@@ -6,8 +6,17 @@
 .pnp.js
 .yarn/install-state.gz
 
+# Ressources
+/_refs/
+
 # testing
+## playwright 
+/playwright-report/
+/playwright/.cache/
+
+## misc
 /coverage
+/test-results/
 
 # next.js
 /.next/
@@ -15,10 +24,6 @@
 
 # production
 /build
-
-# misc
-.DS_Store
-*.pem
 
 # debug
 npm-debug.log*
@@ -40,16 +45,24 @@ next-env.d.ts
 # prisma sqlite database
 dev.db
 dev.db-journal
-/test-results/
-/playwright-report/
-/blob-report/
-/playwright/.cache/
-data/files/resumes
-CLAUDE.md
+
+# project specific
 /docs
-.github
-.claude
-.specify
+
+# misc
 /specs
+/blob-report/
+.DS_Store
+*.pem
+.github
+.specify
 .vscode
+.claude
+
+# user files
+data/files/resumes
+
+# agents
 AGENTS.md
+CLAUDE.md
+CODEX.md
