@@ -2,6 +2,8 @@ import {
   getAllActivityTypes,
   createActivityType,
   getActivitiesList,
+  getActivityById,
+  updateActivity,
 } from "@/actions/activity.actions";
 import { getCurrentUser } from "@/utils/user.utils";
 import { PrismaClient } from "@prisma/client";
@@ -12,7 +14,9 @@ jest.mock("@prisma/client", () => {
   const mPrismaClient = {
     activity: {
       findMany: jest.fn(),
+      findFirst: jest.fn(),
       count: jest.fn(),
+      update: jest.fn(),
     },
     activityType: {
       findMany: jest.fn(),
@@ -348,6 +352,252 @@ describe("activity.actions", () => {
         const findManyCall = (prisma.activity.findMany as jest.Mock).mock
           .calls[0][0];
         expect(findManyCall.where.endTime).toEqual({ not: null });
+      });
+    });
+  });
+
+  describe("getActivityById", () => {
+    const mockActivity = {
+      id: "activity-1",
+      activityName: "TypeScript Learning",
+      startTime: new Date("2024-06-19T09:00:00"),
+      endTime: new Date("2024-06-19T10:00:00"),
+      duration: 60,
+      description: "Learning TypeScript advanced concepts",
+      userId: "user-id",
+      activityTypeId: "type-1",
+      createdAt: new Date("2024-06-19"),
+      activityType: { id: "type-1", label: "Learning", value: "learning" },
+    };
+
+    it("should return error when not authenticated", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(null);
+
+      const result = await getActivityById("activity-1");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Not authenticated",
+      });
+      expect(prisma.activity.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("should return error when activity not found", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.activity.findFirst as jest.Mock).mockResolvedValue(null);
+
+      const result = await getActivityById("non-existent-id");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Activity not found",
+      });
+      expect(prisma.activity.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: "non-existent-id",
+          userId: mockUser.id,
+        },
+        include: {
+          activityType: true,
+        },
+      });
+    });
+
+    it("should return activity with activityType when found and user owns it", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.activity.findFirst as jest.Mock).mockResolvedValue(mockActivity);
+
+      const result = await getActivityById("activity-1");
+
+      expect(result).toEqual({
+        success: true,
+        data: mockActivity,
+      });
+      expect(prisma.activity.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: "activity-1",
+          userId: mockUser.id,
+        },
+        include: {
+          activityType: true,
+        },
+      });
+    });
+
+    it("should return error when activity belongs to different user", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      // findFirst with userId filter returns null when activity belongs to another user
+      (prisma.activity.findFirst as jest.Mock).mockResolvedValue(null);
+
+      const result = await getActivityById("other-user-activity");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Activity not found",
+      });
+      expect(prisma.activity.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: "other-user-activity",
+          userId: mockUser.id,
+        },
+        include: {
+          activityType: true,
+        },
+      });
+    });
+
+    it("should handle database errors", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.activity.findFirst as jest.Mock).mockRejectedValue(
+        new Error("Database error")
+      );
+
+      const result = await getActivityById("activity-1");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Database error",
+      });
+    });
+  });
+
+  describe("updateActivity", () => {
+    const mockActivityType = {
+      id: "type-1",
+      label: "Learning",
+      value: "learning",
+    };
+
+    const updateData = {
+      id: "activity-1",
+      activityName: "Updated Activity",
+      activityTypeId: "type-1",
+      activityType: mockActivityType,
+      startTime: new Date("2024-06-19T09:00:00"),
+      endTime: new Date("2024-06-19T11:00:00"),
+      duration: 120,
+      description: "Updated description",
+    };
+
+    const existingActivity = {
+      id: "activity-1",
+      activityName: "Original Activity",
+      activityTypeId: "type-1",
+      userId: "user-id",
+      startTime: new Date("2024-06-19T09:00:00"),
+      endTime: new Date("2024-06-19T10:00:00"),
+      duration: 60,
+      description: "Original description",
+    };
+
+    const updatedActivity = {
+      id: "activity-1",
+      activityName: "Updated Activity",
+      activityTypeId: "type-1",
+      userId: "user-id",
+      startTime: new Date("2024-06-19T09:00:00"),
+      endTime: new Date("2024-06-19T11:00:00"),
+      duration: 120,
+      description: "Updated description",
+      activityType: mockActivityType,
+    };
+
+    it("should return error when not authenticated", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(null);
+
+      const result = await updateActivity(updateData);
+
+      expect(result).toEqual({
+        success: false,
+        message: "Not authenticated",
+      });
+      expect(prisma.activity.findFirst).not.toHaveBeenCalled();
+      expect(prisma.activity.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error when activity ID is missing", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+
+      const dataWithoutId = { ...updateData };
+      delete (dataWithoutId as any).id;
+
+      const result = await updateActivity(dataWithoutId);
+
+      expect(result).toEqual({
+        success: false,
+        message: "Activity ID is required for update",
+      });
+      expect(prisma.activity.findFirst).not.toHaveBeenCalled();
+      expect(prisma.activity.update).not.toHaveBeenCalled();
+    });
+
+    it("should return error when activity not found or not owned by user", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.activity.findFirst as jest.Mock).mockResolvedValue(null);
+
+      const result = await updateActivity(updateData);
+
+      expect(result).toEqual({
+        success: false,
+        message: "Activity not found",
+      });
+      expect(prisma.activity.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: updateData.id,
+          userId: mockUser.id,
+        },
+      });
+      expect(prisma.activity.update).not.toHaveBeenCalled();
+    });
+
+    it("should successfully update activity and return updated data", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.activity.findFirst as jest.Mock).mockResolvedValue(existingActivity);
+      (prisma.activity.update as jest.Mock).mockResolvedValue(updatedActivity);
+
+      const result = await updateActivity(updateData);
+
+      expect(result).toEqual({
+        success: true,
+        data: updatedActivity,
+        message: "Activity updated successfully",
+      });
+      expect(prisma.activity.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: updateData.id,
+          userId: mockUser.id,
+        },
+      });
+      expect(prisma.activity.update).toHaveBeenCalledWith({
+        where: {
+          id: updateData.id,
+        },
+        data: {
+          activityName: updateData.activityName,
+          activityTypeId: updateData.activityTypeId,
+          startTime: updateData.startTime,
+          endTime: updateData.endTime,
+          duration: updateData.duration,
+          description: updateData.description,
+        },
+        include: {
+          activityType: true,
+        },
+      });
+    });
+
+    it("should handle database errors", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.activity.findFirst as jest.Mock).mockResolvedValue(existingActivity);
+      (prisma.activity.update as jest.Mock).mockRejectedValue(
+        new Error("Database error")
+      );
+
+      const result = await updateActivity(updateData);
+
+      expect(result).toEqual({
+        success: false,
+        message: "Database error",
       });
     });
   });

@@ -1,6 +1,6 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-03-25
+# Bug Tracker — Collected 2026-03-24, Updated 2026-03-26
 
-**Total: 48 bugs found, 48 fixed, 0 remaining**
+**Total: 70 bugs found, 70 fixed, 0 remaining**
 
 ### Status: ✅ All bugs are fixed.
 
@@ -54,7 +54,7 @@
 | C13 | useMemo missing locale dependency | `ActivityForm.tsx:53` |
 | C15 | ESCO combobox buttons missing aria-labels | `EuresOccupationCombobox.tsx` |
 
-## Low (13) — ALL FIXED
+## Low (14) — ALL FIXED
 
 | ID | Bug | Fix |
 |----|-----|-----|
@@ -75,7 +75,7 @@
 
 ## Open — Reported 2026-03-25
 
-**Total: 14 new issues (4 bugs, 8 UX improvements, 2 data gaps)**
+**Total: 17 new issues (4 bugs, 8 UX improvements, 5 data gaps)**
 
 ### Bugs
 
