@@ -270,6 +270,8 @@ Formal specifications in `specs/*.allium` capture domain behaviour:
 
 ### E2E Test Infrastructure (Playwright)
 
+**CRITICAL: Read `e2e/CONVENTIONS.md` before writing any E2E test.** It contains templates, anti-patterns, and environment constraints learned from production incidents.
+
 **Directory structure:**
 - `e2e/smoke/` — Auth-free tests (signin, locale-switching). No storageState.
 - `e2e/crud/` — CRUD tests (job, task, activity, automation, question, profile). Uses storageState.
