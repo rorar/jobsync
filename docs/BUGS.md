@@ -105,6 +105,20 @@
 |----|-------|----------|--------|
 | D13 | Mock data insufficient for all screens | Low | ✅ Fixed |
 | D14 | No mock data for connectors/modules | Low | ✅ Fixed |
-| D15 | All modals: Tab into Combobox/Select fields should allow typing + Enter to add | Multiple modals | Medium | ⚠️ Partial — BaseCombobox refactored, full form UX review pending |
+| D15 | All modals: Tab into Combobox/Select fields should allow typing + Enter to add | Multiple modals | Medium | ✅ Fixed — Enter/Tab/Escape handlers on all 4 combobox variants, ARIA live regions, design-reviewed |
 | D16 | AddCompany: Logo URL validation too strict — rejects valid URLs like Wikipedia SVG links | `AddCompany.tsx` | Medium | ✅ Fixed |
 | D17 | AddCompany: Typo "Unterstutze Formate" — missing ü → "Unterstützte Formate" | `admin.ts` i18n | Low | ✅ Fixed |
+
+## Open — Reported 2026-03-26 (Edge-Case Testing)
+
+**Total: 5 new issues (2 major, 1 minor, 2 low)**
+
+### Bugs
+
+| ID | Bug | File | Severity | Status |
+|----|-----|------|----------|--------|
+| E1 | React controlled/uncontrolled input error — incomplete defaultValues in useForm (missing empty strings for title, company, location, source, jobUrl, jobDescription, resume) | `AddJob.tsx:112-120`, `AddContactInfo.tsx:51-56` | Medium | Open |
+| E2 | Activity "Invalid time format" pageerror — combineDateAndTime throws in Zod refine without try-catch, propagates as uncaught browser error | `addActivityForm.schema.ts:85-86,100-101`, `utils.ts:82` | Medium | Open |
+| E3 | No max-length validation on job title and company name fields — accepts >255 chars without error | `addJobForm.schema.ts`, `addCompanyForm.schema.ts` | Low | Open |
+| E4 | TagInput trigger button has no programmatic label association — `role="combobox"` not connected to FormLabel via htmlFor/id | `TagInput.tsx:109` | Low | Open |
+| E5 | Job Source combobox missing FormControl wrapper — breaks label-to-control association unlike Title/Company/Location comboboxes | `AddJob.tsx:415` | Low | Open |
