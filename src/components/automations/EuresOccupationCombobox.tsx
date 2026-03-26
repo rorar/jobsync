@@ -162,6 +162,7 @@ export function EuresOccupationCombobox({
   const { t } = useTranslations();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [announcement, setAnnouncement] = useState("");
   const [results, setResults] = useState<EscoSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -281,7 +282,10 @@ export function EuresOccupationCombobox({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onOpenChange={(isOpen) => {
+          setOpen(isOpen);
+          if (!isOpen) setInputValue("");
+        }}>
           <PopoverTrigger asChild>
             <Button
               variant="outline"
@@ -317,9 +321,23 @@ export function EuresOccupationCombobox({
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && inputValue.trim()) {
                     e.preventDefault();
+                    e.stopPropagation();
+                    if (isMaxReached) {
+                      setAnnouncement(
+                        t("automations.maxKeywords").replace("{max}", String(MAX_KEYWORDS)),
+                      );
+                      return;
+                    }
                     addKeyword(inputValue.trim());
+                    setAnnouncement(
+                      `${inputValue.trim()} added, ${selectedKeywords.length + 1} of ${MAX_KEYWORDS}`,
+                    );
                     setInputValue("");
                     setResults([]);
+                  }
+                  if (e.key === "Tab") {
+                    setOpen(false);
+                    setInputValue("");
                   }
                 }}
               />
@@ -427,6 +445,9 @@ export function EuresOccupationCombobox({
         onEdit={editKeyword}
         editable
       />
+      <span role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </span>
     </div>
   );
 }

@@ -63,7 +63,7 @@ export function Combobox({
   const filteredOptions = useMemo(() => {
     if (!newOption) return options;
     return options.filter((opt) =>
-      opt.value.includes(newOption.toLowerCase())
+      opt.value.toLowerCase().includes(newOption.toLowerCase())
     );
   }, [options, newOption]);
 

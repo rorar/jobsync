@@ -150,7 +150,13 @@ export function TagInput({
                       (opt) =>
                         opt.value === inputValue.trim().toLowerCase(),
                     );
-                    if (match) handleSelect(match.id);
+                    if (match) {
+                      handleSelect(match.id);
+                    } else {
+                      // Tag exists but is already selected — clear input + inform user
+                      setInputValue("");
+                      setAnnouncement(`${inputValue.trim()} already selected`);
+                    }
                   } else {
                     // Create new tag from input
                     handleCreate();
