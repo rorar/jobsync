@@ -1,6 +1,6 @@
 "use client";
 import { useTranslations, formatDateShort, formatTime } from "@/i18n";
-import { CirclePlay, MoreHorizontal, Trash } from "lucide-react";
+import { CirclePlay, MoreHorizontal, Pencil, Trash } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -28,6 +28,7 @@ interface ActivitiesTableProps {
   activities: Activity[];
   reloadActivities: () => void;
   onStartActivity: (activityId: string) => void;
+  onEditActivity: (activityId: string) => void;
   activityExist: boolean;
 }
 
@@ -35,6 +36,7 @@ function ActivitiesTable({
   activities,
   reloadActivities,
   onStartActivity,
+  onEditActivity,
   activityExist,
 }: ActivitiesTableProps) {
   const { t, locale } = useTranslations();
@@ -133,6 +135,13 @@ function ActivitiesTable({
                         >
                           <CirclePlay className="mr-2 h-4 w-4" />
                           {t("activities.startActivity")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="cursor-pointer"
+                          onClick={() => onEditActivity(activity.id!)}
+                        >
+                          <Pencil className="mr-2 h-4 w-4" />
+                          {t("activities.editActivity")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-red-600 cursor-pointer"

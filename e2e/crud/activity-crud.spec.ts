@@ -114,10 +114,7 @@ test.describe("Activity CRUD", () => {
     );
   });
 
-  test.skip("should edit an activity", async ({ page }) => {
-    // SKIP: Activity edit UI not yet implemented (no Edit menu item,
-    // no updateActivity action, no edit mode in ActivityForm).
-    // Enable this test when the activity edit feature is built.
+  test("should edit an activity", async ({ page }) => {
     const uid = uniqueId();
     const originalName = `E2E Activity ${uid}`;
     const originalType = "E2E Edit Type";

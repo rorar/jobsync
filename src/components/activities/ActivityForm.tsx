@@ -26,9 +26,10 @@ import { DatePicker } from "../DatePicker";
 import TiptapEditor from "../TiptapEditor";
 import { Combobox } from "../ComboBox";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityType } from "@/models/activity.model";
+import { Activity, ActivityType } from "@/models/activity.model";
 import {
   createActivity,
+  updateActivity,
   createActivityType,
   getAllActivityTypes,
 } from "@/actions/activity.actions";
@@ -39,6 +40,8 @@ import { APP_CONSTANTS } from "@/lib/constants";
 interface ActivityFormProps {
   onClose: () => void;
   reloadActivities: () => void;
+  editActivity?: Activity | null;
+  resetEditActivity?: () => void;
 }
 
 type Duration = {
@@ -51,6 +54,8 @@ const MAX_DURATION_HOURS = APP_CONSTANTS.ACTIVITY_MAX_DURATION_MINUTES / 60;
 const ActivityFormComponent = ({
   onClose,
   reloadActivities,
+  editActivity,
+  resetEditActivity,
 }: ActivityFormProps) => {
   const { t, locale } = useTranslations();
   const [activityTypes, setActivityTypes] = useState<ActivityType[]>([]);
@@ -60,6 +65,31 @@ const ActivityFormComponent = ({
   const schema = useMemo(() => createAddActivityFormSchema(locale), [locale]);
 
   const defaultValues = useMemo(() => {
+    if (editActivity) {
+      const startDate = new Date(editActivity.startTime);
+      const startTimeStr = formatTime(startDate, locale);
+      const endDate = editActivity.endTime ? new Date(editActivity.endTime) : undefined;
+      const endTimeStr = editActivity.endTime
+        ? formatTime(new Date(editActivity.endTime), locale)
+        : undefined;
+
+      // Resolve activityType ID: if activityType is an object, use its id; otherwise use activityTypeId or the string value
+      const activityTypeId =
+        typeof editActivity.activityType === "object" && editActivity.activityType?.id
+          ? editActivity.activityType.id
+          : editActivity.activityTypeId ?? (editActivity.activityType as string);
+
+      return {
+        activityName: editActivity.activityName,
+        activityType: activityTypeId ?? "",
+        startDate,
+        startTime: startTimeStr,
+        endDate,
+        endTime: endTimeStr,
+        description: editActivity.description ?? undefined,
+      };
+    }
+
     const now = new Date();
     const currentTime = formatTime(now, locale);
     const nowPlus5mins = addMinutes(now, 5);
@@ -73,7 +103,7 @@ const ActivityFormComponent = ({
       endDate: now,
       endTime: estimatedEndTime,
     };
-  }, [locale]);
+  }, [locale, editActivity]);
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues,
@@ -85,6 +115,11 @@ const ActivityFormComponent = ({
     watch,
     formState: { errors, isValid },
   } = form;
+
+  // Reset form values when editActivity changes (populate for edit, clear for create)
+  useEffect(() => {
+    reset(defaultValues);
+  }, [defaultValues, reset]);
 
   const loadActivityTypes = useCallback(async () => {
     const activityTypes = await getAllActivityTypes();
@@ -165,7 +200,36 @@ const ActivityFormComponent = ({
         endTime: endDateTime ?? undefined,
         duration: totalMinutes,
       };
-      const response = await createActivity(payload);
+
+      if (editActivity?.id) {
+        const response = await updateActivity({
+          ...payload,
+          id: editActivity.id,
+          activityType: payload.activityType,
+          activityTypeId: payload.activityType,
+        });
+        if (response.success) {
+          toast({
+            variant: "success",
+            description: t("activities.updatedSuccess"),
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: t("common.error"),
+            description: response.message,
+          });
+        }
+        resetEditActivity?.();
+      } else {
+        const response = await createActivity(payload);
+        if (response.success) {
+          toast({
+            variant: "success",
+            description: t("activities.createdSuccess"),
+          });
+        }
+      }
       onClose();
       reloadActivities();
     } catch (error) {

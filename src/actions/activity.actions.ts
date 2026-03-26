@@ -302,3 +302,90 @@ export const getCurrentActivity = async (): Promise<ActionResult<unknown>> => {
     return handleError(error, msg);
   }
 };
+
+export const getActivityById = async (
+  activityId: string
+): Promise<ActionResult<Activity>> => {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    const activity = await prisma.activity.findFirst({
+      where: {
+        id: activityId,
+        userId: user.id,
+      },
+      include: {
+        activityType: true,
+      },
+    });
+
+    if (!activity) {
+      return { success: false, message: "Activity not found" };
+    }
+
+    return {
+      success: true,
+      data: activity as unknown as Activity,
+    };
+  } catch (error) {
+    const msg = "Failed to fetch activity.";
+    return handleError(error, msg);
+  }
+};
+
+export const updateActivity = async (
+  data: Activity
+): Promise<ActionResult<Activity>> => {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    if (!data.id) {
+      throw new Error("Activity ID is required for update");
+    }
+
+    const existing = await prisma.activity.findFirst({
+      where: {
+        id: data.id,
+        userId: user.id,
+      },
+    });
+
+    if (!existing) {
+      return { success: false, message: "Activity not found" };
+    }
+
+    const updated = await prisma.activity.update({
+      where: {
+        id: data.id,
+      },
+      data: {
+        activityName: data.activityName,
+        activityTypeId: data.activityTypeId,
+        startTime: data.startTime,
+        endTime: data.endTime ?? null,
+        duration: data.duration ?? null,
+        description: data.description ?? null,
+      },
+      include: {
+        activityType: true,
+      },
+    });
+
+    return {
+      success: true,
+      data: updated as unknown as Activity,
+      message: "Activity updated successfully",
+    };
+  } catch (error) {
+    const msg = "Failed to update activity.";
+    return handleError(error, msg);
+  }
+};

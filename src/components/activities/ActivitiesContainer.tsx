@@ -14,7 +14,7 @@ import {
   DialogTrigger,
 } from "../ui/dialog";
 import { ActivityForm } from "./ActivityForm";
-import { getActivitiesList } from "@/actions/activity.actions";
+import { getActivitiesList, getActivityById } from "@/actions/activity.actions";
 import { Activity } from "@/models/activity.model";
 import { toast } from "../ui/use-toast";
 import Loading from "../Loading";
@@ -39,8 +39,30 @@ function ActivitiesContainer() {
 
   const { currentActivity, startActivity } = useActivity();
   const prevActivityRef = useRef<Activity | undefined>(undefined);
+  const [editActivity, setEditActivity] = useState<Activity | null>(null);
 
-  const closeActivityForm = () => setActivityFormOpen(false);
+  const closeActivityForm = () => {
+    setActivityFormOpen(false);
+    setEditActivity(null);
+  };
+
+  const resetEditActivity = () => {
+    setEditActivity(null);
+  };
+
+  const onEditActivity = async (activityId: string) => {
+    const result = await getActivityById(activityId);
+    if (!result.success) {
+      toast({
+        variant: "destructive",
+        title: t("common.error"),
+        description: result.message,
+      });
+      return;
+    }
+    setEditActivity(result.data as Activity);
+    setActivityFormOpen(true);
+  };
 
   const loadActivities = useCallback(
     async (page: number, limit: number, search?: string) => {
@@ -127,7 +149,10 @@ function ActivitiesContainer() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Dialog open={activityFormOpen} onOpenChange={setActivityFormOpen}>
+          <Dialog open={activityFormOpen} onOpenChange={(open) => {
+              setActivityFormOpen(open);
+              if (!open) setEditActivity(null);
+            }}>
             <DialogTrigger asChild>
               <Button
                 size="sm"
@@ -143,15 +168,17 @@ function ActivitiesContainer() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-[725px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>{t("activities.addNewActivity")}</DialogTitle>
+                <DialogTitle>{editActivity ? t("activities.editActivity") : t("activities.addNewActivity")}</DialogTitle>
                 <DialogDescription className="sr-only">
-                  {t("activities.addNewActivity")}
+                  {editActivity ? t("activities.editActivity") : t("activities.addNewActivity")}
                 </DialogDescription>
               </DialogHeader>
               <div className="p-4">
                 <ActivityForm
                   onClose={closeActivityForm}
                   reloadActivities={reloadActivities}
+                  editActivity={editActivity}
+                  resetEditActivity={resetEditActivity}
                 />
               </div>
             </DialogContent>
@@ -166,6 +193,7 @@ function ActivitiesContainer() {
               activities={activitiesList}
               reloadActivities={reloadActivities}
               onStartActivity={handleStartActivity}
+              onEditActivity={onEditActivity}
               activityExist={Boolean(currentActivity)}
             />
             <div className="flex items-center justify-between mt-4">
