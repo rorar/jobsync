@@ -314,7 +314,7 @@ test.describe("Automation CRUD", () => {
     await page.getByRole("button", { name: /Update Automation/i }).click();
 
     // Verify toast and updated name in the list
-    await expect(page.getByText(/Automation Updated|updated/i).first()).toBeVisible({
+    await expect(page.getByText(/Automation Updated/i).first()).toBeVisible({
       timeout: 10000,
     });
     await page.goto("/dashboard/automations");
@@ -364,7 +364,7 @@ test.describe("Automation CRUD", () => {
     await page.getByRole("menuitem", { name: /Pause/i }).click();
 
     // Verify toast and status change to "paused"
-    await expect(page.getByText(/Automation paused|pausiert|pause/i).first()).toBeVisible({
+    await expect(page.getByText(/Automation paused/i).first()).toBeVisible({
       timeout: 10000,
     });
     // Reload the list to confirm the status persisted
@@ -380,7 +380,7 @@ test.describe("Automation CRUD", () => {
     await page.getByRole("menuitem", { name: /Resume/i }).click();
 
     // Verify toast and status change back to "active"
-    await expect(page.getByText(/Automation resumed|fortgesetzt|reprise/i).first()).toBeVisible({
+    await expect(page.getByText(/Automation resumed/i).first()).toBeVisible({
       timeout: 10000,
     });
     // Reload the list to confirm the status persisted
