@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { selectOrCreateComboboxOption } from "../helpers";
+import { selectOrCreateComboboxOption, uniqueId } from "../helpers";
 
 // storageState handles authentication — no per-test login needed
 
@@ -108,6 +108,64 @@ test.describe("Activity CRUD", () => {
 
     // Clean up
     await deleteActivity(page, activityName);
+    await expect(page.getByRole("status").first()).toContainText(
+      /Activity has been deleted/,
+      { timeout: 10000 },
+    );
+  });
+
+  test("should edit an activity", async ({ page }) => {
+    const uid = uniqueId();
+    const originalName = `E2E Activity ${uid}`;
+    const originalType = "E2E Edit Type";
+    const updatedName = `E2E Activity Updated ${uid}`;
+
+    // Create an activity to edit
+    await createActivity(page, originalName, originalType, "09:00 AM", "10:00 AM");
+
+    // Verify the activity appears in the table
+    await expect(
+      page
+        .getByRole("row", { name: new RegExp(originalName, "i") })
+        .first(),
+    ).toBeVisible({ timeout: 10000 });
+
+    // Open the dropdown menu on the activity row and click Edit
+    const activityRow = page
+      .getByRole("row", { name: new RegExp(originalName, "i") })
+      .first();
+    await activityRow
+      .getByRole("button", { name: "Toggle menu" })
+      .click({ force: true });
+    await page
+      .getByRole("menuitem", { name: /Edit/ })
+      .click({ force: true });
+
+    // The edit form should open (reuses the activity form dialog)
+    const activityNameInput = page.getByPlaceholder(
+      "Ex: Job Search, Learning skill, etc",
+    );
+    await expect(activityNameInput).toBeVisible({ timeout: 10000 });
+
+    // Change the activity name
+    await activityNameInput.clear();
+    await activityNameInput.fill(updatedName);
+
+    // Save the edit
+    await page.getByTestId("save-activity-btn").click();
+
+    // Wait for the dialog to close
+    await expect(activityNameInput).not.toBeVisible({ timeout: 10000 });
+
+    // Verify the updated name appears in the table
+    await expect(
+      page
+        .getByRole("row", { name: new RegExp(updatedName, "i") })
+        .first(),
+    ).toBeVisible({ timeout: 10000 });
+
+    // Cleanup — delete using the updated name
+    await deleteActivity(page, updatedName);
     await expect(page.getByRole("status").first()).toContainText(
       /Activity has been deleted/,
       { timeout: 10000 },

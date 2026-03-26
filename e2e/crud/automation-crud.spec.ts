@@ -250,6 +250,151 @@ test.describe("Automation CRUD", () => {
     await deleteResume(page, resumeTitle);
   });
 
+  test("should edit an automation name", async ({ page }) => {
+    const uid = Date.now().toString(36);
+    const automationName = `E2E Automation ${uid}`;
+    const updatedName = `E2E Edited ${uid}`;
+    const resumeTitle = `E2E Resume ${uid}`;
+
+    // Create
+    const createdResume = await ensureResumeExists(page, resumeTitle);
+    await navigateToAutomations(page);
+    await createAutomation(page, {
+      name: automationName,
+      keywords: "Software Developer",
+      location: "Germany",
+      resumeTitle: createdResume,
+    });
+    await page.waitForTimeout(3000);
+    const dialogStillOpen = await page
+      .getByRole("dialog")
+      .isVisible()
+      .catch(() => false);
+    if (dialogStillOpen) {
+      await page.getByRole("button", { name: "Close" }).click();
+    }
+
+    // Navigate to list and verify the automation exists
+    await page.goto("/dashboard/automations");
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByText(automationName).first()).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Open dropdown menu on the automation card and click Edit
+    const card = page.locator("a", { hasText: automationName }).first();
+    const moreButton = card.getByRole("button").first();
+    await moreButton.click({ force: true });
+    await page.getByRole("menuitem", { name: /Edit/i }).click();
+
+    // The wizard opens in edit mode — Step 1: change the name
+    await expect(
+      page.getByRole("heading", { name: /Edit Automation/i }),
+    ).toBeVisible({ timeout: 8000 });
+    const nameInput = page.getByPlaceholder(/Frontend Jobs Berlin/i);
+    await nameInput.clear();
+    await nameInput.fill(updatedName);
+    await page.getByRole("button", { name: /Next/i }).click();
+
+    // Step 2: Search (keep defaults)
+    await page.getByRole("button", { name: /Next/i }).click();
+
+    // Step 3: Resume (keep defaults)
+    await page.getByRole("button", { name: /Next/i }).click();
+
+    // Step 4: Matching (keep defaults)
+    await page.getByRole("button", { name: /Next/i }).click();
+
+    // Step 5: Schedule (keep defaults)
+    await page.getByRole("button", { name: /Next/i }).click();
+
+    // Step 6: Review — verify updated name, then submit
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText(updatedName)).toBeVisible({ timeout: 8000 });
+    await page.getByRole("button", { name: /Update Automation/i }).click();
+
+    // Verify toast and updated name in the list
+    await expect(page.getByText(/Automation Updated|updated/i).first()).toBeVisible({
+      timeout: 10000,
+    });
+    await page.goto("/dashboard/automations");
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByText(updatedName).first()).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Cleanup
+    await deleteAutomation(page, updatedName);
+    await deleteResume(page, resumeTitle);
+  });
+
+  test("should pause and resume an automation", async ({ page }) => {
+    const uid = Date.now().toString(36);
+    const automationName = `E2E Automation ${uid}`;
+    const resumeTitle = `E2E Resume ${uid}`;
+
+    // Create
+    const createdResume = await ensureResumeExists(page, resumeTitle);
+    await navigateToAutomations(page);
+    await createAutomation(page, {
+      name: automationName,
+      keywords: "Software Developer",
+      location: "Germany",
+      resumeTitle: createdResume,
+    });
+    await page.waitForTimeout(3000);
+    const dialogStillOpen = await page
+      .getByRole("dialog")
+      .isVisible()
+      .catch(() => false);
+    if (dialogStillOpen) {
+      await page.getByRole("button", { name: "Close" }).click();
+    }
+
+    // Navigate to list and verify the automation is active
+    await page.goto("/dashboard/automations");
+    await page.waitForLoadState("networkidle");
+    const card = page.locator("a", { hasText: automationName }).first();
+    await expect(card).toBeVisible({ timeout: 10000 });
+    await expect(card.getByText("active").first()).toBeVisible({ timeout: 5000 });
+
+    // Pause the automation via dropdown menu
+    const moreButton = card.getByRole("button").first();
+    await moreButton.click({ force: true });
+    await page.getByRole("menuitem", { name: /Pause/i }).click();
+
+    // Verify toast and status change to "paused"
+    await expect(page.getByText(/Automation paused|pausiert|pause/i).first()).toBeVisible({
+      timeout: 10000,
+    });
+    // Reload the list to confirm the status persisted
+    await page.goto("/dashboard/automations");
+    await page.waitForLoadState("networkidle");
+    const cardAfterPause = page.locator("a", { hasText: automationName }).first();
+    await expect(cardAfterPause).toBeVisible({ timeout: 10000 });
+    await expect(cardAfterPause.getByText("paused").first()).toBeVisible({ timeout: 5000 });
+
+    // Resume the automation via dropdown menu
+    const moreButtonAfterPause = cardAfterPause.getByRole("button").first();
+    await moreButtonAfterPause.click({ force: true });
+    await page.getByRole("menuitem", { name: /Resume/i }).click();
+
+    // Verify toast and status change back to "active"
+    await expect(page.getByText(/Automation resumed|fortgesetzt|reprise/i).first()).toBeVisible({
+      timeout: 10000,
+    });
+    // Reload the list to confirm the status persisted
+    await page.goto("/dashboard/automations");
+    await page.waitForLoadState("networkidle");
+    const cardAfterResume = page.locator("a", { hasText: automationName }).first();
+    await expect(cardAfterResume).toBeVisible({ timeout: 10000 });
+    await expect(cardAfterResume.getByText("active").first()).toBeVisible({ timeout: 5000 });
+
+    // Cleanup
+    await deleteAutomation(page, automationName);
+    await deleteResume(page, resumeTitle);
+  });
+
   test("should delete the automation and verify removal", async ({
     page,
   }) => {
