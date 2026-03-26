@@ -4,6 +4,13 @@ import { test, expect, type Page } from "@playwright/test";
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Set NEXT_LOCALE=en cookie so the app renders in English. */
+async function ensureEnglishLocale(page: Page) {
+  await page.context().addCookies([
+    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
+  ]);
+}
+
 /**
  * Ensure at least one resume exists (required for automation creation).
  * Creates a uniquely named resume if none with the given title exists.
@@ -152,11 +159,19 @@ async function deleteAutomation(page: Page, name: string) {
     await card.waitFor({ state: "visible", timeout: 5000 });
     const moreButton = card.getByRole("button").first();
     await moreButton.click({ force: true });
-    await page.getByRole("menuitem", { name: /Delete/i }).click();
+
+    // Click "Delete" menu item — identified by Trash2 icon (locale-independent)
+    await page
+      .getByRole("menuitem")
+      .filter({ has: page.locator(".lucide-trash-2") })
+      .click();
+
     await expect(page.getByRole("alertdialog")).toBeVisible();
+    // Click the destructive action button (last button in the alert dialog footer)
     await page
       .getByRole("alertdialog")
-      .getByRole("button", { name: /Delete/i })
+      .getByRole("button")
+      .last()
       .click();
     await expect(page.getByRole("status").first()).toContainText(
       /Automation deleted|deleted/i,
@@ -174,6 +189,10 @@ async function deleteAutomation(page: Page, name: string) {
 // storageState handles authentication — no per-test login needed
 
 test.describe("Automation CRUD", () => {
+  test.beforeEach(async ({ page }) => {
+    await ensureEnglishLocale(page);
+  });
+
   test("should create an automation through the 6-step wizard", async ({
     page,
   }) => {
@@ -285,12 +304,19 @@ test.describe("Automation CRUD", () => {
     const card = page.locator("a", { hasText: automationName }).first();
     const moreButton = card.getByRole("button").first();
     await moreButton.click({ force: true });
-    await page.getByRole("menuitem", { name: /Edit/i }).click();
 
-    // The wizard opens in edit mode — Step 1: change the name
-    await expect(
-      page.getByRole("heading", { name: /Edit Automation/i }),
-    ).toBeVisible({ timeout: 8000 });
+    // Click "Edit" menu item — identified by Pencil icon (locale-independent)
+    await page
+      .getByRole("menuitem")
+      .filter({ has: page.locator(".lucide-pencil") })
+      .click();
+
+    // The wizard opens in edit mode — wait for dialog
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible({ timeout: 8000 });
+    await expect(dialog.getByRole("heading").first()).toBeVisible();
+
+    // Step 1: change the name
     const nameInput = page.getByPlaceholder(/Frontend Jobs Berlin/i);
     await nameInput.clear();
     await nameInput.fill(updatedName);
@@ -309,7 +335,6 @@ test.describe("Automation CRUD", () => {
     await page.getByRole("button", { name: /Next/i }).click();
 
     // Step 6: Review — verify updated name, then submit
-    const dialog = page.getByRole("dialog");
     await expect(dialog.getByText(updatedName)).toBeVisible({ timeout: 8000 });
     await page.getByRole("button", { name: /Update Automation/i }).click();
 
@@ -361,10 +386,15 @@ test.describe("Automation CRUD", () => {
     // Pause the automation via dropdown menu
     const moreButton = card.getByRole("button").first();
     await moreButton.click({ force: true });
-    await page.getByRole("menuitem", { name: /Pause/i }).click();
+
+    // Click "Pause" menu item — identified by Pause icon (locale-independent)
+    await page
+      .getByRole("menuitem")
+      .filter({ has: page.locator(".lucide-pause") })
+      .click();
 
     // Verify toast and status change to "paused"
-    await expect(page.getByText(/Automation paused/i).first()).toBeVisible({
+    await expect(page.getByText(/Automation paused|paused/i).first()).toBeVisible({
       timeout: 10000,
     });
     // Reload the list to confirm the status persisted
@@ -377,10 +407,15 @@ test.describe("Automation CRUD", () => {
     // Resume the automation via dropdown menu
     const moreButtonAfterPause = cardAfterPause.getByRole("button").first();
     await moreButtonAfterPause.click({ force: true });
-    await page.getByRole("menuitem", { name: /Resume/i }).click();
+
+    // Click "Resume" menu item — identified by Play icon (locale-independent)
+    await page
+      .getByRole("menuitem")
+      .filter({ has: page.locator(".lucide-play") })
+      .click();
 
     // Verify toast and status change back to "active"
-    await expect(page.getByText(/Automation resumed/i).first()).toBeVisible({
+    await expect(page.getByText(/Automation resumed|resumed/i).first()).toBeVisible({
       timeout: 10000,
     });
     // Reload the list to confirm the status persisted

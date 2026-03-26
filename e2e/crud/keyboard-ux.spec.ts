@@ -8,6 +8,13 @@ function uniqueId(): string {
   return Date.now().toString(36);
 }
 
+/** Set NEXT_LOCALE=en cookie so the app renders in English. */
+async function ensureEnglishLocale(page: Page) {
+  await page.context().addCookies([
+    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
+  ]);
+}
+
 async function navigateToJobs(page: Page) {
   await page.goto("/dashboard/myjobs");
   await page.waitForLoadState("networkidle");
@@ -126,11 +133,47 @@ function filterCriticalErrors(errors: string[]): string[] {
   );
 }
 
+/**
+ * Get the Title combobox trigger inside the AddJob dialog.
+ * Uses the first combobox role in the dialog (locale-independent).
+ */
+function getTitleCombobox(page: Page) {
+  return page.getByRole("dialog").getByRole("combobox").first();
+}
+
+/**
+ * Get the Company combobox trigger inside the AddJob dialog.
+ * Uses the second combobox role in the dialog (locale-independent).
+ */
+function getCompanyCombobox(page: Page) {
+  return page.getByRole("dialog").getByRole("combobox").nth(1);
+}
+
+/**
+ * Get the Location combobox trigger inside the AddJob dialog.
+ * Uses the third combobox role in the dialog (locale-independent).
+ */
+function getLocationCombobox(page: Page) {
+  return page.getByRole("dialog").getByRole("combobox").nth(2);
+}
+
+/**
+ * Get the Job Source combobox trigger inside the AddJob dialog.
+ * Uses the fourth combobox role in the dialog (locale-independent).
+ */
+function getSourceCombobox(page: Page) {
+  return page.getByRole("dialog").getByRole("combobox").nth(3);
+}
+
 // ---------------------------------------------------------------------------
 // Tests: 1. BaseCombobox (AddJob modal — Title, Company, Location, Source)
 // ---------------------------------------------------------------------------
 
 test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
+  test.beforeEach(async ({ page }) => {
+    await ensureEnglishLocale(page);
+  });
+
   test("Enter key creates a new option in Title combobox", async ({ page }) => {
     const uid = uniqueId();
     const errors = collectConsoleErrors(page);
@@ -139,7 +182,8 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await navigateToJobs(page);
     await openAddJobDialog(page);
 
-    await page.getByLabel("Title").click();
+    // Open the Title combobox (first combobox in the dialog)
+    await getTitleCombobox(page).click();
     const titleInput = page.getByPlaceholder("Create or Search title");
     await expect(titleInput).toBeVisible();
 
@@ -148,7 +192,8 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await titleInput.press("Enter");
     await page.waitForTimeout(1000);
 
-    await expect(page.getByLabel("Title")).toContainText(title, { timeout: 15000 });
+    // Verify the created option shows in the trigger button
+    await expect(getTitleCombobox(page)).toContainText(title, { timeout: 15000 });
 
     // Verify sr-only announcement
     const announcements = await getAllAnnouncements(page);
@@ -166,7 +211,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await navigateToJobs(page);
     await openAddJobDialog(page);
 
-    await page.getByLabel("Company").click();
+    await getCompanyCombobox(page).click();
     const companyInput = page.getByPlaceholder("Create or Search company");
     await expect(companyInput).toBeVisible();
 
@@ -175,7 +220,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await companyInput.press("Enter");
     await page.waitForTimeout(1000);
 
-    await expect(page.getByLabel("Company")).toContainText(company);
+    await expect(getCompanyCombobox(page)).toContainText(company);
   });
 
   test("Enter key creates a new option in Location combobox", async ({
@@ -187,7 +232,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await navigateToJobs(page);
     await openAddJobDialog(page);
 
-    await page.getByLabel("Location").click();
+    await getLocationCombobox(page).click();
     const locationInput = page.getByPlaceholder("Create or Search location");
     await expect(locationInput).toBeVisible();
 
@@ -196,7 +241,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await locationInput.press("Enter");
     await page.waitForTimeout(1000);
 
-    await expect(page.getByLabel("Location")).toContainText(location);
+    await expect(getLocationCombobox(page)).toContainText(location);
   });
 
   test("Escape on open combobox closes popover, focus stays in dialog", async ({
@@ -205,7 +250,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await navigateToJobs(page);
     await openAddJobDialog(page);
 
-    await page.getByLabel("Title").click();
+    await getTitleCombobox(page).click();
     const titleInput = page.getByPlaceholder("Create or Search title");
     await expect(titleInput).toBeVisible();
 
@@ -225,7 +270,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await navigateToJobs(page);
     await openAddJobDialog(page);
 
-    await page.getByLabel("Title").click();
+    await getTitleCombobox(page).click();
     const titleInput = page.getByPlaceholder("Create or Search title");
     await expect(titleInput).toBeVisible();
 
@@ -248,7 +293,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await navigateToJobs(page);
     await openAddJobDialog(page);
 
-    await page.getByLabel("Title").click();
+    await getTitleCombobox(page).click();
     const titleInput = page.getByPlaceholder("Create or Search title");
     await expect(titleInput).toBeVisible();
 
@@ -256,7 +301,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await titleInput.press("Enter");
     await page.waitForTimeout(1500);
 
-    await expect(page.getByLabel("Title")).toContainText(title, { timeout: 15000 });
+    await expect(getTitleCombobox(page)).toContainText(title, { timeout: 15000 });
     expect(filterCriticalErrors(errors)).toEqual([]);
   });
 
@@ -264,7 +309,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await navigateToJobs(page);
     await openAddJobDialog(page);
 
-    await page.getByLabel("Title").click();
+    await getTitleCombobox(page).click();
     const titleInput = page.getByPlaceholder("Create or Search title");
     await expect(titleInput).toBeVisible();
 
@@ -274,7 +319,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await page.getByTestId("add-job-dialog-title").click();
     await page.waitForTimeout(500);
 
-    await page.getByLabel("Title").click();
+    await getTitleCombobox(page).click();
     const titleInputAfter = page.getByPlaceholder("Create or Search title");
     await expect(titleInputAfter).toBeVisible();
 
@@ -288,6 +333,10 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
 // ---------------------------------------------------------------------------
 
 test.describe("Keyboard UX: TagInput (Skills)", () => {
+  test.beforeEach(async ({ page }) => {
+    await ensureEnglishLocale(page);
+  });
+
   test("Enter creates a tag as chip and popover stays open", async ({
     page,
   }) => {
@@ -403,6 +452,10 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
 // ---------------------------------------------------------------------------
 
 test.describe("Keyboard UX: EuresOccupationCombobox", () => {
+  test.beforeEach(async ({ page }) => {
+    await ensureEnglishLocale(page);
+  });
+
   test("Enter adds a keyword as chip, popover stays open", async ({
     page,
   }) => {
@@ -559,6 +612,10 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 // ---------------------------------------------------------------------------
 
 test.describe("Keyboard UX: EuresLocationCombobox", () => {
+  test.beforeEach(async ({ page }) => {
+    await ensureEnglishLocale(page);
+  });
+
   test("Tab closes location popover", async ({ page }) => {
     const uid = uniqueId();
 
@@ -687,6 +744,10 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
 test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
   test.use({ viewport: { width: 375, height: 667 } });
 
+  test.beforeEach(async ({ page }) => {
+    await ensureEnglishLocale(page);
+  });
+
   test("AddJob combobox Enter/Tab works on mobile viewport", async ({
     page,
   }) => {
@@ -697,7 +758,7 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
     await navigateToJobs(page);
     await openAddJobDialog(page);
 
-    await page.getByLabel("Title").click();
+    await getTitleCombobox(page).click();
     const titleInput = page.getByPlaceholder("Create or Search title");
     await expect(titleInput).toBeVisible();
 
@@ -706,9 +767,9 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
     await titleInput.press("Enter");
     await page.waitForTimeout(1000);
 
-    await expect(page.getByLabel("Title")).toContainText(title, { timeout: 15000 });
+    await expect(getTitleCombobox(page)).toContainText(title, { timeout: 15000 });
 
-    await page.getByLabel("Company").click();
+    await getCompanyCombobox(page).click();
     const companyInput = page.getByPlaceholder("Create or Search company");
     await expect(companyInput).toBeVisible();
     await companyInput.fill("test mobile");
@@ -725,7 +786,7 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
     await navigateToJobs(page);
     await openAddJobDialog(page);
 
-    await page.getByLabel("Title").click();
+    await getTitleCombobox(page).click();
     await expect(
       page.getByPlaceholder("Create or Search title"),
     ).toBeVisible();
@@ -743,6 +804,10 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
 // ---------------------------------------------------------------------------
 
 test.describe("Keyboard UX: ARIA Announcements", () => {
+  test.beforeEach(async ({ page }) => {
+    await ensureEnglishLocale(page);
+  });
+
   test("Combobox selection updates sr-only status", async ({ page }) => {
     await navigateToJobs(page);
     await openAddJobDialog(page);
@@ -750,7 +815,7 @@ test.describe("Keyboard UX: ARIA Announcements", () => {
     const srStatus = page.locator('[role="status"]').first();
     await expect(srStatus).toBeAttached();
 
-    await page.getByLabel("Job Source").click();
+    await getSourceCombobox(page).click();
     await page.waitForTimeout(600);
     const firstOption = page.getByRole("option").first();
     try {
