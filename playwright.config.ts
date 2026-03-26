@@ -34,6 +34,7 @@ export default defineConfig({
     {
       name: "crud",
       testDir: "./e2e/crud",
+      dependencies: ["smoke"],
       use: {
         ...chromiumOptions,
         storageState: "e2e/.auth/user.json",
