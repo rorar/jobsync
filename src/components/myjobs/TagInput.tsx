@@ -110,6 +110,7 @@ export function TagInput({
             variant="outline"
             role="combobox"
             aria-expanded={open}
+            aria-label={t("jobs.addSkill")}
             className={cn(
               "w-full justify-between font-normal",
               isMaxReached && "opacity-50 cursor-not-allowed",

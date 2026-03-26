@@ -108,12 +108,12 @@ describe("AddJob Component", () => {
   it("should show relevant react-hook-form errors", async () => {
     const saveBtn = screen.getByTestId("save-job-btn");
     await user.click(saveBtn);
-    expect(screen.getByText("Job title is required.")).toBeInTheDocument();
-    expect(screen.getByText("Company name is required.")).toBeInTheDocument();
-    expect(screen.getByText("Location is required.")).toBeInTheDocument();
-    expect(screen.getByText("Source is required.")).toBeInTheDocument();
+    expect(screen.getByText("Job title must be at least 2 characters.")).toBeInTheDocument();
+    expect(screen.getByText("Company name must be at least 2 characters.")).toBeInTheDocument();
+    expect(screen.getByText("Location name must be at least 2 characters.")).toBeInTheDocument();
+    expect(screen.getByText("Source name must be at least 2 characters.")).toBeInTheDocument();
     expect(
-      screen.getByText("Job description is required."),
+      screen.getByText("Job description must be at least 10 characters."),
     ).toBeInTheDocument();
   });
   it("should close the dialog when clicked on cancel button", async () => {
@@ -224,8 +224,9 @@ describe("AddJob Component", () => {
         dateApplied: undefined,
         salaryRange: "1",
         jobDescription: "<p>New Job Description</p>",
-        jobUrl: undefined,
+        jobUrl: "",
         applied: false,
+        resume: "",
         tags: [],
       });
     });

@@ -81,11 +81,13 @@ export function createAddActivityFormSchema(locale: string) {
         if (!data.endDate || !data.endTime) return true; // Skip if no endDate or endTime
         if (data.endDate > data.startDate) return true; // Valid if endDate is after startDate
 
-        // Combine date and time to compare
-        const startDateTime = combineDateAndTime(data.startDate, data.startTime);
-        const endDateTime = combineDateAndTime(data.endDate, data.endTime);
-
-        return endDateTime > startDateTime; // Valid only if endDateTime is after startDateTime
+        try {
+          const startDateTime = combineDateAndTime(data.startDate, data.startTime);
+          const endDateTime = combineDateAndTime(data.endDate, data.endTime);
+          return endDateTime > startDateTime;
+        } catch {
+          return false; // Invalid time format = validation failure, not exception
+        }
       },
       {
         message:
@@ -97,11 +99,15 @@ export function createAddActivityFormSchema(locale: string) {
       (data) => {
         if (!data.endDate || !data.endTime) return true; // Skip if no endDate or endTime
 
-        const startDateTime = combineDateAndTime(data.startDate, data.startTime);
-        const endDateTime = combineDateAndTime(data.endDate, data.endTime);
+        try {
+          const startDateTime = combineDateAndTime(data.startDate, data.startTime);
+          const endDateTime = combineDateAndTime(data.endDate, data.endTime);
 
-        const durationInMinutes = differenceInMinutes(endDateTime, startDateTime);
-        return durationInMinutes <= APP_CONSTANTS.ACTIVITY_MAX_DURATION_MINUTES; // Ensure duration is within max duration allowed
+          const durationInMinutes = differenceInMinutes(endDateTime, startDateTime);
+          return durationInMinutes <= APP_CONSTANTS.ACTIVITY_MAX_DURATION_MINUTES;
+        } catch {
+          return false; // Invalid time format = validation failure, not exception
+        }
       },
       {
         message: `The duration between start and end date/time cannot exceed ${

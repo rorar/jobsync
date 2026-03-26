@@ -9,6 +9,9 @@ export const AddJobFormSchema = z.object({
     })
     .min(2, {
       message: "Job title must be at least 2 characters.",
+    })
+    .max(255, {
+      message: "Job title must be at most 255 characters.",
     }),
   company: z
     .string({
@@ -16,6 +19,9 @@ export const AddJobFormSchema = z.object({
     })
     .min(2, {
       message: "Company name must be at least 2 characters.",
+    })
+    .max(255, {
+      message: "Company name must be at most 255 characters.",
     }),
   location: z
     .string({
@@ -23,6 +29,9 @@ export const AddJobFormSchema = z.object({
     })
     .min(2, {
       message: "Location name must be at least 2 characters.",
+    })
+    .max(255, {
+      message: "Location must be at most 255 characters.",
     }),
   type: z.string().min(1),
   source: z

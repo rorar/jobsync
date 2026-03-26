@@ -52,6 +52,11 @@ function AddContactInfo({
     resolver: zodResolver(AddContactInfoFormSchema),
     defaultValues: {
       resumeId,
+      firstName: "",
+      lastName: "",
+      headline: "",
+      email: "",
+      phone: "",
     },
   });
 

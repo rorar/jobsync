@@ -112,10 +112,19 @@ export function AddJob({
   const form = useForm<z.infer<typeof AddJobFormSchema>>({
     resolver: zodResolver(AddJobFormSchema) as any, // zod v4 + @hookform/resolvers type mismatch
     defaultValues: {
+      title: "",
+      company: "",
+      location: "",
+      source: "",
       type: Object.keys(JOB_TYPES)[0],
       dueDate: addDays(new Date(), 3),
       status: jobStatuses[0]?.id,
       salaryRange: "1",
+      jobDescription: "",
+      jobUrl: "",
+      applied: false,
+      resume: "",
+      tags: [],
     },
   });
 
@@ -412,6 +421,7 @@ export function AddJob({
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
                         <FormLabel>{t("jobs.jobSource")}</FormLabel>
+                        <FormControl>
                         <Combobox
                           options={mergeConnectorSources(jobSources)}
                           field={field}
@@ -429,6 +439,7 @@ export function AddJob({
                             return res.data as { id: string; label: string; value: string };
                           }}
                         />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}

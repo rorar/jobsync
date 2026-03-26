@@ -117,8 +117,8 @@
 
 | ID | Bug | File | Severity | Status |
 |----|-----|------|----------|--------|
-| E1 | React controlled/uncontrolled input error — incomplete defaultValues in useForm (missing empty strings for title, company, location, source, jobUrl, jobDescription, resume) | `AddJob.tsx:112-120`, `AddContactInfo.tsx:51-56` | Medium | Open |
-| E2 | Activity "Invalid time format" pageerror — combineDateAndTime throws in Zod refine without try-catch, propagates as uncaught browser error | `addActivityForm.schema.ts:85-86,100-101`, `utils.ts:82` | Medium | Open |
-| E3 | No max-length validation on job title and company name fields — accepts >255 chars without error | `addJobForm.schema.ts`, `addCompanyForm.schema.ts` | Low | Open |
-| E4 | TagInput trigger button has no programmatic label association — `role="combobox"` not connected to FormLabel via htmlFor/id | `TagInput.tsx:109` | Low | Open |
-| E5 | Job Source combobox missing FormControl wrapper — breaks label-to-control association unlike Title/Company/Location comboboxes | `AddJob.tsx:415` | Low | Open |
+| E1 | React controlled/uncontrolled input error — incomplete defaultValues in useForm (missing empty strings for title, company, location, source, jobUrl, jobDescription, resume) | `AddJob.tsx:112-120`, `AddContactInfo.tsx:51-56` | Medium | ✅ Fixed |
+| E2 | Activity "Invalid time format" pageerror — combineDateAndTime throws in Zod refine without try-catch, propagates as uncaught browser error | `addActivityForm.schema.ts:85-86,100-101`, `utils.ts:82` | Medium | ✅ Fixed |
+| E3 | No max-length validation on job title and company name fields — accepts >255 chars without error | `addJobForm.schema.ts`, `addCompanyForm.schema.ts` | Low | ✅ Fixed |
+| E4 | TagInput trigger button has no programmatic label association — `role="combobox"` not connected to FormLabel via htmlFor/id | `TagInput.tsx:109` | Low | ✅ Fixed |
+| E5 | Job Source combobox missing FormControl wrapper — breaks label-to-control association unlike Title/Company/Location comboboxes | `AddJob.tsx:415` | Low | ✅ Fixed |

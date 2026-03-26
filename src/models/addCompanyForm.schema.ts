@@ -16,7 +16,10 @@ export const AddCompanyFormSchema = z.object({
     .string({
       error: "Company name is required.",
     })
-    .min(1),
+    .min(1)
+    .max(255, {
+      message: "Company name must be at most 255 characters.",
+    }),
   logoUrl: z
     .string()
     .default("")
