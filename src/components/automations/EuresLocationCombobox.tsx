@@ -93,6 +93,7 @@ export function EuresLocationCombobox({ field }: EuresLocationComboboxProps) {
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(
     new Set(),
   );
+  const [announcement, setAnnouncement] = useState("");
   const fetchedRef = useRef(false);
 
   // Parse comma-separated codes from field value
@@ -228,9 +229,20 @@ export function EuresLocationCombobox({ field }: EuresLocationComboboxProps) {
   }, [countries, inputValue]);
 
   const addCode = (code: string) => {
-    if (selectedCodes.includes(code) || isMaxReached) return;
+    if (selectedCodes.includes(code) || isMaxReached) {
+      if (isMaxReached) {
+        setAnnouncement(
+          t("automations.maxLocations").replace("{max}", String(MAX_LOCATIONS)),
+        );
+      }
+      return;
+    }
     const next = [...selectedCodes, code];
     field.onChange(next.join(","));
+    const label = getLocationLabel(code);
+    setAnnouncement(
+      `${label} ${t("automations.locationsSelected").replace("{count}", String(next.length))}`,
+    );
   };
 
   const removeCode = (code: string) => {
@@ -308,7 +320,10 @@ export function EuresLocationCombobox({ field }: EuresLocationComboboxProps) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onOpenChange={(isOpen) => {
+          setOpen(isOpen);
+          if (!isOpen) setInputValue("");
+        }}>
           <PopoverTrigger asChild>
             <Button
               variant="outline"
@@ -338,6 +353,13 @@ export function EuresLocationCombobox({ field }: EuresLocationComboboxProps) {
                 placeholder={t("automations.searchCountries")}
                 value={inputValue}
                 onValueChange={setInputValue}
+                onKeyDown={(e) => {
+                  if (e.key === "Tab") {
+                    setOpen(false);
+                    setInputValue("");
+                    // Do NOT preventDefault — let browser handle focus
+                  }
+                }}
               />
               <CommandList>
                 {isLoading && (
@@ -450,6 +472,10 @@ export function EuresLocationCombobox({ field }: EuresLocationComboboxProps) {
         }))}
         onRemove={removeCode}
       />
+
+      <span role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </span>
     </div>
   );
 }

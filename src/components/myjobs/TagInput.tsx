@@ -39,6 +39,7 @@ export function TagInput({
   const [inputValue, setInputValue] = useState("");
   const [localTags, setLocalTags] = useState<Tag[]>(availableTags);
   const [isPending, startTransition] = useTransition();
+  const [announcement, setAnnouncement] = useState("");
   const { t } = useTranslations();
 
   const selectedTags = localTags.filter((t) => selectedTagIds.includes(t.id));
@@ -86,14 +87,19 @@ export function TagInput({
       );
       addTagById(newTag.id);
       setInputValue("");
-      setOpen(false);
+      setAnnouncement(
+        `Created ${newTag.label}, ${selectedTagIds.length + 1} of ${MAX_TAGS}`,
+      );
     });
   };
 
   const handleSelect = (tagId: string) => {
+    const tag = localTags.find((t) => t.id === tagId);
     addTagById(tagId);
     setInputValue("");
-    setOpen(false);
+    setAnnouncement(
+      `${tag?.label ?? "Tag"} added, ${selectedTagIds.length + 1} of ${MAX_TAGS}`,
+    );
   };
 
   return (
@@ -123,6 +129,38 @@ export function TagInput({
               placeholder={t("jobs.typeSkill")}
               value={inputValue}
               onValueChange={setInputValue}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && inputValue.trim()) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (isMaxReached) {
+                    toast({
+                      variant: "destructive",
+                      title: t("common.error"),
+                      description: t("jobs.maxSkills"),
+                    });
+                    setAnnouncement(
+                      `Maximum ${MAX_TAGS} skills reached`,
+                    );
+                    return;
+                  }
+                  if (exactMatchExists) {
+                    // Select existing tag that matches input exactly
+                    const match = filteredOptions.find(
+                      (opt) =>
+                        opt.value === inputValue.trim().toLowerCase(),
+                    );
+                    if (match) handleSelect(match.id);
+                  } else {
+                    // Create new tag from input
+                    handleCreate();
+                  }
+                }
+                if (e.key === "Tab") {
+                  setOpen(false);
+                  setInputValue("");
+                }
+              }}
             />
             <CommandList>
               {filteredOptions.length === 0 && !inputValue && (
@@ -178,6 +216,10 @@ export function TagInput({
           ))}
         </div>
       )}
+
+      <span role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </span>
     </div>
   );
 }

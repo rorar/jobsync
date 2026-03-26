@@ -20,7 +20,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "./ui/scroll-area";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 
 interface ComboboxProps {
   options: any[];
@@ -41,6 +41,7 @@ export function Combobox({
 }: ComboboxProps) {
   const [newOption, setNewOption] = useState<string>("");
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
+  const [announcement, setAnnouncement] = useState<string>("");
 
   const [isPending, startTransition] = useTransition();
 
@@ -52,19 +53,47 @@ export function Combobox({
         options.unshift(result);
         field.onChange(result.id);
         setIsPopoverOpen(false);
+        setAnnouncement(`Created ${result.label}`);
       }
     });
   };
 
   const showCreate = creatable && !!onCreateOption;
 
+  const filteredOptions = useMemo(() => {
+    if (!newOption) return options;
+    return options.filter((opt) =>
+      opt.value.includes(newOption.toLowerCase())
+    );
+  }, [options, newOption]);
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && newOption.trim() && showCreate) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleCreateOption(newOption.trim());
+      setNewOption("");
+    } else if (e.key === "Tab") {
+      setIsPopoverOpen(false);
+      setNewOption("");
+    }
+  };
+
   return (
-    <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+    <Popover
+      open={isPopoverOpen}
+      onOpenChange={(open) => {
+        setIsPopoverOpen(open);
+        if (!open) setNewOption("");
+      }}
+    >
       <PopoverTrigger asChild>
         <FormControl>
           <Button
             variant="outline"
             role="combobox"
+            type="button"
+            aria-expanded={isPopoverOpen}
             className={cn(
               "md:w-[240px] lg:w-[280px] justify-between capitalize",
               !field.value && "text-muted-foreground"
@@ -83,14 +112,11 @@ export function Combobox({
         </FormControl>
       </PopoverTrigger>
       <PopoverContent className="md:w-[240px] lg:w-[280px] p-0">
-        <Command
-          filter={(value, search) =>
-            value.includes(search.toLowerCase()) ? 1 : 0
-          }
-        >
+        <Command shouldFilter={false}>
           <CommandInput
             value={newOption}
             onValueChange={(val: string) => setNewOption(val)}
+            onKeyDown={handleInputKeyDown}
             placeholder={`${showCreate ? "Create or " : ""}Search ${field.name}`}
           />
           <CommandEmpty
@@ -121,7 +147,7 @@ export function Combobox({
           <ScrollArea>
             <CommandGroup>
               <CommandList className="capitalize">
-                {options.map((option) => (
+                {filteredOptions.map((option) => (
                   <CommandItem
                     value={option.value}
                     key={option.id}
@@ -129,6 +155,7 @@ export function Combobox({
                       if (field.onChange) {
                         field.onChange(option.id);
                         setIsPopoverOpen(false);
+                        setAnnouncement(`${option.label} selected`);
                       }
                     }}
                   >
@@ -148,6 +175,9 @@ export function Combobox({
           </ScrollArea>
         </Command>
       </PopoverContent>
+      <span role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </span>
     </Popover>
   );
 }

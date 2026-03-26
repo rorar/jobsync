@@ -110,16 +110,24 @@ describe("TagInput Component", () => {
     });
   });
 
-  it("closes the popover after selecting an existing tag", async () => {
+  it("keeps the popover open after selecting a tag (multi-select)", async () => {
     render(<ControlledTagInput availableTags={MOCK_TAGS} />);
 
     await user.click(screen.getByRole("combobox"));
     await user.click(await screen.findByRole("option", { name: "TypeScript" }));
 
     await waitFor(() => {
-      // Options list should be gone
+      // Popover stays open for rapid multi-entry — remaining options visible
       expect(
-        screen.queryByRole("option", { name: "React" }),
+        screen.getByRole("option", { name: "React" }),
+      ).toBeInTheDocument();
+      // Selected tag should appear as badge
+      expect(
+        screen.getByRole("button", { name: /remove typescript/i }),
+      ).toBeInTheDocument();
+      // TypeScript should no longer be in options (already selected)
+      expect(
+        screen.queryByRole("option", { name: "TypeScript" }),
       ).not.toBeInTheDocument();
     });
   });
@@ -206,7 +214,7 @@ describe("TagInput Component", () => {
     });
   });
 
-  it("calls createTag with the typed label and closes the popover on success", async () => {
+  it("calls createTag with the typed label and keeps popover open on success", async () => {
     const newTag: Tag = {
       id: "tag-99",
       label: "GraphQL",
@@ -223,10 +231,11 @@ describe("TagInput Component", () => {
 
     await waitFor(() => {
       expect(createTag).toHaveBeenCalledWith("GraphQL");
-      // Popover should be closed
+      // Popover stays open for rapid multi-entry (multi-select spec)
+      // Remaining unselected tags should still be visible as options
       expect(
-        screen.queryByRole("option", { name: "React" }),
-      ).not.toBeInTheDocument();
+        screen.getByRole("option", { name: "React" }),
+      ).toBeInTheDocument();
     });
   });
 
