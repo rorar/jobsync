@@ -18,6 +18,31 @@ async function navigateToCompanies(page: Page) {
   await page.getByTestId("add-company-btn").waitFor({ state: "visible" });
 }
 
+/**
+ * Click "Load More" until the target company row is visible, or until there
+ * is no more data to load.  This handles the pagination problem where newly
+ * created companies may appear beyond the first page (25-per-page default).
+ */
+async function loadUntilCompanyVisible(page: Page, name: string) {
+  const row = page.getByRole("row", { name: new RegExp(name, "i") }).first();
+
+  // Try up to 10 iterations (10 × 25 = 250 companies max)
+  for (let i = 0; i < 10; i++) {
+    // Check if the row is already visible
+    const visible = await row.isVisible().catch(() => false);
+    if (visible) return;
+
+    // Check if there is a "Load More" button
+    const loadMoreBtn = page.getByRole("button", { name: "Load More" });
+    const loadMoreVisible = await loadMoreBtn.isVisible().catch(() => false);
+    if (!loadMoreVisible) break;
+
+    // Click "Load More" and wait for the table to update
+    await loadMoreBtn.click();
+    await page.waitForLoadState("networkidle");
+  }
+}
+
 async function createCompany(page: Page, name: string, logoUrl?: string) {
   await page.getByTestId("add-company-btn").click();
 
@@ -42,11 +67,14 @@ async function createCompany(page: Page, name: string, logoUrl?: string) {
 }
 
 async function deleteCompany(page: Page, name: string) {
+  // Ensure all pages are loaded so we can find the row
+  await loadUntilCompanyVisible(page, name);
+
   const row = page.getByRole("row", { name: new RegExp(name, "i") }).first();
   await expect(row).toBeVisible({ timeout: 10000 });
 
-  // Click the delete button — identified by its Trash2 icon (lucide-trash-2)
-  await row.locator("button:has(.lucide-trash-2)").click();
+  // Click the delete button
+  await row.getByRole("button", { name: "Delete" }).click();
 
   // Confirm in the DeleteAlertDialog — click the last button (destructive action)
   await expect(page.getByRole("alertdialog")).toBeVisible();
@@ -74,7 +102,9 @@ test.describe("Company CRUD", () => {
     await navigateToCompanies(page);
     await createCompany(page, companyName);
 
-    // Verify the company appears in the table
+    // Reload to ensure table is fresh, then verify
+    await navigateToCompanies(page);
+    await loadUntilCompanyVisible(page, companyName);
     await expect(
       page.getByRole("row", { name: new RegExp(companyName, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
@@ -91,14 +121,16 @@ test.describe("Company CRUD", () => {
     await navigateToCompanies(page);
     await createCompany(page, companyName);
 
-    // Verify the company exists in the table
+    // Reload to ensure table is fresh after creation
+    await navigateToCompanies(page);
+    await loadUntilCompanyVisible(page, companyName);
     const row = page
       .getByRole("row", { name: new RegExp(companyName, "i") })
       .first();
     await expect(row).toBeVisible({ timeout: 10000 });
 
     // Click the edit button — identified by its Pencil icon (lucide-pencil)
-    await row.locator("button:has(.lucide-pencil)").click();
+    await row.getByRole("button", { name: "Edit" }).click();
 
     // Wait for the edit dialog to open
     const dialog = page.getByRole("dialog");
@@ -115,7 +147,8 @@ test.describe("Company CRUD", () => {
     // Verify the update toast
     await expectToast(page, /Company updated/i);
 
-    // Verify the updated name appears in the table
+    // Load all pages if needed, then verify the updated name appears
+    await loadUntilCompanyVisible(page, updatedName);
     await expect(
       page.getByRole("row", { name: new RegExp(updatedName, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
@@ -131,7 +164,9 @@ test.describe("Company CRUD", () => {
     await navigateToCompanies(page);
     await createCompany(page, companyName);
 
-    // Verify the company exists in the table
+    // Reload to ensure table is fresh after creation
+    await navigateToCompanies(page);
+    await loadUntilCompanyVisible(page, companyName);
     await expect(
       page.getByRole("row", { name: new RegExp(companyName, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
@@ -141,8 +176,8 @@ test.describe("Company CRUD", () => {
       .getByRole("row", { name: new RegExp(companyName, "i") })
       .first();
 
-    // Click the delete button — identified by Trash2 icon
-    await row.locator("button:has(.lucide-trash-2)").click();
+    // Click the delete button
+    await row.getByRole("button", { name: "Delete" }).click();
 
     // Confirm in the DeleteAlertDialog — last button is the destructive action
     await expect(page.getByRole("alertdialog")).toBeVisible();

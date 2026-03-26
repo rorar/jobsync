@@ -150,15 +150,41 @@ async function createAutomation(
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText(opts.name)).toBeVisible();
   await page.getByRole("button", { name: /Create Automation/i }).click();
+
+  // Wait for the success toast (replaces fragile waitForTimeout)
+  await expect(
+    page.getByText(/Automation Created/i).first(),
+  ).toBeVisible({ timeout: 15000 });
+
+  // Wait for dialog to close
+  await expect(dialog).not.toBeVisible({ timeout: 10000 });
+}
+
+/**
+ * Open the dropdown menu on an automation card.
+ * Uses event.stopPropagation()-aware clicking to avoid triggering the
+ * parent <Link> navigation.
+ */
+async function openAutomationDropdown(page: Page, name: string) {
+  const card = page.locator("a", { hasText: name }).first();
+  await expect(card).toBeVisible({ timeout: 10000 });
+
+  // The "more" button is the last button inside the card (DropdownMenuTrigger)
+  const moreButton = card.getByRole("button").first();
+
+  // Use dispatchEvent to click without triggering link navigation
+  // The component uses onClick={(e) => e.preventDefault()} but we need
+  // to ensure the dropdown opens reliably
+  await moreButton.click({ force: true });
+
+  // Wait for the dropdown menu to appear
+  await expect(page.getByRole("menuitem").first()).toBeVisible({ timeout: 5000 });
 }
 
 async function deleteAutomation(page: Page, name: string) {
   await navigateToAutomations(page);
-  const card = page.locator("a", { hasText: name }).first();
   try {
-    await card.waitFor({ state: "visible", timeout: 5000 });
-    const moreButton = card.getByRole("button").first();
-    await moreButton.click({ force: true });
+    await openAutomationDropdown(page, name);
 
     // Click "Delete" menu item — identified by Trash2 icon (locale-independent)
     await page
@@ -210,15 +236,6 @@ test.describe("Automation CRUD", () => {
       resumeTitle: createdResume,
     });
 
-    await page.waitForTimeout(3000);
-    const dialogStillOpen = await page
-      .getByRole("dialog")
-      .isVisible()
-      .catch(() => false);
-    if (dialogStillOpen) {
-      await page.getByRole("button", { name: "Close" }).click();
-    }
-
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("networkidle");
     await expect(page.getByText(automationName).first()).toBeVisible({
@@ -246,23 +263,16 @@ test.describe("Automation CRUD", () => {
       location: "Germany",
       resumeTitle: createdResume,
     });
-    await page.waitForTimeout(3000);
-    const dialogStillOpen = await page
-      .getByRole("dialog")
-      .isVisible()
-      .catch(() => false);
-    if (dialogStillOpen) {
-      await page.getByRole("button", { name: "Close" }).click();
-    }
 
-    // Verify
+    // Verify — navigate to the list and check the card details
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("networkidle");
-    await expect(page.getByText(automationName).first()).toBeVisible({
-      timeout: 10000,
-    });
-    await expect(page.getByText("eures").first()).toBeVisible();
-    await expect(page.getByText("active").first()).toBeVisible();
+
+    // Scope assertions to the specific card to avoid matching stale data
+    const card = page.locator("a", { hasText: automationName }).first();
+    await expect(card).toBeVisible({ timeout: 10000 });
+    await expect(card.getByText("eures").first()).toBeVisible();
+    await expect(card.getByText("active").first()).toBeVisible();
 
     // Cleanup
     await deleteAutomation(page, automationName);
@@ -284,14 +294,6 @@ test.describe("Automation CRUD", () => {
       location: "Germany",
       resumeTitle: createdResume,
     });
-    await page.waitForTimeout(3000);
-    const dialogStillOpen = await page
-      .getByRole("dialog")
-      .isVisible()
-      .catch(() => false);
-    if (dialogStillOpen) {
-      await page.getByRole("button", { name: "Close" }).click();
-    }
 
     // Navigate to list and verify the automation exists
     await page.goto("/dashboard/automations");
@@ -301,9 +303,7 @@ test.describe("Automation CRUD", () => {
     });
 
     // Open dropdown menu on the automation card and click Edit
-    const card = page.locator("a", { hasText: automationName }).first();
-    const moreButton = card.getByRole("button").first();
-    await moreButton.click({ force: true });
+    await openAutomationDropdown(page, automationName);
 
     // Click "Edit" menu item — identified by Pencil icon (locale-independent)
     await page
@@ -338,10 +338,15 @@ test.describe("Automation CRUD", () => {
     await expect(dialog.getByText(updatedName)).toBeVisible({ timeout: 8000 });
     await page.getByRole("button", { name: /Update Automation/i }).click();
 
-    // Verify toast and updated name in the list
+    // Wait for the success toast
     await expect(page.getByText(/Automation Updated/i).first()).toBeVisible({
       timeout: 10000,
     });
+
+    // Wait for dialog to close
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
+
+    // Verify updated name in the list
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("networkidle");
     await expect(page.getByText(updatedName).first()).toBeVisible({
@@ -367,14 +372,6 @@ test.describe("Automation CRUD", () => {
       location: "Germany",
       resumeTitle: createdResume,
     });
-    await page.waitForTimeout(3000);
-    const dialogStillOpen = await page
-      .getByRole("dialog")
-      .isVisible()
-      .catch(() => false);
-    if (dialogStillOpen) {
-      await page.getByRole("button", { name: "Close" }).click();
-    }
 
     // Navigate to list and verify the automation is active
     await page.goto("/dashboard/automations");
@@ -384,8 +381,7 @@ test.describe("Automation CRUD", () => {
     await expect(card.getByText("active").first()).toBeVisible({ timeout: 5000 });
 
     // Pause the automation via dropdown menu
-    const moreButton = card.getByRole("button").first();
-    await moreButton.click({ force: true });
+    await openAutomationDropdown(page, automationName);
 
     // Click "Pause" menu item — identified by Pause icon (locale-independent)
     await page
@@ -405,8 +401,7 @@ test.describe("Automation CRUD", () => {
     await expect(cardAfterPause.getByText("paused").first()).toBeVisible({ timeout: 5000 });
 
     // Resume the automation via dropdown menu
-    const moreButtonAfterPause = cardAfterPause.getByRole("button").first();
-    await moreButtonAfterPause.click({ force: true });
+    await openAutomationDropdown(page, automationName);
 
     // Click "Resume" menu item — identified by Play icon (locale-independent)
     await page
@@ -446,14 +441,6 @@ test.describe("Automation CRUD", () => {
       location: "Germany",
       resumeTitle: createdResume,
     });
-    await page.waitForTimeout(3000);
-    const dialogStillOpen = await page
-      .getByRole("dialog")
-      .isVisible()
-      .catch(() => false);
-    if (dialogStillOpen) {
-      await page.getByRole("button", { name: "Close" }).click();
-    }
 
     // Delete
     await deleteAutomation(page, automationName);
