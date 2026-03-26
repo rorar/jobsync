@@ -93,7 +93,7 @@ const originalEnv = { ...process.env };
 beforeEach(() => {
   jest.clearAllMocks();
   // Default to development mode for most tests
-  process.env.NODE_ENV = "development";
+  (process.env as Record<string, string>).NODE_ENV = "development";
   delete process.env.ALLOWED_DEV_ORIGINS;
 });
 
@@ -146,7 +146,7 @@ async function getMiddleware() {
 // ---------------------------------------------------------------------------
 describe("CORS middleware — ALLOWED_DEV_ORIGINS is set", () => {
   it("adds CORS headers when Origin matches an allowed origin", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string>).NODE_ENV = "development";
     process.env.ALLOWED_DEV_ORIGINS = "http://localhost:4000";
 
     const middleware = await getMiddleware();
@@ -168,7 +168,7 @@ describe("CORS middleware — ALLOWED_DEV_ORIGINS is set", () => {
   });
 
   it("does NOT add CORS headers when Origin does not match", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string>).NODE_ENV = "development";
     process.env.ALLOWED_DEV_ORIGINS = "http://localhost:4000";
 
     const middleware = await getMiddleware();
@@ -180,7 +180,7 @@ describe("CORS middleware — ALLOWED_DEV_ORIGINS is set", () => {
   });
 
   it("handles multiple comma-separated origins correctly", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string>).NODE_ENV = "development";
     process.env.ALLOWED_DEV_ORIGINS =
       "http://localhost:4000, http://192.168.1.50:3737, http://myhost.ts.net:3737";
 
@@ -214,7 +214,7 @@ describe("CORS middleware — ALLOWED_DEV_ORIGINS is set", () => {
   });
 
   it("returns response with CORS headers for OPTIONS preflight requests", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string>).NODE_ENV = "development";
     process.env.ALLOWED_DEV_ORIGINS = "http://localhost:4000";
 
     const middleware = await getMiddleware();
@@ -238,7 +238,7 @@ describe("CORS middleware — ALLOWED_DEV_ORIGINS is set", () => {
 // ---------------------------------------------------------------------------
 describe("CORS middleware — ALLOWED_DEV_ORIGINS is not set", () => {
   it("does NOT add CORS headers when ALLOWED_DEV_ORIGINS is undefined", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string>).NODE_ENV = "development";
     delete process.env.ALLOWED_DEV_ORIGINS;
 
     const middleware = await getMiddleware();
@@ -249,7 +249,7 @@ describe("CORS middleware — ALLOWED_DEV_ORIGINS is not set", () => {
   });
 
   it("passes through normally when no Origin header is present", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string>).NODE_ENV = "development";
     delete process.env.ALLOWED_DEV_ORIGINS;
 
     const middleware = await getMiddleware();
@@ -267,7 +267,7 @@ describe("CORS middleware — ALLOWED_DEV_ORIGINS is not set", () => {
 // ---------------------------------------------------------------------------
 describe("CORS middleware — edge cases", () => {
   it("treats empty ALLOWED_DEV_ORIGINS string as not set", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string>).NODE_ENV = "development";
     process.env.ALLOWED_DEV_ORIGINS = "";
 
     const middleware = await getMiddleware();
@@ -278,7 +278,7 @@ describe("CORS middleware — edge cases", () => {
   });
 
   it("matches origins with ports correctly", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string>).NODE_ENV = "development";
     process.env.ALLOWED_DEV_ORIGINS = "http://localhost:4000";
 
     const middleware = await getMiddleware();
@@ -299,7 +299,7 @@ describe("CORS middleware — edge cases", () => {
   });
 
   it("matches origin without port when allowed origin has no port", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string>).NODE_ENV = "development";
     process.env.ALLOWED_DEV_ORIGINS = "http://localhost";
 
     const middleware = await getMiddleware();
@@ -321,7 +321,7 @@ describe("CORS middleware — edge cases", () => {
   });
 
   it("does NOT add CORS headers in production mode", async () => {
-    process.env.NODE_ENV = "production";
+    (process.env as Record<string, string>).NODE_ENV = "production";
     process.env.ALLOWED_DEV_ORIGINS = "http://localhost:4000";
 
     const middleware = await getMiddleware();
@@ -333,7 +333,7 @@ describe("CORS middleware — edge cases", () => {
   });
 
   it("handles whitespace-only entries in comma-separated origins", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string>).NODE_ENV = "development";
     process.env.ALLOWED_DEV_ORIGINS =
       "http://localhost:4000,  , ,http://other:3000";
 
@@ -355,7 +355,7 @@ describe("CORS middleware — edge cases", () => {
   });
 
   it("does not add CORS headers when ALLOWED_DEV_ORIGINS has only spaces", async () => {
-    process.env.NODE_ENV = "development";
+    (process.env as Record<string, string>).NODE_ENV = "development";
     process.env.ALLOWED_DEV_ORIGINS = "   ,  , ";
 
     const middleware = await getMiddleware();
