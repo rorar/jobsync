@@ -54,4 +54,4 @@ Available agents and skills for documentation in JobSync. Use on demand — not 
 1. **Docs grow WITH features** — no documentation for features that don't exist yet
 2. **README.md is the storefront** — keep it up to date, automate screenshots via 8.1
 3. **Agents for initial creation, manual maintenance for updates** — agent generates the initial document, then incremental updates by hand
-4. **Language:** All documentation in English for international reach. Internal docs (ADRs, Architecture) in English or German depending on context.
+4. **Language:** All documentation AND agent output in English for international reach. When invoking agents, instruct them to produce English output. Internal docs (ADRs, Architecture) also in English.
