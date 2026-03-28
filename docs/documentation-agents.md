@@ -2,7 +2,9 @@
 
 Available agents and skills for documentation in JobSync. Use on demand — not all at once.
 
-**Stack:** All agents/skills from `claude-code-workflows` (wshobson). Canonical namespace: `documentation-generation` (contains all agents). Duplicates in `code-documentation` and `api-testing-observability` are identical — only the canonical name is listed here.
+**Stack:**
+- `claude-code-workflows` (wshobson) — documentation generation, C4 architecture, code review
+- `juxt-plugins` (Allium) — behavioral specifications (elicit, tend, weed, distill, propagate)
 
 ## When to use which Agent/Skill?
 
@@ -28,9 +30,23 @@ Available agents and skills for documentation in JobSync. Use on demand — not 
 
 | Document | Agent/Skill | Trigger |
 |---|---|---|
+| **C4 System Context** | `c4-architecture:c4-context` | High-level system context: personas, external systems, boundaries. Create after major architectural changes. |
+| **C4 Container** | `c4-architecture:c4-container` | Deployment units (Next.js, SQLite, Connectors). Synthesize from component docs. |
+| **C4 Component** | `c4-architecture:c4-component` | Logical components within a container. Synthesize from code-level docs. |
+| **C4 Code** | `c4-architecture:c4-code` | Code-level: functions, classes, dependencies per directory. Run on specific directories. |
 | **Write ADRs** | Skill: `documentation-generation:architecture-decision-records` | After architecture decisions (already in CLAUDE.md Post-Work Checklist) |
-| **Diagrams (Mermaid)** | `documentation-generation:mermaid-expert` | Flowcharts, sequence diagrams, ERDs for Architecture Overview |
+| **Diagrams (Mermaid)** | `documentation-generation:mermaid-expert` | Flowcharts, sequence diagrams, ERDs — complements C4 with behavioral flows |
 | **Changelog** | Skill: `documentation-generation:changelog-automation` | Before releases — generates changelog from commits/PRs |
+
+### Behavioral Specifications (Allium)
+
+| Task | Agent/Skill | Trigger |
+|---|---|---|
+| **New spec from scratch** | Skill: `allium:elicit` | New feature area, unclear requirements — structured discovery session |
+| **Update existing spec** | `allium:tend` | Add entities, rules, triggers to an existing `.allium` file |
+| **Extract spec from code** | Skill: `allium:distill` | Existing code without spec — reverse engineer behavior into Allium |
+| **Check spec-code alignment** | `allium:weed` | After implementation — find where spec and code diverged |
+| **Generate tests from spec** | Skill: `allium:propagate` | Generate test files from `.allium` spec obligations |
 
 ### Code Documentation
 
@@ -39,15 +55,38 @@ Available agents and skills for documentation in JobSync. Use on demand — not 
 | **Code Review** | `documentation-generation:docs-architect` | After major implementations (alternatively: `coderabbit:code-review`) |
 | **Module Developer Guide** | `documentation-generation:tutorial-engineer` + `documentation-generation:reference-builder` | When 8.7 (Module SDK) is implemented — template repo + manifest reference |
 
-## Agent Overview (deduplicated)
+## Agent Overview
 
-| Agent | Canonical Namespace | Purpose |
+### Documentation Generation (wshobson)
+
+| Agent | Namespace | Purpose |
 |---|---|---|
 | `docs-architect` | `documentation-generation` | Long-form technical manuals, architecture guides from codebase |
 | `tutorial-engineer` | `documentation-generation` | Step-by-step tutorials, progressive learning paths |
 | `api-documenter` | `documentation-generation` | OpenAPI 3.1, SDK generation, developer portals |
 | `reference-builder` | `documentation-generation` | Exhaustive API/config references |
 | `mermaid-expert` | `documentation-generation` | Mermaid diagrams (flowcharts, sequence, ERD) |
+
+### C4 Architecture (wshobson)
+
+| Agent | Namespace | Purpose |
+|---|---|---|
+| `c4-context` | `c4-architecture` | System context: personas, user journeys, external dependencies |
+| `c4-container` | `c4-architecture` | Container-level: deployment units, APIs, container interfaces |
+| `c4-component` | `c4-architecture` | Component-level: logical boundaries, interfaces, relationships |
+| `c4-code` | `c4-architecture` | Code-level: function signatures, dependencies per directory |
+
+C4 works bottom-up: `c4-code` on directories → `c4-component` synthesizes → `c4-container` synthesizes → `c4-context` creates the system overview.
+
+### Allium Specifications (juxt-plugins)
+
+| Skill/Agent | Namespace | Purpose |
+|---|---|---|
+| `elicit` (skill) | `allium` | Structured discovery — build specs through conversation |
+| `tend` (agent) | `allium` | Edit existing specs — add entities, rules, triggers |
+| `distill` (skill) | `allium` | Extract spec from existing code (reverse engineering) |
+| `weed` (agent) | `allium` | Find spec-code divergences, resolve drift |
+| `propagate` (skill) | `allium` | Generate tests from spec obligations |
 
 ## Rules
 
