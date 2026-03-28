@@ -1309,8 +1309,23 @@ Capability-basierte Isolation für untrusted Community-Module. Nur wenn Communit
 - **Abgrenzung:** Phase 1 + 2 (→ 8.7) vertrauen Community (wie Home Assistant). Phase 3 nur bei konkretem Missbrauch.
 - Depends on: 8.7 (Module SDK)
 
-### 9.4 YOLO Mode (Full Autopilot)
-**Wenn der User ein volles LLM-Setup hat:** Ein Modus der den kompletten Bewerbungsprozess autonom durchführt.
+### 9.4 Automation Modes (Semi-YOLO + YOLO)
+**Drei Stufen der Automatisierung** — User wählt in Settings pro Automation oder global:
+
+| Modus | LLM bereitet vor | User reviewt | Versand |
+|---|---|---|---|
+| **Manual** (Default) | Nein | Alles manuell | Manuell |
+| **Semi-YOLO** (Assistent) | Ja — generiert CV, Anschreiben, E-Mail | Ja — User gibt finalen Klick | Ein-Klick nach Review |
+| **YOLO** (Full Autopilot) | Ja | Nein | Automatisch |
+
+**Semi-YOLO (empfohlen bei LLM-Setup):**
+- LLM übernimmt: Staging-Bewertung, Promotion-Empfehlung, Dokumenten-Generierung, E-Mail-Entwurf
+- **PAUSIERT** vor jedem Versand → User sieht Vorschau (Dokumente + E-Mail) → Ein Klick zum Absenden oder Bearbeiten
+- Batch-Review: Morgens 5 vorbereitete Bewerbungen durchgehen, alle auf einmal absegnen
+- Vermutlich der Modus den 90% der User tatsächlich nutzen
+
+**YOLO (Full Autopilot):**
+Wenn der User ein volles LLM-Setup hat — ein Modus der den kompletten Bewerbungsprozess autonom durchführt.
 
 **Pipeline im YOLO Mode:**
 ```
