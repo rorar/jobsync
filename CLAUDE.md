@@ -174,7 +174,8 @@ Use consistent domain terms across code, UI, specs, and documentation:
 |---|---|---|
 | `DiscoveredVacancy` | A job found by an automation | "scraped job", "result" |
 | `Connector` | ACL that translates external APIs to domain types | "scraper", "fetcher" |
-| `Module` | External system behind a Connector | "API", "service" |
+| `Module` | External system behind a Connector | "API", "service", "provider" |
+| `AiModuleId` | Enum identifying an AI Module (ollama, openai, deepseek) | `AiProvider`, `ProviderType` |
 | `Automation` | A scheduled job search configuration | "cron job", "task" |
 | `ActionResult<T>` | Typed server action response | `Promise<any>` |
 
@@ -259,7 +260,7 @@ Formal specifications in `specs/*.allium` capture domain behaviour:
 - **Refactoring** → existing tests must pass unchanged (or be updated if return shapes change)
 - **New Connector Module** → unit tests for translator, integration test for search/getDetails
 - **i18n changes** → dictionary consistency validation
-- Run `bash scripts/test.sh --no-coverage` before every commit — all 748+ tests must pass
+- Run `bash scripts/test.sh --no-coverage` before every commit — all tests must pass
 - Run `source scripts/env.sh && bun run build` — zero type errors
 
 ### Test Infrastructure
@@ -312,11 +313,14 @@ Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` on
 
 - **When user reports bugs:** IMMEDIATELY add them to `docs/BUGS.md` with ID, description, file, and severity — before starting any fix. BUGS.md is the single source of truth for all known issues.
 - **After bugfixes:** Mark fixed bugs in `docs/BUGS.md`, update counts and status header. Always keep BUGS.md in sync with reality.
-- **After architecture changes:** Run the `/architecture-decision-records` skill to document the decision in `docs/adr/`, unless an ADR was already written by a team agent in the same session.
-- **After UI changes:** Must have consulted the ui-design agent before implementation (design-review, create-component, accessibility-audit). Wait for findings, then implement.
+- **After architecture changes:** Run the `/architecture-decision-records` skill to document the decision in `docs/adr/`, unless an ADR was already written by a team agent in the same session OR it is outdated.
+- **After UI changes:** Must have consulted the ui-design agents before implementation (design-review, create-component, accessibility-audit) and for mobile responsiveness `/responsive-design`. Wait for findings, if needed share with other agents,  then implement.
+- **After feature implementation:** Check `docs/documentation-agents.md` for which documentation agent/skill to run. Docs grow WITH features — update README, write User Guide sections, generate API docs as features ship.
 
 ## Git Workflow
 
-- Upstream: `Gsync/jobsync` (fork)
+- Upstream: `Gsync/jobsync` (fork) 
+- Upstream-Maintainer won't accept PRs, use own repository
+- Create and use own branches whereas needed
 - Always commit with logical grouping, not one big commit
 - Push explicitly when asked
