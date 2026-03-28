@@ -94,6 +94,7 @@ Module registrieren sich mit einem **Manifest** beim Connector und deklarieren i
    - Validierung von `connectorParams` gegen Modul-Schema
 3. **Activation/Deactivation** — Lifecycle-Management:
    - Modul aktiviert → Connector-Status wird derived (aktiv wenn ≥1 Modul aktiv)
+   - Modul aktiviert → `JobSource.findOrCreate(module.id, module.name)` — Referenzdaten automatisch aktuell (ex 1.4)
    - Modul/Connector deaktiviert + Automation nutzt es → Automation pausiert + User benachrichtigt
    - Deaktivierte Module erscheinen nicht im Automation Wizard
 4. **Health Monitoring** — Pro Modul:
@@ -285,9 +286,13 @@ Bestehendes Modul für die Jobsuche über den Job Discovery Connector. Funktioni
 - **Eingehend:** Externe Systeme können Jobs/Events an JobSync pushen
 - **Ausgehend:** JobSync sendet Events (neuer Job, Statusänderung) an externe Systeme
 - Konfigurierbare Endpoints als Module pro externem System
+- **Beispiel-Usecases für Doku:**
+  - Home Assistant: Lampe blinken / Sound abspielen bei neuem Jobangebot oder erfolgreicher Bewerbung (outgoing Webhook → HA Automation)
+  - Slack/Discord: Notification in Channel bei neuen Jobs
+  - IFTTT/Zapier: Trigger für beliebige Aktionen
 
-### 1.4 Connector → JOB_SOURCES Sync
-- Aktivierte Module aktualisieren automatisch die JOB_SOURCES für die Job-Tabelle und Job-Details/Metadaten
+### 1.4 ~~Connector → JOB_SOURCES Sync~~ → verschoben nach 0.4
+- Überführt in den Module Lifecycle Manager (→ 0.4) als Lifecycle-Seiteneffekt: Bei Modul-Aktivierung wird der entsprechende `JobSource`-Eintrag automatisch via `findOrCreate` angelegt.
 
 ### 1.5 Job-Alerts
 - Benachrichtigungen bei neuen Jobs, die den Suchkriterien entsprechen
@@ -400,7 +405,15 @@ App (Kernlogik) ↔ Connector (ACL) ↔ Module (Externes System)
 **Vorteile:** Fehler-Isolation, Module austauschbar, unabhängiges Testing, klare Verträge.
 
 ### 1.12 Communication Connector
-- **Modul: E-Mail (SMTP/IMAP)** — Bewerbungs-E-Mails senden/empfangen
+- **Modul: E-Mail** — Bewerbungs-E-Mails senden/empfangen
+  - **Anbindungsmöglichkeiten (User wählt in Settings):**
+    - SMTP/IMAP direkt (eigener Mailserver, Gmail App Password, etc.)
+    - Microsoft Graph API (Outlook/M365 — OAuth2)
+    - Google Gmail API (OAuth2)
+    - Transactional E-Mail Services: Resend, SendGrid, Mailgun, Amazon SES (API-Key)
+  - **Dokumentation/Anleitung:** Schritt-für-Schritt Setup pro Anbindung — wie der E-Mailverkehr zum Mailserver kommt und umgekehrt zu JobSync
+  - **Empfang (Inbox-Sync):** IMAP-Polling oder Webhook-basiert (je nach Provider) — empfangene E-Mails werden der CRM Timeline (→ 5.9) zugeordnet
+  - **Senden:** Templates (→ 4.9), Anhänge, Application Locale Profile (→ Sektion 4 Cross-Cutting)
 - **Modul: PBX** — Telefonie-Integration, Anruf-Tracking
 
 ### 1.13 Data Enrichment Connector
@@ -679,6 +692,31 @@ Geführte Einführung über die UI-Elemente der App, kombinierbar mit dem Onboar
 - v1: Hardcoded Defaults, nicht konfigurierbar (Aufwand für Konfiguration zu hoch für wenige User)
 - Accessibility: Keine Konflikte mit Screen-Reader-Navigation (Tab, Shift+Tab, F6, Alt+F4)
 
+### 2.17 Browser Extension (Quick-Add)
+- Ein-Klick "Job speichern" von jeder Website (LinkedIn, StepStone, Indeed, etc.) → landet in Staging Queue (→ 0.5)
+- **Funktionen:**
+  - Erkennt Jobseiten automatisch (URL-Pattern-Matching für bekannte Portale)
+  - Extrahiert Titel, Firma, Standort, URL via Meta/OpenGraph + DOM-Parsing (→ Data Enrichment 1.13 Link-Parsing)
+  - Fallback: User markiert Text auf der Seite → wird als Beschreibung übernommen
+  - Optional: Direkt in Inbox statt Staging (User-Preference)
+- **Technisch:**
+  - Chrome Extension (Manifest V3) + Firefox Add-on
+  - Kommuniziert mit JobSync-Instanz via Public API (→ 7.1) + API Key
+  - Self-Hosted: User konfiguriert seine Server-URL in der Extension
+- **Abgrenzung zu Link-Parsing (3.6):** Extension ist der Capture-Punkt (auf der fremden Website), Link-Parsing ist die Verarbeitung (in JobSync)
+
+### 2.18 Analytics / Bewerbungsstatistiken
+- Dashboard mit Insights zur Jobsuche-Effektivität
+- **Metriken:**
+  - Erfolgsquote pro Quelle/Modul (welches Modul liefert die besten Matches?)
+  - Durchschnittliche Antwortzeit nach Bewerbung
+  - Bewerbungsfunnel: Staging → Inbox → Applied → Interview → Offer (Conversion Rates)
+  - Gehaltstrendentwicklung der beworbenen Stellen
+  - Aktivitäts-Heatmap (wann wird am meisten beworben?)
+  - Top-Skills in abgelehnten vs. erfolgreichen Bewerbungen
+- **Datenquellen:** Job Aggregate, StagedVacancy, AutomationRun, Activity, CRM
+- **Visualisierung:** Charts in Dashboard-Widget, detaillierte Statistik-Seite
+
 ---
 
 ## 3. Quality of Life
@@ -782,6 +820,39 @@ Eigener Automationstyp der über alle getrackten Jobs läuft — kein Job-Discov
 
 ## 4. Bewerbungsunterlagen
 
+**Cross-Cutting: Application Locale Profile**
+Jeder Job hat ein **Application Locale Profile** das Sprache + Land + kulturelle Konventionen + Gender-Handling bündelt. Bestimmt: Document-Templates, E-Mail-Templates, Briefformat, Datumsformat, Anrede, Adressformat, Dateinamen.
+
+**Datenquellen (kein eigenes Repo nötig — Teil von JobSync's i18n):**
+
+| Concern | Quelle | Status |
+|---|---|---|
+| Adressformat | `@fragaria/address-formatter` (251 Länder, OpenCage Data) | Production-ready, npm |
+| Personenname-Format | `cldr-person-names-full` (Formalität, Länge, Reihenfolge) | Tech Preview, npm |
+| Datum/Zahl/Währung | Built-in `Intl` API + `date-fns` (bereits installiert) | Vorhanden |
+| Anrede/Grußformel | **Eigener Datensatz** (`src/data/locale-profiles/`) | Muss gebaut werden |
+| Briefstruktur (DIN 5008, NF Z) | **Eigener Datensatz** | Muss gebaut werden |
+| Gender-Handling pro Locale | **Eigener Datensatz** | Muss gebaut werden |
+
+**Eigener Correspondence-Locale-Datensatz** (`src/data/locale-profiles/{locale}.json`):
+- Pro Locale eine JSON-Datei mit Anrede, Grußformel, Briefstandard, Formalität, Gender-Optionen
+- **Defaults mitgeliefert** für DE, EN, FR, ES — User kann alle Felder anpassen und eigene hinzufügen
+- **User-Customization:** Anpassung in Settings-UI. Überschreibt Defaults per User-Preference (gespeichert in UserSettings). User kann eigene Locale-Profile anlegen (z.B. für CH-DE, AT-DE, BE-FR).
+- Kein separates Repository — bei Bedarf später extrahierbar
+
+- **Mehrsprachige Bewerbungen:** Ein Job kann **eine oder mehrere Sprachen** erfordern (z.B. "DE Anschreiben + EN CV"). User wählt pro Dokument die Sprache.
+- **Auto-Detection:** Aus der Sprache des Stellenangebots ableiten (EURES liefert `language`, Arbeitsagentur → DE, StepStone → DE, HelloWork → FR, etc.)
+- **User-Override:** Pro Job und pro Dokument konfigurierbar
+- **Fallback:** User-Locale wenn keine Sprache erkennbar
+- **Dateinamen lokalisiert:** `<Datum> <Lang-Code> <Dok-Titel>` (z.B. `2026-03-28 DE Anschreiben`, `2026-03-28 EN Cover Letter`). Bezeichnungen vom User anpassbar.
+- **Gender-Handling Anrede:**
+  - Wenn CRM-Kontaktperson vorhanden (→ 5.7): Geschlecht aus Kontakt → "Sehr geehrte Frau Müller" / "Sehr geehrter Herr Müller"
+  - Wenn kein Geschlecht bekannt: Gender-neutrale Default-Variante (DE: "Guten Tag, [Name]" / "Sehr geehrte Damen und Herren", EN: "Dear [Name]", FR: "Madame, Monsieur")
+- **Adressformat:** `@fragaria/address-formatter` als Single Source of Truth (251 Länder, OpenCage-Daten)
+- **Kulturelle Konventionen:** Foto auf CV (DE/FR: ja, UK: nein), Formalitätslevel, Briefformat-Standard pro Land — als UX/UI Settings pro Locale Profile konfigurierbar, separater Kontext von Textinhalten
+- **Dokumentbezeichnungen:** Lokalisiert (DE: "Lebenslauf", EN: "CV", FR: "CV") — vom User anpassbar
+- **Konsumenten:** Dokumenten-Generatoren (4.2), Automatisches Datum (4.5), E-Mail-Templates (4.9), Format-Lokalisierung, Output-Struktur (4.3)
+
 ### 4.1 Skillsets
 - Verwaltung von Skill-Profilen basierend auf ESCO/NACE Taxonomien
 
@@ -831,6 +902,17 @@ Dynamische Dateipfade und Dateinamen:
 ### 4.8 Städte: Verdienst-Index
 - Gehaltsvergleich nach Stadt/Region
 - **Datenquellen:** Data Enrichment Connector (→ 1.13) — Modul: Glassdoor/Kununu Gehaltsdaten, Entgeltatlas der Arbeitsagentur, Destatis Verdiensterhebung
+
+### 4.9 E-Mail-Bewerbungs-Templates & Versand
+- Vorkonfigurierte E-Mail-Templates für Bewerbungen, Follow-Ups, Absagen, Danksagungen
+- **Template-Variablen:** `{Firma}`, `{Ansprechpartner}`, `{Jobtitel}`, `{Datum}`, `{Bewerber}` — automatisch aus Job/CRM-Daten befüllt
+- **Anhänge:** Generierte Dokumente (4.2) automatisch anhängen (CV, Anschreiben)
+- **Versand:** Über Communication Connector (→ 1.12) Modul: E-Mail (SMTP/IMAP)
+- **Tracking:** Gesendete Bewerbungs-E-Mails in CRM Timeline (→ 5.9) protokollieren
+- **Lokalisierung:** Sprache wird automatisch aus `applicationLanguage` des Jobs gewählt (→ Sektion 4 Cross-Cutting). User kann Sprache pro E-Mail überschreiben.
+  - **Anrede:** Sprachabhängig (DE: "Sehr geehrte/r Frau/Herr {Ansprechpartner}", EN: "Dear {Ansprechpartner}", FR: "Madame, Monsieur,")
+  - **Formalität:** DE formell, EN semi-formell, FR très formell — pro Template konfigurierbar
+  - **Footer/Signatur:** Sprachabhängige Grußformel + Kontaktdaten (DE: "Mit freundlichen Grüßen", EN: "Kind regards", FR: "Veuillez agréer...") + optionale Unterschrift (→ 4.4)
 
 ---
 
@@ -929,11 +1011,28 @@ Dynamische Dateipfade und Dateinamen:
   - Optional: Wasserzeichen mit Empfängername in geteilten PDFs
 - **Self-Hosted First:** Alle Daten bleiben auf dem eigenen Server — keine Cloud-Abhängigkeit für Kerndaten
 - **LLM-Datenschutz:** Konfigurierbar, ob Daten an externe LLM-APIs gesendet werden dürfen (Opt-In pro Modul)
+- **Vacancy Pipeline DSGVO (→ 0.5):**
+  - StagedVacancy Dedup-Hashing: Nach Retention-Frist werden Daten gelöscht, nur One-Way Hash bleibt (Privacy by Design, Art. 25)
+  - Dismissed StagedVacancies: Retention-Frist konfigurierbar, Hash-Only nach Ablauf (Datenminimierung, Art. 5(1)(c))
+  - Inbox Domain Events können personenbezogene Daten enthalten → Notification-Retention beachten
+- **Datenschutzerklärung automatisch aktuell halten:**
+  - Aktivierte Module bestimmen, welche Drittanbieter in der Datenschutzerklärung gelistet werden
+  - Bei Modul-Aktivierung/Deaktivierung (→ 0.4 Lifecycle): Datenschutzerklärung automatisch aktualisieren
+  - Module deklarieren im Manifest: `privacy: { dataProcessor: "OpenAI", dataCategories: ["job descriptions"], legalBasis: "consent" }`
+  - Template-basierte Generierung der Datenschutzerklärung aus aktivierten Modulen
+- **Data Retention Framework (generell):**
+  - Konfigurierbare Aufbewahrungsfristen **pro Entity-Typ** (nicht nur StagedVacancy)
+  - Betrifft: StagedVacancies (0.5), Trash-Jobs, alte AutomationRuns, alte Activities, alte Notes, Notifications, Audit-Logs
+  - Settings-UI: Retention-Konfiguration pro Kategorie (z.B. "AutomationRuns älter als 90 Tage löschen")
+  - Automatischer Cleanup-Job in Administrative Queue (→ 8.4)
+  - DSGVO Art. 5(1)(e): Speicherbegrenzung — Daten nur so lange wie nötig
+- **Legal Review:** DSGVO-Konformität der gesamten Pipeline (0.5) + Dedup-Hashing + Module-Datenschutz mit Legal-Agent überprüfen
 
 ### 6.2 API Security (Best Practices)
-- **Authentifizierung:** Alle API-Routes erfordern Session-Auth (bereits implementiert für ESCO/EURES)
+- **Authentifizierung:** Alle API-Routes erfordern Session-Auth (bereits implementiert für ESCO/EURES). Public API (→ 7.1): API Key Auth (Bearer Token, SHA-256 gehasht), getrennt von Session-Auth.
 - **Rate Limiting:** Request-Limits pro User/IP (bereits für manuelle Automation-Runs)
   - Erweiterung: globales Rate Limiting via Redis/Memory für alle Endpunkte
+  - Public API (→ 7.1): In-Memory Sliding Window pro API Key (60 req/min Default), separate Limits für externe Consumer vs. Frontend
 - **Input Validation:**
   - Zod-Schema-Validierung auf allen Eingaben (bereits implementiert)
   - URI-Whitelist für externe API-Proxies (SSRF-Schutz, bereits für ESCO)
@@ -1027,12 +1126,17 @@ JobSync exponiert eine stabile REST API für externe Tools (n8n, Webhooks, Custo
 - ffmpeg-Pipeline: Screenshots → GIF für kurze Animationen
 - Ablage in `docs/media/gifs/` und `docs/media/videos/`
 
-**Zu automatisierende Flows (Top 5-10):**
+**Zu automatisierende Flows (Top 10):**
 1. Dashboard-Übersicht (Hero-Screenshot für README)
-2. Automation Wizard (Schritt-für-Schritt Flow als GIF)
-3. Job-Tinder Swipe UI (wenn implementiert)
-4. Settings / Connector-Aktivierung
-5. Profil + CV-Verwaltung
+2. Vacancy Pipeline: Staging Queue → Review → Promote to Inbox (GIF)
+3. Automation Wizard (Schritt-für-Schritt Flow als GIF)
+4. Job-Tinder Swipe UI — Queue-Modus + Inbox-Modus (wenn implementiert)
+5. Settings / Module Marketplace — Aktivierung/Deaktivierung
+6. Profil + CV-Verwaltung
+7. Onboarding-Assistent Flow (wenn implementiert)
+8. CRM Timeline / Activity Log
+9. API Key Management + API-Docs Swagger UI
+10. Backup & Restore Flow
 
 **Integration:**
 - Als CI-Step oder Hook nach dem Build bei UI-Änderungen
@@ -1072,6 +1176,7 @@ JobSync exponiert eine stabile REST API für externe Tools (n8n, Webhooks, Custo
   - Pending Tasks (Enrichment-Requests, Health-Checks, Dedup-Cleanup)
   - Fehlgeschlagene Tasks mit Fehlermeldung und Retry-Option
   - Task-Backlog mit Priorität und Status
+- **Notifications:** Fehlgeschlagene Tasks und kritische Systemereignisse lösen Notifications aus (→ 0.6 Unified Notifications) an Admin/User bzw. "whom it concerns"
 - Nicht zu verwechseln mit der Vacancy Staging Area (→ 0.5) — dies ist eine System-Queue, keine User-Queue
 
 ### 8.5 DB-Migrationstool (Gsync → rorar)
@@ -1090,13 +1195,37 @@ Infrastructure Service — kein Domain-Concern. Distinct von DSGVO-Export (6.1):
 - **Retention-Rotation:** Max N Backups, ältere automatisch gelöscht. DSGVO-aware: Backups älter als Retention-Period rotieren.
 - Config: `BACKUP_SCHEDULE`, `BACKUP_STORAGE_PATH`, `BACKUP_RETENTION_DAYS`, `BACKUP_MAX_COUNT`
 
+### 8.8 Production Monitoring (Self-Hosted)
+- **Health Endpoint:** `GET /api/health` — DB-Connectivity, Disk Space, Module-Status Zusammenfassung
+- **System-Info Endpoint:** `GET /api/system` (auth-gated) — Version, Uptime, DB-Größe, Anzahl Jobs/StagedVacancies/Automations
+- **In-App Monitoring Dashboard (Admin/Developer Settings):**
+  - Ressourcenverbrauch (DB-Größe, Upload-Verzeichnis, Cache)
+  - Module Health-Übersicht (aggregiert aus 0.4 Module Lifecycle)
+  - Automation-Statistiken (Runs/Tag, Fehlerrate)
+  - Letzte Errors aus Error Reporter (→ 8.2)
+- **Externe Monitoring-Integration:** Health Endpoint kompatibel mit Uptime Kuma, Healthchecks.io, etc.
+- Cross-Ref: Administrative Queue (8.4) zeigt fehlgeschlagene Tasks
+
+### 8.9 Docker & Deployment Improvements
+- **Docker Compose:** Fertige `docker-compose.yml` für One-Command Setup
+- **Multi-Arch Builds:** ARM64 Support (Raspberry Pi, Synology NAS, Apple Silicon)
+- **Dockerfile Health Check:** `HEALTHCHECK` Directive nutzt `/api/health` Endpoint (→ 8.8)
+- **Update-Mechanismus:** Watchtower-kompatibel, Versionscheck im Admin UI ("Update verfügbar")
+- **Environment-Konfiguration:** `.env.example` mit allen Variablen dokumentiert, Setup-Wizard (→ 2.13) generiert `.env`
+- Cross-Ref: Projekt Setup UX (2.13) — Docker ist der primäre Deployment-Pfad für Non-Dev User
+
 ### 8.7 Module SDK & Package Convention
 Strukturierte Methode für Community-Module ohne Core-Fork. Phase 1 des Plugin-Systems.
 
 - **Package-Format:** npm Package das ein `ModuleManifest` exportiert
 - **Konvention:** `package.json` → `"jobsync": { "manifest": "./manifest.ts" }` Feld
 - **Auto-Discovery:** Lifecycle Manager scannt installierte Packages nach `jobsync`-Feld bei Startup
-- **Installation:** `bun add jobsync-module-xyz` → Restart → auto-registriert via ModuleRegistration Rule (0.4)
+- **Installationsquellen:**
+  - **npm Registry:** `bun add jobsync-module-xyz` → Restart → auto-registriert
+  - **Externes Git-Repository:** User gibt Repository-URL an (GitHub, GitLab, Self-Hosted Git) → Clone/Pull → auto-registriert. Ermöglicht private/interne Module ohne npm-Veröffentlichung.
+  - **Lokaler Pfad:** `file:../my-module` für Entwicklung
+- **Repository-Management UI (→ 2.11 Marketplace):** User kann externe Repositories hinzufügen/entfernen. Ähnlich wie Home Assistant HACS Custom Repositories.
+- **Update-Mechanismus:** Git-basierte Module können per UI auf neue Commits/Tags geprüft und aktualisiert werden
 - **Kein neuer Spec nötig** — nutzt bestehenden ModuleManifest-Vertrag aus `module-lifecycle.allium`
 - **Trust-Modell:** Wie Home Assistant / Obsidian — Community vertrauen, nicht sandboxen (Phase 1)
 - **Developer-Doku:** Template-Repository für Modul-Entwickler, Manifest-Referenz, Testing-Guide
@@ -1126,12 +1255,13 @@ Strukturierte Methode für Community-Module ohne Core-Fork. Phase 1 des Plugin-S
 ### 9.2 LinkedIn / XING Machbarkeitsstudie
 Research Spike — KEIN Connector, KEIN Modul. Erst Machbarkeit klären, dann entscheiden.
 
-**DDD-Boundary:** LinkedIn/XING sind Plattformen, kein einzelner Connector. Jede Fähigkeit mappt auf einen bestehenden Connector:
-- Job-Suche → Job Discovery Connector (1.14)
-- Company-Daten → Data Enrichment Connector (1.13)
-- Kontakt-Enrichment → Data Enrichment Connector (1.13)
-- CV-Import → File Import (3.5 / 5.8), KEIN Modul
-- Messaging → Communication Connector (1.12)
+**DDD-Boundary:** LinkedIn/XING sind **Module** die sich bei bestehenden Connectors registrieren (wie Google Maps: ein externes System, mehrere Module hinter verschiedenen Connectors). Shared `linkedin-client` / `xing-client` Utility für Auth + HTTP:
+- **Modul: LinkedIn/Jobs** → Job Discovery Connector (1.14)
+- **Modul: LinkedIn/Company** → Data Enrichment Connector (1.13)
+- **Modul: LinkedIn/Contact** → Data Enrichment Connector (1.13)
+- **LinkedIn Data Export Import** → File Import (3.5 / 5.8), kein Modul nötig
+- **Modul: LinkedIn/Messaging** → Communication Connector (1.12)
+- **Modul: XING/Jobs, XING/Company** → analog, aber deprioritisiert (API tot, Kununu deckt DACH ab)
 
 **Deliverables der Studie:**
 1. LinkedIn API-Landscape Dokumentation (welche Endpoints, welche Approval nötig)
@@ -1160,16 +1290,20 @@ Capability-basierte Isolation für untrusted Community-Module. Nur wenn Communit
 
 ---
 
-## Implementierte Features (Stand: 2026-03-26)
+## Implementierte Features (Stand: 2026-03-28)
 
 | Feature | Status |
 |---|---|
 | Roadmap 0.1: Connector Architecture Unification (ADR-010) | ✅ Implementiert |
+| ADR-012: Provider→Module Terminology Harmonization | ✅ Implementiert |
 | EURES Modul (EU Jobs) | ✅ Implementiert |
 | JSearch Modul (Google Jobs) | ✅ Upstream |
+| Arbeitsagentur Modul (DE Jobs) | ✅ Implementiert |
 | EURES Location Combobox (NUTS + Flags) | ✅ Implementiert |
 | ESCO Occupation Combobox (Multi-Select + Details) | ✅ Implementiert |
 | i18n (EN, DE, FR, ES) — 496 Keys | ✅ Implementiert |
 | Locale-aware Date/Number Formatting | ✅ Implementiert |
 | EU API Language Integration | ✅ Implementiert |
 | User Language Settings | ✅ Implementiert |
+| Roadmap 8.2: Client-Side Error Reporting Dashboard | ✅ Implementiert |
+| Allium Spec: Module Lifecycle Manager (`specs/module-lifecycle.allium`) | ✅ Spezifiziert |
