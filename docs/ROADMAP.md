@@ -51,20 +51,18 @@ src/lib/connector/                          ← Unified Connector Architecture
 - **Imports aktualisiert:** `@/lib/scraper/` -> `@/lib/connector/job-discovery/`, `@/lib/ai/` -> `@/lib/connector/ai-provider/`
 - **Tests bestanden**
 
-### 0.2 ActionResult<T> Typisierung vervollständigen
-- **Pattern A** (70/72 Funktionen): `ActionResult<unknown>` ✓ — fast abgeschlossen
-  - 68 mit `ActionResult<unknown>` — bereit für spezifische Typ-Migration
-  - 2 mit `ActionResult<Activity>` — Vorbild für die restlichen
-  - **Verbleibend:** `unknown` → spezifische Domain-Typen (Job, Company, Activity[], etc.)
-- **Pattern B** (6 Funktionen): `getAllX()` gibt raw Arrays zurück (throw-on-error)
-  - Caller-Refactoring damit auch `getAllX` ActionResult nutzt
-- **Pattern C** (24 Funktionen): Custom Return-Types
-  - Automation (12): eigenes `{ success, data?, message? }` Shape — funktioniert, ggf. beibehalten
+### 0.2 ActionResult<T> Typisierung vervollständigen -- DONE
+- **Pattern A** (73 Funktionen): ✅ Alle `ActionResult<unknown>` → spezifische Domain-Typen migriert
+  - 14 Dateien, 73 Funktionen mit konkreten Typen (Job, Company, Activity[], Tag, etc.)
+  - `as unknown as T` Casts überbrücken Prisma null/undefined Gap (wird in 0.3 aufgelöst)
+  - ApiKey (3): von Inline-Typen auf `ActionResult<ApiKeyClientResponse>` migriert
+- **Pattern B** (5 Funktionen): `getAllX()` gibt raw Arrays zurück — unverändert
+  - `getAllCompanies`, `getAllJobTitles`, `getAllJobLocations`, `getAllTags`, `getAllActivityTypes`
+  - Caller-Refactoring → separates Ticket
+- **Pattern C** (24 Funktionen): Custom Return-Types — unverändert
+  - Automation (12): eigenes `{ success, data?, message? }` Shape — beibehalten
   - Dashboard (7): domänenspezifische Returns — bleiben custom
-  - ApiKey (3): sollte auf ActionResult migriert werden
   - Auth (2): untypisiert — Auth-Refactoring separat
-- Endziel: `ActionResult<DomainType>` mit spezifischen Prisma-aligned Domain-Models
-- Reihenfolge: **0.2 vor 0.3** — erst ActionResult-Typen konkretisieren, dann Domain-Models alignen
 - Siehe `specs/action-result.allium` für die vollständige Klassifikation
 
 ### 0.3 Domain-Model Alignment
@@ -1363,5 +1361,6 @@ Automation findet Jobs → LLM filtert & bewertet (Staging) → LLM promoted zu 
 | Locale-aware Date/Number Formatting | ✅ Implementiert |
 | EU API Language Integration | ✅ Implementiert |
 | User Language Settings | ✅ Implementiert |
+| Roadmap 0.2: ActionResult<T> Typisierung | ✅ Implementiert |
 | Roadmap 8.2: Client-Side Error Reporting Dashboard | ✅ Implementiert |
 | Allium Spec: Module Lifecycle Manager (`specs/module-lifecycle.allium`) | ✅ Spezifiziert |
