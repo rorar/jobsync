@@ -213,12 +213,56 @@ Intake (Automation ODER Manual) → Staging Area → Processing → Inbox → Tr
   - Bewerbungspause: User kann Automations pausieren; Staging-Daten bleiben unberührt bis Retention greift
 - Pagination/Virtualisierung in der Staging-UI für große Datenmengen
 
+**Bulk Actions (Domain Service, nicht nur UI-Loop):**
+- Multi-Select + Batch-Operation: bulk dismiss, bulk promote, bulk archive, bulk tag, bulk delete
+- **Partial-Success-Semantik:** Jedes Item wird einzeln validiert. Invalid Items werden übersprungen, nicht die ganze Batch gerollt.
+- **Ein Undo-Eintrag pro Batch** (nicht pro Item). Ctrl+Z reverst die gesamte Batch.
+- **Ein `BulkActionCompleted` Domain Event** pro Batch (nicht N einzelne Events).
+- Consumer (Notifications, Audit-Log) erhalten die Item-ID-Liste aus dem Batch-Event.
+
 **Open Questions:**
 - Undo-Implementierung: Command Pattern (Action-Stack) oder einfacher Timer-basierter Soft-Revert?
+- Partial Undo innerhalb einer Batch: Separate "Restore"-Aktion oder Undo-Granularität pro Item?
 
 - **Reihenfolge:** Nach 0.4 (Module Lifecycle), da Inbox-Events die Connector-Infrastruktur nutzen
 - **Voraussetzung für:** Job-Tinder Dual-Use (2.7), CRM (5), Bewerbungsunterlagen (4)
 - Allium Spec: `specs/vacancy-pipeline.allium` (zu erstellen)
+
+### 0.6 Unified Notification System
+Application Service für Dispatch + bestehende Connectors für Delivery. **Dispatch ≠ Delivery.**
+
+- **Dispatch (intern):** `NotificationDispatcher` subscribt Domain Events → prüft User-Preferences → routet an Channels
+- **Delivery (extern):** E-Mail (→ Communication Connector 1.12), Browser Push, Webhook (→ 1.3), In-App (DB-Write)
+- **Preferences:** Teil von UserSettings (kein eigenes Aggregate). Channels, Digest-Modus, Quiet Hours, per-Typ-Overrides.
+- **Phasen:**
+  1. In-App Notifications (Bell-Icon, DB-backed) — unblocked 0.4 (Degradation) und 0.5 (Promotion)
+  2. E-Mail Channel via Communication Connector (1.12)
+  3. Browser Push Channel
+  4. Webhook Channel für n8n-Integration (1.3)
+- **Key Insight:** Job-Alerts (1.5) und CRM-Reminders (5.4) sind **Notification-Rules**, keine eigenen Systeme. Sie werden als Konfiguration des Dispatchers modelliert.
+- **Reihenfolge:** VOR 0.7 (Search), weil 0.4 und 0.5 bereits Notifications emittieren ohne Infrastruktur
+- Allium Spec: `specs/notification-dispatch.allium` (zu erstellen)
+
+### 0.7 Volltextsuche
+Application Service (CQRS-lite Read-Projektion), kein Connector. Indiziert eigene Domain-Daten, kein externes System.
+
+- **Default:** SQLite FTS5 (same-process, zero Dependencies) — ausreichend für Self-Hosted
+- **Phasen:**
+  1. FTS5 auf Job + StagedVacancy (Kern-Suche, Quick Win)
+  2. Erweitert auf Contact, Company, Resume, Notes (Cross-Aggregate-Suche für CRM)
+  3. Optional: Meilisearch/Typesense Backend für große Datenmengen (dann als Modul hinter Search-Connector)
+- **Invarianten:** Tenant-Isolation (Suche nur eigene Daten), DSGVO-Deletion propagiert zum Index, Eventually Consistent
+- **Cross-Ref:** Staging (0.5) — dismissed StagedVacancies suchbar im "Abgelehnt"-Tab aber nicht in Default-Ergebnissen
+
+### 0.8 PWA / Offline Support (Read-Only)
+Progressive Web App für mobile Nutzung. **Split: Read-Only zuerst, Offline-CRUD separat (später).**
+
+- **Phase 1 (0.8):** Read-Only PWA — Service Worker, Cache-First für Static Assets, Offline-Cache von Jobs/Contacts/Staging
+  - Usecases: Job-Details unterwegs lesen, Staging-Queue auf dem Handy reviewen, Notizen bei Interviews nachschlagen
+  - Kein Offline-Write. Alle Mutationen erfordern Connectivity.
+- **Phase 2 (3.10, später):** Offline-CRUD — lokale Action-Queue, Optimistic Locking (Version-Field), Conflict Resolution bei Sync
+  - Nur bei konkretem User-Demand. Multi-Device (Handy + Laptop) ist der reale Conflict-Vektor.
+- **Invarianten:** Offline-Actions in FIFO-Reihenfolge replayed, keine Offline-Automation-Runs (erfordern Server-Side API-Calls)
 
 ---
 
@@ -625,6 +669,16 @@ Geführte Einführung über die UI-Elemente der App, kombinierbar mit dem Onboar
 - Konfigurierbar: per Firmenname, Domain, oder Handelsregisternummer
 - Blacklist-Grund optional dokumentierbar (nur für User sichtbar)
 
+### 2.16 Keyboard Shortcuts
+- Pure UI-Infrastruktur, keine Domain-Relevanz. Kein Allium-Spec nötig.
+- **Navigation:** J/K (prev/next, vim-style), Pfeiltasten in Job-Tinder (→ 2.7)
+- **Aktionen:** D (dismiss), P (promote), S (super-like), Ctrl+Z (undo)
+- **Global:** ? (Shortcut-Hilfe anzeigen, GitHub/Gmail-Konvention), / (Suche öffnen)
+- Single-Letter Shortcuts nur aktiv wenn Fokus auf der passenden Surface (nicht in Textfeldern)
+- Shortcut-Hints als Tooltips auf Action-Buttons
+- v1: Hardcoded Defaults, nicht konfigurierbar (Aufwand für Konfiguration zu hoch für wenige User)
+- Accessibility: Keine Konflikte mit Screen-Reader-Navigation (Tab, Shift+Tab, F6, Alt+F4)
+
 ---
 
 ## 3. Quality of Life
@@ -897,13 +951,55 @@ Dynamische Dateipfade und Dateinamen:
   - Anomalie-Erkennung bei API-Nutzung
   - Optional: Sentry/OpenTelemetry Integration
 
+### 6.3 Accessibility (WCAG / EU Accessibility Act)
+Cross-cutting Quality Attribute — kein eigener Spec, sondern `@guarantee` Clauses auf jeder Surface.
+
+- **EU Accessibility Act (EAA):** Seit 2025 in Kraft, relevant für EU-fokussiertes Projekt
+- **Standard:** WCAG 2.2 AA Compliance
+- **Kern-Anforderungen:**
+  - **Focus Management:** Dynamische Inhalte (Pipeline-Transitions, Toasts, Modals) verschieben Fokus vorhersagbar. Fokus geht nie auf `<body>` verloren.
+  - **ARIA Labels:** Jedes interaktive Element hat einen accessible name. Icon-Buttons nutzen `aria-label`.
+  - **Farbkontrast:** WCAG AA Ratios (4.5:1 Text, 3:1 UI-Elemente). Shadcn Default-Theme erfüllt dies.
+  - **Reduced Motion:** Alle Animationen respektieren `prefers-reduced-motion: reduce`.
+  - **Screen Reader Announcements:** `aria-live` Regions für dynamische Inhalte (Toasts: `role="status"`, Fehler: `role="alert"`).
+- **Job-Tinder (→ 2.7):** Swipe-UI ist inhärent visuell. Screen-Reader brauchen List-View Alternative mit expliziten Buttons. Toggle: "Card View" vs. "List View".
+- **Bestehende Basis:** Shadcn UI / Radix bietet gute a11y-Foundation. `specs/ui-combobox-keyboard.allium` hat bereits `@guarantee AccessibleKeyboardNavigation` — dieses Pattern auf alle Surfaces anwenden.
+
 ---
 
 ## 7. API & Dokumentation
 
-### 7.1 Automatische API-Dokumentation
-- OpenAPI/Swagger Dokumentation für alle API-Endpunkte
-- Auto-generiert aus den Next.js API Routes
+### 7.1 Public API (REST — Open Host Service)
+JobSync exponiert eine stabile REST API für externe Tools (n8n, Webhooks, Custom Scripts). Die API ist eine **Published Language** (DDD) — manuell designte Surface, nicht auto-generiert aus Prisma.
+
+**Architektur:**
+- **Route-Namespace:** `/api/v1/*` (öffentlich, versioniert) neben `/api/*` (intern, Frontend-only)
+- **Auth:** API Keys (Bearer Token, SHA-256 gehasht, nie Plaintext). Eigenes `PublicApiKey` Model, getrennt von Module-API-Keys.
+- **Session-Bridge:** `AsyncLocalStorage` injiziert API-Key-User in `getCurrentUser()` — Server Actions funktionieren ohne Änderung für beide Auth-Wege.
+- **ActionResult→HTTP Bridge:** Thin Route Handler ruft bestehende Server Actions auf, `actionToResponse()` übersetzt `ActionResult<T>` in HTTP Status Codes + JSON Envelope (`{ data, pagination }` / `{ error }`).
+- **Rate Limiting:** In-Memory Sliding Window pro API Key (60 req/min Default). Kein Redis nötig für Self-Hosted.
+
+**Aggregate-Grenzen in der API:**
+- Nested Routes für Aggregate-Children: `/api/v1/jobs/:id/notes`, `/api/v1/automations/:id/runs`
+- Flat Routes für Aggregate-Roots: `/api/v1/jobs`, `/api/v1/tasks`, `/api/v1/activities`
+- Action-Endpoints (RPC-Style) für Seiteneffekte: `POST /automations/:id/pause`, `POST /automations/:id/resume`
+
+**Phasen:**
+1. Foundation: PublicApiKey Model + Auth + Jobs-Endpoints + Key-Management-UI in Settings
+2. Full Surface: Tasks, Activities, Automations, Tags, Statuses
+3. Hardening: Scoped Keys (read-only vs. read-write), Audit-Log, Key-Rotation
+
+- **Design-Entscheidungen:** REST (nicht GraphQL), API Keys (nicht OAuth), manuell designte Surface (nicht Prisma-auto-gen)
+- Voraussetzung: 0.4 (Module Lifecycle — API Key Infrastruktur)
+- Cross-Ref: Webhook Connector (1.3) incoming nutzt die Public API Layer, Workflow Connector (1.2/n8n) konsumiert die API
+
+### 7.2 API-Dokumentation (automatisch generiert)
+- OpenAPI/Swagger Dokumentation für alle Public API Endpunkte
+- **Workflow:** Zod-Schemas (für Validierung) → `zod-to-json-schema` → OpenAPI-kompatible Schemas → Swagger UI
+- Endpoint-Definitionen (Pfade, Methoden, Beschreibungen) manuell designt
+- Schema-Dokumentation (Feld-Typen, Validierung, Beispiele) automatisch aus Zod generiert
+- Swagger UI unter `/api-docs` serviert
+- Tooling: `@asteasolutions/zod-to-openapi` oder `zod-to-json-schema` + handgeschriebene OpenAPI-Spec
 
 ---
 
@@ -983,6 +1079,29 @@ Dynamische Dateipfade und Dateinamen:
 - Schema-Mapping, Daten-Export/Import, Validierung
 - Einmalige Migration mit Rollback-Möglichkeit
 
+### 8.6 Backup & Restore
+Infrastructure Service — kein Domain-Concern. Distinct von DSGVO-Export (6.1): Export = per-User Datenportabilität, Backup = Operator-level Disaster Recovery.
+
+- **Was wird gesichert:** SQLite DB-File + hochgeladene Dateien (Resumes, Unterschriften)
+- **Was NICHT:** node_modules, .next Build-Cache, Search-Index (rebuildable), .env (Security-Risiko → separat sichern)
+- **Manuell:** "Backup jetzt" Button in Settings → .tar.gz/.zip Download
+- **Scheduled:** Cron-Config (täglich/wöchentlich), schreibt in konfigurierbaren Pfad
+- **Restore:** Backup-Datei hochladen → Validierung (Checksum, Format, Schema-Version) → Bestätigung → Daten ersetzen
+- **Retention-Rotation:** Max N Backups, ältere automatisch gelöscht. DSGVO-aware: Backups älter als Retention-Period rotieren.
+- Config: `BACKUP_SCHEDULE`, `BACKUP_STORAGE_PATH`, `BACKUP_RETENTION_DAYS`, `BACKUP_MAX_COUNT`
+
+### 8.7 Module SDK & Package Convention
+Strukturierte Methode für Community-Module ohne Core-Fork. Phase 1 des Plugin-Systems.
+
+- **Package-Format:** npm Package das ein `ModuleManifest` exportiert
+- **Konvention:** `package.json` → `"jobsync": { "manifest": "./manifest.ts" }` Feld
+- **Auto-Discovery:** Lifecycle Manager scannt installierte Packages nach `jobsync`-Feld bei Startup
+- **Installation:** `bun add jobsync-module-xyz` → Restart → auto-registriert via ModuleRegistration Rule (0.4)
+- **Kein neuer Spec nötig** — nutzt bestehenden ModuleManifest-Vertrag aus `module-lifecycle.allium`
+- **Trust-Modell:** Wie Home Assistant / Obsidian — Community vertrauen, nicht sandboxen (Phase 1)
+- **Developer-Doku:** Template-Repository für Modul-Entwickler, Manifest-Referenz, Testing-Guide
+- Cross-Ref: Marketplace UI (2.11) zeigt auch Community-Module. Plugin-Sandboxing als experimentelles Feature (→ 9.3)
+
 ---
 
 ## 9. Experimentell
@@ -1003,6 +1122,41 @@ Dynamische Dateipfade und Dateinamen:
   - Integration mit dem bestehenden AI Match-Score System
 - **Ressourcen:**
   - https://github.com/julianrosenberger/careerbert
+
+### 9.2 LinkedIn / XING Machbarkeitsstudie
+Research Spike — KEIN Connector, KEIN Modul. Erst Machbarkeit klären, dann entscheiden.
+
+**DDD-Boundary:** LinkedIn/XING sind Plattformen, kein einzelner Connector. Jede Fähigkeit mappt auf einen bestehenden Connector:
+- Job-Suche → Job Discovery Connector (1.14)
+- Company-Daten → Data Enrichment Connector (1.13)
+- Kontakt-Enrichment → Data Enrichment Connector (1.13)
+- CV-Import → File Import (3.5 / 5.8), KEIN Modul
+- Messaging → Communication Connector (1.12)
+
+**Deliverables der Studie:**
+1. LinkedIn API-Landscape Dokumentation (welche Endpoints, welche Approval nötig)
+2. Community-Library Evaluation (linkedin-api Python, etc.)
+3. Legal/DSGVO Risk Assessment: Job-Listings (non-personal, lower risk) vs. Profil-Daten (personal, high risk)
+4. Risk Matrix: Account-Ban-Wahrscheinlichkeit, TOS-Enforcement, Detection
+5. Go/No-Go Entscheidung pro Fähigkeit (Jobs, Company, Contact, Import)
+
+**Priorisierung:**
+- **Zero-Risk sofort machbar:** LinkedIn Data Export Import (JSON/CSV → Profil). Kein API nötig. → 3.5 / 5.8
+- **Lower Risk:** LinkedIn/Jobs als Job Discovery Modul (öffentliche Listings)
+- **Medium Risk:** LinkedIn/Company als Enrichment Modul
+- **High Risk / Deprioritisieren:** LinkedIn/Contact Scraping (personal data, DSGVO), XING (API tot, Kununu deckt DACH ab)
+
+### 9.3 Plugin Sandboxing (low priority)
+Capability-basierte Isolation für untrusted Community-Module. Nur wenn Community-Ecosystem sich entwickelt.
+
+- **Capability Model:** Module deklariert benötigte Permissions im Manifest:
+  - `network: ["api.example.com"]` — erlaubte Outbound-Hosts
+  - `database: read_only | none` — DB-Zugriffslevel
+  - `filesystem: none` — kein Dateisystemzugriff
+  - `env: ["MY_MODULE_KEY"]` — nur spezifische Env-Vars
+- **Isolation-Optionen:** Worker Threads / Child Processes (OS-Level) oder WASM (Browser-Level)
+- **Abgrenzung:** Phase 1 + 2 (→ 8.7) vertrauen Community (wie Home Assistant). Phase 3 nur bei konkretem Missbrauch.
+- Depends on: 8.7 (Module SDK)
 
 ---
 
