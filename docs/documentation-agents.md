@@ -3,8 +3,8 @@
 Available agents and skills for documentation in JobSync. Use on demand — not all at once.
 
 **Stack:**
-- `claude-code-workflows` (wshobson) — documentation generation, C4 architecture, code review
-- `juxt-plugins` (Allium) — behavioral specifications (elicit, tend, weed, distill, propagate)
+- [`claude-code-workflows`](https://github.com/wshobson/claude-code-workflows) (wshobson) — documentation generation, C4 architecture, code review
+- [`allium`](https://github.com/juxt/allium) (juxt) — behavioral specifications (elicit, tend, weed, distill, propagate)
 
 ## When to use which Agent/Skill?
 
