@@ -1309,6 +1309,28 @@ Capability-basierte Isolation für untrusted Community-Module. Nur wenn Communit
 - **Abgrenzung:** Phase 1 + 2 (→ 8.7) vertrauen Community (wie Home Assistant). Phase 3 nur bei konkretem Missbrauch.
 - Depends on: 8.7 (Module SDK)
 
+### 9.4 YOLO Mode (Full Autopilot)
+**Wenn der User ein volles LLM-Setup hat:** Ein Modus der den kompletten Bewerbungsprozess autonom durchführt.
+
+**Pipeline im YOLO Mode:**
+```
+Automation findet Jobs → LLM filtert & bewertet (Staging) → LLM promoted zu Inbox
+→ LLM generiert CV + Anschreiben (Application Locale Profile) → LLM verfasst E-Mail
+→ Automatischer Versand via Communication Connector → CRM-Eintrag → Follow-Up Timer
+→ Bei Antwort: LLM analysiert & schlägt nächste Aktion vor
+```
+
+- **Aktivierung:** Opt-In in Settings, hinter Bestätigungsdialog mit Warnhinweis
+- **Warnung:** "YOLO Mode übernimmt den kompletten Bewerbungsprozess autonom. Bewerbungen werden OHNE manuelle Prüfung versendet. Das kann spektakulär schief gehen. Auf eigenes Risiko."
+- **Safeguards:**
+  - Tägliches Bewerbungslimit (Default: 5) — verhindert Spam
+  - Company Blacklist (→ 2.15) wird respektiert
+  - Match-Score Minimum (konfigurierbar, Default: 90%)
+  - Review-Queue: User kann nachträglich sehen was gesendet wurde
+  - Kill-Switch: Sofort deaktivierbar, pausiert alle pending Actions
+  - Dry-Run Modus: Macht alles außer tatsächlich senden — User reviewt Entwürfe
+- **Depends on:** Praktisch alles — 0.4, 0.5, 0.6, 1.12 (E-Mail), 4.2, 4.9, Application Locale Profile, AI Connector
+
 ---
 
 ## Implementierte Features (Stand: 2026-03-28)
