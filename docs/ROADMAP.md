@@ -131,7 +131,7 @@ Module registrieren sich mit einem **Manifest** beim Connector und deklarieren i
 | openai | AI | Ja (`OPENAI_API_KEY`) | — | Ja | Keine |
 | deepseek | AI | Ja (`DEEPSEEK_API_KEY`) | — | Ja | Keine |
 
-- Voraussetzung für: Marketplace UI (→ 2.7), Unified Automation Wizard (→ 2.7), Onboarding Modul-Aktivierung (→ 2.1)
+- Voraussetzung für: Marketplace UI (→ 2.11), Unified Automation Wizard (→ 2.10), Onboarding Modul-Aktivierung (→ 2.1)
 - Allium Spec: `specs/module-lifecycle.allium`
 - **DDD-Pattern:** Published Language — der Connector publiziert einen Settings-Vertrag (`ModuleManifest`), Module erfüllen ihn mit ihren spezifischen Anforderungen. Basis-Vertrag mit connector-spezifischen Extensions (`JobDiscoveryManifest`, `AiManifest`).
 
@@ -241,8 +241,13 @@ Application Service für Dispatch + bestehende Connectors für Delivery. **Dispa
   3. Browser Push Channel
   4. Webhook Channel für n8n-Integration (1.3)
 - **Key Insight:** Job-Alerts (1.5) und CRM-Reminders (5.4) sind **Notification-Rules**, keine eigenen Systeme. Sie werden als Konfiguration des Dispatchers modelliert.
-- **Reihenfolge:** VOR 0.7 (Search), weil 0.4 und 0.5 bereits Notifications emittieren ohne Infrastruktur
-- Allium Spec: `specs/notification-dispatch.allium` (zu erstellen)
+- **Domain Event Bus (architektonischer Owner):**
+  - 0.6 besitzt den Event Bus als Infrastruktur — nicht nur für Notifications, sondern als **genereller Publish/Subscribe-Mechanismus** für Domain Events
+  - Events: `VacancyPromoted` (0.5), `JobExpired` (3.8), `DocumentsAvailable` (4.2), `BulkActionCompleted` (0.5), `ModuleDeactivated` (0.4)
+  - NotificationDispatcher ist ein Consumer des Event Bus, nicht der Bus selbst
+  - Andere Consumer: CRM (5), Data Enrichment (1.13), Dokumenten-Generatoren (4.2), Administrative Queue (8.4)
+- **Reihenfolge:** NACH 0.4 und 0.5 (die Events produzieren), VOR 0.7 (Search)
+- Allium Spec: `specs/notification-dispatch.allium` (zu erstellen — inkl. Event Bus Definition)
 
 ### 0.7 Volltextsuche
 Application Service (CQRS-lite Read-Projektion), kein Connector. Indiziert eigene Domain-Daten, kein externes System.
@@ -251,7 +256,7 @@ Application Service (CQRS-lite Read-Projektion), kein Connector. Indiziert eigen
 - **Phasen:**
   1. FTS5 auf Job + StagedVacancy (Kern-Suche, Quick Win)
   2. Erweitert auf Contact, Company, Resume, Notes (Cross-Aggregate-Suche für CRM)
-  3. Optional: Meilisearch/Typesense Backend für große Datenmengen (dann als Modul hinter Search-Connector)
+  3. Optional: Meilisearch/Typesense als externes Search-Backend (eigener Connector mit Modulen, nur wenn SQLite FTS5 nicht mehr ausreicht)
 - **Invarianten:** Tenant-Isolation (Suche nur eigene Daten), DSGVO-Deletion propagiert zum Index, Eventually Consistent
 - **Cross-Ref:** Staging (0.5) — dismissed StagedVacancies suchbar im "Abgelehnt"-Tab aber nicht in Default-Ergebnissen
 
@@ -294,7 +299,8 @@ Bestehendes Modul für die Jobsuche über den Job Discovery Connector. Funktioni
 ### 1.4 ~~Connector → JOB_SOURCES Sync~~ → verschoben nach 0.4
 - Überführt in den Module Lifecycle Manager (→ 0.4) als Lifecycle-Seiteneffekt: Bei Modul-Aktivierung wird der entsprechende `JobSource`-Eintrag automatisch via `findOrCreate` angelegt.
 
-### 1.5 Job-Alerts
+### 1.5 Job-Alerts (→ Notification-Rule in 0.6)
+- Wird als Notification-Rule im Unified Notification System (→ 0.6) implementiert, nicht als eigenständiges System
 - Benachrichtigungen bei neuen Jobs, die den Suchkriterien entsprechen
 - Push-Benachrichtigungen (Browser), E-Mail-Alerts, Webhook-Notifications
 - Konfigurierbar pro Automation (Frequenz, Schwellenwert, Kanal)
@@ -388,7 +394,7 @@ Entfernungsberechnung und Kartenintegration als Connector mit austauschbaren Mod
 - **Modul: OpenStreetMap** (kostenlos, Standard)
 - **Modul: Google Maps JS SDK** (API-Key)
 - **Modul: Mapbox GL** (API-Key, anpassbare Stile)
-- Integration mit Kartenansicht (→ 2.4)
+- Integration mit Kartenansicht (→ 2.5)
 
 ### 1.11 Architekturprinzip: App ↔ Connector ↔ Module (ACL)
 
@@ -494,12 +500,14 @@ Alle Module implementieren `DataSourceConnector` (search + optional getDetails),
 - Anbindung an die NEW PLAN Plattform der Bundesagentur für Arbeit (Berufsorientierung, Weiterbildung)
 - https://mein-now.de/new-plan
 - API: https://github.com/bundesAPI/newplan-api
-- Kann als Enrichment-Modul (Weiterbildungsempfehlungen) oder als eigenständiger Connector fungieren
+- **Entscheidung:** Modul im Data Enrichment Connector (→ 1.13) für Weiterbildungsempfehlungen als Enrichment-Dimension
+- **Consumer:** Onboarding (→ 2.1 Karriereplanung), Selbstfindung (→ 2.14), Skillsets (→ 4.1)
 
 ### 1.16 Weitere Bundes-APIs (Discovery)
 - Weitere nützliche APIs der Bundesregierung evaluieren und discovern:
   - https://bund.dev/apis/
   - https://andreasfischer1985.github.io/arbeitsagentur-apis/
+- **Prozess:** Entdeckte APIs werden als Module unter bestehenden Connectors eingeordnet: 1.1/1.14 (Job Discovery), 1.13 (Data Enrichment), oder neue Connector-Kategorie falls kein bestehender passt
 
 ### 1.17 Briefversand Connector (low priority)
 - **Modul: Briefversand** — Physische Briefbewerbungen, Amtswege die der Schriftform bedürfen
@@ -553,7 +561,7 @@ Kontextsensitiver Einrichtungsassistent für neue Benutzer, der sich an deren Zi
   - Checkliste mit empfohlenen nächsten Schritten
 
 ### 2.2 Kununu & Glassdoor in Jobdetails (→ Data Enrichment Connector 1.13, Review-Module)
-- **Vorbedingung:** Modul-Evaluation abgeschlossen (→ 1.8), verfügbare Module bestimmen den UI-Scope
+- **Vorbedingung:** Modul-Evaluation abgeschlossen (→ 1.13 Review-Module), verfügbare Module bestimmen den UI-Scope
 - Unternehmensbewertungen und Gehaltsinformationen in den Jobdetails anzeigen
 - Filter für Bewertungen und Gehaltsinformationen für fundierte Bewerbungsentscheidungen
 - LLM-gestützte Analyse und Zusammenfassung von Bewertungen (Vor-/Nachteile eines Unternehmens)
@@ -592,10 +600,12 @@ Kontextsensitiver Einrichtungsassistent für neue Benutzer, der sich an deren Zi
 - Date Picker: Datumseingabe als Text mit Validierung nach Lokalisation
 - Text Input: Enter-Taste fügt Objekte hinzu (Chip-Pattern)
 
-### 2.7 Job-Tinder
-- Swipe/Icon Click/Pfeiltasten Navigation
+### 2.7 Job-Tinder + Inbox UI
+- **Inbox als eigenständige UI-Surface:** Dedizierte Seite für promoted Jobs (nach Vacancy Pipeline → 0.5). Nicht nur Job-Tinder-Modus, sondern auch Listen-/Tabellen-Ansicht.
+- **Job-Tinder Modus:** Swipe/Icon Click/Pfeiltasten Navigation
 - Aktionen: Kein Match (Archiv) / Match / Favorit / Mehr Details
 - Kartenbasierte Darstellung der entdeckten Jobs
+- **Application Pipeline Overview:** Dashboard-Widget für 20+ aktive Bewerbungen gleichzeitig — Task-Triage, Status-Übersicht, nächste Aktionen
 
 ### 2.8 Datei-Management
 - **Upload:** CV, Anschreiben, Zertifikate etc.
@@ -614,7 +624,8 @@ Kontextsensitiver Einrichtungsassistent für neue Benutzer, der sich an deren Zi
     - **Ollama:** Hinweis dass kein Key benötigt, nur URL-Konfiguration
   - Inline-Hilfe als Tooltip oder ausklappbarer Bereich unter jedem Key-Feld
 
-### 2.10 Unified Add Automation Workflow
+### 2.10 Unified Add Automation Workflow (Dependency: 0.4)
+- Voraussetzung: Module Lifecycle Manager (→ 0.4) — Modul-Manifests liefern die Settings-Schemas für dynamische Felder
 - Einheitlicher Wizard für alle Job Discovery Module (JSearch, EURES, Arbeitsagentur, zukünftige)
 - Modul-spezifische Felder werden dynamisch basierend auf dem gewählten Modul geladen
 - Gemeinsame Felder (Name, Resume, Threshold, Schedule) bleiben einheitlich
@@ -673,7 +684,7 @@ Geführte Einführung über die UI-Elemente der App, kombinierbar mit dem Onboar
 - Workflow zur authentischen Selbstpräsentation ("Persona Me")
 - Geführter Prozess: Hook, Claim, IBR (Identität-Beruf-Relevanz) — iterativ bis User sagt "Ja, das klingt nach mir!"
 - **Lean Business Canvas für Self-Discovery:** Übertragung des Canvas-Modells auf persönliche Positionierung
-- Output: Persönliches Profil-Statement für Bewerbungsunterlagen, Landingpage (→ 4.7), LinkedIn/XING
+- Output: Persönliches Profil-Statement für Bewerbungsunterlagen, Landingpage (→ 4.7), LinkedIn/XING (→ 9.2 Machbarkeit pending)
 
 ### 2.15 Company Blacklist
 - User kann Unternehmen auf eine Blacklist setzen
@@ -807,7 +818,7 @@ Eigener Automationstyp der über alle getrackten Jobs läuft — kein Job-Discov
 - **Bei abgelaufenem Inserat:**
   - Option: E-Mail/Kontakt an Ansprechpartner ob Stelle noch besetzt wird (→ Communication Connector 1.12)
   - CRM-Status-Update: "Inserat abgelaufen" (→ 5.3 Job Status Workflow)
-  - Domain Event: `JobExpired` → Consumer können reagieren (CRM, Notifications)
+  - Domain Event: `JobExpired` → Routing via Event Bus (→ 0.6) an CRM, Notifications
 - Konfigurierbar: Check-Frequenz, Batch-Größe, automatische Aktion bei Ablauf
 
 ### 3.9 LLM-gestützter Vertrags- und Angebotscheck
@@ -815,6 +826,11 @@ Eigener Automationstyp der über alle getrackten Jobs läuft — kein Job-Discov
 - Prüfpunkte: Gehalt vs. Markt (→ Entgeltatlas 1.13), Kündigungsfristen, Wettbewerbsklauseln, Probezeit, ungewöhnliche Klauseln
 - **Weiterleitungsfunktion:** Vertrag per E-Mail/Kommunikationsweg an Gewerkschaft, Anwalt, Beratungsstelle weiterleiten (→ Communication Connector 1.12)
 - LLM-Entkopplung: Ohne LLM nur Checkliste/Hinweise, mit LLM semantische Analyse
+
+### 3.10 Offline-CRUD (später, abhängig von 0.8)
+- Offline-fähige Schreiboperationen für die PWA (→ 0.8 Phase 2)
+- Lokale Action-Queue, Optimistic Locking (Version-Field), Conflict Resolution bei Sync
+- Nur bei konkretem User-Demand implementieren
 
 ---
 
@@ -855,6 +871,8 @@ Jeder Job hat ein **Application Locale Profile** das Sprache + Land + kulturelle
 
 ### 4.1 Skillsets
 - Verwaltung von Skill-Profilen basierend auf ESCO/NACE Taxonomien
+- **Konsumenten:** CV-PDF Parsing (→ 3.5) liefert Skills, Onboarding (→ 2.1 Schritt 4) bearbeitet Skills, CareerBERT (→ 9.1) matcht Skills semantisch, Dokumenten-Generatoren (→ 4.2) nutzen Skills für CV-Templates
+- Kern-Skills vs. Neben-Skills Priorisierung
 
 ### 4.2 Dokumenten-Generatoren
 - Consumer des `DocumentsAvailable` Domain Events bei Vacancy-Promotion (→ 0.5 Inbox)
@@ -896,12 +914,12 @@ Dynamische Dateipfade und Dateinamen:
 - Personalisierte Bewerber-Landingpage pro Bewerbung
 - Enthält: Video-Vorstellung, CV, Portfolio, Skills, Kontaktdaten
 - Teilbar per Link oder QR-Code
-- Tracking: Aufrufe, Verweildauer (optional)
+- Tracking: Aufrufe, Verweildauer (optional, erfordert Public API → 7.1)
 - **DSGVO:** Öffentliche Seite mit personenbezogenen Daten → Datenschutzhinweis erforderlich, Passwortschutz/Expiring Links (→ 6.1)
 
 ### 4.8 Städte: Verdienst-Index
 - Gehaltsvergleich nach Stadt/Region
-- **Datenquellen:** Data Enrichment Connector (→ 1.13) — Modul: Glassdoor/Kununu Gehaltsdaten, Entgeltatlas der Arbeitsagentur, Destatis Verdiensterhebung
+- **Datenquellen:** Data Enrichment Connector (→ 1.13) — Modul: Glassdoor/Kununu Gehaltsdaten, Modul: Entgeltatlas (bereits in 1.13), Modul: Destatis (zu erstellen in 1.13 oder via Entgeltatlas-Modul falls Daten darüber verfügbar)
 
 ### 4.9 E-Mail-Bewerbungs-Templates & Versand
 - Vorkonfigurierte E-Mail-Templates für Bewerbungen, Follow-Ups, Absagen, Danksagungen
@@ -931,7 +949,8 @@ Dynamische Dateipfade und Dateinamen:
 - Notizen pro Status-Übergang
 - **Abgrenzung zu Vacancy Pipeline (→ 0.5):** Pipeline endet bei Promotion (StagedVacancy → Job). Der Job Status Workflow beginnt dort — er ist der **Tracking-Lifecycle** nach der Inbox. CRM erweitert diesen Workflow um Kontakt-Zuordnung, Follow-Up-Automatisierung und Kalender-Events.
 
-### 5.4 Automatisierung & Reminders
+### 5.4 Automatisierung & Reminders (→ Notification-Rules in 0.6)
+- CRM-Reminders werden als Notification-Rules im Unified Notification System (→ 0.6) implementiert
 - Automatisierte Follow-Ups (Erinnerungen, Nachfass-E-Mails)
 - Automatisierte Terminvereinbarungen
 - **Reminder/Notification-System:** Allgemeine Erinnerungen für Deadlines, Interview-Termine, Nachfass-Fristen
@@ -1089,8 +1108,8 @@ JobSync exponiert eine stabile REST API für externe Tools (n8n, Webhooks, Custo
 3. Hardening: Scoped Keys (read-only vs. read-write), Audit-Log, Key-Rotation
 
 - **Design-Entscheidungen:** REST (nicht GraphQL), API Keys (nicht OAuth), manuell designte Surface (nicht Prisma-auto-gen)
-- Voraussetzung: 0.4 (Module Lifecycle — API Key Infrastruktur)
-- Cross-Ref: Webhook Connector (1.3) incoming nutzt die Public API Layer, Workflow Connector (1.2/n8n) konsumiert die API
+- Voraussetzung: 0.3 (Domain-Model Alignment — typisierte Response Bodies), 0.4 (Module Lifecycle — API Key Infrastruktur)
+- Cross-Ref: Webhook Connector (1.3) incoming nutzt die Public API Layer, Workflow Connector (1.2/n8n) konsumiert die API, Browser Extension (2.17) ist primärer externer Consumer
 
 ### 7.2 API-Dokumentation (automatisch generiert)
 - OpenAPI/Swagger Dokumentation für alle Public API Endpunkte
@@ -1195,6 +1214,23 @@ Infrastructure Service — kein Domain-Concern. Distinct von DSGVO-Export (6.1):
 - **Retention-Rotation:** Max N Backups, ältere automatisch gelöscht. DSGVO-aware: Backups älter als Retention-Period rotieren.
 - Config: `BACKUP_SCHEDULE`, `BACKUP_STORAGE_PATH`, `BACKUP_RETENTION_DAYS`, `BACKUP_MAX_COUNT`
 
+### 8.7 Module SDK & Package Convention
+Strukturierte Methode für Community-Module ohne Core-Fork. Phase 1 des Plugin-Systems.
+
+- **Package-Format:** npm Package das ein `ModuleManifest` exportiert
+- **Konvention:** `package.json` → `"jobsync": { "manifest": "./manifest.ts" }` Feld
+- **Auto-Discovery:** Lifecycle Manager scannt installierte Packages nach `jobsync`-Feld bei Startup
+- **Installationsquellen:**
+  - **npm Registry:** `bun add jobsync-module-xyz` → Restart → auto-registriert
+  - **Externes Git-Repository:** User gibt Repository-URL an (GitHub, GitLab, Self-Hosted Git) → Clone/Pull → auto-registriert. Ermöglicht private/interne Module ohne npm-Veröffentlichung.
+  - **Lokaler Pfad:** `file:../my-module` für Entwicklung
+- **Repository-Management UI (→ 2.11 Marketplace):** User kann externe Repositories hinzufügen/entfernen. Ähnlich wie Home Assistant HACS Custom Repositories.
+- **Update-Mechanismus:** Git-basierte Module können per UI auf neue Commits/Tags geprüft und aktualisiert werden
+- **Kein neuer Spec nötig** — nutzt bestehenden ModuleManifest-Vertrag aus `module-lifecycle.allium`
+- **Trust-Modell:** Wie Home Assistant / Obsidian — Community vertrauen, nicht sandboxen (Phase 1)
+- **Developer-Doku:** Template-Repository für Modul-Entwickler, Manifest-Referenz, Testing-Guide
+- Cross-Ref: Marketplace UI (2.11) zeigt auch Community-Module. Plugin-Sandboxing als experimentelles Feature (→ 9.3)
+
 ### 8.8 Production Monitoring (Self-Hosted)
 - **Health Endpoint:** `GET /api/health` — DB-Connectivity, Disk Space, Module-Status Zusammenfassung
 - **System-Info Endpoint:** `GET /api/system` (auth-gated) — Version, Uptime, DB-Größe, Anzahl Jobs/StagedVacancies/Automations
@@ -1214,23 +1250,6 @@ Infrastructure Service — kein Domain-Concern. Distinct von DSGVO-Export (6.1):
 - **Environment-Konfiguration:** `.env.example` mit allen Variablen dokumentiert, Setup-Wizard (→ 2.13) generiert `.env`
 - Cross-Ref: Projekt Setup UX (2.13) — Docker ist der primäre Deployment-Pfad für Non-Dev User
 
-### 8.7 Module SDK & Package Convention
-Strukturierte Methode für Community-Module ohne Core-Fork. Phase 1 des Plugin-Systems.
-
-- **Package-Format:** npm Package das ein `ModuleManifest` exportiert
-- **Konvention:** `package.json` → `"jobsync": { "manifest": "./manifest.ts" }` Feld
-- **Auto-Discovery:** Lifecycle Manager scannt installierte Packages nach `jobsync`-Feld bei Startup
-- **Installationsquellen:**
-  - **npm Registry:** `bun add jobsync-module-xyz` → Restart → auto-registriert
-  - **Externes Git-Repository:** User gibt Repository-URL an (GitHub, GitLab, Self-Hosted Git) → Clone/Pull → auto-registriert. Ermöglicht private/interne Module ohne npm-Veröffentlichung.
-  - **Lokaler Pfad:** `file:../my-module` für Entwicklung
-- **Repository-Management UI (→ 2.11 Marketplace):** User kann externe Repositories hinzufügen/entfernen. Ähnlich wie Home Assistant HACS Custom Repositories.
-- **Update-Mechanismus:** Git-basierte Module können per UI auf neue Commits/Tags geprüft und aktualisiert werden
-- **Kein neuer Spec nötig** — nutzt bestehenden ModuleManifest-Vertrag aus `module-lifecycle.allium`
-- **Trust-Modell:** Wie Home Assistant / Obsidian — Community vertrauen, nicht sandboxen (Phase 1)
-- **Developer-Doku:** Template-Repository für Modul-Entwickler, Manifest-Referenz, Testing-Guide
-- Cross-Ref: Marketplace UI (2.11) zeigt auch Community-Module. Plugin-Sandboxing als experimentelles Feature (→ 9.3)
-
 ---
 
 ## 9. Experimentell
@@ -1249,6 +1268,8 @@ Strukturierte Methode für Community-Module ohne Core-Fork. Phase 1 des Plugin-S
   - Optional: Finetuning auf eigene Jobdaten für bessere Ergebnisse
   - API-Endpunkt für Embedding-Generierung und Similarity-Search
   - Integration mit dem bestehenden AI Match-Score System
+- **DDD-Einordnung:** Bei Implementierung als neues AI-Modul im AI Connector registrieren (wie Ollama, OpenAI, DeepSeek). Implementiert `AIProviderConnector` Interface mit `createModel()` für Embedding-Generierung.
+- **Konsumenten:** Skillsets (→ 4.1), Duplikat-Erkennung (→ 3.2 Fuzzy Matching)
 - **Ressourcen:**
   - https://github.com/julianrosenberger/careerbert
 
