@@ -807,7 +807,8 @@ Aktuell: Tiptap v2 mit StarterKit (Bold, Italic, Heading, Listen). Erweiterung i
 - **Unterstützte Formate:** PDF UND DOCX (in DE häufig von Arbeitsagentur verlangt)
 - **LinkedIn-Profil-Import:** LinkedIn-Profildaten importieren als CV-Quelle (Export-Datei oder Scraping)
 - **LLM-Entkopplung (→ 0.5 Prinzip):**
-  - **Ohne LLM:** Bibliotheks-basiertes Parsing (z.B. pdf-parse, pdf2json, pdfjs-dist, mammoth für DOCX) — Textextraktion + Regex/Heuristik für Sektionen (Erfahrung, Ausbildung, Skills)
+  - **Ohne LLM:** Bibliotheks-basiertes Parsing — Textextraktion + Regex/Heuristik für Sektionen (Erfahrung, Ausbildung, Skills)
+    - Zu evaluieren: [LiteParse](https://github.com/run-llama/liteparse) (run-llama), pdf-parse, pdf2json, pdfjs-dist, mammoth (DOCX)
   - **Mit LLM (optional):** AI-gestützte Extraktion für bessere Sektions-Erkennung, Skill-Mapping zu ESCO/NACE, semantische Analyse
   - User wählt in Settings ob LLM-Verarbeitung aktiviert ist
 
