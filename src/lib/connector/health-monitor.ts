@@ -86,13 +86,15 @@ export async function checkModuleHealth(
     }
   }
 
-  // Update in-memory registry via dedicated mutation methods
-  moduleRegistry.updateCircuitBreaker(moduleId, consecutiveFailures);
+  // Update in-memory registry via dedicated mutation method
+  // Note: health-check failure counts are tracked via updateHealth, NOT updateCircuitBreaker.
+  // updateCircuitBreaker is for CB state transitions only (degradation.ts).
   moduleRegistry.updateHealth(
     moduleId,
     newHealthStatus,
     new Date(),
     probeResult.success ? new Date() : undefined,
+    consecutiveFailures,
   );
 
   // Persist to DB (best-effort)

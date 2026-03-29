@@ -115,12 +115,14 @@ class ModuleRegistry {
     healthStatus: HealthStatus,
     lastCheck: Date,
     lastSuccess?: Date,
+    consecutiveFailures?: number,
   ): boolean {
     const entry = this.entries.get(moduleId);
     if (!entry) return false;
     entry.registered.healthStatus = healthStatus;
     entry.registered.lastHealthCheck = lastCheck;
     if (lastSuccess) entry.registered.lastSuccessfulConnection = lastSuccess;
+    if (consecutiveFailures !== undefined) entry.registered.consecutiveFailures = consecutiveFailures;
     return true;
   }
 
@@ -131,12 +133,18 @@ class ModuleRegistry {
   updateCircuitBreaker(
     moduleId: string,
     consecutiveFailures: number,
-    circuitBreakerOpenSince?: Date,
+    circuitBreakerState?: CircuitBreakerState,
+    circuitBreakerOpenSince?: Date | null,
   ): boolean {
     const entry = this.entries.get(moduleId);
     if (!entry) return false;
     entry.registered.consecutiveFailures = consecutiveFailures;
-    entry.registered.circuitBreakerOpenSince = circuitBreakerOpenSince;
+    if (circuitBreakerState !== undefined) {
+      entry.registered.circuitBreakerState = circuitBreakerState;
+    }
+    if (circuitBreakerOpenSince !== undefined) {
+      entry.registered.circuitBreakerOpenSince = circuitBreakerOpenSince ?? undefined;
+    }
     return true;
   }
 

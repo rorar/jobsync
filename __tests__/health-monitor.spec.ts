@@ -25,19 +25,13 @@ jest.mock("@/lib/connector/registry", () => {
     moduleRegistry: {
       get: jest.fn((id: string) => registryStore.get(id)),
       availableModules: jest.fn(() => [...registryStore.keys()]),
-      updateHealth: jest.fn((id: string, healthStatus: any, lastCheck: Date, lastSuccess?: Date) => {
+      updateHealth: jest.fn((id: string, healthStatus: any, lastCheck: Date, lastSuccess?: Date, consecutiveFailures?: number) => {
         const entry = registryStore.get(id);
         if (!entry) return false;
         entry.healthStatus = healthStatus;
         entry.lastHealthCheck = lastCheck;
         if (lastSuccess) entry.lastSuccessfulConnection = lastSuccess;
-        return true;
-      }),
-      updateCircuitBreaker: jest.fn((id: string, consecutiveFailures: number, openSince?: Date) => {
-        const entry = registryStore.get(id);
-        if (!entry) return false;
-        entry.consecutiveFailures = consecutiveFailures;
-        entry.circuitBreakerOpenSince = openSince;
+        if (consecutiveFailures !== undefined) entry.consecutiveFailures = consecutiveFailures;
         return true;
       }),
       _testStore: registryStore,

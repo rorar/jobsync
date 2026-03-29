@@ -2,7 +2,7 @@ import "server-only";
 
 import prisma from "@/lib/db";
 import { moduleRegistry } from "./registry";
-import { ModuleStatus } from "./manifest";
+import { ModuleStatus, CircuitBreakerState } from "./manifest";
 
 /**
  * Automation Degradation Rules
@@ -27,7 +27,6 @@ const CB_ESCALATION_THRESHOLD = 3;
 export async function handleAuthFailure(
   moduleId: string,
   errorDetail: string,
-  userId: string,
 ): Promise<{ pausedCount: number }> {
   const registered = moduleRegistry.get(moduleId);
   if (!registered) return { pausedCount: 0 };
@@ -54,10 +53,10 @@ export async function handleAuthFailure(
     // best-effort
   }
 
-  // Pause all active automations using this module
+  // Pause ALL active automations using this module (global — spec-compliant)
+  // Auth failure means the credential is invalid for everyone, not just one user.
   const result = await prisma.automation.updateMany({
     where: {
-      userId,
       jobBoard: moduleId,
       status: "active",
     },
@@ -144,24 +143,24 @@ export async function checkConsecutiveRunFailures(
  */
 export async function handleCircuitBreakerTrip(
   moduleId: string,
-  userId: string,
 ): Promise<{ pausedCount: number }> {
   const registered = moduleRegistry.get(moduleId);
   if (!registered) return { pausedCount: 0 };
 
-  // Increment consecutive failures via registry mutation method
+  // Increment consecutive failures + set CB state to OPEN (spec rule CircuitBreakerStateTransition)
   const newFailureCount = registered.consecutiveFailures + 1;
-  moduleRegistry.updateCircuitBreaker(moduleId, newFailureCount, new Date());
+  moduleRegistry.updateCircuitBreaker(
+    moduleId, newFailureCount, CircuitBreakerState.OPEN, new Date(),
+  );
 
   // Check if escalation threshold reached
   if (newFailureCount < CB_ESCALATION_THRESHOLD) {
     return { pausedCount: 0 };
   }
 
-  // Escalation: pause all active automations using this module
+  // Escalation: pause ALL active automations using this module (global — spec-compliant)
   const result = await prisma.automation.updateMany({
     where: {
-      userId,
       jobBoard: moduleId,
       status: "active",
     },
@@ -182,5 +181,6 @@ export async function handleCircuitBreakerTrip(
  * When a module's circuit breaker recovers, reset the counter.
  */
 export function handleCircuitBreakerRecovery(moduleId: string): void {
-  moduleRegistry.updateCircuitBreaker(moduleId, 0, undefined);
+  // Reset counter + set CB state to CLOSED (spec rule CircuitBreakerRecovery)
+  moduleRegistry.updateCircuitBreaker(moduleId, 0, CircuitBreakerState.CLOSED, null);
 }

@@ -24,11 +24,12 @@ jest.mock("@/lib/connector/registry", () => {
     moduleRegistry: {
       get: jest.fn((id: string) => registryMap.get(id)),
       setStatus: jest.fn(),
-      updateCircuitBreaker: jest.fn((id: string, consecutiveFailures: number, openSince?: Date) => {
+      updateCircuitBreaker: jest.fn((id: string, consecutiveFailures: number, cbState?: string, openSince?: Date | null) => {
         const entry = registryMap.get(id);
         if (!entry) return false;
         entry.consecutiveFailures = consecutiveFailures;
-        entry.circuitBreakerOpenSince = openSince;
+        if (cbState !== undefined) entry.circuitBreakerState = cbState;
+        if (openSince !== undefined) entry.circuitBreakerOpenSince = openSince ?? undefined;
         return true;
       }),
       _testMap: registryMap,
@@ -71,7 +72,7 @@ describe("Degradation Rules", () => {
         manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
       });
 
-      await handleAuthFailure("eures", "401 Unauthorized", "user-1");
+      await handleAuthFailure("eures", "401 Unauthorized");
 
       expect(mockRegistry.setStatus).toHaveBeenCalledWith("eures", ModuleStatus.ERROR);
     });
@@ -82,11 +83,10 @@ describe("Degradation Rules", () => {
         manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
       });
 
-      await handleAuthFailure("openai", "403 Forbidden", "user-1");
+      await handleAuthFailure("openai", "403 Forbidden");
 
       expect(mockPrisma.automation.updateMany).toHaveBeenCalledWith({
         where: {
-          userId: "user-1",
           jobBoard: "openai",
           status: "active",
         },
@@ -103,7 +103,7 @@ describe("Degradation Rules", () => {
         manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
       });
 
-      const result = await handleAuthFailure("jsearch", "Invalid API key", "user-1");
+      const result = await handleAuthFailure("jsearch", "Invalid API key");
 
       expect(result).toEqual({ pausedCount: 5 });
     });
@@ -237,7 +237,7 @@ describe("Degradation Rules", () => {
       const registered = registerModule("mod-cb-1", 0);
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
 
-      await handleCircuitBreakerTrip("mod-cb-1", "user-1");
+      await handleCircuitBreakerTrip("mod-cb-1");
 
       expect(registered.consecutiveFailures).toBe(1);
     });
@@ -245,7 +245,7 @@ describe("Degradation Rules", () => {
     it("should NOT pause below threshold (3)", async () => {
       registerModule("mod-cb-2", 0);
 
-      const result = await handleCircuitBreakerTrip("mod-cb-2", "user-1");
+      const result = await handleCircuitBreakerTrip("mod-cb-2");
 
       expect(result).toEqual({ pausedCount: 0 });
       expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
@@ -254,7 +254,7 @@ describe("Degradation Rules", () => {
     it("should NOT pause at 1 below threshold", async () => {
       registerModule("mod-cb-3", 1);
 
-      const result = await handleCircuitBreakerTrip("mod-cb-3", "user-1");
+      const result = await handleCircuitBreakerTrip("mod-cb-3");
 
       // After increment: consecutiveFailures = 2, still below 3
       expect(result).toEqual({ pausedCount: 0 });
@@ -265,13 +265,12 @@ describe("Degradation Rules", () => {
       registerModule("mod-cb-4", 2);
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 2 });
 
-      const result = await handleCircuitBreakerTrip("mod-cb-4", "user-1");
+      const result = await handleCircuitBreakerTrip("mod-cb-4");
 
       // After increment: consecutiveFailures = 3, equals threshold
       expect(result).toEqual({ pausedCount: 2 });
       expect(mockPrisma.automation.updateMany).toHaveBeenCalledWith({
         where: {
-          userId: "user-1",
           jobBoard: "mod-cb-4",
           status: "active",
         },
@@ -285,7 +284,7 @@ describe("Degradation Rules", () => {
     it("should return { pausedCount: 0 } for unknown module", async () => {
       (mockRegistry.get as jest.Mock).mockReturnValue(undefined);
 
-      const result = await handleCircuitBreakerTrip("unknown-module", "user-1");
+      const result = await handleCircuitBreakerTrip("unknown-module");
 
       expect(result).toEqual({ pausedCount: 0 });
     });
@@ -293,7 +292,7 @@ describe("Degradation Rules", () => {
     it("should set circuitBreakerOpenSince date", async () => {
       const registered = registerModule("mod-cb-5", 0);
 
-      await handleCircuitBreakerTrip("mod-cb-5", "user-1");
+      await handleCircuitBreakerTrip("mod-cb-5");
 
       expect(registered.circuitBreakerOpenSince).toBeInstanceOf(Date);
     });
