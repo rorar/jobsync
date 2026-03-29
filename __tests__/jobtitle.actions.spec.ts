@@ -53,7 +53,7 @@ describe("Job Title Actions", () => {
 
       const result = await getAllJobTitles();
 
-      expect(result).toEqual(mockTitles);
+      expect(result).toEqual({ success: true, data: mockTitles });
       expect(prisma.jobTitle.findMany).toHaveBeenCalledWith({
         where: { createdBy: mockUser.id },
       });

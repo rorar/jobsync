@@ -162,7 +162,7 @@ describe("Company Actions", () => {
 
       const result = await getAllCompanies();
 
-      expect(result).toEqual(mockCompanies);
+      expect(result).toEqual({ success: true, data: mockCompanies });
       expect(prisma.company.findMany).toHaveBeenCalledWith({
         where: { createdBy: mockUser.id },
       });

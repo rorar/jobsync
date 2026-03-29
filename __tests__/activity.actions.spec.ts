@@ -82,7 +82,7 @@ describe("activity.actions", () => {
 
       const result = await getAllActivityTypes();
 
-      expect(result).toEqual(mockTypes);
+      expect(result).toEqual({ success: true, data: mockTypes });
       expect(prisma.activityType.findMany).toHaveBeenCalledWith({
         where: { createdBy: mockUser.id },
       });

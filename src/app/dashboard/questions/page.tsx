@@ -4,14 +4,16 @@ import { getAllTags } from "@/actions/tag.actions";
 import React from "react";
 
 async function Questions() {
-  const [allTags, tagsWithCounts] = await Promise.all([
+  const [allTagsResult, tagsWithCounts] = await Promise.all([
     getAllTags(),
     getTagsWithQuestionCounts(),
   ]);
 
+  const allTags = allTagsResult.success ? allTagsResult.data ?? [] : [];
+
   return (
     <QuestionsPageClient
-      allTags={allTags || []}
+      allTags={allTags}
       tagsWithCounts={(tagsWithCounts?.data as any) || []}
       totalQuestions={tagsWithCounts?.total || 0}
     />

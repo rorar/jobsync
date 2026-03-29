@@ -9,13 +9,13 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-export const getStatusList = async (): Promise<JobStatus[]> => {
+export const getStatusList = async (): Promise<ActionResult<JobStatus[]>> => {
   try {
     const statuses = await prisma.jobStatus.findMany();
-    return statuses;
+    return { success: true, data: statuses };
   } catch (error) {
     const msg = "Failed to fetch status list. ";
-    return handleError(error, msg) as unknown as JobStatus[];
+    return handleError(error, msg);
   }
 };
 

@@ -68,7 +68,7 @@ export const getCompanyList = async (
   }
 };
 
-export const getAllCompanies = async (): Promise<Company[]> => {
+export const getAllCompanies = async (): Promise<ActionResult<Company[]>> => {
   try {
     const user = await getCurrentUser();
 
@@ -81,10 +81,10 @@ export const getAllCompanies = async (): Promise<Company[]> => {
         createdBy: user.id,
       },
     });
-    return companies as unknown as Company[];
+    return { success: true, data: companies as Company[] };
   } catch (error) {
     const msg = "Failed to fetch all companies. ";
-    return handleError(error, msg) as unknown as Company[];
+    return handleError(error, msg);
   }
 };
 

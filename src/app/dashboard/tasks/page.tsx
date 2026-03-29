@@ -4,14 +4,16 @@ import { getActivityTypesWithTaskCounts } from "@/actions/task.actions";
 import React from "react";
 
 async function Tasks() {
-  const [activityTypes, activityTypesWithCounts] = await Promise.all([
+  const [activityTypesResult, activityTypesWithCounts] = await Promise.all([
     getAllActivityTypes(),
     getActivityTypesWithTaskCounts(),
   ]);
 
+  const activityTypes = activityTypesResult.success ? activityTypesResult.data ?? [] : [];
+
   return (
     <TasksPageClient
-      activityTypes={activityTypes || []}
+      activityTypes={activityTypes}
       activityTypesWithCounts={(activityTypesWithCounts?.data as any) || []}
       totalTasks={activityTypesWithCounts?.total || 0}
     />

@@ -6,7 +6,7 @@ import { JobLocation } from "@/models/job.model";
 import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 
-export const getAllJobLocations = async (): Promise<JobLocation[]> => {
+export const getAllJobLocations = async (): Promise<ActionResult<JobLocation[]>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -17,10 +17,10 @@ export const getAllJobLocations = async (): Promise<JobLocation[]> => {
         createdBy: user.id,
       },
     });
-    return list as unknown as JobLocation[];
+    return { success: true, data: list as JobLocation[] };
   } catch (error) {
     const msg = "Failed to fetch job location list. ";
-    return handleError(error, msg) as unknown as JobLocation[];
+    return handleError(error, msg);
   }
 };
 

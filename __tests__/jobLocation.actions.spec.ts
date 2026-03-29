@@ -54,7 +54,7 @@ describe("Job Location Actions", () => {
 
       const result = await getAllJobLocations();
 
-      expect(result).toEqual(mockLocations);
+      expect(result).toEqual({ success: true, data: mockLocations });
       expect(prisma.location.findMany).toHaveBeenCalledWith({
         where: { createdBy: mockUser.id },
       });

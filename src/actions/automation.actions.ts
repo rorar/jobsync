@@ -22,6 +22,7 @@ import type {
 import { APP_CONSTANTS } from "@/lib/constants";
 import { handleError } from "@/lib/utils";
 import { ActionResult } from "@/models/actionResult";
+import { validateConnectorParams } from "@/lib/connector/params-validator";
 
 const MAX_AUTOMATIONS_PER_USER = 10;
 
@@ -151,6 +152,24 @@ export async function createAutomation(
       return { success: false, message: "Resume not found or doesn't belong to you" };
     }
 
+    // Validate connectorParams against module's declared schema
+    if (validated.connectorParams) {
+      const params =
+        typeof validated.connectorParams === "string"
+          ? JSON.parse(validated.connectorParams)
+          : validated.connectorParams;
+      const validation = validateConnectorParams(
+        validated.jobBoard,
+        params as Record<string, unknown>,
+      );
+      if (!validation.valid) {
+        return {
+          success: false,
+          message: `Invalid connector params: ${validation.errors?.join(", ")}`,
+        };
+      }
+    }
+
     const nextRunAt = calculateNextRunAt(validated.scheduleHour);
 
     const automation = await prisma.automation.create({
@@ -212,6 +231,25 @@ export async function updateAutomation(
       });
       if (!resume) {
         return { success: false, message: "Resume not found or doesn't belong to you" };
+      }
+    }
+
+    // Validate connectorParams against module's declared schema
+    if (validated.connectorParams && validated.connectorParams !== '') {
+      const params =
+        typeof validated.connectorParams === "string"
+          ? JSON.parse(validated.connectorParams)
+          : validated.connectorParams;
+      const moduleId = validated.jobBoard ?? existing.jobBoard;
+      const validation = validateConnectorParams(
+        moduleId,
+        params as Record<string, unknown>,
+      );
+      if (!validation.valid) {
+        return {
+          success: false,
+          message: `Invalid connector params: ${validation.errors?.join(", ")}`,
+        };
       }
     }
 

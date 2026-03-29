@@ -45,7 +45,7 @@ jest.mock("@/actions/activity.actions", () => ({
   getCurrentActivity: jest.fn(),
   startActivityById: jest.fn(),
   stopActivityById: jest.fn(),
-  getAllActivityTypes: jest.fn(),
+  getAllActivityTypes: jest.fn().mockResolvedValue({ success: true, data: [] }),
   createActivityType: jest.fn(),
   createActivity: jest.fn(),
   deleteActivityById: jest.fn(),

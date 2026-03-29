@@ -57,7 +57,7 @@ describe("Tag Actions", () => {
 
       const result = await getAllTags();
 
-      expect(result).toEqual(mockTags);
+      expect(result).toEqual({ success: true, data: mockTags });
       expect(prisma.tag.findMany).toHaveBeenCalledWith({
         where: { createdBy: mockUser.id },
         orderBy: { label: "asc" },

@@ -120,8 +120,8 @@ const ActivityFormComponent = ({
   }, [defaultValues, reset]);
 
   const loadActivityTypes = useCallback(async () => {
-    const activityTypes = await getAllActivityTypes();
-    setActivityTypes(activityTypes);
+    const result = await getAllActivityTypes();
+    setActivityTypes(result.success ? result.data ?? [] : []);
   }, []);
 
   const calculateDuration = useCallback(() => {

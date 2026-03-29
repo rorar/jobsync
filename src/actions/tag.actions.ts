@@ -6,7 +6,7 @@ import { ActionResult } from "@/models/actionResult";
 import { Tag } from "@/models/job.model";
 import { APP_CONSTANTS } from "@/lib/constants";
 
-export const getAllTags = async (): Promise<Tag[]> => {
+export const getAllTags = async (): Promise<ActionResult<Tag[]>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -16,10 +16,10 @@ export const getAllTags = async (): Promise<Tag[]> => {
       where: { createdBy: user.id },
       orderBy: { label: "asc" },
     });
-    return list;
+    return { success: true, data: list };
   } catch (error) {
     const msg = "Failed to fetch tag list. ";
-    return handleError(error, msg) as unknown as Tag[];
+    return handleError(error, msg);
   }
 };
 

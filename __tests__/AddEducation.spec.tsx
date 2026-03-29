@@ -81,7 +81,7 @@ describe("AddEducation Component", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (getAllJobLocations as jest.Mock).mockResolvedValue(mockLocations);
+    (getAllJobLocations as jest.Mock).mockResolvedValue({ success: true, data: mockLocations });
   });
 
   it("should render Add Education dialog with correct title", async () => {

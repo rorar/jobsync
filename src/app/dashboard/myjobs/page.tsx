@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 async function MyJobs() {
-  const [statuses, companies, titles, locations, sourcesResult, tags] =
+  const [statusesResult, companiesResult, titlesResult, locationsResult, sourcesResult, tagsResult] =
     await Promise.all([
       getStatusList(),
       getAllCompanies(),
@@ -21,7 +21,12 @@ async function MyJobs() {
       getJobSourceList(),
       getAllTags(),
     ]);
-  const sources = sourcesResult?.data as any;
+  const statuses = statusesResult.success ? statusesResult.data ?? [] : [];
+  const companies = companiesResult.success ? companiesResult.data ?? [] : [];
+  const titles = titlesResult.success ? titlesResult.data ?? [] : [];
+  const locations = locationsResult.success ? locationsResult.data ?? [] : [];
+  const sources = sourcesResult.success ? sourcesResult.data ?? [] : [];
+  const tags = tagsResult.success ? tagsResult.data ?? [] : [];
   return (
     <div className="col-span-3">
       <JobsContainer
@@ -30,7 +35,7 @@ async function MyJobs() {
         locations={locations}
         sources={sources}
         statuses={statuses}
-        tags={tags ?? []}
+        tags={tags}
       />
     </div>
   );

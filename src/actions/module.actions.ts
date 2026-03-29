@@ -7,6 +7,7 @@ import "@/lib/connector/ai-provider/modules/connectors";
 import {
   ConnectorType,
   CredentialType,
+  HealthStatus,
   ModuleStatus,
 } from "@/lib/connector/manifest";
 import { getCurrentUser } from "@/utils/user.utils";
@@ -56,6 +57,15 @@ export async function getModuleManifests(
         ...moduleRegistry.getByType(ConnectorType.JOB_DISCOVERY),
         ...moduleRegistry.getByType(ConnectorType.AI_PROVIDER),
       ];
+
+  // Trigger health checks for unknown-status modules (non-blocking).
+  // This ensures the settings page shows fresh health data on first load.
+  const unknownModules = modules.filter(
+    (m) => m.healthStatus === HealthStatus.UNKNOWN,
+  );
+  for (const mod of unknownModules) {
+    checkModuleHealth(mod.manifest.id).catch(() => {});
+  }
 
   const summaries: ModuleManifestSummary[] = modules.map((m) => ({
     moduleId: m.manifest.id,
@@ -208,6 +218,34 @@ export async function deactivateModule(
         pauseReason: "module_deactivated",
       },
     });
+
+    // Create persistent notifications for paused automations
+    if (pauseResult.count > 0) {
+      try {
+        const pausedAutomations = await prisma.automation.findMany({
+          where: {
+            userId: user.id,
+            jobBoard: moduleId,
+            status: "paused",
+            pauseReason: "module_deactivated",
+          },
+          select: { id: true, name: true },
+        });
+        for (const auto of pausedAutomations) {
+          await prisma.notification.create({
+            data: {
+              userId: user.id,
+              type: "module_deactivated",
+              message: `Automation "${auto.name}" paused because module "${moduleId}" was deactivated.`,
+              moduleId,
+              automationId: auto.id,
+            },
+          });
+        }
+      } catch {
+        // best-effort — don't let notification failure block deactivation
+      }
+    }
 
     return {
       success: true,

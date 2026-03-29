@@ -42,6 +42,8 @@ enum CircuitBreakerState { closed | open | half_open }
 
 enum AutomationPauseReason { module_deactivated | auth_failure | consecutive_failures | cb_escalation }
 
+enum NotificationType { module_deactivated | module_reactivated | module_unreachable | cb_escalation | consecutive_failures | auth_failure }
+
 -- =============================================================================
 -- Contracts (Published Language)
 -- =============================================================================
@@ -165,6 +167,17 @@ entity RegisteredModule {
   cbEscalationDue: hasCbEnabled and consecutiveFailures >= config.CB_ESCALATION_THRESHOLD
 }
 
+entity Notification {
+  id: String
+  userId: String
+  type: NotificationType
+  message: String
+  moduleId: String?
+  automationId: String?
+  read: Boolean = false
+  createdAt: DateTime
+}
+
 entity ConnectorGroup {
   type: ConnectorType                 -- job_discovery | ai_provider | ...
   modules: RegisteredModule[]         -- all modules registered under this connector
@@ -202,6 +215,7 @@ config {
   MAX_HEALTH_FAILURES_BEFORE_ERROR: Integer = 3    -- consecutive failures before status = error
   CB_ESCALATION_THRESHOLD: Integer = 3             -- consecutive CB open events before pausing automations
   CONSECUTIVE_RUN_FAILURE_THRESHOLD: Integer = 5   -- consecutive failed runs per automation before pausing
+  NOTIFICATION_RETENTION_DAYS: Integer = 30        -- auto-delete notifications older than 30 days
 }
 
 -- =============================================================================
@@ -645,6 +659,24 @@ surface AutomationWizard {
   @guarantee DynamicFormFields
     -- Form fields for connectorParams are generated from the module's declared schema
     -- Not hardcoded per module
+}
+
+surface NotificationInbox {
+  facing actor: User
+  context entity: Notification[]
+
+  exposes:
+    unread count, notification list (newest first),
+    type, message, moduleId, automationId, createdAt, read status
+
+  provides:
+    MarkAsRead(notificationId),
+    MarkAllAsRead(),
+    DismissNotification(notificationId)
+
+  @guarantee PersistentNotifications
+    -- Notifications persist across sessions (DB-backed, not ephemeral toasts)
+    -- Users see alerts even when not actively using the app
 }
 
 -- =============================================================================

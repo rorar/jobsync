@@ -6,7 +6,7 @@ import { ActionResult } from "@/models/actionResult";
 import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 
-export const getAllActivityTypes = async (): Promise<ActivityType[]> => {
+export const getAllActivityTypes = async (): Promise<ActionResult<ActivityType[]>> => {
   try {
     const user = await getCurrentUser();
 
@@ -19,10 +19,10 @@ export const getAllActivityTypes = async (): Promise<ActivityType[]> => {
         createdBy: user.id,
       },
     });
-    return activityTypes as unknown as ActivityType[];
+    return { success: true, data: activityTypes as ActivityType[] };
   } catch (error) {
     const msg = "Failed to fetch all activity types. ";
-    return handleError(error, msg) as unknown as ActivityType[];
+    return handleError(error, msg);
   }
 };
 

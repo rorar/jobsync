@@ -60,14 +60,14 @@ function AddExperience({
   const pageTitle = experienceToEdit ? "Edit Experience" : "Add Experience";
   const [isPending, startTransition] = useTransition();
   const getTitleCompanyAndLocationData = useCallback(async () => {
-    const [_companies, _titles, _locations] = await Promise.all([
+    const [companiesResult, titlesResult, locationsResult] = await Promise.all([
       getAllCompanies(),
       getAllJobTitles(),
       getAllJobLocations(),
     ]);
-    setCompanies(_companies);
-    setLocations(_locations);
-    setJobTitles(_titles);
+    setCompanies(companiesResult.success ? companiesResult.data ?? [] : []);
+    setLocations(locationsResult.success ? locationsResult.data ?? [] : []);
+    setJobTitles(titlesResult.success ? titlesResult.data ?? [] : []);
   }, []);
 
   const form = useForm<z.infer<typeof AddExperienceFormSchema>>({

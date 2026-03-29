@@ -7,7 +7,6 @@
  *   }
  *
  * NOTE: Not all server actions use this pattern:
- * - Pattern B functions (getAllX) return raw arrays and throw on error
  * - Pattern C functions (dashboard) return custom shapes
  * See specs/action-result.allium for the full classification.
  */

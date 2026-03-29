@@ -56,8 +56,8 @@ function AddEducation({
   const [locations, setLocations] = useState<JobLocation[]>([]);
 
   const getLocationData = useCallback(async () => {
-    const _locations = await getAllJobLocations();
-    setLocations(_locations);
+    const result = await getAllJobLocations();
+    setLocations(result.success ? result.data ?? [] : []);
   }, []);
 
   const form = useForm<z.infer<typeof AddEducationFormSchema>>({

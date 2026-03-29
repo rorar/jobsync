@@ -54,10 +54,13 @@ jest.mock("@/i18n", () => ({
 jest.mock("@/actions/activity.actions", () => ({
   createActivity: jest.fn().mockResolvedValue({ success: true }),
   updateActivity: jest.fn().mockResolvedValue({ success: true }),
-  getAllActivityTypes: jest.fn().mockResolvedValue([
-    { id: "type-1", label: "Learning", value: "learning" },
-    { id: "type-2", label: "Job Search", value: "job-search" },
-  ]),
+  getAllActivityTypes: jest.fn().mockResolvedValue({
+    success: true,
+    data: [
+      { id: "type-1", label: "Learning", value: "learning" },
+      { id: "type-2", label: "Job Search", value: "job-search" },
+    ],
+  }),
   createActivityType: jest.fn(),
 }));
 

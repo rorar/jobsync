@@ -34,6 +34,7 @@ model User {
   Note         Note[]
   Tag          Tag[]
   Question     Question[]
+  Notification Notification[]
 }
 
 model ApiKey {
@@ -427,6 +428,21 @@ model ModuleRegistration {
 
   @@index([moduleId])
   @@index([connectorType, status])
+}
+
+model Notification {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  type         String
+  message      String
+  moduleId     String?
+  automationId String?
+  read         Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }
 
 model Note {

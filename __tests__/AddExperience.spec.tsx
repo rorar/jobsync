@@ -106,9 +106,9 @@ describe("AddExperience Component", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (getAllCompanies as jest.Mock).mockResolvedValue(mockCompanies);
-    (getAllJobTitles as jest.Mock).mockResolvedValue(mockJobTitles);
-    (getAllJobLocations as jest.Mock).mockResolvedValue(mockLocations);
+    (getAllCompanies as jest.Mock).mockResolvedValue({ success: true, data: mockCompanies });
+    (getAllJobTitles as jest.Mock).mockResolvedValue({ success: true, data: mockJobTitles });
+    (getAllJobLocations as jest.Mock).mockResolvedValue({ success: true, data: mockLocations });
   });
 
   it("should render Add Experience dialog with correct title", async () => {

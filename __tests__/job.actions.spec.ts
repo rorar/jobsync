@@ -83,7 +83,7 @@ describe("jobActions", () => {
       (prisma.jobStatus.findMany as jest.Mock).mockResolvedValue(mockStatuses);
 
       const result = await getStatusList();
-      expect(result).toEqual(mockStatuses);
+      expect(result).toEqual({ success: true, data: mockStatuses });
     });
 
     it("should throw error on failure", async () => {

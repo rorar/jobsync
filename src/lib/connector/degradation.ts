@@ -66,6 +66,29 @@ export async function handleAuthFailure(
     },
   });
 
+  // Create persistent notifications for affected users
+  if (result.count > 0) {
+    try {
+      const affectedAutomations = await prisma.automation.findMany({
+        where: { jobBoard: moduleId, status: "paused", pauseReason: "auth_failure" },
+        select: { id: true, userId: true, name: true },
+      });
+      for (const auto of affectedAutomations) {
+        await prisma.notification.create({
+          data: {
+            userId: auto.userId,
+            type: "auth_failure",
+            message: `Automation "${auto.name}" paused: authentication failed for module "${moduleId}". Please check your credentials.`,
+            moduleId,
+            automationId: auto.id,
+          },
+        });
+      }
+    } catch {
+      // best-effort — don't let notification failure block degradation
+    }
+  }
+
   console.error(
     `[Degradation] Auth failure for module "${moduleId}": ${errorDetail}. Paused ${result.count} automation(s).`,
   );
@@ -122,6 +145,20 @@ export async function checkConsecutiveRunFailures(
       },
     });
 
+    // Create persistent notification for the automation owner
+    try {
+      await prisma.notification.create({
+        data: {
+          userId: automation.userId,
+          type: "consecutive_failures",
+          message: `Automation "${automation.name}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
+          automationId,
+        },
+      });
+    } catch {
+      // best-effort
+    }
+
     console.warn(
       `[Degradation] Automation "${automation.name}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
     );
@@ -169,6 +206,29 @@ export async function handleCircuitBreakerTrip(
       pauseReason: "cb_escalation",
     },
   });
+
+  // Create persistent notifications for affected users
+  if (result.count > 0) {
+    try {
+      const affectedAutomations = await prisma.automation.findMany({
+        where: { jobBoard: moduleId, status: "paused", pauseReason: "cb_escalation" },
+        select: { id: true, userId: true, name: true },
+      });
+      for (const auto of affectedAutomations) {
+        await prisma.notification.create({
+          data: {
+            userId: auto.userId,
+            type: "cb_escalation",
+            message: `Automation "${auto.name}" paused: module "${moduleId}" circuit breaker tripped ${newFailureCount} times.`,
+            moduleId,
+            automationId: auto.id,
+          },
+        });
+      }
+    } catch {
+      // best-effort
+    }
+  }
 
   console.warn(
     `[Degradation] CB escalation for module "${moduleId}": ${newFailureCount} consecutive opens. Paused ${result.count} automation(s).`,
