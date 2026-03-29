@@ -138,8 +138,7 @@ export async function runAutomation(
     },
   });
 
-  const connectorParams = automation.connectorParams ? JSON.parse(automation.connectorParams as string) : {};
-  const scheduleFrequency: ScheduleFrequency = connectorParams.scheduleFrequency || "daily";
+  const scheduleFrequency: ScheduleFrequency = (automation.scheduleFrequency as ScheduleFrequency) || "daily";
 
   debugLog("runner", `[Automation ${automation.id}] Created run with ID: ${run.id}`);
   automationLogger.log(

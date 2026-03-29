@@ -3,6 +3,7 @@ import { ConnectorType, CredentialType, type AiManifest } from "@/lib/connector/
 export const openaiManifest: AiManifest = {
   id: "openai",
   name: "OpenAI",
+  manifestVersion: 1,
   connectorType: ConnectorType.AI_PROVIDER,
   credential: {
     type: CredentialType.API_KEY,

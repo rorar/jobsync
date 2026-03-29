@@ -100,11 +100,11 @@ describe("no empty string values in any locale", () => {
 });
 
 describe("key naming convention follows dot notation", () => {
-  it("all keys in the merged dictionary use namespace.key format", () => {
+  it("all keys in the merged dictionary use namespace.key format (with optional sub-keys)", () => {
     const dict = getDictionary("en");
     for (const key of Object.keys(dict)) {
       expect(key).toMatch(
-        /^[a-zA-Z]+\.[a-zA-Z][a-zA-Z0-9]*$/
+        /^[a-zA-Z]+\.[a-zA-Z][a-zA-Z0-9]*(\.[a-zA-Z0-9_]+)*$/
       );
     }
   });

@@ -102,6 +102,14 @@ Modules (each declares a Manifest + implements a Connector interface)
 
 **Shared-Client-Pattern:** External platforms that are pure transport/gateways (RapidAPI, Google Maps API, LinkedIn API) are NOT Modules — they are shared client utilities. The services BEHIND them are the Modules. Example: RapidAPI is a `rapidapi-client` (shared API Key + HTTP), JSearch and OpenWeb Ninja are separate Modules behind different Connectors. Same pattern for Google Maps (`google-maps-client` → Places Module in Data Enrichment + Geocoding Module in Geo/Map).
 
+**Manifest-Driven UI Pattern:** The AutomationWizard is a **generic rendering engine** that consumes manifests — no hardcoded module knowledge. Three mechanisms:
+
+1. **`connectorParamsSchema`** (Array on manifest): Each module declares its filter fields. The wizard's `DynamicParamsForm` renders them dynamically. No `if (jobBoard === "x")` checks.
+2. **`searchFieldOverrides`** (Array on manifest): Modules declare specialized widgets for shared fields (keywords, location). Example: EURES declares `{ field: "keywords", widgetId: "eures-occupation" }`.
+3. **Widget Registry** (`src/components/automations/widget-registry.tsx`): Maps `widgetId → React Component`. The wizard looks up widgets by ID, never by module name.
+
+New modules (StepStone, Indeed, etc.) work without wizard code changes — they just declare their manifest.
+
 ### Module Lifecycle Manager (ROADMAP 0.4)
 
 **Unified Registry:** `src/lib/connector/registry.ts` — single `ModuleRegistry` stores `RegisteredModule` entities (manifest + runtime state). The old `ConnectorRegistry` and `AIProviderRegistry` are thin facades.

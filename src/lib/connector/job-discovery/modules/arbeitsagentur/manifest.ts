@@ -3,7 +3,9 @@ import { ConnectorType, CredentialType, type JobDiscoveryManifest } from "@/lib/
 export const arbeitsagenturManifest: JobDiscoveryManifest = {
   id: "arbeitsagentur",
   name: "Arbeitsagentur",
+  manifestVersion: 1,
   connectorType: ConnectorType.JOB_DISCOVERY,
+  automationType: "discovery",
   credential: {
     type: CredentialType.NONE,
     moduleId: "arbeitsagentur",
@@ -26,10 +28,10 @@ export const arbeitsagenturManifest: JobDiscoveryManifest = {
     rateLimitRefillMs: 500,
     maxConcurrent: 5,
   },
-  connectorParamsSchema: {
-    umkreis: { type: "number", label: "Radius (km)", defaultValue: 25 },
-    veroeffentlichtseit: { type: "number", label: "Published within (days)", defaultValue: 7 },
-    arbeitszeit: { type: "select", label: "Working time", options: ["vz", "tz", "snw", "mj", "ho"] },
-    befristung: { type: "select", label: "Contract type", options: [1, 2] },
-  },
+  connectorParamsSchema: [
+    { key: "umkreis", type: "number", label: "automations.params.umkreis", defaultValue: 25, min: 0, max: 200 },
+    { key: "veroeffentlichtseit", type: "number", label: "automations.params.veroeffentlichtseit", defaultValue: 7, min: 1, max: 100 },
+    { key: "arbeitszeit", type: "select", label: "automations.params.arbeitszeit", options: ["vz", "tz", "snw", "mj", "ho"] },
+    { key: "befristung", type: "select", label: "automations.params.befristung", options: [1, 2] },
+  ],
 };

@@ -118,28 +118,53 @@ export function createEuresConnector(): DataSourceConnector {
               })
           : [];
 
+        // Read configurable params from connectorParams with sensible defaults.
+        // Type assertions align runtime values with the generated EURES OpenAPI types.
+        type PublicationPeriod = NonNullable<EuresSearchRequest["publicationPeriod"]>;
+        type SortOrder = EuresSearchRequest["sortSearch"];
+        type ExperienceCode = NonNullable<EuresSearchRequest["requiredExperienceCodes"]>[number];
+        type OfferingCode = NonNullable<EuresSearchRequest["positionOfferingCodes"]>[number];
+        type ScheduleCode = NonNullable<EuresSearchRequest["positionScheduleCodes"]>[number];
+        type EducationCode = NonNullable<EuresSearchRequest["educationAndQualificationLevelCodes"]>[number];
+        type SectorCode = NonNullable<EuresSearchRequest["sectorCodes"]>[number];
+        type FlagCode = NonNullable<EuresSearchRequest["euresFlagCodes"]>[number];
+
+        const publicationPeriod = ((connectorParams.publicationPeriod as string) || "LAST_WEEK") as PublicationPeriod;
+        const sortSearch = ((connectorParams.sortSearch as string) || "MOST_RECENT") as SortOrder;
+        const requiredExperienceCodes = ((connectorParams.requiredExperienceCodes as string[]) ?? []) as ExperienceCode[];
+        const positionOfferingCodes = ((connectorParams.positionOfferingCodes as string[]) ?? []) as OfferingCode[];
+        const positionScheduleCodes = ((connectorParams.positionScheduleCodes as string[]) ?? []) as ScheduleCode[];
+        const educationLevelCodes = ((connectorParams.educationLevelCodes as string[]) ?? []) as EducationCode[];
+        const sectorCodes = ((connectorParams.sectorCodes as string[]) ?? []) as SectorCode[];
+        const euresFlagCodes = ((connectorParams.euresFlagCodes as string[]) ?? []) as FlagCode[];
+        // requiredLanguages comes as comma-separated string, e.g. "de(B2), en(C1)"
+        const requiredLanguagesRaw = (connectorParams.requiredLanguages as string) ?? "";
+        const requiredLanguages = requiredLanguagesRaw
+          ? requiredLanguagesRaw.split(",").map((s: string) => s.trim()).filter(Boolean)
+          : [];
+
         const RESULTS_PER_PAGE = 50;
         const baseBody: EuresSearchRequest = {
           resultsPerPage: RESULTS_PER_PAGE,
           page: 1,
-          sortSearch: "MOST_RECENT",
+          sortSearch,
           keywords: parseKeywords(params.keywords)
             .map((keyword) => ({
               keyword,
               specificSearchCode: "EVERYWHERE" as const,
             })),
-          publicationPeriod: "LAST_WEEK",
+          publicationPeriod,
           occupationUris: [],
           skillUris: [],
-          requiredExperienceCodes: [],
-          positionScheduleCodes: [],
-          sectorCodes: [],
-          educationAndQualificationLevelCodes: [],
-          positionOfferingCodes: [],
+          requiredExperienceCodes,
+          positionScheduleCodes,
+          sectorCodes,
+          educationAndQualificationLevelCodes: educationLevelCodes,
+          positionOfferingCodes,
           locationCodes,
-          euresFlagCodes: [],
+          euresFlagCodes,
           otherBenefitsCodes: [],
-          requiredLanguages: [],
+          requiredLanguages,
           minNumberPost: null,
           sessionId: `jobsync-${Date.now()}`,
           userPreferredLanguage: null,
@@ -148,8 +173,9 @@ export function createEuresConnector(): DataSourceConnector {
 
         const allVacancies: DiscoveredVacancy[] = [];
         let page = 1;
+        const MAX_PAGES = 10; // P-7.1: Cap pagination to prevent unbounded memory/latency
 
-        while (true) {
+        while (page <= MAX_PAGES) {
           const data = await resilientFetch<EuresSearchResponse>(
             EURES_SEARCH_URL,
             {

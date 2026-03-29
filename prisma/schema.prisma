@@ -381,8 +381,9 @@ model Automation {
   resume         Resume @relation(fields: [resumeId], references: [id])
   matchThreshold Int    @default(80)
 
-  scheduleHour Int
-  nextRunAt    DateTime?
+  scheduleHour      Int
+  scheduleFrequency String  @default("daily")
+  nextRunAt         DateTime?
   lastRunAt    DateTime?
 
   status      String  @default("active")

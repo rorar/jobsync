@@ -3,6 +3,7 @@ import { validateConnectorParams, type ValidationResult } from "@/lib/connector/
 import {
   ConnectorType,
   CredentialType,
+  type ConnectorParamsSchema,
   type JobDiscoveryManifest,
   type ModuleManifest,
 } from "@/lib/connector/manifest";
@@ -10,12 +11,12 @@ import {
 /**
  * Tests for ConnectorParams validation against module manifest schema.
  *
- * The arbeitsagentur manifest schema shape (flat Record):
- *   {
- *     umkreis: { type: "number", label: "Radius (km)", defaultValue: 25 },
- *     arbeitszeit: { type: "select", label: "Working time", options: ["vz", "tz", ...] },
+ * The arbeitsagentur manifest schema shape (Array-based):
+ *   [
+ *     { key: "umkreis", type: "number", label: "automations.params.umkreis", defaultValue: 25 },
+ *     { key: "arbeitszeit", type: "select", label: "automations.params.arbeitszeit", options: ["vz", "tz", ...] },
  *     ...
- *   }
+ *   ]
  */
 
 describe("validateConnectorParams", () => {
@@ -28,11 +29,12 @@ describe("validateConnectorParams", () => {
 
   function registerModuleWithSchema(
     id: string,
-    connectorParamsSchema?: Record<string, unknown>,
+    connectorParamsSchema?: ConnectorParamsSchema,
   ): void {
     const manifest: JobDiscoveryManifest = {
       id,
       name: `Test ${id}`,
+      manifestVersion: 1,
       connectorType: ConnectorType.JOB_DISCOVERY,
       credential: {
         type: CredentialType.NONE,
@@ -79,9 +81,9 @@ describe("validateConnectorParams", () => {
   describe("null/undefined params with schema", () => {
     it("should return valid when params are null and schema exists", () => {
       const id = uniqueId("null-params");
-      registerModuleWithSchema(id, {
-        radius: { type: "number", label: "Radius" },
-      });
+      registerModuleWithSchema(id, [
+        { key: "radius", type: "number", label: "Radius" },
+      ]);
 
       const result = validateConnectorParams(id, null);
 
@@ -90,9 +92,9 @@ describe("validateConnectorParams", () => {
 
     it("should return valid when params are undefined and schema exists", () => {
       const id = uniqueId("undef-params");
-      registerModuleWithSchema(id, {
-        radius: { type: "number", label: "Radius" },
-      });
+      registerModuleWithSchema(id, [
+        { key: "radius", type: "number", label: "Radius" },
+      ]);
 
       const result = validateConnectorParams(id, undefined);
 
@@ -103,9 +105,9 @@ describe("validateConnectorParams", () => {
   describe("valid params", () => {
     it("should return valid for correct number field", () => {
       const id = uniqueId("valid-number");
-      registerModuleWithSchema(id, {
-        umkreis: { type: "number", label: "Radius (km)", defaultValue: 25 },
-      });
+      registerModuleWithSchema(id, [
+        { key: "umkreis", type: "number", label: "Radius (km)", defaultValue: 25 },
+      ]);
 
       const result = validateConnectorParams(id, { umkreis: 50 });
 
@@ -114,9 +116,9 @@ describe("validateConnectorParams", () => {
 
     it("should return valid for correct select field", () => {
       const id = uniqueId("valid-select");
-      registerModuleWithSchema(id, {
-        arbeitszeit: { type: "select", label: "Working time", options: ["vz", "tz", "snw"] },
-      });
+      registerModuleWithSchema(id, [
+        { key: "arbeitszeit", type: "select", label: "Working time", options: ["vz", "tz", "snw"] },
+      ]);
 
       const result = validateConnectorParams(id, { arbeitszeit: "vz" });
 
@@ -125,9 +127,9 @@ describe("validateConnectorParams", () => {
 
     it("should return valid for numeric select options", () => {
       const id = uniqueId("valid-numeric-select");
-      registerModuleWithSchema(id, {
-        befristung: { type: "select", label: "Contract type", options: [1, 2] },
-      });
+      registerModuleWithSchema(id, [
+        { key: "befristung", type: "select", label: "Contract type", options: [1, 2] },
+      ]);
 
       const result = validateConnectorParams(id, { befristung: 1 });
 
@@ -136,9 +138,9 @@ describe("validateConnectorParams", () => {
 
     it("should return valid when string value matches numeric option via coercion", () => {
       const id = uniqueId("valid-coercion");
-      registerModuleWithSchema(id, {
-        befristung: { type: "select", label: "Contract type", options: [1, 2] },
-      });
+      registerModuleWithSchema(id, [
+        { key: "befristung", type: "select", label: "Contract type", options: [1, 2] },
+      ]);
 
       // Form serialization may send "1" instead of 1
       const result = validateConnectorParams(id, { befristung: "1" });
@@ -148,12 +150,12 @@ describe("validateConnectorParams", () => {
 
     it("should return valid for multiple correct fields", () => {
       const id = uniqueId("valid-multi");
-      registerModuleWithSchema(id, {
-        umkreis: { type: "number", label: "Radius (km)", defaultValue: 25 },
-        veroeffentlichtseit: { type: "number", label: "Published within (days)", defaultValue: 7 },
-        arbeitszeit: { type: "select", label: "Working time", options: ["vz", "tz", "snw", "mj", "ho"] },
-        befristung: { type: "select", label: "Contract type", options: [1, 2] },
-      });
+      registerModuleWithSchema(id, [
+        { key: "umkreis", type: "number", label: "Radius (km)", defaultValue: 25 },
+        { key: "veroeffentlichtseit", type: "number", label: "Published within (days)", defaultValue: 7 },
+        { key: "arbeitszeit", type: "select", label: "Working time", options: ["vz", "tz", "snw", "mj", "ho"] },
+        { key: "befristung", type: "select", label: "Contract type", options: [1, 2] },
+      ]);
 
       const result = validateConnectorParams(id, {
         umkreis: 25,
@@ -167,10 +169,10 @@ describe("validateConnectorParams", () => {
 
     it("should return valid when providing only a subset of optional fields", () => {
       const id = uniqueId("valid-subset");
-      registerModuleWithSchema(id, {
-        umkreis: { type: "number", label: "Radius (km)" },
-        arbeitszeit: { type: "select", label: "Working time", options: ["vz", "tz"] },
-      });
+      registerModuleWithSchema(id, [
+        { key: "umkreis", type: "number", label: "Radius (km)" },
+        { key: "arbeitszeit", type: "select", label: "Working time", options: ["vz", "tz"] },
+      ]);
 
       // Only provide umkreis, skip arbeitszeit
       const result = validateConnectorParams(id, { umkreis: 10 });
@@ -180,9 +182,9 @@ describe("validateConnectorParams", () => {
 
     it("should return valid with empty params object and no required fields", () => {
       const id = uniqueId("valid-empty");
-      registerModuleWithSchema(id, {
-        umkreis: { type: "number", label: "Radius" },
-      });
+      registerModuleWithSchema(id, [
+        { key: "umkreis", type: "number", label: "Radius" },
+      ]);
 
       const result = validateConnectorParams(id, {});
 
@@ -193,9 +195,9 @@ describe("validateConnectorParams", () => {
   describe("invalid params", () => {
     it("should fail for missing required field", () => {
       const id = uniqueId("missing-required");
-      registerModuleWithSchema(id, {
-        apiKey: { type: "string", label: "API Key", required: true },
-      });
+      registerModuleWithSchema(id, [
+        { key: "apiKey", type: "string", label: "API Key", required: true },
+      ]);
 
       const result = validateConnectorParams(id, {});
 
@@ -206,9 +208,9 @@ describe("validateConnectorParams", () => {
 
     it("should fail for invalid select option value", () => {
       const id = uniqueId("invalid-select");
-      registerModuleWithSchema(id, {
-        arbeitszeit: { type: "select", label: "Working time", options: ["vz", "tz", "snw"] },
-      });
+      registerModuleWithSchema(id, [
+        { key: "arbeitszeit", type: "select", label: "Working time", options: ["vz", "tz", "snw"] },
+      ]);
 
       const result = validateConnectorParams(id, { arbeitszeit: "invalid-value" });
 
@@ -220,9 +222,9 @@ describe("validateConnectorParams", () => {
 
     it("should fail for wrong type on number field", () => {
       const id = uniqueId("wrong-type-number");
-      registerModuleWithSchema(id, {
-        umkreis: { type: "number", label: "Radius (km)" },
-      });
+      registerModuleWithSchema(id, [
+        { key: "umkreis", type: "number", label: "Radius (km)" },
+      ]);
 
       const result = validateConnectorParams(id, { umkreis: "not-a-number" });
 
@@ -234,9 +236,9 @@ describe("validateConnectorParams", () => {
 
     it("should fail for wrong type on boolean field", () => {
       const id = uniqueId("wrong-type-boolean");
-      registerModuleWithSchema(id, {
-        remote: { type: "boolean", label: "Remote only" },
-      });
+      registerModuleWithSchema(id, [
+        { key: "remote", type: "boolean", label: "Remote only" },
+      ]);
 
       const result = validateConnectorParams(id, { remote: "yes" });
 
@@ -248,11 +250,11 @@ describe("validateConnectorParams", () => {
 
     it("should collect multiple errors at once", () => {
       const id = uniqueId("multi-error");
-      registerModuleWithSchema(id, {
-        apiKey: { type: "string", label: "API Key", required: true },
-        umkreis: { type: "number", label: "Radius (km)" },
-        arbeitszeit: { type: "select", label: "Working time", options: ["vz", "tz"] },
-      });
+      registerModuleWithSchema(id, [
+        { key: "apiKey", type: "string", label: "API Key", required: true },
+        { key: "umkreis", type: "number", label: "Radius (km)" },
+        { key: "arbeitszeit", type: "select", label: "Working time", options: ["vz", "tz"] },
+      ]);
 
       const result = validateConnectorParams(id, {
         // apiKey missing (required)
@@ -266,12 +268,111 @@ describe("validateConnectorParams", () => {
     });
   });
 
+  describe("multiselect validation", () => {
+    it("should return valid for correct multiselect array", () => {
+      const id = uniqueId("valid-multiselect");
+      registerModuleWithSchema(id, [
+        { key: "codes", type: "multiselect", label: "Codes", options: ["a", "b", "c"] },
+      ]);
+
+      const result = validateConnectorParams(id, { codes: ["a", "c"] });
+
+      expect(result.valid).toBe(true);
+    });
+
+    it("should return valid for empty multiselect array", () => {
+      const id = uniqueId("valid-multiselect-empty");
+      registerModuleWithSchema(id, [
+        { key: "codes", type: "multiselect", label: "Codes", options: ["a", "b"] },
+      ]);
+
+      const result = validateConnectorParams(id, { codes: [] });
+
+      expect(result.valid).toBe(true);
+    });
+
+    it("should fail when multiselect value is not an array", () => {
+      const id = uniqueId("invalid-multiselect-type");
+      registerModuleWithSchema(id, [
+        { key: "codes", type: "multiselect", label: "Codes", options: ["a", "b"] },
+      ]);
+
+      const result = validateConnectorParams(id, { codes: "a" });
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toBeDefined();
+      expect(result.errors![0]).toMatch(/expected array/);
+    });
+
+    it("should fail when multiselect contains invalid option", () => {
+      const id = uniqueId("invalid-multiselect-option");
+      registerModuleWithSchema(id, [
+        { key: "codes", type: "multiselect", label: "Codes", options: ["a", "b", "c"] },
+      ]);
+
+      const result = validateConnectorParams(id, { codes: ["a", "invalid"] });
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toBeDefined();
+      expect(result.errors![0]).toMatch(/Invalid value in codes: "invalid"/);
+    });
+  });
+
+  describe("number min/max validation", () => {
+    it("should return valid when number is within range", () => {
+      const id = uniqueId("valid-range");
+      registerModuleWithSchema(id, [
+        { key: "radius", type: "number", label: "Radius", min: 0, max: 200 },
+      ]);
+
+      const result = validateConnectorParams(id, { radius: 50 });
+
+      expect(result.valid).toBe(true);
+    });
+
+    it("should fail when number is below min", () => {
+      const id = uniqueId("below-min");
+      registerModuleWithSchema(id, [
+        { key: "radius", type: "number", label: "Radius", min: 0, max: 200 },
+      ]);
+
+      const result = validateConnectorParams(id, { radius: -5 });
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toBeDefined();
+      expect(result.errors![0]).toMatch(/minimum is 0/);
+    });
+
+    it("should fail when number is above max", () => {
+      const id = uniqueId("above-max");
+      registerModuleWithSchema(id, [
+        { key: "radius", type: "number", label: "Radius", min: 0, max: 200 },
+      ]);
+
+      const result = validateConnectorParams(id, { radius: 300 });
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toBeDefined();
+      expect(result.errors![0]).toMatch(/maximum is 200/);
+    });
+
+    it("should accept boundary values (min and max inclusive)", () => {
+      const id = uniqueId("boundary");
+      registerModuleWithSchema(id, [
+        { key: "radius", type: "number", label: "Radius", min: 0, max: 200 },
+      ]);
+
+      expect(validateConnectorParams(id, { radius: 0 }).valid).toBe(true);
+      expect(validateConnectorParams(id, { radius: 200 }).valid).toBe(true);
+    });
+  });
+
   describe("edge cases", () => {
     it("should allow extra params not in the schema (pass-through unknown fields)", () => {
       const id = uniqueId("extra-params");
-      registerModuleWithSchema(id, {
-        umkreis: { type: "number", label: "Radius" },
-      });
+      registerModuleWithSchema(id, [
+        { key: "umkreis", type: "number", label: "Radius" },
+      ]);
 
       const result = validateConnectorParams(id, {
         umkreis: 25,
@@ -281,11 +382,11 @@ describe("validateConnectorParams", () => {
       expect(result.valid).toBe(true);
     });
 
-    it("should handle schema with empty object descriptor gracefully", () => {
-      const id = uniqueId("empty-desc");
-      registerModuleWithSchema(id, {
-        someField: {},
-      });
+    it("should handle schema with minimal field descriptor gracefully", () => {
+      const id = uniqueId("minimal-desc");
+      registerModuleWithSchema(id, [
+        { key: "someField", type: "string", label: "Some field" },
+      ]);
 
       const result = validateConnectorParams(id, { someField: "anything" });
 

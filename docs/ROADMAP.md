@@ -694,12 +694,19 @@ Kontextsensitiver Einrichtungsassistent für neue Benutzer, der sich an deren Zi
     - **Ollama:** Hinweis dass kein Key benötigt, nur URL-Konfiguration
   - Inline-Hilfe als Tooltip oder ausklappbarer Bereich unter jedem Key-Feld
 
-### 2.10 Unified Add Automation Workflow (Dependency: 0.4)
+### 2.10 Unified Add Automation Workflow (Dependency: 0.4) — Phase 1 DONE
 - Voraussetzung: Module Lifecycle Manager (→ 0.4) — Modul-Manifests liefern die Settings-Schemas für dynamische Felder
-- Einheitlicher Wizard für alle Job Discovery Module (JSearch, EURES, Arbeitsagentur, zukünftige)
-- Modul-spezifische Felder werden dynamisch basierend auf dem gewählten Modul geladen
-- Gemeinsame Felder (Name, Resume, Threshold, Schedule) bleiben einheitlich
-- Modul-spezifische Widgets (z.B. EURES: NUTS-Combobox, Arbeitsagentur: Umkreis-Slider)
+- **Phase 1 implementiert:**
+  - `DynamicParamsForm` rendert connectorParams-Felder dynamisch aus Manifest-Schema (Array-Format)
+  - `searchFieldOverrides` + Widget Registry für EURES Comboboxes (kein Hardcoding im Wizard)
+  - `useAutomationWizard` Headless Hook + `WizardShell` Presenter (composable für 2.1 Onboarding)
+  - `scheduleFrequency` als eigenes Automation-Feld (Prisma-Migration, ex connectorParams)
+  - EURES: 9 neue konfigurierbare API-Filter (publicationPeriod, Experience, Offering, Schedule, Education, Sector, EURES Flag, Languages, Sort)
+  - Arbeitsagentur: 4 Felder exponiert (umkreis, veroeffentlichtseit, arbeitszeit, befristung)
+  - `manifestVersion` + `automationType` auf allen Manifests
+  - Dynamic JobBoard Validation (kein hardcoded enum)
+  - 141 neue Tests, Security + Performance Review durchgeführt
+- **Phase 2 (später):** Maintenance Automations (3.8), Onboarding Embedding (2.1), Module SDK Widget Contract (8.7)
 
 ### 2.11 Connector & Module Marketplace
 Marketplace-artige Verwaltung von Connectors und Modules in `/dashboard/settings`:
@@ -1451,4 +1458,5 @@ Automation findet Jobs → LLM filtert & bewertet (Staging) → LLM promoted zu 
 | User Language Settings | ✅ Implementiert |
 | Roadmap 0.2: ActionResult<T> Typisierung | ✅ Implementiert |
 | Roadmap 8.2: Client-Side Error Reporting Dashboard | ✅ Implementiert |
+| Roadmap 2.10 Phase 1: Manifest-Driven AutomationWizard | ✅ Implementiert |
 | Allium Spec: Module Lifecycle Manager (`specs/module-lifecycle.allium`) | ✅ Spezifiziert |

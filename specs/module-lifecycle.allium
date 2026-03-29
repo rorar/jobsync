@@ -56,6 +56,7 @@ contract ModuleManifest {
   -- Identity
   id: String                          -- unique module identifier (e.g. "eures", "ollama")
   name: String                        -- human-readable display name
+  manifestVersion: Integer            -- schema version for breaking changes (starts at 1)
   connectorType: ConnectorType        -- which connector this module belongs to
 
   -- Credentials
@@ -75,8 +76,15 @@ contract ModuleManifest {
 -- Each connector type defines what additional settings its modules can declare.
 
 contract JobDiscoveryManifest extends ModuleManifest {
-  connectorParamsSchema: JsonSchema?  -- schema for search filter params (umkreis, language, etc.)
-  -- Validated against automation.connectorParams before search execution
+  automationType: discovery | maintenance = discovery
+    -- discovery: find new vacancies; maintenance: update existing vacancy data
+  connectorParamsSchema: ConnectorParamField[]?
+    -- Ordered array of typed field descriptors for module-specific search filters
+    -- (e.g. umkreis, publicationPeriod). Validated against automation.connectorParams
+    -- before search execution. The Automation Wizard renders form fields from this array.
+  searchFieldOverrides: SearchFieldOverride[]?
+    -- Modules may replace the standard keywords/location search fields with
+    -- specialised widgets (e.g. EURES replaces keywords with ESCO occupation combobox)
 }
 
 contract AiManifest extends ModuleManifest {
@@ -133,10 +141,21 @@ value ModelSelectionConfig {
   listEndpoint: String?               -- API path to list available models (e.g. "/models")
 }
 
-value JsonSchema {
-  -- Black box: JSON Schema definition for connectorParams validation
-  -- The schema is module-specific and validated at automation creation time
-  considering: { field keys, types, constraints, defaults }
+value ConnectorParamField {
+  key: String                         -- field identifier (e.g. "umkreis", "publicationPeriod")
+  type: string | number | boolean | select | multiselect
+  label: String                       -- i18n key (e.g. "automations.params.umkreis")
+  defaultValue: Any?                  -- default value for the field
+  options: (String | Number)[]?       -- allowed values for select/multiselect types
+  required: Boolean = false           -- whether the field must be provided
+  min: Number?                        -- minimum value constraint (number type)
+  max: Number?                        -- maximum value constraint (number type)
+  placeholder: String?                -- UI hint text
+}
+
+value SearchFieldOverride {
+  field: keywords | location          -- which standard search field to replace
+  widgetId: String                    -- identifier of the replacement widget (e.g. "eures-occupation")
 }
 
 -- =============================================================================
@@ -306,6 +325,9 @@ rule ConnectorParamsValidation {
   --  against the module's declared schema."
   when: SaveAutomation(automation: Automation)
   let module = RegisteredModule where manifest.id = automation.jobBoard
+  requires: module.status = active
+    -- Only active modules accept automation configuration (security: prevents
+    -- saving automations against deactivated or errored modules)
   requires: module is JobDiscoveryManifest
     -- Only job discovery modules have connectorParams
 
@@ -316,7 +338,9 @@ rule ConnectorParamsValidation {
 
   @guidance
     -- Prevents invalid connectorParams from reaching the module at search time
-    -- The Automation Wizard can use the schema to render dynamic form fields
+    -- The Automation Wizard renders dynamic form fields from the ConnectorParamField array
+    -- Keys present in connectorParams but not declared in the schema are stripped
+    -- before persistence (extraneous key stripping prevents injection of unexpected params)
 }
 
 -- =============================================================================
@@ -652,14 +676,18 @@ surface AutomationWizard {
   context entity: Automation (new or existing)
 
   exposes:
-    availableModules: RegisteredModule where status = active and connectorType = job_discovery
+    availableModules: RegisteredModule where status = active and connectorType = job_discovery,
+    selectedModule.connectorParamsSchema: ConnectorParamField[]?,
+    selectedModule.searchFieldOverrides: SearchFieldOverride[]?,
+    selectedModule.automationType: discovery | maintenance
 
   provides:
     SelectModule(moduleId),
     ConfigureConnectorParams(params validated against module.connectorParamsSchema)
 
   @guarantee DynamicFormFields
-    -- Form fields for connectorParams are generated from the module's declared schema
+    -- Form fields for connectorParams are generated from the ConnectorParamField array
+    -- Search field widgets are swapped per SearchFieldOverride declarations
     -- Not hardcoded per module
 }
 
@@ -688,33 +716,41 @@ surface NotificationInbox {
 -- Job Discovery Modules
 
 -- Module: eures
--- manifest: { id: "eures", connectorType: job_discovery, credential: { type: none },
+-- manifest: { id: "eures", manifestVersion: 1, connectorType: job_discovery,
+--   automationType: discovery, credential: { type: none },
 --   settingsSchema: null,
---   healthCheck: { endpoint: "https://eures.ec.europa.eu/eures2/eures-api/search", timeoutMs: 5000 },
+--   healthCheck: { endpoint: "https://europa.eu/eures/eures-apps/api/jv-searchengine/public/jv-search/search", timeoutMs: 15000 },
 --   resilience: { retryAttempts: 3, retryBackoff: exponential, circuitBreaker: true, timeoutMs: 15000,
 --     rateLimitTokens: 3, rateLimitRefillMs: 500, maxConcurrent: 5 } }
--- connectorParamsSchema: { language: String }
+-- searchFieldOverrides: [ { field: keywords, widgetId: "eures-occupation" }, { field: location, widgetId: "eures-location" } ]
+-- connectorParamsSchema: 9 fields [ publicationPeriod(select), requiredExperienceCodes(multiselect),
+--   positionOfferingCodes(multiselect), positionScheduleCodes(multiselect), educationLevelCodes(multiselect),
+--   sectorCodes(multiselect), euresFlagCodes(multiselect), requiredLanguages(string), sortSearch(select) ]
 
 -- Module: arbeitsagentur
--- manifest: { id: "arbeitsagentur", connectorType: job_discovery, credential: { type: none },
+-- manifest: { id: "arbeitsagentur", manifestVersion: 1, connectorType: job_discovery,
+--   automationType: discovery, credential: { type: none },
 --   settingsSchema: null,
---   healthCheck: { endpoint: "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobs", timeoutMs: 5000 },
+--   healthCheck: { endpoint: "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobs", timeoutMs: 15000 },
 --   resilience: { retryAttempts: 3, retryBackoff: exponential, circuitBreaker: true, timeoutMs: 15000,
 --     rateLimitTokens: 3, rateLimitRefillMs: 500, maxConcurrent: 5 } }
--- connectorParamsSchema: { umkreis: Integer, veroeffentlichtseit: Integer,
---   arbeitszeit: "vz" | "tz", befristung: 1 | 2, angebotsart: "snw" | "mj" | "ho" }
+-- connectorParamsSchema: 4 fields [ umkreis(number, 0-200, default 25), veroeffentlichtseit(number, 1-100, default 7),
+--   arbeitszeit(select: vz|tz|snw|mj|ho), befristung(select: 1|2) ]
 
 -- Module: jsearch
--- manifest: { id: "jsearch", connectorType: job_discovery,
---   credential: { type: api_key, required: true, envFallback: "RAPIDAPI_KEY", sensitive: true,
+-- manifest: { id: "jsearch", manifestVersion: 1, connectorType: job_discovery,
+--   automationType: discovery,
+--   credential: { type: api_key, moduleId: "rapidapi", required: true, envFallback: "RAPIDAPI_KEY", sensitive: true,
 --     placeholder: "Your RapidAPI key" },
---   settingsSchema: null, healthCheck: null, resilience: null }
+--   settingsSchema: null, healthCheck: null,
+--   resilience: { retryAttempts: 2, retryBackoff: exponential, circuitBreaker: true, timeoutMs: 15000,
+--     rateLimitTokens: 2, rateLimitRefillMs: 1000, maxConcurrent: 3 } }
 -- connectorParamsSchema: null
 
 -- AI Modules
 
 -- Module: ollama
--- manifest: { id: "ollama", connectorType: ai_provider,
+-- manifest: { id: "ollama", manifestVersion: 1, connectorType: ai_provider,
 --   credential: { type: endpoint_url, required: false, envFallback: "OLLAMA_BASE_URL",
 --     defaultValue: "http://127.0.0.1:11434", sensitive: false, placeholder: "http://127.0.0.1:11434" },
 --   healthCheck: { endpoint: "/api/tags", timeoutMs: 5000 },
@@ -722,7 +758,7 @@ surface NotificationInbox {
 -- modelSelection: { defaultModel: "llama3.2", listEndpoint: "/api/tags" }
 
 -- Module: openai
--- manifest: { id: "openai", connectorType: ai_provider,
+-- manifest: { id: "openai", manifestVersion: 1, connectorType: ai_provider,
 --   credential: { type: api_key, required: true, envFallback: "OPENAI_API_KEY", sensitive: true,
 --     placeholder: "sk-..." },
 --   healthCheck: { endpoint: "/models", timeoutMs: 10000 },
@@ -730,7 +766,7 @@ surface NotificationInbox {
 -- modelSelection: { defaultModel: "gpt-4o-mini", listEndpoint: "/models" }
 
 -- Module: deepseek
--- manifest: { id: "deepseek", connectorType: ai_provider,
+-- manifest: { id: "deepseek", manifestVersion: 1, connectorType: ai_provider,
 --   credential: { type: api_key, required: true, envFallback: "DEEPSEEK_API_KEY", sensitive: true,
 --     placeholder: "sk-..." },
 --   healthCheck: { endpoint: "/models", timeoutMs: 10000 },
@@ -743,7 +779,7 @@ surface NotificationInbox {
 
 open question "Should modules be able to declare dependencies on other modules? (e.g., CareerBERT module depends on an AI module for embeddings)"
 
-open question "Should the manifest include a version field for breaking changes in settings schema?"
+-- Resolved: manifestVersion: Integer added to ModuleManifest (all modules start at 1)
 
 open question "Should health check results be persisted (DB) or kept in-memory only?"
 

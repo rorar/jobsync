@@ -3,7 +3,7 @@
 import prisma from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { getCurrentUser } from "@/utils/user.utils";
-import { calculateNextRunAt } from "@/lib/connector/job-discovery/schedule";
+import { calculateNextRunAt, type ScheduleFrequency } from "@/lib/connector/job-discovery/schedule";
 import {
   CreateAutomationSchema,
   UpdateAutomationSchema,
@@ -26,6 +26,8 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { handleError } from "@/lib/utils";
 import { ActionResult } from "@/models/actionResult";
 import { validateConnectorParams } from "@/lib/connector/params-validator";
+import { moduleRegistry } from "@/lib/connector/registry";
+import "@/lib/connector/job-discovery/connectors"; // ensure module registration
 import { getAutomationSettingsForUser } from "@/actions/userSettings.actions";
 
 /** Narrow Prisma string fields to domain enums for Automation (with resume included). */
@@ -146,6 +148,17 @@ export async function createAutomation(
 
     const validated = CreateAutomationSchema.parse(input);
 
+    // S-1: Validate jobBoard against module registry
+    const registered = moduleRegistry.get(validated.jobBoard);
+    if (!registered) {
+      return { success: false, message: `Unknown module: ${validated.jobBoard}` };
+    }
+
+    // S-9: Normalize empty string connectorParams to undefined
+    if (validated.connectorParams === '') {
+      validated.connectorParams = undefined;
+    }
+
     const resume = await prisma.resume.findFirst({
       where: {
         id: validated.resumeId,
@@ -180,7 +193,7 @@ export async function createAutomation(
       }
     }
 
-    const nextRunAt = calculateNextRunAt(validated.scheduleHour);
+    const nextRunAt = calculateNextRunAt(validated.scheduleHour, validated.scheduleFrequency as ScheduleFrequency);
 
     const automation = await prisma.automation.create({
       data: {
@@ -193,6 +206,7 @@ export async function createAutomation(
         resumeId: validated.resumeId,
         matchThreshold: validated.matchThreshold,
         scheduleHour: validated.scheduleHour,
+        scheduleFrequency: validated.scheduleFrequency,
         nextRunAt,
         status: "active",
       },
@@ -236,6 +250,14 @@ export async function updateAutomation(
     }
 
     const validated = UpdateAutomationSchema.parse(input);
+
+    // S-1: Validate jobBoard against module registry (if provided in partial update)
+    if (validated.jobBoard) {
+      const registered = moduleRegistry.get(validated.jobBoard);
+      if (!registered) {
+        return { success: false, message: `Unknown module: ${validated.jobBoard}` };
+      }
+    }
 
     const existing = await prisma.automation.findFirst({
       where: { id, userId: user.id },
@@ -287,8 +309,10 @@ export async function updateAutomation(
       updateData.connectorParams = null;
     }
 
-    if (validated.scheduleHour !== undefined) {
-      updateData.nextRunAt = calculateNextRunAt(validated.scheduleHour);
+    if (validated.scheduleHour !== undefined || validated.scheduleFrequency !== undefined) {
+      const hour = validated.scheduleHour ?? existing.scheduleHour;
+      const freq = (validated.scheduleFrequency ?? existing.scheduleFrequency) as ScheduleFrequency;
+      updateData.nextRunAt = calculateNextRunAt(hour, freq);
     }
 
     const automation = await prisma.automation.update({
@@ -385,7 +409,10 @@ export async function resumeAutomation(id: string): Promise<ActionResult<Automat
       return { success: false, message: "Automation not found" };
     }
 
-    const nextRunAt = calculateNextRunAt(automation.scheduleHour);
+    const nextRunAt = calculateNextRunAt(
+      automation.scheduleHour,
+      automation.scheduleFrequency as ScheduleFrequency
+    );
 
     const updated = await prisma.automation.update({
       where: { id },

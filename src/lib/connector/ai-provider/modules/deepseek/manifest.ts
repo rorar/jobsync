@@ -3,6 +3,7 @@ import { ConnectorType, CredentialType, type AiManifest } from "@/lib/connector/
 export const deepseekManifest: AiManifest = {
   id: "deepseek",
   name: "DeepSeek",
+  manifestVersion: 1,
   connectorType: ConnectorType.AI_PROVIDER,
   credential: {
     type: CredentialType.API_KEY,

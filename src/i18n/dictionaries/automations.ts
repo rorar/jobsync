@@ -240,6 +240,79 @@ export const automations = {
     // Performance warning
     "automations.performanceWarning": "You have many automations. This may impact system performance. Make sure you have sufficient resources.",
     "automations.performanceWarningBanner": "You have {count} automations. Many automations may impact system performance. Make sure you have sufficient resources.",
+
+    // Connector Params — Section header
+    "automations.connectorParams": "Advanced Search Options",
+
+    // Connector Params — Arbeitsagentur
+    "automations.params.umkreis": "Radius (km)",
+    "automations.params.veroeffentlichtseit": "Published within (days)",
+    "automations.params.arbeitszeit": "Working time",
+    "automations.params.befristung": "Contract type",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.vz": "Full-time",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.tz": "Part-time",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.snw": "Shift/night/weekend",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.mj": "Mini-job",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.ho": "Home office",
+    "automations.paramOption.arbeitsagentur.befristung.1": "Permanent",
+    "automations.paramOption.arbeitsagentur.befristung.2": "Temporary",
+
+    // Connector Params — EURES: publicationPeriod
+    "automations.params.publicationPeriod": "Published within",
+    "automations.paramOption.eures.publicationPeriod.LAST_DAY": "Last day",
+    "automations.paramOption.eures.publicationPeriod.LAST_THREE_DAYS": "Last 3 days",
+    "automations.paramOption.eures.publicationPeriod.LAST_WEEK": "Last week",
+    "automations.paramOption.eures.publicationPeriod.LAST_MONTH": "Last month",
+
+    // Connector Params — EURES: experience level
+    "automations.params.experienceLevel": "Experience level",
+    "automations.paramOption.eures.requiredExperienceCodes.none_required": "No experience required",
+    "automations.paramOption.eures.requiredExperienceCodes.up_to_1_year": "Up to 1 year",
+    "automations.paramOption.eures.requiredExperienceCodes.between_1_and_2_years": "1-2 years",
+    "automations.paramOption.eures.requiredExperienceCodes.between_2_and_5_years": "2-5 years",
+    "automations.paramOption.eures.requiredExperienceCodes.more_than_5_years": "More than 5 years",
+
+    // Connector Params — EURES: position offering
+    "automations.params.positionOffering": "Position type",
+    "automations.paramOption.eures.positionOfferingCodes.directhire": "Direct hire",
+    "automations.paramOption.eures.positionOfferingCodes.contract": "Contract",
+    "automations.paramOption.eures.positionOfferingCodes.temporary": "Temporary",
+    "automations.paramOption.eures.positionOfferingCodes.internship": "Internship",
+    "automations.paramOption.eures.positionOfferingCodes.apprenticeship": "Apprenticeship",
+    "automations.paramOption.eures.positionOfferingCodes.selfemployed": "Self-employed",
+    "automations.paramOption.eures.positionOfferingCodes.seasonal": "Seasonal",
+    "automations.paramOption.eures.positionOfferingCodes.volunteer": "Volunteer",
+
+    // Connector Params — EURES: working time
+    "automations.params.workingTime": "Working time",
+    "automations.paramOption.eures.positionScheduleCodes.fulltime": "Full-time",
+    "automations.paramOption.eures.positionScheduleCodes.parttime": "Part-time",
+    "automations.paramOption.eures.positionScheduleCodes.flextime": "Flextime",
+
+    // Connector Params — EURES: education level
+    "automations.params.educationLevel": "Education level",
+    "automations.paramOption.eures.educationLevelCodes.basic": "Basic education",
+    "automations.paramOption.eures.educationLevelCodes.medium": "Secondary education",
+    "automations.paramOption.eures.educationLevelCodes.bachelor": "Bachelor's degree",
+    "automations.paramOption.eures.educationLevelCodes.master": "Master's degree",
+    "automations.paramOption.eures.educationLevelCodes.tertiary": "Tertiary education",
+    "automations.paramOption.eures.educationLevelCodes.doctoral": "Doctoral degree",
+
+    // Connector Params — EURES: sector
+    "automations.params.sector": "Industry sector",
+
+    // Connector Params — EURES: EURES flag
+    "automations.params.euresFlag": "EURES flag",
+    "automations.paramOption.eures.euresFlagCodes.WITH": "EURES vacancies only",
+    "automations.paramOption.eures.euresFlagCodes.WITHOUT": "Non-EURES vacancies only",
+
+    // Connector Params — EURES: required languages
+    "automations.params.requiredLanguages": "Required languages",
+
+    // Connector Params — EURES: sort order
+    "automations.params.sortOrder": "Sort order",
+    "automations.paramOption.eures.sortSearch.BEST_MATCH": "Best match",
+    "automations.paramOption.eures.sortSearch.MOST_RECENT": "Most recent",
   },
   de: {
     // AutomationWizard - Steps
@@ -482,6 +555,79 @@ export const automations = {
     // Performance warning
     "automations.performanceWarning": "Du hast viele Automationen. Dies kann die Systemleistung beeintr\u00e4chtigen. Stelle sicher, dass gen\u00fcgend Systemressourcen zur Verf\u00fcgung stehen.",
     "automations.performanceWarningBanner": "Du hast {count} Automationen. Viele Automationen k\u00f6nnen die Systemleistung beeintr\u00e4chtigen. Stelle sicher, dass gen\u00fcgend Systemressourcen zur Verf\u00fcgung stehen.",
+
+    // Connector Params — Section header
+    "automations.connectorParams": "Erweiterte Suchoptionen",
+
+    // Connector Params — Arbeitsagentur
+    "automations.params.umkreis": "Umkreis (km)",
+    "automations.params.veroeffentlichtseit": "Veröffentlicht innerhalb (Tage)",
+    "automations.params.arbeitszeit": "Arbeitszeit",
+    "automations.params.befristung": "Befristung",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.vz": "Vollzeit",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.tz": "Teilzeit",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.snw": "Schicht/Nacht/Wochenende",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.mj": "Minijob",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.ho": "Homeoffice",
+    "automations.paramOption.arbeitsagentur.befristung.1": "Unbefristet",
+    "automations.paramOption.arbeitsagentur.befristung.2": "Befristet",
+
+    // Connector Params — EURES: publicationPeriod
+    "automations.params.publicationPeriod": "Veröffentlicht innerhalb",
+    "automations.paramOption.eures.publicationPeriod.LAST_DAY": "Letzter Tag",
+    "automations.paramOption.eures.publicationPeriod.LAST_THREE_DAYS": "Letzte 3 Tage",
+    "automations.paramOption.eures.publicationPeriod.LAST_WEEK": "Letzte Woche",
+    "automations.paramOption.eures.publicationPeriod.LAST_MONTH": "Letzter Monat",
+
+    // Connector Params — EURES: experience level
+    "automations.params.experienceLevel": "Erfahrungsstufe",
+    "automations.paramOption.eures.requiredExperienceCodes.none_required": "Keine Erfahrung erforderlich",
+    "automations.paramOption.eures.requiredExperienceCodes.up_to_1_year": "Bis zu 1 Jahr",
+    "automations.paramOption.eures.requiredExperienceCodes.between_1_and_2_years": "1-2 Jahre",
+    "automations.paramOption.eures.requiredExperienceCodes.between_2_and_5_years": "2-5 Jahre",
+    "automations.paramOption.eures.requiredExperienceCodes.more_than_5_years": "Mehr als 5 Jahre",
+
+    // Connector Params — EURES: position offering
+    "automations.params.positionOffering": "Stellenart",
+    "automations.paramOption.eures.positionOfferingCodes.directhire": "Direktanstellung",
+    "automations.paramOption.eures.positionOfferingCodes.contract": "Vertrag",
+    "automations.paramOption.eures.positionOfferingCodes.temporary": "Befristet",
+    "automations.paramOption.eures.positionOfferingCodes.internship": "Praktikum",
+    "automations.paramOption.eures.positionOfferingCodes.apprenticeship": "Ausbildung",
+    "automations.paramOption.eures.positionOfferingCodes.selfemployed": "Selbstständig",
+    "automations.paramOption.eures.positionOfferingCodes.seasonal": "Saisonarbeit",
+    "automations.paramOption.eures.positionOfferingCodes.volunteer": "Ehrenamt",
+
+    // Connector Params — EURES: working time
+    "automations.params.workingTime": "Arbeitszeit",
+    "automations.paramOption.eures.positionScheduleCodes.fulltime": "Vollzeit",
+    "automations.paramOption.eures.positionScheduleCodes.parttime": "Teilzeit",
+    "automations.paramOption.eures.positionScheduleCodes.flextime": "Gleitzeit",
+
+    // Connector Params — EURES: education level
+    "automations.params.educationLevel": "Bildungsniveau",
+    "automations.paramOption.eures.educationLevelCodes.basic": "Grundbildung",
+    "automations.paramOption.eures.educationLevelCodes.medium": "Sekundärbildung",
+    "automations.paramOption.eures.educationLevelCodes.bachelor": "Bachelor-Abschluss",
+    "automations.paramOption.eures.educationLevelCodes.master": "Master-Abschluss",
+    "automations.paramOption.eures.educationLevelCodes.tertiary": "Tertiärbildung",
+    "automations.paramOption.eures.educationLevelCodes.doctoral": "Doktorgrad",
+
+    // Connector Params — EURES: sector
+    "automations.params.sector": "Branche",
+
+    // Connector Params — EURES: EURES flag
+    "automations.params.euresFlag": "EURES-Kennzeichnung",
+    "automations.paramOption.eures.euresFlagCodes.WITH": "Nur EURES-Stellen",
+    "automations.paramOption.eures.euresFlagCodes.WITHOUT": "Nur Nicht-EURES-Stellen",
+
+    // Connector Params — EURES: required languages
+    "automations.params.requiredLanguages": "Erforderliche Sprachen",
+
+    // Connector Params — EURES: sort order
+    "automations.params.sortOrder": "Sortierung",
+    "automations.paramOption.eures.sortSearch.BEST_MATCH": "Beste Übereinstimmung",
+    "automations.paramOption.eures.sortSearch.MOST_RECENT": "Neueste zuerst",
   },
   fr: {
     // AutomationWizard - Steps
@@ -724,6 +870,79 @@ export const automations = {
     // Performance warning
     "automations.performanceWarning": "Vous avez beaucoup d'automatisations. Cela peut affecter les performances du syst\u00e8me. Assurez-vous de disposer de ressources suffisantes.",
     "automations.performanceWarningBanner": "Vous avez {count} automatisations. De nombreuses automatisations peuvent affecter les performances du syst\u00e8me. Assurez-vous de disposer de ressources suffisantes.",
+
+    // Connector Params — Section header
+    "automations.connectorParams": "Options de recherche avancées",
+
+    // Connector Params — Arbeitsagentur
+    "automations.params.umkreis": "Rayon (km)",
+    "automations.params.veroeffentlichtseit": "Publié dans les (jours)",
+    "automations.params.arbeitszeit": "Temps de travail",
+    "automations.params.befristung": "Type de contrat",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.vz": "Temps plein",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.tz": "Temps partiel",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.snw": "Travail posté/nuit/week-end",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.mj": "Mini-job",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.ho": "Télétravail",
+    "automations.paramOption.arbeitsagentur.befristung.1": "Permanent",
+    "automations.paramOption.arbeitsagentur.befristung.2": "Temporaire",
+
+    // Connector Params — EURES: publicationPeriod
+    "automations.params.publicationPeriod": "Publié dans les",
+    "automations.paramOption.eures.publicationPeriod.LAST_DAY": "Dernier jour",
+    "automations.paramOption.eures.publicationPeriod.LAST_THREE_DAYS": "3 derniers jours",
+    "automations.paramOption.eures.publicationPeriod.LAST_WEEK": "Dernière semaine",
+    "automations.paramOption.eures.publicationPeriod.LAST_MONTH": "Dernier mois",
+
+    // Connector Params — EURES: experience level
+    "automations.params.experienceLevel": "Niveau d'expérience",
+    "automations.paramOption.eures.requiredExperienceCodes.none_required": "Aucune expérience requise",
+    "automations.paramOption.eures.requiredExperienceCodes.up_to_1_year": "Jusqu'à 1 an",
+    "automations.paramOption.eures.requiredExperienceCodes.between_1_and_2_years": "1-2 ans",
+    "automations.paramOption.eures.requiredExperienceCodes.between_2_and_5_years": "2-5 ans",
+    "automations.paramOption.eures.requiredExperienceCodes.more_than_5_years": "Plus de 5 ans",
+
+    // Connector Params — EURES: position offering
+    "automations.params.positionOffering": "Type de poste",
+    "automations.paramOption.eures.positionOfferingCodes.directhire": "Embauche directe",
+    "automations.paramOption.eures.positionOfferingCodes.contract": "Contrat",
+    "automations.paramOption.eures.positionOfferingCodes.temporary": "Temporaire",
+    "automations.paramOption.eures.positionOfferingCodes.internship": "Stage",
+    "automations.paramOption.eures.positionOfferingCodes.apprenticeship": "Apprentissage",
+    "automations.paramOption.eures.positionOfferingCodes.selfemployed": "Indépendant",
+    "automations.paramOption.eures.positionOfferingCodes.seasonal": "Saisonnier",
+    "automations.paramOption.eures.positionOfferingCodes.volunteer": "Bénévolat",
+
+    // Connector Params — EURES: working time
+    "automations.params.workingTime": "Temps de travail",
+    "automations.paramOption.eures.positionScheduleCodes.fulltime": "Temps plein",
+    "automations.paramOption.eures.positionScheduleCodes.parttime": "Temps partiel",
+    "automations.paramOption.eures.positionScheduleCodes.flextime": "Horaires flexibles",
+
+    // Connector Params — EURES: education level
+    "automations.params.educationLevel": "Niveau d'éducation",
+    "automations.paramOption.eures.educationLevelCodes.basic": "Éducation de base",
+    "automations.paramOption.eures.educationLevelCodes.medium": "Éducation secondaire",
+    "automations.paramOption.eures.educationLevelCodes.bachelor": "Licence",
+    "automations.paramOption.eures.educationLevelCodes.master": "Master",
+    "automations.paramOption.eures.educationLevelCodes.tertiary": "Éducation supérieure",
+    "automations.paramOption.eures.educationLevelCodes.doctoral": "Doctorat",
+
+    // Connector Params — EURES: sector
+    "automations.params.sector": "Secteur d'activité",
+
+    // Connector Params — EURES: EURES flag
+    "automations.params.euresFlag": "Indicateur EURES",
+    "automations.paramOption.eures.euresFlagCodes.WITH": "Offres EURES uniquement",
+    "automations.paramOption.eures.euresFlagCodes.WITHOUT": "Offres non-EURES uniquement",
+
+    // Connector Params — EURES: required languages
+    "automations.params.requiredLanguages": "Langues requises",
+
+    // Connector Params — EURES: sort order
+    "automations.params.sortOrder": "Ordre de tri",
+    "automations.paramOption.eures.sortSearch.BEST_MATCH": "Meilleure correspondance",
+    "automations.paramOption.eures.sortSearch.MOST_RECENT": "Plus récent",
   },
   es: {
     // AutomationWizard - Steps
@@ -966,5 +1185,78 @@ export const automations = {
     // Performance warning
     "automations.performanceWarning": "Tienes muchas automatizaciones. Esto puede afectar el rendimiento del sistema. Aseg\u00farate de tener suficientes recursos.",
     "automations.performanceWarningBanner": "Tienes {count} automatizaciones. Muchas automatizaciones pueden afectar el rendimiento del sistema. Aseg\u00farate de tener suficientes recursos.",
+
+    // Connector Params — Section header
+    "automations.connectorParams": "Opciones de búsqueda avanzadas",
+
+    // Connector Params — Arbeitsagentur
+    "automations.params.umkreis": "Radio (km)",
+    "automations.params.veroeffentlichtseit": "Publicado en los últimos (días)",
+    "automations.params.arbeitszeit": "Jornada laboral",
+    "automations.params.befristung": "Tipo de contrato",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.vz": "Tiempo completo",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.tz": "Tiempo parcial",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.snw": "Turnos/noche/fin de semana",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.mj": "Minijob",
+    "automations.paramOption.arbeitsagentur.arbeitszeit.ho": "Teletrabajo",
+    "automations.paramOption.arbeitsagentur.befristung.1": "Indefinido",
+    "automations.paramOption.arbeitsagentur.befristung.2": "Temporal",
+
+    // Connector Params — EURES: publicationPeriod
+    "automations.params.publicationPeriod": "Publicado en los últimos",
+    "automations.paramOption.eures.publicationPeriod.LAST_DAY": "Último día",
+    "automations.paramOption.eures.publicationPeriod.LAST_THREE_DAYS": "Últimos 3 días",
+    "automations.paramOption.eures.publicationPeriod.LAST_WEEK": "Última semana",
+    "automations.paramOption.eures.publicationPeriod.LAST_MONTH": "Último mes",
+
+    // Connector Params — EURES: experience level
+    "automations.params.experienceLevel": "Nivel de experiencia",
+    "automations.paramOption.eures.requiredExperienceCodes.none_required": "Sin experiencia requerida",
+    "automations.paramOption.eures.requiredExperienceCodes.up_to_1_year": "Hasta 1 año",
+    "automations.paramOption.eures.requiredExperienceCodes.between_1_and_2_years": "1-2 años",
+    "automations.paramOption.eures.requiredExperienceCodes.between_2_and_5_years": "2-5 años",
+    "automations.paramOption.eures.requiredExperienceCodes.more_than_5_years": "Más de 5 años",
+
+    // Connector Params — EURES: position offering
+    "automations.params.positionOffering": "Tipo de puesto",
+    "automations.paramOption.eures.positionOfferingCodes.directhire": "Contratación directa",
+    "automations.paramOption.eures.positionOfferingCodes.contract": "Contrato",
+    "automations.paramOption.eures.positionOfferingCodes.temporary": "Temporal",
+    "automations.paramOption.eures.positionOfferingCodes.internship": "Prácticas",
+    "automations.paramOption.eures.positionOfferingCodes.apprenticeship": "Aprendizaje",
+    "automations.paramOption.eures.positionOfferingCodes.selfemployed": "Autónomo",
+    "automations.paramOption.eures.positionOfferingCodes.seasonal": "Temporal de temporada",
+    "automations.paramOption.eures.positionOfferingCodes.volunteer": "Voluntariado",
+
+    // Connector Params — EURES: working time
+    "automations.params.workingTime": "Jornada laboral",
+    "automations.paramOption.eures.positionScheduleCodes.fulltime": "Tiempo completo",
+    "automations.paramOption.eures.positionScheduleCodes.parttime": "Tiempo parcial",
+    "automations.paramOption.eures.positionScheduleCodes.flextime": "Horario flexible",
+
+    // Connector Params — EURES: education level
+    "automations.params.educationLevel": "Nivel de educación",
+    "automations.paramOption.eures.educationLevelCodes.basic": "Educación básica",
+    "automations.paramOption.eures.educationLevelCodes.medium": "Educación secundaria",
+    "automations.paramOption.eures.educationLevelCodes.bachelor": "Grado universitario",
+    "automations.paramOption.eures.educationLevelCodes.master": "Máster",
+    "automations.paramOption.eures.educationLevelCodes.tertiary": "Educación superior",
+    "automations.paramOption.eures.educationLevelCodes.doctoral": "Doctorado",
+
+    // Connector Params — EURES: sector
+    "automations.params.sector": "Sector industrial",
+
+    // Connector Params — EURES: EURES flag
+    "automations.params.euresFlag": "Indicador EURES",
+    "automations.paramOption.eures.euresFlagCodes.WITH": "Solo ofertas EURES",
+    "automations.paramOption.eures.euresFlagCodes.WITHOUT": "Solo ofertas no EURES",
+
+    // Connector Params — EURES: required languages
+    "automations.params.requiredLanguages": "Idiomas requeridos",
+
+    // Connector Params — EURES: sort order
+    "automations.params.sortOrder": "Orden de clasificación",
+    "automations.paramOption.eures.sortSearch.BEST_MATCH": "Mejor coincidencia",
+    "automations.paramOption.eures.sortSearch.MOST_RECENT": "Más reciente",
   },
 } as const;

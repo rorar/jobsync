@@ -14,7 +14,7 @@ export type AutomationRunStatus =
   | "blocked"
   | "rate_limited";
 export type DiscoveryStatus = "new" | "accepted" | "dismissed";
-export type JobBoard = "jsearch" | "eures" | "arbeitsagentur";
+export type JobBoard = string;
 
 export interface Automation {
   id: string;
@@ -27,6 +27,7 @@ export interface Automation {
   resumeId: string;
   matchThreshold: number;
   scheduleHour: number;
+  scheduleFrequency: string;
   nextRunAt: Date | null;
   lastRunAt: Date | null;
   status: AutomationStatus;

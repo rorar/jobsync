@@ -3,7 +3,9 @@ import { ConnectorType, CredentialType, type JobDiscoveryManifest } from "@/lib/
 export const jsearchManifest: JobDiscoveryManifest = {
   id: "jsearch",
   name: "JSearch",
+  manifestVersion: 1,
   connectorType: ConnectorType.JOB_DISCOVERY,
+  automationType: "discovery",
   credential: {
     type: CredentialType.API_KEY,
     moduleId: "rapidapi",

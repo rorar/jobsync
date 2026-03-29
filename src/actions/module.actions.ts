@@ -9,6 +9,9 @@ import {
   CredentialType,
   HealthStatus,
   ModuleStatus,
+  type ConnectorParamsSchema,
+  type SearchFieldOverride,
+  type JobDiscoveryManifest,
 } from "@/lib/connector/manifest";
 import { getCurrentUser } from "@/utils/user.utils";
 import { handleError } from "@/lib/utils";
@@ -23,7 +26,9 @@ import { checkModuleHealth } from "@/lib/connector/health-monitor";
 export interface ModuleManifestSummary {
   moduleId: string;
   name: string;
+  manifestVersion: number;
   connectorType: string;
+  automationType?: "discovery" | "maintenance";
   status: string;
   healthStatus: string;
   lastHealthCheck?: string;
@@ -36,6 +41,8 @@ export interface ModuleManifestSummary {
     placeholder?: string;
     defaultValue?: string;
   };
+  connectorParamsSchema?: ConnectorParamsSchema;
+  searchFieldOverrides?: SearchFieldOverride[];
 }
 
 // =============================================================================
@@ -67,23 +74,34 @@ export async function getModuleManifests(
     checkModuleHealth(mod.manifest.id).catch(() => {});
   }
 
-  const summaries: ModuleManifestSummary[] = modules.map((m) => ({
-    moduleId: m.manifest.id,
-    name: m.manifest.name,
-    connectorType: m.manifest.connectorType,
-    status: m.status,
-    healthStatus: m.healthStatus,
-    lastHealthCheck: m.lastHealthCheck?.toISOString(),
-    lastSuccessfulConnection: m.lastSuccessfulConnection?.toISOString(),
-    credential: {
-      type: m.manifest.credential.type,
-      moduleId: m.manifest.credential.moduleId,
-      required: m.manifest.credential.required,
-      sensitive: m.manifest.credential.sensitive,
-      placeholder: m.manifest.credential.placeholder,
-      defaultValue: m.manifest.credential.defaultValue,
-    },
-  }));
+  const summaries: ModuleManifestSummary[] = modules.map((m) => {
+    // Extract Job Discovery specific fields when applicable
+    const jdManifest = m.manifest.connectorType === ConnectorType.JOB_DISCOVERY
+      ? (m.manifest as JobDiscoveryManifest)
+      : undefined;
+
+    return {
+      moduleId: m.manifest.id,
+      name: m.manifest.name,
+      manifestVersion: m.manifest.manifestVersion,
+      connectorType: m.manifest.connectorType,
+      automationType: jdManifest?.automationType,
+      status: m.status,
+      healthStatus: m.healthStatus,
+      lastHealthCheck: m.lastHealthCheck?.toISOString(),
+      lastSuccessfulConnection: m.lastSuccessfulConnection?.toISOString(),
+      credential: {
+        type: m.manifest.credential.type,
+        moduleId: m.manifest.credential.moduleId,
+        required: m.manifest.credential.required,
+        sensitive: m.manifest.credential.sensitive,
+        placeholder: m.manifest.credential.placeholder,
+        defaultValue: m.manifest.credential.defaultValue,
+      },
+      connectorParamsSchema: jdManifest?.connectorParamsSchema,
+      searchFieldOverrides: jdManifest?.searchFieldOverrides,
+    };
+  });
 
   return { success: true, data: summaries };
 }

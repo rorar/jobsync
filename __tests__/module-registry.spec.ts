@@ -14,6 +14,7 @@ import {
 function makeManifest(overrides: Partial<ModuleManifest> & { id: string }): ModuleManifest {
   return {
     name: overrides.name ?? `Test ${overrides.id}`,
+    manifestVersion: overrides.manifestVersion ?? 1,
     connectorType: overrides.connectorType ?? ConnectorType.JOB_DISCOVERY,
     credential: overrides.credential ?? {
       type: CredentialType.NONE,

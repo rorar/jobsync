@@ -99,12 +99,36 @@ export interface ModelSelectionConfig {
 }
 
 // =============================================================================
+// ConnectorParams Schema (Array-based, deterministic ordering)
+// =============================================================================
+
+export interface ConnectorParamField {
+  key: string;
+  type: "string" | "number" | "boolean" | "select" | "multiselect";
+  label: string; // i18n key (e.g. "automations.params.umkreis")
+  defaultValue?: string | number | boolean;
+  options?: (string | number)[]; // for select/multiselect types
+  required?: boolean;
+  min?: number; // for number type
+  max?: number; // for number type
+  placeholder?: string;
+}
+
+export type ConnectorParamsSchema = ConnectorParamField[];
+
+export interface SearchFieldOverride {
+  field: "keywords" | "location";
+  widgetId: string; // e.g. "eures-occupation", "eures-location"
+}
+
+// =============================================================================
 // Contracts (Published Language)
 // =============================================================================
 
 export interface ModuleManifest {
   id: string;
   name: string;
+  manifestVersion: number;
   connectorType: ConnectorType;
   credential: CredentialRequirement;
   settingsSchema?: SettingsSchema;
@@ -114,7 +138,9 @@ export interface ModuleManifest {
 
 export interface JobDiscoveryManifest extends ModuleManifest {
   connectorType: ConnectorType.JOB_DISCOVERY;
-  connectorParamsSchema?: Record<string, unknown>;
+  automationType?: "discovery" | "maintenance";
+  connectorParamsSchema?: ConnectorParamsSchema;
+  searchFieldOverrides?: SearchFieldOverride[];
 }
 
 export interface AiManifest extends ModuleManifest {

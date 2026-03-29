@@ -3,6 +3,7 @@ import { ConnectorType, CredentialType, type AiManifest } from "@/lib/connector/
 export const ollamaManifest: AiManifest = {
   id: "ollama",
   name: "Ollama",
+  manifestVersion: 1,
   connectorType: ConnectorType.AI_PROVIDER,
   credential: {
     type: CredentialType.ENDPOINT_URL,
