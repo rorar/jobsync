@@ -21,6 +21,8 @@ type ActiveTab = "new" | "dismissed" | "archive" | "trash";
 interface StagedVacancyCardProps {
   vacancy: StagedVacancyWithAutomation;
   activeTab: ActiveTab;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
   onDismiss: (id: string) => void;
   onRestore: (id: string) => void;
   onArchive: (id: string) => void;
@@ -32,6 +34,8 @@ interface StagedVacancyCardProps {
 export function StagedVacancyCard({
   vacancy,
   activeTab,
+  selected = false,
+  onToggleSelect,
   onDismiss,
   onRestore,
   onArchive,
@@ -42,12 +46,22 @@ export function StagedVacancyCard({
   const { t, locale } = useTranslations();
 
   return (
-    <Card className="mb-3">
+    <Card className={`mb-3 ${selected ? "ring-2 ring-primary/50" : ""}`}>
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base font-medium leading-tight">
-            {vacancy.title}
-          </CardTitle>
+          <div className="flex items-start gap-2">
+            {onToggleSelect && (
+              <input
+                type="checkbox"
+                className="h-4 w-4 mt-1 rounded border-input accent-primary shrink-0"
+                checked={selected}
+                onChange={() => onToggleSelect(vacancy.id)}
+              />
+            )}
+            <CardTitle className="text-base font-medium leading-tight">
+              {vacancy.title}
+            </CardTitle>
+          </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {vacancy.matchScore != null && (
               <Badge variant="secondary" className="text-xs">

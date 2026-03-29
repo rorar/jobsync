@@ -24,6 +24,7 @@ import { RecordsCount } from "@/components/RecordsCount";
 import Loading from "@/components/Loading";
 import { StagedVacancyCard } from "./StagedVacancyCard";
 import { PromotionDialog } from "./PromotionDialog";
+import { BulkActionBar } from "./BulkActionBar";
 import type {
   StagedVacancyWithAutomation,
   StagedVacancyStatus,
@@ -63,10 +64,37 @@ function StagingContainer() {
   const [promotionOpen, setPromotionOpen] = useState(false);
   const hasSearched = useRef(false);
   const [mounted, setMounted] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Clear selection when tab changes
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === vacancies.length && vacancies.length > 0) {
+        return new Set();
+      }
+      return new Set(vacancies.map((v) => v.id));
+    });
+  }, [vacancies]);
 
   const loadCounts = useCallback(async () => {
     const result = await getStagedVacancyCounts();
@@ -215,6 +243,7 @@ function StagingContainer() {
     setActiveTab(value as ActiveTab);
     setSearchTerm("");
     hasSearched.current = false;
+    clearSelection();
   };
 
   const tabBadge = (count: number | undefined) => {
@@ -225,6 +254,8 @@ function StagingContainer() {
       </Badge>
     );
   };
+
+  const isAllSelected = vacancies.length > 0 && selectedIds.size === vacancies.length;
 
   return (
     <>
@@ -271,11 +302,31 @@ function StagingContainer() {
                 {loading && <Loading />}
                 {!loading && vacancies.length > 0 && (
                   <>
+                    {/* Select All + Bulk Action Bar */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-input accent-primary"
+                          checked={isAllSelected}
+                          onChange={toggleSelectAll}
+                        />
+                        {t("staging.selectAll")}
+                      </label>
+                    </div>
+                    <BulkActionBar
+                      selectedIds={selectedIds}
+                      activeTab={activeTab}
+                      onActionComplete={reload}
+                      onClearSelection={clearSelection}
+                    />
                     {vacancies.map((vacancy) => (
                       <StagedVacancyCard
                         key={vacancy.id}
                         vacancy={vacancy}
                         activeTab={activeTab}
+                        selected={selectedIds.has(vacancy.id)}
+                        onToggleSelect={toggleSelection}
                         onDismiss={handleDismiss}
                         onRestore={handleRestore}
                         onArchive={handleArchive}
