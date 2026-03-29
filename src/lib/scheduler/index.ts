@@ -2,6 +2,7 @@ import cron, { ScheduledTask } from "node-cron";
 import { SCHEDULER_CONSTANTS } from "@/lib/constants";
 import db from "@/lib/db";
 import { runAutomation } from "@/lib/connector/job-discovery";
+import type { AutomationPauseReason, AutomationStatus, JobBoard } from "@/models/automation.model";
 import { debugLog, debugError } from "@/lib/debug";
 
 let scheduledTask: ScheduledTask | null = null;
@@ -48,7 +49,7 @@ async function runDueAutomations() {
           id: automation.id,
           userId: automation.userId,
           name: automation.name,
-          jobBoard: automation.jobBoard as "jsearch" | "eures",
+          jobBoard: automation.jobBoard as JobBoard,
           keywords: automation.keywords,
           location: automation.location,
           connectorParams: automation.connectorParams ?? null,
@@ -57,7 +58,8 @@ async function runDueAutomations() {
           scheduleHour: automation.scheduleHour,
           nextRunAt: automation.nextRunAt,
           lastRunAt: automation.lastRunAt,
-          status: automation.status as "active" | "paused",
+          status: automation.status as AutomationStatus,
+          pauseReason: (automation.pauseReason as AutomationPauseReason) ?? null,
           createdAt: automation.createdAt,
           updatedAt: automation.updatedAt,
         });

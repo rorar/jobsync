@@ -74,6 +74,17 @@ class ModuleRegistry {
     return entry.factory(...args) as AnyConnector;
   }
 
+  /** Update a module's status in the in-memory registry */
+  setStatus(moduleId: string, status: ModuleStatus): boolean {
+    const entry = this.entries.get(moduleId);
+    if (!entry) return false;
+    entry.registered.status = status;
+    if (status === ModuleStatus.ACTIVE) {
+      entry.registered.activatedAt = new Date();
+    }
+    return true;
+  }
+
   has(moduleId: string): boolean {
     return this.entries.has(moduleId);
   }

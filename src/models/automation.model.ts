@@ -1,6 +1,11 @@
 // Automation types and interfaces
 
 export type AutomationStatus = "active" | "paused";
+export type AutomationPauseReason =
+  | "module_deactivated"
+  | "auth_failure"
+  | "consecutive_failures"
+  | "cb_escalation";
 export type AutomationRunStatus =
   | "running"
   | "completed"
@@ -9,7 +14,7 @@ export type AutomationRunStatus =
   | "blocked"
   | "rate_limited";
 export type DiscoveryStatus = "new" | "accepted" | "dismissed";
-export type JobBoard = "jsearch" | "eures";
+export type JobBoard = "jsearch" | "eures" | "arbeitsagentur";
 
 export interface Automation {
   id: string;
@@ -25,6 +30,7 @@ export interface Automation {
   nextRunAt: Date | null;
   lastRunAt: Date | null;
   status: AutomationStatus;
+  pauseReason: AutomationPauseReason | null;
   createdAt: Date;
   updatedAt: Date;
 }

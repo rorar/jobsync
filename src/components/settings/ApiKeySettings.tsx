@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../ui/alert-dialog";
+import { Switch } from "../ui/switch";
 import { Loader2, Plus, Trash2, CheckCircle } from "lucide-react";
 import {
   getUserApiKeys,
@@ -31,7 +32,11 @@ import {
   deleteApiKey,
   getDefaultOllamaBaseUrl,
 } from "@/actions/apiKey.actions";
-import { getCredentialModules } from "@/actions/module.actions";
+import {
+  getCredentialModules,
+  activateModule,
+  deactivateModule,
+} from "@/actions/module.actions";
 import type { ModuleManifestSummary } from "@/actions/module.actions";
 import type {
   ApiKeyClientResponse,
@@ -42,11 +47,13 @@ import type { TranslationKey } from "@/i18n";
 
 interface ModuleConfig {
   id: ApiKeyModuleId;
+  moduleId: string;
   name: string;
   placeholder: string;
   inputType: "password" | "text";
   descriptionKey: TranslationKey;
   sensitive: boolean;
+  status: "active" | "inactive" | "error";
 }
 
 /** Fallback description keys per module — i18n keys defined in settings dictionary */
@@ -60,11 +67,13 @@ const DESCRIPTION_KEYS: Record<string, TranslationKey> = {
 function manifestToModuleConfig(m: ModuleManifestSummary): ModuleConfig {
   return {
     id: m.credential.moduleId as ApiKeyModuleId,
+    moduleId: m.moduleId,
     name: m.name,
     placeholder: m.credential.placeholder ?? "",
     inputType: m.credential.sensitive ? "password" : "text",
     descriptionKey: DESCRIPTION_KEYS[m.credential.moduleId] ?? ("settings.apiKeysDesc" as TranslationKey),
     sensitive: m.credential.sensitive,
+    status: m.status as "active" | "inactive" | "error",
   };
 }
 
@@ -84,6 +93,7 @@ function ApiKeySettings() {
   const [inputValue, setInputValue] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
 
   useEffect(() => {
     fetchKeys();
@@ -198,6 +208,66 @@ function ApiKeySettings() {
     setInputValue("");
   };
 
+  const handleToggleStatus = async (module: ModuleConfig) => {
+    setToggling(module.moduleId);
+    try {
+      if (module.status === "active") {
+        const result = await deactivateModule(module.moduleId);
+        if (result.success && result.data) {
+          setModules((prev) =>
+            prev.map((m) =>
+              m.moduleId === module.moduleId ? { ...m, status: "inactive" as const } : m,
+            ),
+          );
+          const paused = result.data.pausedAutomations;
+          toast({
+            variant: "default",
+            title: `${module.name} — Inactive`,
+            description:
+              paused > 0
+                ? `Module deactivated. ${paused} automation${paused > 1 ? "s" : ""} paused.`
+                : "Module deactivated.",
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: t("settings.error"),
+            description: result.message || t("settings.unexpectedError"),
+          });
+        }
+      } else {
+        const result = await activateModule(module.moduleId);
+        if (result.success) {
+          setModules((prev) =>
+            prev.map((m) =>
+              m.moduleId === module.moduleId ? { ...m, status: "active" as const } : m,
+            ),
+          );
+          toast({
+            variant: "success",
+            title: `${module.name} — Active`,
+            description: "Module activated.",
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: t("settings.error"),
+            description: result.message || t("settings.unexpectedError"),
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error toggling module status:", error);
+      toast({
+        variant: "destructive",
+        title: t("settings.error"),
+        description: t("settings.unexpectedError"),
+      });
+    } finally {
+      setToggling(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -245,16 +315,29 @@ function ApiKeySettings() {
                       )}
                     </CardDescription>
                   </div>
-                  {existingKey ? (
-                    <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 hover:bg-green-100 dark:hover:bg-green-900">
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      {module.sensitive
-                        ? `····${existingKey.last4}`
-                        : existingKey.displayValue || existingKey.last4}
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary">{t("settings.notConfigured")}</Badge>
-                  )}
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-medium ${module.status === "active" ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>
+                        {module.status === "active" ? "Active" : "Inactive"}
+                      </span>
+                      <Switch
+                        checked={module.status === "active"}
+                        disabled={toggling === module.moduleId}
+                        onCheckedChange={() => handleToggleStatus(module)}
+                        aria-label={`Toggle ${module.name} module`}
+                      />
+                    </div>
+                    {existingKey ? (
+                      <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 hover:bg-green-100 dark:hover:bg-green-900">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        {module.sensitive
+                          ? `····${existingKey.last4}`
+                          : existingKey.displayValue || existingKey.last4}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">{t("settings.notConfigured")}</Badge>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>

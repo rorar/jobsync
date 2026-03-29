@@ -41,6 +41,9 @@ import {
 import { CreateAutomationSchema, type CreateAutomationInput } from "@/models/automation.schema";
 import { createAutomation, updateAutomation } from "@/actions/automation.actions";
 import { getUserApiKeys } from "@/actions/apiKey.actions";
+import { getActiveModules } from "@/actions/module.actions";
+import type { ModuleManifestSummary } from "@/actions/module.actions";
+import { ConnectorType } from "@/lib/connector/manifest";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/i18n";
 import type { AutomationWithResume } from "@/models/automation.model";
@@ -101,6 +104,8 @@ export function AutomationWizard({
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasRapidApiKey, setHasRapidApiKey] = useState<boolean | null>(null);
+  const [availableModules, setAvailableModules] = useState<ModuleManifestSummary[]>([]);
+  const [configuredKeyModuleIds, setConfiguredKeyModuleIds] = useState<Set<string>>(new Set());
   const [aiScoringEnabled, setAiScoringEnabled] = useState(true);
   const [scheduleFrequency, setScheduleFrequency] = useState<ScheduleFrequency>("daily");
 
@@ -118,18 +123,29 @@ export function AutomationWizard({
     },
   });
 
-  // U2: Check if RapidAPI key is configured
+  // U2: Check configured API keys and load active job discovery modules
   useEffect(() => {
     if (open) {
       getUserApiKeys().then((result) => {
         if (result.success && result.data) {
           const hasKey = result.data.some((k) => k.moduleId === "rapidapi");
           setHasRapidApiKey(hasKey);
+          setConfiguredKeyModuleIds(new Set(result.data.map((k) => k.moduleId)));
         } else {
           setHasRapidApiKey(false);
+          setConfiguredKeyModuleIds(new Set());
         }
       }).catch(() => {
         setHasRapidApiKey(false);
+        setConfiguredKeyModuleIds(new Set());
+      });
+
+      getActiveModules(ConnectorType.JOB_DISCOVERY).then((result) => {
+        if (result.success && result.data) {
+          setAvailableModules(result.data);
+        }
+      }).catch(() => {
+        setAvailableModules([]);
       });
     }
   }, [open]);
@@ -333,8 +349,9 @@ export function AutomationWizard({
                 <FormLabel>{t("automations.jobBoard")}</FormLabel>
                 <Select
                   onValueChange={(val) => {
-                    // U2: Prevent selecting jsearch if no API key
-                    if (val === "jsearch" && hasRapidApiKey === false) {
+                    // Prevent selecting modules that require unconfigured credentials
+                    const mod = availableModules.find((m) => m.moduleId === val);
+                    if (mod?.credential.required && !configuredKeyModuleIds.has(mod.credential.moduleId)) {
                       return;
                     }
                     field.onChange(val);
@@ -348,33 +365,45 @@ export function AutomationWizard({
                   </FormControl>
                   <SelectContent>
                     <TooltipProvider>
-                      {hasRapidApiKey === false ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="relative flex cursor-not-allowed select-none items-center rounded-sm px-2 py-1.5 text-sm text-muted-foreground opacity-50">
-                              <AlertTriangle className="h-4 w-4 mr-2 text-destructive" />
-                              {t("automations.jsearch")}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="left">
-                            <p>{t("automations.jsearchApiKeyRequired")}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <SelectItem value="jsearch">{t("automations.jsearch")}</SelectItem>
-                      )}
+                      {availableModules.map((mod) => {
+                        const needsKey = mod.credential.required && !configuredKeyModuleIds.has(mod.credential.moduleId);
+                        if (needsKey) {
+                          return (
+                            <Tooltip key={mod.moduleId}>
+                              <TooltipTrigger asChild>
+                                <div className="relative flex cursor-not-allowed select-none items-center rounded-sm px-2 py-1.5 text-sm text-muted-foreground opacity-50">
+                                  <AlertTriangle className="h-4 w-4 mr-2 text-destructive" />
+                                  {mod.name}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="left">
+                                <p>{t("automations.jsearchApiKeyRequired")}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        }
+                        return (
+                          <SelectItem key={mod.moduleId} value={mod.moduleId}>
+                            {mod.name}
+                          </SelectItem>
+                        );
+                      })}
                     </TooltipProvider>
-                    <SelectItem value="eures">{t("automations.eures")}</SelectItem>
-                    <SelectItem value="arbeitsagentur">{t("automations.arbeitsagentur")}</SelectItem>
                   </SelectContent>
                 </Select>
-                {/* U2: Warning text below the select when JSearch has no API key */}
-                {hasRapidApiKey === false && jobBoard === "jsearch" && (
-                  <p className="flex items-center gap-1.5 text-sm text-destructive">
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    {t("automations.jsearchApiKeyRequired")}
-                  </p>
-                )}
+                {/* Warning text below the select when selected module needs unconfigured credentials */}
+                {(() => {
+                  const selectedMod = availableModules.find((m) => m.moduleId === jobBoard);
+                  if (selectedMod?.credential.required && !configuredKeyModuleIds.has(selectedMod.credential.moduleId)) {
+                    return (
+                      <p className="flex items-center gap-1.5 text-sm text-destructive">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        {t("automations.jsearchApiKeyRequired")}
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
                 <FormDescription>
                   {t("automations.jobBoardDesc")}
                 </FormDescription>
@@ -591,7 +620,7 @@ export function AutomationWizard({
             <div className="flex justify-between">
               <span className="text-muted-foreground">{t("automations.reviewJobBoard")}</span>
               <span className="font-medium">
-                {jobBoard === "eures" ? t("automations.eures") : jobBoard === "jsearch" ? t("automations.jsearch") : jobBoard === "arbeitsagentur" ? t("automations.arbeitsagentur") : jobBoard || "-"}
+                {availableModules.find((m) => m.moduleId === jobBoard)?.name || jobBoard || "-"}
               </span>
             </div>
             <div className="flex justify-between items-start">

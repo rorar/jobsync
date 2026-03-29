@@ -162,6 +162,7 @@ export const mockAutomation: Automation = {
   lastRunAt: new Date("2024-06-19T08:00:00.000Z"),
   connectorParams: null,
   status: "active",
+  pauseReason: null,
   createdAt: new Date("2024-06-01T00:00:00.000Z"),
   updatedAt: new Date("2024-06-19T08:00:00.000Z"),
 };
@@ -834,6 +835,7 @@ export const mockAutomationPaused: Automation = {
   lastRunAt: new Date("2024-06-15T10:00:00.000Z"),
   connectorParams: null,
   status: "paused",
+  pauseReason: "module_deactivated",
   createdAt: new Date("2024-05-01T00:00:00.000Z"),
   updatedAt: new Date("2024-06-15T10:00:00.000Z"),
 };
@@ -852,6 +854,7 @@ export const mockAutomationEures: Automation = {
   lastRunAt: new Date("2024-06-20T06:00:00.000Z"),
   connectorParams: null,
   status: "active",
+  pauseReason: null,
   createdAt: new Date("2024-06-10T00:00:00.000Z"),
   updatedAt: new Date("2024-06-20T06:00:00.000Z"),
 };
@@ -870,6 +873,7 @@ export const mockAutomationHighThreshold: Automation = {
   lastRunAt: new Date("2024-06-20T12:00:00.000Z"),
   connectorParams: null,
   status: "active",
+  pauseReason: null,
   createdAt: new Date("2024-06-15T00:00:00.000Z"),
   updatedAt: new Date("2024-06-20T12:00:00.000Z"),
 };
@@ -888,6 +892,7 @@ export const mockAutomationNeverRun: Automation = {
   lastRunAt: null,
   connectorParams: null,
   status: "active",
+  pauseReason: null,
   createdAt: new Date("2024-06-21T00:00:00.000Z"),
   updatedAt: new Date("2024-06-21T00:00:00.000Z"),
 };

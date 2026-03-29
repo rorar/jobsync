@@ -40,7 +40,7 @@ model ApiKey {
   id           String    @id @default(uuid())
   userId       String
   user         User      @relation(fields: [userId], references: [id])
-  provider     String
+  moduleId     String    @map("provider")
   encryptedKey String
   iv           String
   last4        String
@@ -49,7 +49,7 @@ model ApiKey {
   updatedAt    DateTime  @updatedAt
   lastUsedAt   DateTime?
 
-  @@unique([userId, provider])
+  @@unique([userId, moduleId])
   @@index([userId])
 }
 
@@ -379,7 +379,8 @@ model Automation {
   nextRunAt    DateTime?
   lastRunAt    DateTime?
 
-  status String @default("active")
+  status      String  @default("active")
+  pauseReason String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -411,6 +412,21 @@ model AutomationRun {
 
   @@index([automationId])
   @@index([startedAt])
+}
+
+model ModuleRegistration {
+  id            String    @id @default(uuid())
+  moduleId      String    @unique
+  connectorType String
+  status        String    @default("active")
+  healthStatus  String    @default("unknown")
+  activatedAt   DateTime?
+  deactivatedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([moduleId])
+  @@index([connectorType, status])
 }
 
 model Note {

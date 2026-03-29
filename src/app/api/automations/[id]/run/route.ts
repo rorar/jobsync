@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import db from "@/lib/db";
 import { runAutomation, type RunnerResult } from "@/lib/connector/job-discovery";
+import type { AutomationPauseReason, AutomationStatus, JobBoard } from "@/models/automation.model";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const MAX_RUNS_PER_HOUR = 5;
@@ -72,7 +73,7 @@ export async function POST(
       id: automation.id,
       userId: automation.userId,
       name: automation.name,
-      jobBoard: automation.jobBoard as "jsearch" | "eures",
+      jobBoard: automation.jobBoard as JobBoard,
       keywords: automation.keywords,
       location: automation.location,
       connectorParams: automation.connectorParams ?? null,
@@ -81,7 +82,8 @@ export async function POST(
       scheduleHour: automation.scheduleHour,
       nextRunAt: automation.nextRunAt,
       lastRunAt: automation.lastRunAt,
-      status: automation.status as "active" | "paused",
+      status: automation.status as AutomationStatus,
+      pauseReason: (automation.pauseReason as AutomationPauseReason) ?? null,
       createdAt: automation.createdAt,
       updatedAt: automation.updatedAt,
     });

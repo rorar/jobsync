@@ -11,6 +11,7 @@ import {
 } from "@/models/automation.schema";
 import type {
   AutomationStatus,
+  AutomationPauseReason,
   AutomationRunStatus,
   AutomationWithResume,
   AutomationRun,
@@ -25,10 +26,15 @@ import { ActionResult } from "@/models/actionResult";
 const MAX_AUTOMATIONS_PER_USER = 10;
 
 /** Narrow Prisma string fields to domain enums for Automation (with resume included). */
-function toAutomationWithResume<T extends { jobBoard: string; status: string }>(
+function toAutomationWithResume<T extends { jobBoard: string; status: string; pauseReason: string | null }>(
   row: T
-): T & { jobBoard: JobBoard; status: AutomationStatus } {
-  return { ...row, jobBoard: row.jobBoard as JobBoard, status: row.status as AutomationStatus };
+): T & { jobBoard: JobBoard; status: AutomationStatus; pauseReason: AutomationPauseReason | null } {
+  return {
+    ...row,
+    jobBoard: row.jobBoard as JobBoard,
+    status: row.status as AutomationStatus,
+    pauseReason: row.pauseReason as AutomationPauseReason | null,
+  };
 }
 
 /** Narrow Prisma string fields to domain enums for AutomationRun. */
