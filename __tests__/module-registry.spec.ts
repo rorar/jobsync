@@ -223,4 +223,178 @@ describe("ModuleRegistry", () => {
       expect(Array.isArray(available)).toBe(true);
     });
   });
+
+  describe("updateHealth", () => {
+    it("should update healthStatus and lastHealthCheck", () => {
+      const id = uniqueId("uh");
+      moduleRegistry.register(makeManifest({ id }), jest.fn());
+
+      const checkTime = new Date();
+      const result = moduleRegistry.updateHealth(id, HealthStatus.HEALTHY, checkTime);
+
+      expect(result).toBe(true);
+      const registered = moduleRegistry.get(id)!;
+      expect(registered.healthStatus).toBe(HealthStatus.HEALTHY);
+      expect(registered.lastHealthCheck).toBe(checkTime);
+    });
+
+    it("should update lastSuccessfulConnection when provided", () => {
+      const id = uniqueId("uh-success");
+      moduleRegistry.register(makeManifest({ id }), jest.fn());
+
+      const checkTime = new Date();
+      const successTime = new Date();
+      moduleRegistry.updateHealth(id, HealthStatus.HEALTHY, checkTime, successTime);
+
+      expect(moduleRegistry.get(id)!.lastSuccessfulConnection).toBe(successTime);
+    });
+
+    it("should not overwrite lastSuccessfulConnection when lastSuccess is omitted", () => {
+      const id = uniqueId("uh-no-success");
+      moduleRegistry.register(makeManifest({ id }), jest.fn());
+
+      // Establish an initial successful connection timestamp
+      const originalSuccess = new Date(2000, 0, 1);
+      moduleRegistry.updateHealth(id, HealthStatus.HEALTHY, new Date(), originalSuccess);
+
+      // Subsequent failure — no lastSuccess argument
+      moduleRegistry.updateHealth(id, HealthStatus.DEGRADED, new Date());
+
+      expect(moduleRegistry.get(id)!.lastSuccessfulConnection).toBe(originalSuccess);
+    });
+
+    it("should update consecutiveFailures when provided", () => {
+      const id = uniqueId("uh-failures");
+      moduleRegistry.register(makeManifest({ id }), jest.fn());
+
+      moduleRegistry.updateHealth(id, HealthStatus.DEGRADED, new Date(), undefined, 3);
+
+      expect(moduleRegistry.get(id)!.consecutiveFailures).toBe(3);
+    });
+
+    it("should return false for an unknown moduleId", () => {
+      const result = moduleRegistry.updateHealth(
+        "nonexistent-health-xyz",
+        HealthStatus.HEALTHY,
+        new Date(),
+      );
+      expect(result).toBe(false);
+    });
+  });
+
+  describe("updateCircuitBreaker", () => {
+    it("should update consecutiveFailures", () => {
+      const id = uniqueId("ucb");
+      moduleRegistry.register(makeManifest({ id }), jest.fn());
+
+      const result = moduleRegistry.updateCircuitBreaker(id, 4);
+
+      expect(result).toBe(true);
+      expect(moduleRegistry.get(id)!.consecutiveFailures).toBe(4);
+    });
+
+    it("should update circuitBreakerState when provided", () => {
+      const id = uniqueId("ucb-state");
+      moduleRegistry.register(makeManifest({ id }), jest.fn());
+
+      moduleRegistry.updateCircuitBreaker(id, 1, CircuitBreakerState.OPEN);
+
+      expect(moduleRegistry.get(id)!.circuitBreakerState).toBe(CircuitBreakerState.OPEN);
+    });
+
+    it("should update circuitBreakerOpenSince when provided", () => {
+      const id = uniqueId("ucb-since");
+      moduleRegistry.register(makeManifest({ id }), jest.fn());
+
+      const openSince = new Date();
+      moduleRegistry.updateCircuitBreaker(id, 1, CircuitBreakerState.OPEN, openSince);
+
+      expect(moduleRegistry.get(id)!.circuitBreakerOpenSince).toBe(openSince);
+    });
+
+    it("should clear circuitBreakerOpenSince when passed null", () => {
+      const id = uniqueId("ucb-clear");
+      moduleRegistry.register(makeManifest({ id }), jest.fn());
+
+      // Open the circuit first
+      moduleRegistry.updateCircuitBreaker(id, 2, CircuitBreakerState.OPEN, new Date());
+      expect(moduleRegistry.get(id)!.circuitBreakerOpenSince).toBeInstanceOf(Date);
+
+      // Recover — pass null to clear the timestamp
+      moduleRegistry.updateCircuitBreaker(id, 0, CircuitBreakerState.CLOSED, null);
+
+      expect(moduleRegistry.get(id)!.circuitBreakerOpenSince).toBeUndefined();
+      expect(moduleRegistry.get(id)!.circuitBreakerState).toBe(CircuitBreakerState.CLOSED);
+    });
+
+    it("should not change circuitBreakerState when not provided", () => {
+      const id = uniqueId("ucb-no-state");
+      moduleRegistry.register(makeManifest({ id }), jest.fn());
+
+      // Default state is CLOSED; update only the failure count
+      moduleRegistry.updateCircuitBreaker(id, 5);
+
+      expect(moduleRegistry.get(id)!.circuitBreakerState).toBe(CircuitBreakerState.CLOSED);
+    });
+
+    it("should return false for an unknown moduleId", () => {
+      const result = moduleRegistry.updateCircuitBreaker("nonexistent-cb-xyz", 1);
+      expect(result).toBe(false);
+    });
+  });
+
+  describe("getByCredentialModuleId", () => {
+    it("should find a module by its credential.moduleId", () => {
+      const id = uniqueId("gcmi");
+      const credModuleId = `cred-${id}`;
+      moduleRegistry.register(
+        makeManifest({
+          id,
+          credential: {
+            type: CredentialType.NONE,
+            moduleId: credModuleId,
+            required: false,
+            sensitive: false,
+          },
+        }),
+        jest.fn(),
+      );
+
+      const found = moduleRegistry.getByCredentialModuleId(credModuleId);
+
+      expect(found).toBeDefined();
+      expect(found!.manifest.id).toBe(id);
+    });
+
+    it("should return undefined when no module has that credential.moduleId", () => {
+      const result = moduleRegistry.getByCredentialModuleId("does-not-exist-cred-xyz");
+      expect(result).toBeUndefined();
+    });
+
+    it("should distinguish manifest.id from credential.moduleId (e.g. jsearch vs rapidapi)", () => {
+      // Simulates the real jsearch module: manifest.id="jsearch", credential.moduleId="rapidapi"
+      const manifestId = uniqueId("jsearch");
+      const credentialModuleId = `rapidapi-${manifestId}`;
+      moduleRegistry.register(
+        makeManifest({
+          id: manifestId,
+          credential: {
+            type: CredentialType.NONE,
+            moduleId: credentialModuleId,
+            required: true,
+            sensitive: true,
+          },
+        }),
+        jest.fn(),
+      );
+
+      // Looking up by manifest.id should NOT find it via getByCredentialModuleId
+      expect(moduleRegistry.getByCredentialModuleId(manifestId)).toBeUndefined();
+
+      // Looking up by credential.moduleId SHOULD find it
+      const found = moduleRegistry.getByCredentialModuleId(credentialModuleId);
+      expect(found).toBeDefined();
+      expect(found!.manifest.id).toBe(manifestId);
+    });
+  });
 });

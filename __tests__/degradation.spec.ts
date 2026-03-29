@@ -45,7 +45,7 @@ import {
   handleCircuitBreakerTrip,
   handleCircuitBreakerRecovery,
 } from "@/lib/connector/degradation";
-import { ModuleStatus, ConnectorType } from "@/lib/connector/manifest";
+import { ModuleStatus, ConnectorType, CircuitBreakerState } from "@/lib/connector/manifest";
 
 const mockPrisma = prisma as jest.Mocked<typeof prisma>;
 const mockRegistry = moduleRegistry as jest.Mocked<typeof moduleRegistry> & {
@@ -106,6 +106,18 @@ describe("Degradation Rules", () => {
       const result = await handleAuthFailure("jsearch", "Invalid API key");
 
       expect(result).toEqual({ pausedCount: 5 });
+    });
+
+    it("should skip escalation when credential.required is false", async () => {
+      (mockRegistry.get as jest.Mock).mockReturnValue({
+        manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: false } },
+      });
+
+      const result = await handleAuthFailure("eures", "401 Unauthorized");
+
+      expect(result).toEqual({ pausedCount: 0 });
+      expect(mockRegistry.setStatus).not.toHaveBeenCalled();
+      expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
     });
   });
 
@@ -296,6 +308,15 @@ describe("Degradation Rules", () => {
 
       expect(registered.circuitBreakerOpenSince).toBeInstanceOf(Date);
     });
+
+    it("should set circuitBreakerState to OPEN", async () => {
+      const registered = registerModule("mod-cb-6", 0) as any;
+      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+      await handleCircuitBreakerTrip("mod-cb-6");
+
+      expect(registered.circuitBreakerState).toBe(CircuitBreakerState.OPEN);
+    });
   });
 
   describe("handleCircuitBreakerRecovery", () => {
@@ -313,6 +334,22 @@ describe("Degradation Rules", () => {
 
       expect(registered.consecutiveFailures).toBe(0);
       expect(registered.circuitBreakerOpenSince).toBeUndefined();
+    });
+
+    it("should set circuitBreakerState to CLOSED", () => {
+      const registered: any = {
+        consecutiveFailures: 3,
+        circuitBreakerState: CircuitBreakerState.OPEN,
+        circuitBreakerOpenSince: new Date(),
+      };
+      mockRegistry._testMap.set("mod-recover-state", registered);
+      (mockRegistry.get as jest.Mock).mockImplementation(
+        (moduleId: string) => mockRegistry._testMap.get(moduleId),
+      );
+
+      handleCircuitBreakerRecovery("mod-recover-state");
+
+      expect(registered.circuitBreakerState).toBe(CircuitBreakerState.CLOSED);
     });
 
     it("should be a no-op for unknown module", () => {

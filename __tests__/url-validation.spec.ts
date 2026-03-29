@@ -1,4 +1,38 @@
-import { validateOllamaUrl } from "@/lib/url-validation";
+import { validateOllamaUrl, isBlockedHealthCheckUrl } from "@/lib/url-validation";
+
+describe("isBlockedHealthCheckUrl", () => {
+  describe("blocked URLs", () => {
+    it("blocks the AWS/Azure/Alibaba IMDS address 169.254.169.254", () => {
+      expect(isBlockedHealthCheckUrl("http://169.254.169.254/latest/meta-data/")).toBe(true);
+    });
+
+    it("blocks the GCP metadata server hostname", () => {
+      expect(isBlockedHealthCheckUrl("http://metadata.google.internal/computeMetadata/v1/")).toBe(true);
+    });
+
+    it("blocks an unparseable URL (returns true as fail-safe)", () => {
+      expect(isBlockedHealthCheckUrl("not a url at all")).toBe(true);
+    });
+
+    it("blocks an empty string", () => {
+      expect(isBlockedHealthCheckUrl("")).toBe(true);
+    });
+  });
+
+  describe("allowed URLs", () => {
+    it("allows 127.0.0.1 (Ollama localhost)", () => {
+      expect(isBlockedHealthCheckUrl("http://127.0.0.1:11434/api/tags")).toBe(false);
+    });
+
+    it("allows a public HTTPS API endpoint", () => {
+      expect(isBlockedHealthCheckUrl("https://api.example.com/health")).toBe(false);
+    });
+
+    it("allows a public HTTP endpoint", () => {
+      expect(isBlockedHealthCheckUrl("http://eures.ec.europa.eu/api/ping")).toBe(false);
+    });
+  });
+});
 
 describe("validateOllamaUrl", () => {
   describe("valid URLs", () => {
