@@ -10,7 +10,9 @@ import type {
   StagedVacancyStatus,
   StagedVacancyWithAutomation,
   BulkActionResult,
+  PromotionInput,
 } from "@/models/stagedVacancy.model";
+import { promoteStagedVacancy } from "@/lib/connector/job-discovery/promoter";
 import { APP_CONSTANTS } from "@/lib/constants";
 
 // Narrow Prisma string to domain enum
@@ -282,5 +284,23 @@ export async function getStagedVacancyCounts(): Promise<
     };
   } catch (error) {
     return handleError(error, "Failed to fetch staged vacancy counts");
+  }
+}
+
+/**
+ * Promote a staged vacancy to a full Job record.
+ */
+export async function promoteStagedVacancyToJob(
+  input: PromotionInput,
+): Promise<ActionResult<{ jobId: string; stagedVacancyId: string }>> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "Not authenticated" };
+
+    const result = await promoteStagedVacancy(input, user.id);
+
+    return { success: true, data: result };
+  } catch (error) {
+    return handleError(error, "Failed to promote staged vacancy");
   }
 }
