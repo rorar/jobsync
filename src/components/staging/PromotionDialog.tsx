@@ -36,14 +36,13 @@ export function PromotionDialog({
   const [titleOverride, setTitleOverride] = useState("");
   const [companyOverride, setCompanyOverride] = useState("");
   const [locationOverride, setLocationOverride] = useState("");
-  const [tagsInput, setTagsInput] = useState("");
+  // TODO: Replace text input with Tag multi-select component (like AddJob's tag selector)
 
   // Reset form when vacancy changes
   const resetForm = () => {
     setTitleOverride(vacancy?.title ?? "");
     setCompanyOverride(vacancy?.employerName ?? "");
     setLocationOverride(vacancy?.location ?? "");
-    setTagsInput("");
   };
 
   const handleOpenChange = (isOpen: boolean) => {
@@ -58,17 +57,11 @@ export function PromotionDialog({
 
     setSubmitting(true);
     try {
-      const tags = tagsInput
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean);
-
       const { success, message } = await promoteStagedVacancyToJob({
         stagedVacancyId: vacancy.id,
         jobTitleOverride: titleOverride || undefined,
         companyOverride: companyOverride || undefined,
         locationOverride: locationOverride || undefined,
-        tagsToApply: tags.length > 0 ? tags : undefined,
       });
 
       if (success) {
@@ -127,15 +120,7 @@ export function PromotionDialog({
               placeholder={vacancy?.location ?? ""}
             />
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="tags">{t("staging.tags")}</Label>
-            <Input
-              id="tags"
-              value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
-              placeholder={t("staging.tagsPlaceholder")}
-            />
-          </div>
+          {/* TODO: Replace text input with Tag multi-select component (like AddJob's tag selector) */}
         </div>
         <DialogFooter>
           <Button

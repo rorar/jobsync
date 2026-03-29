@@ -1,3 +1,14 @@
+import { createHash } from "crypto";
+
+/**
+ * Compute a dedup hash for a vacancy identified by sourceBoard + externalId.
+ * This hash is stored in the DedupHash table when vacancies are purged,
+ * allowing the runner to skip previously-seen vacancies.
+ */
+export function computeDedupHash(sourceBoard: string, externalId: string): string {
+  return createHash("sha256").update(`${sourceBoard}:${externalId}`).digest("hex");
+}
+
 const TRACKING_PARAMS = [
   "utm_source",
   "utm_medium",

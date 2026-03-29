@@ -143,11 +143,16 @@ export async function getOrCreateJobSource(
 }
 
 export async function getDefaultJobStatus(): Promise<string> {
-  let status = await db.jobStatus.findFirst({ where: { value: "new" } });
+  // Prefer "bookmarked" (spec), fall back to "new" (backward compat)
+  let status = await db.jobStatus.findFirst({ where: { value: "bookmarked" } });
+
+  if (!status) {
+    status = await db.jobStatus.findFirst({ where: { value: "new" } });
+  }
 
   if (!status) {
     status = await db.jobStatus.create({
-      data: { label: "New", value: "new" },
+      data: { label: "Bookmarked", value: "bookmarked" },
     });
   }
 

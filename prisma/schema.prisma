@@ -497,7 +497,7 @@ model StagedVacancy {
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
-  @@unique([userId, sourceBoard, externalId])
+  @@index([userId, sourceBoard, externalId])
   @@index([userId, status])
   @@index([userId, automationId])
   @@index([userId, createdAt])

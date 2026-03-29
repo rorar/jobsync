@@ -19,6 +19,15 @@ export interface VacancyDismissedEvent extends DomainEvent<"VacancyDismissed"> {
   };
 }
 
+export interface VacancyStagedEvent extends DomainEvent<"VacancyStaged"> {
+  payload: {
+    stagedVacancyId: string;
+    userId: string;
+    sourceBoard: string;
+    automationId: string;
+  };
+}
+
 export interface BulkActionCompletedEvent extends DomainEvent<"BulkActionCompleted"> {
   payload: {
     actionType: string;

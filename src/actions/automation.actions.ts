@@ -1,6 +1,7 @@
 "use server";
 
 import prisma from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { getCurrentUser } from "@/utils/user.utils";
 import { calculateNextRunAt } from "@/lib/connector/job-discovery/schedule";
 import {
@@ -397,7 +398,7 @@ export async function getDiscoveredJobs(
     if (!user) return { success: false, message: "Not authenticated" };
 
     const skip = (page - 1) * limit;
-    const where: any = {
+    const where: Prisma.StagedVacancyWhereInput = {
       userId: user.id,
       automationId,
       trashedAt: null,
@@ -497,6 +498,10 @@ export async function dismissDiscoveredJob(id: string): Promise<ActionResult<Sta
 
     if (!vacancy) {
       return { success: false, message: "Discovered job not found" };
+    }
+
+    if (vacancy.status !== "staged" && vacancy.status !== "ready") {
+      return { success: false, message: "Can only dismiss staged or ready vacancies" };
     }
 
     const updated = await prisma.stagedVacancy.update({

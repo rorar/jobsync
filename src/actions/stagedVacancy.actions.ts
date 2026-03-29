@@ -313,3 +313,7 @@ export async function promoteStagedVacancyToJob(
     return handleError(error, "Failed to promote staged vacancy");
   }
 }
+
+// TODO: Implement executeBulkAction() with partial-success semantics per spec rule BulkAction
+// TODO: Implement UndoToken + UndoAction per spec rules UndoAction, VacancyDismissal, TrashVacancy
+// TODO: Add unit tests for all 9 server actions (Phase 5 follow-up)

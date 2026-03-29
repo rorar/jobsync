@@ -34,12 +34,16 @@ type ActiveTab = "new" | "dismissed" | "archive" | "trash";
 const TAB_STATUS_MAP: Record<ActiveTab, StagedVacancyStatus[]> = {
   new: ["staged", "processing", "ready"],
   dismissed: ["dismissed"],
-  // Archive and trash are filtered by archivedAt/trashedAt in the backend,
-  // not by status. The current getStagedVacancies action hardcodes
-  // trashedAt: null and archivedAt: null. These tabs will show empty
-  // until the backend adds support for fetching archived/trashed items.
   archive: [],
   trash: [],
+};
+
+// Map frontend tab names to backend tab parameter values
+const TAB_BACKEND_MAP: Record<ActiveTab, "new" | "dismissed" | "archived" | "trashed"> = {
+  new: "new",
+  dismissed: "dismissed",
+  archive: "archived",
+  trash: "trashed",
 };
 
 function StagingContainer() {
@@ -75,21 +79,14 @@ function StagingContainer() {
     async (pageNum: number, tab: ActiveTab, search?: string) => {
       setLoading(true);
       const statusFilter = TAB_STATUS_MAP[tab];
-
-      // Archive and trash tabs are not supported by the current backend action
-      if (tab === "archive" || tab === "trash") {
-        setVacancies([]);
-        setTotalCount(0);
-        setPage(1);
-        setLoading(false);
-        return;
-      }
+      const backendTab = TAB_BACKEND_MAP[tab];
 
       const { success, data, total, message } = await getStagedVacancies(
         pageNum,
         recordsPerPage,
         statusFilter.length > 0 ? statusFilter : undefined,
         search,
+        backendTab,
       );
 
       if (success && data) {
@@ -291,7 +288,7 @@ function StagingContainer() {
                       <RecordsCount
                         count={vacancies.length}
                         total={totalCount}
-                        label="vacancies"
+                        label={t("staging.vacancies")}
                       />
                       {totalCount > APP_CONSTANTS.RECORDS_PER_PAGE && (
                         <RecordsPerPageSelector
