@@ -12,6 +12,8 @@ import {
   AutomationSettings,
   DisplaySettings,
 } from "@/models/userSettings.model";
+import type { NotificationPreferences } from "@/models/notification.model";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
 
 export const getUserSettings = async (): Promise<ActionResult<UserSettings>> => {
   try {
@@ -92,6 +94,7 @@ export const updateUserSettings = async (
           ...currentSettings.automation,
           ...settings.automation,
         },
+        notifications: settings.notifications ?? currentSettings.notifications,
       };
     } else {
       mergedSettings = {
@@ -100,6 +103,7 @@ export const updateUserSettings = async (
         ai: { ...defaultUserSettings.ai, ...settings.ai },
         display: { ...defaultUserSettings.display, ...settings.display },
         automation: { ...defaultUserSettings.automation!, ...settings.automation },
+        notifications: settings.notifications,
       };
     }
 
@@ -172,5 +176,64 @@ export async function getAutomationSettingsForUser(
     return { ...defaults, ...parsed.automation };
   } catch {
     return defaults;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Notification Preferences
+// ---------------------------------------------------------------------------
+
+/**
+ * Read the user's notification preferences.
+ * Returns DEFAULT_NOTIFICATION_PREFERENCES when nothing is stored yet.
+ */
+export async function getNotificationPreferences(): Promise<
+  ActionResult<NotificationPreferences>
+> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const row = await prisma.userSettings.findUnique({
+      where: { userId: user.id },
+    });
+
+    if (!row) {
+      return { success: true, data: DEFAULT_NOTIFICATION_PREFERENCES };
+    }
+
+    const parsed: UserSettingsData = JSON.parse(row.settings);
+    return {
+      success: true,
+      data: parsed.notifications ?? DEFAULT_NOTIFICATION_PREFERENCES,
+    };
+  } catch (error) {
+    return handleError(error, "Failed to fetch notification preferences.");
+  }
+}
+
+/**
+ * Persist notification preferences for the current user.
+ */
+export async function updateNotificationPreferences(
+  prefs: NotificationPreferences
+): Promise<ActionResult<UserSettings>> {
+  return updateUserSettings({ notifications: prefs });
+}
+
+/**
+ * Fetch the resolved notification preferences for a given userId.
+ * Used internally by the NotificationDispatcher consumer — NOT a server action.
+ */
+export async function getNotificationPreferencesForUser(
+  userId: string
+): Promise<NotificationPreferences> {
+  try {
+    const row = await prisma.userSettings.findUnique({ where: { userId } });
+    if (!row) return DEFAULT_NOTIFICATION_PREFERENCES;
+    const parsed: UserSettingsData = JSON.parse(row.settings);
+    return parsed.notifications ?? DEFAULT_NOTIFICATION_PREFERENCES;
+  } catch {
+    return DEFAULT_NOTIFICATION_PREFERENCES;
   }
 }

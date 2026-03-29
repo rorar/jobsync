@@ -1,4 +1,5 @@
 import { AiModuleId } from "./ai.model";
+import type { NotificationPreferences } from "./notification.model";
 
 export interface AiSettings {
   moduleId: AiModuleId;
@@ -47,6 +48,7 @@ export interface UserSettingsData {
   display: DisplaySettings;
   developer?: DeveloperSettings;
   automation?: AutomationSettings;
+  notifications?: NotificationPreferences;
 }
 
 export interface UserSettings {

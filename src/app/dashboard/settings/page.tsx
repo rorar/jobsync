@@ -7,6 +7,7 @@ import AutomationSettings from "@/components/settings/AutomationSettings";
 import DeveloperSettings from "@/components/settings/DeveloperSettings";
 import DisplaySettings from "@/components/settings/DisplaySettings";
 import ErrorLogSettings from "@/components/settings/ErrorLogSettings";
+import NotificationSettings from "@/components/settings/NotificationSettings";
 import SettingsSidebar, { type SettingsSection } from "@/components/settings/SettingsSidebar";
 
 function Settings() {
@@ -27,6 +28,7 @@ function Settings() {
           {activeSection === "api-keys" && <ApiKeySettings />}
           {activeSection === "appearance" && <DisplaySettings />}
           {activeSection === "automation" && <AutomationSettings />}
+          {activeSection === "notifications" && <NotificationSettings />}
           {activeSection === "developer" && <DeveloperSettings />}
           {activeSection === "error-log" && <ErrorLogSettings />}
         </div>
