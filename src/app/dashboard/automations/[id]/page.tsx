@@ -44,6 +44,7 @@ import { RunHistoryList } from "@/components/automations/RunHistoryList";
 import { LogsTab } from "@/components/automations/LogsTab";
 import Loading from "@/components/Loading";
 import { parseKeywords, parseLocations } from "@/utils/automation.utils";
+import { LocationBadge } from "@/components/ui/location-badge";
 
 export default function AutomationDetailPage() {
   const params = useParams();
@@ -222,12 +223,13 @@ export default function AutomationDetailPage() {
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="font-medium text-foreground">Location:</span>
-              {parseLocations(automation.location)
-                .map((loc: string) => (
-                  <Badge key={loc} variant="secondary" className="text-xs">
-                    {loc}
-                  </Badge>
-                ))}
+              {parseLocations(automation.location).map((code) => (
+                <LocationBadge
+                  key={code}
+                  code={code}
+                  resolve={automation.jobBoard === "eures" || automation.jobBoard === "arbeitsagentur"}
+                />
+              ))}
             </div>
           </div>
         </div>

@@ -47,7 +47,7 @@ import { ConnectorType } from "@/lib/connector/manifest";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/i18n";
 import type { AutomationWithResume } from "@/models/automation.model";
-import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, ChevronsUpDown, HelpCircle, Loader2, Play } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, Play } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -64,9 +64,8 @@ import {
 import { cn } from "@/lib/utils";
 import { EuresOccupationCombobox } from "@/components/automations/EuresOccupationCombobox";
 import { EuresLocationCombobox } from "@/components/automations/EuresLocationCombobox";
-import { getLocationLabel, getCountryCode } from "@/lib/connector/job-discovery/modules/eures/countries";
 import { Badge } from "@/components/ui/badge";
-import Image from "next/image";
+import { LocationBadge } from "@/components/ui/location-badge";
 import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 
 interface Resume {
@@ -754,25 +753,9 @@ export function AutomationWizard({
               <span className="text-muted-foreground">{t("automations.reviewLocation")}</span>
               {jobBoard === "eures" && form.getValues("location") ? (
                 <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
-                  {parseLocations(form.getValues("location")).map((trimmed) => {
-                    const isNS = trimmed.toLowerCase() === "ns" || trimmed.toLowerCase().endsWith("-ns");
-                    return (
-                      <Badge key={trimmed} variant="secondary" className="gap-1">
-                        {isNS ? (
-                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                        ) : (
-                          <Image
-                            src={`/flags/${getCountryCode(trimmed)}.svg`}
-                            alt={trimmed}
-                            className="h-3.5 w-3.5"
-                            width={14}
-                            height={14}
-                          />
-                        )}
-                        {getLocationLabel(trimmed)}
-                      </Badge>
-                    );
-                  })}
+                  {parseLocations(form.getValues("location")).map((code) => (
+                    <LocationBadge key={code} code={code} />
+                  ))}
                 </div>
               ) : (
                 <span className="font-medium">{form.getValues("location") || "-"}</span>

@@ -49,7 +49,7 @@ import {
   resumeAutomation,
 } from "@/actions/automation.actions";
 import Link from "next/link";
-import { getLocationLabel } from "@/lib/connector/job-discovery/modules/eures/countries";
+import { LocationBadge } from "@/components/ui/location-badge";
 import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 
 interface AutomationListProps {
@@ -66,15 +66,10 @@ const PAUSE_REASON_KEYS: Record<AutomationPauseReason, string> = {
   cb_escalation: "automations.pauseReasonCbEscalation",
 };
 
-/** Resolve a stored location string to readable labels */
-function resolveLocations(location: string, jobBoard: string): string[] {
+/** Parse location string into raw codes for LocationBadge rendering */
+function getLocationCodes(location: string): string[] {
   if (!location) return [];
-  const codes = parseLocations(location);
-  // Only resolve EURES / arbeitsagentur codes; for other boards, return as-is
-  if (jobBoard === "eures" || jobBoard === "arbeitsagentur") {
-    return codes.map((code) => getLocationLabel(code));
-  }
-  return codes;
+  return parseLocations(location);
 }
 
 export function AutomationList({
@@ -162,7 +157,8 @@ export function AutomationList({
           const isLoading = loadingAction === automation.id;
           const resumeMissing = !automation.resume;
           const keywordChips = parseKeywords(automation.keywords);
-          const locationLabels = resolveLocations(automation.location, automation.jobBoard);
+          const locationCodes = getLocationCodes(automation.location);
+          const isEures = automation.jobBoard === "eures" || automation.jobBoard === "arbeitsagentur";
 
           return (
             <Link
@@ -222,10 +218,8 @@ export function AutomationList({
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium text-foreground">{t("automations.locationLabel")}:</span>
-                      {locationLabels.map((label, idx) => (
-                        <Badge key={idx} variant="secondary" className="text-xs">
-                          {label}
-                        </Badge>
+                      {locationCodes.map((code, idx) => (
+                        <LocationBadge key={idx} code={code} resolve={isEures} />
                       ))}
                     </div>
                     {automation.resume && (

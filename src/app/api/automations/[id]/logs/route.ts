@@ -67,15 +67,24 @@ export async function GET(
           completedAt: store.completedAt,
         });
         controller.enqueue(encoder.encode(`data: ${initialData}\n\n`));
+
+        // If run already completed, close the stream immediately
+        if (!store.isRunning && store.completedAt) {
+          cleanup();
+          return;
+        }
       } else {
         controller.enqueue(
           encoder.encode(
             `data: ${JSON.stringify({ logs: [], isRunning: false })}\n\n`,
           ),
         );
+        // No active run and no stored logs — close immediately to prevent hanging
+        cleanup();
+        return;
       }
 
-      // Poll for new logs every second
+      // Poll for new logs every second (only reached when a run is active)
       const interval = setInterval(() => {
         if (isClosed) return;
         const currentStore = automationLogger.getStore(automationId);
@@ -92,6 +101,9 @@ export async function GET(
           if (!currentStore.isRunning && currentStore.completedAt) {
             cleanup();
           }
+        } else {
+          // Store was cleared while streaming — close gracefully
+          cleanup();
         }
       }, 1000);
 
