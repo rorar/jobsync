@@ -156,8 +156,28 @@ Module registrieren sich mit einem **Manifest** beim Connector und deklarieren i
 - Allium Spec: `specs/module-lifecycle.allium`
 - **DDD-Pattern:** Published Language — der Connector publiziert einen Settings-Vertrag (`ModuleManifest`), Module erfüllen ihn mit ihren spezifischen Anforderungen. Basis-Vertrag mit connector-spezifischen Extensions (`JobDiscoveryManifest`, `AiManifest`).
 
-### 0.5 Vacancy Pipeline (Staging → Inbox → Tracking → Archive/Trash)
+### 0.5 Vacancy Pipeline (Staging → Inbox → Tracking → Archive/Trash) — TEILWEISE IMPLEMENTIERT
 Entkopplung der LLM-Abhängigkeit: Die App funktioniert in den Grundfunktionen ohne LLMs. Stellenangebote durchlaufen eine Pipeline mit klaren Aggregate-Grenzen.
+
+**Implementiert (Kern-Pipeline):**
+- ✅ StagedVacancy Model + Prisma Migration
+- ✅ Runner schreibt in StagedVacancy (nicht direkt Job)
+- ✅ CRUD Actions (`stagedVacancy.actions.ts`)
+- ✅ Promotion Flow: StagedVacancy → Job (`PromotionDialog.tsx`)
+- ✅ Staging UI: Tabs + Karten (`StagingContainer.tsx`, `StagedVacancyCard.tsx`)
+- ✅ Allium Spec (`specs/vacancy-pipeline.allium`)
+- ✅ Dedup via Hash (Review Fix)
+- ✅ Domain Event `VacancyPromoted` emittiert (aber noch kein Event Bus → 0.6)
+
+**Ausstehend:**
+- ❌ Archive + Trash (Lifecycle-Endpunkte)
+- ❌ Undo/Redo (Toast + Ctrl+Z)
+- ❌ Bulk Actions (Multi-Select + Batch-Operationen)
+- ❌ Dedup-Retention (DedupHash-Tabelle nach Löschung, DSGVO)
+- ❌ Staging-Performance (Pagination/Virtualisierung)
+- ❌ Manuelle Jobs → Queue Option
+- ❌ Job-Tinder Dual-Use (→ 2.7)
+- ❌ Company Blacklist Filter (→ 2.15)
 
 **Architektur:**
 ```
@@ -1458,5 +1478,6 @@ Automation findet Jobs → LLM filtert & bewertet (Staging) → LLM promoted zu 
 | User Language Settings | ✅ Implementiert |
 | Roadmap 0.2: ActionResult<T> Typisierung | ✅ Implementiert |
 | Roadmap 8.2: Client-Side Error Reporting Dashboard | ✅ Implementiert |
+| Roadmap 0.5: Vacancy Pipeline (Kern-Pipeline) | ⏳ Teilweise (Archive/Trash, Undo, Bulk ausstehend) |
 | Roadmap 2.10 Phase 1: Manifest-Driven AutomationWizard | ✅ Implementiert |
 | Allium Spec: Module Lifecycle Manager (`specs/module-lifecycle.allium`) | ✅ Spezifiziert |
