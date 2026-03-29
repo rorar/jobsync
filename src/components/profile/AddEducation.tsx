@@ -51,7 +51,7 @@ function AddEducation({
   educationToEdit,
 }: AddEducationProps) {
   const { t } = useTranslations();
-  const pageTitle = educationToEdit ? "Edit Education" : "Add Education";
+  const pageTitle = educationToEdit ? t("profile.editEducationTitle") : t("profile.addEducationTitle");
   const [isPending, startTransition] = useTransition();
   const [locations, setLocations] = useState<JobLocation[]>([]);
 
@@ -124,9 +124,9 @@ function AddEducation({
         setDialogOpen(false);
         toast({
           variant: "success",
-          description: `Education has been ${
-            educationToEdit ? "updated" : "added"
-          } successfully`,
+          description: educationToEdit
+            ? t("profile.educationUpdated")
+            : t("profile.educationCreated"),
         });
       }
     });
@@ -140,7 +140,7 @@ function AddEducation({
         <DialogHeader>
           <DialogTitle>{pageTitle}</DialogTitle>
           <DialogDescription className="sr-only">
-            {educationToEdit ? "Edit education details" : "Add a new education entry"}
+            {educationToEdit ? t("profile.editEducationDescription") : t("profile.addEducationDescription")}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -157,9 +157,9 @@ function AddEducation({
                     name="sectionTitle"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Section Title</FormLabel>
+                        <FormLabel>{t("profile.sectionTitle")}</FormLabel>
                         <FormControl>
-                          <Input {...field} value={field.value ?? ""} placeholder="Ex: Education" />
+                          <Input {...field} value={field.value ?? ""} placeholder={t("profile.sectionTitleEducationPlaceholder")} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -177,9 +177,9 @@ function AddEducation({
                 name="institution"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>School</FormLabel>
+                    <FormLabel>{t("profile.school")}</FormLabel>
                     <FormControl>
-                      <Input {...field} value={field.value ?? ""} placeholder="Ex: Stanford" />
+                      <Input {...field} value={field.value ?? ""} placeholder={t("profile.schoolPlaceholder")} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -194,7 +194,7 @@ function AddEducation({
                 name="location"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Location</FormLabel>
+                    <FormLabel>{t("profile.location")}</FormLabel>
                     <FormControl>
                       <Combobox
                         options={locations!}
@@ -227,9 +227,9 @@ function AddEducation({
                 name="degree"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Degree</FormLabel>
+                    <FormLabel>{t("profile.degree")}</FormLabel>
                     <FormControl>
-                      <Input {...field} value={field.value ?? ""} placeholder="Ex: Bachelor's" />
+                      <Input {...field} value={field.value ?? ""} placeholder={t("profile.degreePlaceholder")} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -243,9 +243,9 @@ function AddEducation({
                 name="fieldOfStudy"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Field of study</FormLabel>
+                    <FormLabel>{t("profile.fieldOfStudy")}</FormLabel>
                     <FormControl>
-                      <Input {...field} value={field.value ?? ""} placeholder="Ex: Computer Science" />
+                      <Input {...field} value={field.value ?? ""} placeholder={t("profile.fieldOfStudyPlaceholder")} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -260,7 +260,7 @@ function AddEducation({
                 name="startDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Start Date</FormLabel>
+                    <FormLabel>{t("profile.startDate")}</FormLabel>
                     <DatePicker
                       field={field}
                       presets={false}
@@ -280,7 +280,7 @@ function AddEducation({
                 name="endDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>End Date</FormLabel>
+                    <FormLabel>{t("profile.endDate")}</FormLabel>
                     <DatePicker
                       field={field}
                       presets={false}
@@ -308,7 +308,7 @@ function AddEducation({
                       }}
                     />
                     <FormLabel className="flex items-center ml-4 mb-2">
-                      {field.value ? "Degree Completed" : "Currently Studying"}
+                      {field.value ? t("profile.degreeCompleted") : t("profile.currentlyStudying")}
                     </FormLabel>
 
                     <FormMessage />
@@ -324,7 +324,7 @@ function AddEducation({
                 name="description"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Description</FormLabel>
+                    <FormLabel>{t("profile.description")}</FormLabel>
                     <FormControl>
                       <TiptapEditor field={field} />
                     </FormControl>
@@ -342,11 +342,11 @@ function AddEducation({
                     className="mt-2 md:mt-0 w-full"
                     onClick={closeDialog}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                 </div>
                 <Button type="submit" disabled={!formState.isDirty}>
-                  Save
+                  {t("common.save")}
                   {isPending && <Loader className="h-4 w-4 shrink-0 spinner" />}
                 </Button>
               </DialogFooter>

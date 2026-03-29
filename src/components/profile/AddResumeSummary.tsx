@@ -47,7 +47,7 @@ function AddResumeSummary({
   const [isPending, startTransition] = useTransition();
   const { t } = useTranslations();
 
-  const pageTitle = summaryToEdit ? "Edit Summary" : "Add Summary";
+  const pageTitle = summaryToEdit ? t("profile.editSummaryTitle") : t("profile.addSummaryTitle");
 
   const form = useForm<z.infer<typeof AddSummarySectionFormSchema>>({
     resolver: zodResolver(AddSummarySectionFormSchema),
@@ -90,9 +90,9 @@ function AddResumeSummary({
         setDialogOpen(false);
         toast({
           variant: "success",
-          description: `Summary has been ${
-            summaryToEdit ? "updated" : "created"
-          } successfully`,
+          description: summaryToEdit
+            ? t("profile.summaryUpdated")
+            : t("profile.summaryCreated"),
         });
       }
     });
@@ -106,7 +106,7 @@ function AddResumeSummary({
         <DialogHeader>
           <DialogTitle>{pageTitle}</DialogTitle>
           <DialogDescription className="sr-only">
-            {summaryToEdit ? "Edit resume summary section" : "Add a new resume summary section"}
+            {summaryToEdit ? t("profile.editSummaryDescription") : t("profile.addSummaryDescription")}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -121,9 +121,9 @@ function AddResumeSummary({
                 name="sectionTitle"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Section Title</FormLabel>
+                    <FormLabel>{t("profile.sectionTitle")}</FormLabel>
                     <FormControl>
-                      <Input {...field} value={field.value ?? ""} placeholder="Ex: Summary" />
+                      <Input {...field} value={field.value ?? ""} placeholder={t("profile.sectionTitleSummaryPlaceholder")} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -137,7 +137,7 @@ function AddResumeSummary({
                 name="content"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Resume Summary</FormLabel>
+                    <FormLabel>{t("profile.resumeSummary")}</FormLabel>
                     <FormControl>
                       <TiptapEditor field={field} />
                     </FormControl>
@@ -157,11 +157,11 @@ function AddResumeSummary({
                     className="mt-2 md:mt-0 w-full"
                     onClick={closeDialog}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                 </div>
                 <Button type="submit" disabled={!formState.isDirty}>
-                  Save
+                  {t("common.save")}
                   {isPending && <Loader className="h-4 w-4 shrink-0 spinner" />}
                 </Button>
               </DialogFooter>
