@@ -766,7 +766,7 @@ Geführte Einführung über die UI-Elemente der App, kombinierbar mit dem Onboar
 ### 2.16 Keyboard Shortcuts
 - Pure UI-Infrastruktur, keine Domain-Relevanz. Kein Allium-Spec nötig.
 - **Navigation:** J/K (prev/next, vim-style), Pfeiltasten in Job-Tinder (→ 2.7)
-- **Aktionen:** D (dismiss), P (promote), S (super-like), Ctrl+Z (undo)
+- **Aktionen:** D (dismiss), P (promote), S (super-like), Ctrl+Z (undo), Ctrl+Enter (Formular bestätigen — Add Note, Add Job, etc.)
 - **Global:** ? (Shortcut-Hilfe anzeigen, GitHub/Gmail-Konvention), / (Suche öffnen)
 - Single-Letter Shortcuts nur aktiv wenn Fokus auf der passenden Surface (nicht in Textfeldern)
 - Shortcut-Hints als Tooltips auf Action-Buttons
