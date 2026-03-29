@@ -13,6 +13,7 @@ interface ContactInfoCardProps {
 function ContactInfoCard({ contactInfo, openDialog }: ContactInfoCardProps) {
   const { firstName, lastName, headline, email, phone, address } = contactInfo!;
   const { t } = useTranslations();
+  const contactParts = [email, phone, address].filter(Boolean);
   return (
     <Card>
       <CardHeader className="flex-row justify-between relative">
@@ -21,9 +22,11 @@ function ContactInfoCard({ contactInfo, openDialog }: ContactInfoCardProps) {
             {firstName} {lastName}
           </CardTitle>
           <CardDescription>{headline}</CardDescription>
-          <CardDescription>
-            {email} - {phone} - {address}
-          </CardDescription>
+          {contactParts.length > 0 && (
+            <CardDescription>
+              {contactParts.join(" \u00b7 ")}
+            </CardDescription>
+          )}
         </div>
         <Button
           variant="ghost"

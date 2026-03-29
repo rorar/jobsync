@@ -635,6 +635,56 @@ export const addEducation = async (
   }
 };
 
+export const deleteWorkExperience = async (
+  experienceId: string,
+  resumeId: string
+): Promise<ActionResult> => {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    await prisma.workExperience.delete({
+      where: {
+        id: experienceId,
+      },
+    });
+
+    revalidatePath(`/dashboard/profile/resume/${resumeId}`);
+    return { success: true };
+  } catch (error) {
+    const msg = "Failed to delete experience.";
+    return handleError(error, msg);
+  }
+};
+
+export const deleteEducation = async (
+  educationId: string,
+  resumeId: string
+): Promise<ActionResult> => {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    await prisma.education.delete({
+      where: {
+        id: educationId,
+      },
+    });
+
+    revalidatePath(`/dashboard/profile/resume/${resumeId}`);
+    return { success: true };
+  } catch (error) {
+    const msg = "Failed to delete education.";
+    return handleError(error, msg);
+  }
+};
+
 export const updateEducation = async (
   data: z.infer<typeof AddEducationFormSchema>
 ): Promise<ActionResult<Education>> => {

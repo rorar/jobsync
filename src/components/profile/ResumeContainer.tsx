@@ -9,9 +9,12 @@ import ExperienceCard from "./ExperienceCard";
 import EducationCard from "./EducationCard";
 import AiResumeReviewSection from "./AiResumeReviewSection";
 import { DownloadFileButton } from "./DownloadFileButton";
+import { FileText } from "lucide-react";
+import { useTranslations } from "@/i18n";
 
 function ResumeContainer({ resume }: { resume: Resume }) {
   const resumeSectionRef = useRef<AddResumeSectionRef>(null);
+  const { t } = useTranslations();
   const { title, ContactInfo, ResumeSections } = resume ?? {};
   const summarySection = ResumeSections?.find(
     (section) => section.sectionType === SectionType.SUMMARY
@@ -37,6 +40,9 @@ function ResumeContainer({ resume }: { resume: Resume }) {
     };
     resumeSectionRef.current?.openExperienceDialog(section);
   };
+  const openExperienceDialogForAdd = () => {
+    resumeSectionRef.current?.openExperienceDialogForAdd();
+  };
   const openEducationDialogForEdit = (educationId: string) => {
     const section: ResumeSection = {
       ...educationSection!,
@@ -46,6 +52,11 @@ function ResumeContainer({ resume }: { resume: Resume }) {
     };
     resumeSectionRef.current?.openEducationDialog(section);
   };
+  const openEducationDialogForAdd = () => {
+    resumeSectionRef.current?.openEducationDialogForAdd();
+  };
+
+  const hasContent = !!(ContactInfo || (ResumeSections && ResumeSections.length > 0));
 
   return (
     <>
@@ -67,30 +78,43 @@ function ResumeContainer({ resume }: { resume: Resume }) {
           </div>
         </CardHeader>
       </Card>
-      {ContactInfo && (
-        <ContactInfoCard
-          contactInfo={ContactInfo}
-          openDialog={openContactInfoDialog}
-        />
+      {!hasContent && (
+        <div className="text-center py-12 text-muted-foreground">
+          <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <h3 className="text-lg font-medium">{t("profile.startBuilding")}</h3>
+          <p className="text-sm mb-4">{t("profile.startBuildingDesc")}</p>
+        </div>
       )}
-      {summarySection && (
-        <SummarySectionCard
-          summarySection={summarySection}
-          openDialogForEdit={openSummaryDialogForEdit}
-        />
-      )}
-      {experienceSection && (
-        <ExperienceCard
-          experienceSection={experienceSection}
-          openDialogForEdit={openExperienceDialogForEdit}
-        />
-      )}
-      {educationSection && (
-        <EducationCard
-          educationSection={educationSection}
-          openDialogForEdit={openEducationDialogForEdit}
-        />
-      )}
+      <div className="space-y-4">
+        {ContactInfo && (
+          <ContactInfoCard
+            contactInfo={ContactInfo}
+            openDialog={openContactInfoDialog}
+          />
+        )}
+        {summarySection && (
+          <SummarySectionCard
+            summarySection={summarySection}
+            openDialogForEdit={openSummaryDialogForEdit}
+          />
+        )}
+        {experienceSection && (
+          <ExperienceCard
+            experienceSection={experienceSection}
+            openDialogForEdit={openExperienceDialogForEdit}
+            openDialogForAdd={openExperienceDialogForAdd}
+            resumeId={resume.id}
+          />
+        )}
+        {educationSection && (
+          <EducationCard
+            educationSection={educationSection}
+            openDialogForEdit={openEducationDialogForEdit}
+            openDialogForAdd={openEducationDialogForAdd}
+            resumeId={resume.id}
+          />
+        )}
+      </div>
     </>
   );
 }

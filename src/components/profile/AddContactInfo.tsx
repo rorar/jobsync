@@ -26,6 +26,7 @@ import { useEffect, useTransition } from "react";
 import { toast } from "../ui/use-toast";
 import { ContactInfo } from "@/models/profile.model";
 import { addContactInfo, updateContactInfo } from "@/actions/profile.actions";
+import { getLatestContactInfo } from "@/actions/contactInfo.actions";
 import { useTranslations } from "@/i18n";
 
 interface AddContactInfoProps {
@@ -82,6 +83,25 @@ function AddContactInfo({
     }
   }, [contactInfoToEdit, reset]);
 
+  // Pre-fill from latest ContactInfo when adding new (not editing)
+  useEffect(() => {
+    if (dialogOpen && !contactInfoToEdit && resumeId) {
+      getLatestContactInfo(resumeId).then((res) => {
+        if (res.success && res.data) {
+          reset({
+            resumeId,
+            firstName: res.data.firstName,
+            lastName: res.data.lastName,
+            headline: res.data.headline,
+            email: res.data.email,
+            phone: res.data.phone,
+            address: res.data.address ?? undefined,
+          });
+        }
+      });
+    }
+  }, [dialogOpen, contactInfoToEdit, resumeId, reset]);
+
   const onSubmit = (data: z.infer<typeof AddContactInfoFormSchema>) => {
     startTransition(async () => {
       const res = contactInfoToEdit
@@ -123,7 +143,7 @@ function AddContactInfo({
             className="grid grid-cols-1 md:grid-cols-2 gap-4 p-2"
           >
             {/* FIRST NAME */}
-            <div className="md:col-span-2">
+            <div>
               <FormField
                 control={form.control}
                 name="firstName"
@@ -131,7 +151,7 @@ function AddContactInfo({
                   <FormItem>
                     <FormLabel>First Name</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input placeholder="e.g. John" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -140,7 +160,7 @@ function AddContactInfo({
             </div>
 
             {/* LAST NAME */}
-            <div className="md:col-span-2">
+            <div>
               <FormField
                 control={form.control}
                 name="lastName"
@@ -148,7 +168,7 @@ function AddContactInfo({
                   <FormItem>
                     <FormLabel>Last Name</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input placeholder="e.g. Doe" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -165,7 +185,7 @@ function AddContactInfo({
                   <FormItem>
                     <FormLabel>Headline</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input placeholder="e.g. Senior Software Engineer" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -174,7 +194,7 @@ function AddContactInfo({
             </div>
 
             {/* EMAIL */}
-            <div className="md:col-span-2">
+            <div>
               <FormField
                 control={form.control}
                 name="email"
@@ -182,7 +202,7 @@ function AddContactInfo({
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input placeholder="e.g. john@example.com" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -191,7 +211,7 @@ function AddContactInfo({
             </div>
 
             {/* PHONE */}
-            <div className="md:col-span-2">
+            <div>
               <FormField
                 control={form.control}
                 name="phone"
@@ -199,7 +219,7 @@ function AddContactInfo({
                   <FormItem>
                     <FormLabel>Phone</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input placeholder="e.g. +49 123 456789" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -216,7 +236,7 @@ function AddContactInfo({
                   <FormItem>
                     <FormLabel>Address</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input placeholder="e.g. Berlin, Germany" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

@@ -29,6 +29,8 @@ export interface AddResumeSectionRef {
   openSummaryDialog: (s: ResumeSection) => void;
   openExperienceDialog: (s: ResumeSection) => void;
   openEducationDialog: (s: ResumeSection) => void;
+  openExperienceDialogForAdd: () => void;
+  openEducationDialogForAdd: () => void;
 }
 
 const AddResumeSection = forwardRef<AddResumeSectionRef, AddResumeSectionProps>(
@@ -62,6 +64,14 @@ const AddResumeSection = forwardRef<AddResumeSectionRef, AddResumeSectionProps>(
       openEducationDialog(educationSection: ResumeSection) {
         setEducationDialogOpen(true);
         setEducationToEdit({ ...educationSection });
+      },
+      openExperienceDialogForAdd() {
+        setExperienceToEdit(null);
+        setExperienceDialogOpen(true);
+      },
+      openEducationDialogForAdd() {
+        setEducationToEdit(null);
+        setEducationDialogOpen(true);
       },
     }));
     const summarySection = resume?.ResumeSections?.find(

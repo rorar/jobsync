@@ -25,6 +25,12 @@ jest.mock("@prisma/client", () => {
       findMany: jest.fn(),
       deleteMany: jest.fn(),
     },
+    note: {
+      deleteMany: jest.fn(),
+    },
+    job: {
+      deleteMany: jest.fn(),
+    },
     location: {
       upsert: jest.fn(),
       findMany: jest.fn(),
@@ -508,6 +514,13 @@ describe("mock.actions", () => {
       (prisma.contactInfo.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
       (prisma.resume.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
 
+      // Cleanup jobs referencing mock companies (added in orphan fix)
+      (prisma.company.findMany as jest.Mock).mockResolvedValue([
+        { id: "c-amazon" }, { id: "c-google" },
+      ]);
+      (prisma.note.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.job.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+
       // Best-effort cleanup of companies, locations, job titles
       (prisma.company.deleteMany as jest.Mock).mockResolvedValue({ count: 12 });
       (prisma.location.deleteMany as jest.Mock).mockResolvedValue({ count: 12 });
@@ -555,6 +568,9 @@ describe("mock.actions", () => {
       (prisma.resumeSection.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.contactInfo.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.resume.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.company.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.note.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.job.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.company.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.location.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.jobTitle.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
