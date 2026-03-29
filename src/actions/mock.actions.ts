@@ -345,6 +345,85 @@ export const generateMockProfileDataAction = async (): Promise<ActionResult> => 
   }
 };
 
+export async function clearE2ETestDataAction(): Promise<ActionResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) throw new Error("Not authenticated");
+
+    if (!isMockDataEnabled()) {
+      throw new Error(
+        "Test data clearing only available in development mode",
+      );
+    }
+
+    // Delete E2E test records (identified by "E2E" prefix in title/name)
+    const e2eResumes = await prisma.resume.findMany({
+      where: {
+        title: { contains: "E2E" },
+        profile: { userId: user.id },
+      },
+      include: {
+        ResumeSections: { select: { id: true, summaryId: true } },
+      },
+    });
+
+    const resumeIds = e2eResumes.map((r) => r.id);
+    const sectionIds = e2eResumes.flatMap((r) =>
+      r.ResumeSections.map((s) => s.id),
+    );
+    const summaryIds = e2eResumes
+      .flatMap((r) => r.ResumeSections)
+      .filter((s) => s.summaryId)
+      .map((s) => s.summaryId!);
+
+    // Delete child records first to satisfy FK constraints
+    await prisma.workExperience.deleteMany({
+      where: { resumeSectionId: { in: sectionIds } },
+    });
+    await prisma.education.deleteMany({
+      where: { resumeSectionId: { in: sectionIds } },
+    });
+    await prisma.licenseOrCertification.deleteMany({
+      where: { resumeSectionId: { in: sectionIds } },
+    });
+    await prisma.otherSection.deleteMany({
+      where: { resumeSectionId: { in: sectionIds } },
+    });
+    await prisma.resumeSection.deleteMany({
+      where: { id: { in: sectionIds } },
+    });
+    if (summaryIds.length > 0) {
+      await prisma.summary.deleteMany({ where: { id: { in: summaryIds } } });
+    }
+    await prisma.contactInfo.deleteMany({
+      where: { resumeId: { in: resumeIds } },
+    });
+    await prisma.resume.deleteMany({ where: { id: { in: resumeIds } } });
+
+    // Also clean E2E automations
+    const e2eAutomations = await prisma.automation.findMany({
+      where: { name: { contains: "E2E" }, userId: user.id },
+      select: { id: true },
+    });
+    const automationIds = e2eAutomations.map((a) => a.id);
+    if (automationIds.length > 0) {
+      await prisma.automationRun.deleteMany({
+        where: { automationId: { in: automationIds } },
+      });
+      await prisma.automation.deleteMany({
+        where: { id: { in: automationIds } },
+      });
+    }
+
+    return {
+      success: true,
+      message: `Deleted ${resumeIds.length} E2E resumes, ${automationIds.length} E2E automations.`,
+    };
+  } catch (error) {
+    return handleError(error, "Failed to clear E2E test data");
+  }
+}
+
 export const clearMockProfileDataAction = async (): Promise<ActionResult> => {
   try {
     const user = await getCurrentUser();

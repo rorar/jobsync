@@ -340,7 +340,9 @@ export function EuresOccupationCombobox({
                   </div>
                 )}
 
-                {/* Custom keyword entry */}
+                {/* Custom keyword entry — must be the FIRST CommandItem so that
+                    cmdk's default Enter behaviour (auto-select first item when
+                    nothing is aria-selected) adds the typed text as a keyword. */}
                 {!isLoading &&
                   inputValue.trim() &&
                   !selectedKeywords.includes(inputValue.trim()) && (

@@ -14,6 +14,7 @@ import {
   clearMockActivitiesAction,
   generateMockProfileDataAction,
   clearMockProfileDataAction,
+  clearE2ETestDataAction,
 } from "@/actions/mock.actions";
 import { useTranslations } from "@/i18n";
 
@@ -184,6 +185,54 @@ export function ClearAllMockDataCard() {
           >
             {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isClearing ? t("developer.clearing") : t("developer.clearAllMockData")}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export function ClearE2ETestDataCard() {
+  const { t } = useTranslations();
+  const [isClearing, setIsClearing] = useState(false);
+  const [message, setMessage] = useState<StatusMessage | null>(null);
+
+  const handleClear = async () => {
+    if (!confirm(t("developer.confirmClearE2ETestData"))) return;
+
+    setIsClearing(true);
+    setMessage(null);
+    const result = await clearE2ETestDataAction();
+    setMessage({
+      type: result.success ? "success" : "error",
+      text:
+        result.message ||
+        (result.success
+          ? t("developer.e2eTestDataCleared")
+          : t("developer.e2eTestDataClearFailed")),
+    });
+    setIsClearing(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      {message && <StatusBanner message={message} />}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("developer.clearE2ETestData")}</CardTitle>
+          <CardDescription>
+            {t("developer.clearE2ETestDataDesc")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={handleClear}
+            disabled={isClearing}
+            variant="destructive"
+            className="w-full"
+          >
+            {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isClearing ? t("developer.clearing") : t("developer.clearE2ETestData")}
           </Button>
         </CardContent>
       </Card>
