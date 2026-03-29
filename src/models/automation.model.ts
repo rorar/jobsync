@@ -18,7 +18,7 @@ export interface Automation {
   jobBoard: JobBoard;
   keywords: string;
   location: string;
-  connectorParams?: string;
+  connectorParams: string | null;
   resumeId: string;
   matchThreshold: number;
   scheduleHour: number;
@@ -66,10 +66,10 @@ export interface DiscoveredJob {
   jobTitleId: string;
   companyId: string;
   locationId: string | null;
-  matchScore: number;
+  matchScore: number | null;
   matchData: string | null;
-  discoveryStatus: DiscoveryStatus;
-  discoveredAt: Date;
+  discoveryStatus: DiscoveryStatus | null;
+  discoveredAt: Date | null;
   JobTitle: { label: string };
   Company: { label: string };
   Location?: { label: string } | null;

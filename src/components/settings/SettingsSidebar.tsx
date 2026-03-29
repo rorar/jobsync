@@ -10,7 +10,7 @@ import type { TranslationKey } from "@/i18n";
 import { getErrorCount } from "@/lib/error-reporter";
 
 export type SettingsSection =
-  | "ai-provider"
+  | "ai-module"
   | "api-keys"
   | "appearance"
   | "developer"
@@ -21,7 +21,7 @@ const SETTINGS_SECTIONS: {
   labelKey: TranslationKey;
   icon: typeof Bot;
 }[] = [
-  { id: "ai-provider", labelKey: "settings.sidebarAiProvider", icon: Bot },
+  { id: "ai-module", labelKey: "settings.sidebarAiModule", icon: Bot },
   { id: "api-keys", labelKey: "settings.sidebarApiKeys", icon: Key },
   { id: "appearance", labelKey: "settings.sidebarAppearance", icon: Palette },
   { id: "developer", labelKey: "settings.sidebarDeveloper", icon: Bug },

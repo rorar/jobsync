@@ -76,6 +76,7 @@ export const mockResume: Resume = {
   title: "Software Engineer Resume",
   createdAt: new Date("2024-01-15T10:00:00.000Z"),
   updatedAt: new Date("2024-06-01T12:00:00.000Z"),
+  FileId: null,
 };
 
 // ─── Job ───────────────────────────────────────────────────────────────────
@@ -106,6 +107,8 @@ export const mockActivityType: ActivityType = {
   id: "activity-type-fixture-id",
   label: "Learning",
   value: "Learning",
+  description: null,
+  createdBy: mockUser.id,
   createdAt: new Date("2024-01-01T00:00:00.000Z"),
   updatedAt: new Date("2024-01-01T00:00:00.000Z"),
 };
@@ -122,6 +125,7 @@ export const mockActivity: Activity = {
   endTime: new Date("2024-06-19T10:00:00.000Z"),
   duration: 60,
   description: "[MOCK_DATA] TypeScript Advanced Concepts",
+  taskId: null,
   createdAt: new Date("2024-06-19T09:00:00.000Z"),
   updatedAt: new Date("2024-06-19T10:00:00.000Z"),
 };
@@ -156,6 +160,7 @@ export const mockAutomation: Automation = {
   scheduleHour: 8,
   nextRunAt: new Date("2024-06-20T08:00:00.000Z"),
   lastRunAt: new Date("2024-06-19T08:00:00.000Z"),
+  connectorParams: null,
   status: "active",
   createdAt: new Date("2024-06-01T00:00:00.000Z"),
   updatedAt: new Date("2024-06-19T08:00:00.000Z"),
@@ -496,6 +501,8 @@ export const mockActivityTypeCoding: ActivityType = {
   id: "activity-type-coding-id",
   label: "Coding",
   value: "Coding",
+  description: null,
+  createdBy: mockUser.id,
   createdAt: new Date("2024-01-01T00:00:00.000Z"),
   updatedAt: new Date("2024-01-01T00:00:00.000Z"),
 };
@@ -504,6 +511,8 @@ export const mockActivityTypeJobSearch: ActivityType = {
   id: "activity-type-job-search-id",
   label: "Job Search",
   value: "Job Search",
+  description: null,
+  createdBy: mockUser.id,
   createdAt: new Date("2024-01-01T00:00:00.000Z"),
   updatedAt: new Date("2024-01-01T00:00:00.000Z"),
 };
@@ -512,6 +521,8 @@ export const mockActivityTypeInterviewPrep: ActivityType = {
   id: "activity-type-interview-prep-id",
   label: "Interview Preparation",
   value: "Interview Preparation",
+  description: null,
+  createdBy: mockUser.id,
   createdAt: new Date("2024-01-01T00:00:00.000Z"),
   updatedAt: new Date("2024-01-01T00:00:00.000Z"),
 };
@@ -520,6 +531,8 @@ export const mockActivityTypeSideProject: ActivityType = {
   id: "activity-type-side-project-id",
   label: "Side Project 1",
   value: "Side Project 1",
+  description: null,
+  createdBy: mockUser.id,
   createdAt: new Date("2024-01-01T00:00:00.000Z"),
   updatedAt: new Date("2024-01-01T00:00:00.000Z"),
 };
@@ -529,6 +542,7 @@ export const mockActivityTypeNetworking: ActivityType = {
   label: "Networking",
   value: "Networking",
   description: "Attending meetups, conferences, or reaching out to contacts",
+  createdBy: mockUser.id,
   createdAt: new Date("2024-02-15T00:00:00.000Z"),
   updatedAt: new Date("2024-02-15T00:00:00.000Z"),
 };
@@ -545,6 +559,7 @@ export const mockActivityCoding: Activity = {
   endTime: new Date("2024-06-18T17:30:00.000Z"),
   duration: 210,
   description: "[MOCK_DATA] Build Portfolio Website",
+  taskId: null,
   createdAt: new Date("2024-06-18T14:00:00.000Z"),
   updatedAt: new Date("2024-06-18T17:30:00.000Z"),
 };
@@ -559,6 +574,7 @@ export const mockActivityJobSearch: Activity = {
   endTime: new Date("2024-06-19T09:30:00.000Z"),
   duration: 90,
   description: "[MOCK_DATA] Research Companies",
+  taskId: null,
   createdAt: new Date("2024-06-19T08:00:00.000Z"),
   updatedAt: new Date("2024-06-19T09:30:00.000Z"),
 };
@@ -573,6 +589,7 @@ export const mockActivityInterviewPrep: Activity = {
   endTime: new Date("2024-06-20T12:00:00.000Z"),
   duration: 120,
   description: "[MOCK_DATA] System Design Review",
+  taskId: null,
   createdAt: new Date("2024-06-20T10:00:00.000Z"),
   updatedAt: new Date("2024-06-20T12:00:00.000Z"),
 };
@@ -587,6 +604,7 @@ export const mockActivityNetworking: Activity = {
   endTime: new Date("2024-06-17T20:30:00.000Z"),
   duration: 150,
   description: "[MOCK_DATA] Attend Local Tech Meetup",
+  taskId: null,
   createdAt: new Date("2024-06-17T18:00:00.000Z"),
   updatedAt: new Date("2024-06-17T20:30:00.000Z"),
 };
@@ -601,6 +619,7 @@ export const mockActivitySideProject: Activity = {
   endTime: new Date("2024-06-16T21:00:00.000Z"),
   duration: 120,
   description: "[MOCK_DATA] Implement New Features",
+  taskId: null,
   createdAt: new Date("2024-06-16T19:00:00.000Z"),
   updatedAt: new Date("2024-06-16T21:00:00.000Z"),
 };
@@ -615,6 +634,7 @@ export const mockActivityShortSession: Activity = {
   endTime: new Date("2024-06-19T12:25:00.000Z"),
   duration: 25,
   description: "[MOCK_DATA] Quick React Hooks Review",
+  taskId: null,
   createdAt: new Date("2024-06-19T12:00:00.000Z"),
   updatedAt: new Date("2024-06-19T12:25:00.000Z"),
 };
@@ -812,6 +832,7 @@ export const mockAutomationPaused: Automation = {
   scheduleHour: 10,
   nextRunAt: null,
   lastRunAt: new Date("2024-06-15T10:00:00.000Z"),
+  connectorParams: null,
   status: "paused",
   createdAt: new Date("2024-05-01T00:00:00.000Z"),
   updatedAt: new Date("2024-06-15T10:00:00.000Z"),
@@ -829,6 +850,7 @@ export const mockAutomationEures: Automation = {
   scheduleHour: 6,
   nextRunAt: new Date("2024-06-21T06:00:00.000Z"),
   lastRunAt: new Date("2024-06-20T06:00:00.000Z"),
+  connectorParams: null,
   status: "active",
   createdAt: new Date("2024-06-10T00:00:00.000Z"),
   updatedAt: new Date("2024-06-20T06:00:00.000Z"),
@@ -846,6 +868,7 @@ export const mockAutomationHighThreshold: Automation = {
   scheduleHour: 12,
   nextRunAt: new Date("2024-06-21T12:00:00.000Z"),
   lastRunAt: new Date("2024-06-20T12:00:00.000Z"),
+  connectorParams: null,
   status: "active",
   createdAt: new Date("2024-06-15T00:00:00.000Z"),
   updatedAt: new Date("2024-06-20T12:00:00.000Z"),
@@ -863,6 +886,7 @@ export const mockAutomationNeverRun: Automation = {
   scheduleHour: 7,
   nextRunAt: new Date("2024-06-22T07:00:00.000Z"),
   lastRunAt: null,
+  connectorParams: null,
   status: "active",
   createdAt: new Date("2024-06-21T00:00:00.000Z"),
   updatedAt: new Date("2024-06-21T00:00:00.000Z"),

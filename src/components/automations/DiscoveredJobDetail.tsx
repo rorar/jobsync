@@ -131,7 +131,7 @@ export function DiscoveredJobDetail({
               </p>
             </div>
 
-            <MatchDetails matchData={matchData} discoveredAt={job.discoveredAt} />
+            <MatchDetails matchData={matchData} discoveredAt={job.discoveredAt ?? undefined} />
           </div>
         </ScrollArea>
 

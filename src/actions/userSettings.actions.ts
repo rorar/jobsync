@@ -5,13 +5,14 @@ import { handleError } from "@/lib/utils";
 import { ActionResult } from "@/models/actionResult";
 import { getCurrentUser } from "@/utils/user.utils";
 import {
+  UserSettings,
   UserSettingsData,
   defaultUserSettings,
   AiSettings,
   DisplaySettings,
 } from "@/models/userSettings.model";
 
-export const getUserSettings = async (): Promise<ActionResult<unknown>> => {
+export const getUserSettings = async (): Promise<ActionResult<UserSettings>> => {
   try {
     const user = await getCurrentUser();
 
@@ -53,7 +54,7 @@ export const getUserSettings = async (): Promise<ActionResult<unknown>> => {
 
 export const updateUserSettings = async (
   settings: Partial<UserSettingsData>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<UserSettings>> => {
   try {
     const user = await getCurrentUser();
 
@@ -123,13 +124,13 @@ export const updateUserSettings = async (
 
 export const updateAiSettings = async (
   aiSettings: AiSettings
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<UserSettings>> => {
   return updateUserSettings({ ai: aiSettings });
 };
 
 export const updateDisplaySettings = async (
   displaySettings: DisplaySettings
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<UserSettings>> => {
   // Sync locale to cookie for server-side access without DB query
   if (displaySettings.locale) {
     const cookieStore = await cookies();

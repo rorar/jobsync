@@ -1,14 +1,14 @@
 import { Company, JobLocation, JobTitle } from "./job.model";
 
 export interface Resume {
-  id?: string;
-  profileId?: string;
+  id: string;
+  profileId: string;
   title: string;
-  createdAt?: Date;
-  updatedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
   ContactInfo?: ContactInfo;
   ResumeSections?: ResumeSection[];
-  FileId?: string;
+  FileId: string | null;
   File?: File;
   _count?: {
     Job?: number;
@@ -16,25 +16,25 @@ export interface Resume {
 }
 
 export interface File {
-  id?: string;
+  id: string;
   fileName: string;
   filePath: string;
   fileType: string;
-  uploadedAt?: Date;
+  uploadedAt: Date;
   Resume?: Resume;
 }
 
 export interface ContactInfo {
-  id?: string;
+  id: string;
   createdAt: Date;
   updatedAt: Date;
   resumeId: string;
   firstName: string;
   lastName: string;
   headline: string;
-  email?: string;
-  phone?: string;
-  address?: string;
+  email: string;
+  phone: string;
+  address: string | null;
 }
 
 export enum SectionType {
@@ -49,9 +49,9 @@ export enum SectionType {
 }
 
 export interface Summary {
-  id?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  id: string;
+  createdAt: Date;
+  updatedAt: Date;
   content: string;
 }
 
@@ -64,7 +64,7 @@ export interface SummarySectionForm {
 }
 
 export interface ResumeSection {
-  id?: string;
+  id: string;
   resumeId: string;
   sectionTitle: string;
   sectionType: SectionType;
@@ -74,27 +74,33 @@ export interface ResumeSection {
 }
 
 export interface WorkExperience {
-  id?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  Company: Company;
-  jobTitle: JobTitle;
-  location: JobLocation;
+  id: string;
+  createdAt: Date;
+  updatedAt: Date;
+  companyId: string;
+  jobTitleId: string;
+  locationId: string;
+  resumeSectionId: string | null;
+  Company?: Company;
+  jobTitle?: JobTitle;
+  location?: JobLocation;
   startDate: Date;
-  endDate: Date;
-  currentJob?: Boolean;
+  endDate: Date | null;
+  currentJob?: boolean;
   description: string;
 }
 
 export interface Education {
-  id?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  id: string;
+  createdAt: Date;
+  updatedAt: Date;
+  locationId: string;
+  resumeSectionId: string | null;
   institution: string;
   degree: string;
   fieldOfStudy: string;
   startDate: Date;
-  endDate?: Date;
-  description?: string;
-  location: JobLocation;
+  endDate: Date | null;
+  description: string | null;
+  location?: JobLocation;
 }

@@ -32,7 +32,7 @@ function EducationCard({
           id,
           institution,
           degree,
-          location: { label },
+          location,
           fieldOfStudy,
           startDate,
           endDate,
@@ -61,7 +61,7 @@ function EducationCard({
                 {formatMonthYear(startDate, locale)} -{" "}
                 {endDate ? formatMonthYear(endDate, locale) : t("profile.present")}
                 <br />
-                {label}
+                {location?.label}
               </CardDescription>
               {description && (
                 <div className="pt-2">

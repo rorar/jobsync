@@ -2,14 +2,14 @@
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { NoteFormSchema } from "@/models/note.schema";
-import { NoteResponse } from "@/models/note.model";
+import { Note, NoteResponse } from "@/models/note.model";
 import { ActionResult } from "@/models/actionResult";
 import { getCurrentUser } from "@/utils/user.utils";
 import { z } from "zod";
 
 export const getNotesByJobId = async (
   jobId: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<NoteResponse[]>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -43,7 +43,7 @@ export const getNotesByJobId = async (
 
 export const addNote = async (
   data: z.infer<typeof NoteFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Note>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -77,7 +77,7 @@ export const addNote = async (
 
 export const updateNote = async (
   data: z.infer<typeof NoteFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Note>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -103,7 +103,7 @@ export const updateNote = async (
 
 export const deleteNote = async (
   noteId: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult> => {
   try {
     const user = await getCurrentUser();
     if (!user) {

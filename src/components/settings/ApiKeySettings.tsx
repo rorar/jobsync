@@ -33,13 +33,13 @@ import {
 } from "@/actions/apiKey.actions";
 import type {
   ApiKeyClientResponse,
-  ApiKeyProvider,
+  ApiKeyModuleId,
 } from "@/models/apiKey.model";
 import { useTranslations } from "@/i18n";
 import type { TranslationKey } from "@/i18n";
 
-interface ProviderConfig {
-  id: ApiKeyProvider;
+interface ModuleConfig {
+  id: ApiKeyModuleId;
   name: string;
   placeholder: string;
   inputType: "password" | "text";
@@ -49,7 +49,7 @@ interface ProviderConfig {
 
 const DEFAULT_OLLAMA_PLACEHOLDER = "http://127.0.0.1:11434";
 
-const PROVIDERS: ProviderConfig[] = [
+const MODULES: ModuleConfig[] = [
   {
     id: "openai",
     name: "OpenAI",
@@ -91,7 +91,7 @@ function ApiKeySettings() {
   const [defaultOllamaUrl, setDefaultOllamaUrl] = useState(
     DEFAULT_OLLAMA_PLACEHOLDER,
   );
-  const [editingProvider, setEditingProvider] = useState<ApiKeyProvider | null>(
+  const [editingModule, setEditingModule] = useState<ApiKeyModuleId | null>(
     null,
   );
   const [inputValue, setInputValue] = useState("");
@@ -117,10 +117,10 @@ function ApiKeySettings() {
     }
   };
 
-  const getKeyForProvider = (provider: ApiKeyProvider) =>
-    keys.find((k) => k.provider === provider);
+  const getKeyForModule = (moduleId: ApiKeyModuleId) =>
+    keys.find((k) => k.moduleId === moduleId);
 
-  const handleVerifyAndSave = async (provider: ApiKeyProvider) => {
+  const handleVerifyAndSave = async (moduleId: ApiKeyModuleId) => {
     if (!inputValue.trim()) return;
 
     setVerifying(true);
@@ -128,7 +128,7 @@ function ApiKeySettings() {
       const verifyRes = await fetch("/api/settings/api-keys/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, key: inputValue }),
+        body: JSON.stringify({ moduleId, key: inputValue }),
       });
       const verifyData = await verifyRes.json();
 
@@ -141,19 +141,19 @@ function ApiKeySettings() {
         return;
       }
 
-      const providerConfig = PROVIDERS.find((p) => p.id === provider);
+      const moduleConfig = MODULES.find((m) => m.id === moduleId);
       const saveResult = await saveApiKey({
-        provider,
+        moduleId,
         key: inputValue,
-        sensitive: providerConfig?.sensitive ?? true,
+        sensitive: moduleConfig?.sensitive ?? true,
       });
       if (saveResult.success) {
         toast({
           variant: "success",
           title: t("settings.apiKeySaved"),
-          description: t("settings.keyVerifiedAndSaved").replace("{provider}", PROVIDERS.find((p) => p.id === provider)?.name ?? provider),
+          description: t("settings.keyVerifiedAndSaved").replace("{module}", MODULES.find((m) => m.id === moduleId)?.name ?? moduleId),
         });
-        setEditingProvider(null);
+        setEditingModule(null);
         setInputValue("");
         await fetchKeys();
       } else {
@@ -175,15 +175,15 @@ function ApiKeySettings() {
     }
   };
 
-  const handleDelete = async (provider: ApiKeyProvider) => {
-    setDeleting(provider);
+  const handleDelete = async (moduleId: ApiKeyModuleId) => {
+    setDeleting(moduleId);
     try {
-      const result = await deleteApiKey(provider);
+      const result = await deleteApiKey(moduleId);
       if (result.success) {
         toast({
           variant: "success",
           title: t("settings.apiKeyDeleted"),
-          description: t("settings.keyRemoved").replace("{provider}", PROVIDERS.find((p) => p.id === provider)?.name ?? provider),
+          description: t("settings.keyRemoved").replace("{module}", MODULES.find((m) => m.id === moduleId)?.name ?? moduleId),
         });
         await fetchKeys();
       } else {
@@ -201,7 +201,7 @@ function ApiKeySettings() {
   };
 
   const handleCancel = () => {
-    setEditingProvider(null);
+    setEditingModule(null);
     setInputValue("");
   };
 
@@ -233,19 +233,19 @@ function ApiKeySettings() {
       </div>
 
       <div className="grid gap-4">
-        {PROVIDERS.map((provider) => {
-          const existingKey = getKeyForProvider(provider.id);
-          const isEditing = editingProvider === provider.id;
+        {MODULES.map((module) => {
+          const existingKey = getKeyForModule(module.id);
+          const isEditing = editingModule === module.id;
 
           return (
-            <Card key={provider.id}>
+            <Card key={module.id}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-base">{provider.name}</CardTitle>
+                    <CardTitle className="text-base">{module.name}</CardTitle>
                     <CardDescription className="text-sm">
-                      {t(provider.descriptionKey)}
-                      {provider.id === "ollama" && (
+                      {t(module.descriptionKey)}
+                      {module.id === "ollama" && (
                         <span className="block text-xs text-muted-foreground/70 mt-0.5">
                           Default: {defaultOllamaUrl}
                         </span>
@@ -255,7 +255,7 @@ function ApiKeySettings() {
                   {existingKey ? (
                     <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 hover:bg-green-100 dark:hover:bg-green-900">
                       <CheckCircle className="h-3 w-3 mr-1" />
-                      {provider.sensitive
+                      {module.sensitive
                         ? `····${existingKey.last4}`
                         : existingKey.displayValue || existingKey.last4}
                     </Badge>
@@ -268,16 +268,16 @@ function ApiKeySettings() {
                 {isEditing ? (
                   <div className="space-y-3">
                     <div>
-                      <Label htmlFor={`key-${provider.id}`}>
-                        {provider.id === "ollama" ? t("settings.baseUrl") : t("settings.apiKey")}
+                      <Label htmlFor={`key-${module.id}`}>
+                        {module.id === "ollama" ? t("settings.baseUrl") : t("settings.apiKey")}
                       </Label>
                       <Input
-                        id={`key-${provider.id}`}
-                        type={provider.inputType}
+                        id={`key-${module.id}`}
+                        type={module.inputType}
                         placeholder={
-                          provider.id === "ollama"
+                          module.id === "ollama"
                             ? defaultOllamaUrl
-                            : provider.placeholder
+                            : module.placeholder
                         }
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
@@ -287,7 +287,7 @@ function ApiKeySettings() {
                     <div className="flex gap-2">
                       <Button
                         size="sm"
-                        onClick={() => handleVerifyAndSave(provider.id)}
+                        onClick={() => handleVerifyAndSave(module.id)}
                         disabled={!inputValue.trim() || verifying}
                       >
                         {verifying && (
@@ -310,7 +310,7 @@ function ApiKeySettings() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        setEditingProvider(provider.id);
+                        setEditingModule(module.id);
                         setInputValue("");
                       }}
                     >
@@ -324,9 +324,9 @@ function ApiKeySettings() {
                             size="sm"
                             variant="outline"
                             className="text-destructive hover:text-destructive"
-                            disabled={deleting === provider.id}
+                            disabled={deleting === module.id}
                           >
-                            {deleting === provider.id ? (
+                            {deleting === module.id ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             ) : (
                               <Trash2 className="h-3 w-3" />
@@ -343,7 +343,7 @@ function ApiKeySettings() {
                           <AlertDialogFooter>
                             <AlertDialogCancel>{t("settings.cancel")}</AlertDialogCancel>
                             <AlertDialogAction
-                              onClick={() => handleDelete(provider.id)}
+                              onClick={() => handleDelete(module.id)}
                             >
                               {t("settings.delete")}
                             </AlertDialogAction>

@@ -26,7 +26,7 @@ export const getAllTags = async (): Promise<Tag[]> => {
 export const getTagList = async (
   page: number = 1,
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Tag[]>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -43,6 +43,7 @@ export const getTagList = async (
           id: true,
           label: true,
           value: true,
+          createdBy: true,
           _count: { select: { jobs: true, questions: true } },
         },
         orderBy: { jobs: { _count: "desc" } },
@@ -57,7 +58,7 @@ export const getTagList = async (
   }
 };
 
-export const createTag = async (label: string): Promise<ActionResult<unknown>> => {
+export const createTag = async (label: string): Promise<ActionResult<Tag>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -86,7 +87,7 @@ export const createTag = async (label: string): Promise<ActionResult<unknown>> =
 
 export const deleteTagById = async (
   tagId: string,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Tag>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {

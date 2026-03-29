@@ -484,6 +484,14 @@ describe("jobActions", () => {
           applied: jobData.applied,
           resumeId: jobData.resume,
         },
+        include: {
+          JobTitle: true,
+          Company: true,
+          Status: true,
+          Location: true,
+          JobSource: true,
+          tags: true,
+        },
       });
     });
     it("should handle undefined values for optional fields", async () => {
@@ -512,6 +520,14 @@ describe("jobActions", () => {
           userId: mockUser.id,
           applied: jobData.applied,
           resumeId: jobData.resume,
+        },
+        include: {
+          JobTitle: true,
+          Company: true,
+          Status: true,
+          Location: true,
+          JobSource: true,
+          tags: true,
         },
       });
       expect(result).toEqual({ data: jobData, success: true });
@@ -619,6 +635,14 @@ describe("jobActions", () => {
           applied: true,
           appliedDate: expect.any(Date),
         },
+        include: {
+          JobTitle: true,
+          Company: true,
+          Status: true,
+          Location: true,
+          JobSource: true,
+          tags: true,
+        },
       });
     });
     it("should handle unexpected errors", async () => {
@@ -661,7 +685,7 @@ describe("jobActions", () => {
 
       const result = await deleteJobById("job-id");
 
-      expect(result).toStrictEqual({ data: jobData, success: true });
+      expect(result).toStrictEqual({ success: true });
       expect(prisma.job.delete).toHaveBeenCalledTimes(1);
       expect(prisma.job.delete).toHaveBeenCalledWith({
         where: {

@@ -1,7 +1,7 @@
-import { AiProvider } from "./ai.model";
+import { AiModuleId } from "./ai.model";
 
 export interface AiSettings {
-  provider: AiProvider;
+  moduleId: AiModuleId;
   model: string | undefined;
 }
 
@@ -48,7 +48,7 @@ export interface UserSettings {
 
 export const defaultUserSettings: UserSettingsData = {
   ai: {
-    provider: AiProvider.OLLAMA,
+    moduleId: AiModuleId.OLLAMA,
     model: undefined,
   },
   display: {

@@ -5,6 +5,7 @@ import {
   getActivityById,
   updateActivity,
 } from "@/actions/activity.actions";
+import { Activity } from "@/models/activity.model";
 import { getCurrentUser } from "@/utils/user.utils";
 import { PrismaClient } from "@prisma/client";
 
@@ -466,17 +467,25 @@ describe("activity.actions", () => {
       id: "type-1",
       label: "Learning",
       value: "learning",
+      description: null as string | null,
+      createdBy: "user-id",
+      createdAt: new Date("2024-01-01"),
+      updatedAt: new Date("2024-01-01"),
     };
 
-    const updateData = {
+    const updateData: Activity = {
       id: "activity-1",
       activityName: "Updated Activity",
       activityTypeId: "type-1",
       activityType: mockActivityType,
+      userId: "user-id",
       startTime: new Date("2024-06-19T09:00:00"),
       endTime: new Date("2024-06-19T11:00:00"),
       duration: 120,
       description: "Updated description",
+      taskId: null,
+      createdAt: new Date("2024-06-19"),
+      updatedAt: new Date("2024-06-19"),
     };
 
     const existingActivity = {

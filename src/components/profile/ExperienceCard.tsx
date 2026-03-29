@@ -40,7 +40,7 @@ function ExperienceCard({
         }) => (
           <Card key={id}>
             <CardHeader className="p-2 pb-0 flex-row justify-between relative">
-              <CardTitle className="text-xl pl-4">{jobTitle.label}</CardTitle>
+              <CardTitle className="text-xl pl-4">{jobTitle?.label}</CardTitle>
               <Button
                 variant="ghost"
                 size="sm"
@@ -54,12 +54,12 @@ function ExperienceCard({
               </Button>
             </CardHeader>
             <CardContent>
-              <h3>{Company.label}</h3>
+              <h3>{Company?.label}</h3>
               <CardDescription>
                 {formatMonthYear(startDate, locale)} -{" "}
                 {endDate ? formatMonthYear(endDate, locale) : t("profile.present")}
                 <br />
-                {location.label}
+                {location?.label}
               </CardDescription>
               <div className="pt-2">
                 <TipTapContentViewer content={description} />

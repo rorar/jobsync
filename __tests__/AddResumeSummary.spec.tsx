@@ -60,6 +60,9 @@ describe("AddResumeSummary Component", () => {
       sectionTitle: "Professional Summary",
       sectionType: "summary" as any,
       summary: {
+        id: "summary-content-1",
+        createdAt: new Date("2024-01-01"),
+        updatedAt: new Date("2024-01-01"),
         content: "Experienced software developer",
       },
     };
@@ -99,6 +102,9 @@ describe("AddResumeSummary Component", () => {
       sectionTitle: "Professional Summary",
       sectionType: "summary" as any,
       summary: {
+        id: "summary-content-2",
+        createdAt: new Date("2024-01-01"),
+        updatedAt: new Date("2024-01-01"),
         content: "Experienced software developer with 5+ years",
       },
     };
@@ -194,6 +200,9 @@ describe("AddResumeSummary Component", () => {
       sectionTitle: "Professional Summary",
       sectionType: "summary" as any,
       summary: {
+        id: "summary-content-1",
+        createdAt: new Date("2024-01-01"),
+        updatedAt: new Date("2024-01-01"),
         content: "Experienced software developer",
       },
     };
@@ -360,6 +369,9 @@ describe("AddResumeSummary Component", () => {
       sectionTitle: "Professional Summary",
       sectionType: "summary" as any,
       summary: {
+        id: "summary-content-1",
+        createdAt: new Date("2024-01-01"),
+        updatedAt: new Date("2024-01-01"),
         content: "Experienced software developer",
       },
     };

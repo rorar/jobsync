@@ -13,7 +13,7 @@ export const getCompanyList = async (
   page: number = 1,
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE,
   countBy?: string,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Company[]>> => {
   try {
     const user = await getCurrentUser();
 
@@ -36,6 +36,7 @@ export const getCompanyList = async (
                 label: true,
                 value: true,
                 logoUrl: true,
+                createdBy: true,
                 _count: {
                   select: {
                     jobsApplied: {
@@ -103,7 +104,7 @@ const isValidImageUrl = (url: string): boolean => {
 
 export const addCompany = async (
   data: z.infer<typeof AddCompanyFormSchema>,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Company>> => {
   try {
     const user = await getCurrentUser();
 
@@ -151,7 +152,7 @@ export const addCompany = async (
 
 export const updateCompany = async (
   data: z.infer<typeof AddCompanyFormSchema>,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Company>> => {
   try {
     const user = await getCurrentUser();
 
@@ -205,7 +206,7 @@ export const updateCompany = async (
 
 export const getCompanyById = async (
   companyId: string,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Company>> => {
   try {
     if (!companyId) {
       throw new Error("Please provide company id");
@@ -221,7 +222,7 @@ export const getCompanyById = async (
         id: companyId,
       },
     });
-    return { success: true, data: company };
+    return { success: true, data: company ?? undefined };
   } catch (error) {
     const msg = "Failed to fetch company by Id. ";
     console.error(msg);
@@ -234,7 +235,7 @@ export const getCompanyById = async (
 
 export const deleteCompanyById = async (
   companyId: string,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Company>> => {
   try {
     const user = await getCurrentUser();
 

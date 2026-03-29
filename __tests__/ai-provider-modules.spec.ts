@@ -1,7 +1,7 @@
 /**
  * AI Provider Module Tests
  *
- * Tests the module wrapper factories for each AI provider.
+ * Tests the module wrapper factories for each AI connector module.
  * SDK factories and resolveApiKey are mocked to avoid real API calls.
  */
 
@@ -57,9 +57,9 @@ jest.mock("@/lib/url-validation", () => ({
   }),
 }));
 
-import { createOllamaProvider } from "@/lib/connector/ai-provider/modules/ollama";
-import { createDeepSeekProvider } from "@/lib/connector/ai-provider/modules/deepseek";
-import { createOpenAIProvider } from "@/lib/connector/ai-provider/modules/openai";
+import { createOllamaConnector } from "@/lib/connector/ai-provider/modules/ollama";
+import { createDeepSeekConnector } from "@/lib/connector/ai-provider/modules/deepseek";
+import { createOpenAIConnector } from "@/lib/connector/ai-provider/modules/openai";
 import { resolveApiKey } from "@/lib/api-key-resolver";
 import { validateOllamaUrl } from "@/lib/url-validation";
 import { createOpenAI } from "@ai-sdk/openai";
@@ -73,19 +73,19 @@ const mockValidateOllamaUrl = validateOllamaUrl as jest.MockedFunction<
   typeof validateOllamaUrl
 >;
 
-describe("OllamaProvider", () => {
-  const provider = createOllamaProvider();
+describe("OllamaConnector", () => {
+  const connector = createOllamaConnector();
 
   it("has correct metadata", () => {
-    expect(provider.id).toBe("ollama");
-    expect(provider.name).toBe("Ollama");
-    expect(provider.requiresApiKey).toBe(false);
+    expect(connector.id).toBe("ollama");
+    expect(connector.name).toBe("Ollama");
+    expect(connector.requiresApiKey).toBe(false);
   });
 
   it("createModel returns success result with correct base URL", async () => {
     mockResolveApiKey.mockResolvedValue("http://custom:11434");
 
-    const result = await provider.createModel("llama3.2", "user-1");
+    const result = await connector.createModel("llama3.2", "user-1");
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -101,7 +101,7 @@ describe("OllamaProvider", () => {
   it("createModel returns success result with default base URL when resolveApiKey returns undefined", async () => {
     mockResolveApiKey.mockResolvedValue(undefined);
 
-    const result = await provider.createModel("llama3.1");
+    const result = await connector.createModel("llama3.1");
 
     expect(result.success).toBe(true);
     expect(createOllama).toHaveBeenCalledWith({
@@ -116,7 +116,7 @@ describe("OllamaProvider", () => {
       .spyOn(console, "error")
       .mockImplementation(() => {});
 
-    const result = await provider.createModel("llama3.2", "user-1");
+    const result = await connector.createModel("llama3.2", "user-1");
 
     expect(result.success).toBe(true);
     expect(mockValidateOllamaUrl).toHaveBeenCalledWith(
@@ -140,7 +140,7 @@ describe("OllamaProvider", () => {
       .spyOn(console, "error")
       .mockImplementation(() => {});
 
-    const result = await provider.createModel("llama3.2", "user-1");
+    const result = await connector.createModel("llama3.2", "user-1");
 
     expect(result.success).toBe(true);
     expect(createOllama).toHaveBeenCalledWith({
@@ -152,7 +152,7 @@ describe("OllamaProvider", () => {
   it("createModel validates URL even when using default", async () => {
     mockResolveApiKey.mockResolvedValue(undefined);
 
-    const result = await provider.createModel("llama3.2");
+    const result = await connector.createModel("llama3.2");
 
     expect(result.success).toBe(true);
     expect(mockValidateOllamaUrl).toHaveBeenCalledWith(
@@ -161,19 +161,19 @@ describe("OllamaProvider", () => {
   });
 });
 
-describe("DeepSeekProvider", () => {
-  const provider = createDeepSeekProvider();
+describe("DeepSeekConnector", () => {
+  const connector = createDeepSeekConnector();
 
   it("has correct metadata", () => {
-    expect(provider.id).toBe("deepseek");
-    expect(provider.name).toBe("DeepSeek");
-    expect(provider.requiresApiKey).toBe(true);
+    expect(connector.id).toBe("deepseek");
+    expect(connector.name).toBe("DeepSeek");
+    expect(connector.requiresApiKey).toBe(true);
   });
 
   it("createModel returns success result with API key", async () => {
     mockResolveApiKey.mockResolvedValue("ds-key-123");
 
-    const result = await provider.createModel("deepseek-chat", "user-1");
+    const result = await connector.createModel("deepseek-chat", "user-1");
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -187,7 +187,7 @@ describe("DeepSeekProvider", () => {
   it("createModel returns auth_failed error when no API key is available", async () => {
     mockResolveApiKey.mockResolvedValue(undefined);
 
-    const result = await provider.createModel("deepseek-chat");
+    const result = await connector.createModel("deepseek-chat");
 
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -200,19 +200,19 @@ describe("DeepSeekProvider", () => {
   });
 });
 
-describe("OpenAIProvider", () => {
-  const provider = createOpenAIProvider();
+describe("OpenAIConnector", () => {
+  const connector = createOpenAIConnector();
 
   it("has correct metadata", () => {
-    expect(provider.id).toBe("openai");
-    expect(provider.name).toBe("OpenAI");
-    expect(provider.requiresApiKey).toBe(true);
+    expect(connector.id).toBe("openai");
+    expect(connector.name).toBe("OpenAI");
+    expect(connector.requiresApiKey).toBe(true);
   });
 
   it("createModel returns success result with API key", async () => {
     mockResolveApiKey.mockResolvedValue("sk-test-key");
 
-    const result = await provider.createModel("gpt-4o", "user-1");
+    const result = await connector.createModel("gpt-4o", "user-1");
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -226,7 +226,7 @@ describe("OpenAIProvider", () => {
   it("createModel returns auth_failed error when no API key is available", async () => {
     mockResolveApiKey.mockResolvedValue(undefined);
 
-    const result = await provider.createModel("gpt-4o");
+    const result = await connector.createModel("gpt-4o");
 
     expect(result.success).toBe(false);
     if (!result.success) {

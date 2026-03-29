@@ -10,6 +10,7 @@ import {
   startActivityFromTask,
 } from "@/actions/task.actions";
 import { Task } from "@/models/task.model";
+import { ActivityType } from "@/models/activity.model";
 import { useRouter } from "next/navigation";
 import { useActivity } from "@/context/ActivityContext";
 
@@ -102,11 +103,13 @@ describe("TasksContainer Component", () => {
 
   const mockRefreshCurrentActivity = jest.fn();
 
-  const mockActivityTypes = [
+  const mockActivityTypes: ActivityType[] = [
     {
       id: "type-1",
       label: "Development",
       value: "development",
+      description: null,
+      createdBy: "test-user",
       createdAt: new Date(),
       updatedAt: new Date(),
     },
@@ -114,6 +117,8 @@ describe("TasksContainer Component", () => {
       id: "type-2",
       label: "Testing",
       value: "testing",
+      description: null,
+      createdBy: "test-user",
       createdAt: new Date(),
       updatedAt: new Date(),
     },
@@ -134,6 +139,8 @@ describe("TasksContainer Component", () => {
         id: "type-1",
         label: "Development",
         value: "development",
+        description: null,
+        createdBy: "test-user",
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -155,6 +162,8 @@ describe("TasksContainer Component", () => {
         id: "type-2",
         label: "Testing",
         value: "testing",
+        description: null,
+        createdBy: "test-user",
         createdAt: new Date(),
         updatedAt: new Date(),
       },

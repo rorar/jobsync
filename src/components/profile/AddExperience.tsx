@@ -90,9 +90,9 @@ function AddExperience({
       reset(
         {
           id: experience?.id,
-          title: experience?.jobTitle.id,
-          company: experience?.Company.id,
-          location: experience?.location.id,
+          title: experience?.jobTitle?.id,
+          company: experience?.Company?.id,
+          location: experience?.location?.id,
           startDate: experience?.startDate,
           endDate: experience?.endDate,
           jobDescription: experience?.description,

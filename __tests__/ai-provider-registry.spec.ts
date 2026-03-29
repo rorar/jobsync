@@ -15,7 +15,7 @@ function createTestRegistry() {
       const factory = factories.get(id);
       if (!factory) {
         throw new Error(
-          `Unknown AI provider: "${id}". Available: ${[...factories.keys()].join(", ")}`,
+          `Unknown AI module: "${id}". Available: ${[...factories.keys()].join(", ")}`,
         );
       }
       return factory();
@@ -23,7 +23,7 @@ function createTestRegistry() {
     has(id: string): boolean {
       return factories.has(id);
     },
-    availableProviders(): string[] {
+    availableModules(): string[] {
       return [...factories.keys()];
     },
   };
@@ -34,7 +34,7 @@ function createMockConnector(
 ): AIProviderConnector {
   return {
     id: overrides.id ?? "mock",
-    name: overrides.name ?? "Mock Provider",
+    name: overrides.name ?? "Mock Connector",
     requiresApiKey: overrides.requiresApiKey ?? false,
     healthCheck: overrides.healthCheck ?? jest.fn(),
     listModels: overrides.listModels ?? jest.fn(),
@@ -43,7 +43,7 @@ function createMockConnector(
 }
 
 describe("AIProviderRegistry", () => {
-  it("registers and creates a provider", () => {
+  it("registers and creates a connector", () => {
     const registry = createTestRegistry();
     const connector = createMockConnector({ id: "test", name: "Test" });
     registry.register("test", () => connector);
@@ -53,7 +53,7 @@ describe("AIProviderRegistry", () => {
     expect(result.name).toBe("Test");
   });
 
-  it("has() returns true for registered providers", () => {
+  it("has() returns true for registered modules", () => {
     const registry = createTestRegistry();
     registry.register("alpha", () => createMockConnector({ id: "alpha" }));
 
@@ -61,25 +61,25 @@ describe("AIProviderRegistry", () => {
     expect(registry.has("beta")).toBe(false);
   });
 
-  it("availableProviders() returns all registered ids", () => {
+  it("availableModules() returns all registered ids", () => {
     const registry = createTestRegistry();
     registry.register("a", () => createMockConnector({ id: "a" }));
     registry.register("b", () => createMockConnector({ id: "b" }));
     registry.register("c", () => createMockConnector({ id: "c" }));
 
-    expect(registry.availableProviders()).toEqual(["a", "b", "c"]);
+    expect(registry.availableModules()).toEqual(["a", "b", "c"]);
   });
 
-  it("throws on unknown provider", () => {
+  it("throws on unknown module", () => {
     const registry = createTestRegistry();
     registry.register("known", () => createMockConnector({ id: "known" }));
 
     expect(() => registry.create("unknown")).toThrow(
-      'Unknown AI provider: "unknown"',
+      'Unknown AI module: "unknown"',
     );
   });
 
-  it("error message lists available providers", () => {
+  it("error message lists available modules", () => {
     const registry = createTestRegistry();
     registry.register("ollama", () => createMockConnector());
     registry.register("openai", () => createMockConnector());

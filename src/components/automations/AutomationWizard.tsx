@@ -123,7 +123,7 @@ export function AutomationWizard({
     if (open) {
       getUserApiKeys().then((result) => {
         if (result.success && result.data) {
-          const hasKey = result.data.some((k) => k.provider === "rapidapi");
+          const hasKey = result.data.some((k) => k.moduleId === "rapidapi");
           setHasRapidApiKey(hasKey);
         } else {
           setHasRapidApiKey(false);

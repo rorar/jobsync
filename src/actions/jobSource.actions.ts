@@ -2,6 +2,7 @@
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { ActionResult } from "@/models/actionResult";
+import { JobSource } from "@/models/job.model";
 import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 
@@ -9,7 +10,7 @@ export const getJobSourceList = async (
   page: number = 1,
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE,
   countBy?: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<JobSource[]>> => {
   try {
     const user = await getCurrentUser();
 
@@ -31,6 +32,7 @@ export const getJobSourceList = async (
                 id: true,
                 label: true,
                 value: true,
+                createdBy: true,
                 _count: {
                   select: {
                     jobsApplied: {
@@ -64,7 +66,7 @@ export const getJobSourceList = async (
 
 export const deleteJobSourceById = async (
   jobSourceId: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<JobSource>> => {
   try {
     const user = await getCurrentUser();
 

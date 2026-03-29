@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/utils/user.utils";
 import userEvent from "@testing-library/user-event";
 import { createTask, updateTask } from "@/actions/task.actions";
 import { Task } from "@/models/task.model";
+import { ActivityType } from "@/models/activity.model";
 
 jest.mock("@/utils/user.utils", () => ({
   getCurrentUser: jest.fn(),
@@ -46,11 +47,13 @@ document.createRange = () => {
 
 describe("TaskForm Component", () => {
   const mockUser = { id: "user-id" };
-  const mockActivityTypes = [
+  const mockActivityTypes: ActivityType[] = [
     {
       id: "type-1",
       label: "Development",
       value: "development",
+      description: null,
+      createdBy: "test-user",
       createdAt: new Date(),
       updatedAt: new Date(),
     },
@@ -58,6 +61,8 @@ describe("TaskForm Component", () => {
       id: "type-2",
       label: "Testing",
       value: "testing",
+      description: null,
+      createdBy: "test-user",
       createdAt: new Date(),
       updatedAt: new Date(),
     },
@@ -249,6 +254,8 @@ describe("TaskForm Component", () => {
         id: "type-1",
         label: "Development",
         value: "development",
+        description: null,
+        createdBy: "test-user",
         createdAt: new Date(),
         updatedAt: new Date(),
       },

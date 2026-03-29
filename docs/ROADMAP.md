@@ -59,22 +59,28 @@ src/lib/connector/                          ← Unified Connector Architecture
 - **Pattern B** (5 Funktionen): `getAllX()` gibt raw Arrays zurück — unverändert
   - `getAllCompanies`, `getAllJobTitles`, `getAllJobLocations`, `getAllTags`, `getAllActivityTypes`
   - Caller-Refactoring → separates Ticket
-- **Pattern C** (24 Funktionen): Custom Return-Types — unverändert
-  - Automation (12): eigenes `{ success, data?, message? }` Shape — beibehalten
+- **Pattern C** (14 Funktionen): Custom Return-Types
+  - Automation (12): ✅ auf ActionResult<T> migriert in 0.3
   - Dashboard (7): domänenspezifische Returns — bleiben custom
   - Auth (2): untypisiert — Auth-Refactoring separat
 - Siehe `specs/action-result.allium` für die vollständige Klassifikation
 
-### 0.3 Domain-Model Alignment
-- Prisma-generierte Typen und Domain-Model Interfaces (`src/models/`) synchronisieren
-- Ermöglicht `ActionResult<Job>` statt `ActionResult<unknown>`
-- **Bekannte Gaps:**
-  - Models sind monolithisch (Prisma ≡ Domain) — kein DTO/Mapper-Layer
-  - DateTime-Inkonsistenz: `profile.model.ts` nutzt `string` statt `Date`
-  - Optional-Field-Mismatch: Models vs. Prisma non-nullability
-  - Computed Fields (`_count`, `_total`) nicht formalisiert
-- **Reihenfolge:** Nach 0.2, da 0.2 die konkreten Typen liefert, die 0.3 aligned
-- Voraussetzung für automatische API-Dokumentation (Roadmap 7.1)
+### 0.3 Domain-Model Alignment -- DONE
+- **Domain Models aligned** mit Prisma Schema (Feld-für-Feld Synchronisation):
+  - `activity.model.ts`: ActivityType +createdBy/description, Activity required fields + `| null`
+  - `job.model.ts`: JobResponse nullable fields (`appliedDate`, `dueDate`, `salaryRange`, `jobUrl`), optional Relations (`Location?`, `JobSource?`), JobLocation/Company `| null` für Prisma-nullable
+  - `profile.model.ts`: DateTime `string` → `Date` (Summary, WorkExperience, Education), FK-Scalare hinzugefügt, Relations optional, `Boolean` → `boolean`
+  - `automation.model.ts`: `connectorParams: string | null`, `matchScore: number | null`, `discoveryStatus | null`, `discoveredAt | null`
+- **`handleError(): ActionResult<never>`** — typisiert mit Bottom-Type, kompatibel zu allen `ActionResult<T>`
+- **`as unknown as` Casts:** 74 → 10 (86% Reduktion). Verbleibende: 9 Pattern-B + 1 Mock-Boundary
+- **Schmale Enum-Casts** (`as TaskStatus`, `as SectionType`, `as AutomationStatus`) ersetzen breite `as unknown as`
+- **Architektur-Invariante:** `null` in DB → `| null` im Domain Model. `undefined` = "Feld nicht im Response"
+- **automation.actions.ts** auf Projekt-Konventionen migriert (ActionResult, handleError, prisma-Alias)
+- **Bugfixes via Review:** `updateJob` createdAt-Überschreibung, `deleteJobById` unnötige includes, Job-Detail notFound-Guard
+- **Verbleibend für spätere Tickets:**
+  - Pattern B `getAllX` Funktionen → ActionResult Migration
+  - `?:` vs `| null` Vereinheitlichung (z.B. task.model.ts)
+  - Mapper-Funktionen für Task/Profile (DRY)
 
 ### 0.4 Module Lifecycle Manager
 Module registrieren sich mit einem **Manifest** beim Connector und deklarieren ihre Settings-Anforderungen. Der Lifecycle Manager propagiert Settings, verwaltet Aktivierung/Deaktivierung und überwacht Health.

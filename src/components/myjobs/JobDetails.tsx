@@ -92,7 +92,7 @@ function JobDetails({ job }: { job: JobResponse }) {
             </div>
           </CardHeader>
           <h3 className="ml-4">
-            {now && now > job.dueDate && job.Status?.value === "draft" ? (
+            {now && job.dueDate && now > job.dueDate && job.Status?.value === "draft" ? (
               <Badge className="bg-red-500">{t("jobs.expired")}</Badge>
             ) : (
               <Badge
@@ -131,7 +131,7 @@ function JobDetails({ job }: { job: JobResponse }) {
             </div>
           )}
           <div className="my-4 ml-4">
-            <TipTapContentViewer content={job?.description} />
+            <TipTapContentViewer content={job?.description ?? ""} />
           </div>
           <NotesSection jobId={job.id} />
           {parsedMatchData && (

@@ -3,7 +3,7 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { AddJobFormSchema } from "@/models/addJobForm.schema";
 import { ActionResult } from "@/models/actionResult";
-import { JOB_TYPES, JobStatus } from "@/models/job.model";
+import { JOB_TYPES, JobStatus, JobResponse, JobSource, JobLocation } from "@/models/job.model";
 import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
@@ -19,7 +19,7 @@ export const getStatusList = async (): Promise<JobStatus[]> => {
   }
 };
 
-export const getJobSourceList = async (): Promise<ActionResult<unknown>> => {
+export const getJobSourceList = async (): Promise<ActionResult<JobSource[]>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -42,7 +42,7 @@ export const getJobsList = async (
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE,
   filter?: string,
   search?: string,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<JobResponse[]>> => {
   try {
     const user = await getCurrentUser();
 
@@ -84,6 +84,8 @@ export const getJobsList = async (
         take: limit,
         select: {
           id: true,
+          userId: true,
+          createdAt: true,
           JobSource: true,
           JobTitle: true,
           jobType: true,
@@ -92,6 +94,9 @@ export const getJobsList = async (
           Location: true,
           dueDate: true,
           appliedDate: true,
+          salaryRange: true,
+          jobUrl: true,
+          applied: true,
           description: false,
           Resume: true,
           matchScore: true,
@@ -164,7 +169,7 @@ export async function* getJobsIterator(filter?: string, pageSize = 200) {
 
 export const getJobDetails = async (
   jobId: string,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<JobResponse>> => {
   try {
     if (!jobId) {
       throw new Error("Please provide job id");
@@ -193,7 +198,10 @@ export const getJobDetails = async (
         tags: true,
       },
     });
-    return { data: job, success: true };
+    // Narrow cast: Prisma returns Resume.File as `| null` but profile.model.ts
+    // declares it as `File?: File` (optional, not nullable). Fix profile.model.ts
+    // to fully remove this cast.
+    return { data: (job ?? undefined) as JobResponse | undefined, success: true };
   } catch (error) {
     const msg = "Failed to fetch job details. ";
     return handleError(error, msg);
@@ -202,7 +210,7 @@ export const getJobDetails = async (
 
 export const createLocation = async (
   label: string,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<JobLocation>> => {
   try {
     const user = await getCurrentUser();
 
@@ -236,7 +244,7 @@ export const createLocation = async (
 
 export const createJobSource = async (
   label: string,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<JobSource>> => {
   try {
     const user = await getCurrentUser();
 
@@ -270,7 +278,7 @@ export const createJobSource = async (
 
 export const addJob = async (
   data: z.infer<typeof AddJobFormSchema>,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<JobResponse>> => {
   try {
     const user = await getCurrentUser();
 
@@ -318,6 +326,14 @@ export const addJob = async (
           ? { tags: { connect: tagIds.map((id) => ({ id })) } }
           : {}),
       },
+      include: {
+        JobTitle: true,
+        Company: true,
+        Status: true,
+        Location: true,
+        JobSource: true,
+        tags: true,
+      },
     });
     return { data: job, success: true };
   } catch (error) {
@@ -328,7 +344,7 @@ export const addJob = async (
 
 export const updateJob = async (
   data: z.infer<typeof AddJobFormSchema>,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<JobResponse>> => {
   try {
     const user = await getCurrentUser();
 
@@ -370,7 +386,6 @@ export const updateJob = async (
         statusId: status,
         jobSourceId: source,
         salaryRange: salaryRange,
-        createdAt: new Date(),
         dueDate: dueDate,
         appliedDate: dateApplied,
         description: jobDescription,
@@ -379,6 +394,14 @@ export const updateJob = async (
         applied,
         resumeId: resume,
         tags: { set: tagIds.map((id) => ({ id })) },
+      },
+      include: {
+        JobTitle: true,
+        Company: true,
+        Status: true,
+        Location: true,
+        JobSource: true,
+        tags: true,
       },
     });
     // revalidatePath("/dashboard/myjobs", "page");
@@ -392,7 +415,7 @@ export const updateJob = async (
 export const updateJobStatus = async (
   jobId: string,
   status: JobStatus,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<JobResponse>> => {
   try {
     const user = await getCurrentUser();
 
@@ -425,6 +448,14 @@ export const updateJobStatus = async (
         userId: user.id,
       },
       data: dataToUpdate(),
+      include: {
+        JobTitle: true,
+        Company: true,
+        Status: true,
+        Location: true,
+        JobSource: true,
+        tags: true,
+      },
     });
     return { data: job, success: true };
   } catch (error) {
@@ -435,7 +466,7 @@ export const updateJobStatus = async (
 
 export const deleteJobById = async (
   jobId: string,
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult> => {
   try {
     const user = await getCurrentUser();
 
@@ -443,13 +474,13 @@ export const deleteJobById = async (
       throw new Error("Not authenticated");
     }
 
-    const res = await prisma.job.delete({
+    await prisma.job.delete({
       where: {
         id: jobId,
         userId: user.id,
       },
     });
-    return { data: res, success: true };
+    return { success: true };
   } catch (error) {
     const msg = "Failed to delete job.";
     return handleError(error, msg);

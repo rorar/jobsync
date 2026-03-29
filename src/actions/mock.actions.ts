@@ -4,6 +4,7 @@ import { handleError } from "@/lib/utils";
 import { isMockDataEnabled } from "@/lib/constants";
 import { getCurrentUser } from "@/utils/user.utils";
 import { generateMockActivities } from "@/lib/mock.utils";
+import { Activity } from "@/models/activity.model";
 import { ActionResult } from "@/models/actionResult";
 import {
   mockActivityTypes,
@@ -18,7 +19,7 @@ import {
 } from "@/lib/data/mockProfileData";
 import { subYears } from "date-fns";
 
-export const generateMockActivitiesAction = async (): Promise<ActionResult<unknown>> => {
+export const generateMockActivitiesAction = async (): Promise<ActionResult<Activity[]>> => {
   try {
     const user = await getCurrentUser();
 
@@ -68,7 +69,9 @@ export const generateMockActivitiesAction = async (): Promise<ActionResult<unkno
       },
     });
 
-    // Generate mock activities
+    // generateMockActivities() returns objects where activityType is a string
+    // label (used as lookup key), not a real ActivityType object. Extract
+    // the raw records to avoid coupling to the domain Activity interface.
     const mockActivities = generateMockActivities(user.id, 10, 25);
 
     // Create a map of activity type values to IDs
@@ -77,7 +80,9 @@ export const generateMockActivitiesAction = async (): Promise<ActionResult<unkno
     // Create activities in the database
     const createdActivities = await Promise.all(
       mockActivities.map((activity) => {
-        const typeValue = activity.activityType as string;
+        // generateMockActivities() stores the type VALUE string in activityType
+        // at runtime (not a real ActivityType object). Narrow cast is safe here.
+        const typeValue = activity.activityType as unknown as string;
         const typeId = typeMap.get(typeValue);
 
         if (!typeId) {
@@ -109,7 +114,7 @@ export const generateMockActivitiesAction = async (): Promise<ActionResult<unkno
   }
 };
 
-export const clearMockActivitiesAction = async (): Promise<ActionResult<unknown>> => {
+export const clearMockActivitiesAction = async (): Promise<ActionResult> => {
   try {
     const user = await getCurrentUser();
 
@@ -153,7 +158,7 @@ export const clearMockActivitiesAction = async (): Promise<ActionResult<unknown>
   }
 };
 
-export const generateMockProfileDataAction = async (): Promise<ActionResult<unknown>> => {
+export const generateMockProfileDataAction = async (): Promise<ActionResult> => {
   try {
     const user = await getCurrentUser();
     if (!user) throw new Error("Not authenticated");
@@ -343,7 +348,7 @@ export const generateMockProfileDataAction = async (): Promise<ActionResult<unkn
   }
 };
 
-export const clearMockProfileDataAction = async (): Promise<ActionResult<unknown>> => {
+export const clearMockProfileDataAction = async (): Promise<ActionResult> => {
   try {
     const user = await getCurrentUser();
     if (!user) throw new Error("Not authenticated");

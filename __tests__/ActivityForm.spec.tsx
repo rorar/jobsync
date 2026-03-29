@@ -109,12 +109,16 @@ const mockResetEditActivity = jest.fn();
 const mockEditActivity: Activity = {
   id: "activity-123",
   activityName: "Study TypeScript",
-  activityType: { id: "type-1", label: "Learning", value: "learning", createdAt: new Date(), updatedAt: new Date() },
+  activityType: { id: "type-1", label: "Learning", value: "learning", description: null, createdBy: "test-user", createdAt: new Date(), updatedAt: new Date() },
   activityTypeId: "type-1",
+  userId: "test-user",
   startTime: new Date("2026-03-25T09:00:00"),
   endTime: new Date("2026-03-25T10:30:00"),
   duration: 90,
   description: "<p>Studying advanced TS concepts</p>",
+  taskId: null,
+  createdAt: new Date("2026-03-25"),
+  updatedAt: new Date("2026-03-25"),
 };
 
 // ---------------------------------------------------------------------------

@@ -15,18 +15,18 @@ export { ResumeReviewSchema, JobMatchSchema } from "./ai.schemas";
 // AI MODEL
 
 export interface AiModel {
-  provider: AiProvider;
+  moduleId: AiModuleId;
   model: string | undefined;
 }
 
-// Provider enum - extensible for future providers
-export enum AiProvider {
+// AI Module ID enum — identifies which external system (Module) to use
+export enum AiModuleId {
   OLLAMA = "ollama",
   OPENAI = "openai",
   DEEPSEEK = "deepseek",
 }
 
-// Default models per provider
+// Default models per module
 export enum OllamaModel {
   LLAMA3_1 = "llama3.1",
   LLAMA3_2 = "llama3.2",
@@ -44,6 +44,6 @@ export enum DeepseekModel {
 }
 
 export const defaultModel: AiModel = {
-  provider: AiProvider.OLLAMA,
+  moduleId: AiModuleId.OLLAMA,
   model: OllamaModel.LLAMA3_1,
 };

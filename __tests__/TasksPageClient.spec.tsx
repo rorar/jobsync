@@ -3,6 +3,7 @@ import "@testing-library/jest-dom";
 import { screen, render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { getTasksList } from "@/actions/task.actions";
+import { ActivityType } from "@/models/activity.model";
 
 jest.mock("next-auth", () => {
   const mockAuth = jest.fn();
@@ -85,11 +86,13 @@ document.createRange = () => {
 };
 
 describe("TasksPageClient Component", () => {
-  const mockActivityTypes = [
+  const mockActivityTypes: ActivityType[] = [
     {
       id: "type-1",
       label: "Development",
       value: "development",
+      description: null,
+      createdBy: "test-user",
       createdAt: new Date(),
       updatedAt: new Date(),
     },
@@ -97,16 +100,20 @@ describe("TasksPageClient Component", () => {
       id: "type-2",
       label: "Testing",
       value: "testing",
+      description: null,
+      createdBy: "test-user",
       createdAt: new Date(),
       updatedAt: new Date(),
     },
   ];
 
-  const mockActivityTypesWithCounts = [
+  const mockActivityTypesWithCounts: (ActivityType & { taskCount: number })[] = [
     {
       id: "type-1",
       label: "Development",
       value: "development",
+      description: null,
+      createdBy: "test-user",
       taskCount: 5,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -115,6 +122,8 @@ describe("TasksPageClient Component", () => {
       id: "type-2",
       label: "Testing",
       value: "testing",
+      description: null,
+      createdBy: "test-user",
       taskCount: 3,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -443,11 +452,13 @@ describe("TasksPageClient Component", () => {
 
   describe("Multiple Activity Types", () => {
     it("should render many activity types correctly", () => {
-      const manyActivityTypes = [
+      const manyActivityTypes: (ActivityType & { taskCount: number })[] = [
         {
           id: "1",
           label: "Development",
           value: "development",
+          description: null,
+          createdBy: "test-user",
           taskCount: 10,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -456,6 +467,8 @@ describe("TasksPageClient Component", () => {
           id: "2",
           label: "Testing",
           value: "testing",
+          description: null,
+          createdBy: "test-user",
           taskCount: 5,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -464,6 +477,8 @@ describe("TasksPageClient Component", () => {
           id: "3",
           label: "Code Review",
           value: "code-review",
+          description: null,
+          createdBy: "test-user",
           taskCount: 3,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -472,6 +487,8 @@ describe("TasksPageClient Component", () => {
           id: "4",
           label: "Documentation",
           value: "documentation",
+          description: null,
+          createdBy: "test-user",
           taskCount: 2,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -480,6 +497,8 @@ describe("TasksPageClient Component", () => {
           id: "5",
           label: "Bug Fixing",
           value: "bug-fixing",
+          description: null,
+          createdBy: "test-user",
           taskCount: 7,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -503,11 +522,13 @@ describe("TasksPageClient Component", () => {
     });
 
     it("should handle switching between multiple filters", async () => {
-      const manyActivityTypes = [
+      const manyActivityTypes: (ActivityType & { taskCount: number })[] = [
         {
           id: "1",
           label: "Development",
           value: "development",
+          description: null,
+          createdBy: "test-user",
           taskCount: 10,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -516,6 +537,8 @@ describe("TasksPageClient Component", () => {
           id: "2",
           label: "Testing",
           value: "testing",
+          description: null,
+          createdBy: "test-user",
           taskCount: 5,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -524,6 +547,8 @@ describe("TasksPageClient Component", () => {
           id: "3",
           label: "Code Review",
           value: "code-review",
+          description: null,
+          createdBy: "test-user",
           taskCount: 3,
           createdAt: new Date(),
           updatedAt: new Date(),

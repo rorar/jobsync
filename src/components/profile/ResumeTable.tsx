@@ -60,7 +60,7 @@ function ResumeTable({ resumes, editResume, reloadResumes }: ResumeTableProps) {
       });
     const { success, message } = await deleteResumeById(
       resume.id,
-      resume.FileId
+      resume.FileId ?? undefined
     );
     if (success) {
       toast({

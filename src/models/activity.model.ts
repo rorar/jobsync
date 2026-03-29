@@ -2,22 +2,23 @@ export interface ActivityType {
   id: string;
   label: string;
   value: string;
-  description?: string;
+  description: string | null;
+  createdBy: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface Activity {
-  id?: string;
-  activityTypeId?: string;
-  activityType: ActivityType | string;
-  userId?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
+  id: string;
+  activityTypeId: string;
+  activityType?: ActivityType;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
   activityName: string;
   startTime: Date;
-  endTime?: Date;
-  duration?: number;
-  description?: string;
-  taskId?: string | null;
+  endTime: Date | null;
+  duration: number | null;
+  description: string | null;
+  taskId: string | null;
 }

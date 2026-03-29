@@ -5,6 +5,7 @@ import { AddQuestionFormSchema } from "@/models/addQuestionForm.schema";
 import { getCurrentUser } from "@/utils/user.utils";
 import { ActionResult } from "@/models/actionResult";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { Question } from "@/models/question.model";
 import { z } from "zod";
 
 export const getQuestionsList = async (
@@ -12,7 +13,7 @@ export const getQuestionsList = async (
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE,
   filter?: string,
   search?: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Question[]>> => {
   try {
     const user = await getCurrentUser();
     if (!user) throw new Error("Not authenticated");
@@ -55,7 +56,7 @@ export const getQuestionsList = async (
 
 export const getQuestionById = async (
   questionId: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Question>> => {
   try {
     const user = await getCurrentUser();
     if (!user) throw new Error("Not authenticated");
@@ -77,7 +78,7 @@ export const getQuestionById = async (
 
 export const createQuestion = async (
   data: z.infer<typeof AddQuestionFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Question>> => {
   try {
     const user = await getCurrentUser();
     if (!user) throw new Error("Not authenticated");
@@ -104,7 +105,7 @@ export const createQuestion = async (
 
 export const updateQuestion = async (
   data: z.infer<typeof AddQuestionFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Question>> => {
   try {
     const user = await getCurrentUser();
     if (!user) throw new Error("Not authenticated");
@@ -133,7 +134,7 @@ export const updateQuestion = async (
 
 export const deleteQuestion = async (
   questionId: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult> => {
   try {
     const user = await getCurrentUser();
     if (!user) throw new Error("Not authenticated");
@@ -149,7 +150,7 @@ export const deleteQuestion = async (
 };
 
 export const getTagsWithQuestionCounts = async (): Promise<
-  ActionResult<unknown>
+  ActionResult<{ id: string; label: string; value: string; questionCount: number }[]>
 > => {
   try {
     const user = await getCurrentUser();

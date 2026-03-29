@@ -75,7 +75,7 @@ export async function POST(
       jobBoard: automation.jobBoard as "jsearch" | "eures",
       keywords: automation.keywords,
       location: automation.location,
-      connectorParams: automation.connectorParams ?? undefined,
+      connectorParams: automation.connectorParams ?? null,
       resumeId: automation.resumeId,
       matchThreshold: automation.matchThreshold,
       scheduleHour: automation.scheduleHour,

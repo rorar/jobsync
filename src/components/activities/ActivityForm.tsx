@@ -73,11 +73,9 @@ const ActivityFormComponent = ({
         ? formatTime(new Date(editActivity.endTime), locale)
         : undefined;
 
-      // Resolve activityType ID: if activityType is an object, use its id; otherwise use activityTypeId or the string value
+      // Resolve activityType ID: prefer activityTypeId, fall back to the included object's id
       const activityTypeId =
-        typeof editActivity.activityType === "object" && editActivity.activityType?.id
-          ? editActivity.activityType.id
-          : editActivity.activityTypeId ?? (editActivity.activityType as string);
+        editActivity.activityTypeId ?? editActivity.activityType?.id;
 
       return {
         activityName: editActivity.activityName,
@@ -186,7 +184,7 @@ const ActivityFormComponent = ({
   }, [calculateDuration, loadActivityTypes, watch]);
 
   const onSubmit = async (data: z.infer<typeof schema>) => {
-    const { startDate, startTime, endDate, endTime, ...rest } = data;
+    const { startDate, startTime, endDate, endTime, activityType: activityTypeIdValue, ...rest } = data;
     try {
       const startDateTime = combineDateAndTime(startDate, startTime);
       const endDateTime =
@@ -196,18 +194,17 @@ const ActivityFormComponent = ({
         : undefined;
       const payload = {
         ...rest,
+        activityTypeId: activityTypeIdValue,
         startTime: startDateTime,
-        endTime: endDateTime ?? undefined,
-        duration: totalMinutes,
+        endTime: endDateTime ?? null,
+        duration: totalMinutes ?? null,
       };
 
       if (editActivity?.id) {
         const response = await updateActivity({
           ...payload,
           id: editActivity.id,
-          activityType: payload.activityType,
-          activityTypeId: payload.activityType,
-        });
+        } as Activity);
         if (response.success) {
           toast({
             variant: "success",
@@ -222,7 +219,7 @@ const ActivityFormComponent = ({
         }
         resetEditActivity?.();
       } else {
-        const response = await createActivity(payload);
+        const response = await createActivity(payload as Activity);
         if (response.success) {
           toast({
             variant: "success",

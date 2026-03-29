@@ -1,9 +1,9 @@
-export type ApiKeyProvider = "openai" | "deepseek" | "ollama" | "rapidapi";
+export type ApiKeyModuleId = "openai" | "deepseek" | "ollama" | "rapidapi";
 
 export interface ApiKeyRecord {
   id: string;
   userId: string;
-  provider: ApiKeyProvider;
+  moduleId: ApiKeyModuleId;
   last4: string;
   label: string | null;
   createdAt: Date;
@@ -13,7 +13,7 @@ export interface ApiKeyRecord {
 
 export interface ApiKeyClientResponse {
   id: string;
-  provider: ApiKeyProvider;
+  moduleId: ApiKeyModuleId;
   last4: string;
   // Full value for non-sensitive entries (e.g. URLs)
   displayValue?: string;

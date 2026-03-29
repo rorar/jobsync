@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import {
   AiModel,
-  AiProvider,
+  AiModuleId,
   defaultModel,
   OpenaiModel,
   DeepseekModel,
@@ -59,19 +59,19 @@ function AiSettings() {
   const [runningModelError, setRunningModelError] = useState<string>("");
   const [runningModelName, setRunningModelName] = useState<string>("");
 
-  const setSelectedProvider = (provider: AiProvider) => {
-    setSelectedModel({ provider, model: undefined });
+  const setSelectedModule = (moduleId: AiModuleId) => {
+    setSelectedModel({ moduleId, model: undefined });
     setFetchError("");
     setRunningModelError("");
     setRunningModelName("");
   };
-  const setSelectedProviderModel = async (model: string) => {
+  const setSelectedModuleModel = async (model: string) => {
     setSelectedModel({ ...selectedModel, model });
     setRunningModelName("");
     setRunningModelError("");
 
-    if (selectedModel.provider === AiProvider.OLLAMA) {
-      const result = await checkIfModelIsRunning(model, selectedModel.provider);
+    if (selectedModel.moduleId === AiModuleId.OLLAMA) {
+      const result = await checkIfModelIsRunning(model, selectedModel.moduleId);
       if (result.isRunning && result.runningModelName) {
         setRunningModelName(result.runningModelName);
         await keepModelAlive(result.runningModelName);
@@ -90,7 +90,7 @@ function AiSettings() {
         if (settingsResult.success && (settingsResult.data as any)?.settings?.ai) {
           const aiSettings = (settingsResult.data as any).settings.ai;
           setSelectedModel({
-            provider: aiSettings.provider || defaultModel.provider,
+            moduleId: aiSettings.moduleId || aiSettings.provider || defaultModel.moduleId,
             model: aiSettings.model,
           });
         }
@@ -105,14 +105,14 @@ function AiSettings() {
   }, []);
 
   useEffect(() => {
-    if (isInitialized && selectedModel.provider === AiProvider.OLLAMA) {
+    if (isInitialized && selectedModel.moduleId === AiModuleId.OLLAMA) {
       fetchOllamaModels();
     }
-    if (isInitialized && selectedModel.provider === AiProvider.DEEPSEEK) {
+    if (isInitialized && selectedModel.moduleId === AiModuleId.DEEPSEEK) {
       fetchDeepseekModels();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedModel.provider, isInitialized]);
+  }, [selectedModel.moduleId, isInitialized]);
 
   const fetchOllamaModels = async () => {
     setIsLoadingModels(true);
@@ -120,7 +120,7 @@ function AiSettings() {
     try {
       const response = await fetch("/api/ai/ollama/tags");
       if (!response.ok) {
-        if (selectedModel.provider === AiProvider.OLLAMA) {
+        if (selectedModel.moduleId === AiModuleId.OLLAMA) {
           setFetchError(
             "Failed to fetch Ollama models. Make sure Ollama is running.",
           );
@@ -134,7 +134,7 @@ function AiSettings() {
       await fetchRunningModel();
     } catch (error) {
       console.error("Error fetching Ollama models:", error);
-      if (selectedModel.provider === AiProvider.OLLAMA) {
+      if (selectedModel.moduleId === AiModuleId.OLLAMA) {
         setFetchError(
           "Failed to fetch Ollama models. Make sure Ollama is running.",
         );
@@ -167,7 +167,7 @@ function AiSettings() {
     try {
       const response = await fetch("/api/ai/ollama/ps");
       if (!response.ok) {
-        if (selectedModel.provider === AiProvider.OLLAMA) {
+        if (selectedModel.moduleId === AiModuleId.OLLAMA) {
           setRunningModelError(
             "No model is currently running. Please start a model first.",
           );
@@ -178,12 +178,12 @@ function AiSettings() {
       if (data.models && data.models.length > 0) {
         const runningModelName = data.models[0].name;
         setSelectedModel({
-          provider: AiProvider.OLLAMA,
+          moduleId: AiModuleId.OLLAMA,
           model: runningModelName,
         });
         const result = await checkIfModelIsRunning(
           runningModelName,
-          AiProvider.OLLAMA,
+          AiModuleId.OLLAMA,
         );
         if (result.isRunning && result.runningModelName) {
           setRunningModelName(result.runningModelName);
@@ -192,7 +192,7 @@ function AiSettings() {
           setRunningModelError(result.error);
         }
       } else {
-        if (selectedModel.provider === AiProvider.OLLAMA) {
+        if (selectedModel.moduleId === AiModuleId.OLLAMA) {
           setRunningModelError(
             "No model is currently running. Please run the ollama model first.",
           );
@@ -200,7 +200,7 @@ function AiSettings() {
       }
     } catch (error) {
       console.error("Error fetching running model:", error);
-      if (selectedModel.provider === AiProvider.OLLAMA) {
+      if (selectedModel.moduleId === AiModuleId.OLLAMA) {
         setRunningModelError(
           "No model is currently running. Please run the ollama model first.",
         );
@@ -231,13 +231,13 @@ function AiSettings() {
     }
   };
 
-  const getModelsList = (provider: AiProvider) => {
-    switch (provider) {
-      case AiProvider.OLLAMA:
+  const getModelsList = (moduleId: AiModuleId) => {
+    switch (moduleId) {
+      case AiModuleId.OLLAMA:
         return ollamaModels.map((model) => [model, model]);
-      case AiProvider.OPENAI:
+      case AiModuleId.OPENAI:
         return Object.entries(OpenaiModel);
-      case AiProvider.DEEPSEEK:
+      case AiModuleId.DEEPSEEK:
         return deepseekModels.map((model) => [model, model]);
       default:
         return [];
@@ -255,7 +255,7 @@ function AiSettings() {
     setIsSaving(true);
     try {
       const result = await updateAiSettings({
-        provider: selectedModel.provider,
+        moduleId: selectedModel.moduleId,
         model: selectedModel.model,
       });
       if (result.success) {
@@ -286,9 +286,9 @@ function AiSettings() {
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-medium">{t("settings.aiProvider")}</h3>
+          <h3 className="text-lg font-medium">{t("settings.aiModule")}</h3>
           <p className="text-sm text-muted-foreground">
-            {t("settings.aiProviderDesc")}
+            {t("settings.aiModuleDesc")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -302,29 +302,29 @@ function AiSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">{t("settings.aiProvider")}</h3>
+        <h3 className="text-lg font-medium">{t("settings.aiModule")}</h3>
         <p className="text-sm text-muted-foreground">
-          {t("settings.aiProviderDesc")}
+          {t("settings.aiModuleDesc")}
         </p>
       </div>
       <div>
-        <Label className="my-4" htmlFor="ai-provider">
-          {t("settings.aiServiceProvider")}
+        <Label className="my-4" htmlFor="ai-module">
+          {t("settings.aiModuleLabel")}
         </Label>
         <Select
-          value={selectedModel.provider}
-          onValueChange={setSelectedProvider}
+          value={selectedModel.moduleId}
+          onValueChange={setSelectedModule}
         >
           <SelectTrigger
-            id="ai-provider"
-            aria-label={t("settings.selectProvider")}
+            id="ai-module"
+            aria-label={t("settings.selectModule")}
             className="w-[180px]"
           >
-            <SelectValue placeholder={t("settings.selectProvider")} />
+            <SelectValue placeholder={t("settings.selectModule")} />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              {Object.entries(AiProvider).map(([key, value]) => (
+              {Object.entries(AiModuleId).map(([key, value]) => (
                 <SelectItem key={key} value={value} className="capitalize">
                   {value}
                 </SelectItem>
@@ -340,7 +340,7 @@ function AiSettings() {
         <div className="flex items-start gap-2">
           <Select
             value={selectedModel.model}
-            onValueChange={setSelectedProviderModel}
+            onValueChange={setSelectedModuleModel}
             disabled={isLoadingModels}
           >
             <SelectTrigger
@@ -356,7 +356,7 @@ function AiSettings() {
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                {getModelsList(selectedModel.provider).map(([key, value]) => (
+                {getModelsList(selectedModel.moduleId).map(([key, value]) => (
                   <SelectItem key={key} value={value} className="capitalize">
                     {value}
                   </SelectItem>
@@ -389,7 +389,7 @@ function AiSettings() {
         onClick={saveModelSettings}
         disabled={
           !selectedModel.model ||
-          (selectedModel.provider === AiProvider.OLLAMA &&
+          (selectedModel.moduleId === AiModuleId.OLLAMA &&
             !runningModelName) ||
           isLoadingModels ||
           isSaving

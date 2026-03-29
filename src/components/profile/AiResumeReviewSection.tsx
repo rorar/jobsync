@@ -47,7 +47,7 @@ const AiResumeReviewSection = ({ resume }: AiSectionProps) => {
         if (result.success && (result.data as any)?.settings?.ai) {
           const aiSettings = (result.data as any).settings.ai;
           setSelectedModel({
-            provider: aiSettings.provider || defaultModel.provider,
+            moduleId: aiSettings.moduleId || aiSettings.provider || defaultModel.moduleId,
             model: aiSettings.model,
           });
         }
@@ -90,7 +90,7 @@ const AiResumeReviewSection = ({ resume }: AiSectionProps) => {
     setAiSectionOpen(openState);
     if (!openState && isLoading) {
       stop();
-    } else if (openState && selectedModel.provider === "ollama") {
+    } else if (openState && selectedModel.moduleId === "ollama") {
       await checkModelStatus();
     }
   };
@@ -100,7 +100,7 @@ const AiResumeReviewSection = ({ resume }: AiSectionProps) => {
     setRunningModelError("");
     const result = await checkIfModelIsRunning(
       selectedModel.model,
-      selectedModel.provider
+      selectedModel.moduleId
     );
     if (result.isRunning && result.runningModelName) {
       setRunningModelName(result.runningModelName);
@@ -134,14 +134,14 @@ const AiResumeReviewSection = ({ resume }: AiSectionProps) => {
         <SheetContent className="overflow-y-scroll">
           <SheetHeader>
             <SheetTitle className="flex flex-row items-center">
-              AI Review ({selectedModel.provider})
+              AI Review ({selectedModel.moduleId})
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Info className="h-4 w-4 text-muted-foreground mx-1" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{`Provider: ${selectedModel.provider}`}</p>
+                    <p>{`Provider: ${selectedModel.moduleId}`}</p>
                     <p>{`Model: ${selectedModel.model}`}</p>
                   </TooltipContent>
                 </Tooltip>
@@ -149,7 +149,7 @@ const AiResumeReviewSection = ({ resume }: AiSectionProps) => {
             </SheetTitle>
           </SheetHeader>
 
-          {selectedModel.provider === "ollama" && (
+          {selectedModel.moduleId === "ollama" && (
             <>
               {runningModelName && (
                 <div className="flex items-center gap-1 text-green-600 text-sm mt-4">
@@ -174,7 +174,7 @@ const AiResumeReviewSection = ({ resume }: AiSectionProps) => {
               onClick={getResumeReview}
               disabled={
                 isLoading ||
-                (selectedModel.provider === "ollama" && !runningModelName)
+                (selectedModel.moduleId === "ollama" && !runningModelName)
               }
             >
               <Sparkles className="h-3.5 w-3.5" />

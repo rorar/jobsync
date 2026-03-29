@@ -83,7 +83,7 @@ function AddEducation({
           institution: education?.institution,
           degree: education?.degree,
           fieldOfStudy: education?.fieldOfStudy,
-          location: education?.location.id,
+          location: education?.location?.id,
           startDate: education?.startDate,
           endDate: education?.endDate,
           description: education?.description,

@@ -124,6 +124,7 @@ describe("Job Title Actions", () => {
           id: true,
           label: true,
           value: true,
+          createdBy: true,
           _count: {
             select: {
               jobs: {

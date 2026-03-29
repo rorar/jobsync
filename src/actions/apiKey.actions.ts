@@ -6,16 +6,13 @@ import { handleError } from "@/lib/utils";
 import { encrypt, getLast4 } from "@/lib/encryption";
 import { apiKeySaveSchema } from "@/models/apiKey.schema";
 import { validateOllamaUrl } from "@/lib/url-validation";
+import { ActionResult } from "@/models/actionResult";
 import type {
   ApiKeyClientResponse,
-  ApiKeyProvider,
+  ApiKeyModuleId,
 } from "@/models/apiKey.model";
 
-export async function getUserApiKeys(): Promise<{
-  success: boolean;
-  data?: ApiKeyClientResponse[];
-  message?: string;
-}> {
+export async function getUserApiKeys(): Promise<ActionResult<ApiKeyClientResponse[]>> {
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
@@ -24,7 +21,7 @@ export async function getUserApiKeys(): Promise<{
       where: { userId: user.id },
       select: {
         id: true,
-        provider: true,
+        moduleId: true,
         last4: true,
         iv: true,
         encryptedKey: true,
@@ -40,7 +37,7 @@ export async function getUserApiKeys(): Promise<{
         const isSensitive = k.iv !== "";
         return {
           id: k.id,
-          provider: k.provider as ApiKeyProvider,
+          moduleId: k.moduleId as ApiKeyModuleId,
           last4: k.last4,
           ...(isSensitive ? {} : { displayValue: k.encryptedKey }),
           label: k.label,
@@ -50,23 +47,16 @@ export async function getUserApiKeys(): Promise<{
       }),
     };
   } catch (error) {
-    return handleError(error, "Failed to fetch API keys") as {
-      success: boolean;
-      message: string;
-    };
+    return handleError(error, "Failed to fetch API keys");
   }
 }
 
 export async function saveApiKey(input: {
-  provider: string;
+  moduleId: string;
   key: string;
   label?: string;
   sensitive?: boolean;
-}): Promise<{
-  success: boolean;
-  data?: ApiKeyClientResponse;
-  message?: string;
-}> {
+}): Promise<ActionResult<ApiKeyClientResponse>> {
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
@@ -92,14 +82,14 @@ export async function saveApiKey(input: {
 
     const apiKey = await db.apiKey.upsert({
       where: {
-        userId_provider: {
+        userId_moduleId: {
           userId: user.id,
-          provider: parsed.provider,
+          moduleId: parsed.moduleId,
         },
       },
       create: {
         userId: user.id,
-        provider: parsed.provider,
+        moduleId: parsed.moduleId,
         encryptedKey,
         iv,
         last4,
@@ -113,7 +103,7 @@ export async function saveApiKey(input: {
       },
       select: {
         id: true,
-        provider: true,
+        moduleId: true,
         last4: true,
         label: true,
         createdAt: true,
@@ -123,7 +113,7 @@ export async function saveApiKey(input: {
 
     const response: ApiKeyClientResponse = {
       ...apiKey,
-      provider: apiKey.provider as ApiKeyProvider,
+      moduleId: apiKey.moduleId as ApiKeyModuleId,
     };
     if (!isSensitive) {
       response.displayValue = parsed.key;
@@ -131,31 +121,22 @@ export async function saveApiKey(input: {
 
     return { success: true, data: response };
   } catch (error) {
-    return handleError(error, "Failed to save API key") as {
-      success: boolean;
-      message: string;
-    };
+    return handleError(error, "Failed to save API key");
   }
 }
 
-export async function deleteApiKey(provider: string): Promise<{
-  success: boolean;
-  message?: string;
-}> {
+export async function deleteApiKey(moduleId: string): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
 
     await db.apiKey.deleteMany({
-      where: { userId: user.id, provider },
+      where: { userId: user.id, moduleId },
     });
 
     return { success: true };
   } catch (error) {
-    return handleError(error, "Failed to delete API key") as {
-      success: boolean;
-      message: string;
-    };
+    return handleError(error, "Failed to delete API key");
   }
 }
 
@@ -170,7 +151,7 @@ export async function getOllamaBaseUrl(): Promise<string> {
     if (user) {
       const apiKey = await db.apiKey.findUnique({
         where: {
-          userId_provider: { userId: user.id, provider: "ollama" },
+          userId_moduleId: { userId: user.id, moduleId: "ollama" },
         },
       });
       if (apiKey) {

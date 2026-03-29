@@ -120,11 +120,11 @@ export const convertResumeToText = (resume: Resume): Promise<string> => {
           const startDate = formatDate(experience.startDate);
           const endDate = experience.currentJob
             ? "Present"
-            : formatDate(experience.endDate);
+            : experience.endDate ? formatDate(experience.endDate) : "Present";
           const parts = [
-            `Company: ${experience.Company.label}`,
-            `Job Title: ${experience.jobTitle.label}`,
-            `Location: ${experience.location.label}`,
+            experience.Company ? `Company: ${experience.Company.label}` : "",
+            experience.jobTitle ? `Job Title: ${experience.jobTitle.label}` : "",
+            experience.location ? `Location: ${experience.location.label}` : "",
             `Dates: ${startDate} - ${endDate}`,
             desc ? `Description: ${desc}` : "",
           ].filter(Boolean);
@@ -137,7 +137,7 @@ export const convertResumeToText = (resume: Resume): Promise<string> => {
       if (!educations || educations.length === 0) return "";
       return educations
         .map((education) => {
-          const desc = removeHtmlTags(education.description);
+          const desc = removeHtmlTags(education.description ?? undefined);
           const startDate = formatDate(education.startDate);
           const endDate = education.endDate
             ? formatDate(education.endDate)
@@ -146,7 +146,7 @@ export const convertResumeToText = (resume: Resume): Promise<string> => {
             `Institution: ${education.institution}`,
             `Degree: ${education.degree}`,
             `Field of Study: ${education.fieldOfStudy}`,
-            `Location: ${education.location.label}`,
+            education.location ? `Location: ${education.location.label}` : "",
             `Dates: ${startDate} - ${endDate}`,
             desc ? `Description: ${desc}` : "",
           ].filter(Boolean);

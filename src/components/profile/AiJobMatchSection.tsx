@@ -61,7 +61,7 @@ export const AiJobMatchSection = ({
         if (result.success && (result.data as any)?.settings?.ai) {
           const aiSettings = (result.data as any).settings.ai;
           setSelectedModel({
-            provider: aiSettings.provider || defaultModel.provider,
+            moduleId: aiSettings.moduleId || aiSettings.provider || defaultModel.moduleId,
             model: aiSettings.model,
           });
         }
@@ -117,21 +117,21 @@ export const AiJobMatchSection = ({
     setRunningModelError("");
     const result = await checkIfModelIsRunning(
       selectedModel.model,
-      selectedModel.provider,
+      selectedModel.moduleId,
     );
     if (result.isRunning && result.runningModelName) {
       setRunningModelName(result.runningModelName);
     } else if (result.error) {
       setRunningModelError(result.error);
     }
-  }, [selectedModel.model, selectedModel.provider]);
+  }, [selectedModel.model, selectedModel.moduleId]);
 
   const onOpenChange = async (openState: boolean) => {
     triggerChange(openState);
     if (!openState && isLoading) {
       stop();
     }
-    if (openState && selectedModel.provider === "ollama") {
+    if (openState && selectedModel.moduleId === "ollama") {
       await checkModelStatus();
     } else if (!openState) {
       setRunningModelName("");
@@ -150,10 +150,10 @@ export const AiJobMatchSection = ({
   }, []);
 
   useEffect(() => {
-    if (aISectionOpen && selectedModel.provider === "ollama") {
+    if (aISectionOpen && selectedModel.moduleId === "ollama") {
       checkModelStatus();
     }
-  }, [aISectionOpen, selectedModel.provider, checkModelStatus]);
+  }, [aISectionOpen, selectedModel.moduleId, checkModelStatus]);
 
   // Check if we have any content to show
   const hasContent =
@@ -165,14 +165,14 @@ export const AiJobMatchSection = ({
         <SheetContent className="overflow-y-scroll">
           <SheetHeader>
             <SheetTitle className="flex flex-row items-center">
-              AI Job Match ({selectedModel.provider})
+              AI Job Match ({selectedModel.moduleId})
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Info className="h-4 w-4 text-muted-foreground mx-1" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{`Provider: ${selectedModel.provider}`}</p>
+                    <p>{`Provider: ${selectedModel.moduleId}`}</p>
                     <p>{`Model: ${selectedModel.model}`}</p>
                   </TooltipContent>
                 </Tooltip>
@@ -180,7 +180,7 @@ export const AiJobMatchSection = ({
             </SheetTitle>
           </SheetHeader>
 
-          {selectedModel.provider === "ollama" && (
+          {selectedModel.moduleId === "ollama" && (
             <>
               {runningModelName && (
                 <div className="flex items-center gap-1 text-green-600 text-sm mt-4">
@@ -205,7 +205,7 @@ export const AiJobMatchSection = ({
                 disabled={
                   isLoading ||
                   isLoadingSettings ||
-                  (selectedModel.provider === "ollama" && !runningModelName)
+                  (selectedModel.moduleId === "ollama" && !runningModelName)
                 }
               >
                 <SelectTrigger className="w-[180px]">

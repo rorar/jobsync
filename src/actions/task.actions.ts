@@ -2,6 +2,7 @@
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { Task, TaskStatus } from "@/models/task.model";
+import { Activity } from "@/models/activity.model";
 import { AddTaskFormSchema } from "@/models/addTaskForm.schema";
 import { getCurrentUser } from "@/utils/user.utils";
 import { ActionResult } from "@/models/actionResult";
@@ -14,7 +15,7 @@ export const getTasksList = async (
   filter?: string,
   statusFilter?: TaskStatus[],
   search?: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Task[]>> => {
   try {
     const user = await getCurrentUser();
 
@@ -64,7 +65,7 @@ export const getTasksList = async (
 
     return {
       success: true,
-      data,
+      data: data.map((t) => ({ ...t, status: t.status as TaskStatus })),
       total,
     };
   } catch (error) {
@@ -75,7 +76,7 @@ export const getTasksList = async (
 
 export const getTaskById = async (
   taskId: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Task>> => {
   try {
     const user = await getCurrentUser();
 
@@ -102,7 +103,7 @@ export const getTaskById = async (
 
     return {
       success: true,
-      data: task,
+      data: { ...task, status: task.status as TaskStatus },
     };
   } catch (error) {
     const msg = "Failed to fetch task.";
@@ -112,7 +113,7 @@ export const getTaskById = async (
 
 export const createTask = async (
   data: z.infer<typeof AddTaskFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Task>> => {
   try {
     const user = await getCurrentUser();
 
@@ -138,7 +139,7 @@ export const createTask = async (
       },
     });
 
-    return { success: true, data: task };
+    return { success: true, data: { ...task, status: task.status as TaskStatus } };
   } catch (error) {
     const msg = "Failed to create task.";
     return handleError(error, msg);
@@ -147,7 +148,7 @@ export const createTask = async (
 
 export const updateTask = async (
   data: z.infer<typeof AddTaskFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Task>> => {
   try {
     const user = await getCurrentUser();
 
@@ -180,7 +181,7 @@ export const updateTask = async (
       },
     });
 
-    return { success: true, data: task };
+    return { success: true, data: { ...task, status: task.status as TaskStatus } };
   } catch (error) {
     const msg = "Failed to update task.";
     return handleError(error, msg);
@@ -190,7 +191,7 @@ export const updateTask = async (
 export const updateTaskStatus = async (
   taskId: string,
   status: TaskStatus
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Task>> => {
   try {
     const user = await getCurrentUser();
 
@@ -211,7 +212,7 @@ export const updateTaskStatus = async (
       },
     });
 
-    return { success: true, data: task };
+    return { success: true, data: { ...task, status: task.status as TaskStatus } };
   } catch (error) {
     const msg = "Failed to update task status.";
     return handleError(error, msg);
@@ -220,7 +221,7 @@ export const updateTaskStatus = async (
 
 export const deleteTaskById = async (
   taskId: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult> => {
   try {
     const user = await getCurrentUser();
 
@@ -266,7 +267,7 @@ export const deleteTaskById = async (
 
 export const startActivityFromTask = async (
   taskId: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Activity>> => {
   try {
     const user = await getCurrentUser();
 
@@ -346,7 +347,7 @@ export const startActivityFromTask = async (
 };
 
 export const getActivityTypesWithTaskCounts = async (): Promise<
-  ActionResult<unknown>
+  ActionResult<{ id: string; label: string; value: string; taskCount: number }[]>
 > => {
   try {
     const user = await getCurrentUser();

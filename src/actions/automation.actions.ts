@@ -1,6 +1,6 @@
 "use server";
 
-import db from "@/lib/db";
+import prisma from "@/lib/db";
 import { getCurrentUser } from "@/utils/user.utils";
 import { calculateNextRunAt } from "@/lib/connector/job-discovery/schedule";
 import {
@@ -10,32 +10,45 @@ import {
   type UpdateAutomationInput,
 } from "@/models/automation.schema";
 import type {
+  AutomationStatus,
+  AutomationRunStatus,
   AutomationWithResume,
   AutomationRun,
   DiscoveredJob,
   DiscoveryStatus,
+  JobBoard,
 } from "@/models/automation.model";
 import { APP_CONSTANTS } from "@/lib/constants";
+import { handleError } from "@/lib/utils";
+import { ActionResult } from "@/models/actionResult";
 
 const MAX_AUTOMATIONS_PER_USER = 10;
 
-function formatError(error: unknown, fallback: string): { success: false; message: string } {
-  console.error(error, fallback);
-  if (error instanceof Error) {
-    return { success: false, message: error.message || fallback };
-  }
-  return { success: false, message: fallback };
+/** Narrow Prisma string fields to domain enums for Automation (with resume included). */
+function toAutomationWithResume<T extends { jobBoard: string; status: string }>(
+  row: T
+): T & { jobBoard: JobBoard; status: AutomationStatus } {
+  return { ...row, jobBoard: row.jobBoard as JobBoard, status: row.status as AutomationStatus };
+}
+
+/** Narrow Prisma string fields to domain enums for AutomationRun. */
+function toAutomationRun<T extends { status: string }>(
+  row: T
+): T & { status: AutomationRunStatus } {
+  return { ...row, status: row.status as AutomationRunStatus };
+}
+
+/** Narrow Prisma string fields to domain enums for DiscoveredJob. */
+function toDiscoveredJob<T extends { discoveryStatus: string | null }>(
+  row: T
+): T & { discoveryStatus: DiscoveryStatus | null } {
+  return { ...row, discoveryStatus: row.discoveryStatus as DiscoveryStatus | null };
 }
 
 export async function getAutomationsList(
   page: number = 1,
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE
-): Promise<{
-  success: boolean;
-  data?: AutomationWithResume[];
-  total?: number;
-  message?: string;
-}> {
+): Promise<ActionResult<AutomationWithResume[]>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -45,7 +58,7 @@ export async function getAutomationsList(
     const skip = (page - 1) * limit;
 
     const [automations, total] = await Promise.all([
-      db.automation.findMany({
+      prisma.automation.findMany({
         where: { userId: user.id },
         skip,
         take: limit,
@@ -56,31 +69,27 @@ export async function getAutomationsList(
           },
         },
       }),
-      db.automation.count({ where: { userId: user.id } }),
+      prisma.automation.count({ where: { userId: user.id } }),
     ]);
 
     return {
       success: true,
-      data: automations as unknown as AutomationWithResume[],
+      data: automations.map(toAutomationWithResume) as AutomationWithResume[],
       total,
     };
   } catch (error) {
-    return formatError(error, "Failed to get automations list");
+    return handleError(error, "Failed to get automations list");
   }
 }
 
-export async function getAutomationById(id: string): Promise<{
-  success: boolean;
-  data?: AutomationWithResume & { runs: AutomationRun[] };
-  message?: string;
-}> {
+export async function getAutomationById(id: string): Promise<ActionResult<AutomationWithResume & { runs: AutomationRun[] }>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return { success: false, message: "Not authenticated" };
     }
 
-    const automation = await db.automation.findFirst({
+    const automation = await prisma.automation.findFirst({
       where: { id, userId: user.id },
       include: {
         resume: {
@@ -99,20 +108,19 @@ export async function getAutomationById(id: string): Promise<{
 
     return {
       success: true,
-      data: automation as unknown as AutomationWithResume & { runs: AutomationRun[] },
+      data: {
+        ...toAutomationWithResume(automation),
+        runs: automation.runs.map(toAutomationRun),
+      } as AutomationWithResume & { runs: AutomationRun[] },
     };
   } catch (error) {
-    return formatError(error, "Failed to get automation");
+    return handleError(error, "Failed to get automation");
   }
 }
 
 export async function createAutomation(
   input: CreateAutomationInput
-): Promise<{
-  success: boolean;
-  data?: AutomationWithResume;
-  message?: string;
-}> {
+): Promise<ActionResult<AutomationWithResume>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -121,12 +129,12 @@ export async function createAutomation(
 
     const validated = CreateAutomationSchema.parse(input);
 
-    const count = await db.automation.count({ where: { userId: user.id } });
+    const count = await prisma.automation.count({ where: { userId: user.id } });
     if (count >= MAX_AUTOMATIONS_PER_USER) {
       return { success: false, message: `Maximum of ${MAX_AUTOMATIONS_PER_USER} automations allowed per user` };
     }
 
-    const resume = await db.resume.findFirst({
+    const resume = await prisma.resume.findFirst({
       where: {
         id: validated.resumeId,
         profile: { userId: user.id },
@@ -139,7 +147,7 @@ export async function createAutomation(
 
     const nextRunAt = calculateNextRunAt(validated.scheduleHour);
 
-    const automation = await db.automation.create({
+    const automation = await prisma.automation.create({
       data: {
         userId: user.id,
         name: validated.name,
@@ -162,21 +170,17 @@ export async function createAutomation(
 
     return {
       success: true,
-      data: automation as unknown as AutomationWithResume,
+      data: toAutomationWithResume(automation) as AutomationWithResume,
     };
   } catch (error) {
-    return formatError(error, "Failed to create automation");
+    return handleError(error, "Failed to create automation");
   }
 }
 
 export async function updateAutomation(
   id: string,
   input: UpdateAutomationInput
-): Promise<{
-  success: boolean;
-  data?: AutomationWithResume;
-  message?: string;
-}> {
+): Promise<ActionResult<AutomationWithResume>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -185,7 +189,7 @@ export async function updateAutomation(
 
     const validated = UpdateAutomationSchema.parse(input);
 
-    const existing = await db.automation.findFirst({
+    const existing = await prisma.automation.findFirst({
       where: { id, userId: user.id },
     });
 
@@ -194,7 +198,7 @@ export async function updateAutomation(
     }
 
     if (validated.resumeId) {
-      const resume = await db.resume.findFirst({
+      const resume = await prisma.resume.findFirst({
         where: {
           id: validated.resumeId,
           profile: { userId: user.id },
@@ -215,7 +219,7 @@ export async function updateAutomation(
       updateData.nextRunAt = calculateNextRunAt(validated.scheduleHour);
     }
 
-    const automation = await db.automation.update({
+    const automation = await prisma.automation.update({
       where: { id },
       data: updateData,
       include: {
@@ -227,24 +231,21 @@ export async function updateAutomation(
 
     return {
       success: true,
-      data: automation as unknown as AutomationWithResume,
+      data: toAutomationWithResume(automation) as AutomationWithResume,
     };
   } catch (error) {
-    return formatError(error, "Failed to update automation");
+    return handleError(error, "Failed to update automation");
   }
 }
 
-export async function deleteAutomation(id: string): Promise<{
-  success: boolean;
-  message?: string;
-}> {
+export async function deleteAutomation(id: string): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return { success: false, message: "Not authenticated" };
     }
 
-    const automation = await db.automation.findFirst({
+    const automation = await prisma.automation.findFirst({
       where: { id, userId: user.id },
     });
 
@@ -252,26 +253,22 @@ export async function deleteAutomation(id: string): Promise<{
       return { success: false, message: "Automation not found" };
     }
 
-    await db.automation.delete({ where: { id } });
+    await prisma.automation.delete({ where: { id } });
 
     return { success: true };
   } catch (error) {
-    return formatError(error, "Failed to delete automation");
+    return handleError(error, "Failed to delete automation");
   }
 }
 
-export async function pauseAutomation(id: string): Promise<{
-  success: boolean;
-  data?: AutomationWithResume;
-  message?: string;
-}> {
+export async function pauseAutomation(id: string): Promise<ActionResult<AutomationWithResume>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return { success: false, message: "Not authenticated" };
     }
 
-    const automation = await db.automation.findFirst({
+    const automation = await prisma.automation.findFirst({
       where: { id, userId: user.id },
     });
 
@@ -279,7 +276,7 @@ export async function pauseAutomation(id: string): Promise<{
       return { success: false, message: "Automation not found" };
     }
 
-    const updated = await db.automation.update({
+    const updated = await prisma.automation.update({
       where: { id },
       data: {
         status: "paused",
@@ -294,25 +291,21 @@ export async function pauseAutomation(id: string): Promise<{
 
     return {
       success: true,
-      data: updated as unknown as AutomationWithResume,
+      data: toAutomationWithResume(updated) as AutomationWithResume,
     };
   } catch (error) {
-    return formatError(error, "Failed to pause automation");
+    return handleError(error, "Failed to pause automation");
   }
 }
 
-export async function resumeAutomation(id: string): Promise<{
-  success: boolean;
-  data?: AutomationWithResume;
-  message?: string;
-}> {
+export async function resumeAutomation(id: string): Promise<ActionResult<AutomationWithResume>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return { success: false, message: "Not authenticated" };
     }
 
-    const automation = await db.automation.findFirst({
+    const automation = await prisma.automation.findFirst({
       where: { id, userId: user.id },
     });
 
@@ -322,7 +315,7 @@ export async function resumeAutomation(id: string): Promise<{
 
     const nextRunAt = calculateNextRunAt(automation.scheduleHour);
 
-    const updated = await db.automation.update({
+    const updated = await prisma.automation.update({
       where: { id },
       data: {
         status: "active",
@@ -337,10 +330,10 @@ export async function resumeAutomation(id: string): Promise<{
 
     return {
       success: true,
-      data: updated as unknown as AutomationWithResume,
+      data: toAutomationWithResume(updated) as AutomationWithResume,
     };
   } catch (error) {
-    return formatError(error, "Failed to resume automation");
+    return handleError(error, "Failed to resume automation");
   }
 }
 
@@ -351,12 +344,7 @@ export async function getDiscoveredJobs(options?: {
   limit?: number;
   sortBy?: "matchScore" | "discoveredAt";
   sortOrder?: "asc" | "desc";
-}): Promise<{
-  success: boolean;
-  data?: DiscoveredJob[];
-  total?: number;
-  message?: string;
-}> {
+}): Promise<ActionResult<DiscoveredJob[]>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -388,7 +376,7 @@ export async function getDiscoveredJobs(options?: {
     }
 
     const [jobs, total] = await Promise.all([
-      db.job.findMany({
+      prisma.job.findMany({
         where,
         skip,
         take: limit,
@@ -402,31 +390,27 @@ export async function getDiscoveredJobs(options?: {
           Location: { select: { label: true } },
         },
       }),
-      db.job.count({ where }),
+      prisma.job.count({ where }),
     ]);
 
     return {
       success: true,
-      data: jobs as unknown as DiscoveredJob[],
+      data: jobs.map(toDiscoveredJob) as DiscoveredJob[],
       total,
     };
   } catch (error) {
-    return formatError(error, "Failed to get discovered jobs");
+    return handleError(error, "Failed to get discovered jobs");
   }
 }
 
-export async function getDiscoveredJobById(id: string): Promise<{
-  success: boolean;
-  data?: DiscoveredJob & { parsedMatchData: object | null };
-  message?: string;
-}> {
+export async function getDiscoveredJobById(id: string): Promise<ActionResult<DiscoveredJob & { parsedMatchData: object | null }>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return { success: false, message: "Not authenticated" };
     }
 
-    const job = await db.job.findFirst({
+    const job = await prisma.job.findFirst({
       where: {
         id,
         userId: user.id,
@@ -458,27 +442,23 @@ export async function getDiscoveredJobById(id: string): Promise<{
     return {
       success: true,
       data: {
-        ...(job as unknown as DiscoveredJob),
+        ...toDiscoveredJob(job) as DiscoveredJob,
         parsedMatchData,
       },
     };
   } catch (error) {
-    return formatError(error, "Failed to get discovered job");
+    return handleError(error, "Failed to get discovered job");
   }
 }
 
-export async function dismissDiscoveredJob(id: string): Promise<{
-  success: boolean;
-  data?: DiscoveredJob;
-  message?: string;
-}> {
+export async function dismissDiscoveredJob(id: string): Promise<ActionResult<DiscoveredJob>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return { success: false, message: "Not authenticated" };
     }
 
-    const job = await db.job.findFirst({
+    const job = await prisma.job.findFirst({
       where: {
         id,
         userId: user.id,
@@ -490,7 +470,7 @@ export async function dismissDiscoveredJob(id: string): Promise<{
       return { success: false, message: "Discovered job not found" };
     }
 
-    const updated = await db.job.update({
+    const updated = await prisma.job.update({
       where: { id },
       data: { discoveryStatus: "dismissed" },
       include: {
@@ -505,25 +485,21 @@ export async function dismissDiscoveredJob(id: string): Promise<{
 
     return {
       success: true,
-      data: updated as unknown as DiscoveredJob,
+      data: toDiscoveredJob(updated) as DiscoveredJob,
     };
   } catch (error) {
-    return formatError(error, "Failed to dismiss discovered job");
+    return handleError(error, "Failed to dismiss discovered job");
   }
 }
 
-export async function acceptDiscoveredJob(id: string): Promise<{
-  success: boolean;
-  data?: DiscoveredJob;
-  message?: string;
-}> {
+export async function acceptDiscoveredJob(id: string): Promise<ActionResult<DiscoveredJob>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return { success: false, message: "Not authenticated" };
     }
 
-    const job = await db.job.findFirst({
+    const job = await prisma.job.findFirst({
       where: {
         id,
         userId: user.id,
@@ -535,7 +511,7 @@ export async function acceptDiscoveredJob(id: string): Promise<{
       return { success: false, message: "Discovered job not found" };
     }
 
-    const updated = await db.job.update({
+    const updated = await prisma.job.update({
       where: { id },
       data: { discoveryStatus: "accepted" },
       include: {
@@ -550,10 +526,10 @@ export async function acceptDiscoveredJob(id: string): Promise<{
 
     return {
       success: true,
-      data: updated as unknown as DiscoveredJob,
+      data: toDiscoveredJob(updated) as DiscoveredJob,
     };
   } catch (error) {
-    return formatError(error, "Failed to accept discovered job");
+    return handleError(error, "Failed to accept discovered job");
   }
 }
 
@@ -563,12 +539,7 @@ export async function getAutomationRuns(
     page?: number;
     limit?: number;
   }
-): Promise<{
-  success: boolean;
-  data?: AutomationRun[];
-  total?: number;
-  message?: string;
-}> {
+): Promise<ActionResult<AutomationRun[]>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -578,7 +549,7 @@ export async function getAutomationRuns(
     const { page = 1, limit = 10 } = options || {};
     const skip = (page - 1) * limit;
 
-    const automation = await db.automation.findFirst({
+    const automation = await prisma.automation.findFirst({
       where: { id: automationId, userId: user.id },
     });
 
@@ -587,21 +558,21 @@ export async function getAutomationRuns(
     }
 
     const [runs, total] = await Promise.all([
-      db.automationRun.findMany({
+      prisma.automationRun.findMany({
         where: { automationId },
         skip,
         take: limit,
         orderBy: { startedAt: "desc" },
       }),
-      db.automationRun.count({ where: { automationId } }),
+      prisma.automationRun.count({ where: { automationId } }),
     ]);
 
     return {
       success: true,
-      data: runs as unknown as AutomationRun[],
+      data: runs.map(toAutomationRun) as AutomationRun[],
       total,
     };
   } catch (error) {
-    return formatError(error, "Failed to get automation runs");
+    return handleError(error, "Failed to get automation runs");
   }
 }

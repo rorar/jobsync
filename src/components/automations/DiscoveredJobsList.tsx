@@ -161,8 +161,8 @@ export function DiscoveredJobsList({
                     </div>
                   </TableCell>
                   <TableCell className="text-center">
-                    <Badge variant={getScoreBadgeVariant(job.matchScore)}>
-                      {job.matchScore}%
+                    <Badge variant={getScoreBadgeVariant(job.matchScore ?? 0)}>
+                      {job.matchScore ?? 0}%
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -179,7 +179,7 @@ export function DiscoveredJobsList({
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {formatDateShort(new Date(job.discoveredAt), locale)}
+                    {job.discoveredAt ? formatDateShort(new Date(job.discoveredAt), locale) : "-"}
                   </TableCell>
                   <TableCell className="text-right">
                     {job.discoveryStatus === "new" && (

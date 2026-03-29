@@ -1,41 +1,41 @@
 import { apiKeySaveSchema } from "@/models/apiKey.schema";
 
 describe("apiKeySaveSchema", () => {
-  describe("non-ollama providers", () => {
+  describe("non-ollama moduleIds", () => {
     it("accepts valid openai input", () => {
       const result = apiKeySaveSchema.parse({
-        provider: "openai",
+        moduleId: "openai",
         key: "sk-abc123",
       });
-      expect(result.provider).toBe("openai");
+      expect(result.moduleId).toBe("openai");
       expect(result.key).toBe("sk-abc123");
     });
 
     it("accepts valid deepseek input", () => {
       const result = apiKeySaveSchema.parse({
-        provider: "deepseek",
+        moduleId: "deepseek",
         key: "ds-xyz",
       });
-      expect(result.provider).toBe("deepseek");
+      expect(result.moduleId).toBe("deepseek");
     });
 
     it("rejects empty key", () => {
       expect(() =>
-        apiKeySaveSchema.parse({ provider: "openai", key: "" }),
+        apiKeySaveSchema.parse({ moduleId: "openai", key: "" }),
       ).toThrow();
     });
 
-    it("rejects unknown provider", () => {
+    it("rejects unknown moduleId", () => {
       expect(() =>
-        apiKeySaveSchema.parse({ provider: "unknown", key: "abc" }),
+        apiKeySaveSchema.parse({ moduleId: "unknown", key: "abc" }),
       ).toThrow();
     });
   });
 
-  describe("ollama provider URL validation", () => {
+  describe("ollama moduleId URL validation", () => {
     it("accepts valid http localhost URL", () => {
       const result = apiKeySaveSchema.parse({
-        provider: "ollama",
+        moduleId: "ollama",
         key: "http://localhost:11434",
         sensitive: false,
       });
@@ -44,7 +44,7 @@ describe("apiKeySaveSchema", () => {
 
     it("accepts valid https URL", () => {
       const result = apiKeySaveSchema.parse({
-        provider: "ollama",
+        moduleId: "ollama",
         key: "https://ollama.example.com",
         sensitive: false,
       });
@@ -53,7 +53,7 @@ describe("apiKeySaveSchema", () => {
 
     it("rejects file:// protocol", () => {
       const result = apiKeySaveSchema.safeParse({
-        provider: "ollama",
+        moduleId: "ollama",
         key: "file:///etc/passwd",
         sensitive: false,
       });
@@ -70,7 +70,7 @@ describe("apiKeySaveSchema", () => {
 
     it("rejects ftp:// protocol", () => {
       const result = apiKeySaveSchema.safeParse({
-        provider: "ollama",
+        moduleId: "ollama",
         key: "ftp://internal-server",
         sensitive: false,
       });
@@ -87,7 +87,7 @@ describe("apiKeySaveSchema", () => {
 
     it("rejects URLs with credentials", () => {
       const result = apiKeySaveSchema.safeParse({
-        provider: "ollama",
+        moduleId: "ollama",
         key: "http://user:pass@internal:11434",
         sensitive: false,
       });
@@ -104,7 +104,7 @@ describe("apiKeySaveSchema", () => {
 
     it("rejects non-URL strings", () => {
       const result = apiKeySaveSchema.safeParse({
-        provider: "ollama",
+        moduleId: "ollama",
         key: "not-a-url",
         sensitive: false,
       });
@@ -117,10 +117,10 @@ describe("apiKeySaveSchema", () => {
       }
     });
 
-    it("does not apply URL validation to other providers", () => {
-      // An openai key like "not-a-url" should still pass (it's not a URL provider)
+    it("does not apply URL validation to other moduleIds", () => {
+      // An openai key like "not-a-url" should still pass (it's not a URL moduleId)
       const result = apiKeySaveSchema.parse({
-        provider: "openai",
+        moduleId: "openai",
         key: "not-a-url-but-valid-key",
       });
       expect(result.key).toBe("not-a-url-but-valid-key");

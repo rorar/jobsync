@@ -117,6 +117,7 @@ describe("Company Actions", () => {
           label: true,
           value: true,
           logoUrl: true,
+          createdBy: true,
           _count: {
             select: {
               jobsApplied: {

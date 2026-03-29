@@ -113,7 +113,7 @@ export function getMockList(
         label: string,
         value: string,
         createdBy: string,
-        logoUrl: string | undefined;
+        logoUrl: string | null | undefined;
 
       if (type === "companies") {
         key = job.Company.id;
@@ -127,9 +127,9 @@ export function getMockList(
         value = job.JobTitle.value;
         createdBy = job.Company.createdBy;
       } else if (type === "locations") {
-        key = job.Location.id;
-        label = job.Location.label;
-        value = job.Location.value;
+        key = job.Location?.id ?? "";
+        label = job.Location?.label ?? "";
+        value = job.Location?.value ?? "";
         createdBy = job.Company.createdBy;
       } else {
         return;
@@ -259,14 +259,20 @@ export const generateMockActivities = (
       const endTime = new Date(startTime);
       endTime.setMinutes(endTime.getMinutes() + duration);
 
+      const activityTypeId = `mock-type-${activityType.toLowerCase().replace(/\s+/g, "-")}`;
+
       activities.push({
+        id: `mock-activity-${recordsGenerated}`,
+        activityTypeId,
         activityName,
-        activityType,
         startTime,
         endTime,
         duration,
         description: `[MOCK_DATA] ${activityName}`,
+        taskId: null,
         userId,
+        createdAt: startTime,
+        updatedAt: endTime,
       });
 
       recordsGenerated++;

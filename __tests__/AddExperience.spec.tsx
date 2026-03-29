@@ -135,6 +135,12 @@ describe("AddExperience Component", () => {
       workExperiences: [
         {
           id: "exp-1",
+          createdAt: new Date("2020-01-01"),
+          updatedAt: new Date("2022-12-31"),
+          companyId: "company-1",
+          jobTitleId: "jobtitle-1",
+          locationId: "location-1",
+          resumeSectionId: "section-1",
           Company: mockCompanies[0] as any,
           jobTitle: mockJobTitles[0] as any,
           location: mockLocations[0] as any,
@@ -230,6 +236,12 @@ describe("AddExperience Component", () => {
       workExperiences: [
         {
           id: "exp-1",
+          createdAt: new Date("2020-01-01"),
+          updatedAt: new Date("2022-12-31"),
+          companyId: "company-1",
+          jobTitleId: "jobtitle-1",
+          locationId: "location-1",
+          resumeSectionId: "section-1",
           Company: mockCompanies[0] as any,
           jobTitle: mockJobTitles[0] as any,
           location: mockLocations[0] as any,
@@ -432,6 +444,12 @@ describe("AddExperience Component", () => {
       workExperiences: [
         {
           id: "exp-1",
+          createdAt: new Date("2020-01-01"),
+          updatedAt: new Date("2022-12-31"),
+          companyId: "company-1",
+          jobTitleId: "jobtitle-1",
+          locationId: "location-1",
+          resumeSectionId: "section-1",
           Company: mockCompanies[0] as any,
           jobTitle: mockJobTitles[0] as any,
           location: mockLocations[0] as any,
@@ -625,6 +643,12 @@ describe("AddExperience Component", () => {
       workExperiences: [
         {
           id: "exp-1",
+          createdAt: new Date("2020-01-01"),
+          updatedAt: new Date("2022-12-31"),
+          companyId: "company-1",
+          jobTitleId: "jobtitle-1",
+          locationId: "location-1",
+          resumeSectionId: "section-1",
           Company: mockCompanies[0] as any,
           jobTitle: mockJobTitles[0] as any,
           location: mockLocations[0] as any,

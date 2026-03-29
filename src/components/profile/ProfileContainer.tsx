@@ -65,8 +65,8 @@ const ProfileContainer = () => {
   };
 
   const onEditResume = (resume: Resume) => {
-    const _resumeToEdit = {
-      id: resume.id,
+    const _resumeToEdit: Resume = {
+      ...resume,
       title: resume.title,
       FileId: resume.FileId,
     };

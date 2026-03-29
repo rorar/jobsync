@@ -34,18 +34,18 @@ export interface JobResponse {
   JobTitle: JobTitle;
   Company: Company;
   Status: JobStatus;
-  Location: JobLocation;
-  JobSource: JobSource;
+  Location?: JobLocation | null;
+  JobSource?: JobSource | null;
   jobType: string;
   createdAt: Date;
-  appliedDate: Date;
-  dueDate: Date;
-  salaryRange: string;
-  description: string;
-  jobUrl: string;
+  appliedDate: Date | null;
+  dueDate: Date | null;
+  salaryRange: string | null;
+  description?: string;
+  jobUrl: string | null;
   applied: boolean;
-  resumeId?: string;
-  Resume?: Resume;
+  resumeId?: string | null;
+  Resume?: Resume | null;
   matchScore?: number | null;
   matchData?: string | null;
   tags?: Tag[];
@@ -67,7 +67,7 @@ export interface Company {
   label: string;
   value: string;
   createdBy: string;
-  logoUrl?: string;
+  logoUrl?: string | null;
   _count?: {
     jobsApplied: number;
   };
@@ -93,8 +93,8 @@ export interface JobLocation {
   id: string;
   label: string;
   value: string;
-  stateProv?: string;
-  country?: string;
+  stateProv?: string | null;
+  country?: string | null;
   createdBy: string;
   _count?: {
     jobsApplied: number;

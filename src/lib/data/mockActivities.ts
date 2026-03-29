@@ -2,9 +2,7 @@ import { Activity } from "@/models/activity.model";
 
 export const MOCK_DATA_IDENTIFIER = "[MOCK_DATA]";
 
-export interface MockActivityData extends Activity {
-  activityTypeId?: string;
-}
+export interface MockActivityData extends Activity {}
 
 export const mockActivityTypes = [
   {

@@ -28,7 +28,7 @@ export const getJobTitleList = async (
   page: number = 1,
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE,
   countBy?: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<JobTitle[]>> => {
   try {
     const user = await getCurrentUser();
 
@@ -50,6 +50,7 @@ export const getJobTitleList = async (
                 id: true,
                 label: true,
                 value: true,
+                createdBy: true,
                 _count: {
                   select: {
                     jobs: {
@@ -83,7 +84,7 @@ export const getJobTitleList = async (
 
 export const createJobTitle = async (
   label: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<JobTitle>> => {
   try {
     const user = await getCurrentUser();
 
@@ -108,7 +109,7 @@ export const createJobTitle = async (
 
 export const deleteJobTitleById = async (
   jobTitleId: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<JobTitle>> => {
   try {
     const user = await getCurrentUser();
 

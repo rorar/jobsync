@@ -2,11 +2,9 @@
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { Activity, ActivityType } from "@/models/activity.model";
-import { AddActivityFormSchema } from "@/models/addActivityForm.schema";
 import { ActionResult } from "@/models/actionResult";
 import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
-import { z } from "zod";
 
 export const getAllActivityTypes = async (): Promise<ActivityType[]> => {
   try {
@@ -30,7 +28,7 @@ export const getAllActivityTypes = async (): Promise<ActivityType[]> => {
 
 export const createActivityType = async (
   label: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<ActivityType>> => {
   try {
     const user = await getCurrentUser();
 
@@ -57,7 +55,7 @@ export const getActivitiesList = async (
   page: number = 1,
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE,
   search?: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Activity[]>> => {
   try {
     const user = await getCurrentUser();
 
@@ -85,14 +83,7 @@ export const getActivitiesList = async (
     const [data, total] = await Promise.all([
       prisma.activity.findMany({
         where: whereClause,
-        select: {
-          id: true,
-          activityName: true,
-          startTime: true,
-          endTime: true,
-          duration: true,
-          description: true,
-          createdAt: true,
+        include: {
           activityType: true,
         },
         orderBy: {
@@ -119,7 +110,7 @@ export const getActivitiesList = async (
 
 export const createActivity = async (
   data: Activity
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Activity>> => {
   try {
     const user = await getCurrentUser();
 
@@ -129,7 +120,7 @@ export const createActivity = async (
 
     const {
       activityName,
-      activityType,
+      activityTypeId,
       startTime,
       endTime,
       duration,
@@ -139,7 +130,7 @@ export const createActivity = async (
     const activity = await prisma.activity.create({
       data: {
         activityName,
-        activityTypeId: activityType as string,
+        activityTypeId,
         userId: user.id,
         startTime,
         endTime,
@@ -156,7 +147,7 @@ export const createActivity = async (
 
 export const deleteActivityById = async (
   activityId: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Activity>> => {
   try {
     const user = await getCurrentUser();
 
@@ -179,7 +170,7 @@ export const deleteActivityById = async (
 
 export const startActivityById = async (
   activityId: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Activity>> => {
   try {
     const user = await getCurrentUser();
 
@@ -223,13 +214,7 @@ export const startActivityById = async (
         endTime: null,
         description,
       },
-      select: {
-        id: true,
-        activityName: true,
-        startTime: true,
-        endTime: true,
-        description: true,
-        createdAt: true,
+      include: {
         activityType: true,
       },
     });
@@ -244,7 +229,7 @@ export const stopActivityById = async (
   activityId: string,
   endTime: Date,
   duration: number
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Activity>> => {
   try {
     const user = await getCurrentUser();
 
@@ -269,7 +254,7 @@ export const stopActivityById = async (
   }
 };
 
-export const getCurrentActivity = async (): Promise<ActionResult<unknown>> => {
+export const getCurrentActivity = async (): Promise<ActionResult<Activity>> => {
   try {
     const user = await getCurrentUser();
 
@@ -282,12 +267,7 @@ export const getCurrentActivity = async (): Promise<ActionResult<unknown>> => {
         userId: user.id,
         endTime: null,
       },
-      select: {
-        id: true,
-        activityName: true,
-        startTime: true,
-        description: true,
-        createdAt: true,
+      include: {
         activityType: true,
       },
     });
@@ -329,7 +309,7 @@ export const getActivityById = async (
 
     return {
       success: true,
-      data: activity as unknown as Activity,
+      data: activity,
     };
   } catch (error) {
     const msg = "Failed to fetch activity.";
@@ -381,7 +361,7 @@ export const updateActivity = async (
 
     return {
       success: true,
-      data: updated as unknown as Activity,
+      data: updated,
       message: "Activity updated successfully",
     };
   } catch (error) {

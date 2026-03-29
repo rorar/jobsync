@@ -79,6 +79,42 @@ jest.mock("@/utils/user.utils", () => ({
   getCurrentUser: jest.fn(),
 }));
 
+// Mock generateMockActivities so returned objects carry the activityType VALUE
+// string that mock.actions.ts reads (line 85: activity.activityType as unknown
+// as string) to look up type IDs in its typeMap.
+jest.mock("@/lib/mock.utils", () => {
+  const actual = jest.requireActual("@/lib/mock.utils");
+  return {
+    ...actual,
+    generateMockActivities: (userId: string, _daysBack: number, _total: number) => {
+      // Return a small set of mock activities whose activityType is a VALUE
+      // string matching one of the activityTypeRows entries.
+      return [
+        {
+          id: "mock-act-1",
+          activityName: "Mock Learning Session",
+          activityType: "Learning",
+          startTime: new Date("2024-01-01T10:00:00"),
+          endTime: new Date("2024-01-01T11:00:00"),
+          duration: 60,
+          description: "[MOCK_DATA] Mock Learning Session",
+          userId,
+        },
+        {
+          id: "mock-act-2",
+          activityName: "Mock Job Search",
+          activityType: "Job Search",
+          startTime: new Date("2024-01-01T12:00:00"),
+          endTime: new Date("2024-01-01T13:00:00"),
+          duration: 60,
+          description: "[MOCK_DATA] Mock Job Search",
+          userId,
+        },
+      ];
+    },
+  };
+});
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // Obtain a reference to the mock Prisma instance so assertions can be made.

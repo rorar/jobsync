@@ -2,6 +2,7 @@ import { type ClassValue, clsx } from "clsx";
 import { format, parse } from "date-fns";
 import { formatDate } from "@/i18n";
 import { twMerge } from "tailwind-merge";
+import { ActionResult } from "@/models/actionResult";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -36,7 +37,7 @@ export function formatUrl(url: string) {
   return url;
 }
 
-export function handleError(error: unknown, msg = "Server Error.") {
+export function handleError(error: unknown, msg = "Server Error."): ActionResult<never> {
   console.error(error, msg);
   if (error instanceof Error) {
     if (error.message === "fetch failed") {

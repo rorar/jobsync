@@ -6,7 +6,7 @@ import { AddContactInfoFormSchema } from "@/models/addContactInfoForm.schema";
 import { AddExperienceFormSchema } from "@/models/addExperienceForm.schema";
 import { AddSummarySectionFormSchema } from "@/models/addSummaryForm.schema";
 import { CreateResumeFormSchema } from "@/models/createResumeForm.schema";
-import { ResumeSection, SectionType, Summary } from "@/models/profile.model";
+import { Resume, ResumeSection, SectionType, ContactInfo, WorkExperience, Education } from "@/models/profile.model";
 import { getCurrentUser } from "@/utils/user.utils";
 import { ActionResult } from "@/models/actionResult";
 import { APP_CONSTANTS } from "@/lib/constants";
@@ -19,7 +19,7 @@ import { writeFile } from "fs/promises";
 export const getResumeList = async (
   page: number = 1,
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Resume[]>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -70,7 +70,7 @@ export const getResumeList = async (
 
 export const getResumeById = async (
   resumeId: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Resume>> => {
   try {
     if (!resumeId) {
       throw new Error("Please provide resume id");
@@ -107,7 +107,22 @@ export const getResumeById = async (
         },
       },
     });
-    return { data: resume, success: true };
+    if (!resume) {
+      return { data: undefined, success: true };
+    }
+    return {
+      data: {
+        ...resume,
+        ContactInfo: resume.ContactInfo ?? undefined,
+        File: resume.File ?? undefined,
+        ResumeSections: resume.ResumeSections.map((section) => ({
+          ...section,
+          sectionType: section.sectionType as SectionType,
+          summary: section.summary ?? undefined,
+        })),
+      },
+      success: true,
+    };
   } catch (error) {
     const msg = "Failed to get resume.";
     return handleError(error, msg);
@@ -116,7 +131,7 @@ export const getResumeById = async (
 
 export const addContactInfo = async (
   data: z.infer<typeof AddContactInfoFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Resume>> => {
   try {
     const user = await getCurrentUser();
 
@@ -154,7 +169,7 @@ export const addContactInfo = async (
 
 export const updateContactInfo = async (
   data: z.infer<typeof AddContactInfoFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<ContactInfo>> => {
   try {
     const user = await getCurrentUser();
 
@@ -187,7 +202,7 @@ export const createResumeProfile = async (
   title: string,
   fileName: string,
   filePath?: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Resume>> => {
   try {
     const user = await getCurrentUser();
 
@@ -214,32 +229,41 @@ export const createResumeProfile = async (
       },
     });
 
-    const res =
-      profile && profile.id
-        ? await prisma.resume.create({
-            data: {
-              profileId: profile.id,
-              title,
-              FileId: fileName && filePath
-                ? await createFileEntry(fileName, filePath as string)
-                : null,
-            },
-          })
-        : await prisma.profile.create({
-            data: {
-              userId: user.id,
-              resumes: {
-                create: [
-                  {
-                    title,
-                    FileId: fileName && filePath
-                      ? await createFileEntry(fileName, filePath as string)
-                      : null,
-                  },
-                ],
+    let res;
+    if (profile && profile.id) {
+      res = await prisma.resume.create({
+        data: {
+          profileId: profile.id,
+          title,
+          FileId: fileName && filePath
+            ? await createFileEntry(fileName, filePath as string)
+            : null,
+        },
+      });
+    } else {
+      const newProfile = await prisma.profile.create({
+        data: {
+          userId: user.id,
+          resumes: {
+            create: [
+              {
+                title,
+                FileId: fileName && filePath
+                  ? await createFileEntry(fileName, filePath as string)
+                  : null,
               },
-            },
-          });
+            ],
+          },
+        },
+        include: {
+          resumes: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      });
+      res = newProfile.resumes[0];
+    }
     // revalidatePath("/dashboard/myjobs", "page");
     return { success: true, data: res };
   } catch (error) {
@@ -268,7 +292,7 @@ export const editResume = async (
   fileId?: string,
   fileName?: string,
   filePath?: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Resume>> => {
   try {
     let resolvedFileId = fileId;
 
@@ -305,7 +329,7 @@ export const editResume = async (
 export const deleteResumeById = async (
   resumeId: string,
   fileId?: string
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult> => {
   try {
     const user = await getCurrentUser();
 
@@ -405,7 +429,7 @@ export const deleteFile = async (fileId: string) => {
 
 export const addResumeSummary = async (
   data: z.infer<typeof AddSummarySectionFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<ResumeSection>> => {
   try {
     const user = await getCurrentUser();
 
@@ -433,7 +457,7 @@ export const addResumeSummary = async (
       },
     });
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
-    return { data: summary, success: true };
+    return { data: { ...summary, sectionType: summary.sectionType as SectionType }, success: true };
   } catch (error) {
     const msg = "Failed to create summary.";
     return handleError(error, msg);
@@ -442,7 +466,7 @@ export const addResumeSummary = async (
 
 export const updateResumeSummary = async (
   data: z.infer<typeof AddSummarySectionFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<ResumeSection>> => {
   try {
     const user = await getCurrentUser();
 
@@ -471,7 +495,7 @@ export const updateResumeSummary = async (
       },
     });
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
-    return { data: summary, success: true };
+    return { data: { ...summary, sectionType: summary.sectionType as SectionType }, success: true };
   } catch (error) {
     const msg = "Failed to update summary.";
     return handleError(error, msg);
@@ -480,7 +504,7 @@ export const updateResumeSummary = async (
 
 export const addExperience = async (
   data: z.infer<typeof AddExperienceFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<ResumeSection>> => {
   try {
     const user = await getCurrentUser();
 
@@ -520,7 +544,7 @@ export const addExperience = async (
       },
     });
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
-    return { data: experience, success: true };
+    return { data: { ...experience, sectionType: experience.sectionType as SectionType }, success: true };
   } catch (error) {
     const msg = "Failed to create experience.";
     return handleError(error, msg);
@@ -529,7 +553,7 @@ export const addExperience = async (
 
 export const updateExperience = async (
   data: z.infer<typeof AddExperienceFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<WorkExperience>> => {
   try {
     const user = await getCurrentUser();
 
@@ -568,7 +592,7 @@ export const updateExperience = async (
 
 export const addEducation = async (
   data: z.infer<typeof AddEducationFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<ResumeSection>> => {
   try {
     const user = await getCurrentUser();
 
@@ -604,7 +628,7 @@ export const addEducation = async (
       },
     });
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
-    return { data: education, success: true };
+    return { data: { ...education, sectionType: education.sectionType as SectionType }, success: true };
   } catch (error) {
     const msg = "Failed to create education.";
     return handleError(error, msg);
@@ -613,7 +637,7 @@ export const addEducation = async (
 
 export const updateEducation = async (
   data: z.infer<typeof AddEducationFormSchema>
-): Promise<ActionResult<unknown>> => {
+): Promise<ActionResult<Education>> => {
   try {
     const user = await getCurrentUser();
 

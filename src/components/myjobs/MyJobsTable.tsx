@@ -129,7 +129,7 @@ function MyJobsTable({
                   {job.Location?.label}
                 </TableCell>
                 <TableCell>
-                  {now && now > job.dueDate && job.Status?.value === "draft" ? (
+                  {now && job.dueDate && now > job.dueDate && job.Status?.value === "draft" ? (
                     <Badge className="bg-red-500">{t("jobs.expired")}</Badge>
                   ) : (
                     <Badge
