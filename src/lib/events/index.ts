@@ -1,44 +1,50 @@
-export interface DomainEvent<T extends string = string> {
-  type: T;
-  timestamp: Date;
-  payload: Record<string, unknown>;
-}
+/**
+ * Domain Events — Public API
+ *
+ * Re-exports the EventBus singleton and all event types.
+ * The `emitEvent()` function is a convenience wrapper around `eventBus.publish()`.
+ *
+ * Spec: specs/event-bus.allium (rule StubMigration)
+ */
 
-export interface VacancyPromotedEvent extends DomainEvent<"VacancyPromoted"> {
-  payload: {
-    stagedVacancyId: string;
-    jobId: string;
-    userId: string;
-  };
-}
+// Re-export everything from event-types for backward compatibility
+export type {
+  DomainEvent,
+  DomainEventType,
+  EventHandler,
+  Unsubscribe,
+  EventPayloadMap,
+  VacancyPromotedPayload,
+  VacancyDismissedPayload,
+  VacancyStagedPayload,
+  VacancyArchivedPayload,
+  VacancyTrashedPayload,
+  VacancyRestoredFromTrashPayload,
+  BulkActionCompletedPayload,
+  ModuleDeactivatedPayload,
+  ModuleReactivatedPayload,
+  RetentionCompletedPayload,
+  NotificationCreatedPayload,
+} from "./event-types";
 
-export interface VacancyDismissedEvent extends DomainEvent<"VacancyDismissed"> {
-  payload: {
-    stagedVacancyId: string;
-    userId: string;
-  };
-}
+export { DomainEventType as DomainEventTypes, createEvent } from "./event-types";
+export { eventBus, WILDCARD } from "./event-bus";
 
-export interface VacancyStagedEvent extends DomainEvent<"VacancyStaged"> {
-  payload: {
-    stagedVacancyId: string;
-    userId: string;
-    sourceBoard: string;
-    automationId: string | null;
-  };
-}
+// ---------------------------------------------------------------------------
+// Convenience: backward-compatible emitEvent wrapper
+// ---------------------------------------------------------------------------
 
-export interface BulkActionCompletedEvent extends DomainEvent<"BulkActionCompleted"> {
-  payload: {
-    actionType: string;
-    itemIds: string[];
-    userId: string;
-    succeeded: number;
-    failed: number;
-  };
-}
+import { eventBus } from "./event-bus";
+import type { DomainEvent, DomainEventType } from "./event-types";
 
-/** Stub: log only. ROADMAP 0.6 Event Bus will replace this. */
-export function emitEvent(event: DomainEvent): void {
-  console.debug(`[DomainEvent] ${event.type}`, event.payload);
+/**
+ * Publish a domain event through the Event Bus.
+ * Backward-compatible with the old stub signature.
+ * New code should prefer `eventBus.publish()` or `createEvent()` directly.
+ */
+export function emitEvent<T extends DomainEventType>(event: DomainEvent<T>): void {
+  // Fire-and-forget: the bus handles errors internally (ErrorIsolation rule)
+  eventBus.publish(event).catch((error) => {
+    console.error("[emitEvent] Unexpected bus error:", error);
+  });
 }
