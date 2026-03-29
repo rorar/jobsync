@@ -808,7 +808,10 @@ Aktuell: Tiptap v2 mit StarterKit (Bold, Italic, Heading, Listen). Erweiterung i
 - **LinkedIn-Profil-Import:** LinkedIn-Profildaten importieren als CV-Quelle (Export-Datei oder Scraping)
 - **LLM-Entkopplung (→ 0.5 Prinzip):**
   - **Ohne LLM:** Bibliotheks-basiertes Parsing — Textextraktion + Regex/Heuristik für Sektionen (Erfahrung, Ausbildung, Skills)
-    - Zu evaluieren: [LiteParse](https://github.com/run-llama/liteparse) (run-llama), pdf-parse, pdf2json, pdfjs-dist, mammoth (DOCX)
+    - Zu evaluieren:
+      - [Docling](https://github.com/docling-project/docling) (IBM/Linux Foundation, 56K Stars) — PDF+DOCX+PPTX+Images, tiefe Layout-Analyse, OCR, kein LLM nötig. Python → als Docker Sidecar via `docling-serve` REST API. ~4.4GB Image, aber mächtigste Option. Empfohlen wenn DOCX-Support benötigt.
+      - [LiteParse](https://github.com/run-llama/liteparse) (LlamaIndex) — nur PDF, TypeScript-nativ, in-process, 26MB. Empfohlen als Lightweight-Alternative wenn nur PDFs.
+      - Weitere: pdf-parse, pdf2json, pdfjs-dist, mammoth (DOCX-only)
   - **Mit LLM (optional):** AI-gestützte Extraktion für bessere Sektions-Erkennung, Skill-Mapping zu ESCO/NACE, semantische Analyse
   - User wählt in Settings ob LLM-Verarbeitung aktiviert ist
 
