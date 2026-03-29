@@ -58,6 +58,7 @@ function AddContactInfo({
       headline: "",
       email: "",
       phone: "",
+      address: "",
     },
   });
 
@@ -74,7 +75,7 @@ function AddContactInfo({
           headline: contactInfoToEdit.headline,
           email: contactInfoToEdit.email,
           phone: contactInfoToEdit.phone,
-          address: contactInfoToEdit.address ?? undefined,
+          address: contactInfoToEdit.address ?? "",
         },
         { keepDefaultValues: true }
       );
@@ -95,7 +96,7 @@ function AddContactInfo({
             headline: res.data.headline,
             email: res.data.email,
             phone: res.data.phone,
-            address: res.data.address ?? undefined,
+            address: res.data.address ?? "",
           });
         }
       });
@@ -236,7 +237,7 @@ function AddContactInfo({
                   <FormItem>
                     <FormLabel>Address</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Berlin, Germany" {...field} />
+                      <Input placeholder="e.g. Berlin, Germany" {...field} value={field.value ?? ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

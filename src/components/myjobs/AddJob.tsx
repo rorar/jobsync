@@ -157,7 +157,7 @@ export function AddJob({
           salaryRange: editJob.salaryRange ?? "",
           jobDescription: editJob.description,
           applied: editJob.applied,
-          jobUrl: editJob.jobUrl ?? undefined,
+          jobUrl: editJob.jobUrl ?? "",
           dateApplied: editJob.appliedDate ?? undefined,
           resume: editJob.Resume?.id ?? undefined,
           tags: editJob.tags?.map((t) => t.id) ?? [],
@@ -276,6 +276,7 @@ export function AddJob({
                           <Input
                             placeholder={t("jobs.copyJobLink")}
                             {...field}
+                            value={field.value ?? ""}
                           />
                         </FormControl>
                         <FormMessage />
@@ -458,7 +459,7 @@ export function AddJob({
                       <FormItem className="flex flex-row">
                         <Switch
                           id="applied-switch"
-                          checked={field.value}
+                          checked={field.value ?? false}
                           onCheckedChange={(a) => {
                             field.onChange(a);
                             jobAppliedChange(a);
