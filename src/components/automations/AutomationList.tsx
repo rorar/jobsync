@@ -66,12 +66,6 @@ const PAUSE_REASON_KEYS: Record<AutomationPauseReason, string> = {
   cb_escalation: "automations.pauseReasonCbEscalation",
 };
 
-/** Parse location string into raw codes for LocationBadge rendering */
-function getLocationCodes(location: string): string[] {
-  if (!location) return [];
-  return parseLocations(location);
-}
-
 export function AutomationList({
   automations,
   onEdit,
@@ -157,7 +151,7 @@ export function AutomationList({
           const isLoading = loadingAction === automation.id;
           const resumeMissing = !automation.resume;
           const keywordChips = parseKeywords(automation.keywords);
-          const locationCodes = getLocationCodes(automation.location);
+          const locationCodes = parseLocations(automation.location);
           const isEures = automation.jobBoard === "eures" || automation.jobBoard === "arbeitsagentur";
 
           return (
@@ -268,27 +262,27 @@ export function AutomationList({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     {automation.status === "active" ? (
-                      <DropdownMenuItem onClick={() => handlePause(automation.id)}>
+                      <DropdownMenuItem onClick={(e) => { e.preventDefault(); e.stopPropagation(); handlePause(automation.id); }}>
                         <Pause className="h-4 w-4 mr-2" />
                         {t("automations.pause")}
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem
-                        onClick={() => handleResume(automation.id)}
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleResume(automation.id); }}
                         disabled={resumeMissing}
                       >
                         <Play className="h-4 w-4 mr-2" />
                         {t("automations.resume")}
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem onClick={() => onEdit(automation)}>
+                    <DropdownMenuItem onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(automation); }}>
                       <Pencil className="h-4 w-4 mr-2" />
                       {t("automations.edit")}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-destructive"
-                      onClick={() => setDeleteId(automation.id)}
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDeleteId(automation.id); }}
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       {t("automations.delete")}

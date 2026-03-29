@@ -38,6 +38,7 @@ import type {
   AutomationRun,
   DiscoveredJob,
 } from "@/models/automation.model";
+import type { Resume } from "@/models/profile.model";
 import type { JobMatchResponse } from "@/models/ai.schemas";
 import { DiscoveredJobsList } from "@/components/automations/DiscoveredJobsList";
 import { DiscoveredJobDetail } from "@/components/automations/DiscoveredJobDetail";
@@ -55,9 +56,9 @@ export default function AutomationDetailPage() {
   const { locale } = useTranslations();
   const automationId = params.id as string;
 
-  const [automation, setAutomation] = useState<AutomationWithResume | null>(
-    null,
-  );
+  const [automation, setAutomation] = useState<
+    (AutomationWithResume & { runs?: AutomationRun[] }) | null
+  >(null);
   const [runs, setRuns] = useState<AutomationRun[]>([]);
   const [jobs, setJobs] = useState<DiscoveredJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,8 +83,8 @@ export default function AutomationDetailPage() {
       ]);
 
       if (automationResult.success && automationResult.data) {
-        setAutomation(automationResult.data as any);
-        setRuns((automationResult.data as any).runs || []);
+        setAutomation(automationResult.data);
+        setRuns(automationResult.data.runs || []);
       } else {
         toast({
           title: "Error",
@@ -95,15 +96,16 @@ export default function AutomationDetailPage() {
       }
 
       if (runsResult.success && runsResult.data) {
-        setRuns(runsResult.data as any);
+        setRuns(runsResult.data);
       }
 
       if (jobsResult.success && jobsResult.data) {
-        setJobs(jobsResult.data as any);
+        // StagedVacancyWithAutomation is structurally compatible with DiscoveredJob at runtime
+        setJobs(jobsResult.data as unknown as DiscoveredJob[]);
       }
 
       if (resumeResult.success && resumeResult.data) {
-        setResumes(resumeResult.data.map((r: any) => ({ id: r.id, title: r.title })));
+        setResumes(resumeResult.data.map((r: Resume) => ({ id: r.id, title: r.title })));
       }
     } catch (error) {
       toast({
@@ -184,9 +186,10 @@ export default function AutomationDetailPage() {
   const handleViewJobDetails = async (job: DiscoveredJob) => {
     const result = await getDiscoveredJobById(job.id);
     if (result.success && result.data) {
-      setSelectedJob(result.data as any);
+      // StagedVacancyWithAutomation is structurally compatible with DiscoveredJob at runtime
+      setSelectedJob(result.data as unknown as DiscoveredJob);
       setSelectedJobMatchData(
-        (result.data as any).parsedMatchData as JobMatchResponse | null,
+        result.data.parsedMatchData as JobMatchResponse | null,
       );
       setDetailOpen(true);
     } else {

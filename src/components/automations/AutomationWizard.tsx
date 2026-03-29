@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -123,6 +123,7 @@ export function AutomationWizard({
   const [scheduleFrequency, setScheduleFrequency] = useState<ScheduleFrequency>("daily");
   const [resumePopoverOpen, setResumePopoverOpen] = useState(false);
   const [runAfterCreate, setRunAfterCreate] = useState(false);
+  const runAfterCreateRef = useRef(false);
 
   const form = useForm<CreateAutomationInput>({
     resolver: zodResolver(CreateAutomationSchema),
@@ -258,7 +259,9 @@ export function AutomationWizard({
   const onSubmit = async (data: CreateAutomationInput) => {
     setIsSubmitting(true);
     try {
-      // Ensure schedule frequency is in connectorParams before submit
+      // Ensure schedule frequency is in connectorParams before submit.
+      // Only persist non-daily frequencies: "daily" is the server-side default,
+      // so omitting it keeps connectorParams lean for the common case.
       const currentParams = tryParseConnectorParams(data.connectorParams) ?? {};
       if (scheduleFrequency !== "daily") {
         data.connectorParams = JSON.stringify({ ...currentParams, scheduleFrequency });
@@ -269,13 +272,15 @@ export function AutomationWizard({
         : await createAutomation(data);
 
       if (result.success) {
-        // If "Create & Run Now" was clicked, trigger a manual run
-        if (runAfterCreate && result.data?.id) {
+        // If "Create & Run Now" was clicked, trigger a manual run.
+        // Read from ref to avoid stale closure over state set just before handleSubmit.
+        if (runAfterCreateRef.current && result.data?.id) {
           try {
             await fetch(`/api/automations/${result.data.id}/run`, { method: "POST" });
           } catch {
             // Non-blocking — automation was created, run is best-effort
           }
+          runAfterCreateRef.current = false;
           setRunAfterCreate(false);
         }
 
@@ -572,12 +577,7 @@ export function AutomationWizard({
                     </FormControl>
                   </PopoverTrigger>
                   <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command filter={(value, search) => {
-                      // Custom filter: cmdk strips special chars by default.
-                      // We need exact substring match for titles like "[MOCK_DATA] Jane Smith"
-                      if (!search) return 1;
-                      return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
-                    }}>
+                    <Command>
                       <CommandInput placeholder={t("automations.searchResume")} />
                       <CommandList>
                         <CommandEmpty>{t("automations.noResumeFound")}</CommandEmpty>
@@ -585,7 +585,8 @@ export function AutomationWizard({
                           {resumes.map((r) => (
                             <CommandItem
                               key={r.id}
-                              value={r.title}
+                              value={r.id}
+                              keywords={[r.title]}
                               onSelect={() => {
                                 field.onChange(r.id);
                                 setResumePopoverOpen(false);
@@ -847,6 +848,7 @@ export function AutomationWizard({
                       type="button"
                       disabled={isSubmitting}
                       onClick={async () => {
+                        runAfterCreateRef.current = true;
                         setRunAfterCreate(true);
                         form.handleSubmit(onSubmit)();
                       }}

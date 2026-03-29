@@ -74,7 +74,11 @@ export async function getAutomationsList(
       prisma.automation.count({ where: { userId: user.id } }),
     ]);
 
-    // Soft warning when automation count exceeds user's configured threshold
+    // Soft warning when automation count exceeds user's configured threshold.
+    // Convention: result.message is overloaded — a "performanceWarning:<count>" prefix
+    // signals a non-error warning to the UI layer, which checks for the prefix in
+    // AutomationWizard.onSubmit to show a separate toast. This avoids adding a
+    // dedicated "warnings" field to ActionResult for a single use case.
     let warning: string | undefined;
     const automationSettings = await getAutomationSettingsForUser(user.id);
     if (
@@ -199,7 +203,8 @@ export async function createAutomation(
       },
     });
 
-    // Soft warning when automation count exceeds user's configured threshold
+    // Soft warning when automation count exceeds user's configured threshold.
+    // See getAutomationsList for the "performanceWarning:" prefix convention.
     let warning: string | undefined;
     const automationCount = await prisma.automation.count({ where: { userId: user.id } });
     const automationSettings = await getAutomationSettingsForUser(user.id);

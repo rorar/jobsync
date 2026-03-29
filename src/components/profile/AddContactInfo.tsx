@@ -46,8 +46,8 @@ function AddContactInfo({
   const { t } = useTranslations();
 
   const pageTitle = contactInfoToEdit
-    ? "Edit Contact Info"
-    : "Add Contact Info";
+    ? t("profile.editContactInfo")
+    : t("profile.addContactInfo");
 
   const form = useForm<z.infer<typeof AddContactInfoFormSchema>>({
     resolver: zodResolver(AddContactInfoFormSchema),
@@ -119,9 +119,9 @@ function AddContactInfo({
         setDialogOpen(false);
         toast({
           variant: "success",
-          description: `Contact Info has been ${
-            contactInfoToEdit ? "updated" : "created"
-          } successfully`,
+          description: contactInfoToEdit
+            ? t("profile.contactInfoUpdated")
+            : t("profile.contactInfoCreated"),
         });
       }
     });
@@ -135,7 +135,7 @@ function AddContactInfo({
         <DialogHeader>
           <DialogTitle>{pageTitle}</DialogTitle>
           <DialogDescription className="sr-only">
-            {contactInfoToEdit ? "Edit contact information" : "Add contact information"}
+            {contactInfoToEdit ? t("profile.editContactInfo") : t("profile.addContactInfo")}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -150,9 +150,9 @@ function AddContactInfo({
                 name="firstName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>First Name</FormLabel>
+                    <FormLabel>{t("profile.firstName")}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. John" {...field} />
+                      <Input placeholder={t("profile.firstNamePlaceholder")} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -167,9 +167,9 @@ function AddContactInfo({
                 name="lastName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Last Name</FormLabel>
+                    <FormLabel>{t("profile.lastName")}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Doe" {...field} />
+                      <Input placeholder={t("profile.lastNamePlaceholder")} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -184,9 +184,9 @@ function AddContactInfo({
                 name="headline"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Headline</FormLabel>
+                    <FormLabel>{t("profile.headline")}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Senior Software Engineer" {...field} />
+                      <Input placeholder={t("profile.headlinePlaceholder")} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -201,9 +201,9 @@ function AddContactInfo({
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel>{t("profile.email")}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. john@example.com" {...field} />
+                      <Input placeholder={t("profile.emailPlaceholder")} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -218,9 +218,9 @@ function AddContactInfo({
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone</FormLabel>
+                    <FormLabel>{t("profile.phone")}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. +49 123 456789" {...field} />
+                      <Input placeholder={t("profile.phonePlaceholder")} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -235,9 +235,9 @@ function AddContactInfo({
                 name="address"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Address</FormLabel>
+                    <FormLabel>{t("profile.address")}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Berlin, Germany" {...field} value={field.value ?? ""} />
+                      <Input placeholder={t("profile.addressPlaceholder")} {...field} value={field.value ?? ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -255,11 +255,11 @@ function AddContactInfo({
                     className="mt-2 md:mt-0 w-full"
                     onClick={closeDialog}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                 </div>
                 <Button type="submit" disabled={!formState.isDirty}>
-                  Save
+                  {t("common.save")}
                   {isPending && <Loader className="h-4 w-4 shrink-0 spinner" />}
                 </Button>
               </DialogFooter>

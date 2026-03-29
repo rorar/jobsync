@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { getLocationLabel, getCountryCode } from "@/lib/connector/job-discovery/modules/eures/countries";
 
 interface LocationBadgeProps {
@@ -20,7 +21,7 @@ export function LocationBadge({ code, resolve = true, className }: LocationBadge
   const countryCode = getCountryCode(code);
 
   return (
-    <Badge variant="secondary" className={`text-xs gap-1 ${className ?? ""}`}>
+    <Badge variant="secondary" className={cn("text-xs gap-1", className)}>
       {countryCode && (
         <Image
           src={`/flags/${countryCode.toLowerCase()}.svg`}
