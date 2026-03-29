@@ -1,30 +1,28 @@
+import { moduleRegistry } from "../registry";
+import { ConnectorType } from "../manifest";
 import type { AIProviderConnector } from "./types";
 
-type AIProviderFactory = () => AIProviderConnector;
-
+/**
+ * Facade on the unified ModuleRegistry, filtered to AI_PROVIDER modules.
+ * Preserves the existing public API for all callers.
+ */
 class AIProviderRegistry {
-  private factories = new Map<string, AIProviderFactory>();
-
-  register(id: string, factory: AIProviderFactory): void {
-    this.factories.set(id, factory);
+  register(_id: string, _factory: () => AIProviderConnector): void {
+    // No-op: registration now happens in modules/connectors.ts via moduleRegistry
   }
 
   create(id: string): AIProviderConnector {
-    const factory = this.factories.get(id);
-    if (!factory) {
-      throw new Error(
-        `Unknown AI provider: "${id}". Available: ${[...this.factories.keys()].join(", ")}`,
-      );
-    }
-    return factory();
+    return moduleRegistry.create(id) as AIProviderConnector;
   }
 
   has(id: string): boolean {
-    return this.factories.has(id);
+    return moduleRegistry.has(id);
   }
 
-  availableProviders(): string[] {
-    return [...this.factories.keys()];
+  availableModules(): string[] {
+    return moduleRegistry
+      .getByType(ConnectorType.AI_PROVIDER)
+      .map((m) => m.manifest.id);
   }
 }
 

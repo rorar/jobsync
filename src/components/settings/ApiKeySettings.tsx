@@ -31,6 +31,8 @@ import {
   deleteApiKey,
   getDefaultOllamaBaseUrl,
 } from "@/actions/apiKey.actions";
+import { getCredentialModules } from "@/actions/module.actions";
+import type { ModuleManifestSummary } from "@/actions/module.actions";
 import type {
   ApiKeyClientResponse,
   ApiKeyModuleId,
@@ -47,45 +49,30 @@ interface ModuleConfig {
   sensitive: boolean;
 }
 
-const DEFAULT_OLLAMA_PLACEHOLDER = "http://127.0.0.1:11434";
+/** Fallback description keys per module — i18n keys defined in settings dictionary */
+const DESCRIPTION_KEYS: Record<string, TranslationKey> = {
+  openai: "settings.openaiDesc",
+  deepseek: "settings.deepseekDesc",
+  rapidapi: "settings.rapidapiDesc",
+  ollama: "settings.ollamaDesc",
+};
 
-const MODULES: ModuleConfig[] = [
-  {
-    id: "openai",
-    name: "OpenAI",
-    placeholder: "sk-...",
-    inputType: "password",
-    descriptionKey: "settings.openaiDesc",
-    sensitive: true,
-  },
-  {
-    id: "deepseek",
-    name: "DeepSeek",
-    placeholder: "sk-...",
-    inputType: "password",
-    descriptionKey: "settings.deepseekDesc",
-    sensitive: true,
-  },
-  {
-    id: "rapidapi",
-    name: "RapidAPI",
-    placeholder: "Your RapidAPI key",
-    inputType: "password",
-    descriptionKey: "settings.rapidapiDesc",
-    sensitive: true,
-  },
-  {
-    id: "ollama",
-    name: "Ollama",
-    placeholder: DEFAULT_OLLAMA_PLACEHOLDER,
-    inputType: "text",
-    descriptionKey: "settings.ollamaDesc",
-    sensitive: false,
-  },
-];
+function manifestToModuleConfig(m: ModuleManifestSummary): ModuleConfig {
+  return {
+    id: m.credential.moduleId as ApiKeyModuleId,
+    name: m.name,
+    placeholder: m.credential.placeholder ?? "",
+    inputType: m.credential.sensitive ? "password" : "text",
+    descriptionKey: DESCRIPTION_KEYS[m.credential.moduleId] ?? ("settings.apiKeysDesc" as TranslationKey),
+    sensitive: m.credential.sensitive,
+  };
+}
+
+const DEFAULT_OLLAMA_PLACEHOLDER = "http://127.0.0.1:11434";
 
 function ApiKeySettings() {
   const { t } = useTranslations();
+  const [modules, setModules] = useState<ModuleConfig[]>([]);
   const [keys, setKeys] = useState<ApiKeyClientResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [defaultOllamaUrl, setDefaultOllamaUrl] = useState(
@@ -101,6 +88,12 @@ function ApiKeySettings() {
   useEffect(() => {
     fetchKeys();
     getDefaultOllamaBaseUrl().then(setDefaultOllamaUrl);
+    // Load module manifests from registry
+    getCredentialModules().then((result) => {
+      if (result.success && result.data) {
+        setModules(result.data.map(manifestToModuleConfig));
+      }
+    });
   }, []);
 
   const fetchKeys = async () => {
@@ -141,7 +134,7 @@ function ApiKeySettings() {
         return;
       }
 
-      const moduleConfig = MODULES.find((m) => m.id === moduleId);
+      const moduleConfig = modules.find((m) => m.id === moduleId);
       const saveResult = await saveApiKey({
         moduleId,
         key: inputValue,
@@ -151,7 +144,7 @@ function ApiKeySettings() {
         toast({
           variant: "success",
           title: t("settings.apiKeySaved"),
-          description: t("settings.keyVerifiedAndSaved").replace("{module}", MODULES.find((m) => m.id === moduleId)?.name ?? moduleId),
+          description: t("settings.keyVerifiedAndSaved").replace("{module}", modules.find((m) => m.id === moduleId)?.name ?? moduleId),
         });
         setEditingModule(null);
         setInputValue("");
@@ -183,7 +176,7 @@ function ApiKeySettings() {
         toast({
           variant: "success",
           title: t("settings.apiKeyDeleted"),
-          description: t("settings.keyRemoved").replace("{module}", MODULES.find((m) => m.id === moduleId)?.name ?? moduleId),
+          description: t("settings.keyRemoved").replace("{module}", modules.find((m) => m.id === moduleId)?.name ?? moduleId),
         });
         await fetchKeys();
       } else {
@@ -233,7 +226,7 @@ function ApiKeySettings() {
       </div>
 
       <div className="grid gap-4">
-        {MODULES.map((module) => {
+        {modules.map((module) => {
           const existingKey = getKeyForModule(module.id);
           const isEditing = editingModule === module.id;
 

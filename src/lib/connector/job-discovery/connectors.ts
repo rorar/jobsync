@@ -1,11 +1,17 @@
+import { moduleRegistry } from "../registry";
 import { connectorRegistry } from "./registry";
-import { createJSearchConnector } from "./modules/jsearch";
-import { createEuresConnector } from "./modules/eures";
-import { createArbeitsagenturConnector } from "./modules/arbeitsagentur";
 
-// Register all available data source connectors
-connectorRegistry.register("jsearch", createJSearchConnector);
-connectorRegistry.register("eures", createEuresConnector);
-connectorRegistry.register("arbeitsagentur", createArbeitsagenturConnector);
+// Import manifests + factories
+import { euresManifest } from "./modules/eures/manifest";
+import { createEuresConnector } from "./modules/eures";
+import { arbeitsagenturManifest } from "./modules/arbeitsagentur/manifest";
+import { createArbeitsagenturConnector } from "./modules/arbeitsagentur";
+import { jsearchManifest } from "./modules/jsearch/manifest";
+import { createJSearchConnector } from "./modules/jsearch";
+
+// Register with unified registry
+moduleRegistry.register(euresManifest, createEuresConnector);
+moduleRegistry.register(arbeitsagenturManifest, createArbeitsagenturConnector);
+moduleRegistry.register(jsearchManifest, createJSearchConnector);
 
 export { connectorRegistry };

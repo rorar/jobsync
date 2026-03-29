@@ -5,7 +5,6 @@ import type {
   SearchParams,
 } from "../../types";
 
-const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 const JSEARCH_BASE_URL = "https://jsearch.p.rapidapi.com";
 
 interface JSearchJob {
@@ -34,7 +33,7 @@ interface JSearchResponse {
   data: JSearchJob[];
 }
 
-export function createJSearchConnector(): DataSourceConnector {
+export function createJSearchConnector(credential?: string): DataSourceConnector {
   return {
     id: "jsearch",
     name: "JSearch",
@@ -43,7 +42,7 @@ export function createJSearchConnector(): DataSourceConnector {
     async search(
       params: SearchParams,
     ): Promise<ConnectorResult<DiscoveredVacancy[]>> {
-      if (!RAPIDAPI_KEY) {
+      if (!credential) {
         return {
           success: false,
           error: {
@@ -66,7 +65,7 @@ export function createJSearchConnector(): DataSourceConnector {
         const response = await fetch(url.toString(), {
           method: "GET",
           headers: {
-            "X-RapidAPI-Key": RAPIDAPI_KEY,
+            "X-RapidAPI-Key": credential,
             "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
           },
         });

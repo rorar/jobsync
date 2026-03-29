@@ -5,7 +5,9 @@ import type {
   AutomationRunStatus,
 } from "@/models/automation.model";
 import type { ConnectorError, DiscoveredVacancy } from "./types";
-import { connectorRegistry } from "./connectors";
+import "./connectors"; // trigger registration
+import { moduleRegistry } from "../registry";
+import { resolveCredential } from "../credential-resolver";
 import { mapDiscoveredVacancyToJobRecord } from "./mapper";
 import { normalizeJobUrl } from "./utils";
 import { calculateNextRunAt, type ScheduleFrequency } from "./schedule";
@@ -16,7 +18,7 @@ import {
   buildJobMatchPrompt,
 } from "@/lib/connector/ai-provider";
 import {
-  AiProvider,
+  AiModuleId,
   OllamaModel,
   OpenaiModel,
   DeepseekModel,
@@ -32,13 +34,13 @@ import { debugLog } from "@/lib/debug";
 
 const MAX_JOBS_PER_RUN = 10;
 
-function getDefaultModelForProvider(provider: AiProvider): string {
-  switch (provider) {
-    case AiProvider.OLLAMA:
+function getDefaultModelForModule(moduleId: AiModuleId): string {
+  switch (moduleId) {
+    case AiModuleId.OLLAMA:
       return OllamaModel.LLAMA3_2;
-    case AiProvider.OPENAI:
+    case AiModuleId.OPENAI:
       return OpenaiModel.GPT4O_MINI;
-    case AiProvider.DEEPSEEK:
+    case AiModuleId.DEEPSEEK:
       return DeepseekModel.DEEPSEEK_CHAT;
   }
 }
@@ -53,9 +55,15 @@ async function getUserAiSettings(userId: string): Promise<AiSettings> {
   }
 
   const settings = JSON.parse(userSettings.settings);
+  const ai = settings.ai ?? {};
+  // Backwards-compat: pre-migration JSON may have "provider" instead of "moduleId"
+  if (ai.provider && !ai.moduleId) {
+    ai.moduleId = ai.provider;
+    delete ai.provider;
+  }
   return {
     ...defaultUserSettings.ai,
-    ...settings.ai,
+    ...ai,
   };
 }
 
@@ -196,7 +204,12 @@ export async function runAutomation(
       `Searching for jobs: "${automation.keywords}" in ${automation.location}`,
     );
 
-    const connector = connectorRegistry.create(automation.jobBoard);
+    // Resolve credential via manifest (PUSH pattern)
+    const registered = moduleRegistry.get(automation.jobBoard);
+    const credential = registered
+      ? await resolveCredential(registered.manifest.credential, automation.userId)
+      : undefined;
+    const connector = moduleRegistry.create(automation.jobBoard, credential) as import("./types").DataSourceConnector;
     const searchResult = await connector.search({
       keywords: automation.keywords,
       location: automation.location,
@@ -311,8 +324,8 @@ export async function runAutomation(
     let aiError: string | null = null;
 
     const aiSettings = await getUserAiSettings(automation.userId);
-    const modelName = aiSettings.model || getDefaultModelForProvider(aiSettings.provider);
-    const resolvedModel = await getModel(aiSettings.provider, modelName, automation.userId);
+    const modelName = aiSettings.model || getDefaultModelForModule(aiSettings.moduleId);
+    const resolvedModel = await getModel(aiSettings.moduleId, modelName, automation.userId);
     const resumeText = convertResumeForMatch(resume as ResumeWithSections);
 
     // JSearch returns full job details, no separate extraction needed
@@ -328,7 +341,7 @@ export async function runAutomation(
       automationLogger.log(
         automation.id,
         "info",
-        `Analyzing job match for: ${job.title} (using ${aiSettings.provider}/${modelName})`,
+        `Analyzing job match for: ${job.title} (using ${aiSettings.moduleId}/${modelName})`,
       );
 
       const matchResult = await matchJobToResume(
@@ -339,7 +352,7 @@ export async function runAutomation(
 
       if (!matchResult.success) {
         if (matchResult.error === "ai_unavailable") {
-          aiError = `AI provider (${aiSettings.provider}) is not available. Please check your settings.`;
+          aiError = `AI provider (${aiSettings.moduleId}) is not available. Please check your settings.`;
           automationLogger.log(automation.id, "error", aiError);
           break;
         }

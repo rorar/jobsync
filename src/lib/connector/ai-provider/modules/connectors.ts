@@ -1,16 +1,21 @@
+import { moduleRegistry } from "../../registry";
 import { aiProviderRegistry } from "../registry";
-import { createOllamaProvider } from "./ollama";
-import { createDeepSeekProvider } from "./deepseek";
-import { createOpenAIProvider } from "./openai";
 
-// Register all providers eagerly at import time
-aiProviderRegistry.register("ollama", createOllamaProvider);
-aiProviderRegistry.register("deepseek", createDeepSeekProvider);
-aiProviderRegistry.register("openai", createOpenAIProvider);
+// Import manifests + factories
+import { ollamaManifest } from "./ollama/manifest";
+import { createOllamaConnector } from "./ollama";
+import { openaiManifest } from "./openai/manifest";
+import { createOpenAIConnector } from "./openai";
+import { deepseekManifest } from "./deepseek/manifest";
+import { createDeepSeekConnector } from "./deepseek";
 
-// Keep the function export for explicit re-registration if needed
-export function registerAllAIProviders() {
-  aiProviderRegistry.register("ollama", createOllamaProvider);
-  aiProviderRegistry.register("deepseek", createDeepSeekProvider);
-  aiProviderRegistry.register("openai", createOpenAIProvider);
+// Register with unified registry
+moduleRegistry.register(ollamaManifest, createOllamaConnector);
+moduleRegistry.register(openaiManifest, createOpenAIConnector);
+moduleRegistry.register(deepseekManifest, createDeepSeekConnector);
+
+export function registerAllAIConnectors() {
+  // No-op: registration happens at import time above
 }
+
+export { aiProviderRegistry };
