@@ -425,6 +425,14 @@ App (Kernlogik) ↔ Connector (ACL) ↔ Module (Externes System)
 
 **Vorteile:** Fehler-Isolation, Module austauschbar, unabhängiges Testing, klare Verträge.
 
+**Shared-Client-Pattern:** Wenn ein externes System nur ein **Transport/Gateway** ist (API-Marketplace, Proxy), ist es kein Modul — es ist Infrastruktur. Die Services dahinter sind die Module. Faustregel: Wenn der Transport austauschbar ist ohne die Domänensemantik zu ändern, ist es ein Shared Client.
+
+| Plattform | Shared Client (Infrastruktur) | Module (Domäne) |
+|---|---|---|
+| Google Maps | `google-maps-client` (API Key, HTTP) | Places → Data Enrichment (1.13), Geocoding → Geo/Map (1.10) |
+| RapidAPI | `rapidapi-client` (API Key, `X-RapidAPI-Host`) | JSearch → Job Discovery, OpenWeb Ninja/Glassdoor → Data Enrichment (1.13) |
+| LinkedIn | `linkedin-client` (OAuth, HTTP) | Jobs → Job Discovery (1.14), Company → Data Enrichment (1.13), Contact → Data Enrichment (1.13) |
+
 ### 1.12 Communication Connector
 - **Modul: E-Mail** — Bewerbungs-E-Mails senden/empfangen
   - **Anbindungsmöglichkeiten (User wählt in Settings):**

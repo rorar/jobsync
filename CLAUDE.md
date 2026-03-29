@@ -100,6 +100,8 @@ Modules (each declares a Manifest + implements a Connector interface)
 
 **Key principle:** The Connector is the shared domain layer. Modules are pluggable implementations. Each Module declares a `ModuleManifest` describing its identity, credentials, health, resilience, and settings.
 
+**Shared-Client-Pattern:** External platforms that are pure transport/gateways (RapidAPI, Google Maps API, LinkedIn API) are NOT Modules — they are shared client utilities. The services BEHIND them are the Modules. Example: RapidAPI is a `rapidapi-client` (shared API Key + HTTP), JSearch and OpenWeb Ninja are separate Modules behind different Connectors. Same pattern for Google Maps (`google-maps-client` → Places Module in Data Enrichment + Geocoding Module in Geo/Map).
+
 ### Module Lifecycle Manager (ROADMAP 0.4)
 
 **Unified Registry:** `src/lib/connector/registry.ts` — single `ModuleRegistry` stores `RegisteredModule` entities (manifest + runtime state). The old `ConnectorRegistry` and `AIProviderRegistry` are thin facades.
