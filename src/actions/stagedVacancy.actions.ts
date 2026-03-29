@@ -13,6 +13,7 @@ import type {
   PromotionInput,
 } from "@/models/stagedVacancy.model";
 import { promoteStagedVacancy } from "@/lib/connector/job-discovery/promoter";
+import { emitEvent } from "@/lib/events";
 import { APP_CONSTANTS } from "@/lib/constants";
 
 // Narrow Prisma string to domain enum
@@ -47,12 +48,16 @@ export async function getStagedVacancies(
       userId: user.id,
     };
 
-    // Tab-based filtering
+    // Tab-based filtering (per spec surface StagingQueue)
     if (tab === "archived") {
       whereClause.archivedAt = { not: null };
     } else if (tab === "trashed") {
       whereClause.trashedAt = { not: null };
+    } else if (tab === "dismissed") {
+      whereClause.trashedAt = null;
+      // Spec: dismissed tab shows dismissed vacancies not in trash (no archivedAt filter)
     } else {
+      // "new" tab: exclude trashed and archived
       whereClause.trashedAt = null;
       whereClause.archivedAt = null;
     }
@@ -138,7 +143,7 @@ export async function dismissStagedVacancy(
       data: { status: "dismissed" },
     });
 
-    console.debug("[DomainEvent] VacancyDismissed", { stagedVacancyId: id, userId: user.id });
+    emitEvent({ type: "VacancyDismissed", timestamp: new Date(), payload: { stagedVacancyId: id, userId: user.id } });
     return { success: true, data: toStagedVacancy(updated) as StagedVacancy };
   } catch (error) {
     return handleError(error, "Failed to dismiss staged vacancy");

@@ -24,7 +24,7 @@ export interface VacancyStagedEvent extends DomainEvent<"VacancyStaged"> {
     stagedVacancyId: string;
     userId: string;
     sourceBoard: string;
-    automationId: string;
+    automationId: string | null;
   };
 }
 

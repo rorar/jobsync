@@ -236,6 +236,9 @@ rule AutomatedVacancyIntake {
     -- Upsert semantics: if a dismissed vacancy is rediscovered, it creates
     -- a new staged entry (not upsert). The user explicitly dismissed it,
     -- so rediscovery is a new signal.
+    -- On rediscovery of an existing non-dismissed vacancy, matchScore and matchData
+    -- are updated (upsert semantics). This refreshes AI match data when automations
+    -- re-run with overlapping results. No new StagedVacancy is created.
 }
 
 rule ManualVacancyBypass {
@@ -535,6 +538,9 @@ rule DedupCheck {
 
   let hashValue = hash(config.DEDUP_HASH_ALGORITHM, sourceBoard + ":" + externalId)
 
+  -- Also check promoted Jobs by URL to prevent re-staging already-promoted vacancies.
+  -- This is a cross-aggregate dedup that the spec's StagedVacancy-only check misses.
+
   ensures:
     if exists DedupHash where userId = userId and hash = hashValue:
       result = duplicate
@@ -543,6 +549,10 @@ rule DedupCheck {
       result = duplicate
     else:
       result = new
+
+  @guidance
+    -- Dual-key dedup: checks both externalId (primary) and normalized sourceUrl (fallback).
+    -- A vacancy with a different externalId but the same URL is treated as a duplicate.
 }
 
 -- =============================================================================
