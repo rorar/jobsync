@@ -35,6 +35,8 @@ model User {
   Tag          Tag[]
   Question     Question[]
   Notification Notification[]
+  StagedVacancy StagedVacancy[]
+  DedupHash     DedupHash[]
 }
 
 model ApiKey {
@@ -297,6 +299,9 @@ model Job {
   discoveryStatus String?
   discoveredAt    DateTime?
 
+  // Back-relation from StagedVacancy promotion
+  stagedVacancyPromotion StagedVacancy?
+
   @@index([userId, automationId])
   @@index([userId, discoveryStatus])
 }
@@ -386,8 +391,9 @@ model Automation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  runs           AutomationRun[]
-  discoveredJobs Job[]
+  runs             AutomationRun[]
+  discoveredJobs   Job[]
+  stagedVacancies  StagedVacancy[]
 
   @@index([userId])
   @@index([status, nextRunAt])
@@ -443,6 +449,71 @@ model Notification {
 
   @@index([userId, read])
   @@index([userId, createdAt])
+}
+
+model StagedVacancy {
+  id                String      @id @default(uuid())
+  userId            String
+  user              User        @relation(fields: [userId], references: [id])
+
+  // Discovery identity (dedup key)
+  sourceBoard       String
+  externalId        String?
+  sourceUrl         String?
+
+  // Vacancy data
+  title             String
+  employerName      String?
+  location          String?
+  description       String?
+  salary            String?
+  employmentType    String?
+  postedAt          DateTime?
+  applicationDeadline String?
+  applicationInstructions String?
+
+  // Source tracking
+  source            String      @default("automation")  // "manual" | "automation"
+  automationId      String?
+  automation        Automation? @relation(fields: [automationId], references: [id], onDelete: SetNull)
+
+  // Match data (optional)
+  matchScore        Int?
+  matchData         String?
+
+  // Pipeline state
+  status            String      @default("staged")
+
+  // Promotion link
+  promotedToJobId   String?     @unique
+  promotedJob       Job?        @relation(fields: [promotedToJobId], references: [id])
+
+  // Archive / Trash
+  archivedAt        DateTime?
+  trashedAt         DateTime?
+
+  // Timestamps
+  discoveredAt      DateTime    @default(now())
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@unique([userId, sourceBoard, externalId])
+  @@index([userId, status])
+  @@index([userId, automationId])
+  @@index([userId, createdAt])
+  @@index([trashedAt])
+}
+
+model DedupHash {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  hash          String
+  sourceBoard   String
+  createdAt     DateTime  @default(now())
+
+  @@unique([userId, hash])
+  @@index([userId, sourceBoard])
 }
 
 model Note {

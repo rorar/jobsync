@@ -10,6 +10,7 @@ import type { Task } from "@/models/task.model";
 import type { Resume } from "@/models/profile.model";
 import type { Automation } from "@/models/automation.model";
 import type { Question } from "@/models/question.model";
+import type { StagedVacancy } from "@/models/stagedVacancy.model";
 
 // ─── User ──────────────────────────────────────────────────────────────────
 
@@ -1033,3 +1034,68 @@ export const mockConnectors: MockConnector[] = [
   mockConnectorJobDiscovery,
   mockConnectorAIProvider,
 ];
+
+// ─── Staged Vacancy ──────────────────────────────────────────────────────
+
+export const mockStagedVacancy: StagedVacancy = {
+  id: "staged-vacancy-1",
+  userId: mockUser.id,
+  sourceBoard: "eures",
+  externalId: "eures-job-12345",
+  sourceUrl: "https://europa.eu/eures/portal/jv-se/jv-details/eures-job-12345",
+  title: "Senior Software Engineer",
+  employerName: "TechCorp GmbH",
+  location: "Berlin, Germany",
+  description: "Full-stack development role...",
+  salary: "\u20AC60,000 - \u20AC80,000",
+  employmentType: "full_time",
+  postedAt: new Date("2026-03-15"),
+  applicationDeadline: "2026-04-15",
+  applicationInstructions: null,
+  source: "automation",
+  automationId: mockAutomation.id,
+  matchScore: 85,
+  matchData: JSON.stringify({ score: 85, recommendation: "Strong match" }),
+  status: "staged",
+  promotedToJobId: null,
+  archivedAt: null,
+  trashedAt: null,
+  discoveredAt: new Date("2026-03-20"),
+  createdAt: new Date("2026-03-20"),
+  updatedAt: new Date("2026-03-20"),
+};
+
+export const mockStagedVacancyDismissed: StagedVacancy = {
+  ...mockStagedVacancy,
+  id: "staged-vacancy-2",
+  externalId: "eures-job-67890",
+  title: "Junior Developer",
+  status: "dismissed",
+  matchScore: 40,
+};
+
+export const mockStagedVacancyPromoted: StagedVacancy = {
+  ...mockStagedVacancy,
+  id: "staged-vacancy-3",
+  externalId: "eures-job-11111",
+  title: "DevOps Engineer",
+  status: "promoted",
+  promotedToJobId: "job-promoted-1",
+};
+
+export const mockStagedVacancyProcessing: StagedVacancy = {
+  ...mockStagedVacancy,
+  id: "staged-vacancy-4",
+  externalId: "eures-job-22222",
+  title: "Backend Developer",
+  status: "processing",
+};
+
+export const mockStagedVacancyReady: StagedVacancy = {
+  ...mockStagedVacancy,
+  id: "staged-vacancy-5",
+  externalId: "eures-job-33333",
+  title: "Frontend Developer",
+  status: "ready",
+  matchScore: 92,
+};
