@@ -800,12 +800,11 @@ Aktuell: Tiptap v2 mit StarterKit (Bold, Italic, Heading, Listen). Erweiterung i
 - Location: Geocoding-basiertes Autocomplete via Geo/Map Connector (→ 1.10 Phase 1, Nominatim/OSM) statt statischer Städte-Liste
 - Degree: Liste von Abschlüssen (lokalisiert)
 
-### 3.5 CV-PDF Parsing
-- Extrahiert Informationen aus hochgeladenem CV
-- Erstellt basierend auf ESCO- und NACE-Codes eine Liste von Skills und Tags
-- Vorschläge für Skills die in Bewerbungsunterlagen hervorgehoben werden sollten
+### 3.5 CV-Parsing
+Extrahiert Informationen aus verschiedenen CV-Quellen. Erstellt basierend auf ESCO- und NACE-Codes eine Liste von Skills und Tags. Vorschläge für Skills die in Bewerbungsunterlagen hervorgehoben werden sollten.
+
+**1. CV-Dokument Parsing (PDF, DOCX):**
 - **Unterstützte Formate:** PDF UND DOCX (in DE häufig von Arbeitsagentur verlangt)
-- **LinkedIn-Profil-Import:** LinkedIn-Profildaten importieren als CV-Quelle (Export-Datei oder Scraping)
 - **LLM-Entkopplung (→ 0.5 Prinzip):**
   - **Ohne LLM:** Bibliotheks-basiertes Parsing — Textextraktion + Regex/Heuristik für Sektionen (Erfahrung, Ausbildung, Skills)
     - Zu evaluieren:
@@ -814,6 +813,13 @@ Aktuell: Tiptap v2 mit StarterKit (Bold, Italic, Heading, Listen). Erweiterung i
       - Weitere: pdf-parse, pdf2json, pdfjs-dist, mammoth (DOCX-only)
   - **Mit LLM (optional):** AI-gestützte Extraktion für bessere Sektions-Erkennung, Skill-Mapping zu ESCO/NACE, semantische Analyse
   - User wählt in Settings ob LLM-Verarbeitung aktiviert ist
+
+**2. LinkedIn-Profil-Import:**
+- LinkedIn-Profildaten importieren als CV-Quelle
+- **Methoden:**
+  - LinkedIn Data Export (JSON/CSV Download) — zero Risk, kein API nötig (→ 5.8 Import/Export)
+  - LinkedIn-Profil Scraping (→ 9.2 Machbarkeitsstudie, Risk Assessment pending)
+- Importierte Daten werden auf Skillsets (→ 4.1) gemappt
 
 ### 3.6 Link-Parsing und Auto-Fill (→ Data Enrichment Connector 1.13)
 - Nutzt das Meta/OpenGraph Parser Modul des Data Enrichment Connectors
@@ -904,7 +910,7 @@ Jeder Job hat ein **Application Locale Profile** das Sprache + Land + kulturelle
 
 ### 4.1 Skillsets
 - Verwaltung von Skill-Profilen basierend auf ESCO/NACE Taxonomien
-- **Konsumenten:** CV-PDF Parsing (→ 3.5) liefert Skills, Onboarding (→ 2.1 Schritt 4) bearbeitet Skills, CareerBERT (→ 9.1) matcht Skills semantisch, Dokumenten-Generatoren (→ 4.2) nutzen Skills für CV-Templates
+- **Konsumenten:** CV-Parsing (→ 3.5) liefert Skills, Onboarding (→ 2.1 Schritt 4) bearbeitet Skills, CareerBERT (→ 9.1) matcht Skills semantisch, Dokumenten-Generatoren (→ 4.2) nutzen Skills für CV-Templates
 - Kern-Skills vs. Neben-Skills Priorisierung
 
 ### 4.2 Dokumenten-Generatoren
