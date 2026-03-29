@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-29
 **Status:** Accepted
-**Deciders:** Pascal, Claude Opus 4.6
+**Deciders:** @rorar, Claude Opus 4.6
 
 ## Context
 
