@@ -89,57 +89,55 @@ All external integrations follow the **App ↔ Connector ↔ Module** pattern:
 App (Core Logic)
   ↕ ConnectorResult<T> / DiscoveredVacancy / ActionResult
 Connector (Shared ACL — ONE interface, ONE registry)
-  - DataSourceConnector interface: search(), getDetails()
-  - ConnectorRegistry: maps module names → factories
-  - Runner: orchestrates search + matching
+  - DataSourceConnector / AIProviderConnector interfaces
+  - ModuleRegistry: unified registry with manifests + factories
+  - Runner: orchestrates search + matching with credential PUSH
   ↕
-Modules (each implements DataSourceConnector)
-  - EURES Module: speaks EURES API protocol
-  - Arbeitsagentur Module: speaks Bundesagentur API protocol
-  - JSearch Module: speaks RapidAPI/Google Jobs protocol
+Modules (each declares a Manifest + implements a Connector interface)
+  - EURES, Arbeitsagentur, JSearch (Job Discovery)
+  - Ollama, OpenAI, DeepSeek (AI Provider)
 ```
 
-**Key principle:** The Connector is the shared domain layer. Modules are pluggable implementations. If a Module crashes, the Connector catches it via `ConnectorResult<error>`.
+**Key principle:** The Connector is the shared domain layer. Modules are pluggable implementations. Each Module declares a `ModuleManifest` describing its identity, credentials, health, resilience, and settings.
 
-**Current structure:** `src/lib/connector/` — unified connector architecture with two connector types:
-- **Job Discovery** (`src/lib/connector/job-discovery/`):
-  - Shared: `types.ts` (DataSourceConnector interface), `registry.ts`, `runner.ts`, `mapper.ts`
-  - Modules: `modules/eures/`, `modules/arbeitsagentur/`, `modules/jsearch/` (each with `index.ts`, `types.ts`, `resilience.ts`)
-- **AI Provider** (`src/lib/connector/ai-provider/`):
-  - Shared: AIProviderConnector interface (mirrors DataSourceConnector pattern)
-  - Modules: `modules/ollama/`, `modules/openai/`, `modules/deepseek/`
+### Module Lifecycle Manager (ROADMAP 0.4)
 
-**For new Job Discovery Modules:** Create `src/lib/connector/job-discovery/modules/{name}/` with `index.ts` (implements `DataSourceConnector`), `types.ts`, `resilience.ts`. Register in `registry.ts`.
+**Unified Registry:** `src/lib/connector/registry.ts` — single `ModuleRegistry` stores `RegisteredModule` entities (manifest + runtime state). The old `ConnectorRegistry` and `AIProviderRegistry` are thin facades.
 
-**For new AI Provider Modules:** Create `src/lib/connector/ai-provider/modules/{name}/` implementing `AIProviderConnector`. Register in the AI provider registry.
+**Current structure:** `src/lib/connector/`:
+- **Shared Kernel:** `manifest.ts` (types), `registry.ts` (unified registry), `resilience.ts` (policy builder), `health-monitor.ts`, `degradation.ts`, `credential-resolver.ts`
+- **Job Discovery** (`job-discovery/`): `types.ts`, `registry.ts` (facade), `runner.ts`, `connectors.ts` (registration barrel)
+  - Modules: `modules/eures/`, `modules/arbeitsagentur/`, `modules/jsearch/` (each with `index.ts`, `manifest.ts`)
+- **AI Provider** (`ai-provider/`): `types.ts`, `registry.ts` (facade), `modules/connectors.ts` (registration barrel)
+  - Modules: `modules/ollama/`, `modules/openai/`, `modules/deepseek/` (each with `index.ts`, `manifest.ts`)
 
-### Connector & Module Lifecycle (Marketplace Pattern)
+**For new Modules:** Create `modules/{name}/` with:
+1. `manifest.ts` — declares `JobDiscoveryManifest` or `AiManifest` (credentials, health, resilience)
+2. `index.ts` — implements `DataSourceConnector` or `AIProviderConnector`
+3. Register in `connectors.ts`: `moduleRegistry.register(manifest, factory)`
 
-Connectors and Modules are **activatable/deactivatable** via `/dashboard/settings`:
+That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilience code.
 
-```
-Module aktiviert → Connector wird automatisch mit aktiviert
-Connector deaktiviert → Warnung wenn Module noch aktiv
-Module/Connector deaktiviert + Automation nutzt es → Automation pausiert + User benachrichtigt
-```
+**Credential Resolution (PUSH):** `credential-resolver.ts` resolves credentials from manifest config (DB → Env → Default). Runner calls `resolveCredential()` before module instantiation.
 
-**Rules:**
-1. **Aktivierung:** Wenn ein Module aktiviert wird, wird der zugehörige Connector automatisch mit aktiviert (Dependency)
-2. **Deaktivierung Connector:** Wenn der Connector deaktiviert wird aber Module noch aktiv sind → **Warnung an User** ("Modul X nutzt diesen Connector — auch deaktivieren?")
-3. **Deaktivierung mit laufenden Automations:** Wenn ein Connector ODER Module deaktiviert wird und eine Automation es nutzt → **Automation automatisch pausieren** + **User-Benachrichtigung** (Toast + E-Mail/Push wenn Job-Alerts aktiv)
-4. **Reaktivierung:** Pausierte Automations werden NICHT automatisch wieder gestartet — User muss bewusst reaktivieren
-5. **Deaktivierte Module** erscheinen nicht im Automation Wizard Job-Board-Selector
+**Activation/Deactivation:** `module.actions.ts` provides `activateModule()` / `deactivateModule()`. Deactivation pauses affected automations with `pauseReason`. Settings UI shows activation toggle per module.
 
-**UI in `/dashboard/settings`:**
-- **Connector-Tab:** Übersicht aller Connectors mit Toggle (aktiv/inaktiv)
-  - Connector aufklappbar → zeigt zugehörige Module mit je eigenem Toggle
-  - Health-Check Status-Indikator (grün/gelb/rot) pro Module
-  - Letzte erfolgreiche Verbindung + Fehlerlog
-- **Module-Einstellungen:** Pro Module konfigurierbar
-  - API-Keys (falls benötigt, z.B. RapidAPI für JSearch)
-  - Default-Parameter (z.B. Standard-Umkreis für Arbeitsagentur, Sprache für EURES)
-  - Rate-Limit Konfiguration
-  - Proxy-Einstellungen
+**Degradation Rules:** `degradation.ts` implements 3 escalation rules:
+- `handleAuthFailure()` — immediate pause on 401/403
+- `checkConsecutiveRunFailures()` — pause after 5 failed runs
+- `handleCircuitBreakerTrip()` — pause after 3 CB opens
+
+**Allium Spec:** `specs/module-lifecycle.allium` — authoritative specification for all lifecycle rules.
+
+### Connector & Module Lifecycle Rules
+
+Implemented in `module.actions.ts` and `degradation.ts`. Spec: `specs/module-lifecycle.allium`.
+
+1. **Aktivierung:** Module registers as `active` by default. User can deactivate via Settings toggle.
+2. **Deaktivierung:** `deactivateModule()` pauses all active automations using it (`pauseReason: "module_deactivated"`)
+3. **Reaktivierung:** Paused automations are NOT auto-restarted — user must manually reactivate
+4. **Deaktivierte Module** are hidden from Automation Wizard module selector (`getActiveModules()`)
+5. **Automation Degradation:** Auth failure → immediate pause. 5 consecutive failed runs → pause. 3 CB opens → pause.
 
 ## EURES/ESCO Integration
 
