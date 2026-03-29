@@ -65,7 +65,7 @@ src/lib/connector/                          ← Unified Connector Architecture
   - Auth (2): untypisiert — Auth-Refactoring separat
 - Siehe `specs/action-result.allium` für die vollständige Klassifikation
 
-### 0.3 Domain-Model Alignment -- DONE
+### 0.3 Domain-Model Alignment -- KERN DONE (3 Follow-Ups offen)
 - **Domain Models aligned** mit Prisma Schema (Feld-für-Feld Synchronisation):
   - `activity.model.ts`: ActivityType +createdBy/description, Activity required fields + `| null`
   - `job.model.ts`: JobResponse nullable fields (`appliedDate`, `dueDate`, `salaryRange`, `jobUrl`), optional Relations (`Location?`, `JobSource?`), JobLocation/Company `| null` für Prisma-nullable
@@ -1477,6 +1477,7 @@ Automation findet Jobs → LLM filtert & bewertet (Staging) → LLM promoted zu 
 | EU API Language Integration | ✅ Implementiert |
 | User Language Settings | ✅ Implementiert |
 | Roadmap 0.2: ActionResult<T> Typisierung | ✅ Implementiert |
+| Roadmap 0.3: Domain-Model Alignment (Kern) | ⏳ Kern done, 3 Follow-Ups (Pattern B, ?:/null, Mapper) |
 | Roadmap 8.2: Client-Side Error Reporting Dashboard | ✅ Implementiert |
 | Roadmap 0.5: Vacancy Pipeline (Kern-Pipeline) | ⏳ Teilweise (Archive/Trash, Undo, Bulk ausstehend) |
 | Roadmap 2.10 Phase 1: Manifest-Driven AutomationWizard | ✅ Implementiert |
