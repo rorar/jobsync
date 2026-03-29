@@ -1,5 +1,8 @@
+-- allium: 3
 -- ActionResult: Typed server action return contract
--- Replaces Promise<any | undefined> across ~80 server actions
+-- Replaces Promise<any | undefined> across 117 server actions
+
+-- NOTE: Integer maps to TypeScript number
 
 value ActionResult<T> {
     success: Boolean
@@ -7,6 +10,12 @@ value ActionResult<T> {
     total: Integer?
     message: String?
 }
+
+-- handleError(): ActionResult<never>
+-- Shared error handler in src/lib/utils.ts.
+-- All Pattern A and Pattern B functions delegate to handleError() in their catch block.
+-- Returns { success: false, message: "..." } — the <never> type parameter means
+-- data is always absent on error paths.
 
 -- Pattern A: Actions that wrap data in ActionResult
 -- These return { success: true, data: ..., total?: ... } on success
@@ -32,7 +41,7 @@ entity ActionPatternA {
 
 entity ActionPatternB {
     -- Functions: getAllCompanies, getAllJobTitles, getAllJobLocations,
-    --   getAllActivityTypes, getAllTags
+    --   getAllActivityTypes, getAllTags, getStatusList, getJobSourceList
     -- Return shape: ActionResult<T[]> (migrated from raw T[])
     -- Callers: Updated to check result.success
     kind: action_result_list
@@ -91,21 +100,23 @@ rule PreserveTests {
     ensures: test_count >= 748
 }
 
--- Classification of all 80 functions:
+-- Classification of all 117 functions:
 
--- PATTERN A (wrap in ActionResult<T>): ~55 functions
--- activity: getActivitiesList, createActivity, updateActivity, deleteActivity,
---   getCurrentActivity, startActivityFromTask
--- company: getCompanyList, createCompany, updateCompany, deleteCompanyById
+-- PATTERN A (ActionResult<T>): 98 functions
+-- activity: getActivitiesList, createActivity, updateActivity, deleteActivityById,
+--   getCurrentActivity, startActivityById, stopActivityById, getActivityById,
+--   createActivityType
+-- company: getCompanyList, addCompany, updateCompany, getCompanyById, deleteCompanyById
 -- job: getJobsList, getJobDetails, addJob, updateJob, updateJobStatus, deleteJobById,
 --   createLocation, createJobSource
 -- jobLocation: getJobLocationsList, deleteJobLocationById
 -- jobSource: getJobSourceList, deleteJobSourceById
--- jobtitle: getJobTitleList, deleteJobTitleById
+-- jobtitle: getJobTitleList, createJobTitle, deleteJobTitleById
 -- note: getNotesByJobId, addNote, updateNote, deleteNote
 -- profile: getResumeList, getResumeById, addContactInfo, updateContactInfo,
---   createResumeProfile, editResume, deleteResumeById, addResumeSummary,
---   updateResumeSummary, addExperience, updateExperience, addEducation, updateEducation
+--   createResumeProfile, editResume, deleteResumeById, uploadFile, deleteFile,
+--   addResumeSummary, updateResumeSummary, addExperience, updateExperience,
+--   addEducation, updateEducation
 -- question: getQuestionsList, getQuestionById, createQuestion, updateQuestion, deleteQuestion,
 --   getTagsWithQuestionCounts
 -- tag: getTagList, createTag, deleteTagById
@@ -114,20 +125,36 @@ rule PreserveTests {
 -- mock: generateMockActivitiesAction, clearMockActivitiesAction,
 --   generateMockProfileDataAction, clearMockProfileDataAction
 -- userSettings: getUserSettings, updateUserSettings, updateAiSettings, updateDisplaySettings
--- automation: all functions (already use ActionResult-like shape via formatError)
+-- automation: MIGRATED to ActionResult<T> (12 functions)
+--   getAutomationsList, getAutomationById, createAutomation, updateAutomation,
+--   deleteAutomation, pauseAutomation, resumeAutomation, getDiscoveredJobs,
+--   getDiscoveredJobById, dismissDiscoveredJob, acceptDiscoveredJob, getAutomationRuns
+-- apiKey: getUserApiKeys, saveApiKey, deleteApiKey
+-- notification: getNotifications, getUnreadCount, markAsRead, markAllAsRead,
+--   dismissNotification
+-- module: getModuleManifests, getCredentialModules, getActiveModules,
+--   activateModule, deactivateModule, runHealthCheck
 
--- PATTERN B (MIGRATED to ActionResult<T[]>): ~5 functions
--- company: getAllCompanies → ActionResult<Company[]>
--- jobtitle: getAllJobTitles → ActionResult<JobTitle[]>
--- jobLocation: getAllJobLocations → ActionResult<JobLocation[]>
--- tag: getAllTags → ActionResult<Tag[]>
--- activity: getAllActivityTypes → ActionResult<ActivityType[]>
+-- PATTERN B (MIGRATED to ActionResult<T[]>): 7 functions
+-- company: getAllCompanies -> ActionResult<Company[]>
+-- jobtitle: getAllJobTitles -> ActionResult<JobTitle[]>
+-- jobLocation: getAllJobLocations -> ActionResult<JobLocation[]>
+-- tag: getAllTags -> ActionResult<Tag[]>
+-- activity: getAllActivityTypes -> ActionResult<ActivityType[]>
+-- job: getStatusList -> ActionResult<JobStatus[]>
+-- job: getJobSourceList -> ActionResult<JobSource[]>
 -- NOTE: createActivityType was reclassified to Pattern A (returns ActionResult shape)
 
--- PATTERN C (custom return): ~5 functions
+-- PATTERN C (custom return): 7 functions
 -- dashboard: getJobsAppliedForPeriod, getRecentJobs, getActivityDataForPeriod,
 --   getJobsActivityForPeriod, getRecentActivities, getTopActivityTypesByDuration,
 --   getActivityCalendarData
+
+-- SPECIAL CASES (not ActionResult):
+-- job: getJobsIterator — async generator (AsyncGenerator<T[], void, unknown>),
+--   yields batches of jobs for streaming; does not return ActionResult
+-- apiKey: getDefaultOllamaBaseUrl, getOllamaBaseUrl — return plain Promise<string>
+-- auth: signup, authenticate — return redirect/error, not ActionResult
 
 -- Pattern B migration complete (2026-03-29)
 open question "Should Pattern C dashboard functions adopt ActionResult or keep custom shapes?"
