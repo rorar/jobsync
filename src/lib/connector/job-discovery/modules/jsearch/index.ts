@@ -4,6 +4,13 @@ import type {
   DiscoveredVacancy,
   SearchParams,
 } from "../../types";
+import {
+  resilientFetch,
+  JSearchApiError,
+  BrokenCircuitError,
+  TaskCancelledError,
+  BulkheadRejectedError,
+} from "./resilience";
 
 const JSEARCH_BASE_URL = "https://jsearch.p.rapidapi.com";
 
@@ -62,26 +69,59 @@ export function createJSearchConnector(credential?: string): DataSourceConnector
         url.searchParams.set("num_pages", "1");
         url.searchParams.set("date_posted", "week");
 
-        const response = await fetch(url.toString(), {
-          method: "GET",
-          headers: {
-            "X-RapidAPI-Key": credential,
-            "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
+        const data = await resilientFetch<JSearchResponse>(
+          url.toString(),
+          {
+            method: "GET",
+            headers: {
+              "X-RapidAPI-Key": credential,
+              "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
+            },
           },
-        });
+        );
 
-        if (!response.ok) {
-          if (response.status === 429) {
+        const vacancies: DiscoveredVacancy[] = (data.data || []).map(
+          translateJSearchJob,
+        );
+
+        return { success: true, data: vacancies };
+      } catch (error) {
+        if (error instanceof BrokenCircuitError) {
+          return {
+            success: false,
+            error: {
+              type: "network" as const,
+              message: "JSearch API circuit breaker open — service temporarily unavailable",
+            },
+          };
+        }
+        if (error instanceof BulkheadRejectedError) {
+          return {
+            success: false,
+            error: { type: "rate_limited" as const, retryAfter: 30 },
+          };
+        }
+        if (error instanceof TaskCancelledError) {
+          return {
+            success: false,
+            error: {
+              type: "network" as const,
+              message: "JSearch API request timed out",
+            },
+          };
+        }
+        if (error instanceof JSearchApiError) {
+          if (error.status === 429) {
             return {
               success: false,
-              error: { type: "rate_limited", retryAfter: 60 },
+              error: { type: "rate_limited" as const, retryAfter: 60 },
             };
           }
-          if (response.status === 403) {
+          if (error.status === 403) {
             return {
               success: false,
               error: {
-                type: "blocked",
+                type: "blocked" as const,
                 reason: "API access denied - check your RapidAPI key",
               },
             };
@@ -89,19 +129,11 @@ export function createJSearchConnector(credential?: string): DataSourceConnector
           return {
             success: false,
             error: {
-              type: "network",
-              message: `API error: ${response.status} ${response.statusText}`,
+              type: "network" as const,
+              message: `JSearch API error: ${error.status} ${error.message}`,
             },
           };
         }
-
-        const data: JSearchResponse = await response.json();
-        const vacancies: DiscoveredVacancy[] = (data.data || []).map(
-          translateJSearchJob,
-        );
-
-        return { success: true, data: vacancies };
-      } catch (error) {
         const message =
           error instanceof Error ? error.message : "Unknown error";
         return { success: false, error: { type: "network", message } };

@@ -12,6 +12,9 @@ import type {
 import {
   resilientFetch,
   ArbeitsagenturApiError,
+  BrokenCircuitError,
+  TaskCancelledError,
+  BulkheadRejectedError,
 } from "./resilience";
 
 const API_BASE =
@@ -211,6 +214,24 @@ export function createArbeitsagenturConnector(): DataSourceConnector {
 
         return { success: true, data: allVacancies };
       } catch (error) {
+        if (error instanceof BrokenCircuitError) {
+          return {
+            success: false,
+            error: { type: "network" as const, message: "Arbeitsagentur circuit breaker is open — too many recent failures" },
+          };
+        }
+        if (error instanceof BulkheadRejectedError) {
+          return {
+            success: false,
+            error: { type: "rate_limited" as const, retryAfter: 30 },
+          };
+        }
+        if (error instanceof TaskCancelledError) {
+          return {
+            success: false,
+            error: { type: "network" as const, message: "Arbeitsagentur request timed out" },
+          };
+        }
         if (error instanceof ArbeitsagenturApiError) {
           if (error.status === 429) {
             return {
@@ -247,6 +268,24 @@ export function createArbeitsagenturConnector(): DataSourceConnector {
 
         return { success: true, data: translateDetail(detail) };
       } catch (error) {
+        if (error instanceof BrokenCircuitError) {
+          return {
+            success: false,
+            error: { type: "network" as const, message: "Arbeitsagentur circuit breaker is open — too many recent failures" },
+          };
+        }
+        if (error instanceof BulkheadRejectedError) {
+          return {
+            success: false,
+            error: { type: "rate_limited" as const, retryAfter: 30 },
+          };
+        }
+        if (error instanceof TaskCancelledError) {
+          return {
+            success: false,
+            error: { type: "network" as const, message: "Arbeitsagentur request timed out" },
+          };
+        }
         if (error instanceof ArbeitsagenturApiError) {
           if (error.status === 429) {
             return {

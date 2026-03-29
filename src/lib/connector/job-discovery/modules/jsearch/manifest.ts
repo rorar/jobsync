@@ -12,4 +12,15 @@ export const jsearchManifest: JobDiscoveryManifest = {
     sensitive: true,
     placeholder: "Your RapidAPI key",
   },
+  resilience: {
+    retryAttempts: 2,
+    retryBackoff: "exponential",
+    circuitBreaker: true,
+    circuitBreakerThreshold: 5,
+    circuitBreakerCooldownMs: 30000,
+    timeoutMs: 15000,
+    rateLimitTokens: undefined,
+    rateLimitRefillMs: undefined,
+    maxConcurrent: undefined,
+  },
 };
