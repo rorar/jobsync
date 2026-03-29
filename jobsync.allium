@@ -297,7 +297,7 @@ entity Automation {
   jobBoard: jsearch | eures               -- currently only jsearch supported
   keywords: String
   location: String
-  connectorParams: String?              -- JSON blob for provider-specific search config
+  connectorParams: String?              -- JSON blob for module-specific search config
   resume: Resume
   matchThreshold: Integer = 80            -- 0-100
   scheduleHour: Integer                   -- hour of day (0-23)
@@ -332,9 +332,9 @@ external entity JSearchAPI {
   page: Integer
 }
 
--- External system: LLM provider for AI matching
-external entity LLMProvider {
-  provider: ollama | openai | deepseek
+-- External system: LLM module for AI matching
+external entity LLMModule {
+  moduleId: ollama | openai | deepseek
   model: String
   prompt: String
   resumeContent: String
@@ -472,7 +472,7 @@ value DiscoveredVacancy {
   postedAt: DateTime?
   salary: String?
   employmentType: full_time | part_time | contract  -- mapped to JobSync domain
-  externalId: String?                    -- provider's native ID for dedup
+  externalId: String?                    -- source system's native ID for dedup
   applicationDeadline: String?           -- ISO date, e.g. "2025-06-30"
   applicationInstructions: String?       -- plain text, HTML stripped
 }
@@ -489,7 +489,7 @@ interface DataSourceConnector {
 value SearchParams {
   keywords: String
   location: String
-  connectorParams: String?               -- JSON blob for provider-specific config
+  connectorParams: String?               -- JSON blob for module-specific config
 }
 
 value ConnectorResult<T> {

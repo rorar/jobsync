@@ -99,10 +99,24 @@ value BulkItemError {
 }
 
 value UndoToken {
+  id: String                        -- UUID, used to reference the token for undo/expiry
   actionType: BulkActionType
+  compensationFn: CompensationFunction
+    -- The function that reverses the action. Captured at action time.
+    -- Must be idempotent — calling it multiple times has the same effect as calling once.
   itemIds: String[]                 -- IDs of affected StagedVacancy records
   previousStatuses: String[]        -- status before the action (for rollback)
   expiresAt: DateTime               -- now() + config.UNDO_WINDOW_SECONDS
+  batchId: String?                  -- Links items from the same bulk operation.
+                                    -- null for single-item actions.
+                                    -- All items in a batch share one UndoToken.
+}
+
+value CompensationFunction {
+  -- A closure that reverses a domain action.
+  -- Captured at the time the action is performed (holds the previous state).
+  -- Must be idempotent: calling compensate() N times = calling it once.
+  compensate: (itemIds: String[], previousStatuses: String[]) -> Void
 }
 
 -- =============================================================================
@@ -392,6 +406,75 @@ rule UndoAction {
     -- For bulk actions, one UndoToken covers the entire batch.
 }
 
+rule UndoExpiry {
+  -- "An UndoToken becomes invalid after its TTL (default 10 seconds, configurable)."
+  -- After expiry, the undo window closes and the action becomes permanent.
+  -- The token is removed from the in-memory UndoStore.
+  when: now() >= token.expiresAt
+  let token = UndoToken where expiresAt <= now()
+
+  ensures: token is removed from UndoStore
+  ensures: token.compensationFn can no longer be invoked
+  ensures: the original action is permanent (no rollback possible)
+
+  @guidance
+    -- The default TTL is config.UNDO_WINDOW_SECONDS (10 seconds).
+    -- This is configurable per user in UserSettings (future: per-action TTL).
+    -- Implementation: setTimeout or periodic sweep of expired tokens.
+    -- The UndoStore is in-memory — tokens are lost on server restart.
+    -- This is acceptable for a 10-second window.
+}
+
+rule UndoExecution {
+  -- "The compensation function is idempotent and restores previous state."
+  -- Calling undo twice on the same token has no additional effect.
+  -- The compensation function restores each item to its pre-action status.
+  when: Undo(token: UndoToken, by: User)
+
+  requires: token.expiresAt > now()
+  requires: by owns all StagedVacancy in token.itemIds
+
+  ensures: token.compensationFn.compensate(token.itemIds, token.previousStatuses)
+    -- Each item's status is reverted to its previousStatus.
+    -- For archive: archivedAt is set back to null.
+    -- For trash: trashedAt is set back to null.
+    -- For dismiss: status reverts from dismissed to the previous status.
+
+  ensures: token is invalidated after first successful invocation
+    -- Prevents double-undo. The token is removed from UndoStore.
+
+  ensures: if token was already invalidated: no-op (idempotent)
+
+  @guidance
+    -- Idempotency is critical because the user might double-click the Undo button,
+    -- or Ctrl+Z might fire while the first undo is still processing.
+    -- Implementation: check token existence in UndoStore before executing.
+    -- If already removed (expired or previously undone), return silently.
+}
+
+rule CtrlZBinding {
+  -- "Ctrl+Z keyboard shortcut pops the most recent unexpired token from the undo stack."
+  -- The undo system maintains a stack (LIFO) of active UndoTokens.
+  -- Ctrl+Z pops and executes the most recent one.
+  when: User presses Ctrl+Z (or Cmd+Z on macOS)
+
+  requires: UndoStore has at least one unexpired token for the current user
+  requires: keyboard focus is NOT in a text input, textarea, or contenteditable element
+    -- Prevents conflict with browser/editor undo in form fields.
+
+  let token = UndoStore.popMostRecent(userId: currentUser.id)
+  requires: token != null and token.expiresAt > now()
+
+  ensures: UndoExecution(token, currentUser)
+
+  @guidance
+    -- Implementation: useUndoStack() React hook registers a global keydown listener.
+    -- The hook checks document.activeElement to avoid capturing undo in form inputs.
+    -- After popping, the toast for that token is dismissed.
+    -- If the stack is empty or all tokens are expired, Ctrl+Z is a no-op
+    -- (does not preventDefault — allows browser undo to work in inputs).
+}
+
 -- =============================================================================
 -- Rules: Bulk Actions
 -- =============================================================================
@@ -438,6 +521,72 @@ rule BulkAction {
   )
 }
 
+rule BulkPartialSuccess {
+  -- "Each item is validated individually; invalid items are skipped; the batch continues."
+  -- A bulk action does NOT use a single database transaction for all items.
+  -- Each item is processed independently. Failure of item N does not rollback items 1..N-1.
+  when: ExecuteBulkAction(actionType, vacancyIds, by)
+
+  ensures: for_each vacancyId in vacancyIds:
+    -- Item-level validation (ownership, status preconditions) happens per item.
+    -- If validation fails for one item, it is recorded as a BulkItemError
+    -- and processing continues with the next item.
+    vacancyId is processed independently of other items in the batch
+
+  ensures: BulkActionResult.failed >= 0
+    -- Zero failures is the happy path. Partial failure is not an error state.
+
+  ensures: BulkActionResult.succeeded + BulkActionResult.failed = BulkActionResult.totalRequested
+
+  @guidance
+    -- Why not a single transaction? A 100-item bulk dismiss where 1 item is
+    -- already promoted should not fail the other 99. Partial success is the
+    -- expected behavior for bulk operations.
+    -- The UI shows a summary: "95 dismissed, 5 skipped (already promoted)".
+    -- Each BulkItemError includes the reason so the user can investigate.
+}
+
+rule BatchUndoGranularity {
+  -- "One UndoToken per batch. Ctrl+Z reverses the entire batch."
+  -- When a bulk action succeeds (partially or fully), a single UndoToken
+  -- is created covering ALL successfully processed items.
+  -- Undoing the batch reverts ALL items in the batch, not individual ones.
+  when: ExecuteBulkAction completes with succeeded > 0
+
+  ensures: exactly one UndoToken is created per batch
+  ensures: UndoToken.batchId is set to a unique batch identifier
+  ensures: UndoToken.itemIds contains only the successfully processed IDs
+    -- Failed items are not included (nothing to undo for them)
+
+  ensures: Undo(token) reverts ALL items in the batch atomically
+    -- Either all items are restored or none (undo itself is transactional)
+
+  @guidance
+    -- This means a user who bulk-dismisses 50 items and presses Ctrl+Z
+    -- gets all 50 items restored, not just one.
+    -- Individual item undo is not supported for bulk actions.
+    -- The toast shows: "50 vacancies dismissed. Undo" — one undo for the batch.
+}
+
+rule BulkActionEvent {
+  -- "One BulkActionCompleted event per batch with the full item ID list."
+  -- The event bus receives a single event summarizing the entire batch,
+  -- not N individual VacancyDismissed/VacancyArchived events.
+  when: ExecuteBulkAction completes
+
+  ensures: exactly one BulkActionCompleted event is published per batch
+  ensures: event.itemIds contains all successfully processed item IDs
+  ensures: no individual per-item events (VacancyDismissed, etc.) are emitted for bulk items
+    -- This prevents N notifications for a single bulk action.
+    -- The NotificationDispatcher handles BulkActionCompleted as a single summary.
+
+  @guidance
+    -- Consumers that need per-item granularity can iterate event.itemIds.
+    -- The actionType field tells consumers what happened (dismiss, archive, etc.).
+    -- This is a deliberate trade-off: simpler event stream at the cost of
+    -- consumers needing to understand BulkActionCompleted semantics.
+}
+
 -- =============================================================================
 -- Rules: Archive & Trash
 -- =============================================================================
@@ -452,6 +601,7 @@ rule ArchiveVacancy {
     -- Promoted vacancies live in the Job aggregate, not in staging archive
 
   ensures: vacancy.archivedAt = now()
+  ensures: VacancyArchived.emitted(stagedVacancyId: vacancy.id, userId: by.id)
 }
 
 rule TrashVacancy {
@@ -463,6 +613,7 @@ rule TrashVacancy {
   requires: vacancy.status != promoted
 
   ensures: vacancy.trashedAt = now()
+  ensures: VacancyTrashed.emitted(stagedVacancyId: vacancy.id, userId: by.id)
   ensures: UndoToken.created(
     actionType: delete,
     itemIds: [vacancy.id],
@@ -486,10 +637,32 @@ rule RestoreFromTrash {
 -- Rules: DSGVO Retention & Dedup
 -- =============================================================================
 
-rule RetentionPurge {
-  -- "Trashed vacancies are purged after the retention period."
-  -- Data is deleted but a one-way hash of the dedup key is retained
-  -- to prevent rediscovery of already-seen vacancies.
+rule RetentionConfig {
+  -- "Retention period is configurable per user (default 90 days)."
+  -- Users can adjust how long trashed and dismissed vacancies are kept
+  -- before automatic purge. The default is config.RETENTION_DAYS (90 days).
+  when: UserUpdatesRetentionSettings(userId: String, retentionDays: Integer)
+
+  requires: retentionDays >= 7
+    -- Minimum 7 days to prevent accidental immediate purge.
+  requires: retentionDays <= 365
+    -- Maximum 1 year. Beyond that, consider archiving.
+
+  ensures: UserSettings where userId = userId:
+    retentionDays = retentionDays
+
+  @guidance
+    -- Stored in UserSettings JSON blob alongside notification preferences.
+    -- If user has no custom setting, config.RETENTION_DAYS (90) applies.
+    -- The retention service reads the user's custom setting when running cleanup.
+    -- Dismissed vacancy retention (DISMISSED_RETENTION_DAYS) is always shorter
+    -- than trash retention: min(30, retentionDays / 3).
+}
+
+rule RetentionCleanup {
+  -- "After retention period: delete StagedVacancy data, preserve hash in DedupHash."
+  -- This is the main retention rule combining purge + hash preservation.
+  -- Runs as a scheduled background job (piggybacking on automation scheduler).
   -- DSGVO Art. 25 (Privacy by Design) + Art. 5(1)(c) (Datenminimierung)
   when: RetentionCheckDue
   let expired = StagedVacancy
@@ -497,21 +670,29 @@ rule RetentionPurge {
     and trashedAt + config.RETENTION_DAYS.days <= now()
 
   ensures: for_each vacancy in expired:
-    -- Retain dedup hash before deletion
+    -- Step 1: Retain dedup hash before deletion
     if vacancy.externalId != null:
       DedupHash.created(
         userId: vacancy.userId,
         hash: hash(config.DEDUP_HASH_ALGORITHM, vacancy.sourceBoard + ":" + vacancy.externalId),
         sourceBoard: vacancy.sourceBoard
       )
-    -- Delete the vacancy data
+    -- Step 2: Delete the vacancy data (all PII removed)
     vacancy.deleted()
 
+  -- Step 3: Emit domain event summarizing the cleanup
+  ensures: RetentionCompleted.emitted(
+    userId: aggregated per user,
+    purgedCount: count of deleted vacancies,
+    hashesCreated: count of new DedupHash records
+  )
+
   @guidance
-    -- The hash is one-way (not reconstructable) → no personal data retained.
-    -- Future automation runs check DedupHash before creating new StagedVacancy.
+    -- The hash is one-way (SHA-256, not reconstructable) — no personal data retained.
+    -- Process in batches of 100 to avoid long-running DB transactions on large datasets.
+    -- Yield between batches (setTimeout/setImmediate) to avoid blocking the event loop.
     -- This runs as a scheduled job (piggyback on existing automation scheduler
-    -- or as a standalone cron).
+    -- or as a standalone cron route triggered by external cron).
 }
 
 rule DismissedRetentionPurge {
@@ -555,6 +736,29 @@ rule DedupCheck {
     -- A vacancy with a different externalId but the same URL is treated as a duplicate.
 }
 
+rule DedupHashCheck {
+  -- "Runner checks DedupHash before inserting a new StagedVacancy."
+  -- After retention purge deletes old StagedVacancy records, the DedupHash table
+  -- retains the one-way hash. The runner must check this table to avoid
+  -- re-staging vacancies that were already processed and purged.
+  when: AutomatedVacancyIntake attempts to stage vacancy with (userId, sourceBoard, externalId)
+
+  let hashValue = hash(config.DEDUP_HASH_ALGORITHM, sourceBoard + ":" + externalId)
+
+  if exists DedupHash where userId = userId and hash = hashValue:
+    ensures: vacancy is NOT staged (silently skipped)
+    ensures: runner increments jobsDeduplicated counter
+
+  @guidance
+    -- This check runs BEFORE the StagedVacancy existence check.
+    -- DedupHash lookup is an indexed query (hash + userId composite index).
+    -- The sourceBoard field on DedupHash enables partitioned queries
+    -- (only check hashes from the same source board for performance).
+    -- If externalId is null, the runner falls back to hashing sourceUrl.
+    -- DedupHash records have no expiry — they persist indefinitely
+    -- because they contain no PII (one-way hash only).
+}
+
 -- =============================================================================
 -- Domain Events
 -- =============================================================================
@@ -584,12 +788,28 @@ event VacancyDismissed {
   userId: String
 }
 
+event VacancyArchived {
+  stagedVacancyId: String
+  userId: String
+}
+
+event VacancyTrashed {
+  stagedVacancyId: String
+  userId: String
+}
+
 event BulkActionCompleted {
   actionType: BulkActionType
   itemIds: String[]
   userId: String
   succeeded: Integer
   failed: Integer
+}
+
+event RetentionCompleted {
+  userId: String
+  purgedCount: Integer
+  hashesCreated: Integer
 }
 
 -- =============================================================================
@@ -690,11 +910,100 @@ surface PromotionDialog {
     -- No Job is created until the user clicks "Promote".
 }
 
+surface BulkActionBar {
+  -- Floating action bar that appears when one or more vacancies are selected.
+  facing actor: User
+  context entity: StagedVacancy[] (selected subset)
+
+  exposes:
+    -- Selection state:
+    selectedCount: Integer,           -- number of currently selected items
+    selectedIds: String[],            -- IDs of selected StagedVacancy records
+    allSelected: Boolean              -- whether "select all" is active (current page or all pages)
+
+  provides:
+    -- Bulk operations (available buttons depend on current tab):
+    BulkDismiss(vacancyIds)           -- dismiss all selected (Neu tab)
+    BulkPromote(vacancyIds)           -- promote all selected (opens batch PromotionDialog)
+    BulkArchive(vacancyIds)           -- archive all selected
+    BulkTrash(vacancyIds)             -- move all selected to trash
+    BulkRestore(vacancyIds)           -- restore selected (Abgelehnt/Papierkorb tabs)
+    SelectAll()                       -- select all items on current page
+    DeselectAll()                     -- clear selection
+
+  @guarantee ContextualButtons
+    -- Only show operations valid for the current tab:
+    -- Neu tab: Dismiss, Promote, Archive, Trash
+    -- Abgelehnt tab: Restore, Trash
+    -- Archiv tab: Restore (from archive), Trash
+    -- Papierkorb tab: Restore (from trash), Permanent Delete (future)
+    -- Buttons for invalid operations are hidden, not disabled.
+
+  @guarantee FloatingPosition
+    -- The bar floats at the bottom of the viewport (sticky bottom).
+    -- Appears with a slide-up animation when first item is selected.
+    -- Disappears when selection is cleared.
+    -- Does not overlap with the UndoToast.
+
+  @guarantee SelectionPersistence
+    -- Selection persists across tab pagination (scrolling/page changes).
+    -- Selection is cleared when switching tabs (different data set).
+    -- Checkbox state is synced with selectedIds.
+
+  @guarantee AccessibleSelection
+    -- Each vacancy card has a checkbox with aria-label: "Select {title}"
+    -- BulkActionBar has role="toolbar" with aria-label: "{count} items selected"
+    -- All buttons have descriptive aria-labels
+}
+
+surface UndoToast {
+  -- Toast notification with countdown timer and Undo button.
+  -- Appears after every destructive action (dismiss, trash, archive, bulk action).
+  facing actor: User
+  context entity: UndoToken
+
+  exposes:
+    -- Toast content:
+    message: String,                  -- e.g. "3 vacancies dismissed" or "Moved to trash"
+    countdown: Integer,               -- remaining seconds (ticks down in real time)
+    progress: Float,                  -- 0.0 to 1.0 for visual countdown bar
+
+  provides:
+    Undo()                            -- triggers UndoExecution for the associated token
+    Dismiss()                         -- manually close the toast (token remains valid until expiry)
+
+  @guarantee CountdownVisual
+    -- A visual countdown (progress bar or circular timer) shows remaining time.
+    -- Countdown ticks every second. When it reaches 0, the toast auto-dismisses.
+    -- The countdown is synchronized with the UndoToken.expiresAt.
+
+  @guarantee StackBehavior
+    -- Multiple toasts can be visible simultaneously (stacked vertically).
+    -- Newest toast appears at the bottom of the stack.
+    -- Each toast has its own independent countdown.
+    -- Ctrl+Z undoes the most recent (bottommost) toast.
+
+  @guarantee AnimatedTransitions
+    -- Toast enters with a slide-up animation.
+    -- Toast exits with a fade-out animation when:
+    --   a) countdown expires (auto-dismiss)
+    --   b) user clicks Undo (action reverted)
+    --   c) user clicks Dismiss (manual close)
+
+  @guarantee AccessibleToast
+    -- role="alert" for screen readers
+    -- aria-live="polite" (does not interrupt current reading)
+    -- Undo button is keyboard-focusable
+    -- Toast does not block interaction with the page below
+}
+
 -- =============================================================================
 -- Open Questions
 -- =============================================================================
 
-open question "Undo implementation: Command Pattern (action stack with full rollback) or timer-based soft-revert (simpler, status-only rollback)?"
+-- Resolved: "Undo implementation: Command Pattern or timer-based soft-revert?"
+-- Answer: Timer-based soft-revert with compensation functions (AD-2 from design spec).
+-- UndoToken with configurable TTL (default 10s). See UndoExpiry, UndoExecution rules.
 
 open question "Should dismissed vacancies that are rediscovered create a notification? ('A vacancy you dismissed was found again on a different board.')"
 

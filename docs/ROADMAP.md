@@ -158,7 +158,7 @@ Module registrieren sich mit einem **Manifest** beim Connector und deklarieren i
 - Allium Spec: `specs/module-lifecycle.allium`
 - **DDD-Pattern:** Published Language — der Connector publiziert einen Settings-Vertrag (`ModuleManifest`), Module erfüllen ihn mit ihren spezifischen Anforderungen. Basis-Vertrag mit connector-spezifischen Extensions (`JobDiscoveryManifest`, `AiManifest`).
 
-### 0.5 Vacancy Pipeline (Staging → Inbox → Tracking → Archive/Trash) — TEILWEISE IMPLEMENTIERT
+### 0.5 Vacancy Pipeline (Staging → Inbox → Tracking → Archive/Trash) — KERN DONE (2 Follow-Ups offen)
 Entkopplung der LLM-Abhängigkeit: Die App funktioniert in den Grundfunktionen ohne LLMs. Stellenangebote durchlaufen eine Pipeline mit klaren Aggregate-Grenzen.
 
 **Implementiert (Kern-Pipeline):**
@@ -169,15 +169,17 @@ Entkopplung der LLM-Abhängigkeit: Die App funktioniert in den Grundfunktionen o
 - ✅ Staging UI: Tabs + Karten (`StagingContainer.tsx`, `StagedVacancyCard.tsx`)
 - ✅ Allium Spec (`specs/vacancy-pipeline.allium`)
 - ✅ Dedup via Hash (Review Fix)
-- ✅ Domain Event `VacancyPromoted` emittiert (aber noch kein Event Bus → 0.6)
+- ✅ Domain Events via Event Bus (0.6)
 
-**Ausstehend:**
-- ❌ Archive + Trash (Lifecycle-Endpunkte)
-- ❌ Undo/Redo (Toast + Ctrl+Z)
-- ❌ Bulk Actions (Multi-Select + Batch-Operationen)
-- ❌ Dedup-Retention (DedupHash-Tabelle nach Löschung, DSGVO)
-- ❌ Staging-Performance (Pagination/Virtualisierung)
-- ❌ Manuelle Jobs → Queue Option
+**Implementiert (2026-03-29):**
+- ✅ Archive + Trash Lifecycle-Endpunkte (mit Undo-Token)
+- ✅ Undo/Redo System (UndoStore mit TTL, Kompensations-Funktionen, userId-Ownership)
+- ✅ Bulk Actions Domain Service (Partial-Success-Semantik, BulkActionBar UI, Multi-Select)
+- ✅ Dedup-Retention Service (SHA-256 Hash → DedupHash, DSGVO Privacy by Design)
+- ✅ Manuelle Jobs → Queue Option (sendToQueue Toggle in AddJob, `addJobToQueue()` Action)
+- ✅ 31+ neue Tests (event-bus, undo-store, retention, bulk-actions)
+
+**Ausstehend (Follow-Ups):**
 - ❌ Job-Tinder Dual-Use (→ 2.7)
 - ❌ Company Blacklist Filter (→ 2.15)
 
@@ -272,8 +274,20 @@ Intake (Automation ODER Manual) → Staging Area → Processing → Inbox → Tr
 - **Voraussetzung für:** Job-Tinder Dual-Use (2.7), CRM (5), Bewerbungsunterlagen (4)
 - Allium Spec: `specs/vacancy-pipeline.allium` (zu erstellen)
 
-### 0.6 Unified Notification System
+### 0.6 Unified Notification System — PHASE 1 DONE (3 Channel-Phasen offen)
 Application Service für Dispatch + bestehende Connectors für Delivery. **Dispatch ≠ Delivery.**
+
+**Implementiert (2026-03-29):**
+- ✅ TypedEventBus (in-process pub/sub, error isolation, wildcard, async handlers)
+- ✅ 11 Domain Event Types (typed discriminated union, VacancyPromoted/Dismissed/Staged/Archived/Trashed + Bulk/Module/Retention)
+- ✅ NotificationDispatcher Consumer (Event→Notification mapping, staged vacancy batching)
+- ✅ AuditLogger Consumer (wildcard subscriber für Debug-Logging)
+- ✅ Consumer Registration at startup (`instrumentation.ts`, hot-reload guard)
+- ✅ In-App Notification UI (NotificationBell + NotificationDropdown + NotificationItem)
+- ✅ Notification Preferences (JSON on UserSettings, per-type enable/disable, quiet hours)
+- ✅ NotificationSettings UI Komponente
+- ✅ Allium Specs: `event-bus.allium`, `notification-dispatch.allium`
+- ✅ emitEvent() → EventBus.publish() Migration (alle Callsites)
 
 - **Dispatch (intern):** `NotificationDispatcher` subscribt Domain Events → prüft User-Preferences → routet an Channels
 - **Delivery (extern):** E-Mail (→ Communication Connector 1.12), Browser Push, Webhook (→ 1.3), In-App (DB-Write)
