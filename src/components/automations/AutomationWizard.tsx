@@ -47,7 +47,21 @@ import { ConnectorType } from "@/lib/connector/manifest";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/i18n";
 import type { AutomationWithResume } from "@/models/automation.model";
-import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, HelpCircle, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, ChevronsUpDown, HelpCircle, Loader2, Play } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import { EuresOccupationCombobox } from "@/components/automations/EuresOccupationCombobox";
 import { EuresLocationCombobox } from "@/components/automations/EuresLocationCombobox";
 import { getLocationLabel, getCountryCode } from "@/lib/connector/job-discovery/modules/eures/countries";
@@ -107,6 +121,8 @@ export function AutomationWizard({
   const [configuredKeyModuleIds, setConfiguredKeyModuleIds] = useState<Set<string>>(new Set());
   const [aiScoringEnabled, setAiScoringEnabled] = useState(true);
   const [scheduleFrequency, setScheduleFrequency] = useState<ScheduleFrequency>("daily");
+  const [resumePopoverOpen, setResumePopoverOpen] = useState(false);
+  const [runAfterCreate, setRunAfterCreate] = useState(false);
 
   const form = useForm<CreateAutomationInput>({
     resolver: zodResolver(CreateAutomationSchema),
@@ -253,6 +269,16 @@ export function AutomationWizard({
         : await createAutomation(data);
 
       if (result.success) {
+        // If "Create & Run Now" was clicked, trigger a manual run
+        if (runAfterCreate && result.data?.id) {
+          try {
+            await fetch(`/api/automations/${result.data.id}/run`, { method: "POST" });
+          } catch {
+            // Non-blocking — automation was created, run is best-effort
+          }
+          setRunAfterCreate(false);
+        }
+
         toast({
           title: editAutomation ? t("automations.automationUpdated") : t("automations.automationCreated"),
           description: editAutomation
@@ -512,22 +538,56 @@ export function AutomationWizard({
             control={form.control}
             name="resumeId"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="flex flex-col">
                 <FormLabel>{t("automations.resumeForMatching")}</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder={t("automations.selectResume")} />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {resumes.map((resume) => (
-                      <SelectItem key={resume.id} value={resume.id}>
-                        {resume.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={resumePopoverOpen} onOpenChange={setResumePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={resumePopoverOpen}
+                        className={cn(
+                          "w-full justify-between",
+                          !field.value && "text-muted-foreground",
+                        )}
+                      >
+                        {field.value
+                          ? resumes.find((r) => r.id === field.value)?.title
+                          : t("automations.selectResume")}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder={t("automations.searchResume")} />
+                      <CommandList>
+                        <CommandEmpty>{t("automations.noResumeFound")}</CommandEmpty>
+                        <CommandGroup>
+                          {resumes.map((r) => (
+                            <CommandItem
+                              key={r.id}
+                              value={r.title}
+                              onSelect={() => {
+                                field.onChange(r.id);
+                                setResumePopoverOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  field.value === r.id ? "opacity-100" : "opacity-0",
+                                )}
+                              />
+                              {r.title}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 <FormDescription>
                   {t("automations.resumeMatchDesc")}
                 </FormDescription>
@@ -777,10 +837,26 @@ export function AutomationWizard({
                   <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               ) : (
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  {editAutomation ? t("automations.updateAutomation") : t("automations.createAutomation")}
-                </Button>
+                <>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting && !runAfterCreate && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    {editAutomation ? t("automations.updateAutomation") : t("automations.createAutomation")}
+                  </Button>
+                  {!editAutomation && (
+                    <Button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={async () => {
+                        setRunAfterCreate(true);
+                        form.handleSubmit(onSubmit)();
+                      }}
+                    >
+                      {isSubmitting && runAfterCreate && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                      {!isSubmitting && <Play className="h-4 w-4 mr-1" />}
+                      {t("automations.createAndRun")}
+                    </Button>
+                  )}
+                </>
               )}
             </DialogFooter>
           </form>

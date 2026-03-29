@@ -192,15 +192,23 @@ export function EuresOccupationCombobox({
 
   const addKeyword = useCallback(
     (keyword: string, meta?: EscoSearchResult) => {
-      if (isMaxReached) return;
+      if (isMaxReached) {
+        setAnnouncement(
+          t("automations.maxKeywords").replace("{max}", String(MAX_KEYWORDS)),
+        );
+        return;
+      }
       const trimmed = keyword.trim();
       if (!trimmed || selectedKeywords.includes(trimmed)) return;
       if (meta) {
         setEscoMeta((prev) => new Map(prev).set(trimmed, meta));
       }
       updateFieldValue([...selectedKeywords, trimmed]);
+      setAnnouncement(
+        `${trimmed} added, ${selectedKeywords.length + 1} of ${MAX_KEYWORDS}`,
+      );
     },
-    [selectedKeywords, isMaxReached, updateFieldValue],
+    [selectedKeywords, isMaxReached, updateFieldValue, t],
   );
 
   const removeKeyword = useCallback(
@@ -319,22 +327,6 @@ export function EuresOccupationCombobox({
                   fetchResults(val);
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && inputValue.trim()) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (isMaxReached) {
-                      setAnnouncement(
-                        t("automations.maxKeywords").replace("{max}", String(MAX_KEYWORDS)),
-                      );
-                      return;
-                    }
-                    addKeyword(inputValue.trim());
-                    setAnnouncement(
-                      `${inputValue.trim()} added, ${selectedKeywords.length + 1} of ${MAX_KEYWORDS}`,
-                    );
-                    setInputValue("");
-                    setResults([]);
-                  }
                   if (e.key === "Tab") {
                     setOpen(false);
                     setInputValue("");

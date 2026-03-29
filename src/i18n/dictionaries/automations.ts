@@ -229,6 +229,13 @@ export const automations = {
     "automations.scheduleEvery2Days": "Every 2 days",
     "automations.scheduleWeekly": "Weekly",
     "automations.preferredStartTime": "Preferred Start Time",
+
+    // Resume Combobox
+    "automations.searchResume": "Search resumes...",
+    "automations.noResumeFound": "No resume found",
+
+    // Create & Run Now
+    "automations.createAndRun": "Create & Run Now",
   },
   de: {
     // AutomationWizard - Steps
@@ -460,6 +467,13 @@ export const automations = {
     "automations.scheduleEvery2Days": "Alle 2 Tage",
     "automations.scheduleWeekly": "Wöchentlich",
     "automations.preferredStartTime": "Bevorzugte Startzeit",
+
+    // Resume Combobox
+    "automations.searchResume": "Resumes suchen...",
+    "automations.noResumeFound": "Kein Resume gefunden",
+
+    // Create & Run Now
+    "automations.createAndRun": "Erstellen & Jetzt starten",
   },
   fr: {
     // AutomationWizard - Steps
@@ -691,6 +705,13 @@ export const automations = {
     "automations.scheduleEvery2Days": "Tous les 2 jours",
     "automations.scheduleWeekly": "Hebdomadaire",
     "automations.preferredStartTime": "Heure de début préférée",
+
+    // Resume Combobox
+    "automations.searchResume": "Rechercher des CV...",
+    "automations.noResumeFound": "Aucun CV trouvé",
+
+    // Create & Run Now
+    "automations.createAndRun": "Créer & Exécuter",
   },
   es: {
     // AutomationWizard - Steps
@@ -922,5 +943,12 @@ export const automations = {
     "automations.scheduleEvery2Days": "Cada 2 días",
     "automations.scheduleWeekly": "Semanal",
     "automations.preferredStartTime": "Hora de inicio preferida",
+
+    // Resume Combobox
+    "automations.searchResume": "Buscar currículums...",
+    "automations.noResumeFound": "Ningún CV encontrado",
+
+    // Create & Run Now
+    "automations.createAndRun": "Crear y Ejecutar",
   },
 } as const;
