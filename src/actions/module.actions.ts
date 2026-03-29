@@ -208,13 +208,14 @@ export async function deactivateModule(
 
     // Query IDs BEFORE update to avoid TOCTOU race — captures the exact set
     // of automations that will be paused, before any concurrent changes.
+    // Global scope (all users) — consistent with degradation.ts handlers
+    // (handleAuthFailure, handleCircuitBreakerTrip) per Allium spec.
     const affectedAutomations = await prisma.automation.findMany({
       where: {
-        userId: user.id,
         jobBoard: moduleId,
         status: "active",
       },
-      select: { id: true, name: true },
+      select: { id: true, name: true, userId: true },
     });
 
     if (affectedAutomations.length > 0) {
@@ -228,10 +229,11 @@ export async function deactivateModule(
       });
 
       // Create persistent notifications using createMany (no N+1)
+      // Each notification targets the automation's owner (global scope).
       try {
         await prisma.notification.createMany({
           data: affectedAutomations.map((auto) => ({
-            userId: user.id,
+            userId: auto.userId,
             type: "module_deactivated",
             message: `Automation "${auto.name}" paused because module "${moduleId}" was deactivated.`,
             moduleId,

@@ -259,11 +259,11 @@ export const generateMockActivities = (
       const endTime = new Date(startTime);
       endTime.setMinutes(endTime.getMinutes() + duration);
 
-      const activityTypeId = `mock-type-${activityType.toLowerCase().replace(/\s+/g, "-")}`;
-
+      // Store the activity type VALUE (e.g. "Learning") in activityTypeId.
+      // mock.actions.ts uses this to look up the real DB type ID via typeMap.
       activities.push({
         id: `mock-activity-${recordsGenerated}`,
-        activityTypeId,
+        activityTypeId: activityType,
         activityName,
         startTime,
         endTime,

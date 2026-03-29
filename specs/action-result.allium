@@ -1,0 +1,133 @@
+-- ActionResult: Typed server action return contract
+-- Replaces Promise<any | undefined> across ~80 server actions
+
+value ActionResult<T> {
+    success: Boolean
+    data: T?
+    total: Integer?
+    message: String?
+}
+
+-- Pattern A: Actions that wrap data in ActionResult
+-- These return { success: true, data: ..., total?: ... } on success
+-- and { success: false, message: "..." } on failure via handleError()
+
+entity ActionPatternA {
+    -- Functions that return paginated lists
+    -- Return shape: { success: true, data: T[], total: number }
+    kind: list
+
+    -- Functions that return single entities
+    -- Return shape: { success: true, data: T }
+    kind: single
+
+    -- Functions that return no data (delete, status change)
+    -- Return shape: { success: true, message?: "..." }
+    kind: void
+}
+
+-- Pattern B: MIGRATED to ActionResult<T[]>
+-- Previously returned raw arrays and threw on error.
+-- Now wrapped in ActionResult<T[]> like Pattern A functions.
+
+entity ActionPatternB {
+    -- Functions: getAllCompanies, getAllJobTitles, getAllJobLocations,
+    --   getAllActivityTypes, getAllTags
+    -- Return shape: ActionResult<T[]> (migrated from raw T[])
+    -- Callers: Updated to check result.success
+    kind: action_result_list
+}
+
+-- Pattern C: Dashboard functions with custom return shapes
+-- These return domain-specific objects and throw on error
+
+entity ActionPatternC {
+    -- Functions: getJobsAppliedForPeriod, getRecentJobs, etc.
+    -- Return shape: custom objects ({ count, trend }, T[], etc.)
+    -- Callers: Dashboard page destructures directly
+    kind: custom_return
+}
+
+rule RefactorPatternA {
+    -- Only change return type annotation
+    -- Body already returns { success, data, total, message }
+    -- Replace: Promise<any | undefined> → Promise<ActionResult<T>>
+    -- where T is determined by examining the data field
+    ensures: annotation_matches_body
+}
+
+rule RefactorPatternB {
+    -- MIGRATED: All Pattern B functions now return ActionResult<T[]>
+    -- Body wraps raw arrays in { success: true, data: [...] }
+    -- Callers updated to destructure via result.data
+    ensures: annotation_matches_body
+}
+
+rule RefactorPatternC {
+    -- Replace with specific return type (not ActionResult)
+    -- e.g., Promise<{ count: number; trend: number | null }>
+    ensures: annotation_matches_actual_return
+}
+
+rule FixBodyMismatches {
+    -- Where function body returns { res, success } or { activity, success }
+    -- instead of { data, success }, normalize to ActionResult shape:
+    -- { res, success: true } → { data: res, success: true }
+    -- { activity, success: true } → { data: activity, success: true }
+    -- { data, total } → { success: true, data, total }
+    ensures: body_matches_action_result
+}
+
+rule UpdateCallers {
+    -- Where callers reference result.totalQuestions or result.totalTasks
+    -- update to result.total (ActionResult standard field)
+    -- Where callers spread result.data, ensure data is typed
+    ensures: callers_use_standard_fields
+}
+
+rule PreserveTests {
+    -- All 748 existing tests must continue to pass
+    -- Mock return shapes in tests must match new ActionResult shape
+    ensures: test_count >= 748
+}
+
+-- Classification of all 80 functions:
+
+-- PATTERN A (wrap in ActionResult<T>): ~55 functions
+-- activity: getActivitiesList, createActivity, updateActivity, deleteActivity,
+--   getCurrentActivity, startActivityFromTask
+-- company: getCompanyList, createCompany, updateCompany, deleteCompanyById
+-- job: getJobsList, getJobDetails, addJob, updateJob, updateJobStatus, deleteJobById,
+--   createLocation, createJobSource
+-- jobLocation: getJobLocationsList, deleteJobLocationById
+-- jobSource: getJobSourceList, deleteJobSourceById
+-- jobtitle: getJobTitleList, deleteJobTitleById
+-- note: getNotesByJobId, addNote, updateNote, deleteNote
+-- profile: getResumeList, getResumeById, addContactInfo, updateContactInfo,
+--   createResumeProfile, editResume, deleteResumeById, addResumeSummary,
+--   updateResumeSummary, addExperience, updateExperience, addEducation, updateEducation
+-- question: getQuestionsList, getQuestionById, createQuestion, updateQuestion, deleteQuestion,
+--   getTagsWithQuestionCounts
+-- tag: getTagList, createTag, deleteTagById
+-- task: getTasksList, getTaskById, createTask, updateTask, updateTaskStatus,
+--   deleteTaskById, startActivityFromTask, getActivityTypesWithTaskCounts
+-- mock: generateMockActivitiesAction, clearMockActivitiesAction,
+--   generateMockProfileDataAction, clearMockProfileDataAction
+-- userSettings: getUserSettings, updateUserSettings, updateAiSettings, updateDisplaySettings
+-- automation: all functions (already use ActionResult-like shape via formatError)
+
+-- PATTERN B (MIGRATED to ActionResult<T[]>): ~5 functions
+-- company: getAllCompanies → ActionResult<Company[]>
+-- jobtitle: getAllJobTitles → ActionResult<JobTitle[]>
+-- jobLocation: getAllJobLocations → ActionResult<JobLocation[]>
+-- tag: getAllTags → ActionResult<Tag[]>
+-- activity: getAllActivityTypes → ActionResult<ActivityType[]>
+-- NOTE: createActivityType was reclassified to Pattern A (returns ActionResult shape)
+
+-- PATTERN C (custom return): ~5 functions
+-- dashboard: getJobsAppliedForPeriod, getRecentJobs, getActivityDataForPeriod,
+--   getJobsActivityForPeriod, getRecentActivities, getTopActivityTypesByDuration,
+--   getActivityCalendarData
+
+-- Pattern B migration complete (2026-03-29)
+open question "Should Pattern C dashboard functions adopt ActionResult or keep custom shapes?"

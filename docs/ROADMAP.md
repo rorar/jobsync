@@ -95,6 +95,12 @@ Module registrieren sich mit einem **Manifest** beim Connector und deklarieren i
 - Allium Spec synchronisiert (17 Divergenzen gefixt)
 - 114 Tests in 6 Suites (Registry, Credentials, Manifests, Degradation, Health, Resilience)
 - UI: Health-Indikator in Settings, pauseReason in Automations-Liste
+- **Connector Feinschliff (2026-03-29):**
+  - Arbeitsagentur: Cockatiel Error-Handling hinzugefuegt
+  - JSearch: Resilience Wrapper (Retry, CB, Timeout, Rate Limit)
+  - EURES: EuresApiError Handling hinzugefuegt
+  - Alle 3 Job-Discovery-Module: 106 Connector-spezifische Tests, Pagination Safety Cap (MAX_PAGES=20)
+  - Pattern B `getAllX` auf ActionResult<T[]> migriert
 
 **Schichten:**
 1. **Module Manifest** — Jedes Modul deklariert bei Registrierung:

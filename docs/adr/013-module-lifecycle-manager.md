@@ -73,3 +73,22 @@ Implement a Module Lifecycle Manager based on the Allium specification (`specs/m
 
 ### Modified (15 files)
 - Registry facades, barrel files, runner, settings UI, automation wizard, Prisma schema
+
+## Amendments (2026-03-29)
+
+### Phase 4-6 Implementation
+- Phase 4: Health monitoring with probe + status transitions
+- Phase 5: Resilience shared kernel (buildResiliencePolicy from manifests)
+- Phase 6: Degradation rules (auth/CB/runFailure escalation)
+
+### Deferred Polish
+- Pattern B getAllX migrated to ActionResult<T[]>
+- Periodic health check scheduler (instrumentation.ts)
+- ConnectorParams validation against manifest schema
+- Persistent notification system (DB-backed)
+
+### Connector Feinschliff
+- All 3 Job Discovery connectors now have consistent cockatiel error handling
+- JSearch gained resilience wrapper (retry, CB, timeout, rate limit)
+- 106 connector-specific tests added
+- Pagination safety cap (MAX_PAGES=20)
