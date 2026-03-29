@@ -285,6 +285,16 @@ export function AutomationWizard({
             ? t("automations.automationUpdatedDesc")
             : t("automations.automationCreatedDesc"),
         });
+
+        // Show performance warning as a separate toast if returned by the server
+        if (result.message?.startsWith("performanceWarning:")) {
+          toast({
+            title: t("automations.warning"),
+            description: t("automations.performanceWarning"),
+            variant: "default",
+          });
+        }
+
         form.reset();
         setStep(0);
         onOpenChange(false);

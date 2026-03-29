@@ -3,6 +3,7 @@
 import { useState } from "react";
 import AiSettings from "@/components/settings/AiSettings";
 import ApiKeySettings from "@/components/settings/ApiKeySettings";
+import AutomationSettings from "@/components/settings/AutomationSettings";
 import DeveloperSettings from "@/components/settings/DeveloperSettings";
 import DisplaySettings from "@/components/settings/DisplaySettings";
 import ErrorLogSettings from "@/components/settings/ErrorLogSettings";
@@ -25,6 +26,7 @@ function Settings() {
           {activeSection === "ai-module" && <AiSettings />}
           {activeSection === "api-keys" && <ApiKeySettings />}
           {activeSection === "appearance" && <DisplaySettings />}
+          {activeSection === "automation" && <AutomationSettings />}
           {activeSection === "developer" && <DeveloperSettings />}
           {activeSection === "error-log" && <ErrorLogSettings />}
         </div>

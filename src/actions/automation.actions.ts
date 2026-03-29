@@ -26,8 +26,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { handleError } from "@/lib/utils";
 import { ActionResult } from "@/models/actionResult";
 import { validateConnectorParams } from "@/lib/connector/params-validator";
-
-const MAX_AUTOMATIONS_PER_USER = 10;
+import { getAutomationSettingsForUser } from "@/actions/userSettings.actions";
 
 /** Narrow Prisma string fields to domain enums for Automation (with resume included). */
 function toAutomationWithResume<T extends { jobBoard: string; status: string; pauseReason: string | null }>(
@@ -75,10 +74,21 @@ export async function getAutomationsList(
       prisma.automation.count({ where: { userId: user.id } }),
     ]);
 
+    // Soft warning when automation count exceeds user's configured threshold
+    let warning: string | undefined;
+    const automationSettings = await getAutomationSettingsForUser(user.id);
+    if (
+      automationSettings.performanceWarningEnabled &&
+      total >= automationSettings.performanceWarningThreshold
+    ) {
+      warning = `performanceWarning:${total}`;
+    }
+
     return {
       success: true,
       data: automations.map(toAutomationWithResume) as AutomationWithResume[],
       total,
+      message: warning,
     };
   } catch (error) {
     return handleError(error, "Failed to get automations list");
@@ -131,11 +141,6 @@ export async function createAutomation(
     }
 
     const validated = CreateAutomationSchema.parse(input);
-
-    const count = await prisma.automation.count({ where: { userId: user.id } });
-    if (count >= MAX_AUTOMATIONS_PER_USER) {
-      return { success: false, message: `Maximum of ${MAX_AUTOMATIONS_PER_USER} automations allowed per user` };
-    }
 
     const resume = await prisma.resume.findFirst({
       where: {
@@ -194,9 +199,21 @@ export async function createAutomation(
       },
     });
 
+    // Soft warning when automation count exceeds user's configured threshold
+    let warning: string | undefined;
+    const automationCount = await prisma.automation.count({ where: { userId: user.id } });
+    const automationSettings = await getAutomationSettingsForUser(user.id);
+    if (
+      automationSettings.performanceWarningEnabled &&
+      automationCount >= automationSettings.performanceWarningThreshold
+    ) {
+      warning = `performanceWarning:${automationCount}`;
+    }
+
     return {
       success: true,
       data: toAutomationWithResume(automation) as AutomationWithResume,
+      message: warning,
     };
   } catch (error) {
     return handleError(error, "Failed to create automation");

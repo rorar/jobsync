@@ -236,6 +236,10 @@ export const automations = {
 
     // Create & Run Now
     "automations.createAndRun": "Create & Run Now",
+
+    // Performance warning
+    "automations.performanceWarning": "You have many automations. This may impact system performance. Make sure you have sufficient resources.",
+    "automations.performanceWarningBanner": "You have {count} automations. Many automations may impact system performance. Make sure you have sufficient resources.",
   },
   de: {
     // AutomationWizard - Steps
@@ -474,6 +478,10 @@ export const automations = {
 
     // Create & Run Now
     "automations.createAndRun": "Erstellen & Jetzt starten",
+
+    // Performance warning
+    "automations.performanceWarning": "Du hast viele Automationen. Dies kann die Systemleistung beeintr\u00e4chtigen. Stelle sicher, dass gen\u00fcgend Systemressourcen zur Verf\u00fcgung stehen.",
+    "automations.performanceWarningBanner": "Du hast {count} Automationen. Viele Automationen k\u00f6nnen die Systemleistung beeintr\u00e4chtigen. Stelle sicher, dass gen\u00fcgend Systemressourcen zur Verf\u00fcgung stehen.",
   },
   fr: {
     // AutomationWizard - Steps
@@ -711,7 +719,11 @@ export const automations = {
     "automations.noResumeFound": "Aucun CV trouvé",
 
     // Create & Run Now
-    "automations.createAndRun": "Créer & Exécuter",
+    "automations.createAndRun": "Cr\u00e9er & Ex\u00e9cuter",
+
+    // Performance warning
+    "automations.performanceWarning": "Vous avez beaucoup d'automatisations. Cela peut affecter les performances du syst\u00e8me. Assurez-vous de disposer de ressources suffisantes.",
+    "automations.performanceWarningBanner": "Vous avez {count} automatisations. De nombreuses automatisations peuvent affecter les performances du syst\u00e8me. Assurez-vous de disposer de ressources suffisantes.",
   },
   es: {
     // AutomationWizard - Steps
@@ -950,5 +962,9 @@ export const automations = {
 
     // Create & Run Now
     "automations.createAndRun": "Crear y Ejecutar",
+
+    // Performance warning
+    "automations.performanceWarning": "Tienes muchas automatizaciones. Esto puede afectar el rendimiento del sistema. Aseg\u00farate de tener suficientes recursos.",
+    "automations.performanceWarningBanner": "Tienes {count} automatizaciones. Muchas automatizaciones pueden afectar el rendimiento del sistema. Aseg\u00farate de tener suficientes recursos.",
   },
 } as const;

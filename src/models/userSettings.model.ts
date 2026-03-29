@@ -35,10 +35,18 @@ export interface DeveloperSettings {
   errorReporting?: boolean;
 }
 
+export interface AutomationSettings {
+  /** Show warning when user has many automations (default: true) */
+  performanceWarningEnabled: boolean;
+  /** Threshold for the performance warning (default: 10) */
+  performanceWarningThreshold: number;
+}
+
 export interface UserSettingsData {
   ai: AiSettings;
   display: DisplaySettings;
   developer?: DeveloperSettings;
+  automation?: AutomationSettings;
 }
 
 export interface UserSettings {
@@ -62,5 +70,9 @@ export const defaultUserSettings: UserSettingsData = {
       runner: true,
       automationLogger: true,
     },
+  },
+  automation: {
+    performanceWarningEnabled: true,
+    performanceWarningThreshold: 10,
   },
 };

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, Plus, RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/i18n";
 import { getAutomationsList } from "@/actions/automation.actions";
@@ -28,6 +28,7 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editAutomation, setEditAutomation] =
     useState<AutomationWithResume | null>(null);
+  const [performanceWarning, setPerformanceWarning] = useState<string | null>(null);
 
   const loadAutomations = useCallback(async () => {
     setLoading(true);
@@ -35,6 +36,15 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
 
     if (result.success && result.data) {
       setAutomations(result.data as any);
+      // Check for performance warning from server
+      if (result.message?.startsWith("performanceWarning:")) {
+        const count = result.message.split(":")[1];
+        setPerformanceWarning(
+          t("automations.performanceWarningBanner").replace("{count}", count)
+        );
+      } else {
+        setPerformanceWarning(null);
+      }
     } else {
       toast({
         title: t("automations.validationError"),
@@ -84,6 +94,12 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
             </Button>
           </div>
         </CardHeader>
+        {performanceWarning && (
+          <div className="mx-6 mb-4 flex items-start gap-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950 dark:text-yellow-200">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{performanceWarning}</span>
+          </div>
+        )}
         <CardContent>
           {resumes.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">

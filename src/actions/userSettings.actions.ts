@@ -9,6 +9,7 @@ import {
   UserSettingsData,
   defaultUserSettings,
   AiSettings,
+  AutomationSettings,
   DisplaySettings,
 } from "@/models/userSettings.model";
 
@@ -86,6 +87,11 @@ export const updateUserSettings = async (
           ...currentSettings.display,
           ...settings.display,
         },
+        automation: {
+          ...defaultUserSettings.automation!,
+          ...currentSettings.automation,
+          ...settings.automation,
+        },
       };
     } else {
       mergedSettings = {
@@ -93,6 +99,7 @@ export const updateUserSettings = async (
         ...settings,
         ai: { ...defaultUserSettings.ai, ...settings.ai },
         display: { ...defaultUserSettings.display, ...settings.display },
+        automation: { ...defaultUserSettings.automation!, ...settings.automation },
       };
     }
 
@@ -142,3 +149,28 @@ export const updateDisplaySettings = async (
   }
   return updateUserSettings({ display: displaySettings });
 };
+
+export const updateAutomationSettings = async (
+  automationSettings: AutomationSettings
+): Promise<ActionResult<UserSettings>> => {
+  return updateUserSettings({ automation: automationSettings });
+};
+
+/**
+ * Fetch the resolved automation settings for a given userId.
+ * Merges DB settings over defaults so callers always get a complete object.
+ * Used internally by automation actions — NOT a server action export.
+ */
+export async function getAutomationSettingsForUser(
+  userId: string
+): Promise<AutomationSettings> {
+  const defaults = defaultUserSettings.automation!;
+  try {
+    const row = await prisma.userSettings.findUnique({ where: { userId } });
+    if (!row) return defaults;
+    const parsed: UserSettingsData = JSON.parse(row.settings);
+    return { ...defaults, ...parsed.automation };
+  } catch {
+    return defaults;
+  }
+}
