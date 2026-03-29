@@ -93,7 +93,8 @@ Module registrieren sich mit einem **Manifest** beim Connector und deklarieren i
 - Phase 5: Resilience Shared Kernel (Cockatiel aus Manifests, Duplikat eliminiert)
 - Phase 6: Automation Degradation (Auth/CB/RunFailure Escalation Rules)
 - Allium Spec synchronisiert (17 Divergenzen gefixt)
-- Branch: `feature/module-lifecycle-manager`
+- 114 Tests in 6 Suites (Registry, Credentials, Manifests, Degradation, Health, Resilience)
+- UI: Health-Indikator in Settings, pauseReason in Automations-Liste
 
 **Schichten:**
 1. **Module Manifest** — Jedes Modul deklariert bei Registrierung:
