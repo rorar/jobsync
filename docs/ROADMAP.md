@@ -123,16 +123,18 @@ Module registrieren sich mit einem **Manifest** beim Connector und deklarieren i
    - Letzte erfolgreiche Verbindung mit Timestamp
    - Circuit Breaker Status (offen/geschlossen/halb-offen)
 5. **Resilience als Shared Kernel (Cockatiel):**
-   - Cockatiel-Policies werden auf **Connector-Ebene** instanziiert, nicht pro Modul dupliziert
+   - `src/lib/connector/resilience.ts` enthält `buildResiliencePolicy()` als **shared Builder**
    - Module deklarieren Resilience-Bedarf im Manifest (`retryAttempts`, `circuitBreaker`, `timeout`, etc.)
-   - Connector erstellt die Policy-Stacks und stellt sie bei Modul-Instanziierung bereit
-   - Eliminiert `resilience.ts`-Duplizierung (aktuell: EURES + Arbeitsagentur identisch, 4 Module ohne)
+   - Lokale `resilience.ts` Wrapper pro Modul existieren noch, sind aber **keine Duplikate** — sie rufen den shared Builder mit ihrem Manifest auf
+   - Code-Duplizierung eliminiert, Datei-Struktur beibehalten (dünne Wrapper)
+6. **Automation-Degradation (Circuit Breaker → Automation):**
 6. **Automation-Degradation (Circuit Breaker → Automation):**
    - Da der Connector die Policies besitzt, kennt er den CB-Status jedes Moduls
    - **Sofort pausieren:** `auth_failed`, `blocked` (heilt sich nicht selbst)
    - **Nach Schwellenwert pausieren:** N konsekutive `failed` Runs oder CB seit X Minuten offen
    - **Nie pausieren:** `rate_limited`, einzelne Timeouts (selbstheilend)
    - Pausierte Automations + User-Benachrichtigung mit Fehlergrund
+   - **Hinweis:** Notifications aktuell als Toasts (nicht persistiert). Persistierte Notifications sind 0.6 (Unified Notification System).
 
 **Connector-Rolle:** Der Connector ist kein eigenständiges Lifecycle-Objekt, sondern:
 - **Interface-Vertrag** (was Module implementieren müssen) — erweitert um optionale `isAvailable?(externalId): ConnectorResult<boolean>` Methode für Maintenance Automations (→ 3.8)
