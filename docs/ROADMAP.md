@@ -1275,6 +1275,15 @@ JobSync exponiert eine stabile REST API für externe Tools (n8n, Webhooks, Custo
 - **Notifications:** Fehlgeschlagene Tasks und kritische Systemereignisse lösen Notifications aus (→ 0.6 Unified Notifications) an Admin/User bzw. "whom it concerns"
 - Nicht zu verwechseln mit der Vacancy Staging Area (→ 0.5) — dies ist eine System-Queue, keine User-Queue
 
+### 8.10 Test Data Generator / Fake Input Data
+- Fake-Responses pro Connector-Modul für Automation-Tests ohne echte API-Calls
+- **Pro Modul:** Realistische Fake-DiscoveredVacancy-Arrays (EURES-Format, Arbeitsagentur-Format, JSearch-Format)
+- **Pro AI-Modul:** Fake Match-Scores und Match-Responses
+- **Seeding:** CLI-Command oder Settings-UI zum Befüllen der DB mit Test-Automations, Test-Jobs, Test-StagedVacancies
+- **Vorhandene Basis:** `src/lib/data/testFixtures.ts`, `mockActivities.ts`, `mockProfileData.ts` — erweitern um Connector-spezifische Fixtures
+- **Integration mit E2E:** Playwright-Tests nutzen Fake-Module statt echte API-Calls (→ `e2e/CONVENTIONS.md`)
+- **Demo-Modus:** Optional — neue Instanz startet mit Beispieldaten (für 2.13 Setup UX)
+
 ### 8.5 DB-Migrationstool (Gsync → rorar)
 - Migrationsskript für Datenbankumzug von Gsync-Fork zu eigenem Repository (rorar)
 - Schema-Mapping, Daten-Export/Import, Validierung

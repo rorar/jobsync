@@ -8,9 +8,6 @@ import { useTranslations } from "@/i18n";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -212,9 +209,32 @@ export default function AutomationDetailPage() {
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold">{automation.name}</h1>
-          <p className="text-muted-foreground">
-            {automation.keywords} in {automation.location}
-          </p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-medium text-foreground">Keywords:</span>
+              {automation.keywords
+                .split("||")
+                .map((kw: string) => kw.trim())
+                .filter(Boolean)
+                .map((kw: string) => (
+                  <Badge key={kw} variant="secondary" className="text-xs">
+                    {kw}
+                  </Badge>
+                ))}
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-medium text-foreground">Location:</span>
+              {automation.location
+                .split(",")
+                .map((loc: string) => loc.trim())
+                .filter(Boolean)
+                .map((loc: string) => (
+                  <Badge key={loc} variant="secondary" className="text-xs">
+                    {loc}
+                  </Badge>
+                ))}
+            </div>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="icon" onClick={loadData}>
