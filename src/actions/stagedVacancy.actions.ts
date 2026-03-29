@@ -34,6 +34,7 @@ export async function getStagedVacancies(
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE,
   statusFilter?: StagedVacancyStatus[],
   search?: string,
+  tab?: "new" | "dismissed" | "archived" | "trashed",
 ): Promise<ActionResult<StagedVacancyWithAutomation[]>> {
   try {
     const user = await getCurrentUser();
@@ -44,9 +45,17 @@ export async function getStagedVacancies(
     const offset = (safePage - 1) * safeTake;
     const whereClause: Prisma.StagedVacancyWhereInput = {
       userId: user.id,
-      trashedAt: null,
-      archivedAt: null,
     };
+
+    // Tab-based filtering
+    if (tab === "archived") {
+      whereClause.archivedAt = { not: null };
+    } else if (tab === "trashed") {
+      whereClause.trashedAt = { not: null };
+    } else {
+      whereClause.trashedAt = null;
+      whereClause.archivedAt = null;
+    }
 
     if (statusFilter && statusFilter.length > 0) {
       whereClause.status = { in: statusFilter };
