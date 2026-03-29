@@ -512,7 +512,8 @@ rule CircuitBreakerEscalation {
       userId: automation.userId,
       type: cb_escalation,
       message: "Automation '{automation.name}' paused: module '{module.manifest.name}' circuit breaker has opened {module.consecutiveFailures} times consecutively.",
-      moduleId: module.manifest.id
+      moduleId: module.manifest.id,
+      automationId: automation.id
     )
 
   @guidance
@@ -572,7 +573,8 @@ rule AuthFailureEscalation {
       userId: automation.userId,
       type: auth_failure,
       message: "Automation '{automation.name}' paused: module '{module.manifest.name}' authentication failed. Please check your credentials.",
-      moduleId: moduleId
+      moduleId: moduleId,
+      automationId: automation.id
     )
 
   @guidance

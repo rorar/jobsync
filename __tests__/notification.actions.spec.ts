@@ -3,8 +3,8 @@ import {
   getUnreadCount,
   markAsRead,
   markAllAsRead,
+  dismissNotification,
 } from "@/actions/notification.actions";
-import { createNotification } from "@/lib/notification";
 import { getCurrentUser } from "@/utils/user.utils";
 import { PrismaClient } from "@prisma/client";
 
@@ -18,6 +18,7 @@ jest.mock("@prisma/client", () => {
       create: jest.fn(),
       update: jest.fn(),
       updateMany: jest.fn(),
+      delete: jest.fn(),
     },
   };
   return { PrismaClient: jest.fn(() => mPrismaClient) };
@@ -252,69 +253,44 @@ describe("Notification Actions", () => {
   });
 
   // =========================================================================
-  // createNotification
+  // dismissNotification
   // =========================================================================
-  describe("createNotification", () => {
-    it("should create a notification with all fields", async () => {
-      (prisma.notification.create as jest.Mock).mockResolvedValue(
+  describe("dismissNotification", () => {
+    it("should delete the notification", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.notification.delete as jest.Mock).mockResolvedValue(
         mockNotification,
       );
 
-      await createNotification({
-        userId: "user-id",
-        type: "auth_failure",
-        message: "Auth failed for module eures",
-        moduleId: "eures",
-        automationId: "auto-1",
-      });
+      const result = await dismissNotification("notif-1");
 
-      expect(prisma.notification.create).toHaveBeenCalledWith({
-        data: {
-          userId: "user-id",
-          type: "auth_failure",
-          message: "Auth failed for module eures",
-          moduleId: "eures",
-          automationId: "auto-1",
-        },
+      expect(result).toEqual({ success: true });
+      expect(prisma.notification.delete).toHaveBeenCalledWith({
+        where: { id: "notif-1", userId: mockUser.id },
       });
     });
 
-    it("should create a notification without optional fields", async () => {
-      (prisma.notification.create as jest.Mock).mockResolvedValue({
-        ...mockNotification,
-        moduleId: null,
-        automationId: null,
-      });
+    it("should fail without auth", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(null);
 
-      await createNotification({
-        userId: "user-id",
-        type: "consecutive_failures",
-        message: "Automation paused after failures",
-      });
+      const result = await dismissNotification("notif-1");
 
-      expect(prisma.notification.create).toHaveBeenCalledWith({
-        data: {
-          userId: "user-id",
-          type: "consecutive_failures",
-          message: "Automation paused after failures",
-          moduleId: null,
-          automationId: null,
-        },
-      });
+      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(prisma.notification.delete).not.toHaveBeenCalled();
     });
 
-    it("should propagate database errors", async () => {
-      (prisma.notification.create as jest.Mock).mockRejectedValue(
-        new Error("DB error"),
+    it("should handle database errors (e.g. notification not found)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.notification.delete as jest.Mock).mockRejectedValue(
+        new Error("Record to delete does not exist."),
       );
 
-      await expect(
-        createNotification({
-          userId: "user-id",
-          type: "auth_failure",
-          message: "Test",
-        }),
-      ).rejects.toThrow("DB error");
+      const result = await dismissNotification("non-existent-id");
+
+      expect(result).toEqual({
+        success: false,
+        message: "Record to delete does not exist.",
+      });
     });
   });
 });

@@ -79,7 +79,7 @@ export async function handleAuthFailure(
         data: affectedAutomations.map((auto) => ({
           userId: auto.userId,
           type: "auth_failure",
-          message: `Automation "${auto.name}" paused: authentication failed for module "${moduleId}". Please check your credentials.`,
+          message: `Automation "${auto.name}" paused: authentication failed for module "${registered.manifest.name}". Please check your credentials.`,
           moduleId,
           automationId: auto.id,
         })),
@@ -221,7 +221,7 @@ export async function handleCircuitBreakerTrip(
         data: affectedAutomations.map((auto) => ({
           userId: auto.userId,
           type: "cb_escalation",
-          message: `Automation "${auto.name}" paused: module "${moduleId}" circuit breaker tripped ${newFailureCount} times.`,
+          message: `Automation "${auto.name}" paused: module "${registered.manifest.name}" circuit breaker tripped ${newFailureCount} times.`,
           moduleId,
           automationId: auto.id,
         })),

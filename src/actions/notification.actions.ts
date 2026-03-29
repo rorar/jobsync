@@ -94,3 +94,23 @@ export async function markAllAsRead(): Promise<ActionResult> {
   }
 }
 
+/**
+ * Dismiss (delete) a single notification.
+ */
+export async function dismissNotification(
+  notificationId: string,
+): Promise<ActionResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "Not authenticated" };
+
+    await prisma.notification.delete({
+      where: { id: notificationId, userId: user.id },
+    });
+
+    return { success: true };
+  } catch (error) {
+    return handleError(error, "Failed to dismiss notification");
+  }
+}
+
