@@ -563,14 +563,21 @@ export function AutomationWizard({
                         )}
                       >
                         {field.value
-                          ? resumes.find((r) => r.id === field.value)?.title
+                          ? (resumes.find((r) => r.id === field.value)?.title
+                            ?? editAutomation?.resume?.title
+                            ?? field.value.slice(0, 8) + "...")
                           : t("automations.selectResume")}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </FormControl>
                   </PopoverTrigger>
                   <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
+                    <Command filter={(value, search) => {
+                      // Custom filter: cmdk strips special chars by default.
+                      // We need exact substring match for titles like "[MOCK_DATA] Jane Smith"
+                      if (!search) return 1;
+                      return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
+                    }}>
                       <CommandInput placeholder={t("automations.searchResume")} />
                       <CommandList>
                         <CommandEmpty>{t("automations.noResumeFound")}</CommandEmpty>
