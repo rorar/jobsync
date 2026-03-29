@@ -70,6 +70,8 @@ export const jobs = {
     "jobs.skillCreateFailed": "Failed to create skill tag.",
     "jobs.createSkill": "Create",
     "jobs.noJobsToExport": "No jobs to export",
+    "jobs.sendToQueue": "Send to Queue",
+    "jobs.sendToQueueDescription": "Review this job later in the staging area",
 
     // Job sources
     "jobs.sourceIndeed": "Indeed",
@@ -162,6 +164,8 @@ export const jobs = {
     "jobs.skillCreateFailed": "Skill-Tag konnte nicht erstellt werden.",
     "jobs.createSkill": "Erstellen",
     "jobs.noJobsToExport": "Keine Jobs zum Exportieren",
+    "jobs.sendToQueue": "An Warteschlange senden",
+    "jobs.sendToQueueDescription": "Diesen Job später in der Staging-Übersicht prüfen",
 
     // Job-Quellen
     "jobs.sourceIndeed": "Indeed",
@@ -254,6 +258,8 @@ export const jobs = {
     "jobs.skillCreateFailed": "Impossible de créer le tag de compétence.",
     "jobs.createSkill": "Créer",
     "jobs.noJobsToExport": "Aucun emploi à exporter",
+    "jobs.sendToQueue": "Envoyer en file d'attente",
+    "jobs.sendToQueueDescription": "Revoir cette offre plus tard dans la zone de tri",
 
     // Sources d'emploi
     "jobs.sourceIndeed": "Indeed",
@@ -346,6 +352,8 @@ export const jobs = {
     "jobs.skillCreateFailed": "Error al crear la etiqueta de habilidad.",
     "jobs.createSkill": "Crear",
     "jobs.noJobsToExport": "Sin empleos para exportar",
+    "jobs.sendToQueue": "Enviar a cola",
+    "jobs.sendToQueueDescription": "Revisar esta oferta más tarde en el área de preparación",
 
     // Fuentes de empleo
     "jobs.sourceIndeed": "Indeed",

@@ -68,6 +68,7 @@ describe("jobActions", () => {
     userId: mockUser.id,
     resume: "",
     tags: [],
+    sendToQueue: false,
   };
   beforeEach(() => {
     jest.clearAllMocks();

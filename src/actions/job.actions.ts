@@ -490,3 +490,54 @@ export const deleteJobById = async (
     return handleError(error, msg);
   }
 };
+
+/**
+ * Create a StagedVacancy from the Add Job form (manual queue option).
+ * Instead of creating a Job directly, this sends the entry to the staging queue
+ * with source: "manual" for later review.
+ */
+export const addJobToQueue = async (
+  data: z.infer<typeof AddJobFormSchema>,
+): Promise<ActionResult> => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    // Resolve names from IDs for the StagedVacancy record
+    const [jobTitle, company, location] = await Promise.all([
+      prisma.jobTitle.findUnique({ where: { id: data.title }, select: { label: true } }),
+      prisma.company.findUnique({ where: { id: data.company }, select: { label: true } }),
+      data.location
+        ? prisma.location.findUnique({ where: { id: data.location }, select: { label: true } })
+        : null,
+    ]);
+
+    if (!jobTitle) throw new Error("Job title not found");
+    if (!company) throw new Error("Company not found");
+
+    await prisma.stagedVacancy.create({
+      data: {
+        userId: user.id,
+        sourceBoard: "manual",
+        externalId: null,
+        sourceUrl: data.jobUrl || null,
+        title: jobTitle.label,
+        employerName: company.label,
+        location: location?.label || null,
+        description: data.jobDescription || null,
+        salary: null,
+        employmentType: data.type || null,
+        source: "manual",
+        status: "staged",
+        discoveredAt: new Date(),
+      },
+    });
+
+    return { success: true };
+  } catch (error) {
+    const msg = "Failed to send job to queue.";
+    return handleError(error, msg);
+  }
+};

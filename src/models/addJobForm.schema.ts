@@ -68,4 +68,5 @@ export const AddJobFormSchema = z.object({
   applied: z.boolean().default(false),
   resume: z.string().optional(),
   tags: z.array(z.string()).max(10).optional().default([]),
+  sendToQueue: z.boolean().default(false),
 });

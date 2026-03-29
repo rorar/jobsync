@@ -14,6 +14,7 @@ jest.mock("@/utils/user.utils", () => ({
 
 jest.mock("@/actions/job.actions", () => ({
   addJob: jest.fn().mockResolvedValue({ success: true }),
+  addJobToQueue: jest.fn().mockResolvedValue({ success: true }),
 }));
 
 jest.mock("next/navigation", () => ({
@@ -87,7 +88,7 @@ describe("AddJob Component", () => {
     expect(dialogTitle).toHaveTextContent("Add Job");
   });
   it("should reflect on status and date applied when applied switch toggles", async () => {
-    const appliedSwitch = screen.getByRole("switch");
+    const appliedSwitch = document.getElementById("applied-switch")!;
     expect(appliedSwitch).not.toBeChecked();
     const dateApplied = screen.getByLabelText("Date Applied");
     expect(dateApplied).toBeDisabled();
@@ -228,6 +229,7 @@ describe("AddJob Component", () => {
         applied: false,
         resume: "",
         tags: [],
+        sendToQueue: false,
       });
     });
   });

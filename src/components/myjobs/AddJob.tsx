@@ -9,7 +9,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { addJob, updateJob } from "@/actions/job.actions";
+import { addJob, updateJob, addJobToQueue } from "@/actions/job.actions";
 import { Loader, PlusCircle } from "lucide-react";
 import { Button } from "../ui/button";
 import { useForm } from "react-hook-form";
@@ -125,6 +125,7 @@ export function AddJob({
       applied: false,
       resume: "",
       tags: [],
+      sendToQueue: false,
     },
   });
 
@@ -188,16 +189,23 @@ export function AddJob({
 
   function onSubmit(data: z.infer<typeof AddJobFormSchema>) {
     startTransition(async () => {
-      const { success, message } = editJob
-        ? await updateJob(data)
-        : await addJob(data);
+      let result: { success: boolean; message?: string };
+
+      if (editJob) {
+        result = await updateJob(data);
+      } else if (data.sendToQueue) {
+        result = await addJobToQueue(data);
+      } else {
+        result = await addJob(data);
+      }
+
       reset();
       setDialogOpen(false);
-      if (!success) {
+      if (!result.success) {
         toast({
           variant: "destructive",
           title: t("jobs.error"),
-          description: message,
+          description: result.message,
         });
       } else {
         toast({
@@ -205,7 +213,7 @@ export function AddJob({
           description: editJob ? t("jobs.updatedSuccess") : t("jobs.createdSuccess"),
         });
       }
-      redirect("/dashboard/myjobs");
+      redirect(data.sendToQueue && !editJob ? "/dashboard/staging" : "/dashboard/myjobs");
     });
   }
 
@@ -477,6 +485,40 @@ export function AddJob({
                     )}
                   />
                 </div>
+
+                {/* Send to Queue (only in create mode) */}
+                {!editJob && (
+                  <div
+                    className="flex items-center"
+                    data-testid="send-to-queue-container"
+                  >
+                    <FormField
+                      control={form.control}
+                      name="sendToQueue"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row">
+                          <Switch
+                            id="send-to-queue-switch"
+                            checked={field.value ?? false}
+                            onCheckedChange={field.onChange}
+                          />
+                          <div className="flex flex-col ml-4">
+                            <FormLabel
+                              htmlFor="send-to-queue-switch"
+                              className="flex items-center mb-1"
+                            >
+                              {t("jobs.sendToQueue")}
+                            </FormLabel>
+                            <p className="text-xs text-muted-foreground">
+                              {t("jobs.sendToQueueDescription")}
+                            </p>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
 
                 {/* Status */}
                 <div>
