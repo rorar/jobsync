@@ -1,16 +1,12 @@
-import {
-  retry,
-  circuitBreaker,
-  timeout,
-  bulkhead,
-  wrap,
-  handleWhen,
-  ConsecutiveBreaker,
-  ExponentialBackoff,
-  TimeoutStrategy,
-} from "cockatiel";
+/**
+ * EURES resilience policy — built from manifest config via Shared Kernel.
+ *
+ * This file is a thin wrapper that provides backward compatibility.
+ * The actual policy is built by buildResiliencePolicy() from the manifest.
+ */
 
-import { TokenBucketRateLimiter } from "./rate-limiter";
+import { buildResiliencePolicy, ConnectorApiError } from "@/lib/connector/resilience";
+import { euresManifest } from "./manifest";
 
 export {
   BrokenCircuitError,
@@ -18,64 +14,15 @@ export {
   BulkheadRejectedError,
 } from "cockatiel";
 
-export class EuresApiError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+export class EuresApiError extends ConnectorApiError {}
 
-const euresRetry = retry(
-  handleWhen((err) => {
-    if (err instanceof EuresApiError) {
-      return err.status >= 500 || err.status === 429;
-    }
-    return true;
-  }),
-  { maxAttempts: 3, backoff: new ExponentialBackoff() },
-);
+const resiliencePolicy = buildResiliencePolicy(euresManifest.resilience!, EuresApiError);
 
-const euresBreaker = circuitBreaker(
-  handleWhen((err) => {
-    if (err instanceof EuresApiError) return err.status >= 500;
-    return true;
-  }),
-  {
-    halfOpenAfter: 30_000,
-    breaker: new ConsecutiveBreaker(5),
-  },
-);
-
-const euresTimeout = timeout(15_000, TimeoutStrategy.Cooperative);
-
-const euresBulkhead = bulkhead(5, 10);
-
-export const euresPolicy = wrap(
-  euresRetry,
-  euresBreaker,
-  euresTimeout,
-  euresBulkhead,
-);
-
-const euresRateLimiter = new TokenBucketRateLimiter(3, 500);
+export const euresPolicy = { execute: resiliencePolicy.execute };
 
 export async function resilientFetch<T>(
   url: string,
   init: RequestInit,
 ): Promise<T> {
-  await euresRateLimiter.acquire();
-  return euresPolicy.execute(async ({ signal }) => {
-    const response = await fetch(url, { ...init, signal });
-
-    if (!response.ok) {
-      throw new EuresApiError(
-        response.status,
-        `EURES API error: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    return response.json() as Promise<T>;
-  });
+  return resiliencePolicy.resilientFetch<T>(url, init, "EURES");
 }

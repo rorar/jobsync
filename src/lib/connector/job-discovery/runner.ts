@@ -8,6 +8,7 @@ import type { ConnectorError, DiscoveredVacancy } from "./types";
 import "./connectors"; // trigger registration
 import { moduleRegistry } from "../registry";
 import { resolveCredential } from "../credential-resolver";
+import { checkConsecutiveRunFailures } from "../degradation";
 import { mapDiscoveredVacancyToJobRecord } from "./mapper";
 import { normalizeJobUrl } from "./utils";
 import { calculateNextRunAt, type ScheduleFrequency } from "./schedule";
@@ -671,6 +672,11 @@ async function finalizeRun(
       nextRunAt: calculateNextRunAt(scheduleHour, scheduleFrequency),
     },
   });
+
+  // Check for consecutive run failure escalation (Phase 6 degradation rule)
+  if (data.status === "failed") {
+    await checkConsecutiveRunFailures(run.automationId);
+  }
 
   return {
     runId: run.id,

@@ -12,6 +12,7 @@ import {
 import { getCurrentUser } from "@/utils/user.utils";
 import { handleError } from "@/lib/utils";
 import { ActionResult } from "@/models/actionResult";
+import { checkModuleHealth } from "@/lib/connector/health-monitor";
 
 // =============================================================================
 // Types
@@ -23,6 +24,9 @@ export interface ModuleManifestSummary {
   name: string;
   connectorType: string;
   status: string;
+  healthStatus: string;
+  lastHealthCheck?: string;
+  lastSuccessfulConnection?: string;
   credential: {
     type: string;
     moduleId: string;
@@ -58,6 +62,9 @@ export async function getModuleManifests(
     name: m.manifest.name,
     connectorType: m.manifest.connectorType,
     status: m.status,
+    healthStatus: m.healthStatus,
+    lastHealthCheck: m.lastHealthCheck?.toISOString(),
+    lastSuccessfulConnection: m.lastSuccessfulConnection?.toISOString(),
     credential: {
       type: m.manifest.credential.type,
       moduleId: m.manifest.credential.moduleId,
@@ -241,5 +248,41 @@ async function syncRegistryFromDb(): Promise<void> {
     dbSynced = true;
   } catch {
     // DB not available — use in-memory defaults (all active)
+  }
+}
+
+// =============================================================================
+// Health Monitoring (Allium spec rule: HealthCheckExecution)
+// =============================================================================
+
+export async function runHealthCheck(
+  moduleId: string,
+): Promise<
+  ActionResult<{
+    moduleId: string;
+    healthStatus: string;
+    success: boolean;
+    responseTimeMs: number;
+    error?: string;
+  }>
+> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "Not authenticated" };
+
+    const result = await checkModuleHealth(moduleId);
+
+    return {
+      success: true,
+      data: {
+        moduleId: result.moduleId,
+        healthStatus: result.healthStatus,
+        success: result.success,
+        responseTimeMs: result.responseTimeMs,
+        error: result.error,
+      },
+    };
+  } catch (error) {
+    return handleError(error, "Failed to run health check");
   }
 }
