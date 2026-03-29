@@ -19,13 +19,15 @@ export async function getNotifications(
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
 
+    const safeTake = Math.min(Math.max(1, limit), 100);
+
     const notifications = await prisma.notification.findMany({
       where: {
         userId: user.id,
         ...(unreadOnly ? { read: false } : {}),
       },
       orderBy: { createdAt: "desc" },
-      take: limit,
+      take: safeTake,
     });
 
     return { success: true, data: notifications as Notification[] };
@@ -92,25 +94,3 @@ export async function markAllAsRead(): Promise<ActionResult> {
   }
 }
 
-/**
- * Create a notification record in the database.
- * This is an internal function called by degradation rules and module actions,
- * not directly by the UI. No auth check needed — callers are server-side code.
- */
-export async function createNotification(params: {
-  userId: string;
-  type: string;
-  message: string;
-  moduleId?: string;
-  automationId?: string;
-}): Promise<void> {
-  await prisma.notification.create({
-    data: {
-      userId: params.userId,
-      type: params.type,
-      message: params.message,
-      moduleId: params.moduleId ?? null,
-      automationId: params.automationId ?? null,
-    },
-  });
-}

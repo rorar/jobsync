@@ -5,8 +5,16 @@ import { checkModuleHealth } from "./health-monitor";
 import { ModuleStatus } from "./manifest";
 import { debugLog } from "@/lib/debug";
 
-let schedulerStarted = false;
-const timers = new Map<string, NodeJS.Timeout>();
+// Use globalThis to survive HMR — module-level variables are reset on hot reload,
+// but globalThis persists across HMR cycles in the same process.
+const g = globalThis as unknown as {
+  __healthTimers?: Map<string, NodeJS.Timeout>;
+  __healthInitials?: NodeJS.Timeout[];
+  __healthStarted?: boolean;
+};
+
+if (!g.__healthTimers) g.__healthTimers = new Map();
+if (!g.__healthInitials) g.__healthInitials = [];
 
 /**
  * Start periodic health checks for all active modules with health configs.
@@ -15,8 +23,8 @@ const timers = new Map<string, NodeJS.Timeout>();
  * See: specs/module-lifecycle.allium, rule HealthCheckExecution
  */
 export function startHealthScheduler(): void {
-  if (schedulerStarted) return;
-  schedulerStarted = true;
+  if (g.__healthStarted) return;
+  g.__healthStarted = true;
 
   const modules = moduleRegistry
     .availableModules()
@@ -33,16 +41,17 @@ export function startHealthScheduler(): void {
     const moduleId = mod!.manifest.id;
 
     // Initial check after 10 seconds (not immediately -- let the app warm up)
-    setTimeout(() => {
+    const initial = setTimeout(() => {
       checkModuleHealth(moduleId).catch(console.error);
     }, 10_000);
+    g.__healthInitials!.push(initial);
 
     // Periodic check at the interval declared in the module manifest
     const interval = setInterval(() => {
       checkModuleHealth(moduleId).catch(console.error);
     }, intervalMs);
 
-    timers.set(moduleId, interval);
+    g.__healthTimers!.set(moduleId, interval);
   }
 
   debugLog(
@@ -55,9 +64,14 @@ export function startHealthScheduler(): void {
  * Stop all health check timers. Used for testing/shutdown.
  */
 export function stopHealthScheduler(): void {
-  for (const [, timer] of timers) {
+  for (const initial of g.__healthInitials!) {
+    clearTimeout(initial);
+  }
+  g.__healthInitials!.length = 0;
+
+  for (const [, timer] of g.__healthTimers!) {
     clearInterval(timer);
   }
-  timers.clear();
-  schedulerStarted = false;
+  g.__healthTimers!.clear();
+  g.__healthStarted = false;
 }

@@ -206,42 +206,38 @@ export async function deactivateModule(
       },
     });
 
-    // Pause affected automations (Allium spec rule: ModuleDeactivation)
-    const pauseResult = await prisma.automation.updateMany({
+    // Query IDs BEFORE update to avoid TOCTOU race — captures the exact set
+    // of automations that will be paused, before any concurrent changes.
+    const affectedAutomations = await prisma.automation.findMany({
       where: {
         userId: user.id,
         jobBoard: moduleId,
         status: "active",
       },
-      data: {
-        status: "paused",
-        pauseReason: "module_deactivated",
-      },
+      select: { id: true, name: true },
     });
 
-    // Create persistent notifications for paused automations
-    if (pauseResult.count > 0) {
+    if (affectedAutomations.length > 0) {
+      // Update by the specific IDs we captured (no TOCTOU)
+      await prisma.automation.updateMany({
+        where: { id: { in: affectedAutomations.map((a) => a.id) } },
+        data: {
+          status: "paused",
+          pauseReason: "module_deactivated",
+        },
+      });
+
+      // Create persistent notifications using createMany (no N+1)
       try {
-        const pausedAutomations = await prisma.automation.findMany({
-          where: {
+        await prisma.notification.createMany({
+          data: affectedAutomations.map((auto) => ({
             userId: user.id,
-            jobBoard: moduleId,
-            status: "paused",
-            pauseReason: "module_deactivated",
-          },
-          select: { id: true, name: true },
+            type: "module_deactivated",
+            message: `Automation "${auto.name}" paused because module "${moduleId}" was deactivated.`,
+            moduleId,
+            automationId: auto.id,
+          })),
         });
-        for (const auto of pausedAutomations) {
-          await prisma.notification.create({
-            data: {
-              userId: user.id,
-              type: "module_deactivated",
-              message: `Automation "${auto.name}" paused because module "${moduleId}" was deactivated.`,
-              moduleId,
-              automationId: auto.id,
-            },
-          });
-        }
       } catch {
         // best-effort — don't let notification failure block deactivation
       }
@@ -252,7 +248,7 @@ export async function deactivateModule(
       data: {
         moduleId,
         status: ModuleStatus.INACTIVE,
-        pausedAutomations: pauseResult.count,
+        pausedAutomations: affectedAutomations.length,
       },
     };
   } catch (error) {

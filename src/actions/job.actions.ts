@@ -11,6 +11,10 @@ import { z } from "zod";
 
 export const getStatusList = async (): Promise<ActionResult<JobStatus[]>> => {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
     const statuses = await prisma.jobStatus.findMany();
     return { success: true, data: statuses };
   } catch (error) {

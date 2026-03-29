@@ -3,8 +3,8 @@ import {
   getUnreadCount,
   markAsRead,
   markAllAsRead,
-  createNotification,
 } from "@/actions/notification.actions";
+import { createNotification } from "@/lib/notification";
 import { getCurrentUser } from "@/utils/user.utils";
 import { PrismaClient } from "@prisma/client";
 

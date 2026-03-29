@@ -53,47 +53,47 @@ export async function handleAuthFailure(
     // best-effort
   }
 
-  // Pause ALL active automations using this module (global — spec-compliant)
-  // Auth failure means the credential is invalid for everyone, not just one user.
-  const result = await prisma.automation.updateMany({
+  // Query IDs BEFORE update to avoid TOCTOU race — captures the exact set
+  // of automations that will be paused, before any concurrent changes.
+  const affectedAutomations = await prisma.automation.findMany({
     where: {
       jobBoard: moduleId,
       status: "active",
     },
-    data: {
-      status: "paused",
-      pauseReason: "auth_failure",
-    },
+    select: { id: true, userId: true, name: true },
   });
 
-  // Create persistent notifications for affected users
-  if (result.count > 0) {
+  if (affectedAutomations.length > 0) {
+    // Update by the specific IDs we captured (no TOCTOU)
+    await prisma.automation.updateMany({
+      where: { id: { in: affectedAutomations.map((a) => a.id) } },
+      data: {
+        status: "paused",
+        pauseReason: "auth_failure",
+      },
+    });
+
+    // Create persistent notifications using createMany (no N+1)
     try {
-      const affectedAutomations = await prisma.automation.findMany({
-        where: { jobBoard: moduleId, status: "paused", pauseReason: "auth_failure" },
-        select: { id: true, userId: true, name: true },
+      await prisma.notification.createMany({
+        data: affectedAutomations.map((auto) => ({
+          userId: auto.userId,
+          type: "auth_failure",
+          message: `Automation "${auto.name}" paused: authentication failed for module "${moduleId}". Please check your credentials.`,
+          moduleId,
+          automationId: auto.id,
+        })),
       });
-      for (const auto of affectedAutomations) {
-        await prisma.notification.create({
-          data: {
-            userId: auto.userId,
-            type: "auth_failure",
-            message: `Automation "${auto.name}" paused: authentication failed for module "${moduleId}". Please check your credentials.`,
-            moduleId,
-            automationId: auto.id,
-          },
-        });
-      }
     } catch {
       // best-effort — don't let notification failure block degradation
     }
   }
 
   console.error(
-    `[Degradation] Auth failure for module "${moduleId}": ${errorDetail}. Paused ${result.count} automation(s).`,
+    `[Degradation] Auth failure for module "${moduleId}": ${errorDetail}. Paused ${affectedAutomations.length} automation(s).`,
   );
 
-  return { pausedCount: result.count };
+  return { pausedCount: affectedAutomations.length };
 }
 
 // =============================================================================
@@ -195,46 +195,47 @@ export async function handleCircuitBreakerTrip(
     return { pausedCount: 0 };
   }
 
-  // Escalation: pause ALL active automations using this module (global — spec-compliant)
-  const result = await prisma.automation.updateMany({
+  // Query IDs BEFORE update to avoid TOCTOU race — captures the exact set
+  // of automations that will be paused, before any concurrent changes.
+  const affectedAutomations = await prisma.automation.findMany({
     where: {
       jobBoard: moduleId,
       status: "active",
     },
-    data: {
-      status: "paused",
-      pauseReason: "cb_escalation",
-    },
+    select: { id: true, userId: true, name: true },
   });
 
-  // Create persistent notifications for affected users
-  if (result.count > 0) {
+  if (affectedAutomations.length > 0) {
+    // Update by the specific IDs we captured (no TOCTOU)
+    await prisma.automation.updateMany({
+      where: { id: { in: affectedAutomations.map((a) => a.id) } },
+      data: {
+        status: "paused",
+        pauseReason: "cb_escalation",
+      },
+    });
+
+    // Create persistent notifications using createMany (no N+1)
     try {
-      const affectedAutomations = await prisma.automation.findMany({
-        where: { jobBoard: moduleId, status: "paused", pauseReason: "cb_escalation" },
-        select: { id: true, userId: true, name: true },
+      await prisma.notification.createMany({
+        data: affectedAutomations.map((auto) => ({
+          userId: auto.userId,
+          type: "cb_escalation",
+          message: `Automation "${auto.name}" paused: module "${moduleId}" circuit breaker tripped ${newFailureCount} times.`,
+          moduleId,
+          automationId: auto.id,
+        })),
       });
-      for (const auto of affectedAutomations) {
-        await prisma.notification.create({
-          data: {
-            userId: auto.userId,
-            type: "cb_escalation",
-            message: `Automation "${auto.name}" paused: module "${moduleId}" circuit breaker tripped ${newFailureCount} times.`,
-            moduleId,
-            automationId: auto.id,
-          },
-        });
-      }
     } catch {
       // best-effort
     }
   }
 
   console.warn(
-    `[Degradation] CB escalation for module "${moduleId}": ${newFailureCount} consecutive opens. Paused ${result.count} automation(s).`,
+    `[Degradation] CB escalation for module "${moduleId}": ${newFailureCount} consecutive opens. Paused ${affectedAutomations.length} automation(s).`,
   );
 
-  return { pausedCount: result.count };
+  return { pausedCount: affectedAutomations.length };
 }
 
 /**

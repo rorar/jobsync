@@ -154,10 +154,15 @@ export async function createAutomation(
 
     // Validate connectorParams against module's declared schema
     if (validated.connectorParams) {
-      const params =
-        typeof validated.connectorParams === "string"
-          ? JSON.parse(validated.connectorParams)
-          : validated.connectorParams;
+      let params: unknown;
+      try {
+        params =
+          typeof validated.connectorParams === "string"
+            ? JSON.parse(validated.connectorParams)
+            : validated.connectorParams;
+      } catch {
+        return { success: false, message: "Invalid connector params: malformed JSON" };
+      }
       const validation = validateConnectorParams(
         validated.jobBoard,
         params as Record<string, unknown>,
@@ -236,10 +241,15 @@ export async function updateAutomation(
 
     // Validate connectorParams against module's declared schema
     if (validated.connectorParams && validated.connectorParams !== '') {
-      const params =
-        typeof validated.connectorParams === "string"
-          ? JSON.parse(validated.connectorParams)
-          : validated.connectorParams;
+      let params: unknown;
+      try {
+        params =
+          typeof validated.connectorParams === "string"
+            ? JSON.parse(validated.connectorParams)
+            : validated.connectorParams;
+      } catch {
+        return { success: false, message: "Invalid connector params: malformed JSON" };
+      }
       const moduleId = validated.jobBoard ?? existing.jobBoard;
       const validation = validateConnectorParams(
         moduleId,

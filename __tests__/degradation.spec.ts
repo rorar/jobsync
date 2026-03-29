@@ -8,11 +8,16 @@ jest.mock("@/lib/db", () => {
     },
     automation: {
       updateMany: jest.fn(),
+      findMany: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
     },
     automationRun: {
       findMany: jest.fn(),
+    },
+    notification: {
+      create: jest.fn().mockResolvedValue({}),
+      createMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
   };
   return { __esModule: true, default: mockPrisma };
@@ -67,6 +72,7 @@ describe("Degradation Rules", () => {
 
   describe("handleAuthFailure", () => {
     it("should set module status to ERROR", async () => {
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([]);
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
@@ -78,6 +84,11 @@ describe("Degradation Rules", () => {
     });
 
     it("should pause active automations with pauseReason 'auth_failure'", async () => {
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-a", userId: "user-a", name: "Auto A" },
+        { id: "auto-b", userId: "user-b", name: "Auto B" },
+        { id: "auto-c", userId: "user-c", name: "Auto C" },
+      ]);
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 3 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
@@ -85,11 +96,13 @@ describe("Degradation Rules", () => {
 
       await handleAuthFailure("openai", "403 Forbidden");
 
+      // TOCTOU-safe: findMany captures IDs, then updateMany targets those exact IDs
+      expect(mockPrisma.automation.findMany).toHaveBeenCalledWith({
+        where: { jobBoard: "openai", status: "active" },
+        select: { id: true, userId: true, name: true },
+      });
       expect(mockPrisma.automation.updateMany).toHaveBeenCalledWith({
-        where: {
-          jobBoard: "openai",
-          status: "active",
-        },
+        where: { id: { in: ["auto-a", "auto-b", "auto-c"] } },
         data: {
           status: "paused",
           pauseReason: "auth_failure",
@@ -98,6 +111,13 @@ describe("Degradation Rules", () => {
     });
 
     it("should return the count of paused automations", async () => {
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-1", userId: "user-1", name: "One" },
+        { id: "auto-2", userId: "user-2", name: "Two" },
+        { id: "auto-3", userId: "user-3", name: "Three" },
+        { id: "auto-4", userId: "user-4", name: "Four" },
+        { id: "auto-5", userId: "user-5", name: "Five" },
+      ]);
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 5 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
@@ -118,6 +138,69 @@ describe("Degradation Rules", () => {
       expect(result).toEqual({ pausedCount: 0 });
       expect(mockRegistry.setStatus).not.toHaveBeenCalled();
       expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("should create a notification for each affected automation", async () => {
+      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 2 });
+      (mockRegistry.get as jest.Mock).mockReturnValue({
+        manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+      });
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-1", userId: "user-1", name: "Alpha Search" },
+        { id: "auto-2", userId: "user-2", name: "Beta Search" },
+      ]);
+
+      await handleAuthFailure("jsearch", "401 Unauthorized");
+
+      // Implementation uses createMany (batch) instead of individual create calls
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledWith({
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            userId: "user-1",
+            type: "auth_failure",
+            moduleId: "jsearch",
+            automationId: "auto-1",
+          }),
+          expect.objectContaining({
+            userId: "user-2",
+            type: "auth_failure",
+            moduleId: "jsearch",
+            automationId: "auto-2",
+          }),
+        ]),
+      });
+    });
+
+    it("should not create notifications when 0 automations are affected", async () => {
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([]);
+      (mockRegistry.get as jest.Mock).mockReturnValue({
+        manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+      });
+
+      await handleAuthFailure("jsearch", "401 Unauthorized");
+
+      expect(mockPrisma.notification.createMany).not.toHaveBeenCalled();
+      // updateMany is also not called when findMany returns empty
+      expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("should still return pausedCount when notification creation fails", async () => {
+      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (mockRegistry.get as jest.Mock).mockReturnValue({
+        manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+      });
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-3", userId: "user-3", name: "Gamma Search" },
+      ]);
+      (mockPrisma.notification.createMany as jest.Mock).mockRejectedValue(
+        new Error("DB constraint violation"),
+      );
+
+      const result = await handleAuthFailure("jsearch", "403 Forbidden");
+
+      // Degradation response must not be blocked by notification failure
+      expect(result).toEqual({ pausedCount: 1 });
     });
   });
 
@@ -228,6 +311,36 @@ describe("Degradation Rules", () => {
 
       expect(result).toEqual({ paused: false });
     });
+
+    it("should create a notification for the automation owner after pausing", async () => {
+      (mockPrisma.automationRun.findMany as jest.Mock).mockResolvedValue([
+        { status: "failed" },
+        { status: "failed" },
+        { status: "failed" },
+        { status: "failed" },
+        { status: "failed" },
+      ]);
+      (mockPrisma.automation.findUnique as jest.Mock).mockResolvedValue({
+        id: "auto-notif",
+        status: "active",
+        name: "Notify Me Auto",
+        userId: "user-notif",
+      });
+      (mockPrisma.automation.update as jest.Mock).mockResolvedValue({});
+
+      await checkConsecutiveRunFailures("auto-notif");
+
+      expect(mockPrisma.notification.create).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.notification.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: "user-notif",
+            type: "consecutive_failures",
+            automationId: "auto-notif",
+          }),
+        }),
+      );
+    });
   });
 
   describe("handleCircuitBreakerTrip", () => {
@@ -275,17 +388,23 @@ describe("Degradation Rules", () => {
 
     it("should pause at threshold (3 consecutive opens)", async () => {
       registerModule("mod-cb-4", 2);
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-x", userId: "user-x", name: "Auto X" },
+        { id: "auto-y", userId: "user-y", name: "Auto Y" },
+      ]);
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 2 });
 
       const result = await handleCircuitBreakerTrip("mod-cb-4");
 
       // After increment: consecutiveFailures = 3, equals threshold
       expect(result).toEqual({ pausedCount: 2 });
+      // TOCTOU-safe: findMany captures IDs, then updateMany targets those exact IDs
+      expect(mockPrisma.automation.findMany).toHaveBeenCalledWith({
+        where: { jobBoard: "mod-cb-4", status: "active" },
+        select: { id: true, userId: true, name: true },
+      });
       expect(mockPrisma.automation.updateMany).toHaveBeenCalledWith({
-        where: {
-          jobBoard: "mod-cb-4",
-          status: "active",
-        },
+        where: { id: { in: ["auto-x", "auto-y"] } },
         data: {
           status: "paused",
           pauseReason: "cb_escalation",
@@ -316,6 +435,45 @@ describe("Degradation Rules", () => {
       await handleCircuitBreakerTrip("mod-cb-6");
 
       expect(registered.circuitBreakerState).toBe(CircuitBreakerState.OPEN);
+    });
+
+    it("should create notifications for affected automations when threshold is reached", async () => {
+      registerModule("mod-cb-notif", 2);
+      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 2 });
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-cb-1", userId: "user-cb-1", name: "CB Auto One" },
+        { id: "auto-cb-2", userId: "user-cb-2", name: "CB Auto Two" },
+      ]);
+
+      await handleCircuitBreakerTrip("mod-cb-notif");
+
+      // Implementation uses createMany (batch) instead of individual create calls
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledWith({
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            userId: "user-cb-1",
+            type: "cb_escalation",
+            moduleId: "mod-cb-notif",
+            automationId: "auto-cb-1",
+          }),
+          expect.objectContaining({
+            userId: "user-cb-2",
+            type: "cb_escalation",
+            moduleId: "mod-cb-notif",
+            automationId: "auto-cb-2",
+          }),
+        ]),
+      });
+    });
+
+    it("should not create notifications below threshold", async () => {
+      registerModule("mod-cb-no-notif", 0);
+
+      await handleCircuitBreakerTrip("mod-cb-no-notif");
+
+      expect(mockPrisma.notification.createMany).not.toHaveBeenCalled();
+      expect(mockPrisma.automation.findMany).not.toHaveBeenCalled();
     });
   });
 
