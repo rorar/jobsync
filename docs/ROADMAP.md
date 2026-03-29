@@ -543,6 +543,35 @@ Alle Module implementieren `DataSourceConnector` (search + optional getDetails),
 - Anbindung an Briefversand-APIs (z.B. Pingen, LetterXpress, Deutsche Post E-POST)
 - Usecase: Briefbewerbung, Widersprüche, förmliche Korrespondenz
 
+### 1.18 Document-Parsing Connector
+Separater Connector für Dokumenten-Inhaltsextraktion — getrennt vom Dokumentenworkflow Connector (1.6, Storage/Sync).
+
+**Interface:** `parse(file) → ConnectorResult<StructuredDocument>` + `supportedFormats()`
+- Output: `StructuredDocument` mit Volltext, erkannten Sektionen (Erfahrung, Ausbildung, Skills, Zusammenfassung), Metadaten (Titel, Autor, Seitenzahl)
+- Sektions-Typen: `summary | experience | education | skills | certifications | other` mit Confidence-Score
+
+**Module:**
+- **Modul: Docling** (Docker Sidecar) — PDF+DOCX+PPTX+Images, tiefe Layout-Analyse, OCR, kein LLM nötig
+  - Manifest: `endpoint_url` (Default: `http://localhost:5001`), `DOCLING_URL` Env-Fallback, Health-Check `/health`, Circuit Breaker
+  - [docling-project/docling](https://github.com/docling-project/docling) (IBM/Linux Foundation, 56K Stars)
+  - [docling-project/docling-serve](https://github.com/docling-project/docling-serve) (REST API, Docker Image ~4.4GB)
+
+**In-Process Fallback (KEINE Module — Libraries):**
+- LiteParse (PDF, TypeScript-nativ), mammoth (DOCX-only) — als Library-Dependencies im Connector
+- Kein Manifest, kein Health-Check, kein Lifecycle — `import` ist kein externes System
+- Fallback wenn Docling nicht konfiguriert/verfügbar ist
+- **DDD-Regel:** `import` = Library, separater Prozess/Container = Modul
+
+**CV-Parsing Pipeline (→ 3.5):**
+1. Document-Parsing Connector: `parse(file)` → `StructuredDocument`
+2. (optional) AI Connector: `enrich(structuredDocument)` → Skills, ESCO/NACE Mapping (bestehender AI Connector, kein neuer)
+
+**Abgrenzung zu 1.6 (Dokumentenworkflow):** 1.6 = Dokumente **lagern/synchronisieren** (Paperless-ngx: send/receive/sync). 1.18 = Dokumente **verstehen** (parse → strukturierte Daten). Null Interface-Überschneidung.
+
+**Open Questions:**
+- Soll `supportedFormats()` auf dem Interface oder als Manifest-Capability deklariert werden?
+- Soll der In-Process Fallback transparent (Connector entscheidet) oder User-wählbar sein?
+
 ---
 
 ## 2. UX/UI
@@ -803,16 +832,13 @@ Aktuell: Tiptap v2 mit StarterKit (Bold, Italic, Heading, Listen). Erweiterung i
 ### 3.5 CV-Parsing
 Extrahiert Informationen aus verschiedenen CV-Quellen. Erstellt basierend auf ESCO- und NACE-Codes eine Liste von Skills und Tags. Vorschläge für Skills die in Bewerbungsunterlagen hervorgehoben werden sollten.
 
-**1. CV-Dokument Parsing (PDF, DOCX):**
+**1. CV-Dokument Parsing (→ Document-Parsing Connector 1.18):**
+- Nutzt den Document-Parsing Connector: `parse(file)` → `StructuredDocument`
 - **Unterstützte Formate:** PDF UND DOCX (in DE häufig von Arbeitsagentur verlangt)
-- **LLM-Entkopplung (→ 0.5 Prinzip):**
-  - **Ohne LLM:** Bibliotheks-basiertes Parsing — Textextraktion + Regex/Heuristik für Sektionen (Erfahrung, Ausbildung, Skills)
-    - Zu evaluieren:
-      - [Docling](https://github.com/docling-project/docling) (IBM/Linux Foundation, 56K Stars) — PDF+DOCX+PPTX+Images, tiefe Layout-Analyse, OCR, kein LLM nötig. Python → als Docker Sidecar via `docling-serve` REST API. ~4.4GB Image, aber mächtigste Option. Empfohlen wenn DOCX-Support benötigt.
-      - [LiteParse](https://github.com/run-llama/liteparse) (LlamaIndex) — nur PDF, TypeScript-nativ, in-process, 26MB. Empfohlen als Lightweight-Alternative wenn nur PDFs.
-      - Weitere: pdf-parse, pdf2json, pdfjs-dist, mammoth (DOCX-only)
-  - **Mit LLM (optional):** AI-gestützte Extraktion für bessere Sektions-Erkennung, Skill-Mapping zu ESCO/NACE, semantische Analyse
-  - User wählt in Settings ob LLM-Verarbeitung aktiviert ist
+- **Pipeline:**
+  1. Document-Parsing Connector (1.18): Textextraktion + Sektions-Erkennung
+  2. (optional) AI Connector: Semantische Skill-Extraktion, ESCO/NACE Mapping
+  3. User wählt in Settings ob LLM-Verarbeitung aktiviert ist (→ 0.5 LLM-Entkopplungs-Prinzip)
 
 **2. LinkedIn-Profil-Import:**
 - LinkedIn-Profildaten importieren als CV-Quelle
