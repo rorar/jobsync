@@ -12,6 +12,7 @@ type EuresVacancyDetail = components["schemas"]["JobVacancyDetail"];
 import { translateEuresVacancy } from "./translator";
 import {
   resilientFetch,
+  EuresApiError,
   BrokenCircuitError,
   TaskCancelledError,
   BulkheadRejectedError,
@@ -180,6 +181,21 @@ export function createEuresConnector(): DataSourceConnector {
 
         return { success: true, data: allVacancies };
       } catch (error) {
+        if (error instanceof EuresApiError) {
+          if (error.status === 429) {
+            return {
+              success: false,
+              error: { type: "rate_limited" as const, retryAfter: 60 },
+            };
+          }
+          return {
+            success: false,
+            error: {
+              type: "network" as const,
+              message: `EURES API error: ${error.status}`,
+            },
+          };
+        }
         if (error instanceof BrokenCircuitError) {
           return {
             success: false,
@@ -224,6 +240,21 @@ export function createEuresConnector(): DataSourceConnector {
 
         return { success: true, data: translateDetail(detail, "en") };
       } catch (error) {
+        if (error instanceof EuresApiError) {
+          if (error.status === 429) {
+            return {
+              success: false,
+              error: { type: "rate_limited" as const, retryAfter: 60 },
+            };
+          }
+          return {
+            success: false,
+            error: {
+              type: "network" as const,
+              message: `EURES API error: ${error.status}`,
+            },
+          };
+        }
         if (error instanceof BrokenCircuitError) {
           return {
             success: false,

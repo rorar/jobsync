@@ -68,11 +68,12 @@ const mockResilientFetch = resilienceModule.resilientFetch as jest.MockedFunctio
   typeof resilienceModule.resilientFetch
 >;
 
-const { BrokenCircuitError, BulkheadRejectedError, TaskCancelledError } =
+const { BrokenCircuitError, BulkheadRejectedError, TaskCancelledError, EuresApiError } =
   resilienceModule as unknown as {
     BrokenCircuitError: new () => Error;
     BulkheadRejectedError: new () => Error;
     TaskCancelledError: new () => Error;
+    EuresApiError: new (status: number, message: string) => Error & { status: number };
   };
 
 // ---------------------------------------------------------------------------
@@ -132,6 +133,10 @@ function makeVacancyDetail(overrides: Record<string, unknown> = {}) {
 // ---------------------------------------------------------------------------
 
 describe("createEuresConnector", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it("returns a connector with id 'eures' and name 'EURES'", () => {
     const connector = createEuresConnector();
     expect(connector.id).toBe("eures");
@@ -147,6 +152,10 @@ describe("createEuresConnector", () => {
 });
 
 describe("EuresConnector.search", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   const connector = createEuresConnector();
   const baseParams = { keywords: "developer", location: "de" };
 
@@ -255,6 +264,28 @@ describe("EuresConnector.search", () => {
     expect((result.error as { message: string }).message).toContain("timed out");
   });
 
+  it("returns rate_limited ConnectorError on EuresApiError with status 429", async () => {
+    mockResilientFetch.mockRejectedValueOnce(new EuresApiError(429, "Too Many Requests"));
+
+    const result = await connector.search(baseParams);
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.type).toBe("rate_limited");
+    expect((result.error as { retryAfter?: number }).retryAfter).toBe(60);
+  });
+
+  it("returns a network ConnectorError on EuresApiError with non-429 status", async () => {
+    mockResilientFetch.mockRejectedValueOnce(new EuresApiError(503, "Service Unavailable"));
+
+    const result = await connector.search(baseParams);
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.type).toBe("network");
+    expect((result.error as { message: string }).message).toContain("503");
+  });
+
   it("passes language from connectorParams as requestLanguage", async () => {
     const jv = makeEuresJobVacancy({
       translations: { fr: { title: "Ingénieur logiciel (FR)", description: "desc" } },
@@ -285,6 +316,10 @@ describe("EuresConnector.search", () => {
 });
 
 describe("EuresConnector.getDetails", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   const connector = createEuresConnector();
 
   it("returns an enriched DiscoveredVacancy on success", async () => {
@@ -323,6 +358,49 @@ describe("EuresConnector.getDetails", () => {
     expect(result.success).toBe(false);
     if (result.success) return;
     expect(result.error.type).toBe("network");
+  });
+
+  it("returns rate_limited ConnectorError on EuresApiError with status 429", async () => {
+    mockResilientFetch.mockRejectedValueOnce(new EuresApiError(429, "Too Many Requests"));
+
+    const result = await connector.getDetails!("jv-detail-001");
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.type).toBe("rate_limited");
+    expect((result.error as { retryAfter?: number }).retryAfter).toBe(60);
+  });
+
+  it("returns a network ConnectorError on EuresApiError with non-429 status", async () => {
+    mockResilientFetch.mockRejectedValueOnce(new EuresApiError(500, "Internal Server Error"));
+
+    const result = await connector.getDetails!("jv-detail-001");
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.type).toBe("network");
+    expect((result.error as { message: string }).message).toContain("500");
+  });
+
+  it("returns rate_limited ConnectorError on BulkheadRejectedError", async () => {
+    mockResilientFetch.mockRejectedValueOnce(new BulkheadRejectedError());
+
+    const result = await connector.getDetails!("jv-detail-001");
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.type).toBe("rate_limited");
+  });
+
+  it("returns a network ConnectorError on TaskCancelledError (timeout)", async () => {
+    mockResilientFetch.mockRejectedValueOnce(new TaskCancelledError());
+
+    const result = await connector.getDetails!("jv-detail-001");
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.type).toBe("network");
+    expect((result.error as { message: string }).message).toContain("timed out");
   });
 });
 

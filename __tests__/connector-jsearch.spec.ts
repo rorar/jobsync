@@ -134,6 +134,10 @@ function makeJSearchResponse(jobs: MockJSearchJob[], status = "OK") {
 // ---------------------------------------------------------------------------
 
 describe("createJSearchConnector", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it("returns a connector with id 'jsearch' and name 'JSearch'", () => {
     const connector = createJSearchConnector();
     expect(connector.id).toBe("jsearch");
@@ -148,7 +152,11 @@ describe("createJSearchConnector", () => {
 });
 
 describe("JSearchConnector.search — credential handling", () => {
-  it("returns a network error immediately when no credential is provided", async () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("returns a blocked error immediately when no credential is provided", async () => {
     const connector = createJSearchConnector(); // no credential
 
     const result = await connector.search({
@@ -158,15 +166,15 @@ describe("JSearchConnector.search — credential handling", () => {
 
     expect(result.success).toBe(false);
     if (result.success) return;
-    expect(result.error.type).toBe("network");
-    expect((result.error as { message: string }).message).toContain(
+    expect(result.error.type).toBe("blocked");
+    expect((result.error as { reason: string }).reason).toContain(
       "RAPIDAPI_KEY",
     );
     // resilientFetch should never be called when there is no credential
     expect(mockResilientFetch).not.toHaveBeenCalled();
   });
 
-  it("returns a network error when credential is an empty string", async () => {
+  it("returns a blocked error when credential is an empty string", async () => {
     const connector = createJSearchConnector("");
 
     const result = await connector.search({
@@ -175,11 +183,18 @@ describe("JSearchConnector.search — credential handling", () => {
     });
 
     expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.type).toBe("blocked");
+    expect((result.error as { reason: string }).reason).toContain("RAPIDAPI_KEY");
     expect(mockResilientFetch).not.toHaveBeenCalled();
   });
 });
 
 describe("JSearchConnector.search — success path", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   const CREDENTIAL = "test-rapidapi-key";
   const connector = createJSearchConnector(CREDENTIAL);
   const baseParams = { keywords: "developer", location: "Berlin" };
@@ -275,6 +290,10 @@ describe("JSearchConnector.search — success path", () => {
 });
 
 describe("JSearchConnector.search — error handling", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   const CREDENTIAL = "test-rapidapi-key";
   const connector = createJSearchConnector(CREDENTIAL);
   const baseParams = { keywords: "developer", location: "Berlin" };
@@ -365,6 +384,10 @@ describe("JSearchConnector.search — error handling", () => {
 });
 
 describe("JSearchConnector — employment type mapping", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   const CREDENTIAL = "test-rapidapi-key";
   const connector = createJSearchConnector(CREDENTIAL);
   const baseParams = { keywords: "dev", location: "US" };
@@ -399,6 +422,10 @@ describe("JSearchConnector — employment type mapping", () => {
 });
 
 describe("formatSalary (via search result)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   const CREDENTIAL = "test-rapidapi-key";
   const connector = createJSearchConnector(CREDENTIAL);
   const baseParams = { keywords: "dev", location: "US" };

@@ -26,6 +26,9 @@ const API_KEY = "jobboerse-jobsuche";
 /** Maximum results per page (API-imposed limit). */
 const PAGE_SIZE = 50;
 
+/** Safety cap to prevent runaway pagination (20 pages * 50 = 1000 results max). */
+const MAX_PAGES = 20;
+
 /**
  * Build the public detail URL for a job listing.
  * Uses hashId when available (detail response), falls back to refnr-based search URL.
@@ -210,6 +213,7 @@ export function createArbeitsagenturConnector(): DataSourceConnector {
           if (jobs.length < PAGE_SIZE) break;
 
           page++;
+          if (page >= MAX_PAGES) break;
         }
 
         return { success: true, data: allVacancies };

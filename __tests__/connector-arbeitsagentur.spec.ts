@@ -66,9 +66,11 @@ const mockResilientFetch = resilienceModule.resilientFetch as jest.MockedFunctio
   typeof resilienceModule.resilientFetch
 >;
 
-const { BrokenCircuitError, ArbeitsagenturApiError } =
+const { BrokenCircuitError, BulkheadRejectedError, TaskCancelledError, ArbeitsagenturApiError } =
   resilienceModule as unknown as {
     BrokenCircuitError: new () => Error;
+    BulkheadRejectedError: new () => Error;
+    TaskCancelledError: new () => Error;
     ArbeitsagenturApiError: new (status: number, message: string) => Error & { status: number };
   };
 
@@ -135,6 +137,10 @@ function makeJobDetail(overrides: Record<string, unknown> = {}) {
 // ---------------------------------------------------------------------------
 
 describe("createArbeitsagenturConnector", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it("returns a connector with id 'arbeitsagentur' and name 'Arbeitsagentur'", () => {
     const connector = createArbeitsagenturConnector();
     expect(connector.id).toBe("arbeitsagentur");
@@ -150,6 +156,10 @@ describe("createArbeitsagenturConnector", () => {
 });
 
 describe("ArbeitsagenturConnector.search", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   const connector = createArbeitsagenturConnector();
   const baseParams = { keywords: "Softwareentwickler", location: "Berlin" };
 
@@ -272,8 +282,28 @@ describe("ArbeitsagenturConnector.search", () => {
 
     expect(result.success).toBe(false);
     if (result.success) return;
-    // BrokenCircuitError is not an ArbeitsagenturApiError, so falls to generic handler
     expect(result.error.type).toBe("network");
+  });
+
+  it("returns rate_limited error on BulkheadRejectedError", async () => {
+    mockResilientFetch.mockRejectedValueOnce(new BulkheadRejectedError());
+
+    const result = await connector.search(baseParams);
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.type).toBe("rate_limited");
+  });
+
+  it("returns a network error on TaskCancelledError (timeout)", async () => {
+    mockResilientFetch.mockRejectedValueOnce(new TaskCancelledError());
+
+    const result = await connector.search(baseParams);
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.type).toBe("network");
+    expect((result.error as { message: string }).message).toContain("timed out");
   });
 
   it("returns a network error on generic Error", async () => {
@@ -366,9 +396,32 @@ describe("ArbeitsagenturConnector.search", () => {
     if (!result.success) return;
     expect(result.data[0].sourceUrl).toContain("was=");
   });
+
+  it("stops pagination at MAX_PAGES (20) even if more results exist", async () => {
+    // Simulate an API that always returns a full page of 50, with a huge total
+    const fullPage = Array.from({ length: 50 }, (_, i) =>
+      makeArbeitsagenturJob({ refnr: `ref-inf-${i}` }),
+    );
+    // 20 pages of 50 = 1000 results, but total claims 5000
+    for (let p = 0; p < 20; p++) {
+      mockResilientFetch.mockResolvedValueOnce(makeSearchResponse(fullPage, 5000));
+    }
+
+    const result = await connector.search(baseParams);
+
+    expect(result.success).toBe(true);
+    // Should have fetched exactly 20 pages (page indices 0..19)
+    expect(mockResilientFetch).toHaveBeenCalledTimes(20);
+    if (!result.success) return;
+    expect(result.data).toHaveLength(1000);
+  });
 });
 
 describe("ArbeitsagenturConnector.getDetails", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   const connector = createArbeitsagenturConnector();
 
   it("returns an enriched DiscoveredVacancy with full description", async () => {
@@ -448,6 +501,27 @@ describe("ArbeitsagenturConnector.getDetails", () => {
     if (result.success) return;
     expect(result.error.type).toBe("network");
     expect((result.error as { message: string }).message).toBe("timeout");
+  });
+
+  it("returns rate_limited error on BulkheadRejectedError", async () => {
+    mockResilientFetch.mockRejectedValueOnce(new BulkheadRejectedError());
+
+    const result = await connector.getDetails!("12345-6789");
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.type).toBe("rate_limited");
+  });
+
+  it("returns a network error on TaskCancelledError (timeout)", async () => {
+    mockResilientFetch.mockRejectedValueOnce(new TaskCancelledError());
+
+    const result = await connector.getDetails!("12345-6789");
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.type).toBe("network");
+    expect((result.error as { message: string }).message).toContain("timed out");
   });
 
   it("sets salary to undefined when verguetung is absent", async () => {

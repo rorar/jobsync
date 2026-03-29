@@ -19,8 +19,11 @@ export const jsearchManifest: JobDiscoveryManifest = {
     circuitBreakerThreshold: 5,
     circuitBreakerCooldownMs: 30000,
     timeoutMs: 15000,
-    rateLimitTokens: undefined,
-    rateLimitRefillMs: undefined,
-    maxConcurrent: undefined,
+    // Conservative defaults for RapidAPI free tier (500 requests/month, 5/sec burst).
+    // 2 tokens refilled every 1s keeps us well under the burst cap while allowing
+    // reasonable throughput; maxConcurrent=3 prevents bulkhead saturation.
+    rateLimitTokens: 2,
+    rateLimitRefillMs: 1000,
+    maxConcurrent: 3,
   },
 };

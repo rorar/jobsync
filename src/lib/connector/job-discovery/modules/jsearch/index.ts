@@ -53,8 +53,8 @@ export function createJSearchConnector(credential?: string): DataSourceConnector
         return {
           success: false,
           error: {
-            type: "network",
-            message: "RAPIDAPI_KEY is not configured",
+            type: "blocked",
+            reason: "RAPIDAPI_KEY is not configured",
           },
         };
       }
