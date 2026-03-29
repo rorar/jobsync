@@ -30,6 +30,16 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
     useState<AutomationWithResume | null>(null);
   const [performanceWarning, setPerformanceWarning] = useState<string | null>(null);
 
+  /** Safely parse a "performanceWarning:<count>" message. Returns localized string or null. */
+  const parseWarningMessage = (message?: string): string | null => {
+    if (!message) return null;
+    const prefix = "performanceWarning:";
+    if (!message.startsWith(prefix)) return null;
+    const count = message.slice(prefix.length);
+    // Return localized warning, never the raw prefix
+    return t("automations.performanceWarningBanner").replace("{count}", count);
+  };
+
   const loadAutomations = useCallback(async () => {
     setLoading(true);
     const result = await getAutomationsList();
@@ -37,11 +47,9 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
     if (result.success && result.data) {
       setAutomations(result.data as any);
       // Check for performance warning from server
-      if (result.message?.startsWith("performanceWarning:")) {
-        const count = result.message.split(":")[1];
-        setPerformanceWarning(
-          t("automations.performanceWarningBanner").replace("{count}", count)
-        );
+      const warningMsg = parseWarningMessage(result.message);
+      if (warningMsg) {
+        setPerformanceWarning(warningMsg);
       } else {
         setPerformanceWarning(null);
       }

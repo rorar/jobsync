@@ -256,6 +256,16 @@ export function AutomationWizard({
     updateConnectorParams({ scheduleFrequency: freq });
   };
 
+  /** Safely parse a "performanceWarning:<count>" message. Returns localized string or null. */
+  const parseWarningMessage = (message?: string): string | null => {
+    if (!message) return null;
+    const prefix = "performanceWarning:";
+    if (!message.startsWith(prefix)) return null;
+    const count = message.slice(prefix.length);
+    // Return localized warning, never the raw prefix
+    return t("automations.performanceWarningBanner").replace("{count}", count);
+  };
+
   const onSubmit = async (data: CreateAutomationInput) => {
     setIsSubmitting(true);
     try {
@@ -292,10 +302,11 @@ export function AutomationWizard({
         });
 
         // Show performance warning as a separate toast if returned by the server
-        if (result.message?.startsWith("performanceWarning:")) {
+        const warningMsg = parseWarningMessage(result.message);
+        if (warningMsg) {
           toast({
             title: t("automations.warning"),
-            description: t("automations.performanceWarning"),
+            description: warningMsg,
             variant: "default",
           });
         }
@@ -762,7 +773,7 @@ export function AutomationWizard({
               {jobBoard === "eures" && form.getValues("location") ? (
                 <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
                   {parseLocations(form.getValues("location")).map((code) => (
-                    <LocationBadge key={code} code={code} />
+                    <LocationBadge key={code} code={code} resolve={jobBoard === "eures" || jobBoard === "arbeitsagentur"} />
                   ))}
                 </div>
               ) : (
