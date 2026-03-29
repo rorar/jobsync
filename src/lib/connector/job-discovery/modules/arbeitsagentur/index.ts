@@ -16,6 +16,7 @@ import {
   TaskCancelledError,
   BulkheadRejectedError,
 } from "./resilience";
+import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 
 const API_BASE =
   "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service";
@@ -159,8 +160,18 @@ function buildSearchParams(
   page: number,
 ): URLSearchParams {
   const sp = new URLSearchParams();
-  sp.set("was", params.keywords);
-  if (params.location) sp.set("wo", params.location);
+
+  // Join multiple keywords with space for broad free-text search
+  const keywords = parseKeywords(params.keywords);
+  sp.set("was", keywords.join(" "));
+
+  // Use first location (API accepts a single city/region)
+  if (params.location) {
+    const locations = parseLocations(params.location);
+    if (locations.length > 0) {
+      sp.set("wo", locations[0]);
+    }
+  }
   sp.set("page", page.toString());
   sp.set("size", PAGE_SIZE.toString());
 

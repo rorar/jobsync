@@ -17,6 +17,7 @@ import {
   TaskCancelledError,
   BulkheadRejectedError,
 } from "./resilience";
+import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 
 const EURES_API_BASE = "https://europa.eu/eures/api";
 const EURES_SEARCH_URL = `${EURES_API_BASE}/jv-searchengine/public/jv-search/search`;
@@ -109,15 +110,12 @@ export function createEuresConnector(): DataSourceConnector {
         const connectorParams = params.connectorParams ?? {};
         const requestLanguage = (connectorParams.language as string) ?? "en";
         const locationCodes = params.location
-          ? params.location
-              .split(",")
-              .map((c) => {
-                const trimmed = c.trim().toLowerCase();
+          ? parseLocations(params.location).map((code) => {
+                const lower = code.toLowerCase();
                 // Convert "de-ns" storage format to EURES API "NS" within country context
-                if (trimmed.endsWith("-ns")) return trimmed.slice(0, -3).toUpperCase() + "-NS";
-                return trimmed;
+                if (lower.endsWith("-ns")) return lower.slice(0, -3).toUpperCase() + "-NS";
+                return lower;
               })
-              .filter(Boolean)
           : [];
 
         const RESULTS_PER_PAGE = 50;
@@ -125,10 +123,7 @@ export function createEuresConnector(): DataSourceConnector {
           resultsPerPage: RESULTS_PER_PAGE,
           page: 1,
           sortSearch: "MOST_RECENT",
-          keywords: params.keywords
-            .split("||")
-            .map((k) => k.trim())
-            .filter(Boolean)
+          keywords: parseKeywords(params.keywords)
             .map((keyword) => ({
               keyword,
               specificSearchCode: "EVERYWHERE" as const,

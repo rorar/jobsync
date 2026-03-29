@@ -43,6 +43,7 @@ import { DiscoveredJobDetail } from "@/components/automations/DiscoveredJobDetai
 import { RunHistoryList } from "@/components/automations/RunHistoryList";
 import { LogsTab } from "@/components/automations/LogsTab";
 import Loading from "@/components/Loading";
+import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 
 export default function AutomationDetailPage() {
   const params = useParams();
@@ -212,10 +213,7 @@ export default function AutomationDetailPage() {
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="font-medium text-foreground">Keywords:</span>
-              {automation.keywords
-                .split("||")
-                .map((kw: string) => kw.trim())
-                .filter(Boolean)
+              {parseKeywords(automation.keywords)
                 .map((kw: string) => (
                   <Badge key={kw} variant="secondary" className="text-xs">
                     {kw}
@@ -224,10 +222,7 @@ export default function AutomationDetailPage() {
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="font-medium text-foreground">Location:</span>
-              {automation.location
-                .split(",")
-                .map((loc: string) => loc.trim())
-                .filter(Boolean)
+              {parseLocations(automation.location)
                 .map((loc: string) => (
                   <Badge key={loc} variant="secondary" className="text-xs">
                     {loc}

@@ -50,6 +50,7 @@ import {
 } from "@/actions/automation.actions";
 import Link from "next/link";
 import { getLocationLabel } from "@/lib/connector/job-discovery/modules/eures/countries";
+import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 
 interface AutomationListProps {
   automations: AutomationWithResume[];
@@ -65,10 +66,10 @@ const PAUSE_REASON_KEYS: Record<AutomationPauseReason, string> = {
   cb_escalation: "automations.pauseReasonCbEscalation",
 };
 
-/** Resolve a comma-separated location string to readable labels */
+/** Resolve a stored location string to readable labels */
 function resolveLocations(location: string, jobBoard: string): string[] {
   if (!location) return [];
-  const codes = location.split(",").map((c) => c.trim()).filter(Boolean);
+  const codes = parseLocations(location);
   // Only resolve EURES / arbeitsagentur codes; for other boards, return as-is
   if (jobBoard === "eures" || jobBoard === "arbeitsagentur") {
     return codes.map((code) => getLocationLabel(code));
@@ -160,10 +161,7 @@ export function AutomationList({
         {automations.map((automation) => {
           const isLoading = loadingAction === automation.id;
           const resumeMissing = !automation.resume;
-          const keywordChips = automation.keywords
-            .split(",")
-            .map((k) => k.trim())
-            .filter(Boolean);
+          const keywordChips = parseKeywords(automation.keywords);
           const locationLabels = resolveLocations(automation.location, automation.jobBoard);
 
           return (

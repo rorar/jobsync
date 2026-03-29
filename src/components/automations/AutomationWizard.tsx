@@ -67,6 +67,7 @@ import { EuresLocationCombobox } from "@/components/automations/EuresLocationCom
 import { getLocationLabel, getCountryCode } from "@/lib/connector/job-discovery/modules/eures/countries";
 import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
+import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 
 interface Resume {
   id: string;
@@ -739,9 +740,9 @@ export function AutomationWizard({
               <span className="text-muted-foreground">{t("automations.reviewKeywords")}</span>
               {jobBoard === "eures" && form.getValues("keywords")?.includes("||") ? (
                 <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
-                  {form.getValues("keywords").split("||").filter(Boolean).map((kw) => (
-                    <Badge key={kw.trim()} variant="secondary">
-                      {kw.trim()}
+                  {parseKeywords(form.getValues("keywords")).map((kw) => (
+                    <Badge key={kw} variant="secondary">
+                      {kw}
                     </Badge>
                   ))}
                 </div>
@@ -753,8 +754,7 @@ export function AutomationWizard({
               <span className="text-muted-foreground">{t("automations.reviewLocation")}</span>
               {jobBoard === "eures" && form.getValues("location") ? (
                 <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
-                  {form.getValues("location").split(",").filter(Boolean).map((code) => {
-                    const trimmed = code.trim();
+                  {parseLocations(form.getValues("location")).map((trimmed) => {
                     const isNS = trimmed.toLowerCase() === "ns" || trimmed.toLowerCase().endsWith("-ns");
                     return (
                       <Badge key={trimmed} variant="secondary" className="gap-1">
