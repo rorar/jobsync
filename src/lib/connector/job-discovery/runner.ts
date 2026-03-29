@@ -9,7 +9,7 @@ import "./connectors"; // trigger registration
 import { moduleRegistry } from "../registry";
 import { resolveCredential } from "../credential-resolver";
 import { checkConsecutiveRunFailures } from "../degradation";
-import { mapDiscoveredVacancyToJobRecord } from "./mapper";
+import { mapDiscoveredVacancyToStagedInput } from "./staged-vacancy-mapper";
 import { normalizeJobUrl } from "./utils";
 import { calculateNextRunAt, type ScheduleFrequency } from "./schedule";
 import {
@@ -279,10 +279,15 @@ export async function runAutomation(
       "Checking for duplicate jobs...",
     );
 
-    const existingJobUrls = await getExistingJobUrls(automation.userId);
-    const newJobs = searchResult.data.filter(
-      (job) => !existingJobUrls.has(normalizeJobUrl(job.sourceUrl)),
-    );
+    const existingKeys = await getExistingVacancyKeys(automation.userId, automation.jobBoard);
+    const newJobs = searchResult.data.filter((job) => {
+      // Check dedup by externalId first, then URL
+      const dedupId = job.externalId ?? normalizeJobUrl(job.sourceUrl);
+      if (existingKeys.has(dedupId) || existingKeys.has(normalizeJobUrl(job.sourceUrl))) {
+        return false;
+      }
+      return true;
+    });
     const jobsDeduplicated = newJobs.length;
 
     automationLogger.log(
@@ -394,13 +399,8 @@ export async function runAutomation(
       );
 
       try {
-        const vacancy: DiscoveredVacancy = {
-          ...job,
-          sourceUrl: normalizeJobUrl(job.sourceUrl),
-        };
-
-        const jobRecord = await mapDiscoveredVacancyToJobRecord({
-          vacancy,
+        const stagedInput = mapDiscoveredVacancyToStagedInput({
+          vacancy: { ...job, sourceUrl: normalizeJobUrl(job.sourceUrl) },
           userId: automation.userId,
           automationId: automation.id,
           matchScore: matchResult.score,
@@ -412,7 +412,28 @@ export async function runAutomation(
           }),
         });
 
-        await db.job.create({ data: jobRecord });
+        // Upsert: if same (userId, sourceBoard, externalId) exists and is not dismissed, update match data.
+        // If dismissed or not found, create new.
+        const dedupKey = {
+          userId: automation.userId,
+          sourceBoard: stagedInput.sourceBoard,
+          externalId: stagedInput.externalId ?? `url:${normalizeJobUrl(job.sourceUrl)}`,
+        };
+
+        await db.stagedVacancy.upsert({
+          where: {
+            userId_sourceBoard_externalId: dedupKey,
+          },
+          create: {
+            ...stagedInput,
+            externalId: dedupKey.externalId,
+          },
+          update: {
+            matchScore: stagedInput.matchScore,
+            matchData: stagedInput.matchData,
+            updatedAt: new Date(),
+          },
+        });
         jobsSaved++;
 
         automationLogger.log(
@@ -489,19 +510,46 @@ export async function runAutomation(
   }
 }
 
-async function getExistingJobUrls(userId: string): Promise<Set<string>> {
-  const existingJobs = await db.job.findMany({
-    where: { userId },
-    select: { jobUrl: true },
-  });
+async function getExistingVacancyKeys(
+  userId: string,
+  sourceBoard: string,
+): Promise<Set<string>> {
+  const [stagedKeys, jobUrls, dedupHashes] = await Promise.all([
+    // Check existing staged vacancies (not dismissed)
+    db.stagedVacancy.findMany({
+      where: { userId, sourceBoard, status: { not: "dismissed" } },
+      select: { externalId: true, sourceUrl: true },
+    }),
+    // Check existing promoted jobs (via URL)
+    db.job.findMany({
+      where: { userId },
+      select: { jobUrl: true },
+    }),
+    // Check dedup hashes (purged records)
+    db.dedupHash.findMany({
+      where: { userId, sourceBoard },
+      select: { hash: true },
+    }),
+  ]);
 
-  const urls = new Set<string>();
-  for (const job of existingJobs) {
-    if (job.jobUrl) {
-      urls.add(normalizeJobUrl(job.jobUrl));
-    }
+  const keys = new Set<string>();
+
+  for (const sv of stagedKeys) {
+    if (sv.externalId) keys.add(sv.externalId);
+    if (sv.sourceUrl) keys.add(normalizeJobUrl(sv.sourceUrl));
   }
-  return urls;
+
+  for (const j of jobUrls) {
+    if (j.jobUrl) keys.add(normalizeJobUrl(j.jobUrl));
+  }
+
+  // DedupHash entries use hash(sourceBoard:externalId), we can't reverse them
+  // but we mark them as "seen" for the sourceBoard filter
+  for (const dh of dedupHashes) {
+    keys.add(`hash:${dh.hash}`);
+  }
+
+  return keys;
 }
 
 interface MatchResult {

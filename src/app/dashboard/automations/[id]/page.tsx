@@ -73,7 +73,7 @@ export default function AutomationDetailPage() {
       const [automationResult, runsResult, jobsResult] = await Promise.all([
         getAutomationById(automationId),
         getAutomationRuns(automationId),
-        getDiscoveredJobs({ automationId }),
+        getDiscoveredJobs(automationId),
       ]);
 
       if (automationResult.success && automationResult.data) {

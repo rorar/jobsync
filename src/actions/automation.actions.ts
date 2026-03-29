@@ -15,10 +15,12 @@ import type {
   AutomationRunStatus,
   AutomationWithResume,
   AutomationRun,
-  DiscoveredJob,
-  DiscoveryStatus,
   JobBoard,
 } from "@/models/automation.model";
+import type {
+  StagedVacancyWithAutomation,
+  StagedVacancyStatus,
+} from "@/models/stagedVacancy.model";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { handleError } from "@/lib/utils";
 import { ActionResult } from "@/models/actionResult";
@@ -43,13 +45,6 @@ function toAutomationRun<T extends { status: string }>(
   row: T
 ): T & { status: AutomationRunStatus } {
   return { ...row, status: row.status as AutomationRunStatus };
-}
-
-/** Narrow Prisma string fields to domain enums for DiscoveredJob. */
-function toDiscoveredJob<T extends { discoveryStatus: string | null }>(
-  row: T
-): T & { discoveryStatus: DiscoveryStatus | null } {
-  return { ...row, discoveryStatus: row.discoveryStatus as DiscoveryStatus | null };
 }
 
 export async function getAutomationsList(
@@ -391,103 +386,80 @@ export async function resumeAutomation(id: string): Promise<ActionResult<Automat
   }
 }
 
-export async function getDiscoveredJobs(options?: {
-  automationId?: string;
-  discoveryStatus?: DiscoveryStatus;
-  page?: number;
-  limit?: number;
-  sortBy?: "matchScore" | "discoveredAt";
-  sortOrder?: "asc" | "desc";
-}): Promise<ActionResult<DiscoveredJob[]>> {
+export async function getDiscoveredJobs(
+  automationId: string,
+  page: number = 1,
+  limit: number = 20,
+  statusFilter?: StagedVacancyStatus[],
+): Promise<ActionResult<StagedVacancyWithAutomation[]>> {
   try {
     const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, message: "Not authenticated" };
-    }
-
-    const {
-      automationId,
-      discoveryStatus,
-      page = 1,
-      limit = APP_CONSTANTS.RECORDS_PER_PAGE,
-      sortBy = "matchScore",
-      sortOrder = "desc",
-    } = options || {};
+    if (!user) return { success: false, message: "Not authenticated" };
 
     const skip = (page - 1) * limit;
-
-    const where: Record<string, unknown> = {
+    const where: any = {
       userId: user.id,
-      automationId: { not: null },
+      automationId,
+      trashedAt: null,
     };
-
-    if (automationId) {
-      where.automationId = automationId;
+    if (statusFilter && statusFilter.length > 0) {
+      where.status = { in: statusFilter };
     }
 
-    if (discoveryStatus) {
-      where.discoveryStatus = discoveryStatus;
-    }
-
-    const [jobs, total] = await Promise.all([
-      prisma.job.findMany({
+    const [data, total] = await Promise.all([
+      prisma.stagedVacancy.findMany({
         where,
+        include: { automation: { select: { id: true, name: true } } },
+        orderBy: { discoveredAt: "desc" },
         skip,
         take: limit,
-        orderBy: { [sortBy]: sortOrder },
-        include: {
-          automation: {
-            select: { id: true, name: true },
-          },
-          JobTitle: { select: { label: true } },
-          Company: { select: { label: true } },
-          Location: { select: { label: true } },
-        },
       }),
-      prisma.job.count({ where }),
+      prisma.stagedVacancy.count({ where }),
     ]);
 
     return {
       success: true,
-      data: jobs.map(toDiscoveredJob) as DiscoveredJob[],
+      data: data.map((d) => ({
+        ...d,
+        status: d.status as StagedVacancyStatus,
+        source: d.source as "manual" | "automation",
+      })) as StagedVacancyWithAutomation[],
       total,
     };
   } catch (error) {
-    return handleError(error, "Failed to get discovered jobs");
+    return handleError(error, "Failed to fetch discovered jobs");
   }
 }
 
-export async function getDiscoveredJobById(id: string): Promise<ActionResult<DiscoveredJob & { parsedMatchData: object | null }>> {
+export async function getDiscoveredJobById(id: string): Promise<ActionResult<StagedVacancyWithAutomation & { parsedMatchData: object | null }>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return { success: false, message: "Not authenticated" };
     }
 
-    const job = await prisma.job.findFirst({
+    const vacancy = await prisma.stagedVacancy.findFirst({
       where: {
         id,
         userId: user.id,
         automationId: { not: null },
+        trashedAt: null,
       },
       include: {
         automation: {
           select: { id: true, name: true },
         },
-        JobTitle: { select: { label: true } },
-        Company: { select: { label: true } },
-        Location: { select: { label: true } },
       },
     });
 
-    if (!job) {
+    if (!vacancy) {
       return { success: false, message: "Discovered job not found" };
     }
 
     let parsedMatchData = null;
-    if (job.matchData) {
+    if (vacancy.matchData) {
       try {
-        parsedMatchData = JSON.parse(job.matchData);
+        parsedMatchData = JSON.parse(vacancy.matchData);
       } catch {
         // Ignore parse errors
       }
@@ -496,91 +468,97 @@ export async function getDiscoveredJobById(id: string): Promise<ActionResult<Dis
     return {
       success: true,
       data: {
-        ...toDiscoveredJob(job) as DiscoveredJob,
+        ...vacancy,
+        status: vacancy.status as StagedVacancyStatus,
+        source: vacancy.source as "manual" | "automation",
         parsedMatchData,
-      },
+      } as StagedVacancyWithAutomation & { parsedMatchData: object | null },
     };
   } catch (error) {
     return handleError(error, "Failed to get discovered job");
   }
 }
 
-export async function dismissDiscoveredJob(id: string): Promise<ActionResult<DiscoveredJob>> {
+export async function dismissDiscoveredJob(id: string): Promise<ActionResult<StagedVacancyWithAutomation>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return { success: false, message: "Not authenticated" };
     }
 
-    const job = await prisma.job.findFirst({
+    const vacancy = await prisma.stagedVacancy.findFirst({
       where: {
         id,
         userId: user.id,
         automationId: { not: null },
+        trashedAt: null,
       },
     });
 
-    if (!job) {
+    if (!vacancy) {
       return { success: false, message: "Discovered job not found" };
     }
 
-    const updated = await prisma.job.update({
+    const updated = await prisma.stagedVacancy.update({
       where: { id },
-      data: { discoveryStatus: "dismissed" },
+      data: { status: "dismissed" },
       include: {
         automation: {
           select: { id: true, name: true },
         },
-        JobTitle: { select: { label: true } },
-        Company: { select: { label: true } },
-        Location: { select: { label: true } },
       },
     });
 
     return {
       success: true,
-      data: toDiscoveredJob(updated) as DiscoveredJob,
+      data: {
+        ...updated,
+        status: updated.status as StagedVacancyStatus,
+        source: updated.source as "manual" | "automation",
+      } as StagedVacancyWithAutomation,
     };
   } catch (error) {
     return handleError(error, "Failed to dismiss discovered job");
   }
 }
 
-export async function acceptDiscoveredJob(id: string): Promise<ActionResult<DiscoveredJob>> {
+export async function acceptDiscoveredJob(id: string): Promise<ActionResult<StagedVacancyWithAutomation>> {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return { success: false, message: "Not authenticated" };
     }
 
-    const job = await prisma.job.findFirst({
+    const vacancy = await prisma.stagedVacancy.findFirst({
       where: {
         id,
         userId: user.id,
         automationId: { not: null },
+        trashedAt: null,
       },
     });
 
-    if (!job) {
+    if (!vacancy) {
       return { success: false, message: "Discovered job not found" };
     }
 
-    const updated = await prisma.job.update({
+    const updated = await prisma.stagedVacancy.update({
       where: { id },
-      data: { discoveryStatus: "accepted" },
+      data: { status: "ready" },
       include: {
         automation: {
           select: { id: true, name: true },
         },
-        JobTitle: { select: { label: true } },
-        Company: { select: { label: true } },
-        Location: { select: { label: true } },
       },
     });
 
     return {
       success: true,
-      data: toDiscoveredJob(updated) as DiscoveredJob,
+      data: {
+        ...updated,
+        status: updated.status as StagedVacancyStatus,
+        source: updated.source as "manual" | "automation",
+      } as StagedVacancyWithAutomation,
     };
   } catch (error) {
     return handleError(error, "Failed to accept discovered job");
