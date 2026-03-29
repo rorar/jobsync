@@ -103,7 +103,6 @@ export function AutomationWizard({
   const { t } = useTranslations();
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [hasRapidApiKey, setHasRapidApiKey] = useState<boolean | null>(null);
   const [availableModules, setAvailableModules] = useState<ModuleManifestSummary[]>([]);
   const [configuredKeyModuleIds, setConfiguredKeyModuleIds] = useState<Set<string>>(new Set());
   const [aiScoringEnabled, setAiScoringEnabled] = useState(true);
@@ -128,15 +127,11 @@ export function AutomationWizard({
     if (open) {
       getUserApiKeys().then((result) => {
         if (result.success && result.data) {
-          const hasKey = result.data.some((k) => k.moduleId === "rapidapi");
-          setHasRapidApiKey(hasKey);
           setConfiguredKeyModuleIds(new Set(result.data.map((k) => k.moduleId)));
         } else {
-          setHasRapidApiKey(false);
           setConfiguredKeyModuleIds(new Set());
         }
       }).catch(() => {
-        setHasRapidApiKey(false);
         setConfiguredKeyModuleIds(new Set());
       });
 
@@ -374,11 +369,7 @@ export function AutomationWizard({
                 <FormLabel>{t("automations.jobBoard")}</FormLabel>
                 <Select
                   onValueChange={(val) => {
-                    // Prevent selecting modules that require unconfigured credentials
-                    const mod = availableModules.find((m) => m.moduleId === val);
-                    if (mod?.credential.required && !configuredKeyModuleIds.has(mod.credential.moduleId)) {
-                      return;
-                    }
+                    // Allow selecting any module — warning shown below if key is missing
                     field.onChange(val);
                   }}
                   value={field.value}
@@ -392,25 +383,26 @@ export function AutomationWizard({
                     <TooltipProvider>
                       {availableModules.map((mod) => {
                         const needsKey = mod.credential.required && !configuredKeyModuleIds.has(mod.credential.moduleId);
-                        if (needsKey) {
-                          return (
-                            <Tooltip key={mod.moduleId}>
-                              <TooltipTrigger asChild>
-                                <div className="relative flex cursor-not-allowed select-none items-center rounded-sm px-2 py-1.5 text-sm text-muted-foreground opacity-50">
-                                  <AlertTriangle className="h-4 w-4 mr-2 text-destructive" />
-                                  {mod.name}
-                                </div>
-                              </TooltipTrigger>
+                        return (
+                          <Tooltip key={mod.moduleId}>
+                            <TooltipTrigger asChild>
+                              <div>
+                                <SelectItem value={mod.moduleId}>
+                                  <span className={needsKey ? "flex items-center gap-2" : ""}>
+                                    {mod.name}
+                                    {needsKey && (
+                                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500 inline-block" />
+                                    )}
+                                  </span>
+                                </SelectItem>
+                              </div>
+                            </TooltipTrigger>
+                            {needsKey && (
                               <TooltipContent side="left">
                                 <p>{t("automations.jsearchApiKeyRequired")}</p>
                               </TooltipContent>
-                            </Tooltip>
-                          );
-                        }
-                        return (
-                          <SelectItem key={mod.moduleId} value={mod.moduleId}>
-                            {mod.name}
-                          </SelectItem>
+                            )}
+                          </Tooltip>
                         );
                       })}
                     </TooltipProvider>
@@ -421,13 +413,23 @@ export function AutomationWizard({
                   const selectedMod = availableModules.find((m) => m.moduleId === jobBoard);
                   if (!selectedMod) return null;
 
-                  // Module requires a key that is NOT configured -> yellow warning
+                  // Module requires a key that is NOT configured -> amber warning with link
                   if (selectedMod.credential.required && !configuredKeyModuleIds.has(selectedMod.credential.moduleId)) {
                     return (
-                      <p className="flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400">
-                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                        {t("automations.jsearchApiKeyRequired")}
-                      </p>
+                      <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-1">
+                        <p className="flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-400">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                          {t("automations.jsearchApiKeyRequired")}
+                        </p>
+                        <a
+                          href="/dashboard/settings"
+                          className="text-xs text-amber-600 dark:text-amber-500 underline hover:no-underline"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {t("automations.configureApiKey")}
+                        </a>
+                      </div>
                     );
                   }
 

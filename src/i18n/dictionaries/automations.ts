@@ -209,6 +209,7 @@ export const automations = {
 
     // U2: JSearch API Key Check
     "automations.jsearchApiKeyRequired": "API Key required — configure in Settings",
+    "automations.configureApiKey": "Go to Settings → API Keys",
     "automations.noApiKeyNeeded": "No API key needed",
 
     // U3: Threshold Toggle
@@ -439,6 +440,7 @@ export const automations = {
 
     // U2: JSearch API Key Check
     "automations.jsearchApiKeyRequired": "API-Schlüssel erforderlich — in Einstellungen konfigurieren",
+    "automations.configureApiKey": "Zu Einstellungen → API-Schlüssel",
     "automations.noApiKeyNeeded": "Kein API-Schlüssel erforderlich",
 
     // U3: Threshold Toggle
@@ -669,6 +671,7 @@ export const automations = {
 
     // U2: JSearch API Key Check
     "automations.jsearchApiKeyRequired": "Clé API requise — configurer dans les Paramètres",
+    "automations.configureApiKey": "Aller dans Paramètres → Clés API",
     "automations.noApiKeyNeeded": "Aucune clé API requise",
 
     // U3: Threshold Toggle
@@ -899,6 +902,7 @@ export const automations = {
 
     // U2: JSearch API Key Check
     "automations.jsearchApiKeyRequired": "Clave API requerida — configurar en Ajustes",
+    "automations.configureApiKey": "Ir a Ajustes → Claves API",
     "automations.noApiKeyNeeded": "No se requiere clave API",
 
     // U3: Threshold Toggle
