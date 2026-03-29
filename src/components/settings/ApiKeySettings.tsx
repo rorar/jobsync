@@ -42,7 +42,7 @@ import type {
   ApiKeyClientResponse,
   ApiKeyModuleId,
 } from "@/models/apiKey.model";
-import { useTranslations } from "@/i18n";
+import { useTranslations, formatDateCompact } from "@/i18n";
 import type { TranslationKey } from "@/i18n";
 
 interface ModuleConfig {
@@ -54,6 +54,8 @@ interface ModuleConfig {
   descriptionKey: TranslationKey;
   sensitive: boolean;
   status: "active" | "inactive" | "error";
+  healthStatus: "healthy" | "degraded" | "unreachable" | "unknown";
+  lastSuccessfulConnection?: string;
 }
 
 /** Fallback description keys per module — i18n keys defined in settings dictionary */
@@ -74,13 +76,15 @@ function manifestToModuleConfig(m: ModuleManifestSummary): ModuleConfig {
     descriptionKey: DESCRIPTION_KEYS[m.credential.moduleId] ?? ("settings.apiKeysDesc" as TranslationKey),
     sensitive: m.credential.sensitive,
     status: m.status as "active" | "inactive" | "error",
+    healthStatus: m.healthStatus as ModuleConfig["healthStatus"],
+    lastSuccessfulConnection: m.lastSuccessfulConnection,
   };
 }
 
 const DEFAULT_OLLAMA_PLACEHOLDER = "http://127.0.0.1:11434";
 
 function ApiKeySettings() {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const [modules, setModules] = useState<ModuleConfig[]>([]);
   const [keys, setKeys] = useState<ApiKeyClientResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -313,10 +317,24 @@ function ApiKeySettings() {
                           Default: {defaultOllamaUrl}
                         </span>
                       )}
+                      {module.lastSuccessfulConnection && (
+                        <span className="block text-xs text-muted-foreground/70 mt-0.5">
+                          {t("settings.lastConnected")}: {formatDateCompact(new Date(module.lastSuccessfulConnection), locale)}
+                        </span>
+                      )}
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-block h-2 w-2 rounded-full ${
+                          module.healthStatus === "healthy" ? "bg-green-500" :
+                          module.healthStatus === "degraded" ? "bg-yellow-500" :
+                          module.healthStatus === "unreachable" ? "bg-red-500" :
+                          "bg-gray-400"
+                        }`}
+                        title={module.healthStatus}
+                      />
                       <span className={`text-xs font-medium ${module.status === "active" ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>
                         {module.status === "active" ? "Active" : "Inactive"}
                       </span>

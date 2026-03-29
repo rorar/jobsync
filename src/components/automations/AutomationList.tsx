@@ -33,9 +33,16 @@ import {
   Clock,
   FileText,
   AlertTriangle,
+  Info,
   Zap,
 } from "lucide-react";
-import type { AutomationWithResume } from "@/models/automation.model";
+import type { AutomationWithResume, AutomationPauseReason } from "@/models/automation.model";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   deleteAutomation,
   pauseAutomation,
@@ -49,6 +56,14 @@ interface AutomationListProps {
   onEdit: (automation: AutomationWithResume) => void;
   onRefresh: () => void;
 }
+
+/** Map pauseReason values to i18n translation keys */
+const PAUSE_REASON_KEYS: Record<AutomationPauseReason, string> = {
+  module_deactivated: "automations.pauseReasonModuleDeactivated",
+  auth_failure: "automations.pauseReasonAuthFailure",
+  consecutive_failures: "automations.pauseReasonConsecutiveFailures",
+  cb_escalation: "automations.pauseReasonCbEscalation",
+};
 
 /** Resolve a comma-separated location string to readable labels */
 function resolveLocations(location: string, jobBoard: string): string[] {
@@ -172,6 +187,23 @@ export function AutomationList({
                     >
                       {automation.status}
                     </Badge>
+                    {automation.status === "paused" && automation.pauseReason && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                              <Info className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">
+                                {t(PAUSE_REASON_KEYS[automation.pauseReason] as any)}
+                              </span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{t(PAUSE_REASON_KEYS[automation.pauseReason] as any)}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </div>
 
                   {resumeMissing && (

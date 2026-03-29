@@ -128,7 +128,7 @@ function JobsContainer({
   }, [loadJobs, filterKey, searchTerm]);
 
   const onDeleteJob = async (jobId: string) => {
-    const { data: res, success, message } = await deleteJobById(jobId);
+    const { success, message } = await deleteJobById(jobId);
     if (success) {
       toast({
         variant: "success",

@@ -102,6 +102,12 @@ export const automations = {
     "automations.automationResumed": "Automation resumed",
     "automations.automationDeleted": "Automation deleted",
 
+    // AutomationList - Pause reasons
+    "automations.pauseReasonModuleDeactivated": "Module was deactivated",
+    "automations.pauseReasonAuthFailure": "Authentication failed — check credentials",
+    "automations.pauseReasonConsecutiveFailures": "Paused after repeated failures",
+    "automations.pauseReasonCbEscalation": "Service temporarily unavailable",
+
     // DiscoveredJobsList
     "automations.noDiscoveredJobs": "No discovered jobs",
     "automations.noDiscoveredJobsDesc": "Jobs will appear here once your automations find matches",
@@ -324,6 +330,12 @@ export const automations = {
     "automations.automationPaused": "Automatisierung pausiert",
     "automations.automationResumed": "Automatisierung fortgesetzt",
     "automations.automationDeleted": "Automatisierung gelöscht",
+
+    // AutomationList - Pause reasons
+    "automations.pauseReasonModuleDeactivated": "Modul wurde deaktiviert",
+    "automations.pauseReasonAuthFailure": "Authentifizierung fehlgeschlagen — Anmeldedaten pruefen",
+    "automations.pauseReasonConsecutiveFailures": "Nach wiederholten Fehlern pausiert",
+    "automations.pauseReasonCbEscalation": "Dienst voruebergehend nicht verfuegbar",
 
     // DiscoveredJobsList
     "automations.noDiscoveredJobs": "Keine entdeckten Stellen",
@@ -548,6 +560,12 @@ export const automations = {
     "automations.automationResumed": "Automatisation reprise",
     "automations.automationDeleted": "Automatisation supprimée",
 
+    // AutomationList - Pause reasons
+    "automations.pauseReasonModuleDeactivated": "Le module a ete desactive",
+    "automations.pauseReasonAuthFailure": "Echec de l'authentification — verifiez les identifiants",
+    "automations.pauseReasonConsecutiveFailures": "Mise en pause apres des echecs repetes",
+    "automations.pauseReasonCbEscalation": "Service temporairement indisponible",
+
     // DiscoveredJobsList
     "automations.noDiscoveredJobs": "Aucun emploi découvert",
     "automations.noDiscoveredJobsDesc": "Les emplois apparaîtront ici une fois que vos automatisations auront trouvé des correspondances",
@@ -770,6 +788,12 @@ export const automations = {
     "automations.automationPaused": "Automatización pausada",
     "automations.automationResumed": "Automatización reanudada",
     "automations.automationDeleted": "Automatización eliminada",
+
+    // AutomationList - Pause reasons
+    "automations.pauseReasonModuleDeactivated": "El modulo fue desactivado",
+    "automations.pauseReasonAuthFailure": "Error de autenticacion — verifique las credenciales",
+    "automations.pauseReasonConsecutiveFailures": "Pausada tras fallos repetidos",
+    "automations.pauseReasonCbEscalation": "Servicio temporalmente no disponible",
 
     // DiscoveredJobsList
     "automations.noDiscoveredJobs": "No hay empleos descubiertos",
