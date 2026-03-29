@@ -388,13 +388,19 @@ Entfernungsberechnung und Kartenintegration als Connector mit austauschbaren Mod
 - **Connector Interface (`GeoConnector`):**
   - `geocode(address)` → `{ lat, lon }` — Adresse in Koordinaten
   - `reverseGeocode(lat, lon)` → Adresse
+  - `parseAddress(text)` → `{ street, houseNumber, postalCode, city, state?, country }` — Freitext-Adresse in strukturierte Komponenten
   - `distance(from, to, mode)` → `{ km, duration, mode }` — Entfernung + Fahrzeit
   - `route(from, to, mode)` → Routengeometrie für Kartenanzeige
   - **Verkehrsmittel (`mode`):** `car` | `transit` | `bike` | `walk`
 
-**Phase 1 — Geocoding + Entfernungsberechnung (Luftlinie):**
-- **Modul: Nominatim/OSM** (kostenlos, self-hostable, DSGVO-konform) — empfohlen als Default
+**Phase 1 — Geocoding + Entfernungsberechnung (Luftlinie) + Address Parsing:**
+- **Modul: Nominatim/OSM** (kostenlos, self-hostable, DSGVO-konform) — empfohlen als Default für Geocoding
 - **Modul: Google Geocoding** (API-Key, genauer bei Adressen) — optional
+- **Modul: libpostal** (Docker Sidecar, ML-trainiert auf 1B+ OSM-Adressen, 99.45% Accuracy) — Address-String → strukturierte Komponenten
+  - Docker: `pelias/libpostal-service` auf Port 4400, ~2GB Disk
+  - Fully offline, kein API-Key, DSGVO-konform
+  - Parst internationale Adressen (DE: "Musterstr. 42, 12345 Berlin", FR: "42 Rue de l'Exemple, 75001 Paris", etc.)
+- **Library (kein Modul): `localized-address-format`** (5KB, zero deps) — Feld-Metadaten pro Land (welche Felder, welche Reihenfolge, welche Pflicht). Für dynamische Formular-Generierung (→ 2.6 AddressInput).
 - Vorhandene Daten nutzen: Arbeitsagentur liefert `koordinaten` (lat/lon), EURES liefert `countryCode` + Stadt
 - Entfernungsfilter (Luftlinie) als Quick Win
 
@@ -657,6 +663,12 @@ Kontextsensitiver Einrichtungsassistent für neue Benutzer, der sich an deren Zi
 - Passende Icons für alle Input-Felder
 - Date Picker: Datumseingabe als Text mit Validierung nach Lokalisation
 - Text Input: Enter-Taste fügt Objekte hinzu (Chip-Pattern)
+- **AddressInput-Komponente (Shadcn):**
+  - Ein Eingabefeld das sich per Land-Auswahl in strukturierte Unterfelder aufteilt (Straße, Hausnummer, PLZ, Stadt, C/O, etc.)
+  - **Feld-Layout pro Land:** Dynamisch generiert via `localized-address-format` Library (→ 1.10) — DE: Straße+Nr | PLZ+Stadt; FR: Nr+Rue | Code+Ville; US: Street | City | State+ZIP
+  - **"Adresse einfügen" (Paste):** Freitext-Adresse wird via libpostal Modul (→ 1.10 Geo/Map Connector) geparst und in Unterfelder verteilt. User bestätigt/editiert.
+  - **Graceful Degradation:** Wenn libpostal nicht verfügbar (Docker nicht konfiguriert), bleibt das manuelle Ausfüllen der Unterfelder. Kein Parsing-Fallback nötig — die Felder sind ja da.
+  - **Output-Formatierung:** Strukturierte Daten → `@fragaria/address-formatter` für Anzeige (→ Application Locale Profile, Sektion 4)
 
 ### 2.7 Job-Tinder + Inbox UI
 - **Inbox als eigenständige UI-Surface:** Dedizierte Seite für promoted Jobs (nach Vacancy Pipeline → 0.5). Nicht nur Job-Tinder-Modus, sondern auch Listen-/Tabellen-Ansicht.
