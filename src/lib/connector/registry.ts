@@ -20,7 +20,22 @@ import {
 } from "./manifest";
 
 type AnyConnector = DataSourceConnector | AIProviderConnector;
-type ConnectorFactory = Function;
+
+/**
+ * Factory type is intentionally loose — module factories have heterogeneous
+ * signatures (some accept credentials, others don't). Type safety is enforced
+ * at the call site via the facade registries, not at the storage level.
+ *
+ * Using `(...args: unknown[]) => unknown` instead of `Function` because:
+ * 1. `Function` accepts absolutely anything including non-callables
+ * 2. The `unknown` return forces an explicit cast in `create()`
+ * 3. Runtime validation in `create()` ensures a valid connector is returned
+ *
+ * We cannot use `(...args: unknown[]) => AnyConnector` because TypeScript
+ * parameter contravariance makes `(credential?: string) => DataSourceConnector`
+ * incompatible with `(...args: unknown[]) => AnyConnector`.
+ */
+type ConnectorFactory = (...args: never[]) => unknown;
 
 interface RegistryEntry {
   registered: RegisteredModule;
@@ -71,7 +86,13 @@ class ModuleRegistry {
         `Unknown module: "${moduleId}". Available: ${[...this.entries.keys()].join(", ")}`,
       );
     }
-    return entry.factory(...args) as AnyConnector;
+    const result = (entry.factory as (...a: unknown[]) => unknown)(...args);
+    if (!result || typeof result !== "object") {
+      throw new Error(
+        `Factory for "${moduleId}" did not return a valid connector`,
+      );
+    }
+    return result as AnyConnector;
   }
 
   /** Update a module's status in the in-memory registry */
@@ -82,6 +103,40 @@ class ModuleRegistry {
     if (status === ModuleStatus.ACTIVE) {
       entry.registered.activatedAt = new Date();
     }
+    return true;
+  }
+
+  /**
+   * Update a module's health state in the in-memory registry.
+   * Encapsulates mutation so external code does not need direct field access.
+   */
+  updateHealth(
+    moduleId: string,
+    healthStatus: HealthStatus,
+    lastCheck: Date,
+    lastSuccess?: Date,
+  ): boolean {
+    const entry = this.entries.get(moduleId);
+    if (!entry) return false;
+    entry.registered.healthStatus = healthStatus;
+    entry.registered.lastHealthCheck = lastCheck;
+    if (lastSuccess) entry.registered.lastSuccessfulConnection = lastSuccess;
+    return true;
+  }
+
+  /**
+   * Update a module's circuit breaker failure tracking in the in-memory registry.
+   * Encapsulates mutation so external code does not need direct field access.
+   */
+  updateCircuitBreaker(
+    moduleId: string,
+    consecutiveFailures: number,
+    circuitBreakerOpenSince?: Date,
+  ): boolean {
+    const entry = this.entries.get(moduleId);
+    if (!entry) return false;
+    entry.registered.consecutiveFailures = consecutiveFailures;
+    entry.registered.circuitBreakerOpenSince = circuitBreakerOpenSince;
     return true;
   }
 

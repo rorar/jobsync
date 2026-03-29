@@ -93,7 +93,7 @@ export const POST = async (req: NextRequest) => {
     const { normalizedText: jobText } = jobPreprocessResult.data;
 
     const model = await getModel(
-      selectedModel.provider,
+      selectedModel.moduleId,
       selectedModel.model || "llama3.2",
       userId,
     );
@@ -123,7 +123,7 @@ export const POST = async (req: NextRequest) => {
     if (message.includes("fetch failed") || message.includes("ECONNREFUSED")) {
       return NextResponse.json(
         {
-          error: `Cannot connect to ${selectedModel.provider} service. Please ensure the service is running.`,
+          error: `Cannot connect to ${selectedModel.moduleId} module. Please ensure the module is running.`,
         },
         { status: 503 },
       );

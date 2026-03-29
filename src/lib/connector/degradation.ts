@@ -149,12 +149,12 @@ export async function handleCircuitBreakerTrip(
   const registered = moduleRegistry.get(moduleId);
   if (!registered) return { pausedCount: 0 };
 
-  // Increment consecutive failures
-  registered.consecutiveFailures += 1;
-  registered.circuitBreakerOpenSince = new Date();
+  // Increment consecutive failures via registry mutation method
+  const newFailureCount = registered.consecutiveFailures + 1;
+  moduleRegistry.updateCircuitBreaker(moduleId, newFailureCount, new Date());
 
   // Check if escalation threshold reached
-  if (registered.consecutiveFailures < CB_ESCALATION_THRESHOLD) {
+  if (newFailureCount < CB_ESCALATION_THRESHOLD) {
     return { pausedCount: 0 };
   }
 
@@ -172,7 +172,7 @@ export async function handleCircuitBreakerTrip(
   });
 
   console.warn(
-    `[Degradation] CB escalation for module "${moduleId}": ${registered.consecutiveFailures} consecutive opens. Paused ${result.count} automation(s).`,
+    `[Degradation] CB escalation for module "${moduleId}": ${newFailureCount} consecutive opens. Paused ${result.count} automation(s).`,
   );
 
   return { pausedCount: result.count };
@@ -182,9 +182,5 @@ export async function handleCircuitBreakerTrip(
  * When a module's circuit breaker recovers, reset the counter.
  */
 export function handleCircuitBreakerRecovery(moduleId: string): void {
-  const registered = moduleRegistry.get(moduleId);
-  if (!registered) return;
-
-  registered.consecutiveFailures = 0;
-  registered.circuitBreakerOpenSince = undefined;
+  moduleRegistry.updateCircuitBreaker(moduleId, 0, undefined);
 }

@@ -14,13 +14,13 @@ const OLLAMA_DEFAULT = "http://127.0.0.1:11434";
 
 export async function resolveApiKey(
   userId: string | undefined,
-  provider: string,
+  moduleId: string,
 ): Promise<string | undefined> {
   // Try user DB key first
   if (userId) {
     try {
       const apiKey = await db.apiKey.findUnique({
-        where: { userId_provider: { userId, provider } },
+        where: { userId_moduleId: { userId, moduleId } },
       });
       if (apiKey) {
         // Update lastUsedAt in background
@@ -41,14 +41,14 @@ export async function resolveApiKey(
   }
 
   // Env var fallback
-  const envVar = ENV_VAR_MAP[provider];
+  const envVar = ENV_VAR_MAP[moduleId];
   if (envVar) {
     const value = process.env[envVar];
     if (value) return value;
   }
 
   // Ollama default
-  if (provider === "ollama") return OLLAMA_DEFAULT;
+  if (moduleId === "ollama") return OLLAMA_DEFAULT;
 
   return undefined;
 }

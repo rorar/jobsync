@@ -9,7 +9,7 @@ import ErrorLogSettings from "@/components/settings/ErrorLogSettings";
 import SettingsSidebar, { type SettingsSection } from "@/components/settings/SettingsSidebar";
 
 function Settings() {
-  const [activeSection, setActiveSection] = useState<SettingsSection>("ai-provider");
+  const [activeSection, setActiveSection] = useState<SettingsSection>("ai-module");
 
   return (
     <div className="flex flex-col col-span-3">
@@ -22,7 +22,7 @@ function Settings() {
           onSectionChange={setActiveSection}
         />
         <div className="flex-1 min-w-0">
-          {activeSection === "ai-provider" && <AiSettings />}
+          {activeSection === "ai-module" && <AiSettings />}
           {activeSection === "api-keys" && <ApiKeySettings />}
           {activeSection === "appearance" && <DisplaySettings />}
           {activeSection === "developer" && <DeveloperSettings />}

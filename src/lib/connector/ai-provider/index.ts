@@ -1,4 +1,5 @@
-export { getModel, type ProviderType } from "./providers";
+export { getModel } from "./providers";
+export { AiModuleId } from "@/models/ai.model";
 export {
   ResumeReviewSchema,
   JobMatchSchema,

@@ -6,7 +6,7 @@ import type { AIProviderConnector, AIConnectorResult } from "../../types";
 const OPENAI_API_BASE = "https://api.openai.com/v1";
 const HEALTH_CHECK_TIMEOUT_MS = 10000;
 
-export function createOpenAIProvider(): AIProviderConnector {
+export function createOpenAIConnector(): AIProviderConnector {
   return {
     id: "openai",
     name: "OpenAI",

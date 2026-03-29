@@ -26,7 +26,7 @@ export async function GET() {
   } catch (error) {
     console.error("Error proxying Ollama ps:", error);
     return NextResponse.json(
-      { error: "Cannot connect to Ollama service" },
+      { error: "Cannot connect to Ollama module" },
       { status: 502 },
     );
   }

@@ -1,5 +1,5 @@
 import { JobResponse } from "@/models/job.model";
-import { AiProvider } from "@/models/ai.model";
+import { AiModuleId } from "@/models/ai.model";
 
 // Re-export for backwards compatibility
 export { convertResumeToText } from "@/lib/connector/ai-provider/tools/preprocessing";
@@ -14,15 +14,15 @@ export interface ModelCheckResult {
 /**
  * Check if an Ollama model is currently running
  * @param modelName - The name of the model to check
- * @param provider - The AI provider (only checks for Ollama)
+ * @param moduleId - The AI module (only checks for Ollama)
  * @returns ModelCheckResult with isRunning status and optional error message
  */
 export const checkIfModelIsRunning = async (
   modelName: string | undefined,
-  provider: AiProvider,
+  moduleId: AiModuleId,
 ): Promise<ModelCheckResult> => {
-  // Only check for Ollama provider
-  if (provider !== AiProvider.OLLAMA) {
+  // Only check for Ollama module
+  if (moduleId !== AiModuleId.OLLAMA) {
     return { isRunning: true };
   }
 

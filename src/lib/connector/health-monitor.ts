@@ -2,6 +2,7 @@ import "server-only";
 
 import prisma from "@/lib/db";
 import { moduleRegistry } from "./registry";
+import { isBlockedHealthCheckUrl } from "@/lib/url-validation";
 import {
   HealthStatus,
   ModuleStatus,
@@ -85,13 +86,14 @@ export async function checkModuleHealth(
     }
   }
 
-  // Update in-memory registry
-  registered.consecutiveFailures = consecutiveFailures;
-  registered.healthStatus = newHealthStatus;
-  registered.lastHealthCheck = new Date();
-  if (probeResult.success) {
-    registered.lastSuccessfulConnection = new Date();
-  }
+  // Update in-memory registry via dedicated mutation methods
+  moduleRegistry.updateCircuitBreaker(moduleId, consecutiveFailures);
+  moduleRegistry.updateHealth(
+    moduleId,
+    newHealthStatus,
+    new Date(),
+    probeResult.success ? new Date() : undefined,
+  );
 
   // Persist to DB (best-effort)
   try {
@@ -162,6 +164,10 @@ async function probeEndpoint(
 
     if (!url || !url.startsWith("http")) {
       return { success: false, error: "No valid health check URL" };
+    }
+
+    if (isBlockedHealthCheckUrl(url)) {
+      return { success: false, error: "Health check blocked: private/metadata URL" };
     }
 
     const response = await fetch(url, {

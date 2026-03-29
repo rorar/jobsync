@@ -5,6 +5,25 @@
  * the server makes outbound fetch requests to them.
  */
 
+/**
+ * Returns true if the URL targets a cloud metadata endpoint that must never
+ * be reachable from health-check probes.  Localhost (127.x / ::1) is
+ * intentionally allowed because Ollama runs locally.
+ */
+export function isBlockedHealthCheckUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname;
+    // AWS / Azure / Alibaba Cloud IMDS
+    if (hostname === "169.254.169.254") return true;
+    // GCP metadata server
+    if (hostname === "metadata.google.internal") return true;
+    return false;
+  } catch {
+    // Unparseable URL — block it
+    return true;
+  }
+}
+
 export function validateOllamaUrl(url: string): {
   valid: boolean;
   error?: string;

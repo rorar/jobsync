@@ -8,17 +8,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
   }
 
-  const { provider, key } = await req.json();
+  const { moduleId, key } = await req.json();
 
-  if (!provider || !key) {
+  if (!moduleId || !key) {
     return NextResponse.json(
-      { success: false, error: "Provider and key are required" },
+      { success: false, error: "Module ID and key are required" },
       { status: 400 },
     );
   }
 
   try {
-    switch (provider) {
+    switch (moduleId) {
       case "openai": {
         const res = await fetch("https://api.openai.com/v1/models", {
           headers: { Authorization: `Bearer ${key}` },
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
         if (!res.ok) {
           return NextResponse.json({
             success: false,
-            error: "Cannot connect to Ollama service",
+            error: "Cannot connect to Ollama module",
           });
         }
         return NextResponse.json({ success: true });
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
 
       default:
         return NextResponse.json(
-          { success: false, error: "Unknown provider" },
+          { success: false, error: "Unknown module" },
           { status: 400 },
         );
     }
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: false,
       error: message.includes("fetch failed") || message.includes("ECONNREFUSED")
-        ? `Cannot connect to ${provider} service`
+        ? `Cannot connect to ${moduleId} module`
         : message,
     });
   }

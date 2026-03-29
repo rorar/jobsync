@@ -24,6 +24,13 @@ jest.mock("@/lib/connector/registry", () => {
     moduleRegistry: {
       get: jest.fn((id: string) => registryMap.get(id)),
       setStatus: jest.fn(),
+      updateCircuitBreaker: jest.fn((id: string, consecutiveFailures: number, openSince?: Date) => {
+        const entry = registryMap.get(id);
+        if (!entry) return false;
+        entry.consecutiveFailures = consecutiveFailures;
+        entry.circuitBreakerOpenSince = openSince;
+        return true;
+      }),
       _testMap: registryMap,
     },
   };

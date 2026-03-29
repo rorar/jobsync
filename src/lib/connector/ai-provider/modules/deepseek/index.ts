@@ -6,7 +6,7 @@ import type { AIProviderConnector, AIConnectorResult } from "../../types";
 const DEEPSEEK_API_BASE = "https://api.deepseek.com";
 const HEALTH_CHECK_TIMEOUT_MS = 10000;
 
-export function createDeepSeekProvider(): AIProviderConnector {
+export function createDeepSeekConnector(): AIProviderConnector {
   return {
     id: "deepseek",
     name: "DeepSeek",

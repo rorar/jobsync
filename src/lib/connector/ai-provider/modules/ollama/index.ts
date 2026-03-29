@@ -7,7 +7,7 @@ import type { AIProviderConnector, AIConnectorResult } from "../../types";
 const OLLAMA_DEFAULT_BASE_URL = "http://127.0.0.1:11434";
 const HEALTH_CHECK_TIMEOUT_MS = 5000;
 
-export function createOllamaProvider(): AIProviderConnector {
+export function createOllamaConnector(): AIProviderConnector {
   return {
     id: "ollama",
     name: "Ollama",

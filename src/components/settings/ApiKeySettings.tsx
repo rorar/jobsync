@@ -226,11 +226,11 @@ function ApiKeySettings() {
           const paused = result.data.pausedAutomations;
           toast({
             variant: "default",
-            title: `${module.name} — Inactive`,
+            title: `${module.name} — ${t("settings.moduleInactive")}`,
             description:
               paused > 0
-                ? `Module deactivated. ${paused} automation${paused > 1 ? "s" : ""} paused.`
-                : "Module deactivated.",
+                ? `${t("settings.moduleDeactivated")} ${t("settings.automationsPaused").replace("{count}", String(paused))}`
+                : t("settings.moduleDeactivated"),
           });
         } else {
           toast({
@@ -249,8 +249,8 @@ function ApiKeySettings() {
           );
           toast({
             variant: "success",
-            title: `${module.name} — Active`,
-            description: "Module activated.",
+            title: `${module.name} — ${t("settings.moduleActive")}`,
+            description: t("settings.moduleActivated"),
           });
         } else {
           toast({
@@ -336,7 +336,7 @@ function ApiKeySettings() {
                         title={module.healthStatus}
                       />
                       <span className={`text-xs font-medium ${module.status === "active" ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>
-                        {module.status === "active" ? "Active" : "Inactive"}
+                        {module.status === "active" ? t("settings.moduleActive") : t("settings.moduleInactive")}
                       </span>
                       <Switch
                         checked={module.status === "active"}
