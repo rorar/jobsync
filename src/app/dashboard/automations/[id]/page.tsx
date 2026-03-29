@@ -23,6 +23,7 @@ import {
   FileText,
   AlertTriangle,
   PlayCircle,
+  Pencil,
 } from "lucide-react";
 import {
   getAutomationById,
@@ -43,6 +44,8 @@ import { DiscoveredJobDetail } from "@/components/automations/DiscoveredJobDetai
 import { RunHistoryList } from "@/components/automations/RunHistoryList";
 import { LogsTab } from "@/components/automations/LogsTab";
 import Loading from "@/components/Loading";
+import { AutomationWizard } from "@/components/automations/AutomationWizard";
+import { getResumeList } from "@/actions/profile.actions";
 import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 import { LocationBadge } from "@/components/ui/location-badge";
 
@@ -60,6 +63,8 @@ export default function AutomationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [runNowLoading, setRunNowLoading] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [resumes, setResumes] = useState<{ id: string; title: string }[]>([]);
   const [selectedJob, setSelectedJob] = useState<DiscoveredJob | null>(null);
   const [selectedJobMatchData, setSelectedJobMatchData] =
     useState<JobMatchResponse | null>(null);
@@ -69,10 +74,11 @@ export default function AutomationDetailPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [automationResult, runsResult, jobsResult] = await Promise.all([
+      const [automationResult, runsResult, jobsResult, resumeResult] = await Promise.all([
         getAutomationById(automationId),
         getAutomationRuns(automationId),
         getDiscoveredJobs(automationId),
+        getResumeList(1, 100),
       ]);
 
       if (automationResult.success && automationResult.data) {
@@ -94,6 +100,10 @@ export default function AutomationDetailPage() {
 
       if (jobsResult.success && jobsResult.data) {
         setJobs(jobsResult.data as any);
+      }
+
+      if (resumeResult.success && resumeResult.data) {
+        setResumes(resumeResult.data.map((r: any) => ({ id: r.id, title: r.title })));
       }
     } catch (error) {
       toast({
@@ -239,6 +249,13 @@ export default function AutomationDetailPage() {
           </Button>
           <Button
             variant="outline"
+            onClick={() => setEditOpen(true)}
+          >
+            <Pencil className="h-4 w-4 mr-2" />
+            Edit
+          </Button>
+          <Button
+            variant="outline"
             onClick={handlePauseResume}
             disabled={actionLoading || resumeMissing}
           >
@@ -377,6 +394,22 @@ export default function AutomationDetailPage() {
         onOpenChange={setDetailOpen}
         onRefresh={loadData}
       />
+
+      {automation && (
+        <AutomationWizard
+          open={editOpen}
+          onOpenChange={(open) => {
+            setEditOpen(open);
+            if (!open) loadData();
+          }}
+          onSuccess={() => {
+            setEditOpen(false);
+            loadData();
+          }}
+          editAutomation={automation}
+          resumes={resumes}
+        />
+      )}
     </div>
   );
 }
