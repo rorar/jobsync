@@ -47,7 +47,7 @@ import { ConnectorType } from "@/lib/connector/manifest";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/i18n";
 import type { AutomationWithResume } from "@/models/automation.model";
-import { AlertTriangle, ChevronLeft, ChevronRight, HelpCircle, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, HelpCircle, Loader2 } from "lucide-react";
 import { EuresOccupationCombobox } from "@/components/automations/EuresOccupationCombobox";
 import { EuresLocationCombobox } from "@/components/automations/EuresLocationCombobox";
 import { getLocationLabel, getCountryCode } from "@/lib/connector/job-discovery/modules/eures/countries";
@@ -177,6 +177,31 @@ export function AutomationWizard({
       setStep(0);
     }
   }, [open, editAutomation, form]);
+
+  // Auto-correct default jobBoard if the current selection requires an unconfigured key.
+  // This prevents showing a misleading "API key required" warning on initial load when
+  // free modules (EURES, Arbeitsagentur) are available.
+  useEffect(() => {
+    if (!open || availableModules.length === 0) return;
+    // Only auto-correct when NOT editing an existing automation
+    if (editAutomation) return;
+
+    const currentBoard = form.getValues("jobBoard");
+    const currentMod = availableModules.find((m) => m.moduleId === currentBoard);
+
+    // If the current selection doesn't need a key, or the key is configured, keep it
+    if (!currentMod?.credential.required || configuredKeyModuleIds.has(currentMod.credential.moduleId)) {
+      return;
+    }
+
+    // Find the first available module that either doesn't require a key, or has one configured
+    const fallback = availableModules.find(
+      (m) => !m.credential.required || configuredKeyModuleIds.has(m.credential.moduleId),
+    );
+    if (fallback) {
+      form.setValue("jobBoard", fallback.moduleId as "jsearch" | "eures" | "arbeitsagentur");
+    }
+  }, [open, availableModules, configuredKeyModuleIds, editAutomation, form]);
 
   const jobBoard = form.watch("jobBoard");
   const connectorParams = form.watch("connectorParams");
@@ -391,17 +416,32 @@ export function AutomationWizard({
                     </TooltipProvider>
                   </SelectContent>
                 </Select>
-                {/* Warning text below the select when selected module needs unconfigured credentials */}
+                {/* Contextual credential feedback below the select */}
                 {(() => {
                   const selectedMod = availableModules.find((m) => m.moduleId === jobBoard);
-                  if (selectedMod?.credential.required && !configuredKeyModuleIds.has(selectedMod.credential.moduleId)) {
+                  if (!selectedMod) return null;
+
+                  // Module requires a key that is NOT configured -> yellow warning
+                  if (selectedMod.credential.required && !configuredKeyModuleIds.has(selectedMod.credential.moduleId)) {
                     return (
-                      <p className="flex items-center gap-1.5 text-sm text-destructive">
-                        <AlertTriangle className="h-3.5 w-3.5" />
+                      <p className="flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                         {t("automations.jsearchApiKeyRequired")}
                       </p>
                     );
                   }
+
+                  // Module does NOT require a key -> green confirmation
+                  if (!selectedMod.credential.required) {
+                    return (
+                      <p className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                        {t("automations.noApiKeyNeeded")}
+                      </p>
+                    );
+                  }
+
+                  // Module requires a key and it IS configured -> no message needed
                   return null;
                 })()}
                 <FormDescription>

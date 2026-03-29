@@ -209,6 +209,7 @@ export const automations = {
 
     // U2: JSearch API Key Check
     "automations.jsearchApiKeyRequired": "API Key required — configure in Settings",
+    "automations.noApiKeyNeeded": "No API key needed",
 
     // U3: Threshold Toggle
     "automations.enableAiScoring": "Enable AI Match Scoring",
@@ -438,6 +439,7 @@ export const automations = {
 
     // U2: JSearch API Key Check
     "automations.jsearchApiKeyRequired": "API-Schlüssel erforderlich — in Einstellungen konfigurieren",
+    "automations.noApiKeyNeeded": "Kein API-Schlüssel erforderlich",
 
     // U3: Threshold Toggle
     "automations.enableAiScoring": "KI-Bewertung aktivieren",
@@ -667,6 +669,7 @@ export const automations = {
 
     // U2: JSearch API Key Check
     "automations.jsearchApiKeyRequired": "Clé API requise — configurer dans les Paramètres",
+    "automations.noApiKeyNeeded": "Aucune clé API requise",
 
     // U3: Threshold Toggle
     "automations.enableAiScoring": "Activer la notation IA",
@@ -896,6 +899,7 @@ export const automations = {
 
     // U2: JSearch API Key Check
     "automations.jsearchApiKeyRequired": "Clave API requerida — configurar en Ajustes",
+    "automations.noApiKeyNeeded": "No se requiere clave API",
 
     // U3: Threshold Toggle
     "automations.enableAiScoring": "Activar puntuación IA",
