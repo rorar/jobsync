@@ -69,6 +69,7 @@ export const jobs = {
     "jobs.noteDeleted": "Note deleted successfully",
     "jobs.skillCreateFailed": "Failed to create skill tag.",
     "jobs.createSkill": "Create",
+    "jobs.noJobsToExport": "No jobs to export",
 
     // Job sources
     "jobs.sourceIndeed": "Indeed",
@@ -160,6 +161,7 @@ export const jobs = {
     "jobs.noteDeleted": "Notiz erfolgreich gelöscht",
     "jobs.skillCreateFailed": "Skill-Tag konnte nicht erstellt werden.",
     "jobs.createSkill": "Erstellen",
+    "jobs.noJobsToExport": "Keine Jobs zum Exportieren",
 
     // Job-Quellen
     "jobs.sourceIndeed": "Indeed",
@@ -251,6 +253,7 @@ export const jobs = {
     "jobs.noteDeleted": "Note supprimée avec succès",
     "jobs.skillCreateFailed": "Impossible de créer le tag de compétence.",
     "jobs.createSkill": "Créer",
+    "jobs.noJobsToExport": "Aucun emploi à exporter",
 
     // Sources d'emploi
     "jobs.sourceIndeed": "Indeed",
@@ -342,6 +345,7 @@ export const jobs = {
     "jobs.noteDeleted": "Nota eliminada con éxito",
     "jobs.skillCreateFailed": "Error al crear la etiqueta de habilidad.",
     "jobs.createSkill": "Crear",
+    "jobs.noJobsToExport": "Sin empleos para exportar",
 
     // Fuentes de empleo
     "jobs.sourceIndeed": "Indeed",

@@ -283,7 +283,8 @@ function JobsContainer({
               size="sm"
               variant="outline"
               className="h-8 gap-1"
-              disabled={loading}
+              disabled={loading || totalJobs === 0}
+              title={totalJobs === 0 ? t("jobs.noJobsToExport") : ""}
               onClick={downloadJobsList}
             >
               <File className="h-3.5 w-3.5" />

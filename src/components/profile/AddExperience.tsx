@@ -176,7 +176,7 @@ function AddExperience({
                       <FormItem>
                         <FormLabel>Section Title</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="Ex: Experience" />
+                          <Input {...field} value={field.value ?? ""} placeholder="Ex: Experience" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -313,7 +313,7 @@ function AddExperience({
                 render={({ field }) => (
                   <FormItem className="flex flex-row">
                     <Switch
-                      checked={field.value}
+                      checked={field.value ?? false}
                       onCheckedChange={(c) => {
                         field.onChange(c);
                         onCurrentJob(c);

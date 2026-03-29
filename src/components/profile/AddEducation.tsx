@@ -159,7 +159,7 @@ function AddEducation({
                       <FormItem>
                         <FormLabel>Section Title</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="Ex: Education" />
+                          <Input {...field} value={field.value ?? ""} placeholder="Ex: Education" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -179,7 +179,7 @@ function AddEducation({
                   <FormItem className="flex flex-col">
                     <FormLabel>School</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Ex: Stanford" />
+                      <Input {...field} value={field.value ?? ""} placeholder="Ex: Stanford" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -229,7 +229,7 @@ function AddEducation({
                   <FormItem className="flex flex-col">
                     <FormLabel>Degree</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Ex: Bachelor's" />
+                      <Input {...field} value={field.value ?? ""} placeholder="Ex: Bachelor's" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -245,7 +245,7 @@ function AddEducation({
                   <FormItem className="flex flex-col">
                     <FormLabel>Field of study</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Ex: Computer Science" />
+                      <Input {...field} value={field.value ?? ""} placeholder="Ex: Computer Science" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -301,7 +301,7 @@ function AddEducation({
                 render={({ field }) => (
                   <FormItem className="flex flex-row">
                     <Switch
-                      checked={field.value}
+                      checked={field.value ?? false}
                       onCheckedChange={(c) => {
                         field.onChange(c);
                         onDegreeCompleted(c);

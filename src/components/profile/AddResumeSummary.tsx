@@ -123,7 +123,7 @@ function AddResumeSummary({
                   <FormItem>
                     <FormLabel>Section Title</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder="Ex: Summary" />
+                      <Input {...field} value={field.value ?? ""} placeholder="Ex: Summary" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

@@ -400,6 +400,22 @@ export const clearMockProfileDataAction = async (): Promise<ActionResult> => {
     });
     await prisma.resume.deleteMany({ where: { id: { in: resumeIds } } });
 
+    // Delete jobs that reference mock companies (prevent orphan FK violations)
+    const mockCompanyIds = await prisma.company.findMany({
+      where: { value: { startsWith: MOCK_VALUE_PREFIX }, createdBy: user.id },
+      select: { id: true },
+    });
+    if (mockCompanyIds.length > 0) {
+      const companyIds = mockCompanyIds.map((c) => c.id);
+      // Delete notes first (FK cascade)
+      await prisma.note.deleteMany({
+        where: { job: { companyId: { in: companyIds } } },
+      });
+      await prisma.job.deleteMany({
+        where: { companyId: { in: companyIds } },
+      });
+    }
+
     // Remove mock companies, locations, job titles (best-effort)
     const [deletedCompanies, deletedLocations, deletedJobTitles] =
       await Promise.allSettled([

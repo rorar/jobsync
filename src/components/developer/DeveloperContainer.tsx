@@ -135,6 +135,62 @@ export function MockActivitiesCard() {
   );
 }
 
+export function ClearAllMockDataCard() {
+  const { t } = useTranslations();
+  const [isClearing, setIsClearing] = useState(false);
+  const [message, setMessage] = useState<StatusMessage | null>(null);
+
+  const handleClearAll = async () => {
+    if (!confirm(t("developer.confirmClearAllMockData"))) return;
+
+    setIsClearing(true);
+    setMessage(null);
+
+    const [activitiesResult, profileResult] = await Promise.all([
+      clearMockActivitiesAction(),
+      clearMockProfileDataAction(),
+    ]);
+
+    const allSuccess = activitiesResult.success && profileResult.success;
+    const details = [activitiesResult.message, profileResult.message]
+      .filter(Boolean)
+      .join(" ");
+
+    setMessage({
+      type: allSuccess ? "success" : "error",
+      text: allSuccess
+        ? `${t("developer.allMockDataCleared")}. ${details}`
+        : `${t("developer.allMockDataClearFailed")}. ${details}`,
+    });
+    setIsClearing(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      {message && <StatusBanner message={message} />}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("developer.clearAllMockData")}</CardTitle>
+          <CardDescription>
+            {t("developer.clearAllMockDataDesc")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={handleClearAll}
+            disabled={isClearing}
+            variant="destructive"
+            className="w-full"
+          >
+            {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isClearing ? t("developer.clearing") : t("developer.clearAllMockData")}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export function MockProfileCard() {
   const { t } = useTranslations();
   const [isGenerating, setIsGenerating] = useState(false);

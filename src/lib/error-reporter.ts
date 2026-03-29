@@ -90,4 +90,44 @@ export function initClientErrorCapture(): void {
       source: "unhandled-rejection",
     });
   });
+
+  // Capture window.onerror for uncaught exceptions
+  window.onerror = (
+    eventOrMessage: Event | string,
+    source?: string,
+    lineno?: number,
+    colno?: number,
+    error?: Error,
+  ) => {
+    const message =
+      error?.message ?? (typeof eventOrMessage === "string" ? eventOrMessage : "Unknown error");
+    reportError({
+      id: generateErrorId(),
+      timestamp: new Date(),
+      message,
+      stack: error?.stack ?? (source ? `${source}:${lineno}:${colno}` : undefined),
+      source: "error-boundary",
+    });
+  };
+
+  // Intercept console.error to capture logged errors
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => {
+    originalConsoleError.apply(console, args);
+
+    const message = args
+      .map((arg) =>
+        arg instanceof Error ? arg.message : String(arg),
+      )
+      .join(" ");
+    const errorArg = args.find((arg) => arg instanceof Error) as Error | undefined;
+
+    reportError({
+      id: generateErrorId(),
+      timestamp: new Date(),
+      message,
+      stack: errorArg?.stack,
+      source: "console-error",
+    });
+  };
 }
