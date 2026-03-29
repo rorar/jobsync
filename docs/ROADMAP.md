@@ -82,8 +82,18 @@ src/lib/connector/                          ← Unified Connector Architecture
   - `?:` vs `| null` Vereinheitlichung (z.B. task.model.ts)
   - Mapper-Funktionen für Task/Profile (DRY)
 
-### 0.4 Module Lifecycle Manager
+### 0.4 Module Lifecycle Manager -- DONE
 Module registrieren sich mit einem **Manifest** beim Connector und deklarieren ihre Settings-Anforderungen. Der Lifecycle Manager propagiert Settings, verwaltet Aktivierung/Deaktivierung und überwacht Health.
+
+**Implementiert (2026-03-29):**
+- Phase 1: ModuleManifest Types + Unified Registry (6 Module mit Manifests)
+- Phase 2: Credential PUSH + Manifest-driven Settings UI (hardcoded MODULES eliminiert)
+- Phase 3: Activation/Deactivation + Automation Pausing (pauseReason auf Automation)
+- Phase 4: Health Monitoring (Probe, Status-Transitions, Persistenz)
+- Phase 5: Resilience Shared Kernel (Cockatiel aus Manifests, Duplikat eliminiert)
+- Phase 6: Automation Degradation (Auth/CB/RunFailure Escalation Rules)
+- Allium Spec synchronisiert (17 Divergenzen gefixt)
+- Branch: `feature/module-lifecycle-manager`
 
 **Schichten:**
 1. **Module Manifest** — Jedes Modul deklariert bei Registrierung:
