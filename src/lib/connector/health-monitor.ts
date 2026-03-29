@@ -86,6 +86,7 @@ export async function checkModuleHealth(
   }
 
   // Update in-memory registry
+  registered.consecutiveFailures = consecutiveFailures;
   registered.healthStatus = newHealthStatus;
   registered.lastHealthCheck = new Date();
   if (probeResult.success) {

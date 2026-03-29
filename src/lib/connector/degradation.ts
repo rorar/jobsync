@@ -27,7 +27,16 @@ const CB_ESCALATION_THRESHOLD = 3;
 export async function handleAuthFailure(
   moduleId: string,
   errorDetail: string,
+  userId: string,
 ): Promise<{ pausedCount: number }> {
+  const registered = moduleRegistry.get(moduleId);
+  if (!registered) return { pausedCount: 0 };
+
+  // Spec precondition: only escalate for modules that require credentials
+  // See specs/module-lifecycle.allium, rule AuthFailureEscalation (line 548):
+  //   requires: module.manifest.credential.required = true
+  if (!registered.manifest.credential.required) return { pausedCount: 0 };
+
   // Set module to error status
   moduleRegistry.setStatus(moduleId, ModuleStatus.ERROR);
 
@@ -48,6 +57,7 @@ export async function handleAuthFailure(
   // Pause all active automations using this module
   const result = await prisma.automation.updateMany({
     where: {
+      userId,
       jobBoard: moduleId,
       status: "active",
     },
@@ -134,6 +144,7 @@ export async function checkConsecutiveRunFailures(
  */
 export async function handleCircuitBreakerTrip(
   moduleId: string,
+  userId: string,
 ): Promise<{ pausedCount: number }> {
   const registered = moduleRegistry.get(moduleId);
   if (!registered) return { pausedCount: 0 };
@@ -150,6 +161,7 @@ export async function handleCircuitBreakerTrip(
   // Escalation: pause all active automations using this module
   const result = await prisma.automation.updateMany({
     where: {
+      userId,
       jobBoard: moduleId,
       status: "active",
     },

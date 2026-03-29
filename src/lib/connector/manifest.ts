@@ -40,12 +40,8 @@ export enum CircuitBreakerState {
   HALF_OPEN = "half_open",
 }
 
-export enum AutomationPauseReason {
-  MODULE_DEACTIVATED = "module_deactivated",
-  AUTH_FAILURE = "auth_failure",
-  CONSECUTIVE_FAILURES = "consecutive_failures",
-  CB_ESCALATION = "cb_escalation",
-}
+// AutomationPauseReason is defined in @/models/automation.model (canonical location per DDD —
+// it belongs to the Automation aggregate). Import from there if needed.
 
 // =============================================================================
 // Value Types (Settings Declaration)

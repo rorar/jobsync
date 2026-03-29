@@ -11,6 +11,9 @@ import type {
   ApiKeyClientResponse,
   ApiKeyModuleId,
 } from "@/models/apiKey.model";
+import { moduleRegistry } from "@/lib/connector/registry";
+import "@/lib/connector/job-discovery/connectors";
+import "@/lib/connector/ai-provider/modules/connectors";
 
 export async function getUserApiKeys(): Promise<ActionResult<ApiKeyClientResponse[]>> {
   try {
@@ -62,7 +65,14 @@ export async function saveApiKey(input: {
     if (!user) return { success: false, message: "Not authenticated" };
 
     const parsed = apiKeySaveSchema.parse(input);
-    const isSensitive = parsed.sensitive;
+
+    // Derive sensitive flag from the module manifest — never trust client input.
+    // Lookup by credential.moduleId because the ApiKey table uses that as its key
+    // (e.g. manifest.id="jsearch" but credential.moduleId="rapidapi").
+    const registeredModule = moduleRegistry.getByCredentialModuleId(parsed.moduleId);
+    const isSensitive = registeredModule
+      ? registeredModule.manifest.credential.sensitive
+      : true; // fail-safe: unknown modules are treated as sensitive
 
     let encryptedKey: string;
     let iv: string;

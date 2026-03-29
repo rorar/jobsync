@@ -292,6 +292,78 @@ describe("Health Monitor", () => {
       expect(registered.healthStatus).toBe(HealthStatus.HEALTHY);
     });
 
+    it("should increment consecutiveFailures on each failed health check", async () => {
+      const registered = registerActiveModule("fail-counter-mod", {
+        endpoint: "https://api.example.com/health",
+        timeoutMs: 5000,
+        intervalMs: 300000,
+      });
+
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 503,
+        statusText: "Service Unavailable",
+      });
+
+      expect(registered.consecutiveFailures).toBe(0);
+
+      await checkModuleHealth("fail-counter-mod");
+      expect(registered.consecutiveFailures).toBe(1);
+
+      await checkModuleHealth("fail-counter-mod");
+      expect(registered.consecutiveFailures).toBe(2);
+    });
+
+    it("should reset consecutiveFailures to zero on successful probe", async () => {
+      const registered = registerActiveModule(
+        "reset-counter-mod",
+        {
+          endpoint: "https://api.example.com/health",
+          timeoutMs: 5000,
+          intervalMs: 300000,
+        },
+        { healthStatus: HealthStatus.DEGRADED, consecutiveFailures: 2 },
+      );
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+      });
+
+      await checkModuleHealth("reset-counter-mod");
+      expect(registered.consecutiveFailures).toBe(0);
+    });
+
+    it("should reach UNREACHABLE through repeated health check calls", async () => {
+      const registered = registerActiveModule("repeated-fail-mod", {
+        endpoint: "https://api.example.com/health",
+        timeoutMs: 5000,
+        intervalMs: 300000,
+      });
+
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+      });
+
+      // Call 1: consecutiveFailures goes from 0 -> 1, status = DEGRADED
+      const r1 = await checkModuleHealth("repeated-fail-mod");
+      expect(r1.healthStatus).toBe(HealthStatus.DEGRADED);
+      expect(registered.consecutiveFailures).toBe(1);
+
+      // Call 2: consecutiveFailures goes from 1 -> 2, status = DEGRADED
+      const r2 = await checkModuleHealth("repeated-fail-mod");
+      expect(r2.healthStatus).toBe(HealthStatus.DEGRADED);
+      expect(registered.consecutiveFailures).toBe(2);
+
+      // Call 3: consecutiveFailures goes from 2 -> 3, status = UNREACHABLE
+      const r3 = await checkModuleHealth("repeated-fail-mod");
+      expect(r3.healthStatus).toBe(HealthStatus.UNREACHABLE);
+      expect(registered.consecutiveFailures).toBe(3);
+    });
+
     it("should handle healthCheck with no endpoint as healthy", async () => {
       registerActiveModule("no-endpoint-mod", {
         timeoutMs: 5000,

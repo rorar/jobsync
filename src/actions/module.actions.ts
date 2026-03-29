@@ -199,6 +199,7 @@ export async function deactivateModule(
     // Pause affected automations (Allium spec rule: ModuleDeactivation)
     const pauseResult = await prisma.automation.updateMany({
       where: {
+        userId: user.id,
         jobBoard: moduleId,
         status: "active",
       },

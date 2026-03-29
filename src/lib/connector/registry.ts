@@ -85,6 +85,20 @@ class ModuleRegistry {
     return true;
   }
 
+  /**
+   * Look up a registered module by its credential.moduleId (the ApiKey table key).
+   * This differs from get() which looks up by manifest.id.
+   * Example: manifest.id="jsearch" has credential.moduleId="rapidapi".
+   */
+  getByCredentialModuleId(credentialModuleId: string): RegisteredModule | undefined {
+    for (const entry of this.entries.values()) {
+      if (entry.registered.manifest.credential.moduleId === credentialModuleId) {
+        return entry.registered;
+      }
+    }
+    return undefined;
+  }
+
   has(moduleId: string): boolean {
     return this.entries.has(moduleId);
   }

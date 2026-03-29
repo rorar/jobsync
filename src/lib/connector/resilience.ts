@@ -20,7 +20,7 @@ import {
   type IPolicy,
 } from "cockatiel";
 
-import { TokenBucketRateLimiter } from "./job-discovery/modules/eures/rate-limiter";
+import { TokenBucketRateLimiter } from "./rate-limiter";
 import type { ResilienceConfig } from "./manifest";
 
 export {
