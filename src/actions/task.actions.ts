@@ -9,6 +9,16 @@ import { ActionResult } from "@/models/actionResult";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { z } from "zod";
 
+// Narrow Prisma string to domain enum
+function toTask<T extends { status: string }>(
+  row: T
+): T & { status: TaskStatus } {
+  return {
+    ...row,
+    status: row.status as TaskStatus,
+  };
+}
+
 export const getTasksList = async (
   page: number = 1,
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE,
@@ -65,7 +75,7 @@ export const getTasksList = async (
 
     return {
       success: true,
-      data: data.map((t) => ({ ...t, status: t.status as TaskStatus })),
+      data: data.map(toTask),
       total,
     };
   } catch (error) {
@@ -103,7 +113,7 @@ export const getTaskById = async (
 
     return {
       success: true,
-      data: { ...task, status: task.status as TaskStatus },
+      data: toTask(task),
     };
   } catch (error) {
     const msg = "Failed to fetch task.";
@@ -139,7 +149,7 @@ export const createTask = async (
       },
     });
 
-    return { success: true, data: { ...task, status: task.status as TaskStatus } };
+    return { success: true, data: toTask(task) };
   } catch (error) {
     const msg = "Failed to create task.";
     return handleError(error, msg);
@@ -181,7 +191,7 @@ export const updateTask = async (
       },
     });
 
-    return { success: true, data: { ...task, status: task.status as TaskStatus } };
+    return { success: true, data: toTask(task) };
   } catch (error) {
     const msg = "Failed to update task.";
     return handleError(error, msg);
@@ -212,7 +222,7 @@ export const updateTaskStatus = async (
       },
     });
 
-    return { success: true, data: { ...task, status: task.status as TaskStatus } };
+    return { success: true, data: toTask(task) };
   } catch (error) {
     const msg = "Failed to update task status.";
     return handleError(error, msg);

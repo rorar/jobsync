@@ -16,6 +16,16 @@ import path from "path";
 import fs from "fs";
 import { writeFile } from "fs/promises";
 
+// Narrow Prisma string to domain enum
+function toResumeSection<T extends { sectionType: string }>(
+  row: T
+): T & { sectionType: SectionType } {
+  return {
+    ...row,
+    sectionType: row.sectionType as SectionType,
+  };
+}
+
 export const getResumeList = async (
   page: number = 1,
   limit: number = APP_CONSTANTS.RECORDS_PER_PAGE
@@ -116,8 +126,7 @@ export const getResumeById = async (
         ContactInfo: resume.ContactInfo ?? undefined,
         File: resume.File ?? undefined,
         ResumeSections: resume.ResumeSections.map((section) => ({
-          ...section,
-          sectionType: section.sectionType as SectionType,
+          ...toResumeSection(section),
           summary: section.summary ?? undefined,
         })),
       },
@@ -457,7 +466,7 @@ export const addResumeSummary = async (
       },
     });
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
-    return { data: { ...summary, sectionType: summary.sectionType as SectionType }, success: true };
+    return { data: toResumeSection(summary), success: true };
   } catch (error) {
     const msg = "Failed to create summary.";
     return handleError(error, msg);
@@ -495,7 +504,7 @@ export const updateResumeSummary = async (
       },
     });
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
-    return { data: { ...summary, sectionType: summary.sectionType as SectionType }, success: true };
+    return { data: toResumeSection(summary), success: true };
   } catch (error) {
     const msg = "Failed to update summary.";
     return handleError(error, msg);
@@ -544,7 +553,7 @@ export const addExperience = async (
       },
     });
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
-    return { data: { ...experience, sectionType: experience.sectionType as SectionType }, success: true };
+    return { data: toResumeSection(experience), success: true };
   } catch (error) {
     const msg = "Failed to create experience.";
     return handleError(error, msg);
@@ -628,7 +637,7 @@ export const addEducation = async (
       },
     });
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
-    return { data: { ...education, sectionType: education.sectionType as SectionType }, success: true };
+    return { data: toResumeSection(education), success: true };
   } catch (error) {
     const msg = "Failed to create education.";
     return handleError(error, msg);

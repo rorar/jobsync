@@ -21,12 +21,12 @@ export interface Task {
   id: string;
   userId: string;
   title: string;
-  description?: string | null;
+  description: string | null;
   status: TaskStatus;
   priority: number;
   percentComplete: number;
-  dueDate?: Date | null;
-  activityTypeId?: string | null;
+  dueDate: Date | null;
+  activityTypeId: string | null;
   activityType?: ActivityType | null;
   activity?: { id: string } | null;
   createdAt: Date;
