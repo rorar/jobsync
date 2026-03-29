@@ -14,7 +14,9 @@ import type {
 } from "@/models/stagedVacancy.model";
 import { promoteStagedVacancy } from "@/lib/connector/job-discovery/promoter";
 import { emitEvent } from "@/lib/events";
+import { undoStore, createUndoEntry } from "@/lib/undo";
 import { APP_CONSTANTS } from "@/lib/constants";
+import type { RetentionResult } from "@/lib/vacancy-pipeline/retention.service";
 
 // Narrow Prisma string to domain enum
 function toStagedVacancy<T extends { status: string; source: string }>(
@@ -55,7 +57,8 @@ export async function getStagedVacancies(
       whereClause.trashedAt = { not: null };
     } else if (tab === "dismissed") {
       whereClause.trashedAt = null;
-      // Spec: dismissed tab shows dismissed vacancies not in trash (no archivedAt filter)
+      whereClause.archivedAt = null;
+      whereClause.status = "dismissed";
     } else {
       // "new" tab: exclude trashed and archived
       whereClause.trashedAt = null;
@@ -120,11 +123,11 @@ export async function getStagedVacancyById(
 }
 
 /**
- * Dismiss a staged vacancy.
+ * Dismiss a staged vacancy. Returns an undo token for reversal.
  */
 export async function dismissStagedVacancy(
   id: string,
-): Promise<ActionResult<StagedVacancy>> {
+): Promise<ActionResult<StagedVacancy & { undoTokenId?: string }>> {
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
@@ -138,13 +141,28 @@ export async function dismissStagedVacancy(
       return { success: false, message: "Can only dismiss staged or ready vacancies" };
     }
 
+    const previousStatus = vacancy.status;
     const updated = await prisma.stagedVacancy.update({
       where: { id },
       data: { status: "dismissed" },
     });
 
+    // Register undo token (compensation: restore to previous status)
+    const undoEntry = createUndoEntry(
+      user.id,
+      "dismiss",
+      [id],
+      async () => {
+        await prisma.stagedVacancy.update({
+          where: { id },
+          data: { status: previousStatus },
+        });
+      },
+    );
+    undoStore.push(undoEntry);
+
     emitEvent({ type: "VacancyDismissed", timestamp: new Date(), payload: { stagedVacancyId: id, userId: user.id } });
-    return { success: true, data: toStagedVacancy(updated) as StagedVacancy };
+    return { success: true, data: { ...toStagedVacancy(updated) as StagedVacancy, undoTokenId: undoEntry.id } };
   } catch (error) {
     return handleError(error, "Failed to dismiss staged vacancy");
   }
@@ -179,11 +197,11 @@ export async function restoreStagedVacancy(
 }
 
 /**
- * Archive a staged vacancy.
+ * Archive a staged vacancy. Returns an undo token for reversal.
  */
 export async function archiveStagedVacancy(
   id: string,
-): Promise<ActionResult<StagedVacancy>> {
+): Promise<ActionResult<StagedVacancy & { undoTokenId?: string }>> {
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
@@ -200,19 +218,32 @@ export async function archiveStagedVacancy(
       data: { archivedAt: new Date() },
     });
 
-    console.debug("[DomainEvent] VacancyArchived", { stagedVacancyId: id, userId: user.id });
-    return { success: true, data: toStagedVacancy(updated) as StagedVacancy };
+    const undoEntry = createUndoEntry(
+      user.id,
+      "archive",
+      [id],
+      async () => {
+        await prisma.stagedVacancy.update({
+          where: { id },
+          data: { archivedAt: null },
+        });
+      },
+    );
+    undoStore.push(undoEntry);
+
+    emitEvent({ type: "VacancyArchived", timestamp: new Date(), payload: { stagedVacancyId: id, userId: user.id } });
+    return { success: true, data: { ...toStagedVacancy(updated) as StagedVacancy, undoTokenId: undoEntry.id } };
   } catch (error) {
     return handleError(error, "Failed to archive staged vacancy");
   }
 }
 
 /**
- * Move a staged vacancy to trash.
+ * Move a staged vacancy to trash. Returns an undo token for reversal.
  */
 export async function trashStagedVacancy(
   id: string,
-): Promise<ActionResult<StagedVacancy>> {
+): Promise<ActionResult<StagedVacancy & { undoTokenId?: string }>> {
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
@@ -229,8 +260,21 @@ export async function trashStagedVacancy(
       data: { trashedAt: new Date() },
     });
 
-    console.debug("[DomainEvent] VacancyTrashed", { stagedVacancyId: id, userId: user.id });
-    return { success: true, data: toStagedVacancy(updated) as StagedVacancy };
+    const undoEntry = createUndoEntry(
+      user.id,
+      "trash",
+      [id],
+      async () => {
+        await prisma.stagedVacancy.update({
+          where: { id },
+          data: { trashedAt: null },
+        });
+      },
+    );
+    undoStore.push(undoEntry);
+
+    emitEvent({ type: "VacancyTrashed", timestamp: new Date(), payload: { stagedVacancyId: id, userId: user.id } });
+    return { success: true, data: { ...toStagedVacancy(updated) as StagedVacancy, undoTokenId: undoEntry.id } };
   } catch (error) {
     return handleError(error, "Failed to trash staged vacancy");
   }
@@ -258,6 +302,7 @@ export async function restoreFromTrash(
       data: { trashedAt: null },
     });
 
+    emitEvent({ type: "VacancyRestoredFromTrash", timestamp: new Date(), payload: { stagedVacancyId: id, userId: user.id } });
     return { success: true, data: toStagedVacancy(updated) as StagedVacancy };
   } catch (error) {
     return handleError(error, "Failed to restore from trash");
@@ -319,6 +364,49 @@ export async function promoteStagedVacancyToJob(
   }
 }
 
-// TODO: Implement executeBulkAction() with partial-success semantics per spec rule BulkAction
-// TODO: Implement UndoToken + UndoAction per spec rules UndoAction, VacancyDismissal, TrashVacancy
-// TODO: Add unit tests for all 9 server actions (Phase 5 follow-up)
+/**
+ * Run retention cleanup: purge expired trashed/dismissed vacancies,
+ * preserving dedup hashes. Default retention: 30 days.
+ */
+export async function runRetentionCleanup(
+  retentionDays: number = 30,
+): Promise<ActionResult<RetentionResult>> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "Not authenticated" };
+
+    // Dynamic import to keep the server-only module out of the action's initial bundle
+    const { runRetentionCleanup: runCleanup } = await import(
+      "@/lib/vacancy-pipeline/retention.service"
+    );
+    const result = await runCleanup(user.id, retentionDays);
+
+    return { success: true, data: result };
+  } catch (error) {
+    return handleError(error, "Failed to run retention cleanup");
+  }
+}
+
+/**
+ * Execute a bulk action on staged vacancies with partial-success semantics.
+ * Each item is validated individually; invalid items are skipped, not rolled back.
+ * One BulkActionCompleted event per batch, one UndoEntry per batch.
+ */
+export async function executeBulkAction(
+  actionType: import("@/lib/vacancy-pipeline/bulk-action.service").BulkActionType,
+  itemIds: string[],
+): Promise<ActionResult<BulkActionResult & { undoTokenId?: string }>> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "Not authenticated" };
+
+    const { executeBulkAction: execBulk } = await import(
+      "@/lib/vacancy-pipeline/bulk-action.service"
+    );
+    const result = await execBulk(user.id, actionType, itemIds);
+
+    return { success: true, data: result };
+  } catch (error) {
+    return handleError(error, "Failed to execute bulk action");
+  }
+}
