@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Archive,
   Trash2,
+  Ban,
 } from "lucide-react";
 import { useTranslations, formatDateShort } from "@/i18n";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
@@ -29,6 +30,7 @@ interface StagedVacancyCardProps {
   onTrash: (id: string) => void;
   onRestoreFromTrash: (id: string) => void;
   onPromote: (vacancy: StagedVacancyWithAutomation) => void;
+  onBlockCompany?: (companyName: string) => void;
 }
 
 export function StagedVacancyCard({
@@ -42,6 +44,7 @@ export function StagedVacancyCard({
   onTrash,
   onRestoreFromTrash,
   onPromote,
+  onBlockCompany,
 }: StagedVacancyCardProps) {
   const { t, locale } = useTranslations();
 
@@ -138,6 +141,17 @@ export function StagedVacancyCard({
               <Trash2 className="h-3.5 w-3.5" />
               {t("staging.trash")}
             </Button>
+            {onBlockCompany && vacancy.employerName && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 text-xs"
+                onClick={() => onBlockCompany(vacancy.employerName!)}
+              >
+                <Ban className="h-3.5 w-3.5" />
+                {t("blacklist.blockCompany")}
+              </Button>
+            )}
           </>
         )}
         {activeTab === "dismissed" && (

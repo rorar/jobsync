@@ -34,6 +34,8 @@ import {
 import { debugLog } from "@/lib/debug";
 import type { RunOptions, RunProgress } from "@/lib/scheduler/types";
 import { runCoordinator } from "@/lib/scheduler/run-coordinator";
+import { getBlacklistEntriesForUser } from "@/actions/companyBlacklist.actions";
+import { isCompanyBlacklisted } from "@/models/companyBlacklist.model";
 
 
 const MAX_JOBS_PER_RUN = 10;
@@ -328,7 +330,23 @@ export async function runAutomation(
       { jobsDeduplicated, duplicates: jobsSearched - jobsDeduplicated },
     );
 
-    const jobsToProcess = newJobs.slice(0, MAX_JOBS_PER_RUN);
+    // Filter blacklisted companies (after dedup, before AI matching to save LLM calls)
+    const blacklistEntries = await getBlacklistEntriesForUser(automation.userId);
+    const nonBlacklisted = blacklistEntries.length > 0
+      ? newJobs.filter((job) => !isCompanyBlacklisted(job.employerName, blacklistEntries))
+      : newJobs;
+    const blacklistedCount = newJobs.length - nonBlacklisted.length;
+
+    if (blacklistedCount > 0) {
+      automationLogger.log(
+        automation.id,
+        "info",
+        `Filtered ${blacklistedCount} blacklisted companies`,
+        { blacklistedCount },
+      );
+    }
+
+    const jobsToProcess = nonBlacklisted.slice(0, MAX_JOBS_PER_RUN);
 
     // Enrich with detail data if connector supports it.
     // Runs after dedup+cap so at most MAX_JOBS_PER_RUN (10) API calls are made.
@@ -347,11 +365,11 @@ export async function runAutomation(
       }
     }
 
-    if (jobsToProcess.length < newJobs.length) {
+    if (jobsToProcess.length < nonBlacklisted.length) {
       automationLogger.log(
         automation.id,
         "info",
-        `Processing first ${jobsToProcess.length} of ${newJobs.length} new jobs (limit: ${MAX_JOBS_PER_RUN})`,
+        `Processing first ${jobsToProcess.length} of ${nonBlacklisted.length} new jobs (limit: ${MAX_JOBS_PER_RUN})`,
       );
     }
 
