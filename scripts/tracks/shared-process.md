@@ -28,7 +28,12 @@ Follow this checklist for EVERY feature, phase, step, and sprint:
 - [ ] Spawn specialized team agents (agent-teams:team-implementer) for parallel work with clear file ownership
 - [ ] All UI strings in 4 locales (en, de, fr, es) — use own namespace file to avoid conflicts with parallel tracks
 - [ ] Tests required for ALL new code (unit, component, integration)
-- [ ] Commit with logical grouping, conventional commits format
+- [ ] **Git commits:** Make commits FREQUENTLY — after each logical unit of work, not at the end.
+  - Use conventional commits: `feat(scope):`, `fix(scope):`, `refactor(scope):`, `test(scope):`
+  - Include `Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>` on every commit
+  - Run `bun run build` and `bash scripts/test.sh --no-coverage` BEFORE each commit
+  - Group logically: schema + model + actions = 1 commit, UI components = 1 commit, tests = 1 commit
+  - Never make one giant commit at the end — if the session crashes, uncommitted work is lost
 
 ### CHECK
 - [ ] After EACH phase/step/sprint: run /comprehensive-review:full-review with ALL dimensions:
