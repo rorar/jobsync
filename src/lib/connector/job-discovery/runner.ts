@@ -32,10 +32,32 @@ import {
   type AiSettings,
 } from "@/models/userSettings.model";
 import { debugLog } from "@/lib/debug";
-import type { RunOptions } from "@/lib/scheduler/types";
+import type { RunOptions, RunProgress } from "@/lib/scheduler/types";
+import { runCoordinator } from "@/lib/scheduler/run-coordinator";
 
 
 const MAX_JOBS_PER_RUN = 10;
+
+/** Report progress to RunCoordinator for SSE streaming to the UI */
+function reportRunProgress(
+  automationId: string,
+  runId: string,
+  phase: RunProgress["phase"],
+  counters: { searched?: number; deduped?: number; processed?: number; matched?: number; saved?: number },
+): void {
+  runCoordinator.reportProgress(automationId, {
+    automationId,
+    runId,
+    phase,
+    jobsSearched: counters.searched ?? 0,
+    jobsDeduplicated: counters.deduped ?? 0,
+    jobsProcessed: counters.processed ?? 0,
+    jobsMatched: counters.matched ?? 0,
+    jobsSaved: counters.saved ?? 0,
+    startedAt: new Date(),
+    updatedAt: new Date(),
+  });
+}
 
 function getDefaultModelForModule(moduleId: AiModuleId): string {
   switch (moduleId) {
@@ -250,6 +272,7 @@ export async function runAutomation(
     }
 
     const jobsSearched = searchResult.data.length;
+    reportRunProgress(automation.id, run.id, "search", { searched: jobsSearched });
 
     automationLogger.log(
       automation.id,
@@ -296,6 +319,7 @@ export async function runAutomation(
       return true;
     });
     const jobsDeduplicated = newJobs.length;
+    reportRunProgress(automation.id, run.id, "dedup", { searched: jobsSearched, deduped: jobsDeduplicated });
 
     automationLogger.log(
       automation.id,
@@ -331,6 +355,8 @@ export async function runAutomation(
       );
     }
 
+    reportRunProgress(automation.id, run.id, "enrich", { searched: jobsSearched, deduped: jobsDeduplicated });
+
     let jobsProcessed = 0;
     let jobsMatched = 0;
     let jobsSaved = 0;
@@ -350,6 +376,7 @@ export async function runAutomation(
       );
 
       jobsProcessed++;
+      reportRunProgress(automation.id, run.id, "match", { searched: jobsSearched, deduped: jobsDeduplicated, processed: jobsProcessed, matched: jobsMatched, saved: jobsSaved });
 
       automationLogger.log(
         automation.id,
@@ -456,6 +483,7 @@ export async function runAutomation(
           savedVacancyId = created.id;
         }
         jobsSaved++;
+        reportRunProgress(automation.id, run.id, "save", { searched: jobsSearched, deduped: jobsDeduplicated, processed: jobsProcessed, matched: jobsMatched, saved: jobsSaved });
 
         emitEvent({
           type: "VacancyStaged",
@@ -509,6 +537,7 @@ export async function runAutomation(
       },
     );
 
+    reportRunProgress(automation.id, run.id, "finalize", { searched: jobsSearched, deduped: jobsDeduplicated, processed: jobsProcessed, matched: jobsMatched, saved: jobsSaved });
     automationLogger.endRun(automation.id);
 
     return await finalizeRun(run.id, {

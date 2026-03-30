@@ -139,6 +139,30 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **Allium Spec:** `specs/module-lifecycle.allium` — authoritative specification for all lifecycle rules.
 
+### Scheduler Coordination (ROADMAP 0.10)
+
+**RunCoordinator** (`src/lib/scheduler/run-coordinator.ts`) — Single entry point for ALL automation runs (scheduler + manual). Uses in-memory mutex per automationId to prevent double-execution.
+
+**Key Rule:** ALL automation runs MUST go through `runCoordinator.requestRun()`. Never call `runAutomation()` directly.
+
+**Current structure:** `src/lib/scheduler/`:
+- **types.ts** — RunSource, RunLock, SchedulerSnapshot, RunOptions, RunProgress
+- **run-coordinator.ts** — RunCoordinator singleton (mutex, state, events, watchdog, degradation bridge)
+- **index.ts** — Scheduler cron loop using RunCoordinator
+
+**SSE Endpoint:** `GET /api/scheduler/status` — Real-time scheduler state, per-user filtered. Client hook: `useSchedulerStatus()` from `src/hooks/use-scheduler-status.ts` (shared singleton EventSource, one connection per tab).
+
+**Singleton Pattern:** RunCoordinator and EventBus use `globalThis` to survive HMR. New singletons MUST follow this pattern.
+
+**Domain Events:**
+- `SchedulerCycleStarted/Completed` — Scheduler lifecycle
+- `AutomationRunStarted/Completed` — Run lifecycle
+- `AutomationDegraded` — Degradation → RunCoordinator bridge
+
+**Progress Reporting:** Runner calls `runCoordinator.reportProgress()` at each phase (search → dedup → enrich → match → save → finalize). UI shows live stepper via RunProgressPanel.
+
+**Allium Spec:** `specs/scheduler-coordination.allium` — authoritative specification for all coordination rules.
+
 ### Connector & Module Lifecycle Rules
 
 Implemented in `module.actions.ts` and `degradation.ts`. Spec: `specs/module-lifecycle.allium`.
