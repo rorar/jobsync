@@ -38,6 +38,10 @@ function getPhaseCounter(
       return progress.jobsSaved > 0 ? String(progress.jobsSaved) : "-";
     case "finalize":
       return "";
+    default: {
+      const _exhaustive: never = phase;
+      return _exhaustive;
+    }
   }
 }
 

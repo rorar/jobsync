@@ -4,6 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { runCoordinator } from "@/lib/scheduler/run-coordinator";
 
+// SSE route must never be statically rendered or cached
+export const dynamic = "force-dynamic";
+
 /**
  * SSE endpoint for real-time scheduler state.
  * Polls RunCoordinator.getState() every 2 seconds.
@@ -23,7 +26,6 @@ function createSSEErrorResponse(message: string): NextResponse {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      Connection: "keep-alive",
     },
   });
 }
@@ -121,7 +123,6 @@ export async function GET(req: NextRequest) {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      Connection: "keep-alive",
     },
   });
 }

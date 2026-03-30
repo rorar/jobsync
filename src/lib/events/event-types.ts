@@ -8,6 +8,7 @@
  */
 
 import type { RunSource } from "@/lib/scheduler/types";
+import type { AutomationRunStatus } from "@/models/automation.model";
 
 // ---------------------------------------------------------------------------
 // Event Type Enum
@@ -131,7 +132,7 @@ export interface AutomationRunCompletedPayload {
   userId: string;
   moduleId: string;
   runSource: RunSource;
-  status: string;
+  status: AutomationRunStatus;
   jobsSaved: number;
   durationMs: number;
 }
