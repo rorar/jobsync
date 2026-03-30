@@ -89,6 +89,8 @@ export interface SchedulerSnapshot {
   lastCycleCompletedAt: Date | null
   lastCycleProcessedCount: number
   lastCycleFailedCount: number
+  /** Live progress per running automation (key: automationId) */
+  runningProgress: Record<string, RunProgress>
 }
 
 // ---------------------------------------------------------------------------

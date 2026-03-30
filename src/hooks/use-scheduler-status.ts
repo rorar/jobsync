@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { SchedulerSnapshot } from "@/lib/scheduler/types";
+import type { SchedulerSnapshot, RunProgress } from "@/lib/scheduler/types";
 
 /**
  * Client hook for real-time scheduler state via SSE.
@@ -115,6 +115,7 @@ interface UseSchedulerStatusResult {
   isAutomationRunning: (automationId: string) => boolean;
   getQueuePosition: (automationId: string) => number | null;
   getModuleBusy: (moduleId: string) => SchedulerSnapshot["runningAutomations"];
+  getActiveProgress: (automationId: string) => RunProgress | null;
 }
 
 export function useSchedulerStatus(): UseSchedulerStatusResult {
@@ -157,6 +158,14 @@ export function useSchedulerStatus(): UseSchedulerStatusResult {
     [state],
   );
 
+  const getActiveProgress = useCallback(
+    (automationId: string): RunProgress | null => {
+      if (!state?.runningProgress) return null;
+      return state.runningProgress[automationId] ?? null;
+    },
+    [state],
+  );
+
   return {
     isConnected: isSharedConnected,
     state,
@@ -164,5 +173,6 @@ export function useSchedulerStatus(): UseSchedulerStatusResult {
     isAutomationRunning,
     getQueuePosition,
     getModuleBusy,
+    getActiveProgress,
   };
 }

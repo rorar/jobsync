@@ -51,6 +51,7 @@ import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 import { LocationBadge } from "@/components/ui/location-badge";
 import { RunStatusBadge } from "@/components/automations/RunStatusBadge";
 import { ModuleBusyBanner } from "@/components/automations/ModuleBusyBanner";
+import { RunProgressPanel } from "@/components/scheduler/RunProgressPanel";
 import {
   Tooltip,
   TooltipContent,
@@ -437,6 +438,7 @@ export default function AutomationDetailPage() {
         </CardContent>
       </Card>
 
+      <RunProgressPanel automationId={automation.id} />
       <ModuleBusyBanner automationId={automation.id} moduleId={automation.jobBoard} />
 
       <Tabs defaultValue="logs">

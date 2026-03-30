@@ -58,17 +58,24 @@ export async function GET(req: NextRequest) {
       const userId = session.user!.id!;
       const filterStateForUser = () => {
         const fullState = runCoordinator.getState();
+        const userRunningAutomations = fullState.runningAutomations.filter(
+          (r) => r.userId === userId,
+        );
         return {
           ...fullState,
-          runningAutomations: fullState.runningAutomations.filter(
-            (r) => r.userId === userId,
-          ),
+          runningAutomations: userRunningAutomations,
           pendingAutomations: fullState.pendingAutomations.filter((p) => {
             const lock = fullState.runningAutomations.find(
               (r) => r.automationId === p.automationId,
             );
             return !lock || lock.userId === userId;
           }),
+          // Filter progress to user's automations only
+          runningProgress: Object.fromEntries(
+            Object.entries(fullState.runningProgress).filter(([id]) =>
+              userRunningAutomations.some((r) => r.automationId === id)
+            )
+          ),
         };
       };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ import Loading from "@/components/Loading";
 import { StagedVacancyCard } from "./StagedVacancyCard";
 import { PromotionDialog } from "./PromotionDialog";
 import { BulkActionBar } from "./BulkActionBar";
+import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
 import type {
   StagedVacancyWithAutomation,
   StagedVacancyStatus,
@@ -65,6 +66,29 @@ function StagingContainer() {
   const hasSearched = useRef(false);
   const [mounted, setMounted] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [newItemsAvailable, setNewItemsAvailable] = useState(false);
+
+  // Track scheduler phase transitions to detect cycle completion
+  const { state: schedulerState } = useSchedulerStatus();
+  const prevPhaseRef = useRef<string | null>(null);
+  const schedulerPhase = useMemo(
+    () => schedulerState?.phase ?? null,
+    [schedulerState],
+  );
+
+  useEffect(() => {
+    const prevPhase = prevPhaseRef.current;
+    prevPhaseRef.current = schedulerPhase;
+
+    // Detect transition from running/cooldown to idle (cycle completed)
+    if (
+      prevPhase !== null &&
+      (prevPhase === "running" || prevPhase === "cooldown") &&
+      schedulerPhase === "idle"
+    ) {
+      setNewItemsAvailable(true);
+    }
+  }, [schedulerPhase]);
 
   useEffect(() => {
     setMounted(true);
@@ -278,6 +302,21 @@ function StagingContainer() {
           </div>
         </CardHeader>
         <CardContent>
+          {newItemsAvailable && (
+            <div className="flex items-center justify-between p-3 mb-3 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+              <span className="text-sm">{t("automations.newItemsAvailable")}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  reload();
+                  setNewItemsAvailable(false);
+                }}
+              >
+                {t("automations.showNewItems")}
+              </Button>
+            </div>
+          )}
           {mounted ? (
             <Tabs value={activeTab} onValueChange={onTabChange}>
               <TabsList>

@@ -177,6 +177,10 @@ class RunCoordinator {
 
   /** Returns current scheduler state for UI consumption */
   getState(): SchedulerSnapshot {
+    const runningProgress: Record<string, RunProgress> = {};
+    for (const [id, progress] of this.progressMap) {
+      runningProgress[id] = progress;
+    }
     return {
       phase: this.phase,
       cycleStartedAt: this.cycleStartedAt,
@@ -185,6 +189,7 @@ class RunCoordinator {
       lastCycleCompletedAt: this.lastCycleCompletedAt,
       lastCycleProcessedCount: this.lastCycleProcessedCount,
       lastCycleFailedCount: this.lastCycleFailedCount,
+      runningProgress,
     }
   }
 

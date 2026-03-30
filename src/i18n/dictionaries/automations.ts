@@ -352,6 +352,19 @@ export const automations = {
     "automations.conflictCancel": "Cancel",
     "automations.conflictStartedAt": "Started",
     "automations.conflictSource": "Source",
+
+    // RunProgressPanel (B3)
+    "automations.runProgress": "Run Progress",
+    "automations.phaseSearch": "Search",
+    "automations.phaseDedup": "Dedup",
+    "automations.phaseEnrich": "Enrich",
+    "automations.phaseMatch": "Match",
+    "automations.phaseSave": "Save",
+    "automations.phaseFinalize": "Finalize",
+
+    // Staging Queue live updates (B10)
+    "automations.newItemsAvailable": "New items have arrived",
+    "automations.showNewItems": "Show new items",
   },
   de: {
     // AutomationWizard - Steps
@@ -706,6 +719,19 @@ export const automations = {
     "automations.conflictCancel": "Abbrechen",
     "automations.conflictStartedAt": "Gestartet",
     "automations.conflictSource": "Quelle",
+
+    // RunProgressPanel (B3)
+    "automations.runProgress": "Fortschritt",
+    "automations.phaseSearch": "Suche",
+    "automations.phaseDedup": "Duplikate",
+    "automations.phaseEnrich": "Anreichern",
+    "automations.phaseMatch": "Abgleich",
+    "automations.phaseSave": "Speichern",
+    "automations.phaseFinalize": "Abschliessen",
+
+    // Staging Queue live updates (B10)
+    "automations.newItemsAvailable": "Neue Eintraege verfuegbar",
+    "automations.showNewItems": "Neue Eintraege anzeigen",
   },
   fr: {
     // AutomationWizard - Steps
@@ -1060,6 +1086,19 @@ export const automations = {
     "automations.conflictCancel": "Annuler",
     "automations.conflictStartedAt": "Demarre",
     "automations.conflictSource": "Source",
+
+    // RunProgressPanel (B3)
+    "automations.runProgress": "Progression",
+    "automations.phaseSearch": "Recherche",
+    "automations.phaseDedup": "Doublons",
+    "automations.phaseEnrich": "Enrichir",
+    "automations.phaseMatch": "Correspondance",
+    "automations.phaseSave": "Sauvegarder",
+    "automations.phaseFinalize": "Finaliser",
+
+    // Staging Queue live updates (B10)
+    "automations.newItemsAvailable": "Nouveaux elements disponibles",
+    "automations.showNewItems": "Afficher les nouveaux",
   },
   es: {
     // AutomationWizard - Steps
@@ -1414,5 +1453,18 @@ export const automations = {
     "automations.conflictCancel": "Cancelar",
     "automations.conflictStartedAt": "Iniciado",
     "automations.conflictSource": "Fuente",
+
+    // RunProgressPanel (B3)
+    "automations.runProgress": "Progreso",
+    "automations.phaseSearch": "Busqueda",
+    "automations.phaseDedup": "Duplicados",
+    "automations.phaseEnrich": "Enriquecer",
+    "automations.phaseMatch": "Coincidencia",
+    "automations.phaseSave": "Guardar",
+    "automations.phaseFinalize": "Finalizar",
+
+    // Staging Queue live updates (B10)
+    "automations.newItemsAvailable": "Nuevos elementos disponibles",
+    "automations.showNewItems": "Mostrar nuevos",
   },
 } as const;
