@@ -5,7 +5,6 @@ import { auth } from "@/auth";
 import db from "@/lib/db";
 import { runCoordinator } from "@/lib/scheduler/run-coordinator";
 import type { RunRequestResult } from "@/lib/scheduler/types";
-import type { RunnerResult } from "@/lib/connector/job-discovery";
 import type { AutomationPauseReason, AutomationStatus, JobBoard } from "@/models/automation.model";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -78,7 +77,7 @@ export async function POST(
       );
     }
 
-    const requestResult: RunRequestResult & { runnerResult?: RunnerResult } =
+    const requestResult: RunRequestResult =
       await runCoordinator.requestRun(
         {
           id: automation.id,

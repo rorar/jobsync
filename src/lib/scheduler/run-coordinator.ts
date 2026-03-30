@@ -126,36 +126,39 @@ class RunCoordinator {
       // Cancel watchdog before releasing lock (A7)
       this.cancelWatchdog(automation.id)
 
-      // 5. Release lock and update state
-      this.runLocks.delete(automation.id)
-      this.progressMap.delete(automation.id)
+      // Guard: only release + emit if lock still exists (H-1 fix)
+      // acknowledgeExternalStop may have already released the lock during degradation
+      const lockStillHeld = this.runLocks.delete(automation.id)
+      if (lockStillHeld) {
+        this.progressMap.delete(automation.id)
+        this.removeFromQueue(automation.id)
+        this.lastCycleProcessedCount++
+        if (!runnerResult || runnerResult.status === "failed") {
+          this.lastCycleFailedCount++
+        }
 
-      // Update cycle queue: remove completed automation, decrement remaining positions
-      this.removeFromQueue(automation.id)
+        debugLog(
+          "scheduler",
+          `[RunCoordinator] Lock released for ${automation.name}`,
+        )
 
-      // Update cycle stats
-      this.lastCycleProcessedCount++
-      if (!runnerResult || runnerResult.status === "failed") {
-        this.lastCycleFailedCount++
+        emitEvent(
+          createEvent(DomainEventType.AutomationRunCompleted, {
+            automationId: automation.id,
+            userId: automation.userId,
+            moduleId: automation.jobBoard,
+            runSource: options.runSource,
+            status: runnerResult?.status ?? "failed",
+            jobsSaved: runnerResult?.jobsSaved ?? 0,
+            durationMs: Date.now() - lock.startedAt.getTime(),
+          }),
+        )
+      } else {
+        debugLog(
+          "scheduler",
+          `[RunCoordinator] Lock already released for ${automation.name} (external stop)`,
+        )
       }
-
-      debugLog(
-        "scheduler",
-        `[RunCoordinator] Lock released for ${automation.name}`,
-      )
-
-      // Emit AutomationRunCompleted event
-      emitEvent(
-        createEvent(DomainEventType.AutomationRunCompleted, {
-          automationId: automation.id,
-          userId: automation.userId,
-          moduleId: automation.jobBoard,
-          runSource: options.runSource,
-          status: runnerResult?.status ?? "failed",
-          jobsSaved: runnerResult?.jobsSaved ?? 0,
-          durationMs: Date.now() - lock.startedAt.getTime(),
-        }),
-      )
     }
 
     const result: RunRequestResult = {

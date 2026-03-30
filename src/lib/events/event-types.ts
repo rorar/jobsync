@@ -139,7 +139,7 @@ export interface AutomationRunCompletedPayload {
 export interface AutomationDegradedPayload {
   automationId: string;
   userId: string;
-  reason: string; // "auth_failure" | "cb_escalation" | "consecutive_failures"
+  reason: "auth_failure" | "cb_escalation" | "consecutive_failures";
 }
 
 // ---------------------------------------------------------------------------
