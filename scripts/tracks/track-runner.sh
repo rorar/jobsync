@@ -7,7 +7,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAX_TURNS="${TRACK_MAX_TURNS:-200}"
-MODEL="${TRACK_MODEL:-opus}"           # opus = Claude Opus 4.6 (best quality)
+MODEL="${TRACK_MODEL:-opus}"
 
 # Load shared process requirements (PDCA cycle)
 SHARED_PROCESS=""
@@ -18,7 +18,7 @@ fi
 run_track() {
   local worktree="$1"
   local track_prompt="$2"
-  local log_file="${3:-/dev/stdout}"
+  local log_file="${3:-}"
 
   cd "$worktree"
 
@@ -33,16 +33,31 @@ ${SHARED_PROCESS}"
   echo "[track-runner] Model: $MODEL"
   echo "[track-runner] Max turns: $MAX_TURNS"
   echo "[track-runner] Shared process: $([ -n "$SHARED_PROCESS" ] && echo 'injected' || echo 'NOT FOUND')"
-  echo "[track-runner] Log: $log_file"
+  echo "[track-runner] Log: ${log_file:-stdout}"
   echo "[track-runner] Timestamp: $(date -Iseconds)"
 
-  claude \
-    -p "$full_prompt" \
-    --dangerously-skip-permissions \
-    --output-format stream-json \
-    --max-turns "$MAX_TURNS" \
-    --model "$MODEL" \
-    2>&1 | tee "$log_file"
+  # Ensure log directory exists
+  if [ -n "$log_file" ]; then
+    mkdir -p "$(dirname "$log_file")"
+  fi
+
+  # Build claude command
+  # Note: --output-format stream-json requires --verbose with -p
+  local claude_cmd=(
+    claude
+    -p "$full_prompt"
+    --dangerously-skip-permissions
+    --verbose
+    --output-format stream-json
+    --max-turns "$MAX_TURNS"
+    --model "$MODEL"
+  )
+
+  if [ -n "$log_file" ]; then
+    "${claude_cmd[@]}" 2>&1 | tee "$log_file"
+  else
+    "${claude_cmd[@]}" 2>&1
+  fi
 
   local exit_code=$?
 
@@ -51,9 +66,9 @@ ${SHARED_PROCESS}"
   echo "[track-runner] Timestamp: $(date -Iseconds)"
 
   # Extract summary from JSON log if available
-  if [ -f "$log_file" ] && command -v python3 &>/dev/null; then
+  if [ -n "$log_file" ] && [ -f "$log_file" ] && command -v python3 &>/dev/null; then
     python3 -c "
-import json, sys
+import json
 tokens = 0
 tool_uses = 0
 errors = 0
