@@ -74,17 +74,21 @@ export async function GET(req: NextRequest) {
 
       // Send initial state immediately
       const initialState = filterStateForUser();
+      let lastSentJson = JSON.stringify(initialState);
       controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify(initialState)}\n\n`),
+        encoder.encode(`data: ${lastSentJson}\n\n`),
       );
 
-      // Poll for state changes every 2 seconds
+      // Poll for state changes every 2 seconds, skip if unchanged
       const interval = setInterval(() => {
         if (isClosed) return;
         try {
           const state = filterStateForUser();
+          const json = JSON.stringify(state);
+          if (json === lastSentJson) return; // skip if unchanged
+          lastSentJson = json;
           controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(state)}\n\n`),
+            encoder.encode(`data: ${json}\n\n`),
           );
         } catch {
           cleanup();

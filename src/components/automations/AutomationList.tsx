@@ -51,6 +51,7 @@ import {
 import Link from "next/link";
 import { LocationBadge } from "@/components/ui/location-badge";
 import { RunStatusBadge } from "@/components/automations/RunStatusBadge";
+import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
 import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 
 interface AutomationListProps {
@@ -73,6 +74,7 @@ export function AutomationList({
   onRefresh,
 }: AutomationListProps) {
   const { t, locale } = useTranslations();
+  const { isAutomationRunning } = useSchedulerStatus();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
@@ -159,7 +161,11 @@ export function AutomationList({
             <Link
               key={automation.id}
               href={`/dashboard/automations/${automation.id}`}
-              className="block rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+              className={`block rounded-lg border bg-card hover:bg-accent/50 transition-colors ${
+                isAutomationRunning(automation.id)
+                  ? "border-l-4 border-l-blue-500 bg-blue-50/30 dark:bg-blue-950/20"
+                  : ""
+              }`}
             >
               <div className="flex items-start justify-between p-4">
                 <div className="flex-1 min-w-0 space-y-2">

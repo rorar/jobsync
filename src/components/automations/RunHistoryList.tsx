@@ -74,6 +74,7 @@ export function RunHistoryList({ runs }: RunHistoryListProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -162,6 +163,7 @@ export function RunHistoryList({ runs }: RunHistoryListProps) {
             })}
           </TableBody>
         </Table>
+        </div>
       </CardContent>
     </Card>
   );

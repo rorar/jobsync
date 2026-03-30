@@ -51,6 +51,12 @@ import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 import { LocationBadge } from "@/components/ui/location-badge";
 import { RunStatusBadge } from "@/components/automations/RunStatusBadge";
 import { ModuleBusyBanner } from "@/components/automations/ModuleBusyBanner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
 
 export default function AutomationDetailPage() {
@@ -282,20 +288,33 @@ export default function AutomationDetailPage() {
             )}
             {automation.status === "active" ? t("automations.pause") : t("automations.resume")}
           </Button>
-          <Button
-            variant="outline"
-            onClick={handleRunNow}
-            disabled={
-              runNowLoading || resumeMissing || automation.status === "paused" || isAutomationRunning(automation.id)
-            }
-          >
-            {runNowLoading ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <PlayCircle className="h-4 w-4 mr-2" />
-            )}
-            {t("automations.runNow")}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="outline"
+                    onClick={handleRunNow}
+                    disabled={
+                      runNowLoading || resumeMissing || automation.status === "paused" || isAutomationRunning(automation.id)
+                    }
+                  >
+                    {runNowLoading ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <PlayCircle className="h-4 w-4 mr-2" />
+                    )}
+                    {t("automations.runNow")}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {isAutomationRunning(automation.id) && (
+                <TooltipContent>
+                  <p>{t("automations.alreadyRunning")}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
 

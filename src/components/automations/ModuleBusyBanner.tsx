@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
 import { useTranslations } from "@/i18n";
 import { AlertCircle } from "lucide-react";
@@ -26,7 +27,15 @@ export function ModuleBusyBanner({ automationId, moduleId }: ModuleBusyBannerPro
     >
       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
       <p>
-        {t("automations.moduleBusy")}: {otherBusy.map((l) => l.automationName).join(", ")}
+        {t("automations.moduleBusy")}:{" "}
+        {otherBusy.map((l, i) => (
+          <span key={l.automationId}>
+            {i > 0 && ", "}
+            <Link href={`/dashboard/automations/${l.automationId}`} className="underline hover:text-foreground">
+              {l.automationName}
+            </Link>
+          </span>
+        ))}
       </p>
     </div>
   );
