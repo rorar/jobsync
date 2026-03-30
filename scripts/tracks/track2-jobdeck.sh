@@ -5,10 +5,13 @@
 # Usage: bash scripts/tracks/track2-jobdeck.sh [worktree_path]
 
 set -euo pipefail
-WORKTREE="${1:-$(pwd)}"
-cd "$WORKTREE"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/track-runner.sh"
 
-claude -p "$(cat <<'PROMPT'
+WORKTREE="${1:-$(pwd)}"
+LOG_FILE="${2:-$WORKTREE/../track2-jobdeck.log}"
+
+PROMPT="$(cat <<'PROMPT'
 You are working on Sprint C Track 2 for the JobSync project.
 Read CLAUDE.md and the project memories first.
 
@@ -27,7 +30,7 @@ A card-based swipe UI for reviewing staged vacancies. Two modes:
 - **Inbox Mode** (Phase 2, later): Review promoted Jobs — different actions
 
 ### Implementation Plan
-1. **TinderCard component** (src/components/staging/DeckCard.tsx):
+1. **DeckCard component** (src/components/staging/DeckCard.tsx):
    - Full card displaying one StagedVacancy at a time
    - Title, employer, location, salary, description preview, match score
    - Action buttons: Dismiss (X), Details (expand), Promote (check), Super-Like (star)
@@ -59,7 +62,7 @@ A card-based swipe UI for reviewing staged vacancies. Two modes:
    - Next card scales up from behind
    - Use CSS transitions, NOT a heavy animation library
 
-### Design Guidelines (from UI agent wireframes)
+### Design Guidelines
 - Card: rounded-xl, shadow-lg, max-w-lg mx-auto
 - Action buttons: circular, bottom of card, color-coded (red=dismiss, green=promote, blue=super-like)
 - Keyboard hint bar below the card showing shortcuts
@@ -67,11 +70,7 @@ A card-based swipe UI for reviewing staged vacancies. Two modes:
 - Mobile: touch swipe gestures, larger tap targets
 - Dark mode support
 
-### Consult ui-design agent BEFORE implementing for:
-- Card layout and visual hierarchy
-- Animation timing and easing
-- Mobile touch gesture thresholds
-- Accessibility audit
+### Before implementing: consult ui-design agent for visual design review
 
 ## Process Requirements
 - After EACH feature: run /comprehensive-review:full-review
@@ -88,7 +87,9 @@ A card-based swipe UI for reviewing staged vacancies. Two modes:
 - src/components/staging/ViewModeToggle.tsx (NEW)
 - src/components/staging/StagingContainer.tsx (MODIFY — add toggle)
 - src/hooks/useDeckStack.ts (NEW)
-- src/i18n/dictionaries/automations.ts (add deck-related keys)
+- src/i18n/dictionaries/ (add deck-related keys to all dicts)
 - DO NOT modify: src/lib/scheduler/*, src/lib/connector/*, src/app/api/*
 PROMPT
-)" --allowedTools "Edit,Write,Read,Bash,Glob,Grep,Agent"
+)"
+
+run_track "$WORKTREE" "$PROMPT" "$LOG_FILE"

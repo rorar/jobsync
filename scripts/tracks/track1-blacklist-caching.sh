@@ -5,10 +5,13 @@
 # Usage: bash scripts/tracks/track1-blacklist-caching.sh [worktree_path]
 
 set -euo pipefail
-WORKTREE="${1:-$(pwd)}"
-cd "$WORKTREE"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/track-runner.sh"
 
-claude -p "$(cat <<'PROMPT'
+WORKTREE="${1:-$(pwd)}"
+LOG_FILE="${2:-$WORKTREE/../track1-blacklist-caching.log}"
+
+PROMPT="$(cat <<'PROMPT'
 You are working on Sprint C Track 1 for the JobSync project.
 Read CLAUDE.md and the project memories first.
 
@@ -62,4 +65,6 @@ After C3 is done, implement in-memory caching:
 - src/app/api/esco/* and src/app/api/eures/* (cache headers)
 - DO NOT modify: src/lib/scheduler/*, src/hooks/*, src/components/scheduler/*
 PROMPT
-)" --allowedTools "Edit,Write,Read,Bash,Glob,Grep,Agent"
+)"
+
+run_track "$WORKTREE" "$PROMPT" "$LOG_FILE"
