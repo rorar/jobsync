@@ -50,6 +50,7 @@ import {
 } from "@/actions/automation.actions";
 import Link from "next/link";
 import { LocationBadge } from "@/components/ui/location-badge";
+import { RunStatusBadge } from "@/components/automations/RunStatusBadge";
 import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 
 interface AutomationListProps {
@@ -175,6 +176,7 @@ export function AutomationList({
                     >
                       {automation.status}
                     </Badge>
+                    <RunStatusBadge automationId={automation.id} />
                     {automation.status === "paused" && automation.pauseReason && (
                       <TooltipProvider>
                         <Tooltip>

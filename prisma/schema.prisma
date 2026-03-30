@@ -412,6 +412,7 @@ model AutomationRun {
   jobsSaved        Int @default(0)
 
   status        String  @default("running")
+  runSource     String  @default("scheduler")
   errorMessage  String?
   blockedReason String?
 

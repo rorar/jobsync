@@ -32,6 +32,7 @@ import {
   Ban,
   Timer,
   History,
+  PlayCircle,
 } from "lucide-react";
 import type { AutomationRun } from "@/models/automation.model";
 
@@ -77,6 +78,7 @@ export function RunHistoryList({ runs }: RunHistoryListProps) {
           <TableHeader>
             <TableRow>
               <TableHead>{t("automations.statusHeader")}</TableHead>
+              <TableHead>{t("automations.sourceHeader")}</TableHead>
               <TableHead>{t("automations.startedHeader")}</TableHead>
               <TableHead>{t("automations.duration")}</TableHead>
               <TableHead className="text-center">{t("automations.searched")}</TableHead>
@@ -103,6 +105,25 @@ export function RunHistoryList({ runs }: RunHistoryListProps) {
                     <div className="flex items-center gap-2">
                       <StatusIcon className={`h-4 w-4 ${config.color}`} />
                       <Badge variant={config.variant}>{run.status.replace("_", " ")}</Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      {run.runSource === "manual" ? (
+                        <>
+                          <PlayCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">
+                            {t("automations.runSourceManual")}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">
+                            {t("automations.runSourceScheduler")}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>

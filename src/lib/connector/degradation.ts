@@ -120,8 +120,9 @@ export async function checkConsecutiveRunFailures(
       return { paused: false };
     }
 
-    // All must be failed
-    const allFailed = recentRuns.every((r) => r.status === "failed");
+    // All must be terminal failure statuses (failed, blocked, rate_limited)
+    const FAILURE_STATUSES = ["failed", "blocked", "rate_limited"];
+    const allFailed = recentRuns.every((r) => FAILURE_STATUSES.includes(r.status));
     if (!allFailed) {
       return { paused: false };
     }

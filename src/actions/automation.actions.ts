@@ -349,6 +349,12 @@ export async function deleteAutomation(id: string): Promise<ActionResult> {
       return { success: false, message: "Automation not found" };
     }
 
+    // Guard: cannot delete while running (prevents RecordNotFound in finalizeRun)
+    const { runCoordinator } = await import("@/lib/scheduler/run-coordinator");
+    if (runCoordinator.getRunStatus(id)) {
+      return { success: false, message: "Cannot delete: automation is currently running" };
+    }
+
     await prisma.automation.delete({ where: { id } });
 
     return { success: true };

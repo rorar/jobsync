@@ -49,11 +49,15 @@ import { AutomationWizard } from "@/components/automations/AutomationWizard";
 import { getResumeList } from "@/actions/profile.actions";
 import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 import { LocationBadge } from "@/components/ui/location-badge";
+import { RunStatusBadge } from "@/components/automations/RunStatusBadge";
+import { ModuleBusyBanner } from "@/components/automations/ModuleBusyBanner";
+import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
 
 export default function AutomationDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { locale } = useTranslations();
+  const { t, locale } = useTranslations();
+  const { isAutomationRunning } = useSchedulerStatus();
   const automationId = params.id as string;
 
   const [automation, setAutomation] = useState<
@@ -166,6 +170,10 @@ export default function AutomationDetailPage() {
           description: `Saved ${data.run.jobsSaved} new jobs`,
         });
         loadData();
+      } else if (response.status === 409) {
+        toast({
+          title: t("automations.alreadyRunning"),
+        });
       } else {
         toast({
           title: "Error",
@@ -223,7 +231,10 @@ export default function AutomationDetailPage() {
           </Link>
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">{automation.name}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">{automation.name}</h1>
+            <RunStatusBadge automationId={automation.id} />
+          </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="font-medium text-foreground">Keywords:</span>
@@ -275,7 +286,7 @@ export default function AutomationDetailPage() {
             variant="outline"
             onClick={handleRunNow}
             disabled={
-              runNowLoading || resumeMissing || automation.status === "paused"
+              runNowLoading || resumeMissing || automation.status === "paused" || isAutomationRunning(automation.id)
             }
           >
             {runNowLoading ? (
@@ -361,6 +372,8 @@ export default function AutomationDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      <ModuleBusyBanner automationId={automation.id} moduleId={automation.jobBoard} />
 
       <Tabs defaultValue="logs">
         <TabsList>

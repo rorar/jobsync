@@ -8,12 +8,12 @@
 import { registerAuditLogger } from "./audit-logger";
 import { registerNotificationDispatcher } from "./notification-dispatcher";
 
-let registered = false;
+// Guard survives HMR via globalThis (same pattern as health-scheduler.ts, event-bus.ts)
+const g = globalThis as unknown as { __eventConsumersRegistered?: boolean };
 
 export function registerEventConsumers(): void {
-  // Guard against duplicate registration on hot reload (dev mode)
-  if (registered) return;
-  registered = true;
+  if (g.__eventConsumersRegistered) return;
+  g.__eventConsumersRegistered = true;
 
   // Phase 1: Audit logging (all events)
   registerAuditLogger();

@@ -1,0 +1,723 @@
+-- allium: 3
+-- scheduler-coordination.allium
+
+-- Scope: Scheduler Transparency & Run Coordination
+-- Includes: SchedulerState singleton, RunCoordinator contract, double-run prevention,
+--           manual/scheduled run coordination, queue management, progress reporting,
+--           scheduler phase lifecycle, contention detection, new domain events
+-- Excludes:
+--   - Automation lifecycle (creation, pausing, degradation — covered by module-lifecycle.allium)
+--   - Runner implementation internals (search, dedup, match, save — runner.ts concern)
+--   - Module registry and health monitoring (module-lifecycle.allium, health-scheduler.ts)
+--   - Notification dispatch (notification-dispatch.allium consumes events from here)
+--   - Rate limiting implementation (Cockatiel/resilience.ts internals)
+-- Dependencies:
+--   - Automation, AutomationRun from module-lifecycle.allium / jobsync.allium
+--   - RegisteredModule from module-lifecycle.allium
+--   - EventBus, DomainEvent from event-bus.allium
+
+-- =============================================================================
+-- Actors
+-- =============================================================================
+
+actor User {
+  -- Triggers manual runs, observes scheduler state, views progress
+}
+
+actor System {
+  -- Orchestrates the scheduler lifecycle, enforces coordination rules
+}
+
+actor Scheduler {
+  -- The cron-driven process that finds due automations and runs them sequentially
+}
+
+-- =============================================================================
+-- Enums
+-- =============================================================================
+
+enum RunSource { scheduler | manual }
+
+enum SchedulerPhase { idle | polling | running | cooldown }
+
+enum RunPhase { search | dedup | enrich | match | save | finalize }
+
+enum RunRequestStatus { acquired | already_running | rate_limited }
+
+-- =============================================================================
+-- Contracts
+-- =============================================================================
+
+-- Application service that wraps the scheduler loop and manual run entry point.
+-- Interface-first design: the concrete implementation is an in-memory coordinator,
+-- but the interface is designed to be reimplemented as a TaskQueue adapter (-> 8.4).
+
+contract RunCoordinator {
+  requestRun(automation: Automation, options: RunOptions): RunRequestResult
+    -- Single entry point for ALL automation runs (scheduler + manual).
+    -- Acquires a lock for the automation, or returns already_running.
+    -- Emits AutomationRunStarted event on successful acquisition.
+    -- On completion, emits AutomationRunCompleted and releases the lock.
+
+  getState(): SchedulerSnapshot
+    -- Returns current scheduler state for UI consumption.
+
+  getRunStatus(automationId: String): RunLock?
+    -- Returns the active RunLock for a specific automation, or null if not running.
+
+  getModuleBusy(moduleId: String): RunLock[]
+    -- Returns all active RunLocks using this module.
+    -- Used for module contention warnings in the UI.
+
+  getQueuePosition(automationId: String): RunQueuePosition?
+    -- Returns position in the scheduler queue, or null if not queued.
+
+  getActiveProgress(automationId: String): RunProgress?
+    -- Returns live progress for a running automation.
+    -- Updated by the runner during phase transitions.
+
+  reportProgress(automationId: String, progress: RunProgress): Void
+    -- Called by the runner to update progress during execution.
+}
+
+-- =============================================================================
+-- Value Types
+-- =============================================================================
+
+value RunLock {
+  automationId: String
+  runSource: RunSource
+  moduleId: String
+  startedAt: DateTime
+  userId: String
+}
+
+value SchedulerSnapshot {
+  phase: SchedulerPhase
+  cycleStartedAt: DateTime?
+  runningAutomations: RunLock[]
+  pendingAutomations: RunQueuePosition[]
+  lastCycleCompletedAt: DateTime?
+  lastCycleProcessedCount: Integer
+}
+
+value RunQueuePosition {
+  automationId: String
+  automationName: String
+  position: Integer
+  total: Integer
+  estimatedStartAt: DateTime?
+}
+
+value RunProgress {
+  automationId: String
+  runId: String
+  phase: RunPhase
+  jobsSearched: Integer
+  jobsDeduplicated: Integer
+  jobsProcessed: Integer
+  jobsMatched: Integer
+  jobsSaved: Integer
+  startedAt: DateTime
+  updatedAt: DateTime
+}
+
+value RunRequestResult {
+  status: RunRequestStatus
+  existingRunSource: RunSource?
+  existingStartedAt: DateTime?
+  queuePosition: RunQueuePosition?
+  runId: String?
+}
+
+value RunOptions {
+  runSource: RunSource
+  bypassCache: Boolean?
+    -- Designed for both 0.10 (runSource) and future 0.9 (bypassCache)
+}
+
+-- Event payloads for scheduler domain events.
+-- These extend the DomainEventType enum in event-bus.allium.
+
+value SchedulerCycleStartedPayload {
+  queueDepth: Integer
+  automationIds: String[]
+}
+
+value SchedulerCycleCompletedPayload {
+  processedCount: Integer
+  failedCount: Integer
+  skippedCount: Integer
+  durationMs: Integer
+}
+
+value AutomationRunStartedPayload {
+  automationId: String
+  userId: String
+  moduleId: String
+  runSource: RunSource
+}
+
+value AutomationRunCompletedPayload {
+  automationId: String
+  userId: String
+  moduleId: String
+  runSource: RunSource
+  status: String                    -- AutomationRun.status value
+  jobsSaved: Integer
+  durationMs: Integer
+}
+
+-- =============================================================================
+-- Entities
+-- =============================================================================
+
+entity SchedulerState {
+  -- Singleton: exactly one instance exists per application process.
+  -- In-memory (not persisted) — resets on restart.
+
+  phase: SchedulerPhase = idle
+  currentCycleStartedAt: DateTime?
+  currentCycleQueue: RunQueuePosition[]
+  activeRuns: RunLock[]
+  lastCycleCompletedAt: DateTime?
+  lastCycleProcessedCount: Integer = 0
+  lastCycleFailedCount: Integer = 0
+
+  -- Derived
+  isRunning: phase = running or activeRuns.count > 0
+  queueDepth: currentCycleQueue.count
+}
+
+-- =============================================================================
+-- External Entities
+-- =============================================================================
+
+external entity Automation {
+  id: String
+  userId: String
+  name: String
+  jobBoard: String                  -- module ID used for search
+  status: active | paused
+  nextRunAt: DateTime?
+  scheduleFrequency: String?
+  scheduleHour: Integer?
+}
+
+external entity AutomationRun {
+  id: String
+  automationId: String
+  status: running | completed | completed_with_errors | failed | blocked | rate_limited
+  startedAt: DateTime
+  completedAt: DateTime?
+  runSource: RunSource?
+}
+
+external entity RegisteredModule {
+  manifest: ModuleManifest
+  status: active | inactive | error
+}
+
+-- ModuleManifest is referenced by type only; its full definition lives in module-lifecycle.allium.
+external entity ModuleManifest {
+  id: String
+  name: String
+}
+
+external entity EventBus {
+  publish(event: Any): Void
+}
+
+-- =============================================================================
+-- Config
+-- =============================================================================
+
+config {
+  MAX_CONCURRENT_RUNS_PER_AUTOMATION: Integer = 1
+  SCHEDULER_CYCLE_COOLDOWN_MS: Integer = 5000
+  MANUAL_RUN_RATE_LIMIT_PER_HOUR: Integer = 5
+  SSE_POLL_INTERVAL_MS: Integer = 2000
+  SSE_MAX_DURATION_MS: Integer = 600000
+}
+
+-- =============================================================================
+-- Rules: Double-Run Prevention
+-- =============================================================================
+
+rule DoubleRunPrevention {
+  -- "Only one run per automation at a time."
+  -- When a run is requested, check whether a RunLock already exists for that automation.
+  -- If it does, reject with already_running and include existing lock details.
+  when: RequestRun(automation: Automation, options: RunOptions)
+
+  let existingLock = SchedulerState.activeRuns
+    where automationId = automation.id
+
+  ensures:
+    if existingLock.count > 0:
+      let lock = existingLock.first
+      RunRequestResult.created(
+        status: already_running,
+        existingRunSource: lock.runSource,
+        existingStartedAt: lock.startedAt
+      )
+    else:
+      let newLock = RunLock.created(
+        automationId: automation.id,
+        runSource: options.runSource,
+        moduleId: automation.jobBoard,
+        startedAt: now,
+        userId: automation.userId
+      )
+      SchedulerState.activeRuns.add(newLock)
+      AutomationRun.created(
+        automationId: automation.id,
+        status: running,
+        startedAt: now,
+        runSource: options.runSource
+      )
+      EventBus.publish({
+        type: AutomationRunStarted,
+        timestamp: now,
+        payload: {
+          automationId: automation.id,
+          userId: automation.userId,
+          moduleId: automation.jobBoard,
+          runSource: options.runSource
+        }
+      })
+      RunRequestResult.created(
+        status: acquired,
+        runId: AutomationRun.id
+      )
+
+  @guidance
+    -- In-memory Map.has/set is atomic in single-threaded JS. No async gap
+    -- between checking and acquiring. This is the critical section.
+    -- MAX_CONCURRENT_RUNS_PER_AUTOMATION is 1; the check is activeRuns
+    -- filtered by automationId. If the value is raised in future, the
+    -- count comparison changes but the mechanism stays the same.
+}
+
+-- =============================================================================
+-- Rules: Manual Run Guard
+-- =============================================================================
+
+rule ManualRunGuard {
+  -- "When a manual run is requested, warn if another automation is using the same module."
+  -- This is informational only — the run still proceeds. Cockatiel rate limiting
+  -- handles the technical side of module contention.
+  when: RequestRun(automation: Automation, options: RunOptions)
+  requires: options.runSource = manual
+
+  let otherRuns = SchedulerState.activeRuns
+    where moduleId = automation.jobBoard
+    and automationId != automation.id
+
+  ensures:
+    if otherRuns.count > 0:
+      RunRequestResult.created(
+        status: acquired,
+        runId: AutomationRun.id,
+        contention: {
+          moduleId: automation.jobBoard,
+          conflictingAutomationIds: otherRuns
+        }
+      )
+
+  @guidance
+    -- Module contention is a soft signal: "another automation is also using
+    -- this job board right now." The UI shows a warning but does not block.
+    -- Cockatiel rate limiting (token bucket + bulkhead) prevents actual
+    -- overload at the HTTP layer.
+}
+
+-- =============================================================================
+-- Rules: Scheduler Queue
+-- =============================================================================
+
+rule SchedulerQueueing {
+  -- "When the scheduler cycle starts, build the run queue from due automations."
+  -- Automations are ordered by nextRunAt ascending (most overdue first).
+  when: SchedulerState.phase transitions_to running
+
+  let dueAutomations = Automation
+    where status = active
+    and nextRunAt != null
+    and nextRunAt <= now
+
+  ensures: for_each automation in dueAutomations:
+    let position = RunQueuePosition.created(
+      automationId: automation.id,
+      automationName: automation.name,
+      position: index + 1,
+      total: dueAutomations.count
+    )
+    SchedulerState.currentCycleQueue.add(position)
+
+  @guidance
+    -- Order by nextRunAt ascending (most overdue first).
+    -- Queue positions start at 1 for the first automation.
+    -- As automations complete, their RunQueuePosition is removed
+    -- and remaining positions are decremented.
+}
+
+rule QueuePositionUpdate {
+  -- "When an automation completes its run, update remaining queue positions."
+  when: RunCompleted(automationId: String)
+
+  let completedPosition = SchedulerState.currentCycleQueue
+    where automationId = automationId
+
+  ensures:
+    if completedPosition.count > 0:
+      SchedulerState.currentCycleQueue.remove(completedPosition.first)
+      for_each remaining in SchedulerState.currentCycleQueue:
+        remaining.position = remaining.position - 1
+
+  @guidance
+    -- Position decrements monotonically. The UI uses this to show
+    -- "3 of 7 remaining" style progress indicators.
+}
+
+-- RunSourceTracking is merged into DoubleRunPrevention (line 273-278).
+-- The DoubleRunPrevention rule creates AutomationRun with runSource = options.runSource.
+-- Invariant EveryRunHasSource asserts that runSource is always set.
+
+-- =============================================================================
+-- Rules: Crash Recovery (Ghost Lock Prevention)
+-- =============================================================================
+
+rule OrphanedRunReconciliation {
+  -- "On startup, orphaned 'running' AutomationRuns are marked as failed."
+  -- If the process crashes with active runs, the DB contains rows with
+  -- status = "running" that will never be updated. The in-memory RunLocks
+  -- are lost on restart. This rule reconciles the DB state.
+  when: ApplicationStartup
+
+  ensures: for_each run in AutomationRun where status = running:
+    run.status = failed
+    run.errorMessage = "process_restart"
+    run.completedAt = now
+
+  @guidance
+    -- Implementation: reconcileOrphanedRuns() in run-coordinator.ts,
+    -- called from instrumentation.ts before startScheduler().
+    -- Uses db.automationRun.updateMany({ where: { status: "running" } }).
+    -- Must run BEFORE any new runs are started.
+}
+
+-- =============================================================================
+-- Rules: Progress Reporting
+-- =============================================================================
+
+rule ProgressReporting {
+  -- "The runner reports progress at each phase transition during execution."
+  -- This keeps SchedulerState up to date with live progress data.
+  when: ReportProgress(automationId: String, progress: RunProgress)
+
+  let activeLock = SchedulerState.activeRuns
+    where automationId = automationId
+
+  requires: activeLock.count > 0
+    -- Can only report progress for a run that is actually active
+
+  ensures: SchedulerState.activeRunProgress = progress
+
+  @guidance
+    -- The runner calls RunCoordinator.reportProgress() at each phase:
+    -- search -> dedup -> enrich -> match -> save -> finalize.
+    -- Each call updates the RunProgress value with new counters.
+    -- The UI polls via SSE and reads the latest RunProgress.
+    -- Progress data is ephemeral (in-memory only, not persisted).
+}
+
+-- =============================================================================
+-- Rules: Scheduler Phase Lifecycle
+-- =============================================================================
+
+rule SchedulerPhaseTransitions {
+  -- "The scheduler moves through a deterministic phase lifecycle."
+  -- idle -> polling (cron fires)
+  -- polling -> running (due automations found)
+  -- polling -> idle (no due automations)
+  -- running -> cooldown (queue drained)
+  -- cooldown -> idle (cooldown elapsed)
+
+  when: SchedulerCycleTick
+
+  ensures:
+    if SchedulerState.phase = idle:
+      SchedulerState.phase = polling
+      SchedulerState.currentCycleStartedAt = now
+
+    else if SchedulerState.phase = polling:
+      let dueCount = Automation where status = active and nextRunAt != null and nextRunAt <= now
+      if dueCount.count > 0:
+        SchedulerState.phase = running
+      else:
+        SchedulerState.phase = idle
+        SchedulerState.currentCycleStartedAt = null
+
+    else if SchedulerState.phase = running:
+      if SchedulerState.currentCycleQueue.count = 0 and SchedulerState.activeRuns.count = 0:
+        SchedulerState.phase = cooldown
+        SchedulerState.lastCycleCompletedAt = now
+
+    else if SchedulerState.phase = cooldown:
+      SchedulerState.phase = idle
+      SchedulerState.currentCycleStartedAt = null
+      SchedulerState.currentCycleQueue = []
+
+  @guidance
+    -- The cron fires every minute (SCHEDULER_CRON = "0 * * * *").
+    -- The idle -> polling transition is the entry point.
+    -- Cooldown lasts SCHEDULER_CYCLE_COOLDOWN_MS (default 5s) before
+    -- returning to idle. This prevents tight loops when automations
+    -- complete quickly.
+    -- Each transition is observable via SchedulerState and SSE.
+}
+
+-- =============================================================================
+-- Rules: Cycle Event Emission
+-- =============================================================================
+
+rule CycleStartedEvent {
+  -- "Emit SchedulerCycleStarted when the scheduler transitions to running."
+  when: SchedulerState.phase transitions_to running
+
+  ensures: EventBus.publish({
+    type: SchedulerCycleStarted,
+    timestamp: now,
+    payload: {
+      queueDepth: SchedulerState.currentCycleQueue.count,
+      automationIds: SchedulerState.currentCycleQueue
+    }
+  })
+}
+
+rule CycleCompletedEvent {
+  -- "Emit SchedulerCycleCompleted when the scheduler transitions to cooldown."
+  when: SchedulerState.phase transitions_to cooldown
+
+  ensures: EventBus.publish({
+    type: SchedulerCycleCompleted,
+    timestamp: now,
+    payload: {
+      processedCount: SchedulerState.lastCycleProcessedCount,
+      failedCount: SchedulerState.lastCycleFailedCount,
+      skippedCount: 0,
+      durationMs: now - SchedulerState.currentCycleStartedAt
+    }
+  })
+}
+
+rule RunCompletedEvent {
+  -- "Emit AutomationRunCompleted when a run reaches ANY terminal status."
+  -- All terminal statuses must release the RunLock to prevent ghost locks.
+  when: run: AutomationRun.status transitions_to completed
+    or run: AutomationRun.status transitions_to completed_with_errors
+    or run: AutomationRun.status transitions_to failed
+    or run: AutomationRun.status transitions_to blocked
+    or run: AutomationRun.status transitions_to rate_limited
+
+  let lock = SchedulerState.activeRuns
+    where automationId = run.automationId
+
+  ensures:
+    if lock.count > 0:
+      SchedulerState.activeRuns.remove(lock.first)
+      EventBus.publish({
+        type: AutomationRunCompleted,
+        timestamp: now,
+        payload: {
+          automationId: run.automationId,
+          userId: lock.first.userId,
+          moduleId: lock.first.moduleId,
+          runSource: lock.first.runSource,
+          status: run.status,
+          jobsSaved: 0,
+          durationMs: now - run.startedAt
+        }
+      })
+      SchedulerState.lastCycleProcessedCount = SchedulerState.lastCycleProcessedCount + 1
+      if run.status = failed:
+        SchedulerState.lastCycleFailedCount = SchedulerState.lastCycleFailedCount + 1
+
+  @guidance
+    -- The lock is released regardless of run outcome.
+    -- The jobsSaved count comes from the runner's final progress report;
+    -- the 0 here is a placeholder. Implementation reads from RunProgress.
+}
+
+-- =============================================================================
+-- Invariants
+-- =============================================================================
+
+invariant NoConcurrentSameAutomation {
+  -- At most one RunLock per automationId at any time.
+  for a in SchedulerState.activeRuns:
+    for b in SchedulerState.activeRuns:
+      a != b implies a.automationId != b.automationId
+}
+
+@invariant SchedulerStateReflectsReality
+  -- SchedulerState mirrors actual system state. When a run starts, an activeRun
+  -- entry exists. When it completes, the entry is removed. No stale data persists
+  -- beyond the run lifecycle. This is a runtime property that cannot be expressed
+  -- as a point-in-time assertion over entity state.
+
+invariant EveryRunHasSource {
+  for run in AutomationRuns:
+    run.runSource != null
+}
+
+@invariant QueuePositionMonotonic
+  -- During a scheduler cycle, queue positions only decrease. A position never
+  -- increases once assigned. This is a temporal ordering property: it compares
+  -- the value at two points in time, which cannot be expressed as a single-point
+  -- assertion.
+
+-- =============================================================================
+-- Surfaces
+-- =============================================================================
+
+surface SchedulerStatusBar {
+  -- Global indicator showing whether the scheduler is active and what it is doing.
+  -- Appears in the application header or sidebar.
+  facing actor: User
+  context state: SchedulerState
+
+  exposes:
+    state.phase,
+    state.queueDepth,
+    state.activeRuns.first.automationId,
+    state.activeRuns.first.moduleId,
+    state.lastCycleCompletedAt
+
+  @guarantee LiveUpdates
+    -- Data refreshes via SSE with a poll interval of SSE_POLL_INTERVAL_MS (default 2s).
+    -- The SSE connection has a maximum duration of SSE_MAX_DURATION_MS (default 10 min)
+    -- before the client must reconnect.
+
+  @guidance
+    -- When phase = idle: show "Idle" with a check icon.
+    -- When phase = running: show the currently running automation name and a spinner.
+    -- When phase = cooldown: show "Finishing up..." briefly before idle.
+    -- queueDepth > 0: show "(N remaining)" badge.
+}
+
+surface RunProgressPanel {
+  -- Per-automation progress shown on the automation detail page.
+  -- Displays a horizontal stepper with phase indicators and live counters.
+  facing actor: User
+  context progress: RunProgress
+
+  exposes:
+    progress.phase,
+    progress.jobsSearched,
+    progress.jobsDeduplicated,
+    progress.jobsProcessed,
+    progress.jobsMatched,
+    progress.jobsSaved,
+    progress.startedAt,
+    progress.updatedAt
+
+  @guarantee PhaseVisualization
+    -- Rendered as a horizontal stepper with six steps: search, dedup, enrich,
+    -- match, save, finalize. Each step shows completed (checkmark), active
+    -- (spinner), or pending (grey dot) state. Counters update live.
+
+  @guarantee RunSourceBadge
+    -- Shows a badge indicating "Scheduled" or "Manual" with an appropriate icon
+    -- (clock for scheduled, hand/play for manual).
+
+  @guidance
+    -- The panel is only visible when a run is active for this automation.
+    -- When no run is active, the panel collapses and shows the last run summary.
+    -- Phase transitions animate the stepper forward.
+}
+
+surface ConflictWarning {
+  -- Shown before a manual run when conflicts are detected.
+  -- Two levels: blocked (same automation running) and contention (same module, different automation).
+  facing actor: User
+  context state: SchedulerState
+
+  let automation = Automation where id = selectedAutomationId
+  let sameAutomationLock = state.activeRuns where automationId = automation.id
+  let sameModuleLocks = state.activeRuns
+    where moduleId = automation.jobBoard
+    and automationId != automation.id
+
+  exposes:
+    sameAutomationLock.count > 0,
+    sameModuleLocks.count > 0,
+    sameAutomationLock.first.runSource,
+    sameAutomationLock.first.startedAt
+
+  provides:
+    ProceedAnyway(actor, automation) when sameAutomationLock.count = 0
+      -- Only available when the conflict is contention (same module), not blocked (same automation).
+    Cancel(actor)
+
+  @guarantee OnlyWhenRelevant
+    -- The warning is hidden entirely when no conflicts exist. It appears only
+    -- when the user clicks "Run Now" and a conflict is detected.
+
+  @guidance
+    -- Blocked state (same automation running): show "This automation is already
+    -- running (started at X, source: Y). Please wait." with only Cancel.
+    -- Contention state (same module busy): show "Another automation is using
+    -- the same job board. You can proceed, but results may be rate-limited."
+    -- with ProceedAnyway and Cancel.
+}
+
+surface RunHistoryEnhancement {
+  -- Extends the existing RunHistoryList with a source badge per run.
+  -- Shows "Scheduled" or "Manual" alongside each automation run entry.
+  facing actor: User
+  context runs: AutomationRun[]
+
+  exposes:
+    for run in runs:
+      run.runSource,
+      run.status,
+      run.startedAt,
+      run.completedAt
+
+  @guarantee BackwardCompatible
+    -- Existing runs without a runSource value display as "Scheduled" by default.
+    -- The Prisma migration sets the default value to "scheduler" for existing rows.
+    -- No visual regression for existing run history entries.
+}
+
+-- =============================================================================
+-- Resolved Questions (2026-03-30)
+-- =============================================================================
+
+-- Q1: SchedulerCycleStarted at polling or running?
+-- RESOLVED: Emit at `running` phase transition (current implementation).
+-- At polling, queue depth is unknown. At running, we have automationIds and count.
+-- EventBus consumers need actionable data, not "the scheduler woke up."
+-- The `polling` phase was removed from SchedulerPhase (no implementation need).
+
+-- Q2: RunProgress persisted or in-memory?
+-- RESOLVED: In-memory for live UI (current). Persist final snapshot to AutomationRun
+-- (progressSnapshot JSON column) when 8.8 Production Monitoring is implemented.
+-- No intermediate persistence needed — SSE provides live updates.
+
+-- Q3: Priority ordering?
+-- RESOLVED: Order by nextRunAt ascending (most overdue first). No separate priority field.
+-- Self-balancing: missed schedules get automatic priority.
+-- Manual runs bypass queue entirely (immediate RunLock via DoubleRunPrevention).
+
+-- Q4: Module interleaving within a scheduler cycle?
+-- RESOLVED: No. With sequential execution, interleaving adds complexity without benefit.
+-- Cockatiel rate limiter naturally handles intervals between same-module requests.
+-- If parallel execution is added later, nextRunAt ordering provides natural interleaving.
+
+-- Q5: RunCoordinator registration at startup or lazy?
+-- RESOLVED: Module-level singleton (lazy on first import). Startup reconciliation
+-- (reconcileOrphanedRuns) runs in instrumentation.ts before startScheduler().
+-- RunCoordinator is a publisher, not a consumer — no EventBus registration needed.

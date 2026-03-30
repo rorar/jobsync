@@ -313,6 +313,16 @@ export const automations = {
     "automations.params.sortOrder": "Sort order",
     "automations.paramOption.eures.sortSearch.BEST_MATCH": "Best match",
     "automations.paramOption.eures.sortSearch.MOST_RECENT": "Most recent",
+
+    // Scheduler Coordination (ROADMAP 0.10)
+    "automations.queued": "Queued",
+    "automations.alreadyRunning": "This automation is already running",
+    "automations.moduleBusy": "Module is busy with another automation",
+    "automations.schedulerIdle": "Idle",
+    "automations.schedulerRunning": "Scheduler running",
+    "automations.runSourceScheduler": "Scheduled",
+    "automations.runSourceManual": "Manual",
+    "automations.sourceHeader": "Source",
   },
   de: {
     // AutomationWizard - Steps
@@ -628,6 +638,16 @@ export const automations = {
     "automations.params.sortOrder": "Sortierung",
     "automations.paramOption.eures.sortSearch.BEST_MATCH": "Beste Übereinstimmung",
     "automations.paramOption.eures.sortSearch.MOST_RECENT": "Neueste zuerst",
+
+    // Scheduler Coordination (ROADMAP 0.10)
+    "automations.queued": "In Warteschlange",
+    "automations.alreadyRunning": "Diese Automation läuft bereits",
+    "automations.moduleBusy": "Modul wird von einer anderen Automation verwendet",
+    "automations.schedulerIdle": "Bereit",
+    "automations.schedulerRunning": "Scheduler aktiv",
+    "automations.runSourceScheduler": "Geplant",
+    "automations.runSourceManual": "Manuell",
+    "automations.sourceHeader": "Quelle",
   },
   fr: {
     // AutomationWizard - Steps
@@ -943,6 +963,16 @@ export const automations = {
     "automations.params.sortOrder": "Ordre de tri",
     "automations.paramOption.eures.sortSearch.BEST_MATCH": "Meilleure correspondance",
     "automations.paramOption.eures.sortSearch.MOST_RECENT": "Plus récent",
+
+    // Scheduler Coordination (ROADMAP 0.10)
+    "automations.queued": "En attente",
+    "automations.alreadyRunning": "Cette automatisation est déjà en cours",
+    "automations.moduleBusy": "Le module est utilisé par une autre automatisation",
+    "automations.schedulerIdle": "Inactif",
+    "automations.schedulerRunning": "Planificateur actif",
+    "automations.runSourceScheduler": "Planifié",
+    "automations.runSourceManual": "Manuel",
+    "automations.sourceHeader": "Source",
   },
   es: {
     // AutomationWizard - Steps
@@ -1258,5 +1288,15 @@ export const automations = {
     "automations.params.sortOrder": "Orden de clasificación",
     "automations.paramOption.eures.sortSearch.BEST_MATCH": "Mejor coincidencia",
     "automations.paramOption.eures.sortSearch.MOST_RECENT": "Más reciente",
+
+    // Scheduler Coordination (ROADMAP 0.10)
+    "automations.queued": "En cola",
+    "automations.alreadyRunning": "Esta automatización ya se está ejecutando",
+    "automations.moduleBusy": "El módulo está siendo utilizado por otra automatización",
+    "automations.schedulerIdle": "Inactivo",
+    "automations.schedulerRunning": "Planificador activo",
+    "automations.runSourceScheduler": "Programado",
+    "automations.runSourceManual": "Manual",
+    "automations.sourceHeader": "Fuente",
   },
 } as const;

@@ -65,7 +65,7 @@ src/lib/connector/                          ← Unified Connector Architecture
   - Auth (2): untypisiert — Auth-Refactoring separat
 - Siehe `specs/action-result.allium` für die vollständige Klassifikation
 
-### 0.3 Domain-Model Alignment -- KERN DONE (3 Follow-Ups offen)
+### 0.3 Domain-Model Alignment -- DONE
 - **Domain Models aligned** mit Prisma Schema (Feld-für-Feld Synchronisation):
   - `activity.model.ts`: ActivityType +createdBy/description, Activity required fields + `| null`
   - `job.model.ts`: JobResponse nullable fields (`appliedDate`, `dueDate`, `salaryRange`, `jobUrl`), optional Relations (`Location?`, `JobSource?`), JobLocation/Company `| null` für Prisma-nullable
@@ -77,10 +77,10 @@ src/lib/connector/                          ← Unified Connector Architecture
 - **Architektur-Invariante:** `null` in DB → `| null` im Domain Model. `undefined` = "Feld nicht im Response"
 - **automation.actions.ts** auf Projekt-Konventionen migriert (ActionResult, handleError, prisma-Alias)
 - **Bugfixes via Review:** `updateJob` createdAt-Überschreibung, `deleteJobById` unnötige includes, Job-Detail notFound-Guard
-- **Verbleibend für spätere Tickets:**
-  - Pattern B `getAllX` Funktionen → ActionResult Migration
-  - `?:` vs `| null` Vereinheitlichung (z.B. task.model.ts)
-  - Mapper-Funktionen für Task/Profile (DRY)
+- **Follow-Ups (alle geschlossen 2026-03-30):**
+  - ✅ Pattern B `getAllX` → ActionResult: Bereits in 0.4 migriert (7 Funktionen)
+  - ✅ `?:` vs `| null` in task.model.ts: Bereits aligned (?: = optional Relation, | null = DB nullable)
+  - ✅ Mapper-Funktionen: Narrow Mappers `toTask()`, `toResumeSection()` ausreichend (DRY ohne Over-Engineering)
 
 ### 0.4 Module Lifecycle Manager -- DONE
 Module registrieren sich mit einem **Manifest** beim Connector und deklarieren ihre Settings-Anforderungen. Der Lifecycle Manager propagiert Settings, verwaltet Aktivierung/Deaktivierung und überwacht Health.
@@ -326,6 +326,154 @@ Progressive Web App für mobile Nutzung. **Split: Read-Only zuerst, Offline-CRUD
 - **Phase 2 (3.10, später):** Offline-CRUD — lokale Action-Queue, Optimistic Locking (Version-Field), Conflict Resolution bei Sync
   - Nur bei konkretem User-Demand. Multi-Device (Handy + Laptop) ist der reale Conflict-Vektor.
 - **Invarianten:** Offline-Actions in FIFO-Reihenfolge replayed, keine Offline-Automation-Runs (erfordern Server-Side API-Calls)
+
+### 0.9 Response Caching (Stufenweise)
+Server-Side Caching-Strategie für externe API-Responses und Referenzdaten. **Stufenweise Einführung** — jede Stufe ist eigenständig nutzbar, höhere Stufen sind optional wählbar. Client-Side Data Caching ist ein separater Concern (→ 2.19).
+
+**Motivation:**
+- External API Rate Limits schonen (EURES, Arbeitsagentur, JSearch, ESCO)
+- UX verbessern: Wiederholte Anfragen sofort beantworten
+- ESCO/EURES Referenzdaten (Berufe, Länder, NUTS-Regionen) ändern sich selten
+- SQLite ist für DB-Queries bereits schnell — Caching-Fokus liegt auf externen APIs
+
+**Stufe 1 — Boardmittel (zero Dependencies):**
+- Next.js `cache()` für Request Deduplication in Server Components
+- In-Memory LRU-Cache für Connector-Responses
+  - Pro Modul konfigurierbar (TTL, Max-Entries) via Manifest-Extension
+  - Default-TTLs: ESCO Lookups (24h), Job-Suche (15min), Health-Checks (5min)
+  - Implementierung: Einfache Map + TTL-Prüfung, oder `lru-cache` npm (~5KB, zero deps)
+- **HTTP Cache Headers** auf API-Proxy-Routes (`/api/esco/*`, `/api/eures/*`):
+  - `Cache-Control: public, max-age=86400` für ESCO Referenzdaten (Berufe, Länder, NUTS)
+  - `Cache-Control: private, max-age=900` für Job-Suche-Responses
+  - `ETag` / `Last-Modified` für conditional Requests (304 Not Modified)
+- Cache-Invalidation: TTL-basiert + manueller "Cache leeren" Button in Settings
+- **Kein Setup-Aufwand für User** — funktioniert out-of-the-box
+
+**Stufe 2 — SQLite-backed Persistent Cache (optional):**
+- Neue Prisma-Tabelle `CacheEntry` (key, value, ttl, createdAt, module)
+- Cache überlebt App-Restarts (In-Memory LRU verliert Daten bei Restart)
+- Nutzt bestehende Prisma-Infrastruktur — keine neue Dependency
+- Automatische Cleanup-Routine (expired Entries, Cron → bestehender Scheduler)
+- **Kein zusätzlicher Setup-Aufwand** — SQLite ist bereits da
+
+**Stufe 3 — Redis (optional, wählbar in Settings):**
+- Für Multi-Instance-Deployments (mehrere Container, Load Balancer)
+- Docker Sidecar Pattern (wie Docling 1.18): `docker-compose.yml` Profile
+- Konfiguration: `CACHE_BACKEND=memory|sqlite|redis`, `REDIS_URL`
+- Manifest-Extension: Module können Cache-Backend-Preference deklarieren
+- **Nur relevant wenn User mehrere Instanzen betreibt** — für Single-Instance ist Stufe 1+2 ausreichend
+
+**Architektur:**
+- Cache-Layer als Shared Kernel im Connector (`src/lib/connector/cache.ts`)
+- Runner ruft `cache.getOrFetch(key, fetcher, ttl)` auf
+- Backend austauschbar (Strategy Pattern): MemoryCache → SQLiteCache → RedisCache
+- Module deklarieren Cache-Config im Manifest (TTL, Cache-Key-Strategy)
+
+**Invariante — Locale-Aware Cache Keys:**
+- EURES, ESCO und Eurostat liefern lokalisierte Responses (Berufsbezeichnungen, NUTS-Regionen, Job-Titel)
+- Cache Keys MÜSSEN die Locale enthalten: `{module}:{operation}:{params}:{locale}`
+- Beispiel: `esco:occupations:softw:de` vs. `esco:occupations:softw:en` — verschiedene Einträge
+- Ohne Locale im Key: DE-User bekommt gecachte EN-Responses → falsche Sprache in der UI
+- Cache-Key-Strategy im Manifest deklariert ob Modul locale-sensitive Responses liefert
+
+**Invariante — Tenant-Isolation bei AI-Responses:**
+- Job Discovery Responses (EURES, Arbeitsagentur, JSearch) sind öffentliche Listings → shared Cache über User hinweg ist sicher und spart Rate Limits
+- AI Provider Responses (Match-Score, Resume-Analyse) sind **user-spezifisch** (mein Lebenslauf ≠ dein Lebenslauf) → Cache Key MUSS `userId` enthalten
+- Manifest deklariert Cache-Scope: `shared` (öffentliche Daten) oder `per-user` (personenbezogene Daten)
+- DSGVO-Relevanz: Gecachte AI-Responses enthalten indirekt personenbezogene Daten → Löschung bei User-Deletion (→ 6.1)
+
+**Invariante — Automation-Bypass:**
+- Cron-gesteuerte Automations (Scheduler) sollen **frische Daten** holen, nicht den Cache nutzen — ihr Zweck ist neue Jobs zu entdecken
+- UI-Browsing (Staging-Queue durchsehen, ESCO-Combobox öffnen) nutzt Cache — hier zählt Geschwindigkeit
+- Runner erhält `bypassCache: boolean` Parameter, Scheduler setzt `true`
+
+**Invariante — Cache-Type-spezifischer Bypass (Manifest):**
+- Module deklarieren im Manifest welche Cache-Stufen sie nutzen bzw. bypassen: `cachePolicy.bypass: CacheType[]`
+- `CacheType = "memory" | "sqlite" | "redis" | "http"`
+- **Usecases:**
+  - **Debugging:** Modul-Entwickler bypassed In-Memory-Cache (`"memory"`) um frische API-Responses zu sehen, behält aber SQLite-Cache für Wiederholbarkeit
+  - **Echtzeit-Module:** Module die immer frische Daten brauchen (z.B. Health-Checks, Rate-Limit-Status) setzen `bypass: ["memory", "sqlite", "redis"]` → kein Cache
+  - **Modul ohne persistenten Cache:** Kurzlebige Daten die keinen Restart überleben müssen → `bypass: ["sqlite"]` (nur In-Memory)
+- **Manifest-Deklaration:**
+  ```ts
+  cachePolicy: {
+    ttl: 900,                    // Default-TTL in Sekunden
+    scope: "shared" | "per-user",
+    localeSensitive: boolean,
+    bypass: CacheType[],         // Welche Cache-Stufen werden übersprungen
+  }
+  ```
+- **Runtime-Override:** Settings UI oder Debug-Modus kann `bypass` temporär erweitern (z.B. "alle Caches aus für Modul X")
+- **Runner-Integration:** `cache.getOrFetch()` prüft `manifest.cachePolicy.bypass` und überspringt die deklarierten Stufen
+
+**Invariante — Thundering Herd Prevention:**
+- Cache-Entry expired + N gleichzeitige Requests = alle N treffen die externe API → Rate Limits gesprengt
+- **Request Coalescing:** Erste Anfrage fetcht, Rest wartet auf dasselbe Promise (Cockatiel Bulkhead Pattern bereits vorhanden → erweitern)
+- Kritisch bei ESCO-Combobox: User tippt → Debounce → aber mehrere Komponenten könnten gleichzeitig anfragen
+
+**Invariante — Negative Caching:**
+- Fehler-Responses (5xx, Timeouts) werden NICHT gecacht — sonst liefert der Cache wiederholt Fehler
+- "Not Found" (404) DARF gecacht werden (kurze TTL, z.B. 5min) — verhindert wiederholte Lookups für nicht-existierende Ressourcen
+- Netzwerk-Fehler → Cache liefert letzten bekannten guten Wert (Stale-If-Error Pattern)
+
+**Cache Observability (→ 8.8 Production Monitoring):**
+- Hit/Miss-Ratio pro Modul und Cache-Backend
+- Cache-Größe und Eviction-Rate
+- Sichtbar im Admin Monitoring Dashboard (→ 8.8)
+
+**Abgrenzung:**
+- KEIN Prisma Query Cache (SQLite ist lokal, kein Netzwerk-Overhead)
+- KEIN Service Worker Cache (→ 0.8 PWA — separater Scope)
+- KEIN Client-Side Data Caching (→ 2.19 eigener Scope)
+- Fokus: Server-Side Caching für Connectors + HTTP Transport Caching
+
+**Discovery (zu evaluieren):**
+- [cached-prisma](https://github.com/JoelLefkowitz/cached-prisma) — wraps Prisma Client mit LRU/Redis. Evaluieren ob für Stufe 1 nutzbar oder ob eigener LRU ausreicht.
+- [lru-cache](https://www.npmjs.com/package/lru-cache) npm — bewährte LRU-Implementierung (~5KB)
+- Next.js `unstable_cache` — Server-Side-Cache mit Revalidation
+- [keyv](https://www.npmjs.com/package/keyv) — Unified Key-Value Store mit austauschbaren Backends (SQLite, Redis, etc.)
+
+**Reihenfolge:** Nach 0.5 (Vacancy Pipeline), da Pipeline-Responses cacheable sind. Unabhängig von 0.6-0.8.
+
+### 0.10 Scheduler Transparency & Run Coordination -- DONE
+RunCoordinator als Single Entry Point für alle Automation-Runs (Scheduler + Manual). Verhindert Doppel-Ausführung, exponiert Scheduler-State via SSE, zeigt Queue-Status und Modul-Kontention in der UI.
+
+**Implementiert (2026-03-30):**
+- ✅ Allium Spec `specs/scheduler-coordination.allium` (700+ Zeilen)
+- ✅ RunCoordinator Singleton (`src/lib/scheduler/run-coordinator.ts`) — In-Memory Mutex, State Tracking, Event Emission
+- ✅ Prisma Migration — `runSource` Feld auf AutomationRun (`"scheduler" | "manual"`)
+- ✅ Runner-Signatur erweitert mit `RunOptions { runSource, bypassCache? }` (vorwärtskompatibel für 0.9)
+- ✅ 4 neue Domain Events: `SchedulerCycleStarted`, `SchedulerCycleCompleted`, `AutomationRunStarted`, `AutomationRunCompleted`
+- ✅ SSE-Endpoint `/api/scheduler/status` mit 2s-Polling
+- ✅ `useSchedulerStatus()` Client-Hook (EventSource, Tab-Visibility, Auto-Reconnect)
+- ✅ UI: `RunStatusBadge` (Running/Queued), `ModuleBusyBanner` (Kontention-Warnung), RunSource-Badge in Run-History
+- ✅ Ghost Lock Prevention: `reconcileOrphanedRuns()` bei Startup
+- ✅ 52 Tests in 1 Suite (RunCoordinator)
+- ✅ i18n: 8 neue Keys × 4 Locales
+- ✅ Manual Run Route: 409 Response bei Double-Run mit Info
+
+**Architektur:**
+```
+POST /api/automations/[id]/run   Scheduler cron (hourly)
+          │                              │
+          └─────────┬────────────────────┘
+                    ▼
+          RunCoordinator (Singleton)
+           ├─ Mutex: Map<automationId, RunLock>
+           ├─ State: SchedulerPhase + Queue + Progress
+           ├─ Events: AutomationRunStarted/Completed
+           └─ Delegates to: runAutomation(automation, options)
+
+          SSE: /api/scheduler/status → useSchedulerStatus() → UI
+```
+
+**Invarianten (Allium Spec):**
+- `NoConcurrentSameAutomation` — maximal ein RunLock pro Automation
+- `EveryRunHasSource` — jeder AutomationRun hat `runSource`
+- `SchedulerStateReflectsReality` — kein stale State
+- `QueuePositionMonotonic` — Positionen nur absteigend
+
+**Cross-Refs:** Vorbereitung für 0.9 (bypassCache via RunOptions), 8.4 (RunCoordinator Interface → TaskQueue Adapter)
 
 ---
 
@@ -614,6 +762,32 @@ Separater Connector für Dokumenten-Inhaltsextraktion — getrennt vom Dokumente
 - Soll `supportedFormats()` auf dem Interface oder als Manifest-Capability deklariert werden?
 - Soll der In-Process Fallback transparent (Connector entscheidet) oder User-wählbar sein?
 
+### 1.19 Task Sync Connector
+Bidirektionale Synchronisation von JobSync-Tasks mit externen Aufgaben-Management-Systemen. Ermöglicht Nutzern ihre Bewerbungsaufgaben dort zu verwalten, wo sie ohnehin ihre Tasks pflegen.
+
+**Interface:** `TaskSyncConnector`
+- `pushTask(task) → ConnectorResult<ExternalTaskRef>` — JobSync-Task → externes System
+- `pullTasks() → ConnectorResult<ExternalTask[]>` — Externe Tasks → JobSync
+- `syncStatus(taskRef) → ConnectorResult<TaskStatus>` — Status bidirektional abgleichen
+- `deleteTask(taskRef) → ConnectorResult<void>` — Cleanup bei Task-Löschung
+
+**Module:**
+- **Modul: Google Tasks** — Google Tasks API (OAuth2, REST). Gut integriert mit Google Kalender/Gmail.
+- **Modul: TickTick** — TickTick Open API. Unterstützt Prioritäten, Tags, Subtasks.
+- **Modul: Todoist** — Todoist REST API v2. Labels, Projekte, Kommentare.
+- (zukünftig: Modul: Microsoft To-Do, Modul: Apple Reminders via CalDAV)
+
+**Sync-Regeln:**
+- Mapping: JobSync-Task ↔ externe Task (Titel, Beschreibung, Fälligkeitsdatum, Status)
+- Konfliktstrategie: "Last Write Wins" mit User-Notification bei Konflikten
+- Job-Referenz im externen Task: Link zur JobSync Job-Detail-Seite
+- Sync-Richtung konfigurierbar: Push-only, Pull-only, Bidirektional
+- Sync-Intervall via Manifest `healthCheck`-Mechanismus (Polling) oder Webhook wenn vom Modul unterstützt
+
+**Abgrenzung:**
+- ≠ Workflow Connector (1.2): Workflow = Multi-Step Automatisierung (n8n). Task Sync = Aufgaben-Synchronisation.
+- ≠ Kalender Connector (1.7): Kalender = Termine/Interviews. Task Sync = Aufgaben/To-Dos.
+
 ---
 
 ## 2. UX/UI
@@ -840,6 +1014,61 @@ Geführte Einführung über die UI-Elemente der App, kombinierbar mit dem Onboar
   - Top-Skills in abgelehnten vs. erfolgreichen Bewerbungen
 - **Datenquellen:** Job Aggregate, StagedVacancy, AutomationRun, Activity, CRM
 - **Visualisierung:** Charts in Dashboard-Widget, detaillierte Statistik-Seite
+
+### 2.19 Client-Side Data Layer (TanStack React Query)
+Paradigmenwechsel im Frontend-Datenmanagement: Von manuellen `fetch` + `useState`/`revalidatePath` zu deklarativem Server-State-Management mit [`@tanstack/react-query`](https://tanstack.com/query).
+
+**Warum eigener Punkt (nicht Teil von 0.9 Caching):**
+- React Query ist kein "Cache-Layer" — es ist eine **Architekturänderung** im Frontend. Es betrifft wie Server Actions aufgerufen werden, wie Loading/Error States gehandhabt werden, und wie Daten zwischen Komponenten geteilt werden.
+- 0.9 (Response Caching) ist Server-Side-Infrastruktur. 2.19 ist Frontend-UX. Beide sind unabhängig einsetzbar.
+
+**Integrations-Pattern (Next.js 15 App Router + Server Actions):**
+React Query ruft Server Actions nicht direkt auf — es ist ein **komplementärer State-Management-Layer**. Best Practice 2025 ist ein Hybrid-Pattern:
+1. **Server Prefetch:** Daten in Server Components via `prefetchQuery()` laden (schnell, SEO-freundlich)
+2. **HydrationBoundary:** Prefetched State via `dehydrate()` an Client Components weitergeben — kein zweiter Fetch
+3. **Server Actions für Mutations:** `useMutation()` wraps Server Actions, `queryClient.invalidateQueries()` ersetzt `revalidatePath()`
+4. **Streaming-Support:** Prefetches müssen nicht geawaited werden → React Query v5.40+ unterstützt pending Queries
+
+```
+Server Component                    Client Component
+  prefetchQuery() ──dehydrate()──→ HydrationBoundary → useQuery() (Daten sofort da)
+                                    useMutation() → Server Action → invalidateQueries()
+```
+
+**Kein Wrapper-Pattern nötig** — Server Actions werden in `mutationFn` aufgerufen, Prefetch geschieht serverseitig. Das ist das offizielle TanStack-Pattern für Next.js App Router.
+
+**Provider-Setup:** `QueryClientProvider` in `app/providers.tsx` (Client Component), eingebunden in Root Layout. Server: neue `QueryClient`-Instanz pro Request. Client: Singleton.
+
+**Core Features:**
+- **Stale-While-Revalidate:** Gecachte Daten sofort anzeigen, im Hintergrund aktualisieren — keine Loading-Spinner bei wiederholter Navigation
+- **Optimistic Updates:** UI reagiert sofort auf Mutationen (Promote, Dismiss, Status-Änderung), automatischer Rollback bei Fehler
+- **Query Invalidation:** Mutation auf Job → invalidiert Job-Liste + Dashboard-Counts automatisch (ersetzt manuelle `revalidatePath()`)
+- **Prefetching:** Daten vorladen bei Hover/Focus (z.B. Job-Details beim Hover über Staging-Karte)
+- **Polling:** `refetchInterval` für Live-Daten (Health-Status, Automation-Runs)
+- **Offline-Ready:** Gecachte Queries bleiben bei kurzen Verbindungsunterbrechungen verfügbar (Synergie mit 0.8 PWA)
+- **DevTools:** React Query DevTools für Cache-Inspektion, Query-Status, Refetch-Debugging (nur in dev)
+
+**Migrations-Kandidaten (nach Priorität):**
+1. ESCO Occupation/Location Lookups — Combobox-Daten, selten ändernd → `staleTime: Infinity`
+2. Job-Listen, Staging-Queue, Dashboard-Aggregationen → `staleTime: 30s`
+3. Module Health-Status → `refetchInterval: 60s` (Polling ersetzt manuelle Refreshes)
+4. Automation-Runs → Live-Updates während Ausführung
+
+**Evaluierte Alternativen:**
+
+| Kriterium | React Query | SWR | Next.js `useTransition` |
+|-----------|-------------|-----|-------------------------|
+| Bundle | ~35KB | ~4KB | 0KB |
+| Mutations | Excellent | Basic | Adequate |
+| Caching | Advanced | Simple | Keins |
+| DevTools | Ja | Nein | Nein |
+| SSR Hydration | HydrationBoundary | Begrenzt | N/A |
+| Optimistic Updates | Built-in | Manuell | Manuell |
+| Offline-Ready | Ja | Nein | Nein |
+
+**Entscheidung:** React Query — höherer Bundle-Impact, aber der einzige Kandidat mit vollständigem Feature-Set (Mutations, Hydration, DevTools, Offline). SWR wäre leichter, verliert aber bei Mutations und Optimistic Updates. `useTransition` ist zero-dependency, aber ohne Caching unbrauchbar für das Ziel.
+
+**Reihenfolge:** Unabhängig von 0.9 (Server-Side Caching). Synergien mit 0.8 (PWA Offline) und 0.5 (Staging-Queue Interaktion).
 
 ---
 
@@ -1327,6 +1556,44 @@ JobSync exponiert eine stabile REST API für externe Tools (n8n, Webhooks, Custo
 - **Integration mit E2E:** Playwright-Tests nutzen Fake-Module statt echte API-Calls (→ `e2e/CONVENTIONS.md`)
 - **Demo-Modus:** Optional — neue Instanz startet mit Beispieldaten (für 2.13 Setup UX)
 
+### 8.11 Fork-README & Projekt-Branding
+Eigenständige README für den Fork (@rorar/jobsync) — das Projekt als eigenständiges Produkt präsentieren, nicht als Upstream-Erweiterung.
+
+**Badges:**
+- CI Status (GitHub Actions)
+- License (MIT)
+- Version / Release
+- Node.js / Next.js Version
+- Docker Image Size
+- Locales (EN/DE/FR/ES)
+- PRs Welcome / Contributions
+
+**Inhalt (Struktur):**
+- Hero-Screenshot (Dashboard) + Tagline
+- Key Features (mit Fork-spezifischen Highlights):
+  - Connector-Architektur (6 Module: EURES, Arbeitsagentur, JSearch, Ollama, OpenAI, DeepSeek)
+  - Module Lifecycle Manager mit Health Monitoring
+  - Vacancy Pipeline (Staging → Promotion)
+  - 4 Sprachen (EN/DE/FR/ES)
+  - EURES/ESCO EU-Integration
+  - Resilience (Circuit Breaker, Retry, Rate Limiting)
+- Quick Start (Docker + Dev Setup)
+- Unterschied zum Upstream (Gsync/jobsync):
+  - Feature-Vergleichstabelle (Upstream vs Fork)
+  - Architektur-Entscheidungen (ACL Pattern, DDD, Allium Specs)
+  - Eigene Module und Integrationen
+- Configuration Guide
+- Screenshots / GIFs der wichtigsten Flows (→ 8.1)
+- Contributing + License
+
+**SEO-Optimierung:**
+- Beschreibende `<title>` und Meta-Description im README-Header
+- Keywords: "self-hosted job tracker", "job application manager", "EURES integration", "privacy-first", "open source"
+- GitHub Topics auf dem Repository setzen
+- Social Preview Image (og:image) für GitHub/Social Media Sharing
+
+**Abhängigkeiten:** Synergien mit 8.1 (automatische Screenshots für README-Medien)
+
 ### 8.5 DB-Migrationstool (Gsync → rorar)
 - Migrationsskript für Datenbankumzug von Gsync-Fork zu eigenem Repository (rorar)
 - Schema-Mapping, Daten-Export/Import, Validierung
@@ -1378,6 +1645,55 @@ Strukturierte Methode für Community-Module ohne Core-Fork. Phase 1 des Plugin-S
 - **Update-Mechanismus:** Watchtower-kompatibel, Versionscheck im Admin UI ("Update verfügbar")
 - **Environment-Konfiguration:** `.env.example` mit allen Variablen dokumentiert, Setup-Wizard (→ 2.13) generiert `.env`
 - Cross-Ref: Projekt Setup UX (2.13) — Docker ist der primäre Deployment-Pfad für Non-Dev User
+
+**CI/CD Docker Builds (GitHub Actions):**
+- Automatische Docker Image Builds bei Push auf `main` / Tag
+- Multi-Arch Builds: `linux/amd64` + `linux/arm64` (Raspberry Pi, Synology, Apple Silicon)
+- Push zu GitHub Container Registry (GHCR): `ghcr.io/rorar/jobsync:latest`, `:vX.Y.Z`
+- Build-Cache via GitHub Actions Cache (Layer Caching für schnelle Builds)
+- Semantic Versioning Tags: `:latest`, `:X.Y.Z`, `:X.Y`, `:X`
+- Security Scanning: Trivy/Grype im Build-Pipeline (Vulnerability-Check vor Push)
+- Badge in README: Docker Image Size + Pull Count
+
+**Docker-Compose Profile (Sidecar-Services):**
+- `docker compose --profile full up` — App + alle optionalen Services
+- Profile-Definition:
+  - `default`: Nur JobSync App (wie aktuell)
+  - `ai`: + Ollama Container (GPU-Passthrough wenn verfügbar)
+  - `parsing`: + Docling Container (→ 1.18 Document-Parsing)
+  - `cache`: + Redis Container (→ 0.9 Stufe 3)
+  - `geo`: + libpostal Container (→ 1.10 Address Parsing)
+  - `full`: Alle Services
+- Jedes Profil inkl. Health Check, Volume-Mounts, Netzwerk-Konfiguration
+- `.env.example` Erweiterung für Sidecar-spezifische Variablen
+- Cross-Ref: Projekt Setup UX (2.13), Caching (0.9 Stufe 3)
+
+### 8.12 Upstream Issues bearbeiten
+Issues aus dem Upstream-Repository [Gsync/jobsync](https://github.com/Gsync/jobsync/issues) sichten und im eigenen Fork beheben.
+
+- **Ziel:** Bugfixes und Verbesserungen aus dem Upstream übernehmen, ohne PRs gegen Upstream zu erstellen (→ eigene Policy)
+- **Workflow:**
+  1. Issues aus `Gsync/jobsync/issues` regelmäßig sichten
+  2. Relevante Issues im eigenen Fork reproduzieren und fixen
+  3. Fixes auf eigenem `main` Branch committen
+  4. Issue-Referenz im Commit: `fix: upstream#42 — Description`
+- **Priorisierung:** Security-Bugs > Breaking Bugs > UX-Issues > Feature-Requests
+- **Abgrenzung:** Keine PRs gegen Upstream (→ `feedback_no_upstream_prs.md`). Fixes leben ausschließlich im eigenen Fork.
+
+### 8.13 Upstream Dev-Branch Sync
+Änderungen aus dem `dev`-Branch von [Gsync/jobsync](https://github.com/Gsync/jobsync/tree/dev) regelmäßig in den eigenen Fork integrieren.
+
+- **Ziel:** Neue Features, Fixes und Schema-Änderungen aus Upstream übernehmen
+- **Workflow:**
+  1. `git fetch upstream` — Upstream-Remote aktualisieren
+  2. `git diff main..upstream/dev` — Änderungen sichten
+  3. Cherry-Pick oder Merge relevanter Commits auf eigenen `main`
+  4. Prisma-Migrationen bei Schema-Änderungen prüfen und ggf. anpassen
+  5. Tests laufen lassen, Konflikte mit eigenen Features (0.x) auflösen
+- **Upstream-Remote:** `git remote add upstream https://github.com/Gsync/jobsync.git` (falls nicht vorhanden)
+- **Konfliktstrategie:** Eigene Features (Connector, Module Lifecycle, Vacancy Pipeline, etc.) haben Vorrang. Upstream-Änderungen werden angepasst, nicht umgekehrt.
+- **Frequenz:** Vor größeren eigenen Feature-Starts sichten — nicht automatisch mergen
+- Cross-Ref: DB-Migrationstool (8.5), Upstream Issues (8.12)
 
 ---
 

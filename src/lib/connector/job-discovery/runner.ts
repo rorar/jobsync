@@ -32,6 +32,7 @@ import {
   type AiSettings,
 } from "@/models/userSettings.model";
 import { debugLog } from "@/lib/debug";
+import type { RunOptions } from "@/lib/scheduler/types";
 
 
 const MAX_JOBS_PER_RUN = 10;
@@ -127,6 +128,7 @@ interface ResumeWithSections extends PrismaResume {
 
 export async function runAutomation(
   automation: Automation,
+  options?: RunOptions,
 ): Promise<RunnerResult> {
   debugLog("runner", `[Automation ${automation.id}] Starting automation run`);
   automationLogger.startRun(automation.id);
@@ -135,6 +137,7 @@ export async function runAutomation(
     data: {
       automationId: automation.id,
       status: "running",
+      runSource: options?.runSource ?? "scheduler",
     },
   });
 

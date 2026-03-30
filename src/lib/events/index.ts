@@ -25,6 +25,10 @@ export type {
   ModuleReactivatedPayload,
   RetentionCompletedPayload,
   NotificationCreatedPayload,
+  SchedulerCycleStartedPayload,
+  SchedulerCycleCompletedPayload,
+  AutomationRunStartedPayload,
+  AutomationRunCompletedPayload,
 } from "./event-types";
 
 export { DomainEventType as DomainEventTypes, createEvent } from "./event-types";

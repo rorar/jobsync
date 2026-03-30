@@ -1,5 +1,7 @@
 // Automation types and interfaces
 
+import type { RunSource } from "@/lib/scheduler/types";
+export type { RunSource };
 export type AutomationStatus = "active" | "paused";
 export type AutomationPauseReason =
   | "module_deactivated"
@@ -56,6 +58,7 @@ export interface AutomationRun {
   blockedReason: string | null;
   startedAt: Date;
   completedAt: Date | null;
+  runSource: RunSource;
 }
 
 export interface DiscoveredJob {

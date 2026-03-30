@@ -7,6 +7,8 @@
  * Spec: specs/event-bus.allium (value DomainEvent, typed payloads)
  */
 
+import type { RunSource } from "@/lib/scheduler/types";
+
 // ---------------------------------------------------------------------------
 // Event Type Enum
 // ---------------------------------------------------------------------------
@@ -23,6 +25,11 @@ export const DomainEventType = {
   ModuleReactivated: "ModuleReactivated",
   RetentionCompleted: "RetentionCompleted",
   NotificationCreated: "NotificationCreated",
+  // Scheduler Coordination (spec: scheduler-coordination.allium)
+  SchedulerCycleStarted: "SchedulerCycleStarted",
+  SchedulerCycleCompleted: "SchedulerCycleCompleted",
+  AutomationRunStarted: "AutomationRunStarted",
+  AutomationRunCompleted: "AutomationRunCompleted",
 } as const;
 
 export type DomainEventType = (typeof DomainEventType)[keyof typeof DomainEventType];
@@ -96,6 +103,37 @@ export interface NotificationCreatedPayload {
   notificationType: string;
 }
 
+// Scheduler Coordination payloads (spec: scheduler-coordination.allium)
+
+export interface SchedulerCycleStartedPayload {
+  queueDepth: number;
+  automationIds: string[];
+}
+
+export interface SchedulerCycleCompletedPayload {
+  processedCount: number;
+  failedCount: number;
+  skippedCount: number;
+  durationMs: number;
+}
+
+export interface AutomationRunStartedPayload {
+  automationId: string;
+  userId: string;
+  moduleId: string;
+  runSource: RunSource;
+}
+
+export interface AutomationRunCompletedPayload {
+  automationId: string;
+  userId: string;
+  moduleId: string;
+  runSource: RunSource;
+  status: string;
+  jobsSaved: number;
+  durationMs: number;
+}
+
 // ---------------------------------------------------------------------------
 // Payload Map (type → payload shape)
 // ---------------------------------------------------------------------------
@@ -112,6 +150,10 @@ export interface EventPayloadMap {
   ModuleReactivated: ModuleReactivatedPayload;
   RetentionCompleted: RetentionCompletedPayload;
   NotificationCreated: NotificationCreatedPayload;
+  SchedulerCycleStarted: SchedulerCycleStartedPayload;
+  SchedulerCycleCompleted: SchedulerCycleCompletedPayload;
+  AutomationRunStarted: AutomationRunStartedPayload;
+  AutomationRunCompleted: AutomationRunCompletedPayload;
 }
 
 // ---------------------------------------------------------------------------

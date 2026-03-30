@@ -1,7 +1,7 @@
 import cron, { ScheduledTask } from "node-cron";
 import { SCHEDULER_CONSTANTS } from "@/lib/constants";
 import db from "@/lib/db";
-import { runAutomation } from "@/lib/connector/job-discovery";
+import { runCoordinator } from "./run-coordinator";
 import type { AutomationPauseReason, AutomationStatus, JobBoard } from "@/models/automation.model";
 import { debugLog, debugError } from "@/lib/debug";
 
@@ -29,46 +29,65 @@ async function runDueAutomations() {
 
     debugLog("scheduler", `[Scheduler] Found ${dueAutomations.length} automation(s) to run`);
 
-    for (const automation of dueAutomations) {
-      if (!automation.resume) {
-        debugLog("scheduler", `[Scheduler] Skipping automation ${automation.id} - no resume`);
-        await db.automationRun.create({
-          data: {
-            automationId: automation.id,
-            status: "failed",
-            errorMessage: "resume_missing",
-            completedAt: new Date(),
-          },
-        });
-        continue;
-      }
+    runCoordinator.startCycle(
+      dueAutomations.map((a) => ({ id: a.id, name: a.name })),
+    );
 
-      try {
-        debugLog("scheduler", `[Scheduler] Running automation: ${automation.name}`);
-        const result = await runAutomation({
-          id: automation.id,
-          userId: automation.userId,
-          name: automation.name,
-          jobBoard: automation.jobBoard as JobBoard,
-          keywords: automation.keywords,
-          location: automation.location,
-          connectorParams: automation.connectorParams ?? null,
-          resumeId: automation.resumeId,
-          matchThreshold: automation.matchThreshold,
-          scheduleHour: automation.scheduleHour,
-          scheduleFrequency: automation.scheduleFrequency,
-          nextRunAt: automation.nextRunAt,
-          lastRunAt: automation.lastRunAt,
-          status: automation.status as AutomationStatus,
-          pauseReason: (automation.pauseReason as AutomationPauseReason) ?? null,
-          createdAt: automation.createdAt,
-          updatedAt: automation.updatedAt,
-        });
-        debugLog("scheduler", `[Scheduler] Automation ${automation.name} completed: ${result.status}, saved ${result.jobsSaved} jobs`);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error";
-        debugError("scheduler", `[Scheduler] Automation ${automation.name} failed:`, message);
+    try {
+      for (const automation of dueAutomations) {
+        if (!automation.resume) {
+          debugLog("scheduler", `[Scheduler] Skipping automation ${automation.id} - no resume`);
+          runCoordinator.skipFromQueue(automation.id);
+          await db.automationRun.create({
+            data: {
+              automationId: automation.id,
+              status: "failed",
+              errorMessage: "resume_missing",
+              completedAt: new Date(),
+              runSource: "scheduler",
+            },
+          });
+          continue;
+        }
+
+        try {
+          debugLog("scheduler", `[Scheduler] Running automation: ${automation.name}`);
+          const requestResult = await runCoordinator.requestRun(
+            {
+              id: automation.id,
+              userId: automation.userId,
+              name: automation.name,
+              jobBoard: automation.jobBoard as JobBoard,
+              keywords: automation.keywords,
+              location: automation.location,
+              connectorParams: automation.connectorParams ?? null,
+              resumeId: automation.resumeId,
+              matchThreshold: automation.matchThreshold,
+              scheduleHour: automation.scheduleHour,
+              scheduleFrequency: automation.scheduleFrequency,
+              nextRunAt: automation.nextRunAt,
+              lastRunAt: automation.lastRunAt,
+              status: automation.status as AutomationStatus,
+              pauseReason: (automation.pauseReason as AutomationPauseReason) ?? null,
+              createdAt: automation.createdAt,
+              updatedAt: automation.updatedAt,
+            },
+            { runSource: "scheduler" },
+          );
+
+          if (requestResult.status === "already_running") {
+            debugLog("scheduler", `[Scheduler] Automation ${automation.name} already running, skipping`);
+            continue;
+          }
+
+          debugLog("scheduler", `[Scheduler] Automation ${automation.name} completed`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Unknown error";
+          debugError("scheduler", `[Scheduler] Automation ${automation.name} failed:`, message);
+        }
       }
+    } finally {
+      runCoordinator.completeCycle();
     }
   } catch (error) {
     debugError("scheduler", "[Scheduler] Error running due automations:", error);

@@ -87,5 +87,8 @@ class TypedEventBus {
   }
 }
 
-// Singleton — module-scoped per Node.js import caching (spec: SingletonBus invariant)
-export const eventBus = new TypedEventBus();
+// Singleton — survives HMR via globalThis (spec: SingletonBus invariant)
+// Module-level variables reset on hot reload, but globalThis persists.
+const g = globalThis as unknown as { __eventBus?: TypedEventBus };
+if (!g.__eventBus) g.__eventBus = new TypedEventBus();
+export const eventBus = g.__eventBus;

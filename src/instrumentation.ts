@@ -4,6 +4,11 @@ export async function register() {
     const { registerEventConsumers } = await import("@/lib/events/consumers");
     registerEventConsumers();
 
+    // Reconcile orphaned "running" AutomationRuns from prior crashes
+    // (Ghost Lock Prevention — scheduler-coordination.allium)
+    const { reconcileOrphanedRuns } = await import("@/lib/scheduler/run-coordinator");
+    await reconcileOrphanedRuns();
+
     const { startScheduler } = await import("@/lib/scheduler");
     startScheduler();
 
