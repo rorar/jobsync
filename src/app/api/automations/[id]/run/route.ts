@@ -138,7 +138,7 @@ export async function POST(
     });
   } catch (error) {
     console.error("Manual run error:", error);
-    const message = error instanceof Error ? error.message : "Run failed";
-    return NextResponse.json({ success: false, message }, { status: 500 });
+    // S-F7: Don't leak internal error details to client
+    return NextResponse.json({ success: false, message: "Run failed" }, { status: 500 });
   }
 }

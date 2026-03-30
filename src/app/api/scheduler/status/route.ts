@@ -103,8 +103,17 @@ export async function GET(req: NextRequest) {
       // Cleanup on client disconnect
       req.signal.addEventListener("abort", cleanup);
 
-      // Auto-close after 10 minutes
-      const timeout = setTimeout(cleanup, SSE_MAX_DURATION_MS);
+      // Auto-close after 10 minutes — send close event so client can reconnect immediately
+      const timeout = setTimeout(() => {
+        if (!isClosed) {
+          try {
+            controller.enqueue(
+              encoder.encode("event: close\ndata: timeout\n\n"),
+            );
+          } catch { /* stream may already be closed */ }
+        }
+        cleanup();
+      }, SSE_MAX_DURATION_MS);
     },
   });
 

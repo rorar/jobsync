@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { SchedulerSnapshot, RunProgress } from "@/lib/scheduler/types";
 
 /**
@@ -55,11 +55,17 @@ function connectShared() {
     }
   };
 
+  // P-6: Handle server-initiated close (timeout) — reconnect immediately
+  eventSource.addEventListener("close", () => {
+    disconnectShared();
+    if (listeners.size > 0) connectShared(); // immediate reconnect, no delay
+  });
+
   eventSource.onerror = () => {
     isSharedConnected = false;
     eventSource.close();
     sharedEventSource = null;
-    // Reconnect after 5s if there are still listeners
+    // Reconnect after 5s on error (network failure etc.)
     if (listeners.size > 0) {
       reconnectTimeout = setTimeout(connectShared, 5000);
     }
@@ -128,45 +134,55 @@ export function useSchedulerStatus(): UseSchedulerStatusResult {
     return subscribe(setState);
   }, []);
 
+  // P-2 perf fix: use ref for stable callback identity
+  // Callbacks read from ref instead of closing over state,
+  // so they don't change on every SSE update (prevents re-render cascades)
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const isRunning =
     state !== null &&
     (state.phase === "running" || state.runningAutomations.length > 0);
 
   const isAutomationRunning = useCallback(
     (automationId: string) => {
-      if (!state) return false;
-      return state.runningAutomations.some(
+      const s = stateRef.current;
+      if (!s) return false;
+      return s.runningAutomations.some(
         (r) => r.automationId === automationId,
       );
     },
-    [state],
+    [],
   );
 
   const getQueuePosition = useCallback(
     (automationId: string): number | null => {
-      if (!state) return null;
-      const entry = state.pendingAutomations.find(
+      const s = stateRef.current;
+      if (!s) return null;
+      const entry = s.pendingAutomations.find(
         (p) => p.automationId === automationId,
       );
       return entry?.position ?? null;
     },
-    [state],
+    [],
   );
 
   const getModuleBusy = useCallback(
     (moduleId: string) => {
-      if (!state) return [];
-      return state.runningAutomations.filter((r) => r.moduleId === moduleId);
+      const s = stateRef.current;
+      if (!s) return [];
+      return s.runningAutomations.filter((r) => r.moduleId === moduleId);
     },
-    [state],
+    [],
   );
 
   const getActiveProgress = useCallback(
     (automationId: string): RunProgress | null => {
-      if (!state?.runningProgress) return null;
-      return state.runningProgress[automationId] ?? null;
+      const s = stateRef.current;
+      if (!s?.runningProgress) return null;
+      return s.runningProgress[automationId] ?? null;
     },
-    [state],
+    [],
   );
 
   return {

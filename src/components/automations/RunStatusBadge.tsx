@@ -1,10 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useReducer, useEffect } from "react";
 import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
 import { useTranslations } from "@/i18n";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Clock } from "lucide-react";
+
+// Shared 1-second timer for ALL RunStatusBadge instances (P-1 perf fix)
+// Instead of N intervals for N badges, one shared timer triggers all subscribers
+const tickListeners = new Set<() => void>();
+let tickInterval: ReturnType<typeof setInterval> | null = null;
+
+function subscribeToTick(cb: () => void) {
+  tickListeners.add(cb);
+  if (!tickInterval) {
+    tickInterval = setInterval(() => {
+      for (const fn of tickListeners) fn();
+    }, 1000);
+  }
+  return () => {
+    tickListeners.delete(cb);
+    if (tickListeners.size === 0 && tickInterval) {
+      clearInterval(tickInterval);
+      tickInterval = null;
+    }
+  };
+}
 
 interface RunStatusBadgeProps {
   automationId: string;
@@ -19,12 +40,11 @@ export function RunStatusBadge({ automationId }: RunStatusBadgeProps) {
     (p) => p.automationId === automationId,
   );
 
-  // Tick counter to force re-render every second while running
-  const [, setTick] = useState(0);
+  // Subscribe to shared tick for elapsed time updates (only while running)
+  const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
   useEffect(() => {
     if (!running) return;
-    const interval = setInterval(() => setTick(t => t + 1), 1000);
-    return () => clearInterval(interval);
+    return subscribeToTick(forceUpdate);
   }, [running]);
 
   // Compute elapsed time from RunLock.startedAt
@@ -33,13 +53,6 @@ export function RunStatusBadge({ automationId }: RunStatusBadgeProps) {
   const elapsedText = elapsed >= 60
     ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`
     : `${elapsed}s`;
-
-  // aria-live announces state changes to screen readers
-  const statusText = running
-    ? `${t("automations.running")} (${elapsedText})`
-    : entry
-      ? `${t("automations.queued")} (${entry.position}/${entry.total})`
-      : "";
 
   return (
     <span role="status" aria-live="polite" aria-atomic="true">
@@ -54,9 +67,6 @@ export function RunStatusBadge({ automationId }: RunStatusBadgeProps) {
           <Clock className="h-3 w-3" />
           {t("automations.queued")} ({entry.position}/{entry.total})
         </Badge>
-      )}
-      {!running && !entry && (
-        <span className="sr-only">{statusText}</span>
       )}
     </span>
   );
