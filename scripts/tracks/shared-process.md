@@ -1,5 +1,17 @@
 # Shared Process Requirements — Injected into ALL Track Prompts
 
+## Required Reading (before writing ANY code)
+
+Read these files FIRST — they contain architecture decisions, dependency maps, and resolved questions that inform your implementation:
+
+1. **CLAUDE.md** (project root) — coding conventions, DDD principles, connector architecture, scheduler coordination rules
+2. **Masterplan**: `/home/pascal/.claude/plans/open-architecture-masterplan.md` — Sprint priorities, cross-dependency map, resolved Allium questions, UX wireframes
+3. **ROADMAP**: `docs/ROADMAP.md` — full feature specs, architecture invariants, cross-references
+4. **Allium Specs**: `specs/*.allium` — domain rules, contracts, invariants (source of truth)
+5. **ADRs**: `docs/adr/` — architecture decision records (especially ADR-014 for scheduler coordination)
+6. **Documentation Agents**: `docs/documentation-agents.md` — which agent/skill to use for which documentation type
+7. **Merge Guide**: `scripts/tracks/MERGE-GUIDE.md` — merge order, conflict zones, your track's file ownership
+
 ## PDCA-Zyklus (Plan-Do-Check-Act)
 
 Follow this checklist for EVERY feature, phase, step, and sprint:
