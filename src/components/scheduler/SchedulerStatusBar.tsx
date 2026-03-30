@@ -2,7 +2,7 @@
 
 import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
 import { useTranslations, formatRelativeTime } from "@/i18n";
-import { Check, Loader2, MoreHorizontal } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -32,11 +32,6 @@ export function SchedulerStatusBar() {
       : t("automations.schedulerRunning");
     pillClasses =
       "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300";
-  } else if (phase === "cooldown") {
-    pillIcon = <MoreHorizontal className="h-3.5 w-3.5" />;
-    pillLabel = t("automations.schedulerPhaseCooldown");
-    pillClasses =
-      "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300";
   } else {
     pillIcon = <Check className="h-3.5 w-3.5" />;
     pillLabel = t("automations.schedulerIdle");
@@ -78,9 +73,7 @@ export function SchedulerStatusBar() {
               <span className="font-medium">
                 {phase === "running" || isRunning
                   ? t("automations.schedulerPhaseRunning")
-                  : phase === "cooldown"
-                    ? t("automations.schedulerPhaseCooldown")
-                    : t("automations.schedulerIdle")}
+                  : t("automations.schedulerIdle")}
               </span>
             </div>
 

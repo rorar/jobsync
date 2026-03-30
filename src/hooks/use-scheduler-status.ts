@@ -94,7 +94,10 @@ function subscribe(listener: Listener) {
 }
 
 // Tab visibility: pause/resume shared connection
-if (typeof document !== "undefined") {
+// Use globalThis guard to prevent duplicate listeners on HMR
+const gVis = globalThis as unknown as { __schedulerVisibilityRegistered?: boolean };
+if (typeof document !== "undefined" && !gVis.__schedulerVisibilityRegistered) {
+  gVis.__schedulerVisibilityRegistered = true;
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       disconnectShared();

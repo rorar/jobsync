@@ -64,12 +64,10 @@ export async function GET(req: NextRequest) {
         return {
           ...fullState,
           runningAutomations: userRunningAutomations,
-          pendingAutomations: fullState.pendingAutomations.filter((p) => {
-            const lock = fullState.runningAutomations.find(
-              (r) => r.automationId === p.automationId,
-            );
-            return !lock || lock.userId === userId;
-          }),
+          // Filter pending automations by userId (RunQueuePosition now carries userId)
+          pendingAutomations: fullState.pendingAutomations.filter(
+            (p) => p.userId === userId,
+          ),
           // Filter progress to user's automations only
           runningProgress: Object.fromEntries(
             Object.entries(fullState.runningProgress).filter(([id]) =>

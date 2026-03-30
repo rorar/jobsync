@@ -14,8 +14,8 @@ import type { RunnerResult } from "@/lib/connector/job-discovery";
 /** Who initiated the run */
 export type RunSource = "scheduler" | "manual"
 
-/** Lifecycle phases of the scheduler */
-export type SchedulerPhase = "idle" | "running" | "cooldown"
+/** Lifecycle phases of the scheduler (cooldown removed — was never observable via SSE) */
+export type SchedulerPhase = "idle" | "running"
 
 /** Phases within a single automation run */
 export type RunPhase = "search" | "dedup" | "enrich" | "match" | "save" | "finalize"
@@ -47,6 +47,7 @@ export interface RunLock {
 export interface RunQueuePosition {
   automationId: string
   automationName: string
+  userId: string
   position: number // 1-indexed
   total: number
 }

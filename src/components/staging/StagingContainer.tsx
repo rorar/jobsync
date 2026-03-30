@@ -80,10 +80,10 @@ function StagingContainer() {
     const prevPhase = prevPhaseRef.current;
     prevPhaseRef.current = schedulerPhase;
 
-    // Detect transition from running/cooldown to idle (cycle completed)
+    // Detect transition from running to idle (cycle completed)
     if (
       prevPhase !== null &&
-      (prevPhase === "running" || prevPhase === "cooldown") &&
+      prevPhase === "running" &&
       schedulerPhase === "idle"
     ) {
       setNewItemsAvailable(true);

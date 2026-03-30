@@ -30,7 +30,7 @@ async function runDueAutomations() {
     debugLog("scheduler", `[Scheduler] Found ${dueAutomations.length} automation(s) to run`);
 
     runCoordinator.startCycle(
-      dueAutomations.map((a) => ({ id: a.id, name: a.name })),
+      dueAutomations.map((a) => ({ id: a.id, name: a.name, userId: a.userId })),
     );
 
     try {

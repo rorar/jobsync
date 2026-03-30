@@ -240,7 +240,7 @@ class RunCoordinator {
   // ---------------------------------------------------------------------------
 
   /** Set phase to "running", populate queue positions */
-  startCycle(automations: Array<{ id: string; name: string }>): void {
+  startCycle(automations: Array<{ id: string; name: string; userId: string }>): void {
     this.phase = "running"
     this.cycleStartedAt = new Date()
     this.lastCycleProcessedCount = 0
@@ -250,6 +250,7 @@ class RunCoordinator {
     this.cycleQueue = automations.map((a, index) => ({
       automationId: a.id,
       automationName: a.name,
+      userId: a.userId,
       position: index + 1,
       total: automations.length,
     }))
@@ -268,11 +269,8 @@ class RunCoordinator {
     )
   }
 
-  /** Set phase to "cooldown", update lastCycle stats */
+  /** Complete cycle — transition directly to idle, update stats, emit event */
   completeCycle(): void {
-    this.phase = "cooldown"
-    this.lastCycleCompletedAt = new Date()
-
     const durationMs = this.cycleStartedAt
       ? Date.now() - this.cycleStartedAt.getTime()
       : 0
@@ -292,7 +290,8 @@ class RunCoordinator {
       }),
     )
 
-    // Transition to idle after cooldown
+    // Transition to idle (cooldown phase removed — it was never observable via SSE)
+    this.lastCycleCompletedAt = new Date()
     this.cycleQueue = []
     this.phase = "idle"
     this.cycleStartedAt = null
