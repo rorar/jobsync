@@ -14,6 +14,7 @@ import { signOut } from "@/auth";
 import { getCurrentUser } from "@/utils/user.utils";
 import { ProfileDropdown } from "./ProfileDropdown";
 import { NotificationBell } from "./layout/NotificationBell";
+import { SchedulerStatusBar } from "./scheduler/SchedulerStatusBar";
 import { t, getUserLocale } from "@/i18n/server";
 
 async function Header() {
@@ -63,6 +64,7 @@ async function Header() {
       <h1 className="font-semibold">{t(locale, "nav.appTitle")}</h1>
       <div className="relative ml-auto flex-1 md:grow-0" />
 
+      <SchedulerStatusBar />
       <NotificationBell />
       <ProfileDropdown
         user={user}

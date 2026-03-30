@@ -58,12 +58,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
+import { ConflictWarningDialog } from "@/components/automations/ConflictWarningDialog";
 
 export default function AutomationDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { t, locale } = useTranslations();
-  const { isAutomationRunning } = useSchedulerStatus();
+  const { state: schedulerState, isAutomationRunning, getModuleBusy } = useSchedulerStatus();
   const automationId = params.id as string;
 
   const [automation, setAutomation] = useState<
@@ -81,6 +82,15 @@ export default function AutomationDetailPage() {
     useState<JobMatchResponse | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [runKey, setRunKey] = useState(0);
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const [conflictType, setConflictType] = useState<"blocked" | "contention">("blocked");
+  const [conflictDetails, setConflictDetails] = useState<{
+    automationName?: string;
+    runSource?: string;
+    startedAt?: Date;
+    moduleId?: string;
+    otherAutomations?: string[];
+  }>({});
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -158,7 +168,7 @@ export default function AutomationDetailPage() {
     }
   };
 
-  const handleRunNow = async () => {
+  const executeRun = async () => {
     if (!automation) return;
 
     setRunNowLoading(true);
@@ -195,6 +205,41 @@ export default function AutomationDetailPage() {
       });
     }
     setRunNowLoading(false);
+  };
+
+  const handleRunNow = async () => {
+    if (!automation) return;
+
+    // Check for conflicts (preventive)
+    if (isAutomationRunning(automation.id)) {
+      const lock = schedulerState?.runningAutomations.find(
+        (r) => r.automationId === automation.id
+      );
+      setConflictType("blocked");
+      setConflictDetails({
+        automationName: automation.name,
+        runSource: lock?.runSource,
+        startedAt: lock?.startedAt ? new Date(lock.startedAt) : undefined,
+      });
+      setConflictOpen(true);
+      return;
+    }
+
+    const moduleBusy = getModuleBusy(automation.jobBoard).filter(
+      (l) => l.automationId !== automation.id
+    );
+    if (moduleBusy.length > 0) {
+      setConflictType("contention");
+      setConflictDetails({
+        moduleId: automation.jobBoard,
+        otherAutomations: moduleBusy.map((l) => l.automationName),
+      });
+      setConflictOpen(true);
+      return;
+    }
+
+    // No conflict -- proceed directly
+    await executeRun();
   };
 
   const handleViewJobDetails = async (job: DiscoveredJob) => {
@@ -445,6 +490,17 @@ export default function AutomationDetailPage() {
           resumes={resumes}
         />
       )}
+
+      <ConflictWarningDialog
+        open={conflictOpen}
+        onOpenChange={setConflictOpen}
+        onProceed={() => {
+          setConflictOpen(false);
+          executeRun();
+        }}
+        type={conflictType}
+        conflictDetails={conflictDetails}
+      />
     </div>
   );
 }

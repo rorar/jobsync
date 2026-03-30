@@ -331,6 +331,27 @@ export const automations = {
     "automations.runSourceScheduler": "Scheduled",
     "automations.runSourceManual": "Manual",
     "automations.sourceHeader": "Source",
+
+    // SchedulerStatusBar (B1)
+    "automations.schedulerPhaseRunning": "Running",
+    "automations.schedulerPhaseCooldown": "Finishing...",
+    "automations.schedulerStatus": "Scheduler Status",
+    "automations.schedulerPhase": "Phase",
+    "automations.schedulerActive": "Active",
+    "automations.schedulerModule": "Module",
+    "automations.schedulerQueueRemaining": "remaining",
+    "automations.schedulerLastCompleted": "Last completed",
+    "automations.schedulerNoAutomations": "No automations configured",
+
+    // ConflictWarningDialog (B2)
+    "automations.conflictBlocked": "Automation Already Running",
+    "automations.conflictBlockedDesc": "This automation is already running. Please wait for it to complete.",
+    "automations.conflictContention": "Module In Use",
+    "automations.conflictContentionDesc": "The module is currently used by another automation. Results may be rate-limited.",
+    "automations.conflictProceed": "Proceed Anyway",
+    "automations.conflictCancel": "Cancel",
+    "automations.conflictStartedAt": "Started",
+    "automations.conflictSource": "Source",
   },
   de: {
     // AutomationWizard - Steps
@@ -664,6 +685,27 @@ export const automations = {
     "automations.runSourceScheduler": "Geplant",
     "automations.runSourceManual": "Manuell",
     "automations.sourceHeader": "Quelle",
+
+    // SchedulerStatusBar (B1)
+    "automations.schedulerPhaseRunning": "Aktiv",
+    "automations.schedulerPhaseCooldown": "Wird abgeschlossen...",
+    "automations.schedulerStatus": "Scheduler-Status",
+    "automations.schedulerPhase": "Phase",
+    "automations.schedulerActive": "Aktiv",
+    "automations.schedulerModule": "Modul",
+    "automations.schedulerQueueRemaining": "ausstehend",
+    "automations.schedulerLastCompleted": "Zuletzt abgeschlossen",
+    "automations.schedulerNoAutomations": "Keine Automationen konfiguriert",
+
+    // ConflictWarningDialog (B2)
+    "automations.conflictBlocked": "Automation laeuft bereits",
+    "automations.conflictBlockedDesc": "Diese Automation laeuft bereits. Bitte warten Sie, bis sie abgeschlossen ist.",
+    "automations.conflictContention": "Modul wird verwendet",
+    "automations.conflictContentionDesc": "Das Modul wird derzeit von einer anderen Automation verwendet. Ergebnisse koennten gedrosselt werden.",
+    "automations.conflictProceed": "Trotzdem fortfahren",
+    "automations.conflictCancel": "Abbrechen",
+    "automations.conflictStartedAt": "Gestartet",
+    "automations.conflictSource": "Quelle",
   },
   fr: {
     // AutomationWizard - Steps
@@ -997,6 +1039,27 @@ export const automations = {
     "automations.runSourceScheduler": "Planifié",
     "automations.runSourceManual": "Manuel",
     "automations.sourceHeader": "Source",
+
+    // SchedulerStatusBar (B1)
+    "automations.schedulerPhaseRunning": "En cours",
+    "automations.schedulerPhaseCooldown": "Finalisation...",
+    "automations.schedulerStatus": "Statut du planificateur",
+    "automations.schedulerPhase": "Phase",
+    "automations.schedulerActive": "Actif",
+    "automations.schedulerModule": "Module",
+    "automations.schedulerQueueRemaining": "restant(s)",
+    "automations.schedulerLastCompleted": "Dernier acheve",
+    "automations.schedulerNoAutomations": "Aucune automatisation configuree",
+
+    // ConflictWarningDialog (B2)
+    "automations.conflictBlocked": "Automatisation deja en cours",
+    "automations.conflictBlockedDesc": "Cette automatisation est deja en cours d'execution. Veuillez attendre qu'elle soit terminee.",
+    "automations.conflictContention": "Module en cours d'utilisation",
+    "automations.conflictContentionDesc": "Le module est actuellement utilise par une autre automatisation. Les resultats pourraient etre limites.",
+    "automations.conflictProceed": "Continuer quand meme",
+    "automations.conflictCancel": "Annuler",
+    "automations.conflictStartedAt": "Demarre",
+    "automations.conflictSource": "Source",
   },
   es: {
     // AutomationWizard - Steps
@@ -1330,5 +1393,26 @@ export const automations = {
     "automations.runSourceScheduler": "Programado",
     "automations.runSourceManual": "Manual",
     "automations.sourceHeader": "Fuente",
+
+    // SchedulerStatusBar (B1)
+    "automations.schedulerPhaseRunning": "En ejecucion",
+    "automations.schedulerPhaseCooldown": "Finalizando...",
+    "automations.schedulerStatus": "Estado del planificador",
+    "automations.schedulerPhase": "Fase",
+    "automations.schedulerActive": "Activo",
+    "automations.schedulerModule": "Modulo",
+    "automations.schedulerQueueRemaining": "restante(s)",
+    "automations.schedulerLastCompleted": "Ultimo completado",
+    "automations.schedulerNoAutomations": "No hay automatizaciones configuradas",
+
+    // ConflictWarningDialog (B2)
+    "automations.conflictBlocked": "Automatizacion ya en ejecucion",
+    "automations.conflictBlockedDesc": "Esta automatizacion ya se esta ejecutando. Por favor, espere a que termine.",
+    "automations.conflictContention": "Modulo en uso",
+    "automations.conflictContentionDesc": "El modulo esta siendo utilizado por otra automatizacion. Los resultados podrian estar limitados.",
+    "automations.conflictProceed": "Continuar de todos modos",
+    "automations.conflictCancel": "Cancelar",
+    "automations.conflictStartedAt": "Iniciado",
+    "automations.conflictSource": "Fuente",
   },
 } as const;
