@@ -3,6 +3,12 @@
 # parallel track worktrees
 .tracks/
 
+# session artifacts
+.full-review/
+.full-stack-feature/
+.remember/
+docs/.remember/
+
 # dependencies
 /node_modules
 /.pnp
