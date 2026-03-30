@@ -180,7 +180,7 @@ Entkopplung der LLM-Abhängigkeit: Die App funktioniert in den Grundfunktionen o
 - ✅ 31+ neue Tests (event-bus, undo-store, retention, bulk-actions)
 
 **Ausstehend (Follow-Ups):**
-- ❌ Job-Tinder Dual-Use (→ 2.7)
+- ❌ JobDeck Dual-Use (→ 2.7)
 - ❌ Company Blacklist Filter (→ 2.15)
 
 **Architektur:**
@@ -228,7 +228,7 @@ Intake (Automation ODER Manual) → Staging Area → Processing → Inbox → Tr
 - Default: Manuell erstellte Jobs landen direkt in der Inbox (User hat bereits reviewt)
 - Option: User kann wählen "in Queue erfassen" für spätere Verarbeitung
 
-**Job-Tinder Dual-Use (→ 2.7):**
+**JobDeck Dual-Use (→ 2.7):**
 - Queue-Modus: Vor-Review (Accept/Dismiss/Super-Like)
 - Inbox-Modus: Finale Bewerbungsentscheidung
 - Super-Like in Queue = sofortige Promotion → Inbox + Downstream-Triggers
@@ -271,7 +271,7 @@ Intake (Automation ODER Manual) → Staging Area → Processing → Inbox → Tr
 - Partial Undo innerhalb einer Batch: Separate "Restore"-Aktion oder Undo-Granularität pro Item?
 
 - **Reihenfolge:** Nach 0.4 (Module Lifecycle), da Inbox-Events die Connector-Infrastruktur nutzen
-- **Voraussetzung für:** Job-Tinder Dual-Use (2.7), CRM (5), Bewerbungsunterlagen (4)
+- **Voraussetzung für:** JobDeck Dual-Use (2.7), CRM (5), Bewerbungsunterlagen (4)
 - Allium Spec: `specs/vacancy-pipeline.allium` (zu erstellen)
 
 ### 0.6 Unified Notification System — PHASE 1 DONE (3 Channel-Phasen offen)
@@ -865,7 +865,7 @@ Kontextsensitiver Einrichtungsassistent für neue Benutzer, der sich an deren Zi
   - Click auf Pin → Job-Details
   - Farbkodierung nach Match-Score oder Status
 - **Integration:**
-  - Job-Tinder (2.7): Entfernung als Swipe-Kriterium
+  - JobDeck (2.7): Entfernung als Swipe-Kriterium
   - Automation Wizard: Umkreissuche (Arbeitsagentur hat `umkreis` Parameter)
   - CRM: Karte mit allen Unternehmen/Kontakten
 
@@ -880,9 +880,9 @@ Kontextsensitiver Einrichtungsassistent für neue Benutzer, der sich an deren Zi
   - **Graceful Degradation:** Wenn libpostal nicht verfügbar (Docker nicht konfiguriert), bleibt das manuelle Ausfüllen der Unterfelder. Kein Parsing-Fallback nötig — die Felder sind ja da.
   - **Output-Formatierung:** Strukturierte Daten → `@fragaria/address-formatter` für Anzeige (→ Application Locale Profile, Sektion 4)
 
-### 2.7 Job-Tinder + Inbox UI
-- **Inbox als eigenständige UI-Surface:** Dedizierte Seite für promoted Jobs (nach Vacancy Pipeline → 0.5). Nicht nur Job-Tinder-Modus, sondern auch Listen-/Tabellen-Ansicht.
-- **Job-Tinder Modus:** Swipe/Icon Click/Pfeiltasten Navigation
+### 2.7 JobDeck + Inbox UI
+- **Inbox als eigenständige UI-Surface:** Dedizierte Seite für promoted Jobs (nach Vacancy Pipeline → 0.5). Nicht nur JobDeck-Modus, sondern auch Listen-/Tabellen-Ansicht.
+- **JobDeck Modus:** Swipe/Icon Click/Pfeiltasten Navigation
 - Aktionen: Kein Match (Archiv) / Match / Favorit / Mehr Details
 - Kartenbasierte Darstellung der entdeckten Jobs
 - **Application Pipeline Overview:** Dashboard-Widget für 20+ aktive Bewerbungen gleichzeitig — Task-Triage, Status-Übersicht, nächste Aktionen
@@ -982,7 +982,7 @@ Geführte Einführung über die UI-Elemente der App, kombinierbar mit dem Onboar
 
 ### 2.16 Keyboard Shortcuts
 - Pure UI-Infrastruktur, keine Domain-Relevanz. Kein Allium-Spec nötig.
-- **Navigation:** J/K (prev/next, vim-style), Pfeiltasten in Job-Tinder (→ 2.7)
+- **Navigation:** J/K (prev/next, vim-style), Pfeiltasten in JobDeck (→ 2.7)
 - **Aktionen:** D (dismiss), P (promote), S (super-like), Ctrl+Z (undo), Ctrl+Enter (Formular bestätigen — Add Note, Add Job, etc.)
 - **Global:** ? (Shortcut-Hilfe anzeigen, GitHub/Gmail-Konvention), / (Suche öffnen)
 - Single-Letter Shortcuts nur aktiv wenn Fokus auf der passenden Surface (nicht in Textfeldern)
@@ -1429,7 +1429,7 @@ Cross-cutting Quality Attribute — kein eigener Spec, sondern `@guarantee` Clau
   - **Farbkontrast:** WCAG AA Ratios (4.5:1 Text, 3:1 UI-Elemente). Shadcn Default-Theme erfüllt dies.
   - **Reduced Motion:** Alle Animationen respektieren `prefers-reduced-motion: reduce`.
   - **Screen Reader Announcements:** `aria-live` Regions für dynamische Inhalte (Toasts: `role="status"`, Fehler: `role="alert"`).
-- **Job-Tinder (→ 2.7):** Swipe-UI ist inhärent visuell. Screen-Reader brauchen List-View Alternative mit expliziten Buttons. Toggle: "Card View" vs. "List View".
+- **JobDeck (→ 2.7):** Swipe-UI ist inhärent visuell. Screen-Reader brauchen List-View Alternative mit expliziten Buttons. Toggle: "Card View" vs. "List View".
 - **Bestehende Basis:** Shadcn UI / Radix bietet gute a11y-Foundation. `specs/ui-combobox-keyboard.allium` hat bereits `@guarantee AccessibleKeyboardNavigation` — dieses Pattern auf alle Surfaces anwenden.
 
 ---
@@ -1498,7 +1498,7 @@ JobSync exponiert eine stabile REST API für externe Tools (n8n, Webhooks, Custo
 1. Dashboard-Übersicht (Hero-Screenshot für README)
 2. Vacancy Pipeline: Staging Queue → Review → Promote to Inbox (GIF)
 3. Automation Wizard (Schritt-für-Schritt Flow als GIF)
-4. Job-Tinder Swipe UI — Queue-Modus + Inbox-Modus (wenn implementiert)
+4. JobDeck Swipe UI — Queue-Modus + Inbox-Modus (wenn implementiert)
 5. Settings / Module Marketplace — Aktivierung/Deaktivierung
 6. Profil + CV-Verwaltung
 7. Onboarding-Assistent Flow (wenn implementiert)

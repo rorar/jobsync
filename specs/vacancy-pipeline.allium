@@ -8,7 +8,7 @@
 -- Excludes:
 --   - Job tracking lifecycle (status workflow, interviews, CRM — separate aggregate)
 --   - Connector/Module internals (covered by module-lifecycle.allium)
---   - UI rendering (Staging page layout, Job-Tinder swipe mechanics)
+--   - UI rendering (Staging page layout, JobDeck swipe mechanics)
 --   - LLM match scoring implementation (AI Connector concern)
 --   - Notification dispatch (covered by notification-dispatch.allium, future 0.6)
 -- Dependencies:
@@ -1007,6 +1007,6 @@ surface UndoToast {
 
 open question "Should dismissed vacancies that are rediscovered create a notification? ('A vacancy you dismissed was found again on a different board.')"
 
-open question "Super-Like in Job-Tinder Queue mode (→ 2.7): should it trigger immediate promotion without the PromotionDialog, or always show the dialog?"
+open question "Super-Like in JobDeck Queue mode (→ 2.7): should it trigger immediate promotion without the PromotionDialog, or always show the dialog?"
 
 open question "Should StagedVacancy support tags for pre-promotion categorization, or only apply tags during promotion?"
