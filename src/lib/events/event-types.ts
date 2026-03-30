@@ -30,6 +30,8 @@ export const DomainEventType = {
   SchedulerCycleCompleted: "SchedulerCycleCompleted",
   AutomationRunStarted: "AutomationRunStarted",
   AutomationRunCompleted: "AutomationRunCompleted",
+  // Degradation ↔ RunCoordinator bridge (spec: module-lifecycle.allium)
+  AutomationDegraded: "AutomationDegraded",
 } as const;
 
 export type DomainEventType = (typeof DomainEventType)[keyof typeof DomainEventType];
@@ -134,6 +136,12 @@ export interface AutomationRunCompletedPayload {
   durationMs: number;
 }
 
+export interface AutomationDegradedPayload {
+  automationId: string;
+  userId: string;
+  reason: string; // "auth_failure" | "cb_escalation" | "consecutive_failures"
+}
+
 // ---------------------------------------------------------------------------
 // Payload Map (type → payload shape)
 // ---------------------------------------------------------------------------
@@ -154,6 +162,7 @@ export interface EventPayloadMap {
   SchedulerCycleCompleted: SchedulerCycleCompletedPayload;
   AutomationRunStarted: AutomationRunStartedPayload;
   AutomationRunCompleted: AutomationRunCompletedPayload;
+  AutomationDegraded: AutomationDegradedPayload;
 }
 
 // ---------------------------------------------------------------------------

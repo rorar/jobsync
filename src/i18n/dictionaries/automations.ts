@@ -102,6 +102,14 @@ export const automations = {
     "automations.automationResumed": "Automation resumed",
     "automations.automationDeleted": "Automation deleted",
 
+    // AutomationDetailPage - Toasts & buttons
+    "automations.runNow": "Run Now",
+    "automations.runStarted": "Automation run started",
+    "automations.savedNewJobs": "Saved {count} new jobs",
+    "automations.runFailed": "Failed to run automation",
+    "automations.loadFailed": "Failed to load automation details",
+    "automations.deleteBlocked": "Cannot delete: automation is currently running",
+
     // AutomationList - Pause reasons
     "automations.pauseReasonModuleDeactivated": "Module was deactivated",
     "automations.pauseReasonAuthFailure": "Authentication failed — check credentials",
@@ -426,6 +434,14 @@ export const automations = {
     "automations.automationPaused": "Automatisierung pausiert",
     "automations.automationResumed": "Automatisierung fortgesetzt",
     "automations.automationDeleted": "Automatisierung gelöscht",
+
+    // AutomationDetailPage - Toasts & buttons
+    "automations.runNow": "Jetzt starten",
+    "automations.runStarted": "Automationslauf gestartet",
+    "automations.savedNewJobs": "{count} neue Stellen gespeichert",
+    "automations.runFailed": "Automationslauf fehlgeschlagen",
+    "automations.loadFailed": "Automationsdetails konnten nicht geladen werden",
+    "automations.deleteBlocked": "Löschen nicht möglich: Automation läuft gerade",
 
     // AutomationList - Pause reasons
     "automations.pauseReasonModuleDeactivated": "Modul wurde deaktiviert",
@@ -752,6 +768,14 @@ export const automations = {
     "automations.automationResumed": "Automatisation reprise",
     "automations.automationDeleted": "Automatisation supprimée",
 
+    // AutomationDetailPage - Toasts & buttons
+    "automations.runNow": "Lancer maintenant",
+    "automations.runStarted": "Exécution de l'automatisation démarrée",
+    "automations.savedNewJobs": "{count} nouvelles offres enregistrées",
+    "automations.runFailed": "Échec de l'exécution de l'automatisation",
+    "automations.loadFailed": "Impossible de charger les détails de l'automatisation",
+    "automations.deleteBlocked": "Suppression impossible : automatisation en cours",
+
     // AutomationList - Pause reasons
     "automations.pauseReasonModuleDeactivated": "Le module a ete desactive",
     "automations.pauseReasonAuthFailure": "Echec de l'authentification — verifiez les identifiants",
@@ -1076,6 +1100,14 @@ export const automations = {
     "automations.automationPaused": "Automatización pausada",
     "automations.automationResumed": "Automatización reanudada",
     "automations.automationDeleted": "Automatización eliminada",
+
+    // AutomationDetailPage - Toasts & buttons
+    "automations.runNow": "Ejecutar ahora",
+    "automations.runStarted": "Ejecución de automatización iniciada",
+    "automations.savedNewJobs": "{count} nuevas ofertas guardadas",
+    "automations.runFailed": "Error al ejecutar la automatización",
+    "automations.loadFailed": "Error al cargar los detalles de la automatización",
+    "automations.deleteBlocked": "No se puede eliminar: la automatización se está ejecutando",
 
     // AutomationList - Pause reasons
     "automations.pauseReasonModuleDeactivated": "El modulo fue desactivado",

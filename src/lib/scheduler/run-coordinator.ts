@@ -13,6 +13,7 @@
 import { runAutomation } from "@/lib/connector/job-discovery"
 import { emitEvent, createEvent } from "@/lib/events"
 import { DomainEventType } from "@/lib/events/event-types"
+import { SCHEDULER_CONSTANTS } from "@/lib/constants"
 import { debugLog, debugError } from "@/lib/debug"
 import type { Automation } from "@/models/automation.model"
 import type {
@@ -33,6 +34,9 @@ class RunCoordinator {
 
   // Live progress per running automation
   private progressMap = new Map<string, RunProgress>()
+
+  // Watchdog timers: force-release stale locks after MAX_RUN_DURATION_MS (A7)
+  private watchdogTimers = new Map<string, NodeJS.Timeout>()
 
   // Scheduler cycle queue (populated by startCycle, drained as runs complete)
   private cycleQueue: RunQueuePosition[] = []
@@ -101,6 +105,13 @@ class RunCoordinator {
       }),
     )
 
+    // Start watchdog timer — force-releases lock if run exceeds MAX_RUN_DURATION_MS (A7)
+    const watchdogId = setTimeout(
+      () => this.forceReleaseLock(automation.id, lock),
+      SCHEDULER_CONSTANTS.MAX_RUN_DURATION_MS,
+    )
+    this.watchdogTimers.set(automation.id, watchdogId)
+
     // 4. Execute run inside try/finally — lock is ALWAYS released
     let runnerResult: RunnerResult | undefined
     try {
@@ -112,6 +123,9 @@ class RunCoordinator {
         `[RunCoordinator] Run failed for ${automation.name}: ${message}`,
       )
     } finally {
+      // Cancel watchdog before releasing lock (A7)
+      this.cancelWatchdog(automation.id)
+
       // 5. Release lock and update state
       this.runLocks.delete(automation.id)
       this.progressMap.delete(automation.id)
@@ -277,6 +291,80 @@ class RunCoordinator {
     this.cycleQueue = []
     this.phase = "idle"
     this.cycleStartedAt = null
+  }
+
+  // ---------------------------------------------------------------------------
+  // External stop (A8: Degradation ↔ RunCoordinator bridge)
+  // ---------------------------------------------------------------------------
+
+  /** Called by degradation consumer to release lock for a degraded automation mid-run */
+  acknowledgeExternalStop(automationId: string): void {
+    const lock = this.runLocks.get(automationId)
+    if (!lock) return // idempotent
+
+    debugLog(
+      "scheduler",
+      `[RunCoordinator] External stop: ${automationId} (degradation mid-run)`,
+    )
+    this.cancelWatchdog(automationId)
+    this.runLocks.delete(automationId)
+    this.progressMap.delete(automationId)
+    this.removeFromQueue(automationId)
+    this.lastCycleProcessedCount++
+    this.lastCycleFailedCount++
+
+    emitEvent(
+      createEvent(DomainEventType.AutomationRunCompleted, {
+        automationId,
+        userId: lock.userId,
+        moduleId: lock.moduleId,
+        runSource: lock.runSource,
+        status: "failed",
+        jobsSaved: 0,
+        durationMs: Date.now() - lock.startedAt.getTime(),
+      }),
+    )
+  }
+
+  // ---------------------------------------------------------------------------
+  // Watchdog timer (A7: stale lock prevention)
+  // ---------------------------------------------------------------------------
+
+  private cancelWatchdog(automationId: string): void {
+    const timer = this.watchdogTimers.get(automationId)
+    if (timer) {
+      clearTimeout(timer)
+      this.watchdogTimers.delete(automationId)
+    }
+  }
+
+  private forceReleaseLock(automationId: string, lock: RunLock): void {
+    try {
+      debugError(
+        "scheduler",
+        `[RunCoordinator] Watchdog timeout: force-releasing lock for ${automationId} after ${SCHEDULER_CONSTANTS.MAX_RUN_DURATION_MS}ms`,
+      )
+      this.runLocks.delete(automationId)
+      this.progressMap.delete(automationId)
+      this.watchdogTimers.delete(automationId)
+      this.removeFromQueue(automationId)
+      this.lastCycleProcessedCount++
+      this.lastCycleFailedCount++
+
+      emitEvent(
+        createEvent(DomainEventType.AutomationRunCompleted, {
+          automationId,
+          userId: lock.userId,
+          moduleId: lock.moduleId,
+          runSource: lock.runSource,
+          status: "failed",
+          jobsSaved: 0,
+          durationMs: SCHEDULER_CONSTANTS.MAX_RUN_DURATION_MS,
+        }),
+      )
+    } catch (error) {
+      debugError("scheduler", `[RunCoordinator] Error in forceReleaseLock:`, error)
+    }
   }
 
   // ---------------------------------------------------------------------------

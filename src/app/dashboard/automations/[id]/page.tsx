@@ -114,7 +114,7 @@ export default function AutomationDetailPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to load automation details",
+        description: t("automations.loadFailed"),
         variant: "destructive",
       });
     }
@@ -139,8 +139,8 @@ export default function AutomationDetailPage() {
       toast({
         title:
           automation.status === "active"
-            ? "Automation paused"
-            : "Automation resumed",
+            ? t("automations.automationPaused")
+            : t("automations.automationResumed"),
       });
       loadData();
     } else {
@@ -166,8 +166,8 @@ export default function AutomationDetailPage() {
 
       if (response.ok && data.success) {
         toast({
-          title: "Automation run started",
-          description: `Saved ${data.run.jobsSaved} new jobs`,
+          title: t("automations.runStarted"),
+          description: t("automations.savedNewJobs").replace("{count}", String(data.run.jobsSaved ?? 0)),
         });
         loadData();
       } else if (response.status === 409) {
@@ -177,14 +177,14 @@ export default function AutomationDetailPage() {
       } else {
         toast({
           title: "Error",
-          description: data.message || "Failed to run automation",
+          description: data.message || t("automations.runFailed"),
           variant: "destructive",
         });
       }
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to run automation",
+        description: t("automations.runFailed"),
         variant: "destructive",
       });
     }
@@ -266,7 +266,7 @@ export default function AutomationDetailPage() {
             onClick={() => setEditOpen(true)}
           >
             <Pencil className="h-4 w-4 mr-2" />
-            Edit
+            {t("automations.edit")}
           </Button>
           <Button
             variant="outline"
@@ -280,7 +280,7 @@ export default function AutomationDetailPage() {
             ) : (
               <Play className="h-4 w-4 mr-2" />
             )}
-            {automation.status === "active" ? "Pause" : "Resume"}
+            {automation.status === "active" ? t("automations.pause") : t("automations.resume")}
           </Button>
           <Button
             variant="outline"
@@ -294,7 +294,7 @@ export default function AutomationDetailPage() {
             ) : (
               <PlayCircle className="h-4 w-4 mr-2" />
             )}
-            Run Now
+            {t("automations.runNow")}
           </Button>
         </div>
       </div>

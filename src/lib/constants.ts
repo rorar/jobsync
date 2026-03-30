@@ -22,6 +22,7 @@ export const APP_CONSTANTS = {
 export const SCHEDULER_CONSTANTS = {
   ENABLED: true,
   CRON_EXPRESSION: "0 * * * *", // Every hour at minute 0
+  MAX_RUN_DURATION_MS: 10 * 60 * 1000, // 10 minutes — watchdog timeout for stale locks
 } as const;
 
 export const JOB_SOURCES: {

@@ -7,6 +7,7 @@
 
 import { registerAuditLogger } from "./audit-logger";
 import { registerNotificationDispatcher } from "./notification-dispatcher";
+import { registerDegradationCoordinator } from "./degradation-coordinator";
 
 // Guard survives HMR via globalThis (same pattern as health-scheduler.ts, event-bus.ts)
 const g = globalThis as unknown as { __eventConsumersRegistered?: boolean };
@@ -20,6 +21,9 @@ export function registerEventConsumers(): void {
 
   // Phase 5: Notification Dispatcher (domain events -> in-app notifications)
   registerNotificationDispatcher();
+
+  // Degradation ↔ RunCoordinator bridge (A8: release locks on degradation)
+  registerDegradationCoordinator();
 
   console.debug("[EventBus] All consumers registered");
 }

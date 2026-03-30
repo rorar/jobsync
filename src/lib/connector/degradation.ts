@@ -1,6 +1,8 @@
 import "server-only";
 
 import prisma from "@/lib/db";
+import { emitEvent, createEvent } from "@/lib/events";
+import { DomainEventType } from "@/lib/events/event-types";
 import { moduleRegistry } from "./registry";
 import { ModuleStatus, CircuitBreakerState } from "./manifest";
 
@@ -87,6 +89,17 @@ export async function handleAuthFailure(
     } catch {
       // best-effort — don't let notification failure block degradation
     }
+
+    // Emit AutomationDegraded events (A8: bridge to RunCoordinator)
+    for (const auto of affectedAutomations) {
+      emitEvent(
+        createEvent(DomainEventType.AutomationDegraded, {
+          automationId: auto.id,
+          userId: auto.userId,
+          reason: "auth_failure",
+        }),
+      );
+    }
   }
 
   console.error(
@@ -160,6 +173,15 @@ export async function checkConsecutiveRunFailures(
       // best-effort
     }
 
+    // Emit AutomationDegraded event (A8: bridge to RunCoordinator)
+    emitEvent(
+      createEvent(DomainEventType.AutomationDegraded, {
+        automationId,
+        userId: automation.userId,
+        reason: "consecutive_failures",
+      }),
+    );
+
     console.warn(
       `[Degradation] Automation "${automation.name}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
     );
@@ -229,6 +251,17 @@ export async function handleCircuitBreakerTrip(
       });
     } catch {
       // best-effort
+    }
+
+    // Emit AutomationDegraded events (A8: bridge to RunCoordinator)
+    for (const auto of affectedAutomations) {
+      emitEvent(
+        createEvent(DomainEventType.AutomationDegraded, {
+          automationId: auto.id,
+          userId: auto.userId,
+          reason: "cb_escalation",
+        }),
+      );
     }
   }
 

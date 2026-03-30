@@ -29,6 +29,7 @@ export type {
   SchedulerCycleCompletedPayload,
   AutomationRunStartedPayload,
   AutomationRunCompletedPayload,
+  AutomationDegradedPayload,
 } from "./event-types";
 
 export { DomainEventType as DomainEventTypes, createEvent } from "./event-types";
