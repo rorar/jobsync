@@ -53,6 +53,12 @@ After C3 is done, implement in-memory caching:
 - All UI strings in 4 locales
 - Tests required for all new code
 
+## CRITICAL: Parallel Track Safety Rules
+- i18n: Create NEW file src/i18n/dictionaries/blacklist.ts for ALL blacklist keys. Do NOT add keys to automations.ts or staging.ts.
+- Prisma: Modify schema.prisma but do NOT run prisma migrate dev. Migration runs on main after merge.
+- Dependencies: If adding npm packages (e.g., lru-cache), run bun add and commit package.json + bun.lockb.
+- StagingContainer: You may add an onBlockCompany callback prop but do NOT restructure the component layout (Track 2 does that).
+
 ## File Ownership (this track only)
 - prisma/schema.prisma (CompanyBlacklist model + CacheEntry if needed)
 - src/actions/companyBlacklist.actions.ts (NEW)
@@ -62,8 +68,9 @@ After C3 is done, implement in-memory caching:
 - src/lib/connector/manifest.ts (cachePolicy extension)
 - src/components/settings/CompanyBlacklistSettings.tsx (NEW)
 - src/components/staging/StagedVacancyCard.tsx (add "Block company" action)
+- src/i18n/dictionaries/blacklist.ts (NEW — own namespace, no conflicts)
 - src/app/api/esco/* and src/app/api/eures/* (cache headers)
-- DO NOT modify: src/lib/scheduler/*, src/hooks/*, src/components/scheduler/*
+- DO NOT modify: src/lib/scheduler/*, src/hooks/*, src/components/scheduler/*, src/i18n/dictionaries/automations.ts
 PROMPT
 )"
 

@@ -65,12 +65,20 @@ REST API exposing JobSync's existing server actions as HTTP endpoints.
 - Security audit: OWASP API Top 10
 - Tests: integration tests for each endpoint
 
+## CRITICAL: Parallel Track Safety Rules
+- i18n: Create NEW file src/i18n/dictionaries/api.ts for ALL API-related keys. Do NOT add keys to automations.ts.
+- Prisma: If adding a PublicApiKey model, modify schema.prisma. Do NOT run prisma migrate dev — migration runs on main after merge.
+- This track merges FIRST (most isolated). Your schema changes become the baseline.
+- Dependencies: If adding zod or other packages, commit package.json + bun.lockb.
+
 ## File Ownership (this track only)
 - src/app/api/v1/ (NEW directory — all routes)
 - src/lib/api/ (NEW — key validation, rate limiting, response helpers)
 - src/middleware.ts (MODIFY — add /api/v1/* key check)
-- src/components/settings/ApiKeySettings.tsx (NEW or MODIFY)
-- DO NOT modify: src/lib/scheduler/*, src/components/staging/*, src/hooks/*
+- src/components/settings/ApiKeySettings.tsx (NEW or MODIFY existing)
+- src/i18n/dictionaries/api.ts (NEW — own namespace, no conflicts)
+- prisma/schema.prisma (PublicApiKey model if needed)
+- DO NOT modify: src/lib/scheduler/*, src/components/staging/*, src/hooks/*, src/i18n/dictionaries/automations.ts
 PROMPT
 )"
 

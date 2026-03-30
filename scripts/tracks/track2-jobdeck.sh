@@ -81,14 +81,20 @@ A card-based swipe UI for reviewing staged vacancies. Two modes:
 - All UI strings in 4 locales (en, de, fr, es)
 - Tests: component tests + E2E for swipe flow
 
+## CRITICAL: Parallel Track Safety Rules
+- i18n: Create NEW file src/i18n/dictionaries/deck.ts for ALL JobDeck keys. Do NOT add keys to automations.ts or staging.ts.
+- Prisma: Do NOT modify prisma/schema.prisma (this track has no schema changes).
+- StagingContainer: You OWN the view mode toggle and DeckView rendering. Track 1 may have added an onBlockCompany prop — integrate it if present, don't remove it.
+- Dependencies: Do NOT add heavy animation libraries. Use CSS transitions only.
+
 ## File Ownership (this track only)
 - src/components/staging/DeckCard.tsx (NEW)
 - src/components/staging/DeckView.tsx (NEW)
 - src/components/staging/ViewModeToggle.tsx (NEW)
-- src/components/staging/StagingContainer.tsx (MODIFY — add toggle)
+- src/components/staging/StagingContainer.tsx (MODIFY — add toggle + DeckView)
 - src/hooks/useDeckStack.ts (NEW)
-- src/i18n/dictionaries/ (add deck-related keys to all dicts)
-- DO NOT modify: src/lib/scheduler/*, src/lib/connector/*, src/app/api/*
+- src/i18n/dictionaries/deck.ts (NEW — own namespace, no conflicts)
+- DO NOT modify: src/lib/scheduler/*, src/lib/connector/*, src/app/api/*, prisma/*, src/i18n/dictionaries/automations.ts
 PROMPT
 )"
 
