@@ -26,6 +26,10 @@ import { StagedVacancyCard } from "./StagedVacancyCard";
 import { PromotionDialog } from "./PromotionDialog";
 import { BulkActionBar } from "./BulkActionBar";
 import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
+import { ViewModeToggle, getPersistedViewMode } from "./ViewModeToggle";
+import type { ViewMode } from "./ViewModeToggle";
+import { DeckView } from "./DeckView";
+import type { DeckAction } from "@/hooks/useDeckStack";
 import type {
   StagedVacancyWithAutomation,
   StagedVacancyStatus,
@@ -67,6 +71,7 @@ function StagingContainer() {
   const [mounted, setMounted] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [newItemsAvailable, setNewItemsAvailable] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
 
   // Track scheduler phase transitions to detect cycle completion
   const { state: schedulerState } = useSchedulerStatus();
@@ -92,6 +97,7 @@ function StagingContainer() {
 
   useEffect(() => {
     setMounted(true);
+    setViewMode(getPersistedViewMode());
   }, []);
 
   // Clear selection when tab changes
@@ -263,6 +269,39 @@ function StagingContainer() {
     setPromotionOpen(true);
   };
 
+  // Deck mode action handler — maps DeckAction to existing server actions
+  const handleDeckAction = useCallback(
+    async (vacancy: StagedVacancyWithAutomation, action: DeckAction) => {
+      if (action === "dismiss") {
+        const { success, message } = await dismissStagedVacancy(vacancy.id);
+        if (success) {
+          toast({ variant: "success", description: t("staging.dismissed") });
+        } else {
+          toast({ variant: "destructive", title: t("staging.error"), description: message });
+        }
+      } else if (action === "promote" || action === "superlike") {
+        // Open the promotion dialog for both promote and super-like
+        setPromotionVacancy(vacancy);
+        setPromotionOpen(true);
+      }
+    },
+    [t],
+  );
+
+  const handleDeckUndo = useCallback(
+    async (entry: { vacancy: StagedVacancyWithAutomation; action: DeckAction }) => {
+      if (entry.action === "dismiss") {
+        const { success, message } = await restoreStagedVacancy(entry.vacancy.id);
+        if (!success) {
+          toast({ variant: "destructive", title: t("staging.error"), description: message });
+        }
+      }
+      // promote/superlike undo is more complex (would need to delete the promoted job)
+      // For now, undo only works for dismiss actions
+    },
+    [t],
+  );
+
   const onTabChange = (value: string) => {
     setActiveTab(value as ActiveTab);
     setSearchTerm("");
@@ -286,8 +325,9 @@ function StagingContainer() {
       <Card className="h-full">
         <CardHeader className="flex-row justify-between items-center">
           <CardTitle>{t("staging.title")}</CardTitle>
-          <div className="flex items-center">
-            <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+            {viewMode === "list" && (
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -298,7 +338,7 @@ function StagingContainer() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-            </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -317,7 +357,15 @@ function StagingContainer() {
               </Button>
             </div>
           )}
-          {mounted ? (
+          {mounted && viewMode === "deck" ? (
+            /* Deck View — card-based swipe UI for "new" tab only */
+            <DeckView
+              vacancies={activeTab === "new" ? vacancies : []}
+              onAction={handleDeckAction}
+              onUndo={handleDeckUndo}
+              onBackToList={() => setViewMode("list")}
+            />
+          ) : mounted ? (
             <Tabs value={activeTab} onValueChange={onTabChange}>
               <TabsList>
                 <TabsTrigger value="new">
