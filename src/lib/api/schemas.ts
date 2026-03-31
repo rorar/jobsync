@@ -20,8 +20,8 @@ export const JobsListQuerySchema = PaginationSchema.extend({
 
 /** Create job request body */
 export const CreateJobSchema = z.object({
-  title: z.string().min(1, "Job title is required").max(500),
-  company: z.string().min(1, "Company is required").max(500),
+  title: z.string().trim().min(1, "Job title is required").max(500),
+  company: z.string().trim().min(1, "Company is required").max(500),
   location: z.string().max(500).optional(),
   type: z.string().max(100).default("Full-time"),
   status: z.string().max(100).optional(),

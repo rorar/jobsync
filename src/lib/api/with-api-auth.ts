@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { validateApiKey } from "./auth";
 import { checkRateLimit } from "./rate-limit";
 import { errorResponse } from "./response";
@@ -10,27 +10,44 @@ interface ApiContext {
 
 type RouteContext = { params: Promise<Record<string, string>> };
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+  "Access-Control-Max-Age": "86400",
+} as const;
+
 /**
  * Higher-order function that wraps an API v1 route handler with:
- * 1. API Key authentication
- * 2. Rate limiting (60 req/min per key)
- * 3. Global error catching
+ * 1. CORS preflight handling
+ * 2. API Key authentication
+ * 3. Rate limiting (60 req/min per key)
+ * 4. Global error catching
  *
  * The wrapped handler receives the authenticated userId as second argument.
+ *
+ * CORS: Uses Access-Control-Allow-Origin: * because auth is via API key
+ * (not cookies), so wildcard is safe. External consumers (n8n, browser
+ * extensions, scripts) need cross-origin access.
  */
 export function withApiAuth(
   handler: (req: NextRequest, ctx: ApiContext) => Promise<Response>,
 ) {
   return async (req: NextRequest, routeCtx: RouteContext) => {
+    // 0. Handle CORS preflight
+    if (req.method === "OPTIONS") {
+      return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+    }
+
     try {
       // 1. Authenticate
       const authResult = await validateApiKey(req);
       if (!authResult) {
-        return errorResponse(
+        return addCorsHeaders(errorResponse(
           "UNAUTHORIZED",
           "Invalid or missing API key. Provide a valid key via Authorization: Bearer <key> or X-API-Key header.",
           401,
-        );
+        ));
       }
 
       // 2. Rate limit
@@ -44,8 +61,8 @@ export function withApiAuth(
         res.headers.set("X-RateLimit-Limit", String(rateResult.limit));
         res.headers.set("X-RateLimit-Remaining", "0");
         res.headers.set("X-RateLimit-Reset", String(rateResult.resetAt));
-        res.headers.set("Retry-After", String(rateResult.resetAt - Math.floor(Date.now() / 1000)));
-        return res;
+        res.headers.set("Retry-After", String(Math.max(1, rateResult.resetAt - Math.floor(Date.now() / 1000))));
+        return addCorsHeaders(res);
       }
 
       // 3. Resolve route params
@@ -57,21 +74,28 @@ export function withApiAuth(
         params,
       });
 
-      // 5. Add rate limit and security headers
+      // 5. Add rate limit, security, and CORS headers
       response.headers.set("X-RateLimit-Limit", String(rateResult.limit));
       response.headers.set("X-RateLimit-Remaining", String(rateResult.remaining));
       response.headers.set("X-RateLimit-Reset", String(rateResult.resetAt));
       response.headers.set("Cache-Control", "no-store");
       response.headers.set("X-Content-Type-Options", "nosniff");
 
-      return response;
+      return addCorsHeaders(response);
     } catch (error) {
       console.error("[Public API] Unhandled error:", error);
-      return errorResponse(
+      return addCorsHeaders(errorResponse(
         "INTERNAL_ERROR",
         "An unexpected error occurred.",
         500,
-      );
+      ));
     }
   };
+}
+
+function addCorsHeaders(response: Response): Response {
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    response.headers.set(key, value);
+  }
+  return response;
 }

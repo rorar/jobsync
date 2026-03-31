@@ -3,6 +3,9 @@ import { withApiAuth } from "@/lib/api/with-api-auth";
 import { actionToResponse, createdResponse, errorResponse } from "@/lib/api/response";
 import { CreateNoteSchema } from "@/lib/api/schemas";
 
+/** CORS preflight */
+export const OPTIONS = withApiAuth(async () => new Response(null));
+
 /**
  * GET /api/v1/jobs/:id/notes — List all notes for a job.
  */

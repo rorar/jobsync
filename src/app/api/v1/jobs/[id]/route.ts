@@ -3,6 +3,9 @@ import { withApiAuth } from "@/lib/api/with-api-auth";
 import { actionToResponse, errorResponse, noContentResponse } from "@/lib/api/response";
 import { UpdateJobSchema } from "@/lib/api/schemas";
 
+/** CORS preflight */
+export const OPTIONS = withApiAuth(async () => new Response(null));
+
 /**
  * GET /api/v1/jobs/:id — Get a single job with full details.
  */
@@ -65,6 +68,9 @@ export const PATCH = withApiAuth(async (req, { userId, params }) => {
   }
 
   const updates = parsed.data;
+  if (Object.keys(updates).length === 0) {
+    return errorResponse("VALIDATION_ERROR", "No fields to update", 400);
+  }
   const data: Record<string, unknown> = {};
 
   // Map API fields to Prisma fields, resolving relations as needed
@@ -108,8 +114,27 @@ export const PATCH = withApiAuth(async (req, { userId, params }) => {
   if (updates.jobDescription !== undefined) data.description = updates.jobDescription;
   if (updates.jobUrl !== undefined) data.jobUrl = updates.jobUrl || null;
   if (updates.applied !== undefined) data.applied = updates.applied;
-  if (updates.resume !== undefined) data.resumeId = updates.resume || null;
+  if (updates.resume !== undefined) {
+    if (updates.resume) {
+      const ownedResume = await prisma.resume.findFirst({
+        where: { id: updates.resume, profile: { userId } },
+        select: { id: true },
+      });
+      if (!ownedResume) {
+        return errorResponse("VALIDATION_ERROR", "Invalid resume ID", 400);
+      }
+    }
+    data.resumeId = updates.resume || null;
+  }
   if (updates.tags !== undefined) {
+    if (updates.tags.length > 0) {
+      const ownedTags = await prisma.tag.count({
+        where: { id: { in: updates.tags }, createdBy: userId },
+      });
+      if (ownedTags !== updates.tags.length) {
+        return errorResponse("VALIDATION_ERROR", "One or more invalid tag IDs", 400);
+      }
+    }
     data.tags = { set: updates.tags.map((id) => ({ id })) };
   }
 
@@ -140,12 +165,14 @@ export const DELETE = withApiAuth(async (_req, { userId, params }) => {
 
   const existing = await prisma.job.findFirst({
     where: { id: jobId, userId },
-    select: { id: true },
+    select: { id: true, _count: { select: { Interview: true } } },
   });
   if (!existing) {
     return errorResponse("NOT_FOUND", "Job not found", 404);
   }
 
+  // Delete related interviews first (no cascade in schema)
+  await prisma.interview.deleteMany({ where: { jobId } });
   await prisma.job.delete({ where: { id: jobId } });
 
   return noContentResponse();

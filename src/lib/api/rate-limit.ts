@@ -25,7 +25,9 @@ interface RateLimitResult {
   resetAt: number; // Unix timestamp in seconds
 }
 
-const store = new Map<string, RateLimitEntry>();
+// Use globalThis to survive HMR in development (same pattern as RunCoordinator/EventBus)
+const store: Map<string, RateLimitEntry> =
+  (globalThis as any).__publicApiRateLimitStore ??= new Map<string, RateLimitEntry>();
 
 // Periodic cleanup of expired entries
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;

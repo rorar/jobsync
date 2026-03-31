@@ -3,6 +3,9 @@ import { withApiAuth } from "@/lib/api/with-api-auth";
 import { paginatedResponse, createdResponse, errorResponse } from "@/lib/api/response";
 import { JobsListQuerySchema, CreateJobSchema } from "@/lib/api/schemas";
 
+/** CORS preflight */
+export const OPTIONS = withApiAuth(async () => new Response(null));
+
 /**
  * GET /api/v1/jobs — List jobs with pagination, filtering, and search.
  */
