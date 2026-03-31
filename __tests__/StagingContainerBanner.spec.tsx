@@ -91,6 +91,20 @@ jest.mock("@/components/staging/BulkActionBar", () => ({
   BulkActionBar: () => null,
 }));
 
+jest.mock("@/components/staging/ViewModeToggle", () => ({
+  ViewModeToggle: () => null,
+  getPersistedViewMode: () => "list",
+  persistViewMode: jest.fn(),
+}));
+
+jest.mock("@/components/staging/DeckView", () => ({
+  DeckView: () => null,
+}));
+
+jest.mock("@/hooks/useDeckStack", () => ({
+  useDeckStack: jest.fn(),
+}));
+
 jest.mock("@/components/Loading", () => ({
   __esModule: true,
   default: () => <div data-testid="loading" />,
