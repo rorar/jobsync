@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, Bell, Bot, Bug, Key, Palette, Zap } from "lucide-react";
+import { AlertTriangle, Bell, Bot, Bug, Globe, Key, Palette, Zap } from "lucide-react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ import { getErrorCount } from "@/lib/error-reporter";
 export type SettingsSection =
   | "ai-module"
   | "api-keys"
+  | "public-api"
   | "appearance"
   | "automation"
   | "notifications"
@@ -25,6 +26,7 @@ const SETTINGS_SECTIONS: {
 }[] = [
   { id: "ai-module", labelKey: "settings.sidebarAiModule", icon: Bot },
   { id: "api-keys", labelKey: "settings.sidebarApiKeys", icon: Key },
+  { id: "public-api", labelKey: "api.title", icon: Globe },
   { id: "appearance", labelKey: "settings.sidebarAppearance", icon: Palette },
   { id: "automation", labelKey: "settings.sidebarAutomation", icon: Zap },
   { id: "notifications", labelKey: "settings.sidebarNotifications", icon: Bell },

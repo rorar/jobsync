@@ -8,6 +8,7 @@ import DeveloperSettings from "@/components/settings/DeveloperSettings";
 import DisplaySettings from "@/components/settings/DisplaySettings";
 import ErrorLogSettings from "@/components/settings/ErrorLogSettings";
 import NotificationSettings from "@/components/settings/NotificationSettings";
+import PublicApiKeySettings from "@/components/settings/PublicApiKeySettings";
 import SettingsSidebar, { type SettingsSection } from "@/components/settings/SettingsSidebar";
 
 function Settings() {
@@ -26,6 +27,7 @@ function Settings() {
         <div className="flex-1 min-w-0">
           {activeSection === "ai-module" && <AiSettings />}
           {activeSection === "api-keys" && <ApiKeySettings />}
+          {activeSection === "public-api" && <PublicApiKeySettings />}
           {activeSection === "appearance" && <DisplaySettings />}
           {activeSection === "automation" && <AutomationSettings />}
           {activeSection === "notifications" && <NotificationSettings />}
