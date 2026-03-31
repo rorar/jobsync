@@ -1547,6 +1547,14 @@ JobSync exponiert eine stabile REST API für externe Tools (n8n, Webhooks, Custo
 - **Notifications:** Fehlgeschlagene Tasks und kritische Systemereignisse lösen Notifications aus (→ 0.6 Unified Notifications) an Admin/User bzw. "whom it concerns"
 - Nicht zu verwechseln mit der Vacancy Staging Area (→ 0.5) — dies ist eine System-Queue, keine User-Queue
 
+### 8.5 E2E Test Self-Healing & Resilience
+- **Discovery:** Systematisch evaluieren, wie E2E-Tests robuster und selbstheilend werden können
+- **Stale Test Data:** Automatisches Cleanup von akkumulierten E2E-Testdaten vor/nach Runs (DB-Reset oder gezieltes Löschen von `E2E`-Prefixed Records)
+- **Dev Server Lifecycle:** Erkennung und Auto-Restart wenn der Dev-Server während E2E-Runs stirbt oder nicht erreichbar ist
+- **Session-Refresh:** Automatische Re-Authentifizierung wenn die storageState-Session abgelaufen ist
+- **Flaky-Test-Detection:** Retry-Strategie für transiente Failures (z.B. `retries: 1` in Playwright-Config)
+- **Konkreter Anlass (Sprint C, 2026-03-31):** 8/8 Smoke-Tests bestanden, aber 60/60 CRUD-Tests timeout'en — Ursache: ~17 akkumulierte E2E-Testdaten-Records machten Selektoren ambig, kein Cleanup zwischen Runs. Server lief, Auth funktionierte, Seite renderte korrekt — rein ein Test-Data-Problem.
+
 ### 8.10 Test Data Generator / Fake Input Data
 - Fake-Responses pro Connector-Modul für Automation-Tests ohne echte API-Calls
 - **Pro Modul:** Realistische Fake-DiscoveredVacancy-Arrays (EURES-Format, Arbeitsagentur-Format, JSearch-Format)
