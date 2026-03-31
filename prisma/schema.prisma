@@ -37,6 +37,7 @@ model User {
   Notification Notification[]
   StagedVacancy StagedVacancy[]
   DedupHash     DedupHash[]
+  PublicApiKey  PublicApiKey[]
 }
 
 model ApiKey {
@@ -555,4 +556,19 @@ model Question {
   updatedAt DateTime @updatedAt
 
   @@index([createdBy])
+}
+
+model PublicApiKey {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  name        String
+  keyHash     String    @unique
+  keyPrefix   String
+  permissions String    @default("[]")
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+
+  @@index([userId])
 }
