@@ -9,6 +9,7 @@ import DisplaySettings from "@/components/settings/DisplaySettings";
 import ErrorLogSettings from "@/components/settings/ErrorLogSettings";
 import NotificationSettings from "@/components/settings/NotificationSettings";
 import PublicApiKeySettings from "@/components/settings/PublicApiKeySettings";
+import CompanyBlacklistSettings from "@/components/settings/CompanyBlacklistSettings";
 import SettingsSidebar, { type SettingsSection } from "@/components/settings/SettingsSidebar";
 
 function Settings() {
@@ -31,6 +32,7 @@ function Settings() {
           {activeSection === "appearance" && <DisplaySettings />}
           {activeSection === "automation" && <AutomationSettings />}
           {activeSection === "notifications" && <NotificationSettings />}
+          {activeSection === "blacklist" && <CompanyBlacklistSettings />}
           {activeSection === "developer" && <DeveloperSettings />}
           {activeSection === "error-log" && <ErrorLogSettings />}
         </div>

@@ -4,7 +4,7 @@
 -- Scope: Vacancy Pipeline — Staging, Processing, Promotion, Archive, Trash
 -- Includes: StagedVacancy lifecycle, Promotion to Job, Dedup (hash-based),
 --           Bulk actions (partial-success), Undo pattern, DSGVO retention,
---           Domain events (VacancyPromoted, etc.)
+--           Domain events (VacancyPromoted, etc.), Company Blacklist (2.15)
 -- Excludes:
 --   - Job tracking lifecycle (status workflow, interviews, CRM — separate aggregate)
 --   - Connector/Module internals (covered by module-lifecycle.allium)
@@ -757,6 +757,73 @@ rule DedupHashCheck {
     -- If externalId is null, the runner falls back to hashing sourceUrl.
     -- DedupHash records have no expiry — they persist indefinitely
     -- because they contain no PII (one-way hash only).
+}
+
+-- =============================================================================
+-- Company Blacklist (ROADMAP 2.15)
+-- =============================================================================
+
+entity CompanyBlacklist {
+  id: String @id
+  userId: String @fk(User)
+  pattern: String
+  matchType: BlacklistMatchType
+  reason: String?
+  createdAt: DateTime
+  updatedAt: DateTime
+
+  @@unique(userId, pattern, matchType)
+  @@index(userId)
+}
+
+enum BlacklistMatchType { exact | contains }
+-- exact:    Case-insensitive full match (e.g. "Acme Corp" matches "acme corp")
+-- contains: Case-insensitive substring match (e.g. "Staffing" matches "Global Staffing Solutions")
+
+rule BlacklistFilter {
+  -- "Blacklisted companies are filtered BEFORE AI matching to save LLM calls."
+  -- Pipeline position: after dedup, before matchThreshold check.
+  when: AutomatedVacancyIntake processes deduplicated vacancies
+
+  let blacklist = CompanyBlacklist[] where userId = automation.userId
+
+  for_each vacancy in deduplicatedVacancies:
+    if blacklist.any(entry => matchesBlacklistEntry(vacancy.employerName, entry)):
+      ensures: vacancy is NOT staged (silently skipped)
+      ensures: runner logs "Filtered {count} blacklisted companies"
+
+  @guidance
+    -- Vacancies without employerName (null) are NEVER blacklisted.
+    -- This prevents false positives on incomplete job data.
+    -- The blacklist check runs on the domain model (pure function),
+    -- not as a SQL query, for testability and consistency.
+}
+
+rule BlacklistQuickAdd {
+  -- "User can add a company to the blacklist directly from a StagedVacancyCard."
+  when: UserBlocksCompany(companyName: String)
+
+  ensures: CompanyBlacklist.created(
+    userId: currentUser.id,
+    pattern: companyName,
+    matchType: contains,
+    reason: null
+  )
+  -- Default match type is "contains" for quick-add (catches variants).
+  -- User can refine match type in Settings → Company Blacklist.
+
+  @guidance
+    -- Quick-add uses "contains" because employer names from different
+    -- sources vary (e.g. "Acme Corp" vs "Acme Corporation" vs "ACME").
+    -- Exact match is available in Settings for precision blocking.
+}
+
+rule BlacklistManagement {
+  -- "Blacklist is managed in Settings → Company Blacklist."
+  -- CRUD operations: add (with match type + optional reason), remove, list.
+  -- No edit — remove and re-add with different settings.
+  when: UserManagesBlacklist
+  surface: Settings → Company Blacklist section
 }
 
 -- =============================================================================

@@ -35,9 +35,10 @@ model User {
   Tag          Tag[]
   Question     Question[]
   Notification Notification[]
-  StagedVacancy StagedVacancy[]
-  DedupHash     DedupHash[]
-  PublicApiKey  PublicApiKey[]
+  StagedVacancy    StagedVacancy[]
+  DedupHash        DedupHash[]
+  PublicApiKey     PublicApiKey[]
+  CompanyBlacklist CompanyBlacklist[]
 }
 
 model ApiKey {
@@ -530,6 +531,20 @@ model Note {
   updatedAt DateTime @updatedAt
 
   @@index([jobId])
+  @@index([userId])
+}
+
+model CompanyBlacklist {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  pattern   String
+  matchType String   @default("contains") // "exact" | "contains"
+  reason    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, pattern, matchType])
   @@index([userId])
 }
 

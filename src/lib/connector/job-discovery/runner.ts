@@ -34,6 +34,9 @@ import {
 import { debugLog } from "@/lib/debug";
 import type { RunOptions, RunProgress } from "@/lib/scheduler/types";
 import { runCoordinator } from "@/lib/scheduler/run-coordinator";
+import { getBlacklistEntriesForUser } from "@/actions/companyBlacklist.actions";
+import { isCompanyBlacklisted } from "@/models/companyBlacklist.model";
+import { connectorCache, ConnectorCache } from "../cache";
 
 
 const MAX_JOBS_PER_RUN = 10;
@@ -236,13 +239,31 @@ export async function runAutomation(
       ? await resolveCredential(registered.manifest.credential, automation.userId)
       : undefined;
     const connector = moduleRegistry.create(automation.jobBoard, credential) as import("./types").DataSourceConnector;
-    const searchResult = await connector.search({
+
+    // Cache integration (ROADMAP 0.9): scheduler runs bypass cache, manual runs use it
+    const shouldBypassCache = options?.bypassCache ?? options?.runSource === "scheduler";
+    const cachePolicy = registered?.manifest.cachePolicy;
+    const searchParams = {
       keywords: automation.keywords,
       location: automation.location,
       connectorParams: automation.connectorParams
         ? JSON.parse(automation.connectorParams)
         : undefined,
-    });
+    };
+
+    const searchResult = cachePolicy
+      ? await connectorCache.getOrFetch(
+          ConnectorCache.buildKey({
+            module: automation.jobBoard,
+            operation: "search",
+            params: JSON.stringify(searchParams),
+            policy: cachePolicy,
+          }),
+          () => connector.search(searchParams),
+          cachePolicy.ttl,
+          { bypass: shouldBypassCache },
+        )
+      : await connector.search(searchParams);
 
     if (!searchResult.success) {
       automationLogger.log(
@@ -328,7 +349,23 @@ export async function runAutomation(
       { jobsDeduplicated, duplicates: jobsSearched - jobsDeduplicated },
     );
 
-    const jobsToProcess = newJobs.slice(0, MAX_JOBS_PER_RUN);
+    // Filter blacklisted companies (after dedup, before AI matching to save LLM calls)
+    const blacklistEntries = await getBlacklistEntriesForUser(automation.userId);
+    const nonBlacklisted = blacklistEntries.length > 0
+      ? newJobs.filter((job) => !isCompanyBlacklisted(job.employerName, blacklistEntries))
+      : newJobs;
+    const blacklistedCount = newJobs.length - nonBlacklisted.length;
+
+    if (blacklistedCount > 0) {
+      automationLogger.log(
+        automation.id,
+        "info",
+        `Filtered ${blacklistedCount} blacklisted companies`,
+        { blacklistedCount },
+      );
+    }
+
+    const jobsToProcess = nonBlacklisted.slice(0, MAX_JOBS_PER_RUN);
 
     // Enrich with detail data if connector supports it.
     // Runs after dedup+cap so at most MAX_JOBS_PER_RUN (10) API calls are made.
@@ -347,11 +384,11 @@ export async function runAutomation(
       }
     }
 
-    if (jobsToProcess.length < newJobs.length) {
+    if (jobsToProcess.length < nonBlacklisted.length) {
       automationLogger.log(
         automation.id,
         "info",
-        `Processing first ${jobsToProcess.length} of ${newJobs.length} new jobs (limit: ${MAX_JOBS_PER_RUN})`,
+        `Processing first ${jobsToProcess.length} of ${nonBlacklisted.length} new jobs (limit: ${MAX_JOBS_PER_RUN})`,
       );
     }
 

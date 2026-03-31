@@ -148,7 +148,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       };
     });
 
-    return NextResponse.json({ locations });
+    return NextResponse.json(
+      { locations },
+      { headers: { "Cache-Control": "private, max-age=3600" } },
+    );
   } catch {
     return NextResponse.json({ locations: [] });
   }

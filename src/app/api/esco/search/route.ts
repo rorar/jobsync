@@ -73,10 +73,10 @@ export async function GET(
       }),
     );
 
-    return NextResponse.json({
-      results,
-      total: data.total ?? results.length,
-    });
+    return NextResponse.json(
+      { results, total: data.total ?? results.length },
+      { headers: { "Cache-Control": "private, max-age=300" } },
+    );
   } catch {
     return NextResponse.json({ results: [], total: 0 });
   }

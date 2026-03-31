@@ -74,7 +74,9 @@ export async function GET(
     }
 
     const data: EuresAutocompleteResponse = await response.json();
-    return NextResponse.json(data);
+    return NextResponse.json(data, {
+      headers: { "Cache-Control": "private, max-age=60" },
+    });
   } catch {
     return NextResponse.json({ results: [] });
   }

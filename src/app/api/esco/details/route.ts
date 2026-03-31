@@ -76,15 +76,10 @@ export async function GET(
     const escoUrl = `https://esco.ec.europa.eu/en/classification/occupation?uri=${encodeURIComponent(uri)}`;
     const euresSearchUrl = `https://europa.eu/eures/portal/jv-se/home?keyword=${encodeURIComponent(title)}`;
 
-    return NextResponse.json({
-      uri,
-      title,
-      code,
-      description,
-      broaderIscoGroup,
-      escoUrl,
-      euresSearchUrl,
-    });
+    return NextResponse.json(
+      { uri, title, code, description, broaderIscoGroup, escoUrl, euresSearchUrl },
+      { headers: { "Cache-Control": "private, max-age=3600" } },
+    );
   } catch {
     return NextResponse.json(
       { error: "Failed to fetch occupation details" },

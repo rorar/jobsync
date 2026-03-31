@@ -16,6 +16,7 @@ import {
   trashStagedVacancy,
   restoreFromTrash,
 } from "@/actions/stagedVacancy.actions";
+import { addBlacklistEntry } from "@/actions/companyBlacklist.actions";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/i18n";
 import { APP_CONSTANTS } from "@/lib/constants";
@@ -263,6 +264,18 @@ function StagingContainer() {
     setPromotionOpen(true);
   };
 
+  const handleBlockCompany = async (companyName: string) => {
+    const result = await addBlacklistEntry(companyName, "contains");
+    if (result.success) {
+      toast({ title: t("blacklist.blocked") });
+    } else {
+      toast({
+        title: result.message ? t(result.message) : t("common.error"),
+        variant: "destructive",
+      });
+    }
+  };
+
   const onTabChange = (value: string) => {
     setActiveTab(value as ActiveTab);
     setSearchTerm("");
@@ -372,6 +385,7 @@ function StagingContainer() {
                         onTrash={handleTrash}
                         onRestoreFromTrash={handleRestoreFromTrash}
                         onPromote={handlePromote}
+                        onBlockCompany={handleBlockCompany}
                       />
                     ))}
                     <div className="flex items-center justify-between mt-4">

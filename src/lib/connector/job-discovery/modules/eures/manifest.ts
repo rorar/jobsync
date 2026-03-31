@@ -1,4 +1,5 @@
 import { ConnectorType, CredentialType, type JobDiscoveryManifest } from "@/lib/connector/manifest";
+import { CACHE_POLICY_SEARCH } from "@/lib/connector/cache";
 
 export const euresManifest: JobDiscoveryManifest = {
   id: "eures",
@@ -28,6 +29,7 @@ export const euresManifest: JobDiscoveryManifest = {
     rateLimitRefillMs: 500,
     maxConcurrent: 5,
   },
+  cachePolicy: CACHE_POLICY_SEARCH,
   searchFieldOverrides: [
     { field: "keywords", widgetId: "eures-occupation" },
     { field: "location", widgetId: "eures-location" },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, Bell, Bot, Bug, Globe, Key, Palette, Zap } from "lucide-react";
+import { AlertTriangle, Ban, Bell, Bot, Bug, Globe, Key, Palette, Zap } from "lucide-react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ export type SettingsSection =
   | "appearance"
   | "automation"
   | "notifications"
+  | "blacklist"
   | "developer"
   | "error-log";
 
@@ -30,6 +31,7 @@ const SETTINGS_SECTIONS: {
   { id: "appearance", labelKey: "settings.sidebarAppearance", icon: Palette },
   { id: "automation", labelKey: "settings.sidebarAutomation", icon: Zap },
   { id: "notifications", labelKey: "settings.sidebarNotifications", icon: Bell },
+  { id: "blacklist", labelKey: "blacklist.sidebarBlacklist", icon: Ban },
   { id: "developer", labelKey: "settings.sidebarDeveloper", icon: Bug },
   { id: "error-log", labelKey: "settings.sidebarErrorLog", icon: AlertTriangle },
 ];

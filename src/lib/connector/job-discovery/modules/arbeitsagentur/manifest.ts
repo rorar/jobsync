@@ -1,4 +1,5 @@
 import { ConnectorType, CredentialType, type JobDiscoveryManifest } from "@/lib/connector/manifest";
+import { CACHE_POLICY_SEARCH } from "@/lib/connector/cache";
 
 export const arbeitsagenturManifest: JobDiscoveryManifest = {
   id: "arbeitsagentur",
@@ -17,6 +18,7 @@ export const arbeitsagenturManifest: JobDiscoveryManifest = {
     timeoutMs: 15000,
     intervalMs: 300000,
   },
+  cachePolicy: CACHE_POLICY_SEARCH,
   resilience: {
     retryAttempts: 3,
     retryBackoff: "exponential",

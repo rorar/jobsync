@@ -1,4 +1,5 @@
 import { ConnectorType, CredentialType, type JobDiscoveryManifest } from "@/lib/connector/manifest";
+import { CACHE_POLICY_SEARCH } from "@/lib/connector/cache";
 
 export const jsearchManifest: JobDiscoveryManifest = {
   id: "jsearch",
@@ -14,6 +15,7 @@ export const jsearchManifest: JobDiscoveryManifest = {
     sensitive: true,
     placeholder: "Your RapidAPI key",
   },
+  cachePolicy: CACHE_POLICY_SEARCH,
   resilience: {
     retryAttempts: 2,
     retryBackoff: "exponential",
