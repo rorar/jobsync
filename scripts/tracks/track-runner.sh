@@ -22,6 +22,17 @@ run_track() {
 
   cd "$worktree"
 
+  # Ensure worktree has dependencies + Prisma client
+  # Git worktrees don't copy node_modules — install if missing
+  if [ ! -d "node_modules" ]; then
+    echo "[track-runner] Installing dependencies (node_modules missing)..."
+    bun install --frozen-lockfile 2>/dev/null || bun install
+  fi
+  if [ ! -d "node_modules/.prisma/client" ]; then
+    echo "[track-runner] Generating Prisma client..."
+    bash scripts/prisma-generate.sh 2>/dev/null || npx prisma generate
+  fi
+
   # Inject shared process into every track prompt
   local full_prompt="${track_prompt}
 
