@@ -163,6 +163,50 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **Allium Spec:** `specs/scheduler-coordination.allium` — authoritative specification for all coordination rules.
 
+### Public API v1 (ROADMAP 7.1 Phase 1)
+
+REST API as "Open Host Service" (DDD) — manually designed surface over existing data layer.
+
+**Route Namespace:** `/api/v1/*` (public, versioned) alongside `/api/*` (internal, frontend-only).
+
+**Auth:** API Keys via `Authorization: Bearer pk_live_...` or `X-API-Key` header. SHA-256 hashed, stored in `PublicApiKey` model (separate from Module `ApiKey` which uses AES).
+
+**Key Infrastructure:** `src/lib/api/`:
+- **auth.ts** — `validateApiKey()`, `hashApiKey()`, `generateApiKey()`, `getKeyPrefix()`
+- **rate-limit.ts** — In-memory sliding window (60 req/min per key, `globalThis` singleton)
+- **response.ts** — `actionToResponse()`, `paginatedResponse()`, `errorResponse()`, `createdResponse()`
+- **with-api-auth.ts** — `withApiAuth()` HOF: CORS + auth + rate limit + error catch + security headers
+- **schemas.ts** — Zod schemas for all API inputs (max lengths, UUID validation)
+
+**Key Rule:** ALL `/api/v1/*` route handlers MUST use `withApiAuth()` wrapper. Never access Prisma directly without it.
+
+**Phase 1 Endpoints (Jobs only):**
+- `GET/POST /api/v1/jobs` — list (paginated) + create
+- `GET/PATCH/DELETE /api/v1/jobs/:id` — single job CRUD
+- `GET/POST /api/v1/jobs/:id/notes` — notes sub-resource
+
+**Phase 1 uses direct Prisma queries** (not server actions) because `getCurrentUser()` depends on NextAuth session. Phase 2 will add `AsyncLocalStorage` bridge for server action reuse.
+
+**API Key Management:** `src/components/settings/PublicApiKeySettings.tsx` — create/revoke/delete keys in Settings UI. Keys shown once on creation, then only prefix visible. Max 10 active keys per user.
+
+**Server Actions:** `src/actions/publicApiKey.actions.ts` — `createPublicApiKey()`, `listPublicApiKeys()`, `revokePublicApiKey()`, `deletePublicApiKey()`
+
+**i18n:** `src/i18n/dictionaries/api.ts` — own namespace, NOT in settings.ts or automations.ts.
+
+### Company Blacklist (ROADMAP 2.15)
+
+**Server Actions:** `src/actions/companyBlacklist.actions.ts` — CRUD for blacklist entries with name/pattern matching.
+
+**UI:** `src/components/settings/CompanyBlacklistSettings.tsx` — manage blocked companies in Settings.
+
+**Pipeline Integration:** Runner filters staged vacancies against blacklist during the dedup phase.
+
+### Response Caching (ROADMAP 0.9 Stufe 1)
+
+**Cache:** `src/lib/connector/cache.ts` — in-memory LRU cache for external API responses.
+
+**HTTP Headers:** ESCO/EURES proxy routes set `Cache-Control` headers for browser caching.
+
 ### Connector & Module Lifecycle Rules
 
 Implemented in `module.actions.ts` and `degradation.ts`. Spec: `specs/module-lifecycle.allium`.

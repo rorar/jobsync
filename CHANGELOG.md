@@ -1,5 +1,23 @@
 # Changelog
 
+## Sprint C (2026-03-31)
+
+### Features
+
+* **api:** Public API v1 Foundation (ROADMAP 7.1 Phase 1) — REST endpoints for Jobs CRUD + Notes with API Key auth, SHA-256 hashing, in-memory rate limiting (60 req/min), Zod validation, CORS, and ActionResult→HTTP bridge
+* **api:** API Key Management UI in Settings — create/copy/revoke/delete keys with i18n (en/de/fr/es)
+* **blacklist:** Company Blacklist (ROADMAP 2.15) — block companies from staging pipeline with name/pattern matching, Settings UI
+* **cache:** Response Caching Stufe 1 (ROADMAP 0.9) — in-memory LRU cache for external API responses with HTTP cache headers on ESCO/EURES proxy routes
+* **staging:** JobDeck swipe UI (ROADMAP 2.7 Phase 1) — card-based vacancy review with dismiss/promote/superlike actions, undo support, and Tailwind animations
+
+### Security
+
+* **api:** IDOR prevention on resume/tag ID associations (ownership validation)
+* **api:** Max length constraints on all API input fields
+* **api:** Cache-Control: no-store + X-Content-Type-Options: nosniff headers
+* **api:** Per-user API key limit (max 10 active)
+* **api:** Revoke-before-delete enforcement on API keys
+
 ## [1.1.3](https://github.com/Gsync/jobsync/compare/v1.1.2...v1.1.3) (2026-02-28)
 
 

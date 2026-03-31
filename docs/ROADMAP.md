@@ -327,7 +327,7 @@ Progressive Web App für mobile Nutzung. **Split: Read-Only zuerst, Offline-CRUD
   - Nur bei konkretem User-Demand. Multi-Device (Handy + Laptop) ist der reale Conflict-Vektor.
 - **Invarianten:** Offline-Actions in FIFO-Reihenfolge replayed, keine Offline-Automation-Runs (erfordern Server-Side API-Calls)
 
-### 0.9 Response Caching (Stufenweise)
+### 0.9 Response Caching (Stufenweise) -- DONE (Stufe 1, Sprint C)
 Server-Side Caching-Strategie für externe API-Responses und Referenzdaten. **Stufenweise Einführung** — jede Stufe ist eigenständig nutzbar, höhere Stufen sind optional wählbar. Client-Side Data Caching ist ein separater Concern (→ 2.19).
 
 **Motivation:**
@@ -880,7 +880,7 @@ Kontextsensitiver Einrichtungsassistent für neue Benutzer, der sich an deren Zi
   - **Graceful Degradation:** Wenn libpostal nicht verfügbar (Docker nicht konfiguriert), bleibt das manuelle Ausfüllen der Unterfelder. Kein Parsing-Fallback nötig — die Felder sind ja da.
   - **Output-Formatierung:** Strukturierte Daten → `@fragaria/address-formatter` für Anzeige (→ Application Locale Profile, Sektion 4)
 
-### 2.7 JobDeck + Inbox UI
+### 2.7 JobDeck + Inbox UI -- DONE (JobDeck Phase 1, Sprint C)
 - **Inbox als eigenständige UI-Surface:** Dedizierte Seite für promoted Jobs (nach Vacancy Pipeline → 0.5). Nicht nur JobDeck-Modus, sondern auch Listen-/Tabellen-Ansicht.
 - **JobDeck Modus:** Swipe/Icon Click/Pfeiltasten Navigation
 - Aktionen: Kein Match (Archiv) / Match / Favorit / Mehr Details
@@ -973,7 +973,7 @@ Geführte Einführung über die UI-Elemente der App, kombinierbar mit dem Onboar
 - **Lean Business Canvas für Self-Discovery:** Übertragung des Canvas-Modells auf persönliche Positionierung
 - Output: Persönliches Profil-Statement für Bewerbungsunterlagen, Landingpage (→ 4.7), LinkedIn/XING (→ 9.2 Machbarkeit pending)
 
-### 2.15 Company Blacklist
+### 2.15 Company Blacklist -- DONE (Sprint C)
 - User kann Unternehmen auf eine Blacklist setzen
 - **Usecases:** Alter Arbeitgeber, ethisch/persönlich unpassende Unternehmen, bekannte Fake-Inserate
 - Blacklisted Companies werden automatisch aus Staging gefiltert (→ 0.5 StagedVacancy → dismissed)
@@ -1436,7 +1436,7 @@ Cross-cutting Quality Attribute — kein eigener Spec, sondern `@guarantee` Clau
 
 ## 7. API & Dokumentation
 
-### 7.1 Public API (REST — Open Host Service)
+### 7.1 Public API (REST — Open Host Service) -- Phase 1 DONE (Sprint C)
 JobSync exponiert eine stabile REST API für externe Tools (n8n, Webhooks, Custom Scripts). Die API ist eine **Published Language** (DDD) — manuell designte Surface, nicht auto-generiert aus Prisma.
 
 **Architektur:**
