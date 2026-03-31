@@ -151,20 +151,25 @@ export const DELETE = withApiAuth(async (_req, { userId, params }) => {
   return noContentResponse();
 });
 
-// --- Helper for find-or-create pattern ---
+// --- Helper using upsert to avoid TOCTOU race conditions ---
 
 type EntityType = "jobTitle" | "company" | "location" | "jobSource";
+
+const COMPOSITE_KEY_MAP: Record<EntityType, string> = {
+  jobTitle: "value_createdBy",
+  company: "value_createdBy",
+  location: "value_createdBy",
+  jobSource: "value_createdBy",
+};
 
 async function findOrCreate(type: EntityType, userId: string, label: string) {
   const value = label.trim().toLowerCase();
   const model = prisma[type] as any;
+  const compositeKey = COMPOSITE_KEY_MAP[type];
 
-  const existing = await model.findFirst({
-    where: { value, createdBy: userId },
-  });
-  if (existing) return existing;
-
-  return model.create({
-    data: { label: label.trim(), value, createdBy: userId },
+  return model.upsert({
+    where: { [compositeKey]: { value, createdBy: userId } },
+    update: {},
+    create: { label: label.trim(), value, createdBy: userId },
   });
 }

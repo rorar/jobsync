@@ -117,6 +117,27 @@ export const POST = withApiAuth(async (req, { userId }) => {
 
   const tagIds = tags ?? [];
 
+  // Validate resume ownership (IDOR prevention)
+  if (resume) {
+    const ownedResume = await prisma.resume.findFirst({
+      where: { id: resume, profile: { userId } },
+      select: { id: true },
+    });
+    if (!ownedResume) {
+      return errorResponse("VALIDATION_ERROR", "Invalid resume ID", 400);
+    }
+  }
+
+  // Validate tag ownership (IDOR prevention)
+  if (tagIds.length > 0) {
+    const ownedTags = await prisma.tag.count({
+      where: { id: { in: tagIds }, createdBy: userId },
+    });
+    if (ownedTags !== tagIds.length) {
+      return errorResponse("VALIDATION_ERROR", "One or more invalid tag IDs", 400);
+    }
+  }
+
   const job = await prisma.job.create({
     data: {
       userId,
@@ -151,49 +172,41 @@ export const POST = withApiAuth(async (req, { userId }) => {
   return createdResponse(job);
 });
 
-// --- Helper functions for resolving/creating related entities ---
+// --- Helper functions using upsert to avoid TOCTOU race conditions ---
 
 async function findOrCreateJobTitle(userId: string, label: string) {
   const value = label.trim().toLowerCase();
-  const existing = await prisma.jobTitle.findFirst({
-    where: { value, createdBy: userId },
-  });
-  if (existing) return existing;
-  return prisma.jobTitle.create({
-    data: { label: label.trim(), value, createdBy: userId },
+  return prisma.jobTitle.upsert({
+    where: { value_createdBy: { value, createdBy: userId } },
+    update: {},
+    create: { label: label.trim(), value, createdBy: userId },
   });
 }
 
 async function findOrCreateCompany(userId: string, label: string) {
   const value = label.trim().toLowerCase();
-  const existing = await prisma.company.findFirst({
-    where: { value, createdBy: userId },
-  });
-  if (existing) return existing;
-  return prisma.company.create({
-    data: { label: label.trim(), value, createdBy: userId },
+  return prisma.company.upsert({
+    where: { value_createdBy: { value, createdBy: userId } },
+    update: {},
+    create: { label: label.trim(), value, createdBy: userId },
   });
 }
 
 async function findOrCreateLocation(userId: string, label: string) {
   const value = label.trim().toLowerCase();
-  const existing = await prisma.location.findFirst({
-    where: { value, createdBy: userId },
-  });
-  if (existing) return existing;
-  return prisma.location.create({
-    data: { label: label.trim(), value, createdBy: userId },
+  return prisma.location.upsert({
+    where: { value_createdBy: { value, createdBy: userId } },
+    update: {},
+    create: { label: label.trim(), value, createdBy: userId },
   });
 }
 
 async function findOrCreateSource(userId: string, label: string) {
   const value = label.trim().toLowerCase();
-  const existing = await prisma.jobSource.findFirst({
-    where: { value, createdBy: userId },
-  });
-  if (existing) return existing;
-  return prisma.jobSource.create({
-    data: { label: label.trim(), value, createdBy: userId },
+  return prisma.jobSource.upsert({
+    where: { value_createdBy: { value, createdBy: userId } },
+    update: {},
+    create: { label: label.trim(), value, createdBy: userId },
   });
 }
 

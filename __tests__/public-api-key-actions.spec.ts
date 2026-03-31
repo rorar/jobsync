@@ -16,6 +16,7 @@ jest.mock("@/lib/db", () => ({
     findFirst: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    count: jest.fn(),
   },
 }));
 
@@ -43,6 +44,7 @@ describe("createPublicApiKey", () => {
 
   it("creates a key and returns the plaintext key once", async () => {
     (getCurrentUser as jest.Mock).mockResolvedValue({ id: "user-1" });
+    db.publicApiKey.count.mockResolvedValue(0);
     db.publicApiKey.create.mockResolvedValue({
       id: "key-1",
       name: "Test Key",
@@ -65,6 +67,13 @@ describe("createPublicApiKey", () => {
         permissions: "[]",
       }),
     });
+  });
+
+  it("rejects when user has 10 active keys", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue({ id: "user-1" });
+    db.publicApiKey.count.mockResolvedValue(10);
+    const result = await createPublicApiKey("Eleventh Key");
+    expect(result.success).toBe(false);
   });
 
   it("rejects empty names", async () => {
@@ -187,6 +196,17 @@ describe("deletePublicApiKey", () => {
     db.publicApiKey.findFirst.mockResolvedValue(null);
 
     const result = await deletePublicApiKey("nonexistent");
+    expect(result.success).toBe(false);
+  });
+
+  it("fails if key is not yet revoked", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue({ id: "user-1" });
+    db.publicApiKey.findFirst.mockResolvedValue({
+      id: "key-1",
+      revokedAt: null,
+    });
+
+    const result = await deletePublicApiKey("key-1");
     expect(result.success).toBe(false);
   });
 });

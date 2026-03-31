@@ -4,6 +4,10 @@
  *
  * Uses a Map of timestamp arrays per key hash.
  * Cleanup runs periodically to prevent memory leaks.
+ *
+ * NOTE: Single-process only. Will NOT work correctly in serverless
+ * or multi-instance deployments. For distributed deployments,
+ * replace with Redis-backed rate limiting (e.g. @upstash/ratelimit).
  */
 
 const DEFAULT_WINDOW_MS = 60_000; // 1 minute

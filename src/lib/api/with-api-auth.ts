@@ -57,10 +57,12 @@ export function withApiAuth(
         params,
       });
 
-      // 5. Add rate limit headers to successful responses
+      // 5. Add rate limit and security headers
       response.headers.set("X-RateLimit-Limit", String(rateResult.limit));
       response.headers.set("X-RateLimit-Remaining", String(rateResult.remaining));
       response.headers.set("X-RateLimit-Reset", String(rateResult.resetAt));
+      response.headers.set("Cache-Control", "no-store");
+      response.headers.set("X-Content-Type-Options", "nosniff");
 
       return response;
     } catch (error) {

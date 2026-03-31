@@ -31,6 +31,14 @@ export async function createPublicApiKey(
       throw new Error("API key name must be 100 characters or less");
     }
 
+    // Enforce per-user key limit
+    const activeCount = await prisma.publicApiKey.count({
+      where: { userId: user.id, revokedAt: null },
+    });
+    if (activeCount >= 10) {
+      throw new Error("Maximum of 10 active API keys per user");
+    }
+
     // Generate key material
     const plainKey = generateApiKey();
     const keyHash = hashApiKey(plainKey);
@@ -155,6 +163,9 @@ export async function deletePublicApiKey(
 
     if (!key) {
       throw new Error("API key not found");
+    }
+    if (!key.revokedAt) {
+      throw new Error("API key must be revoked before it can be deleted");
     }
 
     await prisma.publicApiKey.delete({

@@ -34,8 +34,8 @@ export async function validateApiKey(
       where: { id: apiKey.id },
       data: { lastUsedAt: new Date() },
     })
-    .catch(() => {
-      // Swallow errors — lastUsedAt is non-critical
+    .catch((err: unknown) => {
+      console.warn("[Public API] Failed to update lastUsedAt:", err instanceof Error ? err.message : err);
     });
 
   return { userId: apiKey.userId, keyHash: apiKey.keyHash };
