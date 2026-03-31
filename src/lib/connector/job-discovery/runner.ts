@@ -36,6 +36,7 @@ import type { RunOptions, RunProgress } from "@/lib/scheduler/types";
 import { runCoordinator } from "@/lib/scheduler/run-coordinator";
 import { getBlacklistEntriesForUser } from "@/actions/companyBlacklist.actions";
 import { isCompanyBlacklisted } from "@/models/companyBlacklist.model";
+import { connectorCache, ConnectorCache } from "../cache";
 
 
 const MAX_JOBS_PER_RUN = 10;
@@ -238,13 +239,31 @@ export async function runAutomation(
       ? await resolveCredential(registered.manifest.credential, automation.userId)
       : undefined;
     const connector = moduleRegistry.create(automation.jobBoard, credential) as import("./types").DataSourceConnector;
-    const searchResult = await connector.search({
+
+    // Cache integration (ROADMAP 0.9): scheduler runs bypass cache, manual runs use it
+    const shouldBypassCache = options?.bypassCache ?? options?.runSource === "scheduler";
+    const cachePolicy = registered?.manifest.cachePolicy;
+    const searchParams = {
       keywords: automation.keywords,
       location: automation.location,
       connectorParams: automation.connectorParams
         ? JSON.parse(automation.connectorParams)
         : undefined,
-    });
+    };
+
+    const searchResult = cachePolicy
+      ? await connectorCache.getOrFetch(
+          ConnectorCache.buildKey({
+            module: automation.jobBoard,
+            operation: "search",
+            params: JSON.stringify(searchParams),
+            policy: cachePolicy,
+          }),
+          () => connector.search(searchParams),
+          cachePolicy.ttl,
+          { bypass: shouldBypassCache },
+        )
+      : await connector.search(searchParams);
 
     if (!searchResult.success) {
       automationLogger.log(

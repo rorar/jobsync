@@ -6,6 +6,8 @@
  * domain boundary and its Module implementations.
  */
 
+import type { CachePolicy } from "./cache";
+
 // =============================================================================
 // Enums
 // =============================================================================
@@ -134,6 +136,8 @@ export interface ModuleManifest {
   settingsSchema?: SettingsSchema;
   healthCheck?: HealthCheckConfig;
   resilience?: ResilienceConfig;
+  /** Response caching policy (Stufe 1). If omitted, no caching. */
+  cachePolicy?: CachePolicy;
 }
 
 export interface JobDiscoveryManifest extends ModuleManifest {
