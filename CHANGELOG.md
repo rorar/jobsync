@@ -17,6 +17,22 @@
 * **api:** Cache-Control: no-store + X-Content-Type-Options: nosniff headers
 * **api:** Per-user API key limit (max 10 active)
 * **api:** Revoke-before-delete enforcement on API keys
+* **security:** 25 vulnerability fixes — IDOR ownership checks, credential URL defense, auth secret fail-fast, input validation (SEC-1 to SEC-18, BS-1 to BS-7)
+
+### Bug Fixes
+
+* **jobs:** `resumeId: ""` caused P2003 FK constraint error when no resume selected — changed to `null`
+
+### Testing
+
+* **e2e:** Repaired all 68 E2E tests (was 8/68 passing) — stale data cleanup, networkidle→domcontentloaded, EURES→Arbeitsagentur, locale cookies, timing fixes, startTransition waits
+* **e2e:** Playwright workers optimized: 3 default, 1 CI (was 4/7)
+
+### Documentation
+
+* **specs:** 10 Allium specifications distilled from codebase
+* **security:** STRIDE threat model, ADRs 015-018, upstream bug reports
+* **roadmap:** ROADMAP 8.5 E2E Repair completed
 
 ## [1.1.3](https://github.com/Gsync/jobsync/compare/v1.1.2...v1.1.3) (2026-02-28)
 
