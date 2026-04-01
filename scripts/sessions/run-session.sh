@@ -2,17 +2,30 @@
 set -euo pipefail
 
 # Session Runner — starts Claude Code sessions in tmux
-# Usage: ./scripts/sessions/run-session.sh <session-id>
-# Example: ./scripts/sessions/run-session.sh s1a
+#
+# Default: interactive (you can type in the tmux session)
+# --noninteractive: headless (claude -p, no input possible)
+#
+# Usage:
+#   ./scripts/sessions/run-session.sh s1a                 # interactive
+#   ./scripts/sessions/run-session.sh s1a --noninteractive # headless
+#   ./scripts/sessions/run-session.sh --status
+#   ./scripts/sessions/run-session.sh --kill s1a
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 SESSIONS="s1a s1b s2 s3 s4"
 TMUX_PREFIX="jobsync"
+LOG_DIR="$PROJECT_DIR/logs/sessions"
+NONINTERACTIVE=false
+
+for arg in "$@"; do
+    [ "$arg" = "--noninteractive" ] && NONINTERACTIVE=true
+done
 
 usage() {
-    echo "Usage: $0 <session-id|command>"
+    echo "Usage: $0 <session-id> [--noninteractive]"
     echo ""
     echo "Sessions (execute in order):"
     echo "  s1a  — Allium Weed + Gap Analysis + Performance Fixes"
@@ -21,11 +34,16 @@ usage() {
     echo "  s3   — CRM Core (Job Status Workflow + Kanban)"
     echo "  s4   — Data Enrichment (Logo + Link-Parsing)"
     echo ""
+    echo "Modes:"
+    echo "  (default)          Interactive — you can type in the tmux session"
+    echo "  --noninteractive   Headless — claude -p, no input possible"
+    echo ""
     echo "Commands:"
-    echo "  --status   Show session status (done/in-progress/pending)"
-    echo "  --attach   Attach to a running session: $0 --attach s1a"
-    echo "  --all      Run all remaining sessions sequentially in one tmux session"
+    echo "  --status   Show session status"
+    echo "  --attach   Attach to running session: $0 --attach s1a"
+    echo "  --kill     Kill a running session: $0 --kill s1a"
     echo "  --next     Run the next pending session"
+    echo "  --all      Run all sessions sequentially"
     exit 1
 }
 
@@ -33,9 +51,7 @@ show_status() {
     echo "Session Status:"
     echo ""
     for s in $SESSIONS; do
-        local PROMPT_FILE="$SCRIPT_DIR/${s}-prompt.md"
         local TMUX_NAME="${TMUX_PREFIX}-${s}"
-
         if tmux has-session -t "$TMUX_NAME" 2>/dev/null; then
             STATUS="RUNNING"
         elif git -C "$PROJECT_DIR" log --oneline -20 --grep="Session ${s}" 2>/dev/null | grep -qi "merge\|session"; then
@@ -43,7 +59,6 @@ show_status() {
         else
             STATUS="PENDING"
         fi
-
         case "$s" in
             s1a) DESC="Allium Weed + Gap Analysis + Perf Fixes" ;;
             s1b) DESC="Comprehensive Review + Fix All" ;;
@@ -51,7 +66,6 @@ show_status() {
             s3)  DESC="CRM Core (Workflow + Kanban)" ;;
             s4)  DESC="Data Enrichment (Logo + Links)" ;;
         esac
-
         printf "  %-5s %-15s %s\n" "$s" "[$STATUS]" "$DESC"
     done
     echo ""
@@ -61,12 +75,8 @@ show_status() {
 next_session() {
     for s in $SESSIONS; do
         local TMUX_NAME="${TMUX_PREFIX}-${s}"
-        if tmux has-session -t "$TMUX_NAME" 2>/dev/null; then
-            continue  # running
-        fi
-        if git -C "$PROJECT_DIR" log --oneline -20 --grep="Session ${s}" 2>/dev/null | grep -qi "merge\|session"; then
-            continue  # done
-        fi
+        tmux has-session -t "$TMUX_NAME" 2>/dev/null && continue
+        git -C "$PROJECT_DIR" log --oneline -20 --grep="Session ${s}" 2>/dev/null | grep -qi "merge\|session" && continue
         echo "$s"
         return 0
     done
@@ -85,120 +95,142 @@ run_session() {
     fi
 
     if tmux has-session -t "$TMUX_NAME" 2>/dev/null; then
-        echo "Session $SESSION_ID is already running in tmux."
-        echo "Attach: tmux attach -t $TMUX_NAME"
+        echo "Session $SESSION_ID already running. Attach: tmux attach -t $TMUX_NAME"
         exit 0
     fi
 
-    echo "Starting Session $SESSION_ID in tmux session '$TMUX_NAME'..."
-    echo "Prompt: $PROMPT_FILE ($(wc -l < "$PROMPT_FILE") lines)"
-    echo ""
+    mkdir -p "$LOG_DIR"
+    local LOG_FILE="$LOG_DIR/${SESSION_ID}-$(date +%Y%m%d-%H%M%S).log"
 
-    # Write a tiny launcher script to avoid quoting hell in tmux
-    local LOG_DIR="$PROJECT_DIR/logs/sessions"
-    local LOG_FILE="$LOG_DIR/${SESSION_ID}-\$(date +%Y%m%d-%H%M%S).log"
-    local LAUNCHER="/tmp/jobsync-session-${SESSION_ID}.sh"
-    cat > "$LAUNCHER" <<LAUNCHER_EOF
+    # Inner script: runs claude (separate file so script(1) can wrap it)
+    local INNER="/tmp/jobsync-inner-${SESSION_ID}.sh"
+
+    if [ "$NONINTERACTIVE" = true ]; then
+        # Headless: pipe prompt via stdin, claude -p exits when done
+        cat > "$INNER" <<EOF
 #!/usr/bin/env bash
-cd "$PROJECT_DIR"
-mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/${SESSION_ID}-\$(date +%Y%m%d-%H%M%S).log"
-echo "Logging to: \$LOG_FILE"
+cd '$PROJECT_DIR'
+cat '$PROMPT_FILE' | claude -p --dangerously-skip-permissions --effort max --verbose
+EOF
+    else
+        # Interactive: prompt as first message, claude stays open for input
+        cat > "$INNER" <<EOF
+#!/usr/bin/env bash
+cd '$PROJECT_DIR'
+PROMPT=\$(cat '$PROMPT_FILE')
+claude --dangerously-skip-permissions --effort max --verbose "\$PROMPT"
+EOF
+    fi
+    chmod +x "$INNER"
+
+    # Outer wrapper: script(1) records all terminal I/O to log file
+    local OUTER="/tmp/jobsync-session-${SESSION_ID}.sh"
+    cat > "$OUTER" <<EOF
+#!/usr/bin/env bash
+echo "Mode: $([ "$NONINTERACTIVE" = true ] && echo "noninteractive" || echo "interactive")"
+echo "Log:  $LOG_FILE"
 echo ""
-script -q -c "cat '$PROMPT_FILE' | claude -p --dangerously-skip-permissions --effort max --verbose" "\$LOG_FILE"
+script -q '$LOG_FILE' '$INNER'
 echo ""
-echo "Session $SESSION_ID finished. Log: \$LOG_FILE"
+echo "Session $SESSION_ID finished. Log: $LOG_FILE"
 echo "Press Enter to close."
 read
-LAUNCHER_EOF
-    chmod +x "$LAUNCHER"
+EOF
+    chmod +x "$OUTER"
 
-    tmux new-session -d -s "$TMUX_NAME" "$LAUNCHER"
+    local MODE="interactive"
+    [ "$NONINTERACTIVE" = true ] && MODE="noninteractive"
+
+    echo "Starting Session $SESSION_ID [$MODE]..."
+    echo "Prompt: $PROMPT_FILE ($(wc -l < "$PROMPT_FILE") lines)"
+    echo "Log:    $LOG_FILE"
+    echo ""
+
+    tmux new-session -d -s "$TMUX_NAME" "$OUTER"
 
     echo "tmux session '$TMUX_NAME' started."
-    echo "Log: $LOG_DIR/${SESSION_ID}-*.log"
     echo ""
     echo "  Attach:  tmux attach -t $TMUX_NAME"
-    echo "  Detach:  Ctrl+B, D (inside tmux)"
-    echo "  Status:  $0 --status"
+    echo "  Detach:  Ctrl+B, D"
+    echo "  Kill:    $0 --kill $SESSION_ID"
+    echo "  Log:     tail -f '$LOG_FILE'"
 }
 
 run_all() {
     local TMUX_NAME="${TMUX_PREFIX}-all"
 
     if tmux has-session -t "$TMUX_NAME" 2>/dev/null; then
-        echo "Sequential run already active in tmux session '$TMUX_NAME'."
-        echo "Attach: tmux attach -t $TMUX_NAME"
+        echo "Already running. Attach: tmux attach -t $TMUX_NAME"
         exit 0
     fi
 
-    # Write a launcher script to avoid quoting hell in tmux
+    mkdir -p "$LOG_DIR"
     local LAUNCHER="/tmp/jobsync-session-all.sh"
-    cat > "$LAUNCHER" <<LAUNCHER_EOF
+    cat > "$LAUNCHER" <<'HEADER'
 #!/usr/bin/env bash
-cd "$PROJECT_DIR"
-LAUNCHER_EOF
+HEADER
 
     for s in $SESSIONS; do
         local PROMPT_FILE="$SCRIPT_DIR/${s}-prompt.md"
-        cat >> "$LAUNCHER" <<LAUNCHER_EOF
+        local INNER="/tmp/jobsync-inner-${s}.sh"
+
+        if [ "$NONINTERACTIVE" = true ]; then
+            cat > "$INNER" <<EOF
+#!/usr/bin/env bash
+cd '$PROJECT_DIR'
+cat '$PROMPT_FILE' | claude -p --dangerously-skip-permissions --effort max --verbose
+EOF
+        else
+            cat > "$INNER" <<EOF
+#!/usr/bin/env bash
+cd '$PROJECT_DIR'
+PROMPT=\$(cat '$PROMPT_FILE')
+claude --dangerously-skip-permissions --effort max --verbose "\$PROMPT"
+EOF
+        fi
+        chmod +x "$INNER"
+
+        cat >> "$LAUNCHER" <<STEP
 echo '=========================================='
 echo '  Session: $s'
 echo '=========================================='
-cat '$PROMPT_FILE' | claude -p --dangerously-skip-permissions --effort max --verbose
+LOG_FILE='$LOG_DIR/${s}-\$(date +%Y%m%d-%H%M%S).log'
+script -q "\$LOG_FILE" '$INNER'
+echo "Session $s finished."
 echo ''
-echo 'Session $s finished.'
-echo ''
-LAUNCHER_EOF
+STEP
     done
 
-    cat >> "$LAUNCHER" <<'LAUNCHER_EOF'
+    cat >> "$LAUNCHER" <<'FOOTER'
 echo 'All sessions completed. Press Enter to close.'
 read
-LAUNCHER_EOF
+FOOTER
     chmod +x "$LAUNCHER"
 
     tmux new-session -d -s "$TMUX_NAME" "$LAUNCHER"
 
-    echo "Sequential run started in tmux session '$TMUX_NAME'."
-    echo ""
+    echo "Sequential run started in tmux '$TMUX_NAME'."
     echo "  Attach:  tmux attach -t $TMUX_NAME"
-    echo "  Detach:  Ctrl+B, D"
 }
 
-# Parse arguments
-if [ $# -eq 0 ]; then
-    usage
-fi
+# --- Argument parsing ---
 
-case "$1" in
-    --status)
-        show_status
-        ;;
-    --attach)
-        if [ $# -lt 2 ]; then
-            echo "Usage: $0 --attach <session-id>"
-            exit 1
-        fi
-        tmux attach -t "${TMUX_PREFIX}-${2}"
-        ;;
-    --next)
-        NEXT=$(next_session)
-        if [ -z "$NEXT" ]; then
-            echo "All sessions completed!"
-            exit 0
-        fi
-        echo "Next session: $NEXT"
-        run_session "$NEXT"
-        ;;
-    --all)
-        run_all
-        ;;
-    s1a|s1b|s2|s3|s4)
-        run_session "$1"
-        ;;
-    *)
-        echo "Unknown: $1"
-        usage
-        ;;
+if [ $# -eq 0 ]; then usage; fi
+
+CMD=""
+ARG2=""
+for arg in "$@"; do
+    [ "$arg" = "--noninteractive" ] && continue
+    [ -z "$CMD" ] && CMD="$arg" && continue
+    [ -z "$ARG2" ] && ARG2="$arg"
+done
+
+case "$CMD" in
+    --status)  show_status ;;
+    --attach)  [ -z "$ARG2" ] && { echo "Usage: $0 --attach <id>"; exit 1; }; tmux attach -t "${TMUX_PREFIX}-${ARG2}" ;;
+    --kill)    [ -z "$ARG2" ] && { echo "Usage: $0 --kill <id>"; exit 1; }; tmux kill-session -t "${TMUX_PREFIX}-${ARG2}" 2>/dev/null && echo "Killed ${ARG2}" || echo "${ARG2} not running" ;;
+    --next)    NEXT=$(next_session); [ -z "$NEXT" ] && { echo "All done!"; exit 0; }; echo "Next: $NEXT"; run_session "$NEXT" ;;
+    --all)     run_all ;;
+    s1a|s1b|s2|s3|s4) run_session "$CMD" ;;
+    *)         echo "Unknown: $CMD"; usage ;;
 esac
