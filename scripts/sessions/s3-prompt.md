@@ -99,7 +99,7 @@ Committe nach jedem logischen Schritt. Build + Tests VOR jedem Commit.
 ### CHECK-Phase
 
 1. `allium:weed` — Stimmt Implementation mit Spec überein?
-2. `/comprehensive-review:full-review` mit `/agent-teams:multi-reviewer-patterns` — koordiniere parallele Reviews über alle 5 Dimensionen (Architecture, Security, Performance, Testing, Best Practices) mit Finding-Deduplizierung, Severity-Kalibrierung und konsolidiertem Report
+2. `/comprehensive-review:full-review` mit `/agent-teams:multi-reviewer-patterns` — koordiniere parallele Reviews über alle 5 Dimensionen (Architecture, Security, Performance, Testing, Best Practices) mit Finding-Deduplizierung, Severity-Kalibrierung und konsolidiertem Report. Fixe NUR den konsolidierten Report — NICHT die Einzel-Reports der Review-Agents.
 3. User Journey + Edge Cases für CRM Features (7 Dimensionen)
 4. UX 10-Punkte-Checkliste für alle neuen Komponenten
 5. Blind Spot Check: "Woran haben wir nicht gedacht?"

@@ -160,7 +160,7 @@ Fixe ALLE Findings — auch kosmetische. UX-Qualität ist nicht optional.
 - Dispatche `/accessibility-compliance:wcag-audit-patterns` als eigenen Agent für WCAG 2.2 Audit
 - Dispatche `/ui-design:interaction-design` als eigenen Agent für Microinteractions, Transitions und Feedback-Patterns
 - Koordiniere alle 4 Review-Agents mit `/agent-teams:multi-reviewer-patterns` — Finding-Deduplizierung (z.B. design-review und accessibility-audit finden denselben Kontrast-Issue), Severity-Kalibrierung, konsolidierter Report
-- Warte auf alle vier, dann fixe Findings aus dem konsolidierten Report
+- Warte auf alle vier. Fixe NUR den konsolidierten Report — NICHT die Einzel-Reports der Agents. Der konsolidierte Report ist bereits dedupliziert und severity-kalibriert. Einzel-Reports ignorieren.
 
 **Für Fixes MUSST du:**
 - Gruppiere Fixes nach Komponenten-Files
