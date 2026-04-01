@@ -470,32 +470,36 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     await page.getByRole("button", { name: /Create Automation/i }).click();
     await expect(
       page.getByRole("heading", { name: /Create Automation/i }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 10000 });
 
     await page.getByPlaceholder(/Frontend Jobs Berlin/i).fill(`KBOcc ${uid}`);
     await page.getByRole("combobox", { name: /Job Board/i }).click();
     await page.getByRole("option", { name: /EURES/i }).click();
     await page.getByRole("button", { name: /Next/i }).click();
 
+    // Wait for Step 1 to render with the occupation combobox
     const keywordsCombobox = page
       .getByRole("combobox")
       .filter({ hasText: /Search occupations|keyword/i });
-    await expect(keywordsCombobox).toBeVisible({ timeout: 5000 });
+    await expect(keywordsCombobox).toBeVisible({ timeout: 10000 });
     await keywordsCombobox.click();
 
     const searchInput = page.getByPlaceholder(/Search occupations/i);
-    await expect(searchInput).toBeVisible();
+    await expect(searchInput).toBeVisible({ timeout: 5000 });
 
     const keyword = `KBKeyword ${uid}`;
     await searchInput.fill(keyword);
     await page.waitForTimeout(500);
     await searchInput.press("Enter");
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(1000);
 
-    await expect(page.getByText(keyword).first()).toBeVisible();
+    await expect(page.getByText(keyword).first()).toBeVisible({ timeout: 5000 });
 
-    const announcements = await getAllAnnouncements(page);
-    expect(hasAnnouncement(announcements, "added")).toBe(true);
+    // Poll for the announcement (async state update after Enter)
+    await expect(async () => {
+      const announcements = await getAllAnnouncements(page);
+      expect(hasAnnouncement(announcements, "added")).toBe(true);
+    }).toPass({ timeout: 5000 });
 
     expect(filterCriticalErrors(errors)).toEqual([]);
 
@@ -519,20 +523,21 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     const keywordsCombobox = page
       .getByRole("combobox")
       .filter({ hasText: /Search occupations|keyword/i });
-    await expect(keywordsCombobox).toBeVisible({ timeout: 5000 });
+    await expect(keywordsCombobox).toBeVisible({ timeout: 10000 });
     await keywordsCombobox.click();
 
     const searchInput = page.getByPlaceholder(/Search occupations/i);
+    await expect(searchInput).toBeVisible({ timeout: 5000 });
 
     for (let i = 1; i <= 3; i++) {
       await searchInput.fill(`KW${i} ${uid}`);
       await page.waitForTimeout(500);
       await searchInput.press("Enter");
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(1000);
     }
 
     for (let i = 1; i <= 3; i++) {
-      await expect(page.getByText(`KW${i} ${uid}`).first()).toBeVisible();
+      await expect(page.getByText(`KW${i} ${uid}`).first()).toBeVisible({ timeout: 5000 });
     }
 
     await deleteResume(page, resumeTitle);
@@ -655,6 +660,9 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
     await page.waitForLoadState("domcontentloaded");
 
     await page.getByRole("button", { name: /Create Automation/i }).click();
+    await expect(
+      page.getByRole("heading", { name: /Create Automation/i }),
+    ).toBeVisible({ timeout: 10000 });
     await page
       .getByPlaceholder(/Frontend Jobs Berlin/i)
       .fill(`KBLocSel ${uid}`);
@@ -665,22 +673,22 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
     const locationCombobox = page
       .getByRole("combobox")
       .filter({ hasText: /Select countries|location/i });
-    await expect(locationCombobox).toBeVisible({ timeout: 5000 });
+    await expect(locationCombobox).toBeVisible({ timeout: 10000 });
     await locationCombobox.click();
     await page.waitForTimeout(2000);
 
     const locationInput = page.getByPlaceholder(/Search countries/i);
-    await expect(locationInput).toBeVisible();
+    await expect(locationInput).toBeVisible({ timeout: 5000 });
 
     await locationInput.fill("Germany");
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(1000);
 
     const germanyOption = page
       .getByRole("option")
       .filter({ hasText: /Germany/i })
       .first();
     try {
-      await germanyOption.waitFor({ state: "visible", timeout: 5000 });
+      await germanyOption.waitFor({ state: "visible", timeout: 8000 });
       await germanyOption.click();
       await page.waitForTimeout(500);
 
@@ -848,12 +856,18 @@ test.describe("Keyboard UX: ARIA Announcements", () => {
     await skillInput.fill(skill);
     await page.waitForTimeout(300);
     await skillInput.press("Enter");
-    await page.waitForTimeout(1500);
 
-    const announcements = await getAllAnnouncements(page);
-    expect(
-      hasAnnouncement(announcements, "of 10") ||
-        hasAnnouncement(announcements, "Created"),
-    ).toBe(true);
+    // Wait for chip to appear (confirms the async creation completed)
+    await expect(page.getByText(skill).first()).toBeVisible({ timeout: 10000 });
+
+    // Poll for the sr-only announcement — the server action is async, so the
+    // announcement text updates after the tag is created in the DB
+    await expect(async () => {
+      const announcements = await getAllAnnouncements(page);
+      expect(
+        hasAnnouncement(announcements, "of 10") ||
+          hasAnnouncement(announcements, "Created"),
+      ).toBe(true);
+    }).toPass({ timeout: 5000 });
   });
 });

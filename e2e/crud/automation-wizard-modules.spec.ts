@@ -125,36 +125,34 @@ test.describe("Automation Wizard — Dynamic Module Selector", () => {
     // Ensure a resume exists
     await ensureResumeExists(page, resumeTitle);
 
-    // First: navigate to settings and deactivate EURES
+    // Navigate to settings and find a module toggle on the API Keys page.
+    // EURES/Arbeitsagentur have CredentialType.NONE and do NOT appear here.
+    // JSearch appears on both the API Keys page AND the automation wizard.
     await page.goto("/dashboard/settings");
     await page.waitForLoadState("domcontentloaded");
     await page.getByRole("button", { name: "API Keys", exact: true }).click();
-    await page
-      .locator("[role='switch']")
-      .first()
-      .waitFor({ state: "visible", timeout: 15000 });
 
-    const euresSwitch = page.getByRole("switch", {
-      name: /Toggle EURES module/i,
+    // Wait for the API Keys section to finish loading (modules are fetched async)
+    await page.waitForTimeout(2000);
+
+    const jsearchSwitch = page.getByRole("switch", {
+      name: /Toggle JSearch module/i,
     });
 
-    // Only proceed if EURES switch exists (it may not if EURES has no
-    // credential entry — in that case it is always active and the toggle
-    // is not shown on the API Keys page)
-    const euresSwitchVisible = await euresSwitch
+    const jsearchSwitchVisible = await jsearchSwitch
       .isVisible()
       .catch(() => false);
 
-    if (euresSwitchVisible) {
-      const wasActive = await euresSwitch.isChecked();
+    if (jsearchSwitchVisible) {
+      const wasActive = await jsearchSwitch.isChecked();
 
       if (wasActive) {
-        // Deactivate EURES
-        await euresSwitch.click();
-        await expect(euresSwitch).not.toBeChecked({ timeout: 5000 });
+        // Deactivate JSearch
+        await jsearchSwitch.click();
+        await expect(jsearchSwitch).not.toBeChecked({ timeout: 5000 });
       }
 
-      // Now open the automation wizard — EURES should NOT appear
+      // Now open the automation wizard — JSearch should NOT appear
       await navigateToAutomations(page);
       await page
         .getByRole("button", { name: /Create Automation/i })
@@ -165,29 +163,27 @@ test.describe("Automation Wizard — Dynamic Module Selector", () => {
 
       await page.getByRole("combobox", { name: /Job Board/i }).click();
 
-      // EURES should NOT be a selectable option (it was deactivated)
+      // JSearch should NOT be a selectable option (it was deactivated)
       await expect(
-        page.getByRole("option", { name: /EURES/i }),
+        page.getByRole("option", { name: /JSearch/i }),
       ).not.toBeVisible({ timeout: 3000 });
 
       // Close dialogs
       await page.keyboard.press("Escape");
       await page.keyboard.press("Escape");
 
-      // Restore: re-activate EURES
+      // Restore: re-activate JSearch
       await page.goto("/dashboard/settings");
       await page.waitForLoadState("domcontentloaded");
       await page.getByRole("button", { name: "API Keys", exact: true }).click();
-      await page
-        .locator("[role='switch']")
-        .first()
-        .waitFor({ state: "visible", timeout: 15000 });
+      await page.waitForTimeout(2000);
 
-      const euresSwitchAfter = page.getByRole("switch", {
-        name: /Toggle EURES module/i,
+      const jsearchSwitchAfter = page.getByRole("switch", {
+        name: /Toggle JSearch module/i,
       });
-      await euresSwitchAfter.click();
-      await expect(euresSwitchAfter).toBeChecked({ timeout: 5000 });
+      await jsearchSwitchAfter.waitFor({ state: "visible", timeout: 15000 });
+      await jsearchSwitchAfter.click();
+      await expect(jsearchSwitchAfter).toBeChecked({ timeout: 5000 });
     }
 
     // Cleanup

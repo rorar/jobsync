@@ -83,15 +83,17 @@ test.describe("Module Settings — Activation Toggle", () => {
     });
     await expect(ollamaSwitch).toBeVisible({ timeout: 10000 });
 
-    // The card that contains the Ollama switch should show status text
+    // The card that contains the Ollama switch should show status text.
+    // Card uses className "rounded-lg border bg-card" — no data-slot attribute.
     const ollamaCard = page
-      .locator("[data-slot='card']")
-      .filter({ hasText: /Ollama/i });
+      .locator("div.rounded-lg.border")
+      .filter({ has: ollamaSwitch });
     await expect(ollamaCard).toBeVisible();
 
     const isChecked = await ollamaSwitch.isChecked();
     if (isChecked) {
-      await expect(ollamaCard.getByText("Active")).toBeVisible();
+      // Match the status span that shows "Active" (exact match to avoid matching "Inactive")
+      await expect(ollamaCard.getByText("Active", { exact: true })).toBeVisible();
     } else {
       await expect(ollamaCard.getByText("Inactive")).toBeVisible();
     }

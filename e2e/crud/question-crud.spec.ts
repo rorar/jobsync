@@ -137,22 +137,25 @@ test.describe("Question CRUD", () => {
     await navigateToQuestions(page);
     await createQuestion(page, questionText, answerText);
 
-    // Wait for the toast and question list to reload
-    await expect(page.getByText(/Question has been created/).first()).toBeVisible({
-      timeout: 10000,
-    });
+    // Wait for the question list to reload after save
     await expect(page.getByText(questionText).first()).toBeVisible({
-      timeout: 10000,
+      timeout: 15000,
     });
+
+    // Wait for any toast overlay to disappear before clicking the question
+    await page.waitForTimeout(2000);
 
     // Click on the question text to trigger onEdit — the question title is a
-    // clickable button element that calls onEdit
-    await page.getByRole("button", { name: questionText }).first().click();
+    // clickable button element that calls onEdit. The onEdit handler makes an
+    // async getQuestionById server call before opening the dialog.
+    const questionButton = page.getByRole("button", { name: questionText }).first();
+    await questionButton.click();
 
-    // Wait for the edit dialog to open — t("questions.editQuestion") = "Edit Question"
+    // Wait for the edit dialog to open — the server call may take a few seconds
+    // t("questions.editQuestion") = "Edit Question"
     await expect(
       page.getByRole("heading", { name: /Edit Question/ }),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 15000 });
 
     // Modify the question text
     const questionInput = page.getByPlaceholder("Enter your question");

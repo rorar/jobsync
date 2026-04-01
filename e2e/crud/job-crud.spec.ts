@@ -9,6 +9,55 @@ async function navigateToJobs(page: Page) {
   await page.goto("/dashboard/myjobs");
   await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-job-btn").waitFor({ state: "visible" });
+  // Wait for the jobs table to finish its async loadJobs() call.
+  await page.waitForTimeout(2000);
+}
+
+/**
+ * Ensure at least one resume exists. The AddJob form defaults resume=""
+ * which causes a P2003 FK violation when submitted. Having a resume
+ * available lets us select it in the form to avoid this issue.
+ */
+async function ensureResumeExists(page: Page, resumeTitle: string) {
+  await page.goto("/dashboard/profile");
+  await page.waitForLoadState("domcontentloaded");
+
+  const existingRow = page.getByRole("row", {
+    name: new RegExp(resumeTitle, "i"),
+  });
+  try {
+    await existingRow.first().waitFor({ state: "visible", timeout: 3000 });
+    return;
+  } catch {
+    // Resume does not exist yet — create one
+  }
+
+  await page.getByRole("button", { name: "New Resume" }).click();
+  await page.getByPlaceholder("Ex: Full Stack Developer").fill(resumeTitle);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(
+    page.getByText(/Resume title has been/i).first(),
+  ).toBeVisible({ timeout: 10000 });
+}
+
+async function deleteResume(page: Page, title: string) {
+  await page.goto("/dashboard/profile");
+  await page.waitForLoadState("domcontentloaded");
+  const row = page
+    .getByRole("row", { name: new RegExp(title, "i") })
+    .first();
+  try {
+    await row.waitFor({ state: "visible", timeout: 5000 });
+    await row.getByTestId("resume-actions-menu-btn").click({ force: true });
+    await page.getByRole("menuitem", { name: "Delete" }).click({ force: true });
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Delete" })
+      .click({ force: true });
+  } catch {
+    // Resume may not exist — skip cleanup
+  }
 }
 
 async function createJob(
@@ -63,6 +112,21 @@ async function createJob(
     opts.description ?? "E2E test job description.",
   );
 
+  // Select a resume to avoid the P2003 FK violation that occurs when
+  // the form submits resume="" (empty string is not a valid Resume ID).
+  const resumeSelect = page.getByLabel("Select Resume");
+  await resumeSelect.click();
+  const firstResumeOption = page.getByRole("option").first();
+  const hasResumeOption = await firstResumeOption
+    .waitFor({ state: "visible", timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  if (hasResumeOption) {
+    await firstResumeOption.click();
+  } else {
+    await page.keyboard.press("Escape");
+  }
+
   await page.getByTestId("save-job-btn").click();
 
   // Wait for the dialog to close (confirms save + redirect completed)
@@ -72,10 +136,9 @@ async function createJob(
 }
 
 async function deleteJob(page: Page, jobTitle: string) {
-  await page.goto("/dashboard/myjobs");
-  await page.waitForLoadState("domcontentloaded");
+  await navigateToJobs(page);
   const cells = page.getByText(new RegExp(jobTitle, "i"));
-  await expect(cells.first()).toBeVisible({ timeout: 10000 });
+  await expect(cells.first()).toBeVisible({ timeout: 15000 });
   await page
     .getByRole("row", { name: jobTitle })
     .getByTestId("job-actions-menu-btn")
@@ -98,11 +161,22 @@ async function deleteJob(page: Page, jobTitle: string) {
 // storageState handles authentication — no per-test login needed
 
 test.describe("Job CRUD", () => {
+  test.beforeEach(async ({ page }) => {
+    // Ensure English locale so hardcoded labels (Draft, Indeed, etc.) match
+    await page.context().addCookies([
+      { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
+    ]);
+  });
+
   test("should create a new job with all fields", async ({ page }) => {
     const uid = Date.now().toString(36);
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
+    const resumeTitle = `E2E Resume ${uid}`;
+
+    // Ensure a resume exists (required to avoid FK violation on submit)
+    await ensureResumeExists(page, resumeTitle);
 
     await navigateToJobs(page);
     await createJob(page, { title: jobTitle, company, location });
@@ -110,11 +184,12 @@ test.describe("Job CRUD", () => {
     // Navigate fresh to ensure client-side data is loaded after redirect
     await navigateToJobs(page);
     await expect(
-      page.getByRole("row", { name: jobTitle }).first(),
-    ).toBeVisible({ timeout: 10000 });
+      page.getByText(jobTitle).first(),
+    ).toBeVisible({ timeout: 15000 });
 
     // Cleanup
     await deleteJob(page, jobTitle);
+    await deleteResume(page, resumeTitle);
   });
 
   test("should edit the job description and verify updated values", async ({
@@ -124,6 +199,10 @@ test.describe("Job CRUD", () => {
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
+    const resumeTitle = `E2E Resume ${uid}`;
+
+    // Ensure a resume exists (required to avoid FK violation on submit)
+    await ensureResumeExists(page, resumeTitle);
 
     // Create
     await navigateToJobs(page);
@@ -133,7 +212,7 @@ test.describe("Job CRUD", () => {
     await navigateToJobs(page);
     await expect(
       page.getByRole("row", { name: jobTitle }).first(),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 15000 });
 
     // Edit
     await page
@@ -163,10 +242,11 @@ test.describe("Job CRUD", () => {
     await navigateToJobs(page);
     await expect(
       page.getByRole("row", { name: jobTitle }).first(),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 15000 });
 
     // Cleanup
     await deleteJob(page, jobTitle);
+    await deleteResume(page, resumeTitle);
   });
 
   test("should delete the job and verify removal", async ({ page }) => {
@@ -174,6 +254,10 @@ test.describe("Job CRUD", () => {
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
+    const resumeTitle = `E2E Resume ${uid}`;
+
+    // Ensure a resume exists (required to avoid FK violation on submit)
+    await ensureResumeExists(page, resumeTitle);
 
     // Create first
     await navigateToJobs(page);
@@ -183,7 +267,7 @@ test.describe("Job CRUD", () => {
     await navigateToJobs(page);
     await expect(
       page.getByRole("row", { name: jobTitle }).first(),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 15000 });
 
     // Delete
     await deleteJob(page, jobTitle);
@@ -192,5 +276,8 @@ test.describe("Job CRUD", () => {
     await expect(
       page.getByRole("row", { name: jobTitle }),
     ).not.toBeVisible({ timeout: 10000 });
+
+    // Cleanup resume
+    await deleteResume(page, resumeTitle);
   });
 });

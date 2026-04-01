@@ -292,24 +292,28 @@ test.describe("Task CRUD", () => {
       page.getByRole("row", { name: new RegExp(taskTitle, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
 
-    // Wait for creation toast to disappear
-    await expect(
-      page.getByText(/Task has been created/).first(),
-    ).not.toBeVisible({ timeout: 10000 });
+    // Wait for creation toast to disappear so it doesn't overlay the row
+    await page.waitForTimeout(2000);
 
+    // Use the actions menu to start the activity instead of the hover button,
+    // which has opacity-0 and may not be reliably clickable in all environments
     const taskRow = page
       .getByRole("row", { name: new RegExp(taskTitle, "i") })
       .first();
-    await taskRow.hover();
     await taskRow
-      .getByTestId("task-start-activity-btn")
+      .getByTestId("task-actions-menu-btn")
+      .click({ force: true });
+    await page
+      .getByRole("menuitem", { name: "Start Activity" })
       .click({ force: true });
 
     await expectToast(page, /Activity started from task/);
-    await expect(page).toHaveURL(/\/dashboard\/activities/);
+    await expect(page).toHaveURL(/\/dashboard\/activities/, { timeout: 15000 });
 
     // Stop the running activity
-    await page.getByRole("button", { name: "Stop" }).click({ force: true });
+    const stopBtn = page.getByRole("button", { name: "Stop" });
+    await stopBtn.waitFor({ state: "visible", timeout: 10000 });
+    await stopBtn.click({ force: true });
 
     // Cleanup task
     await navigateToTasks(page);

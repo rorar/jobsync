@@ -17,14 +17,21 @@ async function createResume(page: Page, title: string) {
 }
 
 async function openResumeEditor(page: Page, resumeTitle: string) {
-  await page
+  // Wait for the resume row to appear (the create might still be processing)
+  const row = page
     .getByRole("row", { name: new RegExp(resumeTitle, "i") })
-    .first()
-    .getByTestId("resume-actions-menu-btn")
-    .click({ force: true });
+    .first();
+  await row.waitFor({ state: "visible", timeout: 10000 });
+  await row.getByTestId("resume-actions-menu-btn").click({ force: true });
+  // The "View / Edit Resume" menu item is inside a <Link> that triggers
+  // navigation. Use Promise.all to catch the navigation event.
+  const menuItem = page.getByRole("menuitem", {
+    name: "View / Edit Resume",
+  });
+  await menuItem.waitFor({ state: "visible", timeout: 5000 });
   await Promise.all([
-    page.waitForURL(/\/dashboard\/profile\/resume\//),
-    page.getByRole("menuitem", { name: "View / Edit Resume" }).click(),
+    page.waitForURL(/\/dashboard\/profile\/resume\//, { timeout: 15000 }),
+    menuItem.click(),
   ]);
   await page.waitForLoadState("domcontentloaded");
   await expect(
@@ -111,7 +118,9 @@ test("add contact info", async ({ page }) => {
 
   await page.getByRole("button", { name: "Add Section" }).click();
   await page.getByRole("menuitem", { name: "Add Contact Info" }).click();
-  await page.getByLabel("First Name").waitFor({ state: "visible" });
+  // Wait for the Add Contact Info dialog to open
+  await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
+  await page.getByLabel("First Name").waitFor({ state: "visible", timeout: 10000 });
   await page.getByLabel("First Name").fill("John");
   await page.getByLabel("Last Name").fill("Doe");
   await page.getByLabel("Headline").fill("Skill developer with testing skills");
@@ -122,7 +131,7 @@ test("add contact info", async ({ page }) => {
   await expectToast(page, /Contact Info has been created/);
   await expect(
     page.getByRole("heading", { name: "John Doe" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15000 });
 
   await deleteResume(page, resumeTitle);
 });
@@ -137,13 +146,16 @@ test("add summary section", async ({ page }) => {
 
   await page.getByRole("button", { name: "Add Section" }).click();
   await page.getByRole("menuitem", { name: "Add Summary" }).click();
+  // Wait for the Add Summary dialog to open
+  await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
+  await page.getByLabel("Section Title").waitFor({ state: "visible", timeout: 10000 });
   await page.getByLabel("Section Title").fill("Summary");
   await page.locator(".tiptap").click();
   await page.locator(".tiptap").fill("this is test summary\n");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(
     page.getByRole("heading", { name: "Summary" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15000 });
   await expect(page.getByText("this is test summary")).toBeVisible();
   await expectToast(page, /Summary has been created/);
 
@@ -321,6 +333,8 @@ test("multi-section integration: summary + experience + education", async ({
   // Step 3: Add Summary section
   await page.getByRole("button", { name: "Add Section" }).click();
   await page.getByRole("menuitem", { name: "Add Summary" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
+  await page.getByLabel("Section Title").waitFor({ state: "visible", timeout: 10000 });
   await page.getByLabel("Section Title").fill("Professional Summary");
   await page.locator(".tiptap").click();
   await page.locator(".tiptap").fill(summaryText);
