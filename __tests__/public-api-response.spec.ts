@@ -114,6 +114,16 @@ describe("actionToResponse", () => {
     expect(res.status).toBe(409);
   });
 
+  it("maps i18n key 'api.keyMustBeRevoked' to 400", async () => {
+    const res = actionToResponse({ success: false, message: "api.keyMustBeRevoked" });
+    expect(res.status).toBe(400);
+  });
+
+  it("maps i18n key 'api.maxKeysReached' to 400", async () => {
+    const res = actionToResponse({ success: false, message: "api.maxKeysReached" });
+    expect(res.status).toBe(400);
+  });
+
   it("respects custom status override", async () => {
     const result = { success: true, data: { id: "1" } };
     const res = actionToResponse(result, { status: 201 });

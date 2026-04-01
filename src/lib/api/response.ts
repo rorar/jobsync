@@ -131,6 +131,9 @@ function inferErrorStatus(message: string): number {
   if (lower.includes("alreadyexists") || lower.includes("alreadyrevoked") || lower.includes("duplicate")) {
     return 409;
   }
+  if (lower.includes("mustbe") || lower.includes("maxkeys") || lower.includes("reached")) {
+    return 400;
+  }
 
   // Legacy English message patterns (for backwards compatibility)
   if (lower.includes("not authenticated") || lower.includes("not authorized")) {

@@ -539,7 +539,7 @@ model CompanyBlacklist {
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   pattern   String
-  matchType String   @default("contains") // "exact" | "contains"
+  matchType String   @default("contains") // "exact" | "contains" | "starts_with" | "ends_with"
   reason    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
