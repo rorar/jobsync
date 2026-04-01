@@ -190,6 +190,7 @@ test.describe("Job CRUD", () => {
   test("should edit the job description and verify updated values", async ({
     page,
   }) => {
+    test.setTimeout(120_000); // Create + Edit requires >60s on slow dev server
     const uid = Date.now().toString(36);
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
@@ -245,6 +246,7 @@ test.describe("Job CRUD", () => {
   });
 
   test("should delete the job and verify removal", async ({ page }) => {
+    test.setTimeout(120_000); // Create + Delete requires >60s on slow dev server
     const uid = Date.now().toString(36);
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
