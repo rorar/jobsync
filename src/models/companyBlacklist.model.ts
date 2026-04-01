@@ -6,7 +6,7 @@
  * before they are saved as StagedVacancies.
  */
 
-export type BlacklistMatchType = "exact" | "contains";
+export type BlacklistMatchType = "exact" | "contains" | "starts_with" | "ends_with";
 
 export interface CompanyBlacklist {
   id: string;
@@ -22,6 +22,8 @@ export interface CompanyBlacklist {
  * Check whether a company name matches a blacklist entry.
  * - "exact": case-insensitive full match
  * - "contains": case-insensitive substring match
+ * - "starts_with": case-insensitive prefix match
+ * - "ends_with": case-insensitive suffix match
  */
 export function matchesBlacklistEntry(
   companyName: string,
@@ -35,6 +37,10 @@ export function matchesBlacklistEntry(
       return name === pattern;
     case "contains":
       return name.includes(pattern);
+    case "starts_with":
+      return name.startsWith(pattern);
+    case "ends_with":
+      return name.endsWith(pattern);
   }
 }
 

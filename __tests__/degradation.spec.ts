@@ -75,7 +75,7 @@ describe("Degradation Rules", () => {
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([]);
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
-        manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
       });
 
       await handleAuthFailure("eures", "401 Unauthorized");
@@ -91,7 +91,7 @@ describe("Degradation Rules", () => {
       ]);
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 3 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
-        manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
       });
 
       await handleAuthFailure("openai", "403 Forbidden");
@@ -120,7 +120,7 @@ describe("Degradation Rules", () => {
       ]);
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 5 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
-        manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
       });
 
       const result = await handleAuthFailure("jsearch", "Invalid API key");
@@ -130,7 +130,7 @@ describe("Degradation Rules", () => {
 
     it("should skip escalation when credential.required is false", async () => {
       (mockRegistry.get as jest.Mock).mockReturnValue({
-        manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: false } },
+        manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: false } },
       });
 
       const result = await handleAuthFailure("eures", "401 Unauthorized");
@@ -143,7 +143,7 @@ describe("Degradation Rules", () => {
     it("should create a notification for each affected automation", async () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 2 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
-        manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
       });
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
         { id: "auto-1", userId: "user-1", name: "Alpha Search" },
@@ -175,7 +175,7 @@ describe("Degradation Rules", () => {
     it("should not create notifications when 0 automations are affected", async () => {
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([]);
       (mockRegistry.get as jest.Mock).mockReturnValue({
-        manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
       });
 
       await handleAuthFailure("jsearch", "401 Unauthorized");
@@ -188,7 +188,7 @@ describe("Degradation Rules", () => {
     it("should still return pausedCount when notification creation fails", async () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
-        manifest: { connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
       });
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
         { id: "auto-3", userId: "user-3", name: "Gamma Search" },
@@ -346,7 +346,7 @@ describe("Degradation Rules", () => {
   describe("handleCircuitBreakerTrip", () => {
     function registerModule(id: string, consecutiveFailures = 0) {
       const registered = {
-        manifest: { id, connectorType: ConnectorType.JOB_DISCOVERY },
+        manifest: { id, name: id, connectorType: ConnectorType.JOB_DISCOVERY },
         status: ModuleStatus.ACTIVE,
         consecutiveFailures,
         circuitBreakerOpenSince: undefined as Date | undefined,

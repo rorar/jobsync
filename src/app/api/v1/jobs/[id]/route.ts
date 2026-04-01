@@ -1,7 +1,8 @@
 import prisma from "@/lib/db";
 import { withApiAuth } from "@/lib/api/with-api-auth";
 import { actionToResponse, errorResponse, noContentResponse } from "@/lib/api/response";
-import { UpdateJobSchema } from "@/lib/api/schemas";
+import { UpdateJobSchema, isValidUUID } from "@/lib/api/schemas";
+import { findOrCreate, resolveStatus, JOB_DETAIL_SELECT, JOB_API_SELECT } from "@/lib/api/helpers";
 
 /** CORS preflight */
 export const OPTIONS = withApiAuth(async () => new Response(null));
@@ -11,21 +12,13 @@ export const OPTIONS = withApiAuth(async () => new Response(null));
  */
 export const GET = withApiAuth(async (_req, { userId, params }) => {
   const jobId = params?.id;
-  if (!jobId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) {
+  if (!jobId || !isValidUUID(jobId)) {
     return errorResponse("VALIDATION_ERROR", "Valid Job ID is required", 400);
   }
 
   const job = await prisma.job.findFirst({
     where: { id: jobId, userId },
-    include: {
-      JobSource: true,
-      JobTitle: true,
-      Company: true,
-      Status: true,
-      Location: true,
-      Resume: { include: { File: { select: { id: true, fileName: true, fileType: true } } } },
-      tags: true,
-    },
+    select: JOB_DETAIL_SELECT,
   });
 
   if (!job) {
@@ -40,7 +33,7 @@ export const GET = withApiAuth(async (_req, { userId, params }) => {
  */
 export const PATCH = withApiAuth(async (req, { userId, params }) => {
   const jobId = params?.id;
-  if (!jobId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) {
+  if (!jobId || !isValidUUID(jobId)) {
     return errorResponse("VALIDATION_ERROR", "Valid Job ID is required", 400);
   }
 
@@ -71,84 +64,16 @@ export const PATCH = withApiAuth(async (req, { userId, params }) => {
   if (Object.keys(updates).length === 0) {
     return errorResponse("VALIDATION_ERROR", "No fields to update", 400);
   }
-  const data: Record<string, unknown> = {};
 
-  // Map API fields to Prisma fields, resolving relations as needed
-  if (updates.title !== undefined) {
-    const jobTitle = await findOrCreate("jobTitle", userId, updates.title);
-    data.jobTitleId = jobTitle.id;
-  }
-  if (updates.company !== undefined) {
-    const company = await findOrCreate("company", userId, updates.company);
-    data.companyId = company.id;
-  }
-  if (updates.location !== undefined) {
-    if (updates.location) {
-      const location = await findOrCreate("location", userId, updates.location);
-      data.locationId = location.id;
-    } else {
-      data.locationId = null;
-    }
-  }
-  if (updates.status !== undefined) {
-    const status = await prisma.jobStatus.findFirst({
-      where: { value: updates.status },
-    });
-    if (!status) {
-      return errorResponse("VALIDATION_ERROR", "Invalid job status", 400);
-    }
-    data.statusId = status.id;
-  }
-  if (updates.source !== undefined) {
-    if (updates.source) {
-      const source = await findOrCreate("jobSource", userId, updates.source);
-      data.jobSourceId = source.id;
-    } else {
-      data.jobSourceId = null;
-    }
-  }
-  if (updates.type !== undefined) data.jobType = updates.type;
-  if (updates.salaryRange !== undefined) data.salaryRange = updates.salaryRange || null;
-  if (updates.dueDate !== undefined) data.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
-  if (updates.dateApplied !== undefined) data.appliedDate = updates.dateApplied ? new Date(updates.dateApplied) : null;
-  if (updates.jobDescription !== undefined) data.description = updates.jobDescription;
-  if (updates.jobUrl !== undefined) data.jobUrl = updates.jobUrl || null;
-  if (updates.applied !== undefined) data.applied = updates.applied;
-  if (updates.resume !== undefined) {
-    if (updates.resume) {
-      const ownedResume = await prisma.resume.findFirst({
-        where: { id: updates.resume, profile: { userId } },
-        select: { id: true },
-      });
-      if (!ownedResume) {
-        return errorResponse("VALIDATION_ERROR", "Invalid resume ID", 400);
-      }
-    }
-    data.resumeId = updates.resume || null;
-  }
-  if (updates.tags !== undefined) {
-    if (updates.tags.length > 0) {
-      const ownedTags = await prisma.tag.count({
-        where: { id: { in: updates.tags }, createdBy: userId },
-      });
-      if (ownedTags !== updates.tags.length) {
-        return errorResponse("VALIDATION_ERROR", "One or more invalid tag IDs", 400);
-      }
-    }
-    data.tags = { set: updates.tags.map((id) => ({ id })) };
+  const result = await buildUpdateData(updates, userId);
+  if ("error" in result) {
+    return result.error;
   }
 
   const job = await prisma.job.update({
     where: { id: jobId },
-    data,
-    include: {
-      JobTitle: true,
-      Company: true,
-      Status: true,
-      Location: true,
-      JobSource: true,
-      tags: true,
-    },
+    data: result.data,
+    select: JOB_API_SELECT,
   });
 
   return actionToResponse({ success: true, data: job });
@@ -159,7 +84,7 @@ export const PATCH = withApiAuth(async (req, { userId, params }) => {
  */
 export const DELETE = withApiAuth(async (_req, { userId, params }) => {
   const jobId = params?.id;
-  if (!jobId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) {
+  if (!jobId || !isValidUUID(jobId)) {
     return errorResponse("VALIDATION_ERROR", "Valid Job ID is required", 400);
   }
 
@@ -178,25 +103,133 @@ export const DELETE = withApiAuth(async (_req, { userId, params }) => {
   return noContentResponse();
 });
 
-// --- Helper using upsert to avoid TOCTOU race conditions ---
+// --- PATCH helper ---
 
-type EntityType = "jobTitle" | "company" | "location" | "jobSource";
+type UpdateFields = Partial<{
+  title: string;
+  company: string;
+  location: string | null;
+  status: string;
+  source: string | null;
+  type: string;
+  salaryRange: string | null;
+  dueDate: string | null;
+  dateApplied: string | null;
+  jobDescription: string;
+  jobUrl: string | null;
+  applied: boolean;
+  resume: string | null;
+  tags: string[];
+}>;
 
-const COMPOSITE_KEY_MAP: Record<EntityType, string> = {
-  jobTitle: "value_createdBy",
-  company: "value_createdBy",
-  location: "value_createdBy",
-  jobSource: "value_createdBy",
-};
+type BuildResult =
+  | { data: Record<string, unknown> }
+  | { error: Response };
 
-async function findOrCreate(type: EntityType, userId: string, label: string) {
-  const value = label.trim().toLowerCase();
-  const model = prisma[type] as any;
-  const compositeKey = COMPOSITE_KEY_MAP[type];
+/**
+ * Build the Prisma `data` object from validated PATCH fields.
+ * Resolves relations in parallel where possible.
+ */
+async function buildUpdateData(
+  updates: UpdateFields,
+  userId: string,
+): Promise<BuildResult> {
+  const data: Record<string, unknown> = {};
 
-  return model.upsert({
-    where: { [compositeKey]: { value, createdBy: userId } },
-    update: {},
-    create: { label: label.trim(), value, createdBy: userId },
-  });
+  // 1. Resolve independent relation lookups in parallel
+  const resolvers: Promise<void>[] = [];
+
+  if (updates.title !== undefined) {
+    resolvers.push(
+      findOrCreate("jobTitle", userId, updates.title).then((r) => {
+        data.jobTitleId = r.id;
+      }),
+    );
+  }
+  if (updates.company !== undefined) {
+    resolvers.push(
+      findOrCreate("company", userId, updates.company).then((r) => {
+        data.companyId = r.id;
+      }),
+    );
+  }
+  if (updates.location !== undefined) {
+    if (updates.location) {
+      resolvers.push(
+        findOrCreate("location", userId, updates.location).then((r) => {
+          data.locationId = r.id;
+        }),
+      );
+    } else {
+      data.locationId = null;
+    }
+  }
+  if (updates.status !== undefined) {
+    resolvers.push(
+      resolveStatus(updates.status).then((s) => {
+        // Stash in data temporarily; checked after await
+        data._statusResolved = s;
+      }),
+    );
+  }
+  if (updates.source !== undefined) {
+    if (updates.source) {
+      resolvers.push(
+        findOrCreate("jobSource", userId, updates.source).then((r) => {
+          data.jobSourceId = r.id;
+        }),
+      );
+    } else {
+      data.jobSourceId = null;
+    }
+  }
+
+  await Promise.all(resolvers);
+
+  // Check status resolution
+  if (updates.status !== undefined) {
+    const resolved = data._statusResolved as { id: string } | null;
+    delete data._statusResolved;
+    if (!resolved) {
+      return { error: errorResponse("VALIDATION_ERROR", "Invalid job status", 400) };
+    }
+    data.statusId = resolved.id;
+  }
+
+  // 2. Map simple scalar fields
+  if (updates.type !== undefined) data.jobType = updates.type;
+  if (updates.salaryRange !== undefined) data.salaryRange = updates.salaryRange || null;
+  if (updates.dueDate !== undefined) data.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
+  if (updates.dateApplied !== undefined) data.appliedDate = updates.dateApplied ? new Date(updates.dateApplied) : null;
+  if (updates.jobDescription !== undefined) data.description = updates.jobDescription;
+  if (updates.jobUrl !== undefined) data.jobUrl = updates.jobUrl || null;
+  if (updates.applied !== undefined) data.applied = updates.applied;
+
+  // 3. Validate ownership for resume and tags
+  if (updates.resume !== undefined) {
+    if (updates.resume) {
+      const ownedResume = await prisma.resume.findFirst({
+        where: { id: updates.resume, profile: { userId } },
+        select: { id: true },
+      });
+      if (!ownedResume) {
+        return { error: errorResponse("VALIDATION_ERROR", "Invalid resume ID", 400) };
+      }
+    }
+    data.resumeId = updates.resume || null;
+  }
+
+  if (updates.tags !== undefined) {
+    if (updates.tags.length > 0) {
+      const ownedTags = await prisma.tag.count({
+        where: { id: { in: updates.tags }, createdBy: userId },
+      });
+      if (ownedTags !== updates.tags.length) {
+        return { error: errorResponse("VALIDATION_ERROR", "One or more invalid tag IDs", 400) };
+      }
+    }
+    data.tags = { set: updates.tags.map((id) => ({ id })) };
+  }
+
+  return { data };
 }

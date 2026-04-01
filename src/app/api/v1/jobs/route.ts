@@ -2,6 +2,7 @@ import prisma from "@/lib/db";
 import { withApiAuth } from "@/lib/api/with-api-auth";
 import { paginatedResponse, createdResponse, errorResponse } from "@/lib/api/response";
 import { JobsListQuerySchema, CreateJobSchema } from "@/lib/api/schemas";
+import { findOrCreate, resolveStatus, JOB_LIST_SELECT, JOB_API_SELECT } from "@/lib/api/helpers";
 
 /** CORS preflight */
 export const OPTIONS = withApiAuth(async () => new Response(null));
@@ -49,24 +50,7 @@ export const GET = withApiAuth(async (req, { userId }) => {
       where: whereClause,
       skip,
       take: perPage,
-      select: {
-        id: true,
-        userId: true,
-        createdAt: true,
-        JobSource: true,
-        JobTitle: true,
-        jobType: true,
-        Company: true,
-        Status: true,
-        Location: true,
-        dueDate: true,
-        appliedDate: true,
-        salaryRange: true,
-        jobUrl: true,
-        applied: true,
-        matchScore: true,
-        _count: { select: { Notes: true } },
-      },
+      select: JOB_LIST_SELECT,
       orderBy: { createdAt: "desc" },
     }),
     prisma.job.count({ where: whereClause }),
@@ -99,20 +83,15 @@ export const POST = withApiAuth(async (req, { userId }) => {
     applied, resume, tags,
   } = parsed.data;
 
-  // Resolve or create JobTitle
-  const jobTitle = await findOrCreateJobTitle(userId, title);
-  // Resolve or create Company
-  const companyRecord = await findOrCreateCompany(userId, company);
-  // Resolve or create Location (optional)
-  const locationRecord = location
-    ? await findOrCreateLocation(userId, location)
-    : null;
-  // Resolve JobSource (optional)
-  const sourceRecord = source
-    ? await findOrCreateSource(userId, source)
-    : null;
-  // Resolve Status (default to "draft")
-  const statusRecord = await resolveStatus(status ?? "draft");
+  // Resolve all independent entities in parallel
+  const [jobTitle, companyRecord, locationRecord, sourceRecord, statusRecord] =
+    await Promise.all([
+      findOrCreate("jobTitle", userId, title),
+      findOrCreate("company", userId, company),
+      location ? findOrCreate("location", userId, location) : null,
+      source ? findOrCreate("jobSource", userId, source) : null,
+      resolveStatus(status ?? "draft"),
+    ]);
 
   if (!statusRecord) {
     return errorResponse("VALIDATION_ERROR", "Invalid job status", 400);
@@ -162,59 +141,8 @@ export const POST = withApiAuth(async (req, { userId }) => {
         ? { tags: { connect: tagIds.map((id) => ({ id })) } }
         : {}),
     },
-    include: {
-      JobTitle: true,
-      Company: true,
-      Status: true,
-      Location: true,
-      JobSource: true,
-      tags: true,
-    },
+    select: JOB_API_SELECT,
   });
 
   return createdResponse(job);
 });
-
-// --- Helper functions using upsert to avoid TOCTOU race conditions ---
-
-async function findOrCreateJobTitle(userId: string, label: string) {
-  const value = label.trim().toLowerCase();
-  return prisma.jobTitle.upsert({
-    where: { value_createdBy: { value, createdBy: userId } },
-    update: {},
-    create: { label: label.trim(), value, createdBy: userId },
-  });
-}
-
-async function findOrCreateCompany(userId: string, label: string) {
-  const value = label.trim().toLowerCase();
-  return prisma.company.upsert({
-    where: { value_createdBy: { value, createdBy: userId } },
-    update: {},
-    create: { label: label.trim(), value, createdBy: userId },
-  });
-}
-
-async function findOrCreateLocation(userId: string, label: string) {
-  const value = label.trim().toLowerCase();
-  return prisma.location.upsert({
-    where: { value_createdBy: { value, createdBy: userId } },
-    update: {},
-    create: { label: label.trim(), value, createdBy: userId },
-  });
-}
-
-async function findOrCreateSource(userId: string, label: string) {
-  const value = label.trim().toLowerCase();
-  return prisma.jobSource.upsert({
-    where: { value_createdBy: { value, createdBy: userId } },
-    update: {},
-    create: { label: label.trim(), value, createdBy: userId },
-  });
-}
-
-async function resolveStatus(statusValue: string) {
-  return prisma.jobStatus.findFirst({
-    where: { value: statusValue },
-  });
-}

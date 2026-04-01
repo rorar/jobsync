@@ -68,10 +68,12 @@ export class ConnectorCache {
     userId?: string;
     policy?: CachePolicy;
   }): string {
-    const segments = [parts.module, parts.operation, parts.params];
+    // Sanitize user-controlled segments to prevent key collision via delimiter injection
+    const sanitize = (s: string) => s.replace(/:/g, "%3A");
+    const segments = [parts.module, parts.operation, sanitize(parts.params)];
 
     if (parts.policy?.localeSensitive && parts.locale) {
-      segments.push(parts.locale);
+      segments.push(sanitize(parts.locale));
     }
 
     if (parts.policy?.scope === "per-user" && parts.userId) {
@@ -147,6 +149,9 @@ export class ConnectorCache {
     }
 
     this.hits++;
+    // LRU: re-insert to move to end of Map iteration order
+    this.store.delete(key);
+    this.store.set(key, entry);
     return entry.value as T;
   }
 
@@ -234,8 +239,9 @@ export class ConnectorCache {
   }
 
   /**
-   * Evict the oldest entry (simple LRU approximation via insertion order).
-   * Map preserves insertion order, so the first key is the oldest.
+   * Evict the least-recently-used entry.
+   * Map preserves insertion order; LRU re-insertion in get() moves accessed
+   * entries to the end, so the first key is the least-recently-used.
    */
   private evictOldest(): void {
     const firstKey = this.store.keys().next().value;
@@ -243,6 +249,28 @@ export class ConnectorCache {
       this.store.delete(firstKey);
     }
   }
+
+  /** Start periodic prune (every 15 minutes). Idempotent. */
+  startPeriodicPrune(): void {
+    if (this.pruneTimer) return;
+    this.pruneTimer = setInterval(() => {
+      this.prune();
+    }, 15 * 60_000);
+    // Allow Node.js to exit without waiting for this timer
+    if (this.pruneTimer && typeof this.pruneTimer === "object" && "unref" in this.pruneTimer) {
+      this.pruneTimer.unref();
+    }
+  }
+
+  /** Stop periodic prune. */
+  stopPeriodicPrune(): void {
+    if (this.pruneTimer) {
+      clearInterval(this.pruneTimer);
+      this.pruneTimer = null;
+    }
+  }
+
+  private pruneTimer: ReturnType<typeof setInterval> | null = null;
 }
 
 // =============================================================================
@@ -255,12 +283,15 @@ declare const globalThis: {
   [GLOBAL_KEY]?: ConnectorCache;
 } & typeof global;
 
-export const connectorCache: ConnectorCache =
-  globalThis[GLOBAL_KEY] ?? new ConnectorCache();
-
-if (process.env.NODE_ENV !== "production") {
-  globalThis[GLOBAL_KEY] = connectorCache;
+// Unconditional globalThis assignment — must work in BOTH dev (HMR) and production.
+// Same pattern as RunCoordinator and EventBus singletons.
+if (!globalThis[GLOBAL_KEY]) {
+  globalThis[GLOBAL_KEY] = new ConnectorCache();
 }
+export const connectorCache: ConnectorCache = globalThis[GLOBAL_KEY];
+
+// Start periodic prune to reclaim expired entries
+connectorCache.startPeriodicPrune();
 
 // =============================================================================
 // Default Cache Policies (per ROADMAP 0.9)
