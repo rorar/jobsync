@@ -1,8 +1,15 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-01
 
-**Total: 107 bugs found, 107 fixed, 0 remaining**
+**Total: 109 bugs found, 109 fixed, 0 remaining**
 
 ### Status: ✅ All bugs are fixed.
+
+## Session S1a Blind Spot Check #2 (2026-04-01) — ALL FIXED
+
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| BS2-1 | **HIGH** | `dedupHash.findMany` unbounded — loads ALL hashes without time limit | Added 90-day `createdAt` cutoff (same as job URL query) |
+| BS2-2 | **MEDIUM** | `removeBlacklistEntry` uses `findUnique(id)` then checks userId separately (ADR-015 violation) | Changed to `findFirst({ id, userId })` |
 
 ## Session S1a Allium Weed Findings (2026-04-01) — ALL FIXED
 
