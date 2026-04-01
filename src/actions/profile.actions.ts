@@ -242,6 +242,7 @@ export const createResumeProfile = async (
     const titleExists = await prisma.resume.findFirst({
       where: {
         title: value,
+        profile: { userId: user.id },
       },
     });
 
@@ -435,7 +436,15 @@ export const deleteResumeById = async (
   }
 };
 
-export const uploadFile = async (file: File, dir: string, path: string) => {
+export const uploadFile = async (file: File, dir: string, filePath: string) => {
+  // Validate path is within the expected directory to prevent path traversal
+  const dataDir = path.resolve(process.env.NODE_ENV !== "production" ? "data" : "/data");
+  const resolvedDir = path.resolve(dir);
+  const resolvedPath = path.resolve(filePath);
+  if (!resolvedDir.startsWith(dataDir) || !resolvedPath.startsWith(resolvedDir)) {
+    throw new Error("Invalid upload path");
+  }
+
   const bytes = await file.arrayBuffer();
   const buffer = new Uint8Array(bytes);
 
@@ -443,7 +452,7 @@ export const uploadFile = async (file: File, dir: string, path: string) => {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  await writeFile(path, buffer);
+  await writeFile(filePath, buffer);
 };
 
 export const deleteFile = async (fileId: string, callerUserId?: string) => {
@@ -591,6 +600,16 @@ export const addExperience = async (
       throw new Error("SectionTitle is required.");
     }
 
+    // If sectionId provided, verify it belongs to the user's resume
+    if (data.sectionId) {
+      const ownedSection = await prisma.resumeSection.findFirst({
+        where: { id: data.sectionId, Resume: { profile: { userId: user.id } } },
+      });
+      if (!ownedSection) {
+        throw new Error("Resume section not found");
+      }
+    }
+
     const section = !data.sectionId
       ? await prisma.resumeSection.create({
           data: {
@@ -681,6 +700,16 @@ export const addEducation = async (
     });
     if (!owned) {
       throw new Error("Resume not found");
+    }
+
+    // If sectionId provided, verify it belongs to the user's resume
+    if (data.sectionId) {
+      const ownedSection = await prisma.resumeSection.findFirst({
+        where: { id: data.sectionId, Resume: { profile: { userId: user.id } } },
+      });
+      if (!ownedSection) {
+        throw new Error("Resume section not found");
+      }
     }
 
     const section = !data.sectionId

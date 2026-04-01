@@ -160,10 +160,10 @@ export const updateCompany = async (
       throw new Error("Not authenticated");
     }
 
-    const { id, company, logoUrl, createdBy } = data;
+    const { id, company, logoUrl } = data;
 
-    if (!id || user.id !== createdBy) {
-      throw new Error("Id is not provided or no user privileges");
+    if (!id) {
+      throw new Error("Id is not provided");
     }
 
     // Validate image URL
@@ -186,9 +186,11 @@ export const updateCompany = async (
       throw new Error("Company already exists!");
     }
 
+    // Ownership enforced at Prisma level, not via client-submitted createdBy
     const res = await prisma.company.update({
       where: {
         id,
+        createdBy: user.id,
       },
       data: {
         value,

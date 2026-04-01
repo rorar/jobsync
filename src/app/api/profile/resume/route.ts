@@ -42,7 +42,7 @@ export const POST = async (req: NextRequest) => {
 
     if (resumeId && title) {
       if (fileId && file?.name) {
-        await deleteFile(fileId);
+        await deleteFile(fileId, userId);
         fileId = undefined;
       }
 
