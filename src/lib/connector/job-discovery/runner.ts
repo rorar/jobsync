@@ -633,9 +633,9 @@ async function getExistingVacancyKeys(
       where: { userId, createdAt: { gte: dedupCutoff } },
       select: { jobUrl: true },
     }),
-    // Check dedup hashes (purged records)
+    // Check dedup hashes (purged records) — bounded to last 90 days
     db.dedupHash.findMany({
-      where: { userId, sourceBoard },
+      where: { userId, sourceBoard, createdAt: { gte: dedupCutoff } },
       select: { hash: true },
     }),
   ]);

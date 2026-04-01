@@ -108,12 +108,12 @@ export async function removeBlacklistEntry(
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
 
-    // Verify ownership
-    const entry = await prisma.companyBlacklist.findUnique({
-      where: { id },
+    // Ownership enforced at Prisma level (ADR-015)
+    const entry = await prisma.companyBlacklist.findFirst({
+      where: { id, userId: user.id },
     });
 
-    if (!entry || entry.userId !== user.id) {
+    if (!entry) {
       return { success: false, message: "Entry not found" };
     }
 

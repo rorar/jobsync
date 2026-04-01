@@ -12,6 +12,7 @@ jest.mock("@/lib/db", () => ({
   default: {
     companyBlacklist: {
       findMany: jest.fn(),
+      findFirst: jest.fn(),
       findUnique: jest.fn(),
       create: jest.fn(),
       delete: jest.fn(),
@@ -21,6 +22,7 @@ jest.mock("@/lib/db", () => ({
 
 const mockCompanyBlacklist = db.companyBlacklist as unknown as {
   findMany: jest.Mock;
+  findFirst: jest.Mock;
   findUnique: jest.Mock;
   create: jest.Mock;
   delete: jest.Mock;
@@ -136,7 +138,7 @@ describe("CompanyBlacklist Actions", () => {
 
   describe("removeBlacklistEntry", () => {
     it("removes entry owned by user", async () => {
-      mockCompanyBlacklist.findUnique.mockResolvedValue({
+      mockCompanyBlacklist.findFirst.mockResolvedValue({
         id: "e1", userId: "user-1",
       });
       mockCompanyBlacklist.delete.mockResolvedValue({});
@@ -148,9 +150,9 @@ describe("CompanyBlacklist Actions", () => {
     });
 
     it("rejects removal of entry owned by another user", async () => {
-      mockCompanyBlacklist.findUnique.mockResolvedValue({
-        id: "e1", userId: "other-user",
-      });
+      // With ADR-015, findFirst includes userId in where clause,
+      // so another user's entry simply returns null (not found)
+      mockCompanyBlacklist.findFirst.mockResolvedValue(null);
 
       const result = await removeBlacklistEntry("e1");
 
@@ -159,7 +161,7 @@ describe("CompanyBlacklist Actions", () => {
     });
 
     it("rejects removal of non-existent entry", async () => {
-      mockCompanyBlacklist.findUnique.mockResolvedValue(null);
+      mockCompanyBlacklist.findFirst.mockResolvedValue(null);
 
       const result = await removeBlacklistEntry("non-existent");
 
