@@ -100,7 +100,7 @@ rule ValidateApiKey {
         if key not found: reject (401 UNAUTHORIZED)
         if key is revoked (revokedAt != null): reject (401 UNAUTHORIZED)
         if key valid: return userId + keyHash
-    ensures: lastUsedAt updated asynchronously (non-blocking)
+    ensures: lastUsedAt updated asynchronously (non-blocking), throttled to max 1 write per 5 min per key
     ensures: Validation uses constant-time evaluation pattern to prevent timing oracle
 
     -- The key is NEVER stored in plaintext. Only the SHA-256 hash is persisted.
@@ -262,7 +262,7 @@ rule CreateJob {
     ensures: Company resolved or created via upsert (idempotent)
     ensures: Location resolved or created via upsert (if provided)
     ensures: JobSource resolved or created via upsert (if provided)
-    ensures: JobStatus resolved by value string (must exist)
+    ensures: JobStatus resolved by value string (defaults to "draft" if omitted)
     ensures: Resume ownership verified if resume ID provided (IDOR prevention)
     ensures: Tag ownership verified if tag IDs provided (IDOR prevention)
     ensures: Job created with all resolved relations

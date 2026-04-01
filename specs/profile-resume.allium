@@ -3,10 +3,10 @@
 
 -- Scope: Profile Aggregate — Resume CRUD, Sections (Summary, Experience, Education),
 --   ContactInfo, File upload, Ownership chain traversal
--- Includes: createResumeProfile, getResumeById, editResume, deleteResume,
+-- Includes: createResumeProfile, getResumeById, editResume, deleteResumeById,
 --   addContactInfo, updateContactInfo, addExperience, updateExperience,
 --   addEducation, updateEducation, deleteWorkExperience, deleteEducation,
---   addResumeSummary, updateResumeSummary, getResumeList, uploadFile
+--   addResumeSummary, updateResumeSummary, getResumeList, uploadFile, deleteFile
 -- Excludes:
 --   - Job association (see job-aggregate.allium)
 --   - Automation resume reference (see module-lifecycle.allium)
@@ -71,14 +71,14 @@ entity Resume {
     updated_at: Timestamp
 
     @invariant
-        -- Resume titles must be unique across all resumes (global, not per-user).
+        -- Resume titles must be unique per-user (scoped to user's profile).
         -- A Resume belongs to a Profile which belongs to a User.
         -- Ownership chain: Resume -> Profile -> User.
 }
 
 entity File {
     file_name: String
-    file_path: String?             -- server filesystem path; excluded from responses
+    file_path: String              -- server filesystem path; required in DB, excluded from API responses
     file_type: String              -- always "resume" for resume uploads
     uploaded_at: Timestamp
 
@@ -113,12 +113,16 @@ entity ResumeSection {
     summary: Summary?                   -- only when type = summary
     work_experiences: Set<WorkExperience>  -- only when type = experience
     educations: Set<Education>           -- only when type = education
+    license_or_certifications: Set<LicenseOrCertification>  -- only when type = certification
+    others: Set<OtherSection>            -- only when type = other
 
     @invariant
         -- The section_type determines which child collection is populated.
         -- A summary section has exactly one Summary child.
         -- An experience section has zero or more WorkExperience children.
         -- An education section has zero or more Education children.
+        -- A certification section has zero or more LicenseOrCertification children.
+        -- An other section has zero or more OtherSection children.
 }
 
 entity Summary {
@@ -178,7 +182,7 @@ rule CreateResume {
 
     requires: User is authenticated
     requires: title is non-empty
-    requires: no existing resume has the same title (global uniqueness check)
+    requires: no existing resume for this user has the same title (per-user uniqueness)
 
     ensures:
         if User has an existing Profile:
@@ -245,6 +249,9 @@ rule DeleteResume {
     requires: User is authenticated
     requires: Resume.profile.userId = User.id  -- ownership verified before cascade delete
 
+    ensures: If file attached, file deleted from filesystem AND database BEFORE transaction
+    ensures: File deletion uses callerUserId for ownership verification:
+        File → Resume → Profile → User chain traversal
     ensures: Transaction deletes in order:
         1. ContactInfo (where resumeId)
         2. Summary (where ResumeSection.resumeId)
@@ -252,12 +259,11 @@ rule DeleteResume {
         4. Education (where ResumeSection.resumeId)
         5. ResumeSection (where resumeId)
         6. Resume
-    ensures: If file attached, file deleted from filesystem AND database
-    ensures: File deletion uses callerUserId for ownership verification:
-        File → Resume → Profile → User chain traversal
 
-    -- Transaction ensures atomicity — either all children are deleted or none.
-    -- The deletion order respects referential integrity constraints.
+    -- File deletion happens outside the transaction (before it) because filesystem
+    -- operations cannot be rolled back. If file deletion fails, resume is preserved.
+    -- If transaction fails after file deletion, the file is orphaned (acceptable tradeoff).
+    -- The deletion order within the transaction respects referential integrity.
 }
 
 -- === Contact Info ===
@@ -406,15 +412,14 @@ rule UploadFile {
     when: User uploads a file for a resume
 
     requires: file bytes are readable
+    requires: filePath passes path validation (no traversal, within upload directory)
 
     ensures: Upload directory created if it does not exist
     ensures: File bytes written to server filesystem
-    ensures: File record created in database
 
-    -- File upload is a two-step process:
-    -- 1. Write bytes to disk (server action)
-    -- 2. Create File entity in database
-    -- The File entity is then linked to a Resume via createResumeProfile or editResume.
+    -- File upload writes bytes to disk only. No File record is created here.
+    -- The File entity is created and linked to a Resume by createResumeProfile or editResume,
+    -- which receive the returned filePath.
 }
 
 ------------------------------------------------------------
@@ -437,8 +442,8 @@ invariant LazyProfileCreation {
 }
 
 invariant ResumeTitleUniqueness {
-    -- Resume titles are currently checked for global uniqueness (not per-user).
-    -- This may be overly strict — see Open Questions.
+    -- Resume titles are checked for per-user uniqueness (scoped to user's profile).
+    -- Two different users may have resumes with the same title.
 }
 
 invariant TransactionalDeletion {
@@ -457,9 +462,8 @@ invariant SectionOnDemandCreation {
 -- Open Questions
 ------------------------------------------------------------
 
--- Q1: Resume title uniqueness is checked globally, not per-user.
---     This means two different users cannot have resumes with the same title.
---     Should this be changed to per-user uniqueness?
+-- Q1: RESOLVED. Resume title uniqueness is per-user (scoped to user's profile).
+--     The code queries with { title: value, profile: { userId: user.id } }.
 
 -- Q2: RESOLVED. deleteWorkExperience and deleteEducation now verify ownership
 --     via chain traversal before deletion. See DeleteWorkExperience and

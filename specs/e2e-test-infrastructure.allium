@@ -43,7 +43,8 @@ value AuthState {
 
 value TestDataIdentifier {
   uid: String                    -- Date.now().toString(36), e.g. "m1abc2d"
-  prefix: String                 -- "E2E", distinguishes test data from real data
+  -- Note: prefix is not used in practice. Tests use "{Label} {uid}" format
+  -- (e.g., "Co m1abc2d", "Tag m1abc2d") which is sufficiently unique.
 }
 
 ------------------------------------------------------------
@@ -64,7 +65,13 @@ enum DomainAggregate {
   automation
   question
   profile
+  company
+  module_settings
+  keyboard_ux
 }
+-- Note: automation has two spec files (automation-crud + automation-wizard-modules)
+-- because the wizard is complex enough to warrant a dedicated test file.
+-- keyboard-ux is a cross-cutting spec, not strictly one DDD aggregate.
 
 ------------------------------------------------------------
 -- Entities
@@ -98,7 +105,7 @@ entity GlobalSetup {
 ------------------------------------------------------------
 
 config {
-  workers_local: Integer = 4
+  workers_local: Integer = 3
   workers_ci: Integer = 1
   timeout_default: Duration = 60.seconds
   timeout_expect: Duration = 10.seconds
@@ -166,8 +173,7 @@ rule UniqueTestData {
   -- derived from Date.now().toString(36) to prevent collision
   -- when tests run in parallel across workers.
   when: CrudTestCreatesData(test, entity_name)
-  let uid = TestDataIdentifier(uid: timestamp_base36(), prefix: "E2E")
-  ensures: entity_name contains uid.prefix
+  let uid = TestDataIdentifier(uid: timestamp_base36())
   ensures: entity_name contains uid.uid
 }
 
@@ -186,11 +192,10 @@ rule CleanupOnFailure {
 rule SingleSourceHelpers {
   -- ALL reusable E2E utilities live in e2e/helpers/index.ts.
   -- No test file duplicates login(), selectOrCreateComboboxOption(),
-  -- expectToast(), or navigateTo().
+  -- or expectToast().
   ensures: login defined exactly once in e2e/helpers/
   ensures: selectOrCreateComboboxOption defined exactly once in e2e/helpers/
   ensures: expectToast defined exactly once in e2e/helpers/
-  ensures: navigateTo defined exactly once in e2e/helpers/
   ensures: uniqueId defined exactly once in e2e/helpers/
 }
 
@@ -212,7 +217,7 @@ rule SharedDatabaseConstraint {
   -- Tests must be designed to not interfere with each other.
   ensures: no test modifies seed data (admin user, job sources, job statuses)
   ensures: no test reads data created by another test
-  ensures: all test-created data uses "E2E" prefix for identification
+  ensures: all test-created data uses uniqueId() for identification
 }
 
 rule SeedDataIsReadOnly {
@@ -227,11 +232,11 @@ rule SeedDataIsReadOnly {
 ------------------------------------------------------------
 
 rule OneSpecPerAggregate {
-  -- Each domain aggregate has exactly one E2E spec file.
-  -- No legacy duplicates (e.g., both add-job.spec.ts and job-crud.spec.ts).
-  -- This follows DDD's "single source of truth" principle.
+  -- Each domain aggregate generally has one E2E spec file.
+  -- Exception: automation has two files (automation-crud + automation-wizard-modules)
+  -- because the wizard's module-specific flows are complex enough to warrant separation.
   for_each: aggregate in DomainAggregate
-  ensures: TestFile where aggregate = aggregate | count <= 1
+  ensures: TestFile where aggregate = aggregate | count <= 2
 }
 
 ------------------------------------------------------------

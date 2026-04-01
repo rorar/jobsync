@@ -102,17 +102,14 @@ rule EnterWithInputCreatable {
             SelectionPerformed(combobox, outcome: added)
 
     @guidance
-        -- preventDefault on the Enter event to avoid form submission.
+        -- Two implementation patterns are acceptable:
+        --   A) Custom onKeyDown Enter handler with preventDefault + stopPropagation
+        --      (used by Combobox, TagInput)
+        --   B) Delegation to cmdk's native onSelect on a "Create/Add" CommandItem
+        --      that is positioned first in the list (used by EuresOccupationCombobox)
+        -- Both achieve the same user-facing behavior.
         -- For multi-select, the popover stays open so the user can
         -- continue adding items without re-opening.
-        --
-        -- FRAMEWORK CONSTRAINT (cmdk): Components using custom Enter
-        -- handling MUST set shouldFilter={false} on the Command component
-        -- and handle filtering manually. cmdk's native Enter handler
-        -- selects the highlighted CommandItem via onSelect — this conflicts
-        -- with custom onKeyDown Enter handlers when shouldFilter is active.
-        -- Use e.preventDefault() + e.stopPropagation() to fully suppress
-        -- cmdk's native Enter behaviour.
 }
 
 rule EnterWithInputNonCreatable {
@@ -202,9 +199,10 @@ rule EnterOnHierarchicalNode {
         -- EuresLocationCombobox: Enter on a country with NUTS regions
         -- toggles the expand/collapse state of that node. The user must
         -- drill into a region or use "All of {Country}" to select.
+        -- Implementation: delegated to cmdk's native onSelect on CommandItem,
+        -- which calls toggleExpand. No custom onKeyDown Enter handler needed.
         -- When has_input is true (user is searching), Enter on a node
         -- with children DOES select it directly (bypasses expand/collapse).
-        -- This matches the existing EuresLocationCombobox.onSelect logic.
 }
 
 -- =============================================================================
@@ -308,16 +306,18 @@ invariant MaxLimitRespected {
 
 invariant ManualFilterRequired {
     -- Components with custom Enter handling must use shouldFilter={false}
-    -- to prevent cmdk's native Enter→select from conflicting
-    for c in Comboboxes:
-        if c.creatable or c.hierarchical:
-            c.uses_manual_filter
+    -- to prevent cmdk's native Enter→select from conflicting.
+    -- BaseCombobox delegates via a `filter` prop — consumers are responsible.
+    for c in [Combobox, TagInput, EuresLocationCombobox, EuresOccupationCombobox]:
+        c.uses shouldFilter={false} on their Command component
 
     @guidance
         -- Set shouldFilter={false} on the Command component and implement
-        -- filtering via useMemo or useState. This is required because cmdk's
-        -- built-in filter mode activates native Enter→select on highlighted
-        -- items, which conflicts with custom onKeyDown Enter handlers.
+        -- filtering via useMemo or useState. BaseCombobox accepts an optional
+        -- `filter` prop, but all its consumers set shouldFilter={false}.
+        -- EURES comboboxes use onSelect (via CommandItem) instead of custom
+        -- onKeyDown Enter handlers — this is functionally equivalent because
+        -- cmdk's native Enter triggers onSelect on the highlighted item.
 }
 
 invariant TabNeverPrevented {
