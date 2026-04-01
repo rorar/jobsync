@@ -1,8 +1,14 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-01
 
-**Total: 137 bugs found, 137 fixed, 0 remaining**
+**Total: 138 bugs found, 137 fixed, 1 pre-existing open**
 
-### Status: ✅ All bugs are fixed.
+### Status: ⚠️ 1 pre-existing test failure (PRE-1, not S1b-related)
+
+## Pre-existing Test Failure (2026-04-01) — OPEN
+
+| ID | Severity | Finding | Status |
+|----|----------|---------|--------|
+| PRE-1 | **LOW** | `ActivityForm.spec.tsx` — 2 create-mode tests fail (submit mock not firing). Pre-existing, not caused by S1b. Edit-mode tests pass. | Open — investigate in S2 |
 
 ## Session S1b Blind Spot Follow-up (2026-04-01) — ALL FIXED
 
