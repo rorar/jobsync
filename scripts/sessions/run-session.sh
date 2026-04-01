@@ -95,13 +95,20 @@ run_session() {
     echo ""
 
     # Write a tiny launcher script to avoid quoting hell in tmux
+    local LOG_DIR="$PROJECT_DIR/logs/sessions"
+    local LOG_FILE="$LOG_DIR/${SESSION_ID}-\$(date +%Y%m%d-%H%M%S).log"
     local LAUNCHER="/tmp/jobsync-session-${SESSION_ID}.sh"
     cat > "$LAUNCHER" <<LAUNCHER_EOF
 #!/usr/bin/env bash
 cd "$PROJECT_DIR"
-cat '$PROMPT_FILE' | claude -p --dangerously-skip-permissions --effort max --verbose
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/${SESSION_ID}-\$(date +%Y%m%d-%H%M%S).log"
+echo "Logging to: \$LOG_FILE"
 echo ""
-echo "Session $SESSION_ID finished. Press Enter to close."
+cat '$PROMPT_FILE' | claude -p --dangerously-skip-permissions --effort max --verbose 2>&1 | tee "\$LOG_FILE"
+echo ""
+echo "Session $SESSION_ID finished. Log: \$LOG_FILE"
+echo "Press Enter to close."
 read
 LAUNCHER_EOF
     chmod +x "$LAUNCHER"
@@ -109,6 +116,7 @@ LAUNCHER_EOF
     tmux new-session -d -s "$TMUX_NAME" "$LAUNCHER"
 
     echo "tmux session '$TMUX_NAME' started."
+    echo "Log: $LOG_DIR/${SESSION_ID}-*.log"
     echo ""
     echo "  Attach:  tmux attach -t $TMUX_NAME"
     echo "  Detach:  Ctrl+B, D (inside tmux)"
