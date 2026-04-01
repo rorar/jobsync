@@ -138,7 +138,23 @@ Committe nach jedem logischen Schritt. Build + Tests VOR jedem Commit.
 
 **Für Fixes:** Parallele Fix-Agents nach File-Gruppen dispatchen.
 
-**Anti-Pattern:** NICHT alles im Main-Agent mit Read/Edit machen. Das verschwendet Context und ist langsamer.
+### VERBOTEN für den Main-Agent
+Der Main-Agent darf KEINE der folgenden Aktionen selbst ausführen:
+- ❌ Code lesen/schreiben mit Read/Edit/Write (außer Koordinations-Files wie BUGS.md, CHANGELOG.md, ROADMAP.md, CLAUDE.md)
+- ❌ Tests schreiben oder ausführen
+- ❌ Review-Findings selbst fixen ("I'll fix this quickly while waiting")
+- ❌ UI-Komponenten ändern
+- ❌ Allium Specs schreiben oder editieren
+
+Der Main-Agent darf NUR:
+- ✅ Agents dispatchen und koordinieren
+- ✅ Agent-Ergebnisse prüfen und zusammenführen
+- ✅ Koordinations-Files aktualisieren (BUGS.md, CHANGELOG.md, ROADMAP.md, CLAUDE.md, docs/)
+- ✅ Git-Operationen (commit, merge, branch)
+- ✅ Build/Test Verification Commands ausführen
+- ✅ Architektur-Entscheidungen treffen und an Agents kommunizieren
+
+Wenn ein Agent abbricht oder ein Finding übrig bleibt: Dispatche einen NEUEN Agent. Mache es NICHT selbst.
 
 ### Resilienz bei API-Fehlern
 Bei HTTP 500 oder Timeout-Fehlern:

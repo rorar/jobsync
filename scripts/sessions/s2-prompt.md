@@ -160,7 +160,21 @@ Fixe ALLE Findings — auch kosmetische. UX-Qualität ist nicht optional.
 - Gruppiere Fixes nach Komponenten-Files
 - Dispatche Fix-Agents parallel, max 2-3 auf denselben Files
 
-**Anti-Pattern:** NICHT 8 Features sequenziell im Main-Agent mit Read/Edit durcharbeiten. Das verschwendet Context und ist 4x langsamer.
+### VERBOTEN für den Main-Agent
+Der Main-Agent darf KEINE der folgenden Aktionen selbst ausführen:
+- ❌ Code lesen/schreiben mit Read/Edit/Write (außer Koordinations-Files wie BUGS.md, CHANGELOG.md)
+- ❌ Tests schreiben oder ausführen
+- ❌ Review-Findings selbst fixen ("I'll fix this quickly while waiting")
+- ❌ UI-Komponenten ändern
+
+Der Main-Agent darf NUR:
+- ✅ Agents dispatchen und koordinieren
+- ✅ Agent-Ergebnisse prüfen und zusammenführen
+- ✅ Koordinations-Files aktualisieren (BUGS.md, CHANGELOG.md, ROADMAP.md, docs/)
+- ✅ Git-Operationen (commit, merge, branch)
+- ✅ Build/Test Verification Commands ausführen
+
+Wenn ein Agent abbricht oder ein Finding übrig bleibt: Dispatche einen NEUEN Agent. Mache es NICHT selbst.
 
 ### Resilienz bei API-Fehlern
 Bei HTTP 500 oder Timeout-Fehlern von der Anthropic API:
