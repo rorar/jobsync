@@ -46,14 +46,17 @@ enum VacancySource { manual | automation }
 -- manual:     User created via Add Job or Quick-Add
 -- automation: Discovered by an Automation run
 
-enum BulkActionType { promote | dismiss | archive | restore | delete }
+enum BulkActionType { dismiss | archive | trash | restore | restoreFromTrash }
+-- promote removed: bulk promotion is not yet implemented.
+-- delete renamed to trash: matches code's BulkActionType = "trash".
+-- restoreFromTrash added: distinct from restore (which restores dismissed vacancies).
 
 -- =============================================================================
 -- Config
 -- =============================================================================
 
 config {
-  RETENTION_DAYS: Integer = 90
+  RETENTION_DAYS: Integer = 30
     -- Days before trashed StagedVacancy data is purged. Hash is retained.
   UNDO_WINDOW_SECONDS: Integer = 10
     -- Seconds after a destructive action during which undo is available.
@@ -62,7 +65,11 @@ config {
   MAX_BULK_SIZE: Integer = 100
     -- Maximum items per bulk action.
   DISMISSED_RETENTION_DAYS: Integer = 30
-    -- Days before dismissed vacancies are purged (shorter than trash).
+    -- Days before dismissed vacancies are purged.
+    -- In practice, the code uses a single RETENTION_DAYS threshold for both
+    -- trashed and dismissed vacancies (both default to 30 days). The separate
+    -- config parameter exists for future differentiation but currently both
+    -- resolve to the same value.
 }
 
 -- =============================================================================
@@ -106,6 +113,10 @@ value UndoToken {
     -- Must be idempotent — calling it multiple times has the same effect as calling once.
   itemIds: String[]                 -- IDs of affected StagedVacancy records
   previousStatuses: String[]        -- status before the action (for rollback)
+    -- Note: In the implementation, previousStatuses are not stored as an explicit
+    -- field. The compensation function is a closure that captures the previous
+    -- state at action time. This is implementation-flexible — the spec declares
+    -- the data that must be recoverable, not how it is stored.
   expiresAt: DateTime               -- now() + config.UNDO_WINDOW_SECONDS
   batchId: String?                  -- Links items from the same bulk operation.
                                     -- null for single-item actions.
@@ -468,7 +479,10 @@ rule CtrlZBinding {
   ensures: UndoExecution(token, currentUser)
 
   @guidance
-    -- Implementation: useUndoStack() React hook registers a global keydown listener.
+    -- Current implementation: Ctrl+Z is only active within the JobDeck (swipe)
+    -- view, not as a global listener across all pages. The global keydown
+    -- listener described here is aspirational — the deck-scoped version is
+    -- the initial implementation.
     -- The hook checks document.activeElement to avoid capturing undo in form inputs.
     -- After popping, the toast for that token is dismissed.
     -- If the stack is empty or all tokens are expired, Ctrl+Z is a no-op
@@ -490,11 +504,11 @@ rule BulkAction {
   -- Invalid items are skipped, not the whole batch.
   ensures: for_each vacancyId in vacancyIds:
     try:
-      if actionType = promote: PromoteVacancy(vacancyId, by)
       if actionType = dismiss: DismissVacancy(vacancyId, by)
       if actionType = archive: ArchiveVacancy(vacancyId, by)
+      if actionType = trash:   TrashVacancy(vacancyId, by)
       if actionType = restore: RestoreVacancy(vacancyId, by)
-      if actionType = delete:  TrashVacancy(vacancyId, by)
+      if actionType = restoreFromTrash: RestoreFromTrash(vacancyId, by)
     catch: record BulkItemError(itemId: vacancyId, reason: error.message)
 
   ensures: BulkActionResult.returned(
@@ -631,6 +645,7 @@ rule RestoreFromTrash {
   requires: vacancy.trashedAt != null
 
   ensures: vacancy.trashedAt = null
+  ensures: VacancyRestoredFromTrash.emitted(stagedVacancyId: vacancy.id, userId: by.id)
 }
 
 -- =============================================================================
@@ -638,9 +653,9 @@ rule RestoreFromTrash {
 -- =============================================================================
 
 rule RetentionConfig {
-  -- "Retention period is configurable per user (default 90 days)."
+  -- "Retention period is configurable per user (default 30 days)."
   -- Users can adjust how long trashed and dismissed vacancies are kept
-  -- before automatic purge. The default is config.RETENTION_DAYS (90 days).
+  -- before automatic purge. The default is config.RETENTION_DAYS (30 days).
   when: UserUpdatesRetentionSettings(userId: String, retentionDays: Integer)
 
   requires: retentionDays >= 7
@@ -653,10 +668,11 @@ rule RetentionConfig {
 
   @guidance
     -- Stored in UserSettings JSON blob alongside notification preferences.
-    -- If user has no custom setting, config.RETENTION_DAYS (90) applies.
+    -- If user has no custom setting, config.RETENTION_DAYS (30) applies.
     -- The retention service reads the user's custom setting when running cleanup.
-    -- Dismissed vacancy retention (DISMISSED_RETENTION_DAYS) is always shorter
-    -- than trash retention: min(30, retentionDays / 3).
+    -- In the current implementation, both trashed and dismissed vacancies use
+    -- the same RETENTION_DAYS threshold (30 days). The separate
+    -- DISMISSED_RETENTION_DAYS config exists for future differentiation.
 }
 
 rule RetentionCleanup {
@@ -715,15 +731,23 @@ rule DismissedRetentionPurge {
 rule DedupCheck {
   -- "Before staging a vacancy, check if it was already seen (even after purge)."
   -- This is a precondition of AutomatedVacancyIntake, extracted for clarity.
-  when: CheckDedup(userId: String, sourceBoard: String, externalId: String)
+  when: CheckDedup(userId: String, sourceBoard: String, externalId: String, sourceUrl: String?)
 
   let hashValue = hash(config.DEDUP_HASH_ALGORITHM, sourceBoard + ":" + externalId)
 
-  -- Also check promoted Jobs by URL to prevent re-staging already-promoted vacancies.
-  -- This is a cross-aggregate dedup that the spec's StagedVacancy-only check misses.
+  -- Cross-aggregate dedup: check if a promoted Job already exists with this URL.
+  -- This prevents re-staging vacancies that were already promoted to the Job aggregate.
+  let existingJobByUrl = Job where userId = userId and jobUrl = sourceUrl and sourceUrl != null
+
+  -- Time-bounded: dedup queries are bounded to the last 90 days to prevent
+  -- unbounded table scans. DedupHash records older than 90 days are not checked.
+  -- This means a vacancy purged more than 90 days ago can be rediscovered.
 
   ensures:
-    if exists DedupHash where userId = userId and hash = hashValue:
+    if existingJobByUrl.count > 0:
+      result = duplicate
+    else if exists DedupHash where userId = userId and hash = hashValue
+      and createdAt >= now() - 90.days:
       result = duplicate
     else if exists StagedVacancy where userId = userId and sourceBoard = sourceBoard
       and externalId = externalId and status != dismissed:
@@ -734,6 +758,10 @@ rule DedupCheck {
   @guidance
     -- Dual-key dedup: checks both externalId (primary) and normalized sourceUrl (fallback).
     -- A vacancy with a different externalId but the same URL is treated as a duplicate.
+    -- The 90-day bound on DedupHash queries is a performance safeguard.
+    -- In practice, the DedupHash table is bounded because retention purge only
+    -- creates hashes for vacancies being deleted, and old hashes become irrelevant
+    -- as external job postings expire.
 }
 
 rule DedupHashCheck {
@@ -776,11 +804,14 @@ entity CompanyBlacklist {
   @@index(userId)
 }
 
-enum BlacklistMatchType { exact | contains }
--- exact:    Case-insensitive full match (e.g. "Acme Corp" matches "acme corp")
--- contains: Case-insensitive substring match (e.g. "Staffing" matches "Global Staffing Solutions")
--- Note: VALID_MATCH_TYPES in code also accepts "starts_with" and "ends_with" for
--- runtime validation, but the model type and UI only expose exact | contains.
+enum BlacklistMatchType { exact | contains | starts_with | ends_with }
+-- exact:       Case-insensitive full match (e.g. "Acme Corp" matches "acme corp")
+-- contains:    Case-insensitive substring match (e.g. "Staffing" matches "Global Staffing Solutions")
+-- starts_with: Case-insensitive prefix match (e.g. "Acme" matches "Acme Corporation")
+-- ends_with:   Case-insensitive suffix match (e.g. "Corp" matches "Acme Corp")
+-- All four types are accepted by VALID_MATCH_TYPES runtime validation.
+-- The UI currently exposes exact and contains; starts_with and ends_with
+-- are available via the API and settings form.
 
 rule BlacklistFilter {
   -- "Blacklisted companies are filtered BEFORE AI matching to save LLM calls."
@@ -867,6 +898,11 @@ event VacancyTrashed {
   userId: String
 }
 
+event VacancyRestoredFromTrash {
+  stagedVacancyId: String
+  userId: String
+}
+
 event BulkActionCompleted {
   actionType: BulkActionType
   itemIds: String[]
@@ -928,7 +964,7 @@ surface StagingQueue {
   exposes:
     -- Tabs:
     tab "Neu": StagedVacancy where status in (staged, processing, ready) and archivedAt = null and trashedAt = null
-    tab "Abgelehnt": StagedVacancy where status = dismissed and trashedAt = null
+    tab "Abgelehnt": StagedVacancy where status = dismissed and archivedAt = null and trashedAt = null
     tab "Archiv": StagedVacancy where archivedAt != null
     tab "Papierkorb": StagedVacancy where trashedAt != null
 
@@ -994,6 +1030,7 @@ surface BulkActionBar {
     -- Bulk operations (available buttons depend on current tab):
     BulkDismiss(vacancyIds)           -- dismiss all selected (Neu tab)
     BulkPromote(vacancyIds)           -- promote all selected (opens batch PromotionDialog)
+      -- Note: BulkPromote is not yet implemented. Currently promotion is single-item only.
     BulkArchive(vacancyIds)           -- archive all selected
     BulkTrash(vacancyIds)             -- move all selected to trash
     BulkRestore(vacancyIds)           -- restore selected (Abgelehnt/Papierkorb tabs)
@@ -1013,6 +1050,8 @@ surface BulkActionBar {
     -- Appears with a slide-up animation when first item is selected.
     -- Disappears when selection is cleared.
     -- Does not overlap with the UndoToast.
+    -- Note: Floating/sticky positioning is an open UX item for S2.
+    -- Current implementation renders the bar inline, not floating.
 
   @guarantee SelectionPersistence
     -- Selection persists across tab pagination (scrolling/page changes).
@@ -1023,6 +1062,9 @@ surface BulkActionBar {
     -- Each vacancy card has a checkbox with aria-label: "Select {title}"
     -- BulkActionBar has role="toolbar" with aria-label: "{count} items selected"
     -- All buttons have descriptive aria-labels
+    -- Note: Full ARIA compliance is an open UX item for S2.
+    -- Current implementation has basic keyboard support but not all
+    -- aria-labels and role attributes described here.
 }
 
 surface UndoToast {
@@ -1045,12 +1087,17 @@ surface UndoToast {
     -- A visual countdown (progress bar or circular timer) shows remaining time.
     -- Countdown ticks every second. When it reaches 0, the toast auto-dismisses.
     -- The countdown is synchronized with the UndoToken.expiresAt.
+    -- Note: Current implementation uses a simple toast with Undo button
+    -- but does not yet display a countdown timer or progress bar.
+    -- The countdown and progress fields in the surface are aspirational (S2).
 
   @guarantee StackBehavior
     -- Multiple toasts can be visible simultaneously (stacked vertically).
     -- Newest toast appears at the bottom of the stack.
     -- Each toast has its own independent countdown.
     -- Ctrl+Z undoes the most recent (bottommost) toast.
+    -- Note: Current implementation shows a single toast (no stacking).
+    -- Stack behavior is aspirational (S2).
 
   @guarantee AnimatedTransitions
     -- Toast enters with a slide-up animation.

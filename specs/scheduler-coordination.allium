@@ -259,6 +259,8 @@ external entity RunnerResult {}
 
 config {
   MAX_CONCURRENT_RUNS_PER_AUTOMATION: Integer = 1
+  MAX_RUN_DURATION_MS: Integer = 300000
+    -- 5 minutes. If a run exceeds this, the watchdog forcibly releases its lock.
   SSE_POLL_INTERVAL_MS: Integer = 2000
   SSE_MAX_DURATION_MS: Integer = 600000
   -- SCHEDULER_CYCLE_COOLDOWN_MS removed: no cooldown phase in implementation.
@@ -330,11 +332,12 @@ rule DoubleRunPrevention {
 -- =============================================================================
 
 rule ManualRunGuard {
-  -- "When a manual run is requested, warn if another automation is using the same module."
+  -- "When any run is requested, compute module contention and include it in the result."
   -- This is informational only — the run still proceeds. Cockatiel rate limiting
   -- handles the technical side of module contention.
+  -- Contention is computed for ALL run sources (scheduler + manual), not just manual,
+  -- because the scheduler also needs to report contention in RunRequestResult.
   when: RequestRun(automation: Automation, options: RunOptions)
-  requires: options.runSource = manual
 
   let otherRuns = SchedulerState.activeRuns
     where moduleId = automation.jobBoard
@@ -345,10 +348,11 @@ rule ManualRunGuard {
       RunRequestResult.created(
         status: acquired,
         runId: AutomationRun.id,
-        contention: {
-          moduleId: automation.jobBoard,
-          conflictingAutomationIds: otherRuns
-        }
+        moduleContention: otherRuns.map(r => ModuleContentionInfo(
+          automationId: r.automationId,
+          automationName: r.automationName,
+          moduleId: r.moduleId
+        ))
       )
 
   @guidance
@@ -356,6 +360,8 @@ rule ManualRunGuard {
     -- this job board right now." The UI shows a warning but does not block.
     -- Cockatiel rate limiting (token bucket + bulkhead) prevents actual
     -- overload at the HTTP layer.
+    -- The moduleContention field is an array of ModuleContentionInfo values,
+    -- matching the RunRequestResult.moduleContention type declaration.
 }
 
 -- =============================================================================
@@ -478,6 +484,9 @@ rule SchedulerPhaseTransitions {
       if dueAutomations.count > 0:
         SchedulerState.phase = running
         SchedulerState.currentCycleStartedAt = now
+        -- Reset cycle counters at the start of each new cycle
+        SchedulerState.lastCycleProcessedCount = 0
+        SchedulerState.lastCycleFailedCount = 0
       else:
         SchedulerState.phase = idle
 
@@ -489,10 +498,94 @@ rule SchedulerPhaseTransitions {
         SchedulerState.currentCycleQueue = []
 
   @guidance
-    -- The cron fires every minute (SCHEDULER_CRON = "0 * * * *").
+    -- The cron fires every hour (SCHEDULER_CRON = "0 * * * *").
+    -- "0 * * * *" means minute 0 of every hour, not every minute.
     -- The idle -> running transition queries due automations and starts the cycle.
     -- When all runs complete, the phase returns directly to idle.
     -- Each transition is observable via SchedulerState and SSE.
+}
+
+-- =============================================================================
+-- Rules: Watchdog
+-- =============================================================================
+
+rule WatchdogTimeout {
+  -- "If a run exceeds MAX_RUN_DURATION_MS, the watchdog forcibly releases its lock."
+  -- Prevents ghost locks from hung runs that never reach a terminal status.
+  -- The watchdog sweeps activeRuns periodically and force-releases stale locks.
+  when: WatchdogSweep
+
+  let staleLocks = SchedulerState.activeRuns
+    where now - startedAt > config.MAX_RUN_DURATION_MS.milliseconds
+
+  ensures: for_each lock in staleLocks:
+    SchedulerState.activeRuns.remove(lock)
+    -- The underlying AutomationRun is NOT updated here — the run may still
+    -- be executing. The lock release prevents the automation from being
+    -- permanently blocked. If the run eventually completes, the lock is
+    -- already gone and the completion handler is a no-op.
+
+  @guidance
+    -- Implementation: forceReleaseLock() in run-coordinator.ts.
+    -- The watchdog is invoked at the start of each scheduler cycle
+    -- (inside the cron tick handler), not on its own timer.
+    -- MAX_RUN_DURATION_MS defaults to 300000 (5 minutes).
+    -- This is a safety net, not a normal control flow path.
+}
+
+-- =============================================================================
+-- Rules: External Stop & Degradation Bridge
+-- =============================================================================
+
+rule ExternalStop {
+  -- "An external signal (e.g. degradation) can stop a running automation."
+  -- The degradation bridge publishes AutomationDegraded events which the
+  -- RunCoordinator consumes to stop affected runs.
+  when: ExternalStopSignal(automationId: String)
+
+  let lock = SchedulerState.activeRuns
+    where automationId = automationId
+
+  ensures:
+    if lock.count > 0:
+      SchedulerState.activeRuns.remove(lock.first)
+      -- acknowledgeExternalStop: marks the run as stopped due to external signal.
+
+  @guidance
+    -- Implementation: acknowledgeExternalStop() in run-coordinator.ts.
+    -- The degradation bridge (degradation.ts) emits AutomationDegraded events.
+    -- The RunCoordinator subscribes to these events and calls
+    -- acknowledgeExternalStop() to release the lock for the affected automation.
+    -- This is a consumer relationship: RunCoordinator listens to degradation events,
+    -- it does not produce them.
+}
+
+-- =============================================================================
+-- Rules: Queue Skip
+-- =============================================================================
+
+rule QueueSkip {
+  -- "An automation can be skipped from the scheduler queue without running it."
+  -- Used when an automation becomes ineligible during a cycle (e.g. paused
+  -- by degradation after the queue was built but before the run started).
+  when: SkipFromQueue(automationId: String)
+
+  let position = SchedulerState.currentCycleQueue
+    where automationId = automationId
+
+  ensures:
+    if position.count > 0:
+      SchedulerState.currentCycleQueue.remove(position.first)
+      -- Remaining positions are decremented (same as QueuePositionUpdate).
+      for_each remaining in SchedulerState.currentCycleQueue:
+        remaining.position = remaining.position - 1
+
+  @guidance
+    -- Implementation: skipFromQueue() in run-coordinator.ts.
+    -- Called by the scheduler loop when it detects that an automation
+    -- in the queue is no longer eligible to run (status changed to paused,
+    -- module deactivated, etc.) between queue building and execution.
+    -- The skipped automation is counted in SchedulerCycleCompleted.skippedCount.
 }
 
 -- =============================================================================
@@ -616,6 +709,9 @@ surface SchedulerStatusBar {
     -- Data refreshes via SSE with a poll interval of SSE_POLL_INTERVAL_MS (default 2s).
     -- The SSE connection has a maximum duration of SSE_MAX_DURATION_MS (default 10 min)
     -- before the client must reconnect.
+    -- Note: These values are intentionally hardcoded in the SSE route handler
+    -- (api/scheduler/status/route.ts) rather than read from config at runtime.
+    -- The config values serve as documentation of the intended defaults.
 
   @guidance
     -- When phase = idle: show "Idle" with a check icon.
