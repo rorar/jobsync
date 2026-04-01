@@ -10,6 +10,7 @@ jest.mock("@/lib/db", () => {
       updateMany: jest.fn(),
       findMany: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
     },
     automationRun: {
@@ -241,7 +242,7 @@ describe("Degradation Rules", () => {
         { status: "failed" },
         { status: "failed" },
       ]);
-      (mockPrisma.automation.findUnique as jest.Mock).mockResolvedValue({
+      (mockPrisma.automation.findFirst as jest.Mock).mockResolvedValue({
         id: "auto-3",
         status: "active",
         name: "My Automation",
@@ -262,7 +263,7 @@ describe("Degradation Rules", () => {
         { status: "failed" },
         { status: "failed" },
       ]);
-      (mockPrisma.automation.findUnique as jest.Mock).mockResolvedValue({
+      (mockPrisma.automation.findFirst as jest.Mock).mockResolvedValue({
         id: "auto-4",
         status: "active",
         name: "Test Automation",
@@ -289,7 +290,7 @@ describe("Degradation Rules", () => {
         { status: "failed" },
         { status: "failed" },
       ]);
-      (mockPrisma.automation.findUnique as jest.Mock).mockResolvedValue({
+      (mockPrisma.automation.findFirst as jest.Mock).mockResolvedValue({
         id: "auto-5",
         status: "paused",
         name: "Already Paused",
@@ -320,7 +321,7 @@ describe("Degradation Rules", () => {
         { status: "failed" },
         { status: "failed" },
       ]);
-      (mockPrisma.automation.findUnique as jest.Mock).mockResolvedValue({
+      (mockPrisma.automation.findFirst as jest.Mock).mockResolvedValue({
         id: "auto-notif",
         status: "active",
         name: "Notify Me Auto",

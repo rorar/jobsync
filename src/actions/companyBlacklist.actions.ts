@@ -23,6 +23,7 @@ export async function getBlacklistEntries(): Promise<
     const entries = await prisma.companyBlacklist.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
+      take: 500, // Bound query to prevent unbounded memory (F-05)
     });
 
     return {

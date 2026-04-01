@@ -28,7 +28,6 @@ import {
 import {
   getAutomationById,
   getDiscoveredJobs,
-  getAutomationRuns,
   pauseAutomation,
   resumeAutomation,
   getDiscoveredJobById,
@@ -96,15 +95,15 @@ export default function AutomationDetailPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [automationResult, runsResult, jobsResult, resumeResult] = await Promise.all([
+      const [automationResult, jobsResult, resumeResult] = await Promise.all([
         getAutomationById(automationId),
-        getAutomationRuns(automationId),
         getDiscoveredJobs(automationId),
         getResumeList(1, 100),
       ]);
 
       if (automationResult.success && automationResult.data) {
         setAutomation(automationResult.data);
+        // Runs are included in getAutomationById response — no separate fetch needed (F-04)
         setRuns(automationResult.data.runs || []);
       } else {
         toast({
@@ -114,10 +113,6 @@ export default function AutomationDetailPage() {
         });
         router.push("/dashboard/automations");
         return;
-      }
-
-      if (runsResult.success && runsResult.data) {
-        setRuns(runsResult.data);
       }
 
       if (jobsResult.success && jobsResult.data) {

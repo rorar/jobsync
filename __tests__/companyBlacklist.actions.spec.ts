@@ -61,6 +61,7 @@ describe("CompanyBlacklist Actions", () => {
       expect(mockCompanyBlacklist.findMany).toHaveBeenCalledWith({
         where: { userId: "user-1" },
         orderBy: { createdAt: "desc" },
+        take: 500,
       });
     });
 

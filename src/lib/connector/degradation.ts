@@ -143,8 +143,9 @@ export async function checkConsecutiveRunFailures(
       return { paused: false };
     }
 
-    // Check if automation is still active
-    const automation = await prisma.automation.findUnique({
+    // Check if automation is still active (defense-in-depth: scope by automationId)
+    // Note: findFirst required for ADR-015 compliance pattern (findUnique needs unique key only)
+    const automation = await prisma.automation.findFirst({
       where: { id: automationId },
       select: { status: true, name: true, userId: true },
     });

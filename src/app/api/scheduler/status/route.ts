@@ -30,11 +30,27 @@ function createSSEErrorResponse(message: string): NextResponse {
   });
 }
 
+// Per-user SSE connection limit (SEC-P2-08)
+const MAX_SSE_CONNECTIONS_PER_USER = 5;
+const SSE_CONN_KEY = "__sseConnectionCounts" as const;
+const sseG = globalThis as unknown as { [SSE_CONN_KEY]?: Map<string, number> };
+if (!sseG[SSE_CONN_KEY]) sseG[SSE_CONN_KEY] = new Map();
+const sseConnectionCounts = sseG[SSE_CONN_KEY];
+
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     return createSSEErrorResponse("Not Authenticated");
   }
+
+  const userId = session.user.id;
+
+  // Enforce per-user connection limit
+  const currentCount = sseConnectionCounts.get(userId) ?? 0;
+  if (currentCount >= MAX_SSE_CONNECTIONS_PER_USER) {
+    return createSSEErrorResponse("Too many SSE connections");
+  }
+  sseConnectionCounts.set(userId, currentCount + 1);
 
   const encoder = new TextEncoder();
   const SSE_POLL_INTERVAL_MS = 2000;
@@ -49,6 +65,10 @@ export async function GET(req: NextRequest) {
         isClosed = true;
         clearInterval(interval);
         clearTimeout(timeout);
+        // Decrement per-user connection count
+        const count = sseConnectionCounts.get(userId) ?? 1;
+        if (count <= 1) sseConnectionCounts.delete(userId);
+        else sseConnectionCounts.set(userId, count - 1);
         try {
           controller.close();
         } catch {
