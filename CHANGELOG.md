@@ -2,6 +2,12 @@
 
 ## [2026-04-01] Session S1b — Comprehensive Review + Fix All
 
+### Added (Test Coverage + Spec Alignment)
+- `__tests__/with-api-auth.spec.ts` — 12 integration tests for security perimeter (TG-3)
+- `__tests__/api-v1-jobs.spec.ts` — 52 functional tests for all 8 API v1 endpoints (TG-4)
+- 24 Allium spec divergences resolved across scheduler-coordination, security-rules, vacancy-pipeline
+- Total test delta: +70 tests (2170 → 2240)
+
 ### Fixed (Blind Spot Follow-up)
 - **sec (HIGH):** `inferErrorStatus()` broke with i18n keys — camelCase patterns now matched
 - **sec (HIGH):** `_statusResolved` sentinel could leak into Prisma update — isolated variable
