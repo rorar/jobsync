@@ -1,8 +1,16 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-01
 
-**Total: 134 bugs found, 134 fixed, 0 remaining**
+**Total: 137 bugs found, 137 fixed, 0 remaining**
 
 ### Status: ✅ All bugs are fixed.
+
+## Session S1b Blind Spot Follow-up (2026-04-01) — ALL FIXED
+
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S1b-26 | **HIGH** | `inferErrorStatus()` breaks with i18n keys — "api.notAuthenticated" returns 500 instead of 401 | Added camelCase i18n key pattern matching alongside legacy English patterns |
+| S1b-27 | **HIGH** | `_statusResolved` sentinel on shared data object can leak into Prisma update | Replaced with separate `resolvedStatus` variable |
+| S1b-28 | **HIGH** | `interview.deleteMany` lacks userId scope in DELETE handler (ADR-015) | Added `job: { userId }` to where clause |
 
 ## Session S1b Comprehensive Review (2026-04-01) — ALL FIXED
 

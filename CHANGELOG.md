@@ -2,6 +2,11 @@
 
 ## [2026-04-01] Session S1b — Comprehensive Review + Fix All
 
+### Fixed (Blind Spot Follow-up)
+- **sec (HIGH):** `inferErrorStatus()` broke with i18n keys — camelCase patterns now matched
+- **sec (HIGH):** `_statusResolved` sentinel could leak into Prisma update — isolated variable
+- **sec (HIGH):** `interview.deleteMany` lacked userId scope (ADR-015) — added defense-in-depth
+
 ### Fixed
 - **sec (CRITICAL):** API v1 GET/PATCH/POST job responses leaked userId, matchData, foreign keys — replaced `include` with explicit `select`
 - **perf (CRITICAL):** ConnectorCache singleton broken in production (0% hit rate) — unconditional globalThis assignment
