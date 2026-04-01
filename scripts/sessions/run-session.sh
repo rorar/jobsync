@@ -99,7 +99,7 @@ run_session() {
     cat > "$LAUNCHER" <<LAUNCHER_EOF
 #!/usr/bin/env bash
 cd "$PROJECT_DIR"
-claude -p "\$(cat '$PROMPT_FILE')" --dangerously-skip-permissions --effort max --verbose
+cat '$PROMPT_FILE' | claude -p --dangerously-skip-permissions --effort max --verbose
 echo ""
 echo "Session $SESSION_ID finished. Press Enter to close."
 read
@@ -137,7 +137,7 @@ LAUNCHER_EOF
 echo '=========================================='
 echo '  Session: $s'
 echo '=========================================='
-claude -p "\$(cat '$PROMPT_FILE')" --dangerously-skip-permissions --effort max --verbose
+cat '$PROMPT_FILE' | claude -p --dangerously-skip-permissions --effort max --verbose
 echo ''
 echo 'Session $s finished.'
 echo ''
