@@ -96,6 +96,7 @@ Fehlende Implementierungen SOFORT fixen. Committe nach jedem Fix-Block.
 
 - Starte `/ui-design:design-review` für alle Sprint B+C UI-Komponenten
 - Starte `/ui-design:accessibility-audit` für WCAG-Compliance
+- Starte `/accessibility-compliance:wcag-audit-patterns` für WCAG 2.2 Audit mit automatisiertem Testing und Remediation
 - Verwende `/ui-design:interaction-design` um UX-Entscheidungen bei Microinteractions, Transitions, Feedback-Patterns und User Flows anzureichern
 - Fixe ALLE Findings
 
@@ -155,8 +156,9 @@ Fixe ALLE Findings — auch kosmetische. UX-Qualität ist nicht optional.
 **Für UX 10-Punkte-Checkliste (Schritt 2) MUSST du:**
 - Dispatche `/ui-design:design-review` als eigenen Agent für alle UI-Komponenten
 - Dispatche `/ui-design:accessibility-audit` als eigenen Agent parallel dazu
+- Dispatche `/accessibility-compliance:wcag-audit-patterns` als eigenen Agent für WCAG 2.2 Audit
 - Dispatche `/ui-design:interaction-design` als eigenen Agent für Microinteractions, Transitions und Feedback-Patterns
-- Warte auf alle drei, dann fixe Findings
+- Warte auf alle vier, dann fixe Findings
 
 **Für Fixes MUSST du:**
 - Gruppiere Fixes nach Komponenten-Files
@@ -205,6 +207,7 @@ Agenten, Skills und Plugins dürfen jederzeit online suchen (WebSearch, WebFetch
 - [ ] Alle fehlenden Tests hinzugefügt
 - [ ] `/ui-design:design-review` durchgeführt, Findings gefixt
 - [ ] `/ui-design:accessibility-audit` durchgeführt, Findings gefixt
+- [ ] `/accessibility-compliance:wcag-audit-patterns` durchgeführt, Findings gefixt
 - [ ] Blind Spot Check: "Woran haben wir bei UX nicht gedacht?"
 - [ ] i18n: Keine hardcoded Strings, alle 4 Locales komplett
 - [ ] docs/BUGS.md aktualisiert
