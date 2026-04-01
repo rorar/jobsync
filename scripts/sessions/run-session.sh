@@ -94,9 +94,19 @@ run_session() {
     echo "Prompt: $PROMPT_FILE ($(wc -l < "$PROMPT_FILE") lines)"
     echo ""
 
-    # Create tmux session, cd to project, run claude with prompt
-    tmux new-session -d -s "$TMUX_NAME" -c "$PROJECT_DIR" \
-        "claude -p \"\$(cat '$PROMPT_FILE')\" --dangerously-skip-permissions; echo ''; echo 'Session $SESSION_ID finished. Press Enter to close.'; read"
+    # Write a tiny launcher script to avoid quoting hell in tmux
+    local LAUNCHER="/tmp/jobsync-session-${SESSION_ID}.sh"
+    cat > "$LAUNCHER" <<LAUNCHER_EOF
+#!/usr/bin/env bash
+cd "$PROJECT_DIR"
+claude -p "\$(cat '$PROMPT_FILE')" --dangerously-skip-permissions
+echo ""
+echo "Session $SESSION_ID finished. Press Enter to close."
+read
+LAUNCHER_EOF
+    chmod +x "$LAUNCHER"
+
+    tmux new-session -d -s "$TMUX_NAME" "$LAUNCHER"
 
     echo "tmux session '$TMUX_NAME' started."
     echo ""
@@ -114,19 +124,33 @@ run_all() {
         exit 0
     fi
 
-    # Build a script that runs each session sequentially
-    local RUN_SCRIPT=""
+    # Write a launcher script to avoid quoting hell in tmux
+    local LAUNCHER="/tmp/jobsync-session-all.sh"
+    cat > "$LAUNCHER" <<LAUNCHER_EOF
+#!/usr/bin/env bash
+cd "$PROJECT_DIR"
+LAUNCHER_EOF
+
     for s in $SESSIONS; do
         local PROMPT_FILE="$SCRIPT_DIR/${s}-prompt.md"
-        RUN_SCRIPT+="echo '=========================================='; "
-        RUN_SCRIPT+="echo '  Session: $s'; "
-        RUN_SCRIPT+="echo '=========================================='; "
-        RUN_SCRIPT+="claude -p \"\$(cat '$PROMPT_FILE')\" --dangerously-skip-permissions; "
-        RUN_SCRIPT+="echo ''; echo 'Session $s finished.'; echo ''; "
+        cat >> "$LAUNCHER" <<LAUNCHER_EOF
+echo '=========================================='
+echo '  Session: $s'
+echo '=========================================='
+claude -p "\$(cat '$PROMPT_FILE')" --dangerously-skip-permissions
+echo ''
+echo 'Session $s finished.'
+echo ''
+LAUNCHER_EOF
     done
-    RUN_SCRIPT+="echo 'All sessions completed. Press Enter to close.'; read"
 
-    tmux new-session -d -s "$TMUX_NAME" -c "$PROJECT_DIR" "$RUN_SCRIPT"
+    cat >> "$LAUNCHER" <<'LAUNCHER_EOF'
+echo 'All sessions completed. Press Enter to close.'
+read
+LAUNCHER_EOF
+    chmod +x "$LAUNCHER"
+
+    tmux new-session -d -s "$TMUX_NAME" "$LAUNCHER"
 
     echo "Sequential run started in tmux session '$TMUX_NAME'."
     echo ""
