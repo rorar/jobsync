@@ -20,7 +20,7 @@ async function ensureResumeExists(
   resumeTitle: string,
 ): Promise<string> {
   await page.goto("/dashboard/profile");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 
   const existingRow = page.getByRole("row", {
     name: new RegExp(resumeTitle, "i"),
@@ -44,7 +44,7 @@ async function ensureResumeExists(
 
 async function deleteResume(page: Page, title: string) {
   await page.goto("/dashboard/profile");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   const row = page
     .getByRole("row", { name: new RegExp(title, "i") })
     .first();
@@ -66,7 +66,7 @@ async function deleteResume(page: Page, title: string) {
 
 async function navigateToAutomations(page: Page) {
   await page.goto("/dashboard/automations");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 }
 
 async function createAutomation(
@@ -237,7 +237,7 @@ test.describe("Automation CRUD", () => {
     });
 
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     await expect(page.getByText(automationName).first()).toBeVisible({
       timeout: 10000,
     });
@@ -266,7 +266,7 @@ test.describe("Automation CRUD", () => {
 
     // Verify — navigate to the list and check the card details
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     // Scope assertions to the specific card to avoid matching stale data
     const card = page.locator("a", { hasText: automationName }).first();
@@ -297,7 +297,7 @@ test.describe("Automation CRUD", () => {
 
     // Navigate to list and verify the automation exists
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     await expect(page.getByText(automationName).first()).toBeVisible({
       timeout: 10000,
     });
@@ -348,7 +348,7 @@ test.describe("Automation CRUD", () => {
 
     // Verify updated name in the list
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     await expect(page.getByText(updatedName).first()).toBeVisible({
       timeout: 10000,
     });
@@ -375,7 +375,7 @@ test.describe("Automation CRUD", () => {
 
     // Navigate to list and verify the automation is active
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     const card = page.locator("a", { hasText: automationName }).first();
     await expect(card).toBeVisible({ timeout: 10000 });
     await expect(card.getByText("active").first()).toBeVisible({ timeout: 5000 });
@@ -395,7 +395,7 @@ test.describe("Automation CRUD", () => {
     });
     // Reload the list to confirm the status persisted
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     const cardAfterPause = page.locator("a", { hasText: automationName }).first();
     await expect(cardAfterPause).toBeVisible({ timeout: 10000 });
     await expect(cardAfterPause.getByText("paused").first()).toBeVisible({ timeout: 5000 });
@@ -415,7 +415,7 @@ test.describe("Automation CRUD", () => {
     });
     // Reload the list to confirm the status persisted
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
     const cardAfterResume = page.locator("a", { hasText: automationName }).first();
     await expect(cardAfterResume).toBeVisible({ timeout: 10000 });
     await expect(cardAfterResume.getByText("active").first()).toBeVisible({ timeout: 5000 });

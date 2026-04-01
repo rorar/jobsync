@@ -20,7 +20,7 @@ async function ensureResumeExists(
   resumeTitle: string,
 ): Promise<string> {
   await page.goto("/dashboard/profile");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 
   const existingRow = page.getByRole("row", {
     name: new RegExp(resumeTitle, "i"),
@@ -44,7 +44,7 @@ async function ensureResumeExists(
 
 async function deleteResume(page: Page, title: string) {
   await page.goto("/dashboard/profile");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   const row = page
     .getByRole("row", { name: new RegExp(title, "i") })
     .first();
@@ -66,7 +66,7 @@ async function deleteResume(page: Page, title: string) {
 
 async function navigateToAutomations(page: Page) {
   await page.goto("/dashboard/automations");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 }
 
 // ---------------------------------------------------------------------------
@@ -127,8 +127,8 @@ test.describe("Automation Wizard — Dynamic Module Selector", () => {
 
     // First: navigate to settings and deactivate EURES
     await page.goto("/dashboard/settings");
-    await page.waitForLoadState("networkidle");
-    await page.getByRole("button", { name: /API Keys/i }).click();
+    await page.waitForLoadState("domcontentloaded");
+    await page.getByRole("button", { name: "API Keys", exact: true }).click();
     await page
       .locator("[role='switch']")
       .first()
@@ -176,8 +176,8 @@ test.describe("Automation Wizard — Dynamic Module Selector", () => {
 
       // Restore: re-activate EURES
       await page.goto("/dashboard/settings");
-      await page.waitForLoadState("networkidle");
-      await page.getByRole("button", { name: /API Keys/i }).click();
+      await page.waitForLoadState("domcontentloaded");
+      await page.getByRole("button", { name: "API Keys", exact: true }).click();
       await page
         .locator("[role='switch']")
         .first()

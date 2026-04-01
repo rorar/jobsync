@@ -14,7 +14,7 @@ async function ensureEnglishLocale(page: Page) {
 
 async function navigateToCompanies(page: Page) {
   await page.goto("/dashboard/admin?tab=companies");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-company-btn").waitFor({ state: "visible" });
 }
 
@@ -39,7 +39,7 @@ async function loadUntilCompanyVisible(page: Page, name: string) {
 
     // Click "Load More" and wait for the table to update
     await loadMoreBtn.click();
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
   }
 }
 

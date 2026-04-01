@@ -7,7 +7,7 @@ import { expectToast } from "../helpers";
 
 async function navigateToTasks(page: Page) {
   await page.goto("/dashboard/tasks");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-task-btn").waitFor({ state: "visible" });
 }
 
@@ -55,7 +55,7 @@ async function createTask(
 
 async function stopRunningActivity(page: Page) {
   await page.goto("/dashboard/activities");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-activity-btn").waitFor({ state: "visible" });
   const stopButton = page.getByRole("button", { name: "Stop" });
   try {

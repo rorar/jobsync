@@ -7,7 +7,7 @@ import { expectToast, selectOrCreateComboboxOption } from "../helpers";
 
 async function navigateToProfile(page: Page) {
   await page.goto("/dashboard/profile");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 }
 
 async function createResume(page: Page, title: string) {
@@ -26,7 +26,7 @@ async function openResumeEditor(page: Page, resumeTitle: string) {
     page.waitForURL(/\/dashboard\/profile\/resume\//),
     page.getByRole("menuitem", { name: "View / Edit Resume" }).click(),
   ]);
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   await expect(
     page.getByRole("heading", { name: "Resume" }),
   ).toBeVisible({ timeout: 10000 });
@@ -34,7 +34,7 @@ async function openResumeEditor(page: Page, resumeTitle: string) {
 
 async function deleteResume(page: Page, title: string) {
   await page.goto("/dashboard/profile");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   const row = page
     .getByRole("row", { name: new RegExp(title, "i") })
     .first();

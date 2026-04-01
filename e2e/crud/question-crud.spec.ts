@@ -4,7 +4,7 @@ import { test, expect, type Page } from "@playwright/test";
 
 async function navigateToQuestions(page: Page) {
   await page.goto("/dashboard/questions");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 }
 
 async function createQuestion(

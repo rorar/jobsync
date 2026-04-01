@@ -17,7 +17,7 @@ async function ensureEnglishLocale(page: Page) {
 
 async function navigateToJobs(page: Page) {
   await page.goto("/dashboard/myjobs");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-job-btn").waitFor({ state: "visible" });
 }
 
@@ -28,7 +28,7 @@ async function openAddJobDialog(page: Page) {
 
 async function deleteJob(page: Page, jobTitle: string) {
   await page.goto("/dashboard/myjobs");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   try {
     const row = page.getByRole("row", { name: new RegExp(jobTitle, "i") });
     await row.first().waitFor({ state: "visible", timeout: 5000 });
@@ -42,7 +42,7 @@ async function deleteJob(page: Page, jobTitle: string) {
 
 async function ensureResumeExists(page: Page, resumeTitle: string) {
   await page.goto("/dashboard/profile");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   const existingRow = page.getByRole("row", {
     name: new RegExp(resumeTitle, "i"),
   });
@@ -63,7 +63,7 @@ async function ensureResumeExists(page: Page, resumeTitle: string) {
 
 async function deleteResume(page: Page, title: string) {
   await page.goto("/dashboard/profile");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   try {
     const row = page
       .getByRole("row", { name: new RegExp(title, "i") })
@@ -465,7 +465,7 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     await ensureResumeExists(page, resumeTitle);
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     await page.getByRole("button", { name: /Create Automation/i }).click();
     await expect(
@@ -508,7 +508,7 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     await ensureResumeExists(page, resumeTitle);
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     await page.getByRole("button", { name: /Create Automation/i }).click();
     await page.getByPlaceholder(/Frontend Jobs Berlin/i).fill(`KBMulti ${uid}`);
@@ -544,7 +544,7 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     await ensureResumeExists(page, resumeTitle);
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     await page.getByRole("button", { name: /Create Automation/i }).click();
     await page.getByPlaceholder(/Frontend Jobs Berlin/i).fill(`KBTab ${uid}`);
@@ -580,7 +580,7 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     await ensureResumeExists(page, resumeTitle);
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     await page.getByRole("button", { name: /Create Automation/i }).click();
     await page.getByPlaceholder(/Frontend Jobs Berlin/i).fill(`KBRace ${uid}`);
@@ -620,7 +620,7 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
     const uid = uniqueId();
 
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     await page.getByRole("button", { name: /Create Automation/i }).click();
     await page.getByPlaceholder(/Frontend Jobs Berlin/i).fill(`KBLoc ${uid}`);
@@ -652,7 +652,7 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
     const errors = collectConsoleErrors(page);
 
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     await page.getByRole("button", { name: /Create Automation/i }).click();
     await page
@@ -702,7 +702,7 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
     const uid = uniqueId();
 
     await page.goto("/dashboard/automations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
     await page.getByRole("button", { name: /Create Automation/i }).click();
     await page

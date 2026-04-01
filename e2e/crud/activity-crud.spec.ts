@@ -5,7 +5,7 @@ import { selectOrCreateComboboxOption, uniqueId } from "../helpers";
 
 async function navigateToActivities(page: Page) {
   await page.goto("/dashboard/activities");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-activity-btn").waitFor({ state: "visible" });
 }
 
@@ -16,7 +16,7 @@ async function stopRunningActivity(page: Page) {
     await stopButton.click({ force: true });
     await expect(stopButton).not.toBeVisible({ timeout: 10000 });
     await page.reload();
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
   } catch {
     // No running activity, continue
   }

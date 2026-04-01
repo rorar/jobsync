@@ -14,7 +14,7 @@ async function ensureEnglishLocale(page: Page) {
 
 async function navigateToApiKeysSettings(page: Page) {
   await page.goto("/dashboard/settings");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
 
   // Click the "API Keys" sidebar item to show module cards
   await page.getByRole("button", { name: /API Keys/i }).click();

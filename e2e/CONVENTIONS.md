@@ -29,7 +29,7 @@ import { selectOrCreateComboboxOption, expectToast } from "../helpers";
 
 async function navigateToMyPage(page: Page) {
   await page.goto("/dashboard/mypage");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-item-btn").waitFor({ state: "visible" });
 }
 

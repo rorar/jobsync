@@ -7,7 +7,7 @@ import { selectOrCreateComboboxOption } from "../helpers";
 
 async function navigateToJobs(page: Page) {
   await page.goto("/dashboard/myjobs");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-job-btn").waitFor({ state: "visible" });
 }
 
@@ -68,7 +68,7 @@ async function createJob(
 
 async function deleteJob(page: Page, jobTitle: string) {
   await page.goto("/dashboard/myjobs");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   const cells = page.getByText(new RegExp(jobTitle, "i"));
   await expect(cells.first()).toBeVisible({ timeout: 10000 });
   await page
