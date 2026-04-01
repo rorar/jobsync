@@ -1729,6 +1729,7 @@ Issues aus dem Upstream-Repository [Gsync/jobsync](https://github.com/Gsync/jobs
 ### 9.1 CareerBERT
 - Integration und Optimierung von [CareerBERT](https://github.com/julianrosenberger/careerbert)
 - Spezialisiertes NLP-Modell für Karriere- und Jobtexte (basierend auf BERT)
+- **Paper:** Rosenberger (2025) — "CareerBERT: Matching Resumes to ESCO Jobs in a Shared Embedding Space for Generic Job Recommendations", Expert Systems With Applications. SBERT Bi-Encoder (jobGBERT-Basis), fine-tuned mit MNR-Loss auf ~131K ESCO Sentence-Pairs. Erreicht MRR@100 von 0.328 — übertrifft OpenAI text-embedding-ada-002 (0.302), ESCOXLM-R (0.312) und ist kompetitiv mit text-embedding-3-small (0.323). 3.008 ESCO-Job-Centroids aus EURES-Anzeigen + ESCO-Beschreibungen.
 - **Anwendungsfälle:**
   - Semantisches Matching zwischen CV-Skills und Job-Anforderungen (besser als Keyword-Match)
   - Automatische Skill-Extraktion aus Jobbeschreibungen und Lebensläufen
@@ -1736,14 +1737,68 @@ Issues aus dem Upstream-Repository [Gsync/jobsync](https://github.com/Gsync/jobs
   - Klassifikation von Jobs nach ESCO/ISCO Taxonomie
   - Ranking von Bewerbungen nach semantischer Relevanz
 - **Technisch:**
-  - Self-hosted Inference (z.B. via ONNX Runtime oder Hugging Face Transformers)
+  - Self-hosted Inference via [Transformers.js v4](https://huggingface.co/blog/transformersjs-v4) (nutzt ONNX Runtime, läuft direkt in Node.js/Next.js)
+  - Alternative: [fastembed-js](https://github.com/Anush008/fastembed-js) (npm, Qdrant, ONNX-basiert)
+  - Fallback: Python Sidecar (FastAPI) für Modelle die nur in Python verfügbar sind
+  - INT8-Quantisierung: 2-4.5x Speedup, < 1% Genauigkeitsverlust, 26-75% kleiner
+  - Singleton-Pattern für Modell-Instanz in Next.js (HuggingFace-Empfehlung)
+  - Vektor-Suche via [sqlite-vec](https://github.com/asg017/sqlite-vec) (`npm install sqlite-vec`) — passt in bestehenden SQLite/Prisma-Stack
   - Optional: Finetuning auf eigene Jobdaten für bessere Ergebnisse
   - API-Endpunkt für Embedding-Generierung und Similarity-Search
   - Integration mit dem bestehenden AI Match-Score System
+- **Hardware-Anforderungen (Self-Hosted):** → Details: `docs/research/careerbert-hardware-research.md`
+  - **Minimum (Phase 1):** 2 GB RAM, jede CPU (x86_64/ARM64). all-MiniLM-L6-v2 INT8 = 63 MB, ~12ms/Embedding
+  - **Empfohlen (Phase 2):** 4 GB RAM, 4-Core CPU. ModernBERT-embed-base INT8 = ~150 MB, MTEB 62.6
+  - **Multilingual (Phase 3):** 4-8 GB RAM. multilingual-e5-small = ~120 MB INT8, 100+ Sprachen
+  - Läuft auf: Raspberry Pi 4, alter Laptop, Mini-PC, Standard-VPS (2 GB+)
+- **Implementierungsphasen:**
+  - **Phase 1 — Quick Win:** all-MiniLM-L6-v2 (22.7M Params, 14 MB Q4) + Brute-Force in-memory. Sofort einsetzbar
+  - **Phase 2 — Optimiert:** ModernBERT-embed-base / nomic-embed-text-v1.5 (Matryoshka 768→256→64) + sqlite-vec
+  - **Phase 3 — Multilingual:** multilingual-e5-small oder BGE-M3 für Cross-Language Matching (DE CV → FR Jobs)
+  - **Phase 4 — Domain Fine-Tuning:** MNR-Loss auf ESCO-Daten, kein TSDAE (verschlechtert laut Paper), Two-Stage Retrieval
+- **Verbesserungen gegenüber Original-Paper:**
+  - **Modernere Base-Models evaluieren:** BGE-M3, GTE, E5-Mistral, Nomic-Embed — deutlich bessere Embedding-Qualität als GBERT/jobGBERT. Multilingual-fähig → passt zu JobSync's EU-Fokus (DE, FR, ES, EN)
+  - **Two-Stage Retrieval:** Phase 1: Bi-Encoder (schnell, Top-50 Candidates) → Phase 2: Cross-Encoder Re-Ranking (präzise). Stand der Technik für Semantic Search
+  - **Matryoshka Embeddings:** Variable Dimensionalität (768 → 256 → 64). Grobe Suche bei 64 dims, Verfeinerung bei voller Auflösung. Spart RAM/CPU für Self-Hosted-Betrieb
+  - **LLM-gestützte Resume-Anreicherung:** Paper-Schwäche: kurze CVs → schlechte Ergebnisse (Resume 2: MAP@20 nur 0.310). Lösung: Bestehende AI-Module (Ollama, OpenAI, DeepSeek) zur CV-Vervollständigung VOR dem Encoding nutzen
+  - **Multilingual-Support:** CareerBERT ist nur Deutsch. ESCO existiert in 27 Sprachen — multilinguales Modell ermöglicht Cross-Language Matching
+- **Skalierung (bei Bedarf):**
+  - Bei 3.008 ESCO-Centroids × 768 dims (~9 MB) reicht Brute-Force Cosine-Search (< 1ms)
+  - Ab ~10K Embeddings: FAISS oder Qdrant mit HNSW-Index
+  - Ab ~1M Embeddings: Vektor-Quantisierung relevant:
+    - [RaBitQ](https://arxiv.org/abs/2405.12497) (SIGMOD 2024) — Randomized Quantization, D-dim Vektoren → D-bit Strings, 3× schneller als Product Quantization bei gleicher Accuracy, theoretische Error Bounds
+    - [Extended-RaBitQ](https://github.com/VectorDB-NTU/Extended-RaBitQ) (SIGMOD 2025) — asymptotisch optimale Erweiterung
+    - [TurboQuant](https://arxiv.org/abs/2504.19874) (Google, ICLR 2026) — Random Rotation + per-Coordinate Scalar Quantization, nahezu optimale Distortion Rate. Outperformt PQ in Recall bei Near-Zero Indexing-Overhead. **Achtung:** [Kontroverse um Darstellung von RaBitQ](https://x.com/gaoj0017/status/2037532673812443214)
+  - KV-Cache-Optimierung (TurboQuant) ist für Bi-Encoder NICHT relevant — nur für autoregressive Decoder-Modelle
+- **Bekannte Paper-Limitierungen (zu adressieren):**
+  - Nur deutsche Sprache/Arbeitsmarkt
+  - Kurze CVs → disproportionaler Keyword-Einfluss
+  - Proxy-Evaluation (Job-Ads als Resume-Ersatz statt echte CVs)
+  - Black-Box-Natur → Explainability-Layer nötig (Attention-Visualisierung, regelbasierte Erklärungen)
+  - Bias-Risiko aus historischen Daten → Fairness-Monitoring einplanen
+- **Offene Risiken & Architektur-Entscheidungen:**
+  - **DSGVO / Embedding-Datenschutz:** CV-Embeddings sind personenbezogene Daten. Embedding Inversion Attacks ermöglichen teilweise Rekonstruktion des Originaltexts. Embeddings müssen verschlüsselt gespeichert und bei Kontolöschung gelöscht werden (Art. 17 DSGVO). Einwilligung des Users erforderlich. Self-Hosted mildert, löst aber nicht.
+  - **Embedding-Versionierung:** Modellwechsel → alle Embeddings inkompatibel. Braucht `embedding_model_version` in DB. Migrations-Strategie: alte + neue Embeddings parallel, dann umschalten. Ohne Versionierung wird jeder Modellwechsel zum Datenverlust.
+  - **Tokenizer für Deutsch:** Englische Modelle (ModernBERT, BGE-small) zerstückeln deutsche Compound-Words ("Softwareentwicklungsingenieur" → sinnlose Sub-Tokens). Nur CareerBERT (jobGBERT), multilingual-e5, BGE-M3 haben geeignete Tokenizer. Einschränkt die Modellauswahl für DE erheblich.
+  - **Feedback-Loop:** Ohne User-Feedback (Thumbs-up/down auf Matches) wird Matching nie besser als Tag 1. Braucht UI-Element + Datensatz-Aufbau für Re-Training. Konsumenten: Onboarding (→ 2.1), Vacancy Pipeline.
+  - **ESCO-Taxonomie-Updates:** ESCO wird von der EU regelmäßig aktualisiert. Centroids müssen bei Änderungen neu berechnet werden. Trigger: ESCO-Version-Check (z.B. monatlicher Cron), nicht TTL-basiert.
+  - **Latenz-Budget:** Embedding (~12-25ms) + Search (<1ms) = ~30ms real-time. ABER: LLM-Anreicherung für kurze CVs → Sekunden. Entscheidung: Batch (bei CV-Upload, Background-Job) vs. Real-Time (bei Suche)?
+  - **Hybrid-Modell-Strategie:** CareerBERT (DE, ESCO-Spezialist) + multilingual-e5 (FR/ES/EN) parallel statt Entweder-Oder. Gewichtetes Ensemble der Scores.
+  - **Explainability:** Nicht nur "Job X passt zu 87%" — sondern "weil Skills A, B, C matchen und D fehlt". Ansatz: Cross-Encoder Attention-Weights oder Post-Hoc Skill-Overlap-Analyse.
+  - **Offline / Erster Start:** Modell muss ohne Internet verfügbar sein. Bündeln im Docker-Image oder Download + Cache beim ersten Start. HuggingFace-Hub als Dependency.
+  - **A/B-Testing:** Kein Evaluierungsplan für Modellvergleich in Produktion. Braucht: Gleiche CVs durch verschiedene Modelle, HR-Expert-Review oder automatische Metriken aus Feedback-Loop.
 - **DDD-Einordnung:** Bei Implementierung als neues AI-Modul im AI Connector registrieren (wie Ollama, OpenAI, DeepSeek). Implementiert `AIProviderConnector` Interface mit `createModel()` für Embedding-Generierung.
 - **Konsumenten:** Skillsets (→ 4.1), Duplikat-Erkennung (→ 3.2 Fuzzy Matching)
 - **Ressourcen:**
-  - https://github.com/julianrosenberger/careerbert
+  - **Research:** `docs/research/careerbert-hardware-research.md` — Ausgiebiges Hardware-Research mit Benchmarks, Modellvergleichen, Integrations-Patterns
+  - **Paper:** https://arxiv.org/abs/2503.02056 | [ScienceDirect](https://www.sciencedirect.com/science/article/pii/S0957417425006657)
+  - **Code:** https://github.com/julianrosenberger/careerbert
+  - **Models:** [careerbert-jg](https://huggingface.co/lwolfrum2/careerbert-jg) | [careerbert-g](https://huggingface.co/lwolfrum2/careerbert-g) (HuggingFace)
+  - **Empfohlene Base-Models:** [ModernBERT-embed-base](https://huggingface.co/nomic-ai/modernbert-embed-base) | [nomic-embed-text-v1.5](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5) | [BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) | [multilingual-e5-small](https://huggingface.co/intfloat/multilingual-e5-small)
+  - **Integration:** [Transformers.js v4](https://huggingface.co/blog/transformersjs-v4) | [fastembed-js](https://github.com/Anush008/fastembed-js) | [sqlite-vec](https://github.com/asg017/sqlite-vec) | [ONNX Runtime Next.js Template](https://github.com/microsoft/onnxruntime-nextjs-template)
+  - **Benchmarks:** [MTEB Leaderboard](https://huggingface.co/spaces/mteb/leaderboard) | [Matryoshka Guide](https://huggingface.co/blog/matryoshka) | [Intel CPU-Optimized Embeddings](https://huggingface.co/blog/intel-fast-embedding)
+  - **Vektor-Quantisierung:** [TurboQuant](https://arxiv.org/abs/2504.19874) | [RaBitQ](https://arxiv.org/abs/2405.12497) | [KV-Caching erklärt](https://huggingface.co/blog/not-lain/kv-caching)
+  - **Literature Review:** https://www.themoonlight.io/en/review/careerbert-matching-resumes-to-esco-jobs-in-a-shared-embedding-space-for-generic-job-recommendations
 
 ### 9.2 LinkedIn / XING Machbarkeitsstudie
 Research Spike — KEIN Connector, KEIN Modul. Erst Machbarkeit klären, dann entscheiden.

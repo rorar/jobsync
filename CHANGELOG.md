@@ -1,5 +1,36 @@
 # Changelog
 
+## [2026-04-01] Session S1b — Comprehensive Review + Fix All
+
+### Fixed
+- **sec (CRITICAL):** API v1 GET/PATCH/POST job responses leaked userId, matchData, foreign keys — replaced `include` with explicit `select`
+- **perf (CRITICAL):** ConnectorCache singleton broken in production (0% hit rate) — unconditional globalThis assignment
+- **sec:** degradation findUnique without userId (ADR-015) — changed to findFirst
+- **sec:** IP rate limiting trusted spoofable x-forwarded-for — unique fallback per request
+- **sec:** Misleading "constant-time" comment on API key validation — corrected
+- **sec:** SSE endpoint lacked per-user connection limit — max 5 connections
+- **sec:** Cache key injection via unsanitized delimiter — sanitize params segment
+- **sec:** removeBlacklistEntry TOCTOU — atomic deleteMany
+- **perf:** PATCH /api/v1/jobs/:id 9 sequential DB round-trips → Promise.all (~5)
+- **perf:** POST /api/v1/jobs 5 sequential upserts → Promise.all
+- **perf:** AutomationDetailPage duplicate getAutomationRuns call — removed
+- **perf:** getBlacklistEntries unbounded query — added take:500
+- **perf:** Cache eviction was FIFO → true LRU via Map re-insertion
+- **perf:** Expired cache entries accumulated → periodic prune (15 min)
+- **perf:** Notes endpoint unbounded — added pagination (default 25, max 100)
+- **i18n:** 11x hardcoded English throws in publicApiKey.actions.ts → i18n keys
+- **i18n:** 3x hardcoded English in companyBlacklist.actions.ts → i18n keys
+- **i18n:** 5x hardcoded "Error" toast titles → t("common.error")
+- **arch:** event-types.ts bidirectional coupling with scheduler → inlined RunSource
+- **a11y:** ViewModeToggle radiogroup aria-label describes purpose
+- **code:** UUID validation duplicated in 5 locations → shared isValidUUID()
+- **code:** 4x duplicate findOrCreate helpers → shared helpers.ts
+
+### Added
+- `src/lib/api/helpers.ts` — shared findOrCreate, resolveStatus, JOB_API_SELECT
+- `__tests__/validate-api-key.spec.ts` — validateApiKey unit tests (TG-1)
+- `BlacklistMatchType` extended with starts_with/ends_with + matcher
+
 ## [2026-04-01] Session S1a — Allium Weed + Gap Analysis + Performance Fixes
 
 ### Fixed
