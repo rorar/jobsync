@@ -104,7 +104,10 @@ export function TagInput({
 
   return (
     <div className="flex flex-col gap-2">
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={(isOpen) => {
+          setOpen(isOpen);
+          if (!isOpen) setInputValue(""); // Clear input on any close (click-outside, Escape)
+        }}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"

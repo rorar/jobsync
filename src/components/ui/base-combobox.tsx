@@ -81,6 +81,8 @@ export function BaseCombobox({
         <Button
           variant="outline"
           role="combobox"
+          type="button"
+          aria-expanded={open}
           disabled={disabled}
           className={cn(
             "md:w-[240px] lg:w-[280px] justify-between capitalize",

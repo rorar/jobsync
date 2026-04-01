@@ -1,12 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function uniqueId(): string {
-  return Date.now().toString(36);
-}
+import { uniqueId } from "../helpers";
 
 /** Set NEXT_LOCALE=en cookie so the app renders in English. */
 async function ensureEnglishLocale(page: Page) {
