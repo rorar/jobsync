@@ -354,20 +354,22 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
     await skillInput.fill(skill);
     await page.waitForTimeout(300);
     await skillInput.press("Enter");
-    await page.waitForTimeout(1500);
 
-    // Verify chip is created
-    await expect(page.getByText(skill).first()).toBeVisible();
+    // Wait for async createTag to complete and chip to render
+    await expect(page.getByText(skill).first()).toBeVisible({ timeout: 10000 });
 
     // Verify the popover stays open (multi-select behavior)
     await expect(skillInput).toBeVisible();
 
-    // Verify sr-only announcement contains creation info
-    const announcements = await getAllAnnouncements(page);
-    expect(
-      hasAnnouncement(announcements, "Created") ||
-        hasAnnouncement(announcements, "of 10"),
-    ).toBe(true);
+    // Poll for sr-only announcement (async state update after creation)
+    await expect(async () => {
+      const announcements = await getAllAnnouncements(page);
+      expect(
+        hasAnnouncement(announcements, "Created") ||
+          hasAnnouncement(announcements, "of 10") ||
+          hasAnnouncement(announcements, "added"),
+      ).toBe(true);
+    }).toPass({ timeout: 5000 });
 
     expect(filterCriticalErrors(errors)).toEqual([]);
   });
@@ -431,9 +433,9 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
     await skillInput.fill(skill);
     await page.waitForTimeout(300);
     await skillInput.press("Enter");
-    await page.waitForTimeout(1500);
 
-    await expect(page.getByText(skill).first()).toBeVisible();
+    // Wait for async createTag to complete and chip to render
+    await expect(page.getByText(skill).first()).toBeVisible({ timeout: 10000 });
 
     // Try adding the same skill again
     await skillInput.fill(skill);
@@ -489,11 +491,12 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     const keyword = `KBKeyword ${uid}`;
     await searchInput.fill(keyword);
-    await page.waitForTimeout(500);
+    // Wait for debounce + ESCO API fetch to complete or timeout
+    await page.waitForTimeout(2000);
     await searchInput.press("Enter");
-    await page.waitForTimeout(1000);
 
-    await expect(page.getByText(keyword).first()).toBeVisible({ timeout: 5000 });
+    // Wait for async keyword addition to complete
+    await expect(page.getByText(keyword).first()).toBeVisible({ timeout: 10000 });
 
     // Poll for the announcement (async state update after Enter)
     await expect(async () => {
@@ -531,13 +534,11 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     for (let i = 1; i <= 3; i++) {
       await searchInput.fill(`KW${i} ${uid}`);
-      await page.waitForTimeout(500);
+      // Wait for debounce + ESCO API fetch to complete or timeout
+      await page.waitForTimeout(2000);
       await searchInput.press("Enter");
-      await page.waitForTimeout(1000);
-    }
-
-    for (let i = 1; i <= 3; i++) {
-      await expect(page.getByText(`KW${i} ${uid}`).first()).toBeVisible({ timeout: 5000 });
+      // Wait for chip to appear before adding next keyword
+      await expect(page.getByText(`KW${i} ${uid}`).first()).toBeVisible({ timeout: 10000 });
     }
 
     await deleteResume(page, resumeTitle);

@@ -100,6 +100,9 @@ test.describe("Automation Wizard — Dynamic Module Selector", () => {
     // Open the Job Board selector dropdown
     await page.getByRole("combobox", { name: /Job Board/i }).click();
 
+    // Wait for async getActiveModules to load the options
+    await page.getByRole("option").first().waitFor({ state: "visible", timeout: 10000 });
+
     // Verify that the core active modules appear as options
     await expect(
       page.getByRole("option", { name: /EURES/i }),
@@ -132,8 +135,8 @@ test.describe("Automation Wizard — Dynamic Module Selector", () => {
     await page.waitForLoadState("domcontentloaded");
     await page.getByRole("button", { name: "API Keys", exact: true }).click();
 
-    // Wait for the API Keys section to finish loading (modules are fetched async)
-    await page.waitForTimeout(2000);
+    // Wait for module switches to render (getCredentialModules is async)
+    await page.getByRole("switch").first().waitFor({ state: "visible", timeout: 15000 });
 
     const jsearchSwitch = page.getByRole("switch", {
       name: /Toggle JSearch module/i,
@@ -176,7 +179,9 @@ test.describe("Automation Wizard — Dynamic Module Selector", () => {
       await page.goto("/dashboard/settings");
       await page.waitForLoadState("domcontentloaded");
       await page.getByRole("button", { name: "API Keys", exact: true }).click();
-      await page.waitForTimeout(2000);
+
+      // Wait for module switches to render again
+      await page.getByRole("switch").first().waitFor({ state: "visible", timeout: 15000 });
 
       const jsearchSwitchAfter = page.getByRole("switch", {
         name: /Toggle JSearch module/i,

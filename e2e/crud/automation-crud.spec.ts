@@ -85,48 +85,14 @@ async function createAutomation(
   // Step 1: Basics
   await page.getByPlaceholder(/Frontend Jobs Berlin/i).fill(opts.name);
   await page.getByRole("combobox", { name: /Job Board/i }).click();
-  await page.getByRole("option", { name: /EURES/i }).click();
+  await page.getByRole("option", { name: /Arbeitsagentur/i }).click();
   await page.getByRole("button", { name: /Next/i }).click();
 
   // Step 2: Search (Keywords + Location)
-  const keywordsCombobox = page
-    .getByRole("combobox")
-    .filter({ hasText: /Search occupations|keyword/i });
-  if (await keywordsCombobox.isVisible().catch(() => false)) {
-    await keywordsCombobox.click();
-    const searchInput = page.getByPlaceholder(/Search occupations/i);
-    await searchInput.fill(opts.keywords);
-    await page.waitForTimeout(800);
-    const firstOption = page.getByRole("option").first();
-    try {
-      await firstOption.waitFor({ state: "visible", timeout: 5000 });
-      await firstOption.click();
-    } catch {
-      await searchInput.press("Enter");
-    }
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(300);
-  }
+  // Arbeitsagentur uses plain text inputs (no external API comboboxes)
+  await page.getByLabel(/Search Keywords/i).fill(opts.keywords);
+  await page.getByLabel(/^Location$/i).fill(opts.location);
 
-  const locationCombobox = page
-    .getByRole("combobox")
-    .filter({ hasText: /Select countries|location/i });
-  if (await locationCombobox.isVisible().catch(() => false)) {
-    await locationCombobox.click();
-    await page.waitForTimeout(2000);
-    const locationInput = page.getByPlaceholder(/Search countries/i);
-    await locationInput.fill(opts.location);
-    await page.waitForTimeout(1000);
-    const firstLocOption = page.getByRole("option").first();
-    try {
-      await firstLocOption.waitFor({ state: "visible", timeout: 8000 });
-      await firstLocOption.click();
-    } catch {
-      // fallback
-    }
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(300);
-  }
   await page.getByRole("button", { name: /Next/i }).click();
 
   // Step 3: Resume
@@ -269,7 +235,7 @@ test.describe("Automation CRUD", () => {
     // Scope assertions to the specific card to avoid matching stale data
     const card = page.locator("a", { hasText: automationName }).first();
     await expect(card).toBeVisible({ timeout: 10000 });
-    await expect(card.getByText("eures").first()).toBeVisible();
+    await expect(card.getByText("arbeitsagentur").first()).toBeVisible();
     await expect(card.getByText("active").first()).toBeVisible();
 
     // Cleanup

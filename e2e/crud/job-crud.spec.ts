@@ -10,7 +10,8 @@ async function navigateToJobs(page: Page) {
   await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-job-btn").waitFor({ state: "visible" });
   // Wait for the jobs table to finish its async loadJobs() call.
-  await page.waitForTimeout(2000);
+  // Use a longer timeout to account for slow server responses.
+  await page.waitForTimeout(3000);
 }
 
 /**
@@ -114,18 +115,12 @@ async function createJob(
 
   // Select a resume to avoid the P2003 FK violation that occurs when
   // the form submits resume="" (empty string is not a valid Resume ID).
+  // Wait for resumes to load before attempting selection.
   const resumeSelect = page.getByLabel("Select Resume");
   await resumeSelect.click();
   const firstResumeOption = page.getByRole("option").first();
-  const hasResumeOption = await firstResumeOption
-    .waitFor({ state: "visible", timeout: 5000 })
-    .then(() => true)
-    .catch(() => false);
-  if (hasResumeOption) {
-    await firstResumeOption.click();
-  } else {
-    await page.keyboard.press("Escape");
-  }
+  await firstResumeOption.waitFor({ state: "visible", timeout: 10000 });
+  await firstResumeOption.click();
 
   await page.getByTestId("save-job-btn").click();
 

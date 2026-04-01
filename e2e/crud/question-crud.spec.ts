@@ -2,6 +2,12 @@ import { test, expect, type Page } from "@playwright/test";
 
 // storageState handles authentication — no per-test login needed
 
+test.beforeEach(async ({ context }) => {
+  await context.addCookies([
+    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
+  ]);
+});
+
 async function navigateToQuestions(page: Page) {
   await page.goto("/dashboard/questions");
   await page.waitForLoadState("domcontentloaded");
@@ -142,8 +148,10 @@ test.describe("Question CRUD", () => {
       timeout: 15000,
     });
 
-    // Wait for any toast overlay to disappear before clicking the question
-    await page.waitForTimeout(2000);
+    // Wait for creation toast to auto-dismiss before clicking the question
+    await expect(
+      page.getByText(/Question has been created/i).first(),
+    ).not.toBeVisible({ timeout: 10000 });
 
     // Click on the question text to trigger onEdit — the question title is a
     // clickable button element that calls onEdit. The onEdit handler makes an

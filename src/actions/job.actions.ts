@@ -326,7 +326,7 @@ export const addJob = async (
         userId: user.id,
         jobUrl,
         applied,
-        resumeId: resume,
+        resumeId: resume || null,
         ...(tagIds.length > 0
           ? { tags: { connect: tagIds.map((id) => ({ id })) } }
           : {}),
@@ -398,7 +398,7 @@ export const updateJob = async (
         jobType: type,
         jobUrl,
         applied,
-        resumeId: resume,
+        resumeId: resume || null,
         tags: { set: tagIds.map((id) => ({ id })) },
       },
       include: {

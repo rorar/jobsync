@@ -145,7 +145,10 @@ test.describe("Company CRUD", () => {
     await expect(dialog).toBeVisible();
 
     // Change the name — first textbox in the dialog
+    // Wait for useEffect reset() to populate the form with the original value
     const nameInput = dialog.getByRole("textbox").first();
+    await expect(nameInput).toHaveValue(companyName, { timeout: 5000 });
+    // Now safe to modify
     await nameInput.clear();
     await nameInput.fill(updatedName);
 

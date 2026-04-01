@@ -2,6 +2,16 @@ import { test, expect, type Page } from "@playwright/test";
 import { expectToast, selectOrCreateComboboxOption } from "../helpers";
 
 // ---------------------------------------------------------------------------
+// Locale
+// ---------------------------------------------------------------------------
+
+test.beforeEach(async ({ context }) => {
+  await context.addCookies([
+    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
+  ]);
+});
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -128,7 +138,7 @@ test("add contact info", async ({ page }) => {
   await page.getByLabel("Phone").fill("123456789");
   await page.getByLabel("Address").fill("Calgary");
   await page.getByRole("button", { name: "Save" }).click();
-  await expectToast(page, /Contact Info has been created/);
+  await expectToast(page, /contact info has been created/i);
   await expect(
     page.getByRole("heading", { name: "John Doe" }),
   ).toBeVisible({ timeout: 15000 });
