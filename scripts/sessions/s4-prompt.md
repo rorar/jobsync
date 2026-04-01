@@ -89,6 +89,7 @@ Starte `/full-stack-orchestration:full-stack-feature` für die Umsetzung.
 10. Settings UI: Module Activation/Deactivation (folgt bestehendem Pattern)
 
 **UX-Enrichment:** Verwende `/ui-design:interaction-design` für Loading-Transitions (Skeleton → Logo Fade-In), Enrichment-Status Feedback und Fallback-Visualisierung.
+**Accessibility:** Verwende `/accessibility-compliance:wcag-audit-patterns` für WCAG 2.2 Compliance der neuen Enrichment-UI Komponenten.
 
 **UX-Pflicht für JEDE neue Komponente:**
 - Loading State (Logo wird geladen → Skeleton)

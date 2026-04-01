@@ -65,6 +65,7 @@ Bevor du Code schreibst:
 - Spawne `/ui-design:create-component` für das Kanban Board
 - Spawne `/ui-design:design-review` für die Wireframes
 - Spawne `/ui-design:interaction-design` für Drag-and-Drop Interactions, Status-Transition Feedback, Kanban Microinteractions
+- Spawne `/accessibility-compliance:wcag-audit-patterns` für WCAG 2.2 Compliance der neuen Kanban/CRM Komponenten
 - Mobile Responsiveness prüfen mit `/ui-design:responsive-design`
 - Warte auf Findings, dann implementiere
 
