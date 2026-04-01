@@ -392,6 +392,8 @@ export async function runRetentionCleanup(
  * Each item is validated individually; invalid items are skipped, not rolled back.
  * One BulkActionCompleted event per batch, one UndoEntry per batch.
  */
+const VALID_BULK_ACTIONS = ["dismiss", "archive", "trash", "restore", "restoreFromTrash", "delete"] as const;
+
 export async function executeBulkAction(
   actionType: import("@/lib/vacancy-pipeline/bulk-action.service").BulkActionType,
   itemIds: string[],
@@ -399,6 +401,11 @@ export async function executeBulkAction(
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
+
+    // Runtime validation — TypeScript types are erased (BS-8)
+    if (!(VALID_BULK_ACTIONS as readonly string[]).includes(actionType)) {
+      return { success: false, message: "Invalid action type" };
+    }
 
     const { executeBulkAction: execBulk } = await import(
       "@/lib/vacancy-pipeline/bulk-action.service"

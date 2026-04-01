@@ -35,8 +35,14 @@ export function actionToResponse<T>(
   }
 
   // Map common error messages to HTTP status codes
-  const message = result.message ?? "An error occurred";
-  const status = inferErrorStatus(message);
+  const rawMessage = result.message ?? "An error occurred";
+  const status = inferErrorStatus(rawMessage);
+
+  // Sanitize error message for external consumers (SEC-18).
+  // Only forward known safe messages; replace internal errors with generic text.
+  const message = status === 500
+    ? "An unexpected error occurred."
+    : rawMessage;
 
   return NextResponse.json(
     {

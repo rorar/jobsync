@@ -34,7 +34,7 @@ import {
 import { debugLog } from "@/lib/debug";
 import type { RunOptions, RunProgress } from "@/lib/scheduler/types";
 import { runCoordinator } from "@/lib/scheduler/run-coordinator";
-import { getBlacklistEntriesForUser } from "@/actions/companyBlacklist.actions";
+import { getBlacklistEntriesForUser } from "@/lib/blacklist-query";
 import { isCompanyBlacklisted } from "@/models/companyBlacklist.model";
 import { connectorCache, ConnectorCache } from "../cache";
 

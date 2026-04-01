@@ -18,9 +18,9 @@ export interface Resume {
 export interface File {
   id: string;
   fileName: string;
-  filePath: string;
+  filePath?: string;   // Optional — excluded from API responses to prevent server path leakage (SEC-11)
   fileType: string;
-  uploadedAt: Date;
+  uploadedAt?: Date;
   Resume?: Resume;
 }
 

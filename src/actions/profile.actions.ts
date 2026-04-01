@@ -91,13 +91,14 @@ export const getResumeById = async (
       throw new Error("Not authenticated");
     }
 
-    const resume = await prisma.resume.findUnique({
+    const resume = await prisma.resume.findFirst({
       where: {
         id: resumeId,
+        profile: { userId: user.id },
       },
       include: {
         ContactInfo: true,
-        File: true,
+        File: { select: { id: true, fileName: true, fileType: true } },
         ResumeSections: {
           include: {
             summary: true,
@@ -148,6 +149,14 @@ export const addContactInfo = async (
       throw new Error("Not authenticated");
     }
 
+    // Verify ownership before mutation
+    const owned = await prisma.resume.findFirst({
+      where: { id: data.resumeId, profile: { userId: user.id } },
+    });
+    if (!owned) {
+      throw new Error("Resume not found");
+    }
+
     const res = await prisma.resume.update({
       where: {
         id: data.resumeId,
@@ -184,6 +193,14 @@ export const updateContactInfo = async (
 
     if (!user) {
       throw new Error("Not authenticated");
+    }
+
+    // Verify ownership via contactInfo → resume → profile → userId
+    const ownedContact = await prisma.contactInfo.findFirst({
+      where: { id: data.id, resume: { profile: { userId: user.id } } },
+    });
+    if (!ownedContact) {
+      throw new Error("Contact info not found");
     }
 
     const res = await prisma.contactInfo.update({
@@ -303,6 +320,19 @@ export const editResume = async (
   filePath?: string
 ): Promise<ActionResult<Resume>> => {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+
+    // Verify ownership before mutation
+    const owned = await prisma.resume.findFirst({
+      where: { id, profile: { userId: user.id } },
+    });
+    if (!owned) {
+      throw new Error("Resume not found");
+    }
+
     let resolvedFileId = fileId;
 
     if (!fileId && fileName && filePath) {
@@ -345,8 +375,16 @@ export const deleteResumeById = async (
     if (!user) {
       throw new Error("Not authenticated");
     }
+    // Verify ownership before destructive operation
+    const owned = await prisma.resume.findFirst({
+      where: { id: resumeId, profile: { userId: user.id } },
+    });
+    if (!owned) {
+      throw new Error("Resume not found");
+    }
+
     if (fileId) {
-      await deleteFile(fileId);
+      await deleteFile(fileId, user.id);
     }
 
     await prisma.$transaction(async (prisma) => {
@@ -408,12 +446,14 @@ export const uploadFile = async (file: File, dir: string, path: string) => {
   await writeFile(path, buffer);
 };
 
-export const deleteFile = async (fileId: string) => {
+export const deleteFile = async (fileId: string, callerUserId?: string) => {
   try {
+    // Verify ownership: File → Resume → Profile → User
+    const whereClause = callerUserId
+      ? { id: fileId, Resume: { profile: { userId: callerUserId } } }
+      : { id: fileId };
     const file = await prisma.file.findFirst({
-      where: {
-        id: fileId,
-      },
+      where: whereClause,
     });
 
     const filePath = file?.filePath as string;
@@ -445,6 +485,15 @@ export const addResumeSummary = async (
     if (!user) {
       throw new Error("Not authenticated");
     }
+
+    // Verify ownership of target resume
+    const owned = await prisma.resume.findFirst({
+      where: { id: data.resumeId!, profile: { userId: user.id } },
+    });
+    if (!owned) {
+      throw new Error("Resume not found");
+    }
+
     const res = await prisma.resumeSection.create({
       data: {
         resumeId: data.resumeId!,
@@ -482,6 +531,15 @@ export const updateResumeSummary = async (
     if (!user) {
       throw new Error("Not authenticated");
     }
+
+    // Verify ownership via ResumeSection → Resume → profile → userId
+    const ownedSection = await prisma.resumeSection.findFirst({
+      where: { id: data.id, Resume: { profile: { userId: user.id } } },
+    });
+    if (!ownedSection) {
+      throw new Error("Resume section not found");
+    }
+
     const res = await prisma.resumeSection.update({
       where: {
         id: data.id,
@@ -519,6 +577,14 @@ export const addExperience = async (
 
     if (!user) {
       throw new Error("Not authenticated");
+    }
+
+    // Verify ownership of target resume
+    const owned = await prisma.resume.findFirst({
+      where: { id: data.resumeId!, profile: { userId: user.id } },
+    });
+    if (!owned) {
+      throw new Error("Resume not found");
     }
 
     if (!data.sectionId && !data.sectionTitle) {
@@ -569,14 +635,14 @@ export const updateExperience = async (
     if (!user) {
       throw new Error("Not authenticated");
     }
-    // const res = await prisma.resumeSection.update({
-    //   where: {
-    //     id: data.id,
-    //   },
-    //   data: {
-    //     sectionTitle: data.sectionTitle!,
-    //   },
-    // });
+
+    // Verify ownership via WorkExperience → ResumeSection → Resume → profile → userId
+    const ownedExp = await prisma.workExperience.findFirst({
+      where: { id: data.id, ResumeSection: { Resume: { profile: { userId: user.id } } } },
+    });
+    if (!ownedExp) {
+      throw new Error("Work experience not found");
+    }
 
     const summary = await prisma.workExperience.update({
       where: {
@@ -608,6 +674,15 @@ export const addEducation = async (
     if (!user) {
       throw new Error("Not authenticated");
     }
+
+    // Verify ownership of target resume
+    const owned = await prisma.resume.findFirst({
+      where: { id: data.resumeId!, profile: { userId: user.id } },
+    });
+    if (!owned) {
+      throw new Error("Resume not found");
+    }
+
     const section = !data.sectionId
       ? await prisma.resumeSection.create({
           data: {
@@ -655,6 +730,14 @@ export const deleteWorkExperience = async (
       throw new Error("Not authenticated");
     }
 
+    // Verify ownership via WorkExperience → ResumeSection → Resume → profile → userId
+    const owned = await prisma.workExperience.findFirst({
+      where: { id: experienceId, ResumeSection: { Resume: { profile: { userId: user.id } } } },
+    });
+    if (!owned) {
+      throw new Error("Work experience not found");
+    }
+
     await prisma.workExperience.delete({
       where: {
         id: experienceId,
@@ -680,6 +763,14 @@ export const deleteEducation = async (
       throw new Error("Not authenticated");
     }
 
+    // Verify ownership via Education → ResumeSection → Resume → profile → userId
+    const owned = await prisma.education.findFirst({
+      where: { id: educationId, ResumeSection: { Resume: { profile: { userId: user.id } } } },
+    });
+    if (!owned) {
+      throw new Error("Education not found");
+    }
+
     await prisma.education.delete({
       where: {
         id: educationId,
@@ -703,14 +794,14 @@ export const updateEducation = async (
     if (!user) {
       throw new Error("Not authenticated");
     }
-    // const res = await prisma.resumeSection.update({
-    //   where: {
-    //     id: data.id,
-    //   },
-    //   data: {
-    //     sectionTitle: data.sectionTitle!,
-    //   },
-    // });
+
+    // Verify ownership via Education → ResumeSection → Resume → profile → userId
+    const ownedEdu = await prisma.education.findFirst({
+      where: { id: data.id, ResumeSection: { Resume: { profile: { userId: user.id } } } },
+    });
+    if (!ownedEdu) {
+      throw new Error("Education not found");
+    }
 
     const summary = await prisma.education.update({
       where: {

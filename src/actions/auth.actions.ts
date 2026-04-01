@@ -6,6 +6,7 @@ import prisma from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { SignupFormSchema } from "@/models/signupForm.schema";
 import { JOB_SOURCES, JOB_STATUSES } from "@/lib/constants";
+import { t, getUserLocale } from "@/i18n/server";
 
 export async function signup(formData: {
   name: string;
@@ -24,7 +25,9 @@ export async function signup(formData: {
   });
 
   if (existingUser) {
-    return { error: "An account with this email already exists." };
+    // Generic message to prevent user enumeration (CWE-204)
+    const locale = await getUserLocale();
+    return { error: t(locale, "auth.unableToCreateAccount") };
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);

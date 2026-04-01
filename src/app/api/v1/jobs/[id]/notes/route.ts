@@ -11,8 +11,8 @@ export const OPTIONS = withApiAuth(async () => new Response(null));
  */
 export const GET = withApiAuth(async (_req, { userId, params }) => {
   const jobId = params?.id;
-  if (!jobId) {
-    return errorResponse("VALIDATION_ERROR", "Job ID is required", 400);
+  if (!jobId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) {
+    return errorResponse("VALIDATION_ERROR", "Valid Job ID is required", 400);
   }
 
   // Verify job ownership
@@ -43,8 +43,8 @@ export const GET = withApiAuth(async (_req, { userId, params }) => {
  */
 export const POST = withApiAuth(async (req, { userId, params }) => {
   const jobId = params?.id;
-  if (!jobId) {
-    return errorResponse("VALIDATION_ERROR", "Job ID is required", 400);
+  if (!jobId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) {
+    return errorResponse("VALIDATION_ERROR", "Valid Job ID is required", 400);
   }
 
   // Verify job ownership

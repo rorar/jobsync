@@ -10,11 +10,22 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
+
+    // Allowlist fields forwarded to Ollama — prevent parameter injection (CWE-20)
+    const safeBody = {
+      model: body.model,
+      prompt: body.prompt,
+      stream: false,
+      ...(body.system !== undefined && { system: body.system }),
+      ...(body.template !== undefined && { template: body.template }),
+      ...(body.context !== undefined && { context: body.context }),
+    };
+
     const baseUrl = await getOllamaBaseUrl();
     const response = await fetch(`${baseUrl}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(safeBody),
       signal: AbortSignal.timeout(10000),
     });
 

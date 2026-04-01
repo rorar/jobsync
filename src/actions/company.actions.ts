@@ -217,9 +217,10 @@ export const getCompanyById = async (
       throw new Error("Not authenticated");
     }
 
-    const company = await prisma.company.findUnique({
+    const company = await prisma.company.findFirst({
       where: {
         id: companyId,
+        createdBy: user.id,
       },
     });
     return { success: true, data: company ?? undefined };

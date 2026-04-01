@@ -2,8 +2,8 @@ import {
   getBlacklistEntries,
   addBlacklistEntry,
   removeBlacklistEntry,
-  getBlacklistEntriesForUser,
 } from "@/actions/companyBlacklist.actions";
+import { getBlacklistEntriesForUser } from "@/lib/blacklist-query";
 import { getCurrentUser } from "@/utils/user.utils";
 import db from "@/lib/db";
 

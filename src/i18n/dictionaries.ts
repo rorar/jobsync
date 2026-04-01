@@ -50,6 +50,7 @@ const core = {
     "auth.subtitle": "Track your job search, powered by AI",
     "auth.login": "Login",
     "auth.createAnAccount": "Create an account",
+    "auth.unableToCreateAccount": "Unable to create account. Please try a different email or sign in.",
 
     // Profile Dropdown
     "profile.myAccount": "My Account",
@@ -120,6 +121,7 @@ const core = {
     "auth.subtitle": "Verfolge deine Jobsuche, unterstützt durch KI",
     "auth.login": "Einloggen",
     "auth.createAnAccount": "Konto erstellen",
+    "auth.unableToCreateAccount": "Konto konnte nicht erstellt werden. Bitte verwende eine andere E-Mail-Adresse oder melde dich an.",
 
     "profile.myAccount": "Mein Konto",
     "profile.settings": "Einstellungen",
@@ -187,6 +189,7 @@ const core = {
     "auth.subtitle": "Suivez votre recherche d'emploi, propulsé par l'IA",
     "auth.login": "Connexion",
     "auth.createAnAccount": "Créer un compte",
+    "auth.unableToCreateAccount": "Impossible de créer le compte. Veuillez essayer une autre adresse e-mail ou vous connecter.",
 
     "profile.myAccount": "Mon compte",
     "profile.settings": "Paramètres",
@@ -254,6 +257,7 @@ const core = {
     "auth.subtitle": "Gestiona tu búsqueda de empleo, impulsado por IA",
     "auth.login": "Entrar",
     "auth.createAnAccount": "Crear una cuenta",
+    "auth.unableToCreateAccount": "No se pudo crear la cuenta. Por favor, prueba con otro correo electrónico o inicia sesión.",
 
     "profile.myAccount": "Mi cuenta",
     "profile.settings": "Configuración",

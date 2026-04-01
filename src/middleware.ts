@@ -32,10 +32,45 @@ function addDevCorsHeaders(request: NextRequest, response: NextResponse): NextRe
   return response;
 }
 
+/**
+ * Strips sensitive query parameters from auth routes.
+ * Prevents credential leakage via URL when forms fall back to GET.
+ */
+function sanitizeAuthUrl(request: NextRequest): NextResponse | null {
+  const { pathname, searchParams } = request.nextUrl;
+  const isAuthRoute = pathname === "/signin" || pathname === "/signup";
+  if (isAuthRoute && (searchParams.has("email") || searchParams.has("password"))) {
+    const cleanUrl = new URL(pathname, request.url);
+    return NextResponse.redirect(cleanUrl, { status: 303 });
+  }
+  return null;
+}
+
+/**
+ * Adds security headers to all responses.
+ */
+function addSecurityHeaders(response: NextResponse): NextResponse {
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (process.env.NODE_ENV === "production") {
+    response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  return response;
+}
+
 export default async function middleware(request: NextRequest) {
+  // Layer 3: Strip credentials from auth route URLs before any processing
+  const sanitized = sanitizeAuthUrl(request);
+  if (sanitized) return addSecurityHeaders(sanitized);
+
   // Run the NextAuth middleware
   const authResponse = await (authHandler as any)(request);
   const response = authResponse ?? NextResponse.next();
+
+  // Add security headers
+  addSecurityHeaders(response);
 
   // Add CORS headers for allowed dev origins
   return addDevCorsHeaders(request, response);
@@ -47,5 +82,8 @@ export const config = {
     // "/((?!api|_next/static|_next/image|.*\\.png$).*)",
     "/dashboard",
     "/dashboard/:path*",
+    "/signin",
+    "/signup",
+    "/api/v1/:path*",
   ],
 };

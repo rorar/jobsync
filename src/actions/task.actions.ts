@@ -1,7 +1,7 @@
 "use server";
 import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
-import { Task, TaskStatus } from "@/models/task.model";
+import { Task, TaskStatus, TASK_STATUSES } from "@/models/task.model";
 import { Activity } from "@/models/activity.model";
 import { AddTaskFormSchema } from "@/models/addTaskForm.schema";
 import { getCurrentUser } from "@/utils/user.utils";
@@ -207,6 +207,11 @@ export const updateTaskStatus = async (
 
     if (!user) {
       throw new Error("Not authenticated");
+    }
+
+    // Runtime validation — TypeScript types are erased (BS-8)
+    if (!TASK_STATUSES[status as keyof typeof TASK_STATUSES]) {
+      throw new Error("Invalid task status");
     }
 
     const task = await prisma.task.update({

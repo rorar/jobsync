@@ -184,9 +184,10 @@ export const getJobDetails = async (
       throw new Error("Not authenticated");
     }
 
-    const job = await prisma.job.findUnique({
+    const job = await prisma.job.findFirst({
       where: {
         id: jobId,
+        userId: user.id,
       },
       include: {
         JobSource: true,
@@ -196,7 +197,7 @@ export const getJobDetails = async (
         Location: true,
         Resume: {
           include: {
-            File: true,
+            File: { select: { id: true, fileName: true, fileType: true } },
           },
         },
         tags: true,
@@ -355,8 +356,8 @@ export const updateJob = async (
     if (!user) {
       throw new Error("Not authenticated");
     }
-    if (!data.id || user.id !== data.userId) {
-      throw new Error("Id is not provided or no user privileges");
+    if (!data.id) {
+      throw new Error("Id is not provided");
     }
 
     const {
@@ -382,6 +383,7 @@ export const updateJob = async (
     const job = await prisma.job.update({
       where: {
         id,
+        userId: user.id,
       },
       data: {
         jobTitleId: title,

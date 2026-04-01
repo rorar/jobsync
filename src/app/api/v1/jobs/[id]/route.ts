@@ -11,8 +11,8 @@ export const OPTIONS = withApiAuth(async () => new Response(null));
  */
 export const GET = withApiAuth(async (_req, { userId, params }) => {
   const jobId = params?.id;
-  if (!jobId) {
-    return errorResponse("VALIDATION_ERROR", "Job ID is required", 400);
+  if (!jobId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) {
+    return errorResponse("VALIDATION_ERROR", "Valid Job ID is required", 400);
   }
 
   const job = await prisma.job.findFirst({
@@ -23,7 +23,7 @@ export const GET = withApiAuth(async (_req, { userId, params }) => {
       Company: true,
       Status: true,
       Location: true,
-      Resume: { include: { File: true } },
+      Resume: { include: { File: { select: { id: true, fileName: true, fileType: true } } } },
       tags: true,
     },
   });
@@ -40,8 +40,8 @@ export const GET = withApiAuth(async (_req, { userId, params }) => {
  */
 export const PATCH = withApiAuth(async (req, { userId, params }) => {
   const jobId = params?.id;
-  if (!jobId) {
-    return errorResponse("VALIDATION_ERROR", "Job ID is required", 400);
+  if (!jobId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) {
+    return errorResponse("VALIDATION_ERROR", "Valid Job ID is required", 400);
   }
 
   // Verify ownership
@@ -159,8 +159,8 @@ export const PATCH = withApiAuth(async (req, { userId, params }) => {
  */
 export const DELETE = withApiAuth(async (_req, { userId, params }) => {
   const jobId = params?.id;
-  if (!jobId) {
-    return errorResponse("VALIDATION_ERROR", "Job ID is required", 400);
+  if (!jobId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) {
+    return errorResponse("VALIDATION_ERROR", "Valid Job ID is required", 400);
   }
 
   const existing = await prisma.job.findFirst({

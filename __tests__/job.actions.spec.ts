@@ -29,6 +29,7 @@ jest.mock("@prisma/client", () => {
     job: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       count: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -360,14 +361,15 @@ describe("jobActions", () => {
   it("should return job details on successful query", async () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
     const mockJob = await getMockJobDetails("2");
-    (prisma.job.findUnique as jest.Mock).mockResolvedValue(mockJob);
+    (prisma.job.findFirst as jest.Mock).mockResolvedValue(mockJob);
 
     const result = await getJobDetails("2");
 
     expect(result).toStrictEqual({ data: mockJob, success: true });
-    expect(prisma.job.findUnique).toHaveBeenCalledWith({
+    expect(prisma.job.findFirst).toHaveBeenCalledWith({
       where: {
         id: "2",
+        userId: mockUser.id,
       },
       include: {
         JobSource: true,
@@ -377,7 +379,7 @@ describe("jobActions", () => {
         Location: true,
         Resume: {
           include: {
-            File: true,
+            File: { select: { id: true, fileName: true, fileType: true } },
           },
         },
         tags: true,
@@ -388,7 +390,7 @@ describe("jobActions", () => {
   it("should handle unexpected errors", async () => {
     (getCurrentUser as jest.Mock).mockResolvedValue({ id: "user123" });
 
-    (prisma.job.findUnique as jest.Mock).mockRejectedValue(
+    (prisma.job.findFirst as jest.Mock).mockRejectedValue(
       new Error("Unexpected error"),
     );
 
@@ -592,7 +594,7 @@ describe("jobActions", () => {
         updateJob({ ...jobData, id: undefined }),
       ).resolves.toStrictEqual({
         success: false,
-        message: "Id is not provided or no user privileges",
+        message: "Id is not provided",
       });
     });
   });

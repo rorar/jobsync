@@ -1,10 +1,13 @@
 #!/bin/sh
 set -e
 
-# Auto-generate AUTH_SECRET if not provided
+# Require AUTH_SECRET — ephemeral secrets invalidate all sessions on restart
 if [ -z "$AUTH_SECRET" ]; then
-  export AUTH_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")
-  echo "AUTH_SECRET was not set — generated a temporary secret for this container."
+  echo "FATAL: AUTH_SECRET is not set." >&2
+  echo "Sessions require a stable secret. Generate one with:" >&2
+  echo "  openssl rand -base64 32" >&2
+  echo "Then set it as an environment variable in your Docker Compose or deployment config." >&2
+  exit 1
 fi
 
 # Run migrations as root (before switching users)

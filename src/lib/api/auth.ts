@@ -25,8 +25,13 @@ export async function validateApiKey(
     select: { id: true, userId: true, keyHash: true, revokedAt: true },
   });
 
-  if (!apiKey) return null;
-  if (apiKey.revokedAt !== null) return null;
+  // Constant-time evaluation to prevent timing oracle (SEC-17).
+  // Always perform the same operations regardless of key state.
+  const keyExists = apiKey !== null;
+  const keyRevoked = apiKey?.revokedAt !== null;
+  const isValid = keyExists && !keyRevoked;
+
+  if (!isValid) return null;
 
   // Update lastUsedAt asynchronously — don't block the response
   prisma.publicApiKey

@@ -40,7 +40,22 @@ export function withApiAuth(
     }
 
     try {
-      // 1. Authenticate
+      // 1. Rate limit by IP BEFORE auth — prevents DoS via invalid key flooding
+      const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+        || req.headers.get("x-real-ip")
+        || "unknown";
+      const ipRateResult = checkRateLimit(`ip:${clientIp}`, 120, 60_000);
+      if (!ipRateResult.allowed) {
+        const res = errorResponse(
+          "RATE_LIMITED",
+          "Too many requests. Try again later.",
+          429,
+        );
+        res.headers.set("Retry-After", String(Math.max(1, ipRateResult.resetAt - Math.floor(Date.now() / 1000))));
+        return addCorsHeaders(res);
+      }
+
+      // 2. Authenticate
       const authResult = await validateApiKey(req);
       if (!authResult) {
         return addCorsHeaders(errorResponse(
@@ -50,7 +65,7 @@ export function withApiAuth(
         ));
       }
 
-      // 2. Rate limit
+      // 3. Rate limit by API key (stricter, per-key)
       const rateResult = checkRateLimit(authResult.keyHash);
       if (!rateResult.allowed) {
         const res = errorResponse(

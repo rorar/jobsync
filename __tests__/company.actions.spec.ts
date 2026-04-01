@@ -520,12 +520,12 @@ describe("Company Actions", () => {
     it("should fetch company by id successfully", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
 
-      (prisma.company.findUnique as jest.Mock).mockResolvedValue(mockCompany);
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue(mockCompany);
 
       const result = await getCompanyById(mockCompanyId);
 
-      expect(prisma.company.findUnique).toHaveBeenCalledWith({
-        where: { id: mockCompanyId },
+      expect(prisma.company.findFirst).toHaveBeenCalledWith({
+        where: { id: mockCompanyId, createdBy: mockUser.id },
       });
 
       expect(result).toEqual({ success: true, data: mockCompany });
@@ -537,7 +537,7 @@ describe("Company Actions", () => {
         message: "Please provide company id",
       });
 
-      expect(prisma.company.findUnique).not.toHaveBeenCalled();
+      expect(prisma.company.findFirst).not.toHaveBeenCalled();
     });
 
     it("should throw error when user is not authenticated", async () => {
@@ -548,12 +548,12 @@ describe("Company Actions", () => {
         message: "Not authenticated",
       });
 
-      expect(prisma.company.findUnique).not.toHaveBeenCalled();
+      expect(prisma.company.findFirst).not.toHaveBeenCalled();
     });
 
     it("should handle unexpected errors", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
-      (prisma.company.findUnique as jest.Mock).mockRejectedValue(
+      (prisma.company.findFirst as jest.Mock).mockRejectedValue(
         new Error("Unexpected error"),
       );
 
@@ -562,8 +562,8 @@ describe("Company Actions", () => {
         message: "Unexpected error",
       });
 
-      expect(prisma.company.findUnique).toHaveBeenCalledWith({
-        where: { id: mockCompanyId },
+      expect(prisma.company.findFirst).toHaveBeenCalledWith({
+        where: { id: mockCompanyId, createdBy: mockUser.id },
       });
     });
   });

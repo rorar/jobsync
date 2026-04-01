@@ -1,13 +1,17 @@
 /**
  * In-memory sliding window rate limiter for Public API keys.
  * 60 requests per minute per API key (configurable).
+ * Also used for IP-based pre-auth rate limiting (120 req/min).
  *
  * Uses a Map of timestamp arrays per key hash.
  * Cleanup runs periodically to prevent memory leaks.
  *
- * NOTE: Single-process only. Will NOT work correctly in serverless
- * or multi-instance deployments. For distributed deployments,
- * replace with Redis-backed rate limiting (e.g. @upstash/ratelimit).
+ * LIMITATION (SEC-16): Single-process only. In multi-instance deployments
+ * (Docker Compose, Kubernetes, PM2 cluster), each process maintains
+ * independent state — effective rate limits become N× weaker with N instances.
+ * For distributed deployments, replace with Redis-backed rate limiting
+ * (e.g. @upstash/ratelimit or ioredis sliding window).
+ * Accepted for self-hosted single-instance deployments.
  */
 
 const DEFAULT_WINDOW_MS = 60_000; // 1 minute

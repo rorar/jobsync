@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/form";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SigninFormSchema } from "@/models/signinForm.schema";
 import Loading from "../Loading";
@@ -35,6 +35,16 @@ function SigninForm() {
   const [errorMessage, setError] = useState("");
   const router = useRouter();
 
+  // Defense-in-depth: strip credentials from URL if they leaked via GET fallback
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("email") || url.searchParams.has("password")) {
+      url.searchParams.delete("email");
+      url.searchParams.delete("password");
+      window.history.replaceState({}, "", url.pathname);
+    }
+  }, []);
+
   const onSubmit = async (data: z.infer<typeof SigninFormSchema>) => {
     startTransition(async () => {
       setError("");
@@ -54,8 +64,9 @@ function SigninForm() {
     <>
       <Form {...form}>
         <form
+          method="POST"
+          action=""
           onSubmit={form.handleSubmit(onSubmit)}
-          // className="w-2/3 space-y-6"
         >
           <div className="grid gap-4">
             <div className="grid gap-2">

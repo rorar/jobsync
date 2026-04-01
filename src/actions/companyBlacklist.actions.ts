@@ -40,6 +40,8 @@ export async function getBlacklistEntries(): Promise<
 /**
  * Add a company to the blacklist.
  */
+const VALID_MATCH_TYPES: readonly string[] = ["exact", "contains", "starts_with", "ends_with"] as const;
+
 export async function addBlacklistEntry(
   pattern: string,
   matchType: BlacklistMatchType = "contains",
@@ -48,6 +50,11 @@ export async function addBlacklistEntry(
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
+
+    // Runtime validation — TypeScript types are erased (SEC-14)
+    if (!VALID_MATCH_TYPES.includes(matchType)) {
+      return { success: false, message: "Invalid match type" };
+    }
 
     const trimmedPattern = pattern.trim();
     if (!trimmedPattern) {
@@ -121,20 +128,7 @@ export async function removeBlacklistEntry(
   }
 }
 
-/**
- * Get blacklist entries for a specific user (server-only, no auth check).
- * Used by the Runner pipeline to filter vacancies.
- */
-export async function getBlacklistEntriesForUser(
-  userId: string,
-): Promise<Pick<CompanyBlacklist, "pattern" | "matchType">[]> {
-  const entries = await prisma.companyBlacklist.findMany({
-    where: { userId },
-    select: { pattern: true, matchType: true },
-  });
-
-  return entries.map((e) => ({
-    pattern: e.pattern,
-    matchType: e.matchType as BlacklistMatchType,
-  }));
-}
+// SEC-13: getBlacklistEntriesForUser moved to src/lib/blacklist-query.ts
+// Removed from "use server" file to prevent client-side IDOR.
+// "use server" exports are callable from the browser — this function
+// accepts a raw userId and must NOT be client-accessible.

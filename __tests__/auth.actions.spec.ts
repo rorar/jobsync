@@ -109,7 +109,7 @@ describe("Auth Actions", () => {
       const result = await signup(validSignupData);
 
       expect(result).toEqual({
-        error: "An account with this email already exists.",
+        error: "Unable to create account. Please try a different email or sign in.",
       });
       expect(prisma.user.findUnique).toHaveBeenCalledWith({
         where: { email: validSignupData.email },

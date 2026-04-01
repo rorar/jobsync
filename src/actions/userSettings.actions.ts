@@ -168,6 +168,11 @@ export const updateAutomationSettings = async (
 export async function getAutomationSettingsForUser(
   userId: string
 ): Promise<AutomationSettings> {
+  // Prevent IDOR: verify caller is authenticated and requesting own data (BS-6)
+  const user = await getCurrentUser();
+  if (!user || user.id !== userId) {
+    return defaultUserSettings.automation!;
+  }
   const defaults = defaultUserSettings.automation!;
   try {
     const row = await prisma.userSettings.findUnique({ where: { userId } });
@@ -228,6 +233,11 @@ export async function updateNotificationPreferences(
 export async function getNotificationPreferencesForUser(
   userId: string
 ): Promise<NotificationPreferences> {
+  // Prevent IDOR: verify caller is authenticated and requesting own data (BS-6)
+  const user = await getCurrentUser();
+  if (!user || user.id !== userId) {
+    return DEFAULT_NOTIFICATION_PREFERENCES;
+  }
   try {
     const row = await prisma.userSettings.findUnique({ where: { userId } });
     if (!row) return DEFAULT_NOTIFICATION_PREFERENCES;
