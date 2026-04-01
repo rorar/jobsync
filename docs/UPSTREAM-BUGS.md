@@ -1,13 +1,62 @@
 # Upstream Bug Report for Gsync/jobsync
 
-**Reported by:** rorar (fork maintainer)
-**Date:** 2026-03-24
-**Branch tested:** dev (commit 5879362)
+**Reported by:** @rorar (fork maintainer)
+**Date:** 2026-03-24, updated 2026-04-01
+**Branch tested:** dev (commit 5879362), re-verified against upstream/main (v1.1.9, 2026-04-01)
 **JobSync version:** 1.1.4+
+
+### GitHub Issues Filed (2026-04-01)
+
+| Issue | Title | Severity | Bugs Covered |
+|---|---|---|---|
+| [#67](https://github.com/Gsync/jobsync/issues/67) | Credentials exposed in URL (missing form method=POST) | Critical (CVSS 9.1) | #0 |
+| [#68](https://github.com/Gsync/jobsync/issues/68) | Path Traversal + IDOR in Resume API | High (CVSS 8.6) | #1, #8, #14 |
+| [#69](https://github.com/Gsync/jobsync/issues/69) | Stored XSS via unsanitized HTML rendering | Critical (CVSS 9.0) | #12 |
+| [#70](https://github.com/Gsync/jobsync/issues/70) | SSRF via user-controlled Ollama URL | High (CVSS 8.5) | NEW |
+| [#71](https://github.com/Gsync/jobsync/issues/71) | Systematic IDOR — missing ownership checks | High (CVSS 8.3) | #6, NEW (B-G) |
+| [#72](https://github.com/Gsync/jobsync/issues/72) | Auth architecture weaknesses (bundled) | Medium | #9, #10, #16, NEW (H, I, J) |
 
 ---
 
 ## Critical Security Vulnerabilities
+
+### 0. Credentials Exposed in URL via GET Fallback — [#67](https://github.com/Gsync/jobsync/issues/67)
+
+**Files:** `src/components/auth/SigninForm.tsx` (~line 57), `src/components/auth/SignupForm.tsx` (~line 61)
+**CVSS 3.1:** 9.1 (Critical) — AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:N
+**CWE:** CWE-598 (Use of GET Request Method With Sensitive Query Strings)
+
+Both authentication forms render `<form onSubmit={form.handleSubmit(onSubmit)}>` without `method="POST"`. During Next.js hydration gaps (the period between server-rendered HTML and client-side JS initialization), if a user submits the form before JavaScript loads, the browser falls back to native HTML form behavior. Without an explicit `method` attribute, the HTML spec defaults to `GET`, encoding all form fields — including email and password — as URL query parameters:
+
+```
+http://<host>:3737/signin?email=admin%40example.com&password=password123
+```
+
+**Exposure vectors:**
+- Browser history (permanent, synced across devices via Chrome/Firefox/Edge sync)
+- Browser URL bar autocomplete suggestions
+- Server access logs (nginx, Apache, Caddy log full GET URLs)
+- Next.js dev server stdout logging
+- Proxy/firewall logs (Squid, Zscaler, corporate DPI)
+- Referer header leakage to any external resources loaded on the page
+- Plaintext HTTP transmission (self-hosted deployments typically use HTTP)
+- Screenshot/screen recording/screen share visibility
+
+**Reproduction:**
+1. Navigate to `/signin`
+2. Disable JavaScript in browser DevTools (or throttle network to Slow 3G and submit quickly)
+3. Enter credentials and press Enter
+4. Observe URL bar contains `?email=...&password=...`
+
+**Suggested Fix:**
+```diff
+- <form onSubmit={form.handleSubmit(onSubmit)}>
++ <form method="POST" action="" onSubmit={form.handleSubmit(onSubmit)}>
+```
+
+**Full analysis:** See [security/SECURITY-REPORT-upstream-credential-url-leakage.md](security/SECURITY-REPORT-upstream-credential-url-leakage.md)
+
+---
 
 ### 1. Path Traversal in Resume File Download API
 

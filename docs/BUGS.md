@@ -1,21 +1,33 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-01
 
-**Total: 89 bugs found, 81 fixed, 8 open (security)**
+**Total: 96 bugs found, 96 fixed, 0 remaining**
 
-### Status: ⚠️ 8 open security findings from Sprint C Team Review
+### Status: ✅ All bugs are fixed.
 
-## Security Findings — Sprint C Team Review (2026-04-01)
+## Blind Spot Analysis (2026-04-01) — ALL FIXED
 
-| ID | Severity | Finding | File | Status |
-|----|----------|---------|------|--------|
-| SEC-11 | **HIGH** | **File.filePath exposed in API response:** GET /api/v1/jobs/:id includes `Resume: { include: { File: true } }` — returns full server filesystem path to external API consumers | `src/app/api/v1/jobs/[id]/route.ts:26` | OPEN |
-| SEC-12 | **HIGH** | **No rate limiting for unauthenticated requests:** `withApiAuth` applies rate limiting only after successful auth — invalid/missing API key requests bypass rate limiter entirely, enabling DB-level DoS via unbounded `findUnique` lookups | `src/lib/api/with-api-auth.ts:44` | OPEN |
-| SEC-13 | **MEDIUM** | **`getBlacklistEntriesForUser` exposed as server action without auth:** Exported from `"use server"` file with raw userId param — any client can call it with arbitrary userId to read other users' blacklist patterns (IDOR) | `src/actions/companyBlacklist.actions.ts:128` | OPEN |
-| SEC-14 | **MEDIUM** | **`matchType` parameter not runtime-validated:** TypeScript union `"exact" \| "contains"` erased at runtime — attacker can pass arbitrary string values via server action, stored in DB | `src/actions/companyBlacklist.actions.ts:43` | OPEN |
-| SEC-15 | **MEDIUM** | **Job ID path parameter not UUID-validated:** Route params used directly in Prisma queries without format check — malformed/large strings hit DB unnecessarily, increases DoS surface | `src/app/api/v1/jobs/[id]/route.ts:13` | OPEN |
-| SEC-16 | **MEDIUM** | **In-memory rate limiter ineffective in multi-instance deployments:** Each process maintains independent rate limit state — rate limits become N× weaker with N instances | `src/lib/api/rate-limit.ts:8` | OPEN — documented, accepted for self-hosted |
-| SEC-17 | **MEDIUM** | **Timing oracle in API key validation:** Response timing differs between "key not found", "key revoked", and "key valid" paths — enables key state enumeration by timing analysis | `src/lib/api/auth.ts:21-29` | OPEN — low risk (SHA-256 makes brute-force infeasible) |
-| SEC-18 | **LOW** | **Error messages in `inferErrorStatus` may leak internal context:** String-matching on error messages could forward Prisma/internal error details to API consumers | `src/lib/api/response.ts:112` | OPEN — mitigated by global error handler |
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| BS-1 | **HIGH** | `deleteResumeById()` missing ownership check | Added `findFirst` ownership verification before cascade delete |
+| BS-2 | **HIGH** | `deleteFile()` missing ownership check | Added File→Resume→Profile→User ownership parameter |
+| BS-3 | **HIGH** | `deleteWorkExperience()` + `deleteEducation()` missing ownership | Added relation chain ownership checks |
+| BS-4 | **MED-HIGH** | `addResumeSummary()`, `addExperience()`, `addEducation()` write IDOR | Added resume ownership verification before create |
+| BS-5 | **MEDIUM** | `getJobDetails()` + `getResumeById()` return File.filePath to client | Changed to `File: { select: { id, fileName, fileType } }` |
+| BS-6 | **LOW** | Notes sub-route missing UUID validation | Added regex validation |
+| BS-7 | **LOW** | File.filePath made optional in interface | `profile.model.ts` — filePath now optional |
+
+## Security Findings — Sprint C Team Review (2026-04-01) — ALL FIXED
+
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| SEC-11 | **HIGH** | File.filePath exposed in API response | `File: { select: { id, fileName, fileType } }` — filePath excluded |
+| SEC-12 | **HIGH** | No rate limiting for unauthenticated requests | IP-based pre-auth rate limit (120/min) added before auth check |
+| SEC-13 | **MEDIUM** | `getBlacklistEntriesForUser` IDOR via server action | Moved to `src/lib/blacklist-query.ts` (server-only, no "use server") |
+| SEC-14 | **MEDIUM** | `matchType` not runtime-validated | `VALID_MATCH_TYPES` array check before DB insert |
+| SEC-15 | **MEDIUM** | Job ID not UUID-validated | Regex `/^[0-9a-f-]{36}$/i` on all route params |
+| SEC-16 | **MEDIUM** | In-memory rate limiter multi-instance weakness | Documented in code + rate-limit.ts header comment |
+| SEC-17 | **MEDIUM** | Timing oracle in API key validation | Constant-time evaluation (keyExists + keyRevoked → single branch) |
+| SEC-18 | **LOW** | Error messages may leak internal context | 500 errors sanitized to generic message before response |
 
 ## Security Audit — 2026-03-31 / 2026-04-01
 
