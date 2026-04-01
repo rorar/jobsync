@@ -512,3 +512,4 @@ Fix all divergences found.
 - Use orchestrated team execution, not plan-approval cycles
 - After EVERY sprint: run `/comprehensive-review:full-review`
 - ALWAYS run blind spot analysis after completing any task
+- Agents, skills, and plugins MAY search online at any time (WebSearch, WebFetch, Context7, DeepWiki, etc.) to enrich data — e.g., library docs, API references, best practices, current framework versions

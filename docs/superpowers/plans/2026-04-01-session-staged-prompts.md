@@ -148,6 +148,9 @@ Wenn du merkst dass der Context knapp wird:
 ### Autonomie
 Arbeite VOLLSTÄNDIG autonom. Keine Rückfragen an den User. Maximale kognitive Anstrengung.
 
+### Online-Recherche
+Agenten, Skills und Plugins dürfen jederzeit online suchen (WebSearch, WebFetch, Context7, DeepWiki etc.) um Daten anzureichern — z.B. Library-Docs, API-Referenzen, Best Practices, aktuelle Framework-Versionen.
+
 ## Exit-Checkliste (MUSS vor Merge erfüllt sein)
 
 - [ ] Alle 19 Allium Specs: `allium:weed` = zero Divergenzen
@@ -293,6 +296,9 @@ Wenn du merkst dass der Context knapp wird:
 
 ### Autonomie
 Arbeite VOLLSTÄNDIG autonom. Keine Rückfragen an den User. Maximale kognitive Anstrengung.
+
+### Online-Recherche
+Agenten, Skills und Plugins dürfen jederzeit online suchen (WebSearch, WebFetch, Context7, DeepWiki etc.) um Daten anzureichern — z.B. Library-Docs, API-Referenzen, Best Practices, aktuelle Framework-Versionen.
 
 ## Exit-Checkliste (MUSS vor Merge erfüllt sein)
 
@@ -478,6 +484,9 @@ Wenn du merkst dass der Context knapp wird:
 ### Autonomie
 Arbeite VOLLSTÄNDIG autonom. Keine Rückfragen an den User. Maximale kognitive Anstrengung.
 
+### Online-Recherche
+Agenten, Skills und Plugins dürfen jederzeit online suchen (WebSearch, WebFetch, Context7, DeepWiki etc.) um Daten anzureichern — z.B. Library-Docs, API-Referenzen, Best Practices, aktuelle Framework-Versionen.
+
 ## Exit-Checkliste (MUSS vor Merge erfüllt sein)
 
 - [ ] User Journeys dokumentiert in `docs/user-journey-audit.md` für alle 8 Features
@@ -648,6 +657,9 @@ Wenn du merkst dass der Context knapp wird:
 
 ### Autonomie
 Arbeite VOLLSTÄNDIG autonom. Keine Rückfragen. Maximale kognitive Anstrengung.
+
+### Online-Recherche
+Agenten, Skills und Plugins dürfen jederzeit online suchen (WebSearch, WebFetch, Context7, DeepWiki etc.) um Daten anzureichern — z.B. Library-Docs, API-Referenzen, Best Practices, aktuelle Framework-Versionen.
 
 ## Exit-Checkliste (MUSS vor Merge erfüllt sein)
 
@@ -838,6 +850,9 @@ Wenn du merkst dass der Context knapp wird:
 
 ### Autonomie
 Arbeite VOLLSTÄNDIG autonom. Keine Rückfragen. Maximale kognitive Anstrengung.
+
+### Online-Recherche
+Agenten, Skills und Plugins dürfen jederzeit online suchen (WebSearch, WebFetch, Context7, DeepWiki etc.) um Daten anzureichern — z.B. Library-Docs, API-Referenzen, Best Practices, aktuelle Framework-Versionen.
 
 ## Exit-Checkliste (MUSS vor Merge erfüllt sein)
 
