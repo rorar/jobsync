@@ -1547,13 +1547,32 @@ JobSync exponiert eine stabile REST API für externe Tools (n8n, Webhooks, Custo
 - **Notifications:** Fehlgeschlagene Tasks und kritische Systemereignisse lösen Notifications aus (→ 0.6 Unified Notifications) an Admin/User bzw. "whom it concerns"
 - Nicht zu verwechseln mit der Vacancy Staging Area (→ 0.5) — dies ist eine System-Queue, keine User-Queue
 
-### 8.5 E2E Test Self-Healing & Resilience
-- **Discovery:** Systematisch evaluieren, wie E2E-Tests robuster und selbstheilend werden können
-- **Stale Test Data:** Automatisches Cleanup von akkumulierten E2E-Testdaten vor/nach Runs (DB-Reset oder gezieltes Löschen von `E2E`-Prefixed Records)
-- **Dev Server Lifecycle:** Erkennung und Auto-Restart wenn der Dev-Server während E2E-Runs stirbt oder nicht erreichbar ist
-- **Session-Refresh:** Automatische Re-Authentifizierung wenn die storageState-Session abgelaufen ist
-- **Flaky-Test-Detection:** Retry-Strategie für transiente Failures (z.B. `retries: 1` in Playwright-Config)
-- **Konkreter Anlass (Sprint C, 2026-03-31):** 8/8 Smoke-Tests bestanden, aber 60/60 CRUD-Tests timeout'en — Ursache: ~17 akkumulierte E2E-Testdaten-Records machten Selektoren ambig, kein Cleanup zwischen Runs. Server lief, Auth funktionierte, Seite renderte korrekt — rein ein Test-Data-Problem.
+### 8.5 E2E Test Repair & Self-Healing — PRIORITY (before next feature sprint)
+
+**Begründung:** CLAUDE.md-Regel: "New feature → at minimum 1 E2E test for the happy path." Solange 26/68 E2E-Tests fehlschlagen, kann kein neues Feature sauber verifiziert werden. Muss vor Sprint D (Notification Channels) oder C5/C6 erledigt sein.
+
+**Phase 1 — DONE (Sprint C Housekeeping, 2026-04-01):**
+- ✅ Stale Data Cleanup: `e2e/cleanup-stale-data.ts` in globalSetup (111 Records entfernt)
+- ✅ `networkidle` → `domcontentloaded`: SSE-Verbindung (SchedulerStatusBar) blockierte `networkidle` permanent (40 Stellen in 10 Dateien)
+- ✅ Ambiguer Selector: "Public API Keys" vs "API Keys" — `exact: true` Fix
+- ✅ Server Warm-up: Turbopack-Compile vor Test-Start (verhindert ECONNRESET bei Cold-Start)
+- ✅ Playwright Workers: 4→7 (6.5× schneller, I/O-bound Tests profitieren)
+- **Ergebnis:** 8/68 → 42/68 passing
+
+**Phase 2 — TODO (Verbleibende 26 Failures fixen):**
+- **Automation CRUD** (5 Tests): Toast "Automation Created" nicht sichtbar nach Wizard-Submit → Timing-Issue, vermutlich Timeout erhöhen oder auf Redirect statt Toast warten
+- **Job CRUD** (3 Tests): FK-Constraint bei Job-Erstellung (fehlender Status-Seed?) + Row nach Create nicht gefunden
+- **Profile CRUD** (8 Tests): Diverse Timeout-Issues → Selektoren prüfen, evtl. geänderte UI-Struktur seit letztem Test-Update
+- **Question CRUD** (3 Tests): Timeout → Selektoren prüfen
+- **Task CRUD** (5 Tests): Timeout → Selektoren prüfen
+- **Module Settings** (2 Tests): Ollama nicht erreichbar → Test muss mit Mock oder Skip arbeiten wenn kein Ollama läuft
+- **Company Delete** (1 Test): Row nach Create nicht gefunden → Timing/Pagination
+
+**Phase 3 — Self-Healing Infrastruktur (nach Phase 2):**
+- **Dev Server Lifecycle:** Erkennung und Auto-Restart wenn der Dev-Server während E2E-Runs stirbt
+- **Session-Refresh:** Automatische Re-Authentifizierung wenn storageState abgelaufen
+- **Flaky-Test-Detection:** `retries: 1` in Playwright-Config für transiente Failures
+- **CI-Integration:** E2E als Gate vor Merge (blockiert wenn >X% failed)
 
 ### 8.10 Test Data Generator / Fake Input Data
 - Fake-Responses pro Connector-Modul für Automation-Tests ohne echte API-Calls
