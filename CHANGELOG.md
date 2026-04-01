@@ -6,8 +6,15 @@
 - **perf:** lastUsedAt DB writes throttled to max 1 per 5 minutes per key (PERF-1)
 - **perf:** Dedup job URL query bounded to 90-day window (PERF-2)
 - **perf:** Rate limiter Map capped at 10,000 entries with LRU eviction (PERF-3)
+- **perf:** Legacy api-key-resolver.ts lastUsedAt also throttled (missed in initial fix)
 - **i18n:** 16 hardcoded English strings in automation detail page (A9)
 - **ux:** Run Now tooltip explains all disabled states — running, paused, resume missing (B6)
+- **a11y:** BaseCombobox trigger now has `aria-expanded` and `type="button"` (WEED-1)
+- **a11y:** TagInput clears input on popover close by click-outside (WEED-2)
+- **test:** company/job action tests aligned with IDOR security fixes (WEED-6)
+- **test:** Jest config excludes `.tracks/` worktree files (WEED-7)
+- **e2e:** `uniqueId` deduplication — keyboard-ux uses shared helper (WEED-3)
+- **e2e:** `e2e/.auth/` added to .gitignore (WEED-4)
 
 ### Added
 - `src/lib/api/last-used-throttle.ts` — reusable DB write throttle utility
@@ -15,7 +22,17 @@
 - `docs/gap-analysis-sprint-abc.md` — Sprint A/B/C gap analysis (24/24 items DONE)
 
 ### Changed
-- Allium specs updated for spec-code alignment (19 specs weeded)
+- All 19 Allium specs aligned with implementation (26+ divergences fixed)
+- action-result: function inventory 117→139 (added stagedVacancy, blacklist, undo, publicApiKey)
+- event-bus: async handlers, wildcard subscribe, scheduler/degradation events
+- scheduler-coordination: two-phase model (removed polling/cooldown)
+- module-lifecycle: blocked/rate_limited count as failures, cachePolicy on manifest
+- notification-dispatch: quiet hours drop not queue, vacancy_batch_staged rename
+- security-rules: AES-256-GCM (was incorrectly noted as CBC)
+- profile-resume: per-user title uniqueness, LicenseOrCertification/OtherSection
+- i18n-system: 3-step server locale resolution (DB→cookie→default)
+- ai-provider: CredentialMode→CredentialType with none variant
+- e2e-test-infrastructure: relaxed constraints to match actual test patterns
 
 ## Sprint C (2026-03-31)
 

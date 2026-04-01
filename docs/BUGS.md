@@ -1,8 +1,21 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-01
 
-**Total: 99 bugs found, 99 fixed, 0 remaining**
+**Total: 107 bugs found, 107 fixed, 0 remaining**
 
 ### Status: ✅ All bugs are fixed.
+
+## Session S1a Allium Weed Findings (2026-04-01) — ALL FIXED
+
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| WEED-1 | **MEDIUM** | BaseCombobox missing `aria-expanded` and `type="button"` on trigger | Added both attributes (`base-combobox.tsx`) |
+| WEED-2 | **LOW** | TagInput doesn't clear input on popover close by click-outside | Added `setInputValue("")` in `onOpenChange` callback |
+| WEED-3 | **LOW** | `uniqueId` duplicated in `keyboard-ux.spec.ts` (spec says defined once) | Import from shared `e2e/helpers/` instead |
+| WEED-4 | **LOW** | `e2e/.auth/` missing from `.gitignore` | Added entry |
+| WEED-5 | **LOW** | `api-key-resolver.ts` lastUsedAt not throttled (missed by perf fix) | Added `shouldWriteLastUsedAt()` throttle |
+| WEED-6 | **LOW** | `job.actions.spec.ts` / `company.actions.spec.ts` outdated after IDOR fixes | Updated test expectations (createdBy, createdAt, resumeId) |
+| WEED-7 | **LOW** | Jest picks up `.tracks/` test files (94 false failures) | Added `.tracks/` to `testPathIgnorePatterns` |
+| WEED-8 | **LOW** | 19 allium specs had 26+ divergences from code | Fixed all — 4 code fixes + 15 spec updates across all 19 specs |
 
 ## Session S1a Performance Findings (2026-04-01) — ALL FIXED
 
