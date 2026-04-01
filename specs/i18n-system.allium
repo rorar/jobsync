@@ -156,9 +156,10 @@ rule ResolveLocale {
         Client:
             1. document.documentElement.lang
             2. "en" fallback
-        Server:
-            1. NEXT_LOCALE cookie value
-            2. "en" fallback
+        Server (getUserLocale):
+            1. User DB settings (session → userSettings → locale)
+            2. NEXT_LOCALE cookie value
+            3. "en" fallback
 
     ensures: isValidLocale(code) validates against LOCALE_MAP
     ensures: Invalid locale codes fall back to "en"

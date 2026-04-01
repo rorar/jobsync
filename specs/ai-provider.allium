@@ -45,17 +45,21 @@ enum AiModuleId {
     deepseek        -- DeepSeek cloud API
 }
 
-enum CredentialMode {
+enum CredentialType {
     endpoint_url    -- Ollama: URL to local/remote instance (default: localhost:11434)
     api_key         -- OpenAI, DeepSeek: bearer token
+    none            -- Module requires no credentials
 }
+-- Code uses CredentialType (from manifest.ts), not CredentialMode.
 
 enum AIErrorType {
-    unavailable     -- Service is down or returned error status
-    auth_failed     -- API key invalid, expired, or missing
-    rate_limited    -- Too many requests (may include retryAfter)
-    network         -- Cannot connect (DNS failure, timeout, ECONNREFUSED)
+    unavailable     -- Service is down or returned error status (has message)
+    auth_failed     -- API key invalid, expired, or missing (has message)
+    rate_limited    -- Too many requests (has retryAfter?: number, NO message field)
+    network         -- Cannot connect (DNS failure, timeout, ECONNREFUSED) (has message)
 }
+-- Note: rate_limited variant intentionally omits message. Callers use a default
+-- string: "Module rate limited". See providers.ts fallback pattern.
 
 ------------------------------------------------------------
 -- Core Interface

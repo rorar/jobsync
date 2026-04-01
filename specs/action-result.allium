@@ -1,6 +1,6 @@
 -- allium: 3
 -- ActionResult: Typed server action return contract
--- Replaces Promise<any | undefined> across 117 server actions
+-- Replaces Promise<any | undefined> across 139 server actions
 
 -- NOTE: Integer maps to TypeScript number
 
@@ -100,9 +100,9 @@ rule PreserveTests {
     ensures: test_count >= 748
 }
 
--- Classification of all 117 functions:
+-- Classification of all 139 functions:
 
--- PATTERN A (ActionResult<T>): 98 functions
+-- PATTERN A (ActionResult<T>): 120 functions
 -- activity: getActivitiesList, createActivity, updateActivity, deleteActivityById,
 --   getCurrentActivity, startActivityById, stopActivityById, getActivityById,
 --   createActivityType
@@ -134,6 +134,16 @@ rule PreserveTests {
 --   dismissNotification
 -- module: getModuleManifests, getCredentialModules, getActiveModules,
 --   activateModule, deactivateModule, runHealthCheck
+-- publicApiKey: createPublicApiKey, listPublicApiKeys, revokePublicApiKey,
+--   deletePublicApiKey
+-- stagedVacancy: getStagedVacancies, getStagedVacancyById,
+--   dismissStagedVacancy, restoreStagedVacancy, archiveStagedVacancy,
+--   trashStagedVacancy, restoreFromTrash, getStagedVacancyCounts,
+--   promoteStagedVacancyToJob, runRetentionCleanup, executeBulkAction
+-- companyBlacklist: getBlacklistEntries, addBlacklistEntry, removeBlacklistEntry
+-- undo: undoAction, undoLastAction
+-- contactInfo: getLatestContactInfo
+-- job: addJobToQueue
 
 -- PATTERN B (MIGRATED to ActionResult<T[]>): 7 functions
 -- company: getAllCompanies -> ActionResult<Company[]>
