@@ -9,7 +9,9 @@
 
 ## Summary
 
-**Total unique findings: 68** (38 fixed, 14 open, 16 deferred)
+**Total unique findings: 68** (37 fixed, 15 open, 16 deferred)
+
+> **Note:** F-MED-09 was incorrectly listed as fixed — reclassified to O-MED-06 (open) by final blind spot analysis.
 
 | Severity | Found | Fixed | Open | Deferred |
 |----------|-------|-------|------|----------|
@@ -248,13 +250,12 @@
 - **Fix:** Explicit validation with early return.
 - **Commit:** `c2ba58f`
 
-#### F-MED-09: `as any` cast on translation key in AutomationList
+#### ~~F-MED-09~~ O-MED-06: `as any` cast on translation key in AutomationList
 - **Sources:** `[ARCH] L-1` / `[QUAL] TS-1`
 - **Severity calibration:** Upgraded from Low to Medium (appears in multiple reports as a pattern issue).
-- **BUGS.md:** (fixed as part of i18n sweep)
+- **Status:** **OPEN** — file was never modified during S1b (false positive fix claim corrected by final blind spot analysis)
 - **Files:** `src/components/automations/AutomationList.tsx:193,198`
-- **Fix:** Part of the i18n compliance sweep.
-- **Commit:** `2c2e44c`
+- **Fix needed:** Remove `as any` — `TranslationKey` is `string`, cast is unnecessary. Formatter may revert changes (investigate root cause).
 
 #### F-MED-10: `as any` cast for dynamic Prisma model access in API route
 - **Sources:** `[QUAL] TS-2`
@@ -622,7 +623,7 @@ This table maps original report finding IDs to their consolidated ID for traceab
 | M-7 | D-MED-02 | DEFERRED |
 | M-8 | O-MED-05 | OPEN |
 | M-9 | D-MED-03 | DEFERRED |
-| L-1 | F-MED-09 | FIXED |
+| L-1 | O-MED-06 | OPEN |
 | L-2 | D-LOW-03 | DEFERRED |
 | L-3 | F-MED-11 | FIXED |
 | L-4 | D-LOW-04 | DEFERRED |
@@ -661,7 +662,7 @@ This table maps original report finding IDs to their consolidated ID for traceab
 | F-12 | F-MED-05 | FIXED |
 | F-13 | D-LOW-10 | DEFERRED |
 | **Quality/Testing** | | |
-| TS-1 | F-MED-09 | FIXED |
+| TS-1 | O-MED-06 | OPEN |
 | TS-2 | F-MED-10 | FIXED |
 | TS-3 | CQ-05 | DEFERRED |
 | TS-4 | D-LOW-01 | DEFERRED |

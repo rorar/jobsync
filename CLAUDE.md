@@ -152,6 +152,8 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **SSE Endpoint:** `GET /api/scheduler/status` — Real-time scheduler state, per-user filtered. Client hook: `useSchedulerStatus()` from `src/hooks/use-scheduler-status.ts` (shared singleton EventSource, one connection per tab).
 
+**SSE Connection Limit:** Max 5 concurrent SSE connections per user (in-memory counter on `globalThis`). Excess connections receive error response.
+
 **Singleton Pattern:** RunCoordinator and EventBus use `globalThis` to survive HMR. New singletons MUST follow this pattern.
 
 **Domain Events:**
@@ -178,7 +180,15 @@ REST API as "Open Host Service" (DDD) — manually designed surface over existin
 - **with-api-auth.ts** — `withApiAuth()` HOF: CORS + auth + rate limit + error catch + security headers
 - **schemas.ts** — Zod schemas for all API inputs (max lengths, UUID validation)
 
+**Shared Helpers:** `src/lib/api/helpers.ts`:
+- `findOrCreate(type, userId, value)` — generic upsert for JobTitle, Company, Location, JobSource
+- `resolveStatus(statusValue)` — find JobStatus by value
+- `JOB_API_SELECT` / `JOB_DETAIL_SELECT` / `JOB_LIST_SELECT` — shared Prisma select shapes for API responses
+- `isValidUUID(id)` — UUID format validation (in `schemas.ts`)
+
 **Key Rule:** ALL `/api/v1/*` route handlers MUST use `withApiAuth()` wrapper. Never access Prisma directly without it.
+
+**Key Rule:** API responses MUST use explicit `select` (never `include`) to prevent leaking internal fields (userId, matchData, automationId, foreign keys, createdBy). Use the shared select shapes from `helpers.ts`.
 
 **Phase 1 Endpoints (Jobs only):**
 - `GET/POST /api/v1/jobs` — list (paginated) + create
@@ -203,7 +213,7 @@ REST API as "Open Host Service" (DDD) — manually designed surface over existin
 
 ### Response Caching (ROADMAP 0.9 Stufe 1)
 
-**Cache:** `src/lib/connector/cache.ts` — in-memory LRU cache for external API responses.
+**Cache:** `src/lib/connector/cache.ts` — in-memory LRU cache (true LRU via Map re-insertion on access) with TTL, request coalescing, stale-if-error, periodic prune (15 min). Singleton on `globalThis`.
 
 **HTTP Headers:** ESCO/EURES proxy routes set `Cache-Control` headers for browser caching.
 
@@ -216,6 +226,8 @@ Implemented in `module.actions.ts` and `degradation.ts`. Spec: `specs/module-lif
 3. **Reaktivierung:** Paused automations are NOT auto-restarted — user must manually reactivate
 4. **Deaktivierte Module** are hidden from Automation Wizard module selector (`getActiveModules()`)
 5. **Automation Degradation:** Auth failure → immediate pause. 5 consecutive failed runs → pause. 3 CB opens → pause.
+
+**Cross-User Degradation:** `handleAuthFailure()` and `handleCircuitBreakerTrip()` intentionally affect ALL users' automations for the failing module. This is by design — module-level failures (invalid API key, circuit breaker) affect the shared external service, not individual users. Notifications are per-user.
 
 ## EURES/ESCO Integration
 
