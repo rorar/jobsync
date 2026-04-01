@@ -24,12 +24,9 @@ external entity ModuleRegistry {
 ------------------------------------------------------------
 
 enum ApiKeyModuleId {
-    -- Job Discovery modules
-    eures
-    arbeitsagentur
+    -- Only modules that require user-provided credentials
+    -- EURES and Arbeitsagentur use public APIs, no key needed
     rapidapi               -- shared by JSearch and other RapidAPI modules
-
-    -- AI Provider modules
     ollama                 -- special: stores a base URL, not a secret key
     openai
     deepseek

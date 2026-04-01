@@ -148,8 +148,9 @@ rule SessionResolution {
 rule MiddlewareProtection {
     when: Request matches middleware matcher
 
-    -- Matcher includes: /dashboard, /dashboard/*, /signin, /signup
-    -- Does NOT include: /api/* (each route self-protects)
+    -- Matcher includes: /dashboard, /dashboard/*, /signin, /signup, /api/v1/:path*
+    -- /api/v1/* gets security headers but authorized() returns true (no session check)
+    -- Other /api/* routes self-protect via auth() or withApiAuth()
 
     ensures:
         if path starts with /dashboard:
@@ -158,8 +159,10 @@ rule MiddlewareProtection {
         if path is /signin or /signup:
             sanitize credential query params (see SigninFormSecurity)
             add security headers
-        if authenticated AND path is non-dashboard:
+        if authenticated AND path is non-dashboard (signin/signup):
             redirect to /dashboard
+        if not authenticated AND path is non-dashboard:
+            return true (allow — browser session + API v1 handled by route)
 }
 
 rule RootPageRouting {
@@ -202,7 +205,7 @@ invariant SecurityHeadersOnAuthRoutes {
     --   X-Content-Type-Options: nosniff
     --   X-Frame-Options: DENY
     --   Permissions-Policy: camera=(), microphone=(), geolocation=()
-    --   Strict-Transport-Security: max-age=31536000 (production only)
+    --   Strict-Transport-Security: max-age=31536000; includeSubDomains (production only)
 }
 
 invariant CredentialURLProtection {

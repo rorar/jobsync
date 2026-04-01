@@ -101,15 +101,14 @@ rule OllamaUrlValidation {
 
     ensures: URL protocol is http or https (no file://, ftp://, data://, etc.)
     ensures: URL does not contain embedded credentials (user:pass@host)
-    ensures: URL is not a cloud metadata endpoint:
-        - 169.254.169.254 (AWS/Azure/Alibaba IMDS)
-        - metadata.google.internal (GCP)
     ensures: Unparseable URLs are blocked
     ensures: On validation failure: fall back to default localhost URL
 
+    -- NOTE: Cloud metadata endpoint blocking (169.254.169.254, metadata.google.internal)
+    -- is in isBlockedHealthCheckUrl(), a separate function used by the health monitor,
+    -- not validateOllamaUrl(). Ollama URL validation focuses on protocol + credentials.
     -- Localhost (127.0.0.1, ::1) is intentionally ALLOWED because
-    -- Ollama typically runs locally. The threat model is about preventing
-    -- SSRF to cloud metadata services and internal networks.
+    -- Ollama typically runs locally.
 }
 
 rule EscoUriValidation {
@@ -187,10 +186,10 @@ rule SecurityHeaders {
     ensures: X-Content-Type-Options: nosniff
     ensures: X-Frame-Options: DENY
     ensures: Permissions-Policy: camera=(), microphone=(), geolocation=()
-    ensures: (Production only) Strict-Transport-Security: max-age=31536000
+    ensures: (Production only) Strict-Transport-Security: max-age=31536000; includeSubDomains
 
-    -- Applied by middleware to all matched routes (/dashboard/*, /signin, /signup).
-    -- API v1 routes add their own subset (Cache-Control: no-store, X-Content-Type-Options).
+    -- Applied by middleware to all matched routes (/dashboard/*, /signin, /signup, /api/v1/:path*).
+    -- API v1 routes also get withApiAuth() headers (Cache-Control: no-store, X-Content-Type-Options).
 }
 
 ------------------------------------------------------------
@@ -370,10 +369,10 @@ rule ApiRouteSelfProtection {
     ensures: Each API route handler checks auth() independently
     ensures: /api/v1/* routes use withApiAuth() wrapper
 
-    -- Middleware matcher does NOT include /api/* paths.
+    -- Middleware matcher includes /api/v1/:path* for security headers,
+    -- but authorized() returns true (no session enforcement) for non-dashboard paths.
     -- API routes are responsible for their own authentication.
-    -- This is by design — API routes may use different auth mechanisms
-    -- (session vs API key).
+    -- This is by design — API v1 uses API key auth, not session auth.
 }
 
 ------------------------------------------------------------
