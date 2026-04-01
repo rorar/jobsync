@@ -138,10 +138,35 @@ Wenn du Code änderst für den ein Allium Spec existiert (prüfe `specs/`), füh
 ### Findings-Regel: ZERO TOLERANCE
 Fixe ALLE Findings — auch kosmetische. UX-Qualität ist nicht optional.
 
-### Team-Orchestrierung
-- Verwende `/agent-teams:team-spawn` für parallele Arbeit wo sinnvoll
-- `/agent-teams:team-review` für UI/UX Multi-Dimensionen-Reviews
-- Nicht mehr als 2-3 Agents auf denselben Files
+### Team-Orchestrierung — PFLICHT, nicht optional
+
+**KRITISCH:** Du MUSST Subagenten und Team-Agents für parallele Arbeit verwenden. Mache NICHT alles sequenziell im Main-Agent.
+
+**Für User Journeys (Schritt 1) MUSST du:**
+- Dispatche 4 parallele Agents via `/agent-teams:team-spawn`, je 2 Features pro Agent:
+  - Agent 1: SchedulerStatusBar (B1) + RunProgressPanel (B3)
+  - Agent 2: ConflictWarning (B2) + Company Blacklist (C3)
+  - Agent 3: JobDeck (C1) + Response Caching (C4)
+  - Agent 4: Public API (C2) + API Key Management
+- Jeder Agent: Happy Path + Edge Cases (7 Dimensionen) + Implementation-Check + Test-Check
+- Ergebnis: Jeder Agent schreibt seinen Teil in `docs/user-journey-audit.md`
+
+**Für UX 10-Punkte-Checkliste (Schritt 2) MUSST du:**
+- Dispatche `/ui-design:design-review` als eigenen Agent für alle UI-Komponenten
+- Dispatche `/ui-design:accessibility-audit` als eigenen Agent parallel dazu
+- Warte auf beide, dann fixe Findings
+
+**Für Fixes MUSST du:**
+- Gruppiere Fixes nach Komponenten-Files
+- Dispatche Fix-Agents parallel, max 2-3 auf denselben Files
+
+**Anti-Pattern:** NICHT 8 Features sequenziell im Main-Agent mit Read/Edit durcharbeiten. Das verschwendet Context und ist 4x langsamer.
+
+### Resilienz bei API-Fehlern
+Bei HTTP 500 oder Timeout-Fehlern von der Anthropic API:
+- Warte 30 Sekunden, dann versuche es erneut
+- Wenn ein Sub-Agent mit 500 abbricht: Prüfe was er committed hat, dispatche neuen Agent für Rest
+- Ignoriere "Task not found" Fehler — harmloses Bookkeeping-Problem bei parallelen Agents
 
 ### Context-Exhaustion
 Wenn du merkst dass der Context knapp wird:

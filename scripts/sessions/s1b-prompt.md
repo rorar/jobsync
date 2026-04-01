@@ -103,12 +103,30 @@ Fixe ALLE Findings — Critical, High, Medium UND Low. Zero Tolerance.
 ### Findings-Regel: ZERO TOLERANCE
 Fixe ALLE Findings — Critical, High, Medium UND Low. Keine Ausnahmen, kein "accepted risk".
 
-### Team-Orchestrierung
-- Verwende `/agent-teams:team-spawn` für parallele Arbeit wo sinnvoll
-- `/agent-teams:team-review` für Multi-Dimensionen-Reviews
-- `/agent-teams:team-debug` bei Problemen
-- Nicht mehr als 2-3 Agents auf denselben Files
-- Verwende orchestrated team execution, nicht plan-approval Zyklen
+### Team-Orchestrierung — PFLICHT, nicht optional
+
+**KRITISCH:** Du MUSST Subagenten und Team-Agents für parallele Arbeit verwenden. Mache NICHT alles sequenziell im Main-Agent. Der Main-Agent orchestriert und delegiert — er implementiert nicht alles selbst.
+
+**Für den Comprehensive Review (Schritt 1) MUSST du:**
+- Starte `/comprehensive-review:full-review` ODER `/agent-teams:team-review` mit 5 Dimensionen
+- Das dispatcht automatisch spezialisierte Review-Agents (Architecture, Security, Performance, Testing, Best Practices)
+- Warte auf ALLE Review-Ergebnisse bevor du mit Fixes beginnst
+
+**Für die Fixes (Schritt 2) MUSST du:**
+- Gruppiere Findings nach betroffenen Files
+- Dispatche Fix-Agents parallel via `/agent-teams:team-spawn` (z.B. 1 Agent für Scheduler-Files, 1 für API-Files, 1 für UI-Files)
+- Max 2-3 Agents auf denselben Files (Merge-Konflikte vermeiden)
+
+**Für den Blind Spot Check:**
+- Dispatche als eigenen Agent — nicht im Main-Agent sequenziell abarbeiten
+
+**Anti-Pattern:** NICHT alles im Main-Agent mit Read/Edit machen. Das verschwendet Context und ist langsamer.
+
+### Resilienz bei API-Fehlern
+Bei HTTP 500 oder Timeout-Fehlern von der Anthropic API:
+- Warte 30 Sekunden, dann versuche es erneut
+- Wenn ein Sub-Agent mit 500 abbricht: Prüfe was er committed hat, dann dispatche einen neuen Agent für die verbleibende Arbeit
+- Ignoriere "Task not found" Fehler — das ist ein harmloses Bookkeeping-Problem bei parallelen Agents
 
 ### Context-Exhaustion
 Wenn du merkst dass der Context knapp wird:

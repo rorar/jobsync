@@ -115,12 +115,36 @@ Committe nach jedem logischen Schritt. Build + Tests VOR jedem Commit.
 - Build + Tests VOR jedem Commit: `source scripts/env.sh && bun run build && bash scripts/test.sh --no-coverage`
 - **NIEMALS PRs gegen upstream Gsync/jobsync erstellen.**
 
-### Team-Orchestrierung
-- Verwende `/agent-teams:team-spawn` und `/agent-teams:team-feature` für parallele Arbeit
-- `/agent-teams:team-review` für Multi-Dimensionen-Reviews
-- `/agent-teams:team-debug` bei Problemen
-- Nicht mehr als 2-3 Agents auf denselben Files
-- Verwende orchestrated team execution, nicht plan-approval Zyklen
+### Team-Orchestrierung — PFLICHT, nicht optional
+
+**KRITISCH:** Du MUSST Subagenten und Team-Agents für parallele Arbeit verwenden. Mache NICHT alles sequenziell im Main-Agent. Der Main-Agent orchestriert und delegiert.
+
+**Für die PLAN-Phase:**
+- Dispatche `/allium:elicit` als eigenen Agent für die CRM Spec
+- Dispatche `/ui-design:create-component` parallel für Kanban-Wireframes
+- Main-Agent macht den ROADMAP Deep-Dive während Agents arbeiten
+
+**Für die DO-Phase MUSST du:**
+- Verwende `/full-stack-orchestration:full-stack-feature` ODER `/agent-teams:team-feature`
+- Mindestens 2 parallele Implementierungs-Agents:
+  - Agent 1: Backend (Prisma Schema, Server Actions, Status-Machine)
+  - Agent 2: Frontend (Kanban Board UI, Status-Transitions UI, i18n)
+- File-Ownership strikt trennen — kein Agent ändert Files eines anderen
+
+**Für die CHECK-Phase MUSST du:**
+- Starte `/comprehensive-review:full-review` ODER `/agent-teams:team-review` (5 Dimensionen)
+- Dispatche Blind Spot Check als eigenen Agent
+- Dispatche User Journey Analyse als eigenen Agent
+
+**Für Fixes:** Parallele Fix-Agents nach File-Gruppen dispatchen.
+
+**Anti-Pattern:** NICHT alles im Main-Agent mit Read/Edit machen. Das verschwendet Context und ist langsamer.
+
+### Resilienz bei API-Fehlern
+Bei HTTP 500 oder Timeout-Fehlern:
+- Warte 30 Sekunden, dann erneut versuchen
+- Wenn Sub-Agent abbricht: Prüfe Commits, dispatche neuen Agent für Rest
+- Ignoriere "Task not found" Fehler — harmloses Bookkeeping bei parallelen Agents
 
 ### DDD-Prinzipien
 - Aggregate Boundaries respektieren: Job Aggregate erweitern, nicht neue Root erstellen
