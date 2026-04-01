@@ -436,16 +436,19 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
 
     // Wait for async createTag to complete and chip to render
     await expect(page.getByText(skill).first()).toBeVisible({ timeout: 10000 });
+    // Wait for React startTransition to commit localTags state update
+    await page.waitForTimeout(1000);
 
     // Try adding the same skill again
     await skillInput.fill(skill);
     await page.waitForTimeout(300);
     await skillInput.press("Enter");
-    await page.waitForTimeout(500);
 
-    // Verify sr-only announcement says "already selected"
-    const announcements = await getAllAnnouncements(page);
-    expect(hasAnnouncement(announcements, "already selected")).toBe(true);
+    // Verify sr-only announcement says "already selected" (async state update)
+    await expect(async () => {
+      const announcements = await getAllAnnouncements(page);
+      expect(hasAnnouncement(announcements, "already selected")).toBe(true);
+    }).toPass({ timeout: 5000 });
   });
 });
 
