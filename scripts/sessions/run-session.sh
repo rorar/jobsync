@@ -10,7 +10,6 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 SESSIONS="s1a s1b s2 s3 s4"
 TMUX_PREFIX="jobsync"
-MAX_BUDGET="${JOBSYNC_SESSION_BUDGET:-20}"  # Max USD per session, override with env var
 
 usage() {
     echo "Usage: $0 <session-id|command>"
@@ -100,7 +99,7 @@ run_session() {
     cat > "$LAUNCHER" <<LAUNCHER_EOF
 #!/usr/bin/env bash
 cd "$PROJECT_DIR"
-claude -p "\$(cat '$PROMPT_FILE')" --dangerously-skip-permissions --effort max --max-budget-usd $MAX_BUDGET --verbose
+claude -p "\$(cat '$PROMPT_FILE')" --dangerously-skip-permissions --effort max --verbose
 echo ""
 echo "Session $SESSION_ID finished. Press Enter to close."
 read
@@ -138,7 +137,7 @@ LAUNCHER_EOF
 echo '=========================================='
 echo '  Session: $s'
 echo '=========================================='
-claude -p "\$(cat '$PROMPT_FILE')" --dangerously-skip-permissions --effort max --max-budget-usd $MAX_BUDGET --verbose
+claude -p "\$(cat '$PROMPT_FILE')" --dangerously-skip-permissions --effort max --verbose
 echo ''
 echo 'Session $s finished.'
 echo ''
