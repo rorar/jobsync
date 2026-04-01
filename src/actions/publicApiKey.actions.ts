@@ -20,15 +20,15 @@ export async function createPublicApiKey(
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("api.notAuthenticated");
     }
 
     const trimmedName = name.trim();
     if (!trimmedName) {
-      throw new Error("Please provide a name for the API key");
+      throw new Error("api.keyNameRequired");
     }
     if (trimmedName.length > 100) {
-      throw new Error("API key name must be 100 characters or less");
+      throw new Error("api.keyNameTooLong");
     }
 
     // Enforce per-user key limit
@@ -36,7 +36,7 @@ export async function createPublicApiKey(
       where: { userId: user.id, revokedAt: null },
     });
     if (activeCount >= 10) {
-      throw new Error("Maximum of 10 active API keys per user");
+      throw new Error("api.maxKeysReached");
     }
 
     // Generate key material
@@ -78,7 +78,7 @@ export async function listPublicApiKeys(): Promise<
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("api.notAuthenticated");
     }
 
     const keys = await prisma.publicApiKey.findMany({
@@ -116,7 +116,7 @@ export async function revokePublicApiKey(
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("api.notAuthenticated");
     }
 
     // Ensure the key belongs to this user
@@ -126,10 +126,10 @@ export async function revokePublicApiKey(
     });
 
     if (!key) {
-      throw new Error("API key not found");
+      throw new Error("api.keyNotFound");
     }
     if (key.revokedAt) {
-      throw new Error("API key is already revoked");
+      throw new Error("api.keyAlreadyRevoked");
     }
 
     await prisma.publicApiKey.update({
@@ -153,7 +153,7 @@ export async function deletePublicApiKey(
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("api.notAuthenticated");
     }
 
     const key = await prisma.publicApiKey.findFirst({
@@ -162,10 +162,10 @@ export async function deletePublicApiKey(
     });
 
     if (!key) {
-      throw new Error("API key not found");
+      throw new Error("api.keyNotFound");
     }
     if (!key.revokedAt) {
-      throw new Error("API key must be revoked before it can be deleted");
+      throw new Error("api.keyMustBeRevoked");
     }
 
     await prisma.publicApiKey.delete({

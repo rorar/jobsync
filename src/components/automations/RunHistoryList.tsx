@@ -34,11 +34,20 @@ import {
   History,
   PlayCircle,
 } from "lucide-react";
-import type { AutomationRun } from "@/models/automation.model";
+import type { AutomationRun, AutomationRunStatus } from "@/models/automation.model";
 
 interface RunHistoryListProps {
   runs: AutomationRun[];
 }
+
+const STATUS_KEYS: Record<AutomationRunStatus, string> = {
+  running: "automations.statusRunning",
+  completed: "automations.statusCompleted",
+  failed: "automations.statusFailed",
+  completed_with_errors: "automations.statusCompletedWithErrors",
+  blocked: "automations.statusBlocked",
+  rate_limited: "automations.statusRateLimited",
+};
 
 const STATUS_CONFIG = {
   running: { icon: Clock, color: "text-blue-500", variant: "secondary" as const },
@@ -105,7 +114,7 @@ export function RunHistoryList({ runs }: RunHistoryListProps) {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <StatusIcon className={`h-4 w-4 ${config.color}`} />
-                      <Badge variant={config.variant}>{run.status.replace("_", " ")}</Badge>
+                      <Badge variant={config.variant}>{t(STATUS_KEYS[run.status] ?? run.status)}</Badge>
                     </div>
                   </TableCell>
                   <TableCell>

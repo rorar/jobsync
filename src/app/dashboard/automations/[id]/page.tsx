@@ -108,8 +108,8 @@ export default function AutomationDetailPage() {
         setRuns(automationResult.data.runs || []);
       } else {
         toast({
-          title: "Error",
-          description: automationResult.message || "Automation not found",
+          title: t("common.error"),
+          description: automationResult.message || t("automations.notFound"),
           variant: "destructive",
         });
         router.push("/dashboard/automations");
@@ -130,7 +130,7 @@ export default function AutomationDetailPage() {
       }
     } catch (error) {
       toast({
-        title: "Error",
+        title: t("common.error"),
         description: t("automations.loadFailed"),
         variant: "destructive",
       });
@@ -162,7 +162,7 @@ export default function AutomationDetailPage() {
       loadData();
     } else {
       toast({
-        title: "Error",
+        title: t("common.error"),
         description: result.message,
         variant: "destructive",
       });
@@ -193,14 +193,14 @@ export default function AutomationDetailPage() {
         });
       } else {
         toast({
-          title: "Error",
+          title: t("common.error"),
           description: data.message || t("automations.runFailed"),
           variant: "destructive",
         });
       }
     } catch (error) {
       toast({
-        title: "Error",
+        title: t("common.error"),
         description: t("automations.runFailed"),
         variant: "destructive",
       });
@@ -289,7 +289,7 @@ export default function AutomationDetailPage() {
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-medium text-foreground">Keywords:</span>
+              <span className="font-medium text-foreground">{t("automations.keywords")}:</span>
               {parseKeywords(automation.keywords)
                 .map((kw: string) => (
                   <Badge key={kw} variant="secondary" className="text-xs">
@@ -298,7 +298,7 @@ export default function AutomationDetailPage() {
                 ))}
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-medium text-foreground">Location:</span>
+              <span className="font-medium text-foreground">{t("automations.locationLabel")}:</span>
               {parseLocations(automation.location).map((code) => (
                 <LocationBadge
                   key={code}

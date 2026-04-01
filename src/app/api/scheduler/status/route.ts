@@ -57,7 +57,8 @@ export async function GET(req: NextRequest) {
       };
 
       // Filter state to current user's automations only (M-1 security fix)
-      const userId = session.user!.id!;
+      // userId is guaranteed by the auth check above (session?.user?.id)
+      const userId = session.user!.id as string;
       const filterStateForUser = () => {
         const fullState = runCoordinator.getState();
         const userRunningAutomations = fullState.runningAutomations.filter(
