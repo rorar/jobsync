@@ -51,6 +51,13 @@ Starte `/allium:elicit` für die CRM Domain-Regeln:
   - Drag-and-Drop-Regeln: Welche Transitions per DnD erlaubt?
   - Mobile: Wie funktioniert Kanban auf 375px? (Horizontal scroll? Tabs?)
 
+#### 1.5. Schema-Design
+Verwende `/database-design:postgresql` für das Schema-Design der CRM-Tabellen:
+- `JobStatusHistory` (Transitions, Timestamps, Notizen, vorheriger/neuer Status)
+- Indexing-Strategie für Kanban-Queries (Status + userId + sortOrder)
+- Constraint-Design für valide Status-Transitions
+- **WICHTIG:** Das Projekt nutzt **Prisma + SQLite**, nicht raw PostgreSQL. Übertrage die Design-Prinzipien (Normalisierung, Indexing, Constraints) auf Prisma-Schema-Syntax. Keine PostgreSQL-spezifischen Features (JSONB, Partial Indexes) verwenden.
+
 #### 2. ROADMAP Deep-Dive
 Lies die Cross-Dependencies in docs/ROADMAP.md:
 - 5.1 (Communication) — wird CRM-spezifische Features brauchen
@@ -92,7 +99,7 @@ Committe nach jedem logischen Schritt. Build + Tests VOR jedem Commit.
 ### CHECK-Phase
 
 1. `allium:weed` — Stimmt Implementation mit Spec überein?
-2. `/comprehensive-review:full-review` (alle 5 Dimensionen: Architecture, Security, Performance, Testing, Best Practices)
+2. `/comprehensive-review:full-review` mit `/agent-teams:multi-reviewer-patterns` — koordiniere parallele Reviews über alle 5 Dimensionen (Architecture, Security, Performance, Testing, Best Practices) mit Finding-Deduplizierung, Severity-Kalibrierung und konsolidiertem Report
 3. User Journey + Edge Cases für CRM Features (7 Dimensionen)
 4. UX 10-Punkte-Checkliste für alle neuen Komponenten
 5. Blind Spot Check: "Woran haben wir nicht gedacht?"

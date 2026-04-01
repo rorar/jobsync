@@ -54,6 +54,13 @@ Cross-Dependencies:
 
 **Frage:** Was muss Phase 1 vorbereiten damit Phase 2 (Reviews, Contact-Extraction) draufbauen kann?
 
+#### 2.5. Schema-Design
+Verwende `/database-design:postgresql` für das Schema-Design der Enrichment-Tabellen:
+- `EnrichmentResult` — Cache-Tabelle mit TTL, Modul-Referenz, Domain-Key
+- `EnrichmentLog` — welches Modul hat wann was resolved (für Effektivitäts-Dashboard)
+- Indexing für Fallback-Chain Lookups (domain + dimension + freshness)
+- **WICHTIG:** Das Projekt nutzt **Prisma + SQLite**, nicht raw PostgreSQL. Übertrage die Design-Prinzipien (Normalisierung, Indexing, Constraints) auf Prisma-Schema-Syntax. Keine PostgreSQL-spezifischen Features verwenden.
+
 #### 3. Architektur
 Folge dem bestehenden Module Lifecycle Pattern:
 ```
@@ -102,7 +109,7 @@ Committe nach jedem logischen Schritt. Build + Tests VOR jedem Commit.
 ### CHECK-Phase
 
 1. `allium:weed` — Stimmt Implementation mit Spec überein?
-2. `/comprehensive-review:full-review` (alle 5 Dimensionen)
+2. `/comprehensive-review:full-review` mit `/agent-teams:multi-reviewer-patterns` — koordiniere parallele Reviews über alle 5 Dimensionen mit Finding-Deduplizierung, Severity-Kalibrierung und konsolidiertem Report
 3. User Journey: Company erstellen → Logo automatisch enriched → in Job-Details sichtbar
 4. Edge Cases: Alle Module down, Domain nicht auflösbar, Rate Limit, Cache-Hit
 5. UX 10-Punkte-Checkliste für neue Komponenten
