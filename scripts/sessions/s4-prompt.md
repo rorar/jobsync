@@ -109,7 +109,7 @@ Committe nach jedem logischen Schritt. Build + Tests VOR jedem Commit.
 ### CHECK-Phase
 
 1. `allium:weed` — Stimmt Implementation mit Spec überein?
-2. `/comprehensive-review:full-review` mit `/agent-teams:multi-reviewer-patterns` — koordiniere parallele Reviews über alle 5 Dimensionen mit Finding-Deduplizierung, Severity-Kalibrierung und konsolidiertem Report. Fixe NUR den konsolidierten Report — NICHT die Einzel-Reports der Review-Agents.
+2. `/comprehensive-review:full-review` mit `/agent-teams:multi-reviewer-patterns` — koordiniere parallele Reviews über alle 5 Dimensionen mit Finding-Deduplizierung, Severity-Kalibrierung und konsolidiertem Report. Einzel-Reports in `docs/reviews/s4/` ablegen. Konsolidierter Report verweist pro Finding auf den Quell-Report. Fixe nach dem konsolidierten Report — bei Bedarf Einzel-Report für Detail-Kontext nachlesen.
 3. User Journey: Company erstellen → Logo automatisch enriched → in Job-Details sichtbar
 4. Edge Cases: Alle Module down, Domain nicht auflösbar, Rate Limit, Cache-Hit
 5. UX 10-Punkte-Checkliste für neue Komponenten
