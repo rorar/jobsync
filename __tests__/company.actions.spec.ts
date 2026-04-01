@@ -393,7 +393,7 @@ describe("Company Actions", () => {
       });
 
       expect(prisma.company.update).toHaveBeenCalledWith({
-        where: { id: "company-id" },
+        where: { id: "company-id", createdBy: mockUser.id },
         data: {
           value: "updated company",
           label: "Updated Company",
@@ -439,7 +439,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Id is not provided or no user privileges",
+        message: "Id is not provided",
       });
 
       expect(prisma.company.findFirst).not.toHaveBeenCalled();
