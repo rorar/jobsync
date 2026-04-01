@@ -88,6 +88,8 @@ Starte `/full-stack-orchestration:full-stack-feature` für die Umsetzung.
 9. UI: Enrichment-Status in Company/Job-Details (Logo anzeigen, "Enriched by: Clearbit" Info)
 10. Settings UI: Module Activation/Deactivation (folgt bestehendem Pattern)
 
+**UX-Enrichment:** Verwende `/ui-design:interaction-design` für Loading-Transitions (Skeleton → Logo Fade-In), Enrichment-Status Feedback und Fallback-Visualisierung.
+
 **UX-Pflicht für JEDE neue Komponente:**
 - Loading State (Logo wird geladen → Skeleton)
 - Empty State (kein Logo gefunden → Placeholder-Icon)

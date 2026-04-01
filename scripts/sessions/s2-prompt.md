@@ -96,6 +96,7 @@ Fehlende Implementierungen SOFORT fixen. Committe nach jedem Fix-Block.
 
 - Starte `/ui-design:design-review` für alle Sprint B+C UI-Komponenten
 - Starte `/ui-design:accessibility-audit` für WCAG-Compliance
+- Verwende `/ui-design:interaction-design` um UX-Entscheidungen bei Microinteractions, Transitions, Feedback-Patterns und User Flows anzureichern
 - Fixe ALLE Findings
 
 ### Schritt 4: Output dokumentieren
@@ -154,7 +155,8 @@ Fixe ALLE Findings — auch kosmetische. UX-Qualität ist nicht optional.
 **Für UX 10-Punkte-Checkliste (Schritt 2) MUSST du:**
 - Dispatche `/ui-design:design-review` als eigenen Agent für alle UI-Komponenten
 - Dispatche `/ui-design:accessibility-audit` als eigenen Agent parallel dazu
-- Warte auf beide, dann fixe Findings
+- Dispatche `/ui-design:interaction-design` als eigenen Agent für Microinteractions, Transitions und Feedback-Patterns
+- Warte auf alle drei, dann fixe Findings
 
 **Für Fixes MUSST du:**
 - Gruppiere Fixes nach Komponenten-Files

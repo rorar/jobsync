@@ -64,6 +64,7 @@ Lies die Cross-Dependencies in docs/ROADMAP.md:
 Bevor du Code schreibst:
 - Spawne `/ui-design:create-component` für das Kanban Board
 - Spawne `/ui-design:design-review` für die Wireframes
+- Spawne `/ui-design:interaction-design` für Drag-and-Drop Interactions, Status-Transition Feedback, Kanban Microinteractions
 - Mobile Responsiveness prüfen mit `/ui-design:responsive-design`
 - Warte auf Findings, dann implementiere
 
