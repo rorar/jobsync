@@ -3,6 +3,7 @@ import "server-only";
 import db from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 import { CredentialType, type CredentialRequirement } from "./manifest";
+import { shouldWriteLastUsedAt } from "@/lib/api/last-used-throttle";
 
 /**
  * Resolve a module's credential using the manifest-declared resolution chain.
@@ -25,13 +26,15 @@ export async function resolveCredential(
       where: { userId_moduleId: { userId, moduleId: credential.moduleId } },
     });
     if (apiKey) {
-      // Update lastUsedAt in background
-      db.apiKey
-        .update({
-          where: { id: apiKey.id },
-          data: { lastUsedAt: new Date() },
-        })
-        .catch(() => {});
+      // Throttled lastUsedAt — max 1 DB write per 5 minutes per key (performance fix)
+      if (shouldWriteLastUsedAt(`modkey:${apiKey.id}`)) {
+        db.apiKey
+          .update({
+            where: { id: apiKey.id },
+            data: { lastUsedAt: new Date() },
+          })
+          .catch(() => {});
+      }
 
       return apiKey.iv === ""
         ? apiKey.encryptedKey

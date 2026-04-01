@@ -354,9 +354,15 @@ export default function AutomationDetailPage() {
                   </Button>
                 </span>
               </TooltipTrigger>
-              {isAutomationRunning(automation.id) && (
+              {(isAutomationRunning(automation.id) || resumeMissing || automation.status === "paused") && (
                 <TooltipContent>
-                  <p>{t("automations.alreadyRunning")}</p>
+                  <p>
+                    {isAutomationRunning(automation.id)
+                      ? t("automations.alreadyRunning")
+                      : automation.status === "paused"
+                        ? t("automations.runNowPaused")
+                        : t("automations.runNowResumeMissing")}
+                  </p>
                 </TooltipContent>
               )}
             </Tooltip>
@@ -368,37 +374,37 @@ export default function AutomationDetailPage() {
         <CardContent className="pt-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <p className="text-sm text-muted-foreground">Status</p>
+              <p className="text-sm text-muted-foreground">{t("automations.statusHeader")}</p>
               <Badge
                 variant={
                   automation.status === "active" ? "default" : "secondary"
                 }
-                className="mt-1"
+                className="mt-1 capitalize"
               >
                 {automation.status}
               </Badge>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Job Board</p>
+              <p className="text-sm text-muted-foreground">{t("automations.jobBoard")}</p>
               <p className="font-medium capitalize">{automation.jobBoard}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Match Threshold</p>
+              <p className="text-sm text-muted-foreground">{t("automations.matchThreshold")}</p>
               <p className="font-medium">{automation.matchThreshold}%</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Schedule</p>
+              <p className="text-sm text-muted-foreground">{t("automations.stepSchedule")}</p>
               <p className="font-medium flex items-center gap-1">
                 <Clock className="h-4 w-4" />
-                {automation.scheduleHour.toString().padStart(2, "0")}:00 daily
+                {automation.scheduleHour.toString().padStart(2, "0")}:00 {t("automations.daily").toLowerCase()}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Resume</p>
+              <p className="text-sm text-muted-foreground">{t("automations.resumeLabel")}</p>
               {resumeMissing ? (
                 <p className="text-amber-600 flex items-center gap-1 text-sm">
                   <AlertTriangle className="h-4 w-4" />
-                  Missing
+                  {t("automations.resumeMissing")}
                 </p>
               ) : (
                 <p className="font-medium flex items-center gap-1">
@@ -408,7 +414,7 @@ export default function AutomationDetailPage() {
               )}
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Next Run</p>
+              <p className="text-sm text-muted-foreground">{t("automations.nextRun")}</p>
               <p className="font-medium">
                 {automation.nextRunAt && automation.status === "active"
                   ? formatDateCompact(new Date(automation.nextRunAt), locale)
@@ -416,20 +422,20 @@ export default function AutomationDetailPage() {
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Last Run</p>
+              <p className="text-sm text-muted-foreground">{t("automations.lastRun")}</p>
               <p className="font-medium">
                 {automation.lastRunAt
                   ? formatDateCompact(new Date(automation.lastRunAt), locale)
-                  : "Never"}
+                  : t("automations.never")}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Discovered Jobs</p>
+              <p className="text-sm text-muted-foreground">{t("automations.discoveredJobs")}</p>
               <p className="font-medium">
-                {jobs.length} total
+                {jobs.length} {t("automations.total")}
                 {newJobsCount > 0 && (
                   <Badge variant="secondary" className="ml-2">
-                    {newJobsCount} new
+                    {newJobsCount} {t("automations.new").toLowerCase()}
                   </Badge>
                 )}
               </p>
@@ -443,16 +449,16 @@ export default function AutomationDetailPage() {
 
       <Tabs defaultValue="logs">
         <TabsList>
-          <TabsTrigger value="logs">Logs</TabsTrigger>
+          <TabsTrigger value="logs">{t("automations.tabLogs")}</TabsTrigger>
           <TabsTrigger value="jobs">
-            Discovered Jobs
+            {t("automations.discoveredJobs")}
             {newJobsCount > 0 && (
               <Badge variant="secondary" className="ml-2">
                 {newJobsCount}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="history">Run History</TabsTrigger>
+          <TabsTrigger value="history">{t("automations.runHistory")}</TabsTrigger>
         </TabsList>
         <TabsContent value="logs" className="mt-4">
           <LogsTab automationId={automationId} runKey={runKey} />

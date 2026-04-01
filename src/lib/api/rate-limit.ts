@@ -17,6 +17,7 @@
 const DEFAULT_WINDOW_MS = 60_000; // 1 minute
 const DEFAULT_MAX_REQUESTS = 60;
 const CLEANUP_INTERVAL_MS = 5 * 60_000; // 5 minutes
+const MAX_STORE_SIZE = 10_000; // cap to prevent unbounded memory growth
 
 interface RateLimitEntry {
   timestamps: number[];
@@ -71,6 +72,13 @@ export function checkRateLimit(
 
   let entry = store.get(keyHash);
   if (!entry) {
+    // Evict oldest entry if at capacity (LRU approximation via Map insertion order)
+    if (store.size >= MAX_STORE_SIZE) {
+      const firstKey = store.keys().next().value;
+      if (firstKey !== undefined) {
+        store.delete(firstKey);
+      }
+    }
     entry = { timestamps: [] };
     store.set(keyHash, entry);
   }

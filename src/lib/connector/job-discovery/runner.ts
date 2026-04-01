@@ -617,15 +617,20 @@ async function getExistingVacancyKeys(
   userId: string,
   sourceBoard: string,
 ): Promise<ExistingVacancyData> {
+  // Time-bounded query: only check jobs from last 90 days to prevent
+  // unbounded growth. Older jobs are unlikely to be rediscovered.
+  const dedupCutoff = new Date();
+  dedupCutoff.setDate(dedupCutoff.getDate() - 90);
+
   const [stagedKeys, jobUrls, dedupHashes] = await Promise.all([
     // Check existing staged vacancies (not dismissed)
     db.stagedVacancy.findMany({
       where: { userId, sourceBoard, status: { not: "dismissed" } },
       select: { externalId: true, sourceUrl: true },
     }),
-    // Check existing promoted jobs (via URL)
+    // Check existing promoted jobs (via URL) — bounded to last 90 days
     db.job.findMany({
-      where: { userId },
+      where: { userId, createdAt: { gte: dedupCutoff } },
       select: { jobUrl: true },
     }),
     // Check dedup hashes (purged records)

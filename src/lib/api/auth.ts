@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import { NextRequest } from "next/server";
 import prisma from "@/lib/db";
+import { shouldWriteLastUsedAt } from "./last-used-throttle";
 
 /**
  * Validates a Public API key from the request headers.
@@ -33,15 +34,17 @@ export async function validateApiKey(
 
   if (!isValid) return null;
 
-  // Update lastUsedAt asynchronously — don't block the response
-  prisma.publicApiKey
-    .update({
-      where: { id: apiKey.id },
-      data: { lastUsedAt: new Date() },
-    })
-    .catch((err: unknown) => {
-      console.warn("[Public API] Failed to update lastUsedAt:", err instanceof Error ? err.message : err);
-    });
+  // Throttled lastUsedAt — max 1 DB write per 5 minutes per key (performance fix)
+  if (shouldWriteLastUsedAt(`pubkey:${apiKey.id}`)) {
+    prisma.publicApiKey
+      .update({
+        where: { id: apiKey.id },
+        data: { lastUsedAt: new Date() },
+      })
+      .catch((err: unknown) => {
+        console.warn("[Public API] Failed to update lastUsedAt:", err instanceof Error ? err.message : err);
+      });
+  }
 
   return { userId: apiKey.userId, keyHash: apiKey.keyHash };
 }

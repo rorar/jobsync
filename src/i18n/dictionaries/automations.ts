@@ -365,6 +365,13 @@ export const automations = {
     // Staging Queue live updates (B10)
     "automations.newItemsAvailable": "New items have arrived",
     "automations.showNewItems": "Show new items",
+
+    // Detail page labels (A9 i18n) + B6 tooltip
+    "automations.never": "Never",
+    "automations.tabLogs": "Logs",
+    "automations.total": "total",
+    "automations.runNowPaused": "Cannot run while automation is paused",
+    "automations.runNowResumeMissing": "Cannot run without a resume assigned",
   },
   de: {
     // AutomationWizard - Steps
@@ -732,6 +739,13 @@ export const automations = {
     // Staging Queue live updates (B10)
     "automations.newItemsAvailable": "Neue Eintraege verfuegbar",
     "automations.showNewItems": "Neue Eintraege anzeigen",
+
+    // Detail page labels (A9 i18n) + B6 tooltip
+    "automations.never": "Nie",
+    "automations.tabLogs": "Protokoll",
+    "automations.total": "gesamt",
+    "automations.runNowPaused": "Automation ist pausiert",
+    "automations.runNowResumeMissing": "Kein Lebenslauf zugewiesen",
   },
   fr: {
     // AutomationWizard - Steps
@@ -1099,6 +1113,13 @@ export const automations = {
     // Staging Queue live updates (B10)
     "automations.newItemsAvailable": "Nouveaux elements disponibles",
     "automations.showNewItems": "Afficher les nouveaux",
+
+    // Detail page labels (A9 i18n) + B6 tooltip
+    "automations.never": "Jamais",
+    "automations.tabLogs": "Journaux",
+    "automations.total": "au total",
+    "automations.runNowPaused": "Impossible de lancer une automatisation en pause",
+    "automations.runNowResumeMissing": "Impossible de lancer sans CV",
   },
   es: {
     // AutomationWizard - Steps
@@ -1466,5 +1487,12 @@ export const automations = {
     // Staging Queue live updates (B10)
     "automations.newItemsAvailable": "Nuevos elementos disponibles",
     "automations.showNewItems": "Mostrar nuevos",
+
+    // Detail page labels (A9 i18n) + B6 tooltip
+    "automations.never": "Nunca",
+    "automations.tabLogs": "Registros",
+    "automations.total": "en total",
+    "automations.runNowPaused": "No se puede ejecutar mientras está en pausa",
+    "automations.runNowResumeMissing": "No se puede ejecutar sin currículum",
   },
 } as const;

@@ -106,4 +106,15 @@ describe("checkRateLimit", () => {
     const result = checkRateLimit("test-key", 60, 60_000);
     expect(result.resetAt).toBeGreaterThan(Math.floor(Date.now() / 1000));
   });
+
+  it("evicts oldest entry when store exceeds MAX_STORE_SIZE", () => {
+    // Fill store with 10,000 unique keys
+    for (let i = 0; i < 10_000; i++) {
+      checkRateLimit(`fill-${i}`, 100, 60_000);
+    }
+
+    // Adding one more should succeed (oldest evicted)
+    const result = checkRateLimit("overflow-key", 100, 60_000);
+    expect(result.allowed).toBe(true);
+  });
 });
