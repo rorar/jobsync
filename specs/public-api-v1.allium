@@ -1,0 +1,365 @@
+-- allium: 3
+-- public-api-v1.allium
+
+-- Scope: Public REST API v1 — Open Host Service (DDD)
+-- Includes: API key authentication (SHA-256), rate limiting (sliding window),
+--   CORS, security headers, Jobs CRUD, Notes sub-resource, response envelope
+-- Excludes:
+--   - API key management (create/revoke/delete, see api-key-management.allium)
+--   - Internal API routes (/api/*, frontend-only)
+--   - Future Phase 2 endpoints (automations, resumes, tags)
+
+-- Owner: Public API v1 (src/app/api/v1/, src/lib/api/)
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity PublicApiKey {
+    -- API key stored as SHA-256 hash. See api-key-management.allium.
+    -- Format: pk_live_ + 40 random hex chars.
+}
+
+external entity Job {
+    -- Core job entity. See job-aggregate.allium.
+}
+
+external entity Note {
+    -- Note sub-entity of Job. See job-aggregate.allium.
+}
+
+external entity JobTitle {
+    -- Shared entity, auto-created via upsert. See shared-entities.allium.
+}
+
+external entity Company {
+    -- Shared entity, auto-created via upsert. See shared-entities.allium.
+}
+
+external entity Location {
+    -- Shared entity, auto-created via upsert. See shared-entities.allium.
+}
+
+external entity JobSource {
+    -- Shared entity, auto-created via upsert. See shared-entities.allium.
+}
+
+external entity JobStatus {
+    -- Global status entity. Resolved by value string. See shared-entities.allium.
+}
+
+------------------------------------------------------------
+-- Design: Open Host Service
+------------------------------------------------------------
+
+-- The Public API v1 is an Open Host Service (DDD):
+-- It provides a manually designed REST surface over the internal data layer.
+-- The API surface is independently versioned and designed — it does NOT
+-- mirror internal server actions or Prisma models directly.
+--
+-- Phase 1 uses direct Prisma queries (not server actions) because
+-- getCurrentUser() depends on NextAuth session, which is unavailable
+-- for API key-authenticated requests. Phase 2 will add AsyncLocalStorage
+-- bridge for server action reuse.
+
+------------------------------------------------------------
+-- Authentication
+------------------------------------------------------------
+
+config ApiKeyAuth {
+    key_format: "pk_live_" + 40_random_hex     -- 48 chars total
+    hash_algorithm: SHA-256                     -- stored as hex digest
+    header_primary: "Authorization: Bearer pk_live_..."
+    header_fallback: "X-API-Key: pk_live_..."
+}
+
+rule ValidateApiKey {
+    when: Any request to /api/v1/*
+
+    ensures: Extract key from Authorization (Bearer) or X-API-Key header
+    ensures: Compute SHA-256 hash of the raw key
+    ensures: Look up hash in PublicApiKey table
+    ensures:
+        if key not found: reject (401 UNAUTHORIZED)
+        if key is revoked (revokedAt != null): reject (401 UNAUTHORIZED)
+        if key valid: return userId + keyHash
+    ensures: lastUsedAt updated asynchronously (non-blocking)
+
+    -- The key is NEVER stored in plaintext. Only the SHA-256 hash is persisted.
+    -- Validation is O(1) via unique index on keyHash.
+}
+
+------------------------------------------------------------
+-- Rate Limiting
+------------------------------------------------------------
+
+config RateLimit {
+    window: 60_seconds                          -- sliding window
+    max_requests: 60                            -- per API key
+    cleanup_interval: 5_minutes                 -- expired entries purged
+    storage: in_memory_map                      -- globalThis singleton for HMR
+}
+
+rule CheckRateLimit {
+    when: API key is validated successfully
+
+    ensures: Sliding window check against key hash
+    ensures:
+        if under limit: request proceeds, timestamp recorded
+        if over limit: reject with 429 RATE_LIMITED
+    ensures: Response headers always include:
+        - X-RateLimit-Limit: 60
+        - X-RateLimit-Remaining: (remaining count)
+        - X-RateLimit-Reset: (Unix timestamp when window resets)
+    ensures: On rate limit exceeded, also include:
+        - Retry-After: (seconds until reset)
+
+    -- Single-process only. Does NOT work in serverless/multi-instance.
+    -- Production deployments should use Redis-backed rate limiting.
+}
+
+------------------------------------------------------------
+-- CORS
+------------------------------------------------------------
+
+config CorsPolicy {
+    allow_origin: "*"                           -- safe because auth is via API key, not cookies
+    allow_methods: "GET, POST, PATCH, DELETE, OPTIONS"
+    allow_headers: "Content-Type, Authorization, X-API-Key"
+    max_age: 86400                              -- 24 hours preflight cache
+}
+
+rule HandlePreflight {
+    when: OPTIONS request to any /api/v1/* endpoint
+
+    ensures: Return 204 with CORS headers
+    ensures: No authentication or rate limiting applied
+}
+
+------------------------------------------------------------
+-- Response Envelope
+------------------------------------------------------------
+
+-- All responses follow a standard JSON envelope:
+--
+-- Success:
+--   { success: true, data: T }
+--   { success: true, data: T[], meta: { total, page, perPage, totalPages } }
+--
+-- Error:
+--   { success: false, error: { code: String, message: String } }
+--
+-- Error codes: VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN,
+--   NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR
+
+------------------------------------------------------------
+-- Security Headers
+------------------------------------------------------------
+
+rule AddSecurityHeaders {
+    when: Any /api/v1/* response is sent
+
+    ensures: Cache-Control: no-store
+    ensures: X-Content-Type-Options: nosniff
+    ensures: CORS headers on every response (not just preflight)
+}
+
+------------------------------------------------------------
+-- Validation
+------------------------------------------------------------
+
+config InputValidation {
+    -- All string fields have max length limits to prevent payload abuse.
+    -- Schemas defined in src/lib/api/schemas.ts using Zod.
+
+    pagination:
+        page: integer, min 1, default 1
+        perPage: integer, min 1, max 100, default 25
+
+    job_title: max 500 chars, required
+    company: max 500 chars, required
+    location: max 500 chars, optional
+    type: max 100 chars, default "Full-time"
+    status: max 100 chars, optional
+    source: max 200 chars, optional
+    salary_range: max 200 chars, optional
+    job_description: max 50000 chars, default ""
+    job_url: max 2000 chars, valid URL, optional
+    tags: max 50 UUIDs, optional
+    note_content: min 1, max 10000 chars
+}
+
+------------------------------------------------------------
+-- Rules: Jobs Endpoints
+------------------------------------------------------------
+
+-- === GET /api/v1/jobs ===
+
+rule ListJobs {
+    when: GET /api/v1/jobs
+
+    requires: Valid API key (via withApiAuth)
+
+    ensures: Jobs returned where userId = authenticated user
+    ensures: Paginated by (page, perPage) with meta { total, totalPages }
+    ensures: Filterable by status value (?filter=applied)
+    ensures: Searchable across title, company, location, description (?search=...)
+    ensures: Ordered by created_at descending
+    ensures: Each job includes: title, company, status, location, source,
+        type, salary, URL, dates, applied flag, match score, notes count
+}
+
+-- === POST /api/v1/jobs ===
+
+rule CreateJob {
+    when: POST /api/v1/jobs
+
+    requires: Valid API key (via withApiAuth)
+    requires: Valid JSON body matching CreateJobSchema
+
+    ensures: JobTitle resolved or created via upsert (idempotent)
+    ensures: Company resolved or created via upsert (idempotent)
+    ensures: Location resolved or created via upsert (if provided)
+    ensures: JobSource resolved or created via upsert (if provided)
+    ensures: JobStatus resolved by value string (must exist)
+    ensures: Resume ownership verified if resume ID provided (IDOR prevention)
+    ensures: Tag ownership verified if tag IDs provided (IDOR prevention)
+    ensures: Job created with all resolved relations
+    ensures: Response: 201 Created with full job data
+
+    -- Shared entities use upsert to avoid TOCTOU race conditions.
+    -- This means concurrent API calls creating jobs with the same company
+    -- name will not fail with duplicate key errors.
+}
+
+-- === GET /api/v1/jobs/:id ===
+
+rule GetJob {
+    when: GET /api/v1/jobs/:id
+
+    requires: Valid API key (via withApiAuth)
+    requires: Job exists AND Job.userId = authenticated user
+
+    ensures: Job returned with full details including:
+        title, company, status, location, source, resume (with file), tags
+
+    -- Uses findFirst with { id, userId } — IDOR-safe pattern.
+}
+
+-- === PATCH /api/v1/jobs/:id ===
+
+rule UpdateJob {
+    when: PATCH /api/v1/jobs/:id
+
+    requires: Valid API key (via withApiAuth)
+    requires: Job exists AND Job.userId = authenticated user (ownership verified)
+    requires: Valid JSON body matching UpdateJobSchema (partial)
+    requires: At least one field to update
+
+    ensures: Only provided fields are updated
+    ensures: Related entities (title, company, location, source) resolved via upsert
+    ensures: Status resolved by value string
+    ensures: Resume ownership verified if provided (IDOR prevention)
+    ensures: Tag ownership verified if provided (IDOR prevention)
+    ensures: Tags use "set" semantics (replaces entire tag list)
+}
+
+-- === DELETE /api/v1/jobs/:id ===
+
+rule DeleteJob {
+    when: DELETE /api/v1/jobs/:id
+
+    requires: Valid API key (via withApiAuth)
+    requires: Job exists AND Job.userId = authenticated user
+
+    ensures: Related interviews deleted first (no cascade in schema)
+    ensures: Job deleted (Notes cascade-deleted via schema)
+    ensures: Response: 204 No Content
+}
+
+-- === GET /api/v1/jobs/:id/notes ===
+
+rule ListNotes {
+    when: GET /api/v1/jobs/:id/notes
+
+    requires: Valid API key (via withApiAuth)
+    requires: Job exists AND Job.userId = authenticated user
+
+    ensures: Notes returned where jobId AND userId match
+    ensures: Ordered by created_at descending
+    ensures: Each note includes: id, content, createdAt, updatedAt
+}
+
+-- === POST /api/v1/jobs/:id/notes ===
+
+rule CreateNote {
+    when: POST /api/v1/jobs/:id/notes
+
+    requires: Valid API key (via withApiAuth)
+    requires: Job exists AND Job.userId = authenticated user
+    requires: Valid JSON body matching CreateNoteSchema
+
+    ensures: Note created with jobId, userId, content
+    ensures: Response: 201 Created with note data
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant WithApiAuthWrapper {
+    -- ALL /api/v1/* route handlers MUST use the withApiAuth() wrapper.
+    -- This wrapper provides: CORS, authentication, rate limiting, error catching.
+    -- No route handler should perform its own auth or rate limit checks.
+    -- Never access Prisma directly in a route without withApiAuth().
+    for all route handlers in /api/v1/*:
+        handler = withApiAuth(implementation)
+}
+
+invariant OwnershipEnforcement {
+    -- All queries include userId from the authenticated API key.
+    -- This is the same IDOR-safe pattern used in server actions.
+    -- findFirst({ where: { id, userId } }) for reads.
+    -- Ownership verification before mutations.
+    for all data access in /api/v1/*:
+        query.where includes userId = authenticated_user.id
+}
+
+invariant SharedEntityUpsert {
+    -- Shared entities (JobTitle, Company, Location, JobSource) are created
+    -- via upsert on the (value, createdBy) composite key.
+    -- This prevents TOCTOU race conditions in concurrent API calls.
+    -- If the entity already exists, the existing record is returned.
+    for create/update operations on Job via API:
+        shared_entities resolved via upsert
+}
+
+invariant SeparateFromInternalAPI {
+    -- /api/v1/* routes are the PUBLIC API (API key auth, CORS, rate limiting).
+    -- /api/* routes (without /v1/) are INTERNAL (NextAuth session, no CORS).
+    -- These two namespaces have different auth mechanisms and must not be mixed.
+    -- Public API schemas (src/lib/api/schemas.ts) are separate from form schemas.
+}
+
+invariant ApiKeyNeverPlaintext {
+    -- API keys are hashed with SHA-256 before storage.
+    -- The raw key is shown to the user exactly once (at creation).
+    -- After creation, only the prefix (pk_live_ + 4 chars) is visible.
+    -- Lookup is by hash, not by raw key.
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+-- Q1: Should Phase 2 add GET/PATCH/DELETE for individual notes?
+--     Currently notes can only be listed and created via the API.
+
+-- Q2: Should the rate limit be configurable per API key or per user?
+--     Currently all keys share the same 60 req/min limit.
+
+-- Q3: Should the API support webhook callbacks for async operations?
+--     Currently the API is purely synchronous request/response.
+
+-- Q4: Should batch operations (create/update multiple jobs) be supported?
+--     Currently each job requires a separate API call.

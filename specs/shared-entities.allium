@@ -1,0 +1,342 @@
+-- allium: 3
+-- shared-entities.allium
+
+-- Scope: Shared entities used across aggregates — value-like lookup entities
+-- Includes: Company, Location, JobTitle, JobSource, JobStatus, Tag, Interview,
+--   combobox "create or select" pattern, user-scoped uniqueness, global seeding
+-- Excludes:
+--   - Job Aggregate CRUD (see job-aggregate.allium)
+--   - Profile Aggregate (see profile-resume.allium)
+--   - Automation Aggregate (see module-lifecycle.allium)
+--   - Company Blacklist (see job-aggregate.allium)
+
+-- Owner: Shared across aggregates (src/actions/company.actions.ts,
+--   src/actions/job.actions.ts, src/app/api/v1/jobs/route.ts)
+
+------------------------------------------------------------
+-- Design: Shared Lookup Entities
+------------------------------------------------------------
+
+-- These entities are NOT full aggregates. They are shared lookup values
+-- referenced by multiple aggregates (Job, Resume, Automation).
+--
+-- Key pattern: "Create or Select" (combobox UX)
+-- The user types in a combobox. If the value exists, it is selected.
+-- If not, a new entity is created on-the-fly. This is implemented as
+-- an UPSERT on the (value, createdBy) composite key — idempotent.
+--
+-- Two scoping models:
+--   User-scoped: Company, Location, JobTitle, JobSource, Tag
+--     — Each user has their own set. (value, createdBy) is unique.
+--   Global: JobStatus
+--     — Shared across all users. value is globally unique.
+
+------------------------------------------------------------
+-- Entities
+------------------------------------------------------------
+
+entity Company {
+    label: String               -- display name as entered by user
+    value: String               -- label.trim().toLowerCase()
+    logo_url: String?           -- optional company logo URL
+    created_by: User
+
+    @invariant
+        -- User-scoped: (value, createdBy) is unique.
+        -- A Company cannot be deleted if linked to any Job or WorkExperience.
+        -- Logo URL must use http or https protocol (validated server-side).
+}
+
+entity Location {
+    label: String               -- display name
+    value: String               -- label.trim().toLowerCase()
+    state_prov: String?         -- state or province
+    country: String?
+    created_by: User
+
+    @invariant
+        -- User-scoped: (value, createdBy) is unique.
+        -- Referenced by Job, WorkExperience, and Education.
+}
+
+entity JobTitle {
+    label: String               -- display name
+    value: String               -- label.trim().toLowerCase()
+    created_by: User
+
+    @invariant
+        -- User-scoped: (value, createdBy) is unique.
+        -- Referenced by Job and WorkExperience.
+}
+
+entity JobSource {
+    label: String               -- display name (e.g. "LinkedIn", "Indeed")
+    value: String               -- label.trim().toLowerCase()
+    created_by: User
+
+    @invariant
+        -- User-scoped: (value, createdBy) is unique.
+        -- Seeded at signup from JOB_SOURCES constant.
+        -- Users can create additional sources via combobox.
+}
+
+entity JobStatus {
+    label: String               -- display name (e.g. "Saved", "Applied", "Interview")
+    value: String               -- unique globally (e.g. "saved", "applied", "interview")
+
+    @invariant
+        -- GLOBAL (not user-scoped). value is unique across all users.
+        -- Seeded at signup via upsert from JOB_STATUSES constant.
+        -- All users share the same status options.
+        -- Status values drive side effects in Job (e.g. "applied" sets applied flag).
+}
+
+entity Tag {
+    label: String               -- display name
+    value: String               -- label.trim().toLowerCase()
+    created_by: User
+    jobs: Set<Job>              -- many-to-many
+    questions: Set<Question>    -- many-to-many
+
+    @invariant
+        -- User-scoped: (value, createdBy) is unique.
+        -- A Tag CANNOT be deleted if linked to any Job or Question.
+        -- This referential integrity is checked before deletion.
+}
+
+entity Interview {
+    job: Job
+    interviewers: Set<Contact>
+    created_at: Timestamp
+
+    @invariant
+        -- Interviews belong to a Job.
+        -- Interviews must be deleted before their parent Job
+        -- (no cascade in schema — manual deletion required).
+}
+
+entity Contact {
+    name: String
+    email: String
+    created_by: User
+    interview: Interview?
+    created_at: Timestamp
+
+    @invariant
+        -- User-scoped via createdBy.
+        -- May be linked to an Interview as an interviewer.
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- === Company ===
+
+rule CreateCompany {
+    when: User creates a company via combobox or direct form
+
+    requires: User is authenticated
+    requires: label is non-empty after trim
+    requires: logo_url (if provided) uses http or https protocol
+
+    ensures:
+        value = label.trim().toLowerCase()
+        if company with (value, createdBy) exists:
+            reject with "Company already exists"
+        else:
+            Company.created(label, value, logoUrl?, createdBy: User.id)
+
+    -- Note: this is a CREATE, not an upsert. The Public API v1 uses
+    -- upsert (see UpsertSharedEntity rule) for race-condition safety.
+}
+
+rule UpdateCompany {
+    when: User updates a company
+
+    requires: User is authenticated
+    requires: Company.createdBy = User.id
+    requires: logo_url (if provided) uses http or https protocol
+
+    ensures:
+        value = label.trim().toLowerCase()
+        if another company with same (value, createdBy) exists:
+            reject with "Company already exists"
+        else:
+            Company.updated(label, value, logoUrl?)
+}
+
+rule DeleteCompany {
+    when: User deletes a company
+
+    requires: User is authenticated
+    requires: Company.createdBy = User.id
+    requires: No WorkExperience references this company
+    requires: No Job references this company
+
+    ensures: Company.deleted
+
+    -- Referential integrity prevents orphaned references.
+    -- The UI should show linked counts before allowing deletion.
+}
+
+rule GetCompanyList {
+    when: User requests their company list
+
+    requires: User is authenticated
+
+    ensures: Companies returned where createdBy = User.id
+    ensures: Paginated with total count
+    ensures: Optionally includes count of applied jobs per company
+    ensures: Ordered by job count descending
+}
+
+-- === Shared "Create or Select" Pattern ===
+
+rule UpsertSharedEntity {
+    when: Job creation or update needs to resolve a shared entity by label
+
+    requires: User is authenticated
+    requires: label is non-empty after trim
+
+    ensures:
+        value = label.trim().toLowerCase()
+        UPSERT on (value, createdBy) composite key:
+            if exists: return existing entity (no update)
+            if not exists: create new entity
+
+    -- This pattern is used by the Public API v1 (findOrCreate helpers)
+    -- to avoid TOCTOU race conditions in concurrent requests.
+    -- The combobox UI in the frontend uses a similar pattern but with
+    -- separate "check existence" + "create" steps.
+}
+
+-- === Tag ===
+
+rule CreateTag {
+    when: User creates a tag
+
+    requires: User is authenticated
+    requires: label is non-empty after trim
+
+    ensures: Tag.upserted(
+        value: label.trim().toLowerCase(),
+        createdBy: User.id
+    )
+
+    -- Upsert: returns existing tag if (value, createdBy) matches.
+    -- Idempotent — safe for combobox "create" option.
+}
+
+rule DeleteTag {
+    when: User deletes a tag
+
+    requires: User is authenticated
+    requires: Tag.createdBy = User.id
+    requires: Tag has no linked Jobs (tag.jobs.count = 0)
+    requires: Tag has no linked Questions (tag.questions.count = 0)
+
+    ensures: Tag.deleted
+
+    -- Referential integrity: cannot delete a tag in use.
+}
+
+-- === JobStatus Resolution ===
+
+rule ResolveJobStatus {
+    when: Job creation or update specifies a status by value string
+
+    ensures: JobStatus looked up by value field
+    ensures:
+        if found: use the existing status
+        if not found: reject with validation error
+
+    -- JobStatus is NOT created on-the-fly. It must be a pre-seeded value.
+    -- Users cannot create custom statuses (global, not user-scoped).
+}
+
+-- === Seeding ===
+
+rule SeedOnSignup {
+    when: New user signs up
+
+    ensures: Default JobSources seeded from JOB_SOURCES constant
+    ensures: Default JobStatuses seeded via upsert from JOB_STATUSES constant
+
+    -- JobStatuses are global (upsert ensures no duplicates).
+    -- JobSources are user-scoped (created for each new user).
+    -- See auth-session.allium Signup rule for the trigger.
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant UserScopedUniqueness {
+    -- User-scoped entities enforce uniqueness via (value, createdBy) composite key.
+    -- Two users can have a Company with the same label ("Google") independently.
+    -- But the same user cannot have two Companies with the same normalized value.
+    for entity in [Company, Location, JobTitle, JobSource, Tag]:
+        unique(entity.value, entity.createdBy)
+}
+
+invariant GlobalStatusUniqueness {
+    -- JobStatus enforces global uniqueness on the value field.
+    -- There is exactly one "applied" status shared by all users.
+    for status in JobStatus:
+        unique(status.value)
+}
+
+invariant NormalizedValues {
+    -- The value field is always label.trim().toLowerCase().
+    -- This ensures case-insensitive matching in combobox lookups.
+    -- The label preserves the user's original casing for display.
+    for entity in [Company, Location, JobTitle, JobSource, Tag]:
+        entity.value = entity.label.trim().toLowerCase()
+}
+
+invariant ReferentialIntegrityBeforeDeletion {
+    -- Shared entities cannot be deleted while referenced by other entities.
+    -- Company: check Job.companyId + WorkExperience.companyId
+    -- Tag: check tag.jobs.count + tag.questions.count
+    -- Location: implicitly protected by foreign key constraints
+    -- JobTitle: implicitly protected by foreign key constraints
+    for deletable shared entities:
+        check all references before deletion
+}
+
+invariant IdempotentCreation {
+    -- The combobox "create or select" pattern is idempotent.
+    -- If the entity already exists (by value + createdBy), return it.
+    -- This prevents duplicate entries from rapid UI interactions or
+    -- concurrent API calls.
+}
+
+invariant LogoUrlProtocol {
+    -- Company logo URLs must use http or https protocol.
+    -- Other protocols (javascript:, data:, file:) are rejected.
+    -- This prevents XSS via malicious protocol handlers in <img> tags.
+    for Company.logo_url:
+        if present: protocol in [http, https]
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+-- Q1: Should JobStatus be user-scoped to allow custom statuses?
+--     Currently global — all users share the same status values.
+--     Custom statuses would enable personalized workflows but
+--     complicate administration and reporting.
+
+-- Q2: Should Location have richer structure (city, state, country as
+--     separate required fields instead of optional)?
+--     Currently state_prov and country are optional.
+
+-- Q3: Should Tag support hierarchical organization (parent-child)?
+--     Currently tags are flat. Hierarchies could help organization
+--     but add UI complexity.
+
+-- Q4: Should Interview and Contact be promoted to their own aggregate?
+--     Currently lightweight entities with minimal business logic.
+--     CRM features (Roadmap Section 5) may require this.

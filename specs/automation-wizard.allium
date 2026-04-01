@@ -1,0 +1,350 @@
+-- allium: 3
+-- automation-wizard.allium
+
+-- Scope: Manifest-driven Automation Creation Wizard
+-- Includes: Multi-step form flow, dynamic connector params rendering,
+--   widget registry for search field overrides, module selection,
+--   credential feedback, AI scoring toggle, schedule configuration
+-- Excludes:
+--   - Automation execution (see scheduler-coordination.allium)
+--   - Module manifests (see module-lifecycle.allium)
+--   - Vacancy pipeline (see vacancy-pipeline.allium)
+
+-- Owner: Automation Wizard UI (src/components/automations/)
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity ModuleManifest {
+    -- Declares identity, credentials, connectorParamsSchema, searchFieldOverrides.
+    -- See module-lifecycle.allium for the full manifest contract.
+}
+
+external entity ModuleRegistry {
+    -- Unified registry of all registered modules. Provides getActiveModules().
+    -- See module-lifecycle.allium.
+}
+
+external entity Resume {
+    -- User's resume, used for AI matching configuration. See profile-resume.allium.
+}
+
+external entity Automation {
+    -- The created/updated automation entity. See job-aggregate.allium, scheduler-coordination.allium.
+}
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum WizardStep {
+    basics          -- Step 0: Name + Module selection
+    search          -- Step 1: Keywords + Location + Module-specific params
+    resume          -- Step 2: Resume selection for AI matching
+    matching        -- Step 3: AI scoring toggle + match threshold
+    schedule        -- Step 4: Frequency + preferred start hour
+    review          -- Step 5: Summary of all configured values
+}
+
+enum ScheduleFrequency {
+    every_6h        -- "6h"
+    every_12h       -- "12h"
+    daily           -- "daily" (default)
+    every_2d        -- "2d"
+    weekly          -- "weekly"
+}
+
+------------------------------------------------------------
+-- Core Concept: Generic Rendering Engine
+------------------------------------------------------------
+
+-- The AutomationWizard is a GENERIC rendering engine that consumes module
+-- manifests. It has NO hardcoded knowledge of specific modules.
+-- Three mechanisms enable per-module customization:
+--
+-- 1. connectorParamsSchema (Array on manifest):
+--    Each module declares its filter fields as a typed schema.
+--    DynamicParamsForm renders them dynamically (string, number, boolean,
+--    select, multiselect). No "if (module === X)" checks.
+--
+-- 2. searchFieldOverrides (Array on manifest):
+--    Modules declare specialized widgets for shared fields (keywords, location).
+--    Example: EURES declares { field: "keywords", widgetId: "eures-occupation" }
+--    to replace the plain text input with an ESCO occupation combobox.
+--
+-- 3. Widget Registry (widget-registry.tsx):
+--    Maps widgetId strings to React components.
+--    The wizard resolves widgets by ID, never by module name.
+--    New widgets are registered once, used by any module that references them.
+
+------------------------------------------------------------
+-- Entities (UI State)
+------------------------------------------------------------
+
+entity WizardState {
+    step: WizardStep = basics
+    available_modules: Set<ModuleManifest>
+    configured_key_module_ids: Set<String>      -- modules with API keys configured
+    selected_module: ModuleManifest?
+    params_schema: ConnectorParamsSchema?        -- from selected module manifest
+    search_field_overrides: Set<SearchFieldOverride>
+    connector_params_values: Map<String, Any>   -- user-entered dynamic param values
+    ai_scoring_enabled: Boolean = true
+    schedule_frequency: ScheduleFrequency = daily
+    is_submitting: Boolean = false
+    is_edit_mode: Boolean = false
+}
+
+entity ConnectorParamField {
+    key: String
+    type: string | number | boolean | select | multiselect
+    label: String                              -- i18n key
+    default_value: Any?
+    options: List<Any>?                        -- for select/multiselect
+    required: Boolean?
+    min: Number?                               -- for number type
+    max: Number?                               -- for number type
+    placeholder: String?
+}
+
+entity SearchFieldOverride {
+    field: keywords | location
+    widget_id: String                          -- lookup key into Widget Registry
+}
+
+entity WidgetRegistryEntry {
+    widget_id: String                          -- e.g. "eures-occupation"
+    field: keywords | location
+    component: ReactComponent                  -- lazy-loaded
+
+    @invariant
+        -- Widgets are lazy-loaded to avoid bundling 20-40KB when not needed.
+        -- Example: EURES widgets are loaded only when EURES module is selected.
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- === Wizard Lifecycle ===
+
+rule OpenWizard {
+    when: User opens the automation wizard (create or edit mode)
+
+    ensures: Load active job discovery modules from ModuleRegistry
+    ensures: Load user's configured API keys
+    ensures: Reset form to defaults (or populate from editAutomation)
+    ensures: step = basics
+
+    -- In edit mode, existing automation values are restored:
+    -- connectorParams are parsed from JSON, AI scoring state from matchThreshold,
+    -- schedule frequency from the scheduleFrequency field.
+}
+
+rule SelectModule {
+    when: User selects a job board module in Step 0
+
+    ensures: selected_module = module matching selected ID
+    ensures: params_schema = selected_module.connectorParamsSchema
+    ensures: search_field_overrides = selected_module.searchFieldOverrides
+    ensures: Apply default values from params_schema to connector_params_values
+    ensures: Widget overrides resolved via Widget Registry
+
+    -- When module changes, default values from the new schema are applied.
+    -- In edit mode, saved values are preserved instead of applying defaults.
+}
+
+rule AutoCorrectDefaultModule {
+    when: Wizard opens in create mode AND default module requires unconfigured key
+
+    ensures: jobBoard auto-corrected to first module that either:
+        - does not require a credential, OR
+        - has its credential already configured
+
+    -- This prevents users from starting with a module they cannot use.
+    -- Only applies in create mode, not edit mode.
+}
+
+-- === Step Navigation ===
+
+rule NavigateNext {
+    when: User clicks "Next"
+
+    requires: step < review
+
+    requires:
+        if step = basics: name is non-empty
+        if step = search: keywords AND location are non-empty
+        if step = resume: resumeId is selected
+        if step = matching: always allowed
+        if step = schedule: always allowed
+
+    ensures: step = step + 1
+}
+
+rule NavigateBack {
+    when: User clicks "Back"
+
+    requires: step > basics
+
+    ensures: step = step - 1
+}
+
+-- === Dynamic Params Rendering ===
+
+rule RenderDynamicParams {
+    when: Step 1 (search) is active AND selected module has connectorParamsSchema
+
+    ensures: DynamicParamsForm renders fields from params_schema
+    ensures: Each field type maps to a specific UI control:
+        - string: text input
+        - number: number input (with min/max constraints)
+        - boolean: toggle switch
+        - select: dropdown with options
+        - multiselect: dropdown with badge chips for selected values
+    ensures: Field labels resolved via i18n (with raw-string fallback)
+    ensures: Select option labels resolved via convention:
+        automations.paramOption.{moduleId}.{fieldKey}.{value}
+
+    -- DynamicParamsForm iterates the schema array in declared order.
+    -- No conditional logic based on module identity.
+}
+
+rule RenderSearchFieldOverride {
+    when: Step 1 (search) is active AND selected module has searchFieldOverrides
+
+    ensures: For each override { field, widgetId }:
+        widget = WidgetRegistry.lookup(widgetId)
+        if widget found:
+            Replace default input for "field" with the widget component
+        else:
+            Fall back to default text input
+
+    -- Example: EURES module declares { field: "keywords", widgetId: "eures-occupation" }
+    -- The wizard replaces the plain keywords input with EuresOccupationCombobox.
+    -- The wizard never checks "if module === eures" — it only checks the override.
+}
+
+-- === AI Scoring ===
+
+rule ToggleAiScoring {
+    when: User toggles AI scoring in Step 3
+
+    ensures:
+        if enabled:
+            matchThreshold = 80 (default)
+            threshold slider becomes interactive
+        if disabled:
+            matchThreshold = 0
+            threshold slider becomes disabled
+            -- "Collect only" mode: all discovered jobs are saved without scoring
+}
+
+-- === EURES Language Auto-Injection ===
+
+rule InjectLanguageForEures {
+    when: selected module is "eures" AND wizard is open
+
+    ensures: connector_params_values.language = document.documentElement.lang || "en"
+    ensures: Language synced to form's connectorParams JSON
+
+    -- This ensures EURES API requests use the user's current locale.
+    -- The language param is NOT shown in the dynamic params form.
+    -- It is a system-managed value injected automatically.
+}
+
+-- === Submission ===
+
+rule SubmitAutomation {
+    when: User clicks "Create" or "Update" in Step 5
+
+    requires: Form validation passes (Zod schema)
+
+    ensures: scheduleFrequency set as first-class field on submission data
+    ensures: connectorParams serialized as JSON from connector_params_values
+    ensures:
+        if create mode: createAutomation() called
+        if edit mode: updateAutomation() called
+    ensures: On success: wizard closed, form reset, onSuccess callback invoked
+
+    -- Server-side validation (in automation.actions.ts):
+    -- 1. jobBoard validated against ModuleRegistry
+    -- 2. resumeId validated for ownership (Resume -> Profile -> User)
+    -- 3. connectorParams validated against module's declared schema
+}
+
+rule CreateAndRunNow {
+    when: User clicks "Create & Run" in Step 5
+
+    ensures: Automation created via createAutomation()
+    ensures: POST /api/automations/{id}/run triggered immediately after
+    ensures: Run trigger is non-blocking (fire-and-forget)
+
+    -- Only available in create mode, not edit mode.
+}
+
+rule PerformanceWarning {
+    when: Automation count exceeds user's configured threshold
+
+    ensures: Warning toast shown with automation count
+    ensures: Warning is non-blocking — automation is still created
+
+    -- The "performanceWarning:<count>" prefix convention encodes
+    -- the warning in ActionResult.message to avoid a dedicated warnings field.
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant NoHardcodedModuleChecks {
+    -- The AutomationWizard, WizardShell, DynamicParamsForm, and widget resolution
+    -- MUST NEVER contain "if (moduleId === 'x')" or equivalent conditional logic.
+    -- All per-module behavior flows through:
+    --   1. connectorParamsSchema (manifest-declared fields)
+    --   2. searchFieldOverrides (manifest-declared widget IDs)
+    --   3. Widget Registry (widgetId -> component map)
+    -- New modules work without any wizard code changes.
+    for all code in AutomationWizard components:
+        no conditional on module identity
+}
+
+invariant WidgetRegistryLookup {
+    -- Widget resolution is by widgetId string, never by module name.
+    -- resolveWidgetOverrides(overrides) returns { field -> component } map.
+    -- Unknown widgetIds fall back gracefully to the default input.
+}
+
+invariant ConnectorParamsValidation {
+    -- Server-side: connectorParams JSON is validated against the module's
+    -- connectorParamsSchema via validateConnectorParams().
+    -- Invalid params are rejected with descriptive error messages.
+    -- Empty string params are normalized to null/undefined.
+}
+
+invariant ModuleCredentialFeedback {
+    -- The wizard shows credential status for each module in the selector:
+    -- - Module requires key AND key configured: no indicator
+    -- - Module requires key AND key NOT configured: amber warning with link to settings
+    -- - Module does not require key: green "no API key needed" indicator
+}
+
+invariant LazyWidgetLoading {
+    -- EURES widgets (EuresOccupationCombobox, EuresLocationCombobox) are
+    -- loaded via next/dynamic to avoid bundling 20-40KB when not needed.
+    -- Widgets only load when their module is selected.
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+-- Q1: Should the wizard support a "preview" step that shows sample search results
+--     before creating the automation? Currently the user must create and run.
+
+-- Q2: Should connectorParams validation happen client-side as well as server-side?
+--     Currently only server-side via validateConnectorParams().
+
+-- Q3: Should the Widget Registry support server-side rendering for the review step?
+--     Currently review step shows raw values for widget-overridden fields.

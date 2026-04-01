@@ -1,0 +1,443 @@
+-- allium: 3
+-- security-rules.allium
+
+-- Scope: Cross-cutting security rules and defense-in-depth patterns
+-- Includes: IDOR ownership enforcement, SSRF URL validation, credential URL
+--   protection (3-layer defense), security headers, AUTH_SECRET stability,
+--   user enumeration prevention, form method=POST, Ollama field allowlisting,
+--   ESCO URI validation, API key hashing, parameter injection prevention
+-- Excludes:
+--   - Authentication flow (see auth-session.allium)
+--   - API key lifecycle (see api-key-management.allium)
+--   - Module resilience (see module-lifecycle.allium)
+
+-- Owner: Cross-cutting (src/middleware.ts, src/lib/url-validation.ts,
+--   src/actions/*.ts, src/components/auth/*, docker-entrypoint.sh)
+
+-- THIS IS THE MOST IMPORTANT SPEC. It documents the security posture
+-- of the entire application and the fixes applied during security review.
+
+------------------------------------------------------------
+-- Security Threat Model
+------------------------------------------------------------
+
+-- CWE-639: Insecure Direct Object Reference (IDOR)
+-- CWE-918: Server-Side Request Forgery (SSRF)
+-- CWE-204: User Enumeration via Observable Differences
+-- CWE-20:  Improper Input Validation (Parameter Injection)
+-- CWE-598: Credential Exposure in GET Parameters
+-- CWE-352: Cross-Site Request Forgery (CSRF)
+-- CWE-614: Missing Security Headers
+
+------------------------------------------------------------
+-- Rule 1: IDOR Ownership Enforcement
+------------------------------------------------------------
+
+-- The primary data access security invariant.
+-- Every read, update, and delete on user-owned data MUST include
+-- the authenticated user's ID in the database query.
+
+rule DirectOwnership {
+    -- Applies to: Job, Note, Automation, Tag, Company, Location, JobSource, etc.
+    -- Pattern: findFirst({ where: { id, userId: user.id } })
+
+    when: Any operation on a user-owned entity
+
+    requires: User is authenticated (session.user.id or API key userId)
+
+    ensures: Database query includes userId = authenticated_user.id
+    ensures: userId comes from SESSION, never from client input
+    ensures: Client-submitted userId in form payload is IGNORED
+
+    -- Implementation: All server actions use getCurrentUser() which returns
+    -- the session user. API v1 routes use withApiAuth() which injects userId.
+}
+
+rule RelationChainOwnership {
+    -- Applies to: Resume, ContactInfo, ResumeSection, WorkExperience, Education
+    -- Pattern: findFirst({ where: { id, profile: { userId: user.id } } })
+    --   or deeper: { id, ResumeSection: { Resume: { profile: { userId: user.id } } } }
+
+    when: Any operation on a Profile Aggregate child entity
+
+    requires: User is authenticated
+
+    ensures: Ownership verified by traversing the relation chain:
+        Resume:          resume.profile.userId = user.id
+        ContactInfo:     contactInfo.resume.profile.userId = user.id
+        ResumeSection:   section.Resume.profile.userId = user.id
+        WorkExperience:  exp.ResumeSection.Resume.profile.userId = user.id
+        Education:       edu.ResumeSection.Resume.profile.userId = user.id
+
+    -- Each mutation (update, delete) MUST perform a findFirst with the
+    -- chain traversal BEFORE executing the write operation.
+    -- If the findFirst returns null, the operation is rejected.
+}
+
+rule CrossAggregateOwnership {
+    -- Applies to: References between aggregates (e.g. Job.resumeId, Automation.resumeId)
+
+    when: An operation references an entity from another aggregate
+
+    ensures: Referenced entity ownership verified before linking
+    ensures:
+        Resume in Automation: findFirst({ id: resumeId, profile: { userId } })
+        Resume in Job:        findFirst({ id: resumeId, profile: { userId } })
+        Tags in Job:          tag.count({ id: { in: tagIds }, createdBy: userId })
+
+    -- This prevents a user from linking their Job/Automation to another user's Resume.
+}
+
+------------------------------------------------------------
+-- Rule 2: SSRF URL Validation
+------------------------------------------------------------
+
+rule OllamaUrlValidation {
+    when: Ollama base URL is resolved from user configuration
+
+    ensures: URL protocol is http or https (no file://, ftp://, data://, etc.)
+    ensures: URL does not contain embedded credentials (user:pass@host)
+    ensures: URL is not a cloud metadata endpoint:
+        - 169.254.169.254 (AWS/Azure/Alibaba IMDS)
+        - metadata.google.internal (GCP)
+    ensures: Unparseable URLs are blocked
+    ensures: On validation failure: fall back to default localhost URL
+
+    -- Localhost (127.0.0.1, ::1) is intentionally ALLOWED because
+    -- Ollama typically runs locally. The threat model is about preventing
+    -- SSRF to cloud metadata services and internal networks.
+}
+
+rule EscoUriValidation {
+    when: User-supplied ESCO URI is used in API proxy routes
+
+    ensures: URI starts with "http://data.europa.eu/esco/"
+    ensures: No other URI schemes or domains accepted
+
+    -- Prevents SSRF through the ESCO proxy endpoint.
+    -- Without this, an attacker could use the proxy to reach internal services.
+}
+
+rule ImageUrlValidation {
+    when: Logo URL is provided for a Company entity
+
+    ensures: URL protocol is http or https
+    ensures: Invalid URLs are rejected
+
+    -- Prevents injection of non-HTTP schemes (javascript:, data:, etc.)
+    -- in company logo URLs that may be rendered in <img> tags.
+}
+
+------------------------------------------------------------
+-- Rule 3: Credential URL Protection (3-Layer Defense)
+------------------------------------------------------------
+
+-- Defense-in-depth against credentials appearing in URLs.
+-- Prevents password exposure via browser history, server logs, referrer headers.
+
+rule Layer1_FormMethodPOST {
+    -- First line of defense: prevent native browser GET submission
+
+    when: Signin or Signup form is rendered
+
+    ensures: <form> element has method="POST"
+    ensures: <form> element has action="" (empty, prevents cross-origin submission)
+
+    -- If method="POST" is missing and JavaScript fails to load,
+    -- the browser would submit credentials via GET query parameters.
+}
+
+rule Layer2_ClientSideStrip {
+    -- Second line of defense: strip credentials from URL on page mount
+
+    when: Signin or Signup page mounts in the browser
+
+    ensures: useEffect runs on mount
+    ensures: If URL contains email or password query parameters:
+        remove them from URL via replaceState
+
+    -- This handles the case where credentials ended up in the URL
+    -- despite Layer 1 (e.g., form modified by browser extension).
+}
+
+rule Layer3_MiddlewareRedirect {
+    -- Third line of defense: server-side redirect strips credentials
+
+    when: Request to /signin or /signup contains email or password query params
+
+    ensures: 303 redirect to clean URL (same path, no query params)
+    ensures: 303 status code forces GET, preventing POST replay
+
+    -- This catches credentials in URLs before they reach the page component.
+    -- Even if both client-side layers fail, the middleware catches it.
+}
+
+------------------------------------------------------------
+-- Rule 4: Security Headers
+------------------------------------------------------------
+
+rule SecurityHeaders {
+    when: Any response to a middleware-matched route
+
+    ensures: Referrer-Policy: strict-origin-when-cross-origin
+    ensures: X-Content-Type-Options: nosniff
+    ensures: X-Frame-Options: DENY
+    ensures: Permissions-Policy: camera=(), microphone=(), geolocation=()
+    ensures: (Production only) Strict-Transport-Security: max-age=31536000
+
+    -- Applied by middleware to all matched routes (/dashboard/*, /signin, /signup).
+    -- API v1 routes add their own subset (Cache-Control: no-store, X-Content-Type-Options).
+}
+
+------------------------------------------------------------
+-- Rule 5: AUTH_SECRET Stability
+------------------------------------------------------------
+
+rule AuthSecretRequired {
+    when: Docker container starts (docker-entrypoint.sh)
+
+    requires: AUTH_SECRET environment variable is set and non-empty
+
+    ensures:
+        if AUTH_SECRET is empty or unset:
+            FATAL error logged
+            Container exits with code 1
+            Server does NOT start
+
+    -- An ephemeral or auto-generated AUTH_SECRET invalidates ALL active sessions
+    -- on every container restart. This was a critical bug that locked out all users.
+    -- The fix: docker-entrypoint.sh refuses to start without a pre-configured secret.
+}
+
+------------------------------------------------------------
+-- Rule 6: User Enumeration Prevention
+------------------------------------------------------------
+
+rule GenericSigninError {
+    when: Signin fails (email not found OR password wrong)
+
+    ensures: Error message is "Invalid credentials." for BOTH cases
+    ensures: Error does NOT distinguish between unknown email and wrong password
+
+    -- CWE-204: If different messages were shown for "email not found" vs
+    -- "wrong password", an attacker could enumerate valid email addresses.
+}
+
+rule GenericSignupError {
+    when: Signup fails because email already exists
+
+    ensures: Error message is generic:
+        "Unable to create account. Please try a different email or sign in."
+    ensures: Message does NOT confirm the email is registered
+
+    -- Same principle: prevents email enumeration during registration.
+}
+
+------------------------------------------------------------
+-- Rule 7: Ollama Field Allowlisting
+------------------------------------------------------------
+
+rule OllamaBodyAllowlist {
+    when: POST /api/ai/ollama/generate proxies request to Ollama
+
+    ensures: Only allowlisted fields forwarded:
+        model, prompt, stream (forced false), system?, template?, context?
+    ensures: All other fields from client body are SILENTLY DROPPED
+    ensures: No raw body forwarding (Object.assign, spread, etc.)
+
+    -- CWE-20: Without allowlisting, a malicious client could inject:
+    --   raw_prompt: true (bypass template processing)
+    --   num_predict: 99999 (resource exhaustion)
+    --   keep_alive: "999h" (prevent model unloading)
+    -- The allowlist is the ONLY safe pattern for request proxying.
+}
+
+------------------------------------------------------------
+-- Rule 8: API Key Security
+------------------------------------------------------------
+
+rule ApiKeyHashing {
+    when: Public API key is created or validated
+
+    ensures: Raw key hashed with SHA-256 before storage
+    ensures: Raw key shown to user ONCE at creation, then never again
+    ensures: Only key prefix (pk_live_ + 4 chars) visible after creation
+    ensures: Revoked keys (revokedAt != null) are rejected
+    ensures: Max 10 active keys per user
+
+    -- See api-key-management.allium for full lifecycle.
+}
+
+rule ModuleApiKeyEncryption {
+    when: Module credential (e.g. OpenAI API key) is stored
+
+    ensures: Key encrypted with AES-256-CBC
+    ensures: IV stored alongside encrypted key
+    ensures: Only last 4 characters stored in plaintext (for display)
+    ensures: Unique constraint on (userId, moduleId) — one key per module per user
+
+    -- See api-key-management.allium for full lifecycle.
+}
+
+------------------------------------------------------------
+-- Rule 9: Rate Limiting
+------------------------------------------------------------
+
+rule SigninRateLimit {
+    when: User attempts to sign in
+
+    ensures: 1-second delay before processing credentials
+
+    -- Brute force mitigation. No account lockout currently.
+    -- See auth-session.allium for full details.
+}
+
+rule PublicApiRateLimit {
+    when: Authenticated API v1 request
+
+    ensures: Sliding window rate limit: 60 requests per minute per API key
+    ensures: Rate limit headers on every response
+
+    -- See public-api-v1.allium for full details.
+}
+
+rule AIMatchRateLimit {
+    when: User requests AI job-resume matching
+
+    ensures: Per-user rate limit checked before processing
+
+    -- Prevents abuse of expensive LLM inference.
+}
+
+------------------------------------------------------------
+-- Rule 10: Middleware Route Protection
+------------------------------------------------------------
+
+rule DashboardProtection {
+    when: Request to /dashboard or /dashboard/*
+
+    ensures:
+        if authenticated: allow
+        if not authenticated: redirect to /signin
+
+    -- Middleware matcher includes /dashboard paths.
+}
+
+rule AuthRouteProtection {
+    when: Request to /signin or /signup
+
+    ensures: Credential query params sanitized (Layer 3)
+    ensures: Security headers added
+    ensures:
+        if authenticated AND visiting auth route:
+            redirect to /dashboard
+
+    -- Prevents authenticated users from seeing the login page.
+}
+
+rule ApiRouteSelfProtection {
+    when: Request to /api/* routes
+
+    ensures: Each API route handler checks auth() independently
+    ensures: /api/v1/* routes use withApiAuth() wrapper
+
+    -- Middleware matcher does NOT include /api/* paths.
+    -- API routes are responsible for their own authentication.
+    -- This is by design — API routes may use different auth mechanisms
+    -- (session vs API key).
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant NeverTrustClientUserId {
+    -- The userId for database queries MUST come from the server session
+    -- (getCurrentUser()) or API key validation (withApiAuth()).
+    -- Client-submitted userId fields in form data are IGNORED.
+    -- This is the foundational IDOR prevention principle.
+    for all server actions and API routes:
+        userId = server_authenticated_user_id
+}
+
+invariant DefenseInDepth {
+    -- Security controls are layered. No single control is relied upon alone.
+    -- Examples:
+    --   Credential protection: form POST + client strip + middleware redirect
+    --   IDOR: session auth + userId in query + ownership verification
+    --   SSRF: protocol check + credential check + metadata block + fallback
+}
+
+invariant NoRawBodyForwarding {
+    -- When proxying requests to external services (Ollama, ESCO, EURES),
+    -- the client request body MUST be filtered through an allowlist.
+    -- Raw forwarding (spreading, Object.assign) creates parameter injection risk.
+    for all proxy routes:
+        forwarded_body = explicit_allowlist_filter(client_body)
+}
+
+invariant AuthenticatedProxyRoutes {
+    -- All API proxy routes (/api/esco/*, /api/eures/*, /api/ai/*) MUST
+    -- check auth() before processing.
+    -- Never expose upstream APIs to unauthenticated users.
+    for all proxy routes:
+        session = auth()
+        if not session: reject(401)
+}
+
+invariant GenericErrorMessages {
+    -- Authentication error messages MUST NOT leak information about:
+    --   - Whether an email address is registered
+    --   - Whether a username exists
+    --   - Whether a specific resource exists for another user
+    -- All auth failures return generic messages.
+}
+
+invariant SecureSecretManagement {
+    -- AUTH_SECRET: Pre-configured, stable, never auto-generated.
+    -- Module API keys: AES-256-CBC encrypted at rest.
+    -- Public API keys: SHA-256 hashed, raw shown once.
+    -- No secrets in code, commits, logs, or URLs.
+}
+
+------------------------------------------------------------
+-- Known Gaps (from security review)
+------------------------------------------------------------
+
+-- GAP-1: deleteWorkExperience and deleteEducation in profile.actions.ts
+--   do not verify ownership via chain traversal before deletion.
+--   An authenticated user could potentially delete another user's entries
+--   if they know the ID. Severity: Medium.
+
+-- GAP-2: deleteResumeById does not verify ownership via profile.userId.
+--   Same risk as GAP-1. Severity: Medium.
+
+-- GAP-3: Export endpoint (/api/jobs/export) relies on getCurrentUser()
+--   internally but has no route-level auth check. If getCurrentUser()
+--   behavior changes, the endpoint could become unprotected. Severity: Low.
+
+-- GAP-4: No account lockout after repeated failed login attempts.
+--   Only a 1-second delay. Severity: Low (self-hosted context).
+
+-- GAP-5: Rate limiting for Public API is in-memory only.
+--   Does not persist across restarts or work in multi-instance deployments.
+--   Severity: Low (self-hosted, single-instance typical).
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+-- Q1: Should all delete operations require ownership verification,
+--     even if the ID is a UUID (hard to guess)?
+--     UUIDs reduce but do not eliminate the IDOR risk.
+
+-- Q2: Should the middleware matcher be expanded to include /api/* routes?
+--     This would add a second layer of protection but may complicate
+--     API key authentication for public API routes.
+
+-- Q3: Should Content-Security-Policy be added?
+--     Currently not set. Would require careful configuration to avoid
+--     breaking inline styles from UI component libraries.
+
+-- Q4: Should there be automated security scanning (e.g., OWASP ZAP)
+--     as part of the CI pipeline?

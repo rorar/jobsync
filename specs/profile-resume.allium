@@ -1,0 +1,463 @@
+-- allium: 3
+-- profile-resume.allium
+
+-- Scope: Profile Aggregate — Resume CRUD, Sections (Summary, Experience, Education),
+--   ContactInfo, File upload, Ownership chain traversal
+-- Includes: createResumeProfile, getResumeById, editResume, deleteResume,
+--   addContactInfo, updateContactInfo, addExperience, updateExperience,
+--   addEducation, updateEducation, deleteWorkExperience, deleteEducation,
+--   addResumeSummary, updateResumeSummary, getResumeList, uploadFile
+-- Excludes:
+--   - Job association (see job-aggregate.allium)
+--   - Automation resume reference (see module-lifecycle.allium)
+--   - AI resume matching (see ai-provider.allium)
+
+-- Owner: Profile Aggregate (src/actions/profile.actions.ts)
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity User {
+    -- Authenticated user from session. Owns the Profile.
+}
+
+external entity Company {
+    -- Shared entity referenced by WorkExperience. See shared-entities.allium.
+}
+
+external entity JobTitle {
+    -- Shared entity referenced by WorkExperience. See shared-entities.allium.
+}
+
+external entity Location {
+    -- Shared entity referenced by WorkExperience and Education. See shared-entities.allium.
+}
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum SectionType {
+    summary         -- Professional summary text
+    experience      -- Work experience entries
+    education       -- Education entries
+    license         -- Professional licenses
+    certification   -- Professional certifications
+    course          -- Courses taken
+    project         -- Portfolio projects
+    other           -- Freeform section
+}
+
+------------------------------------------------------------
+-- Entities
+------------------------------------------------------------
+
+entity Profile {
+    user: User
+
+    @invariant
+        -- A User has at most one Profile (created lazily on first resume).
+        -- The Profile is the root of the Resume aggregate tree.
+}
+
+entity Resume {
+    profile: Profile
+    title: String
+    contact_info: ContactInfo?
+    sections: Set<ResumeSection>
+    file: File?
+    created_at: Timestamp
+    updated_at: Timestamp
+
+    @invariant
+        -- Resume titles must be unique across all resumes (global, not per-user).
+        -- A Resume belongs to a Profile which belongs to a User.
+        -- Ownership chain: Resume -> Profile -> User.
+}
+
+entity File {
+    file_name: String
+    file_path: String
+    file_type: String              -- always "resume" for resume uploads
+    uploaded_at: Timestamp
+
+    @invariant
+        -- A File is linked 1:1 with a Resume (unique foreign key).
+        -- Files are stored on the server filesystem.
+}
+
+entity ContactInfo {
+    resume: Resume                 -- 1:1 relationship (unique resumeId)
+    first_name: String
+    last_name: String
+    headline: String
+    email: String
+    phone: String
+    address: String?
+    created_at: Timestamp
+    updated_at: Timestamp
+
+    @invariant
+        -- Each Resume has at most one ContactInfo.
+        -- ContactInfo is cascade-deleted when the Resume is deleted.
+}
+
+entity ResumeSection {
+    resume: Resume
+    section_title: String
+    section_type: SectionType
+    summary: Summary?                   -- only when type = summary
+    work_experiences: Set<WorkExperience>  -- only when type = experience
+    educations: Set<Education>           -- only when type = education
+
+    @invariant
+        -- The section_type determines which child collection is populated.
+        -- A summary section has exactly one Summary child.
+        -- An experience section has zero or more WorkExperience children.
+        -- An education section has zero or more Education children.
+}
+
+entity Summary {
+    content: String
+    created_at: Timestamp
+    updated_at: Timestamp
+}
+
+entity WorkExperience {
+    company: Company
+    job_title: JobTitle
+    location: Location
+    start_date: Timestamp
+    end_date: Timestamp?           -- null means current position
+    description: String
+    created_at: Timestamp
+    updated_at: Timestamp
+}
+
+entity Education {
+    institution: String
+    degree: String
+    field_of_study: String
+    location: Location
+    start_date: Timestamp
+    end_date: Timestamp?           -- null means currently enrolled
+    description: String?
+    created_at: Timestamp
+    updated_at: Timestamp
+}
+
+------------------------------------------------------------
+-- Ownership Chain
+------------------------------------------------------------
+
+-- The Profile Aggregate uses a RELATION CHAIN TRAVERSAL pattern for ownership.
+-- Unlike the Job Aggregate (where userId is directly on the entity),
+-- Resume and its children verify ownership by traversing:
+--
+--   Resume        -> Profile -> userId
+--   ContactInfo   -> Resume  -> Profile -> userId
+--   ResumeSection -> Resume  -> Profile -> userId
+--   WorkExperience -> ResumeSection -> Resume -> Profile -> userId
+--   Education      -> ResumeSection -> Resume -> Profile -> userId
+--
+-- Each mutation MUST verify ownership by querying up this chain
+-- before performing the write operation.
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- === Resume CRUD ===
+
+rule CreateResume {
+    when: User creates a new resume
+
+    requires: User is authenticated
+    requires: title is non-empty
+    requires: no existing resume has the same title (global uniqueness check)
+
+    ensures:
+        if User has an existing Profile:
+            Resume.created(profile: existing_profile, title: title)
+        else:
+            Profile.created(user: User)
+            Resume.created(profile: new_profile, title: title)
+
+    ensures:
+        if file provided (fileName + filePath):
+            File.created(fileName, filePath, fileType: "resume")
+            Resume.file = new_file
+
+    -- The Profile is created lazily on first resume creation.
+    -- This avoids an explicit "create profile" step.
+}
+
+rule GetResumeList {
+    when: User requests paginated list of resumes
+
+    requires: User is authenticated
+
+    ensures: Resumes returned where profile.userId = User.id
+    ensures: Paginated by (page, limit)
+    ensures: Each resume includes job count (for UI badge)
+    ensures: Ordered by created_at descending
+}
+
+rule GetResumeById {
+    when: User requests a specific resume with all details
+
+    requires: User is authenticated
+    requires: Resume.profile.userId = User.id  -- ownership via chain traversal
+
+    ensures: Resume returned with:
+        - ContactInfo (if present)
+        - File (if attached)
+        - All ResumeSections with their children:
+            - Summary sections with content
+            - Experience sections with WorkExperiences (including company, jobTitle, location)
+            - Education sections with Educations (including location)
+}
+
+rule EditResume {
+    when: User updates a resume title or file
+
+    requires: User is authenticated
+    requires: Resume.profile.userId = User.id  -- ownership verified before mutation
+
+    ensures: Resume.title = new_title
+    ensures:
+        if new file provided (fileName + filePath):
+            File.created and linked to Resume
+        if existing fileId provided:
+            File must exist (validated)
+            Resume.file = existing_file
+        if no file:
+            Resume.file = null
+}
+
+rule DeleteResume {
+    when: User deletes a resume
+
+    requires: User is authenticated
+    -- NOTE: Missing ownership check in current code — see Open Questions
+
+    ensures: Transaction deletes in order:
+        1. ContactInfo (where resumeId)
+        2. Summary (where ResumeSection.resumeId)
+        3. WorkExperience (where ResumeSection.resumeId)
+        4. Education (where ResumeSection.resumeId)
+        5. ResumeSection (where resumeId)
+        6. Resume
+    ensures: If file attached, file deleted from filesystem AND database
+
+    -- Transaction ensures atomicity — either all children are deleted or none.
+    -- The deletion order respects referential integrity constraints.
+}
+
+-- === Contact Info ===
+
+rule AddContactInfo {
+    when: User adds contact information to a resume
+
+    requires: User is authenticated
+    requires: Resume.profile.userId = User.id  -- ownership verified before mutation
+
+    ensures: ContactInfo.connectOrCreate(
+        firstName, lastName, headline, email, phone, address?
+    )
+
+    -- Uses connectOrCreate: if ContactInfo already exists for this resume,
+    -- connects to it; otherwise creates new. This is idempotent.
+}
+
+rule UpdateContactInfo {
+    when: User updates existing contact information
+
+    requires: User is authenticated
+    requires: ContactInfo.resume.profile.userId = User.id  -- 4-level chain traversal
+
+    ensures: ContactInfo.updated(
+        firstName, lastName, headline, email, phone, address?
+    )
+}
+
+-- === Summary Section ===
+
+rule AddResumeSummary {
+    when: User adds a summary section to a resume
+
+    requires: User is authenticated
+
+    ensures: ResumeSection.created(
+        resumeId: resumeId,
+        sectionTitle: sectionTitle,
+        sectionType: "summary"
+    )
+    ensures: Summary.created(content: content)
+    ensures: ResumeSection.summary = new_summary
+}
+
+rule UpdateResumeSummary {
+    when: User updates a summary section
+
+    requires: User is authenticated
+    requires: ResumeSection.Resume.profile.userId = User.id  -- chain traversal
+
+    ensures: ResumeSection.sectionTitle = new_title
+    ensures: Summary.content = new_content
+}
+
+-- === Work Experience ===
+
+rule AddExperience {
+    when: User adds a work experience entry
+
+    requires: User is authenticated
+    requires: either sectionId provided OR sectionTitle provided
+
+    ensures:
+        if no sectionId:
+            ResumeSection.created(type: "experience", title: sectionTitle)
+        WorkExperience.created(
+            jobTitle: title_id,
+            company: company_id,
+            location: location_id,
+            startDate, endDate?, description
+        )
+
+    -- The section is created on-demand if it does not yet exist.
+    -- This supports the first experience entry creating its parent section.
+}
+
+rule UpdateExperience {
+    when: User updates a work experience entry
+
+    requires: User is authenticated
+    requires: WorkExperience.ResumeSection.Resume.profile.userId = User.id
+        -- 5-level chain traversal for ownership
+
+    ensures: WorkExperience.updated(
+        jobTitle, company, location, startDate, endDate?, description
+    )
+}
+
+rule DeleteWorkExperience {
+    when: User deletes a work experience entry
+
+    requires: User is authenticated
+    -- NOTE: No ownership chain verification in current code
+
+    ensures: WorkExperience.deleted
+}
+
+-- === Education ===
+
+rule AddEducation {
+    when: User adds an education entry
+
+    requires: User is authenticated
+    requires: either sectionId provided OR sectionTitle provided
+
+    ensures:
+        if no sectionId:
+            ResumeSection.created(type: "education", title: sectionTitle)
+        Education.created(
+            institution, degree, fieldOfStudy,
+            location: location_id, startDate, endDate?, description?
+        )
+}
+
+rule UpdateEducation {
+    when: User updates an education entry
+
+    requires: User is authenticated
+    requires: Education.ResumeSection.Resume.profile.userId = User.id
+        -- 5-level chain traversal for ownership
+
+    ensures: Education.updated(
+        institution, degree, fieldOfStudy,
+        location, startDate, endDate?, description?
+    )
+}
+
+rule DeleteEducation {
+    when: User deletes an education entry
+
+    requires: User is authenticated
+    -- NOTE: No ownership chain verification in current code
+
+    ensures: Education.deleted
+}
+
+-- === File Upload ===
+
+rule UploadFile {
+    when: User uploads a file for a resume
+
+    requires: file bytes are readable
+
+    ensures: Upload directory created if it does not exist
+    ensures: File bytes written to server filesystem
+    ensures: File record created in database
+
+    -- File upload is a two-step process:
+    -- 1. Write bytes to disk (server action)
+    -- 2. Create File entity in database
+    -- The File entity is then linked to a Resume via createResumeProfile or editResume.
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant OwnershipChainTraversal {
+    -- All mutations on Resume aggregate entities MUST verify ownership
+    -- by traversing the relation chain up to User.id.
+    -- Pattern: findFirst({ where: { id, [chain]: { userId: user.id } } })
+    -- before performing update/delete.
+    for all mutations on Resume, ContactInfo, ResumeSection, WorkExperience, Education:
+        verify_ownership_via_chain_to_user_id
+}
+
+invariant LazyProfileCreation {
+    -- A Profile is created automatically when the user creates their first Resume.
+    -- There is no standalone "create profile" action.
+    -- If a Profile already exists, it is reused.
+}
+
+invariant ResumeTitleUniqueness {
+    -- Resume titles are currently checked for global uniqueness (not per-user).
+    -- This may be overly strict — see Open Questions.
+}
+
+invariant TransactionalDeletion {
+    -- Resume deletion uses a database transaction to ensure atomicity.
+    -- All child entities (ContactInfo, Summary, WorkExperience, Education,
+    -- ResumeSection) are deleted in dependency order within a single transaction.
+}
+
+invariant SectionOnDemandCreation {
+    -- When adding the first Experience or Education entry,
+    -- the ResumeSection parent is created automatically if no sectionId is provided.
+    -- The sectionTitle must be provided in this case.
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+-- Q1: Resume title uniqueness is checked globally, not per-user.
+--     This means two different users cannot have resumes with the same title.
+--     Should this be changed to per-user uniqueness?
+
+-- Q2: deleteWorkExperience and deleteEducation do not verify ownership via
+--     chain traversal. They only check authentication. Should these be fixed
+--     to include the full chain traversal check? (See security-rules.allium)
+
+-- Q3: deleteResumeById does not verify ownership via profile.userId.
+--     It relies only on authentication. Should ownership be enforced?
+
+-- Q4: Should File cleanup be handled more robustly? Currently if the DB
+--     delete succeeds but the filesystem delete fails (or vice versa),
+--     there is no rollback mechanism for the orphaned resource.

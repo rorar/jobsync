@@ -1,0 +1,478 @@
+-- allium: 3
+-- job-aggregate.allium
+
+-- Scope: Job Aggregate — the core domain entity of JobSync
+-- Includes: Job CRUD, Status transitions, Notes sub-entity, Tags association,
+--   Company Blacklist filtering, manual queue (StagedVacancy), CSV export iterator
+-- Excludes:
+--   - Automation-discovered jobs (see vacancy-pipeline.allium)
+--   - AI match scoring (see ai-provider.allium, future)
+--   - Scheduler runs (see scheduler-coordination.allium)
+
+-- Owner: Job Aggregate (src/actions/job.actions.ts, note.actions.ts, tag.actions.ts)
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity User {
+    -- Authenticated user from session. All job operations are scoped to the owning user.
+}
+
+external entity StagedVacancy {
+    -- Vacancy in the staging queue. See vacancy-pipeline.allium for lifecycle.
+    -- Manual queue entries created from AddJob form land here.
+}
+
+external entity Resume {
+    -- Optional resume association. See profile-resume.allium for lifecycle.
+}
+
+external entity Automation {
+    -- Optional automation that discovered this job. See module-lifecycle.allium.
+}
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum JobType {
+    full_time   -- "Full-time"
+    part_time   -- "Part-time"
+    contract    -- "Contract"
+}
+
+------------------------------------------------------------
+-- Entities and Variants
+------------------------------------------------------------
+
+entity Job {
+    title: JobTitle
+    company: Company
+    status: JobStatus
+    location: Location?
+    source: JobSource?
+    job_type: JobType
+    salary_range: String?
+    description: String
+    job_url: String?
+    applied: Boolean = false
+    applied_date: Timestamp?
+    due_date: Timestamp?
+    resume: Resume?
+    tags: Set<Tag>
+    created_at: Timestamp
+    notes: Set<Note>
+
+    -- Automation discovery (populated when job comes from automation pipeline)
+    automation: Automation?
+    match_score: Integer?
+    match_data: String?
+    discovery_status: String?
+    discovered_at: Timestamp?
+
+    -- Back-relation from StagedVacancy promotion
+    staged_vacancy_promotion: StagedVacancy?
+
+    @invariant
+        -- Every Job belongs to exactly one User. All reads, writes, and deletes
+        -- MUST include userId in the query to enforce ownership.
+        -- This is the primary security invariant of the Job Aggregate.
+}
+
+entity Note {
+    job: Job
+    content: String
+    created_at: Timestamp
+    updated_at: Timestamp
+
+    is_edited: updated_at - created_at > 1.second
+
+    @invariant
+        -- A Note belongs to a Job AND a User. Both must match for any operation.
+        -- Notes are cascade-deleted when the parent Job is deleted.
+}
+
+entity Tag {
+    label: String
+    value: String              -- label.trim().toLowerCase()
+
+    @invariant
+        -- Tags are user-scoped: (value, createdBy) is unique.
+        -- A Tag cannot be deleted if linked to any Job or Question.
+}
+
+entity JobTitle {
+    label: String
+    value: String              -- label.trim().toLowerCase()
+
+    @invariant
+        -- User-scoped. Created on-demand via combobox "create" option.
+}
+
+entity Company {
+    label: String
+    value: String              -- label.trim().toLowerCase()
+    logo_url: String?
+
+    @invariant
+        -- User-scoped via createdBy.
+}
+
+entity JobStatus {
+    label: String
+    value: String              -- e.g. "saved", "applied", "interview", "offer", "rejected"
+
+    @invariant
+        -- Global (not user-scoped). Seeded at signup. Shared across all users.
+}
+
+entity JobSource {
+    label: String
+    value: String
+
+    @invariant
+        -- User-scoped via createdBy. Seeded at signup from JOB_SOURCES constant.
+}
+
+entity Location {
+    label: String
+    value: String              -- label.trim().toLowerCase()
+    state_prov: String?
+    country: String?
+
+    @invariant
+        -- User-scoped via createdBy.
+}
+
+entity CompanyBlacklist {
+    pattern: String
+    match_type: exact | contains | starts_with | ends_with
+    reason: String?
+
+    @invariant
+        -- User-scoped. Used during vacancy pipeline dedup phase to filter
+        -- staged vacancies by employer name.
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- === Job CRUD ===
+
+rule CreateJob {
+    when: User creates a Job
+
+    requires: User is authenticated
+
+    ensures: Job.created(
+        title: title,
+        company: company,
+        status: status,
+        location: location?,
+        source: source?,
+        job_type: type,
+        salary_range: salary_range?,
+        description: description,
+        job_url: job_url?,
+        applied: applied,
+        applied_date: date_applied?,
+        due_date: due_date?,
+        resume: resume?,
+        tags: tags?
+    )
+
+    -- Tags are connected by ID at creation time.
+    -- userId is set from the authenticated session, never from client input.
+}
+
+rule GetJobDetails {
+    when: User requests Job details by id
+
+    requires: User is authenticated
+    requires: Job.userId = User.id
+
+    ensures: Job returned with all relations (title, company, status, location,
+        source, resume with file, tags)
+
+    -- Uses findFirst with { id, userId } — not findUnique.
+    -- This is the IDOR-safe pattern. See security-rules.allium.
+}
+
+rule UpdateJob {
+    when: User updates a Job
+
+    requires: User is authenticated
+    requires: Job.id is provided
+
+    ensures: Job.updated(
+        where: { id: job_id, userId: User.id }
+    )
+
+    -- Ownership enforced at Prisma query level, NOT via client-submitted userId.
+    -- The client may send userId in the form payload but it is IGNORED.
+    -- Only the session-authenticated User.id is used in the where clause.
+}
+
+rule UpdateJobStatus {
+    when: User changes a Job's status
+
+    requires: User is authenticated
+    requires: Job.userId = User.id
+
+    ensures: Job.status = new_status
+
+    -- Side effects based on status value:
+    ensures:
+        if new_status.value = "applied":
+            Job.applied = true
+            Job.applied_date = now
+        if new_status.value = "interview":
+            Job.applied = true
+}
+
+rule DeleteJob {
+    when: User deletes a Job
+
+    requires: User is authenticated
+    requires: Job.userId = User.id
+
+    ensures: Job.deleted
+    ensures: Job.notes cascade-deleted
+    -- Tags are disconnected (many-to-many), not deleted.
+}
+
+rule SendJobToQueue {
+    when: User creates a Job via the "Send to Queue" option
+
+    requires: User is authenticated
+
+    ensures: StagedVacancy.created(
+        source_board: "manual",
+        source: "manual",
+        status: "staged",
+        title: resolved from JobTitle.label,
+        employer_name: resolved from Company.label,
+        location: resolved from Location.label?,
+        description: job_description?,
+        job_url: job_url?
+    )
+
+    -- Does NOT create a Job. Creates a StagedVacancy for later review.
+    -- Name resolution: IDs → labels via Prisma lookups before insertion.
+}
+
+-- === Job List & Export ===
+
+rule GetJobsList {
+    when: User requests paginated job list
+
+    requires: User is authenticated
+
+    ensures: Jobs returned where userId = User.id
+    ensures: Paginated by (page, limit) with total count
+    ensures: Filterable by status value or job type
+    ensures: Searchable across title, company, location, description
+    ensures: Ordered by created_at descending
+}
+
+rule ExportJobsCSV {
+    when: User exports jobs as CSV
+
+    requires: User is authenticated
+
+    ensures: All jobs for User.id yielded in chunks (page_size = 200)
+    ensures: Iterator pattern — memory-efficient for large datasets
+}
+
+-- === Notes ===
+
+rule GetNotesByJobId {
+    when: User requests notes for a Job
+
+    requires: User is authenticated
+    requires: Job.userId = User.id   -- verify job ownership first
+
+    ensures: Notes returned where jobId = job_id AND userId = User.id
+    ensures: Ordered by created_at descending
+    ensures: Each note annotated with is_edited flag
+}
+
+rule AddNote {
+    when: User adds a note to a Job
+
+    requires: User is authenticated
+    requires: Job.userId = User.id   -- verify job ownership first
+
+    ensures: Note.created(
+        job: job,
+        content: validated_content
+    )
+}
+
+rule UpdateNote {
+    when: User edits a note
+
+    requires: User is authenticated
+    requires: Note.userId = User.id
+    requires: Note.id is provided
+
+    ensures: Note.content = new_content
+    ensures: Note.updated_at = now
+}
+
+rule DeleteNote {
+    when: User deletes a note
+
+    requires: User is authenticated
+    requires: Note.userId = User.id
+
+    ensures: Note.deleted
+}
+
+-- === Tags ===
+
+rule CreateTag {
+    when: User creates a tag
+
+    requires: User is authenticated
+    requires: label is non-empty after trim
+
+    ensures: Tag.upserted(
+        value: label.trim().toLowerCase(),
+        createdBy: User.id
+    )
+
+    -- Upsert: returns existing tag if (value, createdBy) matches.
+    -- This allows combobox "create" to be idempotent.
+}
+
+rule DeleteTag {
+    when: User deletes a tag
+
+    requires: User is authenticated
+    requires: Tag.createdBy = User.id
+    requires: Tag has no linked Jobs
+    requires: Tag has no linked Questions
+
+    ensures: Tag.deleted
+
+    -- Referential integrity: cannot delete a tag still in use.
+    -- UI shows count of linked jobs and questions.
+}
+
+-- === Company Blacklist ===
+
+rule AddBlacklistEntry {
+    when: User adds a company to the blacklist
+
+    requires: User is authenticated
+
+    ensures: CompanyBlacklist.created(
+        pattern: pattern,
+        match_type: match_type,
+        reason: reason?
+    )
+}
+
+rule CheckAgainstBlacklist {
+    when: Vacancy pipeline processes staged vacancies
+
+    requires: User has blacklist entries
+
+    ensures:
+        for each staged_vacancy:
+            if employer_name matches any blacklist entry:
+                staged_vacancy is filtered out
+
+    -- Match logic:
+    --   exact: employer_name = pattern (case-insensitive)
+    --   contains: employer_name contains pattern
+    --   starts_with: employer_name starts with pattern
+    --   ends_with: employer_name ends with pattern
+}
+
+-- === Shared Entity Creation (On-Demand) ===
+
+rule CreateLocation {
+    when: User creates a location via combobox
+
+    requires: User is authenticated
+    requires: label is non-empty after trim
+
+    ensures:
+        if existing location with (value, createdBy) exists:
+            return existing
+        else:
+            Location.created(label, value: label.trim().toLowerCase())
+}
+
+rule CreateJobSource {
+    when: User creates a job source via combobox
+
+    requires: User is authenticated
+    requires: label is non-empty after trim
+
+    ensures:
+        if existing source with (value, createdBy) exists:
+            return existing
+        else:
+            JobSource.created(label, value: label.trim().toLowerCase())
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant JobOwnership {
+    -- Every Job read, update, and delete operation MUST include userId = User.id
+    -- in the Prisma where clause. This is the primary IDOR defence.
+    -- Pattern: findFirst({ where: { id, userId } }) for reads
+    -- Pattern: update/delete({ where: { id, userId } }) for mutations
+    for all operations on Job:
+        query.where.userId = authenticated_user.id
+}
+
+invariant NoteOwnership {
+    -- Notes are double-scoped: jobId + userId.
+    -- Read operations verify job ownership first, then filter notes by userId.
+    for all operations on Note:
+        query.where.userId = authenticated_user.id
+}
+
+invariant TagReferentialIntegrity {
+    -- Tags cannot be deleted while linked to Jobs or Questions.
+    -- The UI must show linked counts before allowing deletion.
+    for tag in Tag:
+        if tag.jobs.count > 0 or tag.questions.count > 0:
+            tag.delete is rejected
+}
+
+invariant SharedEntityIdempotency {
+    -- Location, JobSource, and JobTitle creation is idempotent.
+    -- If (value, createdBy) already exists, the existing entity is returned.
+    -- This supports combobox "create or select" UX.
+}
+
+invariant BlacklistPatternMatching {
+    -- Company blacklist matches are case-insensitive.
+    -- The match_type determines the comparison operator.
+    -- Blacklist is evaluated during the vacancy pipeline dedup phase.
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+-- Q1: Should JobStatus be user-scoped (custom statuses per user)?
+--     Currently global — all users share the same status values.
+--     This limits customisation but simplifies administration.
+
+-- Q2: Should the Export endpoint require its own auth check at the route level?
+--     Currently relies on getJobsIterator → getCurrentUser() internally.
+--     See security-rules.allium for defense-in-depth recommendation.
+
+-- Q3: Should match_score and match_data be a separate entity (JobMatch)?
+--     Currently embedded on the Job entity. Separating would allow
+--     multiple match evaluations per job.

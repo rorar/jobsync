@@ -1,0 +1,286 @@
+-- allium: 3
+-- i18n-system.allium
+
+-- Scope: Internationalization system — adapter pattern for translations
+-- Includes: Client-side useTranslations() hook, server-side t() function,
+--   4 locales (en, de, fr, es), locale resolution, namespace-based
+--   dictionary organization, date/number formatting, adapter pattern
+-- Excludes:
+--   - Dictionary content (specific translation strings)
+--   - LinguiJS migration internals (future)
+--   - EU API locale propagation (handled by EURES/ESCO connectors)
+
+-- Owner: i18n System (src/i18n/)
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity NextAuth {
+    -- Session management. Not directly used by i18n but the locale
+    -- cookie is set alongside the session.
+}
+
+external entity Intl {
+    -- Browser Intl API. Used by formatters for locale-aware date/number formatting.
+}
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum SupportedLocale {
+    en      -- English (default)
+    de      -- German (Deutsch)
+    fr      -- French (Francais)
+    es      -- Spanish (Espanol)
+}
+
+------------------------------------------------------------
+-- Architecture: Adapter Pattern
+------------------------------------------------------------
+
+-- The i18n system uses an ADAPTER PATTERN with two entry points:
+--
+--   @/i18n          — Client-safe. useTranslations() hook, formatters, locale utils.
+--   @/i18n/server   — Server-only. t() function, getUserLocale(), server formatters.
+--
+-- Both entry points expose the same translation API but for different contexts.
+-- This design allows switching from the current dictionary-based system to
+-- LinguiJS macros without changing consumer code.
+--
+-- IMPORT RULES:
+--   Client components: import { useTranslations } from "@/i18n"
+--   Server components: import { t, getUserLocale } from "@/i18n/server"
+--   NEVER import from: @/i18n/dictionaries, @/i18n/use-translations,
+--                       @/lib/formatters, @/lib/locale
+--   These are internal modules — always use the adapter entry points.
+
+------------------------------------------------------------
+-- Entities
+------------------------------------------------------------
+
+entity Locale {
+    code: String            -- "en", "de", "fr", "es"
+    name: String            -- "English", "German", etc.
+    native_name: String     -- "English", "Deutsch", etc.
+    flag: String            -- ISO country code for flag icon ("gb", "de", "fr", "es")
+
+    @invariant
+        -- The SUPPORTED_LOCALES array defines exactly 4 locales.
+        -- DEFAULT_LOCALE is "en".
+        -- LOCALE_MAP provides O(1) lookup by code.
+}
+
+entity Dictionary {
+    locale: SupportedLocale
+    keys: Map<String, String>       -- flat key-value map
+
+    @invariant
+        -- All keys that exist in the English dictionary MUST exist in all 4 locales.
+        -- Missing translations fall back to the key itself (not to English).
+        -- The fallback-to-key behavior makes missing translations immediately visible.
+}
+
+entity Namespace {
+    -- Dictionaries are organized by domain namespace.
+    -- Each namespace is a separate file in src/i18n/dictionaries/.
+
+    namespaces: [
+        core,           -- nav, auth, common, settings, profile (in dictionaries.ts)
+        dashboard,      -- dashboard widgets and stats
+        jobs,           -- job CRUD, filtering, status
+        activities,     -- activity tracking
+        tasks,          -- task management
+        automations,    -- automation wizard, scheduling, matching
+        profile,        -- profile and resume management
+        questions,      -- question bank
+        admin,          -- administration features
+        settings,       -- settings page (separate from core settings)
+        staging,        -- staged vacancy pipeline
+        notifications,  -- notification messages
+        api,            -- public API key management
+        blacklist,      -- company blacklist
+        deck            -- deck/card view
+    ]
+
+    @invariant
+        -- Namespaces are merged into a single flat dictionary per locale
+        -- at import time via mergeDictionaries().
+        -- Key naming convention: namespace.camelCaseKey
+        -- Example: "jobs.addNote", "automations.createAutomation"
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- === Client-Side Translation ===
+
+rule UseTranslations {
+    when: Client component needs translated text
+
+    ensures: useTranslations() hook called
+    ensures: Locale resolved from:
+        1. localeOverride parameter (if provided)
+        2. document.documentElement.lang attribute
+        3. "en" fallback
+    ensures: Dictionary loaded for resolved locale
+    ensures: t(key) returns translated string or key itself as fallback
+    ensures: Hook returns { t, locale } tuple
+
+    -- The html lang attribute is set by the root layout based on the
+    -- NEXT_LOCALE cookie. This is the primary locale source for client code.
+}
+
+-- === Server-Side Translation ===
+
+rule ServerTranslation {
+    when: Server component or server action needs translated text
+
+    ensures: t(locale, key) called with explicit locale
+    ensures: Locale obtained via getUserLocale() or getLocaleFromCookie()
+    ensures: Dictionary loaded for the locale
+    ensures: Returns translated string or key itself as fallback
+
+    -- Server components cannot read document.documentElement.lang.
+    -- They must explicitly obtain the locale from cookies/DB.
+}
+
+-- === Locale Resolution ===
+
+rule ResolveLocale {
+    when: System needs to determine the user's locale
+
+    ensures: Resolution chain:
+        Client:
+            1. document.documentElement.lang
+            2. "en" fallback
+        Server:
+            1. NEXT_LOCALE cookie value
+            2. "en" fallback
+
+    ensures: isValidLocale(code) validates against LOCALE_MAP
+    ensures: Invalid locale codes fall back to "en"
+}
+
+-- === Date and Number Formatting ===
+
+rule FormatDates {
+    when: User-visible date needs to be displayed
+
+    ensures: Use locale-aware formatters from @/i18n or @/i18n/server:
+        formatDateShort(date, locale)    -- "23. Marz 2026" (de) / "Mar 23, 2026" (en)
+        formatDate(date, locale)         -- locale-appropriate format
+        formatDateTime(date, locale)     -- includes time
+        formatISODate(date)              -- machine-readable, locale-independent
+
+    ensures: NEVER use hardcoded date format strings
+    ensures: NEVER use date-fns format() without locale parameter
+
+    -- Formatters use Intl.DateTimeFormat under the hood.
+    -- formatISODate() is the only locale-independent formatter (for CSV, data keys).
+}
+
+rule FormatNumbers {
+    when: User-visible number needs to be displayed
+
+    ensures: Use locale-aware formatters:
+        formatNumber(value, locale)      -- "1.234" (de) / "1,234" (en)
+        formatPercent(value, locale)     -- "85 %" (de) / "85%" (en)
+        formatCurrency(value, locale)    -- locale-aware currency display
+        formatDecimal(value, locale)     -- decimal formatting
+
+    ensures: NEVER use value.toLocaleString() without explicit locale
+    ensures: NEVER use hardcoded thousand/decimal separators
+}
+
+-- === Adding Translation Keys ===
+
+rule AddTranslationKey {
+    when: Developer adds a new UI string
+
+    requires: Key added to appropriate namespace file in src/i18n/dictionaries/
+
+    ensures: Translation provided for ALL 4 locales (en, de, fr, es)
+    ensures: Key follows naming convention: namespace.camelCaseKey
+    ensures: Validated via dictionary consistency check (bun run test)
+
+    -- Missing translations in any locale will render the key string itself,
+    -- making them immediately visible in the UI as untranslated.
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant AllLocalesCovered {
+    -- Every translation key MUST exist in all 4 supported locales.
+    -- If a key exists in English, it must also exist in de, fr, and es.
+    -- Dictionary consistency is validated by automated tests.
+    for all keys in Dictionary("en"):
+        key exists in Dictionary("de")
+        key exists in Dictionary("fr")
+        key exists in Dictionary("es")
+}
+
+invariant AdapterEntryPointsOnly {
+    -- Consumer code MUST import from @/i18n or @/i18n/server.
+    -- NEVER import directly from:
+    --   @/i18n/dictionaries (internal dictionary module)
+    --   @/i18n/use-translations (internal hook implementation)
+    --   @/lib/formatters (internal formatter functions)
+    --   @/lib/locale (internal locale resolution)
+    -- The adapter entry points allow switching implementations without
+    -- changing consumer code (e.g., migrating to LinguiJS).
+}
+
+invariant ServerOnlyBarrier {
+    -- @/i18n/server.ts imports "server-only" package.
+    -- Importing it in a client component will cause a build error.
+    -- This prevents accidental use of server-only APIs in the browser.
+    import "@/i18n/server" in client component:
+        build_error
+}
+
+invariant LocaleAwareFormatting {
+    -- All user-visible dates and numbers MUST use locale-aware formatters.
+    -- Never use hardcoded format strings or locale-less formatting.
+    -- The locale comes from useTranslations() on client or getUserLocale() on server.
+    for all displayed dates and numbers:
+        formatter receives explicit locale parameter
+}
+
+invariant FallbackBehavior {
+    -- Missing translation keys return the key string itself (not an error).
+    -- Missing locale falls back to "en" (not null or empty).
+    -- This ensures the application never crashes due to missing translations
+    -- and makes untranslated strings immediately visible for fixing.
+    for t(key): if key not in dictionary: return key
+    for getDictionary(locale): if locale unknown: return english dictionary
+}
+
+invariant EuApiLocaleIntegration {
+    -- EURES, ESCO, and Eurostat API requests use the user's current locale.
+    -- The NEXT_LOCALE cookie is read by EU API proxy routes.
+    -- This ensures search results and metadata are in the user's language.
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+-- Q1: Should the system support user-added locales beyond the built-in 4?
+--     Currently hardcoded to en, de, fr, es.
+
+-- Q2: Should missing translations fall back to the English value instead
+--     of the key itself? Currently falling back to the key makes gaps
+--     more visible but gives a worse user experience.
+
+-- Q3: Should the LinguiJS migration (mentioned in README) be prioritized?
+--     The adapter pattern is in place to support it, but the current
+--     dictionary approach works and is simpler.
+
+-- Q4: Should translation keys be type-safe (branded types instead of string)?
+--     Currently TranslationKey is just a string alias, so typos are not
+--     caught at compile time.

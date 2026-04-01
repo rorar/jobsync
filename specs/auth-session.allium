@@ -1,0 +1,226 @@
+-- allium: 3
+-- auth-session.allium
+
+-- Scope: Authentication and session management
+-- Includes: Signup, Signin, Session (JWT), Password hashing,
+--   Middleware authorization, Route protection, User model
+-- Excludes:
+--   - API key authentication (see api-key-management.allium)
+--   - Module credentials (see module-lifecycle.allium)
+--   - OAuth providers (not implemented, Credentials only)
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity NextAuth {
+    -- NextAuth v5 framework. Provides JWT sessions, CSRF protection,
+    -- and the Credentials provider. Configured in auth.ts + auth.config.ts.
+}
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum AuthErrorType {
+    credentials_signin  -- Wrong email or password
+    general_error       -- Unknown auth error
+}
+
+------------------------------------------------------------
+-- Entities and Variants
+------------------------------------------------------------
+
+entity User {
+    name: String
+    email: String               -- unique
+    password: String            -- bcrypt hash (10 salt rounds)
+    created_at: Timestamp
+
+    @invariant
+        -- Email is globally unique (enforced at DB level).
+        -- Password is NEVER stored in plaintext.
+        -- Password minimum length: 6 characters (enforced at Credentials provider level).
+}
+
+entity Session {
+    user_id: String
+    -- JWT-based. Token contains user.id (from jwt callback).
+    -- Session.user.id populated from token.id || token.sub (session callback).
+
+    @invariant
+        -- Sessions are signed with AUTH_SECRET.
+        -- AUTH_SECRET MUST be stable across server restarts.
+        -- Ephemeral secrets invalidate all sessions (see docker-entrypoint.sh fix).
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config AuthConfig {
+    password_hash_rounds: 10         -- bcrypt salt rounds
+    password_min_length: 6           -- enforced at Credentials provider
+    signin_delay_ms: 1000            -- rate limiting delay per attempt
+    auth_secret: env("AUTH_SECRET")  -- MUST be pre-set, NEVER auto-generated
+    custom_pages:
+        sign_in: "/signin"
+        error: "/signin"
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- === Signup ===
+
+rule Signup {
+    when: User submits signup form
+
+    requires: name.length >= 2
+    requires: email is valid email format
+    requires: password.length >= 6
+
+    ensures:
+        if user with email already exists:
+            return generic error
+            -- "Unable to create account. Please try a different email or sign in."
+            -- Generic to prevent user enumeration (CWE-204).
+            -- MUST NOT reveal whether the email is registered.
+        else:
+            User.created(
+                name: name,
+                email: email,
+                password: bcrypt.hash(password, 10)
+            )
+            -- Seed default JobSources from JOB_SOURCES constant
+            -- Seed default JobStatuses via upsert from JOB_STATUSES constant
+}
+
+-- === Signin ===
+
+rule Signin {
+    when: User submits signin form
+
+    requires: email is valid email format
+    requires: password is non-empty
+
+    ensures: delay(1000ms) before processing  -- brute force mitigation
+
+    ensures:
+        if credentials valid (email exists AND bcrypt.compare matches):
+            session created with user.id in JWT token
+            return null (success)
+        else:
+            return "Invalid credentials."
+            -- Generic error — does NOT distinguish "email not found" from "wrong password"
+}
+
+rule SigninFormSecurity {
+    -- Defense-in-depth for credential protection during form submission.
+    -- See security-rules.allium for full analysis.
+
+    ensures: form element has method="POST"
+    ensures: form element has action=""
+    ensures: useEffect strips email/password from URL on mount
+    ensures: middleware redirects auth routes containing credential params (303)
+}
+
+-- === Session Management ===
+
+rule SessionCreation {
+    when: Credentials provider returns a valid user
+
+    ensures: JWT token created with user.id embedded
+    ensures: Token signed with AUTH_SECRET
+}
+
+rule SessionResolution {
+    when: Server action or API route calls auth()
+
+    ensures: session.user.id populated from token.id or token.sub
+    ensures: getCurrentUser() returns { id, name, email } or null
+}
+
+-- === Middleware Authorization ===
+
+rule MiddlewareProtection {
+    when: Request matches middleware matcher
+
+    -- Matcher includes: /dashboard, /dashboard/*, /signin, /signup
+    -- Does NOT include: /api/* (each route self-protects)
+
+    ensures:
+        if path starts with /dashboard:
+            if authenticated: allow
+            if not authenticated: reject (redirect to /signin)
+        if path is /signin or /signup:
+            sanitize credential query params (see SigninFormSecurity)
+            add security headers
+        if authenticated AND path is non-dashboard:
+            redirect to /dashboard
+}
+
+rule RootPageRouting {
+    when: User visits /
+
+    ensures:
+        if authenticated: redirect to /dashboard
+        if no users exist: redirect to /signup
+        else: redirect to /signin
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant PasswordNeverPlaintext {
+    -- Passwords are always stored as bcrypt hashes.
+    -- The bcrypt compare function is the ONLY way to verify passwords.
+    -- Plain-text passwords exist only in memory during the signin flow.
+    for all User: User.password starts with "$2a$" or "$2b$"
+}
+
+invariant AuthSecretStability {
+    -- AUTH_SECRET must be stable across server restarts and container recreations.
+    -- The docker-entrypoint.sh MUST fail startup if AUTH_SECRET is not set.
+    -- An ephemeral secret invalidates all active sessions.
+    auth_secret is pre-configured, not auto-generated
+}
+
+invariant GenericAuthErrors {
+    -- Authentication error messages MUST NOT reveal whether an email is registered.
+    -- Signin: returns "Invalid credentials." for both unknown-email and wrong-password.
+    -- Signup: returns generic message for existing email.
+    -- This prevents user enumeration attacks (CWE-204).
+}
+
+invariant SecurityHeadersOnAuthRoutes {
+    -- Middleware adds to all matched routes:
+    --   Referrer-Policy: strict-origin-when-cross-origin
+    --   X-Content-Type-Options: nosniff
+    --   X-Frame-Options: DENY
+    --   Permissions-Policy: camera=(), microphone=(), geolocation=()
+    --   Strict-Transport-Security: max-age=31536000 (production only)
+}
+
+invariant CredentialURLProtection {
+    -- Three-layer defense against credentials appearing in URLs:
+    -- Layer 1 (Form): method="POST" prevents native GET fallback
+    -- Layer 2 (Client): useEffect strips credential params from URL
+    -- Layer 3 (Middleware): 303 redirect strips params server-side
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+-- Q1: Should we add exponential backoff for failed login attempts?
+--     Currently: fixed 1-second delay. No account lockout.
+
+-- Q2: Should middleware matcher be expanded to include /api/* routes?
+--     Currently each API route self-protects. Some have been missed (export).
+--     See security-rules.allium for analysis.
+
+-- Q3: Should we add CSRF protection beyond NextAuth's built-in?
+--     NextAuth provides CSRF tokens. No additional measures currently.
