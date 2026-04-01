@@ -20,6 +20,12 @@ jest.mock("@/lib/encryption", () => ({
   ),
 }));
 
+// Mock throttle to always allow writes (so lastUsedAt tests pass deterministically)
+jest.mock("@/lib/api/last-used-throttle", () => ({
+  shouldWriteLastUsedAt: jest.fn(() => true),
+  resetLastUsedThrottle: jest.fn(),
+}));
+
 import { resolveApiKey } from "@/lib/api-key-resolver";
 import { decrypt } from "@/lib/encryption";
 

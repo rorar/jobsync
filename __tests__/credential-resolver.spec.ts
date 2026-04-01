@@ -19,6 +19,12 @@ jest.mock("@/lib/encryption", () => ({
   decrypt: jest.fn(),
 }));
 
+// Mock throttle to always allow writes (so lastUsedAt tests pass deterministically)
+jest.mock("@/lib/api/last-used-throttle", () => ({
+  shouldWriteLastUsedAt: jest.fn(() => true),
+  resetLastUsedThrottle: jest.fn(),
+}));
+
 import { resolveCredential } from "@/lib/connector/credential-resolver";
 import { decrypt } from "@/lib/encryption";
 import { CredentialType, type CredentialRequirement } from "@/lib/connector/manifest";
