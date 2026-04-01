@@ -85,7 +85,7 @@ export default function PublicApiKeySettings() {
         toast({
           variant: "destructive",
           title: t("api.createFailed"),
-          description: result.message,
+          description: result.message ? t(result.message) : undefined,
         });
       }
     } catch (error) {
@@ -110,7 +110,7 @@ export default function PublicApiKeySettings() {
         toast({
           variant: "destructive",
           title: t("api.revokeFailed"),
-          description: result.message,
+          description: result.message ? t(result.message) : undefined,
         });
       }
     } catch (error) {
@@ -131,7 +131,7 @@ export default function PublicApiKeySettings() {
         toast({
           variant: "destructive",
           title: t("api.deleteFailed"),
-          description: result.message,
+          description: result.message ? t(result.message) : undefined,
         });
       }
     } catch (error) {
