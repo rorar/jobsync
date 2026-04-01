@@ -83,6 +83,37 @@ describe("actionToResponse", () => {
     expect(res.status).toBe(500);
   });
 
+  // i18n key pattern tests (S1b: inferErrorStatus must handle both English and i18n keys)
+  it("maps i18n key 'api.notAuthenticated' to 401", async () => {
+    const res = actionToResponse({ success: false, message: "api.notAuthenticated" });
+    expect(res.status).toBe(401);
+  });
+
+  it("maps i18n key 'blacklist.entryNotFound' to 404", async () => {
+    const res = actionToResponse({ success: false, message: "blacklist.entryNotFound" });
+    expect(res.status).toBe(404);
+  });
+
+  it("maps i18n key 'blacklist.invalidMatchType' to 400", async () => {
+    const res = actionToResponse({ success: false, message: "blacklist.invalidMatchType" });
+    expect(res.status).toBe(400);
+  });
+
+  it("maps i18n key 'api.keyNameRequired' to 400", async () => {
+    const res = actionToResponse({ success: false, message: "api.keyNameRequired" });
+    expect(res.status).toBe(400);
+  });
+
+  it("maps i18n key 'blacklist.alreadyExists' to 409", async () => {
+    const res = actionToResponse({ success: false, message: "blacklist.alreadyExists" });
+    expect(res.status).toBe(409);
+  });
+
+  it("maps i18n key 'api.keyAlreadyRevoked' to 409", async () => {
+    const res = actionToResponse({ success: false, message: "api.keyAlreadyRevoked" });
+    expect(res.status).toBe(409);
+  });
+
   it("respects custom status override", async () => {
     const result = { success: true, data: { id: "1" } };
     const res = actionToResponse(result, { status: 201 });

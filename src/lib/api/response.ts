@@ -117,18 +117,32 @@ export function noContentResponse(): NextResponse {
 
 function inferErrorStatus(message: string): number {
   const lower = message.toLowerCase();
+
+  // Match i18n key patterns (e.g., "api.notAuthenticated", "blacklist.entryNotFound")
+  if (lower.includes("notauthenticated") || lower.includes("notauthorized")) {
+    return 401;
+  }
+  if (lower.includes("notfound") || lower.includes("entrynotfound")) {
+    return 404;
+  }
+  if (lower.includes("invalid") || lower.includes("required") || lower.includes("toolong") || lower.includes("provide")) {
+    return 400;
+  }
+  if (lower.includes("alreadyexists") || lower.includes("alreadyrevoked") || lower.includes("duplicate")) {
+    return 409;
+  }
+
+  // Legacy English message patterns (for backwards compatibility)
   if (lower.includes("not authenticated") || lower.includes("not authorized")) {
     return 401;
   }
   if (lower.includes("not found")) {
     return 404;
   }
-  if (lower.includes("validation") || lower.includes("invalid") || lower.includes("provide")) {
+  if (lower.includes("validation") || lower.includes("already exists")) {
     return 400;
   }
-  if (lower.includes("already exists") || lower.includes("duplicate")) {
-    return 409;
-  }
+
   return 500;
 }
 

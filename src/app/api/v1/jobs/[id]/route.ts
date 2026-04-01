@@ -137,7 +137,9 @@ async function buildUpdateData(
   const data: Record<string, unknown> = {};
 
   // 1. Resolve independent relation lookups in parallel
+  // Use separate variables for resolver results to avoid polluting the Prisma data object (BS-02)
   const resolvers: Promise<void>[] = [];
+  let resolvedStatus: { id: string } | null | undefined;
 
   if (updates.title !== undefined) {
     resolvers.push(
@@ -167,8 +169,7 @@ async function buildUpdateData(
   if (updates.status !== undefined) {
     resolvers.push(
       resolveStatus(updates.status).then((s) => {
-        // Stash in data temporarily; checked after await
-        data._statusResolved = s;
+        resolvedStatus = s;
       }),
     );
   }
@@ -188,12 +189,10 @@ async function buildUpdateData(
 
   // Check status resolution
   if (updates.status !== undefined) {
-    const resolved = data._statusResolved as { id: string } | null;
-    delete data._statusResolved;
-    if (!resolved) {
+    if (!resolvedStatus) {
       return { error: errorResponse("VALIDATION_ERROR", "Invalid job status", 400) };
     }
-    data.statusId = resolved.id;
+    data.statusId = resolvedStatus.id;
   }
 
   // 2. Map simple scalar fields
