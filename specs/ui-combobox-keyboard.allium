@@ -1,0 +1,397 @@
+-- allium: 3
+-- ui-combobox-keyboard.allium
+
+-- Scope: Keyboard interaction rules for all Combobox variants in JobSync
+-- Includes: Single-select combobox, multi-select combobox, tag input, hierarchical location combobox
+-- Excludes:
+--   - Select dropdowns (closed selection, no typing — native keyboard handled by Radix)
+--   - Mouse/touch interaction (existing click handlers remain unchanged)
+--   - Visual styling and layout
+-- Dependencies: Uses Radix Popover + cmdk Command primitives
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum ComboboxMode { single_select | multi_select }
+
+enum KeyAction { enter | tab | escape | arrow_down | arrow_up | typing }
+
+enum PopoverState { open | closed }
+
+enum SelectionOutcome { created | selected | added | rejected_max_limit | no_op }
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value KeyboardEvent {
+    key: KeyAction
+    input_value: String
+    has_highlighted_item: Boolean
+    highlighted_item_has_children: Boolean
+}
+
+value SelectionResult {
+    outcome: SelectionOutcome
+    value: String?
+}
+
+------------------------------------------------------------
+-- Entities
+------------------------------------------------------------
+
+entity Combobox {
+    mode: ComboboxMode
+    creatable: Boolean
+    hierarchical: Boolean
+    popover_state: PopoverState
+    input_value: String
+    selected_value: String?
+    max_items: Integer?
+    current_count: Integer
+    uses_manual_filter: Boolean
+
+    -- Derived
+    is_max_reached: max_items != null and current_count >= max_items
+    has_input: length(input_value) > 0
+    has_filtered_results: filtered_result_count > 0
+
+    filtered_result_count: Integer
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    default_max_tags: Integer = 10
+    default_max_locations: Integer = 10
+    default_max_keywords: Integer = 10
+    debounce_ms: Integer = 300
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- =============================================================================
+-- Enter Key Behaviour
+-- =============================================================================
+
+rule EnterWithInputCreatable {
+    -- User types text and presses Enter in a creatable combobox
+    when: KeyPress(combobox, event)
+    requires:
+        event.key = enter
+        combobox.has_input
+        combobox.popover_state = open
+        combobox.creatable
+        not combobox.is_max_reached
+    ensures:
+        if combobox.mode = single_select:
+            -- Create option, select it, close popover
+            combobox.selected_value = event.input_value
+            combobox.input_value = ""
+            combobox.popover_state = closed
+            SelectionPerformed(combobox, outcome: created)
+        else:
+            -- Multi-select: add to collection, keep popover open for more
+            combobox.current_count = combobox.current_count + 1
+            combobox.input_value = ""
+            SelectionPerformed(combobox, outcome: added)
+
+    @guidance
+        -- preventDefault on the Enter event to avoid form submission.
+        -- For multi-select, the popover stays open so the user can
+        -- continue adding items without re-opening.
+        --
+        -- FRAMEWORK CONSTRAINT (cmdk): Components using custom Enter
+        -- handling MUST set shouldFilter={false} on the Command component
+        -- and handle filtering manually. cmdk's native Enter handler
+        -- selects the highlighted CommandItem via onSelect — this conflicts
+        -- with custom onKeyDown Enter handlers when shouldFilter is active.
+        -- Use e.preventDefault() + e.stopPropagation() to fully suppress
+        -- cmdk's native Enter behaviour.
+}
+
+rule EnterWithInputNonCreatable {
+    -- User types text and presses Enter in a non-creatable combobox
+    when: KeyPress(combobox, event)
+    requires:
+        event.key = enter
+        combobox.has_input
+        combobox.popover_state = open
+        not combobox.creatable
+        combobox.has_filtered_results
+        event.has_highlighted_item
+    ensures:
+        if combobox.mode = single_select:
+            combobox.popover_state = closed
+            combobox.input_value = ""
+            SelectionPerformed(combobox, outcome: selected)
+        else:
+            combobox.current_count = combobox.current_count + 1
+            combobox.input_value = ""
+            SelectionPerformed(combobox, outcome: added)
+
+    @guidance
+        -- cmdk handles highlight-and-select natively via CommandItem.onSelect.
+        -- This rule formalises that Enter on a highlighted item selects it.
+        -- preventDefault to avoid form submission.
+}
+
+rule EnterAtMaxLimit {
+    -- User presses Enter but max items already reached (multi-select only)
+    when: KeyPress(combobox, event)
+    requires:
+        event.key = enter
+        combobox.has_input
+        combobox.popover_state = open
+        combobox.is_max_reached
+    ensures:
+        SelectionPerformed(combobox, outcome: rejected_max_limit)
+        UserWarned(combobox, reason: max_limit_reached)
+
+    @guidance
+        -- Show a toast or inline warning. Do NOT silently swallow the input.
+        -- The input_value is preserved so the user sees what they typed.
+}
+
+rule EnterWithoutInput {
+    -- User presses Enter with empty input — cmdk selects highlighted item
+    when: KeyPress(combobox, event)
+    requires:
+        event.key = enter
+        not combobox.has_input
+        combobox.popover_state = open
+    ensures:
+        if event.has_highlighted_item:
+            -- Delegate to cmdk native behaviour: select highlighted item
+            if combobox.mode = single_select:
+                combobox.popover_state = closed
+                SelectionPerformed(combobox, outcome: selected)
+            else:
+                combobox.current_count = combobox.current_count + 1
+                SelectionPerformed(combobox, outcome: added)
+        else:
+            SelectionPerformed(combobox, outcome: no_op)
+
+    @guidance
+        -- cmdk always highlights the first item by default. Enter with empty
+        -- input selects that highlighted item via cmdk's native handler.
+        -- Do NOT preventDefault here — let cmdk handle it.
+        -- Custom onKeyDown should only intercept Enter when has_input is true.
+}
+
+rule EnterOnHierarchicalNode {
+    -- Enter/select on a hierarchical node with children toggles expand/collapse
+    when: KeyPress(combobox, event)
+    requires:
+        event.key = enter
+        combobox.popover_state = open
+        combobox.hierarchical
+        event.has_highlighted_item
+        event.highlighted_item_has_children
+        not combobox.has_input
+    ensures:
+        HierarchyToggled(combobox, node: event)
+        -- No selection, no popover close, no input change
+
+    @guidance
+        -- EuresLocationCombobox: Enter on a country with NUTS regions
+        -- toggles the expand/collapse state of that node. The user must
+        -- drill into a region or use "All of {Country}" to select.
+        -- When has_input is true (user is searching), Enter on a node
+        -- with children DOES select it directly (bypasses expand/collapse).
+        -- This matches the existing EuresLocationCombobox.onSelect logic.
+}
+
+-- =============================================================================
+-- Tab Key Behaviour
+-- =============================================================================
+
+rule TabClosesPopover {
+    -- Tab always closes the popover and allows natural focus movement
+    when: KeyPress(combobox, event)
+    requires:
+        event.key = tab
+        combobox.popover_state = open
+    ensures:
+        combobox.popover_state = closed
+        combobox.input_value = ""
+        FocusMovedToNextField(combobox)
+
+    @guidance
+        -- CRITICAL: Do NOT call preventDefault on Tab.
+        -- The browser must handle focus movement natively.
+        -- Only close the popover via setOpen(false) / setIsPopoverOpen(false).
+        -- Clearing input_value prevents stale filter text on next open.
+}
+
+-- =============================================================================
+-- Escape Key Behaviour
+-- =============================================================================
+
+rule EscapeClosesPopover {
+    -- Escape closes the popover without selecting, focus stays on trigger
+    when: KeyPress(combobox, event)
+    requires:
+        event.key = escape
+        combobox.popover_state = open
+    ensures:
+        combobox.popover_state = closed
+        combobox.input_value = ""
+        FocusReturnedToTrigger(combobox)
+
+    @guidance
+        -- Radix Popover handles Escape natively. This rule documents
+        -- expected behaviour. Input is cleared to prevent stale state.
+}
+
+-- =============================================================================
+-- Arrow Key Behaviour
+-- =============================================================================
+
+rule ArrowNavigatesOptions {
+    -- Arrow keys navigate through filtered options (cmdk default)
+    when: KeyPress(combobox, event)
+    requires:
+        event.key = arrow_down or event.key = arrow_up
+        combobox.popover_state = open
+        combobox.has_filtered_results
+    ensures:
+        HighlightMoved(combobox, direction: event.key)
+
+    @guidance
+        -- cmdk handles arrow navigation natively. This rule documents
+        -- expected behaviour. No custom onKeyDown needed for arrows.
+}
+
+-- =============================================================================
+-- Typing Behaviour
+-- =============================================================================
+
+rule TypingFiltersResults {
+    -- Any character input updates the filter
+    when: KeyPress(combobox, event)
+    requires:
+        event.key = typing
+        combobox.popover_state = open
+    ensures:
+        combobox.input_value = event.input_value
+        FilterUpdated(combobox, query: event.input_value)
+
+    @guidance
+        -- cmdk handles filtering natively via CommandInput.onValueChange.
+        -- For async search (EuresOccupationCombobox), debounce at config.debounce_ms.
+        -- For local filtering (TagInput, BaseCombobox), filtering is synchronous.
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant PopoverClosedMeansEmptyInput {
+    -- When the popover closes (by any mechanism), input is always cleared
+    for c in Comboboxes:
+        if c.popover_state = closed:
+            c.input_value = ""
+}
+
+invariant MaxLimitRespected {
+    -- Multi-select comboboxes never exceed their configured max
+    for c in Comboboxes:
+        if c.max_items != null:
+            c.current_count <= c.max_items
+}
+
+invariant ManualFilterRequired {
+    -- Components with custom Enter handling must use shouldFilter={false}
+    -- to prevent cmdk's native Enter→select from conflicting
+    for c in Comboboxes:
+        if c.creatable or c.hierarchical:
+            c.uses_manual_filter
+
+    @guidance
+        -- Set shouldFilter={false} on the Command component and implement
+        -- filtering via useMemo or useState. This is required because cmdk's
+        -- built-in filter mode activates native Enter→select on highlighted
+        -- items, which conflicts with custom onKeyDown Enter handlers.
+}
+
+invariant TabNeverPrevented {
+    -- Tab key default behaviour is never suppressed
+    -- The browser always moves focus to the next focusable element
+    for c in Comboboxes:
+        true
+
+    @guidance
+        -- This invariant is not expressible as a data condition.
+        -- It is a behavioural constraint: no onKeyDown handler may
+        -- call e.preventDefault() when e.key === "Tab".
+        -- Enforce via code review and E2E testing.
+}
+
+------------------------------------------------------------
+-- Surfaces
+------------------------------------------------------------
+
+surface ComboboxKeyboardSurface {
+    -- Keyboard interaction boundary between user and combobox component
+    facing user: User
+
+    exposes:
+        combobox.popover_state
+        combobox.input_value
+        combobox.selected_value
+        combobox.is_max_reached
+        combobox.has_filtered_results
+
+    provides:
+        KeyPress(combobox, event)
+
+    @guarantee ConsistentAcrossVariants
+        -- All four combobox variants (BaseCombobox, EuresLocationCombobox,
+        -- EuresOccupationCombobox, TagInput) implement identical keyboard
+        -- behaviour as defined by these rules. The only difference is
+        -- single_select vs multi_select mode.
+
+    @guarantee AccessibleKeyboardNavigation
+        -- All combobox interactions are fully operable via keyboard alone.
+        -- ARIA live regions announce popover open/close state changes.
+        -- Focus is managed predictably: Tab moves forward, Escape returns
+        -- to trigger, Enter confirms selection.
+
+    @guarantee SelectionAnnounced
+        -- Every SelectionPerformed outcome is announced to assistive technology
+        -- via an aria-live="polite" region with role="status".
+        -- Created: "Created [name]". Added: "[name] added, N of M".
+        -- Selected: "[name] selected". Rejected: "Maximum [N] reached".
+        -- Implementation: a <span role="status" aria-live="polite" className="sr-only">
+        -- updated on each SelectionPerformed event.
+
+    @guarantee TriggerAriaExpanded
+        -- All combobox trigger buttons MUST include aria-expanded={open}
+        -- to communicate popover state to screen readers. The trigger
+        -- button MUST also include type="button" to prevent accidental
+        -- form submission when used inside a <form> element.
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+-- RESOLVED: "Should Enter on a highlighted item in multi-select mode close the popover or keep it open?"
+-- Decision: keep open. Multi-select users expect rapid multi-entry without re-opening.
+-- Confirmed by EuresOccupationCombobox reference implementation and design review.
+
+open question "Should typing automatically open a closed popover?"
+-- Currently: user must click or focus the trigger to open. Typing only works when open.
+-- Alternative: if the combobox trigger is focused and user starts typing, auto-open the popover.
+-- Deferred: this would require changes to the Radix Popover trigger pattern.
+
+open question "Should TagInput keep popover open after selection like other multi-select comboboxes?"
+-- Current code: TagInput closes popover after each handleSelect/handleCreate.
+-- Spec says multi-select should keep open. Design review flags this as inconsistent.
+-- Decision: align with spec — keep open. Implementation must change handleSelect/handleCreate.

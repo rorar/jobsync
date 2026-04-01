@@ -1,0 +1,303 @@
+-- allium: 3
+-- event-bus.allium
+
+-- Scope: In-process Event Bus infrastructure for domain event publishing and consumption
+-- Includes: DomainEvent discriminated union, all event types, EventBus contract,
+--           consumer registration, error isolation, ordering guarantees, type safety
+-- Excludes:
+--   - Event persistence / event sourcing (not needed for in-process bus)
+--   - External message brokers (Redis, NATS, Kafka — future if cross-process needed)
+--   - Consumer implementation details (NotificationDispatcher, AuditLogger — separate specs)
+--   - UI rendering (notifications, toasts — covered by notification-dispatch.allium)
+-- Dependencies:
+--   - StagedVacancy, BulkActionType from vacancy-pipeline.allium
+--   - Notification from module-lifecycle.allium
+--   - Automation, AutomationRun from jobsync.allium
+
+-- =============================================================================
+-- Actors
+-- =============================================================================
+
+actor Publisher {
+  -- Any domain service or action that produces events.
+  -- Publishers call EventBus.publish() after completing domain operations.
+}
+
+actor Consumer {
+  -- Any service that subscribes to domain events.
+  -- Consumers register handlers at application startup.
+  -- Examples: NotificationDispatcher, AuditLogger, future CRM/Enrichment services.
+}
+
+-- =============================================================================
+-- Enums
+-- =============================================================================
+
+enum DomainEventType {
+  VacancyPromoted
+  | VacancyDismissed
+  | VacancyStaged
+  | VacancyArchived
+  | VacancyTrashed
+  | BulkActionCompleted
+  | ModuleDeactivated
+  | ModuleReactivated
+  | RetentionCompleted
+  | NotificationCreated
+}
+
+-- =============================================================================
+-- Value Types
+-- =============================================================================
+
+value DomainEvent<T: DomainEventType> {
+  type: T                               -- discriminant field for the union
+  timestamp: DateTime                   -- when the event was published
+  payload: EventPayload<T>              -- typed payload, shape depends on T
+}
+
+-- Typed payloads per event type.
+-- Each payload carries the minimum data consumers need to react.
+-- No entity references — only IDs and scalar values (events are immutable snapshots).
+
+value VacancyPromotedPayload {
+  stagedVacancyId: String
+  jobId: String                         -- the newly created Job
+  userId: String
+}
+
+value VacancyDismissedPayload {
+  stagedVacancyId: String
+  userId: String
+}
+
+value VacancyStagedPayload {
+  stagedVacancyId: String
+  userId: String
+  sourceBoard: String                   -- module ID (e.g. "eures", "jsearch")
+  automationId: String?                 -- null for manual staging
+}
+
+value VacancyArchivedPayload {
+  stagedVacancyId: String
+  userId: String
+}
+
+value VacancyTrashedPayload {
+  stagedVacancyId: String
+  userId: String
+}
+
+value BulkActionCompletedPayload {
+  actionType: String                    -- BulkActionType from vacancy-pipeline
+  itemIds: String[]                     -- IDs of successfully processed items
+  userId: String
+  succeeded: Integer
+  failed: Integer
+}
+
+value ModuleDeactivatedPayload {
+  moduleId: String
+  userId: String                        -- user who deactivated
+  affectedAutomationIds: String[]       -- automations that were paused
+}
+
+value ModuleReactivatedPayload {
+  moduleId: String
+  userId: String                        -- user who reactivated
+  pausedAutomationCount: Integer        -- how many automations remain paused
+}
+
+value RetentionCompletedPayload {
+  userId: String
+  purgedCount: Integer                  -- number of StagedVacancy records deleted
+  hashesCreated: Integer                -- number of DedupHash records created
+}
+
+value NotificationCreatedPayload {
+  notificationId: String
+  userId: String
+  notificationType: String              -- NotificationType from module-lifecycle
+}
+
+-- Handler function type for event consumers.
+value EventHandler<T: DomainEventType> {
+  -- A function that receives a typed DomainEvent and processes it.
+  -- Must not throw — errors are caught by the bus (ErrorIsolation rule).
+  handle: (event: DomainEvent<T>) -> Void
+}
+
+-- Unsubscribe token returned by subscribe().
+value Unsubscribe {
+  -- Calling this function removes the handler from the subscription list.
+  invoke: () -> Void
+}
+
+-- =============================================================================
+-- Contract: EventBus
+-- =============================================================================
+
+contract EventBus {
+  -- The single in-process event bus for the entire application.
+  -- Singleton — one instance shared across all domain services.
+
+  publish<T: DomainEventType>(event: DomainEvent<T>): Void
+    -- Publishes an event to all registered handlers for this event type.
+    -- Synchronous dispatch: handlers execute in registration order.
+    -- Each handler is wrapped in error isolation (see ErrorIsolation rule).
+    -- Returns after all handlers have been invoked (or failed safely).
+
+  subscribe<T: DomainEventType>(
+    eventType: T,
+    handler: EventHandler<T>
+  ): Unsubscribe
+    -- Registers a handler for a specific event type.
+    -- Returns an Unsubscribe function to remove the handler.
+    -- Multiple handlers per event type are supported.
+    -- Handler receives only events matching the subscribed type.
+
+  unsubscribe<T: DomainEventType>(
+    eventType: T,
+    handler: EventHandler<T>
+  ): Void
+    -- Removes a previously registered handler.
+    -- No-op if the handler was not registered.
+
+  reset(): Void
+    -- Removes all subscriptions. Used in tests only.
+}
+
+-- =============================================================================
+-- Rules
+-- =============================================================================
+
+rule ErrorIsolation {
+  -- "One consumer failure must not affect other consumers."
+  -- When a handler throws, the bus catches the error, logs it, and continues
+  -- dispatching to remaining handlers. The publisher is not affected.
+  when: EventBus.publish(event: DomainEvent)
+  let handlers = registered handlers for event.type
+
+  ensures: for_each handler in handlers:
+    try:
+      handler.handle(event)
+    catch error:
+      log.error("[EventBus] Consumer failed for {event.type}", error)
+      -- Continue to next handler. Do NOT rethrow.
+
+  ensures: all handlers are invoked regardless of individual failures
+  ensures: publish() does not throw even if all handlers fail
+
+  @guidance
+    -- This is critical for system stability. A bug in the NotificationDispatcher
+    -- must never prevent the AuditLogger from recording the event.
+    -- Implementation: try/catch per handler invocation, not around the loop.
+}
+
+rule OrderGuarantee {
+  -- "Events are delivered to consumers in publish order per event type."
+  -- When multiple events of the same type are published sequentially,
+  -- consumers receive them in the same order.
+  when: EventBus.publish(event1: DomainEvent<T>) then EventBus.publish(event2: DomainEvent<T>)
+
+  ensures: for_each handler subscribed to T:
+    handler receives event1 before event2
+
+  @guidance
+    -- This is naturally satisfied by synchronous in-process dispatch.
+    -- If the bus is ever replaced with an async transport, this invariant
+    -- must be preserved (e.g., per-type FIFO queue).
+    -- Cross-type ordering is NOT guaranteed and NOT required.
+}
+
+rule TypeSafety {
+  -- "Events form a discriminated union. Consumers receive typed payloads."
+  -- The event's `type` field determines the shape of `payload`.
+  -- Consumers subscribe to a specific DomainEventType and receive
+  -- a narrowed payload type, not a generic Record<string, unknown>.
+
+  ensures: DomainEvent.type discriminates DomainEvent.payload
+  ensures: EventHandler<VacancyPromoted> receives VacancyPromotedPayload
+  ensures: EventHandler<VacancyDismissed> receives VacancyDismissedPayload
+  ensures: EventHandler<VacancyStaged> receives VacancyStagedPayload
+  ensures: EventHandler<VacancyArchived> receives VacancyArchivedPayload
+  ensures: EventHandler<VacancyTrashed> receives VacancyTrashedPayload
+  ensures: EventHandler<BulkActionCompleted> receives BulkActionCompletedPayload
+  ensures: EventHandler<ModuleDeactivated> receives ModuleDeactivatedPayload
+  ensures: EventHandler<ModuleReactivated> receives ModuleReactivatedPayload
+  ensures: EventHandler<RetentionCompleted> receives RetentionCompletedPayload
+  ensures: EventHandler<NotificationCreated> receives NotificationCreatedPayload
+
+  @guidance
+    -- Implementation: TypeScript discriminated union with type narrowing.
+    -- The generic DomainEvent<T> interface + mapped payload types
+    -- give compile-time safety. No runtime type checking needed.
+    -- The existing `DomainEvent<T extends string>` in events/index.ts
+    -- is the starting point — expand with concrete event interfaces.
+}
+
+rule ConsumerRegistration {
+  -- "Consumers register at application startup, not lazily."
+  -- All event handlers must be registered before the first event is published.
+  -- This prevents missed events during early application lifecycle.
+  when: ApplicationStartup
+
+  ensures: NotificationDispatcher.registered(EventBus)
+  ensures: AuditLogger.registered(EventBus) -- optional, may be disabled in production
+
+  @guidance
+    -- Registration happens in a startup module (e.g., src/lib/events/consumers/index.ts).
+    -- Each consumer exports a `register(bus: EventBus)` function.
+    -- The startup module calls all register functions.
+    -- Order of registration determines handler execution order (per ErrorIsolation).
+}
+
+rule StubMigration {
+  -- "All existing emitEvent() calls must be migrated to EventBus.publish()."
+  -- The current stub in src/lib/events/index.ts logs to console only.
+  -- After the bus is built, emitEvent() becomes a thin wrapper around bus.publish().
+  when: EventBusReady
+
+  ensures: emitEvent(event) delegates to EventBus.publish(event)
+  ensures: no direct console.debug calls for domain events remain
+  ensures: all existing event emissions (VacancyPromoted, VacancyDismissed,
+           VacancyStaged, BulkActionCompleted) route through the bus
+
+  @guidance
+    -- Migration strategy: keep the emitEvent() function signature for backward compat.
+    -- Internally, it calls the singleton EventBus instance.
+    -- This is a non-breaking change — callers don't need to update.
+    -- New code should use EventBus.publish() directly.
+}
+
+-- =============================================================================
+-- Invariants
+-- =============================================================================
+
+invariant SingletonBus {
+  ensures: exactly one EventBus instance exists in the application
+  note: "The bus is a Shared Kernel — used by all bounded contexts."
+  note: "Module-scoped singleton in Node.js (import caching)."
+}
+
+invariant NoEventLoss {
+  ensures: every published event is delivered to all registered handlers
+  note: "Handler errors do not constitute event loss (ErrorIsolation catches them)."
+  note: "Events published before any handler is registered ARE lost — see ConsumerRegistration."
+}
+
+invariant ImmutableEvents {
+  ensures: DomainEvent instances are not mutated after creation
+  note: "Events are snapshots. Consumers must not modify the event object."
+  note: "Implementation: Object.freeze() or readonly TypeScript types."
+}
+
+-- =============================================================================
+-- Open Questions
+-- =============================================================================
+
+open question "Should the bus support async handlers (returning Promise)? Current design is synchronous for simplicity, but NotificationDispatcher writes to DB (async)."
+
+open question "Should events be persisted to an EventLog table for audit/replay? Not needed now, but valuable for debugging and future event sourcing."
+
+open question "Should the bus support wildcard subscriptions (subscribe to ALL events)? Useful for AuditLogger, but adds complexity."

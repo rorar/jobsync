@@ -1,0 +1,460 @@
+-- allium: 3
+-- notification-dispatch.allium
+
+-- Scope: Notification Dispatcher — maps domain events to user notifications
+-- Includes: Notification entity, NotificationPreference, dispatch rules,
+--           preference checking, quiet hours, deduplication, channel routing,
+--           batch summaries, notification bell UI contract
+-- Excludes:
+--   - Event Bus infrastructure (covered by event-bus.allium)
+--   - Module lifecycle notifications (trigger rules in module-lifecycle.allium)
+--   - Notification persistence (Prisma model — implementation concern)
+--   - Push notification / email delivery (future channels — not in-app)
+-- Dependencies:
+--   - DomainEvent, DomainEventType from event-bus.allium
+--   - EventBus contract from event-bus.allium
+--   - Notification entity from module-lifecycle.allium (extended here)
+--   - User, UserSettings from jobsync.allium
+
+-- =============================================================================
+-- Actors
+-- =============================================================================
+
+actor EventBus {
+  -- Publishes domain events that the dispatcher consumes.
+  -- The dispatcher subscribes to all notification-relevant event types.
+}
+
+actor User {
+  -- Receives notifications, configures preferences, interacts with bell UI.
+}
+
+-- =============================================================================
+-- Enums
+-- =============================================================================
+
+enum NotificationType {
+  -- Module lifecycle (existing, from module-lifecycle.allium)
+  module_deactivated
+  | module_reactivated
+  | module_unreachable
+  | cb_escalation
+  | consecutive_failures
+  | auth_failure
+  -- Vacancy pipeline (new, from 0.5/0.6)
+  | vacancy_promoted
+  | vacancy_staged_batch            -- summary for automation run batch
+  | bulk_action_completed
+  | retention_completed
+}
+
+enum NotificationChannel {
+  inApp                             -- write to Notification table (MVP)
+  -- Future channels:
+  -- | email                        -- send via SMTP/transactional email
+  -- | push                         -- browser push notification
+  -- | webhook                      -- POST to user-configured URL
+}
+
+enum DigestMode {
+  immediate                         -- deliver as events arrive
+  | hourly                          -- aggregate into hourly digest
+  | daily                           -- aggregate into daily digest
+}
+
+-- =============================================================================
+-- Config
+-- =============================================================================
+
+config {
+  DEDUP_WINDOW_MINUTES: Integer = 5
+    -- No duplicate notifications of same type+moduleId within this window.
+  DEFAULT_DIGEST_MODE: DigestMode = immediate
+    -- Default delivery mode for new users.
+  MAX_NOTIFICATIONS_DISPLAYED: Integer = 50
+    -- Maximum notifications shown in the bell dropdown.
+  NOTIFICATION_RETENTION_DAYS: Integer = 30
+    -- Auto-delete notifications older than this (from module-lifecycle.allium config).
+}
+
+-- =============================================================================
+-- Entities
+-- =============================================================================
+
+entity Notification {
+  -- A persisted notification record displayed to the user.
+  -- Extends the existing Notification entity from module-lifecycle.allium
+  -- with the full set of notification types.
+
+  id: String                          -- UUID
+  userId: String                      -- notification recipient
+  type: NotificationType              -- discriminates the notification content
+  message: String                     -- human-readable message (i18n key or rendered text)
+  moduleId: String?                   -- related module (null for non-module events)
+  automationId: String?               -- related automation (null when not applicable)
+  read: Boolean = false               -- user has seen/acknowledged this notification
+  createdAt: DateTime = now()
+}
+
+entity NotificationPreference {
+  -- User-level notification configuration.
+  -- Stored as JSON column on UserSettings (AD-6 from design spec).
+
+  userId: String                      -- owner
+
+  -- Global controls
+  enabled: Boolean = true             -- master switch: false suppresses ALL notifications
+  channels: ChannelConfig             -- which delivery channels are active
+
+  -- Per-type overrides
+  perType: Map<NotificationType, TypePreference>
+    -- Each type can be individually enabled/disabled and routed to a channel.
+    -- Types not present in the map inherit the global `enabled` and `channels` defaults.
+
+  -- Quiet hours (optional)
+  quietHours: QuietHoursConfig?       -- suppress notifications during configured window
+
+  -- Digest mode
+  digestMode: DigestMode = immediate  -- how to batch notifications
+}
+
+value ChannelConfig {
+  inApp: Boolean = true               -- in-app notifications (MVP, always available)
+  -- Future:
+  -- email: Boolean = false
+  -- push: Boolean = false
+  -- webhook: Boolean = false
+}
+
+value TypePreference {
+  enabled: Boolean = true             -- whether this notification type is active
+  channel: NotificationChannel?       -- override channel (null = use global default)
+}
+
+value QuietHoursConfig {
+  start: String                       -- time-of-day (HH:mm), e.g. "22:00"
+  end: String                         -- time-of-day (HH:mm), e.g. "07:00"
+  timezone: String                    -- IANA timezone, e.g. "Europe/Berlin"
+}
+
+-- =============================================================================
+-- Contract: NotificationDispatcher
+-- =============================================================================
+
+contract NotificationDispatcher {
+  -- Application Service that consumes domain events and produces notifications.
+  -- Registered as an EventBus consumer at application startup.
+  -- Stateless — reads preferences from DB, writes notifications to DB.
+
+  dispatch(event: DomainEvent): Void
+    -- Main entry point. Called by EventBus for each subscribed event.
+    -- 1. Determines the target userId from the event payload
+    -- 2. Loads user's NotificationPreference
+    -- 3. Applies all rules (PreferenceCheck, QuietHours, Deduplication, BatchSummary)
+    -- 4. If notification passes all checks: routes to enabled channels
+    -- 5. For inApp channel: creates Notification record
+
+  register(bus: EventBus): Void
+    -- Subscribes to all notification-relevant event types.
+    -- Called once at application startup.
+
+  mapEventToNotification(event: DomainEvent, userId: String): Notification?
+    -- Maps a domain event to a notification draft.
+    -- Returns null if the event type has no notification mapping.
+    -- Pure function — does not check preferences (that's dispatch's job).
+}
+
+-- =============================================================================
+-- Rules
+-- =============================================================================
+
+rule PreferenceCheck {
+  -- "Skip disabled notification types."
+  -- Before creating a notification, check whether the user has this type enabled.
+  when: NotificationDispatcher.dispatch(event: DomainEvent)
+  let userId = event.payload.userId
+  let prefs = NotificationPreference where userId = userId
+
+  -- Global kill switch
+  requires: prefs.enabled = true
+    -- If global notifications are disabled, silently drop all events.
+
+  -- Per-type check
+  let typeOverride = prefs.perType[event.notificationType]
+  requires: typeOverride = null or typeOverride.enabled = true
+    -- If the type is explicitly disabled, silently drop.
+    -- If the type is not in perType map, it inherits the global enabled=true.
+
+  ensures: notification proceeds to QuietHours check
+
+  @guidance
+    -- Preferences are loaded once per dispatch call, not cached across calls.
+    -- This ensures preference changes take effect immediately.
+    -- Default state for new users: all types enabled, inApp channel only.
+}
+
+rule QuietHours {
+  -- "Suppress notifications during configured quiet hours (queue for later)."
+  -- If the current time falls within the user's quiet hours window,
+  -- the notification is queued and delivered when quiet hours end.
+  when: NotificationDispatcher.dispatch(event: DomainEvent) and prefs.quietHours != null
+  let prefs = NotificationPreference where userId = event.payload.userId
+  let now = currentTimeInTimezone(prefs.quietHours.timezone)
+
+  if now is between prefs.quietHours.start and prefs.quietHours.end:
+    ensures: notification is queued with deliverAt = next occurrence of prefs.quietHours.end
+    -- The notification is created with a future deliverAt timestamp.
+    -- A background job delivers queued notifications when their deliverAt arrives.
+  else:
+    ensures: notification proceeds to Deduplication check
+
+  @guidance
+    -- Quiet hours wrap around midnight: start="22:00", end="07:00" means
+    -- 22:00 to midnight + midnight to 07:00 are quiet.
+    -- If quietHours is null, this rule is a no-op (pass-through).
+    -- MVP: quiet hours may simply delay to next non-quiet period.
+    -- Future: queued notifications could be batched into a morning digest.
+}
+
+rule Deduplication {
+  -- "No duplicate notifications of same type+moduleId within 5 minutes."
+  -- Prevents notification spam when the same event fires multiple times
+  -- in rapid succession (e.g., multiple CB trips for the same module).
+  when: NotificationDispatcher.dispatch(event: DomainEvent)
+  let userId = event.payload.userId
+  let notificationType = event.notificationType
+  let moduleId = event.payload.moduleId  -- may be null
+
+  let recent = Notification
+    where userId = userId
+    and type = notificationType
+    and moduleId = moduleId
+    and createdAt > now() - config.DEDUP_WINDOW_MINUTES.minutes
+
+  if recent exists:
+    ensures: notification is silently dropped
+    -- The user already has a recent notification of this type for this module.
+  else:
+    ensures: notification proceeds to ChannelRouting
+
+  @guidance
+    -- The dedup key is (userId, type, moduleId). If moduleId is null,
+    -- dedup is by (userId, type) only.
+    -- The 5-minute window is configurable via DEDUP_WINDOW_MINUTES.
+    -- This does NOT affect different types: a module_deactivated and auth_failure
+    -- for the same module within 5 minutes are both delivered.
+}
+
+rule ChannelRouting {
+  -- "Route notifications to enabled channels (inApp first, future: email, push, webhook)."
+  -- Determines which delivery channels to use based on user preferences.
+  when: NotificationDispatcher.dispatch(event: DomainEvent) passes all previous checks
+  let prefs = NotificationPreference where userId = event.payload.userId
+
+  -- Determine channel(s)
+  let typeOverride = prefs.perType[event.notificationType]
+  let channel = typeOverride.channel or default_channel_from(prefs.channels)
+
+  if channel = inApp:
+    ensures: Notification.created(
+      userId: event.payload.userId,
+      type: event.notificationType,
+      message: formatMessage(event),
+      moduleId: event.payload.moduleId,
+      automationId: event.payload.automationId,
+      read: false
+    )
+  -- Future channels:
+  -- if channel = email: ensures: EmailQueued(...)
+  -- if channel = push: ensures: PushNotificationSent(...)
+  -- if channel = webhook: ensures: WebhookDispatched(...)
+
+  @guidance
+    -- In MVP, only inApp channel exists. The routing logic is designed
+    -- to be extensible — adding a new channel means adding a new branch,
+    -- not restructuring the dispatcher.
+    -- The `default_channel_from()` picks the first enabled channel.
+    -- For MVP: inApp is always the default and always enabled.
+}
+
+rule BatchSummary {
+  -- "Automation runs produce a summary notification, not per-vacancy."
+  -- When an automation run stages N vacancies, the dispatcher creates
+  -- ONE summary notification instead of N individual ones.
+  when: EventBus.publish(VacancyStaged) from automation context
+  let automationId = event.payload.automationId
+  requires: automationId != null
+    -- Only automation-sourced staging gets batched. Manual staging is individual.
+
+  -- The dispatcher collects VacancyStaged events from the same automation run
+  -- and produces a single summary notification after the run completes.
+  -- Trigger: BulkActionCompleted or a dedicated AutomationRunCompleted event.
+
+  ensures: Notification.created(
+    userId: event.payload.userId,
+    type: vacancy_staged_batch,
+    message: "{count} new vacancies discovered by '{automation.name}'",
+    automationId: automationId,
+    read: false
+  )
+
+  ensures: no individual VacancyStaged notifications are created for automated intake
+
+  @guidance
+    -- Implementation: the runner emits individual VacancyStaged events (for audit/bus),
+    -- but the NotificationDispatcher aggregates them. It subscribes to VacancyStaged
+    -- and buffers events by automationId. When a configurable flush interval passes
+    -- (e.g., 30 seconds) or an explicit flush trigger fires, it creates the summary.
+    --
+    -- Alternative: the runner emits a single VacancyStagedBatch event after the run.
+    -- This is simpler but loses per-vacancy event granularity on the bus.
+    -- Decision: use the buffering approach — individual events on the bus,
+    -- summary notification to the user.
+}
+
+-- =============================================================================
+-- Event-to-Notification Mapping
+-- =============================================================================
+
+-- This section defines how each domain event type maps to a notification.
+-- The dispatcher uses this mapping in mapEventToNotification().
+
+trigger VacancyPromoted -> Notification {
+  type: vacancy_promoted
+  message: "Vacancy '{title}' promoted to your job board"
+  -- Low priority — user just performed this action themselves.
+  -- May be disabled by default in preferences.
+}
+
+trigger VacancyStaged -> BatchSummary {
+  -- Individual VacancyStaged events are batched per BatchSummary rule.
+  -- See BatchSummary rule above.
+}
+
+trigger BulkActionCompleted -> Notification {
+  type: bulk_action_completed
+  message: "Bulk {actionType}: {succeeded} succeeded, {failed} failed"
+}
+
+trigger ModuleDeactivated -> Notification {
+  type: module_deactivated
+  message: "Module '{moduleName}' deactivated. {affectedCount} automation(s) paused."
+  -- Already handled by module-lifecycle.allium rules.
+  -- The dispatcher creates the notification; the lifecycle rule defines WHEN to emit.
+}
+
+trigger ModuleReactivated -> Notification {
+  type: module_reactivated
+  message: "Module '{moduleName}' is active again. {pausedCount} automation(s) remain paused."
+}
+
+trigger RetentionCompleted -> Notification {
+  type: retention_completed
+  message: "Retention cleanup: {purgedCount} expired vacancies removed"
+}
+
+-- =============================================================================
+-- Invariants
+-- =============================================================================
+
+invariant NotificationsOwnedByUser {
+  ensures: for_each notification in Notification:
+    notification.userId references a valid User
+  note: "Notifications are tenant-isolated. Users only see their own notifications."
+}
+
+invariant PreferencesDefaults {
+  ensures: for_each user in User where NotificationPreference does not exist:
+    effective preferences are { enabled: true, channels: { inApp: true }, perType: {}, digestMode: immediate }
+  note: "Users without explicit preferences get all notifications via inApp channel."
+  note: "Preferences are created lazily on first settings access, not at user registration."
+}
+
+invariant NoDuplicateWithinWindow {
+  ensures: for_each pair (n1, n2) in Notification
+    where n1.userId = n2.userId
+    and n1.type = n2.type
+    and n1.moduleId = n2.moduleId
+    and abs(n1.createdAt - n2.createdAt) < config.DEDUP_WINDOW_MINUTES.minutes:
+    n1.id = n2.id
+  note: "Deduplication invariant. Enforced by the Deduplication rule."
+}
+
+invariant QuietHoursRespected {
+  ensures: no Notification is created during user's quiet hours
+    unless it was queued before quiet hours started
+  note: "Notifications during quiet hours are delayed, not dropped."
+}
+
+-- =============================================================================
+-- Surfaces
+-- =============================================================================
+
+surface NotificationBell {
+  -- Bell icon in the app header with unread count badge and dropdown.
+  facing actor: User
+  context entity: Notification[]
+
+  exposes:
+    -- Badge: unread count (0 = no badge, >0 = count shown, >99 = "99+")
+    unreadCount: Integer,
+    -- Dropdown: recent notifications (newest first, limited to MAX_NOTIFICATIONS_DISPLAYED)
+    notifications: Notification[] ordered by createdAt desc,
+    -- Per notification: type icon, message, relative time ("3m ago"), read status
+
+  provides:
+    MarkAsRead(notificationId: String),
+    MarkAllAsRead(),
+    DismissNotification(notificationId: String),
+    OpenNotificationSettings()
+      -- Navigates to the notification preferences page
+
+  @guarantee RealTimeUpdates
+    -- Unread count updates without page refresh.
+    -- Implementation options: polling (simple), SSE (efficient), WebSocket (overkill for MVP).
+    -- MVP: poll every 30 seconds. Future: SSE for instant updates.
+
+  @guarantee PersistentNotifications
+    -- Notifications persist across sessions (DB-backed, not ephemeral toasts).
+    -- Users see missed notifications when they return to the app.
+
+  @guarantee AccessibleBadge
+    -- Badge has aria-label: "{count} unread notifications"
+    -- Dropdown is keyboard-navigable (arrow keys, Enter to open/select, Escape to close)
+}
+
+surface NotificationPreferencesPanel {
+  -- Settings page section for configuring notification preferences.
+  facing actor: User
+  context entity: NotificationPreference
+
+  exposes:
+    -- Global toggle: enabled/disabled
+    -- Per-type toggles: each NotificationType with enabled switch
+    -- Channel selection: which channels are active (MVP: inApp only, shown as disabled toggle)
+    -- Quiet hours: start time, end time, timezone picker
+    -- Digest mode: immediate / hourly / daily selector
+
+  provides:
+    UpdatePreferences(prefs: NotificationPreference),
+    ResetToDefaults()
+
+  @guarantee TypeLabels
+    -- Each NotificationType has a human-readable label and description.
+    -- Labels are i18n keys (e.g., "settings.notifications.type.module_deactivated").
+
+  @guarantee QuietHoursPreview
+    -- After setting quiet hours, show a preview: "Notifications will be suppressed from 22:00 to 07:00 (Europe/Berlin)"
+}
+
+-- =============================================================================
+-- Open Questions
+-- =============================================================================
+
+open question "Should vacancy_promoted notifications be enabled by default? The user just performed the action — the notification may feel redundant. Consider disabled by default with opt-in."
+
+open question "Should the dispatcher support notification templates with i18n, or should messages be pre-rendered strings? Templates are more flexible but add complexity."
+
+open question "Should quiet hours queue notifications or batch them into a morning digest? Queuing delivers individual notifications at quiet hours end; digest combines them."
+
+open question "Should there be a 'Do Not Disturb' mode that suppresses ALL notifications temporarily (e.g., for 1 hour, until tomorrow) separate from quiet hours?"
