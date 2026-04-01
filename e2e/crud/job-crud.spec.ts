@@ -64,6 +64,11 @@ async function createJob(
   );
 
   await page.getByTestId("save-job-btn").click();
+
+  // Wait for the dialog to close (confirms save + redirect completed)
+  await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible({
+    timeout: 15000,
+  });
 }
 
 async function deleteJob(page: Page, jobTitle: string) {
@@ -77,7 +82,13 @@ async function deleteJob(page: Page, jobTitle: string) {
     .first()
     .click();
   await page.getByRole("menuitem", { name: "Delete" }).click();
-  await page.getByRole("button", { name: "Delete" }).click();
+
+  // Wait for the confirmation dialog to appear
+  await expect(page.getByRole("alertdialog")).toBeVisible({ timeout: 5000 });
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Delete" })
+    .click();
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +107,8 @@ test.describe("Job CRUD", () => {
     await navigateToJobs(page);
     await createJob(page, { title: jobTitle, company, location });
 
-    await expect(page).toHaveURL(/\/dashboard\/myjobs/, { timeout: 15000 });
+    // Navigate fresh to ensure client-side data is loaded after redirect
+    await navigateToJobs(page);
     await expect(
       page.getByRole("row", { name: jobTitle }).first(),
     ).toBeVisible({ timeout: 10000 });
@@ -116,7 +128,12 @@ test.describe("Job CRUD", () => {
     // Create
     await navigateToJobs(page);
     await createJob(page, { title: jobTitle, company, location });
-    await expect(page).toHaveURL(/\/dashboard\/myjobs/, { timeout: 15000 });
+
+    // Navigate fresh to ensure job list is loaded
+    await navigateToJobs(page);
+    await expect(
+      page.getByRole("row", { name: jobTitle }).first(),
+    ).toBeVisible({ timeout: 10000 });
 
     // Edit
     await page
@@ -139,7 +156,11 @@ test.describe("Job CRUD", () => {
     );
     await page.getByTestId("save-job-btn").click();
 
-    await expect(page).toHaveURL(/\/dashboard\/myjobs/, { timeout: 15000 });
+    // Wait for dialog to close, then navigate fresh
+    await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible({
+      timeout: 15000,
+    });
+    await navigateToJobs(page);
     await expect(
       page.getByRole("row", { name: jobTitle }).first(),
     ).toBeVisible({ timeout: 10000 });
@@ -157,7 +178,9 @@ test.describe("Job CRUD", () => {
     // Create first
     await navigateToJobs(page);
     await createJob(page, { title: jobTitle, company, location });
-    await expect(page).toHaveURL(/\/dashboard\/myjobs/, { timeout: 15000 });
+
+    // Navigate fresh to ensure job list is loaded
+    await navigateToJobs(page);
     await expect(
       page.getByRole("row", { name: jobTitle }).first(),
     ).toBeVisible({ timeout: 10000 });

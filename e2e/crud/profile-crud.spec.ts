@@ -28,7 +28,7 @@ async function openResumeEditor(page: Page, resumeTitle: string) {
   ]);
   await page.waitForLoadState("domcontentloaded");
   await expect(
-    page.getByRole("heading", { name: "Resume" }),
+    page.getByRole("heading", { name: "Resume" }).first(),
   ).toBeVisible({ timeout: 10000 });
 }
 

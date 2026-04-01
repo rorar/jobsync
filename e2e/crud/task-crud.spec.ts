@@ -68,13 +68,24 @@ async function stopRunningActivity(page: Page) {
 }
 
 async function deleteTask(page: Page, title: string) {
+  // Wait for the task row to be visible before interacting
+  await expect(
+    page.getByRole("row", { name: new RegExp(title, "i") }).first(),
+  ).toBeVisible({ timeout: 10000 });
+
   await page
     .getByRole("row", { name: new RegExp(title, "i") })
     .getByTestId("task-actions-menu-btn")
     .first()
     .click({ force: true });
   await page.getByRole("menuitem", { name: "Delete" }).click({ force: true });
-  await page.getByRole("button", { name: "Delete" }).click({ force: true });
+
+  // Wait for the alert dialog to appear before clicking Delete
+  await expect(page.getByRole("alertdialog")).toBeVisible({ timeout: 5000 });
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Delete" })
+    .click({ force: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -192,9 +203,7 @@ test.describe("Task CRUD", () => {
     // Delete
     await deleteTask(page, taskTitle);
 
-    await expect(page.getByRole("status").first()).toContainText(
-      /Task has been deleted/,
-    );
+    await expectToast(page, /Task has been deleted/);
     await expect(
       page.getByRole("row", { name: new RegExp(taskTitle, "i") }),
     ).not.toBeVisible({ timeout: 10000 });
@@ -205,10 +214,13 @@ test.describe("Task CRUD", () => {
   test("should filter tasks by status", async ({ page }) => {
     await navigateToTasks(page);
 
-    await page
-      .getByRole("button", { name: "Status", exact: true })
-      .click({ force: true });
-    await expect(page.getByText("Filter by Status")).toBeVisible();
+    // Click the Status filter button and wait for the dropdown to open
+    // Retry the click if the dropdown doesn't open (handles hydration timing)
+    const statusButton = page.getByRole("button", { name: "Status", exact: true });
+    await expect(async () => {
+      await statusButton.click();
+      await expect(page.getByText("Filter by Status")).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 10000 });
 
     const inProgressCheckbox = page.getByRole("menuitemcheckbox", {
       name: "In Progress",
@@ -225,7 +237,7 @@ test.describe("Task CRUD", () => {
     });
     await expect(completeCheckbox).not.toBeChecked();
 
-    await completeCheckbox.click({ force: true });
+    await completeCheckbox.click();
     await expect(completeCheckbox).toBeChecked();
   });
 
@@ -250,11 +262,19 @@ test.describe("Task CRUD", () => {
     // Show completed tasks in filter to find and delete
     await page
       .getByRole("button", { name: "Status", exact: true })
-      .click({ force: true });
+      .click();
+    await expect(
+      page.getByRole("menuitemcheckbox", { name: "Complete" }),
+    ).toBeVisible({ timeout: 5000 });
     await page
       .getByRole("menuitemcheckbox", { name: "Complete" })
-      .click({ force: true });
+      .click();
     await page.keyboard.press("Escape");
+
+    // Wait for the task list to reload with the new filter (includes completed tasks)
+    await expect(
+      page.getByRole("row", { name: new RegExp(taskTitle, "i") }).first(),
+    ).toBeVisible({ timeout: 10000 });
 
     await deleteTask(page, taskTitle);
   });

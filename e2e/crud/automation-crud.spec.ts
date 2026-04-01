@@ -35,10 +35,9 @@ async function ensureResumeExists(
   await page.getByRole("button", { name: "New Resume" }).click();
   await page.getByPlaceholder("Ex: Full Stack Developer").fill(resumeTitle);
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("status").first()).toContainText(
-    /Resume title has been/,
-    { timeout: 10000 },
-  );
+  await expect(page.getByText(/Resume title has been/i).first()).toBeVisible({
+    timeout: 10000,
+  });
   return resumeTitle;
 }
 
@@ -199,10 +198,9 @@ async function deleteAutomation(page: Page, name: string) {
       .getByRole("button")
       .last()
       .click();
-    await expect(page.getByRole("status").first()).toContainText(
-      /Automation deleted|deleted/i,
-      { timeout: 10000 },
-    );
+    await expect(
+      page.getByText(/Automation deleted|deleted/i).first(),
+    ).toBeVisible({ timeout: 10000 });
   } catch {
     // Automation may not exist — skip cleanup
   }

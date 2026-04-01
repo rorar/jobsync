@@ -17,7 +17,7 @@ async function navigateToApiKeysSettings(page: Page) {
   await page.waitForLoadState("domcontentloaded");
 
   // Click the "API Keys" sidebar item to show module cards
-  await page.getByRole("button", { name: /API Keys/i }).click();
+  await page.getByRole("button", { name: "API Keys", exact: true }).click();
 
   // Wait for the module cards to load (loading spinner disappears)
   await page.locator("[role='switch']").first().waitFor({ state: "visible", timeout: 15000 });

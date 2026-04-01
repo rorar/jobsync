@@ -26,6 +26,14 @@ async function navigateToCompanies(page: Page) {
 async function loadUntilCompanyVisible(page: Page, name: string) {
   const row = page.getByRole("row", { name: new RegExp(name, "i") }).first();
 
+  // Wait for the table to have at least one data row (i.e. data has loaded).
+  // The first row is the header row, so we wait for at least 2 rows.
+  await page
+    .getByRole("row")
+    .nth(1)
+    .waitFor({ state: "visible", timeout: 15000 })
+    .catch(() => {});
+
   // Try up to 10 iterations (10 × 25 = 250 companies max)
   for (let i = 0; i < 10; i++) {
     // Check if the row is already visible
@@ -33,13 +41,13 @@ async function loadUntilCompanyVisible(page: Page, name: string) {
     if (visible) return;
 
     // Check if there is a "Load More" button
-    const loadMoreBtn = page.getByRole("button", { name: "Load More" });
+    const loadMoreBtn = page.getByRole("button", { name: /Load More/i });
     const loadMoreVisible = await loadMoreBtn.isVisible().catch(() => false);
     if (!loadMoreVisible) break;
 
     // Click "Load More" and wait for the table to update
     await loadMoreBtn.click();
-    await page.waitForLoadState("domcontentloaded");
+    await page.waitForTimeout(1000);
   }
 }
 
