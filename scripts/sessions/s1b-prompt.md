@@ -33,6 +33,15 @@ Dies ist **Session S1b** — die zweite von 5 Sessions. Ziel: 5-Dimensionen Comp
 git checkout -b session/s1b-comprehensive-review
 ```
 
+### Schritt 0.5: S1a Allium-Weed Verifikation (Quick-Check, max 5 Min)
+
+S1a hat alle 19 Allium Specs ge-weeded, aber ohne Team-Agents — alles lief sequenziell im Main-Agent. Verifiziere die Qualität:
+
+1. Wähle 3 der komplexesten Specs: `scheduler-coordination.allium`, `security-rules.allium`, `vacancy-pipeline.allium`
+2. Führe `allium:weed` über diese 3 Specs aus
+3. Wenn zero Divergenzen → S1a Weed war sauber, weiter
+4. Wenn Divergenzen gefunden → Dispatche einen Agent der `allium:weed` über ALLE 19 Specs laufen lässt und Divergenzen fixt
+
 ### Schritt 1: Comprehensive Review
 
 Starte `/comprehensive-review:full-review` über den gesamten Code der in Sprint A+B+C geändert wurde. Verwende ALLE 5 Dimensionen:
