@@ -1,3 +1,4 @@
+-- allium: 3
 -- BaseCombobox: Shared headless combobox wrapper behaviour
 -- Layer 2 component per C4 ComboBox analysis (docs/architecture/c4-component-combobox.md)
 -- Provides Popover + Command + trigger shell consumed by all combobox variants

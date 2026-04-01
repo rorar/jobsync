@@ -280,7 +280,7 @@ rule ApiKeyHashing {
 rule ModuleApiKeyEncryption {
     when: Module credential (e.g. OpenAI API key) is stored
 
-    ensures: Key encrypted with AES-256-CBC
+    ensures: Key encrypted with AES-256-GCM
     ensures: IV stored alongside encrypted key
     ensures: Only last 4 characters stored in plaintext (for display)
     ensures: Unique constraint on (userId, moduleId) — one key per module per user
@@ -517,7 +517,7 @@ invariant GenericErrorMessages {
 
 invariant SecureSecretManagement {
     -- AUTH_SECRET: Pre-configured, stable, never auto-generated.
-    -- Module API keys: AES-256-CBC encrypted at rest.
+    -- Module API keys: AES-256-GCM encrypted at rest.
     -- Public API keys: SHA-256 hashed, raw shown once.
     -- No secrets in code, commits, logs, or URLs.
 }

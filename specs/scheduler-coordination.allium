@@ -38,11 +38,15 @@ actor Scheduler {
 
 enum RunSource { scheduler | manual }
 
-enum SchedulerPhase { idle | polling | running | cooldown }
+enum SchedulerPhase { idle | running }
+-- Code has two phases only. polling and cooldown were never observable via SSE
+-- and are not implemented in the RunCoordinator.
 
 enum RunPhase { search | dedup | enrich | match | save | finalize }
 
-enum RunRequestStatus { acquired | already_running | rate_limited }
+enum RunRequestStatus { acquired | already_running }
+-- rate_limited removed: rate limiting is handled at the HTTP layer (Cockatiel),
+-- not at the RunCoordinator level.
 
 -- =============================================================================
 -- Contracts
@@ -86,6 +90,7 @@ contract RunCoordinator {
 
 value RunLock {
   automationId: String
+  automationName: String
   runSource: RunSource
   moduleId: String
   startedAt: DateTime
@@ -99,14 +104,17 @@ value SchedulerSnapshot {
   pendingAutomations: RunQueuePosition[]
   lastCycleCompletedAt: DateTime?
   lastCycleProcessedCount: Integer
+  lastCycleFailedCount: Integer
+  runningProgress: Map<String, RunProgress>
+    -- Live progress per running automation, keyed by automationId.
 }
 
 value RunQueuePosition {
   automationId: String
   automationName: String
+  userId: String
   position: Integer
   total: Integer
-  estimatedStartAt: DateTime?
 }
 
 value RunProgress {
@@ -124,10 +132,20 @@ value RunProgress {
 
 value RunRequestResult {
   status: RunRequestStatus
+  runId: String?
+  runnerResult: RunnerResult?
+    -- Result of the automation run (only present after execution completes).
   existingRunSource: RunSource?
   existingStartedAt: DateTime?
-  queuePosition: RunQueuePosition?
-  runId: String?
+  queuePosition: Integer?
+  moduleContention: ModuleContentionInfo[]?
+    -- Other automations using the same module (informational only).
+}
+
+value ModuleContentionInfo {
+  automationId: String
+  automationName: String
+  moduleId: String
 }
 
 value RunOptions {
@@ -184,6 +202,9 @@ entity SchedulerState {
   lastCycleProcessedCount: Integer = 0
   lastCycleFailedCount: Integer = 0
 
+  -- Live progress per running automation (in-memory, ephemeral)
+  activeRunProgress: Map<String, RunProgress>
+
   -- Derived
   isRunning: phase = running or activeRuns.count > 0
   queueDepth: currentCycleQueue.count
@@ -225,8 +246,12 @@ external entity ModuleManifest {
 }
 
 external entity EventBus {
-  publish(event: Any): Void
+  publish(event: Any): Promise<Void>
 }
+
+-- RunnerResult is a value type from the runner (job-discovery/runner.ts).
+-- Contains: status, jobsSaved, jobsSearched, jobsMatched, jobsDeduplicated, etc.
+external entity RunnerResult {}
 
 -- =============================================================================
 -- Config
@@ -234,10 +259,10 @@ external entity EventBus {
 
 config {
   MAX_CONCURRENT_RUNS_PER_AUTOMATION: Integer = 1
-  SCHEDULER_CYCLE_COOLDOWN_MS: Integer = 5000
-  MANUAL_RUN_RATE_LIMIT_PER_HOUR: Integer = 5
   SSE_POLL_INTERVAL_MS: Integer = 2000
   SSE_MAX_DURATION_MS: Integer = 600000
+  -- SCHEDULER_CYCLE_COOLDOWN_MS removed: no cooldown phase in implementation.
+  -- MANUAL_RUN_RATE_LIMIT_PER_HOUR removed: rate limiting handled at HTTP layer (Cockatiel).
 }
 
 -- =============================================================================
@@ -264,6 +289,7 @@ rule DoubleRunPrevention {
     else:
       let newLock = RunLock.created(
         automationId: automation.id,
+        automationName: automation.name,
         runSource: options.runSource,
         moduleId: automation.jobBoard,
         startedAt: now,
@@ -437,44 +463,35 @@ rule ProgressReporting {
 -- =============================================================================
 
 rule SchedulerPhaseTransitions {
-  -- "The scheduler moves through a deterministic phase lifecycle."
-  -- idle -> polling (cron fires)
-  -- polling -> running (due automations found)
-  -- polling -> idle (no due automations)
-  -- running -> cooldown (queue drained)
-  -- cooldown -> idle (cooldown elapsed)
+  -- "The scheduler moves through a two-phase lifecycle."
+  -- idle -> running (cron fires, due automations found)
+  -- idle -> idle (cron fires, no due automations)
+  -- running -> idle (queue drained, all runs complete)
+  -- The polling and cooldown phases from the original design were
+  -- removed: they were never observable via SSE and added no value.
 
   when: SchedulerCycleTick
 
   ensures:
     if SchedulerState.phase = idle:
-      SchedulerState.phase = polling
-      SchedulerState.currentCycleStartedAt = now
-
-    else if SchedulerState.phase = polling:
-      let dueCount = Automation where status = active and nextRunAt != null and nextRunAt <= now
-      if dueCount.count > 0:
+      let dueAutomations = Automation where status = active and nextRunAt != null and nextRunAt <= now
+      if dueAutomations.count > 0:
         SchedulerState.phase = running
+        SchedulerState.currentCycleStartedAt = now
       else:
         SchedulerState.phase = idle
-        SchedulerState.currentCycleStartedAt = null
 
     else if SchedulerState.phase = running:
       if SchedulerState.currentCycleQueue.count = 0 and SchedulerState.activeRuns.count = 0:
-        SchedulerState.phase = cooldown
+        SchedulerState.phase = idle
         SchedulerState.lastCycleCompletedAt = now
-
-    else if SchedulerState.phase = cooldown:
-      SchedulerState.phase = idle
-      SchedulerState.currentCycleStartedAt = null
-      SchedulerState.currentCycleQueue = []
+        SchedulerState.currentCycleStartedAt = null
+        SchedulerState.currentCycleQueue = []
 
   @guidance
     -- The cron fires every minute (SCHEDULER_CRON = "0 * * * *").
-    -- The idle -> polling transition is the entry point.
-    -- Cooldown lasts SCHEDULER_CYCLE_COOLDOWN_MS (default 5s) before
-    -- returning to idle. This prevents tight loops when automations
-    -- complete quickly.
+    -- The idle -> running transition queries due automations and starts the cycle.
+    -- When all runs complete, the phase returns directly to idle.
     -- Each transition is observable via SchedulerState and SSE.
 }
 
@@ -497,8 +514,8 @@ rule CycleStartedEvent {
 }
 
 rule CycleCompletedEvent {
-  -- "Emit SchedulerCycleCompleted when the scheduler transitions to cooldown."
-  when: SchedulerState.phase transitions_to cooldown
+  -- "Emit SchedulerCycleCompleted when the scheduler transitions from running to idle."
+  when: SchedulerState.phase transitions_from running to idle
 
   ensures: EventBus.publish({
     type: SchedulerCycleCompleted,
@@ -603,7 +620,6 @@ surface SchedulerStatusBar {
   @guidance
     -- When phase = idle: show "Idle" with a check icon.
     -- When phase = running: show the currently running automation name and a spinner.
-    -- When phase = cooldown: show "Finishing up..." briefly before idle.
     -- queueDepth > 0: show "(N remaining)" badge.
 }
 
@@ -700,7 +716,8 @@ surface RunHistoryEnhancement {
 -- RESOLVED: Emit at `running` phase transition (current implementation).
 -- At polling, queue depth is unknown. At running, we have automationIds and count.
 -- EventBus consumers need actionable data, not "the scheduler woke up."
--- The `polling` phase was removed from SchedulerPhase (no implementation need).
+-- Both `polling` and `cooldown` phases were removed from SchedulerPhase.
+-- The implementation uses a two-phase model: idle -> running -> idle.
 
 -- Q2: RunProgress persisted or in-memory?
 -- RESOLVED: In-memory for live UI (current). Persist final snapshot to AutomationRun

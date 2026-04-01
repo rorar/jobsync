@@ -147,12 +147,13 @@ entity Location {
 
 entity CompanyBlacklist {
     pattern: String
-    match_type: exact | contains | starts_with | ends_with
+    match_type: exact | contains
     reason: String?
 
     @invariant
         -- User-scoped. Used during vacancy pipeline dedup phase to filter
         -- staged vacancies by employer name.
+        -- Only exact and contains are used in the model type and UI.
 }
 
 ------------------------------------------------------------
@@ -390,9 +391,7 @@ rule CheckAgainstBlacklist {
 
     -- Match logic:
     --   exact: employer_name = pattern (case-insensitive)
-    --   contains: employer_name contains pattern
-    --   starts_with: employer_name starts with pattern
-    --   ends_with: employer_name ends with pattern
+    --   contains: employer_name contains pattern (case-insensitive)
 }
 
 -- === Shared Entity Creation (On-Demand) ===

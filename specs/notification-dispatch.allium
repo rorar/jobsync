@@ -43,7 +43,7 @@ enum NotificationType {
   | auth_failure
   -- Vacancy pipeline (new, from 0.5/0.6)
   | vacancy_promoted
-  | vacancy_staged_batch            -- summary for automation run batch
+  | vacancy_batch_staged            -- summary for automation run batch
   | bulk_action_completed
   | retention_completed
 }
@@ -114,8 +114,8 @@ entity NotificationPreference {
   -- Quiet hours (optional)
   quietHours: QuietHoursConfig?       -- suppress notifications during configured window
 
-  -- Digest mode
-  digestMode: DigestMode = immediate  -- how to batch notifications
+  -- Digest mode (aspirational — not implemented yet)
+  -- digestMode: DigestMode = immediate
 }
 
 value ChannelConfig {
@@ -128,10 +128,11 @@ value ChannelConfig {
 
 value TypePreference {
   enabled: Boolean = true             -- whether this notification type is active
-  channel: NotificationChannel?       -- override channel (null = use global default)
+  -- Note: per-type channel override is aspirational. Code currently only stores { enabled }.
 }
 
 value QuietHoursConfig {
+  enabled: Boolean = false            -- whether quiet hours are active
   start: String                       -- time-of-day (HH:mm), e.g. "22:00"
   end: String                         -- time-of-day (HH:mm), e.g. "07:00"
   timezone: String                    -- IANA timezone, e.g. "Europe/Berlin"
@@ -194,26 +195,30 @@ rule PreferenceCheck {
 }
 
 rule QuietHours {
-  -- "Suppress notifications during configured quiet hours (queue for later)."
+  -- "Suppress notifications during configured quiet hours."
   -- If the current time falls within the user's quiet hours window,
-  -- the notification is queued and delivered when quiet hours end.
+  -- the notification is silently dropped (not queued).
   when: NotificationDispatcher.dispatch(event: DomainEvent) and prefs.quietHours != null
   let prefs = NotificationPreference where userId = event.payload.userId
   let now = currentTimeInTimezone(prefs.quietHours.timezone)
 
+  requires: prefs.quietHours.enabled = true
+    -- Quiet hours only apply when the enabled flag is set.
+
   if now is between prefs.quietHours.start and prefs.quietHours.end:
-    ensures: notification is queued with deliverAt = next occurrence of prefs.quietHours.end
-    -- The notification is created with a future deliverAt timestamp.
-    -- A background job delivers queued notifications when their deliverAt arrives.
+    ensures: notification is silently dropped
+    -- Current implementation: shouldNotify() returns false during quiet hours.
+    -- Notifications are dropped, not queued. This is the MVP behavior.
   else:
     ensures: notification proceeds to Deduplication check
 
   @guidance
     -- Quiet hours wrap around midnight: start="22:00", end="07:00" means
     -- 22:00 to midnight + midnight to 07:00 are quiet.
-    -- If quietHours is null, this rule is a no-op (pass-through).
-    -- MVP: quiet hours may simply delay to next non-quiet period.
-    -- Future: queued notifications could be batched into a morning digest.
+    -- If quietHours is null or enabled=false, this rule is a no-op (pass-through).
+    -- Implementation uses Intl.DateTimeFormat to convert current time to
+    -- the configured timezone for comparison.
+    -- Future: queuing with deliverAt instead of dropping.
 }
 
 rule Deduplication {
@@ -292,7 +297,7 @@ rule BatchSummary {
 
   ensures: Notification.created(
     userId: event.payload.userId,
-    type: vacancy_staged_batch,
+    type: vacancy_batch_staged,
     message: "{count} new vacancies discovered by '{automation.name}'",
     automationId: automationId,
     read: false

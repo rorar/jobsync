@@ -39,11 +39,19 @@ enum DomainEventType {
   | VacancyStaged
   | VacancyArchived
   | VacancyTrashed
+  | VacancyRestoredFromTrash
   | BulkActionCompleted
   | ModuleDeactivated
   | ModuleReactivated
   | RetentionCompleted
   | NotificationCreated
+  -- Scheduler Coordination (spec: scheduler-coordination.allium)
+  | SchedulerCycleStarted
+  | SchedulerCycleCompleted
+  | AutomationRunStarted
+  | AutomationRunCompleted
+  -- Degradation bridge (spec: module-lifecycle.allium)
+  | AutomationDegraded
 }
 
 -- =============================================================================
@@ -120,11 +128,56 @@ value NotificationCreatedPayload {
   notificationType: String              -- NotificationType from module-lifecycle
 }
 
+value VacancyRestoredFromTrashPayload {
+  stagedVacancyId: String
+  userId: String
+}
+
+-- Scheduler Coordination payloads (spec: scheduler-coordination.allium)
+
+value SchedulerCycleStartedPayload {
+  queueDepth: Integer
+  automationIds: String[]
+}
+
+value SchedulerCycleCompletedPayload {
+  processedCount: Integer
+  failedCount: Integer
+  skippedCount: Integer
+  durationMs: Integer
+}
+
+value AutomationRunStartedPayload {
+  automationId: String
+  userId: String
+  moduleId: String
+  runSource: String                   -- RunSource from scheduler-coordination
+}
+
+value AutomationRunCompletedPayload {
+  automationId: String
+  userId: String
+  moduleId: String
+  runSource: String                   -- RunSource from scheduler-coordination
+  status: String                      -- AutomationRun.status value
+  jobsSaved: Integer
+  durationMs: Integer
+}
+
+-- Degradation bridge payload (spec: module-lifecycle.allium)
+
+value AutomationDegradedPayload {
+  automationId: String
+  userId: String
+  reason: String                      -- "auth_failure" | "cb_escalation" | "consecutive_failures"
+}
+
 -- Handler function type for event consumers.
 value EventHandler<T: DomainEventType> {
   -- A function that receives a typed DomainEvent and processes it.
-  -- Must not throw — errors are caught by the bus (ErrorIsolation rule).
-  handle: (event: DomainEvent<T>) -> Void
+  -- Handlers may be sync or async (returning Promise<void>).
+  -- Errors are caught by the bus (ErrorIsolation rule).
+  handle: (event: DomainEvent<T>) -> Void | Promise<Void>
 }
 
 -- Unsubscribe token returned by subscribe().
@@ -140,24 +193,26 @@ value Unsubscribe {
 contract EventBus {
   -- The single in-process event bus for the entire application.
   -- Singleton — one instance shared across all domain services.
+  -- Survives HMR via globalThis pattern.
 
-  publish<T: DomainEventType>(event: DomainEvent<T>): Void
-    -- Publishes an event to all registered handlers for this event type.
-    -- Synchronous dispatch: handlers execute in registration order.
+  publish<T: DomainEventType>(event: DomainEvent<T>): Promise<Void>
+    -- Publishes an event to all registered handlers for this event type
+    -- AND to wildcard ("*") handlers.
+    -- Async dispatch: handlers execute in registration order, awaited sequentially.
     -- Each handler is wrapped in error isolation (see ErrorIsolation rule).
     -- Returns after all handlers have been invoked (or failed safely).
 
   subscribe<T: DomainEventType>(
-    eventType: T,
+    eventType: T | "*",
     handler: EventHandler<T>
   ): Unsubscribe
-    -- Registers a handler for a specific event type.
+    -- Registers a handler for a specific event type or "*" for all events.
     -- Returns an Unsubscribe function to remove the handler.
     -- Multiple handlers per event type are supported.
-    -- Handler receives only events matching the subscribed type.
+    -- Wildcard handlers receive ALL events regardless of type.
 
   unsubscribe<T: DomainEventType>(
-    eventType: T,
+    eventType: T | "*",
     handler: EventHandler<T>
   ): Void
     -- Removes a previously registered handler.
@@ -165,6 +220,11 @@ contract EventBus {
 
   reset(): Void
     -- Removes all subscriptions. Used in tests only.
+
+  handlerCount(eventType?: DomainEventType | "*"): Integer
+    -- Returns the number of registered handlers for a given event type,
+    -- or total across all types if no argument is provided.
+    -- Useful for testing.
 }
 
 -- =============================================================================
@@ -173,14 +233,16 @@ contract EventBus {
 
 rule ErrorIsolation {
   -- "One consumer failure must not affect other consumers."
-  -- When a handler throws, the bus catches the error, logs it, and continues
-  -- dispatching to remaining handlers. The publisher is not affected.
+  -- When a handler throws (sync or rejects a Promise), the bus catches
+  -- the error, logs it, and continues dispatching to remaining handlers.
   when: EventBus.publish(event: DomainEvent)
-  let handlers = registered handlers for event.type
+  let typeHandlers = registered handlers for event.type
+  let wildcardHandlers = registered handlers for "*"
+  let allHandlers = typeHandlers + wildcardHandlers
 
-  ensures: for_each handler in handlers:
+  ensures: for_each handler in allHandlers:
     try:
-      handler.handle(event)
+      await handler.handle(event)
     catch error:
       log.error("[EventBus] Consumer failed for {event.type}", error)
       -- Continue to next handler. Do NOT rethrow.
@@ -191,7 +253,8 @@ rule ErrorIsolation {
   @guidance
     -- This is critical for system stability. A bug in the NotificationDispatcher
     -- must never prevent the AuditLogger from recording the event.
-    -- Implementation: try/catch per handler invocation, not around the loop.
+    -- Implementation: try/catch per handler invocation with await, not around the loop.
+    -- Wildcard handlers are dispatched after type-specific handlers.
 }
 
 rule OrderGuarantee {
@@ -222,11 +285,17 @@ rule TypeSafety {
   ensures: EventHandler<VacancyStaged> receives VacancyStagedPayload
   ensures: EventHandler<VacancyArchived> receives VacancyArchivedPayload
   ensures: EventHandler<VacancyTrashed> receives VacancyTrashedPayload
+  ensures: EventHandler<VacancyRestoredFromTrash> receives VacancyRestoredFromTrashPayload
   ensures: EventHandler<BulkActionCompleted> receives BulkActionCompletedPayload
   ensures: EventHandler<ModuleDeactivated> receives ModuleDeactivatedPayload
   ensures: EventHandler<ModuleReactivated> receives ModuleReactivatedPayload
   ensures: EventHandler<RetentionCompleted> receives RetentionCompletedPayload
   ensures: EventHandler<NotificationCreated> receives NotificationCreatedPayload
+  ensures: EventHandler<SchedulerCycleStarted> receives SchedulerCycleStartedPayload
+  ensures: EventHandler<SchedulerCycleCompleted> receives SchedulerCycleCompletedPayload
+  ensures: EventHandler<AutomationRunStarted> receives AutomationRunStartedPayload
+  ensures: EventHandler<AutomationRunCompleted> receives AutomationRunCompletedPayload
+  ensures: EventHandler<AutomationDegraded> receives AutomationDegradedPayload
 
   @guidance
     -- Implementation: TypeScript discriminated union with type narrowing.
@@ -277,7 +346,7 @@ rule StubMigration {
 invariant SingletonBus {
   ensures: exactly one EventBus instance exists in the application
   note: "The bus is a Shared Kernel — used by all bounded contexts."
-  note: "Module-scoped singleton in Node.js (import caching)."
+  note: "Singleton via globalThis to survive HMR (same pattern as RunCoordinator)."
 }
 
 invariant NoEventLoss {
@@ -296,8 +365,12 @@ invariant ImmutableEvents {
 -- Open Questions
 -- =============================================================================
 
-open question "Should the bus support async handlers (returning Promise)? Current design is synchronous for simplicity, but NotificationDispatcher writes to DB (async)."
+-- RESOLVED: "Should the bus support async handlers?"
+-- Yes. publish() is async (returns Promise<void>), handlers may return void | Promise<void>.
+-- Handlers are awaited sequentially within ErrorIsolation try/catch.
 
 open question "Should events be persisted to an EventLog table for audit/replay? Not needed now, but valuable for debugging and future event sourcing."
 
-open question "Should the bus support wildcard subscriptions (subscribe to ALL events)? Useful for AuditLogger, but adds complexity."
+-- RESOLVED: "Should the bus support wildcard subscriptions?"
+-- Yes. subscribe("*", handler) registers a handler that receives ALL events.
+-- Exported as WILDCARD constant from event-bus.ts. Used for AuditLogger.

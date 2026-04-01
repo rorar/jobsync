@@ -779,6 +779,8 @@ entity CompanyBlacklist {
 enum BlacklistMatchType { exact | contains }
 -- exact:    Case-insensitive full match (e.g. "Acme Corp" matches "acme corp")
 -- contains: Case-insensitive substring match (e.g. "Staffing" matches "Global Staffing Solutions")
+-- Note: VALID_MATCH_TYPES in code also accepts "starts_with" and "ends_with" for
+-- runtime validation, but the model type and UI only expose exact | contains.
 
 rule BlacklistFilter {
   -- "Blacklisted companies are filtered BEFORE AI matching to save LLM calls."

@@ -36,7 +36,9 @@ enum ModuleStatus { active | inactive | error }
 
 enum HealthStatus { healthy | degraded | unreachable | unknown }
 
-enum CredentialType { api_key | endpoint_url | oauth_token | none }
+enum CredentialType { api_key | endpoint_url | none }
+-- oauth_token removed: no module uses OAuth tokens. If eID/AusweisApp
+-- is added later, a new type can be introduced.
 
 enum CircuitBreakerState { closed | open | half_open }
 
@@ -70,6 +72,9 @@ contract ModuleManifest {
 
   -- Resilience
   resilience: ResilienceConfig?       -- retry, circuit breaker, rate limit defaults
+
+  -- Caching (ROADMAP 0.9 Stufe 1)
+  cachePolicy: CachePolicy?           -- response caching policy; null = no caching
 }
 
 -- Connector-specific extensions of the base contract.
@@ -550,8 +555,8 @@ rule CircuitBreakerEscalation {
 }
 
 rule ConsecutiveRunFailureEscalation {
-  -- "When an automation's recent runs have all failed, pause it."
-  when: run: AutomationRun.status becomes failed
+  -- "When an automation's recent runs have all been terminal failures, pause it."
+  when: run: AutomationRun.status becomes failed or blocked or rate_limited
   let automation = Automation where id = run.automationId and status = active
   requires: automation != null
 
@@ -561,7 +566,7 @@ rule ConsecutiveRunFailureEscalation {
     limit config.CONSECUTIVE_RUN_FAILURE_THRESHOLD
 
   requires: recentRuns | count = config.CONSECUTIVE_RUN_FAILURE_THRESHOLD
-  requires: recentRuns.all(r => r.status = failed)
+  requires: recentRuns.all(r => r.status in { failed, blocked, rate_limited })
 
   ensures: automation.status = paused
   ensures: automation.pauseReason = consecutive_failures

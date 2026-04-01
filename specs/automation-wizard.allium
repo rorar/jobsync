@@ -48,12 +48,14 @@ enum WizardStep {
 }
 
 enum ScheduleFrequency {
-    every_6h        -- "6h"
-    every_12h       -- "12h"
-    daily           -- "daily" (default)
-    every_2d        -- "2d"
-    weekly          -- "weekly"
+    `6h`            -- every 6 hours
+    `12h`           -- every 12 hours
+    daily           -- once daily (default)
+    `2d`            -- every 2 days
+    weekly          -- once per week
 }
+-- Values use backtick-quoted literals to match the code strings exactly:
+-- ScheduleFrequency = "6h" | "12h" | "daily" | "2d" | "weekly"
 
 ------------------------------------------------------------
 -- Core Concept: Generic Rendering Engine
