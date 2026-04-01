@@ -98,6 +98,7 @@ Fehlende Implementierungen SOFORT fixen. Committe nach jedem Fix-Block.
 - Starte `/ui-design:accessibility-audit` für WCAG-Compliance
 - Starte `/accessibility-compliance:wcag-audit-patterns` für WCAG 2.2 Audit mit automatisiertem Testing und Remediation
 - Verwende `/ui-design:interaction-design` um UX-Entscheidungen bei Microinteractions, Transitions, Feedback-Patterns und User Flows anzureichern
+- Verwende `/business-analytics:data-storytelling` um den Audit-Report als Data Story aufzubereiten: Coverage-Heatmap pro Komponente, Edge-Case-Statistiken als Funnel, UX-Qualitäts-Scorecard
 - Fixe ALLE Findings
 
 ### Schritt 4: Output dokumentieren
