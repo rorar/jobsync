@@ -83,8 +83,9 @@ rule Signup {
 
     ensures:
         if user with email already exists:
-            return generic error
-            -- "Unable to create account. Please try a different email or sign in."
+            return generic error via i18n key "auth.unableToCreateAccount"
+            -- Resolved via t(locale, "auth.unableToCreateAccount") using getUserLocale().
+            -- All 4 locales (en, de, fr, es) carry the translation.
             -- Generic to prevent user enumeration (CWE-204).
             -- MUST NOT reveal whether the email is registered.
         else:

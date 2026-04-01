@@ -195,6 +195,8 @@ rule GetJobDetails {
 
     ensures: Job returned with all relations (title, company, status, location,
         source, resume with file, tags)
+    ensures: Resume.File includes only { id, fileName, fileType }
+        -- File.filePath excluded to prevent server path disclosure
 
     -- Uses findFirst with { id, userId } — not findUnique.
     -- This is the IDOR-safe pattern. See security-rules.allium.

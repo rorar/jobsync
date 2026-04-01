@@ -73,8 +73,25 @@ config ApiKeyAuth {
     header_fallback: "X-API-Key: pk_live_..."
 }
 
+rule PreAuthIpRateLimit {
+    when: Any request to /api/v1/* (before authentication)
+
+    ensures: IP extracted from X-Forwarded-For (first entry), X-Real-IP, or "unknown"
+    ensures: Sliding window check: 120 requests per minute per IP
+    ensures:
+        if over limit: reject with 429 RATE_LIMITED + Retry-After header
+        if under limit: proceed to API key authentication
+
+    -- This runs BEFORE API key validation to prevent DoS via invalid key flooding.
+    -- Without this, an attacker could exhaust DB lookups with random keys.
+    --
+    -- CAVEAT: X-Forwarded-For is forgeable without a trusted reverse proxy.
+    -- Multi-instance deployments share no state — each instance has its own
+    -- in-memory counter. This is acceptable for self-hosted single-instance.
+}
+
 rule ValidateApiKey {
-    when: Any request to /api/v1/*
+    when: Any request to /api/v1/* (after IP rate limit passes)
 
     ensures: Extract key from Authorization (Bearer) or X-API-Key header
     ensures: Compute SHA-256 hash of the raw key
@@ -84,6 +101,7 @@ rule ValidateApiKey {
         if key is revoked (revokedAt != null): reject (401 UNAUTHORIZED)
         if key valid: return userId + keyHash
     ensures: lastUsedAt updated asynchronously (non-blocking)
+    ensures: Validation uses constant-time evaluation pattern to prevent timing oracle
 
     -- The key is NEVER stored in plaintext. Only the SHA-256 hash is persisted.
     -- Validation is O(1) via unique index on keyHash.
@@ -115,7 +133,10 @@ rule CheckRateLimit {
         - Retry-After: (seconds until reset)
 
     -- Single-process only. Does NOT work in serverless/multi-instance.
+    -- In multi-instance deployments, each instance maintains its own counters,
+    -- effectively multiplying the allowed rate by the number of instances.
     -- Production deployments should use Redis-backed rate limiting.
+    -- Same caveat applies to the pre-auth IP rate limit.
 }
 
 ------------------------------------------------------------
@@ -151,6 +172,11 @@ rule HandlePreflight {
 --
 -- Error codes: VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN,
 --   NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR
+--
+-- Error sanitization (SEC-18): When the inferred status is 500,
+-- the response message is replaced with "An unexpected error occurred."
+-- Raw Prisma errors, stack traces, and internal details are NEVER exposed.
+-- Non-500 errors (400, 401, 404, 409) pass through their original messages.
 
 ------------------------------------------------------------
 -- Security Headers
@@ -187,6 +213,21 @@ config InputValidation {
     job_url: max 2000 chars, valid URL, optional
     tags: max 50 UUIDs, optional
     note_content: min 1, max 10000 chars
+}
+
+------------------------------------------------------------
+-- Validation: Route Parameters
+------------------------------------------------------------
+
+rule ValidateRouteParams {
+    when: Any /api/v1/* route receives a path parameter (:id)
+
+    ensures: Parameter validated against strict UUID regex:
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    ensures: Invalid UUIDs rejected with 400 VALIDATION_ERROR before any DB query
+
+    -- Applied to GET/PATCH/DELETE /api/v1/jobs/:id and GET/POST /api/v1/jobs/:id/notes.
+    -- Prevents injection of non-UUID strings into Prisma queries.
 }
 
 ------------------------------------------------------------
@@ -242,6 +283,8 @@ rule GetJob {
 
     ensures: Job returned with full details including:
         title, company, status, location, source, resume (with file), tags
+    ensures: Resume.File includes only { id, fileName, fileType }
+        -- File.filePath excluded to prevent server path disclosure
 
     -- Uses findFirst with { id, userId } — IDOR-safe pattern.
 }

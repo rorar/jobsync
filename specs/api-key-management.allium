@@ -294,3 +294,18 @@ invariant LegacySaltReadOnly {
     -- The hardcoded LEGACY_SALT is used ONLY for decrypting records that were
     -- encrypted before the per-record salt migration. No new encryption uses it.
 }
+
+invariant UseServerExportBoundary {
+    -- Functions accepting raw userId MUST NOT reside in "use server" files.
+    -- "use server" exports are callable from the browser — a function taking
+    -- raw userId would allow any authenticated user to query another's data.
+    --
+    -- Example: getBlacklistEntriesForUser was moved from
+    -- companyBlacklist.actions.ts ("use server") to src/lib/blacklist-query.ts
+    -- (import "server-only") to prevent client-side IDOR (SEC-13).
+    -- The Runner pipeline calls it with a trusted userId from automation context.
+    --
+    -- Functions that remain in "use server" files and accept userId
+    -- (e.g. getAutomationSettingsForUser) MUST verify caller === userId
+    -- via getCurrentUser() before returning data.
+}

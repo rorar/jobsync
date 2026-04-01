@@ -5,7 +5,9 @@
 -- Includes: IDOR ownership enforcement, SSRF URL validation, credential URL
 --   protection (3-layer defense), security headers, AUTH_SECRET stability,
 --   user enumeration prevention, form method=POST, Ollama field allowlisting,
---   ESCO URI validation, API key hashing, parameter injection prevention
+--   ESCO URI validation, API key hashing, parameter injection prevention,
+--   pre-auth IP rate limiting, "use server" export security, runtime union
+--   validation, UUID route param validation, filePath exclusion, error sanitization
 -- Excludes:
 --   - Authentication flow (see auth-session.allium)
 --   - API key lifecycle (see api-key-management.allium)
@@ -24,10 +26,12 @@
 -- CWE-639: Insecure Direct Object Reference (IDOR)
 -- CWE-918: Server-Side Request Forgery (SSRF)
 -- CWE-204: User Enumeration via Observable Differences
--- CWE-20:  Improper Input Validation (Parameter Injection)
+-- CWE-20:  Improper Input Validation (Parameter Injection, Union Types)
 -- CWE-598: Credential Exposure in GET Parameters
 -- CWE-352: Cross-Site Request Forgery (CSRF)
 -- CWE-614: Missing Security Headers
+-- CWE-209: Information Exposure Through Error Messages
+-- CWE-208: Observable Timing Discrepancy (API key validation)
 
 ------------------------------------------------------------
 -- Rule 1: IDOR Ownership Enforcement
@@ -264,6 +268,11 @@ rule ApiKeyHashing {
     ensures: Only key prefix (pk_live_ + 4 chars) visible after creation
     ensures: Revoked keys (revokedAt != null) are rejected
     ensures: Max 10 active keys per user
+    ensures: Validation uses constant-time evaluation pattern:
+        -- Always perform the same DB lookup and boolean operations
+        -- regardless of whether the key exists or is revoked.
+        -- This prevents timing oracles that could distinguish
+        -- "key not found" from "key revoked" (SEC-17).
 
     -- See api-key-management.allium for full lifecycle.
 }
@@ -282,6 +291,26 @@ rule ModuleApiKeyEncryption {
 ------------------------------------------------------------
 -- Rule 9: Rate Limiting
 ------------------------------------------------------------
+
+rule PreAuthIpRateLimit {
+    when: Any request to /api/v1/*
+
+    ensures: Rate limit checked by IP BEFORE API key authentication
+    ensures: Limit: 120 requests per minute per IP address
+    ensures: IP extracted from X-Forwarded-For (first entry), X-Real-IP, or "unknown"
+    ensures:
+        if over limit: reject with 429 RATE_LIMITED + Retry-After header
+        if under limit: proceed to API key authentication
+
+    -- Prevents DoS via invalid key flooding. Without this, an attacker
+    -- could exhaust database lookups by sending millions of requests with
+    -- random API keys. The IP rate limit catches this BEFORE the DB query.
+
+    -- CAVEAT: X-Forwarded-For is forgeable without a trusted reverse proxy.
+    -- In deployments without a reverse proxy, all requests may share the
+    -- same IP or an attacker can spoof the header to bypass the limit.
+    -- This is acceptable for self-hosted single-instance deployments.
+}
 
 rule SigninRateLimit {
     when: User attempts to sign in
@@ -348,6 +377,99 @@ rule ApiRouteSelfProtection {
 }
 
 ------------------------------------------------------------
+-- Rule 11: "use server" Export Security
+------------------------------------------------------------
+
+rule UseServerExportSecurity {
+    when: A server-side function accepts a raw userId parameter
+
+    ensures: The function MUST NOT reside in a "use server" file
+    ensures: Instead, it lives in a server-only module (import "server-only")
+
+    -- "use server" exports are callable from the browser. A function
+    -- accepting raw userId in a "use server" file allows any authenticated
+    -- user to pass another user's ID and access their data (IDOR).
+    -- Example fix (SEC-13): getBlacklistEntriesForUser was moved from
+    -- companyBlacklist.actions.ts ("use server") to src/lib/blacklist-query.ts
+    -- (import "server-only"). The caller (Runner) is trusted to pass a
+    -- valid userId from the automation context.
+    --
+    -- Functions that accept userId but remain in "use server" files
+    -- (e.g. getAutomationSettingsForUser, getNotificationPreferencesForUser)
+    -- MUST verify caller === userId via getCurrentUser() before proceeding.
+}
+
+------------------------------------------------------------
+-- Rule 12: Runtime Validation of Union Types
+------------------------------------------------------------
+
+rule RuntimeUnionValidation {
+    when: A "use server" function accepts a TypeScript union/enum parameter
+
+    ensures: Runtime validation against an explicit allowlist BEFORE use
+    ensures: TypeScript type erasure means the TS type provides NO protection
+
+    -- Examples of validated union types:
+    --   matchType (BlacklistMatchType): validated against VALID_MATCH_TYPES (SEC-14)
+    --   status (TaskStatus): validated against TASK_STATUSES (BS-8)
+    --   actionType (BulkActionType): validated against VALID_BULK_ACTIONS (BS-8)
+    -- Without runtime validation, a malicious client can send any string
+    -- for a parameter typed as a union, potentially corrupting data or
+    -- bypassing business logic.
+}
+
+------------------------------------------------------------
+-- Rule 13: UUID Validation on API Route Params
+------------------------------------------------------------
+
+rule UuidRouteParamValidation {
+    when: API route handler receives a path parameter (e.g. :id)
+
+    ensures: Parameter validated against strict UUID regex:
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    ensures: Invalid UUIDs rejected with 400 VALIDATION_ERROR before any DB query
+
+    -- Prevents injection of non-UUID strings into Prisma queries.
+    -- Applied to all /api/v1/jobs/:id and /api/v1/jobs/:id/notes routes.
+}
+
+------------------------------------------------------------
+-- Rule 14: File.filePath Exclusion
+------------------------------------------------------------
+
+rule FilePathExclusion {
+    when: Server response includes File entity data
+
+    ensures: File.filePath is NEVER included in the response
+    ensures: Only File.id, File.fileName, File.fileType are returned
+    ensures: Prisma queries use { select: { id, fileName, fileType } } for File
+
+    -- File.filePath contains the server filesystem path, which is an
+    -- information disclosure risk. Exposing it reveals the deployment
+    -- directory structure. Applied to:
+    --   - getResumeById (profile.actions.ts)
+    --   - getJobDetails (job.actions.ts)
+    --   - GET /api/v1/jobs/:id (route.ts)
+}
+
+------------------------------------------------------------
+-- Rule 15: Error Message Sanitization
+------------------------------------------------------------
+
+rule ErrorMessageSanitization {
+    when: API v1 response has HTTP status 500
+
+    ensures: Response message is generic: "An unexpected error occurred."
+    ensures: Raw Prisma errors, stack traces, and internal details are NEVER exposed
+    ensures: Non-500 errors (400, 401, 404, 409) pass through their messages
+
+    -- Implemented in src/lib/api/response.ts (SEC-18).
+    -- The actionToResponse() function checks the inferred status code.
+    -- If it resolves to 500 (no recognized pattern in the message),
+    -- the message is replaced with the generic text.
+}
+
+------------------------------------------------------------
 -- Invariants
 ------------------------------------------------------------
 
@@ -404,13 +526,14 @@ invariant SecureSecretManagement {
 -- Known Gaps (from security review)
 ------------------------------------------------------------
 
--- GAP-1: deleteWorkExperience and deleteEducation in profile.actions.ts
---   do not verify ownership via chain traversal before deletion.
---   An authenticated user could potentially delete another user's entries
---   if they know the ID. Severity: Medium.
+-- GAP-1: RESOLVED. deleteWorkExperience and deleteEducation now verify
+--   ownership via chain traversal (WorkExperience/Education → ResumeSection
+--   → Resume → profile → userId) before deletion. See profile-resume.allium.
 
--- GAP-2: deleteResumeById does not verify ownership via profile.userId.
---   Same risk as GAP-1. Severity: Medium.
+-- GAP-2: RESOLVED. deleteResumeById now verifies ownership via
+--   resume → profile → userId before cascade delete. deleteFile accepts
+--   callerUserId for File → Resume → Profile → User chain verification.
+--   See profile-resume.allium.
 
 -- GAP-3: Export endpoint (/api/jobs/export) relies on getCurrentUser()
 --   internally but has no route-level auth check. If getCurrentUser()

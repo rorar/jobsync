@@ -78,13 +78,16 @@ entity Resume {
 
 entity File {
     file_name: String
-    file_path: String
+    file_path: String?             -- server filesystem path; excluded from responses
     file_type: String              -- always "resume" for resume uploads
     uploaded_at: Timestamp
 
     @invariant
         -- A File is linked 1:1 with a Resume (unique foreign key).
         -- Files are stored on the server filesystem.
+        -- file_path is NEVER included in server responses to prevent
+        -- disclosure of the deployment directory structure.
+        -- Queries use { select: { id, fileName, fileType } } for File.
 }
 
 entity ContactInfo {
@@ -212,7 +215,7 @@ rule GetResumeById {
 
     ensures: Resume returned with:
         - ContactInfo (if present)
-        - File (if attached)
+        - File (if attached, with id, fileName, fileType only — filePath excluded)
         - All ResumeSections with their children:
             - Summary sections with content
             - Experience sections with WorkExperiences (including company, jobTitle, location)
@@ -240,7 +243,7 @@ rule DeleteResume {
     when: User deletes a resume
 
     requires: User is authenticated
-    -- NOTE: Missing ownership check in current code — see Open Questions
+    requires: Resume.profile.userId = User.id  -- ownership verified before cascade delete
 
     ensures: Transaction deletes in order:
         1. ContactInfo (where resumeId)
@@ -250,6 +253,8 @@ rule DeleteResume {
         5. ResumeSection (where resumeId)
         6. Resume
     ensures: If file attached, file deleted from filesystem AND database
+    ensures: File deletion uses callerUserId for ownership verification:
+        File → Resume → Profile → User chain traversal
 
     -- Transaction ensures atomicity — either all children are deleted or none.
     -- The deletion order respects referential integrity constraints.
@@ -288,6 +293,7 @@ rule AddResumeSummary {
     when: User adds a summary section to a resume
 
     requires: User is authenticated
+    requires: Resume.profile.userId = User.id  -- ownership verified before create
 
     ensures: ResumeSection.created(
         resumeId: resumeId,
@@ -314,6 +320,7 @@ rule AddExperience {
     when: User adds a work experience entry
 
     requires: User is authenticated
+    requires: Resume.profile.userId = User.id  -- ownership verified before create
     requires: either sectionId provided OR sectionTitle provided
 
     ensures:
@@ -346,7 +353,8 @@ rule DeleteWorkExperience {
     when: User deletes a work experience entry
 
     requires: User is authenticated
-    -- NOTE: No ownership chain verification in current code
+    requires: WorkExperience.ResumeSection.Resume.profile.userId = User.id
+        -- 5-level chain traversal for ownership (same as UpdateExperience)
 
     ensures: WorkExperience.deleted
 }
@@ -357,6 +365,7 @@ rule AddEducation {
     when: User adds an education entry
 
     requires: User is authenticated
+    requires: Resume.profile.userId = User.id  -- ownership verified before create
     requires: either sectionId provided OR sectionTitle provided
 
     ensures:
@@ -385,7 +394,8 @@ rule DeleteEducation {
     when: User deletes an education entry
 
     requires: User is authenticated
-    -- NOTE: No ownership chain verification in current code
+    requires: Education.ResumeSection.Resume.profile.userId = User.id
+        -- 5-level chain traversal for ownership (same as UpdateEducation)
 
     ensures: Education.deleted
 }
@@ -451,12 +461,13 @@ invariant SectionOnDemandCreation {
 --     This means two different users cannot have resumes with the same title.
 --     Should this be changed to per-user uniqueness?
 
--- Q2: deleteWorkExperience and deleteEducation do not verify ownership via
---     chain traversal. They only check authentication. Should these be fixed
---     to include the full chain traversal check? (See security-rules.allium)
+-- Q2: RESOLVED. deleteWorkExperience and deleteEducation now verify ownership
+--     via chain traversal before deletion. See DeleteWorkExperience and
+--     DeleteEducation rules above.
 
--- Q3: deleteResumeById does not verify ownership via profile.userId.
---     It relies only on authentication. Should ownership be enforced?
+-- Q3: RESOLVED. deleteResumeById now verifies ownership via resume → profile
+--     → userId before cascade delete. deleteFile accepts callerUserId for
+--     File → Resume → Profile → User chain verification.
 
 -- Q4: Should File cleanup be handled more robustly? Currently if the DB
 --     delete succeeds but the filesystem delete fails (or vice versa),
