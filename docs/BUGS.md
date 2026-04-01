@@ -1,8 +1,16 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-01
 
-**Total: 96 bugs found, 96 fixed, 0 remaining**
+**Total: 99 bugs found, 99 fixed, 0 remaining**
 
 ### Status: ✅ All bugs are fixed.
+
+## Session S1a Performance Findings (2026-04-01) — ALL FIXED
+
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| PERF-1 | **HIGH** | `lastUsedAt` DB write on every API call / credential resolve — bottleneck under load | In-memory throttle: max 1 write per 5 min per key (`last-used-throttle.ts`) |
+| PERF-2 | **HIGH** | Unbounded job URL query for dedup — loads ALL jobs from DB | Bounded to 90-day window (`runner.ts: getExistingVacancyKeys`) |
+| PERF-3 | **HIGH** | Rate limiter Map grows unbounded between cleanup intervals | Added `MAX_STORE_SIZE=10000` cap with LRU eviction (`rate-limit.ts`) |
 
 ## Blind Spot Analysis (2026-04-01) — ALL FIXED
 

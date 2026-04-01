@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026-04-01] Session S1a — Allium Weed + Gap Analysis + Performance Fixes
+
+### Fixed
+- **perf:** lastUsedAt DB writes throttled to max 1 per 5 minutes per key (PERF-1)
+- **perf:** Dedup job URL query bounded to 90-day window (PERF-2)
+- **perf:** Rate limiter Map capped at 10,000 entries with LRU eviction (PERF-3)
+- **i18n:** 16 hardcoded English strings in automation detail page (A9)
+- **ux:** Run Now tooltip explains all disabled states — running, paused, resume missing (B6)
+
+### Added
+- `src/lib/api/last-used-throttle.ts` — reusable DB write throttle utility
+- `__tests__/last-used-throttle.spec.ts` — 7 unit tests for throttle logic
+- `docs/gap-analysis-sprint-abc.md` — Sprint A/B/C gap analysis (24/24 items DONE)
+
+### Changed
+- Allium specs updated for spec-code alignment (19 specs weeded)
+
 ## Sprint C (2026-03-31)
 
 ### Features
