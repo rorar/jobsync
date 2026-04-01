@@ -4,20 +4,19 @@ import { Paperclip } from "lucide-react";
 import { toast } from "../ui/use-toast";
 
 interface DownloadFileButtonProps {
-  filePath: string;
-  fileTitle: string;
   fileName: string;
+  fileTitle: string;
 }
 
 export function DownloadFileButton({
-  filePath,
-  fileTitle,
   fileName,
+  fileTitle,
 }: DownloadFileButtonProps) {
   const handleDownload = async () => {
     try {
+      // Use fileName (not filePath) to prevent server path leakage (SEC-11)
       const response = await fetch(
-        `/api/profile/resume?filePath=${encodeURIComponent(filePath)}`,
+        `/api/profile/resume?filePath=${encodeURIComponent(fileName)}`,
         {
           method: "GET",
           headers: {
@@ -31,7 +30,7 @@ export function DownloadFileButton({
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = filePath.split("/").pop() || fileName;
+        link.download = fileName;
         link.target = "_blank";
         link.click();
         window.URL.revokeObjectURL(url);

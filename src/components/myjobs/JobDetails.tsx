@@ -82,9 +82,8 @@ function JobDetails({ job }: { job: JobResponse }) {
               </CardDescription>
             </div>
             <div>
-              {job?.Resume && job?.Resume?.File && job.Resume?.File?.filePath
+              {job?.Resume && job?.Resume?.File && job.Resume?.File?.fileName
                 ? <DownloadFileButton
-                    filePath={job.Resume.File.filePath}
                     fileTitle={job.Resume.title}
                     fileName={job.Resume.File.fileName}
                   />

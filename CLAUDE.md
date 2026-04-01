@@ -227,10 +227,43 @@ Implemented in `module.actions.ts` and `degradation.ts`. Spec: `specs/module-lif
 
 ## Security Rules
 
+**Allium Spec:** `specs/security-rules.allium` — authoritative specification for all security rules.
+**ADRs:** ADR-015 (IDOR), ADR-016 (Credential Defense), ADR-017 (Encryption Salt), ADR-018 (AUTH_SECRET), ADR-019 (Rate Limiting + Server Action Security)
+
+### IDOR Ownership Enforcement (ADR-015)
+- **All Prisma reads/writes MUST include userId in the where clause.** Never query by resource ID alone.
+- **Direct ownership:** `findFirst({ where: { id, userId: user.id } })` for Job, Company, Tag
+- **Chain traversal:** Pre-flight `findFirst` via relation chain for sub-resources: `ContactInfo → resume → profile → userId`, `WorkExperience → ResumeSection → Resume → profile → userId`
+- **Never trust client-submitted userId.** Only use `user.id` from `getCurrentUser()` session.
+- **`findFirst` replaces `findUnique`** when adding userId filter (Prisma constraint).
+
+### "use server" Export Security (ADR-019)
+- **Functions accepting raw userId MUST NOT be in `"use server"` files.** Next.js exposes all exports from "use server" files as callable Server Actions from the browser.
+- **Pattern A (preferred):** Move to a file with `import "server-only"` (e.g., `src/lib/blacklist-query.ts`)
+- **Pattern B:** Add `const user = await getCurrentUser(); if (!user || user.id !== userId) return defaults;`
+- **Runtime validation:** TypeScript union types (`matchType`, `TaskStatus`, `BulkActionType`) are erased at runtime — validate with array/enum check at the server action boundary.
+
+### API Security
+- **Pre-auth IP rate limiting:** `withApiAuth()` applies 120 req/min by IP BEFORE API key validation to prevent DoS via invalid key flooding (ADR-019).
+- **UUID validation:** All `/api/v1/*` route params validated with `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`
+- **File.filePath never in responses:** Use `File: { select: { id: true, fileName: true, fileType: true } }` — never `File: true`
+- **Error sanitization:** 500 errors return generic message, never raw Prisma errors
+- **ALL `/api/v1/*` routes** MUST use `withApiAuth()` wrapper
+
+### Credential Protection (ADR-016)
+- **Auth forms:** `method="POST"` + `action=""` on all `<form>` elements
+- **Client-side:** `useEffect` strips credential params from URL on mount
+- **Middleware:** 303 redirect strips credential params from `/signin` and `/signup`
+- **AUTH_SECRET:** Container MUST fail startup if not set (ADR-018). Never auto-generate.
+
+### Existing Rules
 - **All API proxy routes** (`/api/esco/*`, `/api/eures/*`) MUST check `auth()` — never expose EU APIs without authentication
 - **ESCO URI validation**: Always validate that user-supplied URIs start with `http://data.europa.eu/esco/` to prevent SSRF
+- **Ollama URL validation**: `validateOllamaUrl()` before every fetch — blocks IMDS, private IPs, non-http protocols
+- **Ollama body allowlist**: Only forward `model`, `prompt`, `stream`, `system`, `template`, `context` to Ollama
 - **Server-only barrel**: `@/i18n/server.ts` has `import "server-only"` — never import it in client components
 - **No credentials in commits**: `.env` is gitignored, never commit API keys
+- **Security headers** (middleware): Referrer-Policy, X-Content-Type-Options, X-Frame-Options, HSTS (prod), Permissions-Policy
 
 ## Reusable UI Components
 

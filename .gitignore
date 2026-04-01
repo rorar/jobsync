@@ -58,7 +58,7 @@ data/files/resumes
 !.github/workflows
 .claude/settings.local.json
 .specify
-/specs
+# /specs — Allium specs are now tracked in git (19 specs, 8000+ lines)
 .vscode
 AGENTS.md
 
