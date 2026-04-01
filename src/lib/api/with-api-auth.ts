@@ -40,10 +40,13 @@ export function withApiAuth(
     }
 
     try {
-      // 1. Rate limit by IP BEFORE auth — prevents DoS via invalid key flooding
+      // 1. Rate limit by IP BEFORE auth — prevents DoS via invalid key flooding (ADR-019)
+      // SECURITY NOTE: x-forwarded-for is spoofable without a trusted reverse proxy.
+      // In production, configure nginx/Caddy to overwrite x-forwarded-for with the real client IP.
+      // The fallback uses a unique value per request to prevent shared-bucket DoS.
       const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
         || req.headers.get("x-real-ip")
-        || "unknown";
+        || `anon-${Date.now()}`;
       const ipRateResult = checkRateLimit(`ip:${clientIp}`, 120, 60_000);
       if (!ipRateResult.allowed) {
         const res = errorResponse(

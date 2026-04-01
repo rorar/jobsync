@@ -28,7 +28,6 @@ import {
 import {
   getAutomationById,
   getDiscoveredJobs,
-  getAutomationRuns,
   pauseAutomation,
   resumeAutomation,
   getDiscoveredJobById,
@@ -96,28 +95,24 @@ export default function AutomationDetailPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [automationResult, runsResult, jobsResult, resumeResult] = await Promise.all([
+      const [automationResult, jobsResult, resumeResult] = await Promise.all([
         getAutomationById(automationId),
-        getAutomationRuns(automationId),
         getDiscoveredJobs(automationId),
         getResumeList(1, 100),
       ]);
 
       if (automationResult.success && automationResult.data) {
         setAutomation(automationResult.data);
+        // Runs are included in getAutomationById response — no separate fetch needed (F-04)
         setRuns(automationResult.data.runs || []);
       } else {
         toast({
-          title: "Error",
-          description: automationResult.message || "Automation not found",
+          title: t("common.error"),
+          description: automationResult.message || t("automations.notFound"),
           variant: "destructive",
         });
         router.push("/dashboard/automations");
         return;
-      }
-
-      if (runsResult.success && runsResult.data) {
-        setRuns(runsResult.data);
       }
 
       if (jobsResult.success && jobsResult.data) {
@@ -130,7 +125,7 @@ export default function AutomationDetailPage() {
       }
     } catch (error) {
       toast({
-        title: "Error",
+        title: t("common.error"),
         description: t("automations.loadFailed"),
         variant: "destructive",
       });
@@ -162,7 +157,7 @@ export default function AutomationDetailPage() {
       loadData();
     } else {
       toast({
-        title: "Error",
+        title: t("common.error"),
         description: result.message,
         variant: "destructive",
       });
@@ -193,14 +188,14 @@ export default function AutomationDetailPage() {
         });
       } else {
         toast({
-          title: "Error",
+          title: t("common.error"),
           description: data.message || t("automations.runFailed"),
           variant: "destructive",
         });
       }
     } catch (error) {
       toast({
-        title: "Error",
+        title: t("common.error"),
         description: t("automations.runFailed"),
         variant: "destructive",
       });
@@ -289,7 +284,7 @@ export default function AutomationDetailPage() {
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-medium text-foreground">Keywords:</span>
+              <span className="font-medium text-foreground">{t("automations.keywords")}:</span>
               {parseKeywords(automation.keywords)
                 .map((kw: string) => (
                   <Badge key={kw} variant="secondary" className="text-xs">
@@ -298,7 +293,7 @@ export default function AutomationDetailPage() {
                 ))}
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-medium text-foreground">Location:</span>
+              <span className="font-medium text-foreground">{t("automations.locationLabel")}:</span>
               {parseLocations(automation.location).map((code) => (
                 <LocationBadge
                   key={code}

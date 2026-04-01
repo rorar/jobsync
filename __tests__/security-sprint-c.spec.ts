@@ -305,7 +305,7 @@ describe("SEC-14: matchType runtime validation", () => {
 
     const result = await addBlacklistEntry("BadCorp", "invalid" as any);
 
-    expect(result).toEqual({ success: false, message: "Invalid match type" });
+    expect(result).toEqual({ success: false, message: "blacklist.invalidMatchType" });
     expect(prisma.companyBlacklist.create).not.toHaveBeenCalled();
   });
 
@@ -333,7 +333,7 @@ describe("SEC-14: matchType runtime validation", () => {
 
     const result = await addBlacklistEntry("BadCorp", "exact_match" as any);
 
-    expect(result).toEqual({ success: false, message: "Invalid match type" });
+    expect(result).toEqual({ success: false, message: "blacklist.invalidMatchType" });
   });
 
   it("accepts all four valid matchTypes without returning invalid-type error", async () => {
@@ -349,7 +349,7 @@ describe("SEC-14: matchType runtime validation", () => {
       });
 
       const result = await addBlacklistEntry("Acme", mt);
-      expect(result).not.toEqual({ success: false, message: "Invalid match type" });
+      expect(result).not.toEqual({ success: false, message: "blacklist.invalidMatchType" });
     }
   });
 });

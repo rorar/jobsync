@@ -159,6 +159,13 @@ function makeSnapshot(overrides: Partial<SchedulerSnapshot> = {}): SchedulerSnap
   };
 }
 
+// Reset SSE connection counter between tests (SEC-P2-08)
+const SSE_CONN_KEY = "__sseConnectionCounts" as const;
+beforeEach(() => {
+  const g = globalThis as unknown as { [SSE_CONN_KEY]?: Map<string, number> };
+  g[SSE_CONN_KEY]?.clear();
+});
+
 // ---------------------------------------------------------------------------
 // Auth guard
 // ---------------------------------------------------------------------------

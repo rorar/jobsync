@@ -18,11 +18,12 @@ export async function getBlacklistEntries(): Promise<
 > {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "blacklist.notAuthenticated" };
 
     const entries = await prisma.companyBlacklist.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
+      take: 500, // Bound query to prevent unbounded memory (F-05)
     });
 
     return {
@@ -49,16 +50,24 @@ export async function addBlacklistEntry(
 ): Promise<ActionResult<CompanyBlacklist>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "blacklist.notAuthenticated" };
 
     // Runtime validation — TypeScript types are erased (SEC-14)
     if (!VALID_MATCH_TYPES.includes(matchType)) {
-      return { success: false, message: "Invalid match type" };
+      return { success: false, message: "blacklist.invalidMatchType" };
     }
 
     const trimmedPattern = pattern.trim();
     if (!trimmedPattern) {
       return { success: false, message: "blacklist.patternRequired" };
+    }
+    if (trimmedPattern.length > 500) {
+      return { success: false, message: "blacklist.patternTooLong" };
+    }
+
+    const trimmedReason = reason?.trim();
+    if (trimmedReason && trimmedReason.length > 1000) {
+      return { success: false, message: "blacklist.reasonTooLong" };
     }
 
     // Check for duplicate
@@ -81,7 +90,7 @@ export async function addBlacklistEntry(
         userId: user.id,
         pattern: trimmedPattern,
         matchType,
-        reason: reason?.trim() || null,
+        reason: trimmedReason || null,
       },
     });
 
@@ -106,20 +115,16 @@ export async function removeBlacklistEntry(
 ): Promise<ActionResult<undefined>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "blacklist.notAuthenticated" };
 
-    // Ownership enforced at Prisma level (ADR-015)
-    const entry = await prisma.companyBlacklist.findFirst({
+    // Atomic delete with ownership check — avoids TOCTOU race (SEC-P2-17, ADR-015)
+    const result = await prisma.companyBlacklist.deleteMany({
       where: { id, userId: user.id },
     });
 
-    if (!entry) {
-      return { success: false, message: "Entry not found" };
+    if (result.count === 0) {
+      return { success: false, message: "blacklist.entryNotFound" };
     }
-
-    await prisma.companyBlacklist.delete({
-      where: { id },
-    });
 
     revalidatePath("/settings");
     return { success: true };

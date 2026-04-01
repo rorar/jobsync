@@ -16,6 +16,7 @@ jest.mock("@/lib/db", () => ({
       findUnique: jest.fn(),
       create: jest.fn(),
       delete: jest.fn(),
+      deleteMany: jest.fn(),
     },
   },
 }));
@@ -26,6 +27,7 @@ const mockCompanyBlacklist = db.companyBlacklist as unknown as {
   findUnique: jest.Mock;
   create: jest.Mock;
   delete: jest.Mock;
+  deleteMany: jest.Mock;
 };
 
 jest.mock("@/utils/user.utils", () => ({
@@ -59,6 +61,7 @@ describe("CompanyBlacklist Actions", () => {
       expect(mockCompanyBlacklist.findMany).toHaveBeenCalledWith({
         where: { userId: "user-1" },
         orderBy: { createdAt: "desc" },
+        take: 500,
       });
     });
 
@@ -68,7 +71,7 @@ describe("CompanyBlacklist Actions", () => {
       const result = await getBlacklistEntries();
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("Not authenticated");
+      expect(result.message).toBe("blacklist.notAuthenticated");
     });
   });
 
@@ -132,36 +135,34 @@ describe("CompanyBlacklist Actions", () => {
       const result = await addBlacklistEntry("Acme", "contains");
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("Not authenticated");
+      expect(result.message).toBe("blacklist.notAuthenticated");
     });
   });
 
   describe("removeBlacklistEntry", () => {
-    it("removes entry owned by user", async () => {
-      mockCompanyBlacklist.findFirst.mockResolvedValue({
-        id: "e1", userId: "user-1",
-      });
-      mockCompanyBlacklist.delete.mockResolvedValue({});
+    it("removes entry owned by user (atomic deleteMany)", async () => {
+      mockCompanyBlacklist.deleteMany.mockResolvedValue({ count: 1 });
 
       const result = await removeBlacklistEntry("e1");
 
       expect(result.success).toBe(true);
-      expect(mockCompanyBlacklist.delete).toHaveBeenCalledWith({ where: { id: "e1" } });
+      expect(mockCompanyBlacklist.deleteMany).toHaveBeenCalledWith({
+        where: { id: "e1", userId: "user-1" },
+      });
     });
 
     it("rejects removal of entry owned by another user", async () => {
-      // With ADR-015, findFirst includes userId in where clause,
-      // so another user's entry simply returns null (not found)
-      mockCompanyBlacklist.findFirst.mockResolvedValue(null);
+      // With atomic deleteMany + userId, another user's entry returns count: 0
+      mockCompanyBlacklist.deleteMany.mockResolvedValue({ count: 0 });
 
       const result = await removeBlacklistEntry("e1");
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("Entry not found");
+      expect(result.message).toBe("blacklist.entryNotFound");
     });
 
     it("rejects removal of non-existent entry", async () => {
-      mockCompanyBlacklist.findFirst.mockResolvedValue(null);
+      mockCompanyBlacklist.deleteMany.mockResolvedValue({ count: 0 });
 
       const result = await removeBlacklistEntry("non-existent");
 

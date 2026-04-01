@@ -24,6 +24,13 @@ import type {
   BlacklistMatchType,
 } from "@/models/companyBlacklist.model";
 
+const MATCH_TYPE_KEYS: Record<BlacklistMatchType, string> = {
+  exact: "blacklist.matchExact",
+  contains: "blacklist.matchContains",
+  starts_with: "blacklist.matchStartsWith",
+  ends_with: "blacklist.matchEndsWith",
+};
+
 export default function CompanyBlacklistSettings() {
   const { t } = useTranslations();
   const [entries, setEntries] = useState<CompanyBlacklist[]>([]);
@@ -115,6 +122,8 @@ export default function CompanyBlacklistSettings() {
               <SelectContent>
                 <SelectItem value="contains">{t("blacklist.matchContains")}</SelectItem>
                 <SelectItem value="exact">{t("blacklist.matchExact")}</SelectItem>
+                <SelectItem value="starts_with">{t("blacklist.matchStartsWith")}</SelectItem>
+                <SelectItem value="ends_with">{t("blacklist.matchEndsWith")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -160,9 +169,7 @@ export default function CompanyBlacklistSettings() {
                 <div className="flex items-center gap-2">
                   <span className="font-medium truncate">{entry.pattern}</span>
                   <span className="text-xs rounded-full bg-muted px-2 py-0.5 shrink-0">
-                    {entry.matchType === "exact"
-                      ? t("blacklist.matchExact")
-                      : t("blacklist.matchContains")}
+                    {t(MATCH_TYPE_KEYS[entry.matchType])}
                   </span>
                 </div>
                 {entry.reason && (

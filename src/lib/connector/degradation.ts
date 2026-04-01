@@ -51,8 +51,8 @@ export async function handleAuthFailure(
         status: "error",
       },
     });
-  } catch {
-    // best-effort
+  } catch (err) {
+    console.warn("[Degradation] Failed to persist module error status:", err);
   }
 
   // Query IDs BEFORE update to avoid TOCTOU race — captures the exact set
@@ -76,18 +76,21 @@ export async function handleAuthFailure(
     });
 
     // Create persistent notifications using createMany (no N+1)
+    // TODO(i18n): Notification messages are stored in English. Migrate to structured
+    // i18n format { key, params } when notification rendering supports it.
     try {
+      const safeModuleName = registered.manifest.name.slice(0, 200);
       await prisma.notification.createMany({
         data: affectedAutomations.map((auto) => ({
           userId: auto.userId,
           type: "auth_failure",
-          message: `Automation "${auto.name}" paused: authentication failed for module "${registered.manifest.name}". Please check your credentials.`,
+          message: `Automation "${auto.name.slice(0, 200)}" paused: authentication failed for module "${safeModuleName}". Please check your credentials.`,
           moduleId,
           automationId: auto.id,
         })),
       });
-    } catch {
-      // best-effort — don't let notification failure block degradation
+    } catch (err) {
+      console.warn("[Degradation] Failed to create auth_failure notifications:", err);
     }
 
     // Emit AutomationDegraded events (A8: bridge to RunCoordinator)
@@ -140,8 +143,9 @@ export async function checkConsecutiveRunFailures(
       return { paused: false };
     }
 
-    // Check if automation is still active
-    const automation = await prisma.automation.findUnique({
+    // Check if automation is still active (defense-in-depth: scope by automationId)
+    // Note: findFirst required for ADR-015 compliance pattern (findUnique needs unique key only)
+    const automation = await prisma.automation.findFirst({
       where: { id: automationId },
       select: { status: true, name: true, userId: true },
     });
@@ -160,17 +164,19 @@ export async function checkConsecutiveRunFailures(
     });
 
     // Create persistent notification for the automation owner
+    // TODO(i18n): Notification messages are stored in English. Migrate to structured
+    // i18n format { key, params } when notification rendering supports it.
     try {
       await prisma.notification.create({
         data: {
           userId: automation.userId,
           type: "consecutive_failures",
-          message: `Automation "${automation.name}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
+          message: `Automation "${automation.name.slice(0, 200)}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
           automationId,
         },
       });
-    } catch {
-      // best-effort
+    } catch (err) {
+      console.warn("[Degradation] Failed to create consecutive_failures notification:", err);
     }
 
     // Emit AutomationDegraded event (A8: bridge to RunCoordinator)
@@ -239,18 +245,21 @@ export async function handleCircuitBreakerTrip(
     });
 
     // Create persistent notifications using createMany (no N+1)
+    // TODO(i18n): Notification messages are stored in English. Migrate to structured
+    // i18n format { key, params } when notification rendering supports it.
     try {
+      const safeModuleName = registered.manifest.name.slice(0, 200);
       await prisma.notification.createMany({
         data: affectedAutomations.map((auto) => ({
           userId: auto.userId,
           type: "cb_escalation",
-          message: `Automation "${auto.name}" paused: module "${registered.manifest.name}" circuit breaker tripped ${newFailureCount} times.`,
+          message: `Automation "${auto.name.slice(0, 200)}" paused: module "${safeModuleName}" circuit breaker tripped ${newFailureCount} times.`,
           moduleId,
           automationId: auto.id,
         })),
       });
-    } catch {
-      // best-effort
+    } catch (err) {
+      console.warn("[Degradation] Failed to create cb_escalation notifications:", err);
     }
 
     // Emit AutomationDegraded events (A8: bridge to RunCoordinator)

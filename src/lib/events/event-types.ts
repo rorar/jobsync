@@ -7,8 +7,10 @@
  * Spec: specs/event-bus.allium (value DomainEvent, typed payloads)
  */
 
-import type { RunSource } from "@/lib/scheduler/types";
 import type { AutomationRunStatus } from "@/models/automation.model";
+
+/** Inline definition to avoid bidirectional dependency with scheduler/types */
+type RunSource = "scheduler" | "manual";
 
 // ---------------------------------------------------------------------------
 // Event Type Enum

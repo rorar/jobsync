@@ -372,6 +372,13 @@ export const automations = {
     "automations.total": "total",
     "automations.runNowPaused": "Cannot run while automation is paused",
     "automations.runNowResumeMissing": "Cannot run without a resume assigned",
+    "automations.notFound": "Automation not found",
+    "automations.statusRunning": "Running",
+    "automations.statusCompleted": "Completed",
+    "automations.statusFailed": "Failed",
+    "automations.statusCompletedWithErrors": "Completed with errors",
+    "automations.statusBlocked": "Blocked",
+    "automations.statusRateLimited": "Rate limited",
   },
   de: {
     // AutomationWizard - Steps
@@ -746,6 +753,13 @@ export const automations = {
     "automations.total": "gesamt",
     "automations.runNowPaused": "Automation ist pausiert",
     "automations.runNowResumeMissing": "Kein Lebenslauf zugewiesen",
+    "automations.notFound": "Automatisierung nicht gefunden",
+    "automations.statusRunning": "Läuft",
+    "automations.statusCompleted": "Abgeschlossen",
+    "automations.statusFailed": "Fehlgeschlagen",
+    "automations.statusCompletedWithErrors": "Mit Fehlern abgeschlossen",
+    "automations.statusBlocked": "Blockiert",
+    "automations.statusRateLimited": "Ratenbegrenzt",
   },
   fr: {
     // AutomationWizard - Steps
@@ -1120,6 +1134,13 @@ export const automations = {
     "automations.total": "au total",
     "automations.runNowPaused": "Impossible de lancer une automatisation en pause",
     "automations.runNowResumeMissing": "Impossible de lancer sans CV",
+    "automations.notFound": "Automatisation non trouvée",
+    "automations.statusRunning": "En cours",
+    "automations.statusCompleted": "Terminé",
+    "automations.statusFailed": "Échoué",
+    "automations.statusCompletedWithErrors": "Terminé avec des erreurs",
+    "automations.statusBlocked": "Bloqué",
+    "automations.statusRateLimited": "Débit limité",
   },
   es: {
     // AutomationWizard - Steps
@@ -1494,5 +1515,12 @@ export const automations = {
     "automations.total": "en total",
     "automations.runNowPaused": "No se puede ejecutar mientras está en pausa",
     "automations.runNowResumeMissing": "No se puede ejecutar sin currículum",
+    "automations.notFound": "Automatización no encontrada",
+    "automations.statusRunning": "En ejecución",
+    "automations.statusCompleted": "Completada",
+    "automations.statusFailed": "Fallida",
+    "automations.statusCompletedWithErrors": "Completada con errores",
+    "automations.statusBlocked": "Bloqueada",
+    "automations.statusRateLimited": "Limitada por tasa",
   },
 } as const;

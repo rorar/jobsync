@@ -50,8 +50,8 @@ function connectShared() {
       if ("error" in data) return;
       sharedState = data as SchedulerSnapshot;
       notifyListeners();
-    } catch {
-      // Ignore parse errors
+    } catch (error) {
+      console.debug("[SSE] Parse error:", error);
     }
   };
 

@@ -27,7 +27,7 @@ export function ViewModeToggle({ value, onChange }: ViewModeToggleProps) {
   const { t } = useTranslations();
 
   return (
-    <div className="inline-flex items-center rounded-md border border-input bg-background p-0.5" role="radiogroup" aria-label={t("deck.viewModeList")}>
+    <div className="inline-flex items-center rounded-md border border-input bg-background p-0.5" role="radiogroup" aria-label={t("deck.viewModeLabel")}>
       <button
         type="button"
         role="radio"

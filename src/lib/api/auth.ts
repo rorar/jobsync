@@ -26,8 +26,9 @@ export async function validateApiKey(
     select: { id: true, userId: true, keyHash: true, revokedAt: true },
   });
 
-  // Constant-time evaluation to prevent timing oracle (SEC-17).
-  // Always perform the same operations regardless of key state.
+  // Evaluate key validity. Note: the DB query itself is not constant-time
+  // (non-existent keys return faster). Accepted risk for self-hosted deployment.
+  // For stronger protection, perform a dummy query for invalid keys.
   const keyExists = apiKey !== null;
   const keyRevoked = apiKey?.revokedAt !== null;
   const isValid = keyExists && !keyRevoked;

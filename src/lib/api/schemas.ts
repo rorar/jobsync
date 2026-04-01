@@ -39,7 +39,19 @@ export const CreateJobSchema = z.object({
 /** Partial update job request body */
 export const UpdateJobSchema = CreateJobSchema.partial();
 
+/** Query params for notes list */
+export const NotesListQuerySchema = PaginationSchema;
+
 /** Create note request body */
 export const CreateNoteSchema = z.object({
   content: z.string().min(1, "Note content is required").max(10_000),
 });
+
+// --- Shared validation helpers ---
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Validate a string is a well-formed UUID v4 */
+export function isValidUUID(id: string): boolean {
+  return UUID_RE.test(id);
+}

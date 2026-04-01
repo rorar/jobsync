@@ -1,8 +1,40 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-01
 
-**Total: 109 bugs found, 109 fixed, 0 remaining**
+**Total: 134 bugs found, 134 fixed, 0 remaining**
 
 ### Status: ✅ All bugs are fixed.
+
+## Session S1b Comprehensive Review (2026-04-01) — ALL FIXED
+
+5-dimension review over Sprint A+B+C code (34 files, ~7465 lines). 25 findings fixed.
+
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S1b-1 | **CRITICAL** | `ConnectorCache` singleton not registered in production — 0% hit rate | Unconditional `globalThis` assignment matching RunCoordinator/EventBus |
+| S1b-2 | **CRITICAL** | GET/PATCH/POST `/api/v1/jobs` leak userId, matchData, foreign keys via `include` | Replaced all `include` with explicit `select` (SEC-P2-01) |
+| S1b-3 | **HIGH** | PATCH `/api/v1/jobs/:id` — up to 9 sequential DB round-trips | `Promise.all` for independent findOrCreate calls |
+| S1b-4 | **HIGH** | POST `/api/v1/jobs` — 5 sequential upserts | `Promise.all` parallelization |
+| S1b-5 | **HIGH** | `AutomationDetailPage` duplicate runs fetch on every loadData() | Removed redundant `getAutomationRuns` call |
+| S1b-6 | **HIGH** | `getBlacklistEntries` unbounded findMany (no LIMIT) | Added `take: 500` |
+| S1b-7 | **HIGH** | `degradation.ts` findUnique without userId (ADR-015 violation) | Changed to `findFirst` |
+| S1b-8 | **HIGH** | IP rate limiting trusts spoofable `x-forwarded-for` header | Unique per-request fallback + documentation |
+| S1b-9 | **HIGH** | Misleading "constant-time" comment on API key validation | Corrected comment, documented accepted risk |
+| S1b-10 | **HIGH** | 11x hardcoded English in `publicApiKey.actions.ts` | Replaced with i18n keys (api.* namespace) |
+| S1b-11 | **HIGH** | 3x hardcoded English in `companyBlacklist.actions.ts` | Replaced with i18n keys (blacklist.* namespace) |
+| S1b-12 | **HIGH** | 5x hardcoded "Error" toast titles in automation detail page | Replaced with `t("common.error")` |
+| S1b-13 | **HIGH** | `event-types.ts` imports `RunSource` from scheduler (bidirectional coupling) | Inlined type definition |
+| S1b-14 | **MEDIUM** | SSE endpoint no per-user connection limit | Added max 5 connections per user |
+| S1b-15 | **MEDIUM** | Cache eviction was FIFO, not LRU | LRU via Map re-insertion on get() |
+| S1b-16 | **MEDIUM** | No periodic prune — expired cache entries accumulate | Added 15-min prune interval |
+| S1b-17 | **MEDIUM** | Cache key injection via unsanitized `:` in user input | Sanitize params segment in buildKey |
+| S1b-18 | **MEDIUM** | `BlacklistMatchType` missing starts_with/ends_with | Extended type + matcher |
+| S1b-19 | **MEDIUM** | Notes GET endpoint unbounded (no pagination) | Added take/skip/count pagination |
+| S1b-20 | **MEDIUM** | UUID regex duplicated in 5 locations | Extracted `isValidUUID()` to schemas.ts |
+| S1b-21 | **MEDIUM** | 4x duplicate findOrCreate helpers across API routes | Extracted to `helpers.ts` |
+| S1b-22 | **MEDIUM** | SSE route double non-null assertion on userId | Explicit validation |
+| S1b-23 | **MEDIUM** | Degradation notification messages hardcoded English | Added TODO(i18n) + name truncation |
+| S1b-24 | **LOW** | `ViewModeToggle` radiogroup aria-label wrong | Fixed to describe group purpose |
+| S1b-25 | **LOW** | Degradation empty catch blocks (no logging) | Added console.warn |
 
 ## Session S1a Blind Spot Check #2 (2026-04-01) — ALL FIXED
 

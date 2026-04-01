@@ -1,17 +1,17 @@
 import prisma from "@/lib/db";
 import { withApiAuth } from "@/lib/api/with-api-auth";
-import { actionToResponse, createdResponse, errorResponse } from "@/lib/api/response";
-import { CreateNoteSchema } from "@/lib/api/schemas";
+import { paginatedResponse, createdResponse, errorResponse } from "@/lib/api/response";
+import { NotesListQuerySchema, CreateNoteSchema, isValidUUID } from "@/lib/api/schemas";
 
 /** CORS preflight */
 export const OPTIONS = withApiAuth(async () => new Response(null));
 
 /**
- * GET /api/v1/jobs/:id/notes — List all notes for a job.
+ * GET /api/v1/jobs/:id/notes — List notes for a job with pagination.
  */
-export const GET = withApiAuth(async (_req, { userId, params }) => {
+export const GET = withApiAuth(async (req, { userId, params }) => {
   const jobId = params?.id;
-  if (!jobId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) {
+  if (!jobId || !isValidUUID(jobId)) {
     return errorResponse("VALIDATION_ERROR", "Valid Job ID is required", 400);
   }
 
@@ -24,18 +24,40 @@ export const GET = withApiAuth(async (_req, { userId, params }) => {
     return errorResponse("NOT_FOUND", "Job not found", 404);
   }
 
-  const notes = await prisma.note.findMany({
-    where: { jobId, userId },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      content: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+  const url = new URL(req.url);
+  const parsed = NotesListQuerySchema.safeParse({
+    page: url.searchParams.get("page") ?? undefined,
+    perPage: url.searchParams.get("perPage") ?? undefined,
   });
 
-  return actionToResponse({ success: true, data: notes });
+  if (!parsed.success) {
+    return errorResponse(
+      "VALIDATION_ERROR",
+      parsed.error.issues.map((i) => i.message).join(", "),
+      400,
+    );
+  }
+
+  const { page, perPage } = parsed.data;
+  const skip = (page - 1) * perPage;
+
+  const [notes, total] = await Promise.all([
+    prisma.note.findMany({
+      where: { jobId, userId },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: perPage,
+      select: {
+        id: true,
+        content: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    }),
+    prisma.note.count({ where: { jobId, userId } }),
+  ]);
+
+  return paginatedResponse(notes, total, page, perPage);
 });
 
 /**
@@ -43,7 +65,7 @@ export const GET = withApiAuth(async (_req, { userId, params }) => {
  */
 export const POST = withApiAuth(async (req, { userId, params }) => {
   const jobId = params?.id;
-  if (!jobId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) {
+  if (!jobId || !isValidUUID(jobId)) {
     return errorResponse("VALIDATION_ERROR", "Valid Job ID is required", 400);
   }
 

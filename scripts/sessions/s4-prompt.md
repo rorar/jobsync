@@ -90,7 +90,6 @@ Starte `/full-stack-orchestration:full-stack-feature` für die Umsetzung.
 
 **UX-Enrichment:** Verwende `/ui-design:interaction-design` für Loading-Transitions (Skeleton → Logo Fade-In), Enrichment-Status Feedback und Fallback-Visualisierung.
 **Accessibility:** Verwende `/accessibility-compliance:wcag-audit-patterns` für WCAG 2.2 Compliance der neuen Enrichment-UI Komponenten.
-**Data Storytelling:** Verwende `/business-analytics:data-storytelling` für Enrichment-Coverage-Visualisierung (% Firmen mit Logo/Deep-Link), Modul-Effektivität (Clearbit vs Google Favicon Resolve-Raten), Cache-Hit-Raten Dashboard.
 
 **UX-Pflicht für JEDE neue Komponente:**
 - Loading State (Logo wird geladen → Skeleton)
