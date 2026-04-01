@@ -1,5 +1,7 @@
 # Session-Staged Sprint Verification & Completion — Design Spec
 
+> **Note:** This spec captures the initial design. The authoritative, iterated session prompts live in `scripts/sessions/s{1a,1b,2,3,4}-prompt.md`. Those prompts include additional learnings from S1a/S1b execution: strict main-agent delegation rules, multi-reviewer-patterns, interaction-design, data-storytelling, accessibility-compliance, database schema design, API resilience, and consolidated report workflows.
+
 ## Problem Statement
 
 Sprint A (Architecture Debt, 10 items) and Sprint B (UX/UI Gaps, 10 items) were executed automatically via shell scripts and reported as DONE — but never independently verified. Sprint C Tracks 1-3 (Public API, Blacklist, Caching, JobDeck) are on main with security review. Sprint C5 (CRM Core) and C6 (Data Enrichment) remain open.

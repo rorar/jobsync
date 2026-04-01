@@ -44,6 +44,8 @@ usage() {
   printf '  --status   Show session status\n'
   printf '  --attach   Attach to running session: %s --attach s1a\n' "$0"
   printf '  --kill     Kill a running session: %s --kill s1a\n' "$0"
+  printf '  --log      View clean log (strips ANSI): %s --log s1a\n' "$0"
+  printf '  --resume   Resume incomplete session: %s --resume s3\n' "$0"
   printf '  --next     Run the next pending session\n'
   printf '  --all      Run all sessions sequentially\n'
   exit 1
@@ -193,6 +195,8 @@ printf 'Mode: %s\n' ${mode@Q}
 printf 'Log:  %s\n\n' ${log_file@Q}
 script -q -c ${inner@Q} -- ${log_file@Q}
 printf '\nSession %s finished. Log: %s\n' ${session_id@Q} ${log_file@Q}
+printf '\a'
+command -v notify-send >/dev/null && notify-send "JobSync Session ${session_id@Q}" "Session finished. Check log." 2>/dev/null || true
 printf 'Press Enter to close.\n'
 read -r _unused
 OUTER_SCRIPT
@@ -303,6 +307,60 @@ case "$CMD" in
     else
       printf '%s not running\n' "$ARG2"
     fi
+    ;;
+  --log)
+    if [[ -z "$ARG2" ]]; then
+      printf 'Usage: %s --log <id>\n' "$0" >&2
+      exit 1
+    fi
+    # Find latest log for this session, strip ANSI escape codes
+    local_log=$(ls -t "$LOG_DIR/${ARG2}"-*.log 2>/dev/null | head -1)
+    if [[ -z "$local_log" ]]; then
+      printf 'No log found for %s\n' "$ARG2" >&2
+      exit 1
+    fi
+    # col -b strips backspaces, sed strips ANSI escapes
+    sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$local_log" | col -b | less
+    ;;
+  --resume)
+    if [[ -z "$ARG2" ]]; then
+      printf 'Usage: %s --resume <id>\n' "$0" >&2
+      exit 1
+    fi
+    # Create a resume prompt that checks what's done and continues
+    local_resume="/tmp/jobsync-resume-${ARG2}.md"
+    cat > "$local_resume" <<RESUME_EOF
+Lies CLAUDE.md und die Memories (~/.claude/projects/-home-pascal-projekte-jobsync/memory/MEMORY.md).
+Lies docs/BUGS.md und CHANGELOG.md.
+
+## Kontext: Resume von Session ${ARG2}
+
+Die vorige Session ${ARG2} wurde unterbrochen (Context-Exhaustion oder Abbruch).
+
+## Dein Auftrag
+
+1. Prüfe \`git log --oneline -20\` — was wurde bereits committed?
+2. Prüfe \`git status\` — gibt es uncommitted Changes?
+3. Lies \`docs/BUGS.md\` — gibt es offene Items die als "remaining from ${ARG2}" markiert sind?
+4. Lies den Original-Prompt: \`scripts/sessions/${ARG2}-prompt.md\`
+5. Vergleiche: Was ist laut Prompt zu tun vs. was ist bereits getan?
+6. Arbeite die verbleibenden Schritte ab — überspringe was bereits erledigt ist.
+7. Befolge alle Regeln aus dem Original-Prompt (Git, Autonomie, Team-Orchestrierung, Exit-Checkliste).
+
+Arbeite VOLLSTÄNDIG autonom. Maximale kognitive Anstrengung.
+RESUME_EOF
+    printf 'Resume prompt: %s\n' "$local_resume"
+    # Reuse run_session logic but with resume prompt
+    SCRIPT_DIR_BAK="$SCRIPT_DIR"
+    cp "$local_resume" "$SCRIPT_DIR/${ARG2}-prompt.md.resume"
+    # Swap prompt file temporarily
+    local orig_prompt="$SCRIPT_DIR/${ARG2}-prompt.md"
+    mv "$orig_prompt" "${orig_prompt}.bak"
+    mv "$local_resume" "$orig_prompt"
+    run_session "$ARG2"
+    # Restore original prompt
+    mv "${orig_prompt}.bak" "$orig_prompt"
+    rm -f "$SCRIPT_DIR/${ARG2}-prompt.md.resume"
     ;;
   --next)
     # next_session returns 1 when nothing is pending; capture its output

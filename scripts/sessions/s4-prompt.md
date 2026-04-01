@@ -104,7 +104,20 @@ Starte `/full-stack-orchestration:full-stack-feature` für die Umsetzung.
 - Error State (Enrichment fehlgeschlagen → Graceful degradation, kein Fehler für User)
 - i18n (alle 4 Locales)
 
+**Test-Pflicht für External APIs:**
+- Clearbit, Google Favicon, Meta/OpenGraph Parser machen HTTP-Calls zu externen Services
+- In Unit Tests: HTTP-Responses mocken (kein echtes Netzwerk)
+- Teste alle Fallback-Pfade: Modul 1 down → Modul 2 → Modul 3 → Placeholder
+- Teste Timeout, Rate-Limit, Malformed Response Szenarien
+
 Committe nach jedem logischen Schritt. Build + Tests VOR jedem Commit.
+
+**Prisma-Workflow bei Schema-Änderungen:**
+```bash
+bash scripts/prisma-migrate.sh   # Migration erstellen
+bash scripts/prisma-generate.sh  # Client regenerieren
+source scripts/env.sh && bun run build  # Build prüfen
+```
 
 ### CHECK-Phase
 

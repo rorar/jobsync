@@ -96,6 +96,13 @@ Starte `/full-stack-orchestration:full-stack-feature` für die Umsetzung.
 
 Committe nach jedem logischen Schritt. Build + Tests VOR jedem Commit.
 
+**Prisma-Workflow bei Schema-Änderungen:**
+```bash
+bash scripts/prisma-migrate.sh   # Migration erstellen
+bash scripts/prisma-generate.sh  # Client regenerieren
+source scripts/env.sh && bun run build  # Build prüfen
+```
+
 ### CHECK-Phase
 
 1. `allium:weed` — Stimmt Implementation mit Spec überein?
