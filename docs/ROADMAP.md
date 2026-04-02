@@ -1070,6 +1070,32 @@ Server Component                    Client Component
 
 **Reihenfolge:** Unabhängig von 0.9 (Server-Side Caching). Synergien mit 0.8 (PWA Offline) und 0.5 (Staging-Queue Interaktion).
 
+### 2.19b Perceived Performance / Loading UX
+**Problem:** Aktuell zeigt jede async-Operation einen Spinner (Loader2 + animate-spin). Kein Skeleton, kein Suspense, kein Streaming. User-Erlebnis: Klick → Spinner → Content. Ziel: Klick → Skeleton/Instant → Content Fade-In.
+
+**Drei Ebenen der Verbesserung:**
+
+| Ebene | Technik | Effekt | Abhängigkeit |
+|-------|---------|--------|-------------|
+| **1. Skeleton Screens** | Skeleton-Komponenten statt Spinner — zeigen Layout-Platzhalter während Daten laden | Perceived Performance ↑, kein Layout-Shift | Keine — sofort umsetzbar |
+| **2. Next.js Streaming** | `loading.tsx` pro Route-Segment + `<Suspense>` Boundaries in Layouts | Instant Navigation, progressive Content-Anzeige | Next.js App Router (bereits vorhanden) |
+| **3. Optimistic Updates** | React Query `useMutation` mit `onMutate` → UI updated sofort, Server-Bestätigung im Hintergrund | Gefühlt instant, kein Warten auf Server-Response | 2.19 (React Query) |
+
+**Migration (Strangler Fig):**
+- Phase 1: Skeleton-Komponenten erstellen (Shadcn `<Skeleton />` existiert bereits im UI-Kit). Spinner → Skeleton in den meistgenutzten Seiten (Dashboard, Jobs, Automations)
+- Phase 2: `loading.tsx` für Top-Level-Routes hinzufügen (Dashboard, Jobs, Settings, Automations, Profile) — Next.js rendert sie automatisch während Server Components laden
+- Phase 3: React Query (2.19) + Optimistic Updates für Mutations (Job create/edit, Status-Transition, Kanban Drag-and-Drop)
+- Phase 4: Prefetching — React Query `prefetchQuery` in `<Link onMouseEnter>` für Hover-Prefetch
+
+**Aktueller Stand (Audit):**
+- ~30+ Stellen mit `Loader2 + animate-spin` als einzigem Loading-Pattern
+- 0 Skeleton-Screens
+- 0 `loading.tsx` Dateien
+- 0 Suspense Boundaries
+- Shadcn `<Skeleton />` Komponente ist verfügbar aber ungenutzt
+
+**Cross-Ref:** 0.9 (Server-Side Caching — reduziert Wartezeit), 2.19 (React Query — Optimistic Updates), 0.8 (PWA — Offline/Cache-First), `/ui-design:interaction-design` für Transition-Patterns
+
 ### 2.20 Spotlight / Command Palette (Cmd+K)
 Universelle Such- und Aktionsleiste im macOS-Spotlight-Stil. Öffnet per `Cmd+K` (oder `Ctrl+K`) und durchsucht alle Entities und Aktionen.
 
