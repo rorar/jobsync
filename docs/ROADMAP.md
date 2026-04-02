@@ -1396,9 +1396,16 @@ Dynamische Dateipfade und Dateinamen:
 - Nutzt den Kalender Connector mit Modulen CalDAV, Google Kalender, Outlook
 - Interviews, Follow-Ups automatisch eintragen
 
-### 5.3 Job Status Workflow
-- Bewerbung → Interview → Angebot → Abgelehnt etc.
-- Notizen pro Status-Übergang
+### 5.3 Job Status Workflow -- DONE (Sprint C5)
+**Implementiert (2026-04-02):**
+- Allium Spec: `specs/crm-workflow.allium` (643 Zeilen, 9 Regeln, 7 Invarianten)
+- State Machine: 7 Status (bookmarked, applied, interview, offer, accepted, rejected, archived) mit validierten Transitions
+- JobStatusHistory: Append-Only Audit-Log für Status-Änderungen mit optionalen Notizen
+- Domain Event: `JobStatusChanged` für Notification- und Timeline-Consumer
+- Side Effects: applied-Flag + appliedDate automatisch bei Transition zu "applied"/"interview"
+- 5 Server Actions: changeJobStatus, getKanbanBoard, updateKanbanOrder, getJobStatusHistory, getStatusDistribution
+- Cross-Dependencies vorbereitet: Hooks für 5.4 (Reminders), 5.9 (Timeline), 2.20 (Spotlight), 9.5 (Landingpage)
+
 - **Abgrenzung zu Vacancy Pipeline (→ 0.5):** Pipeline endet bei Promotion (StagedVacancy → Job). Der Job Status Workflow beginnt dort — er ist der **Tracking-Lifecycle** nach der Inbox. CRM erweitert diesen Workflow um Kontakt-Zuordnung, Follow-Up-Automatisierung und Kalender-Events.
 
 ### 5.4 Automatisierung & Reminders (→ Notification-Rules in 0.6)
@@ -1417,12 +1424,21 @@ Dynamische Dateipfade und Dateinamen:
 - Automatische Zuordnung von generierten Dokumenten (CV, Anschreiben) zum jeweiligen Job/Kontakt
 - Cross-Ref: Dokumentenworkflow Connector (→ 1.6) für Paperless-ngx Synchronisation
 
-### 5.6 Backlog (Visualisierung)
+### 5.6 Backlog (Visualisierung) -- DONE (Sprint C5)
+**Implementiert (2026-04-02):**
+- Kanban Board mit @dnd-kit Drag-and-Drop (Spalten: Bookmarked, Applied, Interview, Offer, Accepted, Rejected, Archived)
+- Mobile Tab-View unter 768px
+- Column Collapse (Rejected + Archived standardmäßig eingeklappt)
+- Float-basiertes sortOrder für Spalten-Reihenfolge
+- ViewModeToggle: Kanban ↔ Table View, Präferenz in localStorage
+- Status-Transition-Dialog mit optionaler Notiz
+- Undo-Toast (5s) für Status-Änderungen
+- Loading/Empty/Error States, Keyboard Navigation, Dark Mode, motion-reduce
+- 7 React-Komponenten: KanbanBoard, KanbanColumn, KanbanCard, StatusTransitionDialog, KanbanEmptyState, KanbanViewModeToggle, index barrel
+
 - Kanban-Board als **UI-View** über den Job Status Workflow (→ 5.3) — keine eigene Entität
-- Visualisiert: Wer, wann, was, wo, wie, über welchen Kanal
-- Spalten: Backlog → In Bearbeitung → Gesendet → Follow-Up → Abgeschlossen
-- Priorisierung und Sortierung nach Deadline, Match-Score, Unternehmensbewertung
-- Verknüpfung mit Kalender (Deadlines) und Automatisierung (Follow-Ups)
+- Priorisierung und Sortierung nach Deadline, Match-Score
+- Verknüpfung mit Kalender (Deadlines) und Automatisierung (Follow-Ups) — offen für 5.2/5.4
 
 ### 5.7 Kontakt- & Unternehmens-Extraktion (→ Data Enrichment Connector 1.13)
 - Nutzt das NLP-Extraktor Modul des Data Enrichment Connectors
