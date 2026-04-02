@@ -7,6 +7,12 @@ describe("ConnectorCache", () => {
     cache = new ConnectorCache(10);
   });
 
+  afterAll(() => {
+    // Stop the singleton's periodic prune timer to prevent Jest timer leaks
+    const { connectorCache } = require("@/lib/connector/cache");
+    connectorCache.stopPeriodicPrune();
+  });
+
   // ---------------------------------------------------------------------------
   // buildKey
   // ---------------------------------------------------------------------------

@@ -7,22 +7,35 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Clock } from "lucide-react";
 
 // Shared 1-second timer for ALL RunStatusBadge instances (P-1 perf fix)
-// Instead of N intervals for N badges, one shared timer triggers all subscribers
-const tickListeners = new Set<() => void>();
-let tickInterval: ReturnType<typeof setInterval> | null = null;
+// Instead of N intervals for N badges, one shared timer triggers all subscribers.
+// Uses globalThis to survive HMR (same pattern as RunCoordinator, EventBus, ConnectorCache).
+const GLOBAL_KEY = "__runStatusBadgeTick" as const;
+
+interface TickState {
+  interval: ReturnType<typeof setInterval> | null;
+  listeners: Set<() => void>;
+}
+
+function getTickState(): TickState {
+  if (!(GLOBAL_KEY in globalThis)) {
+    (globalThis as any)[GLOBAL_KEY] = { interval: null, listeners: new Set() };
+  }
+  return (globalThis as any)[GLOBAL_KEY];
+}
 
 function subscribeToTick(cb: () => void) {
-  tickListeners.add(cb);
-  if (!tickInterval) {
-    tickInterval = setInterval(() => {
-      for (const fn of tickListeners) fn();
+  const state = getTickState();
+  state.listeners.add(cb);
+  if (!state.interval) {
+    state.interval = setInterval(() => {
+      for (const fn of state.listeners) fn();
     }, 1000);
   }
   return () => {
-    tickListeners.delete(cb);
-    if (tickListeners.size === 0 && tickInterval) {
-      clearInterval(tickInterval);
-      tickInterval = null;
+    state.listeners.delete(cb);
+    if (state.listeners.size === 0 && state.interval) {
+      clearInterval(state.interval);
+      state.interval = null;
     }
   };
 }
