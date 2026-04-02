@@ -46,6 +46,7 @@ export default function PublicApiKeySettings() {
   const { t, locale } = useTranslations();
   const [keys, setKeys] = useState<PublicApiKeyResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [creating, setCreating] = useState(false);
   const [keyName, setKeyName] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -59,6 +60,7 @@ export default function PublicApiKeySettings() {
 
   const fetchKeys = async () => {
     setIsLoading(true);
+    setError(false);
     try {
       const result = await listPublicApiKeys();
       if (result.success && result.data) {
@@ -66,6 +68,7 @@ export default function PublicApiKeySettings() {
       }
     } catch (error) {
       console.error("Error fetching public API keys:", error);
+      setError(true);
     } finally {
       setIsLoading(false);
     }
@@ -168,8 +171,25 @@ export default function PublicApiKeySettings() {
           <p className="text-sm text-muted-foreground">{t("api.description")}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           <span>{t("common.loading")}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-lg font-medium">{t("api.title")}</h3>
+          <p className="text-sm text-muted-foreground">{t("api.description")}</p>
+        </div>
+        <div className="text-center py-8">
+          <p className="text-destructive">{t("api.loadFailed")}</p>
+          <Button variant="outline" size="sm" onClick={fetchKeys} className="mt-2">
+            {t("api.retry")}
+          </Button>
         </div>
       </div>
     );
@@ -212,7 +232,7 @@ export default function PublicApiKeySettings() {
               disabled={!keyName.trim() || creating}
             >
               {creating ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none mr-2" />
               ) : (
                 <Plus className="h-4 w-4 mr-2" />
               )}
@@ -226,7 +246,7 @@ export default function PublicApiKeySettings() {
       {keys.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center">
-            <Key className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+            <Key className="h-8 w-8 mx-auto text-muted-foreground mb-2" aria-hidden="true" />
             <p className="text-sm font-medium">{t("api.noKeys")}</p>
             <p className="text-xs text-muted-foreground mt-1">
               {t("api.noKeysDesc")}
@@ -288,7 +308,7 @@ export default function PublicApiKeySettings() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="flex items-center gap-2 rounded-md border bg-muted p-3">
-              <code className="flex-1 text-sm font-mono break-all">
+              <code className="flex-1 text-sm font-mono break-all" aria-describedby="key-warning">
                 {newKey}
               </code>
               <Button
@@ -300,9 +320,9 @@ export default function PublicApiKeySettings() {
                 {t("api.copyKey")}
               </Button>
             </div>
-            <div className="flex items-start gap-2 text-sm text-amber-600 dark:text-amber-400">
+            <div className="flex items-start gap-2 text-sm text-orange-700 dark:text-amber-400">
               <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-              <span>{t("api.warningOnceVisible")}</span>
+              <span id="key-warning">{t("api.warningOnceVisible")}</span>
             </div>
           </div>
           <DialogFooter>
@@ -347,7 +367,7 @@ function KeyRow({
       <CardContent className="py-3 px-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <Key className="h-4 w-4 text-muted-foreground shrink-0" />
+            <Key className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
             <div className="min-w-0">
               <p className="text-sm font-medium truncate">{apiKey.name}</p>
               <p className="text-xs text-muted-foreground font-mono">
@@ -388,7 +408,7 @@ function KeyRow({
                     disabled={revoking === apiKey.id}
                   >
                     {revoking === apiKey.id ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
                     ) : (
                       t("api.revokeKey")
                     )}
@@ -417,9 +437,10 @@ function KeyRow({
                     variant="outline"
                     className="text-destructive hover:text-destructive"
                     disabled={deleting === apiKey.id}
+                    aria-label={t("api.deleteKey")}
                   >
                     {deleting === apiKey.id ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
                     ) : (
                       <Trash2 className="h-3 w-3" />
                     )}

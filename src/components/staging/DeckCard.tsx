@@ -21,7 +21,7 @@ function MatchScoreRing({ score }: { score: number }) {
   const getColor = (s: number) => {
     if (s >= 80) return "text-emerald-500 dark:text-emerald-400";
     if (s >= 60) return "text-blue-500 dark:text-blue-400";
-    if (s >= 40) return "text-amber-500 dark:text-amber-400";
+    if (s >= 40) return "text-amber-700 dark:text-amber-400";
     return "text-red-500 dark:text-red-400";
   };
 
@@ -125,7 +125,7 @@ export function DeckCard({
         </h3>
         {vacancy.employerName && (
           <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
-            <Building2 className="h-4 w-4 shrink-0" />
+            <Building2 className="h-4 w-4 shrink-0" aria-hidden="true" />
             {vacancy.employerName}
           </p>
         )}
@@ -135,17 +135,17 @@ export function DeckCard({
       <div className="px-5 pt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
         {vacancy.location && (
           <span className="inline-flex items-center gap-1">
-            <MapPin className="h-3.5 w-3.5 shrink-0" />
+            <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             {vacancy.location}
           </span>
         )}
         <span className="inline-flex items-center gap-1">
-          <Calendar className="h-3.5 w-3.5 shrink-0" />
+          <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           {formatDateShort(vacancy.discoveredAt, locale)}
         </span>
         {vacancy.salary && (
           <span className="inline-flex items-center gap-1">
-            <Banknote className="h-3.5 w-3.5 shrink-0" />
+            <Banknote className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             {vacancy.salary}
           </span>
         )}
@@ -165,7 +165,7 @@ export function DeckCard({
             {vacancy.description.length > 200 && (
               <button
                 type="button"
-                className="text-sm font-medium text-primary cursor-pointer mt-1"
+                className="text-sm font-medium text-primary cursor-pointer mt-1 min-h-[24px] py-0.5 inline-flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={() => setExpanded(!expanded)}
               >
                 {expanded ? t("deck.showLess") : t("deck.showMore")}

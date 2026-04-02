@@ -26,7 +26,7 @@ export function SchedulerStatusBar() {
   let pillClasses: string;
 
   if (phase === "running" || isRunning) {
-    pillIcon = <Loader2 className="h-3.5 w-3.5 animate-spin" />;
+    pillIcon = <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />;
     pillLabel = activeRun
       ? `"${activeRun.automationName}"`
       : t("automations.schedulerRunning");
@@ -42,20 +42,25 @@ export function SchedulerStatusBar() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className={`h-8 gap-1.5 rounded-full border px-3 text-xs font-medium ${pillClasses}`}
-          aria-label={t("automations.schedulerStatus")}
-        >
-          {pillIcon}
-          <span className="max-w-[120px] truncate">{pillLabel}</span>
-          {(phase === "running" || isRunning) && queueCount > 0 && (
-            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white dark:bg-blue-500">
-              {queueCount}
-            </span>
-          )}
-        </Button>
+        <span aria-live="polite">
+          <Button
+            variant="ghost"
+            size="sm"
+            className={`h-8 gap-1.5 rounded-full border px-3 text-xs font-medium ${pillClasses}`}
+            aria-label={t("automations.schedulerStatus")}
+          >
+            {pillIcon}
+            <span className="max-w-[120px] truncate">{pillLabel}</span>
+            {(phase === "running" || isRunning) && queueCount > 0 && (
+              <span
+                className="flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white dark:bg-blue-500"
+                aria-label={t("automations.queuedCount").replace("{count}", String(queueCount))}
+              >
+                {queueCount}
+              </span>
+            )}
+          </Button>
+        </span>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-0">
         <div className="p-4 space-y-3">
@@ -63,7 +68,7 @@ export function SchedulerStatusBar() {
             {t("automations.schedulerStatus")}
           </h4>
 
-          <div className="border-t" />
+          <hr className="border-t" />
 
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
@@ -122,7 +127,7 @@ export function SchedulerStatusBar() {
 
           {state.lastCycleCompletedAt && (
             <>
-              <div className="border-t" />
+              <hr className="border-t" />
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">
                   {t("automations.schedulerLastCompleted")}

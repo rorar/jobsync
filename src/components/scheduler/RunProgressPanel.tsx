@@ -1,21 +1,21 @@
 "use client";
 
 import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
-import { useTranslations } from "@/i18n";
+import { useTranslations, formatNumber } from "@/i18n";
 import { CheckCircle2, Loader2, Circle } from "lucide-react";
 import type { RunPhase, RunProgress } from "@/lib/scheduler/types";
 
 const PHASES: RunPhase[] = ["search", "dedup", "enrich", "match", "save", "finalize"];
 
 // Phase translation key mapping
-const PHASE_KEYS: Record<RunPhase, string> = {
+const PHASE_KEYS = {
   search: "automations.phaseSearch",
   dedup: "automations.phaseDedup",
   enrich: "automations.phaseEnrich",
   match: "automations.phaseMatch",
   save: "automations.phaseSave",
   finalize: "automations.phaseFinalize",
-};
+} as const;
 
 interface RunProgressPanelProps {
   automationId: string;
@@ -24,18 +24,19 @@ interface RunProgressPanelProps {
 function getPhaseCounter(
   phase: RunPhase,
   progress: RunProgress,
+  locale: string,
 ): string {
   switch (phase) {
     case "search":
-      return progress.jobsSearched > 0 ? String(progress.jobsSearched) : "-";
+      return progress.jobsSearched > 0 ? formatNumber(progress.jobsSearched, locale) : "-";
     case "dedup":
-      return progress.jobsDeduplicated > 0 ? String(progress.jobsDeduplicated) : "-";
+      return progress.jobsDeduplicated > 0 ? formatNumber(progress.jobsDeduplicated, locale) : "-";
     case "enrich":
-      return progress.jobsProcessed > 0 ? String(progress.jobsProcessed) : "-";
+      return progress.jobsProcessed > 0 ? formatNumber(progress.jobsProcessed, locale) : "-";
     case "match":
-      return progress.jobsMatched > 0 ? String(progress.jobsMatched) : "-";
+      return progress.jobsMatched > 0 ? formatNumber(progress.jobsMatched, locale) : "-";
     case "save":
-      return progress.jobsSaved > 0 ? String(progress.jobsSaved) : "-";
+      return progress.jobsSaved > 0 ? formatNumber(progress.jobsSaved, locale) : "-";
     case "finalize":
       return "";
     default: {
@@ -46,7 +47,7 @@ function getPhaseCounter(
 }
 
 export function RunProgressPanel({ automationId }: RunProgressPanelProps) {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const { isAutomationRunning, getActiveProgress } = useSchedulerStatus();
 
   if (!isAutomationRunning(automationId)) return null;
@@ -65,6 +66,7 @@ export function RunProgressPanel({ automationId }: RunProgressPanelProps) {
   }
 
   const currentPhaseIndex = PHASES.indexOf(progress.phase);
+  const currentPhaseLabel = progress ? t(PHASE_KEYS[progress.phase]) : "";
 
   return (
     <div className="rounded-lg border p-4 mb-4 bg-blue-50/30 dark:bg-blue-950/20">
@@ -72,12 +74,20 @@ export function RunProgressPanel({ automationId }: RunProgressPanelProps) {
         <span className="text-sm font-medium">{t("automations.runProgress")}</span>
       </div>
 
+      {/* Screen reader announcement for phase changes */}
+      <span className="sr-only" aria-live="polite">
+        {progress ? `${currentPhaseLabel} (${currentPhaseIndex + 1}/${PHASES.length})` : ""}
+      </span>
+
       {/* Desktop: horizontal stepper */}
       <div
         className="hidden sm:flex items-center gap-1"
         role="progressbar"
         aria-valuenow={currentPhaseIndex + 1}
+        aria-valuemin={1}
         aria-valuemax={PHASES.length}
+        aria-label={t("automations.runProgress")}
+        aria-valuetext={currentPhaseLabel}
       >
         {PHASES.map((phase, i) => {
           const isCompleted = i < currentPhaseIndex;
@@ -87,11 +97,11 @@ export function RunProgressPanel({ automationId }: RunProgressPanelProps) {
           return (
             <div key={phase} className="flex items-center flex-1">
               <div className="flex flex-col items-center gap-1 flex-1">
-                {isCompleted && <CheckCircle2 className="h-5 w-5 text-green-500" />}
+                {isCompleted && <CheckCircle2 className="h-5 w-5 text-green-500" aria-hidden="true" />}
                 {isActive && (
-                  <Loader2 className="h-5 w-5 text-blue-500 animate-spin motion-reduce:animate-none" />
+                  <Loader2 className="h-5 w-5 text-blue-500 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                 )}
-                {isPending && <Circle className="h-5 w-5 text-muted-foreground/30" />}
+                {isPending && <Circle className="h-5 w-5 text-muted-foreground/30" aria-hidden="true" />}
                 <span
                   className={`text-xs ${
                     isActive
@@ -101,10 +111,10 @@ export function RunProgressPanel({ automationId }: RunProgressPanelProps) {
                         : "text-muted-foreground/50"
                   }`}
                 >
-                  {t(PHASE_KEYS[phase] as Parameters<typeof t>[0])}
+                  {t(PHASE_KEYS[phase])}
                 </span>
                 <span className="text-xs text-muted-foreground tabular-nums">
-                  {getPhaseCounter(phase, progress)}
+                  {getPhaseCounter(phase, progress, locale)}
                 </span>
               </div>
               {i < PHASES.length - 1 && (
@@ -120,7 +130,15 @@ export function RunProgressPanel({ automationId }: RunProgressPanelProps) {
       </div>
 
       {/* Mobile: vertical list */}
-      <div className="sm:hidden space-y-2">
+      <div
+        className="sm:hidden space-y-2"
+        role="progressbar"
+        aria-valuenow={currentPhaseIndex + 1}
+        aria-valuemin={1}
+        aria-valuemax={PHASES.length}
+        aria-label={t("automations.runProgress")}
+        aria-valuetext={currentPhaseLabel}
+      >
         {PHASES.map((phase, i) => {
           const isCompleted = i < currentPhaseIndex;
           const isActive = i === currentPhaseIndex;
@@ -128,13 +146,13 @@ export function RunProgressPanel({ automationId }: RunProgressPanelProps) {
           return (
             <div key={phase} className="flex items-center gap-2">
               {isCompleted && (
-                <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" aria-hidden="true" />
               )}
               {isActive && (
-                <Loader2 className="h-4 w-4 text-blue-500 animate-spin motion-reduce:animate-none flex-shrink-0" />
+                <Loader2 className="h-4 w-4 text-blue-500 animate-spin motion-reduce:animate-none flex-shrink-0" aria-hidden="true" />
               )}
               {!isCompleted && !isActive && (
-                <Circle className="h-4 w-4 text-muted-foreground/30 flex-shrink-0" />
+                <Circle className="h-4 w-4 text-muted-foreground/30 flex-shrink-0" aria-hidden="true" />
               )}
               <span
                 className={`text-sm flex-1 ${
@@ -145,10 +163,10 @@ export function RunProgressPanel({ automationId }: RunProgressPanelProps) {
                       : "text-muted-foreground/50"
                 }`}
               >
-                {t(PHASE_KEYS[phase] as Parameters<typeof t>[0])}
+                {t(PHASE_KEYS[phase])}
               </span>
               <span className="text-sm text-muted-foreground tabular-nums">
-                {getPhaseCounter(phase, progress)}
+                {getPhaseCounter(phase, progress, locale)}
               </span>
             </div>
           );

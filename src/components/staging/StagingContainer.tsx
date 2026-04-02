@@ -316,6 +316,7 @@ function StagingContainer() {
   );
 
   const onTabChange = (value: string) => {
+    setVacancies([]);
     setActiveTab(value as ActiveTab);
     setSearchTerm("");
     hasSearched.current = false;
@@ -346,6 +347,7 @@ function StagingContainer() {
                 <Input
                   type="search"
                   placeholder={t("staging.search")}
+                  aria-label={t("staging.searchLabel")}
                   className="pl-8 h-8 w-[150px] lg:w-[200px]"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -356,7 +358,7 @@ function StagingContainer() {
         </CardHeader>
         <CardContent>
           {newItemsAvailable && (
-            <div className="flex items-center justify-between p-3 mb-3 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+            <div role="status" className="flex items-center justify-between p-3 mb-3 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
               <span className="text-sm">{t("automations.newItemsAvailable")}</span>
               <Button
                 variant="outline"
@@ -407,7 +409,7 @@ function StagingContainer() {
                       <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-input accent-primary"
+                          className="h-4 w-4 rounded border-input accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           checked={isAllSelected}
                           onChange={toggleSelectAll}
                         />
@@ -469,7 +471,6 @@ function StagingContainer() {
                         )
                       }
                       disabled={loading}
-                      className="btn btn-primary"
                     >
                       {loading ? t("common.loading") : t("common.loadMore")}
                     </Button>
