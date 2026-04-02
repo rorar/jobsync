@@ -2,29 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { formatDateCompact } from "@/i18n";
 import { useTranslations } from "@/i18n";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/use-toast";
-import {
-  ArrowLeft,
-  Pause,
-  Play,
-  RefreshCw,
-  Loader2,
-  Clock,
-  FileText,
-  AlertTriangle,
-  PlayCircle,
-  Pencil,
-} from "lucide-react";
 import {
   getAutomationById,
   getDiscoveredJobs,
@@ -46,24 +27,18 @@ import { LogsTab } from "@/components/automations/LogsTab";
 import Loading from "@/components/Loading";
 import { AutomationWizard } from "@/components/automations/AutomationWizard";
 import { getResumeList } from "@/actions/profile.actions";
-import { parseKeywords, parseLocations } from "@/utils/automation.utils";
-import { LocationBadge } from "@/components/ui/location-badge";
-import { RunStatusBadge } from "@/components/automations/RunStatusBadge";
 import { ModuleBusyBanner } from "@/components/automations/ModuleBusyBanner";
 import { RunProgressPanel } from "@/components/scheduler/RunProgressPanel";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
+import { useConflictDetection } from "@/hooks/useConflictDetection";
 import { ConflictWarningDialog } from "@/components/automations/ConflictWarningDialog";
+import { AutomationDetailHeader } from "@/components/automations/AutomationDetailHeader";
+import { AutomationMetadataGrid } from "@/components/automations/AutomationMetadataGrid";
 
 export default function AutomationDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { t, locale } = useTranslations();
+  const { t } = useTranslations();
   const { state: schedulerState, isAutomationRunning, getModuleBusy } = useSchedulerStatus();
   const automationId = params.id as string;
 
@@ -82,15 +57,14 @@ export default function AutomationDetailPage() {
     useState<JobMatchResponse | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [runKey, setRunKey] = useState(0);
-  const [conflictOpen, setConflictOpen] = useState(false);
-  const [conflictType, setConflictType] = useState<"blocked" | "contention">("blocked");
-  const [conflictDetails, setConflictDetails] = useState<{
-    automationName?: string;
-    runSource?: string;
-    startedAt?: Date;
-    moduleId?: string;
-    otherAutomations?: string[];
-  }>({});
+
+  const {
+    conflictOpen,
+    conflictType,
+    conflictDetails,
+    setConflictOpen,
+    checkConflict,
+  } = useConflictDetection(automation, schedulerState, isAutomationRunning, getModuleBusy);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -206,35 +180,10 @@ export default function AutomationDetailPage() {
   const handleRunNow = async () => {
     if (!automation) return;
 
-    // Check for conflicts (preventive)
-    if (isAutomationRunning(automation.id)) {
-      const lock = schedulerState?.runningAutomations.find(
-        (r) => r.automationId === automation.id
-      );
-      setConflictType("blocked");
-      setConflictDetails({
-        automationName: automation.name,
-        runSource: lock?.runSource,
-        startedAt: lock?.startedAt ? new Date(lock.startedAt) : undefined,
-      });
-      setConflictOpen(true);
-      return;
-    }
+    // Check for conflicts (preventive) — if conflict found, dialog opens
+    if (checkConflict()) return;
 
-    const moduleBusy = getModuleBusy(automation.jobBoard).filter(
-      (l) => l.automationId !== automation.id
-    );
-    if (moduleBusy.length > 0) {
-      setConflictType("contention");
-      setConflictDetails({
-        moduleId: automation.jobBoard,
-        otherAutomations: moduleBusy.map((l) => l.automationName),
-      });
-      setConflictOpen(true);
-      return;
-    }
-
-    // No conflict -- proceed directly
+    // No conflict — proceed directly
     await executeRun();
   };
 
@@ -271,173 +220,24 @@ export default function AutomationDetailPage() {
 
   return (
     <div className="col-span-3 py-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/dashboard/automations">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{automation.name}</h1>
-            <RunStatusBadge automationId={automation.id} />
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-medium text-foreground">{t("automations.keywords")}:</span>
-              {parseKeywords(automation.keywords)
-                .map((kw: string) => (
-                  <Badge key={kw} variant="secondary" className="text-xs">
-                    {kw}
-                  </Badge>
-                ))}
-            </div>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-medium text-foreground">{t("automations.locationLabel")}:</span>
-              {parseLocations(automation.location).map((code) => (
-                <LocationBadge
-                  key={code}
-                  code={code}
-                  resolve={automation.jobBoard === "eures" || automation.jobBoard === "arbeitsagentur"}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={loadData}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setEditOpen(true)}
-          >
-            <Pencil className="h-4 w-4 mr-2" />
-            {t("automations.edit")}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handlePauseResume}
-            disabled={actionLoading || resumeMissing}
-          >
-            {actionLoading ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : automation.status === "active" ? (
-              <Pause className="h-4 w-4 mr-2" />
-            ) : (
-              <Play className="h-4 w-4 mr-2" />
-            )}
-            {automation.status === "active" ? t("automations.pause") : t("automations.resume")}
-          </Button>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button
-                    variant="outline"
-                    onClick={handleRunNow}
-                    disabled={
-                      runNowLoading || resumeMissing || automation.status === "paused" || isAutomationRunning(automation.id)
-                    }
-                  >
-                    {runNowLoading ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <PlayCircle className="h-4 w-4 mr-2" />
-                    )}
-                    {t("automations.runNow")}
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {(isAutomationRunning(automation.id) || resumeMissing || automation.status === "paused") && (
-                <TooltipContent>
-                  <p>
-                    {isAutomationRunning(automation.id)
-                      ? t("automations.alreadyRunning")
-                      : automation.status === "paused"
-                        ? t("automations.runNowPaused")
-                        : t("automations.runNowResumeMissing")}
-                  </p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-      </div>
+      <AutomationDetailHeader
+        automation={automation}
+        resumeMissing={resumeMissing}
+        actionLoading={actionLoading}
+        runNowLoading={runNowLoading}
+        isRunning={isAutomationRunning(automation.id)}
+        onRefresh={loadData}
+        onEdit={() => setEditOpen(true)}
+        onPauseResume={handlePauseResume}
+        onRunNow={handleRunNow}
+      />
 
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground">{t("automations.statusHeader")}</p>
-              <Badge
-                variant={
-                  automation.status === "active" ? "default" : "secondary"
-                }
-                className="mt-1 capitalize"
-              >
-                {automation.status}
-              </Badge>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{t("automations.jobBoard")}</p>
-              <p className="font-medium capitalize">{automation.jobBoard}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{t("automations.matchThreshold")}</p>
-              <p className="font-medium">{automation.matchThreshold}%</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{t("automations.stepSchedule")}</p>
-              <p className="font-medium flex items-center gap-1">
-                <Clock className="h-4 w-4" />
-                {automation.scheduleHour.toString().padStart(2, "0")}:00 {t("automations.daily").toLowerCase()}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{t("automations.resumeLabel")}</p>
-              {resumeMissing ? (
-                <p className="text-amber-600 flex items-center gap-1 text-sm">
-                  <AlertTriangle className="h-4 w-4" />
-                  {t("automations.resumeMissing")}
-                </p>
-              ) : (
-                <p className="font-medium flex items-center gap-1">
-                  <FileText className="h-4 w-4" />
-                  {automation.resume.title}
-                </p>
-              )}
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{t("automations.nextRun")}</p>
-              <p className="font-medium">
-                {automation.nextRunAt && automation.status === "active"
-                  ? formatDateCompact(new Date(automation.nextRunAt), locale)
-                  : "-"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{t("automations.lastRun")}</p>
-              <p className="font-medium">
-                {automation.lastRunAt
-                  ? formatDateCompact(new Date(automation.lastRunAt), locale)
-                  : t("automations.never")}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">{t("automations.discoveredJobs")}</p>
-              <p className="font-medium">
-                {jobs.length} {t("automations.total")}
-                {newJobsCount > 0 && (
-                  <Badge variant="secondary" className="ml-2">
-                    {newJobsCount} {t("automations.new").toLowerCase()}
-                  </Badge>
-                )}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <AutomationMetadataGrid
+        automation={automation}
+        resumeMissing={resumeMissing}
+        jobs={jobs}
+        newJobsCount={newJobsCount}
+      />
 
       <RunProgressPanel automationId={automation.id} />
       <ModuleBusyBanner automationId={automation.id} moduleId={automation.jobBoard} />
