@@ -30,6 +30,7 @@ const SWIPE_VELOCITY = 0.5;
 
 export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckViewProps) {
   const { t } = useTranslations();
+  const [showSwipeHint, setShowSwipeHint] = useState(true);
   const {
     currentIndex,
     currentVacancy,
@@ -76,10 +77,13 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
 
     // Check thresholds
     if (dragDelta.x > SWIPE_DISTANCE_X || velocityX > SWIPE_VELOCITY) {
+      setShowSwipeHint(false);
       promote();
     } else if (dragDelta.x < -SWIPE_DISTANCE_X || velocityX < -SWIPE_VELOCITY) {
+      setShowSwipeHint(false);
       dismiss();
     } else if (dragDelta.y < -SWIPE_DISTANCE_Y || velocityY < -SWIPE_VELOCITY) {
+      setShowSwipeHint(false);
       superLike();
     }
     // else: spring back (reset delta)
@@ -218,7 +222,7 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
         <button
           type="button"
           className="h-14 w-14 rounded-full bg-red-100 text-red-600 hover:bg-red-200 active:bg-red-300 active:scale-90 dark:bg-red-950/50 dark:text-red-400 dark:hover:bg-red-950/70 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
-          onClick={dismiss}
+          onClick={() => { setShowSwipeHint(false); dismiss(); }}
           disabled={isAnimating || !currentVacancy}
           aria-label={t("deck.dismissTooltip")}
           title={t("deck.dismissTooltip")}
@@ -229,7 +233,7 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
         <button
           type="button"
           className="h-12 w-12 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 active:bg-blue-300 active:scale-90 dark:bg-blue-950/50 dark:text-blue-400 dark:hover:bg-blue-950/70 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
-          onClick={superLike}
+          onClick={() => { setShowSwipeHint(false); superLike(); }}
           disabled={isAnimating || !currentVacancy}
           aria-label={t("deck.superLikeTooltip")}
           title={t("deck.superLikeTooltip")}
@@ -240,7 +244,7 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
         <button
           type="button"
           className="h-16 w-16 rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 active:bg-emerald-300 active:scale-90 dark:bg-emerald-950/50 dark:text-emerald-400 dark:hover:bg-emerald-950/70 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
-          onClick={promote}
+          onClick={() => { setShowSwipeHint(false); promote(); }}
           disabled={isAnimating || !currentVacancy}
           aria-label={t("deck.promoteTooltip")}
           title={t("deck.promoteTooltip")}
@@ -261,6 +265,13 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
           </button>
         )}
       </div>
+
+      {/* Swipe hint (mobile only, first card only) */}
+      {showSwipeHint && currentIndex === 0 && (
+        <p className="mt-3 text-center text-xs text-muted-foreground animate-pulse motion-reduce:animate-none sm:hidden">
+          &larr; {t("deck.swipeHint")} &rarr;
+        </p>
+      )}
 
       {/* Keyboard hints (hidden on mobile) */}
       <div

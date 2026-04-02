@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
 import { useTranslations, formatNumber } from "@/i18n";
 import { CheckCircle2, Loader2, Circle } from "lucide-react";
@@ -50,7 +51,30 @@ export function RunProgressPanel({ automationId }: RunProgressPanelProps) {
   const { t, locale } = useTranslations();
   const { isAutomationRunning, getActiveProgress } = useSchedulerStatus();
 
-  if (!isAutomationRunning(automationId)) return null;
+  const [showEnded, setShowEnded] = useState(false);
+  const wasRunningRef = useRef(false);
+
+  const running = isAutomationRunning(automationId);
+
+  useEffect(() => {
+    if (wasRunningRef.current && !running) {
+      setShowEnded(true);
+      const timer = setTimeout(() => setShowEnded(false), 3000);
+      return () => clearTimeout(timer);
+    }
+    wasRunningRef.current = running;
+  }, [running]);
+
+  if (!running) {
+    if (showEnded) {
+      return (
+        <div className="rounded-lg border border-muted bg-muted/30 p-4 mb-4 text-center text-sm text-muted-foreground">
+          {t("automations.runEnded")}
+        </div>
+      );
+    }
+    return null;
+  }
 
   const progress = getActiveProgress(automationId);
   if (!progress) {
