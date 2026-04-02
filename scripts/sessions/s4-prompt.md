@@ -205,7 +205,8 @@ S3 hatte kaskadierte Build-Failures weil parallele Agents Code gegen noch-nicht-
 - Dispatche Blind Spot Check als eigenen Agent
 - Dispatche User Journey Analyse als eigenen Agent
 
-**Für Fixes:** Parallele Fix-Agents nach File-Gruppen dispatchen.
+**Für Fixes — nach FILES aufteilen, NICHT nach Finding-Typ (Learning aus S3-Resume):**
+S3-Resume hat Fix-Agents nach Typ aufgeteilt (Security-Agent, WCAG-Agent, Performance-Agent). Mehrere Agents haben dieselbe Datei (`KanbanColumn.tsx`) gleichzeitig editiert → Syntax-Errors durch concurrent Edits. Fix: Gruppiere ALLE Findings (egal ob Security, WCAG, Performance) nach betroffenen Files. Ein Agent bekommt ALLE Findings für seine File-Gruppe.
 
 ### VERBOTEN für den Main-Agent
 Der Main-Agent darf KEINE der folgenden Aktionen selbst ausführen:
