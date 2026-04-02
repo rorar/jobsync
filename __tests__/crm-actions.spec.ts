@@ -94,7 +94,7 @@ describe("CRM Server Actions", () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(null);
       const result = await changeJobStatus("job-1", "status-applied");
       expect(result.success).toBe(false);
-      expect(result.message).toContain("Not authenticated");
+      expect(result.message).toContain("Failed to change job status");
     });
 
     it("should return NOT_FOUND if job does not exist", async () => {
@@ -195,6 +195,112 @@ describe("CRM Server Actions", () => {
 
       await changeJobStatus("job-1", appliedStatus.id);
       expect(emitEvent).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // DAU-2: changeJobStatus should verify expected fromStatus (optimistic lock)
+  // ---------------------------------------------------------------------------
+
+  describe("changeJobStatus — stale state detection (DAU-2)", () => {
+    it("should reject when fromStatusId does not match the actual current status", async () => {
+      // Scenario: User's UI shows the job as "bookmarked" but another tab/user
+      // already moved it to "applied". The stale fromStatusId should be rejected.
+      const jobCurrentlyApplied = {
+        id: "job-1",
+        userId: "user-id",
+        statusId: "status-applied",
+        Status: { id: "status-applied", label: "Applied", value: "applied" },
+        appliedDate: new Date("2026-03-15"),
+        sortOrder: 0,
+        JobTitle: { label: "Engineer" },
+        Company: { label: "Acme", logoUrl: null },
+        Location: { label: "Remote" },
+        JobSource: null,
+        tags: [],
+      };
+
+      const interviewStatus = mockStatuses.find((s) => s.value === "interview")!;
+
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue(jobCurrentlyApplied);
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(interviewStatus);
+
+      // Call with a fromStatusId that does NOT match actual current status.
+      // The caller thinks the job is "bookmarked" (stale), but it is actually "applied".
+      const result = await changeJobStatus(
+        "job-1",
+        interviewStatus.id,
+        undefined,
+        "status-bookmarked", // expectedFromStatusId — STALE, actual is "status-applied"
+      );
+
+      // The function should detect the stale state and reject the transition
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe("STALE_STATE");
+    });
+
+    it("should accept when fromStatusId matches the actual current status", async () => {
+      const appliedStatus = mockStatuses.find((s) => s.value === "applied")!;
+      const interviewStatus = mockStatuses.find((s) => s.value === "interview")!;
+
+      const jobCurrentlyApplied = {
+        ...mockJob,
+        statusId: "status-applied",
+        Status: appliedStatus,
+      };
+
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue(jobCurrentlyApplied);
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(interviewStatus);
+
+      const updatedJob = {
+        ...jobCurrentlyApplied,
+        statusId: interviewStatus.id,
+        Status: interviewStatus,
+      };
+
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) => {
+        return fn({
+          job: {
+            update: jest.fn().mockResolvedValue(updatedJob),
+          },
+          jobStatusHistory: {
+            create: jest.fn().mockResolvedValue({ id: "history-1" }),
+          },
+        });
+      });
+
+      // Call with correct fromStatusId matching the actual current status
+      const result = await changeJobStatus(
+        "job-1",
+        interviewStatus.id,
+        undefined,
+        "status-applied", // expectedFromStatusId — matches actual status
+      );
+
+      expect(result.success).toBe(true);
+    });
+
+    it("should NOT update the job when stale state is detected", async () => {
+      const jobCurrentlyApplied = {
+        ...mockJob,
+        statusId: "status-applied",
+        Status: { id: "status-applied", label: "Applied", value: "applied" },
+      };
+
+      const interviewStatus = mockStatuses.find((s) => s.value === "interview")!;
+
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue(jobCurrentlyApplied);
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(interviewStatus);
+
+      await changeJobStatus(
+        "job-1",
+        interviewStatus.id,
+        undefined,
+        "status-bookmarked", // STALE
+      );
+
+      // No transaction should have been started
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 

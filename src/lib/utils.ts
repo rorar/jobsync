@@ -71,7 +71,7 @@ export function handleError(error: unknown, msg = "Server Error."): ActionResult
       }
     }
 
-    return { success: false, message: error.message || msg };
+    return { success: false, message: msg };
   }
   return { success: false, message: msg, errorCode: "INTERNAL_ERROR" };
 }

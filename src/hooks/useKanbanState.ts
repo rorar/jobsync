@@ -85,6 +85,7 @@ export function useKanbanState(jobs: JobResponse[], statuses: JobStatus[]) {
   const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set(DEFAULT_COLLAPSED));
   const [undoState, setUndoState] = useState<UndoState | null>(null);
   const [mounted, setMounted] = useState(false);
+  const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Initialize collapsed state from localStorage
   useEffect(() => {
@@ -138,29 +139,55 @@ export function useKanbanState(jobs: JobResponse[], statuses: JobStatus[]) {
       });
     }
 
+    // Collect jobs with statuses not covered by STATUS_ORDER
+    const placedStatusValues = new Set(STATUS_ORDER);
+    const orphanJobs: JobResponse[] = [];
+    for (const [statusVal, statusJobs] of jobsByStatus) {
+      if (!placedStatusValues.has(statusVal)) {
+        orphanJobs.push(...statusJobs);
+      }
+    }
+    if (orphanJobs.length > 0) {
+      const otherStatus = {
+        id: "__other__",
+        value: "__other__",
+        label: "Other",
+      } as JobStatus;
+      result.push({
+        status: otherStatus,
+        jobs: orphanJobs.sort((a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        ),
+        isCollapsed: false,
+        color: STATUS_COLORS.archived ?? STATUS_COLORS.draft,
+      });
+    }
+
     return result;
   }, [jobs, statuses, collapsedColumns, mounted]);
 
-  // Set undo with timeout
+  // Set undo with timeout (uses ref to avoid stale closure over undoState)
   const setUndoWithTimeout = useCallback((state: Omit<UndoState, "timeout">) => {
-    // Clear existing undo
-    if (undoState) {
-      clearTimeout(undoState.timeout);
+    if (undoTimeoutRef.current) {
+      clearTimeout(undoTimeoutRef.current);
     }
 
     const timeout = setTimeout(() => {
       setUndoState(null);
+      undoTimeoutRef.current = null;
     }, 5000);
 
+    undoTimeoutRef.current = timeout;
     setUndoState({ ...state, timeout });
-  }, [undoState]);
+  }, []);
 
   const clearUndo = useCallback(() => {
-    if (undoState) {
-      clearTimeout(undoState.timeout);
-      setUndoState(null);
+    if (undoTimeoutRef.current) {
+      clearTimeout(undoTimeoutRef.current);
+      undoTimeoutRef.current = null;
     }
-  }, [undoState]);
+    setUndoState(null);
+  }, []);
 
   return {
     columns,

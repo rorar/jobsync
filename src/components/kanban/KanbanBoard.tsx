@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -14,7 +14,7 @@ import {
   type DragEndEvent,
   type DragOverEvent,
 } from "@dnd-kit/core";
-import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+
 import { useTranslations } from "@/i18n";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,7 @@ import {
   STATUS_ORDER,
 } from "@/hooks/useKanbanState";
 import type { JobResponse, JobStatus } from "@/models/job.model";
+import { getStatusLabel } from "@/lib/crm/status-labels";
 import { changeJobStatus } from "@/actions/job.actions";
 import {
   Select,
@@ -50,17 +51,14 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading }: KanbanBoardP
   const { t } = useTranslations();
   const {
     columns,
-    collapsedColumns,
     toggleCollapse,
-    undoState,
     setUndoWithTimeout,
     clearUndo,
-    mounted,
   } = useKanbanState(jobs, statuses);
 
   // DnD state
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
+  const [_overId, setOverId] = useState<string | null>(null);
   const [transitionDialog, setTransitionDialog] = useState<{
     job: JobResponse;
     fromStatus: JobStatus;
@@ -78,42 +76,39 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading }: KanbanBoardP
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
+    useSensor(KeyboardSensor),
     useSensor(TouchSensor, {
       activationConstraint: { delay: 200, tolerance: 5 },
     })
   );
 
-  // Find job by ID
-  const findJob = useCallback((id: string | null): JobResponse | undefined => {
-    if (!id) return undefined;
-    return jobs.find((j) => j.id === id);
+  // Pre-built lookup maps for O(1) DnD event handling (replaces O(n*cols) linear scan)
+  const jobMap = useMemo(() => {
+    const map = new Map<string, JobResponse>();
+    for (const job of jobs) {
+      map.set(job.id, job);
+    }
+    return map;
   }, [jobs]);
 
-  // Find column status by droppable ID
-  const findColumnStatus = useCallback(
-    (droppableId: string | null): JobStatus | undefined => {
-      if (!droppableId) return undefined;
-      const statusValue = droppableId.replace("column-", "");
-      return statuses.find((s) => s.value === statusValue);
-    },
-    [statuses]
-  );
-
-  // Get the column (status value) a job is in
-  const getJobColumn = useCallback(
-    (jobId: string): string | undefined => {
-      for (const col of columns) {
-        if (col.jobs.some((j) => j.id === jobId)) {
-          return col.status.value;
-        }
+  const jobColumnMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const col of columns) {
+      for (const job of col.jobs) {
+        map.set(job.id, col.status.value);
       }
-      return undefined;
-    },
-    [columns]
-  );
+    }
+    return map;
+  }, [columns]);
+
+  const findJob = useCallback((id: string | null): JobResponse | undefined => {
+    if (!id) return undefined;
+    return jobMap.get(id) ?? undefined;
+  }, [jobMap]);
+
+  const getJobColumn = useCallback((jobId: string): string | undefined => {
+    return jobColumnMap.get(jobId) ?? undefined;
+  }, [jobColumnMap]);
 
   // Determine which column an "over" target belongs to
   const getTargetColumn = useCallback(
@@ -201,44 +196,47 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading }: KanbanBoardP
         if (result.success) {
           setTransitionDialog(null);
 
-          // Set undo state
-          setUndoWithTimeout({
-            jobId: job.id,
-            previousStatusId: fromStatus.id,
-            previousStatusValue: fromStatus.value,
-          });
+          // Check if reverse transition is valid before offering undo
+          const canUndo = isValidTransition(toStatus.value, fromStatus.value);
 
-          // Show toast with undo action
-          const statusLabel = (() => {
-            const key = `jobs.status${toStatus.value.charAt(0).toUpperCase()}${toStatus.value.slice(1)}`;
-            const translated = t(key);
-            return translated !== key ? translated : toStatus.label;
-          })();
+          // Only set undo state if reverse transition is valid
+          if (canUndo) {
+            setUndoWithTimeout({
+              jobId: job.id,
+              previousStatusId: fromStatus.id,
+              previousStatusValue: fromStatus.value,
+            });
+          }
+
+          // Show toast with conditional undo action
+          const statusLabel = getStatusLabel(t, toStatus);
 
           toast({
             title: t("jobs.kanbanMoved").replace("{status}", statusLabel),
             description: job.JobTitle?.label,
-            action: (
-              <ToastAction
-                altText={t("jobs.kanbanUndo")}
-                onClick={async () => {
-                  try {
-                    const undoResult = await changeJobStatus(job.id, fromStatus.id);
-                    if (undoResult.success) {
-                      toast({ title: t("jobs.kanbanUndone") });
-                      clearUndo();
-                      onRefresh();
-                    } else {
+            ...(canUndo ? {
+              action: (
+                <ToastAction
+                  altText={t("jobs.kanbanUndo")}
+                  onClick={async () => {
+                    try {
+                      const undoResult = await changeJobStatus(job.id, fromStatus.id);
+                      if (undoResult.success) {
+                        toast({ title: t("jobs.kanbanUndone") });
+                        clearUndo();
+                        onRefresh();
+                      } else {
+                        toast({ variant: "destructive", title: t("jobs.kanbanUndoFailed") });
+                      }
+                    } catch {
                       toast({ variant: "destructive", title: t("jobs.kanbanUndoFailed") });
                     }
-                  } catch {
-                    toast({ variant: "destructive", title: t("jobs.kanbanUndoFailed") });
-                  }
-                }}
-              >
-                {t("jobs.kanbanUndo")}
-              </ToastAction>
-            ),
+                  }}
+                >
+                  {t("jobs.kanbanUndo")}
+                </ToastAction>
+              ),
+            } : {}),
             duration: 5000,
           });
 
@@ -329,12 +327,6 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading }: KanbanBoardP
   const visibleMobileTabs = mobileColumns.filter(c => !c.isCollapsed);
   const collapsedMobileTabs = mobileColumns.filter(c => c.isCollapsed);
 
-  const getStatusLabel = (status: JobStatus) => {
-    const key = `jobs.status${status.value.charAt(0).toUpperCase()}${status.value.slice(1)}`;
-    const translated = t(key);
-    return translated !== key ? translated : status.label;
-  };
-
   return (
     <>
       {/* Desktop Kanban Board */}
@@ -344,7 +336,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading }: KanbanBoardP
         aria-label={t("jobs.kanbanBoard")}
       >
         <DndContext
-          sensors={sensors}
+          sensors={isPending ? [] : sensors}
           collisionDetection={closestCenter}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
@@ -362,7 +354,6 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading }: KanbanBoardP
               },
               onDragOver({ active, over }) {
                 if (!over) return "";
-                const job = findJob(active.id as string);
                 const targetCol = getTargetColumn(over.id as string);
                 const targetStatus = statuses.find(s => s.value === targetCol);
                 return t("jobs.kanbanDragOver")
@@ -431,13 +422,15 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading }: KanbanBoardP
           )}
 
           {/* Drag overlay */}
-          <DragOverlay>
+          <DragOverlay dropAnimation={null}>
             {activeJob && activeJobColumn ? (
-              <KanbanCard
-                job={activeJob}
-                statusValue={activeJobColumn}
-                isDragOverlay
-              />
+              <div aria-hidden="true">
+                <KanbanCard
+                  job={activeJob}
+                  statusValue={activeJobColumn}
+                  isDragOverlay
+                />
+              </div>
             ) : null}
           </DragOverlay>
         </DndContext>
@@ -450,7 +443,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading }: KanbanBoardP
             <TabsList className="w-max">
               {visibleMobileTabs.map((column) => (
                 <TabsTrigger key={column.status.value} value={column.status.value}>
-                  {getStatusLabel(column.status)}
+                  {getStatusLabel(t, column.status)}
                   <Badge variant="secondary" className="ml-1.5 text-xs px-1.5 py-0 min-w-[20px] justify-center">
                     {column.jobs.length}
                   </Badge>
@@ -458,7 +451,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading }: KanbanBoardP
               ))}
               {collapsedMobileTabs.map((column) => (
                 <TabsTrigger key={column.status.value} value={column.status.value} className="text-muted-foreground">
-                  {getStatusLabel(column.status)}
+                  {getStatusLabel(t, column.status)}
                   <Badge variant="secondary" className="ml-1.5 text-xs px-1.5 py-0 min-w-[20px] justify-center">
                     {column.jobs.length}
                   </Badge>
@@ -484,7 +477,10 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading }: KanbanBoardP
                           value={job.Status?.value}
                           onValueChange={(val) => handleMobileStatusChange(job, val)}
                         >
-                          <SelectTrigger className="h-7 text-xs w-auto max-w-[180px]">
+                          <SelectTrigger
+                            className="h-7 text-xs w-auto max-w-[180px]"
+                            aria-label={t("jobs.kanbanChangeStatusMobile").replace("{title}", job.JobTitle?.label ?? "")}
+                          >
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -499,7 +495,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading }: KanbanBoardP
                                   value={s.value}
                                   disabled={s.value === job.Status?.value}
                                 >
-                                  {getStatusLabel(s)}
+                                  {getStatusLabel(t, s)}
                                 </SelectItem>
                               ))}
                           </SelectContent>

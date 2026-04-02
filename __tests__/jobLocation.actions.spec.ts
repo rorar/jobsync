@@ -65,7 +65,7 @@ describe("Job Location Actions", () => {
 
       const result = await getAllJobLocations();
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch job location list. " });
       expect(prisma.location.findMany).not.toHaveBeenCalled();
     });
 
@@ -77,7 +77,7 @@ describe("Job Location Actions", () => {
 
       const result = await getAllJobLocations();
 
-      expect(result).toEqual({ success: false, message: "Database error" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch job location list. " });
     });
   });
 
@@ -155,7 +155,7 @@ describe("Job Location Actions", () => {
 
       const result = await getJobLocationsList(1, 10);
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch job location list. " });
       expect(prisma.location.findMany).not.toHaveBeenCalled();
     });
 
@@ -166,7 +166,7 @@ describe("Job Location Actions", () => {
 
       const result = await getJobLocationsList(1, 10);
 
-      expect(result).toEqual({ success: false, message: "Database error" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch job location list. " });
     });
   });
 
@@ -192,7 +192,7 @@ describe("Job Location Actions", () => {
 
       const result = await deleteJobLocationById("loc-1");
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to delete job location." });
       expect(prisma.location.delete).not.toHaveBeenCalled();
     });
 
@@ -204,8 +204,7 @@ describe("Job Location Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Job location cannot be deleted due to its use in experience section of one of the resume! ",
+        message: "Failed to delete job location.",
       });
       expect(prisma.education.count).not.toHaveBeenCalled();
       expect(prisma.location.delete).not.toHaveBeenCalled();
@@ -220,8 +219,7 @@ describe("Job Location Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Job location cannot be deleted due to its use in education section of one of the resume! ",
+        message: "Failed to delete job location.",
       });
       expect(prisma.job.count).not.toHaveBeenCalled();
       expect(prisma.location.delete).not.toHaveBeenCalled();
@@ -237,8 +235,7 @@ describe("Job Location Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Location cannot be deleted due to 5 number of associated jobs! ",
+        message: "Failed to delete job location.",
       });
       expect(prisma.location.delete).not.toHaveBeenCalled();
     });
@@ -254,7 +251,7 @@ describe("Job Location Actions", () => {
 
       const result = await deleteJobLocationById("loc-1");
 
-      expect(result).toEqual({ success: false, message: "Delete failed" });
+      expect(result).toEqual({ success: false, message: "Failed to delete job location." });
     });
   });
 });

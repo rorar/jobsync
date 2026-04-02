@@ -107,7 +107,7 @@ describe("Notification Actions", () => {
 
       const result = await getNotifications();
 
-      expect(result).toEqual({ success: false, message: "Database error" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch notifications" });
     });
   });
 
@@ -153,7 +153,7 @@ describe("Notification Actions", () => {
 
       const result = await getUnreadCount();
 
-      expect(result).toEqual({ success: false, message: "Database error" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch unread count" });
     });
   });
 
@@ -196,7 +196,7 @@ describe("Notification Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Record to update not found.",
+        message: "Failed to mark notification as read",
       });
     });
   });
@@ -248,7 +248,7 @@ describe("Notification Actions", () => {
 
       const result = await markAllAsRead();
 
-      expect(result).toEqual({ success: false, message: "Database error" });
+      expect(result).toEqual({ success: false, message: "Failed to mark all notifications as read" });
     });
   });
 
@@ -289,7 +289,7 @@ describe("Notification Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Record to delete does not exist.",
+        message: "Failed to dismiss notification",
       });
     });
   });

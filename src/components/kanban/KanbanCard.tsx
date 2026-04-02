@@ -1,7 +1,7 @@
 "use client";
 
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import React, { useMemo } from "react";
+import { useDraggable } from "@dnd-kit/core";
 import { useTranslations, formatDateShort } from "@/i18n";
 import { GripVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -9,42 +9,40 @@ import Link from "next/link";
 import type { JobResponse } from "@/models/job.model";
 import { STATUS_COLORS } from "@/hooks/useKanbanState";
 
+// Module-level "today" — refreshed on each page load, not per-render
+const getToday = () => {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return now;
+};
+
 interface KanbanCardProps {
   job: JobResponse;
   statusValue: string;
   isDragOverlay?: boolean;
 }
 
-export function KanbanCard({ job, statusValue, isDragOverlay = false }: KanbanCardProps) {
+export const KanbanCard = React.memo(function KanbanCard({ job, statusValue, isDragOverlay = false }: KanbanCardProps) {
   const { t, locale } = useTranslations();
   const color = STATUS_COLORS[statusValue] ?? STATUS_COLORS.draft;
+  const dateKey = new Date().toISOString().slice(0, 10);
+  const today = useMemo(() => getToday(), [dateKey]);
 
   const {
     attributes,
     listeners,
     setNodeRef,
-    transform,
-    transition,
     isDragging,
-  } = useSortable({
+  } = useDraggable({
     id: job.id,
     disabled: isDragOverlay,
   });
 
-  const style = isDragOverlay
-    ? undefined
-    : {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.4 : 1,
-      };
-
   // Due date calculations
-  const now = new Date();
   const dueDate = job.dueDate ? new Date(job.dueDate) : null;
-  const isOverdue = dueDate ? now > dueDate : false;
+  const isOverdue = dueDate ? today > dueDate : false;
   const daysUntilDue = dueDate
-    ? Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    ? Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
     : null;
   const isDueSoon = daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 3;
   const isDueToday = daysUntilDue !== null && daysUntilDue === 0;
@@ -55,7 +53,7 @@ export function KanbanCard({ job, statusValue, isDragOverlay = false }: KanbanCa
   return (
     <div
       ref={isDragOverlay ? undefined : setNodeRef}
-      style={style}
+      style={{ opacity: isDragging ? 0.4 : 1 }}
       className={`
         group relative rounded-lg border bg-card shadow-sm
         border-l-[3px] ${color.border} ${color.darkBorder}
@@ -77,7 +75,8 @@ export function KanbanCard({ job, statusValue, isDragOverlay = false }: KanbanCa
                      rounded p-0.5"
           {...attributes}
           {...listeners}
-          aria-label={t("jobs.kanbanDndInstructions")}
+          aria-label={t("jobs.kanbanDragHandle").replace("{title}", job.JobTitle?.label ?? "")}
+          aria-describedby="kanban-dnd-instructions"
         >
           <GripVertical className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -145,4 +144,4 @@ export function KanbanCard({ job, statusValue, isDragOverlay = false }: KanbanCa
       </div>
     </div>
   );
-}
+});

@@ -197,7 +197,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to fetch tasks list.",
       });
     });
 
@@ -211,7 +211,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Database error",
+        message: "Failed to fetch tasks list.",
       });
     });
   });
@@ -260,7 +260,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to fetch task.",
       });
     });
 
@@ -274,7 +274,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Database error",
+        message: "Failed to fetch task.",
       });
     });
   });
@@ -324,7 +324,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to create task.",
       });
     });
 
@@ -352,7 +352,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Database error",
+        message: "Failed to create task.",
       });
     });
   });
@@ -410,7 +410,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Task ID is required for update",
+        message: "Failed to update task.",
       });
     });
 
@@ -421,7 +421,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to update task.",
       });
     });
 
@@ -435,7 +435,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Database error",
+        message: "Failed to update task.",
       });
     });
   });
@@ -473,7 +473,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to update task status.",
       });
     });
 
@@ -487,7 +487,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Database error",
+        message: "Failed to update task status.",
       });
     });
   });
@@ -548,7 +548,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to delete task.",
       });
     });
 
@@ -562,7 +562,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Database error",
+        message: "Failed to delete task.",
       });
     });
   });
@@ -712,7 +712,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to start activity from task.",
       });
     });
 
@@ -726,7 +726,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Database error",
+        message: "Failed to start activity from task.",
       });
     });
   });
@@ -807,7 +807,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to fetch activity types with task counts.",
       });
     });
 
@@ -821,7 +821,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Database error",
+        message: "Failed to fetch activity types with task counts.",
       });
     });
   });

@@ -93,7 +93,7 @@ describe("activity.actions", () => {
 
       const result = await getAllActivityTypes();
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch all activity types. " });
       expect(prisma.activityType.findMany).not.toHaveBeenCalled();
     });
 
@@ -105,7 +105,7 @@ describe("activity.actions", () => {
 
       const result = await getAllActivityTypes();
 
-      expect(result).toEqual({ success: false, message: "Database error" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch all activity types. " });
     });
   });
 
@@ -139,7 +139,7 @@ describe("activity.actions", () => {
 
       const result = await createActivityType("Learning");
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to create activity type. " });
       expect(prisma.activityType.upsert).not.toHaveBeenCalled();
     });
 
@@ -151,7 +151,7 @@ describe("activity.actions", () => {
 
       const result = await createActivityType("Learning");
 
-      expect(result).toEqual({ success: false, message: "Upsert failed" });
+      expect(result).toEqual({ success: false, message: "Failed to create activity type. " });
     });
   });
 
@@ -179,7 +179,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to fetch activities list. ",
       });
     });
 
@@ -193,7 +193,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Database error",
+        message: "Failed to fetch activities list. ",
       });
     });
 
@@ -378,7 +378,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to fetch activity.",
       });
       expect(prisma.activity.findFirst).not.toHaveBeenCalled();
     });
@@ -457,7 +457,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Database error",
+        message: "Failed to fetch activity.",
       });
     });
   });
@@ -518,7 +518,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to update activity.",
       });
       expect(prisma.activity.findFirst).not.toHaveBeenCalled();
       expect(prisma.activity.update).not.toHaveBeenCalled();
@@ -534,7 +534,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Activity ID is required for update",
+        message: "Failed to update activity.",
       });
       expect(prisma.activity.findFirst).not.toHaveBeenCalled();
       expect(prisma.activity.update).not.toHaveBeenCalled();
@@ -606,7 +606,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Database error",
+        message: "Failed to update activity.",
       });
     });
   });

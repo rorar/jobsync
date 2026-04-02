@@ -162,7 +162,7 @@ describe("mock.actions", () => {
 
       const result = await generateMockActivitiesAction();
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to generate mock activities" });
       expect(prisma.activityType.findMany).not.toHaveBeenCalled();
     });
 
@@ -178,8 +178,7 @@ describe("mock.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Mock data generation is only available in development mode or when NEXT_PUBLIC_ENABLE_MOCK_DATA=true",
+        message: "Failed to generate mock activities",
       });
     });
 
@@ -234,7 +233,7 @@ describe("mock.actions", () => {
 
       const result = await generateMockActivitiesAction();
 
-      expect(result).toEqual({ success: false, message: "Database connection lost" });
+      expect(result).toEqual({ success: false, message: "Failed to generate mock activities" });
     });
   });
 
@@ -246,7 +245,7 @@ describe("mock.actions", () => {
 
       const result = await clearMockActivitiesAction();
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to clear mock activities" });
       expect(prisma.activity.findMany).not.toHaveBeenCalled();
     });
 
@@ -258,8 +257,7 @@ describe("mock.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Mock data clearing is only available in development mode or when NEXT_PUBLIC_ENABLE_MOCK_DATA=true",
+        message: "Failed to clear mock activities",
       });
     });
 
@@ -308,7 +306,7 @@ describe("mock.actions", () => {
 
       const result = await clearMockActivitiesAction();
 
-      expect(result).toEqual({ success: false, message: "Disk full" });
+      expect(result).toEqual({ success: false, message: "Failed to clear mock activities" });
     });
   });
 
@@ -394,7 +392,7 @@ describe("mock.actions", () => {
 
       const result = await generateMockProfileDataAction();
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to generate mock profile data" });
     });
 
     it("returns error when mock data is disabled", async () => {
@@ -405,8 +403,7 @@ describe("mock.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Mock data generation is only available in development mode or when NEXT_PUBLIC_ENABLE_MOCK_DATA=true",
+        message: "Failed to generate mock profile data",
       });
     });
 
@@ -462,7 +459,7 @@ describe("mock.actions", () => {
 
       const result = await generateMockProfileDataAction();
 
-      expect(result).toEqual({ success: false, message: "Upsert failed" });
+      expect(result).toEqual({ success: false, message: "Failed to generate mock profile data" });
     });
   });
 
@@ -474,7 +471,7 @@ describe("mock.actions", () => {
 
       const result = await clearMockProfileDataAction();
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to clear mock profile data" });
     });
 
     it("returns error when mock data is disabled", async () => {
@@ -485,8 +482,7 @@ describe("mock.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Mock data clearing is only available in development mode or when NEXT_PUBLIC_ENABLE_MOCK_DATA=true",
+        message: "Failed to clear mock profile data",
       });
     });
 
@@ -589,7 +585,7 @@ describe("mock.actions", () => {
 
       const result = await clearMockProfileDataAction();
 
-      expect(result).toEqual({ success: false, message: "Query timeout" });
+      expect(result).toEqual({ success: false, message: "Failed to clear mock profile data" });
     });
   });
 });

@@ -64,7 +64,7 @@ describe("Job Title Actions", () => {
 
       const result = await getAllJobTitles();
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch job title list. " });
       expect(prisma.jobTitle.findMany).not.toHaveBeenCalled();
     });
 
@@ -76,7 +76,7 @@ describe("Job Title Actions", () => {
 
       const result = await getAllJobTitles();
 
-      expect(result).toEqual({ success: false, message: "Database error" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch job title list. " });
     });
   });
 
@@ -154,7 +154,7 @@ describe("Job Title Actions", () => {
 
       const result = await getJobTitleList(1, 10);
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch job title list. " });
       expect(prisma.jobTitle.findMany).not.toHaveBeenCalled();
     });
 
@@ -165,7 +165,7 @@ describe("Job Title Actions", () => {
 
       const result = await getJobTitleList(1, 10);
 
-      expect(result).toEqual({ success: false, message: "Database error" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch job title list. " });
     });
   });
 
@@ -199,7 +199,7 @@ describe("Job Title Actions", () => {
 
       const result = await createJobTitle("Developer");
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to create job title. " });
       expect(prisma.jobTitle.upsert).not.toHaveBeenCalled();
     });
 
@@ -211,7 +211,7 @@ describe("Job Title Actions", () => {
 
       const result = await createJobTitle("Developer");
 
-      expect(result).toEqual({ success: false, message: "Upsert failed" });
+      expect(result).toEqual({ success: false, message: "Failed to create job title. " });
     });
   });
 
@@ -236,7 +236,7 @@ describe("Job Title Actions", () => {
 
       const result = await deleteJobTitleById("title-1");
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to delete job title." });
       expect(prisma.jobTitle.delete).not.toHaveBeenCalled();
     });
 
@@ -248,8 +248,7 @@ describe("Job Title Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Job title cannot be deleted due to its use in experience section of one of the resume! ",
+        message: "Failed to delete job title.",
       });
       expect(prisma.job.count).not.toHaveBeenCalled();
       expect(prisma.jobTitle.delete).not.toHaveBeenCalled();
@@ -264,8 +263,7 @@ describe("Job Title Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Job title cannot be deleted due to 3 number of associated jobs! ",
+        message: "Failed to delete job title.",
       });
       expect(prisma.jobTitle.delete).not.toHaveBeenCalled();
     });
@@ -280,7 +278,7 @@ describe("Job Title Actions", () => {
 
       const result = await deleteJobTitleById("title-1");
 
-      expect(result).toEqual({ success: false, message: "Delete failed" });
+      expect(result).toEqual({ success: false, message: "Failed to delete job title." });
     });
   });
 });

@@ -1,8 +1,47 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-02
 
-**Total: 232 bugs found, 221 fixed, 1 pre-existing open, 10 deferred to S4**
+**Total: 252 bugs found, 241 fixed, 1 pre-existing open, 10 deferred to S4**
 
 ### Status: ⚠️ 1 pre-existing test failure (PRE-1) + 10 S3 deferred items
+
+## Session S3-Resume (2026-04-02) — Skills + Full Review + a11y + Security + Performance
+
+10-dimension review using specialized skill agents (not generic agents). 68 raw findings deduplicated to 42 unique. 20 fixed this session.
+
+### Fixed in S3-Resume (20 findings)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| CON-C01 | **CRITICAL** | Cross-user FK injection in addJob/updateJob — no ownership verification on foreign keys | Added Promise.all ownership checks for all user-scoped FKs |
+| CON-C02 | **CRITICAL** | Drag handle aria-label identical for all cards (full instruction string) | Per-card `kanbanDragHandle` + aria-describedby |
+| CON-C03 | **CRITICAL** | Collapse/expand buttons missing aria-expanded | Added aria-expanded={true/false} |
+| CON-C04 | **CRITICAL** | Mobile status Select has no accessible label | Added aria-label with job title |
+| CON-C05 | **CRITICAL** | Search input and filter Select unlabelled | Added aria-label to both |
+| CON-C06 | **CRITICAL** | ToastClose dismiss button has no accessible name | Added sr-only "Dismiss" label |
+| CON-C07 | **CRITICAL** | DnD linear scan O(n×cols) on every onDragOver at 60Hz | Replaced with useMemo Map lookups (O(1)) |
+| CON-H01 | **HIGH** | Serial DB round-trips in changeJobStatus | Promise.all for independent lookups |
+| CON-H02 | **HIGH** | No React.memo on KanbanColumn/KanbanCard | Wrapped both with React.memo |
+| CON-H03 | **HIGH** | new Date() in KanbanCard render body (12K alloc/sec during drag) | Lifted to module-scope getToday() + useMemo |
+| CON-H04 | **HIGH** | updateKanbanOrder missing note length validation | Added 500 char limit check |
+| CON-H05 | **HIGH** | Cross-user data leak in addJobToQueue lookups | Added createdBy filter to findFirst |
+| CON-H06 | **HIGH** | getJobsList unbounded limit parameter | Clamped to MAX_LIMIT=200 |
+| CON-H07 | **HIGH** | Resume:true in getJobsList leaks File.filePath | Explicit select excluding filePath |
+| CON-M01 | MEDIUM | Undo button shown for irreversible transitions (10/13 fail) | Guard with isValidTransition |
+| CON-M05 | MEDIUM | getStatusLabel duplicated in 3 components | Extracted to shared status-labels.ts |
+| CON-M07 | MEDIUM | Stale closure in setUndoWithTimeout (timeout in state) | useRef for timeout handle |
+| CON-M09 | MEDIUM | handleError leaks raw Prisma error messages to client | Generic msg fallback, never error.message |
+| CON-M13 | MEDIUM | StatusTransitionDialog note persists across reopenings | useEffect reset on open |
+| WCAG-M03 | MEDIUM | DragOverlay clone not hidden from a11y tree | Added aria-hidden="true" wrapper |
+
+### Deferred — remain from S3 (10 items, unchanged)
+See S3 deferred items above (S3-D1 through S3-D10).
+
+### Documented but not fixed (recommendations, not bugs)
+- DS-01 through DS-05: Data storytelling gaps (funnel, bottleneck, trends, source comparison, calendar bug)
+- WEED-D1 through D8: Allium spec divergences (sortOrder, breakpoint, match types)
+- 7 WCAG Medium findings, 3 WCAG Low findings
+- 9 Low code quality/architecture findings
+
+Full consolidated report: `docs/reviews/s3-resume/consolidated-report.md`
 
 ## Session S3 CRM Core (2026-04-02) — FIXING CRITICAL, REST DEFERRED TO S4
 

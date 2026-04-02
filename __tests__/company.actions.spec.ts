@@ -83,7 +83,7 @@ describe("Company Actions", () => {
 
       await expect(getCompanyList(1, 10)).resolves.toStrictEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to fetch company list. ",
       });
 
       expect(prisma.company.findMany).not.toHaveBeenCalled();
@@ -142,7 +142,7 @@ describe("Company Actions", () => {
 
       await expect(getCompanyList(1, 10)).resolves.toStrictEqual({
         success: false,
-        message: "Database error",
+        message: "Failed to fetch company list. ",
       });
 
       expect(prisma.company.findMany).not.toHaveBeenCalled();
@@ -173,7 +173,7 @@ describe("Company Actions", () => {
 
       await expect(getAllCompanies()).resolves.toStrictEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to fetch all companies. ",
       });
 
       expect(prisma.company.findMany).not.toHaveBeenCalled();
@@ -187,7 +187,7 @@ describe("Company Actions", () => {
 
       const result = await getAllCompanies();
 
-      expect(result).toEqual({ success: false, message: "Unexpected error" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch all companies. " });
       expect(prisma.company.findMany).toHaveBeenCalledWith({
         where: { createdBy: mockUser.id },
       });
@@ -236,7 +236,7 @@ describe("Company Actions", () => {
 
       const result = await addCompany(validData);
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to create company." });
       expect(prisma.company.findFirst).not.toHaveBeenCalled();
       expect(prisma.company.create).not.toHaveBeenCalled();
     });
@@ -257,7 +257,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Company already exists!",
+        message: "Failed to create company.",
       });
       expect(prisma.company.findFirst).toHaveBeenCalledWith({
         where: { value: "new company", createdBy: mockUser.id },
@@ -273,7 +273,7 @@ describe("Company Actions", () => {
 
       const result = await addCompany(validData);
 
-      expect(result).toEqual({ success: false, message: "Unexpected error" });
+      expect(result).toEqual({ success: false, message: "Failed to create company." });
       expect(prisma.company.findFirst).toHaveBeenCalledWith({
         where: { value: "new company", createdBy: mockUser.id },
       });
@@ -292,7 +292,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Invalid logo URL. Only http and https protocols are allowed.",
+        message: "Failed to create company.",
       });
 
       expect(prisma.company.findFirst).not.toHaveBeenCalled();
@@ -311,7 +311,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Invalid logo URL. Only http and https protocols are allowed.",
+        message: "Failed to create company.",
       });
 
       expect(prisma.company.create).not.toHaveBeenCalled();
@@ -407,7 +407,7 @@ describe("Company Actions", () => {
 
       const result = await updateCompany(validData);
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to update company." });
 
       expect(prisma.company.findFirst).not.toHaveBeenCalled();
       expect(prisma.company.update).not.toHaveBeenCalled();
@@ -424,7 +424,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Company already exists!",
+        message: "Failed to update company.",
       });
 
       expect(prisma.company.update).not.toHaveBeenCalled();
@@ -439,7 +439,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Id is not provided",
+        message: "Failed to update company.",
       });
 
       expect(prisma.company.findFirst).not.toHaveBeenCalled();
@@ -458,7 +458,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Invalid logo URL. Only http and https protocols are allowed.",
+        message: "Failed to update company.",
       });
 
       expect(prisma.company.findFirst).not.toHaveBeenCalled();
@@ -477,7 +477,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Invalid logo URL. Only http and https protocols are allowed.",
+        message: "Failed to update company.",
       });
 
       expect(prisma.company.update).not.toHaveBeenCalled();
@@ -589,7 +589,7 @@ describe("Company Actions", () => {
 
       const result = await deleteCompanyById("company-id");
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to delete company." });
       expect(prisma.company.delete).not.toHaveBeenCalled();
     });
 
@@ -601,8 +601,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Company cannot be deleted due to its use in experience section of one of the resume! ",
+        message: "Failed to delete company.",
       });
       expect(prisma.job.count).not.toHaveBeenCalled();
       expect(prisma.company.delete).not.toHaveBeenCalled();
@@ -617,8 +616,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Company cannot be deleted due to 3 number of associated jobs! ",
+        message: "Failed to delete company.",
       });
       expect(prisma.company.delete).not.toHaveBeenCalled();
     });
@@ -633,7 +631,7 @@ describe("Company Actions", () => {
 
       const result = await deleteCompanyById("company-id");
 
-      expect(result).toEqual({ success: false, message: "Delete failed" });
+      expect(result).toEqual({ success: false, message: "Failed to delete company." });
     });
   });
 });

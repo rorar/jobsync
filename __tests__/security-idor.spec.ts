@@ -20,6 +20,18 @@ jest.mock("@/lib/db", () => ({
   company: {
     findFirst: jest.fn(),
   },
+  jobTitle: {
+    findFirst: jest.fn(),
+  },
+  location: {
+    findFirst: jest.fn(),
+  },
+  jobSource: {
+    findFirst: jest.fn(),
+  },
+  tag: {
+    count: jest.fn(),
+  },
 }));
 
 jest.mock("@/utils/user.utils", () => ({
@@ -92,6 +104,11 @@ describe("IDOR Ownership Checks", () => {
         sendToQueue: false,
       };
 
+      // FK ownership verification mocks (CON-C01)
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "loc-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
       (prisma.job.update as jest.Mock).mockResolvedValue(mockJobData);
 
       await updateJob(mockJobData);

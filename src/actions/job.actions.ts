@@ -9,6 +9,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { isValidTransition, computeTransitionSideEffects, getValidTargets, STATUS_ORDER, COLLAPSED_BY_DEFAULT } from "@/lib/crm/status-machine";
+import { isEditTransitionValid } from "@/lib/crm/validate-edit-transition";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 
 export const getStatusList = async (): Promise<ActionResult<JobStatus[]>> => {
@@ -52,12 +53,17 @@ export const getJobsList = async (
   search?: string,
 ): Promise<ActionResult<JobResponse[]>> => {
   try {
+    // CON-H06 — clamp pagination parameters
+    const MAX_LIMIT = 200;
+    const safePage = Math.max(1, Math.floor(page));
+    const safeLimit = Math.min(Math.max(1, Math.floor(limit)), MAX_LIMIT);
+
     const user = await getCurrentUser();
 
     if (!user) {
       throw new Error("Not authenticated");
     }
-    const skip = (page - 1) * limit;
+    const skip = (safePage - 1) * safeLimit;
 
     const filterBy = filter
       ? filter === Object.keys(JOB_TYPES)[1]
@@ -89,7 +95,7 @@ export const getJobsList = async (
       prisma.job.findMany({
         where: whereClause,
         skip,
-        take: limit,
+        take: safeLimit,
         select: {
           id: true,
           userId: true,
@@ -106,7 +112,17 @@ export const getJobsList = async (
           jobUrl: true,
           applied: true,
           description: false,
-          Resume: true,
+          Resume: {
+            select: {
+              id: true,
+              profileId: true,
+              title: true,
+              createdAt: true,
+              updatedAt: true,
+              FileId: true,
+              File: { select: { id: true, fileName: true, fileType: true } },
+            },
+          },
           matchScore: true,
           _count: { select: { Notes: true } },
         },
@@ -119,7 +135,9 @@ export const getJobsList = async (
         where: whereClause,
       }),
     ]);
-    return { success: true, data, total };
+    // Narrow cast: Prisma returns Resume.File as `| null` but profile.model.ts
+    // declares it as `File?: File` (optional, not nullable). Same pattern as getJobDetails.
+    return { success: true, data: data as unknown as JobResponse[], total };
   } catch (error) {
     const msg = "Failed to fetch jobs list. ";
     return handleError(error, msg);
@@ -314,6 +332,39 @@ export const addJob = async (
 
     const tagIds = tags ?? [];
 
+    // Verify FK ownership (CON-C01 — prevent cross-user FK injection)
+    const [titleOwned, companyOwned, locationOwned, sourceOwned, resumeOwned] =
+      await Promise.all([
+        title ? prisma.jobTitle.findFirst({ where: { id: title, createdBy: user.id }, select: { id: true } }) : true,
+        company ? prisma.company.findFirst({ where: { id: company, createdBy: user.id }, select: { id: true } }) : true,
+        location ? prisma.location.findFirst({ where: { id: location, createdBy: user.id }, select: { id: true } }) : true,
+        source ? prisma.jobSource.findFirst({ where: { id: source, createdBy: user.id }, select: { id: true } }) : true,
+        resume ? prisma.resume.findFirst({ where: { id: resume, profile: { userId: user.id } }, select: { id: true } }) : true,
+      ]);
+
+    if (!titleOwned || !companyOwned || !locationOwned || !sourceOwned || !resumeOwned) {
+      return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" as const };
+    }
+
+    // Verify tag ownership
+    if (tagIds && tagIds.length > 0) {
+      const ownedTagCount = await prisma.tag.count({
+        where: { id: { in: tagIds }, createdBy: user.id }
+      });
+      if (ownedTagCount !== tagIds.length) {
+        return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" as const };
+      }
+    }
+
+    // Verify statusId exists (F8)
+    const statusExists = await prisma.jobStatus.findFirst({
+      where: { id: status },
+      select: { id: true },
+    });
+    if (statusExists === null) {
+      return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" as const };
+    }
+
     // Transaction: create job + initial status history entry
     const [job, historyEntry] = await prisma.$transaction(async (tx) => {
       const newJob = await tx.job.create({
@@ -413,6 +464,52 @@ export const updateJob = async (
 
     const tagIds = tags ?? [];
 
+    // Verify FK ownership (CON-C01 — prevent cross-user FK injection)
+    const [titleOwned, companyOwned, locationOwned, sourceOwned, resumeOwned] =
+      await Promise.all([
+        title ? prisma.jobTitle.findFirst({ where: { id: title, createdBy: user.id }, select: { id: true } }) : true,
+        company ? prisma.company.findFirst({ where: { id: company, createdBy: user.id }, select: { id: true } }) : true,
+        location ? prisma.location.findFirst({ where: { id: location, createdBy: user.id }, select: { id: true } }) : true,
+        source ? prisma.jobSource.findFirst({ where: { id: source, createdBy: user.id }, select: { id: true } }) : true,
+        resume ? prisma.resume.findFirst({ where: { id: resume, profile: { userId: user.id } }, select: { id: true } }) : true,
+      ]);
+
+    if (!titleOwned || !companyOwned || !locationOwned || !sourceOwned || !resumeOwned) {
+      return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" as const };
+    }
+
+    // Verify tag ownership
+    if (tagIds && tagIds.length > 0) {
+      const ownedTagCount = await prisma.tag.count({
+        where: { id: { in: tagIds }, createdBy: user.id }
+      });
+      if (ownedTagCount !== tagIds.length) {
+        return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" as const };
+      }
+    }
+
+    // State machine enforcement (F5): validate status transitions via edit form.
+    // Fetch the current job to compare status. If the status is changing,
+    // validate the transition against the state machine before writing.
+    const currentJob = await prisma.job.findFirst({
+      where: { id, userId: user.id },
+      include: { Status: true },
+    }).catch(() => null);
+
+    if (currentJob?.Status && status !== currentJob.statusId) {
+      const newStatus = await prisma.jobStatus.findFirst({
+        where: { id: status },
+      });
+
+      if (newStatus && !isEditTransitionValid(currentJob.Status.value, newStatus.value)) {
+        return {
+          success: false,
+          message: "errors.invalidTransition",
+          errorCode: "INVALID_TRANSITION",
+        };
+      }
+    }
+
     const job = await prisma.job.update({
       where: {
         id,
@@ -499,12 +596,12 @@ export const addJobToQueue = async (
       throw new Error("Not authenticated");
     }
 
-    // Resolve names from IDs for the StagedVacancy record
+    // Resolve names from IDs for the StagedVacancy record (CON-H05 — ownership filter)
     const [jobTitle, company, location] = await Promise.all([
-      prisma.jobTitle.findUnique({ where: { id: data.title }, select: { label: true } }),
-      prisma.company.findUnique({ where: { id: data.company }, select: { label: true } }),
+      prisma.jobTitle.findFirst({ where: { id: data.title, createdBy: user.id }, select: { label: true } }),
+      prisma.company.findFirst({ where: { id: data.company, createdBy: user.id }, select: { label: true } }),
       data.location
-        ? prisma.location.findUnique({ where: { id: data.location }, select: { label: true } })
+        ? prisma.location.findFirst({ where: { id: data.location, createdBy: user.id }, select: { label: true } })
         : null,
     ]);
 
@@ -599,6 +696,7 @@ export const changeJobStatus = async (
   jobId: string,
   newStatusId: string,
   note?: string,
+  expectedFromStatusId?: string,
 ): Promise<ActionResult<JobResponse>> => {
   try {
     const user = await getCurrentUser();
@@ -611,21 +709,26 @@ export const changeJobStatus = async (
       return { success: false, message: "errors.noteTooLong", errorCode: "VALIDATION_ERROR" };
     }
 
-    // Fetch job with ownership check (IDOR safe)
-    const currentJob = await prisma.job.findFirst({
-      where: { id: jobId, userId: user.id },
-      include: { Status: true },
-    });
+    // Parallel lookups (independent queries)
+    const [currentJob, newStatus] = await Promise.all([
+      prisma.job.findFirst({
+        where: { id: jobId, userId: user.id },
+        include: { Status: true },
+      }),
+      prisma.jobStatus.findFirst({
+        where: { id: newStatusId },
+      }),
+    ]);
     if (!currentJob) {
       return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
     }
-
-    // Get new status
-    const newStatus = await prisma.jobStatus.findFirst({
-      where: { id: newStatusId },
-    });
     if (!newStatus) {
       return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
+    }
+
+    // Compare-and-swap: reject if caller's expected fromStatus is stale (DAU-2)
+    if (expectedFromStatusId !== undefined && currentJob.statusId !== expectedFromStatusId) {
+      return { success: false, message: "errors.staleState", errorCode: "STALE_STATE" };
     }
 
     // Validate transition against state machine
@@ -798,6 +901,11 @@ export const updateKanbanOrder = async (
     // Validate sortOrder: must be a finite non-negative number
     if (!Number.isFinite(newSortOrder) || newSortOrder < 0) {
       return { success: false, message: "errors.invalidSortOrder", errorCode: "VALIDATION_ERROR" };
+    }
+
+    // CON-H04 — note length validation
+    if (note && note.length > 500) {
+      return { success: false, message: "errors.noteTooLong", errorCode: "VALIDATION_ERROR" as const };
     }
 
     // Fetch job with ownership check

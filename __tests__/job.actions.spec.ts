@@ -26,6 +26,19 @@ jest.mock("@prisma/client", () => {
     },
     jobSource: {
       findMany: jest.fn(),
+      findFirst: jest.fn(),
+    },
+    jobTitle: {
+      findFirst: jest.fn(),
+    },
+    company: {
+      findFirst: jest.fn(),
+    },
+    resume: {
+      findFirst: jest.fn(),
+    },
+    tag: {
+      count: jest.fn(),
     },
     job: {
       findMany: jest.fn(),
@@ -118,7 +131,7 @@ describe("jobActions", () => {
     it("should throw error on failure", async () => {
       const mockErrorResponse = {
         success: false,
-        message: "Failed to fetch status list.",
+        message: "Failed to fetch status list. ",
       };
       (prisma.jobStatus.findMany as jest.Mock).mockRejectedValue(
         new Error("Failed to fetch status list."),
@@ -150,7 +163,7 @@ describe("jobActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch job source list.",
+        message: "Failed to fetch job source list. ",
       });
 
       expect(prisma.jobSource.findMany).toHaveBeenCalledTimes(1);
@@ -185,7 +198,7 @@ describe("jobActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Database error",
+        message: "Failed to fetch jobs list. ",
       });
     });
     it("should return error when user is not authenticated", async () => {
@@ -195,7 +208,7 @@ describe("jobActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to fetch jobs list. ",
       });
     });
 
@@ -373,7 +386,7 @@ describe("jobActions", () => {
     it("should throw error when jobId is not provided", async () => {
       await expect(getJobDetails("")).resolves.toStrictEqual({
         success: false,
-        message: "Please provide job id",
+        message: "Failed to fetch job details. ",
       });
     });
     it("should throw error when user is not authenticated", async () => {
@@ -381,7 +394,7 @@ describe("jobActions", () => {
 
       await expect(getJobDetails("job123")).resolves.toStrictEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to fetch job details. ",
       });
     });
   });
@@ -423,7 +436,7 @@ describe("jobActions", () => {
 
     await expect(getJobDetails("job123")).resolves.toStrictEqual({
       success: false,
-      message: "Unexpected error",
+      message: "Failed to fetch job details. ",
     });
   });
   it("should throw error when user is not authenticated", async () => {
@@ -431,7 +444,7 @@ describe("jobActions", () => {
 
     await expect(getJobDetails("job123")).resolves.toStrictEqual({
       success: false,
-      message: "Not authenticated",
+      message: "Failed to fetch job details. ",
     });
   });
   describe("createLocation", () => {
@@ -440,14 +453,14 @@ describe("jobActions", () => {
 
       await expect(createLocation("location-name")).resolves.toStrictEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to create job location. ",
       });
     });
     it("should throw error when location name is not provided or empty", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       await expect(createLocation(" ")).resolves.toStrictEqual({
         success: false,
-        message: "Please provide location name",
+        message: "Failed to create job location. ",
       });
     });
     it("should create with valid input", async () => {
@@ -483,7 +496,7 @@ describe("jobActions", () => {
 
       await expect(createLocation("location-name")).resolves.toStrictEqual({
         success: false,
-        message: "Unexpected error",
+        message: "Failed to create job location. ",
       });
     });
   });
@@ -497,6 +510,11 @@ describe("jobActions", () => {
 
     it("should create a new job with initial status history", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      // FK ownership verification mocks (CON-C01)
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
       (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) => {
         return fn({
           job: {
@@ -516,6 +534,11 @@ describe("jobActions", () => {
     it("should emit JobStatusChanged event after creation", async () => {
       const { emitEvent } = require("@/lib/events");
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      // FK ownership verification mocks (CON-C01)
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
       (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) => {
         return fn({
           job: {
@@ -533,6 +556,11 @@ describe("jobActions", () => {
     });
     it("should handle unexpected errors", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      // FK ownership verification mocks (CON-C01)
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
 
       (prisma.$transaction as jest.Mock).mockRejectedValue(
         new Error("Unexpected error"),
@@ -540,7 +568,7 @@ describe("jobActions", () => {
 
       await expect(addJob(jobData)).resolves.toStrictEqual({
         success: false,
-        message: "Unexpected error",
+        message: "Failed to create job. ",
       });
     });
     it("should throw error when user is not authenticated", async () => {
@@ -548,13 +576,18 @@ describe("jobActions", () => {
 
       await expect(addJob(jobData)).resolves.toStrictEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to create job. ",
       });
     });
   });
   describe("updateJob", () => {
     it("should update a job successfully", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      // FK ownership verification mocks (CON-C01)
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
       (prisma.job.update as jest.Mock).mockResolvedValue(jobData);
 
       const result = await updateJob(jobData);
@@ -564,6 +597,11 @@ describe("jobActions", () => {
     });
     it("should handle unexpected errors", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      // FK ownership verification mocks (CON-C01)
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
 
       (prisma.job.update as jest.Mock).mockRejectedValue(
         new Error("Unexpected error"),
@@ -571,7 +609,7 @@ describe("jobActions", () => {
 
       await expect(updateJob(jobData)).resolves.toStrictEqual({
         success: false,
-        message: "Unexpected error",
+        message: "Failed to update job. ",
       });
     });
     it("should throw error when user is not authenticated", async () => {
@@ -579,7 +617,7 @@ describe("jobActions", () => {
 
       await expect(updateJob(jobData)).resolves.toStrictEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to update job. ",
       });
     });
 
@@ -590,7 +628,7 @@ describe("jobActions", () => {
         updateJob({ ...jobData, id: undefined }),
       ).resolves.toStrictEqual({
         success: false,
-        message: "Id is not provided",
+        message: "Failed to update job. ",
       });
     });
   });
@@ -642,17 +680,200 @@ describe("jobActions", () => {
         updateJobStatus("job-id", statusObj),
       ).resolves.toStrictEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to change job status.",
       });
     });
   });
+  // ---------------------------------------------------------------------------
+  // F5: updateJob must enforce state machine when status changes
+  // ---------------------------------------------------------------------------
+
+  describe("updateJob — state machine enforcement (F5)", () => {
+    const bookmarkedStatus = {
+      id: "status-bookmarked",
+      label: "Bookmarked",
+      value: "bookmarked",
+    };
+    const offerStatus = {
+      id: "status-offer",
+      label: "Offer",
+      value: "offer",
+    };
+
+    const existingJob = {
+      id: "job-id",
+      userId: mockUser.id,
+      statusId: bookmarkedStatus.id,
+      Status: bookmarkedStatus,
+    };
+
+    const updateData = {
+      ...jobData,
+      id: "job-id",
+      status: offerStatus.id, // Attempting bookmarked -> offer (INVALID)
+    };
+
+    it("should reject invalid status transition (bookmarked -> offer) via edit form", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      // FK ownership verification mocks (CON-C01)
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
+
+      // Mock: fetch the current job to check its current status
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue(existingJob);
+      // Mock: fetch the target status to get its value
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(offerStatus);
+
+      const result = await updateJob(updateData);
+
+      // updateJob should validate the state machine BEFORE writing to DB.
+      // bookmarked -> offer is NOT a valid transition.
+      expect(result.success).toBe(false);
+
+      // Prisma update should NOT have been called since the transition is invalid
+      expect(prisma.job.update).not.toHaveBeenCalled();
+    });
+
+    it("should allow valid status transition (bookmarked -> applied) via edit form", async () => {
+      const appliedStatus = {
+        id: "status-applied",
+        label: "Applied",
+        value: "applied",
+      };
+      const validUpdateData = {
+        ...jobData,
+        id: "job-id",
+        status: appliedStatus.id, // bookmarked -> applied (VALID)
+      };
+
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue(existingJob);
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(appliedStatus);
+
+      (prisma.job.update as jest.Mock).mockResolvedValue({
+        ...existingJob,
+        statusId: appliedStatus.id,
+        Status: appliedStatus,
+      });
+
+      const result = await updateJob(validUpdateData);
+
+      // Valid transition should proceed
+      expect(result.success).toBe(true);
+      expect(prisma.job.update).toHaveBeenCalledTimes(1);
+    });
+
+    it("should allow update without status change (same status)", async () => {
+      const sameStatusData = {
+        ...jobData,
+        id: "job-id",
+        status: bookmarkedStatus.id, // same status, no transition
+      };
+
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue(existingJob);
+
+      (prisma.job.update as jest.Mock).mockResolvedValue(existingJob);
+
+      const result = await updateJob(sameStatusData);
+
+      // Same status = no transition needed, should succeed
+      expect(result.success).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // F8: addJob should validate statusId exists
+  // ---------------------------------------------------------------------------
+
+  describe("addJob — statusId validation (F8)", () => {
+    it("should reject when statusId does not exist in the database", async () => {
+      const nonExistentStatusId = "00000000-0000-0000-0000-000000000000";
+      const jobDataWithBadStatus = {
+        ...jobData,
+        status: nonExistentStatusId,
+      };
+
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      // FK ownership verification mocks (CON-C01)
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
+
+      // The statusId does NOT exist in the database
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(null);
+
+      const result = await addJob(jobDataWithBadStatus);
+
+      // addJob should validate statusId before creating the job.
+      // A non-existent statusId should be rejected.
+      expect(result.success).toBe(false);
+
+      // The job should NOT have been created
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("should validate statusId belongs to a real status before writing to DB", async () => {
+      const validStatusId = "status-bookmarked";
+      const jobDataWithValidStatus = {
+        ...jobData,
+        status: validStatusId,
+      };
+
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
+
+      // The statusId DOES exist
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue({
+        id: validStatusId,
+        label: "Bookmarked",
+        value: "bookmarked",
+      });
+
+      const createdJob = {
+        ...jobData,
+        id: "new-job-id",
+        Status: { id: validStatusId, label: "Bookmarked", value: "bookmarked" },
+      };
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) => {
+        return fn({
+          job: {
+            create: jest.fn().mockResolvedValue(createdJob),
+          },
+          jobStatusHistory: {
+            create: jest.fn().mockResolvedValue({ id: "history-1" }),
+          },
+        });
+      });
+
+      const result = await addJob(jobDataWithValidStatus);
+
+      // Valid status should succeed
+      expect(result.success).toBe(true);
+    });
+  });
+
   describe("deleteJobById", () => {
     it("should return error when user is not authenticated", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(null);
 
       await expect(deleteJobById("job-id")).resolves.toStrictEqual({
         success: false,
-        message: "Not authenticated",
+        message: "Failed to delete job.",
       });
     });
     it("should delete a job successfully", async () => {
@@ -679,7 +900,7 @@ describe("jobActions", () => {
 
       await expect(deleteJobById("job-id")).resolves.toStrictEqual({
         success: false,
-        message: "Unexpected error",
+        message: "Failed to delete job.",
       });
     });
   });

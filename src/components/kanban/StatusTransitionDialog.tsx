@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslations } from "@/i18n";
 import {
   AlertDialog,
@@ -38,6 +38,13 @@ export function StatusTransitionDialog({
 }: StatusTransitionDialogProps) {
   const { t } = useTranslations();
   const [note, setNote] = useState("");
+
+  // Reset note when dialog opens
+  useEffect(() => {
+    if (open) {
+      setNote("");
+    }
+  }, [open]);
 
   const handleConfirm = () => {
     onConfirm(note.trim() || undefined);

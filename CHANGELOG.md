@@ -1,5 +1,55 @@
 # Changelog
 
+## [2026-04-02] Session S3-Resume — Skills + Full Review + a11y + Security + Performance
+
+### Review (10-dimension specialized skill review)
+- `/comprehensive-review:full-review` — Code Quality (13), Architecture (7), Security (8), Performance (7), Testing (7), Best Practices (12)
+- `/accessibility-compliance:wcag-audit-patterns` — 21 WCAG 2.2 findings (5 Critical Level A)
+- `/ui-design:interaction-design` — Interaction quality score 7.5/10
+- `/business-analytics:data-storytelling` — Data storytelling maturity 2.5/10
+- `allium:weed` — 8 new spec divergences (2 Medium, 6 Low)
+- 68 raw findings → 42 unique after deduplication across dimensions
+
+### Fixed (Security — 5 findings)
+- **CRITICAL:** Cross-user FK injection in addJob/updateJob — ownership verification for all FK inputs (CON-C01)
+- **HIGH:** Cross-user data leak in addJobToQueue — createdBy filter on entity lookups (CON-H05)
+- **HIGH:** getJobsList unbounded limit — clamped to MAX_LIMIT=200 (CON-H06)
+- **HIGH:** Resume:true leaks File.filePath — explicit select excluding filePath (CON-H07)
+- **MEDIUM:** handleError leaks raw Prisma errors — generic msg fallback (CON-M09)
+
+### Fixed (Accessibility — 8 findings)
+- **CRITICAL:** Drag handle aria-label identical for all cards → per-card label + aria-describedby (CON-C02)
+- **CRITICAL:** Collapse/expand buttons missing aria-expanded (CON-C03)
+- **CRITICAL:** Mobile status Select unlabelled (CON-C04)
+- **CRITICAL:** Search input + filter Select unlabelled (CON-C05)
+- **CRITICAL:** ToastClose dismiss button no accessible name (CON-C06)
+- **MEDIUM:** DragOverlay clone not hidden from a11y tree (WCAG-M03)
+- **MEDIUM:** Column card list aria-label hardcoded English "jobs" → translated
+- **MEDIUM:** getStatusLabel duplicated in 3 components → shared status-labels.ts (CON-M05)
+
+### Fixed (Performance — 4 findings)
+- **CRITICAL:** DnD linear scan O(n×cols) at 60Hz → useMemo Map O(1) lookups (CON-C07)
+- **HIGH:** Serial DB reads in changeJobStatus → Promise.all (CON-H01)
+- **HIGH:** No React.memo on KanbanCard/KanbanColumn (CON-H02)
+- **HIGH:** new Date() per card per render → module-scope getToday() + useMemo (CON-H03)
+
+### Fixed (UX/Quality — 3 findings)
+- **HIGH:** updateKanbanOrder missing note length validation (CON-H04)
+- **MEDIUM:** Undo button shown for irreversible transitions → guard with isValidTransition (CON-M01)
+- **MEDIUM:** StatusTransitionDialog note persists across reopenings → useEffect reset (CON-M13)
+- **MEDIUM:** Stale closure in setUndoWithTimeout → useRef for timeout handle (CON-M07)
+
+### Changed (Tests)
+- Updated 142 test assertions for handleError generic message change
+- Added FK ownership mock setup in job.actions.spec.ts and security-idor.spec.ts
+- Total: 2390 tests passing (126 suites)
+
+### Added (Review Reports — `docs/reviews/s3-resume/`)
+- Consolidated report with deduplication log, 42 findings across 7 dimensions
+- Architecture review, Code quality review, Performance analysis, Test coverage analysis, WCAG audit
+- Data storytelling gap analysis (5 recommendations)
+- Allium weed report (8 divergences)
+
 ## [2026-04-02] Session S2-Resume — Skipped Skills + Deferred Items
 
 ### Fixed (Code — 10 findings)

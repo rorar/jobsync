@@ -95,6 +95,17 @@ const core = {
     "common.hourShort": "h",
     "common.minuteShort": "m",
     "common.secondShort": "s",
+    "common.dismiss": "Dismiss",
+
+    // Error messages
+    "errors.notFound": "Resource not found",
+    "errors.noteTooLong": "Note is too long (max 500 characters)",
+    "errors.invalidTransition": "This status change is not allowed",
+    "errors.invalidSortOrder": "Invalid sort order value",
+    "errors.duplicateEntry": "A record with this value already exists",
+    "errors.fetchFailed": "Failed to fetch data",
+    "errors.referenceError": "Cannot delete: this record is referenced by other data",
+    "errors.staleState": "This job was modified in another tab. Please refresh and try again.",
   },
   de: {
     "nav.dashboard": "Dashboard",
@@ -166,6 +177,17 @@ const core = {
     "common.hourShort": "h",
     "common.minuteShort": "m",
     "common.secondShort": "s",
+    "common.dismiss": "Schließen",
+
+    // Fehlermeldungen
+    "errors.notFound": "Ressource nicht gefunden",
+    "errors.noteTooLong": "Notiz ist zu lang (max. 500 Zeichen)",
+    "errors.invalidTransition": "Dieser Statuswechsel ist nicht erlaubt",
+    "errors.invalidSortOrder": "Ungültiger Sortierungswert",
+    "errors.duplicateEntry": "Ein Eintrag mit diesem Wert existiert bereits",
+    "errors.fetchFailed": "Daten konnten nicht abgerufen werden",
+    "errors.referenceError": "Löschen nicht möglich: Dieser Eintrag wird von anderen Daten referenziert",
+    "errors.staleState": "Dieser Job wurde in einem anderen Tab geändert. Bitte aktualisieren und erneut versuchen.",
   },
   fr: {
     "nav.dashboard": "Tableau de bord",
@@ -237,6 +259,17 @@ const core = {
     "common.hourShort": "h",
     "common.minuteShort": "min",
     "common.secondShort": "s",
+    "common.dismiss": "Fermer",
+
+    // Messages d'erreur
+    "errors.notFound": "Ressource non trouvée",
+    "errors.noteTooLong": "La note est trop longue (max 500 caractères)",
+    "errors.invalidTransition": "Ce changement de statut n'est pas autorisé",
+    "errors.invalidSortOrder": "Valeur de tri invalide",
+    "errors.duplicateEntry": "Un enregistrement avec cette valeur existe déjà",
+    "errors.fetchFailed": "Impossible de récupérer les données",
+    "errors.referenceError": "Suppression impossible : cet enregistrement est référencé par d'autres données",
+    "errors.staleState": "Ce poste a été modifié dans un autre onglet. Veuillez actualiser et réessayer.",
   },
   es: {
     "nav.dashboard": "Panel",
@@ -308,6 +341,17 @@ const core = {
     "common.hourShort": "h",
     "common.minuteShort": "min",
     "common.secondShort": "s",
+    "common.dismiss": "Cerrar",
+
+    // Mensajes de error
+    "errors.notFound": "Recurso no encontrado",
+    "errors.noteTooLong": "La nota es demasiado larga (máx. 500 caracteres)",
+    "errors.invalidTransition": "Este cambio de estado no está permitido",
+    "errors.invalidSortOrder": "Valor de orden inválido",
+    "errors.duplicateEntry": "Ya existe un registro con este valor",
+    "errors.fetchFailed": "No se pudieron obtener los datos",
+    "errors.referenceError": "No se puede eliminar: este registro está referenciado por otros datos",
+    "errors.staleState": "Esta oferta fue modificada en otra pestaña. Por favor, actualice e intente de nuevo.",
   },
 } as const;
 

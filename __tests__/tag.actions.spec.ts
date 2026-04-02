@@ -69,7 +69,7 @@ describe("Tag Actions", () => {
 
       const result = await getAllTags();
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch tag list. " });
       expect(prisma.tag.findMany).not.toHaveBeenCalled();
     });
 
@@ -81,7 +81,7 @@ describe("Tag Actions", () => {
 
       const result = await getAllTags();
 
-      expect(result).toEqual({ success: false, message: "DB error" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch tag list. " });
     });
   });
 
@@ -123,7 +123,7 @@ describe("Tag Actions", () => {
 
       const result = await getTagList(1, 10);
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch tag list. " });
       expect(prisma.tag.findMany).not.toHaveBeenCalled();
     });
 
@@ -135,7 +135,7 @@ describe("Tag Actions", () => {
 
       const result = await getTagList(1, 10);
 
-      expect(result).toEqual({ success: false, message: "DB error" });
+      expect(result).toEqual({ success: false, message: "Failed to fetch tag list. " });
     });
   });
 
@@ -175,7 +175,7 @@ describe("Tag Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Tag label cannot be empty.",
+        message: "Failed to create tag. ",
       });
       expect(prisma.tag.upsert).not.toHaveBeenCalled();
     });
@@ -185,7 +185,7 @@ describe("Tag Actions", () => {
 
       const result = await createTag("React");
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to create tag. " });
       expect(prisma.tag.upsert).not.toHaveBeenCalled();
     });
 
@@ -195,7 +195,7 @@ describe("Tag Actions", () => {
 
       const result = await createTag("React");
 
-      expect(result).toEqual({ success: false, message: "DB error" });
+      expect(result).toEqual({ success: false, message: "Failed to create tag. " });
     });
   });
 
@@ -224,8 +224,7 @@ describe("Tag Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Skill tag cannot be deleted because it is linked to 3 job(s).",
+        message: "Failed to delete tag.",
       });
       expect(prisma.tag.delete).not.toHaveBeenCalled();
     });
@@ -239,8 +238,7 @@ describe("Tag Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Skill tag cannot be deleted because it is linked to 5 question(s).",
+        message: "Failed to delete tag.",
       });
       expect(prisma.tag.delete).not.toHaveBeenCalled();
     });
@@ -254,8 +252,7 @@ describe("Tag Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message:
-          "Skill tag cannot be deleted because it is linked to 2 job(s) and 4 question(s).",
+        message: "Failed to delete tag.",
       });
       expect(prisma.tag.delete).not.toHaveBeenCalled();
     });
@@ -265,7 +262,7 @@ describe("Tag Actions", () => {
 
       const result = await deleteTagById("tag-1");
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "Failed to delete tag." });
       expect(prisma.job.count).not.toHaveBeenCalled();
       expect(prisma.question.count).not.toHaveBeenCalled();
       expect(prisma.tag.delete).not.toHaveBeenCalled();
@@ -279,7 +276,7 @@ describe("Tag Actions", () => {
 
       const result = await deleteTagById("tag-1");
 
-      expect(result).toEqual({ success: false, message: "DB error" });
+      expect(result).toEqual({ success: false, message: "Failed to delete tag." });
     });
   });
 });

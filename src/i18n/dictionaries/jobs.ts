@@ -134,10 +134,15 @@ export const jobs = {
     // Column Actions
     "jobs.kanbanCollapseColumn": "Collapse column",
     "jobs.kanbanExpandColumn": "Expand column",
+    "jobs.kanbanColumnJobsList": "{status} jobs",
+
+    // Drag & Drop Accessibility
+    "jobs.kanbanDragHandle": "Drag {title}",
+    "jobs.kanbanDragNoTarget": "No valid drop target",
 
     // Mobile
     "jobs.kanbanMoreStatuses": "{count} more",
-    "jobs.kanbanChangeStatusMobile": "Change status",
+    "jobs.kanbanChangeStatusMobile": "Change status for {title}",
 
     // Match Score
     "jobs.kanbanMatchScore": "{score}% match",
@@ -146,6 +151,9 @@ export const jobs = {
     "jobs.kanbanOverdue": "Overdue",
     "jobs.kanbanDueSoon": "Due in {days} days",
     "jobs.kanbanDueToday": "Due today",
+
+    // Other column (catch-all)
+    "jobs.kanbanOtherColumn": "Other",
   },
   de: {
     "jobs.title": "Meine Jobs",
@@ -282,10 +290,15 @@ export const jobs = {
     // Spaltenaktionen
     "jobs.kanbanCollapseColumn": "Spalte einklappen",
     "jobs.kanbanExpandColumn": "Spalte ausklappen",
+    "jobs.kanbanColumnJobsList": "{status} Jobs",
+
+    // Drag & Drop Barrierefreiheit
+    "jobs.kanbanDragHandle": "{title} ziehen",
+    "jobs.kanbanDragNoTarget": "Kein gültiges Ablageziel",
 
     // Mobil
     "jobs.kanbanMoreStatuses": "{count} weitere",
-    "jobs.kanbanChangeStatusMobile": "Status ändern",
+    "jobs.kanbanChangeStatusMobile": "Status ändern für {title}",
 
     // Übereinstimmung
     "jobs.kanbanMatchScore": "{score}% Übereinstimmung",
@@ -294,6 +307,9 @@ export const jobs = {
     "jobs.kanbanOverdue": "Überfällig",
     "jobs.kanbanDueSoon": "Fällig in {days} Tagen",
     "jobs.kanbanDueToday": "Heute fällig",
+
+    // Sonstige-Spalte (Auffangbecken)
+    "jobs.kanbanOtherColumn": "Sonstige",
   },
   fr: {
     "jobs.title": "Mes emplois",
@@ -430,10 +446,15 @@ export const jobs = {
     // Actions de colonne
     "jobs.kanbanCollapseColumn": "Réduire la colonne",
     "jobs.kanbanExpandColumn": "Développer la colonne",
+    "jobs.kanbanColumnJobsList": "Emplois {status}",
+
+    // Accessibilité glisser-déposer
+    "jobs.kanbanDragHandle": "Glisser {title}",
+    "jobs.kanbanDragNoTarget": "Aucune cible de dépôt valide",
 
     // Mobile
     "jobs.kanbanMoreStatuses": "{count} de plus",
-    "jobs.kanbanChangeStatusMobile": "Changer le statut",
+    "jobs.kanbanChangeStatusMobile": "Changer le statut pour {title}",
 
     // Score de correspondance
     "jobs.kanbanMatchScore": "{score}% de correspondance",
@@ -442,6 +463,9 @@ export const jobs = {
     "jobs.kanbanOverdue": "En retard",
     "jobs.kanbanDueSoon": "Échéance dans {days} jours",
     "jobs.kanbanDueToday": "Échéance aujourd'hui",
+
+    // Colonne autre (fourre-tout)
+    "jobs.kanbanOtherColumn": "Autres",
   },
   es: {
     "jobs.title": "Mis empleos",
@@ -578,10 +602,15 @@ export const jobs = {
     // Acciones de columna
     "jobs.kanbanCollapseColumn": "Colapsar columna",
     "jobs.kanbanExpandColumn": "Expandir columna",
+    "jobs.kanbanColumnJobsList": "Empleos {status}",
+
+    // Accesibilidad arrastrar y soltar
+    "jobs.kanbanDragHandle": "Arrastrar {title}",
+    "jobs.kanbanDragNoTarget": "Sin destino válido",
 
     // Móvil
     "jobs.kanbanMoreStatuses": "{count} más",
-    "jobs.kanbanChangeStatusMobile": "Cambiar estado",
+    "jobs.kanbanChangeStatusMobile": "Cambiar estado para {title}",
 
     // Puntuación de coincidencia
     "jobs.kanbanMatchScore": "{score}% coincidencia",
@@ -590,5 +619,8 @@ export const jobs = {
     "jobs.kanbanOverdue": "Atrasado",
     "jobs.kanbanDueSoon": "Vence en {days} días",
     "jobs.kanbanDueToday": "Vence hoy",
+
+    // Columna otros (cajón de sastre)
+    "jobs.kanbanOtherColumn": "Otros",
   },
 } as const;

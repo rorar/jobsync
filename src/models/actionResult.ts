@@ -19,6 +19,7 @@ export type ActionErrorCode =
   | "NOT_FOUND"
   | "REFERENCE_ERROR"
   | "INVALID_TRANSITION"
+  | "STALE_STATE"
   | "UNAUTHORIZED"
   | "VALIDATION_ERROR"
   | "INTERNAL_ERROR";

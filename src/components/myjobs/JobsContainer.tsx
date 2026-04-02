@@ -269,13 +269,14 @@ function JobsContainer({
               <Input
                 type="search"
                 placeholder={t("jobs.searchPlaceholder")}
+                aria-label={t("jobs.searchPlaceholder")}
                 className="pl-8 h-8 w-full sm:w-[150px] lg:w-[200px]"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             <Select value={filterKey} onValueChange={onFilterChange}>
-              <SelectTrigger className="w-[120px] h-8">
+              <SelectTrigger className="w-[120px] h-8" aria-label={t("jobs.filterBy")}>
                 <ListFilter className="h-3.5 w-3.5" />
                 <SelectValue placeholder={t("jobs.filter")} />
               </SelectTrigger>

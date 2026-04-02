@@ -1,13 +1,15 @@
 "use client";
 
+import React from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+
 import { useTranslations } from "@/i18n";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { KanbanCard } from "./KanbanCard";
-import type { JobResponse, JobStatus } from "@/models/job.model";
+import { getStatusLabel } from "@/lib/crm/status-labels";
+import type { JobStatus } from "@/models/job.model";
 import type { KanbanColumn as KanbanColumnType } from "@/hooks/useKanbanState";
 
 interface KanbanColumnProps {
@@ -18,7 +20,7 @@ interface KanbanColumnProps {
   onToggleCollapse: (statusValue: string) => void;
 }
 
-export function KanbanColumn({
+export const KanbanColumn = React.memo(function KanbanColumn({
   column,
   isValidDropTarget,
   isInvalidDropTarget,
@@ -33,12 +35,6 @@ export function KanbanColumn({
     data: { type: "column", status },
   });
 
-  const getStatusLabel = (s: JobStatus) => {
-    const key = `jobs.status${s.value.charAt(0).toUpperCase()}${s.value.slice(1)}`;
-    const translated = t(key);
-    return translated !== key ? translated : s.label;
-  };
-
   // Collapsed column pill
   if (isCollapsed) {
     return (
@@ -52,11 +48,12 @@ export function KanbanColumn({
           min-h-[44px]
         `}
         onClick={() => onToggleCollapse(status.value)}
+        aria-expanded={false}
         aria-label={t("jobs.kanbanExpandColumn")}
         data-testid={`kanban-collapsed-${status.value}`}
       >
         <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        <span className={color.text}>{getStatusLabel(status)}</span>
+        <span className={color.text}>{getStatusLabel(t, status)}</span>
         <Badge variant="secondary" className="text-xs px-1.5 py-0">
           {jobs.length}
         </Badge>
@@ -68,7 +65,7 @@ export function KanbanColumn({
     <div
       ref={setNodeRef}
       role="group"
-      aria-label={`${getStatusLabel(status)} - ${t("jobs.kanbanCollapsedCount").replace("{count}", String(jobs.length))}`}
+      aria-label={`${getStatusLabel(t, status)} - ${t("jobs.kanbanCollapsedCount").replace("{count}", String(jobs.length))}`}
       className={`
         flex flex-col rounded-lg border bg-muted/30 dark:bg-muted/10
         min-w-[280px] max-w-[360px] flex-1
@@ -83,7 +80,7 @@ export function KanbanColumn({
       <div className={`flex items-center justify-between px-3 py-2.5 rounded-t-lg ${color.headerBg}`}>
         <div className="flex items-center gap-2">
           <h3 className={`text-sm font-semibold ${color.text}`}>
-            {getStatusLabel(status)}
+            {getStatusLabel(t, status)}
           </h3>
           <Badge variant="secondary" className="text-xs px-1.5 py-0 min-w-[20px] justify-center">
             {jobs.length}
@@ -94,6 +91,7 @@ export function KanbanColumn({
           size="icon"
           className="h-7 w-7"
           onClick={() => onToggleCollapse(status.value)}
+          aria-expanded={true}
           aria-label={t("jobs.kanbanCollapseColumn")}
         >
           <ChevronDown className="h-4 w-4" aria-hidden="true" />
@@ -101,14 +99,11 @@ export function KanbanColumn({
       </div>
 
       {/* Column body - scrollable card list */}
-      <SortableContext
-        items={jobs.map((j) => j.id)}
-        strategy={verticalListSortingStrategy}
-      >
+      <>
         <div
           className="flex-1 overflow-y-auto p-2 space-y-2 max-h-[calc(100vh-280px)] scrollbar-thin"
           role="list"
-          aria-label={`${getStatusLabel(status)} jobs`}
+          aria-label={t("jobs.kanbanColumnJobsList").replace("{status}", getStatusLabel(t, status))}
         >
           {jobs.length === 0 ? (
             <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
@@ -124,7 +119,7 @@ export function KanbanColumn({
             ))
           )}
         </div>
-      </SortableContext>
+      </>
     </div>
   );
-}
+});
