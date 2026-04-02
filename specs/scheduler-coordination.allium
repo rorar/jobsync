@@ -713,6 +713,13 @@ surface SchedulerStatusBar {
     -- (api/scheduler/status/route.ts) rather than read from config at runtime.
     -- The config values serve as documentation of the intended defaults.
 
+  @guarantee AccessibleStatusAnnouncement
+    -- The status pill is wrapped in an aria-live="polite" region so screen readers
+    -- announce phase transitions (idle <-> running) without interrupting the user.
+    -- The spinner uses motion-reduce:animate-none to respect prefers-reduced-motion.
+    -- The queue count badge includes an aria-label with the interpolated count
+    -- (e.g. "3 queued") for assistive technology.
+
   @guidance
     -- When phase = idle: show "Idle" with a check icon.
     -- When phase = running: show the currently running automation name and a spinner.
@@ -722,6 +729,7 @@ surface SchedulerStatusBar {
 surface RunProgressPanel {
   -- Per-automation progress shown on the automation detail page.
   -- Displays a horizontal stepper with phase indicators and live counters.
+  -- Responsive: horizontal on desktop (sm+), vertical list on mobile.
   facing actor: User
   context progress: RunProgress
 
@@ -739,6 +747,21 @@ surface RunProgressPanel {
     -- Rendered as a horizontal stepper with six steps: search, dedup, enrich,
     -- match, save, finalize. Each step shows completed (checkmark), active
     -- (spinner), or pending (grey dot) state. Counters update live.
+    -- Counters use locale-aware number formatting (formatNumber).
+    -- Phase icons (checkmark, spinner, dot) are marked aria-hidden="true".
+    -- Active-phase spinners respect prefers-reduced-motion via motion-reduce:animate-none.
+
+  @guarantee AccessibleProgress
+    -- The stepper container uses role="progressbar" with aria-valuenow (current step),
+    -- aria-valuemin (1), aria-valuemax (total phases), aria-label, and
+    -- aria-valuetext (current phase label) for assistive technology.
+    -- A sr-only aria-live="polite" region announces phase transitions
+    -- (e.g. "Dedup (2/6)") without interrupting the user.
+
+  @guarantee RunEndedTransition
+    -- When a run transitions from running to stopped, the panel shows a
+    -- transient "run ended" message for 3 seconds before collapsing.
+    -- This prevents abrupt visual removal when a run completes.
 
   @guarantee RunSourceBadge
     -- Shows a badge indicating "Scheduled" or "Manual" with an appropriate icon
@@ -746,8 +769,11 @@ surface RunProgressPanel {
 
   @guidance
     -- The panel is only visible when a run is active for this automation.
-    -- When no run is active, the panel collapses and shows the last run summary.
+    -- When no run is active (and the ended transition has elapsed), the panel
+    -- collapses and shows the last run summary.
     -- Phase transitions animate the stepper forward.
+    -- Phase translation keys use an as-const mapping (PHASE_KEYS) for
+    -- exhaustive type checking.
 }
 
 surface ConflictWarning {
@@ -785,6 +811,35 @@ surface ConflictWarning {
     -- with ProceedAnyway and Cancel.
 }
 
+surface RunStatusBadge {
+  -- Per-automation inline badge showing running/queued state with elapsed time.
+  -- Used in AutomationList and automation detail pages.
+  facing actor: User
+  context state: SchedulerState
+
+  exposes:
+    is_running: Boolean,
+    elapsed_time: String,
+    queue_position: RunQueuePosition?
+
+  @guarantee ElapsedTimeDisplay
+    -- When running, shows elapsed time since RunLock.startedAt, updated every second.
+    -- Elapsed time is formatted via i18n translation keys (elapsedMinSec / elapsedSec)
+    -- for locale-aware display.
+    -- All badge instances share a single 1-second interval timer to avoid
+    -- N independent timers for N badges (performance optimization).
+
+  @guarantee ThrottledLiveRegion
+    -- The badge wraps content in a role="status" container with a sr-only
+    -- aria-live="polite" aria-atomic="true" region for screen readers.
+    -- The live region only announces state transitions (running/queued),
+    -- NOT elapsed time updates, to avoid announcing every second.
+
+  @guarantee AccessibleIcons
+    -- Spinner and clock icons are marked aria-hidden="true".
+    -- The spinner respects prefers-reduced-motion via motion-reduce:animate-none.
+}
+
 surface RunHistoryEnhancement {
   -- Extends the existing RunHistoryList with a source badge per run.
   -- Shows "Scheduled" or "Manual" alongside each automation run entry.
@@ -796,12 +851,36 @@ surface RunHistoryEnhancement {
       run.runSource,
       run.status,
       run.startedAt,
-      run.completedAt
+      run.completedAt,
+      run.blockedReason,
+      run.errorMessage
 
   @guarantee BackwardCompatible
     -- Existing runs without a runSource value display as "Scheduled" by default.
     -- The Prisma migration sets the default value to "scheduler" for existing rows.
     -- No visual regression for existing run history entries.
+
+  @guarantee MobileResponsive
+    -- Counter columns (searched, new, processed, matched) are hidden on mobile
+    -- (below md breakpoint) to prevent horizontal overflow. The "saved" column
+    -- and status/source/error columns remain visible at all sizes.
+
+  @guarantee LoadingSkeleton
+    -- When loading with no prior data, the list shows three pulse-animated
+    -- placeholder rows. The animation respects motion-reduce:animate-none.
+
+  @guarantee TranslatedBlockedReasons
+    -- Blocked reasons (already_running, module_busy, module_deactivated,
+    -- auth_failure, consecutive_failures, circuit_breaker, resume_missing)
+    -- are translated via i18n lookup. Unknown reasons fall back to the raw string.
+
+  @guarantee AccessibleErrorTooltip
+    -- Error/blocked reason badges are wrapped in a focusable button element
+    -- (type="button", tabIndex=0) inside a Tooltip for keyboard accessibility.
+
+  @guarantee ScrollableRegion
+    -- The table container is horizontally scrollable with role="region",
+    -- an aria-label, and tabIndex=0 so keyboard users can scroll the table.
 }
 
 -- =============================================================================
