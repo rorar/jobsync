@@ -364,7 +364,7 @@ export function EuresLocationCombobox({ field }: EuresLocationComboboxProps) {
               <CommandList>
                 {isLoading && (
                   <div className="flex items-center justify-center py-4">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none text-muted-foreground" />
                   </div>
                 )}
                 {!isLoading && filtered.length === 0 && (

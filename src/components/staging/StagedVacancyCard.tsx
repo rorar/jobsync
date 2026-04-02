@@ -59,6 +59,7 @@ export function StagedVacancyCard({
                 className="h-4 w-4 mt-1 rounded border-input accent-primary shrink-0"
                 checked={selected}
                 onChange={() => onToggleSelect(vacancy.id)}
+                aria-label={`${t("staging.selectVacancy")}: ${vacancy.title}`}
               />
             )}
             <CardTitle className="text-base font-medium leading-tight">
@@ -81,18 +82,18 @@ export function StagedVacancyCard({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
           {vacancy.employerName && (
             <span className="inline-flex items-center gap-1">
-              <Building2 className="h-3.5 w-3.5" />
+              <Building2 className="h-3.5 w-3.5" aria-hidden="true" />
               {vacancy.employerName}
             </span>
           )}
           {vacancy.location && (
             <span className="inline-flex items-center gap-1">
-              <MapPin className="h-3.5 w-3.5" />
+              <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
               {vacancy.location}
             </span>
           )}
           <span className="inline-flex items-center gap-1">
-            <Calendar className="h-3.5 w-3.5" />
+            <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
             {formatDateShort(vacancy.discoveredAt, locale)}
           </span>
         </div>

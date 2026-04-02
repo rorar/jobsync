@@ -143,7 +143,7 @@ export function DiscoveredJobDetail({
               disabled={loadingAction !== null}
             >
               {loadingAction === "dismiss" ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 mr-2 animate-spin motion-reduce:animate-none" />
               ) : (
                 <X className="h-4 w-4 mr-2" />
               )}
@@ -151,7 +151,7 @@ export function DiscoveredJobDetail({
             </Button>
             <Button onClick={handleAccept} disabled={loadingAction !== null}>
               {loadingAction === "accept" ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 mr-2 animate-spin motion-reduce:animate-none" />
               ) : (
                 <Check className="h-4 w-4 mr-2" />
               )}
