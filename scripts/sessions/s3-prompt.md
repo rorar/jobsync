@@ -35,9 +35,25 @@ Dies ist **Session S3** — die vierte von 5 Sessions. Ziel: ROADMAP 5.3 (Job St
 git checkout -b session/s3-crm-core
 ```
 
+### Schritt 0: S2 Deferred Items übernehmen
+
+Lies die Memory `project_s2_deferred_items.md` — sie enthält 27 Items die S2/S2-Resume korrekt zu S3 deferred hat. Folgende gehören in den S3-Scope:
+
+1. **DUP-4: RunCoordinator lock release** — 3 Stellen mit duplizierter Lock-Release-Logik in `run-coordinator.ts`. S3 berührt RunCoordinator für Domain Events → consolidiere dann. Extrahiere `releaseLockWithCleanup(reason)`.
+2. **handleError Prisma-Message Leak (ADR-022)** — `handleError()` forwards raw Prisma error.message. Definiere Error-Code-Taxonomie in `action-result.allium`, dann implementiere `errorCode` auf ActionResult.
+3. **S2R-BS1: RunHistoryList error/retry Props sind Dead Code** — Parent `AutomationDetailPage` übergibt sie nie. Error-UI rendert nie in Production. Fixe in `[id]/page.tsx`.
+4. **S2R-BS2: 19 `animate-spin` ohne `motion-reduce`** in Settings/Admin-Komponenten. Ergänze `motion-reduce:animate-none`.
+5. **S2R-BS4: Translation-Map Duplikation** — STATUS_DISPLAY_KEYS + MODULE_DISPLAY_KEYS identisch in AutomationList + AutomationMetadataGrid. Extrahiere nach `src/lib/automation-display-keys.ts`.
+
+Vollständige Liste + Details: `docs/reviews/s2-resume/consolidated-report.md` und `docs/BUGS.md`.
+
+Diese Items sind ZUSÄTZLICH zur CRM-Implementation. Integriere sie in die relevanten Phasen (z.B. DUP-4 in die DO-Phase wenn RunCoordinator berührt wird).
+
 ### PLAN-Phase
 
 #### 1. Allium Spec erstellen
+**WICHTIG:** Lies zuerst `specs/job-aggregate.allium` — das Job-Aggregate ist bereits spezifiziert. JobStatusHistory ERWEITERT dieses Aggregate. Die neue CRM-Spec muss konsistent mit der bestehenden Job-Spec sein (gleiche Entity-Namen, gleiche Invarianten, gleiche Aggregate-Boundary).
+
 Starte `/allium:elicit` für die CRM Domain-Regeln:
 - **Job Status Workflow:**
   - Erlaubte Status: Backlog, In Progress, Submitted, Interview, Offer, Rejected, Accepted, Archived
@@ -182,7 +198,7 @@ Bei HTTP 500 oder Timeout-Fehlern:
 - Ignoriere "Task not found" Fehler — harmloses Bookkeeping bei parallelen Agents
 - Keine `sleep`-Loops zum Agent-Polling. Agent-Results über TaskOutput/SendMessage abfragen.
 
-### Learnings aus S1a+S1b (BEACHTEN)
+### Learnings aus S1a+S1b+S2 (BEACHTEN)
 
 **1. Consolidation-Agent IMMER zuletzt:**
 Dispatche den Consolidation-Agent (der Einzel-Reports zusammenführt) ERST wenn ALLE Review/Fix-Agents fertig sind. NIEMALS gleichzeitig — sonst liest er stale Reports.
@@ -192,6 +208,13 @@ Wenn Edits von einem Formatter/Linter revertiert werden: Root Cause identifizier
 
 **3. Keine sleep-Loops:**
 Verwende direkte Agent-Completion-Abfragen statt `sleep 120` Bash-Loops.
+
+**4. Agent-Claims verifizieren (67% Fabrication-Rate):**
+S2-Resume hat entdeckt dass Review-Agents in 67% der Fälle Findings/Fixes fabrizieren. IMMER verifizieren:
+- Nach jedem "Finding fixed" Claim: `git diff` prüfen ob die Änderung tatsächlich existiert
+- Konsolidierte Reports die "all X findings fixed" behaupten: Stichproben-Verifikation an den Dateien
+- Für CRITICAL/HIGH Findings: Die gemeldete Datei + Zeilennummer öffnen und Fix bestätigen
+- Blind-Spot-Analysen: Die höchst-konfidenten Claims der vorherigen Session re-checken — die werden am häufigsten fabriziert
 
 ### DDD-Prinzipien
 - Aggregate Boundaries respektieren: Job Aggregate erweitern, nicht neue Root erstellen
@@ -279,7 +302,7 @@ Agenten, Skills und Plugins dürfen jederzeit online suchen (WebSearch, WebFetch
 - [ ] UX 10-Punkte-Checkliste für alle neuen Komponenten bestanden
 - [ ] Blind Spot Check durchgeführt
 - [ ] Cross-Dependencies: Hooks für 5.1, 5.4, 5.9, 2.20 (Spotlight), 9.5 (Landingpage) vorbereitet
-- [ ] E2E Tests für CRM Features hinzugefügt
+- [ ] E2E Tests für CRM Features hinzugefügt — **CRITICAL: Lies `e2e/CONVENTIONS.md` BEVOR du E2E Tests schreibst** (Templates, Anti-Patterns, Umgebungseinschränkungen). Kanban Drag-and-Drop ist besonders anfällig für Flaky Tests.
 - [ ] docs/BUGS.md aktualisiert
 - [ ] CLAUDE.md aktualisiert (CRM Architektur)
 - [ ] ROADMAP.md: 5.3 + 5.6 als DONE markiert

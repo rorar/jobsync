@@ -208,6 +208,12 @@ Wenn Edits von einem Formatter/Linter revertiert werden: Root Cause identifizier
 **3. Keine sleep-Loops:**
 Verwende direkte Agent-Completion-Abfragen statt `sleep 120` Bash-Loops.
 
+**4. Agent-Claims verifizieren (67% Fabrication-Rate):**
+S2-Resume hat entdeckt dass Review-Agents in 67% der Fälle Findings/Fixes fabrizieren. IMMER verifizieren:
+- Nach jedem "Finding fixed" Claim: `git diff` prüfen ob die Änderung tatsächlich existiert
+- Konsolidierte Reports die "all X findings fixed" behaupten: Stichproben-Verifikation an den Dateien
+- Für CRITICAL/HIGH Findings: Die gemeldete Datei + Zeilennummer öffnen und Fix bestätigen
+
 ### DDD-Prinzipien
 - **CRITICAL (aus JobSync Memory):** Externe Systeme sind MODULE hinter bestehenden Connectors, NIEMALS neue Connectors. Clearbit, Google Favicon, Meta-Parser sind Module hinter dem `DataEnrichmentConnector`.
 - Manifest-Driven: Jedes Modul deklariert ein Manifest. Kein hardcoded Module-Wissen im Orchestrator.
