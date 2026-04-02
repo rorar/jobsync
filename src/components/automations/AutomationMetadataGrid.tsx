@@ -14,6 +14,19 @@ import {
 import type { AutomationWithResume } from "@/models/automation.model";
 import type { DiscoveredJob } from "@/models/automation.model";
 
+/** Map automation status to i18n keys */
+const STATUS_DISPLAY_KEYS: Record<string, string> = {
+  active: "automations.statusActive",
+  paused: "automations.statusPaused",
+};
+
+/** Map module/jobBoard ids to i18n keys */
+const MODULE_DISPLAY_KEYS: Record<string, string> = {
+  eures: "automations.moduleEures",
+  arbeitsagentur: "automations.moduleArbeitsagentur",
+  jsearch: "automations.moduleJsearch",
+};
+
 interface AutomationMetadataGridProps {
   automation: AutomationWithResume;
   resumeMissing: boolean;
@@ -39,14 +52,14 @@ export function AutomationMetadataGrid({
               variant={
                 automation.status === "active" ? "default" : "secondary"
               }
-              className="mt-1 capitalize"
+              className="mt-1"
             >
-              {automation.status}
+              {t(STATUS_DISPLAY_KEYS[automation.status] ?? automation.status)}
             </Badge>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">{t("automations.jobBoard")}</p>
-            <p className="font-medium capitalize">{automation.jobBoard}</p>
+            <p className="font-medium">{t(MODULE_DISPLAY_KEYS[automation.jobBoard] ?? automation.jobBoard)}</p>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">{t("automations.matchThreshold")}</p>
@@ -55,7 +68,7 @@ export function AutomationMetadataGrid({
           <div>
             <p className="text-sm text-muted-foreground">{t("automations.stepSchedule")}</p>
             <p className="font-medium flex items-center gap-1">
-              <Clock className="h-4 w-4" />
+              <Clock className="h-4 w-4" aria-hidden="true" />
               {automation.scheduleHour.toString().padStart(2, "0")}:00 {t("automations.daily").toLowerCase()}
             </p>
           </div>
@@ -63,12 +76,12 @@ export function AutomationMetadataGrid({
             <p className="text-sm text-muted-foreground">{t("automations.resumeLabel")}</p>
             {resumeMissing ? (
               <p className="text-amber-600 flex items-center gap-1 text-sm">
-                <AlertTriangle className="h-4 w-4" />
+                <AlertTriangle className="h-4 w-4" aria-hidden="true" />
                 {t("automations.resumeMissing")}
               </p>
             ) : (
               <p className="font-medium flex items-center gap-1">
-                <FileText className="h-4 w-4" />
+                <FileText className="h-4 w-4" aria-hidden="true" />
                 {automation.resume.title}
               </p>
             )}
