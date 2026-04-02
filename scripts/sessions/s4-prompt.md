@@ -34,6 +34,26 @@ Dies ist **Session S4** — die fünfte und letzte Session. Ziel: ROADMAP 1.13 P
 git checkout -b session/s4-data-enrichment
 ```
 
+### Schritt 0: S3 Deferred Items übernehmen
+
+Lies die Memory `project_s3_deferred_items.md` — sie enthält 10 Items die S3 zu S4 deferred hat.
+
+**SECURITY-CRITICAL (sofort fixen, VOR der PLAN-Phase):**
+
+1. **S3-D1 (HIGH): Public API PATCH bypassed State Machine** — `/api/v1/jobs/:id` kann `statusId` direkt ändern ohne `changeJobStatus`. Fix: Status aus PATCH-Blacklist, neuer Endpoint `POST /api/v1/jobs/:id/status`.
+2. **S3-D2 (HIGH): Edit Form bypassed State Machine** — Edit-Formular kann Status ohne Validation ändern. Fix: Status aus `updateJob` accepted fields entfernen, `changeJobStatus` für Status-Änderungen nutzen.
+
+**Weitere S3-Deferred (in die DO-Phase integrieren):**
+
+3. **S3-D3 (HIGH): Optimistic Locking** — Zwei Tabs können gleichzeitig widersprüchliche Transitions machen. Fix: `version Int @default(0)` auf Job, increment bei Status-Change, stale Writes ablehnen.
+4. **S3-D4 (HIGH): Within-Column Reorder ist No-Op** — `useKanbanState` sortiert nach `createdAt` statt `sortOrder`. Fix: Sort by sortOrder, same-column early-return entfernen.
+5. **S3-D5 bis D10 (MEDIUM/LOW):** Siehe `project_s3_deferred_items.md` für Details. In relevante Phasen integrieren.
+
+**Key Context aus S3:**
+- State Machine: `src/lib/crm/status-machine.ts`
+- Domain Event: `JobStatusChanged` in `event-types.ts`
+- Kanban: @dnd-kit in `src/components/kanban/` (7 Komponenten + `useKanbanState` Hook)
+
 ### PLAN-Phase
 
 #### 1. Allium Spec erstellen
@@ -264,6 +284,11 @@ Gültige Skip-Begründungen (NUR diese):
 
 Du MUSST jeden Checkpoint mit Evidenz bestätigen bevor du zum nächsten Schritt gehst.
 ÜBERSPRINGE KEINEN CHECKPOINT.
+
+**Vor Schritt 0 (S3 Deferred Items):**
+- [ ] CP-0a: `project_s3_deferred_items.md` gelesen → 10 Items bekannt
+- [ ] CP-0b: S3-D1 + S3-D2 (Security) gefixt → `git diff` zeigt State-Machine-Enforcement in API + Edit Form
+- [ ] CP-0c: `allium:weed` Stichprobe über `crm-workflow.allium` + `job-aggregate.allium` → zero Divergenzen
 
 **Vor der DO-Phase:**
 - [ ] CP-1: `/allium:elicit` dispatcht → Spec-Datei existiert in `specs/`
