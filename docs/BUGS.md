@@ -1,8 +1,15 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-02
 
-**Total: 197 bugs found, 196 fixed, 1 pre-existing open**
+**Total: 199 bugs found, 198 fixed, 1 pre-existing open**
 
 ### Status: ⚠️ 1 pre-existing test failure (PRE-1, not S2-related)
+
+## Deferred to S3 (2026-04-02) — STRUCTURAL
+
+| ID | Severity | Finding | Reason Deferred |
+|----|----------|---------|-----------------|
+| S1b-DUP4 | **MEDIUM** | RunCoordinator lock release logic duplicated in 3 places with different semantics per path | Needs careful semantic analysis; RunCoordinator will be touched in S3 CRM Core |
+| S1b-SEC11 | **MEDIUM** | `handleError()` forwards raw Prisma error.message to UI (~80 callsites) | ADR-022 accepted debt; needs structured `errorCode` field on ActionResult — cross-cutting change |
 
 ## Session S2 Gap Closure + Blind Spot (2026-04-02) — ALL 5 FIXED
 
