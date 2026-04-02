@@ -1417,7 +1417,19 @@ Dynamische Dateipfade und Dateinamen:
   - Settings-UI: Retention-Konfiguration pro Kategorie (z.B. "AutomationRuns älter als 90 Tage löschen")
   - Automatischer Cleanup-Job in Administrative Queue (→ 8.4)
   - DSGVO Art. 5(1)(e): Speicherbegrenzung — Daten nur so lange wie nötig
-- **Legal Review:** DSGVO-Konformität der gesamten Pipeline (0.5) + Dedup-Hashing + Module-Datenschutz mit Legal-Agent überprüfen
+- **Consent-by-Referral für Drittdaten-Verarbeitung (→ 9.5 Landingpage):**
+  - Wenn der Bewerber aktiv auf HRler/Recruiter zugeht und deren Daten (Name, Position, Firma) für personalisierte Ansprache verarbeiten will, ist je nach Land eine Einwilligung nötig (DSGVO Art. 6(1)(a))
+  - **Mechanismus: Consent-Referral-Link**
+    - Bewerber sendet einen personalisierten Ref-Link an den HR-Kontakt (z.B. via LinkedIn-Nachricht, E-Mail)
+    - Der Link enthält einen kurzen Hinweis: "Wenn du den Link klickst, erklärst du dich einverstanden mit der Verarbeitung deines Namens für die persönliche Anrede. [Link zur Datenschutzerklärung]"
+    - Klick auf den Ref-Link = Consent (Art. 7 DSGVO: eindeutige bestätigende Handlung)
+    - Ref-Link triggert eine Automation: Daten werden geladen (Name, Position aus UTM-Params oder LinkedIn-Profil), Landingpage wird personalisiert
+    - Consent wird protokolliert (Zeitstempel, IP, Scope) für Nachweispflicht (Art. 7(1))
+  - **Datenminimierung:** Nur die im Consent genannten Datenpunkte verarbeiten — nicht mehr
+  - **Widerruf:** Jederzeit möglich über Link in der Datenschutzerklärung → Daten werden gelöscht, Landingpage depersonalisiert
+  - **Länderspezifisch:** Consent-Text muss lokalisiert und an landesspezifische Anforderungen angepasst sein (DE: DSGVO strikt, US: weniger Consent nötig, UK: UK-GDPR)
+  - **Cross-Ref:** Bewerber-Landingpage (9.5), Data Enrichment (1.13), Communication Connector (1.12)
+- **Legal Review:** DSGVO-Konformität der gesamten Pipeline (0.5) + Dedup-Hashing + Module-Datenschutz + Consent-Referral-Mechanismus mit Legal-Agent überprüfen
 
 ### 6.2 API Security (Best Practices)
 - **Authentifizierung:** Alle API-Routes erfordern Session-Auth (bereits implementiert für ESCO/EURES). Public API (→ 7.1): API Key Auth (Bearer Token, SHA-256 gehasht), getrennt von Session-Auth.
