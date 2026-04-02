@@ -1281,6 +1281,24 @@ Dynamische Dateipfade und Dateinamen:
   - **Formalität:** DE formell, EN semi-formell, FR très formell — pro Template konfigurierbar
   - **Footer/Signatur:** Sprachabhängige Grußformel + Kontaktdaten (DE: "Mit freundlichen Grüßen", EN: "Kind regards", FR: "Veuillez agréer...") + optionale Unterschrift (→ 4.4)
 
+### 4.10 Social Proof & Empfehlungen
+- **LinkedIn-Empfehlungen:** Import von Recommendations/Endorsements (via LinkedIn Data Export → 3.5 / 9.2)
+- **Testimonials:** Manuelle Eingabe von Referenzen (Name, Position, Firma, Zitat, Beziehung)
+- **Zertifikate & Badges:** Upload + Verlinkung (Coursera, AWS, Google, etc.)
+- **GitHub/GitLab Stats:** Automatischer Import von Contributions, Top-Repos, Sprachen (via Public API)
+- **Anzeige:** Im Profil, in generierten CVs (→ 4.2), auf der Bewerber-Landingpage (→ 9.5)
+- **Cross-Ref:** Data Enrichment (1.13) für automatischen Import, LinkedIn-Machbarkeit (9.2)
+
+### 4.11 Portfolio / Arbeitsproben-Mappe
+- Sammlung von Arbeitsbeispielen, Projekten und Designarbeiten
+- **Typen:** Designmappe, Code-Projekte, Studienarbeiten, Publikationen, Case Studies
+- **Pro Eintrag:** Titel, Beschreibung, Zeitraum, Tags/Skills, Medien (Bilder, PDFs, Links)
+- **Kategorisierung:** Nach Typ (Design, Development, Research, etc.) und nach Skill-Tags (→ 4.1)
+- **Verknüpfung:** Arbeitsproben können mit Jobs verknüpft werden ("Dieses Projekt ist relevant für Stelle X")
+- **LLM-Integration:** Automatische Zusammenfassung und Relevanz-Scoring pro Stellenanzeige
+- **Export:** Als PDF-Mappe, als Sektion im generierten CV (→ 4.2), auf Bewerber-Landingpage (→ 9.5)
+- **Cross-Ref:** Dateiexplorer (2.8) für Medien-Management, Skillsets (4.1) für Tag-Verknüpfung
+
 ---
 
 ## 5. CRM
