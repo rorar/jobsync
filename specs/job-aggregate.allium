@@ -74,6 +74,10 @@ entity Job {
     -- Back-relation from StagedVacancy promotion
     staged_vacancy_promotion: StagedVacancy?
 
+    -- Interview[] relation exists in the Prisma schema but is outside this
+    -- aggregate boundary. Interview scheduling is a separate future feature (5.2).
+    -- Listed here for completeness; not governed by job-aggregate rules.
+
     @invariant
         -- Every Job belongs to exactly one User. All reads, writes, and deletes
         -- MUST include userId in the query to enforce ownership.
@@ -147,13 +151,14 @@ entity Location {
 
 entity CompanyBlacklist {
     pattern: String
-    match_type: exact | contains
+    match_type: exact | contains | starts_with | ends_with
     reason: String?
 
     @invariant
         -- User-scoped. Used during vacancy pipeline dedup phase to filter
         -- staged vacancies by employer name.
-        -- Only exact and contains are used in the model type and UI.
+        -- All four match types are accepted by VALID_MATCH_TYPES runtime validation.
+        -- See also BlacklistMatchType enum in vacancy-pipeline.allium.
 }
 
 ------------------------------------------------------------
@@ -389,9 +394,11 @@ rule CheckAgainstBlacklist {
             if employer_name matches any blacklist entry:
                 staged_vacancy is filtered out
 
-    -- Match logic:
-    --   exact: employer_name = pattern (case-insensitive)
-    --   contains: employer_name contains pattern (case-insensitive)
+    -- Match logic (all case-insensitive):
+    --   exact:       employer_name = pattern
+    --   contains:    employer_name contains pattern
+    --   starts_with: employer_name starts with pattern
+    --   ends_with:   employer_name ends with pattern
 }
 
 -- === Shared Entity Creation (On-Demand) ===

@@ -4,11 +4,23 @@
 
 -- NOTE: Integer maps to TypeScript number
 
+enum ActionErrorCode {
+    duplicate_entry       -- Unique constraint violation
+    not_found             -- Entity does not exist or fails ownership check
+    reference_error       -- Cannot delete entity still referenced elsewhere
+    invalid_transition    -- Status transition rejected by state machine
+    stale_state           -- Optimistic concurrency conflict (compare-and-swap)
+    unauthorized          -- Authentication or authorisation failure
+    validation_error      -- Input validation failure
+    internal_error        -- Unexpected server error (details logged, not exposed)
+}
+
 value ActionResult<T> {
     success: Boolean
     data: T?
     total: Integer?
     message: String?
+    error_code: ActionErrorCode?
 }
 
 -- handleError(): ActionResult<never>

@@ -179,6 +179,12 @@ rule TransitionJobStatus {
         -- Self-transition only allowed for interview (multiple rounds)
     requires: (currentStatus → newStatus) is valid in JobStatusTransitions
         -- Reject transitions not in the state machine
+    requires: if expectedFromStatusId is provided:
+        Job.statusId = expectedFromStatusId
+        -- Optimistic concurrency guard (compare-and-swap). If the caller
+        -- supplies an expected previous status ID and the job's current status
+        -- has changed since the caller last read it, the transition is rejected
+        -- with STALE_STATE to prevent lost-update races on the Kanban board.
 
     -- 1. Update Job status
     ensures: Job.status = newStatus
@@ -214,6 +220,7 @@ rule TransitionJobStatus {
         previousStatus: currentStatus.value,
         newStatus: newStatus.value,
         note: transitionNote?,
+        historyEntryId: historyEntry.id,
         timestamp: now()
     ))
 
@@ -367,8 +374,8 @@ rule KanbanDragAndDrop {
         -- If dropped at the bottom: newSortOrder = lastCard.sortOrder + 1.0
         -- If column is empty: newSortOrder = 0.0
         --
-        -- The note dialog should be lightweight (inline textarea, not a modal)
-        -- to avoid disrupting the drag flow. "Skip" is the default action.
+        -- The note dialog uses a modal (AlertDialog) for focus trapping
+        -- and accessibility. "Skip" is the default action.
         --
         -- Invalid drops: during drag, columns that cannot receive the card
         -- (per state machine) are visually dimmed/greyed out with a
@@ -406,8 +413,8 @@ rule KanbanReorder {
 -- =============================================================================
 
 rule KanbanMobileView {
-    -- "On mobile (< 640px), the Kanban board adapts to a single-column layout."
-    when: Viewport width < 640px
+    -- "On mobile (< 768px), the Kanban board adapts to a single-column layout."
+    when: Viewport width < 768px
 
     ensures: One column visible at a time (full viewport width)
     ensures: Horizontal swipe or tab navigation between columns
@@ -489,6 +496,7 @@ event JobStatusChanged {
     previousStatus: String          -- JobStatusValue string (e.g., "bookmarked")
     newStatus: String               -- JobStatusValue string (e.g., "applied")
     note: String?                   -- Transition note, if provided
+    historyEntryId: String          -- UUID of the JobStatusHistory record created by this transition
     timestamp: DateTime
 
     @guidance
