@@ -1260,6 +1260,19 @@ Jeder Job hat ein **Application Locale Profile** das Sprache + Land + kulturelle
   - **AI-Section-Creator:** User sagt "Füge Publikationen hinzu" → LLM generiert JSON Schema mit Feldern → RJSF rendert Editor sofort → gleiche Daten fließen in PDF + Landingpage + API
   - **Import-Pfade:** LinkedIn Data Export → JSON Resume → JobSync, Europass XML → JSON Resume → JobSync
   - **Vorteil:** Eine Datenstruktur, vier Rendering-Kontexte (Editor, PDF, Landingpage 9.5, Public API 7.1). Neue Abschnitte ohne Code-Änderungen.
+  - **Migrationsstrategie: Strangler Fig (NICHT ersetzen)**
+    - Das bestehende Prisma-Schema (Resume → ResumeSection → WorkExperience/Education/etc.) stammt vom Upstream-Maintainer Gsync und bleibt die **Datenschicht**
+    - Die Manifest-Engine wird als **Präsentationsschicht** darüber gelegt (Adapter-Pattern / ACL)
+    - System-Manifests mappen 1:1 auf bestehende Prisma-Models (WorkExperience, Education, ContactInfo, etc.)
+    - User-Manifests (custom Sections) nutzen die bestehende `OtherSection`-Relation + `jsonData` Feld für dynamische Felder
+    - Upstream-Kompatibilität bleibt erhalten — bei Gsync-Schema-Änderungen brechen nur die Adapter, nicht die Engine
+  - **Weiterführende Discovery mit spezialisierten Agents/Skills:**
+    - `/framework-migration:legacy-modernize` — Strangler Fig Migrationsstrategie für den Umbau des bestehenden CV-Editors
+    - `/backend-development:architecture-patterns` — Clean Architecture / Hexagonal Architecture für die Adapter-Schicht
+    - `/allium:elicit` — Formale Spec für das Manifest-Schema und die Rendering-Regeln
+    - `/ui-design:create-component` + `/ui-design:interaction-design` — UX-Design des dynamischen Section-Editors
+    - `/frontend-mobile-development:react-state-management` — State-Management für den Pagebuilder (Drag-and-Drop, Undo/Redo)
+    - `/documentation-generation:openapi-spec-generation` — API-Spec für das Manifest-Format (Public API 7.1 Erweiterung)
   - **Cross-Ref:** Skillsets (4.1), Social Proof (4.10), Portfolio (4.11), Bewerber-Landingpage (9.5), Public API (7.1)
 
 ### 4.3 Output-Struktur (Paperless-ngx Style)
