@@ -1,8 +1,19 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-02
 
-**Total: 211 bugs found, 209 fixed, 1 pre-existing open, 1 deferred**
+**Total: 209 bugs found, 208 fixed, 1 pre-existing open**
 
 ### Status: ⚠️ 1 pre-existing test failure (PRE-1, not S2-related)
+
+## Session S2-Resume Blind Spot (2026-04-02) — DEFERRED TO S3
+
+| ID | Severity | Finding | Scope |
+|----|----------|---------|-------|
+| S2R-BS1 | **HIGH** | RunHistoryList `error`/`onRetry` props never wired up — error UI is dead code | Wire up in AutomationDetailPage |
+| S2R-BS2 | **HIGH** | 19 `animate-spin` without `motion-reduce` in settings/admin/developer components | Extend motion-reduce sweep beyond automations scope |
+| S2R-BS3 | **MEDIUM** | 2 `animate-pulse` without `motion-reduce` in profile AI components | Same sweep |
+| S2R-BS4 | **MEDIUM** | STATUS/MODULE_DISPLAY_KEYS duplicated in 2 files + SchedulerStatusBar uses CSS capitalize | Extract to shared constant |
+| S2R-BS5 | **LOW** | formatDuration doesn't guard negative/NaN | Add Math.max(0, seconds) guard |
+| S2R-BS6 | **LOW** | Elapsed time formatting duplicated in RunStatusBadge and RunHistoryList | Extract shared utility |
 
 ## Session S2-Resume (2026-04-02) — 10 FIXED, 18 DEFERRED
 
