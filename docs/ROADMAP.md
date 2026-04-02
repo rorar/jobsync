@@ -1070,6 +1070,29 @@ Server Component                    Client Component
 
 **Reihenfolge:** Unabhängig von 0.9 (Server-Side Caching). Synergien mit 0.8 (PWA Offline) und 0.5 (Staging-Queue Interaktion).
 
+### 2.20 Spotlight / Command Palette (Cmd+K)
+Universelle Such- und Aktionsleiste im macOS-Spotlight-Stil. Öffnet per `Cmd+K` (oder `Ctrl+K`) und durchsucht alle Entities und Aktionen.
+
+**Drei Stufen:**
+- **Navigation:** "Go to Siemens" → Company-Detail. "Open EURES Automation" → Automation-Detail. "Settings" → Settings-Page. Alle Seiten und Entities erreichbar ohne Klicken durch Menüs.
+- **Search:** "Jobs in Berlin" → gefilterte Job-Liste. "Rejected last week" → Status-Query. Volltextsuche über Jobs, Companies, Contacts, Automations, Notizen, Dokumente.
+- **Actions:** "Run EURES" → startet Automation. "Create Job at BMW" → Pre-filled Modal. "Switch to Dark Mode" → Setting-Toggle. "Export CV as PDF" → Dokumenten-Generierung.
+
+**AI-Bridge (Zukunft):**
+- Natürliche Spracheingabe: "Schreib ein Anschreiben für den Siemens-Job" → LLM-Action
+- "Wie viele Bewerbungen habe ich diesen Monat?" → Analytics-Query (→ 2.18)
+- "Zeig mir alle offenen Interviews" → CRM-Filter (→ 5.3)
+- Spotlight wird zum primären Chatbot-Interface — kein separater Chat-Screen nötig
+
+**Technisch:**
+- **Package:** `cmdk` (Vercel/Paco) — React, auf Radix/Shadcn gebaut, passt in den bestehenden UI-Stack
+- **Datenquellen:** Server Actions für Entity-Suche, Client-Side für Actions/Navigation
+- **Index:** Fuzzy-Search über Entity-Namen (Jobs, Companies, Automations), Page-Routes, Action-Registry
+- **Action-Registry:** Manifest-driven (wie Widget-Registry) — Actions deklarieren sich mit Label, Icon, Shortcut, Handler
+- **Keyboard-First:** Pfeiltasten navigieren, Enter führt aus, Escape schließt — volle Keyboard-Navigation (→ 2.16)
+
+**Cross-Ref:** Keyboard Shortcuts (2.16), Analytics (2.18), CRM (5.3), Dokumenten-Generatoren (4.2), LLM AI-Provider
+
 ---
 
 ## 3. Quality of Life
