@@ -118,6 +118,15 @@ if (typeof document !== "undefined" && !gVis.__schedulerVisibilityRegistered) {
 // ---------------------------------------------------------------------------
 
 interface UseSchedulerStatusResult {
+  /**
+   * SSE connection state. Planned for future diagnostics UI
+   * (e.g., Settings > Connection Health, reconnection banner).
+   *
+   * Currently unused — no component consumes this value.
+   * NOTE: Uses module-level `let` (not React state), so changes do NOT
+   * trigger re-renders. Migrate to `useSyncExternalStore` when adding a
+   * consumer component.
+   */
   isConnected: boolean;
   state: SchedulerSnapshot | null;
   isRunning: boolean;
