@@ -109,3 +109,45 @@ describe("persistViewMode", () => {
     expect(localStorage.getItem("jobsync-staging-view-mode")).toBe("deck");
   });
 });
+
+describe("ViewModeToggle — arrow key navigation", () => {
+  const mockOnChange = jest.fn();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it("ArrowRight switches from list to deck and calls onChange", () => {
+    render(<ViewModeToggle value="list" onChange={mockOnChange} />);
+
+    const radiogroup = screen.getByRole("radiogroup");
+    fireEvent.keyDown(radiogroup, { key: "ArrowRight" });
+
+    expect(mockOnChange).toHaveBeenCalledWith("deck");
+  });
+
+  it("ArrowLeft switches from deck to list and calls onChange", () => {
+    render(<ViewModeToggle value="deck" onChange={mockOnChange} />);
+
+    const radiogroup = screen.getByRole("radiogroup");
+    fireEvent.keyDown(radiogroup, { key: "ArrowLeft" });
+
+    expect(mockOnChange).toHaveBeenCalledWith("list");
+  });
+
+  it("only the selected radio has tabIndex 0, the other has tabIndex -1", () => {
+    const { rerender } = render(<ViewModeToggle value="list" onChange={mockOnChange} />);
+
+    const listBtn = screen.getByText("List").closest("button")!;
+    const deckBtn = screen.getByText("Deck").closest("button")!;
+
+    expect(listBtn).toHaveAttribute("tabindex", "0");
+    expect(deckBtn).toHaveAttribute("tabindex", "-1");
+
+    rerender(<ViewModeToggle value="deck" onChange={mockOnChange} />);
+
+    expect(listBtn).toHaveAttribute("tabindex", "-1");
+    expect(deckBtn).toHaveAttribute("tabindex", "0");
+  });
+});
