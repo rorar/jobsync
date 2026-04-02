@@ -244,6 +244,10 @@ Gültige Skip-Begründungen (NUR diese):
 Du MUSST jeden Checkpoint mit Evidenz bestätigen bevor du zum nächsten Schritt gehst.
 ÜBERSPRINGE KEINEN CHECKPOINT.
 
+**Vor Schritt 0 (Verification der Vorgänger-Sessions):**
+- [ ] CP-0a: `allium:weed` Stichprobe über die 4 meistberührten Specs: `scheduler-coordination.allium`, `security-rules.allium`, `vacancy-pipeline.allium`, `job-aggregate.allium` → zero Divergenzen bestätigt
+- [ ] CP-0b: S2 Deferred Items gelesen (`project_s2_deferred_items.md`) → 27 Items bekannt, S3-relevante identifiziert
+
 **Vor der DO-Phase:**
 - [ ] CP-1: `/allium:elicit` dispatcht → Spec-Datei existiert in `specs/`
 - [ ] CP-2: `/database-design:postgresql` dispatcht → Schema-Design dokumentiert
