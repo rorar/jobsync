@@ -1,5 +1,27 @@
 # Changelog
 
+## [2026-04-02] Session S2 — Gap Closure & Blind Spot Fixes
+
+### Added (Testing Infrastructure)
+- **axe-core**: jest-axe integration with 4 a11y test files (8 tests, 0 violations)
+- **E2E**: 9 new Playwright tests — staging-crud, settings-api-keys, settings-blacklist (68→77)
+- **Unit**: 22 new tests for extracted components + UX behaviors (116→121 suites)
+
+### Fixed (UX/A11y Sweep — 5 fixes)
+- **ux (HIGH):** RunHistoryList — hide 4 numeric columns on mobile
+- **ux (MISSING):** RunHistoryList — add loading skeleton state
+- **ux (MISSING):** RunProgressPanel — "Run completed" transition on run end (3s auto-hide)
+- **ux (HIGH):** DeckView — mobile swipe hint ("Swipe to decide" on first card)
+- **a11y (MEDIUM):** ViewModeToggle — roving tabindex + arrow key navigation
+
+### Changed (Refactoring)
+- **StagingContainer** 497→398 LOC: extract useStagingActions hook + StagingNewItemsBanner
+- **AutomationDetailPage** 509→309 LOC: extract useConflictDetection + Header + MetadataGrid
+
+### Changed (Allium Specs)
+- scheduler-coordination.allium: 3 surfaces updated, RunStatusBadge surface added
+- vacancy-pipeline.allium: StagingQueue updated, DeckView surface added
+
 ## [2026-04-02] Session S2 — User Journeys & UX Polish
 
 ### Fixed (WCAG Compliance — 15 fixes)

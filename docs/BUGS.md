@@ -1,8 +1,18 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-02
 
-**Total: 192 bugs found, 191 fixed, 1 pre-existing open**
+**Total: 197 bugs found, 196 fixed, 1 pre-existing open**
 
 ### Status: ⚠️ 1 pre-existing test failure (PRE-1, not S2-related)
+
+## Session S2 Gap Closure + Blind Spot (2026-04-02) — ALL 5 FIXED
+
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S2-30 | **HIGH** | RunHistoryList 10 columns unusable on mobile | Hide 4 numeric columns with `hidden md:table-cell` |
+| S2-31 | **HIGH** | DeckView no swipe affordance for mobile users | Added "Swipe to decide" hint on first card (sm:hidden) |
+| S2-32 | **MEDIUM** | ViewModeToggle missing roving tabindex for radio pattern | Added tabIndex management + arrow key navigation |
+| S2-33 | **MISSING** | RunHistoryList no loading state | Added skeleton pulse rows with motion-reduce |
+| S2-34 | **MISSING** | RunProgressPanel no error/completion state | Added "Run completed" 3s transition on run end |
 
 ## Pre-existing Test Failure (2026-04-01) — OPEN
 
