@@ -158,12 +158,21 @@ source scripts/env.sh && bun run build  # Build prüfen
 - Dispatche `/allium:elicit` als eigenen Agent für die Enrichment Spec
 - Main-Agent macht den ROADMAP Deep-Dive parallel
 
-**Für die DO-Phase MUSST du:**
-- Verwende `/full-stack-orchestration:full-stack-feature` ODER `/agent-teams:team-feature`
-- Mindestens 3 parallele Implementierungs-Agents:
-  - Agent 1: Connector-Infrastruktur (types.ts, registry.ts, orchestrator.ts)
-  - Agent 2: Module (clearbit/, google-favicon/, meta-parser/ — je manifest.ts + index.ts)
-  - Agent 3: Frontend (Company-Integration, Logo-Anzeige, Settings UI, i18n)
+**Für die DO-Phase — SEQUENZIELL dann PARALLEL (Learning aus S3):**
+
+S3 hatte kaskadierte Build-Failures weil parallele Agents Code gegen noch-nicht-existierende Types geschrieben haben. Fix: Erst Foundation legen, dann parallelisieren.
+
+**Schritt 1 (SEQUENZIELL — ein Agent, Main-Agent wartet):**
+- Prisma Schema ändern (neue Models: EnrichmentResult, EnrichmentLog)
+- `bash scripts/prisma-migrate.sh` + `bash scripts/prisma-generate.sh`
+- Types/Interfaces definieren: `DataEnrichmentConnector`, `DataEnrichmentManifest`, `EnrichmentResult`, `ActionErrorCode` Erweiterungen
+- Main-Agent verifiziert: `tsc --noEmit` = zero Errors
+- Commit: "feat(enrichment): add schema + types foundation"
+
+**Schritt 2 (PARALLEL — erst NACH Schritt 1):**
+- Agent 1: Connector-Infrastruktur (registry.ts, orchestrator.ts) — nutzt Types aus Schritt 1
+- Agent 2: Module (clearbit/, google-favicon/, meta-parser/) — nutzt Interfaces aus Schritt 1
+- Agent 3: Frontend (Company-Integration, Logo-Anzeige, Settings UI, i18n) — nutzt Types aus Schritt 1
 - File-Ownership strikt trennen — kein Agent ändert Files eines anderen
 
 **Build-Serialisierung (Learning aus S3):**

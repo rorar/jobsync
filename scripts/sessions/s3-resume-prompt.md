@@ -69,6 +69,7 @@ Du MUSST die Skills EXAKT aufrufen — NICHT durch generische `Agent("...")` Auf
 - Fixe ALLE WCAG-Findings aus CP-3
 - Fixe ALLE Interaction-Design-Findings aus CP-4
 - Dispatche Fix-Agents — NICHT selbst fixen (VERBOTEN für Main-Agent)
+- **Fix-Reihenfolge (Learning aus S3):** Wenn Fixes neue Types/Interfaces brauchen (z.B. `ActionErrorCode` Erweiterung), definiere diese ZUERST in einem eigenen sequenziellen Fix-Agent. DANN dispatche parallele Fix-Agents die gegen die neuen Types coden. Sonst entstehen kaskadierte Build-Failures.
 - **Evidenz:** `git diff` zeigt Fixes
 
 **CP-8: Agent-Claims verifizieren**
