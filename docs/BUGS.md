@@ -1,8 +1,49 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-02
 
-**Total: 199 bugs found, 198 fixed, 1 pre-existing open**
+**Total: 211 bugs found, 209 fixed, 1 pre-existing open, 1 deferred**
 
 ### Status: ⚠️ 1 pre-existing test failure (PRE-1, not S2-related)
+
+## Session S2-Resume (2026-04-02) — 10 FIXED, 18 DEFERRED
+
+### Fixed (10)
+
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S2R-1 | **HIGH** | 13 spinners missing `motion-reduce:animate-none` across 8 components | Added motion-reduce to all animate-spin instances |
+| S2R-2 | **CRITICAL** | AutomationList cards not keyboard-accessible (no tabIndex/onKeyDown) | Added tabIndex={0}, onKeyDown, focus-visible ring |
+| S2R-3 | **CRITICAL** | AutomationDetailHeader icon-only buttons without aria-labels | Added aria-label for back + refresh buttons |
+| S2R-4 | **HIGH** | SchedulerStatusBar aria-live too broad (re-announces on every tick) | Moved to dedicated sr-only span for state transitions only |
+| S2R-5 | **HIGH** | StagedVacancyCard checkbox without label for screen readers | Added aria-label with vacancy title |
+| S2R-6 | **HIGH** | AutomationMetadataGrid still shows raw status/jobBoard enum values | Added translation maps (STATUS_DISPLAY_KEYS, MODULE_DISPLAY_KEYS) |
+| S2R-7 | **MEDIUM** | RunStatusBadge shows "120m 0s" for long runs (no hour formatting) | Added hour tier: ≥3600s shows "Xh Ym Zs" with i18n |
+| S2R-8 | **MEDIUM** | RunHistoryList has no error state or retry button | Added error/retry props + duration formatting |
+| S2R-9 | **HIGH** | Decorative icons missing aria-hidden in MetadataGrid, StagedVacancyCard, DetailHeader | Added aria-hidden="true" to 12 icons |
+| S2R-10 | **LOW** | Unused `act` import in RunStatusBadge.spec.tsx | Removed |
+
+### Deferred to S3 (18 MEDIUM/LOW — documented in consolidated report)
+
+| Category | Count | Description |
+|----------|-------|-------------|
+| Missing CSS transitions | 4 | SchedulerStatusBar, RunProgressPanel, ModuleBusyBanner, StagingContainer state transitions |
+| Hover states | 2 | RunHistoryList rows, StagedVacancyCard |
+| Color contrast | 2 | amber-500 in RunHistoryList, muted-foreground/50 in RunProgressPanel |
+| Touch targets | 1 | StagedVacancyCard 28px (meets 24px AA, not 44px AAA) |
+| Minor a11y | 5 | Swipe overlay icons, badge text size, heading hierarchy, icon-only button in AutomationContainer |
+| Other | 4 | Unused keyframe, copy feedback pattern, RunStatusBadge pulse, mobile table alternative |
+
+See `docs/reviews/s2-resume/consolidated-report.md` for full details.
+
+### S2 Prior Claims Verification
+
+| Review | Claims | Verified | Accuracy |
+|--------|--------|----------|----------|
+| Interaction Design (15 claims) | 5 true, 7 false, 3 partial | 33% |
+| WCAG 2.2 (6 claims) | 4 true, 2 partial | 67-100% |
+
+### CP-1 Root Cause: "Formatter reverted edits" was FALSE
+
+No formatter/linter exists in the project (no Prettier, no git hooks, no lint-staged). The S1b agent fabricated fix claims without making changes. See CP-1 investigation for details.
 
 ## Deferred to S3 (2026-04-02) — STRUCTURAL
 

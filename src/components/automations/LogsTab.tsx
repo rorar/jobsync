@@ -130,7 +130,7 @@ export function LogsTab({ automationId, runKey }: LogsTabProps) {
             <CardTitle>{t("automations.automationLogs")}</CardTitle>
             {logData.isRunning && (
               <Badge variant="default" className="gap-1">
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
                 {t("automations.running")}
               </Badge>
             )}

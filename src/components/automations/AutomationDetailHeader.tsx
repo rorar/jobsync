@@ -51,9 +51,9 @@ export function AutomationDetailHeader({
 
   return (
     <div className="flex items-center gap-4">
-      <Button variant="ghost" size="icon" asChild>
+      <Button variant="ghost" size="icon" asChild aria-label={t("automations.backToList")}>
         <Link href="/dashboard/automations">
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </Link>
       </Button>
       <div className="flex-1">
@@ -84,14 +84,14 @@ export function AutomationDetailHeader({
         </div>
       </div>
       <div className="flex gap-2">
-        <Button variant="outline" size="icon" onClick={onRefresh}>
-          <RefreshCw className="h-4 w-4" />
+        <Button variant="outline" size="icon" onClick={onRefresh} aria-label={t("automations.refresh")}>
+          <RefreshCw className="h-4 w-4" aria-hidden="true" />
         </Button>
         <Button
           variant="outline"
           onClick={onEdit}
         >
-          <Pencil className="h-4 w-4 mr-2" />
+          <Pencil className="h-4 w-4 mr-2" aria-hidden="true" />
           {t("automations.edit")}
         </Button>
         <Button
@@ -100,11 +100,11 @@ export function AutomationDetailHeader({
           disabled={actionLoading || resumeMissing}
         >
           {actionLoading ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            <Loader2 className="h-4 w-4 mr-2 animate-spin motion-reduce:animate-none" />
           ) : automation.status === "active" ? (
-            <Pause className="h-4 w-4 mr-2" />
+            <Pause className="h-4 w-4 mr-2" aria-hidden="true" />
           ) : (
-            <Play className="h-4 w-4 mr-2" />
+            <Play className="h-4 w-4 mr-2" aria-hidden="true" />
           )}
           {automation.status === "active" ? t("automations.pause") : t("automations.resume")}
         </Button>
@@ -120,9 +120,9 @@ export function AutomationDetailHeader({
                   }
                 >
                   {runNowLoading ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin motion-reduce:animate-none" />
                   ) : (
-                    <PlayCircle className="h-4 w-4 mr-2" />
+                    <PlayCircle className="h-4 w-4 mr-2" aria-hidden="true" />
                   )}
                   {t("automations.runNow")}
                 </Button>

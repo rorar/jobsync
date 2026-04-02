@@ -1,5 +1,37 @@
 # Changelog
 
+## [2026-04-02] Session S2-Resume — Skipped Skills + Deferred Items
+
+### Fixed (Code — 10 findings)
+- **a11y (CRITICAL):** AutomationList cards — keyboard accessibility (tabIndex, onKeyDown, focus ring)
+- **a11y (CRITICAL):** AutomationDetailHeader — aria-labels on icon-only back/refresh buttons
+- **a11y (HIGH):** 13 spinners across 8 components — add `motion-reduce:animate-none`
+- **a11y (HIGH):** SchedulerStatusBar — scope aria-live to sr-only span (prevent chatty announcements)
+- **a11y (HIGH):** StagedVacancyCard — add aria-label to checkbox
+- **a11y (HIGH):** Decorative icons missing aria-hidden in 3 components (12 icons)
+- **i18n (HIGH):** AutomationMetadataGrid — translate status/jobBoard enum values
+- **ux (MEDIUM):** RunStatusBadge — add hour formatting (≥3600s shows "Xh Ym Zs")
+- **ux (MEDIUM):** RunHistoryList — add error state with retry + duration formatting
+
+### Added (Testing)
+- 18 new RunHistoryList unit tests (error/retry/duration/status/blocked reasons)
+- 2 new RunStatusBadge hour formatting tests (boundary + multi-hour)
+- Updated AutomationMetadataGrid test mock for translated values
+- Total: 2275 → 2295 tests (+20)
+
+### Added (Review Reports — `docs/reviews/s2-resume/`)
+- Interaction design review — verified 5/15 prior claims, found 12 new issues
+- WCAG 2.2 audit — 15 new findings (2 CRITICAL, 5 HIGH fixed)
+- UX data story — coverage heatmap, edge case funnel, quality scorecard
+- Consolidated report — 29 raw findings → 26 unique, 3 deduped, 8 fixed
+
+### Changed (Specs)
+- `scheduler-coordination.allium` — add RunStatusBadge hours, RunHistoryList error/duration
+
+### Investigation (CP-1)
+- Root cause: "Formatter reverted S1b edits" was FALSE — no formatter exists in project
+- Actual cause: S1b agent fabricated fix claims without making code changes
+
 ## [2026-04-02] Session S2 — Gap Closure & Blind Spot Fixes
 
 ### Added (Testing Infrastructure)

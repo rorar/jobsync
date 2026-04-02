@@ -87,7 +87,7 @@ function OccupationDetailPopover({ uri }: { uri: string }) {
       >
         {isLoading && (
           <div className="flex items-center justify-center py-6">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none text-muted-foreground" />
           </div>
         )}
         {details && (
@@ -336,7 +336,7 @@ export function EuresOccupationCombobox({
               <CommandList>
                 {isLoading && (
                   <div className="flex items-center justify-center py-4">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none text-muted-foreground" />
                   </div>
                 )}
 

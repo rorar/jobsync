@@ -177,12 +177,15 @@ export function AutomationList({
             <div
               key={automation.id}
               role="article"
-              className={`scroll-mt-14 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer ${
+              tabIndex={0}
+              className={`scroll-mt-14 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                 isAutomationRunning(automation.id)
                   ? "border-l-4 border-l-blue-500 bg-blue-50/30 dark:bg-blue-950/20"
                   : ""
               }`}
               onClick={() => router.push(detailHref)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); router.push(detailHref); } }}
+              aria-label={automation.name}
             >
               <div className="flex items-start justify-between p-4">
                 <div className="flex-1 min-w-0 space-y-2">

@@ -131,7 +131,7 @@ export function PromotionDialog({
             {t("common.cancel")}
           </Button>
           <Button onClick={handlePromote} disabled={submitting}>
-            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin motion-reduce:animate-none" />}
             {t("staging.promote")}
           </Button>
         </DialogFooter>

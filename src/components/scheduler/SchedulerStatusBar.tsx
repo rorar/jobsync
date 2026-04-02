@@ -39,28 +39,34 @@ export function SchedulerStatusBar() {
       "border-muted bg-muted/50 text-muted-foreground";
   }
 
+  // Screen reader announcement for scheduler state changes (idle vs running)
+  const srAnnouncement = (phase === "running" || isRunning)
+    ? t("automations.schedulerRunning")
+    : t("automations.schedulerIdle");
+
   return (
     <Popover>
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {srAnnouncement}
+      </span>
       <PopoverTrigger asChild>
-        <span aria-live="polite">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`h-8 gap-1.5 rounded-full border px-3 text-xs font-medium ${pillClasses}`}
-            aria-label={t("automations.schedulerStatus")}
-          >
-            {pillIcon}
-            <span className="max-w-[120px] truncate">{pillLabel}</span>
-            {(phase === "running" || isRunning) && queueCount > 0 && (
-              <span
-                className="flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white dark:bg-blue-500"
-                aria-label={t("automations.queuedCount").replace("{count}", String(queueCount))}
-              >
-                {queueCount}
-              </span>
-            )}
-          </Button>
-        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={`h-8 gap-1.5 rounded-full border px-3 text-xs font-medium ${pillClasses}`}
+          aria-label={t("automations.schedulerStatus")}
+        >
+          <span aria-hidden="true">{pillIcon}</span>
+          <span className="max-w-[120px] truncate">{pillLabel}</span>
+          {(phase === "running" || isRunning) && queueCount > 0 && (
+            <span
+              className="flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white dark:bg-blue-500"
+              aria-label={t("automations.queuedCount").replace("{count}", String(queueCount))}
+            >
+              {queueCount}
+            </span>
+          )}
+        </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-0">
         <div className="p-4 space-y-3">

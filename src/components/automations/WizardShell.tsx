@@ -483,7 +483,7 @@ export function WizardShell({ wizard, resumes, editResumeTitle }: WizardShellPro
             <>
               <Button type="submit" disabled={state.isSubmitting}>
                 {state.isSubmitting && !state.runAfterCreate && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin motion-reduce:animate-none" />
                 )}
                 {state.isEditMode ? t("automations.updateAutomation") : t("automations.createAutomation")}
               </Button>
@@ -494,7 +494,7 @@ export function WizardShell({ wizard, resumes, editResumeTitle }: WizardShellPro
                   onClick={actions.handleRunAfterCreateClick}
                 >
                   {state.isSubmitting && state.runAfterCreate && (
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin motion-reduce:animate-none" />
                   )}
                   {!state.isSubmitting && <Play className="h-4 w-4 mr-1" />}
                   {t("automations.createAndRun")}

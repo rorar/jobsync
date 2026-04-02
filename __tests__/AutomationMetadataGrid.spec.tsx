@@ -31,6 +31,11 @@ jest.mock("@/i18n", () => ({
         "automations.discoveredJobs": "Discovered Jobs",
         "automations.total": "total",
         "automations.new": "New",
+        "automations.statusActive": "Active",
+        "automations.statusPaused": "Paused",
+        "automations.moduleEures": "EURES",
+        "automations.moduleArbeitsagentur": "Arbeitsagentur",
+        "automations.moduleJsearch": "JSearch",
       };
       return dict[key] ?? key;
     },
@@ -133,11 +138,11 @@ describe("AutomationMetadataGrid — full rendering", () => {
 
     // Status field
     expect(screen.getByText("Status")).toBeInTheDocument();
-    expect(screen.getByText("active")).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
 
     // Module field
     expect(screen.getByText("Module")).toBeInTheDocument();
-    expect(screen.getByText("eures")).toBeInTheDocument();
+    expect(screen.getByText("EURES")).toBeInTheDocument();
 
     // Match Threshold field
     expect(screen.getByText("Match Threshold")).toBeInTheDocument();
@@ -191,7 +196,7 @@ describe("AutomationMetadataGrid — null/undefined optional fields", () => {
     );
 
     // Status shows paused
-    expect(screen.getByText("paused")).toBeInTheDocument();
+    expect(screen.getByText("Paused")).toBeInTheDocument();
 
     // Resume missing warning
     expect(screen.getByText("Resume missing")).toBeInTheDocument();
