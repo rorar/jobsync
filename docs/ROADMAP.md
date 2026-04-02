@@ -1341,6 +1341,11 @@ Dynamische Dateipfade und Dateinamen:
 - Zeigt alle Interaktionen: E-Mails, Anrufe, Interviews, Notizen, Statusänderungen, Dokumente
 - Automatisch befüllt aus CRM-Aktionen und Domain Events
 - Filterbar nach Typ, Datum, Kanal
+- **Discovery: Event Sourcing vs. Audit-Log**
+  - Aktuell: Domain Events (TypedEventBus) als Fire-and-Forget, Prisma-Entities sind Source of Truth
+  - 5.3 erstellt `JobStatusHistory` als Append-Only Audit-Log — reicht das für die Timeline?
+  - Event Sourcing ermöglicht temporale Queries ("Zustand am Tag X"), Replay, vollständige Audit-Trails — bringt aber erhebliche Komplexität (Event Store, Projections, Snapshots, Eventual Consistency)
+  - **Empfehlung:** Discovery mit `/backend-development:event-store-design` durchführen bevor Architektur-Entscheidung. Audit-Log als Default, Event Sourcing nur wenn temporale Queries oder Replay tatsächlich gebraucht werden
 
 ---
 
