@@ -304,7 +304,9 @@ Du MUSST jeden Checkpoint mit Evidenz bestätigen bevor du zum nächsten Schritt
 
 **Vor der ACT-Phase — EXAKTE Skill-Aufrufe (Learning aus S3):**
 
-S3 hat generische `Agent("review")` Aufrufe statt der spezialisierten Skills verwendet. Skills laden spezialisierte Prompts und Checklisten — generische Agents improvisieren. Du MUSST die folgenden Skills EXAKT aufrufen:
+S3 hat generische `Agent("review")` Aufrufe statt der spezialisierten Skills verwendet. Skills laden spezialisierte Prompts und Checklisten — generische Agents improvisieren. Du MUSST die folgenden Skills EXAKT aufrufen.
+
+**WICHTIG (Learning aus S3-Resume):** Verwende das **`Skill` Tool**, NICHT das `Agent` Tool. `Skill("comprehensive-review:full-review")` ist korrekt. `Agent(subagent_type="comprehensive-review:full-review")` schlägt fehl weil nicht alle Skills als Agent-Type registriert sind. Im Zweifel: immer `Skill` Tool verwenden.
 
 - [ ] CP-9: Rufe `/comprehensive-review:full-review` auf (NICHT `Agent("comprehensive review")`). Dann `/agent-teams:multi-reviewer-patterns` zur Konsolidierung. Reports in `docs/reviews/s4/`. **Evidenz:** Skill-Invocation-Output zeigen.
 - [ ] CP-10: Rufe `/accessibility-compliance:wcag-audit-patterns` auf (NICHT `Agent("a11y check")`). **Evidenz:** Skill-Output + Findings-Datei.
