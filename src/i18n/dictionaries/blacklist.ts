@@ -32,6 +32,9 @@ export const blacklist = {
     "blacklist.entryNotFound": "Entry not found",
     "blacklist.patternTooLong": "Pattern must be 500 characters or less",
     "blacklist.reasonTooLong": "Reason must be 1000 characters or less",
+    "blacklist.deleteConfirmTitle": "Remove entry?",
+    "blacklist.loadFailed": "Failed to load blacklist entries",
+    "blacklist.retry": "Retry",
   },
   de: {
     "blacklist.title": "Firmen-Blacklist",
@@ -66,6 +69,9 @@ export const blacklist = {
     "blacklist.entryNotFound": "Eintrag nicht gefunden",
     "blacklist.patternTooLong": "Muster darf maximal 500 Zeichen lang sein",
     "blacklist.reasonTooLong": "Grund darf maximal 1000 Zeichen lang sein",
+    "blacklist.deleteConfirmTitle": "Eintrag entfernen?",
+    "blacklist.loadFailed": "Blacklist-Einträge konnten nicht geladen werden",
+    "blacklist.retry": "Erneut versuchen",
   },
   fr: {
     "blacklist.title": "Liste noire d'entreprises",
@@ -100,6 +106,9 @@ export const blacklist = {
     "blacklist.entryNotFound": "Entrée non trouvée",
     "blacklist.patternTooLong": "Le motif doit comporter 500 caractères ou moins",
     "blacklist.reasonTooLong": "La raison doit comporter 1000 caractères ou moins",
+    "blacklist.deleteConfirmTitle": "Supprimer l'entrée ?",
+    "blacklist.loadFailed": "Échec du chargement de la liste noire",
+    "blacklist.retry": "Réessayer",
   },
   es: {
     "blacklist.title": "Lista negra de empresas",
@@ -134,5 +143,8 @@ export const blacklist = {
     "blacklist.entryNotFound": "Entrada no encontrada",
     "blacklist.patternTooLong": "El patrón debe tener 500 caracteres o menos",
     "blacklist.reasonTooLong": "El motivo debe tener 1000 caracteres o menos",
+    "blacklist.deleteConfirmTitle": "\u00bfEliminar entrada?",
+    "blacklist.loadFailed": "Error al cargar la lista negra",
+    "blacklist.retry": "Reintentar",
   },
 } as const;

@@ -132,7 +132,7 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
   return (
     <div
       ref={containerRef}
-      className="flex flex-col items-center outline-none"
+      className="flex flex-col items-center outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       tabIndex={0}
       role="region"
       aria-label={t("deck.viewModeDeck")}
@@ -151,18 +151,22 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
       >
         {/* Third card (background preview) */}
         {thirdVacancy && !exitDirection && (
-          <DeckCard vacancy={thirdVacancy} isPreview previewLevel={2} />
+          <div aria-hidden="true">
+            <DeckCard vacancy={thirdVacancy} isPreview previewLevel={2} />
+          </div>
         )}
 
         {/* Next card (preview) */}
         {nextVacancy && !exitDirection && (
-          <DeckCard vacancy={nextVacancy} isPreview previewLevel={1} />
+          <div aria-hidden="true">
+            <DeckCard vacancy={nextVacancy} isPreview previewLevel={1} />
+          </div>
         )}
 
         {/* Current card */}
         {currentVacancy && (
           <div
-            className="relative z-10"
+            className="relative z-10 motion-reduce:!transition-none"
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -261,7 +265,7 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
       {/* Keyboard hints (hidden on mobile) */}
       <div
         className="hidden sm:flex items-center justify-center gap-4 mt-4 text-xs text-muted-foreground"
-        aria-label={t("deck.keyboardHints")}
+        aria-hidden="true"
       >
         <span className="inline-flex items-center gap-1.5">
           <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded border border-border bg-muted px-1 text-[10px] font-medium font-mono">

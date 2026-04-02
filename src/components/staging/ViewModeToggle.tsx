@@ -32,7 +32,7 @@ export function ViewModeToggle({ value, onChange }: ViewModeToggleProps) {
         type="button"
         role="radio"
         aria-checked={value === "list"}
-        className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors ${
+        className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
           value === "list"
             ? "bg-primary text-primary-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -49,7 +49,7 @@ export function ViewModeToggle({ value, onChange }: ViewModeToggleProps) {
         type="button"
         role="radio"
         aria-checked={value === "deck"}
-        className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors ${
+        className={`inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
           value === "deck"
             ? "bg-primary text-primary-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground hover:bg-accent"

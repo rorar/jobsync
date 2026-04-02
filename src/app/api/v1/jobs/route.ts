@@ -38,10 +38,10 @@ export const GET = withApiAuth(async (req, { userId }) => {
 
   if (search) {
     whereClause.OR = [
-      { JobTitle: { label: { contains: search } } },
-      { Company: { label: { contains: search } } },
-      { Location: { label: { contains: search } } },
-      { description: { contains: search } },
+      { JobTitle: { label: { contains: search, mode: 'insensitive' } } },
+      { Company: { label: { contains: search, mode: 'insensitive' } } },
+      { Location: { label: { contains: search, mode: 'insensitive' } } },
+      { description: { contains: search, mode: 'insensitive' } },
     ];
   }
 

@@ -1,14 +1,60 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-04-01
+# Bug Tracker — Collected 2026-03-24, Updated 2026-04-02
 
-**Total: 138 bugs found, 137 fixed, 1 pre-existing open**
+**Total: 192 bugs found, 191 fixed, 1 pre-existing open**
 
-### Status: ⚠️ 1 pre-existing test failure (PRE-1, not S1b-related)
+### Status: ⚠️ 1 pre-existing test failure (PRE-1, not S2-related)
 
 ## Pre-existing Test Failure (2026-04-01) — OPEN
 
 | ID | Severity | Finding | Status |
 |----|----------|---------|--------|
-| PRE-1 | **LOW** | `ActivityForm.spec.tsx` — 2 create-mode tests fail (submit mock not firing). Pre-existing, not caused by S1b. Edit-mode tests pass. | Open — investigate in S2 |
+| PRE-1 | **LOW** | `ActivityForm.spec.tsx` — 2 create-mode tests fail (submit mock not firing). Pre-existing, not caused by S1b/S2. Edit-mode tests pass. | Open — investigate in S3 |
+
+## Session S2 UX/UI Audit (2026-04-02) — ALL 54 FIXED
+
+### WCAG Compliance (15 fixes)
+
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S2-1 | **HIGH** | SchedulerStatusBar — no aria-live for state changes | Wrapped in `aria-live="polite"` |
+| S2-2 | **HIGH** | RunProgressPanel — no aria-live for phase progression | Added sr-only aria-live span |
+| S2-3 | **HIGH** | RunProgressPanel — incomplete progressbar (missing valuemin, valuetext) | Added all ARIA attributes to desktop + mobile |
+| S2-4 | **HIGH** | AutomationList — nested `<button>` inside `<Link>` (invalid HTML) | Restructured to `<div>` with router.push |
+| S2-5 | **HIGH** | AutomationList — tooltip on non-focusable `<span>` | Changed to `<button>` |
+| S2-6 | **HIGH** | RunHistoryList — tooltip on non-focusable `<Badge>` | Wrapped in focusable `<button>` |
+| S2-7 | **HIGH** | DeckView — container `outline-none` with no focus indicator | Added focus-visible:ring-2 |
+| S2-8 | **HIGH** | DeckCard — "Show more" button below 24px target | Added min-h-[24px] |
+| S2-9 | **HIGH** | PublicApiKeySettings — amber-600 contrast ~3.0:1 | Changed to orange-700 (~4.8:1) |
+| S2-10 | **MEDIUM** | DeckCard — match score amber SVG text low contrast | Changed to amber-700 |
+| S2-11 | **MEDIUM** | 6 components — spinners missing motion-reduce | Added motion-reduce:animate-none |
+| S2-12 | **MEDIUM** | RunStatusBadge — excessive live region (per-second announcements) | Throttled to status changes only |
+| S2-13 | **MEDIUM** | 8 components — decorative icons missing aria-hidden | Added aria-hidden="true" |
+| S2-14 | **MEDIUM** | AutomationList — no scroll-mt for sticky header | Added scroll-mt-14 |
+| S2-15 | **MEDIUM** | ViewModeToggle — missing focus-visible + small targets | Added ring + increased py |
+
+### i18n Fixes (6 fixes, 88 translations)
+
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S2-16 | **HIGH** | AutomationList — raw `automation.status`/`automation.jobBoard` | Translation maps for status + modules |
+| S2-17 | **HIGH** | RunHistoryList — raw `blockedReason`/`errorMessage` | Translation map for 7 known reasons + fallback |
+| S2-18 | **HIGH** | RunStatusBadge — hardcoded `m`/`s` in elapsed time | Locale-aware format (DE: "Min. Sek.") |
+| S2-19 | **HIGH** | RunProgressPanel — `as Parameters<typeof t>[0]` casts | `as const` on PHASE_KEYS |
+| S2-20 | **MEDIUM** | RunProgressPanel — phase counters not using formatNumber | Added formatNumber(value, locale) |
+| S2-21 | **MEDIUM** | AutomationList — `as any` on PAUSE_REASON_KEYS | Removed (TranslationKey is string) |
+
+### UX Fixes (8 fixes)
+
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S2-22 | **HIGH** | CompanyBlacklist — delete has no confirmation dialog | Added AlertDialog (key existed but was unused) |
+| S2-23 | **HIGH** | CompanyBlacklist — loadEntries silent failure | Added error state + retry button |
+| S2-24 | **HIGH** | PublicApiKeySettings — fetchKeys silent failure | Added error state + retry button |
+| S2-25 | **HIGH** | StagingContainer — stale vacancies flash on tab switch | Added setVacancies([]) in onTabChange |
+| S2-26 | **MEDIUM** | Public API — search case-sensitive on SQLite | Added mode: 'insensitive' |
+| S2-27 | **MEDIUM** | StagingContainer — notification banner no aria-live | Added role="status" |
+| S2-28 | **LOW** | StagingContainer — Bootstrap `btn btn-primary` classes | Removed (no effect in Tailwind) |
+| S2-29 | **LOW** | DeckView — preview cards not hidden from AT | Added aria-hidden="true" |
 
 ## Session S1b Blind Spot Follow-up (2026-04-01) — ALL FIXED
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "@/i18n";
 import { formatDateCompact } from "@/i18n";
 import { Card, CardContent } from "@/components/ui/card";
@@ -68,12 +69,26 @@ const PAUSE_REASON_KEYS: Record<AutomationPauseReason, string> = {
   cb_escalation: "automations.pauseReasonCbEscalation",
 };
 
+/** Map automation status to i18n keys */
+const STATUS_DISPLAY_KEYS: Record<string, string> = {
+  active: "automations.statusActive",
+  paused: "automations.statusPaused",
+};
+
+/** Map module/jobBoard ids to i18n keys */
+const MODULE_DISPLAY_KEYS: Record<string, string> = {
+  eures: "automations.moduleEures",
+  arbeitsagentur: "automations.moduleArbeitsagentur",
+  jsearch: "automations.moduleJsearch",
+};
+
 export function AutomationList({
   automations,
   onEdit,
   onRefresh,
 }: AutomationListProps) {
   const { t, locale } = useTranslations();
+  const router = useRouter();
   const { isAutomationRunning } = useSchedulerStatus();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -137,7 +152,7 @@ export function AutomationList({
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-12">
-          <Zap className="h-12 w-12 text-muted-foreground mb-4" />
+          <Zap aria-hidden="true" className="h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="text-lg font-medium">{t("automations.noAutomations")}</h3>
           <p className="text-muted-foreground text-center mt-2">
             {t("automations.noAutomationsDesc")}
@@ -156,46 +171,47 @@ export function AutomationList({
           const keywordChips = parseKeywords(automation.keywords);
           const locationCodes = parseLocations(automation.location);
           const isEures = automation.jobBoard === "eures" || automation.jobBoard === "arbeitsagentur";
+          const detailHref = `/dashboard/automations/${automation.id}`;
 
           return (
-            <Link
+            <div
               key={automation.id}
-              href={`/dashboard/automations/${automation.id}`}
-              className={`block rounded-lg border bg-card hover:bg-accent/50 transition-colors ${
+              role="article"
+              className={`scroll-mt-14 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer ${
                 isAutomationRunning(automation.id)
                   ? "border-l-4 border-l-blue-500 bg-blue-50/30 dark:bg-blue-950/20"
                   : ""
               }`}
+              onClick={() => router.push(detailHref)}
             >
               <div className="flex items-start justify-between p-4">
                 <div className="flex-1 min-w-0 space-y-2">
                   <div className="flex items-center gap-3 flex-wrap">
-                    <span className="font-semibold">
+                    <Link href={detailHref} className="font-semibold hover:underline" onClick={(e) => e.stopPropagation()}>
                       {automation.name}
-                    </span>
-                    <Badge variant="outline" className="capitalize">
-                      {automation.jobBoard}
+                    </Link>
+                    <Badge variant="outline">
+                      {t(MODULE_DISPLAY_KEYS[automation.jobBoard] ?? automation.jobBoard)}
                     </Badge>
                     <Badge
                       variant={automation.status === "active" ? "default" : "secondary"}
-                      className="capitalize"
                     >
-                      {automation.status}
+                      {t(STATUS_DISPLAY_KEYS[automation.status] ?? automation.status)}
                     </Badge>
                     <RunStatusBadge automationId={automation.id} />
                     {automation.status === "paused" && automation.pauseReason && (
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                              <Info className="h-3.5 w-3.5" />
+                            <button type="button" className="inline-flex items-center gap-1 text-xs text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+                              <Info aria-hidden="true" className="h-3.5 w-3.5" />
                               <span className="hidden sm:inline">
-                                {t(PAUSE_REASON_KEYS[automation.pauseReason] as any)}
+                                {t(PAUSE_REASON_KEYS[automation.pauseReason])}
                               </span>
-                            </span>
+                            </button>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>{t(PAUSE_REASON_KEYS[automation.pauseReason] as any)}</p>
+                            <p>{t(PAUSE_REASON_KEYS[automation.pauseReason])}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -203,8 +219,8 @@ export function AutomationList({
                   </div>
 
                   {resumeMissing && (
-                    <div className="flex items-center gap-2 text-amber-600 text-sm">
-                      <AlertTriangle className="h-4 w-4" />
+                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-sm">
+                      <AlertTriangle aria-hidden="true" className="h-4 w-4" />
                       <span>{t("automations.resumeMissing")}</span>
                     </div>
                   )}
@@ -234,13 +250,13 @@ export function AutomationList({
 
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">
-                      <Clock className="h-4 w-4" />
+                      <Clock aria-hidden="true" className="h-4 w-4" />
                       <span>
                         {automation.scheduleHour.toString().padStart(2, "0")}:00 {t("automations.daily").toLowerCase()}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <FileText className="h-4 w-4" />
+                      <FileText aria-hidden="true" className="h-4 w-4" />
                       <span>{automation.matchThreshold}% {t("automations.threshold").toLowerCase()}</span>
                     </div>
                     {automation.nextRunAt && automation.status === "active" && (
@@ -263,34 +279,35 @@ export function AutomationList({
                       variant="ghost"
                       size="icon"
                       disabled={isLoading}
-                      onClick={(e) => e.preventDefault()}
+                      aria-label={t("automations.actions")}
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <MoreHorizontal className="h-4 w-4" />
+                      <MoreHorizontal aria-hidden="true" className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     {automation.status === "active" ? (
-                      <DropdownMenuItem onClick={(e) => { e.preventDefault(); e.stopPropagation(); handlePause(automation.id); }}>
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handlePause(automation.id); }}>
                         <Pause className="h-4 w-4 mr-2" />
                         {t("automations.pause")}
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleResume(automation.id); }}
+                        onClick={(e) => { e.stopPropagation(); handleResume(automation.id); }}
                         disabled={resumeMissing}
                       >
                         <Play className="h-4 w-4 mr-2" />
                         {t("automations.resume")}
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(automation); }}>
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(automation); }}>
                       <Pencil className="h-4 w-4 mr-2" />
                       {t("automations.edit")}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-destructive"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDeleteId(automation.id); }}
+                      onClick={(e) => { e.stopPropagation(); setDeleteId(automation.id); }}
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       {t("automations.delete")}
@@ -298,7 +315,7 @@ export function AutomationList({
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-            </Link>
+            </div>
           );
         })}
       </div>

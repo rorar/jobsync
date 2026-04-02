@@ -36,6 +36,7 @@ jest.mock("@/i18n", () => ({
     },
     locale: "en",
   })),
+  formatNumber: (value: number, _locale: string) => String(value),
 }));
 
 const mockIsAutomationRunning = jest.fn<boolean, [string]>();
@@ -143,27 +144,28 @@ describe("RunProgressPanel — phase stepper icon states", () => {
   it("renders the progressbar role element", () => {
     mockGetActiveProgress.mockReturnValue(makeProgress("search"));
     render(<RunProgressPanel automationId={AUTOMATION_ID} />);
-    expect(screen.getByRole("progressbar")).toBeInTheDocument();
+    const bars = screen.getAllByRole("progressbar");
+    expect(bars.length).toBeGreaterThanOrEqual(1);
   });
 
   it("sets aria-valuenow to 1 when phase is 'search' (index 0, 0-indexed → 1-indexed)", () => {
     mockGetActiveProgress.mockReturnValue(makeProgress("search"));
     render(<RunProgressPanel automationId={AUTOMATION_ID} />);
-    const bar = screen.getByRole("progressbar");
+    const bar = screen.getAllByRole("progressbar")[0];
     expect(bar).toHaveAttribute("aria-valuenow", "1");
   });
 
   it("sets aria-valuenow to 3 when phase is 'enrich' (index 2)", () => {
     mockGetActiveProgress.mockReturnValue(makeProgress("enrich"));
     render(<RunProgressPanel automationId={AUTOMATION_ID} />);
-    const bar = screen.getByRole("progressbar");
+    const bar = screen.getAllByRole("progressbar")[0];
     expect(bar).toHaveAttribute("aria-valuenow", "3");
   });
 
   it("sets aria-valuemax to 6 (total phase count)", () => {
     mockGetActiveProgress.mockReturnValue(makeProgress("search"));
     render(<RunProgressPanel automationId={AUTOMATION_ID} />);
-    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuemax", "6");
+    expect(screen.getAllByRole("progressbar")[0]).toHaveAttribute("aria-valuemax", "6");
   });
 
   it("shows completed check icons for phases before the active one", () => {

@@ -48,6 +48,8 @@ export const api = {
     "api.keyNotFound": "API key not found",
     "api.keyAlreadyRevoked": "API key is already revoked",
     "api.keyMustBeRevoked": "API key must be revoked before it can be deleted",
+    "api.loadFailed": "Failed to load API keys",
+    "api.retry": "Retry",
   },
   de: {
     "api.title": "Öffentliche API-Schlüssel",
@@ -91,6 +93,8 @@ export const api = {
     "api.keyNotFound": "API-Schlüssel nicht gefunden",
     "api.keyAlreadyRevoked": "API-Schlüssel ist bereits widerrufen",
     "api.keyMustBeRevoked": "API-Schlüssel muss vor dem Löschen widerrufen werden",
+    "api.loadFailed": "API-Schlüssel konnten nicht geladen werden",
+    "api.retry": "Erneut versuchen",
   },
   fr: {
     "api.title": "Clés API publiques",
@@ -134,6 +138,8 @@ export const api = {
     "api.keyNotFound": "Clé API non trouvée",
     "api.keyAlreadyRevoked": "La clé API est déjà révoquée",
     "api.keyMustBeRevoked": "La clé API doit être révoquée avant de pouvoir être supprimée",
+    "api.loadFailed": "Échec du chargement des clés API",
+    "api.retry": "Réessayer",
   },
   es: {
     "api.title": "Claves API públicas",
@@ -177,5 +183,7 @@ export const api = {
     "api.keyNotFound": "Clave API no encontrada",
     "api.keyAlreadyRevoked": "La clave API ya está revocada",
     "api.keyMustBeRevoked": "La clave API debe ser revocada antes de poder ser eliminada",
+    "api.loadFailed": "Error al cargar las claves API",
+    "api.retry": "Reintentar",
   },
 } as const;

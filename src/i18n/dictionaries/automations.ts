@@ -379,6 +379,27 @@ export const automations = {
     "automations.statusCompletedWithErrors": "Completed with errors",
     "automations.statusBlocked": "Blocked",
     "automations.statusRateLimited": "Rate limited",
+
+    // AutomationList - Status & Module display
+    "automations.statusActive": "Active",
+    "automations.statusPaused": "Paused",
+    "automations.moduleEures": "EURES",
+    "automations.moduleArbeitsagentur": "Arbeitsagentur",
+    "automations.moduleJsearch": "JSearch",
+
+    // RunHistoryList - Blocked reasons
+    "automations.blockedAlreadyRunning": "Already running",
+    "automations.blockedModuleBusy": "Module busy",
+    "automations.blockedModuleDeactivated": "Module deactivated",
+    "automations.blockedAuthFailure": "Authentication failure",
+    "automations.blockedConsecutiveFailures": "Consecutive failures",
+    "automations.blockedCircuitBreaker": "Circuit breaker tripped",
+    "automations.blockedResumeMissing": "Resume missing",
+    "automations.blockedUnknown": "Blocked",
+    // elapsed time
+    "automations.elapsedMinSec": "{min}m {sec}s",
+    "automations.elapsedSec": "{sec}s",
+    "automations.queuedCount": "{count} automations queued",
   },
   de: {
     // AutomationWizard - Steps
@@ -760,6 +781,27 @@ export const automations = {
     "automations.statusCompletedWithErrors": "Mit Fehlern abgeschlossen",
     "automations.statusBlocked": "Blockiert",
     "automations.statusRateLimited": "Ratenbegrenzt",
+
+    // AutomationList - Status & Module display
+    "automations.statusActive": "Aktiv",
+    "automations.statusPaused": "Pausiert",
+    "automations.moduleEures": "EURES",
+    "automations.moduleArbeitsagentur": "Arbeitsagentur",
+    "automations.moduleJsearch": "JSearch",
+
+    // RunHistoryList - Blocked reasons
+    "automations.blockedAlreadyRunning": "Wird bereits ausgeführt",
+    "automations.blockedModuleBusy": "Modul beschäftigt",
+    "automations.blockedModuleDeactivated": "Modul deaktiviert",
+    "automations.blockedAuthFailure": "Authentifizierungsfehler",
+    "automations.blockedConsecutiveFailures": "Aufeinanderfolgende Fehler",
+    "automations.blockedCircuitBreaker": "Sicherungsschalter ausgelöst",
+    "automations.blockedResumeMissing": "Lebenslauf fehlt",
+    "automations.blockedUnknown": "Blockiert",
+    // elapsed time
+    "automations.elapsedMinSec": "{min} Min. {sec} Sek.",
+    "automations.elapsedSec": "{sec} Sek.",
+    "automations.queuedCount": "{count} Automatisierungen in Warteschlange",
   },
   fr: {
     // AutomationWizard - Steps
@@ -1141,6 +1183,27 @@ export const automations = {
     "automations.statusCompletedWithErrors": "Terminé avec des erreurs",
     "automations.statusBlocked": "Bloqué",
     "automations.statusRateLimited": "Débit limité",
+
+    // AutomationList - Status & Module display
+    "automations.statusActive": "Actif",
+    "automations.statusPaused": "En pause",
+    "automations.moduleEures": "EURES",
+    "automations.moduleArbeitsagentur": "Arbeitsagentur",
+    "automations.moduleJsearch": "JSearch",
+
+    // RunHistoryList - Blocked reasons
+    "automations.blockedAlreadyRunning": "Déjà en cours",
+    "automations.blockedModuleBusy": "Module occupé",
+    "automations.blockedModuleDeactivated": "Module désactivé",
+    "automations.blockedAuthFailure": "Échec d'authentification",
+    "automations.blockedConsecutiveFailures": "Échecs consécutifs",
+    "automations.blockedCircuitBreaker": "Disjoncteur déclenché",
+    "automations.blockedResumeMissing": "CV manquant",
+    "automations.blockedUnknown": "Bloqué",
+    // elapsed time
+    "automations.elapsedMinSec": "{min} min {sec} s",
+    "automations.elapsedSec": "{sec} s",
+    "automations.queuedCount": "{count} automatisations en attente",
   },
   es: {
     // AutomationWizard - Steps
@@ -1522,5 +1585,26 @@ export const automations = {
     "automations.statusCompletedWithErrors": "Completada con errores",
     "automations.statusBlocked": "Bloqueada",
     "automations.statusRateLimited": "Limitada por tasa",
+
+    // AutomationList - Status & Module display
+    "automations.statusActive": "Activo",
+    "automations.statusPaused": "En pausa",
+    "automations.moduleEures": "EURES",
+    "automations.moduleArbeitsagentur": "Arbeitsagentur",
+    "automations.moduleJsearch": "JSearch",
+
+    // RunHistoryList - Blocked reasons
+    "automations.blockedAlreadyRunning": "Ya en ejecución",
+    "automations.blockedModuleBusy": "Módulo ocupado",
+    "automations.blockedModuleDeactivated": "Módulo desactivado",
+    "automations.blockedAuthFailure": "Error de autenticación",
+    "automations.blockedConsecutiveFailures": "Fallos consecutivos",
+    "automations.blockedCircuitBreaker": "Interruptor activado",
+    "automations.blockedResumeMissing": "Currículum faltante",
+    "automations.blockedUnknown": "Bloqueada",
+    // elapsed time
+    "automations.elapsedMinSec": "{min} min {sec} s",
+    "automations.elapsedSec": "{sec} s",
+    "automations.queuedCount": "{count} automatizaciones en cola",
   },
 } as const;

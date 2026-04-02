@@ -11,6 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "../ui/use-toast";
 import { Ban, Loader2, Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "@/i18n";
@@ -35,17 +45,27 @@ export default function CompanyBlacklistSettings() {
   const { t } = useTranslations();
   const [entries, setEntries] = useState<CompanyBlacklist[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [entryToDelete, setEntryToDelete] = useState<string | null>(null);
   const [pattern, setPattern] = useState("");
   const [matchType, setMatchType] = useState<BlacklistMatchType>("contains");
   const [reason, setReason] = useState("");
 
   const loadEntries = useCallback(async () => {
-    const result = await getBlacklistEntries();
-    if (result.success && result.data) {
-      setEntries(result.data);
+    setLoading(true);
+    setError(false);
+    try {
+      const result = await getBlacklistEntries();
+      if (result.success && result.data) {
+        setEntries(result.data);
+      }
+    } catch (err) {
+      console.error("Error fetching blacklist entries:", err);
+      setError(true);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -108,6 +128,8 @@ export default function CompanyBlacklistSettings() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleAdd();
               }}
+              required
+              aria-required="true"
             />
           </div>
           <div className="space-y-2">
@@ -141,7 +163,7 @@ export default function CompanyBlacklistSettings() {
           />
         </div>
         <Button onClick={handleAdd} disabled={adding || !pattern.trim()} size="sm" className="gap-1.5">
-          {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          {adding ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Plus className="h-4 w-4" />}
           {t("blacklist.addEntry")}
         </Button>
       </div>
@@ -149,12 +171,19 @@ export default function CompanyBlacklistSettings() {
       {/* Entries list */}
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           {t("common.loading")}
+        </div>
+      ) : error ? (
+        <div className="text-center py-8">
+          <p className="text-destructive">{t("blacklist.loadFailed")}</p>
+          <Button variant="outline" size="sm" onClick={loadEntries} className="mt-2">
+            {t("blacklist.retry")}
+          </Button>
         </div>
       ) : entries.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
-          <Ban className="h-10 w-10 mx-auto mb-3 opacity-30" />
+          <Ban className="h-10 w-10 mx-auto mb-3 opacity-30" aria-hidden="true" />
           <p className="font-medium">{t("blacklist.noEntries")}</p>
           <p className="text-sm mt-1">{t("blacklist.noEntriesHint")}</p>
         </div>
@@ -182,7 +211,7 @@ export default function CompanyBlacklistSettings() {
                 variant="ghost"
                 size="sm"
                 className="h-8 w-8 p-0 text-destructive hover:text-destructive shrink-0"
-                onClick={() => handleRemove(entry.id)}
+                onClick={() => setEntryToDelete(entry.id)}
                 aria-label={t("common.delete")}
               >
                 <Trash2 className="h-4 w-4" />
@@ -191,6 +220,22 @@ export default function CompanyBlacklistSettings() {
           ))}
         </div>
       )}
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!entryToDelete} onOpenChange={(open) => !open && setEntryToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("blacklist.deleteConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("blacklist.deleteConfirm")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (entryToDelete) handleRemove(entryToDelete); setEntryToDelete(null); }}>
+              {t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

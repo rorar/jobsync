@@ -58,13 +58,24 @@ const STATUS_CONFIG = {
   rate_limited: { icon: Timer, color: "text-amber-500", variant: "secondary" as const },
 };
 
+/** Map blockedReason values to i18n translation keys */
+const BLOCKED_REASON_KEYS: Record<string, string> = {
+  already_running: "automations.blockedAlreadyRunning",
+  module_busy: "automations.blockedModuleBusy",
+  module_deactivated: "automations.blockedModuleDeactivated",
+  auth_failure: "automations.blockedAuthFailure",
+  consecutive_failures: "automations.blockedConsecutiveFailures",
+  circuit_breaker: "automations.blockedCircuitBreaker",
+  resume_missing: "automations.blockedResumeMissing",
+};
+
 export function RunHistoryList({ runs }: RunHistoryListProps) {
   const { t, locale } = useTranslations();
   if (runs.length === 0) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-12">
-          <History className="h-12 w-12 text-muted-foreground mb-4" />
+          <History aria-hidden="true" className="h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="text-lg font-medium">{t("automations.noRuns")}</h3>
           <p className="text-muted-foreground text-center mt-2">
             {t("automations.noRunsDesc")}
@@ -73,6 +84,18 @@ export function RunHistoryList({ runs }: RunHistoryListProps) {
       </Card>
     );
   }
+
+  /** Translate a blockedReason if known, otherwise return the raw string */
+  const translateBlockedReason = (reason: string): string => {
+    const key = BLOCKED_REASON_KEYS[reason];
+    return key ? t(key) : reason;
+  };
+
+  /** Get display text for error/blocked column */
+  const getErrorDisplay = (run: AutomationRun): string => {
+    if (run.blockedReason) return translateBlockedReason(run.blockedReason);
+    return run.errorMessage ?? "";
+  };
 
   return (
     <Card>
@@ -83,7 +106,7 @@ export function RunHistoryList({ runs }: RunHistoryListProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" role="region" aria-label={t("automations.runHistory")} tabIndex={0}>
         <Table>
           <TableHeader>
             <TableRow>
@@ -113,7 +136,7 @@ export function RunHistoryList({ runs }: RunHistoryListProps) {
                 <TableRow key={run.id}>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <StatusIcon className={`h-4 w-4 ${config.color}`} />
+                      <StatusIcon aria-hidden="true" className={`h-4 w-4 ${config.color}`} />
                       <Badge variant={config.variant}>{t(STATUS_KEYS[run.status] ?? run.status)}</Badge>
                     </div>
                   </TableCell>
@@ -121,14 +144,14 @@ export function RunHistoryList({ runs }: RunHistoryListProps) {
                     <div className="flex items-center gap-1.5">
                       {run.runSource === "manual" ? (
                         <>
-                          <PlayCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                          <PlayCircle aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
                           <span className="text-xs text-muted-foreground">
                             {t("automations.runSourceManual")}
                           </span>
                         </>
                       ) : (
                         <>
-                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                          <Clock aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
                           <span className="text-xs text-muted-foreground">
                             {t("automations.runSourceScheduler")}
                           </span>
@@ -153,14 +176,16 @@ export function RunHistoryList({ runs }: RunHistoryListProps) {
                     {(run.errorMessage || run.blockedReason) && (
                       <TooltipProvider>
                         <Tooltip>
-                          <TooltipTrigger>
-                            <Badge variant="outline" className="max-w-[150px] truncate">
-                              {run.blockedReason || run.errorMessage}
-                            </Badge>
+                          <TooltipTrigger asChild>
+                            <button type="button" className="inline-flex" tabIndex={0}>
+                              <Badge variant="outline" className="max-w-[150px] truncate">
+                                {getErrorDisplay(run)}
+                              </Badge>
+                            </button>
                           </TooltipTrigger>
                           <TooltipContent>
                             <p className="max-w-xs">
-                              {run.blockedReason || run.errorMessage}
+                              {getErrorDisplay(run)}
                             </p>
                           </TooltipContent>
                         </Tooltip>

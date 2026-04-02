@@ -50,21 +50,30 @@ export function RunStatusBadge({ automationId }: RunStatusBadgeProps) {
   // Compute elapsed time from RunLock.startedAt
   const lock = state?.runningAutomations.find(r => r.automationId === automationId);
   const elapsed = lock ? Math.floor((Date.now() - new Date(lock.startedAt).getTime()) / 1000) : 0;
+  const min = Math.floor(elapsed / 60);
+  const sec = elapsed % 60;
   const elapsedText = elapsed >= 60
-    ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`
-    : `${elapsed}s`;
+    ? t("automations.elapsedMinSec").replace("{min}", String(min)).replace("{sec}", String(sec))
+    : t("automations.elapsedSec").replace("{sec}", String(elapsed));
+
+  // Screen reader status - only announces on significant state changes (start/stop), not elapsed time
+  const srStatus = running ? t("automations.running") : entry ? t("automations.queued") : "";
 
   return (
-    <span role="status" aria-live="polite" aria-atomic="true">
+    <span role="status">
+      {/* Screen reader announcement - only updates on state change, not every second */}
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {srStatus}
+      </span>
       {running && (
         <Badge variant="default" className="gap-1">
-          <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
+          <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           {t("automations.running")} ({elapsedText})
         </Badge>
       )}
       {!running && entry && (
         <Badge variant="secondary" className="gap-1">
-          <Clock className="h-3 w-3" />
+          <Clock className="h-3 w-3" aria-hidden="true" />
           {t("automations.queued")} ({entry.position}/{entry.total})
         </Badge>
       )}
