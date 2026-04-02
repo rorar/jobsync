@@ -1,0 +1,643 @@
+-- allium: 3
+-- crm-workflow.allium
+
+-- Scope: CRM Core — Job Status Workflow (5.3) + Kanban Board (5.6)
+-- Includes: Status state machine, transition rules, side effects,
+--           JobStatusHistory audit log, Kanban column mapping, drag-and-drop,
+--           sort ordering, mobile view, domain events
+-- Excludes:
+--   - Communication tracking (5.1 — separate spec when implemented)
+--   - Follow-up Reminders (5.4 — consumes events from this spec)
+--   - Timeline rendering (5.9 — reads JobStatusHistory defined here)
+--   - Vacancy discovery/staging (see vacancy-pipeline.allium)
+--   - Job CRUD operations (see job-aggregate.allium)
+--   - Notification dispatch (see notification-dispatch.allium)
+-- Dependencies:
+--   - Job entity from job-aggregate.allium (CRM extends this aggregate)
+--   - EventBus from event-bus.allium (publishes domain events)
+--   - VacancyPromotion from vacancy-pipeline.allium (CRM begins where pipeline ends)
+
+-- Owner: Job Aggregate (src/actions/job.actions.ts)
+-- Note: This spec EXTENDS job-aggregate.allium. The Job Aggregate boundary grows
+--       to include JobStatusHistory as a child entity. The existing UpdateJobStatus
+--       rule in job-aggregate.allium is SUPERSEDED by TransitionJobStatus here.
+
+-- =============================================================================
+-- External Entities
+-- =============================================================================
+
+external entity User {
+    -- Authenticated user from session. All operations are scoped to the owning user.
+    -- Same entity as in job-aggregate.allium.
+}
+
+external entity Job {
+    -- The Job entity defined in job-aggregate.allium.
+    -- CRM adds: kanbanSortOrder field, status state machine constraints.
+    -- Fields referenced: id, userId, status, applied, appliedDate
+}
+
+external entity JobStatus {
+    -- The JobStatus entity defined in job-aggregate.allium.
+    -- Global (not user-scoped). CRM defines the extended status set and
+    -- valid transitions between statuses.
+    -- Fields referenced: id, value, label
+}
+
+external entity Note {
+    -- Job Notes from job-aggregate.allium. These are SEPARATE from transition notes.
+    -- Transition notes live in JobStatusHistory.note, NOT in the Note entity.
+}
+
+external entity EventBus {
+    -- In-process event bus from event-bus.allium.
+    -- CRM publishes JobStatusChanged events through this bus.
+}
+
+-- =============================================================================
+-- Enumerations
+-- =============================================================================
+
+enum JobStatusValue {
+    bookmarked    -- Backlog: initial state when a job is saved or promoted from staging
+    applied       -- Application submitted
+    interview     -- Invited to interview (may occur multiple times)
+    offer         -- Received a job offer
+    accepted      -- Accepted the offer (terminal)
+    rejected      -- Rejected by company OR declined by user (terminal)
+    archived      -- No longer actively tracking (terminal, but reactivatable)
+}
+
+-- Migration from current seed data:
+--   "draft"    → renamed to "bookmarked" (clearer intent for CRM)
+--   "saved"    → renamed to "bookmarked" (if present in older seeds)
+--   "applied"  → unchanged
+--   "interview"→ unchanged
+--   "offer"    → unchanged
+--   "rejected" → unchanged
+--   "expired"  → removed (subsumed by "archived" with a note)
+--   "archived" → unchanged
+--   NEW: "accepted" (previously missing — offer acceptance was untracked)
+
+-- =============================================================================
+-- State Machine: Valid Transitions
+-- =============================================================================
+
+-- The state machine defines which status transitions are valid.
+-- Any transition NOT listed here is REJECTED by the system.
+-- This is enforced at the server action level, NOT in the database.
+
+state_machine JobStatusTransitions {
+    bookmarked → applied       -- User submitted an application
+    bookmarked → archived      -- User decides not to pursue (cold storage)
+    bookmarked → rejected      -- Rejected before applying (e.g., company withdrew listing)
+
+    applied    → interview     -- Invited to interview
+    applied    → rejected      -- Application rejected
+    applied    → archived      -- User withdraws / gives up tracking
+
+    interview  → offer         -- Received offer after interview
+    interview  → rejected      -- Rejected after interview
+    interview  → archived      -- User withdraws during interview process
+    interview  → interview     -- Multiple interview rounds (self-transition)
+
+    offer      → accepted      -- User accepts the offer
+    offer      → rejected      -- User declines the offer OR company rescinds
+    offer      → archived      -- Offer expired / user stops tracking
+
+    accepted   → archived      -- Move to archive after onboarding complete
+
+    rejected   → bookmarked    -- Re-apply: user wants to try again
+    rejected   → archived      -- Move rejected job to archive
+
+    archived   → bookmarked    -- Reactivate: pull back from archive for re-tracking
+}
+
+-- =============================================================================
+-- Entities
+-- =============================================================================
+
+entity JobStatusHistory {
+    -- Append-only audit log for status transitions.
+    -- One entry per transition. Never updated, never deleted independently.
+    -- This is the data source for Timeline (5.9).
+
+    id: String                  -- UUID
+    jobId: String               -- FK to Job
+    userId: String              -- FK to User (who initiated the transition)
+    previousStatusValue: String -- JobStatusValue before transition
+    newStatusValue: String      -- JobStatusValue after transition
+    note: String?               -- Optional transition note (NOT a Job Note entity)
+    changedAt: DateTime = now() -- Timestamp of the transition
+
+    @invariant
+        -- JobStatusHistory is a child of the Job Aggregate.
+        -- Created ONLY through status transitions (TransitionJobStatus rule).
+        -- Never created independently, never updated after creation.
+        -- Deleted ONLY via cascade when parent Job is deleted.
+        -- userId MUST match the authenticated user (IDOR protection).
+
+    @invariant
+        -- previousStatusValue and newStatusValue store the string values
+        -- (e.g., "bookmarked", "applied"), NOT the JobStatus UUID.
+        -- This makes the audit log self-contained — it remains readable
+        -- even if JobStatus records are ever modified.
+}
+
+-- =============================================================================
+-- Job Aggregate Extensions
+-- =============================================================================
+
+-- The following fields are ADDED to the existing Job entity
+-- (defined in job-aggregate.allium). They do not create a new entity.
+
+extension Job {
+    kanbanSortOrder: Float = 0.0
+        -- Sort position within the Kanban column.
+        -- Float allows insertion between items without reindexing:
+        --   item A = 1.0, item B = 2.0 → insert C at 1.5
+        -- New items default to 0.0 (top of column, sorted before all positive values).
+
+    statusHistory: Set<JobStatusHistory>
+        -- Back-relation. All status transitions for this job.
+        -- Ordered by changedAt ascending for timeline display.
+}
+
+-- =============================================================================
+-- Rules: Status Transitions
+-- =============================================================================
+
+rule TransitionJobStatus {
+    -- "When a user changes a job's status, the transition is validated,
+    --  side effects are applied, and an audit entry is created."
+    -- This rule SUPERSEDES the UpdateJobStatus rule in job-aggregate.allium.
+    when: User transitions Job.status from currentStatus to newStatus
+
+    requires: User is authenticated
+    requires: Job.userId = User.id
+    requires: currentStatus != newStatus OR currentStatus = interview
+        -- Self-transition only allowed for interview (multiple rounds)
+    requires: (currentStatus → newStatus) is valid in JobStatusTransitions
+        -- Reject transitions not in the state machine
+
+    -- 1. Update Job status
+    ensures: Job.status = newStatus
+
+    -- 2. Side effects based on target status
+    ensures:
+        if newStatus = applied:
+            Job.applied = true
+            if Job.appliedDate = null:
+                Job.appliedDate = now()
+            -- appliedDate is set only on first transition to "applied".
+            -- Re-applying (rejected → bookmarked → applied) does NOT reset the date.
+
+        if newStatus = interview:
+            Job.applied = true
+            -- Interviews imply an application was submitted.
+            -- If the user skipped the "applied" status, we backfill the flag.
+
+    -- 3. Create audit log entry
+    ensures: JobStatusHistory.created(
+        jobId: Job.id,
+        userId: User.id,
+        previousStatusValue: currentStatus.value,
+        newStatusValue: newStatus.value,
+        note: transitionNote?,
+        changedAt: now()
+    )
+
+    -- 4. Publish domain event
+    ensures: EventBus.publish(JobStatusChanged(
+        jobId: Job.id,
+        userId: User.id,
+        previousStatus: currentStatus.value,
+        newStatus: newStatus.value,
+        note: transitionNote?,
+        timestamp: now()
+    ))
+
+    @guidance
+        -- The transition, side effects, history entry, and Job update
+        -- MUST run in a single database transaction.
+        -- The domain event is published AFTER the transaction commits
+        -- (eventual consistency — event delivery is best-effort).
+        --
+        -- The optional transitionNote is provided by the UI. The UI prompts
+        -- "Add a note about this change?" but allows skip (null).
+        -- Transition notes are stored in JobStatusHistory.note, NOT as
+        -- Note entities (which are the free-form job notes from job-aggregate.allium).
+        --
+        -- The interview self-transition creates a new history entry each time,
+        -- allowing users to track "Interview Round 1", "Interview Round 2", etc.
+        -- via the transition note.
+}
+
+rule InitialStatusOnPromotion {
+    -- "When a staged vacancy is promoted to a Job, it starts as bookmarked."
+    -- This documents the integration point with vacancy-pipeline.allium.
+    -- The VacancyPromotion rule already sets status = "bookmarked".
+    when: VacancyPromotion creates a new Job
+
+    ensures: Job.status.value = "bookmarked"
+    ensures: Job.kanbanSortOrder = 0.0
+        -- New promoted jobs appear at the top of the Bookmarked column
+
+    ensures: JobStatusHistory.created(
+        jobId: Job.id,
+        userId: User.id,
+        previousStatusValue: "none",
+        newStatusValue: "bookmarked",
+        note: null,
+        changedAt: now()
+    )
+
+    @guidance
+        -- The "none" previousStatusValue signals that this is the initial
+        -- creation event, not a transition from another status.
+        -- This entry anchors the timeline for this job.
+        --
+        -- For manually created jobs (via AddJob form), the initial status
+        -- is whatever the user selects in the form. If they select "applied",
+        -- the appliedDate side effect triggers immediately.
+        -- A history entry with previousStatusValue = "none" is also created.
+}
+
+rule InitialStatusOnManualCreate {
+    -- "When a user creates a job manually, the selected status is recorded."
+    -- The user may select any status in the AddJob form (not constrained by state machine).
+    when: User creates a Job via AddJob form with initialStatus
+
+    ensures: Job.status = initialStatus
+    ensures: Job.kanbanSortOrder = 0.0
+
+    ensures: JobStatusHistory.created(
+        jobId: Job.id,
+        userId: User.id,
+        previousStatusValue: "none",
+        newStatusValue: initialStatus.value,
+        note: null,
+        changedAt: now()
+    )
+
+    -- Side effects apply based on the initial status:
+    ensures:
+        if initialStatus.value = applied or initialStatus.value = interview
+           or initialStatus.value = offer or initialStatus.value = accepted:
+            Job.applied = true
+            Job.appliedDate = now()
+
+    @guidance
+        -- Manual creation bypasses the state machine validation because there
+        -- is no "previous" status to transition from. The user selects the
+        -- starting point directly.
+        -- The state machine ONLY governs subsequent transitions.
+}
+
+-- =============================================================================
+-- Rules: Kanban Board
+-- =============================================================================
+
+rule GetKanbanBoard {
+    -- "Load all jobs grouped by status for Kanban display."
+    when: User opens the Kanban board view
+
+    requires: User is authenticated
+
+    ensures: Jobs returned where userId = User.id
+    ensures: Jobs grouped by status.value into columns
+    ensures: Within each column, jobs ordered by kanbanSortOrder ascending
+    ensures: Column order follows the enum sequence:
+        bookmarked, applied, interview, offer, accepted, rejected, archived
+
+    -- Column metadata per status:
+    ensures: each column includes:
+        statusValue: String
+        statusLabel: String
+        jobCount: Integer
+        isCollapsed: Boolean
+            -- rejected: collapsed by default
+            -- archived: collapsed by default
+            -- all others: expanded by default
+
+    @guidance
+        -- This is a READ operation — a view projection, not an entity.
+        -- Implementation: single Prisma query with groupBy or multiple
+        -- filtered queries per status. Performance note: for users with
+        -- many jobs (100+), consider pagination within columns.
+        --
+        -- The collapsed state for Rejected and Archived is a UI default.
+        -- User preference for column collapse state can be stored in
+        -- localStorage (client-side only — no server persistence needed).
+}
+
+rule KanbanDragAndDrop {
+    -- "Dragging a job card to another column triggers a status transition."
+    -- DnD is the primary Kanban interaction. It maps to TransitionJobStatus.
+    when: User drags Job card from sourceColumn to targetColumn
+
+    requires: User is authenticated
+    requires: Job.userId = User.id
+    requires: (sourceColumn.status → targetColumn.status) is valid in JobStatusTransitions
+        -- Invalid drop targets are visually indicated BEFORE drop:
+        -- dimmed columns with a "not allowed" cursor
+
+    -- If transition is valid:
+    ensures: TransitionJobStatus(
+        Job: draggedJob,
+        currentStatus: sourceColumn.status,
+        newStatus: targetColumn.status,
+        transitionNote: from optional dialog
+    )
+
+    -- Update sort order in target column:
+    ensures: Job.kanbanSortOrder = calculated insertion position
+
+    @guidance
+        -- Drop flow:
+        -- 1. User drops card on target column (or between specific cards)
+        -- 2. System checks if transition is valid (state machine lookup)
+        -- 3. If valid: show optional "Add a note?" dialog
+        -- 4. After dialog (confirm or skip): execute TransitionJobStatus
+        -- 5. Update kanbanSortOrder for the dropped card
+        --
+        -- If the user drops between two existing cards:
+        --   newSortOrder = (cardAbove.sortOrder + cardBelow.sortOrder) / 2
+        -- If dropped at the top: newSortOrder = firstCard.sortOrder - 1.0
+        -- If dropped at the bottom: newSortOrder = lastCard.sortOrder + 1.0
+        -- If column is empty: newSortOrder = 0.0
+        --
+        -- The note dialog should be lightweight (inline textarea, not a modal)
+        -- to avoid disrupting the drag flow. "Skip" is the default action.
+        --
+        -- Invalid drops: during drag, columns that cannot receive the card
+        -- (per state machine) are visually dimmed/greyed out with a
+        -- prohibition indicator. The drop handler rejects invalid targets.
+}
+
+rule KanbanReorder {
+    -- "Dragging a job card within the same column reorders it."
+    -- This is a pure sort-order change, NOT a status transition.
+    when: User drags Job card within the same column
+
+    requires: User is authenticated
+    requires: Job.userId = User.id
+
+    ensures: Job.kanbanSortOrder = calculated insertion position
+    ensures: NO status transition occurs
+    ensures: NO JobStatusHistory entry created
+    ensures: NO domain event published
+
+    @guidance
+        -- Same sort-order calculation as KanbanDragAndDrop.
+        -- This is a lightweight operation: single field update on one Job.
+        -- No transaction needed beyond the single update.
+        --
+        -- Float sort-order precision: JavaScript doubles have 53 bits of
+        -- significand, allowing ~2^52 halvings before precision loss.
+        -- In practice, this is never exhausted. If a user reorders
+        -- obsessively (thousands of reorders in the same gap), a
+        -- re-normalization pass can spread sort orders evenly.
+        -- This is a theoretical concern — no implementation needed now.
+}
+
+-- =============================================================================
+-- Rules: Kanban Mobile
+-- =============================================================================
+
+rule KanbanMobileView {
+    -- "On mobile (< 640px), the Kanban board adapts to a single-column layout."
+    when: Viewport width < 640px
+
+    ensures: One column visible at a time (full viewport width)
+    ensures: Horizontal swipe or tab navigation between columns
+    ensures: Column header shows status label + job count badge
+    ensures: Collapsed columns (rejected, archived) are accessible but
+             placed at the end of the swipe/tab sequence
+
+    @guidance
+        -- Two viable approaches (UI agent decides):
+        --
+        -- Option A: Horizontal scroll with snap-to-column
+        --   - CSS scroll-snap-type: x mandatory
+        --   - Each column is 100vw wide
+        --   - Swipe left/right to navigate
+        --   - Column indicator dots at the top
+        --   - DnD disabled on mobile (use dropdown for status change)
+        --
+        -- Option B: Tab-based view
+        --   - Horizontal scrollable tab bar at the top
+        --   - One tab per status (with count badge)
+        --   - Tapping a tab shows that column's cards
+        --   - Status change via dropdown on each card
+        --
+        -- Both options: DnD is NOT available on mobile.
+        -- Status transitions on mobile use a dropdown/select on the job card
+        -- that shows only valid target statuses (per state machine).
+        -- The dropdown triggers TransitionJobStatus with the same flow
+        -- (optional note dialog → transition → history entry).
+}
+
+-- =============================================================================
+-- Rules: History & Audit
+-- =============================================================================
+
+rule GetStatusHistory {
+    -- "User views the status transition history for a job."
+    -- This is the data source for Timeline (5.9).
+    when: User requests status history for a Job
+
+    requires: User is authenticated
+    requires: Job.userId = User.id
+
+    ensures: JobStatusHistory entries returned where jobId = Job.id
+    ensures: Ordered by changedAt ascending (chronological)
+    ensures: Each entry includes: previousStatusValue, newStatusValue, note, changedAt
+
+    @guidance
+        -- For Timeline (5.9), this data will be merged with other event
+        -- sources (Notes, Activities, Communications) into a unified
+        -- chronological view. The API should return raw history entries
+        -- that the Timeline component can interleave with other events.
+}
+
+rule CascadeDeleteHistory {
+    -- "When a Job is deleted, all its status history entries are deleted."
+    when: Job is deleted (via DeleteJob in job-aggregate.allium)
+
+    ensures: all JobStatusHistory where jobId = Job.id are cascade-deleted
+
+    @guidance
+        -- This is a database-level cascade (onDelete: Cascade on the
+        -- jobId FK in the Prisma schema). No application code needed.
+        -- Consistent with Note cascade delete in job-aggregate.allium.
+}
+
+-- =============================================================================
+-- Domain Events
+-- =============================================================================
+
+-- New event types to add to event-bus.allium and event-types.ts:
+
+event JobStatusChanged {
+    -- Published on every status transition (including self-transitions).
+    -- Consumers: Notification Rules (5.4), Timeline (5.9),
+    --            Spotlight indexing (2.20), Landing page stats (9.5)
+
+    jobId: String
+    userId: String
+    previousStatus: String          -- JobStatusValue string (e.g., "bookmarked")
+    newStatus: String               -- JobStatusValue string (e.g., "applied")
+    note: String?                   -- Transition note, if provided
+    timestamp: DateTime
+
+    @guidance
+        -- This is the most important CRM domain event.
+        -- Future consumers:
+        --   5.4 Reminders: "Create follow-up reminder 7 days after applied"
+        --   5.9 Timeline: Status changes appear in the job timeline
+        --   2.20 Spotlight: Index status for search ("show me all applied jobs")
+        --   9.5 Landing page: Real-time status distribution chart
+}
+
+-- JobKanbanReordered is intentionally NOT a domain event.
+-- Reordering is pure UI state (sort position within a column).
+-- No downstream consumers need to react to reorder events.
+-- If analytics ever need reorder tracking, it can be added then.
+
+-- =============================================================================
+-- Invariants
+-- =============================================================================
+
+invariant StateMachineEnforcement {
+    -- Every status transition MUST be validated against JobStatusTransitions.
+    -- Transitions not listed in the state machine are REJECTED.
+    -- Exception: initial status on job creation (previousStatus = "none").
+    for all status changes on Job:
+        (currentStatus → newStatus) in JobStatusTransitions
+        OR currentStatus = none (creation)
+}
+
+invariant HistoryAppendOnly {
+    -- JobStatusHistory entries are NEVER updated after creation.
+    -- They form an immutable, append-only audit log.
+    -- The only deletion path is cascade from parent Job deletion.
+    for all operations on JobStatusHistory:
+        only INSERT and DELETE (via cascade) are permitted
+        UPDATE is never performed
+}
+
+invariant HistoryCompleteness {
+    -- Every status transition produces exactly one JobStatusHistory entry.
+    -- No transition can occur without a corresponding history record.
+    -- The history entry and the status update are in the same transaction.
+    for all status transitions on Job:
+        exists exactly one JobStatusHistory where
+            jobId = Job.id
+            and changedAt = transition timestamp
+            and previousStatusValue = old status
+            and newStatusValue = new status
+}
+
+invariant HistoryOwnership {
+    -- JobStatusHistory entries are scoped to the Job's owner.
+    -- Reading history requires Job.userId = User.id (IDOR protection).
+    -- Same pattern as NoteOwnership in job-aggregate.allium.
+    for all reads on JobStatusHistory:
+        Job.userId = authenticated_user.id
+}
+
+invariant SortOrderConsistency {
+    -- kanbanSortOrder is a float that determines card position within a column.
+    -- It is only meaningful within a single status column for a single user.
+    -- There is no cross-user or cross-column uniqueness constraint.
+    -- New jobs default to 0.0 (top of column).
+    for all Jobs in a Kanban column:
+        order is determined by kanbanSortOrder ascending
+}
+
+invariant AppliedDateImmutability {
+    -- Job.appliedDate is set on the FIRST transition to "applied" status.
+    -- Subsequent transitions to "applied" (e.g., after rejected → bookmarked → applied)
+    -- do NOT overwrite the original appliedDate.
+    -- This preserves the original application date for reporting.
+    for Job where appliedDate is set:
+        appliedDate is never overwritten by subsequent transitions
+}
+
+invariant TransitionNoteScope {
+    -- Transition notes are stored in JobStatusHistory.note.
+    -- They are NOT Job Notes (the Note entity in job-aggregate.allium).
+    -- These are two separate concepts:
+    --   - Job Notes: free-form notes about the job (user can CRUD anytime)
+    --   - Transition Notes: annotations on a specific status change (immutable)
+    for all transition notes:
+        stored in JobStatusHistory.note
+        never in Note entity
+}
+
+-- =============================================================================
+-- Extension Points (Future Features)
+-- =============================================================================
+
+-- 5.1 Communication Tracking:
+--   JobStatusHistory may be extended with a contactId field to link
+--   transitions to specific contacts (e.g., "rejected by [recruiter name]").
+--   This is a nullable FK — most transitions won't have a contact.
+
+-- 5.4 Follow-up Reminders:
+--   Domain event consumers can create reminder rules per transition type.
+--   Example: "When status changes to applied, create a 7-day follow-up task."
+--   The consumer subscribes to JobStatusChanged and inspects newStatus.
+
+-- 5.9 Timeline:
+--   JobStatusHistory IS the primary data source for the Timeline view.
+--   Timeline merges status history + Notes + Activities + Communications
+--   into a single chronological stream. Each source has its own timestamp
+--   field (changedAt, createdAt, etc.) for unified ordering.
+
+-- 9.5 Landing Page:
+--   Job status distribution (count per status) serves as a read model
+--   for the landing page dashboard. Query: GROUP BY statusValue, COUNT(*).
+
+-- 4.2 Dynamic CV:
+--   Current job status can inform CV generation context.
+--   Example: if a job is in "interview" status, the CV generator
+--   may emphasize skills matching that job's requirements.
+
+-- =============================================================================
+-- Open Questions
+-- =============================================================================
+
+-- Q1: Should the state machine be configurable per user?
+--     Currently the transition rules are hardcoded. Some users may want
+--     custom workflows (e.g., "phone screen" between applied and interview).
+--     Decision: hardcoded for now. Custom statuses are a significant
+--     complexity increase (user-scoped state machines, migration logic).
+--     Revisit if user feedback demands it.
+
+-- Q2: Should kanbanSortOrder be re-normalized periodically?
+--     Float precision allows ~2^52 halvings, which is practically infinite.
+--     A re-normalization pass (spread sort orders evenly, e.g., 1.0, 2.0, 3.0...)
+--     could run on page load if gaps get very small. Not needed initially.
+
+-- Q3: Should the "accepted" status trigger any automated actions?
+--     Candidates: archive all other jobs in "applied" or "interview" status,
+--     send a congratulations notification, mark the job search as "completed".
+--     Decision: deferred to 5.4 Reminders. Keep the core state machine simple.
+
+-- Q4: Should transition notes support rich text or attachments?
+--     Currently plain text only. Rich text would require a separate editor
+--     component and storage considerations. Attachments (rejection emails,
+--     offer letters) belong to a future Document Management feature.
+--     Decision: plain text for v1. Re-evaluate with 5.1 Communication.
+
+-- Q5: How should the migration from current statuses ("draft", "expired") be handled?
+--     Existing jobs with "draft" status → map to "bookmarked".
+--     Existing jobs with "expired" status → map to "archived".
+--     This requires a data migration script that:
+--       1. Updates JobStatus seed values
+--       2. Remaps existing Job.statusId references
+--       3. Creates initial JobStatusHistory entries for all existing jobs
+--          (previousStatusValue = "none", newStatusValue = current status)
+--     The migration must be idempotent and run as part of the Prisma migration.
