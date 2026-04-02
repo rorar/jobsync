@@ -1238,6 +1238,29 @@ Jeder Job hat ein **Application Locale Profile** das Sprache + Land + kulturelle
   - Motivationsschreiben
   - Exposé
   - Anhänge (Zertifikate)
+- **Discovery: Dynamisches CV-Modul — Manifest-driven Mini-Pagebuilder**
+  - **Problem:** Aktuell sind CV-Abschnitte starr programmiert. User kann keine eigenen Felder/Abschnitte hinzufügen. Entwickler muss jede Erweiterung coden.
+  - **Lösungsansatz: JSON Schema als Manifest-Format mit Übersetzungsschicht**
+    - Industriestandard statt Custom-Format — LLMs kennen JSON Schema nativ, riesiges Tooling-Ökosystem
+    - Basis: [JSON Resume](https://jsonresume.org) Schema adoptieren, erweitern mit `x-jobsync-*` Properties für Layout-Hints, Widget-IDs, AI-Hints
+    - Zweischichtig: **System-Manifests** (vordefiniert: Work Experience, Education, Skills) + **User-Manifests** (selbst erstellt oder per Chatbot/LLM generiert)
+  - **Übersetzungsschicht / Adapter (ACL-Pattern):**
+    ```
+    CvSectionManifest (JobSync Domain)
+      ↕ Adapter
+    JSON Schema (Industriestandard)
+      ↕
+      ├→ react-jsonschema-form (@rjsf/core)  — Editor UI gratis aus Schema
+      ├→ react-pdf / pdfmake                 — CV PDF Output
+      ├→ React Components                     — Landing Page (9.5)
+      ├→ LLMs / Chatbot                       — Generiert Abschnitte als JSON Schema
+      └→ Import/Export                         — LinkedIn JSON, Europass, JSON Resume
+    ```
+  - **Packages:** `@rjsf/core` (Form-Renderer), `@react-pdf/renderer` oder `pdfmake` (PDF), `zod-to-json-schema` (Konversion), `@tiptap/core` oder `plate` (Rich Text Felder), JSON Resume Themes (50+ auf npm)
+  - **AI-Section-Creator:** User sagt "Füge Publikationen hinzu" → LLM generiert JSON Schema mit Feldern → RJSF rendert Editor sofort → gleiche Daten fließen in PDF + Landingpage + API
+  - **Import-Pfade:** LinkedIn Data Export → JSON Resume → JobSync, Europass XML → JSON Resume → JobSync
+  - **Vorteil:** Eine Datenstruktur, vier Rendering-Kontexte (Editor, PDF, Landingpage 9.5, Public API 7.1). Neue Abschnitte ohne Code-Änderungen.
+  - **Cross-Ref:** Skillsets (4.1), Social Proof (4.10), Portfolio (4.11), Bewerber-Landingpage (9.5), Public API (7.1)
 
 ### 4.3 Output-Struktur (Paperless-ngx Style)
 Dynamische Dateipfade und Dateinamen:
