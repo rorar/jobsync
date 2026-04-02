@@ -31,6 +31,7 @@ export const deck = {
     "deck.viewModeList": "List",
     "deck.viewModeDeck": "Deck",
     "deck.keyboardHints": "Keyboard shortcuts",
+    "deck.swipeHint": "Swipe to decide",
   },
   de: {
     "deck.dismiss": "Ablehnen",
@@ -64,6 +65,7 @@ export const deck = {
     "deck.viewModeList": "Liste",
     "deck.viewModeDeck": "Deck",
     "deck.keyboardHints": "Tastaturkuerzel",
+    "deck.swipeHint": "Wischen zum Entscheiden",
   },
   fr: {
     "deck.dismiss": "Rejeter",
@@ -97,6 +99,7 @@ export const deck = {
     "deck.viewModeList": "Liste",
     "deck.viewModeDeck": "Deck",
     "deck.keyboardHints": "Raccourcis clavier",
+    "deck.swipeHint": "Glissez pour d\u00e9cider",
   },
   es: {
     "deck.dismiss": "Rechazar",
@@ -130,5 +133,6 @@ export const deck = {
     "deck.viewModeList": "Lista",
     "deck.viewModeDeck": "Deck",
     "deck.keyboardHints": "Atajos de teclado",
+    "deck.swipeHint": "Desliza para decidir",
   },
 } as const;

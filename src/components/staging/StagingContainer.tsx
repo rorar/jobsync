@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,10 +26,11 @@ import Loading from "@/components/Loading";
 import { StagedVacancyCard } from "./StagedVacancyCard";
 import { PromotionDialog } from "./PromotionDialog";
 import { BulkActionBar } from "./BulkActionBar";
-import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
+import { StagingNewItemsBanner } from "./StagingNewItemsBanner";
 import { ViewModeToggle, getPersistedViewMode } from "./ViewModeToggle";
 import type { ViewMode } from "./ViewModeToggle";
 import { DeckView } from "./DeckView";
+import { useStagingActions } from "@/hooks/useStagingActions";
 import type { DeckAction } from "@/hooks/useDeckStack";
 import type {
   StagedVacancyWithAutomation,
@@ -71,30 +72,7 @@ function StagingContainer() {
   const hasSearched = useRef(false);
   const [mounted, setMounted] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [newItemsAvailable, setNewItemsAvailable] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-
-  // Track scheduler phase transitions to detect cycle completion
-  const { state: schedulerState } = useSchedulerStatus();
-  const prevPhaseRef = useRef<string | null>(null);
-  const schedulerPhase = useMemo(
-    () => schedulerState?.phase ?? null,
-    [schedulerState],
-  );
-
-  useEffect(() => {
-    const prevPhase = prevPhaseRef.current;
-    prevPhaseRef.current = schedulerPhase;
-
-    // Detect transition from running to idle (cycle completed)
-    if (
-      prevPhase !== null &&
-      prevPhase === "running" &&
-      schedulerPhase === "idle"
-    ) {
-      setNewItemsAvailable(true);
-    }
-  }, [schedulerPhase]);
 
   useEffect(() => {
     setMounted(true);
@@ -194,76 +172,13 @@ function StagingContainer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm]);
 
-  // Action handlers
-  const handleDismiss = async (id: string) => {
-    const { success, message } = await dismissStagedVacancy(id);
-    if (success) {
-      toast({ variant: "success", description: t("staging.dismissed") });
-      reload();
-    } else {
-      toast({
-        variant: "destructive",
-        title: t("staging.error"),
-        description: message,
-      });
-    }
-  };
-
-  const handleRestore = async (id: string) => {
-    const { success, message } = await restoreStagedVacancy(id);
-    if (success) {
-      toast({ variant: "success", description: t("staging.restored") });
-      reload();
-    } else {
-      toast({
-        variant: "destructive",
-        title: t("staging.error"),
-        description: message,
-      });
-    }
-  };
-
-  const handleArchive = async (id: string) => {
-    const { success, message } = await archiveStagedVacancy(id);
-    if (success) {
-      toast({ variant: "success", description: t("staging.archived") });
-      reload();
-    } else {
-      toast({
-        variant: "destructive",
-        title: t("staging.error"),
-        description: message,
-      });
-    }
-  };
-
-  const handleTrash = async (id: string) => {
-    const { success, message } = await trashStagedVacancy(id);
-    if (success) {
-      toast({ variant: "success", description: t("staging.trashed") });
-      reload();
-    } else {
-      toast({
-        variant: "destructive",
-        title: t("staging.error"),
-        description: message,
-      });
-    }
-  };
-
-  const handleRestoreFromTrash = async (id: string) => {
-    const { success, message } = await restoreFromTrash(id);
-    if (success) {
-      toast({ variant: "success", description: t("staging.restoredFromTrash") });
-      reload();
-    } else {
-      toast({
-        variant: "destructive",
-        title: t("staging.error"),
-        description: message,
-      });
-    }
-  };
+  // Action handlers — consolidated via useStagingActions factory
+  const { createHandler } = useStagingActions(reload);
+  const handleDismiss = createHandler(dismissStagedVacancy, "staging.dismissed");
+  const handleRestore = createHandler(restoreStagedVacancy, "staging.restored");
+  const handleArchive = createHandler(archiveStagedVacancy, "staging.archived");
+  const handleTrash = createHandler(trashStagedVacancy, "staging.trashed");
+  const handleRestoreFromTrash = createHandler(restoreFromTrash, "staging.restoredFromTrash");
 
   const handlePromote = (vacancy: StagedVacancyWithAutomation) => {
     setPromotionVacancy(vacancy);
@@ -357,21 +272,7 @@ function StagingContainer() {
           </div>
         </CardHeader>
         <CardContent>
-          {newItemsAvailable && (
-            <div role="status" className="flex items-center justify-between p-3 mb-3 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-              <span className="text-sm">{t("automations.newItemsAvailable")}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  reload();
-                  setNewItemsAvailable(false);
-                }}
-              >
-                {t("automations.showNewItems")}
-              </Button>
-            </div>
-          )}
+          <StagingNewItemsBanner onRefresh={reload} />
           {mounted && viewMode === "deck" ? (
             /* Deck View — card-based swipe UI for "new" tab only */
             <DeckView

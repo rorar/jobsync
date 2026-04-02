@@ -400,6 +400,8 @@ export const automations = {
     "automations.elapsedMinSec": "{min}m {sec}s",
     "automations.elapsedSec": "{sec}s",
     "automations.queuedCount": "{count} automations queued",
+    // run history
+    "automations.runEnded": "Run completed",
   },
   de: {
     // AutomationWizard - Steps
@@ -802,6 +804,8 @@ export const automations = {
     "automations.elapsedMinSec": "{min} Min. {sec} Sek.",
     "automations.elapsedSec": "{sec} Sek.",
     "automations.queuedCount": "{count} Automatisierungen in Warteschlange",
+    // run history
+    "automations.runEnded": "Ausführung abgeschlossen",
   },
   fr: {
     // AutomationWizard - Steps
@@ -1204,6 +1208,8 @@ export const automations = {
     "automations.elapsedMinSec": "{min} min {sec} s",
     "automations.elapsedSec": "{sec} s",
     "automations.queuedCount": "{count} automatisations en attente",
+    // run history
+    "automations.runEnded": "Exécution terminée",
   },
   es: {
     // AutomationWizard - Steps
@@ -1606,5 +1612,7 @@ export const automations = {
     "automations.elapsedMinSec": "{min} min {sec} s",
     "automations.elapsedSec": "{sec} s",
     "automations.queuedCount": "{count} automatizaciones en cola",
+    // run history
+    "automations.runEnded": "Ejecución completada",
   },
 } as const;

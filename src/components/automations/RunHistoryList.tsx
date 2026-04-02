@@ -38,6 +38,7 @@ import type { AutomationRun, AutomationRunStatus } from "@/models/automation.mod
 
 interface RunHistoryListProps {
   runs: AutomationRun[];
+  loading?: boolean;
 }
 
 const STATUS_KEYS: Record<AutomationRunStatus, string> = {
@@ -69,8 +70,26 @@ const BLOCKED_REASON_KEYS: Record<string, string> = {
   resume_missing: "automations.blockedResumeMissing",
 };
 
-export function RunHistoryList({ runs }: RunHistoryListProps) {
+export function RunHistoryList({ runs, loading = false }: RunHistoryListProps) {
   const { t, locale } = useTranslations();
+
+  if (loading && runs.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("automations.runHistory")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-10 animate-pulse motion-reduce:animate-none rounded bg-muted" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (runs.length === 0) {
     return (
       <Card>
@@ -114,10 +133,10 @@ export function RunHistoryList({ runs }: RunHistoryListProps) {
               <TableHead>{t("automations.sourceHeader")}</TableHead>
               <TableHead>{t("automations.startedHeader")}</TableHead>
               <TableHead>{t("automations.duration")}</TableHead>
-              <TableHead className="text-center">{t("automations.searched")}</TableHead>
-              <TableHead className="text-center">{t("automations.new")}</TableHead>
-              <TableHead className="text-center">{t("automations.processed")}</TableHead>
-              <TableHead className="text-center">{t("automations.matched")}</TableHead>
+              <TableHead className="hidden md:table-cell text-center">{t("automations.searched")}</TableHead>
+              <TableHead className="hidden md:table-cell text-center">{t("automations.new")}</TableHead>
+              <TableHead className="hidden md:table-cell text-center">{t("automations.processed")}</TableHead>
+              <TableHead className="hidden md:table-cell text-center">{t("automations.matched")}</TableHead>
               <TableHead className="text-center">{t("automations.saved")}</TableHead>
               <TableHead>{t("automations.errorHeader")}</TableHead>
             </TableRow>
@@ -165,10 +184,10 @@ export function RunHistoryList({ runs }: RunHistoryListProps) {
                   <TableCell>
                     {duration !== null ? `${duration}s` : "-"}
                   </TableCell>
-                  <TableCell className="text-center">{run.jobsSearched}</TableCell>
-                  <TableCell className="text-center">{run.jobsDeduplicated}</TableCell>
-                  <TableCell className="text-center">{run.jobsProcessed}</TableCell>
-                  <TableCell className="text-center">{run.jobsMatched}</TableCell>
+                  <TableCell className="hidden md:table-cell text-center">{run.jobsSearched}</TableCell>
+                  <TableCell className="hidden md:table-cell text-center">{run.jobsDeduplicated}</TableCell>
+                  <TableCell className="hidden md:table-cell text-center">{run.jobsProcessed}</TableCell>
+                  <TableCell className="hidden md:table-cell text-center">{run.jobsMatched}</TableCell>
                   <TableCell className="text-center">
                     <span className="font-medium">{run.jobsSaved}</span>
                   </TableCell>
