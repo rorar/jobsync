@@ -34,6 +34,20 @@ Dies ist **Session S2** — die dritte von 5 Sessions. Ziel: Systematische UX/UI
 git checkout -b session/s2-ux-journeys
 ```
 
+### Schritt 0: S1b Deferred Items übernehmen
+
+Lies die Memory `project_s1b_deferred_items.md` — sie enthält 12 Items die S1b korrekt zu S2 deferred hat. Folgende gehören in den S2-Scope:
+
+1. **2 untranslated UI-Strings** — `automation.status` und `automation.jobBoard` in AutomationList.tsx:177,183 zeigen raw English Enum-Werte
+2. **Raw blockedReason/errorMessage** in RunHistoryList.tsx:158-159 — keine Translation-Mappings
+3. **6 Low-Priority UI-Fixes** die von einem Formatter/Linter revertiert wurden — **Root Cause der Reverts untersuchen** bevor erneuter Fix-Versuch:
+   - AutomationList `as any` (2x)
+   - RunProgressPanel Cast (2x)
+   - StagingContainer stale-flash
+4. **Component-Refactoring** — AutomationDetailPage (514 LOC) und StagingContainer (497 LOC)
+
+Diese Items sind ZUSÄTZLICH zu den UX-Journeys und 10-Point-Checklist unten. Integriere sie in die jeweiligen Feature-Reviews.
+
 ### Schritt 1: User Journeys für 8 Features
 
 Erstelle für JEDES Feature User Journeys mit Edge Cases. Dokumentiere in `docs/user-journey-audit.md`.
