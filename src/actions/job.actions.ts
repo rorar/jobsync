@@ -314,36 +314,65 @@ export const addJob = async (
 
     const tagIds = tags ?? [];
 
-    const job = await prisma.job.create({
-      data: {
-        jobTitleId: title,
-        companyId: company,
-        locationId: location,
-        statusId: status,
-        jobSourceId: source,
-        salaryRange: salaryRange,
-        createdAt: new Date(),
-        dueDate: dueDate,
-        appliedDate: dateApplied,
-        description: jobDescription,
-        jobType: type,
-        userId: user.id,
-        jobUrl,
-        applied,
-        resumeId: resume || null,
-        ...(tagIds.length > 0
-          ? { tags: { connect: tagIds.map((id) => ({ id })) } }
-          : {}),
-      },
-      include: {
-        JobTitle: true,
-        Company: true,
-        Status: true,
-        Location: true,
-        JobSource: true,
-        tags: true,
-      },
+    // Transaction: create job + initial status history entry
+    const [job, historyEntry] = await prisma.$transaction(async (tx) => {
+      const newJob = await tx.job.create({
+        data: {
+          jobTitleId: title,
+          companyId: company,
+          locationId: location,
+          statusId: status,
+          jobSourceId: source,
+          salaryRange: salaryRange,
+          createdAt: new Date(),
+          dueDate: dueDate,
+          appliedDate: dateApplied,
+          description: jobDescription,
+          jobType: type,
+          userId: user.id,
+          jobUrl,
+          applied,
+          resumeId: resume || null,
+          ...(tagIds.length > 0
+            ? { tags: { connect: tagIds.map((id) => ({ id })) } }
+            : {}),
+        },
+        include: {
+          JobTitle: true,
+          Company: true,
+          Status: true,
+          Location: true,
+          JobSource: true,
+          tags: true,
+        },
+      });
+
+      const history = await tx.jobStatusHistory.create({
+        data: {
+          jobId: newJob.id,
+          userId: user.id,
+          previousStatusId: null,
+          newStatusId: status,
+          note: null,
+          changedAt: new Date(),
+        },
+      });
+
+      return [newJob, history] as const;
     });
+
+    // Publish domain event AFTER transaction commits
+    emitEvent(
+      createEvent(DomainEventTypes.JobStatusChanged, {
+        jobId: job.id,
+        userId: user.id,
+        previousStatusValue: null,
+        newStatusValue: job.Status.value,
+        note: undefined,
+        historyEntryId: historyEntry.id,
+      }),
+    );
+
     return { data: job, success: true };
   } catch (error) {
     const msg = "Failed to create job. ";
@@ -422,56 +451,15 @@ export const updateJob = async (
   }
 };
 
+/**
+ * Legacy wrapper — delegates to changeJobStatus so ALL status changes
+ * go through the state machine (validation, side effects, history, events).
+ */
 export const updateJobStatus = async (
   jobId: string,
   status: JobStatus,
 ): Promise<ActionResult<JobResponse>> => {
-  try {
-    const user = await getCurrentUser();
-
-    if (!user) {
-      throw new Error("Not authenticated");
-    }
-    const dataToUpdate = () => {
-      switch (status.value) {
-        case "applied":
-          return {
-            statusId: status.id,
-            applied: true,
-            appliedDate: new Date(),
-          };
-        case "interview":
-          return {
-            statusId: status.id,
-            applied: true,
-          };
-        default:
-          return {
-            statusId: status.id,
-          };
-      }
-    };
-
-    const job = await prisma.job.update({
-      where: {
-        id: jobId,
-        userId: user.id,
-      },
-      data: dataToUpdate(),
-      include: {
-        JobTitle: true,
-        Company: true,
-        Status: true,
-        Location: true,
-        JobSource: true,
-        tags: true,
-      },
-    });
-    return { data: job, success: true };
-  } catch (error) {
-    const msg = "Failed to update job status.";
-    return handleError(error, msg);
-  }
+  return changeJobStatus(jobId, status.id);
 };
 
 export const deleteJobById = async (
@@ -807,6 +795,11 @@ export const updateKanbanOrder = async (
       throw new Error("Not authenticated");
     }
 
+    // Validate sortOrder: must be a finite non-negative number
+    if (!Number.isFinite(newSortOrder) || newSortOrder < 0) {
+      return { success: false, message: "errors.invalidSortOrder", errorCode: "VALIDATION_ERROR" };
+    }
+
     // Fetch job with ownership check
     const currentJob = await prisma.job.findFirst({
       where: { id: jobId, userId: user.id },
@@ -943,7 +936,7 @@ export const getJobStatusHistory = async (
         previousStatus: { select: { label: true, value: true } },
         newStatus: { select: { label: true, value: true } },
       },
-      orderBy: { changedAt: "desc" },
+      orderBy: { changedAt: "asc" },
     });
 
     const entries: StatusHistoryEntry[] = history.map((h) => ({

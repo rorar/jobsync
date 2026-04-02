@@ -1,10 +1,43 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-02
 
-**Total: 209 bugs found, 208 fixed, 1 pre-existing open**
+**Total: 232 bugs found, 221 fixed, 1 pre-existing open, 10 deferred to S4**
 
-### Status: ⚠️ 1 pre-existing test failure (PRE-1, not S2-related)
+### Status: ⚠️ 1 pre-existing test failure (PRE-1) + 10 S3 deferred items
 
-## Session S2-Resume Blind Spot (2026-04-02) — DEFERRED TO S3
+## Session S3 CRM Core (2026-04-02) — FIXING CRITICAL, REST DEFERRED TO S4
+
+### Fixed in S3 (13 findings)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S3-CR01 | **HIGH** | Duplicated VALID_TRANSITIONS in useKanbanState vs status-machine.ts | Import from shared module |
+| S3-CR02 | **HIGH** | Duplicated STATUS_ORDER with divergent "draft" entry | Import from shared module |
+| S3-CR03 | **HIGH** | getStatusList dead auth code | Added design-intent comment |
+| S3-CR04 | MEDIUM | Missing revalidatePath after CRM mutations | Added revalidatePath calls |
+| S3-CR05 | MEDIUM | STATUS_COLORS naming confusion | Renamed to STATUS_COLOR_NAMES |
+| S3-CR09 | MEDIUM | Unnecessary dynamic import for getValidTargets | Replaced with static import |
+| S3-CR10 | MEDIUM | No max-length on transition note textarea | Added maxLength=500 + server validation |
+| S3-CR11 | MEDIUM | ARIA listbox without option children | Changed to list/listitem |
+| S3-CR12 | MEDIUM | E2E waitForTimeout instead of assertion | Replaced with proper assertion |
+| S3-FIX1 | **HIGH** | updateJobStatus bypasses state machine | Delegated to changeJobStatus |
+| S3-FIX2 | **HIGH** | addJob no initial JobStatusHistory | Added initial history entry |
+| S3-FIX3 | LOW | History sort desc vs spec asc | Changed to asc |
+| S3-FIX4 | MEDIUM | sortOrder accepts Infinity/NaN | Added validation |
+
+### Deferred to S4 (10 findings from weed + blind spot)
+| ID | Severity | Finding | Reason Deferred |
+|----|----------|---------|-----------------|
+| S3-D1 | **HIGH** | Public API PATCH /api/v1/jobs/:id bypasses state machine | Needs API versioning discussion — status changes should require dedicated endpoint |
+| S3-D2 | **HIGH** | updateJob server action bypasses state machine via edit form | Needs UI refactoring — status field should be removed from edit form |
+| S3-D3 | **HIGH** | No optimistic locking for concurrent status changes | Needs etag/version field — cross-cutting schema change |
+| S3-D4 | **HIGH** | Within-column reorder is no-op (useKanbanState sorts by createdAt) | Needs useKanbanState refactor to use sortOrder |
+| S3-D5 | MEDIUM | "Expired" status seeded but no state machine transitions | Needs seed script update + migration for existing data |
+| S3-D6 | MEDIUM | History stores FK IDs not string values (spec says string) | Architecture decision — FKs are more robust, update spec |
+| S3-D7 | MEDIUM | Vacancy promoter doesn't create initial history entry | Needs promoter.ts change + vacancy-pipeline.allium update |
+| S3-D8 | MEDIUM | Event payload previousStatusValue nullable vs spec non-nullable | Update spec to allow null for creation events |
+| S3-D9 | LOW | Field name sortOrder vs spec kanbanSortOrder | Naming-only, update spec |
+| S3-D10 | LOW | Legacy saved/draft in VALID_TRANSITIONS not in spec | Backward compat — document in spec |
+
+## Session S2-Resume Blind Spot (2026-04-02) — FIXED IN S3
 
 | ID | Severity | Finding | Scope |
 |----|----------|---------|-------|
