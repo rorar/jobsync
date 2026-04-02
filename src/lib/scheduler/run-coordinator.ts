@@ -123,36 +123,10 @@ class RunCoordinator {
         `[RunCoordinator] Run failed for ${automation.name}: ${message}`,
       )
     } finally {
-      // Cancel watchdog before releasing lock (A7)
-      this.cancelWatchdog(automation.id)
-
       // Guard: only release + emit if lock still exists (H-1 fix)
       // acknowledgeExternalStop may have already released the lock during degradation
-      const lockStillHeld = this.runLocks.delete(automation.id)
-      if (lockStillHeld) {
-        this.progressMap.delete(automation.id)
-        this.removeFromQueue(automation.id)
-        this.lastCycleProcessedCount++
-        if (!runnerResult || runnerResult.status === "failed") {
-          this.lastCycleFailedCount++
-        }
-
-        debugLog(
-          "scheduler",
-          `[RunCoordinator] Lock released for ${automation.name}`,
-        )
-
-        emitEvent(
-          createEvent(DomainEventType.AutomationRunCompleted, {
-            automationId: automation.id,
-            userId: automation.userId,
-            moduleId: automation.jobBoard,
-            runSource: options.runSource,
-            status: runnerResult?.status ?? "failed",
-            jobsSaved: runnerResult?.jobsSaved ?? 0,
-            durationMs: Date.now() - lock.startedAt.getTime(),
-          }),
-        )
+      if (this.runLocks.has(automation.id)) {
+        this.releaseLockWithCleanup(automation.id, lock, "completed", runnerResult)
       } else {
         debugLog(
           "scheduler",
@@ -313,24 +287,7 @@ class RunCoordinator {
       "scheduler",
       `[RunCoordinator] External stop: ${automationId} (degradation mid-run)`,
     )
-    this.cancelWatchdog(automationId)
-    this.runLocks.delete(automationId)
-    this.progressMap.delete(automationId)
-    this.removeFromQueue(automationId)
-    this.lastCycleProcessedCount++
-    this.lastCycleFailedCount++
-
-    emitEvent(
-      createEvent(DomainEventType.AutomationRunCompleted, {
-        automationId,
-        userId: lock.userId,
-        moduleId: lock.moduleId,
-        runSource: lock.runSource,
-        status: "failed",
-        jobsSaved: 0,
-        durationMs: Date.now() - lock.startedAt.getTime(),
-      }),
-    )
+    this.releaseLockWithCleanup(automationId, lock, "external_stop")
   }
 
   // ---------------------------------------------------------------------------
@@ -351,24 +308,7 @@ class RunCoordinator {
         "scheduler",
         `[RunCoordinator] Watchdog timeout: force-releasing lock for ${automationId} after ${SCHEDULER_CONSTANTS.MAX_RUN_DURATION_MS}ms`,
       )
-      this.runLocks.delete(automationId)
-      this.progressMap.delete(automationId)
-      this.watchdogTimers.delete(automationId)
-      this.removeFromQueue(automationId)
-      this.lastCycleProcessedCount++
-      this.lastCycleFailedCount++
-
-      emitEvent(
-        createEvent(DomainEventType.AutomationRunCompleted, {
-          automationId,
-          userId: lock.userId,
-          moduleId: lock.moduleId,
-          runSource: lock.runSource,
-          status: "failed",
-          jobsSaved: 0,
-          durationMs: SCHEDULER_CONSTANTS.MAX_RUN_DURATION_MS,
-        }),
-      )
+      this.releaseLockWithCleanup(automationId, lock, "watchdog_timeout")
     } catch (error) {
       debugError("scheduler", `[RunCoordinator] Error in forceReleaseLock:`, error)
     }
@@ -384,6 +324,55 @@ class RunCoordinator {
     debugLog(
       "scheduler",
       `[RunCoordinator] Skipped ${automationId} from queue`,
+    )
+  }
+
+  /**
+   * Centralized lock release with cleanup (DUP-4 consolidation).
+   * Cancels watchdog, deletes lock + progress, removes from queue,
+   * increments processed/failed counters, and emits RunCompleted event.
+   */
+  private releaseLockWithCleanup(
+    automationId: string,
+    lock: RunLock,
+    reason: "completed" | "external_stop" | "watchdog_timeout",
+    runnerResult?: RunnerResult,
+  ): void {
+    this.cancelWatchdog(automationId)
+    this.runLocks.delete(automationId)
+    this.progressMap.delete(automationId)
+    this.removeFromQueue(automationId)
+    this.lastCycleProcessedCount++
+
+    const failed =
+      reason === "external_stop" ||
+      reason === "watchdog_timeout" ||
+      !runnerResult ||
+      runnerResult.status === "failed"
+    if (failed) {
+      this.lastCycleFailedCount++
+    }
+
+    const durationMs =
+      reason === "watchdog_timeout"
+        ? SCHEDULER_CONSTANTS.MAX_RUN_DURATION_MS
+        : Date.now() - lock.startedAt.getTime()
+
+    debugLog(
+      "scheduler",
+      `[RunCoordinator] Lock released for ${automationId} (reason: ${reason})`,
+    )
+
+    emitEvent(
+      createEvent(DomainEventType.AutomationRunCompleted, {
+        automationId,
+        userId: lock.userId,
+        moduleId: lock.moduleId,
+        runSource: lock.runSource,
+        status: runnerResult?.status ?? "failed",
+        jobsSaved: runnerResult?.jobsSaved ?? 0,
+        durationMs,
+      }),
     )
   }
 

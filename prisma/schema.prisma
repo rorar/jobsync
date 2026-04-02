@@ -39,6 +39,7 @@ model User {
   DedupHash        DedupHash[]
   PublicApiKey     PublicApiKey[]
   CompanyBlacklist CompanyBlacklist[]
+  JobStatusHistory JobStatusHistory[]
 }
 
 model ApiKey {
@@ -216,6 +217,9 @@ model JobStatus {
   label String
   value String @unique
   jobs  Job[]
+
+  historyAsPrevious JobStatusHistory[] @relation("PreviousStatus")
+  historyAsNew      JobStatusHistory[] @relation("NewStatus")
 }
 
 model Location {
@@ -293,6 +297,10 @@ model Job {
   Notes       Note[]
   tags        Tag[]
 
+  // CRM fields
+  sortOrder      Float  @default(0)
+  statusHistory  JobStatusHistory[]
+
   // Automation discovery fields
   automationId    String?
   automation      Automation? @relation(fields: [automationId], references: [id], onDelete: SetNull)
@@ -306,6 +314,7 @@ model Job {
 
   @@index([userId, automationId])
   @@index([userId, discoveryStatus])
+  @@index([userId, statusId, sortOrder])
 }
 
 model ActivityType {
@@ -586,4 +595,22 @@ model PublicApiKey {
   revokedAt   DateTime?
 
   @@index([userId])
+}
+
+model JobStatusHistory {
+  id               String     @id @default(cuid())
+  jobId            String
+  job              Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User       @relation(fields: [userId], references: [id])
+  previousStatusId String?
+  previousStatus   JobStatus? @relation("PreviousStatus", fields: [previousStatusId], references: [id])
+  newStatusId      String
+  newStatus        JobStatus  @relation("NewStatus", fields: [newStatusId], references: [id])
+  note             String?
+  changedAt        DateTime   @default(now())
+
+  @@index([jobId, changedAt])
+  @@index([userId, changedAt])
+  @@index([jobId, userId])
 }

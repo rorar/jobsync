@@ -35,6 +35,8 @@ export const DomainEventType = {
   AutomationRunCompleted: "AutomationRunCompleted",
   // Degradation ↔ RunCoordinator bridge (spec: module-lifecycle.allium)
   AutomationDegraded: "AutomationDegraded",
+  // CRM Core (spec: crm-workflow.allium)
+  JobStatusChanged: "JobStatusChanged",
 } as const;
 
 export type DomainEventType = (typeof DomainEventType)[keyof typeof DomainEventType];
@@ -145,6 +147,17 @@ export interface AutomationDegradedPayload {
   reason: "auth_failure" | "cb_escalation" | "consecutive_failures";
 }
 
+// CRM Core payloads (spec: crm-workflow.allium)
+
+export interface JobStatusChangedPayload {
+  jobId: string;
+  userId: string;
+  previousStatusValue: string | null;
+  newStatusValue: string;
+  note?: string;
+  historyEntryId: string;
+}
+
 // ---------------------------------------------------------------------------
 // Payload Map (type → payload shape)
 // ---------------------------------------------------------------------------
@@ -166,6 +179,7 @@ export interface EventPayloadMap {
   AutomationRunStarted: AutomationRunStartedPayload;
   AutomationRunCompleted: AutomationRunCompletedPayload;
   AutomationDegraded: AutomationDegradedPayload;
+  JobStatusChanged: JobStatusChangedPayload;
 }
 
 // ---------------------------------------------------------------------------

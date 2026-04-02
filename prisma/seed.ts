@@ -29,14 +29,21 @@ const JOB_SOURCES = [
 ];
 
 const JOB_STATUSES = [
-  { label: "Draft", value: "draft" },
+  { label: "Bookmarked", value: "bookmarked" },
   { label: "Applied", value: "applied" },
   { label: "Interview", value: "interview" },
   { label: "Offer", value: "offer" },
+  { label: "Accepted", value: "accepted" },
   { label: "Rejected", value: "rejected" },
   { label: "Expired", value: "expired" },
   { label: "Archived", value: "archived" },
 ];
+
+// Legacy status renames: "draft" → "bookmarked", "saved" → "bookmarked"
+const LEGACY_STATUS_RENAMES: Record<string, { label: string; value: string }> = {
+  draft: { label: "Bookmarked", value: "bookmarked" },
+  saved: { label: "Bookmarked", value: "bookmarked" },
+};
 
 async function main() {
   console.log("🌱 Seeding database...");
@@ -73,7 +80,39 @@ async function main() {
 
   console.log(`  ✓ Job Sources: ${JOB_SOURCES.length} entries`);
 
-  // 3. Create job statuses (shared, no createdBy)
+  // 3. Rename legacy statuses (idempotent)
+  for (const [oldValue, newData] of Object.entries(LEGACY_STATUS_RENAMES)) {
+    const existing = await prisma.jobStatus.findFirst({ where: { value: oldValue } });
+    if (existing) {
+      // Only rename if the target value doesn't already exist
+      const targetExists = await prisma.jobStatus.findFirst({ where: { value: newData.value } });
+      if (!targetExists) {
+        await prisma.jobStatus.update({
+          where: { value: oldValue },
+          data: { label: newData.label, value: newData.value },
+        });
+        console.log(`  ✓ Renamed status "${oldValue}" → "${newData.value}"`);
+      } else {
+        // Target already exists — reassign jobs from old status to new status, then delete old
+        await prisma.job.updateMany({
+          where: { statusId: existing.id },
+          data: { statusId: targetExists.id },
+        });
+        await prisma.jobStatusHistory.updateMany({
+          where: { previousStatusId: existing.id },
+          data: { previousStatusId: targetExists.id },
+        });
+        await prisma.jobStatusHistory.updateMany({
+          where: { newStatusId: existing.id },
+          data: { newStatusId: targetExists.id },
+        });
+        await prisma.jobStatus.delete({ where: { value: oldValue } });
+        console.log(`  ✓ Migrated jobs from "${oldValue}" to "${newData.value}" and removed old status`);
+      }
+    }
+  }
+
+  // 4. Create job statuses (shared, no createdBy)
   for (const status of JOB_STATUSES) {
     await prisma.jobStatus.upsert({
       where: { value: status.value },
