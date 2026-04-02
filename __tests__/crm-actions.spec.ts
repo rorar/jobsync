@@ -37,6 +37,10 @@ jest.mock("@/utils/user.utils", () => ({
   getCurrentUser: jest.fn(),
 }));
 
+jest.mock("next/cache", () => ({
+  revalidatePath: jest.fn(),
+}));
+
 jest.mock("@/lib/events", () => ({
   emitEvent: jest.fn(),
   createEvent: jest.fn((_type: string, payload: unknown) => ({
