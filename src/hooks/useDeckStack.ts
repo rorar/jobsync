@@ -20,7 +20,7 @@ interface DeckStats {
 
 interface UseDeckStackOptions {
   vacancies: StagedVacancyWithAutomation[];
-  onAction: (vacancy: StagedVacancyWithAutomation, action: DeckAction) => Promise<void>;
+  onAction: (vacancy: StagedVacancyWithAutomation, action: DeckAction) => Promise<{ success: boolean }>;
   onUndo?: (entry: UndoEntry) => Promise<void>;
   enabled?: boolean;
 }
@@ -69,39 +69,51 @@ export function useDeckStack({
   const isSessionComplete = currentIndex >= totalCount && totalCount > 0;
 
   const performAction = useCallback(
-    async (action: DeckAction) => {
+    (action: DeckAction) => {
       if (animatingRef.current || !currentVacancy) return;
       animatingRef.current = true;
       setIsAnimating(true);
 
       const direction: ExitDirection =
         action === "dismiss" ? "left" : action === "promote" ? "right" : "up";
+
+      // 1. Start exit animation immediately (optimistic)
       setExitDirection(direction);
 
-      // Push to undo stack
-      const entry: UndoEntry = { vacancy: currentVacancy, action, index: currentIndex };
-      setUndoStack((prev) => [entry, ...prev].slice(0, MAX_UNDO_STACK));
+      // 2. Fire server action in parallel with animation
+      const vacancy = currentVacancy;
+      const index = currentIndex;
+      const actionPromise = onAction(vacancy, action).catch(
+        (): { success: boolean } => ({ success: false }),
+      );
 
-      // Update stats
-      setStats((prev) => ({
-        ...prev,
-        promoted: prev.promoted + (action === "promote" ? 1 : 0),
-        dismissed: prev.dismissed + (action === "dismiss" ? 1 : 0),
-        superLiked: prev.superLiked + (action === "superlike" ? 1 : 0),
-      }));
+      // 3. After animation delay, check result
+      setTimeout(async () => {
+        const result = await actionPromise;
 
-      // Wait for exit animation
-      await new Promise((resolve) => setTimeout(resolve, ANIMATION_DURATION));
+        if (result.success) {
+          // Normal flow: advance to next card, push undo, update stats
+          const entry: UndoEntry = { vacancy, action, index };
+          setUndoStack((prev) => [entry, ...prev].slice(0, MAX_UNDO_STACK));
 
-      // Fire server action (don't block UI)
-      onAction(currentVacancy, action).catch(() => {
-        // Action failed — error handling is done by the caller via toast
-      });
+          setStats((prev) => ({
+            ...prev,
+            promoted: prev.promoted + (action === "promote" ? 1 : 0),
+            dismissed: prev.dismissed + (action === "dismiss" ? 1 : 0),
+            superLiked: prev.superLiked + (action === "superlike" ? 1 : 0),
+          }));
 
-      setExitDirection(null);
-      setCurrentIndex((prev) => prev + 1);
-      setIsAnimating(false);
-      animatingRef.current = false;
+          setExitDirection(null);
+          setCurrentIndex((prev) => prev + 1);
+        } else {
+          // Rollback: card reappears — don't advance index
+          setExitDirection(null);
+          // Caller handles error toast via ActionResult
+        }
+
+        setIsAnimating(false);
+        animatingRef.current = false;
+      }, ANIMATION_DURATION);
     },
     [currentVacancy, currentIndex, onAction],
   );

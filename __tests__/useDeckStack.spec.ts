@@ -2,7 +2,7 @@
  * useDeckStack hook tests
  *
  * Tests: navigation, action dispatching, exit direction, undo stack,
- * stats tracking, session completion, animation guard.
+ * stats tracking, session completion, animation guard, rollback on failure.
  */
 import { renderHook, act } from "@testing-library/react";
 import { useDeckStack } from "@/hooks/useDeckStack";
@@ -20,8 +20,15 @@ const vacancies: StagedVacancyWithAutomation[] = [
   makeVacancy({ id: "v3", title: "Job C" }),
 ];
 
+/** Advance fake timers and flush microtasks so async setTimeout callbacks complete */
+async function advanceTimersAndFlush(ms: number) {
+  jest.advanceTimersByTime(ms);
+  // Flush the microtask queue (await inside setTimeout callback)
+  await Promise.resolve();
+}
+
 describe("useDeckStack", () => {
-  const mockOnAction = jest.fn().mockResolvedValue(undefined);
+  const mockOnAction = jest.fn().mockResolvedValue({ success: true });
   const mockOnUndo = jest.fn().mockResolvedValue(undefined);
 
   beforeEach(() => {
@@ -55,8 +62,7 @@ describe("useDeckStack", () => {
 
     await act(async () => {
       result.current.dismiss();
-      // Wait for animation timeout
-      jest.advanceTimersByTime(300);
+      await advanceTimersAndFlush(300);
     });
 
     expect(result.current.currentIndex).toBe(1);
@@ -74,7 +80,7 @@ describe("useDeckStack", () => {
 
     await act(async () => {
       result.current.promote();
-      jest.advanceTimersByTime(300);
+      await advanceTimersAndFlush(300);
     });
 
     expect(result.current.currentIndex).toBe(1);
@@ -91,7 +97,7 @@ describe("useDeckStack", () => {
 
     await act(async () => {
       result.current.superLike();
-      jest.advanceTimersByTime(300);
+      await advanceTimersAndFlush(300);
     });
 
     expect(result.current.currentIndex).toBe(1);
@@ -108,15 +114,15 @@ describe("useDeckStack", () => {
 
     await act(async () => {
       result.current.dismiss();
-      jest.advanceTimersByTime(300);
+      await advanceTimersAndFlush(300);
     });
     await act(async () => {
       result.current.promote();
-      jest.advanceTimersByTime(300);
+      await advanceTimersAndFlush(300);
     });
     await act(async () => {
       result.current.superLike();
-      jest.advanceTimersByTime(300);
+      await advanceTimersAndFlush(300);
     });
 
     expect(result.current.stats).toEqual({
@@ -134,7 +140,7 @@ describe("useDeckStack", () => {
     for (let i = 0; i < 3; i++) {
       await act(async () => {
         result.current.dismiss();
-        jest.advanceTimersByTime(300);
+        await advanceTimersAndFlush(300);
       });
     }
 
@@ -149,7 +155,7 @@ describe("useDeckStack", () => {
 
     await act(async () => {
       result.current.dismiss();
-      jest.advanceTimersByTime(300);
+      await advanceTimersAndFlush(300);
     });
 
     expect(result.current.currentIndex).toBe(1);
@@ -185,7 +191,7 @@ describe("useDeckStack", () => {
 
     // Advance timer to complete
     await act(async () => {
-      jest.advanceTimersByTime(300);
+      await advanceTimersAndFlush(300);
     });
 
     // Only one action call
@@ -200,5 +206,85 @@ describe("useDeckStack", () => {
     expect(result.current.currentVacancy).toBeNull();
     expect(result.current.totalCount).toBe(0);
     expect(result.current.isSessionComplete).toBe(false);
+  });
+
+  it("rolls back card when server action returns failure", async () => {
+    const failingAction = jest.fn().mockResolvedValue({ success: false });
+    const { result } = renderHook(() =>
+      useDeckStack({ vacancies, onAction: failingAction }),
+    );
+
+    expect(result.current.currentIndex).toBe(0);
+    expect(result.current.currentVacancy?.id).toBe("v1");
+
+    // Exit animation starts immediately (optimistic)
+    act(() => {
+      result.current.dismiss();
+    });
+    expect(result.current.exitDirection).toBe("left");
+    expect(result.current.isAnimating).toBe(true);
+
+    // After animation completes, server result is checked → rollback
+    await act(async () => {
+      await advanceTimersAndFlush(300);
+    });
+
+    // Card should NOT have advanced — stays on same vacancy
+    expect(result.current.currentIndex).toBe(0);
+    expect(result.current.currentVacancy?.id).toBe("v1");
+    expect(result.current.exitDirection).toBeNull();
+    expect(result.current.isAnimating).toBe(false);
+
+    // Stats should NOT have changed
+    expect(result.current.stats).toEqual({ promoted: 0, dismissed: 0, superLiked: 0 });
+
+    // Undo stack should be empty (action failed, nothing to undo)
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it("rolls back card when server action throws (network error)", async () => {
+    const throwingAction = jest.fn().mockRejectedValue(new Error("Network error"));
+    const { result } = renderHook(() =>
+      useDeckStack({ vacancies, onAction: throwingAction }),
+    );
+
+    await act(async () => {
+      result.current.promote();
+      await advanceTimersAndFlush(300);
+    });
+
+    // Card should NOT have advanced — caught rejection treated as failure
+    expect(result.current.currentIndex).toBe(0);
+    expect(result.current.currentVacancy?.id).toBe("v1");
+    expect(result.current.isAnimating).toBe(false);
+    expect(result.current.stats.promoted).toBe(0);
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it("only pushes to undo stack on successful actions", async () => {
+    const failThenSucceed = jest
+      .fn()
+      .mockResolvedValueOnce({ success: false })
+      .mockResolvedValueOnce({ success: true });
+
+    const { result } = renderHook(() =>
+      useDeckStack({ vacancies, onAction: failThenSucceed }),
+    );
+
+    // First action fails — no undo entry
+    await act(async () => {
+      result.current.dismiss();
+      await advanceTimersAndFlush(300);
+    });
+    expect(result.current.canUndo).toBe(false);
+    expect(result.current.currentIndex).toBe(0);
+
+    // Second action succeeds — undo entry created
+    await act(async () => {
+      result.current.dismiss();
+      await advanceTimersAndFlush(300);
+    });
+    expect(result.current.canUndo).toBe(true);
+    expect(result.current.currentIndex).toBe(1);
   });
 });

@@ -18,7 +18,7 @@ import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 
 interface DeckViewProps {
   vacancies: StagedVacancyWithAutomation[];
-  onAction: (vacancy: StagedVacancyWithAutomation, action: DeckAction) => Promise<void>;
+  onAction: (vacancy: StagedVacancyWithAutomation, action: DeckAction) => Promise<{ success: boolean }>;
   onUndo?: (entry: { vacancy: StagedVacancyWithAutomation; action: DeckAction; index: number }) => Promise<void>;
   onBackToList: () => void;
 }

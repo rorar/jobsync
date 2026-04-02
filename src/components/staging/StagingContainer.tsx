@@ -198,8 +198,9 @@ function StagingContainer() {
   };
 
   // Deck mode action handler — maps DeckAction to existing server actions
+  // Returns { success } so useDeckStack can roll back the card on failure
   const handleDeckAction = useCallback(
-    async (vacancy: StagedVacancyWithAutomation, action: DeckAction) => {
+    async (vacancy: StagedVacancyWithAutomation, action: DeckAction): Promise<{ success: boolean }> => {
       if (action === "dismiss") {
         const { success, message } = await dismissStagedVacancy(vacancy.id);
         if (success) {
@@ -207,11 +208,15 @@ function StagingContainer() {
         } else {
           toast({ variant: "destructive", title: t("staging.error"), description: message });
         }
+        return { success };
       } else if (action === "promote" || action === "superlike") {
         // Open the promotion dialog for both promote and super-like
         setPromotionVacancy(vacancy);
         setPromotionOpen(true);
+        // Promotion dialog handles its own success/failure — always succeed from deck perspective
+        return { success: true };
       }
+      return { success: true };
     },
     [t],
   );
