@@ -201,6 +201,21 @@ Bei HTTP 500 oder Timeout-Fehlern von der Anthropic API:
 - Warte 30 Sekunden, dann versuche es erneut
 - Wenn ein Sub-Agent mit 500 abbricht: Prüfe was er committed hat, dispatche neuen Agent für Rest
 - Ignoriere "Task not found" Fehler — harmloses Bookkeeping-Problem bei parallelen Agents
+- Keine `sleep`-Loops zum Agent-Polling. Agent-Results über TaskOutput/SendMessage abfragen.
+
+### Learnings aus S1a+S1b (BEACHTEN)
+
+**1. Consolidation-Agent IMMER zuletzt:**
+Dispatche den Consolidation-Agent (der Einzel-Reports zusammenführt) ERST wenn ALLE Review/Fix-Agents fertig sind. NIEMALS gleichzeitig — sonst liest er stale Reports.
+
+**2. Formatter/Linter Root-Cause ZUERST:**
+S1b hat 6 Fixes verloren weil ein Formatter/Linter die Edits revertiert hat. Root Cause wurde nie gefunden. BEVOR du Low-Priority UI-Fixes wiederholst (aus den S1b deferred Items):
+- Prüfe `.eslintrc.json`, `prettier`, Post-Save-Hooks
+- Identifiziere welcher Formatter/Linter die Edits revertiert
+- Fix den Formatter-Konflikt ZUERST, dann die eigentlichen Fixes
+
+**3. Keine sleep-Loops:**
+S1b hat `sleep 120` in Bash-Loops benutzt um auf Agents zu warten. Das verschwendet 2 Minuten pro Iteration. Verwende stattdessen direkte Agent-Completion-Abfragen.
 
 ### Context-Exhaustion
 Wenn du merkst dass der Context knapp wird:

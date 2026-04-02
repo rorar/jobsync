@@ -192,6 +192,18 @@ Bei HTTP 500 oder Timeout-Fehlern:
 - Warte 30 Sekunden, dann erneut versuchen
 - Wenn Sub-Agent abbricht: Prüfe Commits, dispatche neuen Agent für Rest
 - Ignoriere "Task not found" Fehler — harmloses Bookkeeping bei parallelen Agents
+- Keine `sleep`-Loops zum Agent-Polling. Agent-Results über TaskOutput/SendMessage abfragen.
+
+### Learnings aus S1a+S1b (BEACHTEN)
+
+**1. Consolidation-Agent IMMER zuletzt:**
+Dispatche den Consolidation-Agent (der Einzel-Reports zusammenführt) ERST wenn ALLE Review/Fix-Agents fertig sind. NIEMALS gleichzeitig — sonst liest er stale Reports.
+
+**2. Formatter/Linter beachten:**
+Wenn Edits von einem Formatter/Linter revertiert werden: Root Cause identifizieren (`.eslintrc.json`, prettier, Post-Save-Hooks) und Konflikt lösen BEVOR erneuter Fix-Versuch.
+
+**3. Keine sleep-Loops:**
+Verwende direkte Agent-Completion-Abfragen statt `sleep 120` Bash-Loops.
 
 ### DDD-Prinzipien
 - **CRITICAL (aus JobSync Memory):** Externe Systeme sind MODULE hinter bestehenden Connectors, NIEMALS neue Connectors. Clearbit, Google Favicon, Meta-Parser sind Module hinter dem `DataEnrichmentConnector`.
