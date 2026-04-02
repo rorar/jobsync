@@ -327,9 +327,14 @@ case "$CMD" in
       printf 'Usage: %s --resume <id>\n' "$0" >&2
       exit 1
     fi
-    # Create a resume prompt that checks what's done and continues
-    local_resume="/tmp/jobsync-resume-${ARG2}.md"
-    cat > "$local_resume" <<RESUME_EOF
+    # Check for dedicated resume prompt first, fallback to generic
+    local_resume_file="$SCRIPT_DIR/${ARG2}-resume-prompt.md"
+    if [[ -f "$local_resume_file" ]]; then
+      printf 'Using dedicated resume prompt: %s\n' "$local_resume_file"
+    else
+      # Generate a generic resume prompt
+      local_resume_file="/tmp/jobsync-resume-${ARG2}.md"
+      cat > "$local_resume_file" <<RESUME_EOF
 Lies CLAUDE.md und die Memories (~/.claude/projects/-home-pascal-projekte-jobsync/memory/MEMORY.md).
 Lies docs/BUGS.md und CHANGELOG.md.
 
@@ -349,18 +354,14 @@ Die vorige Session ${ARG2} wurde unterbrochen (Context-Exhaustion oder Abbruch).
 
 Arbeite VOLLSTÄNDIG autonom. Maximale kognitive Anstrengung.
 RESUME_EOF
-    printf 'Resume prompt: %s\n' "$local_resume"
-    # Reuse run_session logic but with resume prompt
-    SCRIPT_DIR_BAK="$SCRIPT_DIR"
-    cp "$local_resume" "$SCRIPT_DIR/${ARG2}-prompt.md.resume"
-    # Swap prompt file temporarily
+      printf 'Using generic resume prompt\n'
+    fi
+    # Swap prompt, run, restore
     local orig_prompt="$SCRIPT_DIR/${ARG2}-prompt.md"
-    mv "$orig_prompt" "${orig_prompt}.bak"
-    mv "$local_resume" "$orig_prompt"
+    cp "$orig_prompt" "${orig_prompt}.bak"
+    cp "$local_resume_file" "$orig_prompt"
     run_session "$ARG2"
-    # Restore original prompt
     mv "${orig_prompt}.bak" "$orig_prompt"
-    rm -f "$SCRIPT_DIR/${ARG2}-prompt.md.resume"
     ;;
   --next)
     # next_session returns 1 when nothing is pending; capture its output

@@ -222,6 +222,67 @@ Folge EXAKT dem bestehenden Pattern aus `src/lib/connector/`:
 ### Findings-Regel: ZERO TOLERANCE
 Fixe ALLE Findings. Keine Ausnahmen.
 
+### ANTI-FAULHEIT — Verbotene Begründungen für Skips
+Die folgenden Begründungen sind UNGÜLTIG um einen Schritt zu überspringen:
+- ❌ "Aus Zeitgründen übersprungen"
+- ❌ "Good enough" / "sufficient" / "acceptable"
+- ❌ "Moving on" / "for now"
+- ❌ "Deferred to next session" (ohne expliziten fachlichen Grund)
+- ❌ "Conservative scope"
+- ❌ "Not critical"
+
+Gültige Skip-Begründungen (NUR diese):
+- ✅ Technische Unmöglichkeit mit Erklärung
+- ✅ Explizite fachliche Entscheidung mit Begründung
+- ✅ Blocker durch externen Fehler — dokumentiere in BUGS.md
+
+### PFLICHT-CHECKPOINTS (Evidenz vor jedem nächsten Schritt)
+
+Du MUSST jeden Checkpoint mit Evidenz bestätigen bevor du zum nächsten Schritt gehst.
+ÜBERSPRINGE KEINEN CHECKPOINT.
+
+**Vor der DO-Phase:**
+- [ ] CP-1: `/allium:elicit` dispatcht → Spec-Datei existiert in `specs/`
+- [ ] CP-2: `/database-design:postgresql` dispatcht → Schema-Design dokumentiert (Prisma+SQLite!)
+- [ ] CP-3: ROADMAP Deep-Dive abgeschlossen → Cross-Dependencies identifiziert
+
+**Vor der CHECK-Phase:**
+- [ ] CP-4: Alle 3 Module implementiert (Clearbit, Google Favicon, Meta-Parser)
+- [ ] CP-5: Fallback-Chain-Orchestrator funktional
+- [ ] CP-6: Integration Company-Create → Enrichment → Logo sichtbar
+- [ ] CP-7: Alle neuen Komponenten haben Loading/Empty/Error/i18n States
+- [ ] CP-8: External API Tests mit Mocks geschrieben
+
+**Vor der ACT-Phase:**
+- [ ] CP-9: `/comprehensive-review:full-review` mit `/agent-teams:multi-reviewer-patterns` dispatcht → konsolidierter Report in `docs/reviews/s4/`
+- [ ] CP-10: `/accessibility-compliance:wcag-audit-patterns` dispatcht → Findings dokumentiert
+- [ ] CP-11: `/ui-design:interaction-design` dispatcht → Loading-Transitions dokumentiert
+- [ ] CP-12: `/business-analytics:data-storytelling` dispatcht → Enrichment-Coverage-Viz dokumentiert
+- [ ] CP-13: `allium:weed` ausgeführt → zero Divergenzen
+- [ ] CP-14: Blind Spot Check als eigener Agent dispatcht → Findings dokumentiert
+
+**Vor dem Merge:**
+- [ ] CP-15: ALLE Findings aus konsolidiertem Report gefixt
+- [ ] CP-16: Re-Review bestätigt zero Regressionen
+- [ ] CP-17: Exit-Checkliste vollständig mit Evidenz
+
+### Learnings aus S1a+S1b+S2 (BEACHTEN)
+
+**1. Skills werden ignoriert wenn sie nur "erwähnt" werden:**
+Deshalb sind sie jetzt als PFLICHT-CHECKPOINTS formuliert. Du KANNST sie nicht überspringen.
+
+**2. Consolidation-Agent IMMER zuletzt:**
+ERST wenn ALLE Review/Fix-Agents fertig sind. NIEMALS gleichzeitig.
+
+**3. Formatter/Linter beachten:**
+Root Cause identifizieren BEVOR Fix-Versuch.
+
+**4. Keine sleep-Loops:**
+Direkte Agent-Completion-Abfragen statt `sleep 120`.
+
+**5. Allium Weed wird vergessen:**
+Deshalb CP-13 in der CHECK-Phase — nicht optional.
+
 ### Context-Exhaustion
 Wenn du merkst dass der Context knapp wird:
 1. Committe sofort alle fertigen Änderungen

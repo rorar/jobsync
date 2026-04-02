@@ -199,6 +199,59 @@ Verwende direkte Agent-Completion-Abfragen statt `sleep 120` Bash-Loops.
 ### Findings-Regel: ZERO TOLERANCE
 Fixe ALLE Findings. Keine Ausnahmen.
 
+### ANTI-FAULHEIT — Verbotene Begründungen für Skips
+Die folgenden Begründungen sind UNGÜLTIG um einen Schritt zu überspringen:
+- ❌ "Aus Zeitgründen übersprungen"
+- ❌ "Good enough" / "sufficient" / "acceptable"
+- ❌ "Moving on" / "for now"
+- ❌ "Deferred to next session" (ohne expliziten fachlichen Grund)
+- ❌ "Conservative scope"
+- ❌ "Not critical"
+
+Gültige Skip-Begründungen (NUR diese):
+- ✅ Technische Unmöglichkeit mit Erklärung
+- ✅ Explizite fachliche Entscheidung mit Begründung (z.B. "DDD Aggregate Boundary verhindert X")
+- ✅ Blocker durch externen Fehler (API down, Build broken) — dokumentiere in BUGS.md
+
+### PFLICHT-CHECKPOINTS (Evidenz vor jedem nächsten Schritt)
+
+Du MUSST jeden Checkpoint mit Evidenz bestätigen bevor du zum nächsten Schritt gehst.
+ÜBERSPRINGE KEINEN CHECKPOINT.
+
+**Vor der DO-Phase:**
+- [ ] CP-1: `/allium:elicit` dispatcht → Spec-Datei existiert in `specs/`
+- [ ] CP-2: `/database-design:postgresql` dispatcht → Schema-Design dokumentiert
+- [ ] CP-3: `/ui-design:create-component` dispatcht → Wireframes vorhanden
+- [ ] CP-4: `/ui-design:interaction-design` dispatcht → Interaction-Patterns dokumentiert
+- [ ] CP-5: ROADMAP Deep-Dive abgeschlossen → Cross-Dependencies identifiziert
+
+**Vor der CHECK-Phase:**
+- [ ] CP-6: Implementation committed → `git log` zeigen
+- [ ] CP-7: Alle neuen Komponenten haben Loading/Empty/Error/Mobile/Keyboard/Dark/i18n/Confirmation/Feedback
+
+**Vor der ACT-Phase:**
+- [ ] CP-8: `/comprehensive-review:full-review` mit `/agent-teams:multi-reviewer-patterns` dispatcht → konsolidierter Report in `docs/reviews/s3/`
+- [ ] CP-9: `/accessibility-compliance:wcag-audit-patterns` dispatcht → Findings dokumentiert
+- [ ] CP-10: `/business-analytics:data-storytelling` dispatcht → Dashboard-Visualisierung dokumentiert
+- [ ] CP-11: `allium:weed` ausgeführt → zero Divergenzen
+- [ ] CP-12: Blind Spot Check als eigener Agent dispatcht → Findings dokumentiert
+
+**Vor dem Merge:**
+- [ ] CP-13: ALLE Findings aus konsolidiertem Report gefixt
+- [ ] CP-14: Re-Review bestätigt zero Regressionen
+- [ ] CP-15: Exit-Checkliste vollständig mit Evidenz
+
+### Learnings aus S2 (BEACHTEN)
+
+**1. Skills werden ignoriert wenn sie nur "erwähnt" werden:**
+S2 hat `/data-storytelling`, `/interaction-design`, `/multi-reviewer-patterns`, `/wcag-audit-patterns` komplett übersprungen obwohl sie im Prompt standen. Deshalb sind sie jetzt als PFLICHT-CHECKPOINTS formuliert. Du KANNST sie nicht überspringen.
+
+**2. Deferred Items werden übersprungen:**
+S2 hat "Schritt 0: S1b Deferred Items" ignoriert. Deshalb haben wir Checkpoints die Evidenz VOR dem nächsten Schritt verlangen.
+
+**3. Allium Weed wird vergessen:**
+S2 hat allium:weed erst nach der Blind-Spot-Analyse nachgeholt. Deshalb ist es jetzt CP-11 in der CHECK-Phase — nicht optional.
+
 ### Context-Exhaustion
 Wenn du merkst dass der Context knapp wird:
 1. Committe sofort alle fertigen Änderungen
