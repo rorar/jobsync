@@ -92,6 +92,9 @@ const core = {
     "common.version": "Version",
     "common.copyright": "Copyright",
     "common.allRightsReserved": "All rights reserved.",
+    "common.hourShort": "h",
+    "common.minuteShort": "m",
+    "common.secondShort": "s",
   },
   de: {
     "nav.dashboard": "Dashboard",
@@ -160,6 +163,9 @@ const core = {
     "common.version": "Version",
     "common.copyright": "Urheberrecht",
     "common.allRightsReserved": "Alle Rechte vorbehalten.",
+    "common.hourShort": "h",
+    "common.minuteShort": "m",
+    "common.secondShort": "s",
   },
   fr: {
     "nav.dashboard": "Tableau de bord",
@@ -228,6 +234,9 @@ const core = {
     "common.version": "Version",
     "common.copyright": "Droits d'auteur",
     "common.allRightsReserved": "Tous droits réservés.",
+    "common.hourShort": "h",
+    "common.minuteShort": "min",
+    "common.secondShort": "s",
   },
   es: {
     "nav.dashboard": "Panel",
@@ -296,6 +305,9 @@ const core = {
     "common.version": "Versión",
     "common.copyright": "Derechos de autor",
     "common.allRightsReserved": "Todos los derechos reservados.",
+    "common.hourShort": "h",
+    "common.minuteShort": "min",
+    "common.secondShort": "s",
   },
 } as const;
 

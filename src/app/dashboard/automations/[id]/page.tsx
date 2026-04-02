@@ -46,6 +46,7 @@ export default function AutomationDetailPage() {
     (AutomationWithResume & { runs?: AutomationRun[] }) | null
   >(null);
   const [runs, setRuns] = useState<AutomationRun[]>([]);
+  const [runsError, setRunsError] = useState(false);
   const [jobs, setJobs] = useState<DiscoveredJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -68,6 +69,7 @@ export default function AutomationDetailPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setRunsError(false);
     try {
       const [automationResult, jobsResult, resumeResult] = await Promise.all([
         getAutomationById(automationId),
@@ -98,6 +100,7 @@ export default function AutomationDetailPage() {
         setResumes(resumeResult.data.map((r: Resume) => ({ id: r.id, title: r.title })));
       }
     } catch (error) {
+      setRunsError(true);
       toast({
         title: t("common.error"),
         description: t("automations.loadFailed"),
@@ -266,7 +269,7 @@ export default function AutomationDetailPage() {
           />
         </TabsContent>
         <TabsContent value="history" className="mt-4">
-          <RunHistoryList runs={runs} />
+          <RunHistoryList runs={runs} error={runsError} onRetry={loadData} />
         </TabsContent>
       </Tabs>
 

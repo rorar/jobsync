@@ -74,26 +74,7 @@ const BLOCKED_REASON_KEYS: Record<string, string> = {
   resume_missing: "automations.blockedResumeMissing",
 };
 
-/** Format a duration in seconds to a human-readable string with hours support */
-function formatDuration(seconds: number, t: (key: string) => string): string {
-  if (seconds >= 3600) {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    return t("automations.elapsedHourMinSec")
-      .replace("{hour}", String(h))
-      .replace("{min}", String(m))
-      .replace("{sec}", String(s));
-  }
-  if (seconds >= 60) {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return t("automations.elapsedMinSec")
-      .replace("{min}", String(m))
-      .replace("{sec}", String(s));
-  }
-  return t("automations.elapsedSec").replace("{sec}", String(seconds));
-}
+import { formatDuration } from "@/lib/format-duration";
 
 export function RunHistoryList({ runs, loading = false, error = false, onRetry }: RunHistoryListProps) {
   const { t, locale } = useTranslations();

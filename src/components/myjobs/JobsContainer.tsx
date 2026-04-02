@@ -46,6 +46,9 @@ import { NoteDialog } from "./NoteDialog";
 import { format } from "date-fns";
 import { RecordsPerPageSelector } from "../RecordsPerPageSelector";
 import { RecordsCount } from "../RecordsCount";
+import { KanbanBoard } from "@/components/kanban/KanbanBoard";
+import { KanbanViewModeToggle } from "@/components/kanban/KanbanViewModeToggle";
+import { type KanbanViewMode, getPersistedViewMode } from "@/hooks/useKanbanState";
 
 type MyJobsProps = {
   statuses: JobStatus[];
@@ -90,6 +93,13 @@ function JobsContainer({
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [noteJobId, setNoteJobId] = useState("");
   const hasSearched = useRef(false);
+  const [viewMode, setViewMode] = useState<KanbanViewMode>("kanban");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    setViewMode(getPersistedViewMode());
+  }, []);
 
   const jobsPerPage = recordsPerPage;
 
@@ -251,6 +261,9 @@ function JobsContainer({
         <CardHeader className="flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
           <CardTitle>{t("jobs.title")}</CardTitle>
           <div className="flex flex-wrap items-center gap-2">
+            {mounted && (
+              <KanbanViewModeToggle value={viewMode} onChange={setViewMode} />
+            )}
             <div className="relative flex-1 min-w-[140px] sm:flex-none">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -305,46 +318,57 @@ function JobsContainer({
           </div>
         </CardHeader>
         <CardContent>
-          {loading && <Loading />}
-          {jobs.length > 0 && (
+          {mounted && viewMode === "kanban" ? (
+            <KanbanBoard
+              jobs={jobs}
+              statuses={statuses}
+              onRefresh={reloadJobs}
+              loading={loading}
+            />
+          ) : (
             <>
-              <MyJobsTable
-                jobs={jobs}
-                jobStatuses={statuses}
-                deleteJob={onDeleteJob}
-                editJob={onEditJob}
-                onChangeJobStatus={onChangeJobStatus}
-                onAddNote={onAddNote}
-              />
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mt-4">
-                <RecordsCount
-                  count={jobs.length}
-                  total={totalJobs}
-                  label="jobs"
-                />
-                {totalJobs > APP_CONSTANTS.RECORDS_PER_PAGE && (
-                  <RecordsPerPageSelector
-                    value={recordsPerPage}
-                    onChange={setRecordsPerPage}
+              {loading && <Loading />}
+              {jobs.length > 0 && (
+                <>
+                  <MyJobsTable
+                    jobs={jobs}
+                    jobStatuses={statuses}
+                    deleteJob={onDeleteJob}
+                    editJob={onEditJob}
+                    onChangeJobStatus={onChangeJobStatus}
+                    onAddNote={onAddNote}
                   />
-                )}
-              </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mt-4">
+                    <RecordsCount
+                      count={jobs.length}
+                      total={totalJobs}
+                      label="jobs"
+                    />
+                    {totalJobs > APP_CONSTANTS.RECORDS_PER_PAGE && (
+                      <RecordsPerPageSelector
+                        value={recordsPerPage}
+                        onChange={setRecordsPerPage}
+                      />
+                    )}
+                  </div>
+                </>
+              )}
+              {jobs.length < totalJobs && (
+                <div className="flex justify-center p-4">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      loadJobs(page + 1, filterKey, searchTerm || undefined)
+                    }
+                    disabled={loading}
+                    className="btn btn-primary"
+                  >
+                    {loading ? t("common.loading") : t("jobs.loadMore")}
+                  </Button>
+                </div>
+              )}
             </>
-          )}
-          {jobs.length < totalJobs && (
-            <div className="flex justify-center p-4">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  loadJobs(page + 1, filterKey, searchTerm || undefined)
-                }
-                disabled={loading}
-                className="btn btn-primary"
-              >
-                {loading ? t("common.loading") : t("jobs.loadMore")}
-              </Button>
-            </div>
           )}
         </CardContent>
         <CardFooter></CardFooter>

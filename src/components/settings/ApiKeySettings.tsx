@@ -282,7 +282,7 @@ function ApiKeySettings() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
           <span>{t("settings.loadingKeys")}</span>
         </div>
       </div>
@@ -385,7 +385,7 @@ function ApiKeySettings() {
                         disabled={!inputValue.trim() || verifying}
                       >
                         {verifying && (
-                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin motion-reduce:animate-none" />
                         )}
                         {t("settings.verifySave")}
                       </Button>
@@ -421,7 +421,7 @@ function ApiKeySettings() {
                             disabled={deleting === module.id}
                           >
                             {deleting === module.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
                             ) : (
                               <Trash2 className="h-3 w-3" />
                             )}
