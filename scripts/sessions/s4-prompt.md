@@ -34,25 +34,41 @@ Dies ist **Session S4** — die fünfte und letzte Session. Ziel: ROADMAP 1.13 P
 git checkout -b session/s4-data-enrichment
 ```
 
-### Schritt 0: S3 Deferred Items übernehmen
+### Schritt 0: S3 + S3-Resume Deferred Items übernehmen
 
-Lies die Memory `project_s3_deferred_items.md` — sie enthält 10 Items die S3 zu S4 deferred hat.
+Lies die Memory `project_s3_deferred_items.md` — sie enthält die aktualisierten Items nach S3-Resume.
+
+**S3-Resume hat erledigt:**
+- ~~S3-D2: updateJob bypasses state machine~~ → ✅ `isEditTransitionValid` implementiert
+- ~~S3-D4: Within-column reorder no-op~~ → ✅ `useSortable` → `useDraggable` (DnD disabled statt silent no-op)
+- Compare-and-swap: `changeJobStatus` akzeptiert optionales `expectedFromStatusId` (STALE_STATE error)
+- 20+ Security/a11y/Performance Fixes (siehe CHANGELOG.md S3-Resume)
 
 **SECURITY-CRITICAL (sofort fixen, VOR der PLAN-Phase):**
 
 1. **S3-D1 (HIGH): Public API PATCH bypassed State Machine** — `/api/v1/jobs/:id` kann `statusId` direkt ändern ohne `changeJobStatus`. Fix: Status aus PATCH-Blacklist, neuer Endpoint `POST /api/v1/jobs/:id/status`.
-2. **S3-D2 (HIGH): Edit Form bypassed State Machine** — Edit-Formular kann Status ohne Validation ändern. Fix: Status aus `updateJob` accepted fields entfernen, `changeJobStatus` für Status-Änderungen nutzen.
 
-**Weitere S3-Deferred (in die DO-Phase integrieren):**
+**S3-Resume Deferred — HIGH (in Step 0 oder PLAN-Phase):**
 
-3. **S3-D3 (HIGH): Optimistic Locking** — Zwei Tabs können gleichzeitig widersprüchliche Transitions machen. Fix: `version Int @default(0)` auf Job, increment bei Status-Change, stale Writes ablehnen.
-4. **S3-D4 (HIGH): Within-Column Reorder ist No-Op** — `useKanbanState` sortiert nach `createdAt` statt `sortOrder`. Fix: Sort by sortOrder, same-column early-return entfernen.
-5. **S3-D5 bis D10 (MEDIUM/LOW):** Siehe `project_s3_deferred_items.md` für Details. In relevante Phasen integrieren.
+2. **DAU-7 (HIGH): Kanban nutzt paginiertes getJobsList statt getKanbanBoard** — Zeigt max 25-100 Jobs, Tags fehlen. Architektur fertig designed (Adapter-Shim), nicht implementiert. Siehe `.full-stack-feature/03-architecture.md`.
+   **How to apply:** `loadKanbanBoard()` in JobsContainer, Normalizer `kanbanBoardToJobResponses()`.
 
-**Key Context aus S3:**
-- State Machine: `src/lib/crm/status-machine.ts`
+3. **S3-D3 (HIGH): Optimistic Locking** — Compare-and-swap auf Action-Ebene existiert jetzt, aber Schema-Level `version` Field fehlt noch. Fix: `version Int @default(0)` auf Job.
+
+**S3-Resume Deferred — MEDIUM (in die DO-Phase integrieren):**
+
+4. **F7: handleError English Prefixes** — ~48 Callsites mit hardcoded English. Fix: i18n Keys ersetzen.
+5. **F6: Toast Dismiss hardcoded English** — `label` Prop auf ToastClose, `useTranslations()` in Toaster.
+6. **EDGE-3: Empty Kanban Board ohne CTA** — `onAddJob` Prop durch KanbanBoard zu KanbanEmptyState durchreichen.
+7. **S3-D5 bis D10 (MEDIUM/LOW):** Siehe `project_s3_deferred_items.md` für Details.
+
+**Key Context aus S3-Resume:**
+- State Machine: `src/lib/crm/status-machine.ts` + `src/lib/crm/validate-edit-transition.ts`
 - Domain Event: `JobStatusChanged` in `event-types.ts`
-- Kanban: @dnd-kit in `src/components/kanban/` (7 Komponenten + `useKanbanState` Hook)
+- Kanban: @dnd-kit/core (useDraggable, NICHT mehr @dnd-kit/sortable) in `src/components/kanban/`
+- Shared Utility: `src/lib/crm/status-labels.ts` (getStatusLabel)
+- ActionErrorCode: enthält jetzt `STALE_STATE`
+- Tests: 2419 passing (129 suites), incl. TDD-Tests für state machine enforcement + compare-and-swap
 
 ### PLAN-Phase
 
