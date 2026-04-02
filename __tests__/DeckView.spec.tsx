@@ -39,6 +39,7 @@ jest.mock("@/i18n", () => ({
         "deck.viaAutomation": 'via "{name}" automation',
         "deck.cardAnnouncement": "Vacancy {current} of {total}: {title}",
         "deck.cardAnnouncementNoScore": "Vacancy {current} of {total}: {title}",
+        "deck.swipeHint": "Swipe to decide",
         "common.na": "N/A",
       };
       return dict[key] ?? key;
@@ -178,5 +179,35 @@ describe("DeckView", () => {
 
     // In empty state, buttons are not rendered (empty state component)
     expect(screen.queryByLabelText("Dismiss this vacancy")).not.toBeInTheDocument();
+  });
+
+  it("shows swipe hint on first render when vacancies exist", () => {
+    render(
+      <DeckView
+        vacancies={testVacancies}
+        onAction={mockOnAction}
+        onBackToList={mockOnBackToList}
+      />,
+    );
+
+    expect(screen.getByText(/Swipe to decide/)).toBeInTheDocument();
+  });
+
+  it("hides swipe hint after an action button is clicked", () => {
+    render(
+      <DeckView
+        vacancies={testVacancies}
+        onAction={mockOnAction}
+        onBackToList={mockOnBackToList}
+      />,
+    );
+
+    // Swipe hint visible initially
+    expect(screen.getByText(/Swipe to decide/)).toBeInTheDocument();
+
+    // Click dismiss — sets showSwipeHint to false synchronously
+    fireEvent.click(screen.getByLabelText("Dismiss this vacancy"));
+
+    expect(screen.queryByText(/Swipe to decide/)).not.toBeInTheDocument();
   });
 });

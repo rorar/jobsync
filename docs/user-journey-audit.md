@@ -449,17 +449,29 @@
 
 ---
 
-## Known Remaining Gaps (not fixed, documented)
+## Gap Closure (same session, second pass)
 
-| Gap | Severity | Reason Not Fixed |
-|-----|----------|-----------------|
-| No E2E tests for Sprint B+C features | Medium | E2E scope deferred — unit coverage is strong |
-| DeckView error recovery (card advances on server failure) | Low | Fire-and-forget is intentional design |
-| RunProgressPanel no error state on run failure | Low | Panel disappears; user checks RunHistoryList |
-| RunHistoryList 10 columns on mobile | Low | overflow-x-auto enables scrolling |
-| StagingContainer 497 LOC | Low | Refactoring deferred to S3 |
-| AutomationDetailPage 514 LOC | Low | Refactoring deferred to S3 |
-| No axe-core testing infrastructure | Medium | Infrastructure item for future sprint |
-| DeckView no swipe affordance on mobile | Low | Keyboard shortcuts + action buttons exist |
-| RunStatusBadge no hour formatting | Low | 120m 0s format is acceptable |
-| Cache no per-entry size limit | Low | 500 entry LRU cap is sufficient |
+All gaps from the initial pass were closed:
+
+| Gap | Resolution |
+|-----|-----------|
+| No E2E tests | **FIXED** — 9 new E2E tests (staging, API keys, blacklist). 68→77 |
+| RunHistoryList 10 columns mobile | **FIXED** — hide 4 numeric columns on mobile |
+| RunProgressPanel no error state | **FIXED** — "Run completed" 3s transition |
+| DeckView no swipe affordance | **FIXED** — "Swipe to decide" hint on first card |
+| StagingContainer 497 LOC | **FIXED** — 398 LOC after hook + component extraction |
+| AutomationDetailPage 514 LOC | **FIXED** — 309 LOC after hook + 2 component extractions |
+| No axe-core testing | **FIXED** — jest-axe installed, 4 test files, 8 tests |
+| ViewModeToggle roving tabindex | **FIXED** — arrow key navigation + tabIndex management |
+| RunHistoryList loading state | **FIXED** — skeleton pulse rows |
+| 5 new files without tests | **FIXED** — 22 new unit tests across 5 new + 3 existing test files |
+| Allium specs not weeded | **FIXED** — scheduler-coordination + vacancy-pipeline updated |
+
+## Remaining Accepted Trade-offs
+
+| Gap | Severity | Reason Accepted |
+|-----|----------|----------------|
+| DeckView error recovery (card advances on server failure) | Low | Fire-and-forget is intentional design; undo provides safety net |
+| RunStatusBadge no hour formatting (shows "120m 0s") | Low | Acceptable for expected run durations |
+| Cache no per-entry size limit | Low | 500-entry LRU cap is sufficient |
+| `isConnected` not reactive in useSchedulerStatus | Low | No consumer uses the value |

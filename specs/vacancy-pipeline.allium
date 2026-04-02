@@ -990,6 +990,16 @@ surface StagingQueue {
   @guarantee UndoFeedback
     -- After every destructive action, a toast with "Undo" button appears.
     -- Countdown shows remaining seconds. Click reverts the action.
+
+  @guarantee NewItemsBanner
+    -- When the scheduler completes a cycle (running -> idle phase transition),
+    -- a banner with role="status" appears offering to refresh the vacancy list.
+    -- The banner detects the transition via its own scheduler status subscription
+    -- and phase-change ref tracking. Dismisses on refresh.
+
+  @guarantee AccessibleSearch
+    -- The search input includes an aria-label (distinct from the placeholder)
+    -- for assistive technology. The search is debounced (300ms).
 }
 
 surface PromotionDialog {
@@ -1111,6 +1121,56 @@ surface UndoToast {
     -- aria-live="polite" (does not interrupt current reading)
     -- Undo button is keyboard-focusable
     -- Toast does not block interaction with the page below
+}
+
+surface DeckView {
+  -- Card-stack swipe interface for rapid vacancy triage.
+  -- Available only on the "Neu" tab as an alternative to the list view.
+  -- Scope note: This surface covers interaction behaviour and accessibility,
+  -- not visual layout or swipe animation mechanics.
+  facing actor: User
+  context entity: StagedVacancy[] (ordered subset from "Neu" tab)
+
+  exposes:
+    current_vacancy: StagedVacancy,
+    current_index: Integer,
+    total_count: Integer,
+    stats: { promoted: Integer, dismissed: Integer, super_liked: Integer },
+    can_undo: Boolean
+
+  provides:
+    Dismiss(vacancy) -> swipe left or press D,
+    Promote(vacancy) -> swipe right or press P -> opens PromotionDialog,
+    SuperLike(vacancy) -> swipe up or press S -> opens PromotionDialog,
+    Undo() -> press Z (restores last dismissed vacancy)
+
+  @guarantee FocusManagement
+    -- The deck container is focusable (tabIndex=0) with focus-visible ring styling.
+    -- Keyboard interaction requires the container to be focused.
+
+  @guarantee AccessiblePreviewCards
+    -- Preview cards (next and third in the stack) are marked aria-hidden="true"
+    -- so screen readers only announce the current (top) card.
+
+  @guarantee ScreenReaderAnnouncements
+    -- An aria-live="polite" aria-atomic="true" sr-only region announces the
+    -- current card details on each card change: position, title, employer,
+    -- location, and match score (when available). A separate announcement
+    -- template is used when no match score is present.
+
+  @guarantee SwipeHint
+    -- On the first card only and on mobile (sm:hidden), a pulsing text hint
+    -- shows swipe directions. The pulse animation respects motion-reduce:animate-none.
+    -- The hint auto-dismisses after the first swipe action.
+
+  @guarantee KeyboardHintsDecoration
+    -- Desktop-only (hidden sm:flex) keyboard shortcut hints (D, P, S, Z) are
+    -- displayed below the action buttons. Marked aria-hidden="true" as they
+    -- are visual decoration for sighted keyboard users, not semantic content.
+
+  @guarantee MotionReduce
+    -- The current card's drag transition and exit animation respect
+    -- prefers-reduced-motion via motion-reduce:!transition-none.
 }
 
 -- =============================================================================

@@ -31,6 +31,7 @@ jest.mock("@/i18n", () => ({
         "automations.phaseMatch": "Match",
         "automations.phaseSave": "Save",
         "automations.phaseFinalize": "Finalize",
+        "automations.runEnded": "Run completed",
       };
       return dict[key] ?? key;
     },
@@ -287,4 +288,37 @@ describe("RunProgressPanel — all phase labels rendered", () => {
       ).not.toThrow();
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// Suite — run completed transition
+// ---------------------------------------------------------------------------
+
+describe("RunProgressPanel — run completed transition", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("shows 'Run completed' message when automation transitions from running to not running", () => {
+    // Start in running state
+    mockIsAutomationRunning.mockReturnValue(true);
+    mockGetActiveProgress.mockReturnValue(makeProgress("finalize"));
+
+    const { rerender } = render(
+      <RunProgressPanel automationId={AUTOMATION_ID} />,
+    );
+
+    // Transition to not running
+    mockIsAutomationRunning.mockReturnValue(false);
+    mockGetActiveProgress.mockReturnValue(null);
+
+    rerender(<RunProgressPanel automationId={AUTOMATION_ID} />);
+
+    expect(screen.getByText("Run completed")).toBeInTheDocument();
+  });
 });
