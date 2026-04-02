@@ -268,13 +268,16 @@ Du MUSST jeden Checkpoint mit Evidenz bestätigen bevor du zum nächsten Schritt
 - [ ] CP-7: Alle neuen Komponenten haben Loading/Empty/Error/i18n States
 - [ ] CP-8: External API Tests mit Mocks geschrieben
 
-**Vor der ACT-Phase:**
-- [ ] CP-9: `/comprehensive-review:full-review` mit `/agent-teams:multi-reviewer-patterns` dispatcht → konsolidierter Report in `docs/reviews/s4/`
-- [ ] CP-10: `/accessibility-compliance:wcag-audit-patterns` dispatcht → Findings dokumentiert
-- [ ] CP-11: `/ui-design:interaction-design` dispatcht → Loading-Transitions dokumentiert
-- [ ] CP-12: `/business-analytics:data-storytelling` dispatcht → Enrichment-Coverage-Viz dokumentiert
-- [ ] CP-13: `allium:weed` ausgeführt → zero Divergenzen
-- [ ] CP-14: Blind Spot Check als eigener Agent dispatcht → Findings dokumentiert
+**Vor der ACT-Phase — EXAKTE Skill-Aufrufe (Learning aus S3):**
+
+S3 hat generische `Agent("review")` Aufrufe statt der spezialisierten Skills verwendet. Skills laden spezialisierte Prompts und Checklisten — generische Agents improvisieren. Du MUSST die folgenden Skills EXAKT aufrufen:
+
+- [ ] CP-9: Rufe `/comprehensive-review:full-review` auf (NICHT `Agent("comprehensive review")`). Dann `/agent-teams:multi-reviewer-patterns` zur Konsolidierung. Reports in `docs/reviews/s4/`. **Evidenz:** Skill-Invocation-Output zeigen.
+- [ ] CP-10: Rufe `/accessibility-compliance:wcag-audit-patterns` auf (NICHT `Agent("a11y check")`). **Evidenz:** Skill-Output + Findings-Datei.
+- [ ] CP-11: Rufe `/ui-design:interaction-design` auf (NICHT `Agent("interaction review")`). **Evidenz:** Skill-Output + dokumentierte Patterns.
+- [ ] CP-12: Rufe `/business-analytics:data-storytelling` auf (NICHT `Agent("dashboard")`). **Evidenz:** Skill-Output + Visualisierung.
+- [ ] CP-13: Rufe `allium:weed` auf über alle betroffenen Specs. **Evidenz:** Weed-Output = zero Divergenzen.
+- [ ] CP-14: Dispatche Blind Spot Agent: "Woran haben wir nicht gedacht?" **Evidenz:** Findings dokumentiert.
 
 **Vor dem Merge:**
 - [ ] CP-15: ALLE Findings aus konsolidiertem Report gefixt
