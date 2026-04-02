@@ -714,8 +714,10 @@ surface SchedulerStatusBar {
     -- The config values serve as documentation of the intended defaults.
 
   @guarantee AccessibleStatusAnnouncement
-    -- The status pill is wrapped in an aria-live="polite" region so screen readers
-    -- announce phase transitions (idle <-> running) without interrupting the user.
+    -- A sr-only sibling span with aria-live="polite" aria-atomic="true" announces
+    -- phase transitions (idle <-> running) without interrupting the user.
+    -- The live region is a sibling of the pill trigger, not a wrapper, to avoid
+    -- re-announcing visual-only updates (popover open/close, queue count changes).
     -- The spinner uses motion-reduce:animate-none to respect prefers-reduced-motion.
     -- The queue count badge includes an aria-label with the interpolated count
     -- (e.g. "3 queued") for assistive technology.
@@ -824,7 +826,8 @@ surface RunStatusBadge {
 
   @guarantee ElapsedTimeDisplay
     -- When running, shows elapsed time since RunLock.startedAt, updated every second.
-    -- Elapsed time is formatted via i18n translation keys (elapsedMinSec / elapsedSec)
+    -- Elapsed time is formatted via i18n translation keys:
+    --   elapsedHourMinSec (>= 3600s), elapsedMinSec (>= 60s), elapsedSec (< 60s)
     -- for locale-aware display.
     -- All badge instances share a single 1-second interval timer to avoid
     -- N independent timers for N badges (performance optimization).
@@ -860,10 +863,22 @@ surface RunHistoryEnhancement {
     -- The Prisma migration sets the default value to "scheduler" for existing rows.
     -- No visual regression for existing run history entries.
 
+  @guarantee DurationColumn
+    -- Each run row shows a "Duration" column computed from completedAt - startedAt.
+    -- Duration is formatted via the same i18n keys as RunStatusBadge elapsed time:
+    --   elapsedHourMinSec (>= 3600s), elapsedMinSec (>= 60s), elapsedSec (< 60s).
+    -- Runs without a completedAt value show "-".
+
+  @guarantee ErrorState
+    -- When the run history fetch fails (error prop = true), the list renders a
+    -- centered error icon, an error message (runHistoryError i18n key), and an
+    -- optional retry button (runHistoryRetry i18n key) if an onRetry callback
+    -- is provided. This replaces the table entirely.
+
   @guarantee MobileResponsive
     -- Counter columns (searched, new, processed, matched) are hidden on mobile
     -- (below md breakpoint) to prevent horizontal overflow. The "saved" column
-    -- and status/source/error columns remain visible at all sizes.
+    -- and status/source/duration/error columns remain visible at all sizes.
 
   @guarantee LoadingSkeleton
     -- When loading with no prior data, the list shows three pulse-animated
