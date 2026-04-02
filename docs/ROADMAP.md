@@ -1918,8 +1918,12 @@ Generierte persönliche Landingpage die den Bewerbungs-Funnel invertiert: Statt 
 - **Skill-Tags:** Visueller Match zwischen angeforderten Fähigkeiten und Profil (aus JobSync-Daten: 4.1 Skillsets, Profil)
 - **Social Proof:** Projekte, Testimonials, GitHub-Stats, Portfolio
 - **CTA:** "Jetzt Gespräch vereinbaren" — Cal.com/Calendly Embed für direkte Terminbuchung
-- **Datenquelle:** JobSync-Profil, Skillsets (→ 4.1), generierte Dokumente (→ 4.2), Match-Scores
-- **Cross-Ref:** Public API (7.1) als Daten-Backend, Data Enrichment (1.13) für Logo/Company-Context
+- **Zwei Modi — Graceful Degradation:**
+  - **Personalisiert (Consent-Referral-Link geklickt, → 6.1):** "Hallo Frau Müller, Sie suchen einen Senior Developer mit React bei Siemens — hier ist warum ich matche." Ref-Link triggert Automation, lädt HR-Daten, personalisiert Ansprache + Skill-Matching.
+  - **Generisch (Default, kein Consent nötig):** "Hallo, ich bin Pascal. Hier ist mein Profil und meine Projekte." Gleiche Seite, gleiche Inhalte — nur ohne Personalisierung. Zero Drittdaten-Verarbeitung, DSGVO-sauber by Default.
+- **Social Proof:** Testimonials (→ 4.10), Portfolio/Arbeitsproben (→ 4.11), GitHub-Stats
+- **Datenquelle:** JobSync-Profil, Skillsets (→ 4.1), generierte Dokumente (→ 4.2), Match-Scores, Portfolio (→ 4.11)
+- **Cross-Ref:** Public API (7.1) als Daten-Backend, Data Enrichment (1.13) für Logo/Company-Context, DSGVO Consent-by-Referral (6.1)
 
 ---
 
