@@ -357,7 +357,7 @@ RESUME_EOF
       printf 'Using generic resume prompt\n'
     fi
     # Swap prompt, run, restore
-    local orig_prompt="$SCRIPT_DIR/${ARG2}-prompt.md"
+    orig_prompt="$SCRIPT_DIR/${ARG2}-prompt.md"
     cp "$orig_prompt" "${orig_prompt}.bak"
     cp "$local_resume_file" "$orig_prompt"
     run_session "$ARG2"
