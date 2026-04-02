@@ -26,6 +26,9 @@ jest.mock("@/i18n", () => ({
         "automations.elapsedHourMinSec": "{hour}h {min}m {sec}s",
         "automations.elapsedMinSec": "{min}m {sec}s",
         "automations.elapsedSec": "{sec}s",
+        "common.hourShort": "h",
+        "common.minuteShort": "m",
+        "common.secondShort": "s",
       };
       return dict[key] ?? key;
     },

@@ -121,7 +121,7 @@ function LogoPreview({
   return (
     <div className="flex items-center justify-center w-full h-24 rounded-md border border-dashed border-muted-foreground/40 bg-muted/10 overflow-hidden">
       {imgStatus === "loading" && (
-        <Loader className="h-5 w-5 animate-spin text-muted-foreground" />
+        <Loader className="h-5 w-5 animate-spin motion-reduce:animate-none text-muted-foreground" />
       )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img

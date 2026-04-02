@@ -30,6 +30,7 @@ export type {
   AutomationRunStartedPayload,
   AutomationRunCompletedPayload,
   AutomationDegradedPayload,
+  JobStatusChangedPayload,
 } from "./event-types";
 
 export { DomainEventType as DomainEventTypes, createEvent } from "./event-types";

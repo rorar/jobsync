@@ -10,9 +10,23 @@
  * - Pattern C functions (dashboard) return custom shapes
  * See specs/action-result.allium for the full classification.
  */
+/**
+ * Error codes for programmatic handling of server action failures.
+ * The error MESSAGE should be a generic i18n key; the errorCode is for code-level branching.
+ */
+export type ActionErrorCode =
+  | "DUPLICATE_ENTRY"
+  | "NOT_FOUND"
+  | "REFERENCE_ERROR"
+  | "INVALID_TRANSITION"
+  | "UNAUTHORIZED"
+  | "VALIDATION_ERROR"
+  | "INTERNAL_ERROR";
+
 export interface ActionResult<T = undefined> {
   success: boolean;
   data?: T;
   total?: number;
   message?: string;
+  errorCode?: ActionErrorCode;
 }

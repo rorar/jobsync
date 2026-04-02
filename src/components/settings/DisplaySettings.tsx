@@ -123,7 +123,7 @@ function DisplaySettings() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
           <span>{t("settings.loadingSettings")}</span>
         </div>
       </div>
@@ -239,7 +239,7 @@ function DisplaySettings() {
               />
 
               <Button type="submit" disabled={isSaving}>
-                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin motion-reduce:animate-none" />}
                 {t("settings.updatePreferences")}
               </Button>
             </form>

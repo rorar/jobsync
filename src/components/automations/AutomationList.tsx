@@ -69,18 +69,7 @@ const PAUSE_REASON_KEYS: Record<AutomationPauseReason, string> = {
   cb_escalation: "automations.pauseReasonCbEscalation",
 };
 
-/** Map automation status to i18n keys */
-const STATUS_DISPLAY_KEYS: Record<string, string> = {
-  active: "automations.statusActive",
-  paused: "automations.statusPaused",
-};
-
-/** Map module/jobBoard ids to i18n keys */
-const MODULE_DISPLAY_KEYS: Record<string, string> = {
-  eures: "automations.moduleEures",
-  arbeitsagentur: "automations.moduleArbeitsagentur",
-  jsearch: "automations.moduleJsearch",
-};
+import { STATUS_DISPLAY_KEYS, MODULE_DISPLAY_KEYS } from "@/lib/automation-display-keys";
 
 export function AutomationList({
   automations,

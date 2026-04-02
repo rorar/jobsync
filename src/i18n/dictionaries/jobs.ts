@@ -92,6 +92,60 @@ export const jobs = {
     "jobs.statusRejected": "Rejected",
     "jobs.statusExpired": "Expired",
     "jobs.statusArchived": "Archived",
+    "jobs.statusAccepted": "Accepted",
+    "jobs.statusBookmarked": "Bookmarked",
+
+    // Kanban Board
+    "jobs.kanbanBoard": "Kanban Board",
+    "jobs.kanbanViewTable": "Table",
+    "jobs.kanbanViewKanban": "Kanban",
+    "jobs.kanbanViewModeLabel": "View mode",
+    "jobs.kanbanNoJobs": "No jobs in this status",
+    "jobs.kanbanEmptyBoard": "Add your first job to start tracking",
+    "jobs.kanbanEmptyBoardAction": "Add Job",
+    "jobs.kanbanCollapsedCount": "{count} jobs",
+    "jobs.kanbanLoading": "Loading board...",
+    "jobs.kanbanError": "Failed to load Kanban board",
+    "jobs.kanbanRetry": "Retry",
+
+    // Drag and Drop Announcements (screen reader)
+    "jobs.kanbanDragStart": "Picked up {title} from {status} column",
+    "jobs.kanbanDragOver": "Moved over {status} column",
+    "jobs.kanbanDragEnd": "Dropped {title} in {status} column",
+    "jobs.kanbanDragCancel": "Movement cancelled, {title} returned to original position",
+    "jobs.kanbanDndInstructions": "Press Space or Enter to pick up a job card. Use arrow keys to move between columns. Press Space or Enter to drop. Press Escape to cancel.",
+
+    // Transition Dialog
+    "jobs.kanbanMoveTitle": "Move Job",
+    "jobs.kanbanMoveConfirm": "Move \"{title}\" from {from} to {to}?",
+    "jobs.kanbanMoveNote": "Add a note about this change (optional)",
+    "jobs.kanbanMoveNotePlaceholder": "e.g., Scheduled interview for next week",
+    "jobs.kanbanMoveButton": "Move to {status}",
+    "jobs.kanbanMoveMoving": "Moving...",
+    "jobs.kanbanMoved": "Job moved to {status}",
+    "jobs.kanbanMoveFailed": "Failed to move job",
+    "jobs.kanbanUndo": "Undo",
+    "jobs.kanbanUndone": "Move undone",
+    "jobs.kanbanUndoFailed": "Failed to undo move",
+
+    // Invalid Transition
+    "jobs.kanbanInvalidTransition": "Cannot move directly from {from} to {to}",
+
+    // Column Actions
+    "jobs.kanbanCollapseColumn": "Collapse column",
+    "jobs.kanbanExpandColumn": "Expand column",
+
+    // Mobile
+    "jobs.kanbanMoreStatuses": "{count} more",
+    "jobs.kanbanChangeStatusMobile": "Change status",
+
+    // Match Score
+    "jobs.kanbanMatchScore": "{score}% match",
+
+    // Due Date
+    "jobs.kanbanOverdue": "Overdue",
+    "jobs.kanbanDueSoon": "Due in {days} days",
+    "jobs.kanbanDueToday": "Due today",
   },
   de: {
     "jobs.title": "Meine Jobs",
@@ -186,6 +240,60 @@ export const jobs = {
     "jobs.statusRejected": "Abgelehnt",
     "jobs.statusExpired": "Abgelaufen",
     "jobs.statusArchived": "Archiviert",
+    "jobs.statusAccepted": "Angenommen",
+    "jobs.statusBookmarked": "Gemerkt",
+
+    // Kanban-Board
+    "jobs.kanbanBoard": "Kanban-Board",
+    "jobs.kanbanViewTable": "Tabelle",
+    "jobs.kanbanViewKanban": "Kanban",
+    "jobs.kanbanViewModeLabel": "Ansichtsmodus",
+    "jobs.kanbanNoJobs": "Keine Jobs in diesem Status",
+    "jobs.kanbanEmptyBoard": "Erstelle deinen ersten Job, um die Nachverfolgung zu starten",
+    "jobs.kanbanEmptyBoardAction": "Job hinzufügen",
+    "jobs.kanbanCollapsedCount": "{count} Jobs",
+    "jobs.kanbanLoading": "Board wird geladen...",
+    "jobs.kanbanError": "Kanban-Board konnte nicht geladen werden",
+    "jobs.kanbanRetry": "Erneut versuchen",
+
+    // Drag-and-Drop-Ankündigungen (Screenreader)
+    "jobs.kanbanDragStart": "{title} aus Spalte {status} aufgenommen",
+    "jobs.kanbanDragOver": "Über Spalte {status} bewegt",
+    "jobs.kanbanDragEnd": "{title} in Spalte {status} abgelegt",
+    "jobs.kanbanDragCancel": "Bewegung abgebrochen, {title} an Originalposition zurückgesetzt",
+    "jobs.kanbanDndInstructions": "Drücke Leertaste oder Eingabetaste, um eine Jobkarte aufzunehmen. Verwende Pfeiltasten, um zwischen Spalten zu wechseln. Drücke Leertaste oder Eingabetaste zum Ablegen. Drücke Escape zum Abbrechen.",
+
+    // Übergangs-Dialog
+    "jobs.kanbanMoveTitle": "Job verschieben",
+    "jobs.kanbanMoveConfirm": "\"{title}\" von {from} nach {to} verschieben?",
+    "jobs.kanbanMoveNote": "Notiz zu dieser Änderung hinzufügen (optional)",
+    "jobs.kanbanMoveNotePlaceholder": "z.B. Vorstellungsgespräch für nächste Woche geplant",
+    "jobs.kanbanMoveButton": "Nach {status} verschieben",
+    "jobs.kanbanMoveMoving": "Wird verschoben...",
+    "jobs.kanbanMoved": "Job nach {status} verschoben",
+    "jobs.kanbanMoveFailed": "Job konnte nicht verschoben werden",
+    "jobs.kanbanUndo": "Rückgängig",
+    "jobs.kanbanUndone": "Verschiebung rückgängig gemacht",
+    "jobs.kanbanUndoFailed": "Rückgängigmachen fehlgeschlagen",
+
+    // Ungültiger Übergang
+    "jobs.kanbanInvalidTransition": "Direkter Wechsel von {from} nach {to} nicht möglich",
+
+    // Spaltenaktionen
+    "jobs.kanbanCollapseColumn": "Spalte einklappen",
+    "jobs.kanbanExpandColumn": "Spalte ausklappen",
+
+    // Mobil
+    "jobs.kanbanMoreStatuses": "{count} weitere",
+    "jobs.kanbanChangeStatusMobile": "Status ändern",
+
+    // Übereinstimmung
+    "jobs.kanbanMatchScore": "{score}% Übereinstimmung",
+
+    // Fälligkeitsdatum
+    "jobs.kanbanOverdue": "Überfällig",
+    "jobs.kanbanDueSoon": "Fällig in {days} Tagen",
+    "jobs.kanbanDueToday": "Heute fällig",
   },
   fr: {
     "jobs.title": "Mes emplois",
@@ -280,6 +388,60 @@ export const jobs = {
     "jobs.statusRejected": "Refusé",
     "jobs.statusExpired": "Expiré",
     "jobs.statusArchived": "Archivé",
+    "jobs.statusAccepted": "Accepté",
+    "jobs.statusBookmarked": "Marqué",
+
+    // Tableau Kanban
+    "jobs.kanbanBoard": "Tableau Kanban",
+    "jobs.kanbanViewTable": "Tableau",
+    "jobs.kanbanViewKanban": "Kanban",
+    "jobs.kanbanViewModeLabel": "Mode d'affichage",
+    "jobs.kanbanNoJobs": "Aucun emploi dans ce statut",
+    "jobs.kanbanEmptyBoard": "Ajoutez votre premier emploi pour commencer le suivi",
+    "jobs.kanbanEmptyBoardAction": "Ajouter un emploi",
+    "jobs.kanbanCollapsedCount": "{count} emplois",
+    "jobs.kanbanLoading": "Chargement du tableau...",
+    "jobs.kanbanError": "Impossible de charger le tableau Kanban",
+    "jobs.kanbanRetry": "Réessayer",
+
+    // Annonces glisser-déposer (lecteur d'écran)
+    "jobs.kanbanDragStart": "{title} pris dans la colonne {status}",
+    "jobs.kanbanDragOver": "Déplacé au-dessus de la colonne {status}",
+    "jobs.kanbanDragEnd": "{title} déposé dans la colonne {status}",
+    "jobs.kanbanDragCancel": "Mouvement annulé, {title} remis à sa position d'origine",
+    "jobs.kanbanDndInstructions": "Appuyez sur Espace ou Entrée pour prendre une carte. Utilisez les touches fléchées pour naviguer entre les colonnes. Appuyez sur Espace ou Entrée pour déposer. Appuyez sur Échap pour annuler.",
+
+    // Dialogue de transition
+    "jobs.kanbanMoveTitle": "Déplacer l'emploi",
+    "jobs.kanbanMoveConfirm": "Déplacer \"{title}\" de {from} vers {to} ?",
+    "jobs.kanbanMoveNote": "Ajouter une note sur ce changement (optionnel)",
+    "jobs.kanbanMoveNotePlaceholder": "ex. Entretien prévu la semaine prochaine",
+    "jobs.kanbanMoveButton": "Déplacer vers {status}",
+    "jobs.kanbanMoveMoving": "Déplacement...",
+    "jobs.kanbanMoved": "Emploi déplacé vers {status}",
+    "jobs.kanbanMoveFailed": "Impossible de déplacer l'emploi",
+    "jobs.kanbanUndo": "Annuler",
+    "jobs.kanbanUndone": "Déplacement annulé",
+    "jobs.kanbanUndoFailed": "Impossible d'annuler le déplacement",
+
+    // Transition invalide
+    "jobs.kanbanInvalidTransition": "Impossible de passer directement de {from} à {to}",
+
+    // Actions de colonne
+    "jobs.kanbanCollapseColumn": "Réduire la colonne",
+    "jobs.kanbanExpandColumn": "Développer la colonne",
+
+    // Mobile
+    "jobs.kanbanMoreStatuses": "{count} de plus",
+    "jobs.kanbanChangeStatusMobile": "Changer le statut",
+
+    // Score de correspondance
+    "jobs.kanbanMatchScore": "{score}% de correspondance",
+
+    // Date limite
+    "jobs.kanbanOverdue": "En retard",
+    "jobs.kanbanDueSoon": "Échéance dans {days} jours",
+    "jobs.kanbanDueToday": "Échéance aujourd'hui",
   },
   es: {
     "jobs.title": "Mis empleos",
@@ -374,5 +536,59 @@ export const jobs = {
     "jobs.statusRejected": "Rechazado",
     "jobs.statusExpired": "Expirado",
     "jobs.statusArchived": "Archivado",
+    "jobs.statusAccepted": "Aceptado",
+    "jobs.statusBookmarked": "Marcado",
+
+    // Tablero Kanban
+    "jobs.kanbanBoard": "Tablero Kanban",
+    "jobs.kanbanViewTable": "Tabla",
+    "jobs.kanbanViewKanban": "Kanban",
+    "jobs.kanbanViewModeLabel": "Modo de vista",
+    "jobs.kanbanNoJobs": "Sin empleos en este estado",
+    "jobs.kanbanEmptyBoard": "Agrega tu primer empleo para empezar a hacer seguimiento",
+    "jobs.kanbanEmptyBoardAction": "Agregar empleo",
+    "jobs.kanbanCollapsedCount": "{count} empleos",
+    "jobs.kanbanLoading": "Cargando tablero...",
+    "jobs.kanbanError": "No se pudo cargar el tablero Kanban",
+    "jobs.kanbanRetry": "Reintentar",
+
+    // Anuncios de arrastrar y soltar (lector de pantalla)
+    "jobs.kanbanDragStart": "{title} tomado de la columna {status}",
+    "jobs.kanbanDragOver": "Movido sobre la columna {status}",
+    "jobs.kanbanDragEnd": "{title} soltado en la columna {status}",
+    "jobs.kanbanDragCancel": "Movimiento cancelado, {title} devuelto a su posición original",
+    "jobs.kanbanDndInstructions": "Presiona Espacio o Enter para tomar una tarjeta. Usa las teclas de flecha para moverte entre columnas. Presiona Espacio o Enter para soltar. Presiona Escape para cancelar.",
+
+    // Diálogo de transición
+    "jobs.kanbanMoveTitle": "Mover empleo",
+    "jobs.kanbanMoveConfirm": "Mover \"{title}\" de {from} a {to}?",
+    "jobs.kanbanMoveNote": "Agregar una nota sobre este cambio (opcional)",
+    "jobs.kanbanMoveNotePlaceholder": "ej. Entrevista programada para la próxima semana",
+    "jobs.kanbanMoveButton": "Mover a {status}",
+    "jobs.kanbanMoveMoving": "Moviendo...",
+    "jobs.kanbanMoved": "Empleo movido a {status}",
+    "jobs.kanbanMoveFailed": "No se pudo mover el empleo",
+    "jobs.kanbanUndo": "Deshacer",
+    "jobs.kanbanUndone": "Movimiento deshecho",
+    "jobs.kanbanUndoFailed": "No se pudo deshacer el movimiento",
+
+    // Transición inválida
+    "jobs.kanbanInvalidTransition": "No se puede mover directamente de {from} a {to}",
+
+    // Acciones de columna
+    "jobs.kanbanCollapseColumn": "Colapsar columna",
+    "jobs.kanbanExpandColumn": "Expandir columna",
+
+    // Móvil
+    "jobs.kanbanMoreStatuses": "{count} más",
+    "jobs.kanbanChangeStatusMobile": "Cambiar estado",
+
+    // Puntuación de coincidencia
+    "jobs.kanbanMatchScore": "{score}% coincidencia",
+
+    // Fecha límite
+    "jobs.kanbanOverdue": "Atrasado",
+    "jobs.kanbanDueSoon": "Vence en {days} días",
+    "jobs.kanbanDueToday": "Vence hoy",
   },
 } as const;

@@ -3,6 +3,7 @@
 import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
 import { useTranslations, formatRelativeTime } from "@/i18n";
 import { Check, Loader2 } from "lucide-react";
+import { MODULE_DISPLAY_KEYS } from "@/lib/automation-display-keys";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -103,8 +104,8 @@ export function SchedulerStatusBar() {
                   <span className="text-muted-foreground">
                     {t("automations.schedulerModule")}
                   </span>
-                  <span className="font-medium capitalize">
-                    {activeRun.moduleId}
+                  <span className="font-medium">
+                    {t(MODULE_DISPLAY_KEYS[activeRun.moduleId] ?? activeRun.moduleId)}
                   </span>
                 </div>
               </>

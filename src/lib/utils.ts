@@ -2,7 +2,7 @@ import { type ClassValue, clsx } from "clsx";
 import { format, parse } from "date-fns";
 import { formatDate } from "@/i18n";
 import { twMerge } from "tailwind-merge";
-import { ActionResult } from "@/models/actionResult";
+import { ActionResult, ActionErrorCode } from "@/models/actionResult";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -37,23 +37,43 @@ export function formatUrl(url: string) {
   return url;
 }
 
+/**
+ * Map Prisma error codes to ActionErrorCode for programmatic handling.
+ * Raw Prisma messages are replaced with generic i18n-friendly messages.
+ */
+const PRISMA_ERROR_MAP: Record<string, { errorCode: ActionErrorCode; message: string }> = {
+  P2002: { errorCode: "DUPLICATE_ENTRY", message: "errors.duplicateEntry" },
+  P2025: { errorCode: "NOT_FOUND", message: "errors.notFound" },
+  P2003: { errorCode: "REFERENCE_ERROR", message: "errors.referenceError" },
+};
+
 export function handleError(error: unknown, msg = "Server Error."): ActionResult<never> {
   console.error(error, msg);
   if (error instanceof Error) {
     if (error.message === "fetch failed") {
-      error.message =
-        "Fetch failed, please make sure selected AI service is running.";
-    }
-    if ("code" in error && (error as { code: unknown }).code === "P2003") {
       return {
         success: false,
-        message:
-          "Your session appears invalid. Please sign out and sign back in.",
+        message: "errors.fetchFailed",
+        errorCode: "INTERNAL_ERROR",
       };
     }
+
+    // Map known Prisma error codes to structured ActionErrorCodes
+    if ("code" in error) {
+      const prismaCode = (error as { code: unknown }).code;
+      if (typeof prismaCode === "string" && PRISMA_ERROR_MAP[prismaCode]) {
+        const mapped = PRISMA_ERROR_MAP[prismaCode];
+        return {
+          success: false,
+          message: mapped.message,
+          errorCode: mapped.errorCode,
+        };
+      }
+    }
+
     return { success: false, message: error.message || msg };
   }
-  return { success: false, message: msg };
+  return { success: false, message: msg, errorCode: "INTERNAL_ERROR" };
 }
 
 export function getTimestampedFileName(originalName: string): string {

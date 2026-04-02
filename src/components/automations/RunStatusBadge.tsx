@@ -5,6 +5,7 @@ import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
 import { useTranslations } from "@/i18n";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Clock } from "lucide-react";
+import { formatDuration } from "@/lib/format-duration";
 
 // Shared 1-second timer for ALL RunStatusBadge instances (P-1 perf fix)
 // Instead of N intervals for N badges, one shared timer triggers all subscribers.
@@ -63,14 +64,7 @@ export function RunStatusBadge({ automationId }: RunStatusBadgeProps) {
   // Compute elapsed time from RunLock.startedAt
   const lock = state?.runningAutomations.find(r => r.automationId === automationId);
   const elapsed = lock ? Math.floor((Date.now() - new Date(lock.startedAt).getTime()) / 1000) : 0;
-  const hour = Math.floor(elapsed / 3600);
-  const min = Math.floor((elapsed % 3600) / 60);
-  const sec = elapsed % 60;
-  const elapsedText = elapsed >= 3600
-    ? t("automations.elapsedHourMinSec").replace("{hour}", String(hour)).replace("{min}", String(min)).replace("{sec}", String(sec))
-    : elapsed >= 60
-      ? t("automations.elapsedMinSec").replace("{min}", String(min)).replace("{sec}", String(sec))
-      : t("automations.elapsedSec").replace("{sec}", String(elapsed));
+  const elapsedText = formatDuration(elapsed, t);
 
   // Screen reader status - only announces on significant state changes (start/stop), not elapsed time
   const srStatus = running ? t("automations.running") : entry ? t("automations.queued") : "";
