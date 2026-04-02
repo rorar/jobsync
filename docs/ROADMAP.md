@@ -1878,6 +1878,19 @@ Automation findet Jobs → LLM filtert & bewertet (Staging) → LLM promoted zu 
   - Dry-Run Modus: Macht alles außer tatsächlich senden — User reviewt Entwürfe
 - **Depends on:** Praktisch alles — 0.4, 0.5, 0.6, 1.12 (E-Mail), 4.2, 4.9, Application Locale Profile, AI Connector
 
+### 9.5 Bewerber-Landingpage / Reverse-Funnel
+Generierte persönliche Landingpage die den Bewerbungs-Funnel invertiert: Statt "Ich bewerbe mich bei euch" → "Ihr habt mich gefunden, hier ist warum ich matche."
+
+**Konzept:** Der Bewerber erstellt die Seite, HRler/Recruiter lesen sie.
+
+- **Hook:** Personalisierte Begrüßung mit Pitch ("Hallo, ich bin [Name]. Ich baue [X].")
+- **Dynamic Match:** Visitor kommt von Stellenanzeige/LinkedIn → Seite parsed Referrer/UTM-Params und zeigt relevante Skills/Projekte passend zur Stelle
+- **Skill-Tags:** Visueller Match zwischen angeforderten Fähigkeiten und Profil (aus JobSync-Daten: 4.1 Skillsets, Profil)
+- **Social Proof:** Projekte, Testimonials, GitHub-Stats, Portfolio
+- **CTA:** "Jetzt Gespräch vereinbaren" — Cal.com/Calendly Embed für direkte Terminbuchung
+- **Datenquelle:** JobSync-Profil, Skillsets (→ 4.1), generierte Dokumente (→ 4.2), Match-Scores
+- **Cross-Ref:** Public API (7.1) als Daten-Backend, Data Enrichment (1.13) für Logo/Company-Context
+
 ---
 
 ## Implementierte Features (Stand: 2026-03-28)
