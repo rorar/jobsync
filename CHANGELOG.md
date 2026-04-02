@@ -1,5 +1,45 @@
 # Changelog
 
+## [2026-04-02] Session S2 — User Journeys & UX Polish
+
+### Fixed (WCAG Compliance — 15 fixes)
+- **a11y (HIGH):** aria-live regions for SchedulerStatusBar and RunProgressPanel state changes
+- **a11y (HIGH):** Complete progressbar ARIA (valuemin, valuetext, label) on desktop + mobile
+- **a11y (HIGH):** DeckView container missing focus indicator — added focus-visible:ring-2
+- **a11y (HIGH):** DeckCard "Show more" button below 24px WCAG 2.5.8 target
+- **a11y (HIGH):** AutomationList nested `<button>` inside `<Link>` — restructured to div+router.push
+- **a11y (HIGH):** Non-focusable tooltip triggers in AutomationList + RunHistoryList → buttons
+- **a11y (HIGH):** PublicApiKeySettings amber-600 contrast ~3.0:1 → orange-700 (~4.8:1)
+- **a11y:** DeckCard match score amber SVG contrast improved
+- **a11y:** motion-reduce:animate-none on 6 spinner instances (Loading, SchedulerStatusBar, Settings×4)
+- **a11y:** RunStatusBadge live region throttled (status changes only, not per-second elapsed time)
+- **a11y:** Decorative icons aria-hidden="true" across 8 components
+- **a11y:** AutomationList scroll-mt-14 for sticky header focus obscuring
+- **a11y:** ViewModeToggle focus-visible styles + increased touch targets
+
+### Fixed (i18n — 22 keys × 4 locales = 88 translations)
+- **i18n (HIGH):** Translate raw `automation.status`/`automation.jobBoard` in AutomationList
+- **i18n (HIGH):** Translate raw `blockedReason` in RunHistoryList (7 known reasons + fallback)
+- **i18n (HIGH):** Locale-aware elapsed time in RunStatusBadge (DE: "2 Min. 30 Sek.")
+- **i18n (HIGH):** Remove `as Parameters<typeof t>[0]` casts — `as const` on PHASE_KEYS
+- **i18n:** formatNumber for RunProgressPanel phase counters
+- **i18n:** Remove `as any` on PAUSE_REASON_KEYS
+
+### Fixed (UX)
+- **ux (HIGH):** CompanyBlacklist delete now has AlertDialog confirmation
+- **ux (HIGH):** Error states for initial load failure (PublicApiKeySettings, CompanyBlacklistSettings)
+- **ux (HIGH):** StagingContainer stale vacancies flash on tab switch — clear on change
+- **ux:** Public API search case-insensitive (`mode: 'insensitive'` on SQLite)
+- **ux:** StagingContainer notification banner `role="status"` for screen readers
+- **ux:** Removed Bootstrap `btn btn-primary` classes from StagingContainer
+- **ux:** DeckView preview cards `aria-hidden` from assistive technology
+
+### Changed (Tests)
+- Updated api-v1-jobs, RunProgressPanel, RunStatusBadge test expectations for S2 changes
+
+### Added (Documentation)
+- `docs/user-journey-audit.md` — comprehensive audit of 8 features and 14 components
+
 ## [2026-04-01] Session S1b — Comprehensive Review + Fix All
 
 ### Added (Test Coverage + Spec Alignment)
