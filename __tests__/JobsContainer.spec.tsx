@@ -53,6 +53,20 @@ jest.mock("next/navigation", () => ({
   useSearchParams: jest.fn(),
 }));
 
+// Force table view mode so table-based tests (Load More, loader) work
+jest.mock("@/hooks/useKanbanState", () => ({
+  ...jest.requireActual("@/hooks/useKanbanState"),
+  getPersistedViewMode: () => "table" as const,
+}));
+
+// Stub kanban components not needed for these tests
+jest.mock("@/components/kanban/KanbanBoard", () => ({
+  KanbanBoard: () => <div data-testid="kanban-board" />,
+}));
+jest.mock("@/components/kanban/KanbanViewModeToggle", () => ({
+  KanbanViewModeToggle: () => <div data-testid="kanban-toggle" />,
+}));
+
 global.ResizeObserver = jest.fn().mockImplementation(() => ({
   observe: jest.fn(),
   unobserve: jest.fn(),

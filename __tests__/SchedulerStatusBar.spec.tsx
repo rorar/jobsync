@@ -33,6 +33,10 @@ jest.mock("@/i18n", () => ({
         "automations.schedulerQueueRemaining": "remaining",
         "automations.schedulerLastCompleted": "Last completed",
         "automations.schedulerNoAutomations": "No automations configured",
+        "automations.queuedCount": "{count} queued",
+        "automations.moduleEures": "eures",
+        "automations.moduleArbeitsagentur": "arbeitsagentur",
+        "automations.moduleJsearch": "jsearch",
       };
       return dict[key] ?? key;
     },
