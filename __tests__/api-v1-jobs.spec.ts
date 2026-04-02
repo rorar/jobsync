@@ -267,7 +267,7 @@ describe("GET /api/v1/jobs", () => {
     expect(where.OR).toBeDefined();
     expect(where.OR).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ JobTitle: { label: { contains: "Engineer" } } }),
+        expect.objectContaining({ JobTitle: { label: { contains: "Engineer", mode: "insensitive" } } }),
       ]),
     );
   });

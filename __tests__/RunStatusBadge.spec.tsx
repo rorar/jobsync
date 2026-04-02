@@ -23,6 +23,8 @@ jest.mock("@/i18n", () => ({
       const dict: Record<string, string> = {
         "automations.running": "Running",
         "automations.queued": "Queued",
+        "automations.elapsedMinSec": "{min}m {sec}s",
+        "automations.elapsedSec": "{sec}s",
       };
       return dict[key] ?? key;
     },
@@ -97,14 +99,16 @@ describe("RunStatusBadge — idle state", () => {
     expect(screen.queryByText(/Queued/i)).not.toBeInTheDocument();
   });
 
-  it("has aria-live='polite' on the container", () => {
+  it("has aria-live='polite' on the sr-only child span", () => {
     render(<RunStatusBadge automationId={AUTOMATION_ID} />);
-    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
+    const srOnly = screen.getByRole("status").querySelector(".sr-only");
+    expect(srOnly).toHaveAttribute("aria-live", "polite");
   });
 
-  it("has aria-atomic='true' on the container", () => {
+  it("has aria-atomic='true' on the sr-only child span", () => {
     render(<RunStatusBadge automationId={AUTOMATION_ID} />);
-    expect(screen.getByRole("status")).toHaveAttribute("aria-atomic", "true");
+    const srOnly = screen.getByRole("status").querySelector(".sr-only");
+    expect(srOnly).toHaveAttribute("aria-atomic", "true");
   });
 });
 
@@ -139,7 +143,7 @@ describe("RunStatusBadge — running state", () => {
 
     render(<RunStatusBadge automationId={AUTOMATION_ID} />);
 
-    expect(screen.getByText(/Running/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Running/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId("icon-loader")).toBeInTheDocument();
   });
 
@@ -232,7 +236,7 @@ describe("RunStatusBadge — queued state", () => {
 
     render(<RunStatusBadge automationId={AUTOMATION_ID} />);
 
-    expect(screen.getByText(/Queued/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Queued/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId("icon-clock")).toBeInTheDocument();
   });
 
