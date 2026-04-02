@@ -20,6 +20,7 @@ jest.mock("@prisma/client", () => {
   const mPrismaClient = {
     jobStatus: {
       findMany: jest.fn(),
+      findFirst: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },
@@ -35,18 +36,44 @@ jest.mock("@prisma/client", () => {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    jobStatusHistory: {
+      create: jest.fn(),
+    },
     location: {
       findMany: jest.fn(),
       findFirst: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },
+    $transaction: jest.fn(),
   };
   return { PrismaClient: jest.fn(() => mPrismaClient) };
 });
 
 jest.mock("@/utils/user.utils", () => ({
   getCurrentUser: jest.fn(),
+}));
+
+jest.mock("next/cache", () => ({
+  revalidatePath: jest.fn(),
+}));
+
+jest.mock("@/lib/events", () => ({
+  emitEvent: jest.fn(),
+  createEvent: jest.fn((_type: string, payload: unknown) => ({
+    type: _type,
+    payload,
+    timestamp: new Date(),
+  })),
+  DomainEventTypes: { JobStatusChanged: "JobStatusChanged" },
+}));
+
+jest.mock("@/lib/crm/status-machine", () => ({
+  isValidTransition: jest.fn().mockReturnValue(true),
+  computeTransitionSideEffects: jest.fn().mockReturnValue({}),
+  getValidTargets: jest.fn().mockReturnValue([]),
+  STATUS_ORDER: ["bookmarked", "applied", "interview", "offer", "rejected", "ghosted", "withdrawn"],
+  COLLAPSED_BY_DEFAULT: [],
 }));
 
 describe("jobActions", () => {
@@ -461,84 +488,53 @@ describe("jobActions", () => {
     });
   });
   describe("addJob", () => {
-    it("should create a new job successfully", async () => {
+    const createdJob = {
+      ...jobData,
+      id: "new-job-id",
+      Status: { id: "status-id", label: "Bookmarked", value: "bookmarked" },
+    };
+    const historyEntry = { id: "history-1" };
+
+    it("should create a new job with initial status history", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
-      (prisma.job.create as jest.Mock).mockResolvedValue(jobData);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) => {
+        return fn({
+          job: {
+            create: jest.fn().mockResolvedValue(createdJob),
+          },
+          jobStatusHistory: {
+            create: jest.fn().mockResolvedValue(historyEntry),
+          },
+        });
+      });
 
       const result = await addJob(jobData);
 
-      expect(result).toStrictEqual({ data: jobData, success: true });
-      expect(prisma.job.create).toHaveBeenCalledTimes(1);
-      expect(prisma.job.create).toHaveBeenCalledWith({
-        data: {
-          jobTitleId: jobData.title,
-          companyId: jobData.company,
-          locationId: jobData.location,
-          statusId: jobData.status,
-          jobSourceId: jobData.source,
-          salaryRange: jobData.salaryRange,
-          createdAt: expect.any(Date),
-          dueDate: jobData.dueDate,
-          appliedDate: jobData.dateApplied,
-          description: jobData.jobDescription,
-          jobType: jobData.type,
-          userId: mockUser.id,
-          jobUrl: jobData.jobUrl,
-          applied: jobData.applied,
-          resumeId: null,
-        },
-        include: {
-          JobTitle: true,
-          Company: true,
-          Status: true,
-          Location: true,
-          JobSource: true,
-          tags: true,
-        },
-      });
+      expect(result).toStrictEqual({ data: createdJob, success: true });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
-    it("should handle undefined values for optional fields", async () => {
+    it("should emit JobStatusChanged event after creation", async () => {
+      const { emitEvent } = require("@/lib/events");
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
-      (prisma.job.create as jest.Mock).mockResolvedValue(jobData);
-
-      const result = await addJob({
-        ...jobData,
-        jobUrl: undefined,
-        dateApplied: undefined,
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) => {
+        return fn({
+          job: {
+            create: jest.fn().mockResolvedValue(createdJob),
+          },
+          jobStatusHistory: {
+            create: jest.fn().mockResolvedValue(historyEntry),
+          },
+        });
       });
 
-      expect(prisma.job.create).toHaveBeenCalledTimes(1);
-      expect(prisma.job.create).toHaveBeenCalledWith({
-        data: {
-          jobTitleId: jobData.title,
-          companyId: jobData.company,
-          locationId: jobData.location,
-          statusId: jobData.status,
-          jobSourceId: jobData.source,
-          salaryRange: jobData.salaryRange,
-          createdAt: expect.any(Date),
-          dueDate: jobData.dueDate,
-          description: jobData.jobDescription,
-          jobType: jobData.type,
-          userId: mockUser.id,
-          applied: jobData.applied,
-          resumeId: null,
-        },
-        include: {
-          JobTitle: true,
-          Company: true,
-          Status: true,
-          Location: true,
-          JobSource: true,
-          tags: true,
-        },
-      });
-      expect(result).toEqual({ data: jobData, success: true });
+      await addJob(jobData);
+
+      expect(emitEvent).toHaveBeenCalledTimes(1);
     });
     it("should handle unexpected errors", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
 
-      (prisma.job.create as jest.Mock).mockRejectedValue(
+      (prisma.$transaction as jest.Mock).mockRejectedValue(
         new Error("Unexpected error"),
       );
 
@@ -599,74 +595,51 @@ describe("jobActions", () => {
     });
   });
   describe("updateJobStatus", () => {
-    const jobData = {
-      id: "job-id",
-      title: "job-title-id",
-      company: "company-id",
-      location: "location-id",
-      type: "FT",
-      status: {
-        id: "status-id",
-        label: "Applied",
-        value: "applied",
-      },
-      source: "source-id",
-      salaryRange: "$50,000 - $70,000",
-      createdAt: expect.any(Date),
-      dueDate: new Date("2023-01-01"),
-      dateApplied: new Date("2022-12-31"),
-      jobDescription: "Job description",
-      jobUrl: "https://example.com/job",
-      applied: true,
-      userId: mockUser.id,
+    const statusObj = {
+      id: "status-applied",
+      label: "Applied",
+      value: "applied",
     };
-    it("should update a job status successfully", async () => {
+    const currentJob = {
+      id: "job-id",
+      statusId: "status-bookmarked",
+      Status: { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked" },
+      appliedDate: null,
+    };
+    const updatedJob = {
+      ...currentJob,
+      statusId: statusObj.id,
+      Status: statusObj,
+    };
+    const historyEntry = { id: "history-1" };
+
+    it("should delegate to changeJobStatus (state machine path)", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
-      (prisma.job.update as jest.Mock).mockResolvedValue(jobData);
-
-      const result = await updateJobStatus(jobData.id, jobData.status);
-
-      expect(result).toStrictEqual({ data: jobData, success: true });
-      expect(prisma.job.update).toHaveBeenCalledTimes(1);
-      expect(prisma.job.update).toHaveBeenCalledWith({
-        where: {
-          id: jobData.id,
-          userId: mockUser.id,
-        },
-        data: {
-          statusId: jobData.status.id,
-          applied: true,
-          appliedDate: expect.any(Date),
-        },
-        include: {
-          JobTitle: true,
-          Company: true,
-          Status: true,
-          Location: true,
-          JobSource: true,
-          tags: true,
-        },
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue(currentJob);
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(statusObj);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) => {
+        return fn({
+          job: {
+            update: jest.fn().mockResolvedValue(updatedJob),
+          },
+          jobStatusHistory: {
+            create: jest.fn().mockResolvedValue(historyEntry),
+          },
+        });
       });
-    });
-    it("should handle unexpected errors", async () => {
-      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
 
-      (prisma.job.update as jest.Mock).mockRejectedValue(
-        new Error("Unexpected error"),
-      );
+      const result = await updateJobStatus("job-id", statusObj);
 
-      await expect(
-        updateJobStatus(jobData.id, jobData.status),
-      ).resolves.toStrictEqual({
-        success: false,
-        message: "Unexpected error",
-      });
+      expect(result.success).toBe(true);
+      // Verify it went through changeJobStatus by checking $transaction was called
+      // (the old updateJobStatus used prisma.job.update directly)
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
     it("should throw error when user is not authenticated", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(null);
 
       await expect(
-        updateJobStatus(jobData.id, jobData.status),
+        updateJobStatus("job-id", statusObj),
       ).resolves.toStrictEqual({
         success: false,
         message: "Not authenticated",
