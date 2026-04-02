@@ -62,8 +62,11 @@ Verwende `/database-design:postgresql` für das Schema-Design der CRM-Tabellen:
 Lies die Cross-Dependencies in docs/ROADMAP.md:
 - 5.1 (Communication) — wird CRM-spezifische Features brauchen
 - 5.4 (Reminders) — CRM-Reminders als Notification-Rules (→ 0.6)
-- 5.9 (Timeline) — Chronologische Timeline pro Job, automatisch befüllt
+- 5.9 (Timeline) — Chronologische Timeline pro Job, automatisch befüllt. Discovery: Event Sourcing vs. Audit-Log (→ `/event-store-design`)
 - 0.6 (Notifications) — Event Bus als Infrastruktur
+- 2.20 (Spotlight / Cmd+K) — CRM-Entities müssen durchsuchbar sein (Job-Status, Kanban-Spalten)
+- 9.5 (Bewerber-Landingpage) — Job-Status-Daten als Conversion-Funnel auf der Landingpage
+- 4.2 (Dynamic CV) — CRM Job-Status-Daten als Input für CV-Generierung (aktueller Stand pro Bewerbung)
 
 **Frage:** Was muss C5 vorbereiten damit diese Features später draufbauen können? Definiere die Hooks/Events/Interfaces die C5 exponieren muss.
 
@@ -110,7 +113,7 @@ source scripts/env.sh && bun run build  # Build prüfen
 3. User Journey + Edge Cases für CRM Features (7 Dimensionen)
 4. UX 10-Punkte-Checkliste für alle neuen Komponenten
 5. Blind Spot Check: "Woran haben wir nicht gedacht?"
-6. Cross-Dependency Check: Hat C5 die Hooks/Events für 5.1, 5.4, 5.9 vorbereitet?
+6. Cross-Dependency Check: Hat C5 die Hooks/Events für 5.1, 5.4, 5.9, 2.20, 9.5 vorbereitet?
 
 ### ACT-Phase
 
@@ -275,7 +278,7 @@ Agenten, Skills und Plugins dürfen jederzeit online suchen (WebSearch, WebFetch
 - [ ] User Journeys + Edge Cases für CRM Features dokumentiert
 - [ ] UX 10-Punkte-Checkliste für alle neuen Komponenten bestanden
 - [ ] Blind Spot Check durchgeführt
-- [ ] Cross-Dependencies: Hooks für 5.1, 5.4, 5.9 vorbereitet
+- [ ] Cross-Dependencies: Hooks für 5.1, 5.4, 5.9, 2.20 (Spotlight), 9.5 (Landingpage) vorbereitet
 - [ ] E2E Tests für CRM Features hinzugefügt
 - [ ] docs/BUGS.md aktualisiert
 - [ ] CLAUDE.md aktualisiert (CRM Architektur)

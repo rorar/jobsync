@@ -50,6 +50,9 @@ Cross-Dependencies:
 - 2.4 (Auto-Fetch Firmenlogos) — Consumer des Logo-Enrichments
 - 2.2 (Kununu/Glassdoor in Jobdetails) — Zukünftiges Review-Modul
 - 3.6 (Link-Parsing und Auto-Fill) — Consumer des Deep-Link-Enrichments
+- 9.5 (Bewerber-Landingpage) — Logos + Company-Context auf der Landingpage, Deep-Links für Social Proof
+- 4.2 (Dynamic CV) — Enriched Company-Daten (Logo, Website) in generierten CVs
+- 4.10 (Social Proof) — GitHub-Stats als potenzielle zukünftige Enrichment-Dimension
 - Shared-Client-Pattern: Google Maps Client (falls Places-Modul später kommt)
 
 **Frage:** Was muss Phase 1 vorbereiten damit Phase 2 (Reviews, Contact-Extraction) draufbauen kann?
@@ -127,7 +130,7 @@ source scripts/env.sh && bun run build  # Build prüfen
 4. Edge Cases: Alle Module down, Domain nicht auflösbar, Rate Limit, Cache-Hit
 5. UX 10-Punkte-Checkliste für neue Komponenten
 6. Blind Spot Check
-7. Cross-Dependency Check: Sind 2.4, 3.6 vorbereitet?
+7. Cross-Dependency Check: Sind 2.4, 3.6, 9.5 (Landingpage), 4.2 (Dynamic CV) vorbereitet?
 
 ### ACT-Phase
 
@@ -310,7 +313,7 @@ Agenten, Skills und Plugins dürfen jederzeit online suchen (WebSearch, WebFetch
 - [ ] User Journeys + Edge Cases dokumentiert
 - [ ] UX 10-Punkte-Checkliste bestanden
 - [ ] Blind Spot Check durchgeführt
-- [ ] Cross-Dependencies: 2.4, 3.6 vorbereitet
+- [ ] Cross-Dependencies: 2.4, 3.6, 9.5 (Landingpage), 4.2 (Dynamic CV) vorbereitet
 - [ ] E2E Tests hinzugefügt
 - [ ] docs/BUGS.md aktualisiert
 - [ ] CLAUDE.md aktualisiert (Data Enrichment Architektur)
