@@ -117,6 +117,16 @@ export async function cleanupStaleE2EData(): Promise<void> {
     },
   })).count;
 
+  // 13. Public API Keys (E2E test keys)
+  total += (await prisma.publicApiKey.deleteMany({
+    where: { userId, name: { startsWith: "E2E " } },
+  })).count;
+
+  // 14. Company Blacklist entries (E2E test entries)
+  total += (await prisma.companyBlacklist.deleteMany({
+    where: { userId, pattern: { startsWith: "E2E " } },
+  })).count;
+
   if (total > 0) {
     console.log(`[E2E Cleanup] Removed ${total} stale E2E records`);
   }
