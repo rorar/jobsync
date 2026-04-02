@@ -397,11 +397,17 @@ export const automations = {
     "automations.blockedResumeMissing": "Resume missing",
     "automations.blockedUnknown": "Blocked",
     // elapsed time
+    "automations.elapsedHourMinSec": "{hour}h {min}m {sec}s",
     "automations.elapsedMinSec": "{min}m {sec}s",
     "automations.elapsedSec": "{sec}s",
     "automations.queuedCount": "{count} automations queued",
     // run history
+    "automations.runHistoryError": "Failed to load run history",
+    "automations.runHistoryRetry": "Retry",
     "automations.runEnded": "Run completed",
+    // detail header a11y
+    "automations.backToList": "Back to automations list",
+    "automations.refresh": "Refresh",
   },
   de: {
     // AutomationWizard - Steps
@@ -801,11 +807,17 @@ export const automations = {
     "automations.blockedResumeMissing": "Lebenslauf fehlt",
     "automations.blockedUnknown": "Blockiert",
     // elapsed time
+    "automations.elapsedHourMinSec": "{hour} Std. {min} Min. {sec} Sek.",
     "automations.elapsedMinSec": "{min} Min. {sec} Sek.",
     "automations.elapsedSec": "{sec} Sek.",
     "automations.queuedCount": "{count} Automatisierungen in Warteschlange",
     // run history
+    "automations.runHistoryError": "Ausführungsverlauf konnte nicht geladen werden",
+    "automations.runHistoryRetry": "Erneut versuchen",
     "automations.runEnded": "Ausführung abgeschlossen",
+    // detail header a11y
+    "automations.backToList": "Zurück zur Automatisierungsliste",
+    "automations.refresh": "Aktualisieren",
   },
   fr: {
     // AutomationWizard - Steps
@@ -1205,11 +1217,17 @@ export const automations = {
     "automations.blockedResumeMissing": "CV manquant",
     "automations.blockedUnknown": "Bloqué",
     // elapsed time
+    "automations.elapsedHourMinSec": "{hour} h {min} min {sec} s",
     "automations.elapsedMinSec": "{min} min {sec} s",
     "automations.elapsedSec": "{sec} s",
     "automations.queuedCount": "{count} automatisations en attente",
     // run history
+    "automations.runHistoryError": "Impossible de charger l'historique des exécutions",
+    "automations.runHistoryRetry": "Réessayer",
     "automations.runEnded": "Exécution terminée",
+    // detail header a11y
+    "automations.backToList": "Retour à la liste des automatisations",
+    "automations.refresh": "Actualiser",
   },
   es: {
     // AutomationWizard - Steps
@@ -1609,10 +1627,16 @@ export const automations = {
     "automations.blockedResumeMissing": "Currículum faltante",
     "automations.blockedUnknown": "Bloqueada",
     // elapsed time
+    "automations.elapsedHourMinSec": "{hour} h {min} min {sec} s",
     "automations.elapsedMinSec": "{min} min {sec} s",
     "automations.elapsedSec": "{sec} s",
     "automations.queuedCount": "{count} automatizaciones en cola",
     // run history
+    "automations.runHistoryError": "No se pudo cargar el historial de ejecuciones",
+    "automations.runHistoryRetry": "Reintentar",
     "automations.runEnded": "Ejecución completada",
+    // detail header a11y
+    "automations.backToList": "Volver a la lista de automatizaciones",
+    "automations.refresh": "Actualizar",
   },
 } as const;

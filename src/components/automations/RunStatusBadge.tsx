@@ -63,11 +63,14 @@ export function RunStatusBadge({ automationId }: RunStatusBadgeProps) {
   // Compute elapsed time from RunLock.startedAt
   const lock = state?.runningAutomations.find(r => r.automationId === automationId);
   const elapsed = lock ? Math.floor((Date.now() - new Date(lock.startedAt).getTime()) / 1000) : 0;
-  const min = Math.floor(elapsed / 60);
+  const hour = Math.floor(elapsed / 3600);
+  const min = Math.floor((elapsed % 3600) / 60);
   const sec = elapsed % 60;
-  const elapsedText = elapsed >= 60
-    ? t("automations.elapsedMinSec").replace("{min}", String(min)).replace("{sec}", String(sec))
-    : t("automations.elapsedSec").replace("{sec}", String(elapsed));
+  const elapsedText = elapsed >= 3600
+    ? t("automations.elapsedHourMinSec").replace("{hour}", String(hour)).replace("{min}", String(min)).replace("{sec}", String(sec))
+    : elapsed >= 60
+      ? t("automations.elapsedMinSec").replace("{min}", String(min)).replace("{sec}", String(sec))
+      : t("automations.elapsedSec").replace("{sec}", String(elapsed));
 
   // Screen reader status - only announces on significant state changes (start/stop), not elapsed time
   const srStatus = running ? t("automations.running") : entry ? t("automations.queued") : "";

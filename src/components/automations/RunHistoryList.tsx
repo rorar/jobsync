@@ -24,6 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import {
   CheckCircle2,
   XCircle,
@@ -33,12 +34,15 @@ import {
   Timer,
   History,
   PlayCircle,
+  RefreshCw,
 } from "lucide-react";
 import type { AutomationRun, AutomationRunStatus } from "@/models/automation.model";
 
 interface RunHistoryListProps {
   runs: AutomationRun[];
   loading?: boolean;
+  error?: boolean;
+  onRetry?: () => void;
 }
 
 const STATUS_KEYS: Record<AutomationRunStatus, string> = {
@@ -70,8 +74,51 @@ const BLOCKED_REASON_KEYS: Record<string, string> = {
   resume_missing: "automations.blockedResumeMissing",
 };
 
-export function RunHistoryList({ runs, loading = false }: RunHistoryListProps) {
+/** Format a duration in seconds to a human-readable string with hours support */
+function formatDuration(seconds: number, t: (key: string) => string): string {
+  if (seconds >= 3600) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return t("automations.elapsedHourMinSec")
+      .replace("{hour}", String(h))
+      .replace("{min}", String(m))
+      .replace("{sec}", String(s));
+  }
+  if (seconds >= 60) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return t("automations.elapsedMinSec")
+      .replace("{min}", String(m))
+      .replace("{sec}", String(s));
+  }
+  return t("automations.elapsedSec").replace("{sec}", String(seconds));
+}
+
+export function RunHistoryList({ runs, loading = false, error = false, onRetry }: RunHistoryListProps) {
   const { t, locale } = useTranslations();
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("automations.runHistory")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center justify-center py-8">
+            <AlertCircle className="h-10 w-10 text-destructive mb-3" aria-hidden="true" />
+            <p className="text-destructive text-sm">{t("automations.runHistoryError")}</p>
+            {onRetry && (
+              <Button variant="outline" size="sm" onClick={onRetry} className="mt-3 gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                {t("automations.runHistoryRetry")}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (loading && runs.length === 0) {
     return (
@@ -182,7 +229,7 @@ export function RunHistoryList({ runs, loading = false }: RunHistoryListProps) {
                     {formatDateCompact(new Date(run.startedAt), locale)}
                   </TableCell>
                   <TableCell>
-                    {duration !== null ? `${duration}s` : "-"}
+                    {duration !== null ? formatDuration(duration, t) : "-"}
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-center">{run.jobsSearched}</TableCell>
                   <TableCell className="hidden md:table-cell text-center">{run.jobsDeduplicated}</TableCell>

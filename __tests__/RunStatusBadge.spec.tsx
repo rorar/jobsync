@@ -10,7 +10,7 @@
 
 import "@testing-library/jest-dom";
 import React from "react";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import type { SchedulerSnapshot } from "@/lib/scheduler/types";
 
 // ---------------------------------------------------------------------------
@@ -23,6 +23,7 @@ jest.mock("@/i18n", () => ({
       const dict: Record<string, string> = {
         "automations.running": "Running",
         "automations.queued": "Queued",
+        "automations.elapsedHourMinSec": "{hour}h {min}m {sec}s",
         "automations.elapsedMinSec": "{min}m {sec}s",
         "automations.elapsedSec": "{sec}s",
       };
@@ -189,6 +190,50 @@ describe("RunStatusBadge — running state", () => {
 
     // Should contain "1m" pattern
     expect(screen.getByText(/\dm\s+\d+s/)).toBeInTheDocument();
+  });
+
+  it("shows elapsed time in hours format when 3600s or more have passed", () => {
+    const startedAt = new Date(Date.now() - 7_320_000); // 2h 2m 0s ago
+    mockState.current = makeSnapshot({
+      phase: "running",
+      runningAutomations: [
+        {
+          automationId: AUTOMATION_ID,
+          automationName: "Test Auto",
+          runSource: "scheduler",
+          moduleId: "jsearch",
+          startedAt,
+          userId: "user-1",
+        },
+      ],
+    });
+
+    render(<RunStatusBadge automationId={AUTOMATION_ID} />);
+
+    // Should contain "2h" pattern with minutes and seconds
+    expect(screen.getByText(/2h\s+2m\s+\d+s/)).toBeInTheDocument();
+  });
+
+  it("shows 1h 0m 0s for exactly 3600 seconds", () => {
+    const startedAt = new Date(Date.now() - 3_600_000); // exactly 1h ago
+    mockState.current = makeSnapshot({
+      phase: "running",
+      runningAutomations: [
+        {
+          automationId: AUTOMATION_ID,
+          automationName: "Test Auto",
+          runSource: "scheduler",
+          moduleId: "jsearch",
+          startedAt,
+          userId: "user-1",
+        },
+      ],
+    });
+
+    render(<RunStatusBadge automationId={AUTOMATION_ID} />);
+
+    // Should contain "1h 0m" pattern (not minutes-only format)
+    expect(screen.getByText(/1h\s+0m\s+\d+s/)).toBeInTheDocument();
   });
 
   it("does NOT render the queued badge when running", () => {
