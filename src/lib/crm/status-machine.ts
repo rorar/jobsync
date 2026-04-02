@@ -65,10 +65,11 @@ export function getValidTargets(fromValue: string): string[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Map of status value → color name for consistent UI rendering.
- * Used by Kanban columns, status badges, and charts.
+ * Map of status value → simple color name identifier for consistent UI rendering.
+ * Used by status badges and charts. For rich Tailwind class maps, see
+ * STATUS_COLORS in src/hooks/useKanbanState.ts.
  */
-export const STATUS_COLORS: Record<string, string> = {
+export const STATUS_COLOR_NAMES: Record<string, string> = {
   bookmarked: "blue",
   applied: "indigo",
   interview: "purple",

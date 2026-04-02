@@ -8,11 +8,13 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { isValidTransition, computeTransitionSideEffects, STATUS_ORDER, COLLAPSED_BY_DEFAULT } from "@/lib/crm/status-machine";
+import { isValidTransition, computeTransitionSideEffects, getValidTargets, STATUS_ORDER, COLLAPSED_BY_DEFAULT } from "@/lib/crm/status-machine";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 
 export const getStatusList = async (): Promise<ActionResult<JobStatus[]>> => {
   try {
+    // Auth check gates access — only logged-in users can fetch status list.
+    // JobStatus is a system-wide lookup table, not user-scoped — no userId filter needed.
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Not authenticated");
@@ -616,6 +618,11 @@ export const changeJobStatus = async (
       throw new Error("Not authenticated");
     }
 
+    // Validate note length (server-side enforcement)
+    if (note && note.length > 500) {
+      return { success: false, message: "errors.noteTooLong", errorCode: "VALIDATION_ERROR" };
+    }
+
     // Fetch job with ownership check (IDOR safe)
     const currentJob = await prisma.job.findFirst({
       where: { id: jobId, userId: user.id },
@@ -691,6 +698,9 @@ export const changeJobStatus = async (
         historyEntryId: historyEntry.id,
       }),
     );
+
+    revalidatePath("/dashboard/myjobs", "page");
+    revalidatePath("/dashboard", "page");
 
     return { data: updatedJob, success: true };
   } catch (error) {
@@ -874,6 +884,9 @@ export const updateKanbanOrder = async (
         }),
       );
 
+      revalidatePath("/dashboard/myjobs", "page");
+      revalidatePath("/dashboard", "page");
+
       return { data: updatedJob, success: true };
     } else {
       // Same column reorder — no transition, no history, no event
@@ -889,6 +902,9 @@ export const updateKanbanOrder = async (
           tags: true,
         },
       });
+
+      revalidatePath("/dashboard/myjobs", "page");
+      revalidatePath("/dashboard", "page");
 
       return { data: updatedJob, success: true };
     }
@@ -1010,7 +1026,6 @@ export const getValidTransitions = async (
       return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
     }
 
-    const { getValidTargets } = await import("@/lib/crm/status-machine");
     const validValues = getValidTargets(job.Status.value);
 
     const statuses = await prisma.jobStatus.findMany({

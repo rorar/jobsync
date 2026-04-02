@@ -64,6 +64,7 @@ export function KanbanCard({ job, statusValue, isDragOverlay = false }: KanbanCa
         ${isDragOverlay ? "shadow-lg scale-[1.02] rotate-[1deg] motion-reduce:scale-100 motion-reduce:rotate-0" : ""}
         ${isDragging ? "z-50" : ""}
       `}
+      role="listitem"
       data-testid="kanban-card"
     >
       <div className="flex items-start gap-2 p-3">

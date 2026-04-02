@@ -20,6 +20,7 @@ export type ActionErrorCode =
   | "REFERENCE_ERROR"
   | "INVALID_TRANSITION"
   | "UNAUTHORIZED"
+  | "VALIDATION_ERROR"
   | "INTERNAL_ERROR";
 
 export interface ActionResult<T = undefined> {

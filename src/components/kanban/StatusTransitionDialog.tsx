@@ -95,6 +95,7 @@ export function StatusTransitionDialog({
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={3}
+            maxLength={500}
             disabled={isPending}
             className="resize-none"
           />

@@ -2,7 +2,7 @@ import {
   VALID_TRANSITIONS,
   isValidTransition,
   getValidTargets,
-  STATUS_COLORS,
+  STATUS_COLOR_NAMES,
   STATUS_ORDER,
   COLLAPSED_BY_DEFAULT,
   computeTransitionSideEffects,
@@ -140,25 +140,25 @@ describe("Status Machine", () => {
     });
   });
 
-  describe("STATUS_COLORS", () => {
+  describe("STATUS_COLOR_NAMES", () => {
     it("should define colors for all standard statuses", () => {
       for (const status of STATUS_ORDER) {
-        expect(STATUS_COLORS[status]).toBeDefined();
-        expect(typeof STATUS_COLORS[status]).toBe("string");
+        expect(STATUS_COLOR_NAMES[status]).toBeDefined();
+        expect(typeof STATUS_COLOR_NAMES[status]).toBe("string");
       }
     });
 
     it("should define colors for legacy statuses", () => {
-      expect(STATUS_COLORS["saved"]).toBe("blue");
-      expect(STATUS_COLORS["draft"]).toBe("blue");
+      expect(STATUS_COLOR_NAMES["saved"]).toBe("blue");
+      expect(STATUS_COLOR_NAMES["draft"]).toBe("blue");
     });
 
     it("should map bookmarked to blue", () => {
-      expect(STATUS_COLORS["bookmarked"]).toBe("blue");
+      expect(STATUS_COLOR_NAMES["bookmarked"]).toBe("blue");
     });
 
     it("should map rejected to red", () => {
-      expect(STATUS_COLORS["rejected"]).toBe("red");
+      expect(STATUS_COLOR_NAMES["rejected"]).toBe("red");
     });
   });
 

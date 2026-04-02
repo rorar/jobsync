@@ -107,7 +107,7 @@ export function KanbanColumn({
       >
         <div
           className="flex-1 overflow-y-auto p-2 space-y-2 max-h-[calc(100vh-280px)] scrollbar-thin"
-          role="listbox"
+          role="list"
           aria-label={`${getStatusLabel(status)} jobs`}
         >
           {jobs.length === 0 ? (

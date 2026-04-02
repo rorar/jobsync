@@ -55,8 +55,8 @@ async function createTestJob(page: Page, uid: string): Promise<string> {
   const submitBtn = page.getByRole("button", { name: /save|create|add/i }).last();
   await submitBtn.click();
 
-  // Wait for dialog to close or toast
-  await page.waitForTimeout(1000);
+  // Wait for dialog to close (indicates successful creation)
+  await page.waitForSelector('[role="dialog"]', { state: "hidden", timeout: 5000 });
 
   return title;
 }
@@ -66,7 +66,7 @@ async function createTestJob(page: Page, uid: string): Promise<string> {
  */
 async function deleteTestJob(page: Page, title: string) {
   await switchToTableView(page);
-  await page.waitForTimeout(500);
+  await page.locator("table").first().waitFor({ state: "visible", timeout: 5000 });
 
   const row = page.getByRole("row", { name: new RegExp(title, "i") }).first();
   if (await row.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -115,7 +115,10 @@ test.describe("Kanban Board", () => {
     await switchToKanbanView(page);
 
     // Wait for board to load (either columns or empty state)
-    await page.waitForTimeout(2000);
+    const boardContent = page.locator("[data-testid^='kanban-column-']").first()
+      .or(page.locator("[data-testid^='kanban-collapsed-']").first())
+      .or(page.locator("text=Add your first job"));
+    await boardContent.first().waitFor({ state: "visible", timeout: 10000 });
 
     // On desktop, check for column headers or empty state
     const viewport = page.viewportSize();
@@ -136,7 +139,11 @@ test.describe("Kanban Board", () => {
   test("should show transition dialog on status change attempt", async ({ page }) => {
     await navigateToMyJobs(page);
     await switchToKanbanView(page);
-    await page.waitForTimeout(2000);
+    // Wait for board content to load
+    const boardContent = page.locator("[data-testid^='kanban-column-']").first()
+      .or(page.locator("[data-testid^='kanban-collapsed-']").first())
+      .or(page.locator("text=Add your first job"));
+    await boardContent.first().waitFor({ state: "visible", timeout: 10000 });
 
     // On mobile view, test the status change dropdown
     const viewport = page.viewportSize();
@@ -156,12 +163,11 @@ test.describe("Kanban Board", () => {
 
     // Switch to table view
     await switchToTableView(page);
-    await page.waitForTimeout(500);
+    await page.locator("table").first().waitFor({ state: "visible", timeout: 5000 });
 
     // Reload the page
     await page.reload();
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForTimeout(1000);
 
     // Check that table radio is selected
     const tableRadio = page.getByRole("radio", { name: /table/i });
@@ -185,7 +191,6 @@ test.describe("Kanban Board", () => {
 
     // Press arrow key to switch
     await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(300);
 
     // The other radio should now be checked
     const otherRadio = page.getByRole("radio", { checked: true });

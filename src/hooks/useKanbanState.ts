@@ -2,27 +2,23 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { JobResponse, JobStatus } from "@/models/job.model";
+import {
+  isValidTransition,
+  STATUS_ORDER,
+  COLLAPSED_BY_DEFAULT,
+} from "@/lib/crm/status-machine";
+
+// Re-export from the single source of truth (status-machine.ts)
+export { isValidTransition, STATUS_ORDER };
 
 export type KanbanViewMode = "table" | "kanban";
 
 const VIEW_MODE_STORAGE_KEY = "jobsync-myjobs-view-mode";
 const COLLAPSED_STORAGE_KEY = "jobsync-kanban-collapsed";
 
-const DEFAULT_COLLAPSED = ["rejected", "archived"];
+const DEFAULT_COLLAPSED = COLLAPSED_BY_DEFAULT;
 
-/** Status display order for columns */
-export const STATUS_ORDER = [
-  "bookmarked",
-  "draft",
-  "applied",
-  "interview",
-  "offer",
-  "accepted",
-  "rejected",
-  "archived",
-];
-
-/** Status color classes for column headers, card borders, etc. */
+/** Status color Tailwind classes for column headers, card borders, etc. */
 export const STATUS_COLORS: Record<string, {
   bg: string;
   border: string;
@@ -40,22 +36,6 @@ export const STATUS_COLORS: Record<string, {
   rejected:   { bg: "bg-red-50", border: "border-l-red-500", text: "text-red-700", darkBg: "dark:bg-red-950/30", darkBorder: "dark:border-l-red-400", headerBg: "bg-red-100 dark:bg-red-950/50" },
   archived:   { bg: "bg-gray-50", border: "border-l-gray-400", text: "text-gray-600", darkBg: "dark:bg-gray-900/30", darkBorder: "dark:border-l-gray-500", headerBg: "bg-gray-100 dark:bg-gray-800/50" },
 };
-
-/** Valid transitions from the CRM state machine */
-export const VALID_TRANSITIONS: Record<string, string[]> = {
-  bookmarked: ["applied", "archived", "rejected"],
-  draft:      ["applied", "archived"],
-  applied:    ["interview", "rejected", "archived"],
-  interview:  ["offer", "rejected", "archived", "interview"],
-  offer:      ["accepted", "rejected", "archived"],
-  accepted:   ["archived"],
-  rejected:   ["bookmarked", "archived"],
-  archived:   ["bookmarked"],
-};
-
-export function isValidTransition(from: string, to: string): boolean {
-  return VALID_TRANSITIONS[from]?.includes(to) ?? false;
-}
 
 export function getPersistedViewMode(): KanbanViewMode {
   if (typeof window === "undefined") return "kanban";
