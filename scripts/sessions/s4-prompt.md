@@ -121,6 +121,7 @@ bash scripts/prisma-migrate.sh   # Migration erstellen
 bash scripts/prisma-generate.sh  # Client regenerieren
 source scripts/env.sh && bun run build  # Build prüfen
 ```
+**KRITISCH (Learning aus S3):** Der Agent der das Prisma-Schema ändert MUSS `prisma-generate.sh` als letzten Schritt ausführen. Sonst haben alle anderen Agents Prisma-Type-Errors. Schreibe diese Anforderung explizit in jeden Agent-Prompt der Schema-Files berührt.
 
 ### CHECK-Phase
 
@@ -164,6 +165,11 @@ source scripts/env.sh && bun run build  # Build prüfen
   - Agent 2: Module (clearbit/, google-favicon/, meta-parser/ — je manifest.ts + index.ts)
   - Agent 3: Frontend (Company-Integration, Logo-Anzeige, Settings UI, i18n)
 - File-Ownership strikt trennen — kein Agent ändert Files eines anderen
+
+**Build-Serialisierung (Learning aus S3):**
+- Agents dürfen NICHT parallel `bun run build` ausführen — das korruptiert `.next/`
+- NUR der Main-Agent führt Build-Verification aus, NACHDEM alle Agents fertig sind
+- Agents dürfen `tsc --noEmit` für Type-Checking nutzen (kein `.next/` Konflikt)
 
 **Für die CHECK-Phase MUSST du:**
 - Starte `/comprehensive-review:full-review` ODER `/agent-teams:team-review` (5 Dimensionen)
