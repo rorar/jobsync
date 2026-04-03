@@ -115,6 +115,17 @@ state_machine JobStatusTransitions {
 
     expired    → bookmarked    -- Reactivate: user wants to re-track an expired listing
     expired    → archived      -- Cleanup: move expired listing to archive
+
+    -- Legacy backward compatibility: "saved" and "draft" are pre-CRM status values
+    -- from the upstream Gsync codebase. They map to the same transitions as "bookmarked"
+    -- (applied, archived, rejected). Existing jobs with these values can still transition.
+    -- New jobs will never receive these values — the UI only creates "bookmarked" status.
+    saved      → applied       -- Legacy: treat like bookmarked
+    saved      → archived
+    saved      → rejected
+    draft      → applied       -- Legacy: treat like bookmarked
+    draft      → archived
+    draft      → rejected
 }
 
 -- =============================================================================
@@ -129,8 +140,8 @@ entity JobStatusHistory {
     id: String                  -- UUID
     jobId: String               -- FK to Job
     userId: String              -- FK to User (who initiated the transition)
-    previousStatusValue: String -- JobStatusValue before transition
-    newStatusValue: String      -- JobStatusValue after transition
+    previousStatusId: Reference<JobStatus>? -- FK to JobStatus before transition (null for initial creation)
+    newStatusId: Reference<JobStatus>       -- FK to JobStatus after transition
     note: String?               -- Optional transition note (NOT a Job Note entity)
     changedAt: DateTime = now() -- Timestamp of the transition
 
@@ -142,10 +153,11 @@ entity JobStatusHistory {
         -- userId MUST match the authenticated user (IDOR protection).
 
     @invariant
-        -- previousStatusValue and newStatusValue store the string values
-        -- (e.g., "bookmarked", "applied"), NOT the JobStatus UUID.
-        -- This makes the audit log self-contained — it remains readable
-        -- even if JobStatus records are ever modified.
+        -- previousStatusId and newStatusId store FK references to JobStatus.
+        -- This provides referential integrity and JOIN-capability.
+        -- Trade-off: if a JobStatus is deleted, history entries would need
+        -- cascade handling. Accepted because JobStatus records are system-seeded
+        -- and never deleted in normal operation.
 }
 
 -- =============================================================================
