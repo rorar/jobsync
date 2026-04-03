@@ -24,7 +24,7 @@ Wenn rot: Erst fixen (max 15 Min), dann weiter.
 
 ## Kontext
 
-Sprint A+B+C ist verifiziert. CRM Core (5.3+5.6) und Data Enrichment (1.13 Phase 1) sind implementiert. Eine Action→Component-Analyse fand 7 Server Actions ohne UI-Consumer und 1 Page ohne Navigation. Notification-Infrastruktur existiert: `notification-dispatcher.ts` (242 LOC), `notification-dispatch.allium` (465 LOC), `Notification` Prisma Model (in-app only).
+Sprint A+B+C ist verifiziert. CRM Core (5.3+5.6) und Data Enrichment (1.13 Phase 1) sind implementiert. Eine Action→Component-Analyse fand 10 Server Actions ohne UI-Consumer und 1 Page ohne Navigation. Notification-Infrastruktur existiert: `notification-dispatcher.ts` (242 LOC), `notification-dispatch.allium` (465 LOC), `Notification` Prisma Model (in-app only).
 
 Dies ist **Session S5a** — die erste von 2 Sessions. Ziel: 8 UI-Lücken schließen (Sprint E) + Webhook-Channel als ersten Notification-Channel implementieren (Sprint D1).
 
@@ -43,7 +43,7 @@ Lies `project_s4_deferred_items.md` falls vorhanden. Prüfe docs/BUGS.md auf off
 
 **E1.1 (M): Enrichment Control Panel**
 - Neues Component: `src/components/enrichment/EnrichmentStatusPanel.tsx`
-- Integration in Job-Detail (`JobDetails.tsx`) und Company-Detail Views
+- Integration in Job-Detail (`JobDetails.tsx`) — KEIN Company-Detail-View vorhanden (Company ist eine Relation auf Job, keine eigene Page). Enrichment-Panel NUR in JobDetails integrieren.
 - Zeigt pro Company: Logo-Preview, Enrichment-Status (pending/done/failed), Modul-Info ("Enriched by: Clearbit"), "Refresh" Button
 - Consumers: `getEnrichmentStatus`, `getEnrichmentResult`, `refreshEnrichment`, `triggerEnrichment`
 - Online-Recherche: Prüfe wie die Enrichment-Actions implementiert sind BEVOR du die UI baust
@@ -57,12 +57,12 @@ Lies `project_s4_deferred_items.md` falls vorhanden. Prüfe docs/BUGS.md auf off
 
 **E1.3 (S): Kanban Within-Column Reorder**
 - Modify: `src/components/kanban/KanbanBoard.tsx` — early-return entfernen
-- Modify: `src/hooks/useKanbanState.ts` — Sort by `sortOrder` statt `createdAt`
+- Modify: `src/hooks/useKanbanState.ts` — Sort by `sortOrder` statt `createdAt`. ACHTUNG: `useKanbanState` erhält Daten von `getJobsList` (hat KEIN `sortOrder` im Select). Entweder (a) Kanban auf `getKanbanBoard` umstellen (hat `sortOrder`), oder (b) `sortOrder` zum `getJobsList` Select hinzufügen. Option (a) empfohlen — `getKanbanBoard` wurde genau dafür gebaut.
 - Consumer: `updateKanbanOrder`
 
 **E1.4 (XS): Staging Queue Sidebar-Link**
-- Modify: `src/lib/constants.ts` — `SIDEBAR_LINKS` um Staging-Entry erweitern
-- i18n: Key für Navigation-Label in allen 4 Locales
+- Modify: `src/lib/constants.ts` — `SIDEBAR_LINKS` um Staging-Entry erweitern. Icon: Lucide `Inbox` oder `Package` (bestehende Pattern: jeder Link braucht ein `icon` vom Typ `typeof LayoutDashboard`). Route: `/dashboard/staging`. Label-Key: `nav.staging`.
+- i18n: Key `nav.staging` in allen 4 Locales in `src/i18n/dictionaries/` Navigation-Namespace
 
 **UX-Enrichment:** Verwende `/ui-design:interaction-design` für Enrichment Panel Loading-Transitions, Timeline Scroll-Verhalten, Kanban Reorder Animation.
 **Accessibility:** Verwende `/accessibility-compliance:wcag-audit-patterns` für WCAG 2.2 Compliance aller neuen Komponenten.
@@ -109,8 +109,8 @@ Lies `project_s4_deferred_items.md` falls vorhanden. Prüfe docs/BUGS.md auf off
 6. Retry-Exhaustion: Nach 3 failed Attempts → in-app Notification. Nach 5 consecutive Failures → auto-deactivate Endpoint mit Notification.
 7. Secret Storage: AES-verschlüsselt via `src/lib/encryption.ts`, Decrypt bei HMAC-Signing
 8. Settings UI: CRUD für Webhook-Endpoints (URL + SSRF-Validation, Secret auto-generated, Event-Selection, Active-Toggle, Delivery-Log letzte 10 Attempts)
-9. Channel-Integration: `notification-dispatcher.ts` → `WebhookChannel` Adapter neben bestehendem in-app Channel
-10. Allium Spec: `specs/notification-dispatch.allium` um Webhook-Channel-Regeln erweitern
+9. **Channel-Abstraktion REFACTORING:** Der aktuelle `notification-dispatcher.ts` hardcodet `prisma.notification.create()` in jedem Handler — das ist NICHT channel-agnostisch. BEVOR der Webhook-Adapter hinzugefügt wird, MUSS der Dispatcher in eine Multi-Channel-Architektur refactored werden: `ChannelRouter` der pro Notification-Event alle aktiven Channels dispatcht (in-app + webhook). `shouldNotify()` muss channel-aware werden (aktuell prüft es nur `channels.inApp` als Single Gate — wenn inApp disabled, wird auch Webhook suppressed). `NotificationPreferences` Interface erweitern: `channels: { inApp: boolean, webhook: boolean }`.
+10. Allium Spec: `specs/notification-dispatch.allium` um Webhook-Channel-Regeln erweitern. AUCH `specs/event-bus.allium` updaten — es fehlen `JobStatusChanged`, `CompanyCreated`, `EnrichmentCompleted`, `EnrichmentFailed` Events (Spec-Code-Divergenz).
 
 **Test-Pflicht:**
 - SSRF-Validator: Unit Tests für alle blockierten Patterns (IMDS, private IPs, localhost)
@@ -364,7 +364,7 @@ Agenten, Skills und Plugins dürfen jederzeit online suchen (WebSearch, WebFetch
 
 ## Exit-Checkliste (MUSS vor Merge erfüllt sein)
 
-- [ ] Alle 7 orphaned Server Actions haben UI-Consumer (Action→Component Trace verifiziert)
+- [ ] Alle 10 orphaned Server Actions haben UI-Consumer (Action→Component Trace verifiziert)
 - [ ] `/dashboard/staging` in Sidebar
 - [ ] Enrichment Control Panel: Logo-Preview, Status, "Refresh" Button, Modul-Info
 - [ ] Status History Timeline: Chronologische Transitions mit Notizen

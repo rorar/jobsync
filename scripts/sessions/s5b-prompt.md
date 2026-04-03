@@ -48,10 +48,13 @@ Das bestehende `NotificationType` Enum hat keine `job_status_changed`. Der `noti
 **Schritt 1 (SEQUENZIELL — ein Agent, Main-Agent wartet):**
 - `NotificationType` Enum erweitern: `job_status_changed` hinzufügen in `notification.model.ts`
 - `notification-dispatcher.ts`: Subscribe auf `JobStatusChanged` Event aus `event-types.ts`
-- `notification-dispatch.allium` updaten: neuer Typ + Dispatch-Regel
+- `NotificationPreferences` Interface erweitern: `channels: { inApp: boolean, webhook: boolean, email: boolean, push: boolean }` (aktuell nur `inApp`). `DEFAULT_NOTIFICATION_PREFERENCES` updaten.
+- `shouldNotify()` channel-aware machen: aktuell prüft es nur `channels.inApp` als Single Gate. Muss pro Channel separat prüfen ob der spezifische Channel enabled ist.
+- `notification-dispatch.allium` updaten: neuer Typ + Dispatch-Regel + Channel-Enum erweitern
+- `event-bus.allium` updaten: fehlende Events hinzufügen (JobStatusChanged, CompanyCreated, EnrichmentCompleted, EnrichmentFailed — Spec-Code-Divergenz)
 - i18n: Notification-Text für `job_status_changed` in allen 4 Locales
 - Main-Agent verifiziert: `tsc --noEmit` = 0, bestehende Notification-Tests grün
-- Commit: "feat(notifications): add job_status_changed type + dispatcher wiring"
+- Commit: "feat(notifications): add job_status_changed type + multi-channel preferences + dispatcher wiring"
 
 ### PHASE 2: Sprint D2 — E-Mail Channel
 
@@ -84,8 +87,8 @@ Das bestehende `NotificationType` Enum hat keine `job_status_changed`. Der `noti
 **Online-Recherche PFLICHT:** Agent MUSS `web-push` + VAPID Protokoll via WebSearch/Context7 recherchieren BEVOR er Code schreibt.
 
 **Schritt 1 (SEQUENZIELL — Schema + Service Worker):**
-- Prisma: `PushSubscription` Model (endpoint, p256dh, auth — encrypted at rest via AES, userId)
-- VAPID Keys: Generated on first use, stored encrypted in DB (NICHT in env vars). Rotation Warning: alle bestehenden Subscriptions werden ungültig.
+- Prisma: `WebPushSubscription` Model (NICHT `PushSubscription` — kollidiert mit Browser Web API Type `PushSubscription`). Felder: endpoint, p256dh, auth — encrypted at rest via AES, userId + User Relation + `@@index([userId])`.
+- VAPID Keys: Generated on first use, stored encrypted in separater DB-Tabelle `VapidConfig` (publicKey, privateKey encrypted via AES) oder als JSON-Feld in UserSettings. NICHT in env vars. Rotation Warning: alle bestehenden Subscriptions werden ungültig.
 - `public/sw-push.js`: Minimaler Service Worker (push-only, NOT full PWA). Handles `push` event, shows notification with title + body + click-action.
 - `bash scripts/prisma-migrate.sh` + `bash scripts/prisma-generate.sh`
 - Main-Agent verifiziert: `tsc --noEmit` = 0
@@ -118,7 +121,7 @@ source scripts/env.sh && bun run build  # Build prüfen
 
 ### CHECK-Phase
 
-1. `allium:weed` — Stimmt Implementation mit Spec überein? Über `notification-dispatch.allium` (muss jetzt ALLE 3 Channels enthalten: in-app + webhook + email + push).
+1. `allium:weed` — Stimmt Implementation mit Spec überein? Über `notification-dispatch.allium` (muss jetzt ALLE 4 Channels enthalten: in-app + webhook + email + push).
 2. `/comprehensive-review:full-review` mit `/agent-teams:multi-reviewer-patterns` — koordiniere parallele Reviews über alle 5 Dimensionen. Einzel-Reports in `docs/reviews/s5b/`. Konsolidierter Report verweist pro Finding auf Quell-Report.
 3. User Journey: SMTP konfigurieren → Notification triggert E-Mail → zugestellt. Push aktivieren → Notification → Browser-Notification sichtbar.
 4. **Dreistufige Analyse (Learning aus S3: Blind Spot allein findet nur ~43% der Findings):**
