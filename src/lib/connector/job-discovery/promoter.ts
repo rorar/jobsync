@@ -72,6 +72,18 @@ export async function promoteStagedVacancy(
       },
     });
 
+    // Create initial JobStatusHistory entry (spec: InitialStatusOnPromotion)
+    await tx.jobStatusHistory.create({
+      data: {
+        jobId: job.id,
+        userId,
+        previousStatusId: null,
+        newStatusId: statusId,
+        note: null,
+        changedAt: new Date(),
+      },
+    });
+
     // Link back (immutable after this)
     await tx.stagedVacancy.update({
       where: { id: vacancy.id },

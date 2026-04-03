@@ -50,7 +50,7 @@ export const getQuestionsList = async (
 
     return { success: true, data, total };
   } catch (error) {
-    return handleError(error, "Failed to fetch questions list.");
+    return handleError(error, "errors.fetchQuestionsList");
   }
 };
 
@@ -72,7 +72,7 @@ export const getQuestionById = async (
 
     return { success: true, data: question };
   } catch (error) {
-    return handleError(error, "Failed to fetch question.");
+    return handleError(error, "errors.fetchQuestion");
   }
 };
 
@@ -99,7 +99,7 @@ export const createQuestion = async (
 
     return { success: true, data: question };
   } catch (error) {
-    return handleError(error, "Failed to create question.");
+    return handleError(error, "errors.createQuestion");
   }
 };
 
@@ -128,7 +128,7 @@ export const updateQuestion = async (
 
     return { success: true, data: question };
   } catch (error) {
-    return handleError(error, "Failed to update question.");
+    return handleError(error, "errors.updateQuestion");
   }
 };
 
@@ -145,7 +145,7 @@ export const deleteQuestion = async (
 
     return { success: true };
   } catch (error) {
-    return handleError(error, "Failed to delete question.");
+    return handleError(error, "errors.deleteQuestion");
   }
 };
 
@@ -181,6 +181,6 @@ export const getTagsWithQuestionCounts = async (): Promise<
 
     return { success: true, data, total: totalQuestions };
   } catch (error) {
-    return handleError(error, "Failed to fetch tags with question counts.");
+    return handleError(error, "errors.fetchTagsWithCounts");
   }
 };

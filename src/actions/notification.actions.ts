@@ -32,7 +32,7 @@ export async function getNotifications(
 
     return { success: true, data: notifications as Notification[] };
   } catch (error) {
-    return handleError(error, "Failed to fetch notifications");
+    return handleError(error, "errors.fetchNotifications");
   }
 }
 
@@ -50,7 +50,7 @@ export async function getUnreadCount(): Promise<ActionResult<number>> {
 
     return { success: true, data: count };
   } catch (error) {
-    return handleError(error, "Failed to fetch unread count");
+    return handleError(error, "errors.fetchUnreadCount");
   }
 }
 
@@ -71,7 +71,7 @@ export async function markAsRead(
 
     return { success: true };
   } catch (error) {
-    return handleError(error, "Failed to mark notification as read");
+    return handleError(error, "errors.markNotificationRead");
   }
 }
 
@@ -90,7 +90,7 @@ export async function markAllAsRead(): Promise<ActionResult> {
 
     return { success: true };
   } catch (error) {
-    return handleError(error, "Failed to mark all notifications as read");
+    return handleError(error, "errors.markAllNotificationsRead");
   }
 }
 
@@ -110,7 +110,7 @@ export async function dismissNotification(
 
     return { success: true };
   } catch (error) {
-    return handleError(error, "Failed to dismiss notification");
+    return handleError(error, "errors.dismissNotification");
   }
 }
 

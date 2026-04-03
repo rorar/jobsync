@@ -66,6 +66,7 @@ enum JobStatusValue {
     accepted      -- Accepted the offer (terminal)
     rejected      -- Rejected by company OR declined by user (terminal)
     archived      -- No longer actively tracking (terminal, but reactivatable)
+    expired       -- Listing expired (reactivatable or archivable)
 }
 
 -- Migration from current seed data:
@@ -75,7 +76,7 @@ enum JobStatusValue {
 --   "interview"→ unchanged
 --   "offer"    → unchanged
 --   "rejected" → unchanged
---   "expired"  → removed (subsumed by "archived" with a note)
+--   "expired"  → kept with transitions to bookmarked and archived
 --   "archived" → unchanged
 --   NEW: "accepted" (previously missing — offer acceptance was untracked)
 
@@ -111,6 +112,9 @@ state_machine JobStatusTransitions {
     rejected   → archived      -- Move rejected job to archive
 
     archived   → bookmarked    -- Reactivate: pull back from archive for re-tracking
+
+    expired    → bookmarked    -- Reactivate: user wants to re-track an expired listing
+    expired    → archived      -- Cleanup: move expired listing to archive
 }
 
 -- =============================================================================

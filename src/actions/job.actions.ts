@@ -23,7 +23,7 @@ export const getStatusList = async (): Promise<ActionResult<JobStatus[]>> => {
     const statuses = await prisma.jobStatus.findMany();
     return { success: true, data: statuses };
   } catch (error) {
-    const msg = "Failed to fetch status list. ";
+    const msg = "errors.fetchStatusList";
     return handleError(error, msg);
   }
 };
@@ -41,7 +41,7 @@ export const getJobSourceList = async (): Promise<ActionResult<JobSource[]>> => 
     });
     return { success: true, data: list };
   } catch (error) {
-    const msg = "Failed to fetch job source list. ";
+    const msg = "errors.fetchJobSourceList";
     return handleError(error, msg);
   }
 };

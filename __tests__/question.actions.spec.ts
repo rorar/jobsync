@@ -147,7 +147,7 @@ describe("Question Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch questions list.",
+        message: "errors.fetchQuestionsList",
       });
       expect(prisma.question.findMany).not.toHaveBeenCalled();
     });
@@ -160,7 +160,7 @@ describe("Question Actions", () => {
 
       const result = await getQuestionsList(1, 10);
 
-      expect(result).toEqual({ success: false, message: "Failed to fetch questions list." });
+      expect(result).toEqual({ success: false, message: "errors.fetchQuestionsList" });
     });
   });
 
@@ -198,7 +198,7 @@ describe("Question Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch question.",
+        message: "errors.fetchQuestion",
       });
       expect(prisma.question.findFirst).not.toHaveBeenCalled();
     });
@@ -211,7 +211,7 @@ describe("Question Actions", () => {
 
       const result = await getQuestionById("q-1");
 
-      expect(result).toEqual({ success: false, message: "Failed to fetch question." });
+      expect(result).toEqual({ success: false, message: "errors.fetchQuestion" });
     });
   });
 
@@ -291,7 +291,7 @@ describe("Question Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to create question.",
+        message: "errors.createQuestion",
       });
       expect(prisma.question.create).not.toHaveBeenCalled();
     });
@@ -304,7 +304,7 @@ describe("Question Actions", () => {
 
       const result = await createQuestion({ question: "What is React?" });
 
-      expect(result).toEqual({ success: false, message: "Failed to create question." });
+      expect(result).toEqual({ success: false, message: "errors.createQuestion" });
     });
   });
 
@@ -371,7 +371,7 @@ describe("Question Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update question.",
+        message: "errors.updateQuestion",
       });
       expect(prisma.question.update).not.toHaveBeenCalled();
     });
@@ -387,7 +387,7 @@ describe("Question Actions", () => {
         question: "Updated?",
       });
 
-      expect(result).toEqual({ success: false, message: "Failed to update question." });
+      expect(result).toEqual({ success: false, message: "errors.updateQuestion" });
     });
   });
 
@@ -412,7 +412,7 @@ describe("Question Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to delete question.",
+        message: "errors.deleteQuestion",
       });
       expect(prisma.question.delete).not.toHaveBeenCalled();
     });
@@ -425,7 +425,7 @@ describe("Question Actions", () => {
 
       const result = await deleteQuestion("q-1");
 
-      expect(result).toEqual({ success: false, message: "Failed to delete question." });
+      expect(result).toEqual({ success: false, message: "errors.deleteQuestion" });
     });
   });
 
@@ -499,7 +499,7 @@ describe("Question Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch tags with question counts.",
+        message: "errors.fetchTagsWithCounts",
       });
       expect(prisma.tag.findMany).not.toHaveBeenCalled();
     });
@@ -512,7 +512,7 @@ describe("Question Actions", () => {
 
       const result = await getTagsWithQuestionCounts();
 
-      expect(result).toEqual({ success: false, message: "Failed to fetch tags with question counts." });
+      expect(result).toEqual({ success: false, message: "errors.fetchTagsWithCounts" });
     });
   });
 });

@@ -95,7 +95,7 @@ export async function getStagedVacancies(
       total,
     };
   } catch (error) {
-    return handleError(error, "Failed to fetch staged vacancies");
+    return handleError(error, "errors.fetchStagedVacancies");
   }
 }
 
@@ -118,7 +118,7 @@ export async function getStagedVacancyById(
 
     return { success: true, data: toStagedVacancy(vacancy) as StagedVacancyWithAutomation };
   } catch (error) {
-    return handleError(error, "Failed to fetch staged vacancy");
+    return handleError(error, "errors.fetchStagedVacancy");
   }
 }
 
@@ -164,7 +164,7 @@ export async function dismissStagedVacancy(
     emitEvent({ type: "VacancyDismissed", timestamp: new Date(), payload: { stagedVacancyId: id, userId: user.id } });
     return { success: true, data: { ...toStagedVacancy(updated) as StagedVacancy, undoTokenId: undoEntry.id } };
   } catch (error) {
-    return handleError(error, "Failed to dismiss staged vacancy");
+    return handleError(error, "errors.dismissStagedVacancy");
   }
 }
 
@@ -192,7 +192,7 @@ export async function restoreStagedVacancy(
 
     return { success: true, data: toStagedVacancy(updated) as StagedVacancy };
   } catch (error) {
-    return handleError(error, "Failed to restore staged vacancy");
+    return handleError(error, "errors.restoreStagedVacancy");
   }
 }
 
@@ -234,7 +234,7 @@ export async function archiveStagedVacancy(
     emitEvent({ type: "VacancyArchived", timestamp: new Date(), payload: { stagedVacancyId: id, userId: user.id } });
     return { success: true, data: { ...toStagedVacancy(updated) as StagedVacancy, undoTokenId: undoEntry.id } };
   } catch (error) {
-    return handleError(error, "Failed to archive staged vacancy");
+    return handleError(error, "errors.archiveStagedVacancy");
   }
 }
 
@@ -276,7 +276,7 @@ export async function trashStagedVacancy(
     emitEvent({ type: "VacancyTrashed", timestamp: new Date(), payload: { stagedVacancyId: id, userId: user.id } });
     return { success: true, data: { ...toStagedVacancy(updated) as StagedVacancy, undoTokenId: undoEntry.id } };
   } catch (error) {
-    return handleError(error, "Failed to trash staged vacancy");
+    return handleError(error, "errors.trashStagedVacancy");
   }
 }
 
@@ -305,7 +305,7 @@ export async function restoreFromTrash(
     emitEvent({ type: "VacancyRestoredFromTrash", timestamp: new Date(), payload: { stagedVacancyId: id, userId: user.id } });
     return { success: true, data: toStagedVacancy(updated) as StagedVacancy };
   } catch (error) {
-    return handleError(error, "Failed to restore from trash");
+    return handleError(error, "errors.restoreFromTrash");
   }
 }
 
@@ -342,7 +342,7 @@ export async function getStagedVacancyCounts(): Promise<
       data: { new: newCount, ready, dismissed, archived, trashed },
     };
   } catch (error) {
-    return handleError(error, "Failed to fetch staged vacancy counts");
+    return handleError(error, "errors.fetchStagedVacancyCounts");
   }
 }
 
@@ -360,7 +360,7 @@ export async function promoteStagedVacancyToJob(
 
     return { success: true, data: result };
   } catch (error) {
-    return handleError(error, "Failed to promote staged vacancy");
+    return handleError(error, "errors.promoteStagedVacancy");
   }
 }
 
@@ -383,7 +383,7 @@ export async function runRetentionCleanup(
 
     return { success: true, data: result };
   } catch (error) {
-    return handleError(error, "Failed to run retention cleanup");
+    return handleError(error, "errors.runRetentionCleanup");
   }
 }
 
@@ -414,6 +414,6 @@ export async function executeBulkAction(
 
     return { success: true, data: result };
   } catch (error) {
-    return handleError(error, "Failed to execute bulk action");
+    return handleError(error, "errors.executeBulkAction");
   }
 }

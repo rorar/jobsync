@@ -64,7 +64,7 @@ export async function createPublicApiKey(
       },
     };
   } catch (error) {
-    return handleError(error, "Failed to create API key.");
+    return handleError(error, "errors.createApiKey");
   }
 }
 
@@ -102,7 +102,7 @@ export async function listPublicApiKeys(): Promise<
 
     return { success: true, data };
   } catch (error) {
-    return handleError(error, "Failed to list API keys.");
+    return handleError(error, "errors.listApiKeys");
   }
 }
 
@@ -139,7 +139,7 @@ export async function revokePublicApiKey(
 
     return { success: true };
   } catch (error) {
-    return handleError(error, "Failed to revoke API key.");
+    return handleError(error, "errors.revokeApiKey");
   }
 }
 
@@ -174,7 +174,7 @@ export async function deletePublicApiKey(
 
     return { success: true };
   } catch (error) {
-    return handleError(error, "Failed to delete API key.");
+    return handleError(error, "errors.deleteApiKey");
   }
 }
 

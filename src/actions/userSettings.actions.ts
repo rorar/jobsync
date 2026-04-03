@@ -213,7 +213,7 @@ export async function getNotificationPreferences(): Promise<
       data: parsed.notifications ?? DEFAULT_NOTIFICATION_PREFERENCES,
     };
   } catch (error) {
-    return handleError(error, "Failed to fetch notification preferences.");
+    return handleError(error, "errors.fetchNotificationPreferences");
   }
 }
 

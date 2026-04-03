@@ -177,7 +177,7 @@ export async function activateModule(
 
     return { success: true, data: { moduleId, status: ModuleStatus.ACTIVE } };
   } catch (error) {
-    return handleError(error, "Failed to activate module");
+    return handleError(error, "errors.activateModule");
   }
 }
 
@@ -272,7 +272,7 @@ export async function deactivateModule(
       },
     };
   } catch (error) {
-    return handleError(error, "Failed to deactivate module");
+    return handleError(error, "errors.deactivateModule");
   }
 }
 
@@ -338,6 +338,6 @@ export async function runHealthCheck(
       },
     };
   } catch (error) {
-    return handleError(error, "Failed to run health check");
+    return handleError(error, "errors.runHealthCheck");
   }
 }

@@ -9,9 +9,11 @@ import {
   ToastViewport,
 } from "@/components/ui/toast"
 import { useToast } from "@/components/ui/use-toast"
+import { useTranslations } from "@/i18n"
 
 export function Toaster() {
   const { toasts } = useToast()
+  const { t } = useTranslations()
 
   return (
     <ToastProvider>
@@ -25,7 +27,7 @@ export function Toaster() {
               )}
             </div>
             {action}
-            <ToastClose />
+            <ToastClose label={t("common.dismiss")} />
           </Toast>
         )
       })}

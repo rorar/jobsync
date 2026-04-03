@@ -50,7 +50,7 @@ export async function getUserApiKeys(): Promise<ActionResult<ApiKeyClientRespons
       }),
     };
   } catch (error) {
-    return handleError(error, "Failed to fetch API keys");
+    return handleError(error, "errors.fetchApiKeys");
   }
 }
 
@@ -131,7 +131,7 @@ export async function saveApiKey(input: {
 
     return { success: true, data: response };
   } catch (error) {
-    return handleError(error, "Failed to save API key");
+    return handleError(error, "errors.saveApiKey");
   }
 }
 
@@ -146,7 +146,7 @@ export async function deleteApiKey(moduleId: string): Promise<ActionResult> {
 
     return { success: true };
   } catch (error) {
-    return handleError(error, "Failed to delete API key");
+    return handleError(error, "errors.deleteApiKey");
   }
 }
 

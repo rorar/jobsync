@@ -26,6 +26,13 @@ describe("Status Machine", () => {
       }
     });
 
+    it("should define transitions for expired status", () => {
+      expect(VALID_TRANSITIONS["expired"]).toBeDefined();
+      expect(Array.isArray(VALID_TRANSITIONS["expired"])).toBe(true);
+      expect(VALID_TRANSITIONS["expired"]).toContain("bookmarked");
+      expect(VALID_TRANSITIONS["expired"]).toContain("archived");
+    });
+
     it("should define transitions for legacy statuses", () => {
       expect(VALID_TRANSITIONS["saved"]).toBeDefined();
       expect(VALID_TRANSITIONS["draft"]).toBeDefined();
@@ -124,6 +131,23 @@ describe("Status Machine", () => {
       expect(isValidTransition("draft", "applied")).toBe(true);
       expect(isValidTransition("draft", "archived")).toBe(true);
     });
+
+    // Expired status transitions (S3-D5)
+    it("should allow transition from expired to bookmarked (reactivate)", () => {
+      expect(isValidTransition("expired", "bookmarked")).toBe(true);
+    });
+
+    it("should allow transition from expired to archived (cleanup)", () => {
+      expect(isValidTransition("expired", "archived")).toBe(true);
+    });
+
+    it("should reject transition from expired to applied", () => {
+      expect(isValidTransition("expired", "applied")).toBe(false);
+    });
+
+    it("should reject self-transition for expired", () => {
+      expect(isValidTransition("expired", "expired")).toBe(false);
+    });
   });
 
   describe("getValidTargets", () => {
@@ -137,6 +161,10 @@ describe("Status Machine", () => {
 
     it("should include self-transition for interview", () => {
       expect(getValidTargets("interview")).toContain("interview");
+    });
+
+    it("should return bookmarked and archived for expired", () => {
+      expect(getValidTargets("expired")).toEqual(["bookmarked", "archived"]);
     });
   });
 
@@ -159,6 +187,10 @@ describe("Status Machine", () => {
 
     it("should map rejected to red", () => {
       expect(STATUS_COLOR_NAMES["rejected"]).toBe("red");
+    });
+
+    it("should map expired to amber", () => {
+      expect(STATUS_COLOR_NAMES["expired"]).toBe("amber");
     });
   });
 

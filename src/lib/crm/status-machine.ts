@@ -27,6 +27,7 @@ export const VALID_TRANSITIONS: Record<string, string[]> = {
   accepted: ["archived"],
   rejected: ["bookmarked", "archived"],
   archived: ["bookmarked"],
+  expired: ["bookmarked", "archived"],
   // Legacy status values — map to same transitions as their replacements
   saved: ["applied", "archived", "rejected"],
   draft: ["applied", "archived", "rejected"],
@@ -77,6 +78,7 @@ export const STATUS_COLOR_NAMES: Record<string, string> = {
   accepted: "emerald",
   rejected: "red",
   archived: "gray",
+  expired: "amber",
   // Legacy
   saved: "blue",
   draft: "blue",

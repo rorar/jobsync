@@ -265,6 +265,12 @@ function JobsContainer({
     setEditJob(null);
   };
 
+  /** Trigger the AddJob dialog from the Kanban empty state CTA */
+  const handleKanbanAddJob = useCallback(() => {
+    const btn = document.querySelector<HTMLButtonElement>('[data-testid="add-job-btn"]');
+    btn?.click();
+  }, []);
+
   const onAddNote = (jobId: string) => {
     setNoteJobId(jobId);
     setNoteDialogOpen(true);
@@ -406,6 +412,7 @@ function JobsContainer({
               statuses={statuses}
               onRefresh={reloadKanban}
               loading={kanbanLoading}
+              onAddJob={handleKanbanAddJob}
             />
           ) : (
             <>

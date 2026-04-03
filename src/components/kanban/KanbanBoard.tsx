@@ -45,9 +45,10 @@ interface KanbanBoardProps {
   statuses: JobStatus[];
   onRefresh: () => void;
   loading: boolean;
+  onAddJob?: () => void;
 }
 
-export function KanbanBoard({ jobs, statuses, onRefresh, loading }: KanbanBoardProps) {
+export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: KanbanBoardProps) {
   const { t } = useTranslations();
   const {
     columns,
@@ -319,7 +320,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading }: KanbanBoardP
 
   // Empty state
   if (jobs.length === 0 && !loading) {
-    return <KanbanEmptyState />;
+    return <KanbanEmptyState onAddJob={onAddJob} />;
   }
 
   // Build columns for mobile tabs

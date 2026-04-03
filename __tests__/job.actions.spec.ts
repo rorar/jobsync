@@ -131,10 +131,10 @@ describe("jobActions", () => {
     it("should throw error on failure", async () => {
       const mockErrorResponse = {
         success: false,
-        message: "Failed to fetch status list. ",
+        message: "errors.fetchStatusList",
       };
       (prisma.jobStatus.findMany as jest.Mock).mockRejectedValue(
-        new Error("Failed to fetch status list."),
+        new Error("DB error"),
       );
 
       await expect(getStatusList()).resolves.toStrictEqual(mockErrorResponse);
@@ -156,14 +156,14 @@ describe("jobActions", () => {
 
     it("should returns failure response on error", async () => {
       (prisma.jobSource.findMany as jest.Mock).mockRejectedValue(
-        new Error("Failed to fetch job source list."),
+        new Error("DB error"),
       );
 
       const result = await getJobSourceList();
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch job source list. ",
+        message: "errors.fetchJobSourceList",
       });
 
       expect(prisma.jobSource.findMany).toHaveBeenCalledTimes(1);

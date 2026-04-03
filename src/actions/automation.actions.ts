@@ -97,7 +97,7 @@ export async function getAutomationsList(
       message: warning,
     };
   } catch (error) {
-    return handleError(error, "Failed to get automations list");
+    return handleError(error, "errors.fetchAutomationsList");
   }
 }
 
@@ -133,7 +133,7 @@ export async function getAutomationById(id: string): Promise<ActionResult<Automa
       } as AutomationWithResume & { runs: AutomationRun[] },
     };
   } catch (error) {
-    return handleError(error, "Failed to get automation");
+    return handleError(error, "errors.fetchAutomation");
   }
 }
 
@@ -235,7 +235,7 @@ export async function createAutomation(
       message: warning,
     };
   } catch (error) {
-    return handleError(error, "Failed to create automation");
+    return handleError(error, "errors.createAutomation");
   }
 }
 
@@ -330,7 +330,7 @@ export async function updateAutomation(
       data: toAutomationWithResume(automation) as AutomationWithResume,
     };
   } catch (error) {
-    return handleError(error, "Failed to update automation");
+    return handleError(error, "errors.updateAutomation");
   }
 }
 
@@ -359,7 +359,7 @@ export async function deleteAutomation(id: string): Promise<ActionResult> {
 
     return { success: true };
   } catch (error) {
-    return handleError(error, "Failed to delete automation");
+    return handleError(error, "errors.deleteAutomation");
   }
 }
 
@@ -396,7 +396,7 @@ export async function pauseAutomation(id: string): Promise<ActionResult<Automati
       data: toAutomationWithResume(updated) as AutomationWithResume,
     };
   } catch (error) {
-    return handleError(error, "Failed to pause automation");
+    return handleError(error, "errors.pauseAutomation");
   }
 }
 
@@ -438,7 +438,7 @@ export async function resumeAutomation(id: string): Promise<ActionResult<Automat
       data: toAutomationWithResume(updated) as AutomationWithResume,
     };
   } catch (error) {
-    return handleError(error, "Failed to resume automation");
+    return handleError(error, "errors.resumeAutomation");
   }
 }
 
@@ -483,7 +483,7 @@ export async function getDiscoveredJobs(
       total,
     };
   } catch (error) {
-    return handleError(error, "Failed to fetch discovered jobs");
+    return handleError(error, "errors.fetchDiscoveredJobs");
   }
 }
 
@@ -531,7 +531,7 @@ export async function getDiscoveredJobById(id: string): Promise<ActionResult<Sta
       } as StagedVacancyWithAutomation & { parsedMatchData: object | null },
     };
   } catch (error) {
-    return handleError(error, "Failed to get discovered job");
+    return handleError(error, "errors.fetchDiscoveredJob");
   }
 }
 
@@ -578,7 +578,7 @@ export async function dismissDiscoveredJob(id: string): Promise<ActionResult<Sta
       } as StagedVacancyWithAutomation,
     };
   } catch (error) {
-    return handleError(error, "Failed to dismiss discovered job");
+    return handleError(error, "errors.dismissDiscoveredJob");
   }
 }
 
@@ -621,7 +621,7 @@ export async function acceptDiscoveredJob(id: string): Promise<ActionResult<Stag
       } as StagedVacancyWithAutomation,
     };
   } catch (error) {
-    return handleError(error, "Failed to accept discovered job");
+    return handleError(error, "errors.acceptDiscoveredJob");
   }
 }
 
@@ -665,6 +665,6 @@ export async function getAutomationRuns(
       total,
     };
   } catch (error) {
-    return handleError(error, "Failed to get automation runs");
+    return handleError(error, "errors.fetchAutomationRuns");
   }
 }

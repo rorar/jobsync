@@ -107,7 +107,7 @@ describe("Notification Actions", () => {
 
       const result = await getNotifications();
 
-      expect(result).toEqual({ success: false, message: "Failed to fetch notifications" });
+      expect(result).toEqual({ success: false, message: "errors.fetchNotifications" });
     });
   });
 
@@ -153,7 +153,7 @@ describe("Notification Actions", () => {
 
       const result = await getUnreadCount();
 
-      expect(result).toEqual({ success: false, message: "Failed to fetch unread count" });
+      expect(result).toEqual({ success: false, message: "errors.fetchUnreadCount" });
     });
   });
 
@@ -196,7 +196,7 @@ describe("Notification Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to mark notification as read",
+        message: "errors.markNotificationRead",
       });
     });
   });
@@ -248,7 +248,7 @@ describe("Notification Actions", () => {
 
       const result = await markAllAsRead();
 
-      expect(result).toEqual({ success: false, message: "Failed to mark all notifications as read" });
+      expect(result).toEqual({ success: false, message: "errors.markAllNotificationsRead" });
     });
   });
 
@@ -289,7 +289,7 @@ describe("Notification Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to dismiss notification",
+        message: "errors.dismissNotification",
       });
     });
   });
