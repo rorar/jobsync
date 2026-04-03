@@ -80,7 +80,7 @@ model WebhookEndpoint {
 - Retry: 3 attempts with exponential backoff (1s, 5s, 30s)
 - Timeout: 10s per request
 - **Retry Exhaustion:** After 3 failed attempts → create in-app notification "Webhook delivery failed for event X to endpoint Y". After 5 consecutive failures across different events → auto-deactivate endpoint with notification "Webhook endpoint {url} deactivated due to repeated failures". User can re-activate manually.
-- **SSRF Protection:** Validate webhook URLs using the same pattern as `validateOllamaUrl()` — block IMDS (169.254.169.254), private IPs (10.x, 172.16-31.x, 192.168.x), localhost, non-http(s) protocols. Validate on create AND on dispatch (URL may resolve differently over time).
+- **SSRF Protection:** New `validateWebhookUrl()` in `src/lib/url-validation.ts` — a SUPERSET of existing validators (NOTE: `validateOllamaUrl()` only checks protocol+credentials, `isBlockedHealthCheckUrl()` only checks IMDS — neither blocks private IPs). Must block: IMDS (169.254.169.254), RFC 1918 private IPs (10.x, 172.16-31.x, 192.168.x), localhost (127.x, ::1), non-http(s) protocols, URLs with credentials. Validate on create AND on dispatch (URL may resolve differently over time).
 - **Secret Storage:** Webhook secret encrypted at rest via existing AES pattern (`src/lib/encryption.ts`). Decrypted on each HMAC signing. Secret rotation = generate new secret, old webhooks get new signature header.
 - Settings UI: CRUD for webhook endpoints (URL, secret auto-generated, event selection, active toggle, delivery log with last 10 attempts)
 - Channel Integration: Extend `notification-dispatcher.ts` with `WebhookChannel` adapter alongside existing in-app channel
