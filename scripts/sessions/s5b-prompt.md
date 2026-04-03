@@ -45,7 +45,7 @@ Lies `project_s5a_deferred_items.md` falls vorhanden. Prüfe docs/BUGS.md auf of
 **BEVOR E-Mail/Push gebaut werden — Foundation-then-Fan-Out (Learning aus S3/S4):**
 Das bestehende `NotificationType` Enum hat keine `job_status_changed`. Der `notification-dispatcher.ts` ist NICHT auf `JobStatusChanged` Domain Event subscribed. Beides muss zuerst existieren.
 
-**Schritt 1 (SEQUENZIELL — ein Agent via `Skill("backend-development:feature-development")`, Main-Agent wartet):**
+**Schritt 1 (SEQUENZIELL — ein Agent, Main-Agent wartet):**
 - `NotificationType` Enum erweitern: `job_status_changed` hinzufügen in `notification.model.ts`
 - `notification-dispatcher.ts`: Subscribe auf `JobStatusChanged` Event aus `event-types.ts`
 - `NotificationPreferences` Interface erweitern: `channels: { inApp: boolean, webhook: boolean, email: boolean, push: boolean }` (aktuell nur `inApp`). `DEFAULT_NOTIFICATION_PREFERENCES` updaten.
@@ -60,54 +60,31 @@ Das bestehende `NotificationType` Enum hat keine `job_status_changed`. Der `noti
 
 **Online-Recherche PFLICHT:** Agent MUSS `nodemailer` API via WebSearch/Context7 recherchieren BEVOR er Code schreibt. Auch: React-Email oder Handlebars für Templates.
 
-**Schritt 1 (SEQUENZIELL — Foundation via spezialisiertem Skill):**
-Verwende `Skill("backend-development:feature-development")` für die Foundation:
-- Prisma: SMTP-Settings als eigene `SmtpConfig` Tabelle (NICHT in UserSettings JSON — eigene Tabelle ermöglicht `@@index`, Relationen, und saubere Migrations). Felder: id, userId, host, port, username, password (AES encrypted), fromAddress, tlsRequired (default true), active. Relation: User. `@@index([userId])`.
-- Types: `EmailChannel` Interface, `EmailTemplate` Type
-- `bash scripts/prisma-migrate.sh` + `bash scripts/prisma-generate.sh`
-- Main-Agent verifiziert: `tsc --noEmit` = 0
-- Commit Foundation
+Starte `Skill("full-stack-orchestration:full-stack-feature")` für die E-Mail Channel Umsetzung.
 
-**Schritt 2 (PARALLEL — erst NACH Schritt 1, spezialisierte Agents/Skills):**
+**Feature-Beschreibung für den Skill:**
+E-Mail Notification Channel via nodemailer SMTP. SmtpConfig Prisma Model (eigene Tabelle: id, userId, host, port, username, password AES encrypted, fromAddress, tlsRequired default true, active, `@@index([userId])`). EmailChannel Adapter für ChannelRouter (von S5a etabliert). TLS-Enforcement (reject plaintext). Rate-Limiting (10/min pro User). E-Mail Templates pro NotificationType in 4 Locales (EN, DE, FR, ES). Settings UI (SMTP-Konfiguration, Test-Button rate-limited 1/60s, Per-Type Enable/Disable).
 
-KRITISCH: Verwende spezialisierte Skills/Agents für die Implementation, NICHT generische `Agent("implement X")`. Generische Agents haben eine 67% Fabrication-Rate — spezialisierte Skills haben eingebaute Checklisten und Patterns die Drift verhindern.
+**Online-Recherche:** Der Skill MUSS `nodemailer` API via WebSearch/Context7 recherchieren. Auch: React-Email oder Handlebars für Templates.
 
-- Agent 1 — `backend-api-security:backend-security-coder`: `nodemailer` SMTP Integration + TLS-Enforcement (reject plaintext) + Rate-Limiting (10/min pro User). Security-Coder kennt Credential-Handling, TLS-Patterns.
-- Agent 2 — `Skill("ui-design:create-component")`: E-Mail Templates pro `NotificationType` — alle existierenden Typen + `job_status_changed`. Templates in allen 4 Locales (EN, DE, FR, ES). Verwende React-Email oder Handlebars.
-- Agent 3 — `Skill("ui-design:create-component")`: Settings UI — SMTP-Konfiguration (Host, Port, User, Password), Test-E-Mail Button (rate-limited: 1/60s), Per-Type Enable/Disable
-- Agent 4 — `Skill("full-stack-orchestration:full-stack-feature")`: Channel-Integration in `notification-dispatcher.ts` — `EmailChannel` Adapter in die bestehende ChannelRouter-Architektur (von S5a etabliert)
-- File-Ownership strikt trennen — kein Agent ändert Files eines anderen
-
-**UX-Enrichment:** Verwende `/ui-design:interaction-design` für SMTP-Test-Feedback, E-Mail-Preview.
-**Accessibility:** Verwende `/accessibility-compliance:wcag-audit-patterns` für Settings-UI.
-
-**Test-Pflicht:**
-- SMTP: Mock `nodemailer.createTransport()`, teste TLS-Enforcement, Rate-Limiting
-- Templates: Snapshot-Tests für alle Templates × 4 Locales
-- Settings: Component-Tests für SMTP-Formular, Test-Button Rate-Limit
+**Zusätzliche Anforderungen (nicht im Skill abgedeckt):**
+- SSRF: SMTP Host-Validierung (keine internen IPs)
+- Credential-Sicherheit: Password encrypted at rest, `import "server-only"` für Decrypt
+- Test-Pflicht: Mock `nodemailer.createTransport()`, Snapshot-Tests für Templates × 4 Locales
 
 ### PHASE 3: Sprint D3 — Browser Push Channel
 
-**Online-Recherche PFLICHT:** Agent MUSS `web-push` + VAPID Protokoll via WebSearch/Context7 recherchieren BEVOR er Code schreibt.
+Starte `Skill("full-stack-orchestration:full-stack-feature")` für die Browser Push Umsetzung.
 
-**Schritt 1 (SEQUENZIELL — Foundation via spezialisiertem Skill):**
-Verwende `Skill("backend-development:feature-development")` für die Foundation:
-- Prisma: `WebPushSubscription` Model (NICHT `PushSubscription` — kollidiert mit Browser Web API Type `PushSubscription`). Felder: endpoint, p256dh, auth — encrypted at rest via AES, userId + User Relation + `@@index([userId])`.
-- VAPID Keys: Generated on first use, stored in eigener `VapidConfig` Tabelle (id, publicKey, privateKey encrypted via AES). NICHT in env vars, NICHT in UserSettings JSON (eigene Tabelle für saubere Key-Rotation). Rotation Warning: alle bestehenden WebPushSubscriptions werden ungültig → Confirmation Dialog vor Rotation.
-- **Service Worker Discovery (BEVOR sw-push.js erstellt wird):** Prüfe ob bereits ein Service Worker existiert (`grep -r "serviceWorker" src/ public/` und `ls public/sw*.js`). Wenn ja: in den bestehenden SW integrieren statt einen neuen zu erstellen. Wenn nein: `public/sw-push.js` erstellen. Beachte: Next.js 15 braucht ggf. Custom Headers für `Service-Worker-Allowed` Scope (prüfe `next.config.mjs`).
-- `public/sw-push.js`: Minimaler Service Worker (push-only, NOT full PWA). Handles `push` event, shows notification with title + body + click-action.
-- `bash scripts/prisma-migrate.sh` + `bash scripts/prisma-generate.sh`
-- Main-Agent verifiziert: `tsc --noEmit` = 0
-- Commit Foundation
+**Feature-Beschreibung für den Skill:**
+Browser Push Notification Channel via web-push (VAPID). WebPushSubscription Prisma Model (NICHT `PushSubscription` — kollidiert mit Browser Web API Type). Felder: endpoint, p256dh, auth (encrypted at rest via AES), userId + User Relation + `@@index([userId])`. VapidConfig Prisma Tabelle (publicKey, privateKey encrypted via AES). Service Worker Discovery BEVOR Erstellung (`grep -r "serviceWorker" src/ public/` und `ls public/sw*.js`). `public/sw-push.js` minimaler Service Worker (push-only, NOT full PWA). PushChannel Adapter für ChannelRouter. Settings UI (Enable/Disable Push, VAPID Rotation Warning + Confirmation Dialog, Unsubscribe). Stale Subscription Handling (410 Gone → delete).
 
-**Schritt 2 (PARALLEL — erst NACH Schritt 1, spezialisierte Agents/Skills):**
+**Online-Recherche:** Der Skill MUSS `web-push` + VAPID Protokoll via WebSearch/Context7 recherchieren.
 
-KRITISCH: Verwende spezialisierte Skills/Agents — NICHT generische `Agent("implement X")`.
-
-- Agent 1 — `Skill("full-stack-orchestration:full-stack-feature")`: `web-push` Integration + `PushChannel` Adapter in notification-dispatcher + Stale Subscription Handling (410 Gone → delete WebPushSubscription)
-- Agent 2 — `Skill("ui-design:create-component")`: Settings UI — "Enable Push" Button → Browser Permission Prompt → Subscription gespeichert. VAPID Key Rotation Warning. Unsubscribe Button.
-- Agent 3 — `frontend-mobile-development:frontend-developer` Agent: Service Worker Registration in Layout + Push-Event Handler + Click-Action (navigates to relevant page)
-- File-Ownership strikt trennen
+**Zusätzliche Anforderungen (nicht im Skill abgedeckt):**
+- Service Worker Scope: Prüfe ob Next.js 15 Custom Headers braucht (`Service-Worker-Allowed` in `next.config.mjs`)
+- VAPID Key Rotation: Confirmation Dialog BEVOR Rotation (alle Subscriptions werden ungültig)
+- Credential-Sicherheit: VAPID privateKey + Subscription auth encrypted at rest
 
 **UX-Pflicht für JEDE neue Komponente:**
 - Loading State, Empty State, Error State
