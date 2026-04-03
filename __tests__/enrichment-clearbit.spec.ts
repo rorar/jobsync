@@ -65,18 +65,14 @@ describe("ClearbitLogoModule", () => {
       );
     });
 
-    it("encodes special characters in the domain", async () => {
-      mockFetch().mockResolvedValueOnce({ ok: true, status: 200 });
-
-      await module.enrich({
+    it("rejects domains with special characters via domain validation", async () => {
+      const result = await module.enrich({
         dimension: "logo",
         companyDomain: "ex ample.com",
       });
 
-      expect(mockFetch()).toHaveBeenCalledWith(
-        "https://logo.clearbit.com/ex%20ample.com",
-        expect.anything(),
-      );
+      expect(result.status).toBe("not_found");
+      expect(mockFetch()).not.toHaveBeenCalled();
     });
   });
 

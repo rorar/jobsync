@@ -18,8 +18,13 @@ jest.mock("@/lib/db", () => ({
       findFirst: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
   },
+}));
+
+jest.mock("@/lib/api/rate-limit", () => ({
+  checkRateLimit: jest.fn().mockReturnValue({ allowed: true, remaining: 9, limit: 10, resetAt: 0 }),
 }));
 
 jest.mock("@/utils/user.utils", () => ({
@@ -43,6 +48,7 @@ const mockDb = db as unknown as {
     findFirst: jest.Mock;
     findMany: jest.Mock;
     update: jest.Mock;
+    updateMany: jest.Mock;
   };
 };
 
@@ -96,7 +102,7 @@ describe("Enrichment Actions", () => {
       mockGetChain.mockReturnValue(mockChain);
       mockOrchestrator.execute.mockResolvedValue(mockOutput);
       mockDb.enrichmentResult.findFirst.mockResolvedValue(mockResult);
-      mockDb.enrichmentResult.update.mockResolvedValue(mockResult);
+      mockDb.enrichmentResult.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await triggerEnrichment("company-1", "logo");
 

@@ -5,15 +5,47 @@ import { handleError } from "@/lib/utils";
 import { ActionResult } from "@/models/actionResult";
 import { getCurrentUser } from "@/utils/user.utils";
 import { revalidatePath } from "next/cache";
+import { checkRateLimit } from "@/lib/api/rate-limit";
 import {
   enrichmentOrchestrator,
   getChainForDimension,
 } from "@/lib/connector/data-enrichment/orchestrator";
 import {
   ENRICHMENT_DIMENSIONS,
+  ENRICHMENT_CONFIG,
   type EnrichmentDimension,
   type EnrichmentResult,
 } from "@/lib/connector/data-enrichment/types";
+
+/** Per-user enrichment rate limit: 10 requests per minute */
+const ENRICHMENT_RATE_LIMIT = 10;
+const ENRICHMENT_WINDOW_MS = 60_000;
+
+/**
+ * In-memory tracker for in-flight enrichment requests per user.
+ * Used to enforce MAX_CONCURRENT_PER_USER from ENRICHMENT_CONFIG.
+ */
+const gInflight = globalThis as unknown as { __enrichmentInflight?: Map<string, number> };
+gInflight.__enrichmentInflight ??= new Map<string, number>();
+const inflightMap = gInflight.__enrichmentInflight;
+
+function incrementInflight(userId: string): boolean {
+  const current = inflightMap.get(userId) ?? 0;
+  if (current >= ENRICHMENT_CONFIG.MAX_CONCURRENT_PER_USER) {
+    return false; // Would exceed limit
+  }
+  inflightMap.set(userId, current + 1);
+  return true;
+}
+
+function decrementInflight(userId: string): void {
+  const current = inflightMap.get(userId) ?? 0;
+  if (current <= 1) {
+    inflightMap.delete(userId);
+  } else {
+    inflightMap.set(userId, current - 1);
+  }
+}
 
 /**
  * Trigger enrichment for a company dimension.
@@ -36,59 +68,74 @@ export async function triggerEnrichment(
       return { success: false, message: "enrichment.invalidDimension" };
     }
 
-    // Verify company ownership (IDOR: ADR-015)
-    const company = await db.company.findFirst({
-      where: { id: companyId, createdBy: user.id },
-      select: { id: true, label: true },
-    });
-
-    if (!company) {
-      return { success: false, message: "enrichment.companyNotFound", errorCode: "NOT_FOUND" };
+    // Rate limiting: 10 enrichments per minute per user (Fix 3)
+    const rateResult = checkRateLimit(`enrichment:${user.id}`, ENRICHMENT_RATE_LIMIT, ENRICHMENT_WINDOW_MS);
+    if (!rateResult.allowed) {
+      return { success: false, message: "enrichment.rateLimited" };
     }
 
-    // Get the fallback chain for the requested dimension
-    const chain = getChainForDimension(dimension);
-    if (!chain) {
-      return { success: false, message: "enrichment.noChainAvailable" };
+    // Concurrency limiting: MAX_CONCURRENT_PER_USER (Fix 3)
+    if (!incrementInflight(user.id)) {
+      return { success: false, message: "enrichment.tooManyConcurrent" };
     }
 
-    // Build enrichment input from company data
-    const input = {
-      dimension,
-      companyDomain: extractDomain(company.label),
-      companyName: company.label,
-    };
-
-    // Execute the fallback chain
-    const output = await enrichmentOrchestrator.execute(user.id, input, chain);
-
-    if (!output) {
-      return { success: false, message: "enrichment.allModulesFailed" };
-    }
-
-    // Fetch the persisted result to return
-    const result = await db.enrichmentResult.findFirst({
-      where: {
-        userId: user.id,
-        dimension,
-        domainKey: input.companyDomain ?? input.companyName ?? "unknown",
-      },
-    });
-
-    if (!result) {
-      return { success: false, message: "enrichment.persistFailed" };
-    }
-
-    // Link result to company if not yet linked
-    if (!result.companyId) {
-      await db.enrichmentResult.update({
-        where: { id: result.id },
-        data: { companyId },
+    try {
+      // Verify company ownership (IDOR: ADR-015)
+      const company = await db.company.findFirst({
+        where: { id: companyId, createdBy: user.id },
+        select: { id: true, label: true },
       });
-    }
 
-    revalidatePath("/jobs");
-    return { success: true, data: result };
+      if (!company) {
+        return { success: false, message: "enrichment.companyNotFound", errorCode: "NOT_FOUND" };
+      }
+
+      // Get the fallback chain for the requested dimension
+      const chain = getChainForDimension(dimension);
+      if (!chain) {
+        return { success: false, message: "enrichment.noChainAvailable" };
+      }
+
+      // Build enrichment input from company data
+      const input = {
+        dimension,
+        companyDomain: extractDomain(company.label),
+        companyName: company.label,
+      };
+
+      // Execute the fallback chain
+      const output = await enrichmentOrchestrator.execute(user.id, input, chain);
+
+      if (!output) {
+        return { success: false, message: "enrichment.allModulesFailed" };
+      }
+
+      // Fetch the persisted result to return
+      const result = await db.enrichmentResult.findFirst({
+        where: {
+          userId: user.id,
+          dimension,
+          domainKey: input.companyDomain ?? input.companyName ?? "unknown",
+        },
+      });
+
+      if (!result) {
+        return { success: false, message: "enrichment.persistFailed" };
+      }
+
+      // Link result to company if not yet linked (Fix 5: IDOR — userId in where)
+      if (!result.companyId) {
+        await db.enrichmentResult.updateMany({
+          where: { id: result.id, userId: user.id },
+          data: { companyId },
+        });
+      }
+
+      revalidatePath("/jobs");
+      return { success: true, data: result };
+    } finally {
+      decrementInflight(user.id);
+    }
   } catch (error) {
     return handleError(error, "enrichment.triggerFailed");
   }
@@ -181,52 +228,67 @@ export async function refreshEnrichment(
       return { success: false, message: "enrichment.notAuthenticated" };
     }
 
-    // Fetch existing result with ownership check (IDOR: ADR-015)
-    const existing = await db.enrichmentResult.findFirst({
-      where: { id: resultId, userId: user.id },
-    });
-
-    if (!existing) {
-      return { success: false, message: "enrichment.resultNotFound", errorCode: "NOT_FOUND" };
+    // Rate limiting: 10 enrichments per minute per user (Fix 3)
+    const rateResult = checkRateLimit(`enrichment:${user.id}`, ENRICHMENT_RATE_LIMIT, ENRICHMENT_WINDOW_MS);
+    if (!rateResult.allowed) {
+      return { success: false, message: "enrichment.rateLimited" };
     }
 
-    const dimension = existing.dimension as EnrichmentDimension;
-
-    // Validate dimension
-    if (!ENRICHMENT_DIMENSIONS.includes(dimension)) {
-      return { success: false, message: "enrichment.invalidDimension" };
+    // Concurrency limiting: MAX_CONCURRENT_PER_USER (Fix 3)
+    if (!incrementInflight(user.id)) {
+      return { success: false, message: "enrichment.tooManyConcurrent" };
     }
 
-    const chain = getChainForDimension(dimension);
-    if (!chain) {
-      return { success: false, message: "enrichment.noChainAvailable" };
+    try {
+      // Fetch existing result with ownership check (IDOR: ADR-015)
+      const existing = await db.enrichmentResult.findFirst({
+        where: { id: resultId, userId: user.id },
+      });
+
+      if (!existing) {
+        return { success: false, message: "enrichment.resultNotFound", errorCode: "NOT_FOUND" };
+      }
+
+      const dimension = existing.dimension as EnrichmentDimension;
+
+      // Validate dimension
+      if (!ENRICHMENT_DIMENSIONS.includes(dimension)) {
+        return { success: false, message: "enrichment.invalidDimension" };
+      }
+
+      const chain = getChainForDimension(dimension);
+      if (!chain) {
+        return { success: false, message: "enrichment.noChainAvailable" };
+      }
+
+      // Build enrichment input from existing result data
+      const input = {
+        dimension,
+        companyDomain: existing.domainKey,
+        companyName: existing.domainKey,
+      };
+
+      // Execute the fallback chain (will upsert over existing result)
+      const output = await enrichmentOrchestrator.execute(user.id, input, chain);
+
+      if (!output) {
+        return { success: false, message: "enrichment.allModulesFailed" };
+      }
+
+      // Fetch the updated result
+      const refreshed = await db.enrichmentResult.findFirst({
+        where: { id: resultId, userId: user.id },
+      });
+
+      if (!refreshed) {
+        return { success: false, message: "enrichment.persistFailed" };
+      }
+
+      revalidatePath("/jobs");
+      return { success: true, data: refreshed };
+    } finally {
+      decrementInflight(user.id);
     }
-
-    // Build enrichment input from existing result data
-    const input = {
-      dimension,
-      companyDomain: existing.domainKey,
-      companyName: existing.domainKey,
-    };
-
-    // Execute the fallback chain (will upsert over existing result)
-    const output = await enrichmentOrchestrator.execute(user.id, input, chain);
-
-    if (!output) {
-      return { success: false, message: "enrichment.allModulesFailed" };
-    }
-
-    // Fetch the updated result
-    const refreshed = await db.enrichmentResult.findFirst({
-      where: { id: resultId, userId: user.id },
-    });
-
-    if (!refreshed) {
-      return { success: false, message: "enrichment.persistFailed" };
-    }
-
-    revalidatePath("/jobs");
-    return { success: true, data: refreshed };
   } catch (error) {
     return handleError(error, "enrichment.refreshFailed");
   }

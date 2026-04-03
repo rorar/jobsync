@@ -136,9 +136,9 @@ export class EnrichmentOrchestrator {
         continue;
       }
 
-      // Skip unhealthy modules
-      if (registered.healthStatus === HealthStatus.UNREACHABLE) {
-        await this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "skipped", 0, "Module unreachable");
+      // Skip unhealthy modules (UNREACHABLE or DEGRADED — Fix 9)
+      if (registered.healthStatus === HealthStatus.UNREACHABLE || registered.healthStatus === HealthStatus.DEGRADED) {
+        await this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "skipped", 0, `Module ${registered.healthStatus}`);
         continue;
       }
 
@@ -319,5 +319,7 @@ export class EnrichmentOrchestrator {
   }
 }
 
-// Singleton instance
-export const enrichmentOrchestrator = new EnrichmentOrchestrator();
+// Singleton instance (globalThis to survive HMR — Fix 8)
+const g = globalThis as unknown as { __enrichmentOrchestrator?: EnrichmentOrchestrator };
+g.__enrichmentOrchestrator ??= new EnrichmentOrchestrator();
+export const enrichmentOrchestrator = g.__enrichmentOrchestrator;

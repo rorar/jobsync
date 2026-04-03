@@ -25,12 +25,25 @@ function mockFetch() {
   return globalThis.fetch as jest.Mock;
 }
 
+// Helper to create a ReadableStream from a string (for incremental body reading)
+function stringToReadableStream(str: string): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const encoded = encoder.encode(str);
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoded);
+      controller.close();
+    },
+  });
+}
+
 // Helper to create a mock fetch response with HTML body
 function htmlResponse(html: string, ok = true, status = 200) {
   return {
     ok,
     status,
-    text: jest.fn().mockResolvedValue(html),
+    headers: new Headers(),
+    body: stringToReadableStream(html),
   };
 }
 
@@ -167,7 +180,7 @@ describe("MetaParserModule", () => {
         "https://example.com/page",
         expect.objectContaining({
           headers: { "User-Agent": "JobSync/1.0 (Link Preview)" },
-          redirect: "follow",
+          redirect: "manual",
         }),
       );
     });

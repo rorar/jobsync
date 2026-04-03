@@ -48,11 +48,29 @@ enum EnrichmentDimension {
 }
 
 enum EnrichmentResultStatus {
-  pending           -- Request created, chain not yet started
-  | enriching       -- Chain execution in progress
-  | found           -- A module returned data successfully
+  found             -- A module returned data successfully
   | not_found       -- All modules in chain exhausted, none had data
   | error           -- Chain execution failed (retryable)
+  -- Note: pending and enriching are not persisted. The orchestrator
+  -- executes the chain synchronously and persists only the outcome.
+}
+
+enum CacheStatus {
+  fresh             -- Result exists and expiresAt > now()
+  | stale           -- Result exists, expiresAt <= now(), within grace period
+  | expired         -- Result exists, past grace period, needs re-enrichment
+  | not_found       -- No result exists for this key
+  | error           -- Result exists but status = error (retryable)
+  -- Derived at read time from expiresAt and config.STALE_GRACE_PERIOD_SECONDS.
+  -- Not stored in the database.
+}
+
+enum EnrichmentOutcome {
+  success           -- Module returned data (status = found)
+  | not_found       -- Module returned no data (dimension not available)
+  | error           -- Module call failed (exception or error status)
+  | timeout         -- Module call or chain exceeded timeout
+  | skipped         -- Module was skipped (inactive, unhealthy, circuit-broken)
 }
 
 enum EnrichmentTrigger {
@@ -115,8 +133,10 @@ value EnrichmentInput {
 
 value EnrichmentOutput {
   dimension: EnrichmentDimension
+  status: EnrichmentResultStatus        -- found, not_found, or error
   data: String                          -- JSON-serialised dimension-specific payload
   source: String                        -- Module ID that produced this result
+  ttl: Integer                          -- TTL in seconds for this result
 }
 
 value LogoData {
@@ -150,60 +170,69 @@ contract DataEnrichmentManifest extends ModuleManifest {
 -- Entities
 -- =============================================================================
 
-entity EnrichmentRequest {
-  -- Tracks a single enrichment attempt for a specific dimension and target.
-  -- One request per (dimension, cacheKey) combination. Reused on re-enrichment.
+entity EnrichmentResult {
+  -- Persisted enrichment outcome for a specific dimension and domain key.
+  -- One result per (userId, dimension, domainKey) combination. Upserted on re-enrichment.
 
   id: String                            -- UUID
   userId: String                        -- Owner (all enrichment is user-scoped)
   dimension: EnrichmentDimension
-  cacheKey: String                      -- Composite key: dimension + ":" + domain/url
-  input: EnrichmentInput                -- What to enrich
-  trigger: EnrichmentTrigger            -- What caused this request
-  status: EnrichmentResultStatus = pending
+  domainKey: String                     -- Domain or URL — the enrichment target key.
+                                        -- Dimension prefix is NOT included; uniqueness
+                                        -- is enforced by @@unique(userId, dimension, domainKey).
+  companyId: String?                    -- Optional FK to Company. Set when enrichment
+                                        -- is triggered for a specific company.
+  status: EnrichmentResultStatus        -- Outcome of the last chain execution
+  data: String                          -- JSON payload (dimension-specific)
+  sourceModuleId: String                -- Module ID that produced this result
+  ttlSeconds: Integer                   -- TTL in seconds, set based on dimension config
+  expiresAt: DateTime                   -- Pre-computed expiry: createdAt + ttlSeconds.
+                                        -- Used for cache status derivation and index queries.
 
-  -- Result (populated when status = found)
-  resultData: String?                   -- JSON payload (dimension-specific)
-  resolvedByModule: String?             -- Module ID that produced the result
-  resolvedAt: DateTime?                 -- When the result was obtained
-
-  -- TTL and freshness (derived)
-  ttl: Duration?                        -- Set based on dimension config
-  isFresh: resolvedAt != null and resolvedAt + ttl > now()
-  isStale: resolvedAt != null and resolvedAt + ttl <= now()
-    and resolvedAt + ttl + config.STALE_GRACE_PERIOD > now()
-  isExpired: resolvedAt != null
-    and resolvedAt + ttl + config.STALE_GRACE_PERIOD <= now()
-  needsRefresh: isStale or isExpired or status = error
-
-  -- Chain execution tracking
-  attemptedModules: List<String>        -- Module IDs tried in this execution (ordered)
-  lastError: String?                    -- Last error message from chain execution
+  -- Derived cache lifecycle (computed at read time, not persisted)
+  cacheStatus: CacheStatus
+    = if expiresAt > now(): fresh
+      else if expiresAt + config.STALE_GRACE_PERIOD_SECONDS > now(): stale
+      else: expired
+  needsRefresh: cacheStatus in { stale, expired } or status = error
 
   -- Timestamps
   createdAt: DateTime = now()
   updatedAt: DateTime                   -- Auto-updated on any change
+
+  -- Constraints
+  @@unique(userId, dimension, domainKey)
+  @@index(userId, dimension, status)
+  @@index(expiresAt)
+  @@index(companyId)
 }
 
 entity EnrichmentLog {
   -- Append-only audit trail for enrichment attempts.
   -- One entry per module attempt within a fallback chain execution.
 
-  id: String                            -- UUID
-  requestId: String                     -- FK to EnrichmentRequest
-  moduleId: String                      -- Which module was attempted
+  id: String                            -- CUID
+  userId: String                        -- Owner (denormalised for efficient querying)
+  enrichmentResultId: String?           -- FK to EnrichmentResult (nullable: set only
+                                        -- on the successful attempt that produced a result)
   dimension: EnrichmentDimension
-  success: Boolean                      -- Whether this module returned data
+  domainKey: String                     -- Domain or URL target (denormalised)
+  moduleId: String                      -- Which module was attempted
+  chainPosition: Integer                -- 1-based position of this module in the chain
+  outcome: EnrichmentOutcome            -- Result of this attempt
   latencyMs: Integer                    -- How long the module call took
-  errorMessage: String?                 -- Error detail if success = false
-  skipped: Boolean = false              -- True if module was skipped (inactive/unhealthy)
-  skipReason: String?                   -- Why the module was skipped
+  errorMessage: String?                 -- Error or skip detail (null on success)
   createdAt: DateTime = now()
+
+  -- Constraints
+  @@index(userId, dimension, domainKey)
+  @@index(moduleId, outcome)
+  @@index(createdAt)
 
   @invariant
     -- EnrichmentLog entries are immutable after creation.
     -- They form an append-only audit trail for observability.
-    -- Deleted only via cascade when parent EnrichmentRequest is purged.
+    -- Deleted only via cascade when parent EnrichmentResult is purged.
 }
 
 -- =============================================================================
@@ -211,21 +240,24 @@ entity EnrichmentLog {
 -- =============================================================================
 
 config {
-  LOGO_TTL_DAYS: Integer = 30
-    -- Days before a logo result is considered stale. Logos rarely change.
-  DEEP_LINK_TTL_DAYS: Integer = 7
-    -- Days before a deep link result is considered stale. Pages change more often.
-  REVIEW_TTL_DAYS: Integer = 1
-    -- Days before a review result is considered stale (future).
-  STALE_GRACE_PERIOD: Duration = 7.days
-    -- Duration after TTL expiry during which a stale result is still returned
-    -- while a background refresh is triggered. After this period, the result
-    -- is expired and the chain is re-executed synchronously.
+  LOGO_TTL_SECONDS: Integer = 2592000
+    -- 30 days in seconds. TTL before a logo result is considered stale.
+    -- Logos rarely change.
+  DEEP_LINK_TTL_SECONDS: Integer = 604800
+    -- 7 days in seconds. TTL before a deep link result is considered stale.
+    -- Pages change more often.
+  REVIEW_TTL_SECONDS: Integer = 86400
+    -- 1 day in seconds. TTL before a review result is considered stale (future).
+  STALE_GRACE_PERIOD_SECONDS: Integer = 604800
+    -- 7 days in seconds. Duration after TTL expiry during which a stale
+    -- result is still returned while a background refresh is triggered.
+    -- After this period, the result is expired and the chain is
+    -- re-executed synchronously.
   CHAIN_TIMEOUT_MS: Integer = 10000
     -- Maximum total time for a fallback chain execution (all modules combined).
   MODULE_TIMEOUT_MS: Integer = 5000
     -- Maximum time for a single module call within the chain.
-  MAX_CONCURRENT_ENRICHMENTS_PER_USER: Integer = 5
+  MAX_CONCURRENT_PER_USER: Integer = 5
     -- Maximum in-flight enrichment requests per user to prevent abuse.
   PLACEHOLDER_LOGO_PATH: String = "/images/company-placeholder.svg"
     -- Fallback when no logo is found or enrichment fails.
@@ -247,15 +279,15 @@ rule TriggerEnrichmentOnCompanyCreated {
   requires: domain != null
     -- Only attempt logo enrichment if we can derive a domain.
 
-  ensures: EnrichmentRequest.created(
+  ensures: executeChain(
     userId: company.created_by.id,
     dimension: logo,
-    cacheKey: "logo:" + domain,
+    domainKey: domain,
     input: EnrichmentInput(dimension: logo, companyDomain: domain),
-    trigger: company_created,
-    status: pending,
-    ttl: config.LOGO_TTL_DAYS.days
+    trigger: company_created
   )
+  -- The orchestrator executes the chain synchronously and upserts the
+  -- EnrichmentResult. See ExecuteFallbackChain rule for chain logic.
 
   @guidance
     -- Domain extraction heuristics: if the company label looks like a domain
@@ -275,34 +307,30 @@ rule TriggerEnrichmentOnJobImported {
 
   ensures:
     if domain != null:
-      -- Only create if no fresh/stale result exists for this cache key
-      let existingLogo = EnrichmentRequest
-        where cacheKey = "logo:" + domain and userId = userId
+      -- Only execute if no fresh result exists for this domain key
+      let existingLogo = EnrichmentResult
+        where dimension = logo and domainKey = domain and userId = userId
       if not exists existingLogo or existingLogo.needsRefresh:
-        EnrichmentRequest.created(
+        executeChain(
           userId: userId,
           dimension: logo,
-          cacheKey: "logo:" + domain,
+          domainKey: domain,
           input: EnrichmentInput(dimension: logo, companyDomain: domain),
-          trigger: job_imported,
-          status: pending,
-          ttl: config.LOGO_TTL_DAYS.days
+          trigger: job_imported
         )
 
   -- Deep link enrichment (if the job has a URL)
   ensures:
     if job.jobUrl != null:
-      let existingLink = EnrichmentRequest
-        where cacheKey = "deep_link:" + job.jobUrl and userId = userId
+      let existingLink = EnrichmentResult
+        where dimension = deep_link and domainKey = job.jobUrl and userId = userId
       if not exists existingLink or existingLink.needsRefresh:
-        EnrichmentRequest.created(
+        executeChain(
           userId: userId,
           dimension: deep_link,
-          cacheKey: "deep_link:" + job.jobUrl,
+          domainKey: job.jobUrl,
           input: EnrichmentInput(dimension: deep_link, url: job.jobUrl),
-          trigger: job_imported,
-          status: pending,
-          ttl: config.DEEP_LINK_TTL_DAYS.days
+          trigger: job_imported
         )
 
   @guidance
@@ -319,40 +347,25 @@ rule TriggerManualEnrichment {
   requires: input.companyDomain != null or input.url != null
     -- At least one enrichment target must be provided.
 
-  let cacheKey =
-    if dimension = logo: "logo:" + input.companyDomain
-    else: "deep_link:" + input.url
+  let domainKey =
+    if dimension = logo: input.companyDomain
+    else: input.url
 
-  let existing = EnrichmentRequest where cacheKey = cacheKey and userId = userId
-
-  -- Check concurrent enrichment limit
-  let inFlight = EnrichmentRequest
-    where userId = userId and status in { pending, enriching }
-  requires: inFlight.count < config.MAX_CONCURRENT_ENRICHMENTS_PER_USER
+  let existing = EnrichmentResult
+    where dimension = dimension and domainKey = domainKey and userId = userId
 
   ensures:
-    if exists existing and existing.status = enriching:
-      -- Already in progress, do nothing (idempotent)
-      existing.status = enriching
-    else if exists existing:
-      -- Re-enrich: reset status to pending to re-execute chain
-      existing.status = pending
-      existing.trigger = manual
-      existing.attemptedModules = []
-      existing.lastError = null
+    if exists existing and existing.cacheStatus = fresh:
+      -- Cache hit: return existing result, no chain execution needed
+      existing.status = existing.status
     else:
-      -- New request
-      let ttl =
-        if dimension = logo: config.LOGO_TTL_DAYS.days
-        else: config.DEEP_LINK_TTL_DAYS.days
-      EnrichmentRequest.created(
+      -- New or stale/expired/error: execute the chain (upserts the result)
+      executeChain(
         userId: userId,
         dimension: dimension,
-        cacheKey: cacheKey,
+        domainKey: domainKey,
         input: input,
-        trigger: manual,
-        status: pending,
-        ttl: ttl
+        trigger: manual
       )
 }
 
@@ -365,26 +378,21 @@ rule TriggerDeepLinkOnPaste {
   requires: validateUrl(url)
     -- Black box: validates URL format and protocol (http/https only).
 
-  let cacheKey = "deep_link:" + url
-  let existing = EnrichmentRequest where cacheKey = cacheKey and userId = userId
+  let existing = EnrichmentResult
+    where dimension = deep_link and domainKey = url and userId = userId
 
   ensures:
-    if exists existing and existing.isFresh:
-      -- Cache hit: return cached result immediately, no new request
+    if exists existing and existing.cacheStatus = fresh:
+      -- Cache hit: return cached result immediately, no chain execution
       existing.status = existing.status
-    else if exists existing and existing.isStale:
-      -- Stale: return cached result, trigger background refresh
-      existing.trigger = link_pasted
-      existing.status = pending
-    else if not exists existing:
-      EnrichmentRequest.created(
+    else:
+      -- New, stale, or expired: execute the chain (upserts the result)
+      executeChain(
         userId: userId,
         dimension: deep_link,
-        cacheKey: cacheKey,
+        domainKey: url,
         input: EnrichmentInput(dimension: deep_link, url: url),
-        trigger: link_pasted,
-        status: pending,
-        ttl: config.DEEP_LINK_TTL_DAYS.days
+        trigger: link_pasted
       )
 
   @guidance
@@ -398,98 +406,124 @@ rule TriggerDeepLinkOnPaste {
 -- =============================================================================
 
 rule ExecuteFallbackChain {
-  -- "When an enrichment request is pending, execute the fallback chain."
-  -- First successful module wins. Inactive, unhealthy and circuit-broken
-  -- modules are skipped.
-  when: request: EnrichmentRequest.status becomes pending
+  -- "Execute the fallback chain for a given dimension and input."
+  -- Called by trigger rules via executeChain(). First successful module wins.
+  -- Inactive, unhealthy and circuit-broken modules are skipped.
+  -- The orchestrator executes the chain synchronously and upserts the result.
+  when: executeChain(userId: String, dimension: EnrichmentDimension,
+    domainKey: String, input: EnrichmentInput, trigger: EnrichmentTrigger)
 
-  let chain = lookupChain(request.dimension)
+  let chainExecutionId = generateUUID()
+    -- Ephemeral ID for this chain execution. Used in domain events.
+
+  let chain = lookupChain(dimension)
     -- Black box: retrieves the configured FallbackChain for this dimension.
     -- Returns null if no chain is configured for the dimension.
   requires: chain != null
   requires: chain.entries.count >= 1
 
-  ensures: request.status = enriching
-  ensures: request.attemptedModules = []
-
   -- Walk the chain in priority order
-  for entry in chain.entries:
+  for entry in chain.entries ordered_by entry.priority:
+    let chainPosition = entry.priority
     let module = RegisteredModule where manifest.id = entry.moduleId
 
     -- Skip inactive modules
     if module.status != active:
       ensures: EnrichmentLog.created(
-        requestId: request.id,
+        userId: userId,
+        enrichmentResultId: null,
+        dimension: dimension,
+        domainKey: domainKey,
         moduleId: entry.moduleId,
-        dimension: request.dimension,
-        success: false,
+        chainPosition: chainPosition,
+        outcome: skipped,
         latencyMs: 0,
-        skipped: true,
-        skipReason: "module_inactive"
+        errorMessage: "Module inactive"
       )
-    -- Skip unhealthy modules (degraded or unreachable)
-    else if module.healthStatus in { degraded, unreachable }:
+    -- Skip unhealthy modules (unreachable)
+    else if module.healthStatus = unreachable:
       ensures: EnrichmentLog.created(
-        requestId: request.id,
+        userId: userId,
+        enrichmentResultId: null,
+        dimension: dimension,
+        domainKey: domainKey,
         moduleId: entry.moduleId,
-        dimension: request.dimension,
-        success: false,
+        chainPosition: chainPosition,
+        outcome: skipped,
         latencyMs: 0,
-        skipped: true,
-        skipReason: "module_unhealthy"
+        errorMessage: "Module unreachable"
       )
     -- Skip circuit-broken modules
     else if module.circuitBreakerState = open:
       ensures: EnrichmentLog.created(
-        requestId: request.id,
+        userId: userId,
+        enrichmentResultId: null,
+        dimension: dimension,
+        domainKey: domainKey,
         moduleId: entry.moduleId,
-        dimension: request.dimension,
-        success: false,
+        chainPosition: chainPosition,
+        outcome: skipped,
         latencyMs: 0,
-        skipped: true,
-        skipReason: "circuit_breaker_open"
+        errorMessage: "Circuit breaker open"
       )
     else:
       -- Attempt enrichment via this module
-      let result = enrich(module, request.input)
+      let result = enrich(module, input)
         -- Black box: calls module.enrich(input) with timeout.
-        -- Returns EnrichmentOutput on success, null on failure.
-
-      ensures: request.attemptedModules.add(entry.moduleId)
-
-      ensures: EnrichmentLog.created(
-        requestId: request.id,
-        moduleId: entry.moduleId,
-        dimension: request.dimension,
-        success: result != null,
-        latencyMs: result.latencyMs,
-        errorMessage: result.errorMessage
-      )
+        -- Returns EnrichmentOutput on success, raises on failure.
 
       if result != null and result.status = found:
-        -- Success: store result and stop chain
-        ensures: request.status = found
-        ensures: request.resultData = result.data
-        ensures: request.resolvedByModule = entry.moduleId
-        ensures: request.resolvedAt = now()
-        ensures: EventBus.publish(EnrichmentCompleted(
-          requestId: request.id,
-          dimension: request.dimension,
+        -- Success: upsert result, log, emit event, stop chain
+        let enrichmentResult = EnrichmentResult.upserted(
+          userId: userId,
+          dimension: dimension,
+          domainKey: domainKey,
+          status: found,
+          data: result.data,
+          sourceModuleId: entry.moduleId,
+          ttlSeconds: result.ttl,
+          expiresAt: now() + result.ttl.seconds
+        )
+        ensures: EnrichmentLog.created(
+          userId: userId,
+          enrichmentResultId: enrichmentResult.id,
+          dimension: dimension,
+          domainKey: domainKey,
           moduleId: entry.moduleId,
-          userId: request.userId
+          chainPosition: chainPosition,
+          outcome: success,
+          latencyMs: result.latencyMs
+        )
+        ensures: EventBus.publish(EnrichmentCompleted(
+          requestId: chainExecutionId,
+          dimension: dimension,
+          moduleId: entry.moduleId,
+          userId: userId,
+          domainKey: domainKey
         ))
         -- Stop: do not try remaining modules
 
+      else:
+        -- Module returned not_found or error -- log and try next
+        ensures: EnrichmentLog.created(
+          userId: userId,
+          enrichmentResultId: null,
+          dimension: dimension,
+          domainKey: domainKey,
+          moduleId: entry.moduleId,
+          chainPosition: chainPosition,
+          outcome: if result.status = not_found: not_found else: error,
+          latencyMs: result.latencyMs,
+          errorMessage: result.errorMessage
+        )
+
   -- If we reach here, all modules failed or were skipped
-  ensures:
-    if request.status = enriching:
-      -- No module succeeded
-      request.status = not_found
-      EventBus.publish(EnrichmentFailed(
-        requestId: request.id,
-        dimension: request.dimension,
-        userId: request.userId
-      ))
+  ensures: EventBus.publish(EnrichmentFailed(
+    requestId: chainExecutionId,
+    dimension: dimension,
+    userId: userId,
+    domainKey: domainKey
+  ))
 
   @guidance
     -- The chain is executed sequentially, not in parallel.
@@ -500,6 +534,9 @@ rule ExecuteFallbackChain {
     -- + timeout) provisioned from the module's manifest.resilience config.
     -- Enrichment NEVER blocks the triggering operation. If called from a
     -- domain event handler, the chain execution runs asynchronously.
+    -- Results are persisted via upsert on the (userId, dimension, domainKey)
+    -- unique constraint. There is no separate "request" entity — the
+    -- EnrichmentResult is created or updated directly by the orchestrator.
 }
 
 -- SkipInactiveModules is embedded in ExecuteFallbackChain as conditional branches.
@@ -517,44 +554,55 @@ rule ExecuteFallbackChain {
 rule CacheHit {
   -- "When a cached result is fresh, return it without external calls."
   -- This is checked BEFORE ExecuteFallbackChain fires.
+  -- The orchestrator checks the in-memory cache first, then the DB.
   when: RequestEnrichment(userId: String, dimension: EnrichmentDimension, input: EnrichmentInput)
-  let cacheKey =
-    if dimension = logo: "logo:" + input.companyDomain
-    else: "deep_link:" + input.url
-  let cached = EnrichmentRequest where cacheKey = cacheKey and userId = userId
+  let domainKey =
+    if dimension = logo: input.companyDomain
+    else: input.url
+  let cached = EnrichmentResult
+    where dimension = dimension and domainKey = domainKey and userId = userId
 
   requires: exists cached
-  requires: cached.isFresh
+  requires: cached.cacheStatus = fresh
 
   ensures: cached.status = cached.status
     -- No-op: return cached result. No chain execution needed.
 
   @guidance
     -- Cache hit is the fast path. The UI reads the cached result
-    -- directly from the EnrichmentRequest entity.
+    -- directly from the EnrichmentResult entity.
     -- No external HTTP calls are made.
+    -- The in-memory LRU cache (ConnectorCache) is checked first;
+    -- DB lookup is the second-tier cache.
 }
 
 rule StaleRefresh {
   -- "When a cached result is stale, return it and trigger a background refresh."
   when: RequestEnrichment(userId: String, dimension: EnrichmentDimension, input: EnrichmentInput)
-  let cacheKey =
-    if dimension = logo: "logo:" + input.companyDomain
-    else: "deep_link:" + input.url
-  let cached = EnrichmentRequest where cacheKey = cacheKey and userId = userId
+  let domainKey =
+    if dimension = logo: input.companyDomain
+    else: input.url
+  let cached = EnrichmentResult
+    where dimension = dimension and domainKey = domainKey and userId = userId
 
   requires: exists cached
-  requires: cached.isStale
+  requires: cached.cacheStatus = stale
 
-  ensures: cached.status = pending
-    -- Transitions to pending, which triggers ExecuteFallbackChain.
-    -- The stale result remains available for read until the refresh completes.
+  ensures: executeChain(
+    userId: userId,
+    dimension: dimension,
+    domainKey: domainKey,
+    input: input,
+    trigger: manual
+  )
+  -- Re-executes the chain, which upserts over the existing result.
+  -- The stale result remains available for read until the upsert completes.
 
   @guidance
     -- Stale-while-revalidate pattern: the UI shows the stale result
     -- immediately while the background refresh runs. If the refresh
-    -- succeeds, the result is updated in place. If it fails, the
-    -- stale result remains until expiry.
+    -- succeeds, the result is updated in place (upsert). If it fails,
+    -- the stale result remains until expiry.
 }
 
 -- =============================================================================
@@ -563,18 +611,18 @@ rule StaleRefresh {
 
 rule ApplyLogoResult {
   -- "When a logo enrichment succeeds, update the Company.logo_url."
-  when: request: EnrichmentRequest.status transitions_to found
-  requires: request.dimension = logo
+  when: result: EnrichmentResult.status transitions_to found
+  requires: result.dimension = logo
 
-  let logoData = parseLogoData(request.resultData)
+  let logoData = parseLogoData(result.data)
     -- Black box: deserialises JSON to LogoData value type.
   requires: logoData != null
   requires: logoData.logoUrl != null
 
-  -- Find the company by domain (the enrichment target)
-  let domain = request.input.companyDomain
-  let company = Company where extractDomain(label) = domain
-    and created_by.id = request.userId
+  -- Find the company via the result's companyId or by domain matching
+  let company = Company where id = result.companyId
+    or (extractDomain(label) = result.domainKey
+        and created_by.id = result.userId)
 
   ensures:
     if exists company and company.logo_url = null:
@@ -582,9 +630,14 @@ rule ApplyLogoResult {
     -- Only set logo_url if it's not already populated.
     -- A manually set logo takes precedence over enrichment.
 
+  -- Link the result to the company if not yet linked
+  ensures:
+    if exists company and result.companyId = null:
+      result.companyId = company.id
+
   @guidance
     -- The logo URL from enrichment is written back to Company.logo_url.
-    -- This is a cross-aggregate update (EnrichmentRequest -> Company).
+    -- This is a cross-aggregate update (EnrichmentResult -> Company).
     -- The Company entity is a shared lookup entity, not a full aggregate,
     -- so this cross-boundary write is acceptable.
     -- Protocol validation: the logo URL must use http or https (enforced
@@ -594,11 +647,11 @@ rule ApplyLogoResult {
 rule ApplyDeepLinkResult {
   -- "When a deep link enrichment succeeds, the result is available for UI display."
   -- Deep link data is NOT written back to Job or any other entity.
-  -- It is read directly from EnrichmentRequest.resultData by the UI.
-  when: request: EnrichmentRequest.status transitions_to found
-  requires: request.dimension = deep_link
+  -- It is read directly from EnrichmentResult.data by the UI.
+  when: result: EnrichmentResult.status transitions_to found
+  requires: result.dimension = deep_link
 
-  -- No entity updates. The deep link metadata lives in EnrichmentRequest.resultData.
+  -- No entity updates. The deep link metadata lives in EnrichmentResult.data.
   -- The UI reads it via the JobDetailEnriched surface.
 
   @guidance
@@ -642,13 +695,15 @@ invariant FallbackChainNonEmpty {
     chain.entries.count >= 1
 }
 
-invariant CacheKeyUniquenessPerUser {
-  -- Cache key is unique per user. Two users may have results for the same
-  -- domain/URL, but each user has at most one EnrichmentRequest per cache key.
-  for a in EnrichmentRequests:
-    for b in EnrichmentRequests:
-      a != b and a.userId = b.userId
-        implies a.cacheKey != b.cacheKey
+invariant DomainKeyUniquenessPerUser {
+  -- Domain key is unique per user per dimension. Two users may have results
+  -- for the same domain/URL, but each user has at most one EnrichmentResult
+  -- per (dimension, domainKey) combination.
+  -- Enforced by @@unique(userId, dimension, domainKey) on the entity.
+  for a in EnrichmentResults:
+    for b in EnrichmentResults:
+      a != b and a.userId = b.userId and a.dimension = b.dimension
+        implies a.domainKey != b.domainKey
 }
 
 @invariant EnrichmentNonBlocking
@@ -674,15 +729,15 @@ surface JobDetailEnriched {
   facing viewer: User
   context job: Job
 
-  let deepLinkPreview = EnrichmentRequest
+  let deepLinkPreview = EnrichmentResult
     where dimension = deep_link
-    and cacheKey = "deep_link:" + job.jobUrl
+    and domainKey = job.jobUrl
     and userId = viewer.id
     and status = found
 
   exposes:
     job.company.logo_url,
-    deepLinkPreview.resultData
+    deepLinkPreview.data
 
   provides:
     RequestEnrichment(userId: viewer.id, dimension: deep_link,
@@ -730,7 +785,7 @@ surface EnrichmentModuleSettings {
 -- Future: chains may become user-configurable or admin-configurable.
 
 -- Logo chain: Clearbit -> Google Favicon -> Placeholder
--- Module: clearbit (credential: api_key, dimension: logo)
+-- Module: clearbit (credential: none, dimension: logo)
 -- Module: google_favicon (credential: none, dimension: logo)
 --   Uses https://www.google.com/s2/favicons?domain={domain}&sz=128
 -- Placeholder is not a module — it is the fallback when all modules fail.
@@ -748,18 +803,20 @@ surface EnrichmentModuleSettings {
 
 event EnrichmentCompleted {
   -- Published when a fallback chain execution succeeds (status -> found).
-  requestId: String
+  requestId: String                     -- Ephemeral chain execution ID (UUID)
   dimension: EnrichmentDimension
   moduleId: String                      -- Which module produced the result
   userId: String
+  domainKey: String                     -- The enrichment target key
 }
 
 event EnrichmentFailed {
   -- Published when all modules in a fallback chain fail (status -> not_found).
   -- This is an internal observability event, NOT surfaced to the user.
-  requestId: String
+  requestId: String                     -- Ephemeral chain execution ID (UUID)
   dimension: EnrichmentDimension
   userId: String
+  domainKey: String                     -- The enrichment target key
 }
 
 -- =============================================================================
@@ -771,11 +828,11 @@ event EnrichmentFailed {
 -- Module: clearbit
 -- manifest: { id: "clearbit", manifestVersion: 1, connectorType: data_enrichment,
 --   supportedDimensions: { logo },
---   credential: { type: api_key, moduleId: "clearbit", required: true,
---     envFallback: "CLEARBIT_API_KEY", sensitive: true, placeholder: "sk_..." },
+--   credential: { type: none, moduleId: "clearbit", required: false, sensitive: false },
 --   healthCheck: { endpoint: "https://logo.clearbit.com/clearbit.com", timeoutMs: 5000 },
 --   resilience: { retryAttempts: 1, retryBackoff: none, circuitBreaker: true,
 --     circuitBreakerThreshold: 3, timeoutMs: 5000 } }
+-- Note: Clearbit Logo API (free tier) does not require an API key.
 
 -- Module: google_favicon
 -- manifest: { id: "google_favicon", manifestVersion: 1, connectorType: data_enrichment,

@@ -6,15 +6,22 @@
  * This file is imported once at startup.
  *
  * New modules: add an import line below. No other changes needed.
- *
- * Note: Module implementations are created by a separate agent.
- * Uncomment imports as modules become available:
- *
- * import "./modules/clearbit";
- * import "./modules/google-favicon";
- * import "./modules/meta-parser";
  */
 
+import { moduleRegistry } from "../registry";
 import { enrichmentConnectorRegistry } from "./registry";
+
+// Import manifests + factories
+import { clearbitManifest } from "./modules/clearbit/manifest";
+import { createClearbitModule } from "./modules/clearbit";
+import { googleFaviconManifest } from "./modules/google-favicon/manifest";
+import { createGoogleFaviconModule } from "./modules/google-favicon";
+import { metaParserManifest } from "./modules/meta-parser/manifest";
+import { createMetaParserModule } from "./modules/meta-parser";
+
+// Register with unified registry
+moduleRegistry.register(clearbitManifest, createClearbitModule);
+moduleRegistry.register(googleFaviconManifest, createGoogleFaviconModule);
+moduleRegistry.register(metaParserManifest, createMetaParserModule);
 
 export { enrichmentConnectorRegistry };

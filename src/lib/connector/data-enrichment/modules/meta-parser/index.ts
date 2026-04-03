@@ -126,6 +126,66 @@ function isPrivateIP(hostname: string): boolean {
 }
 
 /**
+ * Maximum number of redirects to follow manually (SSRF: Fix 1).
+ * Prevents redirect loops while still supporting standard redirect chains.
+ */
+const MAX_REDIRECTS = 5;
+
+/**
+ * Sanitizes a meta tag value to prevent XSS.
+ * Strips HTML tags, javascript: URIs, and event handlers.
+ */
+function sanitizeMetaValue(value: string): string {
+  return value
+    .replace(/<[^>]*>/g, "")       // Strip HTML tags
+    .replace(/javascript:/gi, "")   // Remove javascript: URIs
+    .replace(/on\w+=/gi, "")        // Remove event handlers
+    .trim()
+    .slice(0, 1000);                // Max length
+}
+
+/**
+ * Validates that an image/favicon URL is safe.
+ * Allows http://, https://, and relative paths (starting with /).
+ * Blocks javascript:, data:, and other dangerous protocols.
+ */
+function isValidImageUrl(url: string): boolean {
+  // Allow relative paths (common for favicons)
+  if (url.startsWith("/") && !url.startsWith("//")) {
+    return true;
+  }
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reads the response body incrementally up to MAX_HTML_SIZE bytes.
+ * Aborts the stream once the limit is reached to prevent memory DoS.
+ */
+async function readBodyWithLimit(response: Response): Promise<string> {
+  if (!response.body) {
+    return "";
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let html = "";
+  try {
+    while (html.length < MAX_HTML_SIZE) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      html += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    reader.cancel();
+  }
+  return html.slice(0, MAX_HTML_SIZE);
+}
+
+/**
  * Extracts a meta tag content value from HTML.
  *
  * Handles both `content="value"` before and after the attribute selector.
@@ -173,12 +233,16 @@ function parseMetaTags(html: string): DeepLinkData {
   const ogSiteName = extractMeta(html, 'property="og:site_name"');
   const favicon = extractFavicon(html);
 
+  // Sanitize all extracted values to prevent XSS (Fix 7)
+  const sanitizedImage = ogImage ? sanitizeMetaValue(ogImage) : undefined;
+  const sanitizedFavicon = favicon ? sanitizeMetaValue(favicon) : undefined;
+
   return {
-    title: ogTitle || undefined,
-    description: ogDesc || undefined,
-    image: ogImage || undefined,
-    siteName: ogSiteName || undefined,
-    favicon: favicon || undefined,
+    title: ogTitle ? sanitizeMetaValue(ogTitle) : undefined,
+    description: ogDesc ? sanitizeMetaValue(ogDesc) : undefined,
+    image: sanitizedImage && isValidImageUrl(sanitizedImage) ? sanitizedImage : undefined,
+    siteName: ogSiteName ? sanitizeMetaValue(ogSiteName) : undefined,
+    favicon: sanitizedFavicon && isValidImageUrl(sanitizedFavicon) ? sanitizedFavicon : undefined,
   };
 }
 
@@ -238,13 +302,44 @@ export function createMetaParserModule(): DataEnrichmentConnector {
       );
 
       try {
-        const response = await fetch(url, {
-          headers: { "User-Agent": "JobSync/1.0 (Link Preview)" },
-          signal: controller.signal,
-          redirect: "follow",
-        });
+        // Manual redirect following with SSRF validation on each hop (Fix 1)
+        let currentUrl = url;
+        let response: Response | null = null;
 
-        if (!response.ok) {
+        for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+          response = await fetch(currentUrl, {
+            headers: { "User-Agent": "JobSync/1.0 (Link Preview)" },
+            signal: controller.signal,
+            redirect: "manual",
+          });
+
+          // Handle redirects: validate the target URL before following
+          if (response.status >= 300 && response.status < 400) {
+            const location = response.headers.get("location");
+            if (!location) break;
+
+            // Resolve relative URLs against current URL
+            const resolvedUrl = new URL(location, currentUrl).toString();
+
+            // Validate redirect target against SSRF rules
+            if (!isValidExternalUrl(resolvedUrl)) {
+              return {
+                dimension: "deep_link",
+                status: "error",
+                data: {},
+                source: "meta_parser",
+                ttl: 0,
+              };
+            }
+
+            currentUrl = resolvedUrl;
+            continue;
+          }
+
+          break;
+        }
+
+        if (!response || !response.ok) {
           return {
             dimension: "deep_link",
             status: "not_found",
@@ -254,9 +349,8 @@ export function createMetaParserModule(): DataEnrichmentConnector {
           };
         }
 
-        const html = await response.text();
-        // Only parse first 100KB to prevent memory issues
-        const truncatedHtml = html.slice(0, MAX_HTML_SIZE);
+        // Read body incrementally to prevent memory DoS (Fix 2)
+        const truncatedHtml = await readBodyWithLimit(response);
 
         const data = parseMetaTags(truncatedHtml);
 
