@@ -10,6 +10,7 @@
 
 import type { DataSourceConnector } from "./job-discovery/types";
 import type { AIProviderConnector } from "./ai-provider/types";
+import type { DataEnrichmentConnector } from "./data-enrichment/types";
 import {
   ConnectorType,
   ModuleStatus,
@@ -19,7 +20,7 @@ import {
   type RegisteredModule,
 } from "./manifest";
 
-type AnyConnector = DataSourceConnector | AIProviderConnector;
+type AnyConnector = DataSourceConnector | AIProviderConnector | DataEnrichmentConnector;
 
 /**
  * Factory type is intentionally loose — module factories have heterogeneous

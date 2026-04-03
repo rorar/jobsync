@@ -10,6 +10,7 @@ import ErrorLogSettings from "@/components/settings/ErrorLogSettings";
 import NotificationSettings from "@/components/settings/NotificationSettings";
 import PublicApiKeySettings from "@/components/settings/PublicApiKeySettings";
 import CompanyBlacklistSettings from "@/components/settings/CompanyBlacklistSettings";
+import EnrichmentModuleSettings from "@/components/settings/EnrichmentModuleSettings";
 import SettingsSidebar, { type SettingsSection } from "@/components/settings/SettingsSidebar";
 
 function Settings() {
@@ -31,6 +32,7 @@ function Settings() {
           {activeSection === "public-api" && <PublicApiKeySettings />}
           {activeSection === "appearance" && <DisplaySettings />}
           {activeSection === "automation" && <AutomationSettings />}
+          {activeSection === "enrichment" && <EnrichmentModuleSettings />}
           {activeSection === "notifications" && <NotificationSettings />}
           {activeSection === "blacklist" && <CompanyBlacklistSettings />}
           {activeSection === "developer" && <DeveloperSettings />}

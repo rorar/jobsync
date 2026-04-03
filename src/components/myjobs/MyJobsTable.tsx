@@ -38,6 +38,7 @@ import { JobResponse, JobStatus } from "@/models/job.model";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
+import { CompanyLogo } from "../ui/company-logo";
 
 type MyJobsTableProps = {
   jobs: JobResponse[];
@@ -97,11 +98,10 @@ function MyJobsTable({
             return (
               <TableRow key={job.id}>
                 <TableCell className="hidden sm:table-cell">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    alt={t("jobs.companyLogo")}
-                    className="aspect-square rounded-md object-cover h-8 w-8"
-                    src={job.Company?.logoUrl || "/images/jobsync-logo.svg"}
+                  <CompanyLogo
+                    logoUrl={job.Company?.logoUrl}
+                    companyName={job.Company?.label ?? ""}
+                    size="md"
                   />
                 </TableCell>
                 <TableCell className="hidden md:table-cell w-[120px]">

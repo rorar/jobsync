@@ -15,6 +15,7 @@ import type { CachePolicy } from "./cache";
 export enum ConnectorType {
   JOB_DISCOVERY = "job_discovery",
   AI_PROVIDER = "ai_provider",
+  DATA_ENRICHMENT = "data_enrichment",
 }
 
 export enum ModuleStatus {
@@ -150,6 +151,11 @@ export interface JobDiscoveryManifest extends ModuleManifest {
 export interface AiManifest extends ModuleManifest {
   connectorType: ConnectorType.AI_PROVIDER;
   modelSelection: ModelSelectionConfig;
+}
+
+export interface DataEnrichmentManifest extends ModuleManifest {
+  connectorType: ConnectorType.DATA_ENRICHMENT;
+  supportedDimensions: string[];
 }
 
 // =============================================================================

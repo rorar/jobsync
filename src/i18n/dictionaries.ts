@@ -18,6 +18,7 @@ import { notifications } from "./dictionaries/notifications";
 import { api } from "./dictionaries/api";
 import { blacklist } from "./dictionaries/blacklist";
 import { deck } from "./dictionaries/deck";
+import { enrichment } from "./dictionaries/enrichment";
 
 const core = {
   en: {
@@ -368,7 +369,7 @@ function mergeDictionaries(...namespaces: Record<string, Record<string, string>>
   return merged;
 }
 
-const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, staging, notifications, api, blacklist, deck);
+const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, staging, notifications, api, blacklist, deck, enrichment);
 
 export type TranslationKey = string;
 export type Dictionary = Record<string, string>;

@@ -19,6 +19,7 @@ import { NotesSection } from "./NotesSection";
 import { useState, useMemo, useEffect } from "react";
 import { DownloadFileButton } from "../profile/DownloadFileButton";
 import { MatchDetails } from "../automations/MatchDetails";
+import { CompanyLogo } from "../ui/company-logo";
 import type { JobMatchResponse } from "@/models/ai.schemas";
 
 function JobDetails({ job }: { job: JobResponse }) {
@@ -75,7 +76,14 @@ function JobDetails({ job }: { job: JobResponse }) {
         <Card className="col-span-3">
           <CardHeader className="flex-row justify-between relative">
             <div>
-              {job?.Company?.label}
+              <div className="flex items-center gap-2 mb-1">
+                <CompanyLogo
+                  logoUrl={job?.Company?.logoUrl}
+                  companyName={job?.Company?.label ?? ""}
+                  size="lg"
+                />
+                <span className="text-sm text-muted-foreground">{job?.Company?.label}</span>
+              </div>
               <CardTitle>{job?.JobTitle?.label}</CardTitle>
               <CardDescription>
                 {job?.Location?.label} - {getJobType(job?.jobType)}

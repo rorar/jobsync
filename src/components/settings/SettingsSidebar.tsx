@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, Ban, Bell, Bot, Bug, Globe, Key, Palette, Zap } from "lucide-react";
+import { AlertTriangle, Ban, Bell, Bot, Bug, Database, Globe, Key, Palette, Zap } from "lucide-react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ export type SettingsSection =
   | "public-api"
   | "appearance"
   | "automation"
+  | "enrichment"
   | "notifications"
   | "blacklist"
   | "developer"
@@ -30,6 +31,7 @@ const SETTINGS_SECTIONS: {
   { id: "public-api", labelKey: "api.title", icon: Globe },
   { id: "appearance", labelKey: "settings.sidebarAppearance", icon: Palette },
   { id: "automation", labelKey: "settings.sidebarAutomation", icon: Zap },
+  { id: "enrichment", labelKey: "enrichment.sidebarEnrichment", icon: Database },
   { id: "notifications", labelKey: "settings.sidebarNotifications", icon: Bell },
   { id: "blacklist", labelKey: "blacklist.sidebarBlacklist", icon: Ban },
   { id: "developer", labelKey: "settings.sidebarDeveloper", icon: Bug },

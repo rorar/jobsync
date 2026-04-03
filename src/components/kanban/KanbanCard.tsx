@@ -5,6 +5,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { useTranslations, formatDateShort } from "@/i18n";
 import { GripVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { CompanyLogo } from "@/components/ui/company-logo";
 import Link from "next/link";
 import type { JobResponse } from "@/models/job.model";
 import { STATUS_COLORS } from "@/hooks/useKanbanState";
@@ -94,9 +95,16 @@ export const KanbanCard = React.memo(function KanbanCard({ job, statusValue, isD
           </Link>
 
           {/* Company */}
-          <p className="text-xs text-muted-foreground truncate">
-            {job.Company?.label}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <CompanyLogo
+              logoUrl={job.Company?.logoUrl}
+              companyName={job.Company?.label ?? ""}
+              size="sm"
+            />
+            <p className="text-xs text-muted-foreground truncate">
+              {job.Company?.label}
+            </p>
+          </div>
 
           {/* Bottom row: match score + tags + due date */}
           <div className="flex items-center gap-1.5 flex-wrap">
