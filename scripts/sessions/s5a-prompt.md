@@ -33,6 +33,16 @@ git checkout -b session/s5a-ui-gaps-webhook
 
 ### PHASE 1: Sprint E1 — Kritische UI-Lücken (4 Items)
 
+**Agent-Aufteilung (Foundation-then-Fan-Out):**
+
+Schritt 1 (SEQUENZIELL): E1.4 (Sidebar-Link, XS) sofort umsetzen — ein Agent, 2 Minuten.
+
+Schritt 2 (PARALLEL — 3 Agents nach E1.4):
+- Agent 1: E1.1 Enrichment Control Panel (neue Component + Integration in JobDetails)
+- Agent 2: E1.2 Status History Timeline (neue Component + Integration in Job-Detail)
+- Agent 3: E1.3 Kanban Reorder (KanbanBoard.tsx + useKanbanState.ts)
+- File-Ownership: Kein Overlap — Agent 1 besitzt Enrichment-Files, Agent 2 besitzt CRM-Files, Agent 3 besitzt Kanban-Files.
+
 **E1.1 (M): Enrichment Control Panel**
 - Neues Component: `src/components/enrichment/EnrichmentStatusPanel.tsx`
 - Integration in Job-Detail (`JobDetails.tsx`) und Company-Detail Views
@@ -57,6 +67,13 @@ git checkout -b session/s5a-ui-gaps-webhook
 - i18n: Key für Navigation-Label in allen 4 Locales
 
 ### PHASE 2: Sprint E2 — Backend exponieren (4 Items)
+
+**Agent-Aufteilung (PARALLEL — 4 Items sind unabhängig):**
+- Agent 1: E2.1 Dashboard Funnel (neues Component `StatusFunnelWidget.tsx`)
+- Agent 2: E2.2 Health Check Button (`EnrichmentModuleSettings.tsx` + `ApiKeySettings.tsx`)
+- Agent 3: E2.3 Ctrl+Z Undo (Layout-Component + Keyboard-Listener)
+- Agent 4: E2.4 Retention Cleanup (`DeveloperSettings.tsx`)
+- File-Ownership: Kein Overlap — jeder Agent besitzt seine eigenen Files.
 
 **E2.1 (M): Dashboard Status Funnel**
 - Neues Component: `src/components/dashboard/StatusFunnelWidget.tsx`
