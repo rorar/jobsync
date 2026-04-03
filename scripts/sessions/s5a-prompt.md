@@ -86,7 +86,7 @@ Lies `project_s4_deferred_items.md` falls vorhanden. Prüfe docs/BUGS.md auf off
 - Toast-Feedback bei Undo-Ausführung
 
 **E2.4 (S): Retention Cleanup Admin UI**
-- Modify: `src/components/developer/DeveloperSettings.tsx` — "Run Cleanup" Button + letzte Execution-Info
+- Modify: `src/components/developer/DeveloperContainer.tsx` — "Run Cleanup" Button + letzte Execution-Info
 - Consumer: `runRetentionCleanup`
 
 **UX-Pflicht für JEDE neue Komponente:**
@@ -208,7 +208,7 @@ Schritt 2 (PARALLEL — 3 Agents nach E1.4):
 - Agent 1: E2.1 Dashboard Funnel (neues Component `StatusFunnelWidget.tsx`)
 - Agent 2: E2.2 Health Check Button (`EnrichmentModuleSettings.tsx` + `ApiKeySettings.tsx`)
 - Agent 3: E2.3 Ctrl+Z Undo (Layout-Component + Keyboard-Listener)
-- Agent 4: E2.4 Retention Cleanup (`DeveloperSettings.tsx`)
+- Agent 4: E2.4 Retention Cleanup (`DeveloperContainer.tsx`)
 - File-Ownership: Kein Overlap — jeder Agent besitzt seine eigenen Files.
 
 **Für Phase 3 (Webhook) — SEQUENZIELL dann PARALLEL (Learning aus S3):**
