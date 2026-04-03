@@ -15,8 +15,10 @@ import {
   deleteJobById,
   getJobDetails,
   getJobsList,
+  getKanbanBoard,
   updateJobStatus,
 } from "@/actions/job.actions";
+import type { KanbanBoard as KanbanBoardData } from "@/actions/job.actions";
 import { toast } from "../ui/use-toast";
 import {
   Company,
@@ -59,6 +61,54 @@ type MyJobsProps = {
   tags: Tag[];
 };
 
+/**
+ * Normalizer: Convert KanbanBoard server response to JobResponse[] for the
+ * KanbanBoard component. The Kanban components expect JobResponse shape
+ * (with JobTitle.label, Company.label, Status, etc.), so we adapt the
+ * lightweight KanbanJob into that shape.
+ *
+ * This adapter keeps the Kanban components (KanbanBoard, KanbanCard) clean
+ * — they continue working with JobResponse without knowing about the
+ * dedicated server action's return type.
+ */
+function kanbanBoardToJobResponses(board: KanbanBoardData): JobResponse[] {
+  const jobs: JobResponse[] = [];
+  for (const column of board.columns) {
+    for (const kanbanJob of column.jobs) {
+      jobs.push({
+        id: kanbanJob.id,
+        userId: "", // Not needed for Kanban display
+        JobTitle: { id: "", label: kanbanJob.title, value: "", createdBy: "" },
+        Company: {
+          id: "",
+          label: kanbanJob.company,
+          value: "",
+          createdBy: "",
+          logoUrl: kanbanJob.companyLogoUrl,
+        },
+        Status: {
+          id: column.statusId,
+          label: column.statusLabel,
+          value: column.statusValue,
+        },
+        Location: kanbanJob.location
+          ? { id: "", label: kanbanJob.location, value: "", createdBy: "" }
+          : null,
+        jobType: "",
+        createdAt: kanbanJob.createdAt,
+        appliedDate: null,
+        dueDate: kanbanJob.dueDate,
+        salaryRange: null,
+        jobUrl: null,
+        applied: false,
+        matchScore: kanbanJob.matchScore,
+        tags: kanbanJob.tags.map((tag) => ({ ...tag, createdBy: "" })),
+      });
+    }
+  }
+  return jobs;
+}
+
 function JobsContainer({
   statuses,
   companies,
@@ -95,11 +145,32 @@ function JobsContainer({
   const hasSearched = useRef(false);
   const [viewMode, setViewMode] = useState<KanbanViewMode>("kanban");
   const [mounted, setMounted] = useState(false);
+  const [kanbanJobs, setKanbanJobs] = useState<JobResponse[]>([]);
+  const [kanbanLoading, setKanbanLoading] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     setViewMode(getPersistedViewMode());
   }, []);
+
+  /**
+   * Load all jobs via the dedicated getKanbanBoard() server action.
+   * Returns ALL jobs (no pagination) with tags included — fixes DAU-7.
+   */
+  const loadKanbanBoardData = useCallback(async () => {
+    setKanbanLoading(true);
+    const result = await getKanbanBoard();
+    if (result.success && result.data) {
+      setKanbanJobs(kanbanBoardToJobResponses(result.data));
+    } else {
+      toast({
+        variant: "destructive",
+        title: t("jobs.error"),
+        description: result.message,
+      });
+    }
+    setKanbanLoading(false);
+  }, [t]);
 
   const jobsPerPage = recordsPerPage;
 
@@ -136,6 +207,11 @@ function JobsContainer({
       setFilterKey(undefined);
     }
   }, [loadJobs, filterKey, searchTerm]);
+
+  /** Reload for Kanban view — reloads via the dedicated getKanbanBoard path */
+  const reloadKanban = useCallback(async () => {
+    await loadKanbanBoardData();
+  }, [loadKanbanBoardData]);
 
   const onDeleteJob = async (jobId: string) => {
     const { success, message } = await deleteJobById(jobId);
@@ -197,6 +273,11 @@ function JobsContainer({
   useEffect(() => {
     (async () => await loadJobs(1))();
   }, [loadJobs]);
+
+  // Load Kanban board data via the dedicated endpoint (all jobs, with tags)
+  useEffect(() => {
+    loadKanbanBoardData();
+  }, [loadKanbanBoardData]);
 
   useEffect(() => {
     if (searchTerm !== "") {
@@ -321,10 +402,10 @@ function JobsContainer({
         <CardContent>
           {mounted && viewMode === "kanban" ? (
             <KanbanBoard
-              jobs={jobs}
+              jobs={kanbanJobs}
               statuses={statuses}
-              onRefresh={reloadJobs}
-              loading={loading}
+              onRefresh={reloadKanban}
+              loading={kanbanLoading}
             />
           ) : (
             <>

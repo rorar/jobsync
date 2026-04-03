@@ -156,8 +156,7 @@ function mockRequest(
 }
 
 function routeCtx(id?: string) {
-  if (!id) return {};
-  return { params: Promise.resolve({ id }) };
+  return { params: Promise.resolve(id ? { id } : {}) } as any;
 }
 
 type StubResponse = {
@@ -515,18 +514,20 @@ describe("PATCH /api/v1/jobs/:id", () => {
     expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
   });
 
-  it("returns 400 when status value is invalid (status not found in DB)", async () => {
-    mockPrisma.job.findFirst.mockResolvedValue({ id: VALID_UUID });
-    mockPrisma.jobStatus.findFirst.mockResolvedValue(null); // unknown status
+  it("strips status field from PATCH body (S3-D1: use POST /status instead)", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue({ id: VALID_UUID, version: 0 });
+    mockPrisma.job.update.mockResolvedValue(makeJobRow());
 
     const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}`, {
       method: "PATCH",
-      body: { status: "nonexistent_status" },
+      body: { status: "applied", type: "Part-time" },
     });
     const res = asRes(await patchJob(req, routeCtx(VALID_UUID)));
 
-    expect(res.status).toBe(400);
-    expect((await res.json()).error.message).toBe("Invalid job status");
+    expect(res.status).toBe(200);
+    // Verify that statusId is NOT included in the Prisma update data
+    const updateCall = mockPrisma.job.update.mock.calls[0][0];
+    expect(updateCall.data).not.toHaveProperty("statusId");
   });
 
   it("returns 400 for invalid JSON body", async () => {

@@ -50,6 +50,10 @@ export const api = {
     "api.keyMustBeRevoked": "API key must be revoked before it can be deleted",
     "api.loadFailed": "Failed to load API keys",
     "api.retry": "Retry",
+    "api.statusChange.jobNotFound": "Job not found",
+    "api.statusChange.invalidStatus": "Invalid target status ID",
+    "api.statusChange.staleState": "Status has changed since you last read it. Re-fetch and try again.",
+    "api.statusChange.invalidTransition": "This status transition is not allowed by the workflow",
   },
   de: {
     "api.title": "Öffentliche API-Schlüssel",
@@ -95,6 +99,10 @@ export const api = {
     "api.keyMustBeRevoked": "API-Schlüssel muss vor dem Löschen widerrufen werden",
     "api.loadFailed": "API-Schlüssel konnten nicht geladen werden",
     "api.retry": "Erneut versuchen",
+    "api.statusChange.jobNotFound": "Job nicht gefunden",
+    "api.statusChange.invalidStatus": "Ungültige Zielstatus-ID",
+    "api.statusChange.staleState": "Der Status hat sich seit dem letzten Abruf geändert. Bitte erneut laden und nochmal versuchen.",
+    "api.statusChange.invalidTransition": "Dieser Statusübergang ist im Workflow nicht erlaubt",
   },
   fr: {
     "api.title": "Clés API publiques",
@@ -140,6 +148,10 @@ export const api = {
     "api.keyMustBeRevoked": "La clé API doit être révoquée avant de pouvoir être supprimée",
     "api.loadFailed": "Échec du chargement des clés API",
     "api.retry": "Réessayer",
+    "api.statusChange.jobNotFound": "Emploi non trouvé",
+    "api.statusChange.invalidStatus": "ID de statut cible invalide",
+    "api.statusChange.staleState": "Le statut a changé depuis votre dernière lecture. Rechargez et réessayez.",
+    "api.statusChange.invalidTransition": "Cette transition de statut n'est pas autorisée par le workflow",
   },
   es: {
     "api.title": "Claves API públicas",
@@ -185,5 +197,9 @@ export const api = {
     "api.keyMustBeRevoked": "La clave API debe ser revocada antes de poder ser eliminada",
     "api.loadFailed": "Error al cargar las claves API",
     "api.retry": "Reintentar",
+    "api.statusChange.jobNotFound": "Empleo no encontrado",
+    "api.statusChange.invalidStatus": "ID de estado de destino no válido",
+    "api.statusChange.staleState": "El estado ha cambiado desde la última lectura. Vuelve a cargar e intenta de nuevo.",
+    "api.statusChange.invalidTransition": "Esta transición de estado no está permitida por el flujo de trabajo",
   },
 } as const;

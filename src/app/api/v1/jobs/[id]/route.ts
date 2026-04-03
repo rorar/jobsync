@@ -2,7 +2,7 @@ import prisma from "@/lib/db";
 import { withApiAuth } from "@/lib/api/with-api-auth";
 import { actionToResponse, errorResponse, noContentResponse } from "@/lib/api/response";
 import { UpdateJobSchema, isValidUUID } from "@/lib/api/schemas";
-import { findOrCreate, resolveStatus, JOB_DETAIL_SELECT, JOB_API_SELECT } from "@/lib/api/helpers";
+import { findOrCreate, JOB_DETAIL_SELECT, JOB_API_SELECT } from "@/lib/api/helpers";
 
 /** CORS preflight */
 export const OPTIONS = withApiAuth(async () => new Response(null));
@@ -37,10 +37,10 @@ export const PATCH = withApiAuth(async (req, { userId, params }) => {
     return errorResponse("VALIDATION_ERROR", "Valid Job ID is required", 400);
   }
 
-  // Verify ownership
+  // Verify ownership + fetch version for optimistic locking (S3-D3)
   const existing = await prisma.job.findFirst({
     where: { id: jobId, userId },
-    select: { id: true },
+    select: { id: true, version: true },
   });
   if (!existing) {
     return errorResponse("NOT_FOUND", "Job not found", 404);
@@ -60,7 +60,13 @@ export const PATCH = withApiAuth(async (req, { userId, params }) => {
     );
   }
 
-  const updates = parsed.data;
+  const { version: expectedVersion, ...updates } = parsed.data;
+
+  // Optimistic locking: reject if caller's expected version is stale (S3-D3)
+  if (expectedVersion !== undefined && existing.version !== expectedVersion) {
+    return errorResponse("CONFLICT", "Resource was modified by another request. Refresh and retry.", 409);
+  }
+
   if (Object.keys(updates).length === 0) {
     return errorResponse("VALIDATION_ERROR", "No fields to update", 400);
   }
@@ -69,6 +75,9 @@ export const PATCH = withApiAuth(async (req, { userId, params }) => {
   if ("error" in result) {
     return result.error;
   }
+
+  // Always increment version on update
+  result.data.version = { increment: 1 };
 
   const job = await prisma.job.update({
     where: { id: jobId },
@@ -109,7 +118,6 @@ type UpdateFields = Partial<{
   title: string;
   company: string;
   location: string | null;
-  status: string;
   source: string | null;
   type: string;
   salaryRange: string | null;
@@ -139,7 +147,6 @@ async function buildUpdateData(
   // 1. Resolve independent relation lookups in parallel
   // Use separate variables for resolver results to avoid polluting the Prisma data object (BS-02)
   const resolvers: Promise<void>[] = [];
-  let resolvedStatus: { id: string } | null | undefined;
 
   if (updates.title !== undefined) {
     resolvers.push(
@@ -166,13 +173,6 @@ async function buildUpdateData(
       data.locationId = null;
     }
   }
-  if (updates.status !== undefined) {
-    resolvers.push(
-      resolveStatus(updates.status).then((s) => {
-        resolvedStatus = s;
-      }),
-    );
-  }
   if (updates.source !== undefined) {
     if (updates.source) {
       resolvers.push(
@@ -186,14 +186,6 @@ async function buildUpdateData(
   }
 
   await Promise.all(resolvers);
-
-  // Check status resolution
-  if (updates.status !== undefined) {
-    if (!resolvedStatus) {
-      return { error: errorResponse("VALIDATION_ERROR", "Invalid job status", 400) };
-    }
-    data.statusId = resolvedStatus.id;
-  }
 
   // 2. Map simple scalar fields
   if (updates.type !== undefined) data.jobType = updates.type;

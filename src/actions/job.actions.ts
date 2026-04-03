@@ -433,6 +433,7 @@ export const addJob = async (
 
 export const updateJob = async (
   data: z.infer<typeof AddJobFormSchema>,
+  expectedVersion?: number,
 ): Promise<ActionResult<JobResponse>> => {
   try {
     const user = await getCurrentUser();
@@ -496,6 +497,11 @@ export const updateJob = async (
       include: { Status: true },
     }).catch(() => null);
 
+    // Optimistic locking: reject if caller's expected version is stale (S3-D3)
+    if (expectedVersion !== undefined && currentJob && currentJob.version !== expectedVersion) {
+      return { success: false, message: "errors.staleState", errorCode: "STALE_STATE" };
+    }
+
     if (currentJob?.Status && status !== currentJob.statusId) {
       const newStatus = await prisma.jobStatus.findFirst({
         where: { id: status },
@@ -530,6 +536,7 @@ export const updateJob = async (
         applied,
         resumeId: resume || null,
         tags: { set: tagIds.map((id) => ({ id })) },
+        version: { increment: 1 },
       },
       include: {
         JobTitle: true,
@@ -697,6 +704,7 @@ export const changeJobStatus = async (
   newStatusId: string,
   note?: string,
   expectedFromStatusId?: string,
+  expectedVersion?: number,
 ): Promise<ActionResult<JobResponse>> => {
   try {
     const user = await getCurrentUser();
@@ -731,6 +739,11 @@ export const changeJobStatus = async (
       return { success: false, message: "errors.staleState", errorCode: "STALE_STATE" };
     }
 
+    // Optimistic locking: reject if caller's expected version is stale (S3-D3)
+    if (expectedVersion !== undefined && currentJob.version !== expectedVersion) {
+      return { success: false, message: "errors.staleState", errorCode: "STALE_STATE" };
+    }
+
     // Validate transition against state machine
     const currentStatusValue = currentJob.Status.value;
     if (!isValidTransition(currentStatusValue, newStatus.value)) {
@@ -747,12 +760,13 @@ export const changeJobStatus = async (
       currentJob.appliedDate,
     );
 
-    // Transaction: update job + create history entry
+    // Transaction: update job (with version increment) + create history entry
     const [updatedJob, historyEntry] = await prisma.$transaction(async (tx) => {
       const job = await tx.job.update({
         where: { id: jobId, userId: user.id },
         data: {
           statusId: newStatusId,
+          version: { increment: 1 },
           ...sideEffects,
         },
         include: {

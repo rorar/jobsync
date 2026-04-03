@@ -1,0 +1,811 @@
+-- allium: 3
+-- data-enrichment.allium
+
+-- Scope: Data Enrichment Connector — dimension-based enrichment of company and job data
+--        from external sources, with fallback chains, caching and graceful degradation
+-- Includes: Enrichment dimensions, fallback chain execution, result caching with TTL,
+--           trigger rules (company created, job imported, manual, link pasted),
+--           module health/skip logic, audit logging, UI surfaces
+-- Excludes:
+--   - Module registration/lifecycle (covered by module-lifecycle.allium)
+--   - Circuit breaker internals (covered by module-lifecycle.allium, resilience.ts)
+--   - Credential resolution (covered by module-lifecycle.allium, credential-resolver.ts)
+--   - Notification dispatch (covered by notification-dispatch.allium)
+--   - Vacancy pipeline (covered by vacancy-pipeline.allium)
+--   - Event bus infrastructure (covered by event-bus.allium)
+-- Dependencies:
+--   - RegisteredModule, ModuleManifest, ConnectorType from module-lifecycle.allium
+--   - Company from shared-entities.allium
+--   - Job from job-aggregate.allium
+--   - EventBus from event-bus.allium
+
+-- =============================================================================
+-- Actors
+-- =============================================================================
+
+actor User {
+  -- Views enriched data (logos, link previews). Triggers manual enrichment.
+  -- Manages enrichment module activation via Settings.
+}
+
+actor System {
+  -- Triggers enrichment on domain events (company created, job imported).
+  -- Executes fallback chains, manages cache lifecycle, publishes domain events.
+}
+
+-- =============================================================================
+-- Enumerations
+-- =============================================================================
+
+enum EnrichmentDimension {
+  logo              -- Company domain -> logo URL
+  | deep_link       -- URL -> OpenGraph/Meta title, description, image, site_name
+  -- Future dimensions (declared for forward compatibility, not yet implemented):
+  -- | review        -- Company -> ratings, review count
+  -- | contact       -- Job description -> extracted contacts
+  -- | salary        -- Position + region -> salary range
+  -- | company_profile -- Company -> structured company info
+}
+
+enum EnrichmentResultStatus {
+  pending           -- Request created, chain not yet started
+  | enriching       -- Chain execution in progress
+  | found           -- A module returned data successfully
+  | not_found       -- All modules in chain exhausted, none had data
+  | error           -- Chain execution failed (retryable)
+}
+
+enum EnrichmentTrigger {
+  company_created   -- New company entity created
+  | job_imported    -- Job imported via automation pipeline
+  | manual          -- User clicked "Enrich" button
+  | link_pasted     -- User pasted URL in form (-> 3.6 deep link parsing)
+  | scheduled       -- Periodic refresh of expired results (future)
+}
+
+-- =============================================================================
+-- External Entities
+-- =============================================================================
+
+external entity RegisteredModule {
+  -- Module registered in the unified ModuleRegistry (module-lifecycle.allium).
+  -- Enrichment modules have connectorType = data_enrichment.
+  -- Fields referenced: manifest.id, status, healthStatus, circuitBreakerState
+}
+
+external entity Company {
+  -- Shared lookup entity from shared-entities.allium.
+  -- Fields referenced: id, label, logo_url
+  -- Enrichment populates Company.logo_url via the Logo dimension.
+}
+
+external entity Job {
+  -- Job aggregate from job-aggregate.allium.
+  -- Fields referenced: id, userId, jobUrl, companyId
+}
+
+external entity EventBus {
+  -- In-process event bus from event-bus.allium.
+  -- Enrichment publishes EnrichmentCompleted / EnrichmentFailed events.
+}
+
+-- =============================================================================
+-- Value Types
+-- =============================================================================
+
+value FallbackChainEntry {
+  moduleId: String                      -- RegisteredModule.manifest.id
+  priority: Integer                     -- Lower = tried first. 1-based.
+}
+
+value FallbackChain {
+  dimension: EnrichmentDimension
+  entries: List<FallbackChainEntry>     -- Ordered by priority ascending
+  -- Invariant: entries.count >= 1 (enforced by FallbackChainNonEmpty invariant)
+}
+
+value EnrichmentInput {
+  dimension: EnrichmentDimension
+  companyDomain: String?                -- For logo dimension
+  url: String?                          -- For deep_link dimension
+  companyName: String?                  -- For review, contact dimensions (future)
+  jobDescription: String?              -- For contact extraction (future)
+  region: String?                       -- For salary dimension (future)
+}
+
+value EnrichmentOutput {
+  dimension: EnrichmentDimension
+  data: String                          -- JSON-serialised dimension-specific payload
+  source: String                        -- Module ID that produced this result
+}
+
+value LogoData {
+  -- Dimension-specific payload for logo enrichment.
+  logoUrl: String                       -- URL to the company logo image
+}
+
+value DeepLinkData {
+  -- Dimension-specific payload for deep_link enrichment.
+  title: String?                        -- OpenGraph og:title or <title>
+  description: String?                  -- OpenGraph og:description or meta description
+  imageUrl: String?                     -- OpenGraph og:image
+  siteName: String?                     -- OpenGraph og:site_name
+}
+
+-- =============================================================================
+-- Contracts
+-- =============================================================================
+
+-- The enrichment connector contract that every enrichment module must fulfill.
+-- Extends the base ModuleManifest (from module-lifecycle.allium) with
+-- enrichment-specific declarations.
+
+contract DataEnrichmentManifest extends ModuleManifest {
+  supportedDimensions: Set<EnrichmentDimension>
+    -- Which dimensions this module can enrich.
+    -- A module may support multiple dimensions (unlikely but allowed).
+}
+
+-- =============================================================================
+-- Entities
+-- =============================================================================
+
+entity EnrichmentRequest {
+  -- Tracks a single enrichment attempt for a specific dimension and target.
+  -- One request per (dimension, cacheKey) combination. Reused on re-enrichment.
+
+  id: String                            -- UUID
+  userId: String                        -- Owner (all enrichment is user-scoped)
+  dimension: EnrichmentDimension
+  cacheKey: String                      -- Composite key: dimension + ":" + domain/url
+  input: EnrichmentInput                -- What to enrich
+  trigger: EnrichmentTrigger            -- What caused this request
+  status: EnrichmentResultStatus = pending
+
+  -- Result (populated when status = found)
+  resultData: String?                   -- JSON payload (dimension-specific)
+  resolvedByModule: String?             -- Module ID that produced the result
+  resolvedAt: DateTime?                 -- When the result was obtained
+
+  -- TTL and freshness (derived)
+  ttl: Duration?                        -- Set based on dimension config
+  isFresh: resolvedAt != null and resolvedAt + ttl > now()
+  isStale: resolvedAt != null and resolvedAt + ttl <= now()
+    and resolvedAt + ttl + config.STALE_GRACE_PERIOD > now()
+  isExpired: resolvedAt != null
+    and resolvedAt + ttl + config.STALE_GRACE_PERIOD <= now()
+  needsRefresh: isStale or isExpired or status = error
+
+  -- Chain execution tracking
+  attemptedModules: List<String>        -- Module IDs tried in this execution (ordered)
+  lastError: String?                    -- Last error message from chain execution
+
+  -- Timestamps
+  createdAt: DateTime = now()
+  updatedAt: DateTime                   -- Auto-updated on any change
+}
+
+entity EnrichmentLog {
+  -- Append-only audit trail for enrichment attempts.
+  -- One entry per module attempt within a fallback chain execution.
+
+  id: String                            -- UUID
+  requestId: String                     -- FK to EnrichmentRequest
+  moduleId: String                      -- Which module was attempted
+  dimension: EnrichmentDimension
+  success: Boolean                      -- Whether this module returned data
+  latencyMs: Integer                    -- How long the module call took
+  errorMessage: String?                 -- Error detail if success = false
+  skipped: Boolean = false              -- True if module was skipped (inactive/unhealthy)
+  skipReason: String?                   -- Why the module was skipped
+  createdAt: DateTime = now()
+
+  @invariant
+    -- EnrichmentLog entries are immutable after creation.
+    -- They form an append-only audit trail for observability.
+    -- Deleted only via cascade when parent EnrichmentRequest is purged.
+}
+
+-- =============================================================================
+-- Config
+-- =============================================================================
+
+config {
+  LOGO_TTL_DAYS: Integer = 30
+    -- Days before a logo result is considered stale. Logos rarely change.
+  DEEP_LINK_TTL_DAYS: Integer = 7
+    -- Days before a deep link result is considered stale. Pages change more often.
+  REVIEW_TTL_DAYS: Integer = 1
+    -- Days before a review result is considered stale (future).
+  STALE_GRACE_PERIOD: Duration = 7.days
+    -- Duration after TTL expiry during which a stale result is still returned
+    -- while a background refresh is triggered. After this period, the result
+    -- is expired and the chain is re-executed synchronously.
+  CHAIN_TIMEOUT_MS: Integer = 10000
+    -- Maximum total time for a fallback chain execution (all modules combined).
+  MODULE_TIMEOUT_MS: Integer = 5000
+    -- Maximum time for a single module call within the chain.
+  MAX_CONCURRENT_ENRICHMENTS_PER_USER: Integer = 5
+    -- Maximum in-flight enrichment requests per user to prevent abuse.
+  PLACEHOLDER_LOGO_PATH: String = "/images/company-placeholder.svg"
+    -- Fallback when no logo is found or enrichment fails.
+}
+
+-- =============================================================================
+-- Rules: Enrichment Triggers
+-- =============================================================================
+
+rule TriggerEnrichmentOnCompanyCreated {
+  -- "When a new company is created, trigger logo enrichment."
+  -- Fire-and-forget: the company creation is not blocked.
+  when: company: Company.created
+
+  let domain = extractDomain(company.label)
+    -- Black box: extracts a plausible domain from the company name.
+    -- Returns null if the name is not domain-like (e.g., "Acme Corp").
+
+  requires: domain != null
+    -- Only attempt logo enrichment if we can derive a domain.
+
+  ensures: EnrichmentRequest.created(
+    userId: company.created_by.id,
+    dimension: logo,
+    cacheKey: "logo:" + domain,
+    input: EnrichmentInput(dimension: logo, companyDomain: domain),
+    trigger: company_created,
+    status: pending,
+    ttl: config.LOGO_TTL_DAYS.days
+  )
+
+  @guidance
+    -- Domain extraction heuristics: if the company label looks like a domain
+    -- (e.g., "github.com") use it directly. Otherwise try common patterns
+    -- (e.g., "GitHub" -> "github.com"). If unsure, return null and skip.
+    -- The enrichment is best-effort — no failure is visible to the user.
+}
+
+rule TriggerEnrichmentOnJobImported {
+  -- "When a job is imported via automation, trigger logo + deep link enrichment."
+  when: VacancyPromoted(stagedVacancyId: String, jobId: String, userId: String)
+  let job = Job where id = jobId
+
+  -- Logo enrichment (if the job has a company with a domain)
+  let company = Company where id = job.companyId
+  let domain = extractDomain(company.label)
+
+  ensures:
+    if domain != null:
+      -- Only create if no fresh/stale result exists for this cache key
+      let existingLogo = EnrichmentRequest
+        where cacheKey = "logo:" + domain and userId = userId
+      if not exists existingLogo or existingLogo.needsRefresh:
+        EnrichmentRequest.created(
+          userId: userId,
+          dimension: logo,
+          cacheKey: "logo:" + domain,
+          input: EnrichmentInput(dimension: logo, companyDomain: domain),
+          trigger: job_imported,
+          status: pending,
+          ttl: config.LOGO_TTL_DAYS.days
+        )
+
+  -- Deep link enrichment (if the job has a URL)
+  ensures:
+    if job.jobUrl != null:
+      let existingLink = EnrichmentRequest
+        where cacheKey = "deep_link:" + job.jobUrl and userId = userId
+      if not exists existingLink or existingLink.needsRefresh:
+        EnrichmentRequest.created(
+          userId: userId,
+          dimension: deep_link,
+          cacheKey: "deep_link:" + job.jobUrl,
+          input: EnrichmentInput(dimension: deep_link, url: job.jobUrl),
+          trigger: job_imported,
+          status: pending,
+          ttl: config.DEEP_LINK_TTL_DAYS.days
+        )
+
+  @guidance
+    -- This rule subscribes to the VacancyPromoted event emitted by
+    -- vacancy-pipeline.allium. It triggers up to two enrichment requests
+    -- per promoted vacancy. Both are fire-and-forget — the promotion
+    -- completes regardless of enrichment outcome.
+}
+
+rule TriggerManualEnrichment {
+  -- "When a user clicks 'Enrich', trigger enrichment for the specified dimension."
+  when: RequestEnrichment(userId: String, dimension: EnrichmentDimension, input: EnrichmentInput)
+
+  requires: input.companyDomain != null or input.url != null
+    -- At least one enrichment target must be provided.
+
+  let cacheKey =
+    if dimension = logo: "logo:" + input.companyDomain
+    else: "deep_link:" + input.url
+
+  let existing = EnrichmentRequest where cacheKey = cacheKey and userId = userId
+
+  -- Check concurrent enrichment limit
+  let inFlight = EnrichmentRequest
+    where userId = userId and status in { pending, enriching }
+  requires: inFlight.count < config.MAX_CONCURRENT_ENRICHMENTS_PER_USER
+
+  ensures:
+    if exists existing and existing.status = enriching:
+      -- Already in progress, do nothing (idempotent)
+      existing.status = enriching
+    else if exists existing:
+      -- Re-enrich: reset status to pending to re-execute chain
+      existing.status = pending
+      existing.trigger = manual
+      existing.attemptedModules = []
+      existing.lastError = null
+    else:
+      -- New request
+      let ttl =
+        if dimension = logo: config.LOGO_TTL_DAYS.days
+        else: config.DEEP_LINK_TTL_DAYS.days
+      EnrichmentRequest.created(
+        userId: userId,
+        dimension: dimension,
+        cacheKey: cacheKey,
+        input: input,
+        trigger: manual,
+        status: pending,
+        ttl: ttl
+      )
+}
+
+rule TriggerDeepLinkOnPaste {
+  -- "When a user pastes a URL in a form field, trigger deep link enrichment."
+  -- This provides instant link previews in the UI (Roadmap 3.6).
+  when: LinkPasted(userId: String, url: String)
+
+  requires: url != null and url != ""
+  requires: validateUrl(url)
+    -- Black box: validates URL format and protocol (http/https only).
+
+  let cacheKey = "deep_link:" + url
+  let existing = EnrichmentRequest where cacheKey = cacheKey and userId = userId
+
+  ensures:
+    if exists existing and existing.isFresh:
+      -- Cache hit: return cached result immediately, no new request
+      existing.status = existing.status
+    else if exists existing and existing.isStale:
+      -- Stale: return cached result, trigger background refresh
+      existing.trigger = link_pasted
+      existing.status = pending
+    else if not exists existing:
+      EnrichmentRequest.created(
+        userId: userId,
+        dimension: deep_link,
+        cacheKey: cacheKey,
+        input: EnrichmentInput(dimension: deep_link, url: url),
+        trigger: link_pasted,
+        status: pending,
+        ttl: config.DEEP_LINK_TTL_DAYS.days
+      )
+
+  @guidance
+    -- The UI should display a loading skeleton while the deep link
+    -- enrichment is in progress. If a cached result exists, show it
+    -- immediately and refresh in the background if stale.
+}
+
+-- =============================================================================
+-- Rules: Fallback Chain Execution
+-- =============================================================================
+
+rule ExecuteFallbackChain {
+  -- "When an enrichment request is pending, execute the fallback chain."
+  -- First successful module wins. Inactive, unhealthy and circuit-broken
+  -- modules are skipped.
+  when: request: EnrichmentRequest.status becomes pending
+
+  let chain = lookupChain(request.dimension)
+    -- Black box: retrieves the configured FallbackChain for this dimension.
+    -- Returns null if no chain is configured for the dimension.
+  requires: chain != null
+  requires: chain.entries.count >= 1
+
+  ensures: request.status = enriching
+  ensures: request.attemptedModules = []
+
+  -- Walk the chain in priority order
+  for entry in chain.entries:
+    let module = RegisteredModule where manifest.id = entry.moduleId
+
+    -- Skip inactive modules
+    if module.status != active:
+      ensures: EnrichmentLog.created(
+        requestId: request.id,
+        moduleId: entry.moduleId,
+        dimension: request.dimension,
+        success: false,
+        latencyMs: 0,
+        skipped: true,
+        skipReason: "module_inactive"
+      )
+    -- Skip unhealthy modules (degraded or unreachable)
+    else if module.healthStatus in { degraded, unreachable }:
+      ensures: EnrichmentLog.created(
+        requestId: request.id,
+        moduleId: entry.moduleId,
+        dimension: request.dimension,
+        success: false,
+        latencyMs: 0,
+        skipped: true,
+        skipReason: "module_unhealthy"
+      )
+    -- Skip circuit-broken modules
+    else if module.circuitBreakerState = open:
+      ensures: EnrichmentLog.created(
+        requestId: request.id,
+        moduleId: entry.moduleId,
+        dimension: request.dimension,
+        success: false,
+        latencyMs: 0,
+        skipped: true,
+        skipReason: "circuit_breaker_open"
+      )
+    else:
+      -- Attempt enrichment via this module
+      let result = enrich(module, request.input)
+        -- Black box: calls module.enrich(input) with timeout.
+        -- Returns EnrichmentOutput on success, null on failure.
+
+      ensures: request.attemptedModules.add(entry.moduleId)
+
+      ensures: EnrichmentLog.created(
+        requestId: request.id,
+        moduleId: entry.moduleId,
+        dimension: request.dimension,
+        success: result != null,
+        latencyMs: result.latencyMs,
+        errorMessage: result.errorMessage
+      )
+
+      if result != null and result.status = found:
+        -- Success: store result and stop chain
+        ensures: request.status = found
+        ensures: request.resultData = result.data
+        ensures: request.resolvedByModule = entry.moduleId
+        ensures: request.resolvedAt = now()
+        ensures: EventBus.publish(EnrichmentCompleted(
+          requestId: request.id,
+          dimension: request.dimension,
+          moduleId: entry.moduleId,
+          userId: request.userId
+        ))
+        -- Stop: do not try remaining modules
+
+  -- If we reach here, all modules failed or were skipped
+  ensures:
+    if request.status = enriching:
+      -- No module succeeded
+      request.status = not_found
+      EventBus.publish(EnrichmentFailed(
+        requestId: request.id,
+        dimension: request.dimension,
+        userId: request.userId
+      ))
+
+  @guidance
+    -- The chain is executed sequentially, not in parallel.
+    -- On first success, the chain short-circuits (remaining modules are not called).
+    -- The total chain execution is bounded by config.CHAIN_TIMEOUT_MS.
+    -- Individual module calls are bounded by config.MODULE_TIMEOUT_MS.
+    -- All external calls MUST go through the resilience wrapper (circuit breaker
+    -- + timeout) provisioned from the module's manifest.resilience config.
+    -- Enrichment NEVER blocks the triggering operation. If called from a
+    -- domain event handler, the chain execution runs asynchronously.
+}
+
+-- SkipInactiveModules is embedded in ExecuteFallbackChain as conditional branches.
+-- Three skip scenarios are handled inline:
+--   1. Module status = inactive (user deactivated it in Settings)
+--   2. Module healthStatus = degraded | unreachable (health probe failed)
+--   3. Module circuitBreakerState = open (too many recent failures)
+-- In all cases, the module is logged as skipped with a reason,
+-- and the chain advances to the next entry.
+
+-- =============================================================================
+-- Rules: Cache Behaviour
+-- =============================================================================
+
+rule CacheHit {
+  -- "When a cached result is fresh, return it without external calls."
+  -- This is checked BEFORE ExecuteFallbackChain fires.
+  when: RequestEnrichment(userId: String, dimension: EnrichmentDimension, input: EnrichmentInput)
+  let cacheKey =
+    if dimension = logo: "logo:" + input.companyDomain
+    else: "deep_link:" + input.url
+  let cached = EnrichmentRequest where cacheKey = cacheKey and userId = userId
+
+  requires: exists cached
+  requires: cached.isFresh
+
+  ensures: cached.status = cached.status
+    -- No-op: return cached result. No chain execution needed.
+
+  @guidance
+    -- Cache hit is the fast path. The UI reads the cached result
+    -- directly from the EnrichmentRequest entity.
+    -- No external HTTP calls are made.
+}
+
+rule StaleRefresh {
+  -- "When a cached result is stale, return it and trigger a background refresh."
+  when: RequestEnrichment(userId: String, dimension: EnrichmentDimension, input: EnrichmentInput)
+  let cacheKey =
+    if dimension = logo: "logo:" + input.companyDomain
+    else: "deep_link:" + input.url
+  let cached = EnrichmentRequest where cacheKey = cacheKey and userId = userId
+
+  requires: exists cached
+  requires: cached.isStale
+
+  ensures: cached.status = pending
+    -- Transitions to pending, which triggers ExecuteFallbackChain.
+    -- The stale result remains available for read until the refresh completes.
+
+  @guidance
+    -- Stale-while-revalidate pattern: the UI shows the stale result
+    -- immediately while the background refresh runs. If the refresh
+    -- succeeds, the result is updated in place. If it fails, the
+    -- stale result remains until expiry.
+}
+
+-- =============================================================================
+-- Rules: Result Application
+-- =============================================================================
+
+rule ApplyLogoResult {
+  -- "When a logo enrichment succeeds, update the Company.logo_url."
+  when: request: EnrichmentRequest.status transitions_to found
+  requires: request.dimension = logo
+
+  let logoData = parseLogoData(request.resultData)
+    -- Black box: deserialises JSON to LogoData value type.
+  requires: logoData != null
+  requires: logoData.logoUrl != null
+
+  -- Find the company by domain (the enrichment target)
+  let domain = request.input.companyDomain
+  let company = Company where extractDomain(label) = domain
+    and created_by.id = request.userId
+
+  ensures:
+    if exists company and company.logo_url = null:
+      company.logo_url = logoData.logoUrl
+    -- Only set logo_url if it's not already populated.
+    -- A manually set logo takes precedence over enrichment.
+
+  @guidance
+    -- The logo URL from enrichment is written back to Company.logo_url.
+    -- This is a cross-aggregate update (EnrichmentRequest -> Company).
+    -- The Company entity is a shared lookup entity, not a full aggregate,
+    -- so this cross-boundary write is acceptable.
+    -- Protocol validation: the logo URL must use http or https (enforced
+    -- by the LogoUrlProtocol invariant in shared-entities.allium).
+}
+
+rule ApplyDeepLinkResult {
+  -- "When a deep link enrichment succeeds, the result is available for UI display."
+  -- Deep link data is NOT written back to Job or any other entity.
+  -- It is read directly from EnrichmentRequest.resultData by the UI.
+  when: request: EnrichmentRequest.status transitions_to found
+  requires: request.dimension = deep_link
+
+  -- No entity updates. The deep link metadata lives in EnrichmentRequest.resultData.
+  -- The UI reads it via the JobDetailEnriched surface.
+
+  @guidance
+    -- Deep link data (title, description, image, site_name) is displayed
+    -- as a link preview card on the Job detail page. It is not persisted
+    -- in the Job entity because it is supplementary display data,
+    -- not core domain state.
+}
+
+-- =============================================================================
+-- Rules: Graceful Degradation
+-- =============================================================================
+
+-- Graceful Degradation Design Notes:
+--
+-- EnrichmentNeverShowsError: Enrichment failures are never surfaced as
+-- user-visible errors. When all modules fail, the system stores not_found
+-- and uses placeholders:
+--   - Logo: show config.PLACEHOLDER_LOGO_PATH
+--   - DeepLink: show a plain URL without preview card
+--   - Future dimensions: show "not available" or omit the section
+-- The user should never see an error toast, error page, or error message
+-- related to enrichment failures. Enrichment is invisible infrastructure.
+--
+-- DegradationIntegration: Enrichment module degradation follows the same
+-- pattern as job discovery. Circuit breaker, auth failure, and consecutive
+-- failure escalation are handled by module-lifecycle.allium rules. This
+-- spec does not redefine them.
+-- Key difference from job discovery: enrichment degradation does NOT pause
+-- automations (enrichment modules are not referenced by Automation.jobBoard).
+-- Instead, degraded enrichment modules are simply skipped in fallback chains.
+
+-- =============================================================================
+-- Invariants
+-- =============================================================================
+
+invariant FallbackChainNonEmpty {
+  -- Every configured fallback chain has at least one module entry.
+  -- A chain with zero entries is a configuration error.
+  for chain in FallbackChains:
+    chain.entries.count >= 1
+}
+
+invariant CacheKeyUniquenessPerUser {
+  -- Cache key is unique per user. Two users may have results for the same
+  -- domain/URL, but each user has at most one EnrichmentRequest per cache key.
+  for a in EnrichmentRequests:
+    for b in EnrichmentRequests:
+      a != b and a.userId = b.userId
+        implies a.cacheKey != b.cacheKey
+}
+
+@invariant EnrichmentNonBlocking
+  -- Enrichment never blocks the triggering operation.
+  -- Company creation, job import, and vacancy promotion complete
+  -- before or independently of enrichment chain execution.
+  -- Enrichment runs asynchronously (fire-and-forget or background task).
+  -- This is a temporal property (ordering of operations) that cannot
+  -- be expressed as a point-in-time assertion.
+
+@invariant NoExternalCallWithoutResilience
+  -- Every external HTTP call made by an enrichment module is wrapped
+  -- in a resilience policy (circuit breaker + timeout) provisioned
+  -- from the module's manifest.resilience configuration.
+  -- This is an implementation constraint, not entity state.
+  -- Enforced by code review and the module registration contract.
+
+-- =============================================================================
+-- Surfaces
+-- =============================================================================
+
+surface JobDetailEnriched {
+  facing viewer: User
+  context job: Job
+
+  let deepLinkPreview = EnrichmentRequest
+    where dimension = deep_link
+    and cacheKey = "deep_link:" + job.jobUrl
+    and userId = viewer.id
+    and status = found
+
+  exposes:
+    job.company.logo_url,
+    deepLinkPreview.resultData
+
+  provides:
+    RequestEnrichment(userId: viewer.id, dimension: deep_link,
+      input: EnrichmentInput(dimension: deep_link, url: job.jobUrl))
+      when job.jobUrl != null
+    RequestEnrichment(userId: viewer.id, dimension: logo,
+      input: EnrichmentInput(dimension: logo,
+        companyDomain: extractDomain(job.company.label)))
+      when job.company != null
+
+  @guarantee BestEffortDisplay
+    -- Enriched data is shown when available. Placeholders are used
+    -- when enrichment has not completed or has failed.
+    -- The page loads and is usable regardless of enrichment status.
+}
+
+surface EnrichmentModuleSettings {
+  facing viewer: User
+  context module: RegisteredModule
+    where manifest.connectorType = data_enrichment
+
+  exposes:
+    module.manifest.id,
+    module.manifest.name,
+    module.status,
+    module.healthStatus,
+    module.lastHealthCheck,
+    module.circuitBreakerState
+
+  provides:
+    ActivateModule(moduleId: module.manifest.id),
+    DeactivateModule(moduleId: module.manifest.id)
+
+  @guarantee SamePatternAsOtherConnectors
+    -- The settings UI for enrichment modules follows the same layout
+    -- and interaction pattern as job discovery and AI provider modules.
+    -- Module activation toggle, health indicator, credential field.
+}
+
+-- =============================================================================
+-- Fallback Chain Configuration (Phase 1)
+-- =============================================================================
+
+-- Phase 1 chains are declared here as system configuration.
+-- Future: chains may become user-configurable or admin-configurable.
+
+-- Logo chain: Clearbit -> Google Favicon -> Placeholder
+-- Module: clearbit (credential: api_key, dimension: logo)
+-- Module: google_favicon (credential: none, dimension: logo)
+--   Uses https://www.google.com/s2/favicons?domain={domain}&sz=128
+-- Placeholder is not a module — it is the fallback when all modules fail.
+
+-- DeepLink chain: MetaParser (single module)
+-- Module: meta_parser (credential: none, dimension: deep_link)
+--   Fetches URL, parses OpenGraph meta tags and <title>/<meta> fallbacks.
+--   Runs server-side to avoid CORS. Respects robots.txt.
+
+-- =============================================================================
+-- Domain Events
+-- =============================================================================
+
+-- New event types to be added to event-bus.allium DomainEventType enum:
+
+event EnrichmentCompleted {
+  -- Published when a fallback chain execution succeeds (status -> found).
+  requestId: String
+  dimension: EnrichmentDimension
+  moduleId: String                      -- Which module produced the result
+  userId: String
+}
+
+event EnrichmentFailed {
+  -- Published when all modules in a fallback chain fail (status -> not_found).
+  -- This is an internal observability event, NOT surfaced to the user.
+  requestId: String
+  dimension: EnrichmentDimension
+  userId: String
+}
+
+-- =============================================================================
+-- Current Module Inventory (Planned)
+-- =============================================================================
+
+-- Data Enrichment Modules (Phase 1)
+
+-- Module: clearbit
+-- manifest: { id: "clearbit", manifestVersion: 1, connectorType: data_enrichment,
+--   supportedDimensions: { logo },
+--   credential: { type: api_key, moduleId: "clearbit", required: true,
+--     envFallback: "CLEARBIT_API_KEY", sensitive: true, placeholder: "sk_..." },
+--   healthCheck: { endpoint: "https://logo.clearbit.com/clearbit.com", timeoutMs: 5000 },
+--   resilience: { retryAttempts: 1, retryBackoff: none, circuitBreaker: true,
+--     circuitBreakerThreshold: 3, timeoutMs: 5000 } }
+
+-- Module: google_favicon
+-- manifest: { id: "google_favicon", manifestVersion: 1, connectorType: data_enrichment,
+--   supportedDimensions: { logo },
+--   credential: { type: none },
+--   healthCheck: { endpoint: "https://www.google.com/s2/favicons?domain=google.com&sz=128",
+--     timeoutMs: 5000 },
+--   resilience: { retryAttempts: 1, retryBackoff: none, circuitBreaker: true,
+--     circuitBreakerThreshold: 5, timeoutMs: 5000 } }
+
+-- Module: meta_parser
+-- manifest: { id: "meta_parser", manifestVersion: 1, connectorType: data_enrichment,
+--   supportedDimensions: { deep_link },
+--   credential: { type: none },
+--   healthCheck: null,
+--   resilience: { retryAttempts: 1, retryBackoff: none, circuitBreaker: true,
+--     circuitBreakerThreshold: 5, timeoutMs: 10000 } }
+-- Note: meta_parser has no health check because it fetches arbitrary URLs.
+-- Health is determined by circuit breaker state (actual request outcomes).
+
+-- =============================================================================
+-- Open Questions
+-- =============================================================================
+
+open question "Should enrichment be fully async (fire-and-forget) or should the UI wait briefly (e.g., 2 seconds) for a result before showing a placeholder? Fire-and-forget is simpler but means the first view of a company/job never shows enriched data."
+
+open question "Should users be able to manually override enrichment results (e.g., upload a custom company logo)? If so, the override must take precedence over future enrichment runs (ApplyLogoResult already checks for null before writing)."
+
+open question "What is the maximum number of concurrent enrichment requests per user? Current config is 5, but this may need tuning based on actual usage patterns."
+
+open question "Should fallback chains be user-configurable (e.g., user disables Clearbit and only uses Google Favicon)? Currently chains are system-level configuration."
+
+open question "How should enrichment results be purged? Unlike StagedVacancy which has DSGVO retention rules, enrichment results are derived data. A simple TTL-based expiry with no privacy-preserving hash retention may suffice."

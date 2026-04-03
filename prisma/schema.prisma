@@ -298,6 +298,7 @@ model Job {
   tags        Tag[]
 
   // CRM fields
+  version        Int    @default(0)
   sortOrder      Float  @default(0)
   statusHistory  JobStatusHistory[]
 

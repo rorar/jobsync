@@ -86,6 +86,7 @@ export const JOB_API_SELECT = {
   appliedDate: true,
   applied: true,
   matchScore: true,
+  version: true,
   JobTitle: { select: labelValueSelect },
   Company: { select: labelValueSelect },
   Status: { select: labelValueSelect },

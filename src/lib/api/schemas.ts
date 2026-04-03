@@ -36,11 +36,22 @@ export const CreateJobSchema = z.object({
   tags: z.array(z.string().uuid()).max(50).optional(),
 });
 
-/** Partial update job request body */
-export const UpdateJobSchema = CreateJobSchema.partial();
+/** Partial update job request body — status is excluded; use POST /jobs/:id/status instead.
+ *  Accepts optional `version` for optimistic locking (S3-D3). */
+export const UpdateJobSchema = CreateJobSchema.omit({ status: true }).partial().extend({
+  version: z.number().int().min(0).optional(),
+});
 
 /** Query params for notes list */
 export const NotesListQuerySchema = PaginationSchema;
+
+/** Change job status request body — accepts optional `expectedVersion` for optimistic locking (S3-D3) */
+export const ChangeJobStatusSchema = z.object({
+  statusId: z.string().uuid("Valid status ID is required"),
+  note: z.string().max(500).optional(),
+  expectedFromStatusId: z.string().uuid().optional(),
+  expectedVersion: z.number().int().min(0).optional(),
+});
 
 /** Create note request body */
 export const CreateNoteSchema = z.object({

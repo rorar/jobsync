@@ -4,6 +4,7 @@ import { screen, render, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   getJobsList,
+  getKanbanBoard,
   getJobDetails,
   deleteJobById,
   updateJobStatus,
@@ -42,6 +43,7 @@ jest.mock("next-auth/providers/credentials", () => ({
 
 jest.mock("@/actions/job.actions", () => ({
   getJobsList: jest.fn(),
+  getKanbanBoard: jest.fn(),
   getJobDetails: jest.fn(),
   deleteJobById: jest.fn(),
   updateJobStatus: jest.fn(),
@@ -219,6 +221,11 @@ describe("JobsContainer Search Functionality", () => {
     (useRouter as jest.Mock).mockReturnValue(mockRouter);
     (usePathname as jest.Mock).mockReturnValue("/dashboard/myjobs");
     (useSearchParams as jest.Mock).mockReturnValue(mockSearchParams);
+    // Mock getKanbanBoard to return empty board (tests use table view mode)
+    (getKanbanBoard as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { columns: [] },
+    });
   });
 
   afterEach(() => {

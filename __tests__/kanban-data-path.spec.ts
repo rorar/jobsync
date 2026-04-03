@@ -1,18 +1,16 @@
 /**
- * RED phase test — Finding DAU-7: Kanban should use getKanbanBoard, not getJobsList
+ * DAU-7: Kanban data path — getKanbanBoard vs getJobsList
  *
- * The Kanban board component should use getKanbanBoard (which includes tags and
- * has no pagination) rather than getJobsList (which omits tags and is paginated).
+ * Tests for the dedicated Kanban data path:
+ * 1. getKanbanBoard returns tags for each job (correct data path)
+ * 2. getKanbanBoard returns ALL jobs without pagination
+ * 3. getKanbanBoard groups jobs by status
+ * 4. getKanbanBoard enforces IDOR protection (userId in where clause)
+ * 5. getJobsList does NOT include tags (characterizing the list/table gap)
+ * 6. getJobsList applies pagination (take/skip)
  *
- * This file contains:
- * 1. A test that getKanbanBoard returns tags for each job (should PASS — characterization)
- * 2. A test that getJobsList does NOT include tags (should PASS — characterizing the gap)
- * 3. A test that getKanbanBoard returns ALL jobs without pagination (should PASS — characterization)
- * 4. A test that getJobsList returns paginated results (should PASS — characterizing the limitation)
- *
- * The characterization tests document the data-path gap. The real fix is in the
- * component layer (using getKanbanBoard instead of getJobsList), but these tests
- * codify the contract difference between the two functions.
+ * The component layer (JobsContainer) now uses getKanbanBoard for Kanban view
+ * and getJobsList for table view, each with the appropriate data shape.
  */
 
 import { getKanbanBoard, getJobsList } from "@/actions/job.actions";
@@ -166,10 +164,10 @@ describe("Kanban data path — DAU-7 characterization", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // getKanbanBoard — CHARACTERIZATION (should PASS, documenting correct path)
+  // getKanbanBoard — Correct data path (all jobs, with tags, grouped by status)
   // ---------------------------------------------------------------------------
 
-  describe("getKanbanBoard includes tags (correct data path)", () => {
+  describe("getKanbanBoard (dedicated Kanban data path)", () => {
     beforeEach(() => {
       (prisma.jobStatus.findMany as jest.Mock).mockResolvedValue(mockStatuses);
       (prisma.job.findMany as jest.Mock).mockResolvedValue(mockKanbanJobs);
@@ -208,13 +206,87 @@ describe("Kanban data path — DAU-7 characterization", () => {
       // All 5 jobs should be present (no pagination limit)
       expect(allJobs).toHaveLength(5);
     });
+
+    it("should group jobs by status into columns", async () => {
+      const result = await getKanbanBoard();
+      expect(result.success).toBe(true);
+
+      const columns = result.data!.columns;
+
+      // Bookmarked column should have 2 jobs (job-1, job-4)
+      const bookmarked = columns.find((c) => c.statusValue === "bookmarked");
+      expect(bookmarked).toBeDefined();
+      expect(bookmarked!.jobs).toHaveLength(2);
+      expect(bookmarked!.jobCount).toBe(2);
+
+      // Applied column should have 1 job (job-2)
+      const applied = columns.find((c) => c.statusValue === "applied");
+      expect(applied).toBeDefined();
+      expect(applied!.jobs).toHaveLength(1);
+      expect(applied!.jobs[0].id).toBe("job-2");
+
+      // Interview column should have 1 job (job-3)
+      const interview = columns.find((c) => c.statusValue === "interview");
+      expect(interview).toBeDefined();
+      expect(interview!.jobs).toHaveLength(1);
+
+      // Offer column should have 1 job (job-5)
+      const offer = columns.find((c) => c.statusValue === "offer");
+      expect(offer).toBeDefined();
+      expect(offer!.jobs).toHaveLength(1);
+
+      // Empty columns should exist with 0 jobs
+      const accepted = columns.find((c) => c.statusValue === "accepted");
+      expect(accepted).toBeDefined();
+      expect(accepted!.jobs).toHaveLength(0);
+      expect(accepted!.jobCount).toBe(0);
+    });
+
+    it("should enforce IDOR protection with userId in where clause", async () => {
+      await getKanbanBoard();
+
+      // Verify job.findMany was called with userId filter
+      const findManyCall = (prisma.job.findMany as jest.Mock).mock.calls[0][0];
+      expect(findManyCall.where).toEqual({ userId: mockUser.id });
+    });
+
+    it("should use explicit select (not include) for Kanban jobs", async () => {
+      await getKanbanBoard();
+
+      const findManyCall = (prisma.job.findMany as jest.Mock).mock.calls[0][0];
+      expect(findManyCall).toHaveProperty("select");
+      expect(findManyCall).not.toHaveProperty("include");
+
+      // Verify critical select fields
+      const select = findManyCall.select;
+      expect(select.id).toBe(true);
+      expect(select.tags).toBeDefined();
+      expect(select.matchScore).toBe(true);
+      expect(select.dueDate).toBe(true);
+      expect(select.sortOrder).toBe(true);
+    });
+
+    it("should not apply pagination (no skip/take)", async () => {
+      await getKanbanBoard();
+
+      const findManyCall = (prisma.job.findMany as jest.Mock).mock.calls[0][0];
+      expect(findManyCall.skip).toBeUndefined();
+      expect(findManyCall.take).toBeUndefined();
+    });
+
+    it("should return error when user is not authenticated", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(null);
+
+      const result = await getKanbanBoard();
+      expect(result.success).toBe(false);
+    });
   });
 
   // ---------------------------------------------------------------------------
-  // getJobsList — CHARACTERIZATION (should PASS, documenting the gap)
+  // getJobsList — Table view data path (paginated, no tags)
   // ---------------------------------------------------------------------------
 
-  describe("getJobsList omits tags (characterizing the gap)", () => {
+  describe("getJobsList (table view data path)", () => {
     it("should NOT include tags in the select for list view jobs", async () => {
       const mockListJobs = mockKanbanJobs.map(({ tags, ...rest }) => rest);
       (prisma.job.findMany as jest.Mock).mockResolvedValue(mockListJobs);
