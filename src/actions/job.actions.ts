@@ -139,8 +139,7 @@ export const getJobsList = async (
     // declares it as `File?: File` (optional, not nullable). Same pattern as getJobDetails.
     return { success: true, data: data as unknown as JobResponse[], total };
   } catch (error) {
-    const msg = "Failed to fetch jobs list. ";
-    return handleError(error, msg);
+    return handleError(error, "errors.fetchJobsList");
   }
 };
 
@@ -230,8 +229,7 @@ export const getJobDetails = async (
     // to fully remove this cast.
     return { data: (job ?? undefined) as JobResponse | undefined, success: true };
   } catch (error) {
-    const msg = "Failed to fetch job details. ";
-    return handleError(error, msg);
+    return handleError(error, "errors.fetchJobDetails");
   }
 };
 
@@ -264,8 +262,7 @@ export const createLocation = async (
 
     return { data: location, success: true };
   } catch (error) {
-    const msg = "Failed to create job location. ";
-    return handleError(error, msg);
+    return handleError(error, "errors.createJobLocation");
   }
 };
 
@@ -298,8 +295,7 @@ export const createJobSource = async (
 
     return { data: jobSource, success: true };
   } catch (error) {
-    const msg = "Failed to create job source. ";
-    return handleError(error, msg);
+    return handleError(error, "errors.createJobSource");
   }
 };
 
@@ -426,8 +422,7 @@ export const addJob = async (
 
     return { data: job, success: true };
   } catch (error) {
-    const msg = "Failed to create job. ";
-    return handleError(error, msg);
+    return handleError(error, "errors.createJob");
   }
 };
 
@@ -550,8 +545,7 @@ export const updateJob = async (
     // revalidatePath("/dashboard/myjobs", "page");
     return { data: job, success: true };
   } catch (error) {
-    const msg = "Failed to update job. ";
-    return handleError(error, msg);
+    return handleError(error, "errors.updateJob");
   }
 };
 
@@ -584,8 +578,7 @@ export const deleteJobById = async (
     });
     return { success: true };
   } catch (error) {
-    const msg = "Failed to delete job.";
-    return handleError(error, msg);
+    return handleError(error, "errors.deleteJob");
   }
 };
 
@@ -635,8 +628,7 @@ export const addJobToQueue = async (
 
     return { success: true };
   } catch (error) {
-    const msg = "Failed to send job to queue.";
-    return handleError(error, msg);
+    return handleError(error, "errors.sendJobToQueue");
   }
 };
 
@@ -809,8 +801,7 @@ export const changeJobStatus = async (
 
     return { data: updatedJob, success: true };
   } catch (error) {
-    const msg = "Failed to change job status.";
-    return handleError(error, msg);
+    return handleError(error, "errors.changeJobStatus");
   }
 };
 
@@ -890,8 +881,7 @@ export const getKanbanBoard = async (): Promise<ActionResult<KanbanBoard>> => {
 
     return { success: true, data: { columns } };
   } catch (error) {
-    const msg = "Failed to load Kanban board.";
-    return handleError(error, msg);
+    return handleError(error, "errors.loadKanbanBoard");
   }
 };
 
@@ -1024,8 +1014,7 @@ export const updateKanbanOrder = async (
       return { data: updatedJob, success: true };
     }
   } catch (error) {
-    const msg = "Failed to update Kanban order.";
-    return handleError(error, msg);
+    return handleError(error, "errors.updateKanbanOrder");
   }
 };
 
@@ -1073,8 +1062,7 @@ export const getJobStatusHistory = async (
 
     return { success: true, data: entries };
   } catch (error) {
-    const msg = "Failed to fetch status history.";
-    return handleError(error, msg);
+    return handleError(error, "errors.fetchStatusHistory");
   }
 };
 
@@ -1116,8 +1104,7 @@ export const getStatusDistribution = async (): Promise<ActionResult<StatusDistri
 
     return { success: true, data: distribution };
   } catch (error) {
-    const msg = "Failed to fetch status distribution.";
-    return handleError(error, msg);
+    return handleError(error, "errors.fetchStatusDistribution");
   }
 };
 
@@ -1149,7 +1136,6 @@ export const getValidTransitions = async (
 
     return { success: true, data: statuses };
   } catch (error) {
-    const msg = "Failed to fetch valid transitions.";
-    return handleError(error, msg);
+    return handleError(error, "errors.fetchValidTransitions");
   }
 };

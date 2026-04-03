@@ -94,7 +94,7 @@ describe("CRM Server Actions", () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(null);
       const result = await changeJobStatus("job-1", "status-applied");
       expect(result.success).toBe(false);
-      expect(result.message).toContain("Failed to change job status");
+      expect(result.message).toContain("errors.changeJobStatus");
     });
 
     it("should return NOT_FOUND if job does not exist", async () => {

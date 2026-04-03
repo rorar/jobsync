@@ -198,7 +198,7 @@ describe("jobActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch jobs list. ",
+        message: "errors.fetchJobsList",
       });
     });
     it("should return error when user is not authenticated", async () => {
@@ -208,7 +208,7 @@ describe("jobActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch jobs list. ",
+        message: "errors.fetchJobsList",
       });
     });
 
@@ -386,7 +386,7 @@ describe("jobActions", () => {
     it("should throw error when jobId is not provided", async () => {
       await expect(getJobDetails("")).resolves.toStrictEqual({
         success: false,
-        message: "Failed to fetch job details. ",
+        message: "errors.fetchJobDetails",
       });
     });
     it("should throw error when user is not authenticated", async () => {
@@ -394,7 +394,7 @@ describe("jobActions", () => {
 
       await expect(getJobDetails("job123")).resolves.toStrictEqual({
         success: false,
-        message: "Failed to fetch job details. ",
+        message: "errors.fetchJobDetails",
       });
     });
   });
@@ -436,7 +436,7 @@ describe("jobActions", () => {
 
     await expect(getJobDetails("job123")).resolves.toStrictEqual({
       success: false,
-      message: "Failed to fetch job details. ",
+      message: "errors.fetchJobDetails",
     });
   });
   it("should throw error when user is not authenticated", async () => {
@@ -444,7 +444,7 @@ describe("jobActions", () => {
 
     await expect(getJobDetails("job123")).resolves.toStrictEqual({
       success: false,
-      message: "Failed to fetch job details. ",
+      message: "errors.fetchJobDetails",
     });
   });
   describe("createLocation", () => {
@@ -453,14 +453,14 @@ describe("jobActions", () => {
 
       await expect(createLocation("location-name")).resolves.toStrictEqual({
         success: false,
-        message: "Failed to create job location. ",
+        message: "errors.createJobLocation",
       });
     });
     it("should throw error when location name is not provided or empty", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       await expect(createLocation(" ")).resolves.toStrictEqual({
         success: false,
-        message: "Failed to create job location. ",
+        message: "errors.createJobLocation",
       });
     });
     it("should create with valid input", async () => {
@@ -496,7 +496,7 @@ describe("jobActions", () => {
 
       await expect(createLocation("location-name")).resolves.toStrictEqual({
         success: false,
-        message: "Failed to create job location. ",
+        message: "errors.createJobLocation",
       });
     });
   });
@@ -568,7 +568,7 @@ describe("jobActions", () => {
 
       await expect(addJob(jobData)).resolves.toStrictEqual({
         success: false,
-        message: "Failed to create job. ",
+        message: "errors.createJob",
       });
     });
     it("should throw error when user is not authenticated", async () => {
@@ -576,7 +576,7 @@ describe("jobActions", () => {
 
       await expect(addJob(jobData)).resolves.toStrictEqual({
         success: false,
-        message: "Failed to create job. ",
+        message: "errors.createJob",
       });
     });
   });
@@ -609,7 +609,7 @@ describe("jobActions", () => {
 
       await expect(updateJob(jobData)).resolves.toStrictEqual({
         success: false,
-        message: "Failed to update job. ",
+        message: "errors.updateJob",
       });
     });
     it("should throw error when user is not authenticated", async () => {
@@ -617,7 +617,7 @@ describe("jobActions", () => {
 
       await expect(updateJob(jobData)).resolves.toStrictEqual({
         success: false,
-        message: "Failed to update job. ",
+        message: "errors.updateJob",
       });
     });
 
@@ -628,7 +628,7 @@ describe("jobActions", () => {
         updateJob({ ...jobData, id: undefined }),
       ).resolves.toStrictEqual({
         success: false,
-        message: "Failed to update job. ",
+        message: "errors.updateJob",
       });
     });
   });
@@ -680,7 +680,7 @@ describe("jobActions", () => {
         updateJobStatus("job-id", statusObj),
       ).resolves.toStrictEqual({
         success: false,
-        message: "Failed to change job status.",
+        message: "errors.changeJobStatus",
       });
     });
   });
@@ -873,7 +873,7 @@ describe("jobActions", () => {
 
       await expect(deleteJobById("job-id")).resolves.toStrictEqual({
         success: false,
-        message: "Failed to delete job.",
+        message: "errors.deleteJob",
       });
     });
     it("should delete a job successfully", async () => {
@@ -900,7 +900,7 @@ describe("jobActions", () => {
 
       await expect(deleteJobById("job-id")).resolves.toStrictEqual({
         success: false,
-        message: "Failed to delete job.",
+        message: "errors.deleteJob",
       });
     });
   });
