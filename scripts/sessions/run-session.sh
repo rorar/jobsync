@@ -16,7 +16,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 PROJECT_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
 
 # Use an array so paths with spaces and IFS changes are safe.
-SESSIONS=(s1a s1b s2 s3 s4)
+SESSIONS=(s1a s1b s2 s3 s4 s5a s5b)
 TMUX_PREFIX="jobsync"
 LOG_DIR="$PROJECT_DIR/logs/sessions"
 NONINTERACTIVE=false
@@ -62,6 +62,8 @@ session_desc() {
     s2)  printf 'User Journeys & UX Polish' ;;
     s3)  printf 'CRM Core (Workflow + Kanban)' ;;
     s4)  printf 'Data Enrichment (Logo + Links)' ;;
+    s5a) printf 'UI Gaps (Sprint E) + Webhook Channel' ;;
+    s5b) printf 'E-Mail + Browser Push Channels' ;;
     *)   printf 'Unknown session' ;;
   esac
 }
@@ -380,7 +382,7 @@ RESUME_EOF
   --all)
     run_all
     ;;
-  s1a|s1b|s2|s3|s4)
+  s1a|s1b|s2|s3|s4|s5a|s5b)
     run_session "$CMD"
     ;;
   *)
