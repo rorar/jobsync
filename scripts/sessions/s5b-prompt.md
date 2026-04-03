@@ -45,7 +45,7 @@ Lies `project_s5a_deferred_items.md` falls vorhanden. Prüfe docs/BUGS.md auf of
 **BEVOR E-Mail/Push gebaut werden — Foundation-then-Fan-Out (Learning aus S3/S4):**
 Das bestehende `NotificationType` Enum hat keine `job_status_changed`. Der `notification-dispatcher.ts` ist NICHT auf `JobStatusChanged` Domain Event subscribed. Beides muss zuerst existieren.
 
-**Schritt 1 (SEQUENZIELL — ein Agent, Main-Agent wartet):**
+**Schritt 1 (SEQUENZIELL — ein Agent via `Skill("backend-development:feature-development")`, Main-Agent wartet):**
 - `NotificationType` Enum erweitern: `job_status_changed` hinzufügen in `notification.model.ts`
 - `notification-dispatcher.ts`: Subscribe auf `JobStatusChanged` Event aus `event-types.ts`
 - `NotificationPreferences` Interface erweitern: `channels: { inApp: boolean, webhook: boolean, email: boolean, push: boolean }` (aktuell nur `inApp`). `DEFAULT_NOTIFICATION_PREFERENCES` updaten.
@@ -60,18 +60,22 @@ Das bestehende `NotificationType` Enum hat keine `job_status_changed`. Der `noti
 
 **Online-Recherche PFLICHT:** Agent MUSS `nodemailer` API via WebSearch/Context7 recherchieren BEVOR er Code schreibt. Auch: React-Email oder Handlebars für Templates.
 
-**Schritt 1 (SEQUENZIELL — Types + Settings Schema):**
+**Schritt 1 (SEQUENZIELL — Foundation via spezialisiertem Skill):**
+Verwende `Skill("backend-development:feature-development")` für die Foundation:
 - Prisma: SMTP-Settings als eigene `SmtpConfig` Tabelle (NICHT in UserSettings JSON — eigene Tabelle ermöglicht `@@index`, Relationen, und saubere Migrations). Felder: id, userId, host, port, username, password (AES encrypted), fromAddress, tlsRequired (default true), active. Relation: User. `@@index([userId])`.
 - Types: `EmailChannel` Interface, `EmailTemplate` Type
 - `bash scripts/prisma-migrate.sh` + `bash scripts/prisma-generate.sh`
 - Main-Agent verifiziert: `tsc --noEmit` = 0
 - Commit Foundation
 
-**Schritt 2 (PARALLEL — erst NACH Schritt 1):**
-- Agent 1: `nodemailer` SMTP Integration + TLS-Enforcement (reject plaintext) + Rate-Limiting (10/min pro User)
-- Agent 2: E-Mail Templates pro `NotificationType` — alle existierenden Typen + `job_status_changed`. Templates in allen 4 Locales (EN, DE, FR, ES). Verwende React-Email oder Handlebars.
-- Agent 3: Settings UI — SMTP-Konfiguration (Host, Port, User, Password), Test-E-Mail Button (rate-limited: 1/60s), Per-Type Enable/Disable
-- Agent 4: Channel-Integration in `notification-dispatcher.ts` — `EmailChannel` Adapter
+**Schritt 2 (PARALLEL — erst NACH Schritt 1, spezialisierte Agents/Skills):**
+
+KRITISCH: Verwende spezialisierte Skills/Agents für die Implementation, NICHT generische `Agent("implement X")`. Generische Agents haben eine 67% Fabrication-Rate — spezialisierte Skills haben eingebaute Checklisten und Patterns die Drift verhindern.
+
+- Agent 1 — `backend-api-security:backend-security-coder`: `nodemailer` SMTP Integration + TLS-Enforcement (reject plaintext) + Rate-Limiting (10/min pro User). Security-Coder kennt Credential-Handling, TLS-Patterns.
+- Agent 2 — `Skill("ui-design:create-component")`: E-Mail Templates pro `NotificationType` — alle existierenden Typen + `job_status_changed`. Templates in allen 4 Locales (EN, DE, FR, ES). Verwende React-Email oder Handlebars.
+- Agent 3 — `Skill("ui-design:create-component")`: Settings UI — SMTP-Konfiguration (Host, Port, User, Password), Test-E-Mail Button (rate-limited: 1/60s), Per-Type Enable/Disable
+- Agent 4 — `Skill("full-stack-orchestration:full-stack-feature")`: Channel-Integration in `notification-dispatcher.ts` — `EmailChannel` Adapter in die bestehende ChannelRouter-Architektur (von S5a etabliert)
 - File-Ownership strikt trennen — kein Agent ändert Files eines anderen
 
 **UX-Enrichment:** Verwende `/ui-design:interaction-design` für SMTP-Test-Feedback, E-Mail-Preview.
@@ -86,7 +90,8 @@ Das bestehende `NotificationType` Enum hat keine `job_status_changed`. Der `noti
 
 **Online-Recherche PFLICHT:** Agent MUSS `web-push` + VAPID Protokoll via WebSearch/Context7 recherchieren BEVOR er Code schreibt.
 
-**Schritt 1 (SEQUENZIELL — Schema + Service Worker):**
+**Schritt 1 (SEQUENZIELL — Foundation via spezialisiertem Skill):**
+Verwende `Skill("backend-development:feature-development")` für die Foundation:
 - Prisma: `WebPushSubscription` Model (NICHT `PushSubscription` — kollidiert mit Browser Web API Type `PushSubscription`). Felder: endpoint, p256dh, auth — encrypted at rest via AES, userId + User Relation + `@@index([userId])`.
 - VAPID Keys: Generated on first use, stored in eigener `VapidConfig` Tabelle (id, publicKey, privateKey encrypted via AES). NICHT in env vars, NICHT in UserSettings JSON (eigene Tabelle für saubere Key-Rotation). Rotation Warning: alle bestehenden WebPushSubscriptions werden ungültig → Confirmation Dialog vor Rotation.
 - **Service Worker Discovery (BEVOR sw-push.js erstellt wird):** Prüfe ob bereits ein Service Worker existiert (`grep -r "serviceWorker" src/ public/` und `ls public/sw*.js`). Wenn ja: in den bestehenden SW integrieren statt einen neuen zu erstellen. Wenn nein: `public/sw-push.js` erstellen. Beachte: Next.js 15 braucht ggf. Custom Headers für `Service-Worker-Allowed` Scope (prüfe `next.config.mjs`).
@@ -95,10 +100,13 @@ Das bestehende `NotificationType` Enum hat keine `job_status_changed`. Der `noti
 - Main-Agent verifiziert: `tsc --noEmit` = 0
 - Commit Foundation
 
-**Schritt 2 (PARALLEL — erst NACH Schritt 1):**
-- Agent 1: `web-push` Integration + `PushChannel` Adapter in notification-dispatcher + Stale Subscription Handling (410 Gone → delete PushSubscription)
-- Agent 2: Settings UI — "Enable Push" Button → Browser Permission Prompt → Subscription gespeichert. VAPID Key Rotation Warning. Unsubscribe Button.
-- Agent 3: Service Worker Registration in Layout + Push-Event Handler + Click-Action (navigates to relevant page)
+**Schritt 2 (PARALLEL — erst NACH Schritt 1, spezialisierte Agents/Skills):**
+
+KRITISCH: Verwende spezialisierte Skills/Agents — NICHT generische `Agent("implement X")`.
+
+- Agent 1 — `Skill("full-stack-orchestration:full-stack-feature")`: `web-push` Integration + `PushChannel` Adapter in notification-dispatcher + Stale Subscription Handling (410 Gone → delete WebPushSubscription)
+- Agent 2 — `Skill("ui-design:create-component")`: Settings UI — "Enable Push" Button → Browser Permission Prompt → Subscription gespeichert. VAPID Key Rotation Warning. Unsubscribe Button.
+- Agent 3 — `frontend-mobile-development:frontend-developer` Agent: Service Worker Registration in Layout + Push-Event Handler + Click-Action (navigates to relevant page)
 - File-Ownership strikt trennen
 
 **UX-Pflicht für JEDE neue Komponente:**
