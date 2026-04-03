@@ -164,10 +164,41 @@ source scripts/env.sh && bun run build  # Build prüfen
 1. `allium:weed` — Stimmt Implementation mit Spec überein?
 2. `/comprehensive-review:full-review` mit `/agent-teams:multi-reviewer-patterns` — koordiniere parallele Reviews über alle 5 Dimensionen mit Finding-Deduplizierung, Severity-Kalibrierung und konsolidiertem Report. Einzel-Reports in `docs/reviews/s4/` ablegen. Konsolidierter Report verweist pro Finding auf den Quell-Report. Fixe nach dem konsolidierten Report — bei Bedarf Einzel-Report für Detail-Kontext nachlesen.
 3. User Journey: Company erstellen → Logo automatisch enriched → in Job-Details sichtbar
-4. Edge Cases: Alle Module down, Domain nicht auflösbar, Rate Limit, Cache-Hit
+4. **Dreistufige Analyse (Learning aus S3: Blind Spot allein findet nur ~43% der Findings):**
+
+   **Stufe 1 — Offen (Agent denkt eigenständig):**
+   Dispatche 3 parallele Analyse-Agents mit je einer breiten Frage:
+   - Agent A: "Blind Spot: Woran haben wir nicht gedacht?"
+   - Agent B: "DAU/BDU (Brain Dead User): Was macht ein User der nicht nachdenkt, keine Anleitung liest und alles falsch bedient?"
+   - Agent C: "Edge Cases: Was passiert bei Extremen, Grenzfällen und unerwarteten Zuständen?"
+
+   **Stufe 2 — Gezielt (Sicherheitsnetz, fängt ab was Stufe 1 übersieht):**
+   Nach Stufe 1, dispatche Nachbohrer-Agents mit spezifischen Fragen:
+
+   Blind Spot Nachbohrer:
+   - "Welche Code-Pfade haben keinen Test?"
+   - "Welche Server Actions akzeptieren Input der nicht validiert wird?"
+   - "Welche Prisma Queries haben kein `userId` in der WHERE-Clause?"
+   - "Welche Enrichment-Module haben keine Fallback-Logik wenn die API nicht erreichbar ist?"
+
+   DAU/BDU Nachbohrer:
+   - "Du bist ein User der zum ersten Mal eine Firma mit Logo sieht. Was ist verwirrend?"
+   - "Du klickst 'Enrichment starten' und es passiert nichts sichtbares. Was erwartest du?"
+   - "Du hast 200 Firmen ohne Logo. Was siehst du? Wie lange wartest du?"
+   - "Du nutzt die App nur auf dem Handy (375px). Was geht nicht? Was ist zu klein?"
+
+   Edge Case Nachbohrer:
+   - "Was passiert wenn Clearbit UND Google Favicon UND Meta-Parser alle gleichzeitig down sind?"
+   - "Was passiert bei einer Domain die nicht existiert? Bei einer Domain ohne Favicon?"
+   - "Was passiert wenn der Enrichment-Cache voll ist? Wenn der TTL abläuft während ein Request läuft?"
+   - "Was passiert wenn 50 Companies gleichzeitig enriched werden? Rate Limits?"
+   - "Was passiert wenn die Company gelöscht wird während das Enrichment noch läuft?"
+
+   **Stufe 3 — Anti-Stille-Herabstufung:**
+   Wenn ein Finding als "nicht fixbar" oder "accepted debt" eingestuft wird, MUSS das explizit kommuniziert werden mit Begründung. Stillschweigendes Weglassen ist VERBOTEN.
+
 5. UX 10-Punkte-Checkliste für neue Komponenten
-6. Blind Spot Check
-7. Cross-Dependency Check: Sind 2.4, 3.6, 9.5 (Landingpage), 4.2 (Dynamic CV) vorbereitet?
+6. Cross-Dependency Check: Sind 2.4, 3.6, 9.5 (Landingpage), 4.2 (Dynamic CV) vorbereitet?
 
 ### ACT-Phase
 
