@@ -40,6 +40,8 @@ model User {
   PublicApiKey     PublicApiKey[]
   CompanyBlacklist CompanyBlacklist[]
   JobStatusHistory JobStatusHistory[]
+  EnrichmentResult  EnrichmentResult[]
+  EnrichmentLog     EnrichmentLog[]
 }
 
 model ApiKey {
@@ -246,6 +248,7 @@ model Company {
   createdBy       String // userId
   user            User             @relation(fields: [createdBy], references: [id])
   workExperiences WorkExperience[]
+  enrichmentResults EnrichmentResult[]
 
   @@unique([value, createdBy])
 }
@@ -614,4 +617,47 @@ model JobStatusHistory {
   @@index([jobId, changedAt])
   @@index([userId, changedAt])
   @@index([jobId, userId])
+}
+
+model EnrichmentResult {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  dimension      String
+  domainKey      String
+  companyId      String?
+  company        Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  status         String
+  data           String
+  sourceModuleId String
+  ttlSeconds     Int
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  logs           EnrichmentLog[]
+
+  @@unique([userId, dimension, domainKey])
+  @@index([userId, dimension, status])
+  @@index([expiresAt])
+  @@index([companyId])
+}
+
+model EnrichmentLog {
+  id                 String            @id @default(cuid())
+  userId             String
+  user               User              @relation(fields: [userId], references: [id])
+  enrichmentResultId String?
+  enrichmentResult   EnrichmentResult? @relation(fields: [enrichmentResultId], references: [id], onDelete: SetNull)
+  dimension          String
+  domainKey          String
+  moduleId           String
+  chainPosition      Int
+  outcome            String
+  latencyMs          Int
+  errorMessage       String?
+  createdAt          DateTime          @default(now())
+
+  @@index([userId, dimension, domainKey])
+  @@index([moduleId, outcome])
+  @@index([createdAt])
 }
