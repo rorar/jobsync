@@ -167,35 +167,39 @@ source scripts/env.sh && bun run build  # Build prüfen
 4. **Dreistufige Analyse (Learning aus S3: Blind Spot allein findet nur ~43% der Findings):**
 
    **Stufe 1 — Offen (Agent denkt eigenständig):**
-   Dispatche 3 parallele Analyse-Agents mit je einer breiten Frage:
-   - Agent A: "Blind Spot: Woran haben wir nicht gedacht?"
-   - Agent B: "DAU/BDU (Brain Dead User): Was macht ein User der nicht nachdenkt, keine Anleitung liest und alles falsch bedient?"
-   - Agent C: "Edge Cases: Was passiert bei Extremen, Grenzfällen und unerwarteten Zuständen?"
+   Dispatche 3 parallele Analyse-Agents mit je einer breiten Frage und dem passenden spezialisierten Skill:
+   - Agent A — `Skill("pr-review-toolkit:silent-failure-hunter")`: "Blind Spot: Woran haben wir nicht gedacht? Finde silent failures, fehlende Error-Handler, falsche Fallbacks."
+   - Agent B — `Skill("ui-design:design-review")` + `Skill("accessibility-compliance:screen-reader-testing")`: "DAU/BDU (Brain Dead User): Was macht ein User der nicht nachdenkt, keine Anleitung liest und alles falsch bedient? Kommt ein blinder User durch?"
+   - Agent C — `Skill("developer-essentials:error-handling-patterns")`: "Edge Cases: Was passiert bei Extremen, Grenzfällen und unerwarteten Zuständen? Analysiere Graceful Degradation."
 
    **Stufe 2 — Gezielt (Sicherheitsnetz, fängt ab was Stufe 1 übersieht):**
-   Nach Stufe 1, dispatche Nachbohrer-Agents mit spezifischen Fragen:
+   Nach Stufe 1, dispatche Nachbohrer-Agents mit spezifischen Fragen und spezialisierten Skills:
 
-   Blind Spot Nachbohrer:
+   Blind Spot Nachbohrer — `Skill("security-scanning:stride-analysis-patterns")` + `Skill("pr-review-toolkit:pr-test-analyzer")`:
    - "Welche Code-Pfade haben keinen Test?"
    - "Welche Server Actions akzeptieren Input der nicht validiert wird?"
    - "Welche Prisma Queries haben kein `userId` in der WHERE-Clause?"
    - "Welche Enrichment-Module haben keine Fallback-Logik wenn die API nicht erreichbar ist?"
+   - "STRIDE-Analyse auf die neuen Enrichment-Endpoints"
 
-   DAU/BDU Nachbohrer:
+   DAU/BDU Nachbohrer — `Skill("ui-design:interaction-design")`:
    - "Du bist ein User der zum ersten Mal eine Firma mit Logo sieht. Was ist verwirrend?"
    - "Du klickst 'Enrichment starten' und es passiert nichts sichtbares. Was erwartest du?"
    - "Du hast 200 Firmen ohne Logo. Was siehst du? Wie lange wartest du?"
    - "Du nutzt die App nur auf dem Handy (375px). Was geht nicht? Was ist zu klein?"
 
-   Edge Case Nachbohrer:
+   Edge Case Nachbohrer — `Skill("application-performance:performance-optimization")`:
    - "Was passiert wenn Clearbit UND Google Favicon UND Meta-Parser alle gleichzeitig down sind?"
    - "Was passiert bei einer Domain die nicht existiert? Bei einer Domain ohne Favicon?"
    - "Was passiert wenn der Enrichment-Cache voll ist? Wenn der TTL abläuft während ein Request läuft?"
    - "Was passiert wenn 50 Companies gleichzeitig enriched werden? Rate Limits?"
    - "Was passiert wenn die Company gelöscht wird während das Enrichment noch läuft?"
 
-   **Stufe 3 — Anti-Stille-Herabstufung:**
-   Wenn ein Finding als "nicht fixbar" oder "accepted debt" eingestuft wird, MUSS das explizit kommuniziert werden mit Begründung. Stillschweigendes Weglassen ist VERBOTEN.
+   **Stufe 3 — Konsolidierung + Anti-Stille-Herabstufung:**
+   - `Skill("agent-teams:multi-reviewer-patterns")` — konsolidiere ALLE Findings aus Stufe 1 + 2 (dedupliziert, severity-kalibriert)
+   - Bei unklaren Root Causes: `Skill("superpowers:systematic-debugging")` für Hypothesen-Testing
+   - Bei widersprüchlichen Findings: `Skill("agent-teams:parallel-debugging")` für konkurrierende Untersuchungen
+   - Wenn ein Finding als "nicht fixbar" oder "accepted debt" eingestuft wird, MUSS das explizit kommuniziert werden mit Begründung. Stillschweigendes Weglassen ist VERBOTEN.
 
 5. UX 10-Punkte-Checkliste für neue Komponenten
 6. Cross-Dependency Check: Sind 2.4, 3.6, 9.5 (Landingpage), 4.2 (Dynamic CV) vorbereitet?
