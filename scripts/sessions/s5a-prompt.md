@@ -216,16 +216,18 @@ Schritt 2 (PARALLEL — 3 Agents nach E1.4):
 S3 hatte kaskadierte Build-Failures weil parallele Agents Code gegen noch-nicht-existierende Types geschrieben haben. Fix: Erst Foundation legen, dann parallelisieren.
 
 **Schritt 1 (SEQUENZIELL — ein Agent, Main-Agent wartet):**
-- Prisma Schema: `WebhookEndpoint` Model
+- Prisma Schema: `WebhookEndpoint` Model (mit `userId` Relation + `@@index([userId, active])`)
 - `bash scripts/prisma-migrate.sh` + `bash scripts/prisma-generate.sh`
 - Types/Interfaces: `WebhookChannel`, `WebhookDeliveryResult`, `validateWebhookUrl()`
-- Main-Agent verifiziert: `tsc --noEmit` = zero Errors
-- Commit: "feat(webhook): add schema + types + SSRF validator foundation"
+- **ChannelRouter REFACTOR (MUSS in Foundation, NICHT parallel):** Refactore `notification-dispatcher.ts` von hardcoded `prisma.notification.create()` zu Multi-Channel-Architektur: `ChannelRouter` Interface, `InAppChannel` als erster Channel, `shouldNotify()` channel-aware machen. Das ist die Grundlage auf der HMAC+Retry und Settings UI aufbauen.
+- Allium Spec Updates: `notification-dispatch.allium` (Webhook-Regeln) + `event-bus.allium` (fehlende Events: JobStatusChanged, CompanyCreated, EnrichmentCompleted, EnrichmentFailed)
+- Main-Agent verifiziert: `tsc --noEmit` = zero Errors, bestehende Notification-Tests grün
+- Commit: "feat(webhook): add schema + types + SSRF validator + ChannelRouter foundation"
 
-**Schritt 2 (PARALLEL — erst NACH Schritt 1):**
-- Agent 1: HMAC Signing + Retry-Logik + Retry-Exhaustion + Auto-Deactivation
+**Schritt 2 (PARALLEL — erst NACH Schritt 1, baut auf ChannelRouter auf):**
+- Agent 1: HMAC Signing + Retry-Logik + Retry-Exhaustion + Auto-Deactivation (implementiert `WebhookChannel` gegen `ChannelRouter` Interface)
 - Agent 2: Settings UI (CRUD, Event-Selection, Delivery-Log)
-- Agent 3: Channel-Integration in `notification-dispatcher.ts` + Allium Spec Update
+- Agent 3: Webhook Server Action + E2E Tests
 - File-Ownership strikt trennen — kein Agent ändert Files eines anderen
 
 **Build-Serialisierung (Learning aus S3):**
@@ -329,7 +331,8 @@ Du MUSST jeden Checkpoint mit Evidenz bestätigen bevor du zum nächsten Schritt
 **Vor CHECK-Phase:**
 - [ ] CP-9: Webhook Foundation committed (Schema + Types + SSRF-Validator) → `tsc --noEmit` = 0
 - [ ] CP-10: Webhook HMAC + Retry + Settings UI + Channel-Integration committed
-- [ ] CP-11: `notification-dispatch.allium` updated mit Webhook-Regeln
+- [ ] CP-11a: `notification-dispatch.allium` updated mit Webhook-Channel-Regeln
+- [ ] CP-11b: `event-bus.allium` updated mit fehlenden Events (JobStatusChanged, CompanyCreated, EnrichmentCompleted, EnrichmentFailed) → `allium:weed` = zero Divergenzen
 
 **Vor der ACT-Phase — EXAKTE Skill-Aufrufe (Learning aus S3):**
 

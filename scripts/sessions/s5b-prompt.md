@@ -61,7 +61,7 @@ Das bestehende `NotificationType` Enum hat keine `job_status_changed`. Der `noti
 **Online-Recherche PFLICHT:** Agent MUSS `nodemailer` API via WebSearch/Context7 recherchieren BEVOR er Code schreibt. Auch: React-Email oder Handlebars für Templates.
 
 **Schritt 1 (SEQUENZIELL — Types + Settings Schema):**
-- Prisma: SMTP-Settings in `UserSettings` oder eigene Tabelle (Host, Port, User, Password encrypted via AES)
+- Prisma: SMTP-Settings als eigene `SmtpConfig` Tabelle (NICHT in UserSettings JSON — eigene Tabelle ermöglicht `@@index`, Relationen, und saubere Migrations). Felder: id, userId, host, port, username, password (AES encrypted), fromAddress, tlsRequired (default true), active. Relation: User. `@@index([userId])`.
 - Types: `EmailChannel` Interface, `EmailTemplate` Type
 - `bash scripts/prisma-migrate.sh` + `bash scripts/prisma-generate.sh`
 - Main-Agent verifiziert: `tsc --noEmit` = 0
@@ -88,7 +88,8 @@ Das bestehende `NotificationType` Enum hat keine `job_status_changed`. Der `noti
 
 **Schritt 1 (SEQUENZIELL — Schema + Service Worker):**
 - Prisma: `WebPushSubscription` Model (NICHT `PushSubscription` — kollidiert mit Browser Web API Type `PushSubscription`). Felder: endpoint, p256dh, auth — encrypted at rest via AES, userId + User Relation + `@@index([userId])`.
-- VAPID Keys: Generated on first use, stored encrypted in separater DB-Tabelle `VapidConfig` (publicKey, privateKey encrypted via AES) oder als JSON-Feld in UserSettings. NICHT in env vars. Rotation Warning: alle bestehenden Subscriptions werden ungültig.
+- VAPID Keys: Generated on first use, stored in eigener `VapidConfig` Tabelle (id, publicKey, privateKey encrypted via AES). NICHT in env vars, NICHT in UserSettings JSON (eigene Tabelle für saubere Key-Rotation). Rotation Warning: alle bestehenden WebPushSubscriptions werden ungültig → Confirmation Dialog vor Rotation.
+- **Service Worker Discovery (BEVOR sw-push.js erstellt wird):** Prüfe ob bereits ein Service Worker existiert (`grep -r "serviceWorker" src/ public/` und `ls public/sw*.js`). Wenn ja: in den bestehenden SW integrieren statt einen neuen zu erstellen. Wenn nein: `public/sw-push.js` erstellen. Beachte: Next.js 15 braucht ggf. Custom Headers für `Service-Worker-Allowed` Scope (prüfe `next.config.mjs`).
 - `public/sw-push.js`: Minimaler Service Worker (push-only, NOT full PWA). Handles `push` event, shows notification with title + body + click-action.
 - `bash scripts/prisma-migrate.sh` + `bash scripts/prisma-generate.sh`
 - Main-Agent verifiziert: `tsc --noEmit` = 0
