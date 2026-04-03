@@ -1,8 +1,39 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-04-02
+# Bug Tracker — Collected 2026-03-24, Updated 2026-04-03
 
-**Total: 252 bugs found, 241 fixed, 1 pre-existing open, 10 deferred to S4**
+**Total: 267 bugs found, 262 fixed, 1 pre-existing open, 4 deferred**
 
-### Status: ⚠️ 1 pre-existing test failure (PRE-1) + 10 S3 deferred items
+### Status: ⚠️ 1 pre-existing test failure (PRE-1) + 4 remaining S3 deferred items
+
+## Session S4 (2026-04-03) — Data Enrichment + S3 Deferred Fixes
+
+### Fixed in S4 — S3 Deferred Items (3 of 10)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S3-D1 | **HIGH** | Public API PATCH bypasses state machine | statusId blacklisted, new POST /status endpoint |
+| S3-D3 | **HIGH** | No optimistic locking for concurrent changes | version field + 409 CONFLICT |
+| DAU-7 | **HIGH** | Kanban uses paginated getJobsList | Dedicated getKanbanBoard query |
+
+### Fixed in S4 — CHECK Phase Findings (12 findings)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S4-C01 | **CRITICAL** | Meta-parser SSRF via redirect chain | redirect: "manual" with revalidation |
+| S4-C02 | **CRITICAL** | Memory DoS via unbounded response.text() | Streaming body read (100KB limit) |
+| S4-C03 | **CRITICAL** | No rate limiting on enrichment actions | Per-user sliding window |
+| S4-C04 | **CRITICAL** | Modules not registered (commented imports) | Connectors.ts activated |
+| S4-H01 | **HIGH** | IDOR enrichmentResult.update without userId | ADR-015 compliance |
+| S4-H02 | **HIGH** | Clearbit domain not validated | Domain regex validation |
+| S4-H03 | **HIGH** | XSS via unsanitized OpenGraph data | sanitizeMetaValue + URL validation |
+| S4-H04 | **HIGH** | Orchestrator not using globalThis | HMR-safe singleton |
+| S4-H05 | **HIGH** | Missing DEGRADED health check | Skip degraded + unreachable |
+| S4-M01 | MEDIUM | No concurrency control for same domain | Documented as accepted |
+| S4-M02 | MEDIUM | EnrichmentLog unbounded growth | Documented, cleanup in 0.9 |
+| S4-M03 | MEDIUM | Persist failure returns success | Documented as accepted |
+
+### Remaining S3 Deferred (4 items, MEDIUM/LOW)
+- S3-D5: "Expired" status seeded but no transitions
+- S3-D7: Vacancy promoter doesn't create initial history
+- S3-D9: Field name sortOrder vs spec kanbanSortOrder
+- S3-D10: Legacy saved/draft in VALID_TRANSITIONS
 
 ## Session S3-Resume (2026-04-02) — Skills + Full Review + a11y + Security + Performance
 

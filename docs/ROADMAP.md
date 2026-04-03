@@ -641,8 +641,19 @@ App (Kernlogik) ↔ Connector (ACL) ↔ Module (Externes System)
   - **Senden:** Templates (→ 4.9), Anhänge, Application Locale Profile (→ Sektion 4 Cross-Cutting)
 - **Modul: PBX** — Telefonie-Integration, Anruf-Tracking
 
-### 1.13 Data Enrichment Connector
+### 1.13 Data Enrichment Connector -- Phase 1 DONE (Sprint C6)
 Anreicherung von Unternehmens-, Kontakt- und Bewerbungsdaten aus externen Quellen. Der Connector orchestriert Fallback-Chains pro Enrichment-Dimension.
+
+**Phase 1 implementiert (2026-04-03):**
+- DataEnrichmentConnector Interface + Fallback-Chain-Orchestrator
+- 3 Module: Clearbit Logo (free), Google Favicon, Meta/OpenGraph Parser
+- EnrichmentResult Cache (TTL, stale-if-error) + EnrichmentLog Audit Trail
+- CompanyLogo Komponente (Skeleton → Image → Initials Fallback)
+- EnrichmentModuleSettings in Settings (Activation Toggles)
+- Domain Events: EnrichmentCompleted, EnrichmentFailed
+- i18n: enrichment Namespace in 4 Locales
+- Allium Spec: `specs/data-enrichment.allium`
+- Security Hardened: SSRF Protection, Rate Limiting, XSS Sanitization, IDOR Compliance
 
 **Logo-Module:**
 - **Modul: Clearbit** — Logo via Domain (kostenlos, kein API-Key)

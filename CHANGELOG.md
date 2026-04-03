@@ -1,5 +1,40 @@
 # Changelog
 
+## [2026-04-03] Session S4 — Data Enrichment Connector
+
+### Step 0 — S3 Deferred Fixes
+- **S3-D1 (HIGH):** Public API PATCH `/api/v1/jobs/:id` no longer accepts statusId — new `POST /api/v1/jobs/:id/status` endpoint for state-machine-enforced transitions
+- **S3-D3 (HIGH):** Optimistic locking via `version` field on Job model — stale writes rejected with 409 CONFLICT
+- **DAU-7 (HIGH):** Kanban board switched from paginated getJobsList to dedicated getKanbanBoard (all jobs, tags included)
+
+### Added — Data Enrichment Connector (ROADMAP 1.13 Phase 1)
+- **DataEnrichmentConnector interface** with fallback chain orchestration per dimension
+- **3 Modules:** Clearbit Logo (free tier), Google Favicon, Meta/OpenGraph Parser
+- **Fallback chains:** Logo: Clearbit → Google Favicon → Placeholder; DeepLink: Meta Parser
+- **Enrichment cache:** EnrichmentResult table with TTL-based stale-if-error semantics
+- **Audit trail:** EnrichmentLog table for module effectiveness tracking
+- **CompanyLogo component** with skeleton → image → initials fallback (sm/md/lg sizes)
+- **EnrichmentModuleSettings** in Settings page (activation toggles, health indicators)
+- **Domain events:** EnrichmentCompleted, EnrichmentFailed
+- **i18n:** enrichment namespace in all 4 locales (en, de, fr, es)
+- **Allium spec:** `specs/data-enrichment.allium` (821 lines, aligned with implementation)
+- **Schema design:** `docs/enrichment-schema-design.md` (731 lines)
+
+### Fixed — CHECK Phase Security Hardening (12 findings)
+- **CRITICAL:** Meta-parser SSRF via redirect chain → `redirect: "manual"` with URL revalidation
+- **CRITICAL:** Meta-parser memory DoS via unbounded response.text() → streaming body read (100KB limit)
+- **CRITICAL:** No rate limiting on enrichment server actions → per-user sliding window
+- **CRITICAL:** Modules not registered (commented-out imports) → connectors.ts activated
+- **HIGH:** IDOR in enrichmentResult.update → userId in all WHERE clauses (ADR-015)
+- **HIGH:** Clearbit domain not validated → domain regex + redirect: "manual"
+- **HIGH:** XSS via unsanitized OpenGraph data → sanitizeMetaValue + image URL validation
+- **HIGH:** Orchestrator not using globalThis → HMR-safe singleton pattern
+- **HIGH:** Missing DEGRADED health check → skip degraded + unreachable modules
+
+### Testing
+- 121 new tests across 8 suites (modules, orchestrator, actions, components)
+- Total: 138 suites, 2569 tests passing
+
 ## [2026-04-02] Session S3-Resume — Skills + Full Review + a11y + Security + Performance
 
 ### Review (10-dimension specialized skill review)

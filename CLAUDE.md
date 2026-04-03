@@ -89,13 +89,15 @@ All external integrations follow the **App ↔ Connector ↔ Module** pattern:
 App (Core Logic)
   ↕ ConnectorResult<T> / DiscoveredVacancy / ActionResult
 Connector (Shared ACL — ONE interface, ONE registry)
-  - DataSourceConnector / AIProviderConnector interfaces
+  - DataSourceConnector / AIProviderConnector / DataEnrichmentConnector interfaces
   - ModuleRegistry: unified registry with manifests + factories
   - Runner: orchestrates search + matching with credential PUSH
+  - Orchestrator: fallback chains per enrichment dimension
   ↕
 Modules (each declares a Manifest + implements a Connector interface)
   - EURES, Arbeitsagentur, JSearch (Job Discovery)
   - Ollama, OpenAI, DeepSeek (AI Provider)
+  - Clearbit, Google Favicon, Meta/OpenGraph Parser (Data Enrichment)
 ```
 
 **Key principle:** The Connector is the shared domain layer. Modules are pluggable implementations. Each Module declares a `ModuleManifest` describing its identity, credentials, health, resilience, and settings.
@@ -138,6 +140,41 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 - `handleCircuitBreakerTrip()` — pause after 3 CB opens
 
 **Allium Spec:** `specs/module-lifecycle.allium` — authoritative specification for all lifecycle rules.
+
+### Data Enrichment Connector (ROADMAP 1.13)
+
+**Enrichment Orchestrator** (`src/lib/connector/data-enrichment/orchestrator.ts`) — Fallback-chain-based enrichment per dimension. First success wins, remaining modules skipped.
+
+**Key Rule:** Enrichment is **best-effort and non-blocking**. Never show errors to users for enrichment failures. Use placeholders when enrichment fails.
+
+**Current structure:** `src/lib/connector/data-enrichment/`:
+- **types.ts** — DataEnrichmentConnector, EnrichmentDimension, LogoData, DeepLinkData, FallbackChainConfig, ENRICHMENT_CONFIG
+- **registry.ts** — Facade: `getActiveEnrichmentModules()`, `getEnrichmentModuleByDimension()`
+- **orchestrator.ts** — `EnrichmentOrchestrator.execute()`: cache check → chain execution → persist result → publish events. `globalThis` singleton.
+- **connectors.ts** — Registration barrel (imports clearbit, google-favicon, meta-parser)
+- **Modules:** `modules/clearbit/`, `modules/google-favicon/`, `modules/meta-parser/` (each with `index.ts` + `manifest.ts`)
+
+**Enrichment Dimensions (Phase 1):**
+- **Logo:** Company domain → logo URL. Chain: Clearbit → Google Favicon → Placeholder
+- **DeepLink:** URL → OpenGraph metadata. Chain: Meta Parser (single module)
+
+**Cache:** `EnrichmentResult` table with TTL-based stale-if-error. Unique key: `(userId, dimension, domainKey)`.
+**Audit:** `EnrichmentLog` append-only trail per module attempt (chain position, outcome, latency).
+
+**Server Actions:** `src/actions/enrichment.actions.ts` — `triggerEnrichment()`, `getEnrichmentStatus()`, `getEnrichmentResult()`, `refreshEnrichment()`. Rate-limited per user.
+
+**UI Components:**
+- `src/components/ui/company-logo.tsx` — CompanyLogo (skeleton → image → initials fallback)
+- `src/components/settings/EnrichmentModuleSettings.tsx` — Module activation in Settings
+
+**Security:**
+- Meta-parser: `redirect: "manual"` (SSRF protection), streaming body read (100KB limit), XSS sanitization on all extracted values
+- Clearbit: domain regex validation before URL construction
+- ALL Prisma queries include `userId` (IDOR protection, ADR-015)
+
+**Domain Events:** `EnrichmentCompleted`, `EnrichmentFailed` — published via TypedEventBus.
+
+**Allium Spec:** `specs/data-enrichment.allium` — authoritative specification for all enrichment rules.
 
 ### Scheduler Coordination (ROADMAP 0.10)
 
