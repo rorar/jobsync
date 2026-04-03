@@ -235,7 +235,7 @@ function EnrichmentModuleSettings() {
                           checked={module.status === "active"}
                           disabled={toggling === module.moduleId}
                           onCheckedChange={() => handleToggleStatus(module)}
-                          aria-label={`Toggle ${getModuleName(module)} module`}
+                          aria-label={t("enrichment.toggleModule").replace("{name}", getModuleName(module))}
                         />
                       </div>
                     </div>

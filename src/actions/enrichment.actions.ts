@@ -131,6 +131,21 @@ export async function triggerEnrichment(
         });
       }
 
+      // Logo writeback: update Company.logoUrl when logo enrichment succeeds
+      // Only write if Company.logoUrl is currently null (don't override manual uploads)
+      if (dimension === "logo" && output.status === "found") {
+        const logoData = typeof output.data === "string"
+          ? JSON.parse(output.data) as Record<string, unknown>
+          : output.data as Record<string, unknown>;
+        const logoUrl = logoData?.logoUrl as string | undefined;
+        if (logoUrl) {
+          await db.company.updateMany({
+            where: { id: companyId, createdBy: user.id, logoUrl: null },
+            data: { logoUrl },
+          });
+        }
+      }
+
       revalidatePath("/jobs");
       return { success: true, data: result };
     } finally {
@@ -282,6 +297,21 @@ export async function refreshEnrichment(
 
       if (!refreshed) {
         return { success: false, message: "enrichment.persistFailed" };
+      }
+
+      // Logo writeback on refresh: update Company.logoUrl if linked to a company
+      // Only write if Company.logoUrl is currently null (don't override manual uploads)
+      if (dimension === "logo" && output.status === "found" && refreshed.companyId) {
+        const logoData = typeof output.data === "string"
+          ? JSON.parse(output.data) as Record<string, unknown>
+          : output.data as Record<string, unknown>;
+        const logoUrl = logoData?.logoUrl as string | undefined;
+        if (logoUrl) {
+          await db.company.updateMany({
+            where: { id: refreshed.companyId, createdBy: user.id, logoUrl: null },
+            data: { logoUrl },
+          });
+        }
       }
 
       revalidatePath("/jobs");

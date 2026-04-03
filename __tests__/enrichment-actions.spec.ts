@@ -13,6 +13,7 @@ jest.mock("@/lib/db", () => ({
   default: {
     company: {
       findFirst: jest.fn(),
+      updateMany: jest.fn(),
     },
     enrichmentResult: {
       findFirst: jest.fn(),
@@ -43,7 +44,7 @@ jest.mock("@/lib/connector/data-enrichment/orchestrator", () => ({
 }));
 
 const mockDb = db as unknown as {
-  company: { findFirst: jest.Mock };
+  company: { findFirst: jest.Mock; updateMany: jest.Mock };
   enrichmentResult: {
     findFirst: jest.Mock;
     findMany: jest.Mock;
