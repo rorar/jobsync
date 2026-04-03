@@ -2039,7 +2039,39 @@ Generierte persönliche Landingpage die den Bewerbungs-Funnel invertiert: Statt 
 
 ---
 
-## Implementierte Features (Stand: 2026-03-28)
+## 10. Sprint E: UI-Lücken schließen (Backend→Frontend Alignment)
+
+**Rationale:** Sprint C5+C6 haben Backend-Capabilities gebaut die nie an die UI angeschlossen wurden. 8 Server Actions sind ohne Consumer, 1 Page ist nicht navigierbar. Dieser Sprint schließt die Lücken.
+
+### Sprint E1: Kritische UI-Lücken (Feature komplett ohne UI)
+
+| # | Feature | Backend vorhanden | UI zu bauen | Komplexität |
+|---|---------|-------------------|-------------|-------------|
+| E1.1 | **Enrichment Control Panel** | `triggerEnrichment`, `getEnrichmentStatus`, `getEnrichmentResult`, `refreshEnrichment` | Company-Detail: Enrichment-Status-Panel mit "Refresh" Button, Logo-Preview, Modul-Info ("Enriched by: Clearbit") | M |
+| E1.2 | **Status History Timeline** | `getJobStatusHistory` | Job-Detail: Chronologische Timeline der Status-Transitions mit Notizen, Timestamps, User. Vorbereitung für 5.9 Timeline. | M |
+| E1.3 | **Kanban Within-Column Reorder** | `updateKanbanOrder` + `sortOrder` Feld | `KanbanBoard.tsx:156` — early-return entfernen, `updateKanbanOrder` aufrufen bei same-column Drag | S |
+| E1.4 | **Staging Queue Sidebar-Link** | `src/app/dashboard/staging/page.tsx` existiert | `SIDEBAR_LINKS` in `src/lib/constants.ts` erweitern | XS |
+
+### Sprint E2: Backend-Capabilities exponieren
+
+| # | Feature | Backend vorhanden | UI zu bauen | Komplexität |
+|---|---------|-------------------|-------------|-------------|
+| E2.1 | **Dashboard Status Funnel** | `getStatusDistribution` | Dashboard-Widget: Conversion Funnel (Bookmarked → Applied → Interview → Offer). Nutze `/business-analytics:data-storytelling`. | M |
+| E2.2 | **Health Check Button** | `runHealthCheck` | EnrichmentModuleSettings + ApiKeySettings: "Check Now" Button pro Modul | S |
+| E2.3 | **Ctrl+Z Global Undo** | `undoLastAction` | `useEffect` Keyboard-Listener in Layout, Toast-Feedback | S |
+| E2.4 | **Retention Cleanup Admin UI** | `runRetentionCleanup` | Developer Settings: "Run Cleanup" Button + letzte Execution-Info | S |
+
+### Sprint E — Cross-Cutting
+
+- Jede neue UI-Komponente folgt UX-Pflicht: Loading/Empty/Error States, Mobile, Keyboard, Dark Mode, i18n
+- `/ui-design:create-component` + `/ui-design:interaction-design` für neue Panels
+- `/accessibility-compliance:wcag-audit-patterns` nach Implementation
+- E2E Tests für jede neue UI-Fläche
+- Dreistufige Analyse (Blind Spot + DAU/BDU + Edge Cases) nach Abschluss
+
+---
+
+## Implementierte Features (Stand: 2026-04-03)
 
 | Feature | Status |
 |---|---|
@@ -2050,13 +2082,27 @@ Generierte persönliche Landingpage die den Bewerbungs-Funnel invertiert: Statt 
 | Arbeitsagentur Modul (DE Jobs) | ✅ Implementiert |
 | EURES Location Combobox (NUTS + Flags) | ✅ Implementiert |
 | ESCO Occupation Combobox (Multi-Select + Details) | ✅ Implementiert |
-| i18n (EN, DE, FR, ES) — 496 Keys | ✅ Implementiert |
+| i18n (EN, DE, FR, ES) — 496+ Keys | ✅ Implementiert |
 | Locale-aware Date/Number Formatting | ✅ Implementiert |
 | EU API Language Integration | ✅ Implementiert |
 | User Language Settings | ✅ Implementiert |
 | Roadmap 0.2: ActionResult<T> Typisierung | ✅ Implementiert |
-| Roadmap 0.3: Domain-Model Alignment (Kern) | ⏳ Kern done, 3 Follow-Ups (Pattern B, ?:/null, Mapper) |
+| Roadmap 0.3: Domain-Model Alignment | ✅ Implementiert (Follow-Ups geschlossen) |
+| Roadmap 0.4: Module Lifecycle Manager | ✅ Implementiert (6 Phasen, 114 Tests) |
+| Roadmap 0.9: Response Caching Stufe 1 | ✅ Implementiert (LRU + HTTP Headers) |
+| Roadmap 0.10: Scheduler Transparency | ✅ Implementiert (RunCoordinator, SSE, Watchdog) |
+| Roadmap 2.7: JobDeck Swipe UI | ✅ Implementiert (DeckCard, DeckView, ViewModeToggle) |
+| Roadmap 2.10 Phase 1: Manifest-Driven AutomationWizard | ✅ Implementiert |
+| Roadmap 2.15: Company Blacklist | ✅ Implementiert (CRUD + Pipeline-Filter) |
+| Roadmap 5.3: Job Status Workflow | ✅ Implementiert (State Machine, History, Domain Events) |
+| Roadmap 5.6: Kanban Board | ✅ Implementiert (@dnd-kit, cross-column DnD) |
+| Roadmap 7.1 Phase 1: Public API v1 | ✅ Implementiert (Jobs CRUD + Notes, API Keys, Rate Limiting) |
+| Roadmap 1.13 Phase 1: Data Enrichment | ✅ Implementiert (Clearbit, Google Favicon, Meta/OG Parser, Fallback-Chain) |
 | Roadmap 8.2: Client-Side Error Reporting Dashboard | ✅ Implementiert |
 | Roadmap 0.5: Vacancy Pipeline (Kern-Pipeline) | ⏳ Teilweise (Archive/Trash, Undo, Bulk ausstehend) |
-| Roadmap 2.10 Phase 1: Manifest-Driven AutomationWizard | ✅ Implementiert |
-| Allium Spec: Module Lifecycle Manager (`specs/module-lifecycle.allium`) | ✅ Spezifiziert |
+| Sprint A: Architecture Debt (10 Items) | ✅ Verifiziert |
+| Sprint B: UX/UI Gaps (10 Items) | ✅ Verifiziert |
+| Security Audit: 25+ Vulnerabilities | ✅ Gefixt (ADR-015 bis ADR-025) |
+| Allium Specs (21 Specs, ~10345 Lines) | ✅ Spezifiziert + Aligned |
+| Test Suite: 140 Suites, 2606 Tests, 79 E2E | ✅ Grün |
+| Bug Tracker: 281 Bugs | ✅ Alle gefixt |
