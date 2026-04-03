@@ -38,6 +38,7 @@ export const DomainEventType = {
   // CRM Core (spec: crm-workflow.allium)
   JobStatusChanged: "JobStatusChanged",
   // Data Enrichment (spec: data-enrichment)
+  CompanyCreated: "CompanyCreated",
   EnrichmentCompleted: "EnrichmentCompleted",
   EnrichmentFailed: "EnrichmentFailed",
 } as const;
@@ -163,6 +164,12 @@ export interface JobStatusChangedPayload {
 
 // Data Enrichment payloads (spec: data-enrichment)
 
+export interface CompanyCreatedPayload {
+  companyId: string;
+  companyName: string;
+  userId: string;
+}
+
 export interface EnrichmentCompletedPayload {
   requestId: string;
   dimension: string;
@@ -200,6 +207,7 @@ export interface EventPayloadMap {
   AutomationRunCompleted: AutomationRunCompletedPayload;
   AutomationDegraded: AutomationDegradedPayload;
   JobStatusChanged: JobStatusChangedPayload;
+  CompanyCreated: CompanyCreatedPayload;
   EnrichmentCompleted: EnrichmentCompletedPayload;
   EnrichmentFailed: EnrichmentFailedPayload;
 }

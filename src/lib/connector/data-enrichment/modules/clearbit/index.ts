@@ -13,6 +13,7 @@ import type {
   EnrichmentOutput,
 } from "../../types";
 import { ENRICHMENT_CONFIG } from "../../types";
+import { clearbitPolicy } from "./resilience";
 
 /** Domain validation regex — prevents injection of paths, query strings, or invalid characters */
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i;
@@ -50,36 +51,33 @@ export function createClearbitModule(): DataEnrichmentConnector {
       }
 
       const logoUrl = `https://logo.clearbit.com/${encodeURIComponent(domain)}`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(
-        () => controller.abort(),
-        ENRICHMENT_CONFIG.MODULE_TIMEOUT_MS,
-      );
 
       try {
-        const response = await fetch(logoUrl, {
-          method: "HEAD",
-          signal: controller.signal,
-          redirect: "manual",
-        });
+        return await clearbitPolicy.execute(async ({ signal }) => {
+          const response = await fetch(logoUrl, {
+            method: "HEAD",
+            signal,
+            redirect: "manual",
+          });
 
-        if (response.ok) {
+          if (response.ok) {
+            return {
+              dimension: "logo" as const,
+              status: "found" as const,
+              data: { logoUrl, width: 128, format: "png" },
+              source: "clearbit",
+              ttl: ENRICHMENT_CONFIG.LOGO_TTL_SECONDS,
+            };
+          }
+
           return {
-            dimension: "logo",
-            status: "found",
-            data: { logoUrl, width: 128, format: "png" },
+            dimension: "logo" as const,
+            status: "not_found" as const,
+            data: {},
             source: "clearbit",
-            ttl: ENRICHMENT_CONFIG.LOGO_TTL_SECONDS,
+            ttl: 0,
           };
-        }
-
-        return {
-          dimension: "logo",
-          status: "not_found",
-          data: {},
-          source: "clearbit",
-          ttl: 0,
-        };
+        });
       } catch {
         return {
           dimension: "logo",
@@ -88,8 +86,6 @@ export function createClearbitModule(): DataEnrichmentConnector {
           source: "clearbit",
           ttl: 0,
         };
-      } finally {
-        clearTimeout(timeoutId);
       }
     },
   };

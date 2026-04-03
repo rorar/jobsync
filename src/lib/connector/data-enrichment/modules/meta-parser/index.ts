@@ -16,6 +16,7 @@ import type {
   DeepLinkData,
 } from "../../types";
 import { ENRICHMENT_CONFIG } from "../../types";
+import { metaParserPolicy } from "./resilience";
 
 /** Maximum HTML size to parse (100KB) to prevent memory issues */
 const MAX_HTML_SIZE = 100_000;
@@ -295,82 +296,78 @@ export function createMetaParserModule(): DataEnrichmentConnector {
         };
       }
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(
-        () => controller.abort(),
-        ENRICHMENT_CONFIG.CHAIN_TIMEOUT_MS,
-      );
-
       try {
-        // Manual redirect following with SSRF validation on each hop (Fix 1)
-        let currentUrl = url;
-        let response: Response | null = null;
+        return await metaParserPolicy.execute(async ({ signal }) => {
+          // Manual redirect following with SSRF validation on each hop (Fix 1)
+          let currentUrl = url;
+          let response: Response | null = null;
 
-        for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
-          response = await fetch(currentUrl, {
-            headers: { "User-Agent": "JobSync/1.0 (Link Preview)" },
-            signal: controller.signal,
-            redirect: "manual",
-          });
+          for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+            response = await fetch(currentUrl, {
+              headers: { "User-Agent": "JobSync/1.0 (Link Preview)" },
+              signal,
+              redirect: "manual",
+            });
 
-          // Handle redirects: validate the target URL before following
-          if (response.status >= 300 && response.status < 400) {
-            const location = response.headers.get("location");
-            if (!location) break;
+            // Handle redirects: validate the target URL before following
+            if (response.status >= 300 && response.status < 400) {
+              const location = response.headers.get("location");
+              if (!location) break;
 
-            // Resolve relative URLs against current URL
-            const resolvedUrl = new URL(location, currentUrl).toString();
+              // Resolve relative URLs against current URL
+              const resolvedUrl = new URL(location, currentUrl).toString();
 
-            // Validate redirect target against SSRF rules
-            if (!isValidExternalUrl(resolvedUrl)) {
-              return {
-                dimension: "deep_link",
-                status: "error",
-                data: {},
-                source: "meta_parser",
-                ttl: 0,
-              };
+              // Validate redirect target against SSRF rules
+              if (!isValidExternalUrl(resolvedUrl)) {
+                return {
+                  dimension: "deep_link" as const,
+                  status: "error" as const,
+                  data: {},
+                  source: "meta_parser",
+                  ttl: 0,
+                };
+              }
+
+              currentUrl = resolvedUrl;
+              continue;
             }
 
-            currentUrl = resolvedUrl;
-            continue;
+            break;
           }
 
-          break;
-        }
+          if (!response || !response.ok) {
+            return {
+              dimension: "deep_link" as const,
+              status: "not_found" as const,
+              data: {},
+              source: "meta_parser",
+              ttl: 0,
+            };
+          }
 
-        if (!response || !response.ok) {
+          // Read body incrementally to prevent memory DoS (Fix 2)
+          const truncatedHtml = await readBodyWithLimit(response);
+
+          const data = parseMetaTags(truncatedHtml);
+
+          if (!data.title && !data.description && !data.image) {
+            return {
+              dimension: "deep_link" as const,
+              status: "not_found" as const,
+              data: {},
+              source: "meta_parser",
+              ttl: 0,
+            };
+          }
+
           return {
-            dimension: "deep_link",
-            status: "not_found",
-            data: {},
+            dimension: "deep_link" as const,
+            status: "found" as const,
+            data: data as unknown as Record<string, unknown>,
             source: "meta_parser",
-            ttl: 0,
+            ttl: ENRICHMENT_CONFIG.DEEP_LINK_TTL_SECONDS,
           };
-        }
-
-        // Read body incrementally to prevent memory DoS (Fix 2)
-        const truncatedHtml = await readBodyWithLimit(response);
-
-        const data = parseMetaTags(truncatedHtml);
-
-        if (!data.title && !data.description && !data.image) {
-          return {
-            dimension: "deep_link",
-            status: "not_found",
-            data: {},
-            source: "meta_parser",
-            ttl: 0,
-          };
-        }
-
-        return {
-          dimension: "deep_link",
-          status: "found",
-          data: data as unknown as Record<string, unknown>,
-          source: "meta_parser",
-          ttl: ENRICHMENT_CONFIG.DEEP_LINK_TTL_SECONDS,
-        };
+        });
       } catch {
         return {
           dimension: "deep_link",
@@ -379,8 +376,6 @@ export function createMetaParserModule(): DataEnrichmentConnector {
           source: "meta_parser",
           ttl: 0,
         };
-      } finally {
-        clearTimeout(timeoutId);
       }
     },
   };

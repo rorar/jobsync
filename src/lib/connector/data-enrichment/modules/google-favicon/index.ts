@@ -14,6 +14,7 @@ import type {
   EnrichmentOutput,
 } from "../../types";
 import { ENRICHMENT_CONFIG } from "../../types";
+import { googleFaviconPolicy } from "./resilience";
 
 /**
  * Creates a Google Favicon enrichment connector.
@@ -38,35 +39,32 @@ export function createGoogleFaviconModule(): DataEnrichmentConnector {
       }
 
       const logoUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(
-        () => controller.abort(),
-        ENRICHMENT_CONFIG.MODULE_TIMEOUT_MS,
-      );
 
       try {
-        const response = await fetch(logoUrl, {
-          method: "HEAD",
-          signal: controller.signal,
-        });
+        return await googleFaviconPolicy.execute(async ({ signal }) => {
+          const response = await fetch(logoUrl, {
+            method: "HEAD",
+            signal,
+          });
 
-        if (response.ok) {
+          if (response.ok) {
+            return {
+              dimension: "logo" as const,
+              status: "found" as const,
+              data: { logoUrl, format: "png" },
+              source: "google_favicon",
+              ttl: ENRICHMENT_CONFIG.LOGO_TTL_SECONDS,
+            };
+          }
+
           return {
-            dimension: "logo",
-            status: "found",
-            data: { logoUrl, format: "png" },
+            dimension: "logo" as const,
+            status: "not_found" as const,
+            data: {},
             source: "google_favicon",
-            ttl: ENRICHMENT_CONFIG.LOGO_TTL_SECONDS,
+            ttl: 0,
           };
-        }
-
-        return {
-          dimension: "logo",
-          status: "not_found",
-          data: {},
-          source: "google_favicon",
-          ttl: 0,
-        };
+        });
       } catch {
         return {
           dimension: "logo",
@@ -75,8 +73,6 @@ export function createGoogleFaviconModule(): DataEnrichmentConnector {
           source: "google_favicon",
           ttl: 0,
         };
-      } finally {
-        clearTimeout(timeoutId);
       }
     },
   };

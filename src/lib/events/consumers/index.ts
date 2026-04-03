@@ -8,6 +8,7 @@
 import { registerAuditLogger } from "./audit-logger";
 import { registerNotificationDispatcher } from "./notification-dispatcher";
 import { registerDegradationCoordinator } from "./degradation-coordinator";
+import { registerEnrichmentTrigger } from "./enrichment-trigger";
 
 // Guard survives HMR via globalThis (same pattern as health-scheduler.ts, event-bus.ts)
 const g = globalThis as unknown as { __eventConsumersRegistered?: boolean };
@@ -24,6 +25,9 @@ export function registerEventConsumers(): void {
 
   // Degradation ↔ RunCoordinator bridge (A8: release locks on degradation)
   registerDegradationCoordinator();
+
+  // Data Enrichment triggers (spec: data-enrichment.allium, rules TriggerEnrichmentOnCompanyCreated, TriggerEnrichmentOnJobImported)
+  registerEnrichmentTrigger();
 
   console.debug("[EventBus] All consumers registered");
 }

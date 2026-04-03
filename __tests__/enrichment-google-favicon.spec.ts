@@ -9,6 +9,14 @@ import { createGoogleFaviconModule } from "@/lib/connector/data-enrichment/modul
 import { ENRICHMENT_CONFIG } from "@/lib/connector/data-enrichment/types";
 import type { EnrichmentInput } from "@/lib/connector/data-enrichment/types";
 
+// Mock the resilience policy to pass-through (unit tests focus on module logic, not Cockatiel)
+jest.mock("@/lib/connector/data-enrichment/modules/google-favicon/resilience", () => ({
+  googleFaviconPolicy: {
+    execute: <T>(fn: (ctx: { signal: AbortSignal }) => Promise<T>) =>
+      fn({ signal: new AbortController().signal }),
+  },
+}));
+
 const originalFetch = globalThis.fetch;
 
 beforeEach(() => {

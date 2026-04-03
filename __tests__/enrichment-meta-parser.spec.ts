@@ -11,6 +11,14 @@ import {
 } from "@/lib/connector/data-enrichment/modules/meta-parser";
 import { ENRICHMENT_CONFIG } from "@/lib/connector/data-enrichment/types";
 
+// Mock the resilience policy to pass-through (unit tests focus on module logic, not Cockatiel)
+jest.mock("@/lib/connector/data-enrichment/modules/meta-parser/resilience", () => ({
+  metaParserPolicy: {
+    execute: <T>(fn: (ctx: { signal: AbortSignal }) => Promise<T>) =>
+      fn({ signal: new AbortController().signal }),
+  },
+}));
+
 const originalFetch = globalThis.fetch;
 
 beforeEach(() => {

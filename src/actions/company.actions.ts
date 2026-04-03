@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 
 export const getCompanyList = async (
   page: number = 1,
@@ -142,6 +143,16 @@ export const addCompany = async (
         logoUrl,
       },
     });
+
+    // Emit domain event for automatic enrichment (spec: TriggerEnrichmentOnCompanyCreated)
+    emitEvent(
+      createEvent(DomainEventTypes.CompanyCreated, {
+        companyId: res.id,
+        companyName: company,
+        userId: user.id,
+      }),
+    );
+
     revalidatePath("/dashboard/myjobs", "page");
     return { success: true, data: res };
   } catch (error) {
