@@ -88,7 +88,7 @@ describe("Enrichment Actions", () => {
         id: "result-1",
         userId: "user-1",
         dimension: "logo",
-        domainKey: "acmecorp.com",
+        domainKey: "acme.com",
         companyId: null,
         status: "found",
         data: JSON.stringify({ logoUrl: "https://logo.clearbit.com/acme.com" }),

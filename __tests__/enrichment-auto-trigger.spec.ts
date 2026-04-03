@@ -76,11 +76,28 @@ async function flushPromises(): Promise<void> {
 
 describe("extractDomainFromCompanyName", () => {
   it("converts company name to domain", () => {
-    expect(extractDomainFromCompanyName("Acme Corp")).toBe("acmecorp.com");
+    expect(extractDomainFromCompanyName("Acme")).toBe("acme.com");
   });
 
-  it("handles company name with special characters", () => {
-    expect(extractDomainFromCompanyName("GitHub, Inc.")).toBe("githubinc.com");
+  it("strips legal suffix Corp before converting", () => {
+    expect(extractDomainFromCompanyName("Acme Corp")).toBe("acme.com");
+  });
+
+  it("strips legal suffix GmbH before converting", () => {
+    expect(extractDomainFromCompanyName("Siemens GmbH")).toBe("siemens.com");
+  });
+
+  it("strips legal suffix Inc. before converting", () => {
+    expect(extractDomainFromCompanyName("GitHub, Inc.")).toBe("github.com");
+  });
+
+  it("strips legal suffix AG before converting", () => {
+    expect(extractDomainFromCompanyName("SAP AG")).toBe("sap.com");
+  });
+
+  it("preserves input that already looks like a domain", () => {
+    expect(extractDomainFromCompanyName("acme.com")).toBe("acme.com");
+    expect(extractDomainFromCompanyName("Acme.DE")).toBe("acme.de");
   });
 
   it("returns null for empty string", () => {
@@ -97,6 +114,10 @@ describe("extractDomainFromCompanyName", () => {
 
   it("returns null for name that reduces to single char after cleaning", () => {
     expect(extractDomainFromCompanyName("- -")).toBeNull();
+  });
+
+  it("returns null for name that is only a legal suffix", () => {
+    expect(extractDomainFromCompanyName("GmbH")).toBeNull();
   });
 });
 
@@ -131,7 +152,7 @@ describe("EnrichmentTrigger — CompanyCreated", () => {
       "user-1",
       {
         dimension: "logo",
-        companyDomain: "acmecorp.com",
+        companyDomain: "acme.com",
         companyName: "Acme Corp",
       },
       logoChain,
@@ -162,7 +183,7 @@ describe("EnrichmentTrigger — CompanyCreated", () => {
       where: {
         userId: "user-1",
         dimension: "logo",
-        domainKey: "acmecorp.com",
+        domainKey: "acme.com",
         companyId: null,
       },
       data: { companyId: "company-1" },
@@ -338,7 +359,7 @@ describe("EnrichmentTrigger — VacancyPromoted", () => {
     expect(mockOrchestrator.execute).toHaveBeenCalledTimes(2);
     expect(mockOrchestrator.execute).toHaveBeenCalledWith(
       "user-1",
-      expect.objectContaining({ dimension: "logo", companyDomain: "acmecorp.com" }),
+      expect.objectContaining({ dimension: "logo", companyDomain: "acme.com" }),
       logoChain,
     );
     expect(mockOrchestrator.execute).toHaveBeenCalledWith(
@@ -484,7 +505,7 @@ describe("EnrichmentTrigger — VacancyPromoted", () => {
       where: {
         userId: "user-1",
         dimension: "logo",
-        domainKey: "acmecorp.com",
+        domainKey: "acme.com",
         companyId: null,
       },
       data: { companyId: "company-1" },

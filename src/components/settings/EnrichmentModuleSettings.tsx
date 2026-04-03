@@ -10,6 +10,16 @@ import {
 } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Switch } from "../ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { Loader2, Database } from "lucide-react";
 import {
   getModuleManifests,
@@ -42,11 +52,20 @@ const DIMENSION_KEYS: Record<string, TranslationKey> = {
   deep_link: "enrichment.dimension.deep_link",
 };
 
+/** i18n health status keys */
+const HEALTH_STATUS_KEYS: Record<string, TranslationKey> = {
+  healthy: "enrichment.health.healthy",
+  degraded: "enrichment.health.degraded",
+  unreachable: "enrichment.health.unreachable",
+  unknown: "enrichment.health.unknown",
+};
+
 function EnrichmentModuleSettings() {
   const { t } = useTranslations();
   const [modules, setModules] = useState<ModuleManifestSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [moduleToDeactivate, setModuleToDeactivate] = useState<ModuleManifestSummary | null>(null);
 
   useEffect(() => {
     const fetchModules = async () => {
@@ -68,59 +87,82 @@ function EnrichmentModuleSettings() {
   }, []);
 
   const handleToggleStatus = async (module: ModuleManifestSummary) => {
+    // Show confirmation dialog for deactivation
+    if (module.status === "active") {
+      setModuleToDeactivate(module);
+      return;
+    }
+
+    // Activate immediately (no confirmation needed)
+    await doActivate(module);
+  };
+
+  const doDeactivate = async (module: ModuleManifestSummary) => {
     setToggling(module.moduleId);
     try {
-      if (module.status === "active") {
-        const result = await deactivateModule(module.moduleId);
-        if (result.success && result.data) {
-          setModules((prev) =>
-            prev.map((m) =>
-              m.moduleId === module.moduleId
-                ? { ...m, status: "inactive" }
-                : m,
-            ),
-          );
-          const paused = result.data.pausedAutomations;
-          toast({
-            variant: "default",
-            title: `${getModuleName(module)} — ${t("settings.moduleInactive")}`,
-            description:
-              paused > 0
-                ? `${t("settings.moduleDeactivated")} ${t("settings.automationsPaused").replace("{count}", String(paused))}`
-                : t("settings.moduleDeactivated"),
-          });
-        } else {
-          toast({
-            variant: "destructive",
-            title: t("settings.error"),
-            description: result.message || t("settings.unexpectedError"),
-          });
-        }
+      const result = await deactivateModule(module.moduleId);
+      if (result.success && result.data) {
+        setModules((prev) =>
+          prev.map((m) =>
+            m.moduleId === module.moduleId
+              ? { ...m, status: "inactive" }
+              : m,
+          ),
+        );
+        const paused = result.data.pausedAutomations;
+        toast({
+          variant: "default",
+          title: `${getModuleName(module)} — ${t("settings.moduleInactive")}`,
+          description:
+            paused > 0
+              ? `${t("settings.moduleDeactivated")} ${t("settings.automationsPaused").replace("{count}", String(paused))}`
+              : t("settings.moduleDeactivated"),
+        });
       } else {
-        const result = await activateModule(module.moduleId);
-        if (result.success) {
-          setModules((prev) =>
-            prev.map((m) =>
-              m.moduleId === module.moduleId
-                ? { ...m, status: "active" }
-                : m,
-            ),
-          );
-          toast({
-            variant: "success",
-            title: `${getModuleName(module)} — ${t("settings.moduleActive")}`,
-            description: t("settings.moduleActivated"),
-          });
-        } else {
-          toast({
-            variant: "destructive",
-            title: t("settings.error"),
-            description: result.message || t("settings.unexpectedError"),
-          });
-        }
+        toast({
+          variant: "destructive",
+          title: t("settings.error"),
+          description: result.message || t("settings.unexpectedError"),
+        });
       }
     } catch (error) {
-      console.error("Error toggling module status:", error);
+      console.error("Error deactivating module:", error);
+      toast({
+        variant: "destructive",
+        title: t("settings.error"),
+        description: t("settings.unexpectedError"),
+      });
+    } finally {
+      setToggling(null);
+    }
+  };
+
+  const doActivate = async (module: ModuleManifestSummary) => {
+    setToggling(module.moduleId);
+    try {
+      const result = await activateModule(module.moduleId);
+      if (result.success) {
+        setModules((prev) =>
+          prev.map((m) =>
+            m.moduleId === module.moduleId
+              ? { ...m, status: "active" }
+              : m,
+          ),
+        );
+        toast({
+          variant: "success",
+          title: `${getModuleName(module)} — ${t("settings.moduleActive")}`,
+          description: t("settings.moduleActivated"),
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: t("settings.error"),
+          description: result.message || t("settings.unexpectedError"),
+        });
+      }
+    } catch (error) {
+      console.error("Error activating module:", error);
       toast({
         variant: "destructive",
         title: t("settings.error"),
@@ -152,7 +194,7 @@ function EnrichmentModuleSettings() {
             {t("enrichment.modulesDescription")}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" role="status" aria-live="polite">
           <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
           <span>{t("enrichment.loadingModules")}</span>
         </div>
@@ -218,8 +260,13 @@ function EnrichmentModuleSettings() {
                                   ? "bg-red-500"
                                   : "bg-gray-400"
                           }`}
-                          title={module.healthStatus}
-                        />
+                          role="img"
+                          aria-label={t(HEALTH_STATUS_KEYS[module.healthStatus] ?? "enrichment.health.unknown")}
+                        >
+                          <span className="sr-only">
+                            {t(HEALTH_STATUS_KEYS[module.healthStatus] ?? "enrichment.health.unknown")}
+                          </span>
+                        </span>
                         <span
                           className={`text-xs font-medium ${
                             module.status === "active"
@@ -253,6 +300,34 @@ function EnrichmentModuleSettings() {
           })}
         </div>
       )}
+
+      {/* Deactivation confirmation dialog */}
+      <AlertDialog
+        open={!!moduleToDeactivate}
+        onOpenChange={(open) => !open && setModuleToDeactivate(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("enrichment.deactivateConfirmTitle")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("enrichment.deactivateConfirmDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (moduleToDeactivate) doDeactivate(moduleToDeactivate);
+                setModuleToDeactivate(null);
+              }}
+            >
+              {t("enrichment.deactivateConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

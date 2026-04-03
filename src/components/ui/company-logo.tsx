@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/i18n";
 
@@ -51,6 +51,11 @@ export function CompanyLogo({
   const [imageState, setImageState] = useState<
     "loading" | "loaded" | "error"
   >(logoUrl ? "loading" : "error");
+
+  // Reset imageState when logoUrl prop changes (e.g., after enrichment writeback)
+  useEffect(() => {
+    setImageState(logoUrl ? "loading" : "error");
+  }, [logoUrl]);
 
   const sizeConfig = SIZE_MAP[size];
   const initials = getInitials(companyName);

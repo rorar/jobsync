@@ -16,6 +16,7 @@ import {
   type EnrichmentDimension,
   type EnrichmentResult,
 } from "@/lib/connector/data-enrichment/types";
+import { applyLogoWriteback } from "@/lib/connector/data-enrichment/logo-writeback";
 
 /** Per-user enrichment rate limit: 10 requests per minute */
 const ENRICHMENT_RATE_LIMIT = 10;
@@ -99,7 +100,7 @@ export async function triggerEnrichment(
       // Build enrichment input from company data
       const input = {
         dimension,
-        companyDomain: extractDomain(company.label),
+        companyDomain: extractDomain(company.label) ?? undefined,
         companyName: company.label,
       };
 
@@ -131,19 +132,9 @@ export async function triggerEnrichment(
         });
       }
 
-      // Logo writeback: update Company.logoUrl when logo enrichment succeeds
-      // Only write if Company.logoUrl is currently null (don't override manual uploads)
-      if (dimension === "logo" && output.status === "found") {
-        const logoData = typeof output.data === "string"
-          ? JSON.parse(output.data) as Record<string, unknown>
-          : output.data as Record<string, unknown>;
-        const logoUrl = logoData?.logoUrl as string | undefined;
-        if (logoUrl) {
-          await db.company.updateMany({
-            where: { id: companyId, createdBy: user.id, logoUrl: null },
-            data: { logoUrl },
-          });
-        }
+      // Logo writeback: shared helper updates Company.logoUrl if currently null
+      if (dimension === "logo") {
+        await applyLogoWriteback(db, user.id, companyId, output);
       }
 
       revalidatePath("/jobs");
@@ -299,19 +290,9 @@ export async function refreshEnrichment(
         return { success: false, message: "enrichment.persistFailed" };
       }
 
-      // Logo writeback on refresh: update Company.logoUrl if linked to a company
-      // Only write if Company.logoUrl is currently null (don't override manual uploads)
-      if (dimension === "logo" && output.status === "found" && refreshed.companyId) {
-        const logoData = typeof output.data === "string"
-          ? JSON.parse(output.data) as Record<string, unknown>
-          : output.data as Record<string, unknown>;
-        const logoUrl = logoData?.logoUrl as string | undefined;
-        if (logoUrl) {
-          await db.company.updateMany({
-            where: { id: refreshed.companyId, createdBy: user.id, logoUrl: null },
-            data: { logoUrl },
-          });
-        }
+      // Logo writeback on refresh: shared helper updates Company.logoUrl if currently null
+      if (dimension === "logo" && refreshed.companyId) {
+        await applyLogoWriteback(db, user.id, refreshed.companyId, output);
       }
 
       revalidatePath("/jobs");
@@ -326,12 +307,30 @@ export async function refreshEnrichment(
 
 /**
  * Extract a domain from a company name.
- * Simple heuristic: lowercase, remove spaces, append ".com".
- * In practice, modules handle domain resolution themselves.
+ *
+ * Strategy:
+ * 1. If input already looks like a domain (contains dot, no spaces), use as-is.
+ * 2. Otherwise strip common legal suffixes, lowercase, remove non-alphanumeric,
+ *    and append ".com".
+ * 3. Return null for names that can't be reasonably converted.
  */
-function extractDomain(companyName: string): string {
-  return companyName
+function extractDomain(companyName: string): string | null {
+  const trimmed = companyName.trim();
+  if (!trimmed || trimmed.length < 2) return null;
+
+  // If it already looks like a domain (e.g. "acme.com")
+  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+
+  // Strip common legal suffixes before converting to domain
+  const cleaned = trimmed
+    .replace(/\b(AG|GmbH|Inc\.?|Ltd\.?|SE|SA|SAS|Corp\.?|LLC|PLC|NV|BV)\b/gi, "")
+    .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, "")
-    .concat(".com");
+    .replace(/[^a-z0-9]/g, "");
+
+  if (!cleaned || cleaned.length < 2) return null;
+
+  return `${cleaned}.com`;
 }

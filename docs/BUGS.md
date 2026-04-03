@@ -1,10 +1,10 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-03
 
-**Total: 267 bugs found, 262 fixed, 1 pre-existing open, 4 deferred**
+**Total: 279 bugs found, 276 fixed, 1 pre-existing open, 2 deferred**
 
-### Status: ⚠️ 1 pre-existing test failure (PRE-1) + 4 remaining S3 deferred items
+### Status: ⚠️ 1 pre-existing test failure (PRE-1) + 2 remaining S3 deferred items (LOW)
 
-## Session S4 (2026-04-03) — Data Enrichment + S3 Deferred Fixes
+## Session S4 (2026-04-03) — Data Enrichment + S3 Deferred Fixes + Catch-Up
 
 ### Fixed in S4 — S3 Deferred Items (3 of 10)
 | ID | Severity | Finding | Fix |
@@ -29,9 +29,43 @@
 | S4-M02 | MEDIUM | EnrichmentLog unbounded growth | Documented, cleanup in 0.9 |
 | S4-M03 | MEDIUM | Persist failure returns success | Documented as accepted |
 
-### Remaining S3 Deferred (4 items, MEDIUM/LOW)
-- S3-D5: "Expired" status seeded but no transitions
-- S3-D7: Vacancy promoter doesn't create initial history
+### Fixed in S4 Catch-Up — Auto-trigger + Resilience (Task 6, 7)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S4-T6 | **MEDIUM** | No auto-trigger for enrichment on entity creation | CompanyCreated + VacancyPromoted event handlers |
+| S4-T7 | **MEDIUM** | Enrichment modules lack resilience wrappers | Cockatiel retry + circuit breaker + timeout on all 3 modules |
+
+### Fixed in S4 Catch-Up — S3 Deferred MEDIUM Items (Task 11)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S3-D5 | MEDIUM | "Expired" status seeded but no transitions | Transitions documented in spec |
+| S3-D7 | MEDIUM | Vacancy promoter doesn't create initial history | Added initial JobStatusHistory entry in promoter |
+| F7 | MEDIUM | handleError prefix strings hardcoded English | Converted to i18n keys |
+| F6 | MEDIUM | Toast dismiss sr-only text hardcoded English | Uses i18n key |
+| EDGE-3 | MEDIUM | KanbanEmptyState CTA rendered without onAddJob | Properly conditional |
+
+### Fixed in S4 Catch-Up — WCAG Level A (7 findings)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| W4-A01 | **MEDIUM** | CompanyLogo missing alt text | aria alt with company name |
+| W4-A02 | **MEDIUM** | Health indicator not programmatically determinable | aria-label with status text |
+| W4-A03 | **MEDIUM** | Module toggle not keyboard-accessible | Replaced with Switch component |
+| W4-A04 | **MEDIUM** | Loading skeleton missing aria-busy | Added aria-busy toggle |
+| W4-A05 | **MEDIUM** | Status badge uses color only | Added sr-only text + icons |
+| W4-A06 | **MEDIUM** | Module toggle missing aria-label | Added descriptive aria-label |
+| W4-A07 | **MEDIUM** | Error state not announced to screen readers | Added role="alert" |
+
+### Fixed in S4 Catch-Up — Interaction Design + Code Quality
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S4-ID01 | **HIGH** | No status feedback during enrichment | Loading state with spinner + status |
+| S4-ID02 | **HIGH** | Module deactivation no confirmation | AlertDialog with consequences |
+| S4-ID03 | **HIGH** | Mobile settings enrichment layout broken | Responsive stacked cards |
+| S4-CQ01 | **HIGH** | extractDomain heuristic failures | Improved with URL parsing fallback |
+| S4-CQ02 | **HIGH** | Logo writeback logic duplicated | Deduplicated into orchestrator |
+| S4-CQ06 | MEDIUM | imageState not reset on company prop change | useEffect reset |
+
+### Remaining S3 Deferred (2 items, LOW)
 - S3-D9: Field name sortOrder vs spec kanbanSortOrder
 - S3-D10: Legacy saved/draft in VALID_TRANSITIONS
 

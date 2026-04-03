@@ -40,6 +40,15 @@ jest.mock("@/i18n", () => ({
         "settings.automationsPaused": "{count} automation(s) paused.",
         "settings.error": "Error",
         "settings.unexpectedError": "An unexpected error occurred",
+        "enrichment.health.healthy": "Healthy",
+        "enrichment.health.degraded": "Degraded",
+        "enrichment.health.unreachable": "Unreachable",
+        "enrichment.health.unknown": "Unknown",
+        "enrichment.deactivateConfirmTitle": "Deactivate module?",
+        "enrichment.deactivateConfirmDescription": "Deactivating this module will pause all automations that depend on it.",
+        "enrichment.deactivateConfirm": "Deactivate",
+        "common.cancel": "Cancel",
+        "enrichment.toggleModule": "Toggle {name} module",
       };
       return dict[key] ?? key;
     },
@@ -245,7 +254,7 @@ describe("EnrichmentModuleSettings", () => {
     });
   });
 
-  it("calls deactivateModule when toggling active module off", async () => {
+  it("calls deactivateModule after confirmation when toggling active module off", async () => {
     mockGetModuleManifests.mockResolvedValue({
       success: true,
       data: [mockModules[0]], // clearbit (active)
@@ -261,8 +270,21 @@ describe("EnrichmentModuleSettings", () => {
       expect(screen.getByText("Clearbit Logo")).toBeInTheDocument();
     });
 
+    // Click the toggle -- should open the confirmation dialog
     const toggle = screen.getByRole("switch");
     fireEvent.click(toggle);
+
+    // Confirmation dialog should appear
+    await waitFor(() => {
+      expect(screen.getByText("Deactivate module?")).toBeInTheDocument();
+    });
+
+    // deactivateModule should NOT have been called yet
+    expect(mockDeactivateModule).not.toHaveBeenCalled();
+
+    // Click the confirm button in the dialog
+    const confirmBtn = screen.getByRole("button", { name: "Deactivate" });
+    fireEvent.click(confirmBtn);
 
     await waitFor(() => {
       expect(mockDeactivateModule).toHaveBeenCalledWith("clearbit");

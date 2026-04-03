@@ -22,23 +22,37 @@ import {
   enrichmentOrchestrator,
   getChainForDimension,
 } from "@/lib/connector/data-enrichment/orchestrator";
+import { applyLogoWriteback } from "@/lib/connector/data-enrichment/logo-writeback";
 import db from "@/lib/db";
 
 /**
  * Extract a plausible domain from a company name.
- * Simple heuristic: lowercase, remove non-alphanumeric chars, append ".com".
- * Returns null for very short names (likely not domain-like).
+ *
+ * Strategy:
+ * 1. If input already looks like a domain (contains dot, no spaces), use as-is.
+ * 2. Otherwise strip common legal suffixes, lowercase, remove non-alphanumeric,
+ *    and append ".com".
+ * 3. Return null for names that can't be reasonably converted.
  */
 export function extractDomainFromCompanyName(companyName: string): string | null {
-  if (!companyName || companyName.trim().length < 2) return null;
+  const trimmed = companyName?.trim();
+  if (!trimmed || trimmed.length < 2) return null;
 
-  const cleaned = companyName
+  // If it already looks like a domain (e.g. "acme.com")
+  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+
+  // Strip common legal suffixes before converting to domain
+  const cleaned = trimmed
+    .replace(/\b(AG|GmbH|Inc\.?|Ltd\.?|SE|SA|SAS|Corp\.?|LLC|PLC|NV|BV)\b/gi, "")
+    .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
 
-  if (cleaned.length < 2) return null;
+  if (!cleaned || cleaned.length < 2) return null;
 
-  return cleaned.concat(".com");
+  return `${cleaned}.com`;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,21 +103,8 @@ async function handleCompanyCreated(
             data: { companyId: payload.companyId },
           });
 
-          // Logo writeback: update Company.logoUrl if currently null
-          const logoData = typeof output.data === "string"
-            ? JSON.parse(output.data) as Record<string, unknown>
-            : output.data as Record<string, unknown>;
-          const logoUrl = logoData?.logoUrl as string | undefined;
-          if (logoUrl) {
-            await db.company.updateMany({
-              where: {
-                id: payload.companyId,
-                createdBy: payload.userId,
-                logoUrl: null,
-              },
-              data: { logoUrl },
-            });
-          }
+          // Logo writeback via shared helper
+          await applyLogoWriteback(db, payload.userId, payload.companyId, output);
         } catch {
           // Best-effort link — do not break on failure
         }
@@ -172,21 +173,8 @@ async function handleVacancyPromoted(
                   data: { companyId: job!.Company.id },
                 });
 
-                // Logo writeback
-                const logoData = typeof output.data === "string"
-                  ? JSON.parse(output.data) as Record<string, unknown>
-                  : output.data as Record<string, unknown>;
-                const logoUrl = logoData?.logoUrl as string | undefined;
-                if (logoUrl) {
-                  await db.company.updateMany({
-                    where: {
-                      id: job!.Company!.id,
-                      createdBy: payload.userId,
-                      logoUrl: null,
-                    },
-                    data: { logoUrl },
-                  });
-                }
+                // Logo writeback via shared helper
+                await applyLogoWriteback(db, payload.userId, job!.Company.id, output);
               } catch {
                 // Best-effort
               }

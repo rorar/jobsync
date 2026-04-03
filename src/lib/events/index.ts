@@ -31,6 +31,7 @@ export type {
   AutomationRunCompletedPayload,
   AutomationDegradedPayload,
   JobStatusChangedPayload,
+  CompanyCreatedPayload,
   EnrichmentCompletedPayload,
   EnrichmentFailedPayload,
 } from "./event-types";

@@ -31,6 +31,21 @@
 - **HIGH:** Orchestrator not using globalThis → HMR-safe singleton pattern
 - **HIGH:** Missing DEGRADED health check → skip degraded + unreachable modules
 
+### Catch-Up (S4 continued)
+- feat: Auto-trigger enrichment on CompanyCreated + VacancyPromoted events
+- feat: Cockatiel resilience wrappers for all enrichment modules
+- fix: S3 deferred MEDIUM items (F7 i18n, F6 toast, EDGE-3 CTA, D5 expired, D7 promoter)
+- fix: WCAG Level A findings (health indicator, loading states, imageState reset)
+- fix: Interaction design findings (status feedback, deactivation dialog, mobile settings)
+- fix: extractDomain improved heuristic
+- fix: Logo writeback logic deduplicated
+
+### Documentation
+- `docs/reviews/s4/consolidated-report.md` -- 62 findings across 6 dimensions
+- `docs/reviews/s4/wcag-audit.md` -- 12 WCAG 2.2 findings (7 Level A fixed)
+- `docs/reviews/s4/blind-spot-analysis.md` -- 17 findings (failure modes, boundaries, data integrity)
+- `docs/adr/ADR-025-data-enrichment-connector.md` -- Data Enrichment Connector Architecture decision
+
 ### Testing
 - 121 new tests across 8 suites (modules, orchestrator, actions, components)
 - Total: 138 suites, 2569 tests passing
