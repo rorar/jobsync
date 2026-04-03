@@ -169,8 +169,9 @@ source scripts/env.sh && bun run build  # Build prüfen
    - Bei widersprüchlichen Findings: `Skill("agent-teams:parallel-debugging")` für konkurrierende Untersuchungen
    - Wenn ein Finding als "nicht fixbar" oder "accepted debt" eingestuft wird, MUSS das explizit kommuniziert werden mit Begründung. Stillschweigendes Weglassen ist VERBOTEN.
 
-5. UX 10-Punkte-Checkliste für alle neuen Komponenten
-6. Cross-Dependency Check: Sind die Hooks für D2 (E-Mail) und D3 (Push) vorbereitet? Ist die Channel-Abstraktion erweiterbar?
+5. **Flashlight-Analyse (Learning aus S2):** Nach jedem scoped Fix, frage: "Dieses Problem wurde in Scope X gefixt — existiert es auch in Y, Z?" Verwende `grep` um Patterns project-wide zu verifizieren (z.B. fehlende SSRF-Validation in anderen URL-Feldern, fehlende Rate-Limits in anderen Server Actions).
+6. UX 10-Punkte-Checkliste für alle neuen Komponenten
+7. Cross-Dependency Check: Sind die Hooks für D2 (E-Mail) und D3 (Push) vorbereitet? Ist die Channel-Abstraktion erweiterbar?
 
 ### ACT-Phase
 
