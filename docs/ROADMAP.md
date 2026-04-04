@@ -1642,6 +1642,71 @@ JobSync exponiert eine stabile REST API für externe Tools (n8n, Webhooks, Custo
 
 > **Hinweis:** Diese Features betreffen nur die Entwicklung, nicht den End-User. Sie werden nicht im Docker-Image ausgeliefert und sind im Projekt unter `tools/` separiert.
 
+### 8.0 Teststrategie-Redesign (PRIORITÄT)
+Vollständiges Redesign der Teststrategie nach ISTQB-Foundation-Prinzipien. Ziel: Weniger E2E Tests, mehr Property-Based und Integrationstests, schnelleres Feedback, bessere Defekt-Lokalisierung.
+
+**Ist-Zustand:**
+- 2606+ Unit/Component Tests (Jest + Testing Library)
+- 79+ E2E Tests (Playwright + Chromium)
+- 8 axe-core Accessibility Tests
+- E2E Tests sind langsam (~3-5 Min), flaky (ECONNRESET-History), resource-intensiv (Chromium)
+- Keine Property-Based Tests, keine Integrationstests mit echtem DB-Layer
+
+**Neue Test-Pyramide (ISTQB-orientiert):**
+
+| Ebene | Tool | Was | Ziel-Anteil |
+|-------|------|-----|-------------|
+| **Property-Based** | `fast-check` | Äquivalenzklassen, Grenzwertanalyse, Invarianten (z.B. State Machine Transitions, ActionResult Contracts, i18n Key-Completeness) | ~15% |
+| **Unit** | Jest + Testing Library | Reine Funktionen, Hooks, Utilities, Formatters — bestehende Tests bleiben | ~40% |
+| **Integration** | Jest + `testcontainers` | Server Actions gegen echte SQLite-DB (nicht gemockt), Prisma Queries, IDOR-Ownership, Cascade Deletes | ~25% |
+| **Schnittstelle (Contract)** | Jest + Supertest/MSW | API v1 Endpoints, Webhook HMAC-Verification, SSE Contracts, Server Action Request/Response Shapes | ~10% |
+| **E2E (Smoke)** | Playwright | NUR kritische User Flows (~15-20 Tests): Login, Job CRUD, Automation Wizard, Kanban DnD, Staging Promotion | ~10% |
+
+**Property-Based Testing mit fast-check:**
+- **Äquivalenzklassen:** State Machine (alle validen Transitions), ActionResult (success/error Shapes), NotificationType (alle Enum-Werte dispatchen)
+- **Grenzwertanalyse:** Pagination (0, 1, MAX_INT), String-Lengths (0, 500 Limit, 501), Dates (past, now, future)
+- **Invarianten:** "Jeder Job hat genau einen Status", "Jede Prisma Query enthält userId", "Jedes i18n Key existiert in allen 4 Locales"
+- **Shrinking:** fast-check findet das minimale Gegenbeispiel automatisch
+
+**Integrationstests mit testcontainers:**
+- SQLite-Container pro Test-Suite (isolated, reproducible)
+- Prisma Migrations laufen im Container
+- Testen gegen echte DB statt Prisma Mocks → fängt Migration-Bugs, Query-Fehler, IDOR-Violations
+- Seed-Data per Fixture (bestehende `testFixtures.ts` adaptieren)
+
+**Schnittstellentests (Contract Tests):**
+- API v1: Request/Response Shape Validation gegen Zod Schemas
+- Webhook: HMAC-Signature Verification, Retry-Behavior, Event-Filtering
+- SSE: Event-Format, Connection-Lifecycle
+- Server Actions: ActionResult<T> Contract (success hat data, error hat message)
+
+**E2E Reduktion:**
+- Aktuelle 79+ E2E → ~15-20 kritische Smoke Tests
+- Kriterium: Nur Tests die MEHRERE Schichten durchqueren UND nicht durch niedrigere Ebenen abdeckbar sind
+- Kandidaten: Login Flow, Job Create→Edit→Delete, Automation Wizard→Run→Status, Kanban DnD→Status Change, Staging→Promote→Job
+
+**Migration (Strangler Fig):**
+- Phase 1: fast-check + testcontainers Setup, erste Property-Tests für State Machine + ActionResult
+- Phase 2: Integrationstests für Server Actions (ersetzen gemockte Prisma-Tests)
+- Phase 3: Contract Tests für API v1 + Webhook
+- Phase 4: E2E Reduktion — Tests die durch Integration/Contract abgedeckt sind entfernen
+- Bestehende Tests bleiben bis Ersatz nachweislich funktioniert (kein "erst löschen, dann neu schreiben")
+
+**Dokumentation + GitHub-Kommunikation:**
+- `docs/testing-strategy.md` — vollständige Teststrategie mit ISTQB-Referenzen
+- ADR für die Entscheidung (warum Property-Based, warum testcontainers, warum E2E-Reduktion)
+- `CONTRIBUTING.md` Update — welche Test-Ebene für welchen Code-Typ
+- GitHub Issue/Discussion — Kommunikation an Entwickler mit Rationale und Migrationsplan
+
+**Discovery mit spezialisierten Skills:**
+- `/tdd-workflows:tdd-cycle` für die Migrations-Strategie
+- `/backend-development:test-automator` für Integrationstests
+- `/developer-essentials:e2e-testing-patterns` für E2E-Reduktions-Kriterien
+- `/allium:propagate` für Generierung von Property-Tests aus Allium Specs (21 Specs → Test-Obligations)
+- `/documentation-generation:architecture-decision-records` für Test-ADR
+
+**Cross-Ref:** Allium Specs (→ propagate für Test-Generierung), CLAUDE.md Testing Requirements, e2e/CONVENTIONS.md, CI/CD Pipeline
+
 ### 8.1 Automatische Screenshot/GIF/Video-Dokumentation
 - Playwright-basiertes Capture-Script (`tools/capture-docs/`) für automatische Erstellung von Screenshots, GIFs und Videos der wichtigsten UI-Flows
 - **Ziel:** README.md und Docs bleiben bei UI-Änderungen automatisch aktuell
