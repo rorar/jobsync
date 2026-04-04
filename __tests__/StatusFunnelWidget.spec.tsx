@@ -336,6 +336,44 @@ describe("StatusFunnelWidget", () => {
     });
   });
 
+  describe("Exception handling", () => {
+    it("shows error state when getStatusDistribution throws an exception", async () => {
+      mockGetStatusDistribution.mockRejectedValue(new Error("Network error"));
+
+      render(<StatusFunnelWidget />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to fetch status distribution"),
+        ).toBeInTheDocument();
+      });
+
+      expect(screen.getByText("Retry")).toBeInTheDocument();
+    });
+
+    it("recovers from exception when retry is clicked", async () => {
+      mockGetStatusDistribution
+        .mockRejectedValueOnce(new Error("Network error"))
+        .mockResolvedValueOnce({
+          success: true,
+          data: makeDistribution(),
+        });
+
+      render(<StatusFunnelWidget />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Retry")).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText("Retry"));
+
+      await waitFor(() => {
+        expect(screen.getByText("Bookmarked")).toBeInTheDocument();
+      });
+      expect(mockGetStatusDistribution).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe("Biggest drop-off highlighting", () => {
     it("highlights the stage with the largest drop-off", async () => {
       // Biggest drop: bookmarked(80) -> applied(10) = 70 drop

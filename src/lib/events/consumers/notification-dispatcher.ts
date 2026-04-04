@@ -30,6 +30,7 @@ import type { NotificationPreferences } from "@/models/notification.model";
 import type { UserSettingsData } from "@/models/userSettings.model";
 import { channelRouter } from "@/lib/notifications/channel-router";
 import { InAppChannel } from "@/lib/notifications/channels/in-app.channel";
+import { WebhookChannel } from "@/lib/notifications/channels/webhook.channel";
 import type { NotificationDraft } from "@/lib/notifications/types";
 
 // ---------------------------------------------------------------------------
@@ -39,6 +40,7 @@ import type { NotificationDraft } from "@/lib/notifications/types";
 // Register channels on first import. The channelRouter is a globalThis singleton,
 // so duplicate registration is guarded internally.
 channelRouter.register(new InAppChannel());
+channelRouter.register(new WebhookChannel());
 
 // ---------------------------------------------------------------------------
 // VacancyStaged batch buffer (spec: rule BatchSummary)

@@ -15,9 +15,10 @@ jest.mock("server-only", () => ({}));
 // ---------------------------------------------------------------------------
 
 const mockFindMany = jest.fn();
-const mockUpdate = jest.fn().mockResolvedValue({});
+const mockUpdate = jest.fn().mockResolvedValue({ failureCount: 1 });
 const mockCount = jest.fn();
 const mockNotificationCreate = jest.fn().mockResolvedValue({ id: "notif-1" });
+const mockUserSettingsFindUnique = jest.fn().mockResolvedValue(null);
 
 jest.mock("@/lib/db", () => ({
   __esModule: true,
@@ -30,6 +31,9 @@ jest.mock("@/lib/db", () => ({
     notification: {
       create: (...args: unknown[]) => mockNotificationCreate(...args),
     },
+    userSettings: {
+      findUnique: (...args: unknown[]) => mockUserSettingsFindUnique(...args),
+    },
   },
 }));
 
@@ -39,6 +43,20 @@ jest.mock("@/lib/db", () => ({
 
 jest.mock("@/lib/encryption", () => ({
   decrypt: jest.fn((_encrypted: string, _iv: string) => "test-secret-key"),
+}));
+
+// ---------------------------------------------------------------------------
+// i18n dictionaries mock
+// ---------------------------------------------------------------------------
+
+jest.mock("@/i18n/dictionaries", () => ({
+  t: jest.fn((_locale: string, key: string) => {
+    const translations: Record<string, string> = {
+      "webhook.deliveryFailed": 'Webhook delivery failed for event "{eventType}" to {url}',
+      "webhook.endpointDeactivated": "Webhook endpoint {url} deactivated due to repeated failures",
+    };
+    return translations[key] ?? key;
+  }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -282,8 +300,9 @@ describe("WebhookChannel", () => {
 
       await channel.dispatch(makeDraft(), TEST_USER_ID);
 
+      // H3: userId must be in where clause (IDOR protection)
       expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: "ep-1" },
+        where: { id: "ep-1", userId: TEST_USER_ID },
         data: { failureCount: 0 },
       });
     });
@@ -390,16 +409,20 @@ describe("WebhookChannel", () => {
       });
     });
 
-    it("increments failureCount after all retries exhausted", async () => {
+    it("uses atomic increment for failureCount after all retries exhausted", async () => {
       const endpoint = makeEndpoint({ failureCount: 2 });
       mockFindMany.mockResolvedValue([endpoint]);
+      mockUpdate.mockResolvedValue({ failureCount: 3 });
       getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
       await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
 
+      // M3: atomic increment instead of read-then-write
+      // H3: userId must be in where clause
       expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: "ep-1" },
-        data: { failureCount: 3 },
+        where: { id: "ep-1", userId: TEST_USER_ID },
+        data: { failureCount: { increment: 1 } },
+        select: { failureCount: true },
       });
     });
 
@@ -413,19 +436,22 @@ describe("WebhookChannel", () => {
     it("deactivates endpoint after 5 consecutive failures", async () => {
       const endpoint = makeEndpoint({ failureCount: 4 }); // will become 5
       mockFindMany.mockResolvedValue([endpoint]);
+      // M3: atomic increment returns the updated failureCount
+      mockUpdate.mockResolvedValueOnce({ failureCount: 5 }).mockResolvedValue({});
       getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
       await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
 
-      // First update: increment failureCount to 5
+      // First update: atomic increment (M3 + H3)
       expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: "ep-1" },
-        data: { failureCount: 5 },
+        where: { id: "ep-1", userId: TEST_USER_ID },
+        data: { failureCount: { increment: 1 } },
+        select: { failureCount: true },
       });
 
-      // Second update: deactivate
+      // Second update: deactivate (H3: userId in where)
       expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: "ep-1" },
+        where: { id: "ep-1", userId: TEST_USER_ID },
         data: { active: false },
       });
     });
@@ -433,11 +459,13 @@ describe("WebhookChannel", () => {
     it("creates deactivation notification when endpoint is deactivated", async () => {
       const endpoint = makeEndpoint({ failureCount: 4 });
       mockFindMany.mockResolvedValue([endpoint]);
+      // M3: atomic increment returns failureCount >= threshold
+      mockUpdate.mockResolvedValueOnce({ failureCount: 5 }).mockResolvedValue({});
       getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
       await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
 
-      // Should create both failure and deactivation notifications
+      // Should create both failure and deactivation notifications (M6: i18n messages)
       const calls = mockNotificationCreate.mock.calls;
       const deactivationCall = calls.find(
         (c: unknown[]) =>
@@ -451,14 +479,17 @@ describe("WebhookChannel", () => {
     it("does not deactivate when failureCount is below threshold", async () => {
       const endpoint = makeEndpoint({ failureCount: 2 }); // will become 3, below 5
       mockFindMany.mockResolvedValue([endpoint]);
+      // M3: atomic increment returns failureCount below threshold
+      mockUpdate.mockResolvedValue({ failureCount: 3 });
       getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
       await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
 
-      // Should increment but not deactivate
+      // Should use atomic increment (M3 + H3)
       expect(mockUpdate).toHaveBeenCalledWith({
-        where: { id: "ep-1" },
-        data: { failureCount: 3 },
+        where: { id: "ep-1", userId: TEST_USER_ID },
+        data: { failureCount: { increment: 1 } },
+        select: { failureCount: true },
       });
 
       // Should NOT have a deactivation update
@@ -548,6 +579,72 @@ describe("WebhookChannel", () => {
 
       expect(result.success).toBe(true);
       expect(getMockFetch()).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("SSRF redirect prevention (H1)", () => {
+    it("passes redirect: 'manual' to fetch", async () => {
+      const endpoint = makeEndpoint();
+      mockFindMany.mockResolvedValue([endpoint]);
+      getMockFetch().mockResolvedValue({ ok: true, status: 200 });
+
+      await channel.dispatch(makeDraft(), TEST_USER_ID);
+
+      const options = getMockFetch().mock.calls[0][1];
+      expect(options.redirect).toBe("manual");
+    });
+
+    it("treats 301 redirect as failure", async () => {
+      const endpoint = makeEndpoint();
+      mockFindMany.mockResolvedValue([endpoint]);
+      getMockFetch().mockResolvedValue({ ok: false, status: 301 });
+
+      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+
+      // Should retry all 3 attempts since redirects are failures
+      expect(getMockFetch()).toHaveBeenCalledTimes(3);
+    });
+
+    it("treats 302 redirect as failure", async () => {
+      const endpoint = makeEndpoint();
+      mockFindMany.mockResolvedValue([endpoint]);
+      getMockFetch().mockResolvedValue({ ok: false, status: 302 });
+
+      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+
+      expect(getMockFetch()).toHaveBeenCalledTimes(3);
+    });
+
+    it("treats 307 redirect as failure", async () => {
+      const endpoint = makeEndpoint();
+      mockFindMany.mockResolvedValue([endpoint]);
+      getMockFetch().mockResolvedValue({ ok: false, status: 307 });
+
+      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+
+      expect(getMockFetch()).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe("concurrent delivery (M2)", () => {
+    it("delivers to multiple endpoints concurrently via Promise.allSettled", async () => {
+      const callOrder: string[] = [];
+      const ep1 = makeEndpoint({ id: "ep-1", url: "https://a.com/hook" });
+      const ep2 = makeEndpoint({ id: "ep-2", url: "https://b.com/hook" });
+      mockFindMany.mockResolvedValue([ep1, ep2]);
+
+      getMockFetch().mockImplementation((url: string) => {
+        callOrder.push(url);
+        return Promise.resolve({ ok: true, status: 200 });
+      });
+
+      const result = await channel.dispatch(makeDraft(), TEST_USER_ID);
+
+      expect(result.success).toBe(true);
+      expect(getMockFetch()).toHaveBeenCalledTimes(2);
+      // Both endpoints should have been called
+      expect(callOrder).toContain("https://a.com/hook");
+      expect(callOrder).toContain("https://b.com/hook");
     });
   });
 

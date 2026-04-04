@@ -102,6 +102,33 @@ export function validateWebhookUrl(url: string): {
     return { valid: false, error: "webhook.ssrfBlocked" };
   }
 
+  // Block IPv4-mapped IPv6 addresses (::ffff:x.x.x.x)
+  // These bypass IPv4 checks by wrapping private IPv4 addresses in IPv6 notation.
+  // URL parser normalizes dotted-decimal to hex: ::ffff:127.0.0.1 -> ::ffff:7f00:1
+  // So we match both forms: dotted-decimal and hex pair (XXXX:XXXX).
+  const ipv4DottedMatch = cleanHostname.match(
+    /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i,
+  );
+  const ipv4HexMatch = cleanHostname.match(
+    /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i,
+  );
+  let mappedIpv4: string | null = null;
+  if (ipv4DottedMatch) {
+    mappedIpv4 = ipv4DottedMatch[1];
+  } else if (ipv4HexMatch) {
+    // Convert hex pair to dotted-decimal: e.g. 7f00:1 -> 127.0.0.1
+    const hi = parseInt(ipv4HexMatch[1], 16);
+    const lo = parseInt(ipv4HexMatch[2], 16);
+    mappedIpv4 = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+  }
+  if (mappedIpv4) {
+    // Re-validate the underlying IPv4 address against all private/blocked ranges
+    const innerResult = validateWebhookUrl(`http://${mappedIpv4}/`);
+    if (!innerResult.valid) {
+      return { valid: false, error: "webhook.ssrfBlocked" };
+    }
+  }
+
   // Block GCP metadata server
   if (cleanHostname === "metadata.google.internal") {
     return { valid: false, error: "webhook.ssrfBlocked" };

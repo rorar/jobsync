@@ -1,0 +1,13 @@
+{
+  "feature": "ROADMAP 0.10: Scheduler Transparency & Run Coordination",
+  "status": "in_progress",
+  "stack": "nextjs-15-prisma-sqlite-shadcn",
+  "api_style": "rest",
+  "complexity": "complex",
+  "current_step": 1,
+  "current_phase": 0,
+  "completed_steps": [],
+  "files_created": [],
+  "started_at": "2026-03-30T12:00:00Z",
+  "last_updated": "2026-03-30T12:00:00Z"
+}

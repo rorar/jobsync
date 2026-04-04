@@ -274,11 +274,12 @@ function ApiKeySettings() {
     }
   };
 
-  const HEALTH_STATUS_LABELS: Record<string, string> = {
-    healthy: "Healthy",
-    degraded: "Degraded",
-    unreachable: "Unreachable",
-    unknown: "Unknown",
+  /** i18n health status keys — same pattern as EnrichmentModuleSettings */
+  const HEALTH_STATUS_KEYS: Record<string, TranslationKey> = {
+    healthy: "enrichment.health.healthy",
+    degraded: "enrichment.health.degraded",
+    unreachable: "enrichment.health.unreachable",
+    unknown: "enrichment.health.unknown",
   };
 
   const handleHealthCheck = async (module: ModuleConfig) => {
@@ -298,7 +299,7 @@ function ApiKeySettings() {
           title: t("settings.healthCheckNow"),
           description: t("settings.healthCheckSuccess")
             .replace("{module}", module.name)
-            .replace("{status}", HEALTH_STATUS_LABELS[result.data.healthStatus] ?? result.data.healthStatus)
+            .replace("{status}", t(HEALTH_STATUS_KEYS[result.data.healthStatus] ?? "enrichment.health.unknown"))
             .replace("{time}", String(result.data.responseTimeMs)),
         });
       } else {

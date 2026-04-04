@@ -139,6 +139,40 @@ describe("validateWebhookUrl — SSRF protection", () => {
     });
   });
 
+  describe("blocks IPv4-mapped IPv6 addresses (M7)", () => {
+    it("blocks ::ffff:127.0.0.1 (loopback)", () => {
+      expect(validateWebhookUrl("http://[::ffff:127.0.0.1]/hook").valid).toBe(false);
+    });
+
+    it("blocks ::ffff:10.0.0.1 (RFC 1918)", () => {
+      expect(validateWebhookUrl("http://[::ffff:10.0.0.1]/hook").valid).toBe(false);
+    });
+
+    it("blocks ::ffff:192.168.1.1 (RFC 1918)", () => {
+      expect(validateWebhookUrl("http://[::ffff:192.168.1.1]/hook").valid).toBe(false);
+    });
+
+    it("blocks ::ffff:172.16.0.1 (RFC 1918)", () => {
+      expect(validateWebhookUrl("http://[::ffff:172.16.0.1]/hook").valid).toBe(false);
+    });
+
+    it("blocks ::ffff:169.254.169.254 (IMDS)", () => {
+      expect(validateWebhookUrl("http://[::ffff:169.254.169.254]/hook").valid).toBe(false);
+    });
+
+    it("allows ::ffff:8.8.8.8 (public IP)", () => {
+      expect(validateWebhookUrl("http://[::ffff:8.8.8.8]/hook").valid).toBe(true);
+    });
+
+    it("allows ::ffff:203.0.113.1 (public IP)", () => {
+      expect(validateWebhookUrl("http://[::ffff:203.0.113.1]/hook").valid).toBe(true);
+    });
+
+    it("blocks ::FFFF:10.0.0.1 (case-insensitive)", () => {
+      expect(validateWebhookUrl("http://[::FFFF:10.0.0.1]/hook").valid).toBe(false);
+    });
+  });
+
   describe("allows valid URLs", () => {
     it("allows valid https URLs", () => {
       expect(validateWebhookUrl("https://example.com/webhook").valid).toBe(true);

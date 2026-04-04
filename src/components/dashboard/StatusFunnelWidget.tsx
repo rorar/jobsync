@@ -92,13 +92,20 @@ export default function StatusFunnelWidget() {
 
   const fetchData = useCallback(async () => {
     setState({ status: "loading" });
-    const result = await getStatusDistribution();
-    if (result.success && result.data) {
-      setState({ status: "loaded", data: result.data });
-    } else {
+    try {
+      const result = await getStatusDistribution();
+      if (result.success && result.data) {
+        setState({ status: "loaded", data: result.data });
+      } else {
+        setState({
+          status: "error",
+          message: result.message ?? "errors.fetchStatusDistribution",
+        });
+      }
+    } catch {
       setState({
         status: "error",
-        message: result.message ?? "errors.fetchStatusDistribution",
+        message: "errors.fetchStatusDistribution",
       });
     }
   }, []);

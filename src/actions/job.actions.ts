@@ -902,8 +902,8 @@ export const updateKanbanOrder = async (
       throw new Error("Not authenticated");
     }
 
-    // Validate sortOrder: must be a finite non-negative number
-    if (!Number.isFinite(newSortOrder) || newSortOrder < 0) {
+    // Validate sortOrder: must be a finite number (negative values are valid for insertion ordering)
+    if (!Number.isFinite(newSortOrder)) {
       return { success: false, message: "errors.invalidSortOrder", errorCode: "VALIDATION_ERROR" };
     }
 

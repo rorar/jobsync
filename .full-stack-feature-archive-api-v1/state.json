@@ -1,0 +1,13 @@
+{
+  "feature": "Public API v1 Foundation (ROADMAP 7.1 Phase 1)",
+  "status": "in_progress",
+  "stack": "nextjs-15-prisma-sqlite-shadcn",
+  "api_style": "rest",
+  "complexity": "complex",
+  "current_step": 1,
+  "current_phase": 1,
+  "completed_steps": [],
+  "files_created": [],
+  "started_at": "2026-03-31T10:00:00Z",
+  "last_updated": "2026-03-31T10:00:00Z"
+}

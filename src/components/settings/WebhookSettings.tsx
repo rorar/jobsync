@@ -85,6 +85,7 @@ export default function WebhookSettings() {
 
   // Create form state
   const [url, setUrl] = useState("");
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<NotificationType[]>([]);
   const [creating, setCreating] = useState(false);
 
@@ -120,8 +121,41 @@ export default function WebhookSettings() {
     }
   };
 
+  /** Client-side URL validation (UX only, server still validates) */
+  const validateUrl = (value: string): string | null => {
+    const trimmed = value.trim();
+    if (!trimmed) return null; // Empty is not an error (just disables submit)
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return t("webhook.urlInvalidProtocol");
+      }
+    } catch {
+      return t("webhook.urlInvalid");
+    }
+    return null;
+  };
+
+  const handleUrlChange = (value: string) => {
+    setUrl(value);
+    // Only show error after user has typed something meaningful
+    if (value.trim().length > 0) {
+      setUrlError(validateUrl(value));
+    } else {
+      setUrlError(null);
+    }
+  };
+
   const handleCreate = async () => {
     if (!url.trim()) return;
+
+    // Client-side URL validation before submit
+    const error = validateUrl(url);
+    if (error) {
+      setUrlError(error);
+      return;
+    }
+
     if (selectedEvents.length === 0) {
       toast({
         variant: "destructive",
@@ -137,6 +171,7 @@ export default function WebhookSettings() {
         setNewSecret(result.data.secret);
         setShowSecretDialog(true);
         setUrl("");
+        setUrlError(null);
         setSelectedEvents([]);
         await fetchEndpoints();
       } else {
@@ -314,10 +349,17 @@ export default function WebhookSettings() {
               type="url"
               placeholder={t("webhook.urlPlaceholder")}
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => handleUrlChange(e.target.value)}
               disabled={creating || limitReached}
               maxLength={2048}
+              aria-invalid={!!urlError}
+              aria-describedby={urlError ? "webhook-url-error" : undefined}
             />
+            {urlError && (
+              <p id="webhook-url-error" className="text-sm text-destructive">
+                {urlError}
+              </p>
+            )}
           </div>
 
           {/* Event selection */}
@@ -352,7 +394,7 @@ export default function WebhookSettings() {
           {/* Create button */}
           <Button
             onClick={handleCreate}
-            disabled={!url.trim() || selectedEvents.length === 0 || creating || limitReached}
+            disabled={!url.trim() || !!urlError || selectedEvents.length === 0 || creating || limitReached}
           >
             {creating ? (
               <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none mr-2" aria-hidden="true" />

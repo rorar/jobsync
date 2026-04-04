@@ -194,6 +194,25 @@ describe("computeSortOrder — direction-aware midpoint strategy", () => {
   });
 });
 
+describe("computeSortOrder — negative sortOrder is valid for top-of-column insertion", () => {
+  it("negative sortOrder is a valid result when dragging to top of zero-based column", () => {
+    const jobs = [makeJob("a", 0), makeJob("b", 5), makeJob("c", 10)];
+    // Move c to top → beforeOrder=0, no card above → 0 - 1 = -1
+    const result = computeSortOrder(jobs, 2, 0);
+    expect(result).toBe(-1);
+    // Negative values are valid: the server action accepts them for insertion ordering
+    expect(Number.isFinite(result)).toBe(true);
+  });
+
+  it("negative sortOrder from repeated top-insertions stays finite", () => {
+    const jobs = [makeJob("a", -5), makeJob("b", 0), makeJob("c", 10)];
+    // Move c to top → beforeOrder=-5, no card above → -5 - 1 = -6
+    const result = computeSortOrder(jobs, 2, 0);
+    expect(result).toBe(-6);
+    expect(Number.isFinite(result)).toBe(true);
+  });
+});
+
 describe("computeSortOrder — sortOrder constraint verification", () => {
   it("dragging down always produces sortOrder > target card's sortOrder", () => {
     const jobs = [makeJob("a", 5), makeJob("b", 15), makeJob("c", 25), makeJob("d", 35)];

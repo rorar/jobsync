@@ -259,9 +259,16 @@ export async function updateWebhookEndpoint(
       if (data.active) updateData.failureCount = 0;
     }
 
-    const updated = await prisma.webhookEndpoint.update({
-      where: { id },
+    // Use updateMany with userId to prevent IDOR (ADR-015)
+    // Cannot use update() with compound where since there is no @@unique([id, userId])
+    await prisma.webhookEndpoint.updateMany({
+      where: { id, userId: user.id },
       data: updateData,
+    });
+
+    // Re-fetch to return updated DTO (updateMany doesn't return the record)
+    const updated = await prisma.webhookEndpoint.findFirst({
+      where: { id, userId: user.id },
       select: {
         id: true,
         url: true,
@@ -272,6 +279,10 @@ export async function updateWebhookEndpoint(
         updatedAt: true,
       },
     });
+
+    if (!updated) {
+      return { success: false, message: "webhook.notFound", errorCode: "NOT_FOUND" };
+    }
 
     return { success: true, data: toDTO(updated) };
   } catch (error) {
@@ -297,8 +308,9 @@ export async function deleteWebhookEndpoint(
       return { success: false, message: "webhook.notFound", errorCode: "NOT_FOUND" };
     }
 
-    await prisma.webhookEndpoint.delete({
-      where: { id },
+    // Use deleteMany with userId to prevent IDOR (ADR-015)
+    await prisma.webhookEndpoint.deleteMany({
+      where: { id, userId: user.id },
     });
 
     return { success: true };

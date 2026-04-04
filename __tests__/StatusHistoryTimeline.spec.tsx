@@ -25,12 +25,32 @@ jest.mock("@/i18n", () => ({
         "jobs.statusHistoryNote": "Note",
         "jobs.statusHistoryInitial": "Initial status",
         "jobs.statusHistoryRetry": "Retry",
+        "jobs.statusHistoryShowAll": "Show all ({count})",
+        "jobs.statusHistoryShowLess": "Show less",
       };
       return dict[key] ?? key;
     },
     locale: "en",
   })),
   formatDateShort: jest.fn(() => "Jan 15, 2026"),
+}));
+
+jest.mock("lucide-react", () => ({
+  History: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg data-testid="icon-history" {...props} />
+  ),
+  AlertTriangle: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg data-testid="icon-alert" {...props} />
+  ),
+  RefreshCw: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg data-testid="icon-refresh" {...props} />
+  ),
+  ArrowRight: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg data-testid="icon-arrow" {...props} />
+  ),
+  MessageSquare: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg data-testid="icon-message" {...props} />
+  ),
 }));
 
 const mockGetJobStatusHistory = jest.fn();
@@ -261,6 +281,108 @@ describe("StatusHistoryTimeline", () => {
 
     await waitFor(() => {
       expect(mockGetJobStatusHistory).toHaveBeenCalledWith("job-42");
+    });
+  });
+
+  describe("entry limit and Show all toggle", () => {
+    function makeManyEntries(count: number) {
+      return Array.from({ length: count }, (_, i) => ({
+        id: `hist-${i}`,
+        previousStatusLabel: i === 0 ? null : "Draft",
+        previousStatusValue: i === 0 ? null : "draft",
+        newStatusLabel: `Status ${i}`,
+        newStatusValue: i % 2 === 0 ? "applied" : "draft",
+        note: null,
+        changedAt: new Date(`2026-01-${String(i + 1).padStart(2, "0")}`),
+      }));
+    }
+
+    it("shows all entries when count is within the default limit", async () => {
+      const entries = makeManyEntries(15);
+      mockGetJobStatusHistory.mockResolvedValue({
+        success: true,
+        data: entries,
+      });
+
+      render(<StatusHistoryTimeline jobId="job-1" />);
+
+      await waitFor(() => {
+        const items = screen.getAllByRole("listitem");
+        expect(items).toHaveLength(15);
+      });
+
+      // No toggle button should be present
+      expect(screen.queryByText(/Show all/)).not.toBeInTheDocument();
+      expect(screen.queryByText("Show less")).not.toBeInTheDocument();
+    });
+
+    it("truncates entries and shows Show all button when exceeding limit", async () => {
+      const entries = makeManyEntries(30);
+      mockGetJobStatusHistory.mockResolvedValue({
+        success: true,
+        data: entries,
+      });
+
+      render(<StatusHistoryTimeline jobId="job-1" />);
+
+      await waitFor(() => {
+        const items = screen.getAllByRole("listitem");
+        expect(items).toHaveLength(20); // DEFAULT_VISIBLE_LIMIT
+      });
+
+      expect(screen.getByText("Show all (30)")).toBeInTheDocument();
+    });
+
+    it("expands all entries when Show all is clicked", async () => {
+      const entries = makeManyEntries(25);
+      mockGetJobStatusHistory.mockResolvedValue({
+        success: true,
+        data: entries,
+      });
+
+      render(<StatusHistoryTimeline jobId="job-1" />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Show all (25)")).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText("Show all (25)"));
+
+      await waitFor(() => {
+        const items = screen.getAllByRole("listitem");
+        expect(items).toHaveLength(25);
+      });
+
+      expect(screen.getByText("Show less")).toBeInTheDocument();
+    });
+
+    it("collapses back when Show less is clicked", async () => {
+      const entries = makeManyEntries(25);
+      mockGetJobStatusHistory.mockResolvedValue({
+        success: true,
+        data: entries,
+      });
+
+      render(<StatusHistoryTimeline jobId="job-1" />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Show all (25)")).toBeInTheDocument();
+      });
+
+      // Expand
+      fireEvent.click(screen.getByText("Show all (25)"));
+      await waitFor(() => {
+        expect(screen.getByText("Show less")).toBeInTheDocument();
+      });
+
+      // Collapse
+      fireEvent.click(screen.getByText("Show less"));
+      await waitFor(() => {
+        const items = screen.getAllByRole("listitem");
+        expect(items).toHaveLength(20);
+      });
+
+      expect(screen.getByText("Show all (25)")).toBeInTheDocument();
     });
   });
 });

@@ -169,6 +169,8 @@ export const jobs = {
     "jobs.statusHistoryNote": "Note",
     "jobs.statusHistoryInitial": "Initial status",
     "jobs.statusHistoryRetry": "Retry",
+    "jobs.statusHistoryShowAll": "Show all ({count})",
+    "jobs.statusHistoryShowLess": "Show less",
   },
   de: {
     "jobs.title": "Meine Jobs",
@@ -340,6 +342,8 @@ export const jobs = {
     "jobs.statusHistoryNote": "Notiz",
     "jobs.statusHistoryInitial": "Anfangsstatus",
     "jobs.statusHistoryRetry": "Erneut versuchen",
+    "jobs.statusHistoryShowAll": "Alle anzeigen ({count})",
+    "jobs.statusHistoryShowLess": "Weniger anzeigen",
   },
   fr: {
     "jobs.title": "Mes emplois",
@@ -511,6 +515,8 @@ export const jobs = {
     "jobs.statusHistoryNote": "Note",
     "jobs.statusHistoryInitial": "Statut initial",
     "jobs.statusHistoryRetry": "Réessayer",
+    "jobs.statusHistoryShowAll": "Tout afficher ({count})",
+    "jobs.statusHistoryShowLess": "Afficher moins",
   },
   es: {
     "jobs.title": "Mis empleos",
@@ -682,5 +688,7 @@ export const jobs = {
     "jobs.statusHistoryNote": "Nota",
     "jobs.statusHistoryInitial": "Estado inicial",
     "jobs.statusHistoryRetry": "Reintentar",
+    "jobs.statusHistoryShowAll": "Mostrar todo ({count})",
+    "jobs.statusHistoryShowLess": "Mostrar menos",
   },
 } as const;
