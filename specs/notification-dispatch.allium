@@ -9,7 +9,7 @@
 --   - Event Bus infrastructure (covered by event-bus.allium)
 --   - Module lifecycle notifications (trigger rules in module-lifecycle.allium)
 --   - Notification persistence (Prisma model — implementation concern)
---   - Push notification / email delivery (future channels — not in-app)
+--   - Push notification / email delivery (future channels — not yet implemented)
 -- Dependencies:
 --   - DomainEvent, DomainEventType from event-bus.allium
 --   - EventBus contract from event-bus.allium
@@ -50,10 +50,10 @@ enum NotificationType {
 
 enum NotificationChannel {
   inApp                             -- write to Notification table (MVP)
+  | webhook                         -- POST to user-configured URL (D1)
   -- Future channels:
   -- | email                        -- send via SMTP/transactional email
   -- | push                         -- browser push notification
-  -- | webhook                      -- POST to user-configured URL
 }
 
 enum DigestMode {
@@ -75,6 +75,16 @@ config {
     -- Maximum notifications shown in the bell dropdown.
   NOTIFICATION_RETENTION_DAYS: Integer = 30
     -- Auto-delete notifications older than this (from module-lifecycle.allium config).
+
+  -- Webhook channel constants
+  WEBHOOK_FETCH_TIMEOUT_MS: Integer = 10000
+    -- HTTP timeout per delivery attempt.
+  WEBHOOK_MAX_ATTEMPTS: Integer = 3
+    -- Maximum retry attempts per endpoint per notification.
+  WEBHOOK_RETRY_BACKOFFS_MS: Integer[] = [1000, 5000, 30000]
+    -- Backoff delays between retry attempts.
+  WEBHOOK_AUTO_DEACTIVATE_THRESHOLD: Integer = 5
+    -- Consecutive failures before auto-deactivation.
 }
 
 -- =============================================================================
@@ -120,10 +130,10 @@ entity NotificationPreference {
 
 value ChannelConfig {
   inApp: Boolean = true               -- in-app notifications (MVP, always available)
+  webhook: Boolean = false             -- webhook notifications (D1, user must configure endpoints)
   -- Future:
   -- email: Boolean = false
   -- push: Boolean = false
-  -- webhook: Boolean = false
 }
 
 value TypePreference {
@@ -136,6 +146,22 @@ value QuietHoursConfig {
   start: String                       -- time-of-day (HH:mm), e.g. "22:00"
   end: String                         -- time-of-day (HH:mm), e.g. "07:00"
   timezone: String                    -- IANA timezone, e.g. "Europe/Berlin"
+}
+
+entity WebhookEndpoint {
+  -- A user-configured HTTP endpoint that receives notification payloads.
+  -- Secret is AES-encrypted at rest; decrypted only at dispatch time for HMAC signing.
+
+  id: String                          -- UUID
+  userId: String                      -- owner
+  url: String                         -- validated against SSRF rules on create AND dispatch
+  secret: String                      -- AES-encrypted HMAC signing key
+  iv: String                          -- AES initialization vector
+  events: String                      -- JSON array of subscribed NotificationType values
+  active: Boolean = true              -- deactivated after AUTO_DEACTIVATE_THRESHOLD failures
+  failureCount: Integer = 0           -- consecutive delivery failures (reset on success)
+  createdAt: DateTime = now()
+  updatedAt: DateTime
 }
 
 -- =============================================================================
@@ -251,35 +277,45 @@ rule Deduplication {
 }
 
 rule ChannelRouting {
-  -- "Route notifications to enabled channels (inApp first, future: email, push, webhook)."
-  -- Determines which delivery channels to use based on user preferences.
+  -- "Route notifications to all enabled channels via ChannelRouter."
+  -- The ChannelRouter iterates registered channels and dispatches in parallel.
+  -- Each channel is independently gated by shouldNotify(prefs, type, channel).
   when: NotificationDispatcher.dispatch(event: DomainEvent) passes all previous checks
   let prefs = NotificationPreference where userId = event.payload.userId
+  let draft = mapEventToNotification(event, userId)
 
-  -- Determine channel(s)
-  let typeOverride = prefs.perType[event.notificationType]
-  let channel = typeOverride.channel or default_channel_from(prefs.channels)
+  -- The ChannelRouter dispatches to each registered channel:
+  for_each channel in registered channels:
+    requires: shouldNotify(prefs, draft.type, channel.name) = true
+    requires: channel.isAvailable(userId) = true
 
-  if channel = inApp:
-    ensures: Notification.created(
-      userId: event.payload.userId,
-      type: event.notificationType,
-      message: formatMessage(event),
-      moduleId: event.payload.moduleId,
-      automationId: event.payload.automationId,
-      read: false
-    )
-  -- Future channels:
-  -- if channel = email: ensures: EmailQueued(...)
-  -- if channel = push: ensures: PushNotificationSent(...)
-  -- if channel = webhook: ensures: WebhookDispatched(...)
+    if channel = inApp:
+      ensures: Notification.created(
+        userId: event.payload.userId,
+        type: event.notificationType,
+        message: formatMessage(event),
+        moduleId: event.payload.moduleId,
+        automationId: event.payload.automationId,
+        read: false
+      )
+
+    if channel = webhook:
+      ensures: WebhookDelivery(draft, userId)
+      -- Delivers to all active WebhookEndpoints subscribed to this event type.
+      -- See WebhookDelivery rule for retry, signing, and failure handling.
+
+    -- Future channels:
+    -- if channel = email: ensures: EmailQueued(...)
+    -- if channel = push: ensures: PushNotificationSent(...)
 
   @guidance
-    -- In MVP, only inApp channel exists. The routing logic is designed
-    -- to be extensible — adding a new channel means adding a new branch,
-    -- not restructuring the dispatcher.
-    -- The `default_channel_from()` picks the first enabled channel.
-    -- For MVP: inApp is always the default and always enabled.
+    -- Error isolation: one channel failure does not block others.
+    -- The ChannelRouter catches errors per channel and continues.
+    -- shouldNotify() accepts an optional channel parameter:
+    --   - With channel: checks that specific channel is enabled in prefs.channels
+    --   - Without channel: returns true if ANY channel is enabled (used by dispatcher
+    --     to decide whether to build a NotificationDraft at all).
+    -- This two-level gating avoids building drafts when all channels are disabled.
 }
 
 rule BatchSummary {
@@ -315,6 +351,74 @@ rule BatchSummary {
     -- This is simpler but loses per-vacancy event granularity on the bus.
     -- Decision: use the buffering approach — individual events on the bus,
     -- summary notification to the user.
+}
+
+rule WebhookDelivery {
+  -- "Deliver notifications to active webhook endpoints."
+  when: ChannelRouter routes notification to webhook channel
+  let endpoints = WebhookEndpoint where userId = userId and active = true
+
+  for_each endpoint in endpoints:
+    requires: endpoint.events contains notificationType
+    requires: validateWebhookUrl(endpoint.url) = valid
+
+    -- HMAC signing
+    let payload = { event: notificationType, timestamp: now(), data: notificationData }
+    let decryptedSecret = decrypt(endpoint.secret, endpoint.iv)
+    let signature = hmac_sha256(decryptedSecret, json(payload))
+
+    -- HTTP POST with retry
+    ensures: POST endpoint.url with headers:
+      X-Webhook-Signature: "sha256={signature}"
+      X-Webhook-Event: notificationType
+      Content-Type: "application/json"
+      User-Agent: "JobSync-Webhook/1.0"
+
+    -- Timeout: 10 seconds per attempt
+    -- Retry: 3 attempts with backoff 1s, 5s, 30s
+
+    if delivery succeeds:
+      ensures: endpoint.failureCount = 0    -- reset on success
+
+  @guidance
+    -- SSRF validation is performed on EVERY dispatch, not just on endpoint creation.
+    -- URL resolution may change (DNS rebinding), so re-validation is required.
+    -- The secret is AES-encrypted at rest and decrypted only for HMAC computation.
+    -- Delivery to each endpoint is independent — one endpoint failure does not
+    -- prevent delivery to other endpoints.
+}
+
+rule WebhookRetryExhaustion {
+  -- "Create in-app notification on webhook delivery failure."
+  when: WebhookDelivery fails after 3 retry attempts for an endpoint
+  ensures: endpoint.failureCount incremented by 1
+  ensures: Notification.created(
+    userId: endpoint.userId,
+    type: "module_unreachable",
+    message: "Webhook delivery failed for event \"{event}\" to {endpoint.url}"
+  )
+
+  @guidance
+    -- Uses the existing "module_unreachable" NotificationType for delivery failure
+    -- notifications, as it semantically represents an unreachable external target.
+    -- This is a best-effort notification — failure to create it is logged but not fatal.
+}
+
+rule WebhookAutoDeactivation {
+  -- "Auto-deactivate webhook endpoint after 5 consecutive failures."
+  when: endpoint.failureCount >= 5
+  ensures: endpoint.active = false
+  ensures: Notification.created(
+    userId: endpoint.userId,
+    type: "module_unreachable",
+    message: "Webhook endpoint {endpoint.url} deactivated due to repeated failures"
+  )
+
+  @guidance
+    -- The threshold of 5 is defined as AUTO_DEACTIVATE_THRESHOLD in the implementation.
+    -- Once deactivated, the endpoint is skipped during future dispatches.
+    -- The user must manually re-activate the endpoint in Settings after fixing the issue.
+    -- Failure count resets to 0 on any successful delivery (see WebhookDelivery rule).
 }
 
 -- =============================================================================
@@ -391,6 +495,15 @@ invariant QuietHoursRespected {
   note: "Notifications during quiet hours are delayed, not dropped."
 }
 
+invariant WebhookUrlSafe {
+  ensures: for_each endpoint in WebhookEndpoint:
+    validateWebhookUrl(endpoint.url) = valid
+  note: "SSRF validation on create AND on each dispatch."
+  note: "Blocks private IPs (10.x, 172.16-31.x, 192.168.x), IMDS (169.254.169.254),"
+  note: "localhost, non-http(s) protocols, and cloud metadata endpoints."
+  note: "Re-validated at dispatch time because DNS resolution may change (DNS rebinding)."
+}
+
 -- =============================================================================
 -- Surfaces
 -- =============================================================================
@@ -436,7 +549,7 @@ surface NotificationPreferencesPanel {
   exposes:
     -- Global toggle: enabled/disabled
     -- Per-type toggles: each NotificationType with enabled switch
-    -- Channel selection: which channels are active (MVP: inApp only, shown as disabled toggle)
+    -- Channel selection: which channels are active (inApp + webhook; email/push shown as disabled)
     -- Quiet hours: start time, end time, timezone picker
     -- Digest mode: immediate / hourly / daily selector
 

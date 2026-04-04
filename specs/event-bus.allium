@@ -13,6 +13,8 @@
 --   - StagedVacancy, BulkActionType from vacancy-pipeline.allium
 --   - Notification from module-lifecycle.allium
 --   - Automation, AutomationRun from jobsync.allium
+--   - Job, StatusHistory from crm-workflow.allium
+--   - Company, EnrichmentResult from data-enrichment.allium
 
 -- =============================================================================
 -- Actors
@@ -52,6 +54,12 @@ enum DomainEventType {
   | AutomationRunCompleted
   -- Degradation bridge (spec: module-lifecycle.allium)
   | AutomationDegraded
+  -- CRM Core (spec: crm-workflow.allium)
+  | JobStatusChanged
+  -- Data Enrichment (spec: data-enrichment.allium)
+  | CompanyCreated
+  | EnrichmentCompleted
+  | EnrichmentFailed
 }
 
 -- =============================================================================
@@ -170,6 +178,40 @@ value AutomationDegradedPayload {
   automationId: String
   userId: String
   reason: String                      -- "auth_failure" | "cb_escalation" | "consecutive_failures"
+}
+
+-- CRM Core payload (spec: crm-workflow.allium)
+
+value JobStatusChangedPayload {
+  jobId: String
+  userId: String
+  previousStatusValue: String?        -- null for initial status assignment
+  newStatusValue: String
+  note: String?                       -- optional note attached to the status change
+  historyEntryId: String              -- ID of the StatusHistory entry
+}
+
+-- Data Enrichment payloads (spec: data-enrichment.allium)
+
+value CompanyCreatedPayload {
+  companyId: String
+  companyName: String
+  userId: String
+}
+
+value EnrichmentCompletedPayload {
+  requestId: String                   -- enrichment request ID
+  dimension: String                   -- "logo" | "deepLink"
+  moduleId: String                    -- which module provided the result
+  userId: String
+  domainKey: String                   -- domain used as enrichment cache key
+}
+
+value EnrichmentFailedPayload {
+  requestId: String                   -- enrichment request ID
+  dimension: String                   -- "logo" | "deepLink"
+  userId: String
+  domainKey: String                   -- domain used as enrichment cache key
 }
 
 -- Handler function type for event consumers.
@@ -296,6 +338,10 @@ rule TypeSafety {
   ensures: EventHandler<AutomationRunStarted> receives AutomationRunStartedPayload
   ensures: EventHandler<AutomationRunCompleted> receives AutomationRunCompletedPayload
   ensures: EventHandler<AutomationDegraded> receives AutomationDegradedPayload
+  ensures: EventHandler<JobStatusChanged> receives JobStatusChangedPayload
+  ensures: EventHandler<CompanyCreated> receives CompanyCreatedPayload
+  ensures: EventHandler<EnrichmentCompleted> receives EnrichmentCompletedPayload
+  ensures: EventHandler<EnrichmentFailed> receives EnrichmentFailedPayload
 
   @guidance
     -- Implementation: TypeScript discriminated union with type narrowing.
