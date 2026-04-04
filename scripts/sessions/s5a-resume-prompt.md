@@ -65,8 +65,8 @@ BEVOR du den Branch mergst, beantworte diese Fragen EHRLICH:
 
 **Frage 1 — Selbstreflexion:**
 - Wo habe ich Abkürzungen genommen und warum?
-- Wo habe ich KEINE spezialisierten Skills ODER Agents verwendet, obwohl die Anweisungen es verlangen?
-- Was fehlt in dieser Session ODER wurde nicht bearbeitet?
+- Wo habe ich KEINE spezialisierten Skills UND/ODER Agents verwendet, obwohl die Anweisungen es verlangen?
+- Was fehlt in dieser Session UND/ODER wurde nicht bearbeitet?
 - Habe ich die Dokumentation aktualisiert?
 - Habe ich die nächste Session über meine Arbeit informiert?
 
