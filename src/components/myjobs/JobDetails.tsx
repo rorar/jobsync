@@ -20,6 +20,8 @@ import { useState, useMemo, useEffect } from "react";
 import { DownloadFileButton } from "../profile/DownloadFileButton";
 import { MatchDetails } from "../automations/MatchDetails";
 import { CompanyLogo } from "../ui/company-logo";
+import { EnrichmentStatusPanel } from "../enrichment/EnrichmentStatusPanel";
+import { StatusHistoryTimeline } from "../crm/StatusHistoryTimeline";
 import type { JobMatchResponse } from "@/models/ai.schemas";
 
 function JobDetails({ job }: { job: JobResponse }) {
@@ -141,6 +143,19 @@ function JobDetails({ job }: { job: JobResponse }) {
             <TipTapContentViewer content={job?.description ?? ""} />
           </div>
           <NotesSection jobId={job.id} />
+
+          {/* Enrichment & Status History panels */}
+          <div className="mx-4 mb-4 grid gap-4 sm:grid-cols-2">
+            {job.Company?.id && (
+              <EnrichmentStatusPanel
+                companyId={job.Company.id}
+                companyName={job.Company.label}
+                logoUrl={job.Company.logoUrl}
+              />
+            )}
+            <StatusHistoryTimeline jobId={job.id} />
+          </div>
+
           {parsedMatchData && (
             <div className="mx-4 mb-4">
               <h4 className="font-medium mb-2 flex items-center gap-2">
