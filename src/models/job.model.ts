@@ -48,6 +48,7 @@ export interface JobResponse {
   Resume?: Resume | null;
   matchScore?: number | null;
   matchData?: string | null;
+  sortOrder?: number;
   tags?: Tag[];
   _count?: { Notes?: number };
 }
