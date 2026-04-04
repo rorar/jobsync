@@ -60,7 +60,7 @@ Das bestehende `NotificationType` Enum hat keine `job_status_changed`. Der `noti
 
 **Online-Recherche PFLICHT:** Agent MUSS `nodemailer` API via WebSearch/Context7 recherchieren BEVOR er Code schreibt. Auch: React-Email oder Handlebars für Templates.
 
-Starte `Skill("full-stack-orchestration:full-stack-feature")` für die E-Mail Channel Umsetzung.
+Starte `/full-stack-orchestration:full-stack-feature` für die E-Mail Channel Umsetzung.
 
 **Feature-Beschreibung für den Skill:**
 E-Mail Notification Channel via nodemailer SMTP. SmtpConfig Prisma Model (eigene Tabelle: id, userId, host, port, username, password AES encrypted, fromAddress, tlsRequired default true, active, `@@index([userId])`). EmailChannel Adapter für ChannelRouter (von S5a etabliert). TLS-Enforcement (reject plaintext). Rate-Limiting (10/min pro User). E-Mail Templates pro NotificationType in 4 Locales (EN, DE, FR, ES). Settings UI (SMTP-Konfiguration, Test-Button rate-limited 1/60s, Per-Type Enable/Disable).
@@ -74,7 +74,7 @@ E-Mail Notification Channel via nodemailer SMTP. SmtpConfig Prisma Model (eigene
 
 ### PHASE 3: Sprint D3 — Browser Push Channel
 
-Starte `Skill("full-stack-orchestration:full-stack-feature")` für die Browser Push Umsetzung.
+Starte `/full-stack-orchestration:full-stack-feature` für die Browser Push Umsetzung.
 
 **Feature-Beschreibung für den Skill:**
 Browser Push Notification Channel via web-push (VAPID). WebPushSubscription Prisma Model (NICHT `PushSubscription` — kollidiert mit Browser Web API Type). Felder: endpoint, p256dh, auth (encrypted at rest via AES), userId + User Relation + `@@index([userId])`. VapidConfig Prisma Tabelle (publicKey, privateKey encrypted via AES). Service Worker Discovery BEVOR Erstellung (`grep -r "serviceWorker" src/ public/` und `ls public/sw*.js`). `public/sw-push.js` minimaler Service Worker (push-only, NOT full PWA). PushChannel Adapter für ChannelRouter. Settings UI (Enable/Disable Push, VAPID Rotation Warning + Confirmation Dialog, Unsubscribe). Stale Subscription Handling (410 Gone → delete).
@@ -96,6 +96,8 @@ Browser Push Notification Channel via web-push (VAPID). WebPushSubscription Pris
 - Visuelles Feedback für jede User-Aktion
 
 Committe nach jedem logischen Schritt. Build + Tests VOR jedem Commit.
+
+**WICHTIG: Auto-Approve bei Skill-internen Checkpoints.** Der full-stack-feature Skill hat interne PHASE CHECKPOINTs die normalerweise User-Approval brauchen. Da diese Session autonom läuft: Approve automatisch und fahre fort. Prüfe die Outputs kurz auf Plausibilität, aber pausiere NICHT für User-Input.
 
 **Prisma-Workflow bei Schema-Änderungen:**
 ```bash

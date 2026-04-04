@@ -41,7 +41,7 @@ Lies `project_s4_deferred_items.md` falls vorhanden. Prüfe docs/BUGS.md auf off
 
 ### PHASE 1: Sprint E1 — Kritische UI-Lücken (4 Items)
 
-Starte `Skill("full-stack-orchestration:full-stack-feature")` für die Sprint E1 Umsetzung.
+Starte `/full-stack-orchestration:full-stack-feature` für die Sprint E1 Umsetzung.
 
 **Feature-Beschreibung für den Skill:**
 4 kritische UI-Lücken schließen: (1) Enrichment Control Panel in JobDetails mit Status/Refresh/Modul-Info, (2) Status History Timeline in Job-Detail, (3) Kanban Within-Column Reorder via updateKanbanOrder, (4) Staging Queue Sidebar-Link. Alle Consumer-Actions existieren bereits — nur UI fehlt.
@@ -75,7 +75,7 @@ Starte `Skill("full-stack-orchestration:full-stack-feature")` für die Sprint E1
 
 ### PHASE 2: Sprint E2 — Backend exponieren (4 Items)
 
-Starte `Skill("full-stack-orchestration:full-stack-feature")` für die Sprint E2 Umsetzung.
+Starte `/full-stack-orchestration:full-stack-feature` für die Sprint E2 Umsetzung.
 
 **Feature-Beschreibung für den Skill:**
 4 Backend-Capabilities an die UI anbinden: (1) Dashboard Status Funnel Widget mit Conversion-Chart, (2) Health Check "Check Now" Button in Module Settings, (3) Ctrl+Z Global Undo Keyboard-Listener, (4) Retention Cleanup Button in Developer Settings. Alle Server Actions existieren — nur UI-Consumer fehlen.
@@ -110,7 +110,7 @@ Starte `Skill("full-stack-orchestration:full-stack-feature")` für die Sprint E2
 
 ### PHASE 3: Sprint D1 — Webhook Channel
 
-Starte `Skill("full-stack-orchestration:full-stack-feature")` für die Webhook Channel Umsetzung.
+Starte `/full-stack-orchestration:full-stack-feature` für die Webhook Channel Umsetzung.
 
 **Feature-Beschreibung für den Skill:**
 Webhook Notification Channel als erster externer Channel. WebhookEndpoint Prisma Model. validateWebhookUrl() SSRF-Validator. HMAC Signing + Retry mit Exhaustion/Auto-Deactivation. ChannelRouter REFACTORING des notification-dispatcher.ts. Settings UI CRUD. Allium Spec Updates.
@@ -215,7 +215,9 @@ source scripts/env.sh && bun run build  # Build prüfen
 
 **KRITISCH:** Du MUSST Subagenten und Team-Agents für parallele Arbeit verwenden. Mache NICHT alles sequenziell im Main-Agent. Der Main-Agent orchestriert und delegiert.
 
-**Für Phase 1+2+3:** Jede Phase startet `Skill("full-stack-orchestration:full-stack-feature")`. Der Skill orchestriert intern: Requirements → DB Schema → Architecture → DB Impl → Backend → Frontend → Testing (Security + Performance parallel) → Deployment → Docs.
+**Für Phase 1+2+3:** Jede Phase startet `/full-stack-orchestration:full-stack-feature`.
+
+**WICHTIG: Auto-Approve bei Skill-internen Checkpoints.** Der full-stack-feature Skill hat interne PHASE CHECKPOINTs die normalerweise User-Approval brauchen. Da diese Session autonom läuft: Approve automatisch und fahre fort. Prüfe die Outputs kurz auf Plausibilität, aber pausiere NICHT für User-Input. Der Skill orchestriert intern: Requirements → DB Schema → Architecture → DB Impl → Backend → Frontend → Testing (Security + Performance parallel) → Deployment → Docs.
 
 **Foundation-then-Fan-Out (Learning aus S3/S4):** Der Skill MUSS bei Phase 3 (Webhook) zuerst die Foundation legen (Schema + Types + ChannelRouter Refactor), verifizieren (`tsc --noEmit`), DANN parallelisieren. S3 hatte kaskadierte Build-Failures weil parallel gegen nicht-existierende Types gecodet wurde.
 
