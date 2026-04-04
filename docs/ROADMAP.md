@@ -1371,10 +1371,11 @@ Dynamische Dateipfade und Dateinamen:
   - Manifest-Engine (→ 4.2) — `type: "video"` als Feld-Typ im JSON Schema → QR-Code/Link in generierten CVs und E-Mails (5. Rendering-Kontext)
   - Communication Connector (→ 1.12) — Video-Link in Bewerbungs-E-Mails auto-attached
   - Onboarding (→ 2.1) — Video-Aufnahme als Onboarding-Schritt ("Nimm dein Vorstellungsvideo auf")
-- **Infrastruktur-Anforderungen (Discovery nötig):**
-  - **Video-Storage:** Videos sind groß (50-500MB). SQLite/lokaler Storage reicht nicht. Braucht Object Storage (S3-kompatibel / MinIO für Self-Hosted) oder Streaming-Lösung. Eigenständiger Infrastruktur-Punkt.
-  - **Video-Encoding:** Browser-aufgenommene Videos (WebM) müssen für E-Mail/QR ggf. in MP4 konvertiert werden. FFmpeg als System-Dependency.
-  - **Streaming:** Große Videos dürfen nicht als Blob geladen werden — braucht Range-Request/Streaming-Endpoint über Public API (→ 7.1).
+- **Video-Storage (3 Strategien, User wählt in Settings):**
+  - **Strategie A: Embed/Externer Anbieter (einfachste, empfohlen als Default):** User hostet Video extern (YouTube No-Cookie `youtube-nocookie.com/embed/`, Vimeo Private, Loom) und fügt URL ein. JobSync speichert nur die Embed-URL. Kein eigener Storage nötig, kein Encoding, kein Streaming. DSGVO: YouTube No-Cookie setzt keine Tracking-Cookies vor Play — aber Datenschutzerklärung muss YouTube/Google als Drittanbieter listen (→ 6.1 automatische DSE-Aktualisierung bei Modul-Aktivierung).
+  - **Strategie B: Object Storage (Self-Hosted):** S3-kompatibel / MinIO für Self-Hosted. Videos (50-500MB) als Blobs. Range-Request-Streaming über Public API (→ 7.1). Braucht FFmpeg für WebM→MP4 Encoding.
+  - **Strategie C: Hybrid:** Embed für große Videos, lokaler Upload für kurze Clips (<30s, <10MB). Lokale Clips via Datei-Management (→ 2.8).
+  - **Empfehlung (Nachhaltigkeitsprinzip):** Strategie A als Default (zero Infrastruktur). Strategie B als optionale Erweiterung für Self-Hosted-User die keine externen Dienste nutzen wollen. Strategie C als Kompromiss.
 
 ### 4.7 Landingpage für Unternehmen
 - Personalisierte Bewerber-Landingpage pro Bewerbung
