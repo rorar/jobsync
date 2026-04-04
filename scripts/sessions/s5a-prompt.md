@@ -41,6 +41,11 @@ Lies `project_s4_deferred_items.md` falls vorhanden. Prüfe docs/BUGS.md auf off
 
 ### PHASE 1: Sprint E1 — Kritische UI-Lücken (4 Items)
 
+Starte `Skill("full-stack-orchestration:full-stack-feature")` für die Sprint E1 Umsetzung.
+
+**Feature-Beschreibung für den Skill:**
+4 kritische UI-Lücken schließen: (1) Enrichment Control Panel in JobDetails mit Status/Refresh/Modul-Info, (2) Status History Timeline in Job-Detail, (3) Kanban Within-Column Reorder via updateKanbanOrder, (4) Staging Queue Sidebar-Link. Alle Consumer-Actions existieren bereits — nur UI fehlt.
+
 **E1.1 (M): Enrichment Control Panel**
 - Neues Component: `src/components/enrichment/EnrichmentStatusPanel.tsx`
 - Integration in Job-Detail (`JobDetails.tsx`) — KEIN Company-Detail-View vorhanden (Company ist eine Relation auf Job, keine eigene Page). Enrichment-Panel NUR in JobDetails integrieren.
@@ -69,6 +74,11 @@ Lies `project_s4_deferred_items.md` falls vorhanden. Prüfe docs/BUGS.md auf off
 **Data Storytelling:** Verwende `/business-analytics:data-storytelling` für Timeline-Visualisierung und Enrichment-Coverage.
 
 ### PHASE 2: Sprint E2 — Backend exponieren (4 Items)
+
+Starte `Skill("full-stack-orchestration:full-stack-feature")` für die Sprint E2 Umsetzung.
+
+**Feature-Beschreibung für den Skill:**
+4 Backend-Capabilities an die UI anbinden: (1) Dashboard Status Funnel Widget mit Conversion-Chart, (2) Health Check "Check Now" Button in Module Settings, (3) Ctrl+Z Global Undo Keyboard-Listener, (4) Retention Cleanup Button in Developer Settings. Alle Server Actions existieren — nur UI-Consumer fehlen.
 
 **E2.1 (M): Dashboard Status Funnel**
 - Neues Component: `src/components/dashboard/StatusFunnelWidget.tsx`
@@ -99,6 +109,17 @@ Lies `project_s4_deferred_items.md` falls vorhanden. Prüfe docs/BUGS.md auf off
 - Visuelles Feedback für jede User-Aktion
 
 ### PHASE 3: Sprint D1 — Webhook Channel
+
+Starte `Skill("full-stack-orchestration:full-stack-feature")` für die Webhook Channel Umsetzung.
+
+**Feature-Beschreibung für den Skill:**
+Webhook Notification Channel als erster externer Channel. WebhookEndpoint Prisma Model. validateWebhookUrl() SSRF-Validator. HMAC Signing + Retry mit Exhaustion/Auto-Deactivation. ChannelRouter REFACTORING des notification-dispatcher.ts. Settings UI CRUD. Allium Spec Updates.
+
+**Zusätzliche Anforderungen (nicht im Skill abgedeckt):**
+- SSRF: validateWebhookUrl() muss SUPERSET sein (bestehende Validators blocken KEINE private IPs)
+- ChannelRouter: Refactore notification-dispatcher.ts von hardcoded in-app zu Multi-Channel BEVOR Webhook hinzugefügt wird
+- shouldNotify() channel-aware machen, NotificationPreferences erweitern
+- event-bus.allium updaten (4 fehlende Events)
 
 **Implementierungs-Reihenfolge:**
 1. `WebhookEndpoint` Prisma Model (id, userId, url, secret, events, active, timestamps)
@@ -194,41 +215,9 @@ source scripts/env.sh && bun run build  # Build prüfen
 
 **KRITISCH:** Du MUSST Subagenten und Team-Agents für parallele Arbeit verwenden. Mache NICHT alles sequenziell im Main-Agent. Der Main-Agent orchestriert und delegiert.
 
-**Für Phase 1 (Sprint E1) — Foundation-then-Fan-Out:**
+**Für Phase 1+2+3:** Jede Phase startet `Skill("full-stack-orchestration:full-stack-feature")`. Der Skill orchestriert intern: Requirements → DB Schema → Architecture → DB Impl → Backend → Frontend → Testing (Security + Performance parallel) → Deployment → Docs.
 
-Schritt 1 (SEQUENZIELL): E1.4 (Sidebar-Link, XS) sofort umsetzen — ein Agent, 2 Minuten.
-
-Schritt 2 (PARALLEL — 3 Agents nach E1.4):
-- Agent 1: E1.1 Enrichment Control Panel (neue Component + Integration in JobDetails)
-- Agent 2: E1.2 Status History Timeline (neue Component + Integration in Job-Detail)
-- Agent 3: E1.3 Kanban Reorder (KanbanBoard.tsx + useKanbanState.ts)
-- File-Ownership: Kein Overlap — Agent 1 besitzt Enrichment-Files, Agent 2 besitzt CRM-Files, Agent 3 besitzt Kanban-Files.
-
-**Für Phase 2 (Sprint E2) — 4 parallele Agents:**
-- Agent 1: E2.1 Dashboard Funnel (neues Component `StatusFunnelWidget.tsx`)
-- Agent 2: E2.2 Health Check Button (`EnrichmentModuleSettings.tsx` + `ApiKeySettings.tsx`)
-- Agent 3: E2.3 Ctrl+Z Undo (Layout-Component + Keyboard-Listener)
-- Agent 4: E2.4 Retention Cleanup (`DeveloperContainer.tsx`)
-- File-Ownership: Kein Overlap — jeder Agent besitzt seine eigenen Files.
-
-**Für Phase 3 (Webhook) — SEQUENZIELL dann PARALLEL (Learning aus S3):**
-
-S3 hatte kaskadierte Build-Failures weil parallele Agents Code gegen noch-nicht-existierende Types geschrieben haben. Fix: Erst Foundation legen, dann parallelisieren.
-
-**Schritt 1 (SEQUENZIELL — ein Agent, Main-Agent wartet):**
-- Prisma Schema: `WebhookEndpoint` Model (mit `userId` Relation + `@@index([userId, active])`)
-- `bash scripts/prisma-migrate.sh` + `bash scripts/prisma-generate.sh`
-- Types/Interfaces: `WebhookChannel`, `WebhookDeliveryResult`, `validateWebhookUrl()`
-- **ChannelRouter REFACTOR (MUSS in Foundation, NICHT parallel):** Refactore `notification-dispatcher.ts` von hardcoded `prisma.notification.create()` zu Multi-Channel-Architektur: `ChannelRouter` Interface, `InAppChannel` als erster Channel, `shouldNotify()` channel-aware machen. Das ist die Grundlage auf der HMAC+Retry und Settings UI aufbauen.
-- Allium Spec Updates: `notification-dispatch.allium` (Webhook-Regeln) + `event-bus.allium` (fehlende Events: JobStatusChanged, CompanyCreated, EnrichmentCompleted, EnrichmentFailed)
-- Main-Agent verifiziert: `tsc --noEmit` = zero Errors, bestehende Notification-Tests grün
-- Commit: "feat(webhook): add schema + types + SSRF validator + ChannelRouter foundation"
-
-**Schritt 2 (PARALLEL — erst NACH Schritt 1, baut auf ChannelRouter auf):**
-- Agent 1: HMAC Signing + Retry-Logik + Retry-Exhaustion + Auto-Deactivation (implementiert `WebhookChannel` gegen `ChannelRouter` Interface)
-- Agent 2: Settings UI (CRUD, Event-Selection, Delivery-Log)
-- Agent 3: Webhook Server Action + E2E Tests
-- File-Ownership strikt trennen — kein Agent ändert Files eines anderen
+**Foundation-then-Fan-Out (Learning aus S3/S4):** Der Skill MUSS bei Phase 3 (Webhook) zuerst die Foundation legen (Schema + Types + ChannelRouter Refactor), verifizieren (`tsc --noEmit`), DANN parallelisieren. S3 hatte kaskadierte Build-Failures weil parallel gegen nicht-existierende Types gecodet wurde.
 
 **Build-Serialisierung (Learning aus S3):**
 - Agents dürfen NICHT parallel `bun run build` ausführen — das korruptiert `.next/`
