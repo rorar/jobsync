@@ -1,0 +1,12 @@
+{
+  "feature": "S3-Resume Blind Spots + DAU Bugs + Edge Cases (23 findings)",
+  "status": "in_progress",
+  "mode": "suite",
+  "coverage_target": 80,
+  "current_step": 1,
+  "current_phase": 1,
+  "completed_steps": [],
+  "files_created": [],
+  "started_at": "2026-04-02T18:00:00Z",
+  "last_updated": "2026-04-02T18:00:00Z"
+}

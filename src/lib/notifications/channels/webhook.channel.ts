@@ -1,0 +1,384 @@
+/**
+ * WebhookChannel — Webhook Notification Channel
+ *
+ * Implements NotificationChannel for delivering notifications to user-configured
+ * webhook endpoints via HTTP POST with HMAC-SHA256 signing.
+ *
+ * Features:
+ * - HMAC-SHA256 signature in X-Webhook-Signature header
+ * - SSRF re-validation on every dispatch (URL resolution may change)
+ * - Retry with backoff: 3 attempts at 1s, 5s, 30s
+ * - Auto-deactivation after 5 consecutive failures
+ * - In-app notification on delivery failure / deactivation
+ *
+ * Spec: specs/notification-dispatch.allium
+ */
+
+import { createHmac } from "crypto";
+import prisma from "@/lib/db";
+import { decrypt } from "@/lib/encryption";
+import { validateWebhookUrl } from "@/lib/url-validation";
+import { t } from "@/i18n/dictionaries";
+import type { NotificationType } from "@/models/notification.model";
+import type { UserSettingsData } from "@/models/userSettings.model";
+import type {
+  NotificationChannel,
+  NotificationDraft,
+  ChannelResult,
+  WebhookPayload,
+  WebhookDeliveryResult,
+} from "../types";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const RETRY_BACKOFFS_MS = [1_000, 5_000, 30_000];
+const MAX_ATTEMPTS = 3;
+const FETCH_TIMEOUT_MS = 10_000;
+const AUTO_DEACTIVATE_THRESHOLD = 5;
+const USER_AGENT = "JobSync-Webhook/1.0";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute HMAC-SHA256 signature for a webhook payload.
+ */
+export function computeHmacSignature(secret: string, payload: string): string {
+  return createHmac("sha256", secret).update(payload).digest("hex");
+}
+
+/**
+ * Delay execution by the given milliseconds.
+ * Returns a promise that resolves after the delay.
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Attempt a single HTTP POST to the webhook endpoint.
+ */
+async function attemptDelivery(
+  url: string,
+  payload: string,
+  signature: string,
+  eventType: string,
+): Promise<WebhookDeliveryResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Webhook-Signature": `sha256=${signature}`,
+        "X-Webhook-Event": eventType,
+        "User-Agent": USER_AGENT,
+      },
+      body: payload,
+      signal: controller.signal,
+      redirect: "manual",
+    });
+
+    clearTimeout(timeout);
+
+    // Treat redirects as failure (SSRF bypass prevention)
+    if (response.status >= 300 && response.status < 400) {
+      return {
+        success: false,
+        statusCode: response.status,
+        error: `Redirect not allowed (HTTP ${response.status})`,
+        attemptNumber: 0,
+      };
+    }
+
+    if (response.ok) {
+      return { success: true, statusCode: response.status, attemptNumber: 0 };
+    }
+
+    return {
+      success: false,
+      statusCode: response.status,
+      error: `HTTP ${response.status}`,
+      attemptNumber: 0,
+    };
+  } catch (error) {
+    clearTimeout(timeout);
+    const message =
+      error instanceof Error ? error.message : "Unknown fetch error";
+    return { success: false, error: message, attemptNumber: 0 };
+  }
+}
+
+/**
+ * Deliver a webhook payload with retry logic.
+ * Attempts up to MAX_ATTEMPTS times with increasing backoff.
+ */
+async function deliverWithRetry(
+  url: string,
+  payload: string,
+  signature: string,
+  eventType: string,
+): Promise<WebhookDeliveryResult> {
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const result = await attemptDelivery(url, payload, signature, eventType);
+    result.attemptNumber = attempt + 1;
+
+    if (result.success) {
+      return result;
+    }
+
+    // If this is not the last attempt, wait before retrying
+    if (attempt < MAX_ATTEMPTS - 1) {
+      await delay(RETRY_BACKOFFS_MS[attempt]);
+    }
+  }
+
+  // All attempts exhausted
+  return {
+    success: false,
+    error: `All ${MAX_ATTEMPTS} delivery attempts failed`,
+    attemptNumber: MAX_ATTEMPTS,
+  };
+}
+
+/**
+ * Resolve the user's preferred locale from their settings.
+ * Falls back to "en" if settings are unavailable or unparseable.
+ */
+async function resolveUserLocale(userId: string): Promise<string> {
+  try {
+    const row = await prisma.userSettings.findUnique({ where: { userId } });
+    if (!row) return "en";
+    const parsed: UserSettingsData = JSON.parse(row.settings);
+    return parsed.display?.locale ?? "en";
+  } catch {
+    return "en";
+  }
+}
+
+/**
+ * Create an in-app notification for webhook delivery failure.
+ * Best-effort: logs errors but never throws.
+ */
+async function notifyDeliveryFailed(
+  userId: string,
+  endpointUrl: string,
+  eventType: string,
+): Promise<void> {
+  try {
+    const locale = await resolveUserLocale(userId);
+    const template = t(locale, "webhook.deliveryFailed");
+    const message = template
+      .replace("{eventType}", eventType)
+      .replace("{url}", endpointUrl);
+    await prisma.notification.create({
+      data: {
+        userId,
+        type: "module_unreachable" satisfies NotificationType,
+        message,
+      },
+    });
+  } catch (error) {
+    console.error("[WebhookChannel] Failed to create failure notification:", error);
+  }
+}
+
+/**
+ * Create an in-app notification for webhook endpoint auto-deactivation.
+ * Best-effort: logs errors but never throws.
+ */
+async function notifyEndpointDeactivated(
+  userId: string,
+  endpointUrl: string,
+): Promise<void> {
+  try {
+    const locale = await resolveUserLocale(userId);
+    const template = t(locale, "webhook.endpointDeactivated");
+    const message = template.replace("{url}", endpointUrl);
+    await prisma.notification.create({
+      data: {
+        userId,
+        type: "module_unreachable" satisfies NotificationType,
+        message,
+      },
+    });
+  } catch (error) {
+    console.error("[WebhookChannel] Failed to create deactivation notification:", error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// WebhookChannel
+// ---------------------------------------------------------------------------
+
+export class WebhookChannel implements NotificationChannel {
+  readonly name = "webhook";
+
+  async dispatch(
+    notification: NotificationDraft,
+    userId: string,
+  ): Promise<ChannelResult> {
+    try {
+      // Query active endpoints for this user that subscribe to this event type
+      const endpoints = await prisma.webhookEndpoint.findMany({
+        where: { userId, active: true },
+        select: {
+          id: true,
+          url: true,
+          secret: true,
+          iv: true,
+          events: true,
+          failureCount: true,
+        },
+      });
+
+      if (endpoints.length === 0) {
+        return { success: true, channel: this.name };
+      }
+
+      // Filter endpoints by event type subscription
+      const matchingEndpoints = endpoints.filter((ep) => {
+        try {
+          const events: string[] = JSON.parse(ep.events);
+          return events.includes(notification.type);
+        } catch {
+          return false;
+        }
+      });
+
+      if (matchingEndpoints.length === 0) {
+        return { success: true, channel: this.name };
+      }
+
+      // Build the webhook payload
+      const payload: WebhookPayload = {
+        event: notification.type,
+        timestamp: new Date().toISOString(),
+        data: notification.data ?? {},
+      };
+      const payloadJson = JSON.stringify(payload);
+
+      // Deliver to all matching endpoints concurrently (M2: avoid sequential blocking)
+      const deliveryResults = await Promise.allSettled(
+        matchingEndpoints.map(async (endpoint) => {
+          // Re-validate URL against SSRF on dispatch (URL resolution may change)
+          const urlCheck = validateWebhookUrl(endpoint.url);
+          if (!urlCheck.valid) {
+            console.warn(
+              `[WebhookChannel] SSRF blocked for endpoint ${endpoint.id}: ${urlCheck.error}`,
+            );
+            return { success: false, error: `SSRF blocked: ${endpoint.url}` };
+          }
+
+          // Decrypt the HMAC secret
+          const decryptedSecret = decrypt(endpoint.secret, endpoint.iv);
+
+          // Sign the payload
+          const signature = computeHmacSignature(decryptedSecret, payloadJson);
+
+          // Deliver with retry
+          const result = await deliverWithRetry(
+            endpoint.url,
+            payloadJson,
+            signature,
+            notification.type,
+          );
+
+          if (result.success) {
+            // Reset failure count on success (H3: include userId in where clause)
+            if (endpoint.failureCount > 0) {
+              await prisma.webhookEndpoint.update({
+                where: { id: endpoint.id, userId },
+                data: { failureCount: 0 },
+              });
+            }
+            return { success: true };
+          }
+
+          // Atomic increment failure count (M3: prevent read-then-write race)
+          const updated = await prisma.webhookEndpoint.update({
+            where: { id: endpoint.id, userId },
+            data: { failureCount: { increment: 1 } },
+            select: { failureCount: true },
+          });
+
+          // Notify about delivery failure
+          await notifyDeliveryFailed(userId, endpoint.url, notification.type);
+
+          // Auto-deactivate after threshold (H3: include userId in where clause)
+          if (updated.failureCount >= AUTO_DEACTIVATE_THRESHOLD) {
+            await prisma.webhookEndpoint.update({
+              where: { id: endpoint.id, userId },
+              data: { active: false },
+            });
+            await notifyEndpointDeactivated(userId, endpoint.url);
+          }
+
+          return { success: false, error: result.error ?? `Delivery failed to ${endpoint.url}` };
+        }),
+      );
+
+      const errors: string[] = [];
+      let anySuccess = false;
+
+      for (const settled of deliveryResults) {
+        if (settled.status === "fulfilled") {
+          if (settled.value.success) {
+            anySuccess = true;
+          } else if (settled.value.error) {
+            errors.push(settled.value.error);
+          }
+        } else {
+          const msg = settled.reason instanceof Error ? settled.reason.message : "Unknown error";
+          console.error("[WebhookChannel] Error delivering to endpoint:", settled.reason);
+          errors.push(msg);
+        }
+      }
+
+      if (anySuccess || errors.length === 0) {
+        return { success: true, channel: this.name };
+      }
+
+      return {
+        success: false,
+        channel: this.name,
+        error: errors.join("; "),
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      console.error("[WebhookChannel] Dispatch failed:", error);
+      return { success: false, channel: this.name, error: errorMessage };
+    }
+  }
+
+  async isAvailable(userId: string): Promise<boolean> {
+    // Check if user has any active webhook endpoints
+    const count = await prisma.webhookEndpoint.count({
+      where: { userId, active: true },
+    });
+    return count > 0;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Exports for testing
+// ---------------------------------------------------------------------------
+
+export const _testHelpers = {
+  attemptDelivery,
+  deliverWithRetry,
+  notifyDeliveryFailed,
+  notifyEndpointDeactivated,
+  resolveUserLocale,
+  delay,
+  RETRY_BACKOFFS_MS,
+  MAX_ATTEMPTS,
+  FETCH_TIMEOUT_MS,
+  AUTO_DEACTIVATE_THRESHOLD,
+};

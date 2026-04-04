@@ -28,10 +28,11 @@ import {
   useKanbanState,
   isValidTransition,
   STATUS_ORDER,
+  computeSortOrder,
 } from "@/hooks/useKanbanState";
 import type { JobResponse, JobStatus } from "@/models/job.model";
 import { getStatusLabel } from "@/lib/crm/status-labels";
-import { changeJobStatus } from "@/actions/job.actions";
+import { changeJobStatus, updateKanbanOrder } from "@/actions/job.actions";
 import {
   Select,
   SelectContent,
@@ -55,6 +56,8 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
     toggleCollapse,
     setUndoWithTimeout,
     clearUndo,
+    applyOptimisticReorder,
+    clearOptimisticReorder,
   } = useKanbanState(jobs, statuses);
 
   // DnD state
@@ -152,8 +155,67 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
 
       if (!sourceColumn || !targetColumn) return;
 
-      // Same column - reorder (no-op for now, could add sort order)
-      if (sourceColumn === targetColumn) return;
+      // Same column — within-column reorder
+      if (sourceColumn === targetColumn) {
+        const column = columns.find(c => c.status.value === sourceColumn);
+        if (!column) return;
+
+        const columnJobs = column.jobs;
+        const fromIndex = columnJobs.findIndex(j => j.id === jobId);
+        const overId = over.id as string;
+
+        // Determine target index: if dropped on a card, use that card's index
+        let toIndex: number;
+        if (overId.startsWith("column-")) {
+          // Dropped on the column itself (e.g., empty area) — move to end
+          toIndex = columnJobs.length - 1;
+        } else {
+          toIndex = columnJobs.findIndex(j => j.id === overId);
+          if (toIndex === -1) return;
+        }
+
+        // No-op if position unchanged
+        if (fromIndex === toIndex) return;
+
+        // Compute the new sortOrder using midpoint strategy
+        const newSortOrder = computeSortOrder(columnJobs, fromIndex, toIndex);
+
+        // Apply optimistic reorder: build the new ID order.
+        // After splice-removing the moved item, its original toIndex maps to the
+        // correct insertion position in both up and down directions.
+        const reorderedIds = columnJobs.map(j => j.id);
+        const [movedId] = reorderedIds.splice(fromIndex, 1);
+        reorderedIds.splice(Math.min(toIndex, reorderedIds.length), 0, movedId);
+        applyOptimisticReorder(sourceColumn, reorderedIds);
+
+        // Persist to server
+        (async () => {
+          try {
+            const result = await updateKanbanOrder(jobId, newSortOrder);
+            if (result.success) {
+              toast({
+                title: t("jobs.kanbanReorderSuccess"),
+                duration: 2000,
+              });
+              // Refresh to get server-confirmed order
+              onRefresh();
+            } else {
+              clearOptimisticReorder();
+              toast({
+                variant: "destructive",
+                title: t("jobs.kanbanReorderFailed"),
+              });
+            }
+          } catch {
+            clearOptimisticReorder();
+            toast({
+              variant: "destructive",
+              title: t("jobs.kanbanReorderFailed"),
+            });
+          }
+        })();
+        return;
+      }
 
       // Different column - status transition
       const fromStatus = statuses.find((s) => s.value === sourceColumn);
@@ -175,7 +237,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
       // Open transition dialog
       setTransitionDialog({ job, fromStatus, toStatus });
     },
-    [findJob, getJobColumn, getTargetColumn, statuses, t]
+    [findJob, getJobColumn, getTargetColumn, statuses, t, columns, applyOptimisticReorder, clearOptimisticReorder, onRefresh]
   );
 
   const handleDragCancel = useCallback(() => {
@@ -391,9 +453,13 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
                 key={column.status.value}
                 column={column}
                 isValidDropTarget={
-                  activeId !== null &&
-                  isValidTransition(activeSourceStatus, column.status.value) &&
-                  column.status.value !== activeSourceStatus
+                  activeId !== null && (
+                    // Cross-column: valid transition target
+                    (isValidTransition(activeSourceStatus, column.status.value) &&
+                    column.status.value !== activeSourceStatus) ||
+                    // Within-column: always a valid target (for reorder)
+                    column.status.value === activeSourceStatus
+                  )
                 }
                 isInvalidDropTarget={
                   activeId !== null &&

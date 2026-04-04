@@ -20,11 +20,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
-import { Loader2, Database } from "lucide-react";
+import { Button } from "../ui/button";
+import { Loader2, Database, HeartPulse } from "lucide-react";
 import {
   getModuleManifests,
   activateModule,
   deactivateModule,
+  runHealthCheck,
 } from "@/actions/module.actions";
 import type { ModuleManifestSummary } from "@/actions/module.actions";
 import { ConnectorType } from "@/lib/connector/manifest";
@@ -66,6 +68,7 @@ function EnrichmentModuleSettings() {
   const [isLoading, setIsLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
   const [moduleToDeactivate, setModuleToDeactivate] = useState<ModuleManifestSummary | null>(null);
+  const [checking, setChecking] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchModules = async () => {
@@ -170,6 +173,45 @@ function EnrichmentModuleSettings() {
       });
     } finally {
       setToggling(null);
+    }
+  };
+
+  const handleHealthCheck = async (module: ModuleManifestSummary) => {
+    setChecking(module.moduleId);
+    try {
+      const result = await runHealthCheck(module.moduleId);
+      if (result.success && result.data) {
+        // Update local health status
+        setModules((prev) =>
+          prev.map((m) =>
+            m.moduleId === module.moduleId
+              ? { ...m, healthStatus: result.data!.healthStatus as ModuleManifestSummary["healthStatus"] }
+              : m,
+          ),
+        );
+        toast({
+          variant: result.data.success ? "success" : "destructive",
+          title: t("settings.healthCheckNow"),
+          description: t("settings.healthCheckSuccess")
+            .replace("{module}", getModuleName(module))
+            .replace("{status}", t(HEALTH_STATUS_KEYS[result.data.healthStatus] ?? "enrichment.health.unknown"))
+            .replace("{time}", String(result.data.responseTimeMs)),
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: t("settings.healthCheckNow"),
+          description: t("settings.healthCheckFailed").replace("{module}", getModuleName(module)),
+        });
+      }
+    } catch {
+      toast({
+        variant: "destructive",
+        title: t("settings.error"),
+        description: t("settings.healthCheckFailed").replace("{module}", getModuleName(module)),
+      });
+    } finally {
+      setChecking(null);
     }
   };
 
@@ -293,6 +335,22 @@ function EnrichmentModuleSettings() {
                     <Badge variant="secondary" className="text-xs">
                       {t("enrichment.noCredentialRequired")}
                     </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={checking === module.moduleId || module.status !== "active"}
+                      onClick={() => handleHealthCheck(module)}
+                      aria-label={t("settings.healthCheckNow")}
+                    >
+                      {checking === module.moduleId ? (
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin motion-reduce:animate-none" />
+                      ) : (
+                        <HeartPulse className="mr-1 h-3 w-3" />
+                      )}
+                      {checking === module.moduleId
+                        ? t("settings.healthCheckRunning")
+                        : t("settings.healthCheckNow")}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

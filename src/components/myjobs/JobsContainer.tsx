@@ -102,6 +102,7 @@ function kanbanBoardToJobResponses(board: KanbanBoardData): JobResponse[] {
         jobUrl: null,
         applied: false,
         matchScore: kanbanJob.matchScore,
+        sortOrder: kanbanJob.sortOrder,
         tags: kanbanJob.tags.map((tag) => ({ ...tag, createdBy: "" })),
       });
     }

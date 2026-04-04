@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, Ban, Bell, Bot, Bug, Database, Globe, Key, Palette, Zap } from "lucide-react";
+import { AlertTriangle, Ban, Bell, Bot, Bug, Database, Globe, Key, Palette, Webhook, Zap } from "lucide-react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ export type SettingsSection =
   | "automation"
   | "enrichment"
   | "notifications"
+  | "webhooks"
   | "blacklist"
   | "developer"
   | "error-log";
@@ -33,6 +34,7 @@ const SETTINGS_SECTIONS: {
   { id: "automation", labelKey: "settings.sidebarAutomation", icon: Zap },
   { id: "enrichment", labelKey: "enrichment.sidebarEnrichment", icon: Database },
   { id: "notifications", labelKey: "settings.sidebarNotifications", icon: Bell },
+  { id: "webhooks", labelKey: "webhook.title", icon: Webhook },
   { id: "blacklist", labelKey: "blacklist.sidebarBlacklist", icon: Ban },
   { id: "developer", labelKey: "settings.sidebarDeveloper", icon: Bug },
   { id: "error-log", labelKey: "settings.sidebarErrorLog", icon: AlertTriangle },

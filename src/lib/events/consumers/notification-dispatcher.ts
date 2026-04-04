@@ -1,8 +1,8 @@
 /**
  * NotificationDispatcher — Event Bus Consumer
  *
- * Maps domain events to in-app notifications via Prisma.
- * Subscribes to notification-relevant event types and creates Notification records.
+ * Maps domain events to notification drafts and routes them through the ChannelRouter.
+ * Each channel (InApp, Webhook, Email, Push) decides independently whether to dispatch.
  *
  * For VacancyStaged events: buffers by automationId and emits a summary
  * notification after a flush interval (5 seconds of inactivity).
@@ -25,10 +25,22 @@ import prisma from "@/lib/db";
 import type { NotificationType } from "@/models/notification.model";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
-  shouldNotify,
 } from "@/models/notification.model";
 import type { NotificationPreferences } from "@/models/notification.model";
 import type { UserSettingsData } from "@/models/userSettings.model";
+import { channelRouter } from "@/lib/notifications/channel-router";
+import { InAppChannel } from "@/lib/notifications/channels/in-app.channel";
+import { WebhookChannel } from "@/lib/notifications/channels/webhook.channel";
+import type { NotificationDraft } from "@/lib/notifications/types";
+
+// ---------------------------------------------------------------------------
+// Channel Registration (one-time)
+// ---------------------------------------------------------------------------
+
+// Register channels on first import. The channelRouter is a globalThis singleton,
+// so duplicate registration is guarded internally.
+channelRouter.register(new InAppChannel());
+channelRouter.register(new WebhookChannel());
 
 // ---------------------------------------------------------------------------
 // VacancyStaged batch buffer (spec: rule BatchSummary)
@@ -60,26 +72,37 @@ async function resolvePreferences(userId: string): Promise<NotificationPreferenc
   }
 }
 
+// ---------------------------------------------------------------------------
+// Dispatch Helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a NotificationDraft and route through all channels.
+ * Replaces the old direct prisma.notification.create() calls.
+ */
+async function dispatchNotification(draft: NotificationDraft): Promise<void> {
+  const prefs = await resolvePreferences(draft.userId);
+  await channelRouter.route(draft, prefs);
+}
+
+// ---------------------------------------------------------------------------
+// Flush staged buffer (batched VacancyStaged notifications)
+// ---------------------------------------------------------------------------
+
 async function flushStagedBuffer(automationId: string): Promise<void> {
   const entry = stagedBuffers.get(automationId);
   if (!entry) return;
   stagedBuffers.delete(automationId);
 
-  const prefs = await resolvePreferences(entry.userId);
-  if (!shouldNotify(prefs, "vacancy_batch_staged")) return;
+  const draft: NotificationDraft = {
+    userId: entry.userId,
+    type: "vacancy_batch_staged" satisfies NotificationType,
+    message: `${entry.count} new vacancies staged from automation`,
+    automationId,
+    data: { count: entry.count, automationId },
+  };
 
-  try {
-    await prisma.notification.create({
-      data: {
-        userId: entry.userId,
-        type: "vacancy_batch_staged" satisfies NotificationType,
-        message: `${entry.count} new vacancies staged from automation`,
-        automationId,
-      },
-    });
-  } catch (error) {
-    console.error("[NotificationDispatcher] Failed to create batch staged notification:", error);
-  }
+  await dispatchNotification(draft);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,20 +113,13 @@ async function handleVacancyPromoted(
   event: DomainEvent<typeof DomainEventType.VacancyPromoted>,
 ): Promise<void> {
   const payload = event.payload as VacancyPromotedPayload;
-  const prefs = await resolvePreferences(payload.userId);
-  if (!shouldNotify(prefs, "vacancy_promoted")) return;
 
-  try {
-    await prisma.notification.create({
-      data: {
-        userId: payload.userId,
-        type: "vacancy_promoted" satisfies NotificationType,
-        message: `Job created from staged vacancy`,
-      },
-    });
-  } catch (error) {
-    console.error("[NotificationDispatcher] Failed to create vacancy_promoted notification:", error);
-  }
+  await dispatchNotification({
+    userId: payload.userId,
+    type: "vacancy_promoted" satisfies NotificationType,
+    message: `Job created from staged vacancy`,
+    data: { stagedVacancyId: payload.stagedVacancyId, jobId: payload.jobId },
+  });
 }
 
 async function handleVacancyStaged(
@@ -136,82 +152,65 @@ async function handleBulkActionCompleted(
   event: DomainEvent<typeof DomainEventType.BulkActionCompleted>,
 ): Promise<void> {
   const payload = event.payload as BulkActionCompletedPayload;
-  const prefs = await resolvePreferences(payload.userId);
-  if (!shouldNotify(prefs, "bulk_action_completed")) return;
 
-  try {
-    await prisma.notification.create({
-      data: {
-        userId: payload.userId,
-        type: "bulk_action_completed" satisfies NotificationType,
-        message: `${payload.succeeded} items ${payload.actionType}d successfully`,
-      },
-    });
-  } catch (error) {
-    console.error("[NotificationDispatcher] Failed to create bulk_action_completed notification:", error);
-  }
+  await dispatchNotification({
+    userId: payload.userId,
+    type: "bulk_action_completed" satisfies NotificationType,
+    message: `${payload.succeeded} items ${payload.actionType}d successfully`,
+    data: {
+      actionType: payload.actionType,
+      succeeded: payload.succeeded,
+      failed: payload.failed,
+      itemCount: payload.itemIds.length,
+    },
+  });
 }
 
 async function handleModuleDeactivated(
   event: DomainEvent<typeof DomainEventType.ModuleDeactivated>,
 ): Promise<void> {
   const payload = event.payload as ModuleDeactivatedPayload;
-  const prefs = await resolvePreferences(payload.userId);
-  if (!shouldNotify(prefs, "module_deactivated")) return;
 
-  try {
-    await prisma.notification.create({
-      data: {
-        userId: payload.userId,
-        type: "module_deactivated" satisfies NotificationType,
-        message: `Module ${payload.moduleId} deactivated. ${payload.affectedAutomationIds.length} automation(s) paused.`,
-        moduleId: payload.moduleId,
-      },
-    });
-  } catch (error) {
-    console.error("[NotificationDispatcher] Failed to create module_deactivated notification:", error);
-  }
+  await dispatchNotification({
+    userId: payload.userId,
+    type: "module_deactivated" satisfies NotificationType,
+    message: `Module ${payload.moduleId} deactivated. ${payload.affectedAutomationIds.length} automation(s) paused.`,
+    moduleId: payload.moduleId,
+    data: {
+      moduleId: payload.moduleId,
+      affectedAutomationCount: payload.affectedAutomationIds.length,
+    },
+  });
 }
 
 async function handleModuleReactivated(
   event: DomainEvent<typeof DomainEventType.ModuleReactivated>,
 ): Promise<void> {
   const payload = event.payload as ModuleReactivatedPayload;
-  const prefs = await resolvePreferences(payload.userId);
-  if (!shouldNotify(prefs, "module_reactivated")) return;
 
-  try {
-    await prisma.notification.create({
-      data: {
-        userId: payload.userId,
-        type: "module_reactivated" satisfies NotificationType,
-        message: `Module ${payload.moduleId} reactivated. ${payload.pausedAutomationCount} automation(s) remain paused.`,
-        moduleId: payload.moduleId,
-      },
-    });
-  } catch (error) {
-    console.error("[NotificationDispatcher] Failed to create module_reactivated notification:", error);
-  }
+  await dispatchNotification({
+    userId: payload.userId,
+    type: "module_reactivated" satisfies NotificationType,
+    message: `Module ${payload.moduleId} reactivated. ${payload.pausedAutomationCount} automation(s) remain paused.`,
+    moduleId: payload.moduleId,
+    data: {
+      moduleId: payload.moduleId,
+      pausedAutomationCount: payload.pausedAutomationCount,
+    },
+  });
 }
 
 async function handleRetentionCompleted(
   event: DomainEvent<typeof DomainEventType.RetentionCompleted>,
 ): Promise<void> {
   const payload = event.payload as RetentionCompletedPayload;
-  const prefs = await resolvePreferences(payload.userId);
-  if (!shouldNotify(prefs, "retention_completed")) return;
 
-  try {
-    await prisma.notification.create({
-      data: {
-        userId: payload.userId,
-        type: "retention_completed" satisfies NotificationType,
-        message: `${payload.purgedCount} expired vacancies cleaned up`,
-      },
-    });
-  } catch (error) {
-    console.error("[NotificationDispatcher] Failed to create retention_completed notification:", error);
-  }
+  await dispatchNotification({
+    userId: payload.userId,
+    type: "retention_completed" satisfies NotificationType,
+    message: `${payload.purgedCount} expired vacancies cleaned up`,
+    data: { purgedCount: payload.purgedCount, hashesCreated: payload.hashesCreated },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -238,5 +237,6 @@ export const _testHelpers = {
   },
   flushStagedBuffer,
   resolvePreferences,
+  dispatchNotification,
   FLUSH_DELAY_MS,
 };

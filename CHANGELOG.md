@@ -1,5 +1,48 @@
 # Changelog
 
+## [2026-04-04] Session S5a — UI Gaps + Webhook Channel
+
+### Added — Sprint E1: Critical UI Gaps (4 items)
+- **EnrichmentStatusPanel:** Logo preview, enrichment status, module info, refresh button in Job Detail
+- **StatusHistoryTimeline:** Chronological status transitions with notes, timestamps, visual connectors (20-entry limit with "Show all")
+- **Kanban Within-Column Reorder:** Drag-and-drop reorder via updateKanbanOrder with optimistic updates and midpoint sortOrder strategy
+- **Staging Queue Sidebar Link:** `/dashboard/staging` in sidebar navigation with Inbox icon
+
+### Added — Sprint E2: Backend Capabilities Exposed (4 items)
+- **StatusFunnelWidget:** 5-stage conversion chart (Bookmarked→Applied→Interview→Offer→Hired) in dashboard
+- **Health Check Button:** "Check Now" per module in EnrichmentModuleSettings + ApiKeySettings
+- **Global Undo (Ctrl+Z/Cmd+Z):** useGlobalUndo hook in dashboard layout, skips text inputs
+- **Retention Cleanup:** "Run Cleanup" button in Developer Settings with AlertDialog confirmation
+
+### Added — Sprint D1: Webhook Notification Channel
+- **WebhookEndpoint model** with AES-encrypted HMAC secret, event subscriptions, failure tracking
+- **ChannelRouter:** Multi-channel notification dispatcher refactored from hardcoded in-app
+- **WebhookChannel:** HMAC-SHA256 signing, 3-attempt retry (1s/5s/30s), 10s timeout, concurrent delivery
+- **SSRF Protection:** validateWebhookUrl() blocks IMDS, RFC1918, localhost, IPv6 private, IPv4-mapped IPv6, open redirectors
+- **Auto-deactivation:** After 5 consecutive failures with in-app notification
+- **Webhook Settings UI:** CRUD with event selection, secret-once dialog, active toggle, client-side URL validation
+- **shouldNotify() channel-aware:** Per-channel gating (webhook fires even if inApp disabled)
+- **Allium specs:** notification-dispatch.allium + event-bus.allium updated
+
+### Fixed — CHECK Phase (13 findings: 2 CRIT, 4 HIGH, 7 MED)
+- **CRITICAL:** WebhookChannel not registered in ChannelRouter → import + register
+- **CRITICAL:** computeSortOrder negative values rejected by updateKanbanOrder → allow negative sortOrder
+- **HIGH:** Webhook fetch followed redirects (SSRF bypass) → redirect: "manual"
+- **HIGH:** IDOR in webhook CRUD actions → userId in all write/delete operations
+- **HIGH:** IDOR in webhook.channel.ts failure updates → userId in all Prisma calls
+- **HIGH:** Hardcoded English health labels in ApiKeySettings → i18n keys
+- **MEDIUM:** StatusFunnelWidget unhandled rejection → try-catch with error state
+- **MEDIUM:** Sequential webhook delivery → Promise.allSettled for concurrency
+- **MEDIUM:** Failure count race condition → Prisma atomic increment
+- **MEDIUM:** No client-side URL validation → inline validation with error messages
+- **MEDIUM:** StatusHistoryTimeline no pagination → 20-entry limit with "Show all"
+- **MEDIUM:** Hardcoded English webhook messages → i18n with locale resolution
+- **MEDIUM:** IPv4-mapped IPv6 SSRF gap → detect and re-validate underlying IPv4
+
+### Stats
+- **Tests:** 150 suites, 2778 passed (+172 new)
+- **Files:** 30+ new/modified across components, actions, hooks, notifications, specs
+
 ## [2026-04-03] Session S4 — Data Enrichment Connector
 
 ### Step 0 — S3 Deferred Fixes

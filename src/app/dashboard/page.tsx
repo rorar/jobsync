@@ -11,6 +11,7 @@ import ActivityCalendar from "@/components/dashboard/ActivityCalendar";
 import JobsApplied from "@/components/dashboard/JobsAppliedCard";
 import NumberCardToggle from "@/components/dashboard/NumberCardToggle";
 import RecentCardToggle from "@/components/dashboard/RecentCardToggle";
+import StatusFunnelWidget from "@/components/dashboard/StatusFunnelWidget";
 import TopActivitiesCard from "@/components/dashboard/TopActivitiesCard";
 import WeeklyBarChartToggle from "@/components/dashboard/WeeklyBarChartToggle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -79,6 +80,9 @@ export default async function Dashboard() {
               { label: "Last 30 days", activities: topActivities30Days },
             ]}
           />
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <StatusFunnelWidget />
         </div>
         <WeeklyBarChartToggle
           charts={[

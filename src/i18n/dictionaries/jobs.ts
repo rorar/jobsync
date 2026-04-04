@@ -154,6 +154,23 @@ export const jobs = {
 
     // Other column (catch-all)
     "jobs.kanbanOtherColumn": "Other",
+
+    // Within-column reorder
+    "jobs.kanbanReorderSuccess": "Card position updated",
+    "jobs.kanbanReorderFailed": "Failed to update card position",
+
+    // Status History Timeline (E1.2)
+    "jobs.statusHistory": "Status History",
+    "jobs.statusHistoryEmpty": "No status changes recorded yet.",
+    "jobs.statusHistoryLoading": "Loading status history...",
+    "jobs.statusHistoryError": "Failed to load status history",
+    "jobs.statusChangedTo": "Changed to {status}",
+    "jobs.statusChangedFrom": "from {status}",
+    "jobs.statusHistoryNote": "Note",
+    "jobs.statusHistoryInitial": "Initial status",
+    "jobs.statusHistoryRetry": "Retry",
+    "jobs.statusHistoryShowAll": "Show all ({count})",
+    "jobs.statusHistoryShowLess": "Show less",
   },
   de: {
     "jobs.title": "Meine Jobs",
@@ -310,6 +327,23 @@ export const jobs = {
 
     // Sonstige-Spalte (Auffangbecken)
     "jobs.kanbanOtherColumn": "Sonstige",
+
+    // Innerhalb-Spalte Neuanordnung
+    "jobs.kanbanReorderSuccess": "Kartenposition aktualisiert",
+    "jobs.kanbanReorderFailed": "Kartenposition konnte nicht aktualisiert werden",
+
+    // Statusverlauf-Zeitleiste (E1.2)
+    "jobs.statusHistory": "Statusverlauf",
+    "jobs.statusHistoryEmpty": "Noch keine Statusänderungen erfasst.",
+    "jobs.statusHistoryLoading": "Statusverlauf wird geladen...",
+    "jobs.statusHistoryError": "Statusverlauf konnte nicht geladen werden",
+    "jobs.statusChangedTo": "Geändert zu {status}",
+    "jobs.statusChangedFrom": "von {status}",
+    "jobs.statusHistoryNote": "Notiz",
+    "jobs.statusHistoryInitial": "Anfangsstatus",
+    "jobs.statusHistoryRetry": "Erneut versuchen",
+    "jobs.statusHistoryShowAll": "Alle anzeigen ({count})",
+    "jobs.statusHistoryShowLess": "Weniger anzeigen",
   },
   fr: {
     "jobs.title": "Mes emplois",
@@ -466,6 +500,23 @@ export const jobs = {
 
     // Colonne autre (fourre-tout)
     "jobs.kanbanOtherColumn": "Autres",
+
+    // Réorganisation au sein de la colonne
+    "jobs.kanbanReorderSuccess": "Position de la carte mise à jour",
+    "jobs.kanbanReorderFailed": "Impossible de mettre à jour la position de la carte",
+
+    // Historique des statuts (E1.2)
+    "jobs.statusHistory": "Historique des statuts",
+    "jobs.statusHistoryEmpty": "Aucun changement de statut enregistré.",
+    "jobs.statusHistoryLoading": "Chargement de l'historique des statuts...",
+    "jobs.statusHistoryError": "Impossible de charger l'historique des statuts",
+    "jobs.statusChangedTo": "Changé en {status}",
+    "jobs.statusChangedFrom": "depuis {status}",
+    "jobs.statusHistoryNote": "Note",
+    "jobs.statusHistoryInitial": "Statut initial",
+    "jobs.statusHistoryRetry": "Réessayer",
+    "jobs.statusHistoryShowAll": "Tout afficher ({count})",
+    "jobs.statusHistoryShowLess": "Afficher moins",
   },
   es: {
     "jobs.title": "Mis empleos",
@@ -622,5 +673,22 @@ export const jobs = {
 
     // Columna otros (cajón de sastre)
     "jobs.kanbanOtherColumn": "Otros",
+
+    // Reordenamiento dentro de la columna
+    "jobs.kanbanReorderSuccess": "Posición de la tarjeta actualizada",
+    "jobs.kanbanReorderFailed": "No se pudo actualizar la posición de la tarjeta",
+
+    // Historial de estados (E1.2)
+    "jobs.statusHistory": "Historial de estados",
+    "jobs.statusHistoryEmpty": "Aún no se han registrado cambios de estado.",
+    "jobs.statusHistoryLoading": "Cargando historial de estados...",
+    "jobs.statusHistoryError": "No se pudo cargar el historial de estados",
+    "jobs.statusChangedTo": "Cambiado a {status}",
+    "jobs.statusChangedFrom": "desde {status}",
+    "jobs.statusHistoryNote": "Nota",
+    "jobs.statusHistoryInitial": "Estado inicial",
+    "jobs.statusHistoryRetry": "Reintentar",
+    "jobs.statusHistoryShowAll": "Mostrar todo ({count})",
+    "jobs.statusHistoryShowLess": "Mostrar menos",
   },
 } as const;

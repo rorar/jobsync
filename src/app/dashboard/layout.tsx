@@ -3,6 +3,7 @@ import Sidebar from "@/components/Sidebar";
 import { Toaster } from "@/components/ui/toaster";
 import { ActivityProvider } from "@/context/ActivityContext";
 import { GlobalActivityBanner } from "@/components/activities/GlobalActivityBanner";
+import { GlobalUndoListener } from "@/components/GlobalUndoListener";
 
 export default function RootLayout({
   children,
@@ -20,6 +21,7 @@ export default function RootLayout({
             {children}
           </main>
           <Toaster />
+          <GlobalUndoListener />
         </div>
       </div>
     </ActivityProvider>

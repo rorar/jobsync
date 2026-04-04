@@ -29,6 +29,14 @@ jest.mock("@/components/profile/DownloadFileButton", () => ({
   DownloadFileButton: () => null,
 }));
 
+jest.mock("@/components/enrichment/EnrichmentStatusPanel", () => ({
+  EnrichmentStatusPanel: () => null,
+}));
+
+jest.mock("@/components/crm/StatusHistoryTimeline", () => ({
+  StatusHistoryTimeline: () => null,
+}));
+
 const makeJob = (overrides: Partial<JobResponse> = {}): JobResponse => ({
   id: "job-1",
   userId: "user-1",

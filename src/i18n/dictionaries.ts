@@ -19,6 +19,7 @@ import { api } from "./dictionaries/api";
 import { blacklist } from "./dictionaries/blacklist";
 import { deck } from "./dictionaries/deck";
 import { enrichment } from "./dictionaries/enrichment";
+import { webhook } from "./dictionaries/webhook";
 
 const core = {
   en: {
@@ -32,6 +33,7 @@ const core = {
     "nav.profile": "Profile",
     "nav.administration": "Administration",
     "nav.developerOptions": "Developer Options",
+    "nav.stagingQueue": "Staging Queue",
     "nav.settings": "Settings",
     "nav.toggleMenu": "Toggle Menu",
     "nav.appTitle": "JobSync - Job Search Assistant",
@@ -97,6 +99,12 @@ const core = {
     "common.minuteShort": "m",
     "common.secondShort": "s",
     "common.dismiss": "Dismiss",
+
+    // Undo
+    "undo.actionUndone": "Action undone",
+    "undo.nothingToUndo": "Nothing to undo",
+    "undo.undoFailed": "Undo failed",
+    "undo.undoShortcut": "Press Ctrl+Z to undo the last action",
 
     // Error messages
     "errors.notFound": "Resource not found",
@@ -180,6 +188,7 @@ const core = {
     "nav.profile": "Profil",
     "nav.administration": "Verwaltung",
     "nav.developerOptions": "Entwickleroptionen",
+    "nav.stagingQueue": "Staging-Warteschlange",
     "nav.settings": "Einstellungen",
     "nav.toggleMenu": "Menü umschalten",
     "nav.appTitle": "JobSync - Jobsuche-Assistent",
@@ -241,6 +250,12 @@ const core = {
     "common.minuteShort": "m",
     "common.secondShort": "s",
     "common.dismiss": "Schließen",
+
+    // Rückgängig machen
+    "undo.actionUndone": "Aktion rückgängig gemacht",
+    "undo.nothingToUndo": "Nichts zum Rückgängigmachen",
+    "undo.undoFailed": "Rückgängig machen fehlgeschlagen",
+    "undo.undoShortcut": "Strg+Z drücken, um die letzte Aktion rückgängig zu machen",
 
     // Fehlermeldungen
     "errors.notFound": "Ressource nicht gefunden",
@@ -324,6 +339,7 @@ const core = {
     "nav.profile": "Profil",
     "nav.administration": "Administration",
     "nav.developerOptions": "Options développeur",
+    "nav.stagingQueue": "File d'attente",
     "nav.settings": "Paramètres",
     "nav.toggleMenu": "Basculer le menu",
     "nav.appTitle": "JobSync - Assistant de recherche d'emploi",
@@ -385,6 +401,12 @@ const core = {
     "common.minuteShort": "min",
     "common.secondShort": "s",
     "common.dismiss": "Fermer",
+
+    // Annuler
+    "undo.actionUndone": "Action annulée",
+    "undo.nothingToUndo": "Rien à annuler",
+    "undo.undoFailed": "Échec de l'annulation",
+    "undo.undoShortcut": "Appuyez sur Ctrl+Z pour annuler la dernière action",
 
     // Messages d'erreur
     "errors.notFound": "Ressource non trouvée",
@@ -468,6 +490,7 @@ const core = {
     "nav.profile": "Perfil",
     "nav.administration": "Administración",
     "nav.developerOptions": "Opciones de desarrollador",
+    "nav.stagingQueue": "Cola de espera",
     "nav.settings": "Configuración",
     "nav.toggleMenu": "Alternar menú",
     "nav.appTitle": "JobSync - Asistente de búsqueda de empleo",
@@ -529,6 +552,12 @@ const core = {
     "common.minuteShort": "min",
     "common.secondShort": "s",
     "common.dismiss": "Cerrar",
+
+    // Deshacer
+    "undo.actionUndone": "Acción deshecha",
+    "undo.nothingToUndo": "Nada que deshacer",
+    "undo.undoFailed": "Error al deshacer",
+    "undo.undoShortcut": "Pulsa Ctrl+Z para deshacer la última acción",
 
     // Mensajes de error
     "errors.notFound": "Recurso no encontrado",
@@ -617,7 +646,7 @@ function mergeDictionaries(...namespaces: Record<string, Record<string, string>>
   return merged;
 }
 
-const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, staging, notifications, api, blacklist, deck, enrichment);
+const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, staging, notifications, api, blacklist, deck, enrichment, webhook);
 
 export type TranslationKey = string;
 export type Dictionary = Record<string, string>;

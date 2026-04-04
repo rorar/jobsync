@@ -1,0 +1,16 @@
+{
+  "target": "S3 CRM Core — Job Status Workflow (5.3) + Kanban Board (5.6) — 47 files",
+  "status": "in_progress",
+  "flags": {
+    "security_focus": true,
+    "performance_critical": false,
+    "strict_mode": true,
+    "framework": "nextjs-15"
+  },
+  "current_step": 0,
+  "current_phase": 0,
+  "completed_steps": [],
+  "files_created": [],
+  "started_at": "2026-04-02T12:00:00Z",
+  "last_updated": "2026-04-02T12:00:00Z"
+}

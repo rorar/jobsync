@@ -4,6 +4,7 @@ import {
   MockProfileCard,
   ClearAllMockDataCard,
   ClearE2ETestDataCard,
+  RetentionCleanupCard,
 } from "@/components/developer/DeveloperContainer";
 
 export const metadata: Metadata = {
@@ -31,6 +32,9 @@ export default function DeveloperPage() {
       </div>
       <div className="col-start-1 self-start">
         <ClearE2ETestDataCard />
+      </div>
+      <div className="col-start-2 self-start">
+        <RetentionCleanupCard />
       </div>
     </>
   );
