@@ -1356,9 +1356,25 @@ Dynamische Dateipfade und Dateinamen:
 - Lokalisiertes Format je nach Zielland (z.B. "23. März 2026" für DE, "March 23, 2026" für EN)
 
 ### 4.6 Video-Vorstellung
-- Bewerber können ein kurzes Vorstellungsvideo aufnehmen oder hochladen
+- Bewerber können ein kurzes Vorstellungsvideo aufnehmen (WebRTC/MediaRecorder) oder hochladen
 - Einbettbar in Bewerbungsunterlagen als QR-Code/Link
-- Optional: KI-gestützte Transkription und Zusammenfassung
+- Optional: KI-gestützte Transkription und Zusammenfassung (→ AI Provider Connector: Whisper/Speech-to-Text als neues AI-Modul)
+- **Abhängigkeiten (4.6 braucht):**
+  - Datei-Management (→ 2.8) für Video-Upload, Organisation, Löschung
+  - Public API (→ 7.1) für öffentliche Video-URLs / Streaming-Endpoint
+  - DSGVO (→ 6.1) — Video enthält biometrische Daten (Gesicht, Stimme) → stärkere Consent-Anforderungen als Text. Passwortschutz + Expiring Links erforderlich.
+- **Consumer (4.6 fließt in):**
+  - Bewerber-Landingpage (→ 9.5) — Video als Hook-Element ("Hallo, ich bin Pascal" + Video)
+  - Landingpage für Unternehmen (→ 4.7) — Video eingebettet (bereits referenziert)
+  - Social Proof (→ 4.10) — Video-Testimonials, Empfehlungen als Video-Format
+  - Portfolio / Arbeitsproben (→ 4.11) — Video als Portfolio-Item-Typ (Design-Walkthroughs, Code-Demos, Präsentationen)
+  - Manifest-Engine (→ 4.2) — `type: "video"` als Feld-Typ im JSON Schema → QR-Code/Link in generierten CVs und E-Mails (5. Rendering-Kontext)
+  - Communication Connector (→ 1.12) — Video-Link in Bewerbungs-E-Mails auto-attached
+  - Onboarding (→ 2.1) — Video-Aufnahme als Onboarding-Schritt ("Nimm dein Vorstellungsvideo auf")
+- **Infrastruktur-Anforderungen (Discovery nötig):**
+  - **Video-Storage:** Videos sind groß (50-500MB). SQLite/lokaler Storage reicht nicht. Braucht Object Storage (S3-kompatibel / MinIO für Self-Hosted) oder Streaming-Lösung. Eigenständiger Infrastruktur-Punkt.
+  - **Video-Encoding:** Browser-aufgenommene Videos (WebM) müssen für E-Mail/QR ggf. in MP4 konvertiert werden. FFmpeg als System-Dependency.
+  - **Streaming:** Große Videos dürfen nicht als Blob geladen werden — braucht Range-Request/Streaming-Endpoint über Public API (→ 7.1).
 
 ### 4.7 Landingpage für Unternehmen
 - Personalisierte Bewerber-Landingpage pro Bewerbung
