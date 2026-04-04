@@ -1319,7 +1319,12 @@ Jeder Job hat ein **Application Locale Profile** das Sprache + Land + kulturelle
   - **Packages:** `@rjsf/core` (Form-Renderer), `@react-pdf/renderer` oder `pdfmake` (PDF), `zod-to-json-schema` (Konversion), `@tiptap/core` oder `plate` (Rich Text Felder), JSON Resume Themes (50+ auf npm)
   - **AI-Section-Creator:** User sagt "Füge Publikationen hinzu" → LLM generiert JSON Schema mit Feldern → RJSF rendert Editor sofort → gleiche Daten fließen in PDF + Landingpage + API
   - **Import-Pfade:** LinkedIn Data Export → JSON Resume → JobSync, Europass XML → JSON Resume → JobSync
-  - **Vorteil:** Eine Datenstruktur, vier Rendering-Kontexte (Editor, PDF, Landingpage 9.5, Public API 7.1). Neue Abschnitte ohne Code-Änderungen.
+  - **Vorteil:** Eine Datenstruktur, fünf Rendering-Kontexte (Editor, PDF, Landingpage 9.5, Public API 7.1, E-Mail Templates). Neue Abschnitte ohne Code-Änderungen.
+  - **5. Rendering-Kontext: E-Mail Templates (→ D2 E-Mail Channel)**
+    - Gleiche JSON Schema Manifests → `react-email` oder `MJML` als Renderer (transpiliert React-Komponenten in E-Mail-kompatibles HTML)
+    - User kann lokalisierte E-Mail Templates erstellen/bearbeiten über denselben Pagebuilder wie CV-Abschnitte
+    - Constraint: E-Mail hat härtere CSS-Limits (kein Grid, kein Flexbox, kein JS) — der Renderer abstrahiert das
+    - S5b (D2) baut zuerst einfache System-Templates. Der Manifest-Pagebuilder ist die Erweiterung für User-eigene Templates.
   - **Migrationsstrategie: Strangler Fig (NICHT ersetzen)**
     - Das bestehende Prisma-Schema (Resume → ResumeSection → WorkExperience/Education/etc.) stammt vom Upstream-Maintainer Gsync und bleibt die **Datenschicht**
     - Die Manifest-Engine wird als **Präsentationsschicht** darüber gelegt (Adapter-Pattern / ACL)
