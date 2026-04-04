@@ -42,6 +42,7 @@ model User {
   JobStatusHistory JobStatusHistory[]
   EnrichmentResult  EnrichmentResult[]
   EnrichmentLog     EnrichmentLog[]
+  WebhookEndpoint   WebhookEndpoint[]
 }
 
 model ApiKey {
@@ -660,4 +661,20 @@ model EnrichmentLog {
   @@index([userId, dimension, domainKey])
   @@index([moduleId, outcome])
   @@index([createdAt])
+}
+
+model WebhookEndpoint {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url          String
+  secret       String   // AES-encrypted HMAC secret
+  iv           String   // IV for AES decryption
+  events       String   // JSON array of NotificationType values
+  active       Boolean  @default(true)
+  failureCount Int      @default(0) // consecutive failures for auto-deactivation
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId, active])
 }

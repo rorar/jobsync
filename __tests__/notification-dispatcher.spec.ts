@@ -3,33 +3,37 @@
  *
  * Tests: event-to-notification mapping for VacancyPromoted, BulkActionCompleted,
  * RetentionCompleted, ModuleDeactivated, ModuleReactivated, VacancyStaged batching
+ *
+ * After the ChannelRouter refactor, the dispatcher routes through channels.
+ * The InAppChannel creates Prisma notifications, so we still mock Prisma.
+ *
  * Spec: specs/notification-dispatch.allium
  */
 
 import { eventBus } from "@/lib/events/event-bus";
 import { createEvent, DomainEventType } from "@/lib/events/event-types";
+
+// Mock @/lib/db (used by InAppChannel)
+const mockCreate = jest.fn().mockResolvedValue({ id: "notif-1" });
+const mockFindUnique = jest.fn().mockResolvedValue(null); // default: no settings
+
+jest.mock("@/lib/db", () => ({
+  __esModule: true,
+  default: {
+    notification: {
+      create: (...args: unknown[]) => mockCreate(...args),
+    },
+    userSettings: {
+      findUnique: (...args: unknown[]) => mockFindUnique(...args),
+    },
+  },
+}));
+
+// Must import AFTER mocks are set up
 import {
   registerNotificationDispatcher,
   _testHelpers,
 } from "@/lib/events/consumers/notification-dispatcher";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
-
-jest.mock("@prisma/client", () => {
-  const mPrismaClient = {
-    notification: {
-      create: jest.fn().mockResolvedValue({ id: "notif-1" }),
-      findMany: jest.fn(),
-      count: jest.fn(),
-      update: jest.fn(),
-      updateMany: jest.fn(),
-      delete: jest.fn(),
-      createMany: jest.fn(),
-    },
-  };
-  return { PrismaClient: jest.fn(() => mPrismaClient) };
-});
 
 describe("NotificationDispatcher", () => {
   beforeEach(() => {
@@ -45,7 +49,7 @@ describe("NotificationDispatcher", () => {
   });
 
   describe("VacancyPromoted", () => {
-    it("creates a vacancy_promoted notification", async () => {
+    it("creates a vacancy_promoted notification via InAppChannel", async () => {
       const event = createEvent(DomainEventType.VacancyPromoted, {
         stagedVacancyId: "sv-1",
         jobId: "job-1",
@@ -54,7 +58,7 @@ describe("NotificationDispatcher", () => {
 
       await eventBus.publish(event);
 
-      expect(prisma.notification.create).toHaveBeenCalledWith({
+      expect(mockCreate).toHaveBeenCalledWith({
         data: {
           userId: "user-1",
           type: "vacancy_promoted",
@@ -65,7 +69,7 @@ describe("NotificationDispatcher", () => {
   });
 
   describe("BulkActionCompleted", () => {
-    it("creates a bulk_action_completed notification", async () => {
+    it("creates a bulk_action_completed notification via InAppChannel", async () => {
       const event = createEvent(DomainEventType.BulkActionCompleted, {
         actionType: "dismiss",
         itemIds: ["sv-1", "sv-2", "sv-3"],
@@ -76,7 +80,7 @@ describe("NotificationDispatcher", () => {
 
       await eventBus.publish(event);
 
-      expect(prisma.notification.create).toHaveBeenCalledWith({
+      expect(mockCreate).toHaveBeenCalledWith({
         data: {
           userId: "user-1",
           type: "bulk_action_completed",
@@ -87,7 +91,7 @@ describe("NotificationDispatcher", () => {
   });
 
   describe("RetentionCompleted", () => {
-    it("creates a retention_completed notification", async () => {
+    it("creates a retention_completed notification via InAppChannel", async () => {
       const event = createEvent(DomainEventType.RetentionCompleted, {
         userId: "user-1",
         purgedCount: 42,
@@ -96,7 +100,7 @@ describe("NotificationDispatcher", () => {
 
       await eventBus.publish(event);
 
-      expect(prisma.notification.create).toHaveBeenCalledWith({
+      expect(mockCreate).toHaveBeenCalledWith({
         data: {
           userId: "user-1",
           type: "retention_completed",
@@ -107,7 +111,7 @@ describe("NotificationDispatcher", () => {
   });
 
   describe("ModuleDeactivated", () => {
-    it("creates a module_deactivated notification", async () => {
+    it("creates a module_deactivated notification via InAppChannel", async () => {
       const event = createEvent(DomainEventType.ModuleDeactivated, {
         moduleId: "eures",
         userId: "user-1",
@@ -116,7 +120,7 @@ describe("NotificationDispatcher", () => {
 
       await eventBus.publish(event);
 
-      expect(prisma.notification.create).toHaveBeenCalledWith({
+      expect(mockCreate).toHaveBeenCalledWith({
         data: {
           userId: "user-1",
           type: "module_deactivated",
@@ -128,7 +132,7 @@ describe("NotificationDispatcher", () => {
   });
 
   describe("ModuleReactivated", () => {
-    it("creates a module_reactivated notification", async () => {
+    it("creates a module_reactivated notification via InAppChannel", async () => {
       const event = createEvent(DomainEventType.ModuleReactivated, {
         moduleId: "eures",
         userId: "user-1",
@@ -137,7 +141,7 @@ describe("NotificationDispatcher", () => {
 
       await eventBus.publish(event);
 
-      expect(prisma.notification.create).toHaveBeenCalledWith({
+      expect(mockCreate).toHaveBeenCalledWith({
         data: {
           userId: "user-1",
           type: "module_reactivated",
@@ -160,7 +164,7 @@ describe("NotificationDispatcher", () => {
       await eventBus.publish(event);
 
       // No immediate notification — buffered
-      expect(prisma.notification.create).not.toHaveBeenCalled();
+      expect(mockCreate).not.toHaveBeenCalled();
     });
 
     it("creates batch summary via direct flush", async () => {
@@ -176,14 +180,14 @@ describe("NotificationDispatcher", () => {
         );
       }
 
-      expect(prisma.notification.create).not.toHaveBeenCalled();
+      expect(mockCreate).not.toHaveBeenCalled();
       expect(_testHelpers.stagedBuffers.size).toBe(1);
       expect(_testHelpers.stagedBuffers.get("auto-1")?.count).toBe(3);
 
       // Directly invoke the flush (simulating what the timer would do)
       await _testHelpers.flushStagedBuffer("auto-1");
 
-      expect(prisma.notification.create).toHaveBeenCalledWith({
+      expect(mockCreate).toHaveBeenCalledWith({
         data: {
           userId: "user-1",
           type: "vacancy_batch_staged",
@@ -208,15 +212,13 @@ describe("NotificationDispatcher", () => {
 
       // No buffer entry created
       expect(_testHelpers.stagedBuffers.size).toBe(0);
-      expect(prisma.notification.create).not.toHaveBeenCalled();
+      expect(mockCreate).not.toHaveBeenCalled();
     });
   });
 
-  describe("Future-ready: preferences", () => {
+  describe("Error isolation", () => {
     it("dispatcher does not crash when notification creation fails", async () => {
-      (prisma.notification.create as jest.Mock).mockRejectedValueOnce(
-        new Error("DB error"),
-      );
+      mockCreate.mockRejectedValueOnce(new Error("DB error"));
 
       const event = createEvent(DomainEventType.VacancyPromoted, {
         stagedVacancyId: "sv-1",

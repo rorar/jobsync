@@ -30,7 +30,8 @@ export interface NotificationPreferences {
   enabled: boolean; // global kill switch
   channels: {
     inApp: boolean;
-    // future: email: boolean; push: boolean; webhook: boolean;
+    webhook: boolean;
+    // future: email: boolean; push: boolean;
   };
   perType: Partial<Record<NotificationType, { enabled: boolean }>>;
   quietHours?: {
@@ -43,7 +44,7 @@ export interface NotificationPreferences {
 
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   enabled: true,
-  channels: { inApp: true },
+  channels: { inApp: true, webhook: false },
   perType: {},
 };
 
@@ -60,22 +61,37 @@ export const CONFIGURABLE_NOTIFICATION_TYPES: NotificationType[] = [
   "retention_completed",
 ];
 
+/** Channel identifiers for shouldNotify checks */
+export type NotificationChannelId = keyof NotificationPreferences["channels"];
+
 /**
- * Check whether a notification of the given type should be created,
- * according to the supplied preferences.
+ * Check whether a notification of the given type should be dispatched
+ * for a specific channel, according to the supplied preferences.
  *
  * Returns `true` when the notification should proceed, `false` to suppress.
+ *
+ * When no channel is specified, returns true if ANY channel is enabled
+ * (backward compatible — used by the dispatcher to decide whether to
+ * build a NotificationDraft at all).
  */
 export function shouldNotify(
   prefs: NotificationPreferences,
   type: NotificationType,
+  channel?: NotificationChannelId,
   now: Date = new Date(),
 ): boolean {
   // Global kill switch
   if (!prefs.enabled) return false;
 
-  // Channel gate (currently only in-app)
-  if (!prefs.channels.inApp) return false;
+  // Channel gate
+  if (channel) {
+    // Check specific channel
+    if (!prefs.channels[channel]) return false;
+  } else {
+    // No channel specified — check if ANY channel is enabled
+    const anyChannelEnabled = Object.values(prefs.channels).some(Boolean);
+    if (!anyChannelEnabled) return false;
+  }
 
   // Per-type override
   const perTypeEntry = prefs.perType[type];

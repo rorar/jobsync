@@ -52,7 +52,7 @@ describe("CONFIGURABLE_NOTIFICATION_TYPES", () => {
 describe("shouldNotify()", () => {
   const basePrefs: NotificationPreferences = {
     enabled: true,
-    channels: { inApp: true },
+    channels: { inApp: true, webhook: false },
     perType: {},
   };
 
@@ -69,12 +69,36 @@ describe("shouldNotify()", () => {
   });
 
   describe("channel gating", () => {
-    it("returns false when inApp channel is disabled", () => {
+    it("returns false when all channels are disabled", () => {
       const prefs: NotificationPreferences = {
         ...basePrefs,
-        channels: { inApp: false },
+        channels: { inApp: false, webhook: false },
       };
       expect(shouldNotify(prefs, "vacancy_promoted")).toBe(false);
+    });
+
+    it("returns false when specific channel is disabled", () => {
+      const prefs: NotificationPreferences = {
+        ...basePrefs,
+        channels: { inApp: false, webhook: true },
+      };
+      expect(shouldNotify(prefs, "vacancy_promoted", "inApp")).toBe(false);
+    });
+
+    it("returns true when any channel is enabled (no channel specified)", () => {
+      const prefs: NotificationPreferences = {
+        ...basePrefs,
+        channels: { inApp: false, webhook: true },
+      };
+      expect(shouldNotify(prefs, "vacancy_promoted")).toBe(true);
+    });
+
+    it("returns true for specific enabled channel", () => {
+      const prefs: NotificationPreferences = {
+        ...basePrefs,
+        channels: { inApp: true, webhook: false },
+      };
+      expect(shouldNotify(prefs, "vacancy_promoted", "inApp")).toBe(true);
     });
   });
 
@@ -126,7 +150,7 @@ describe("shouldNotify()", () => {
       };
       // 23:30 UTC is within 23:00-07:00 (overnight)
       const now = new Date("2026-03-29T23:30:00Z");
-      expect(shouldNotify(prefs, "vacancy_promoted", now)).toBe(false);
+      expect(shouldNotify(prefs, "vacancy_promoted", undefined, now)).toBe(false);
     });
 
     it("returns true outside quiet hours", () => {
@@ -141,7 +165,7 @@ describe("shouldNotify()", () => {
       };
       // 12:00 UTC is outside 22:00-07:00
       const now = new Date("2026-03-29T12:00:00Z");
-      expect(shouldNotify(prefs, "vacancy_promoted", now)).toBe(true);
+      expect(shouldNotify(prefs, "vacancy_promoted", undefined, now)).toBe(true);
     });
 
     it("returns true when quiet hours are disabled", () => {
@@ -155,7 +179,7 @@ describe("shouldNotify()", () => {
         },
       };
       const now = new Date("2026-03-29T23:30:00Z");
-      expect(shouldNotify(prefs, "vacancy_promoted", now)).toBe(true);
+      expect(shouldNotify(prefs, "vacancy_promoted", undefined, now)).toBe(true);
     });
 
     it("handles same-day ranges correctly", () => {
@@ -170,11 +194,11 @@ describe("shouldNotify()", () => {
       };
       // 12:00 UTC is within 09:00-17:00
       const midday = new Date("2026-03-29T12:00:00Z");
-      expect(shouldNotify(prefs, "vacancy_promoted", midday)).toBe(false);
+      expect(shouldNotify(prefs, "vacancy_promoted", undefined, midday)).toBe(false);
 
       // 20:00 UTC is outside 09:00-17:00
       const evening = new Date("2026-03-29T20:00:00Z");
-      expect(shouldNotify(prefs, "vacancy_promoted", evening)).toBe(true);
+      expect(shouldNotify(prefs, "vacancy_promoted", undefined, evening)).toBe(true);
     });
 
     it("gracefully handles invalid timezone (does not suppress)", () => {
@@ -189,7 +213,7 @@ describe("shouldNotify()", () => {
       };
       const now = new Date("2026-03-29T23:30:00Z");
       // Should NOT suppress because the timezone is invalid
-      expect(shouldNotify(prefs, "vacancy_promoted", now)).toBe(true);
+      expect(shouldNotify(prefs, "vacancy_promoted", undefined, now)).toBe(true);
     });
   });
 
@@ -197,16 +221,16 @@ describe("shouldNotify()", () => {
     it("global disabled takes precedence over everything", () => {
       const prefs: NotificationPreferences = {
         enabled: false,
-        channels: { inApp: true },
+        channels: { inApp: true, webhook: false },
         perType: { vacancy_promoted: { enabled: true } },
       };
       expect(shouldNotify(prefs, "vacancy_promoted")).toBe(false);
     });
 
-    it("channel disabled takes precedence over per-type enabled", () => {
+    it("all channels disabled takes precedence over per-type enabled", () => {
       const prefs: NotificationPreferences = {
         enabled: true,
-        channels: { inApp: false },
+        channels: { inApp: false, webhook: false },
         perType: { vacancy_promoted: { enabled: true } },
       };
       expect(shouldNotify(prefs, "vacancy_promoted")).toBe(false);

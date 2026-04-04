@@ -116,7 +116,7 @@ describe("NotificationDispatcher flushStagedBuffer with preferences", () => {
       settings: JSON.stringify({
         notifications: {
           enabled: false,
-          channels: { inApp: true },
+          channels: { inApp: true, webhook: false },
           perType: {},
         },
       }),
@@ -140,7 +140,7 @@ describe("NotificationDispatcher flushStagedBuffer with preferences", () => {
       settings: JSON.stringify({
         notifications: {
           enabled: true,
-          channels: { inApp: true },
+          channels: { inApp: true, webhook: false },
           perType: { vacancy_batch_staged: { enabled: false } },
         },
       }),
