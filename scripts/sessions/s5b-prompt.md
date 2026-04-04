@@ -99,6 +99,12 @@ Committe nach jedem logischen Schritt. Build + Tests VOR jedem Commit.
 
 **WICHTIG: Auto-Approve bei Skill-internen Checkpoints.** Der full-stack-feature Skill hat interne PHASE CHECKPOINTs die normalerweise User-Approval brauchen. Da diese Session autonom läuft: Approve automatisch und fahre fort. Prüfe die Outputs kurz auf Plausibilität, aber pausiere NICHT für User-Input.
 
+**Entscheidungsprinzip bei Skill-internen Architektur-Entscheidungen:**
+Bei JEDER Architektur-Entscheidung wählst du NICHT den einfacheren Weg. Du wählst den Weg des Nachhaltigkeitsprinzips:
+1. **DDD-Prinzipien:** Aggregate Boundaries, Ubiquitous Language, ACL-Pattern
+2. **ROADMAP Cross-Dependencies:** Was brauchen spätere Features (1.5 Job Alerts, 5.4 CRM Reminders, 0.8 PWA)?
+3. **Allium Specs:** Wenn eine Entscheidung unklar ist, befrage `notification-dispatch.allium` und `event-bus.allium`. Wenn die Spec keine Antwort hat, verwende `allium:elicit` BEVOR du implementierst. Die Spec ist die Source of Truth.
+
 **Prisma-Workflow bei Schema-Änderungen:**
 ```bash
 bash scripts/prisma-migrate.sh   # Migration erstellen

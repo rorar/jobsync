@@ -81,7 +81,7 @@ Starte `/full-stack-orchestration:full-stack-feature` für die Sprint E2 Umsetzu
 4 Backend-Capabilities an die UI anbinden: (1) Dashboard Status Funnel Widget mit Conversion-Chart, (2) Health Check "Check Now" Button in Module Settings, (3) Ctrl+Z Global Undo Keyboard-Listener, (4) Retention Cleanup Button in Developer Settings. Alle Server Actions existieren — nur UI-Consumer fehlen.
 
 **E2.1 (M): Dashboard Status Funnel**
-- Neues Component: `src/components/dashboard/StatusFunnelWidget.tsx`
+- Component existiert BEREITS: `src/components/dashboard/StatusFunnelWidget.tsx` — prüfe ob es in die Dashboard-Page (`src/app/dashboard/page.tsx`) integriert ist. Falls nicht: integrieren. Falls ja aber unvollständig: erweitern.
 - Conversion-Chart: Bookmarked → Applied → Interview → Offer (mit Counts und Prozent)
 - Consumer: `getStatusDistribution`
 
@@ -217,7 +217,13 @@ source scripts/env.sh && bun run build  # Build prüfen
 
 **Für Phase 1+2+3:** Jede Phase startet `/full-stack-orchestration:full-stack-feature`.
 
-**WICHTIG: Auto-Approve bei Skill-internen Checkpoints.** Der full-stack-feature Skill hat interne PHASE CHECKPOINTs die normalerweise User-Approval brauchen. Da diese Session autonom läuft: Approve automatisch und fahre fort. Prüfe die Outputs kurz auf Plausibilität, aber pausiere NICHT für User-Input. Der Skill orchestriert intern: Requirements → DB Schema → Architecture → DB Impl → Backend → Frontend → Testing (Security + Performance parallel) → Deployment → Docs.
+**WICHTIG: Auto-Approve bei Skill-internen Checkpoints.** Der full-stack-feature Skill hat interne PHASE CHECKPOINTs die normalerweise User-Approval brauchen. Da diese Session autonom läuft: Approve automatisch und fahre fort. Prüfe die Outputs kurz auf Plausibilität, aber pausiere NICHT für User-Input.
+
+**Entscheidungsprinzip bei Skill-internen Architektur-Entscheidungen:**
+Bei JEDER Architektur-Entscheidung (DB Schema Design, API Design, Component Architecture) wählst du NICHT den einfacheren Weg. Du wählst den Weg des Nachhaltigkeitsprinzips:
+1. **DDD-Prinzipien:** Aggregate Boundaries, Ubiquitous Language, ACL-Pattern
+2. **ROADMAP Cross-Dependencies:** Was brauchen spätere Features (D2 E-Mail, D3 Push, 1.5 Job Alerts, 5.4 CRM Reminders)?
+3. **Allium Specs:** Wenn eine Entscheidung unklar ist, befrage die relevante Allium Spec (`notification-dispatch.allium`, `event-bus.allium`). Wenn die Spec keine Antwort hat, verwende `allium:elicit` um die Frage formal zu klären BEVOR du implementierst. Die Spec ist die Source of Truth für Domain-Regeln. Der Skill orchestriert intern: Requirements → DB Schema → Architecture → DB Impl → Backend → Frontend → Testing (Security + Performance parallel) → Deployment → Docs.
 
 **Foundation-then-Fan-Out (Learning aus S3/S4):** Der Skill MUSS bei Phase 3 (Webhook) zuerst die Foundation legen (Schema + Types + ChannelRouter Refactor), verifizieren (`tsc --noEmit`), DANN parallelisieren. S3 hatte kaskadierte Build-Failures weil parallel gegen nicht-existierende Types gecodet wurde.
 
