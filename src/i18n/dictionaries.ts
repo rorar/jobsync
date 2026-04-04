@@ -99,6 +99,12 @@ const core = {
     "common.secondShort": "s",
     "common.dismiss": "Dismiss",
 
+    // Undo
+    "undo.actionUndone": "Action undone",
+    "undo.nothingToUndo": "Nothing to undo",
+    "undo.undoFailed": "Undo failed",
+    "undo.undoShortcut": "Press Ctrl+Z to undo the last action",
+
     // Error messages
     "errors.notFound": "Resource not found",
     "errors.noteTooLong": "Note is too long (max 500 characters)",
@@ -243,6 +249,12 @@ const core = {
     "common.minuteShort": "m",
     "common.secondShort": "s",
     "common.dismiss": "Schließen",
+
+    // Rückgängig machen
+    "undo.actionUndone": "Aktion rückgängig gemacht",
+    "undo.nothingToUndo": "Nichts zum Rückgängigmachen",
+    "undo.undoFailed": "Rückgängig machen fehlgeschlagen",
+    "undo.undoShortcut": "Strg+Z drücken, um die letzte Aktion rückgängig zu machen",
 
     // Fehlermeldungen
     "errors.notFound": "Ressource nicht gefunden",
@@ -389,6 +401,12 @@ const core = {
     "common.secondShort": "s",
     "common.dismiss": "Fermer",
 
+    // Annuler
+    "undo.actionUndone": "Action annulée",
+    "undo.nothingToUndo": "Rien à annuler",
+    "undo.undoFailed": "Échec de l'annulation",
+    "undo.undoShortcut": "Appuyez sur Ctrl+Z pour annuler la dernière action",
+
     // Messages d'erreur
     "errors.notFound": "Ressource non trouvée",
     "errors.noteTooLong": "La note est trop longue (max 500 caractères)",
@@ -533,6 +551,12 @@ const core = {
     "common.minuteShort": "min",
     "common.secondShort": "s",
     "common.dismiss": "Cerrar",
+
+    // Deshacer
+    "undo.actionUndone": "Acción deshecha",
+    "undo.nothingToUndo": "Nada que deshacer",
+    "undo.undoFailed": "Error al deshacer",
+    "undo.undoShortcut": "Pulsa Ctrl+Z para deshacer la última acción",
 
     // Mensajes de error
     "errors.notFound": "Recurso no encontrado",

@@ -8,7 +8,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { AlertCircle, CheckCircle2, Loader2, Trash2 } from "lucide-react";
 import {
   generateMockActivitiesAction,
   clearMockActivitiesAction,
@@ -16,7 +27,9 @@ import {
   clearMockProfileDataAction,
   clearE2ETestDataAction,
 } from "@/actions/mock.actions";
+import { runRetentionCleanup } from "@/actions/stagedVacancy.actions";
 import { useTranslations } from "@/i18n";
+import { toast } from "@/components/ui/use-toast";
 
 type StatusMessage = { type: "success" | "error"; text: string };
 
@@ -324,6 +337,109 @@ export function MockProfileCard() {
               {isClearing ? t("developer.clearing") : t("developer.clearMockProfile")}
             </Button>
           </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export function RetentionCleanupCard() {
+  const { t } = useTranslations();
+  const [isRunning, setIsRunning] = useState(false);
+  const [lastResult, setLastResult] = useState<{
+    purged: number;
+    hashes: number;
+    timestamp: Date;
+  } | null>(null);
+
+  const handleCleanup = async () => {
+    setIsRunning(true);
+    try {
+      const result = await runRetentionCleanup();
+      if (result.success && result.data) {
+        const info = {
+          purged: result.data.purgedCount,
+          hashes: result.data.hashesCreated,
+          timestamp: new Date(),
+        };
+        setLastResult(info);
+        toast({
+          variant: "success",
+          title: t("developer.retentionCleanup"),
+          description: t("developer.cleanupSuccess")
+            .replace("{purged}", String(info.purged))
+            .replace("{hashes}", String(info.hashes)),
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: t("developer.retentionCleanup"),
+          description: result.message || t("developer.error"),
+        });
+      }
+    } catch {
+      toast({
+        variant: "destructive",
+        title: t("developer.error"),
+        description: t("developer.error"),
+      });
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("developer.retentionCleanup")}</CardTitle>
+          <CardDescription>
+            {t("developer.retentionCleanupDesc")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {lastResult && (
+            <p className="text-xs text-muted-foreground">
+              {t("developer.lastCleanup")}:{" "}
+              {lastResult.timestamp.toLocaleTimeString()} &mdash;{" "}
+              {t("developer.cleanupSuccess")
+                .replace("{purged}", String(lastResult.purged))
+                .replace("{hashes}", String(lastResult.hashes))}
+            </p>
+          )}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="destructive"
+                className="w-full"
+                disabled={isRunning}
+                aria-label={t("developer.runCleanup")}
+              >
+                {isRunning ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <Trash2 className="mr-2 h-4 w-4" />
+                )}
+                {isRunning ? t("developer.cleanupRunning") : t("developer.runCleanup")}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {t("developer.cleanupConfirm")}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t("developer.cleanupWarning")}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                <AlertDialogAction onClick={handleCleanup}>
+                  {t("developer.runCleanup")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </CardContent>
       </Card>
     </div>

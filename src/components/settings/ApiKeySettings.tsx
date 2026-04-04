@@ -25,7 +25,7 @@ import {
   AlertDialogTrigger,
 } from "../ui/alert-dialog";
 import { Switch } from "../ui/switch";
-import { Loader2, Plus, Trash2, CheckCircle } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle, HeartPulse } from "lucide-react";
 import {
   getUserApiKeys,
   saveApiKey,
@@ -36,6 +36,7 @@ import {
   getCredentialModules,
   activateModule,
   deactivateModule,
+  runHealthCheck,
 } from "@/actions/module.actions";
 import type { ModuleManifestSummary } from "@/actions/module.actions";
 import type {
@@ -98,6 +99,7 @@ function ApiKeySettings() {
   const [verifying, setVerifying] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [checking, setChecking] = useState<string | null>(null);
 
   useEffect(() => {
     fetchKeys();
@@ -269,6 +271,51 @@ function ApiKeySettings() {
       });
     } finally {
       setToggling(null);
+    }
+  };
+
+  const HEALTH_STATUS_LABELS: Record<string, string> = {
+    healthy: "Healthy",
+    degraded: "Degraded",
+    unreachable: "Unreachable",
+    unknown: "Unknown",
+  };
+
+  const handleHealthCheck = async (module: ModuleConfig) => {
+    setChecking(module.moduleId);
+    try {
+      const result = await runHealthCheck(module.moduleId);
+      if (result.success && result.data) {
+        setModules((prev) =>
+          prev.map((m) =>
+            m.moduleId === module.moduleId
+              ? { ...m, healthStatus: result.data!.healthStatus as ModuleConfig["healthStatus"] }
+              : m,
+          ),
+        );
+        toast({
+          variant: result.data.success ? "success" : "destructive",
+          title: t("settings.healthCheckNow"),
+          description: t("settings.healthCheckSuccess")
+            .replace("{module}", module.name)
+            .replace("{status}", HEALTH_STATUS_LABELS[result.data.healthStatus] ?? result.data.healthStatus)
+            .replace("{time}", String(result.data.responseTimeMs)),
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: t("settings.healthCheckNow"),
+          description: t("settings.healthCheckFailed").replace("{module}", module.name),
+        });
+      }
+    } catch {
+      toast({
+        variant: "destructive",
+        title: t("settings.error"),
+        description: t("settings.healthCheckFailed").replace("{module}", module.name),
+      });
+    } finally {
+      setChecking(null);
     }
   };
 
@@ -445,6 +492,22 @@ function ApiKeySettings() {
                         </AlertDialogContent>
                       </AlertDialog>
                     )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={checking === module.moduleId || module.status !== "active"}
+                      onClick={() => handleHealthCheck(module)}
+                      aria-label={t("settings.healthCheckNow")}
+                    >
+                      {checking === module.moduleId ? (
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin motion-reduce:animate-none" />
+                      ) : (
+                        <HeartPulse className="mr-1 h-3 w-3" />
+                      )}
+                      {checking === module.moduleId
+                        ? t("settings.healthCheckRunning")
+                        : t("settings.healthCheckNow")}
+                    </Button>
                   </div>
                 )}
               </CardContent>
