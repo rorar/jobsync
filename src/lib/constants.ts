@@ -8,6 +8,7 @@ import {
   Wrench,
   Zap,
   BookOpen,
+  Inbox,
 } from "lucide-react";
 import type { TranslationKey } from "@/i18n";
 
@@ -91,6 +92,12 @@ export const SIDEBAR_LINKS: {
     route: "/dashboard/automations",
     label: "Automations",
     labelKey: "nav.automations",
+  },
+  {
+    icon: Inbox,
+    route: "/dashboard/staging",
+    label: "Staging Queue",
+    labelKey: "nav.stagingQueue",
   },
   {
     icon: SquareCheckBig,
