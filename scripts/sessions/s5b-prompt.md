@@ -202,6 +202,7 @@ Der Main-Agent darf KEINE der folgenden Aktionen selbst ausführen:
 - ❌ Review-Findings selbst fixen ("I'll fix this quickly while waiting")
 - ❌ UI-Komponenten ändern
 - ❌ Allium Specs schreiben oder editieren
+- ❌ **Eigenständige Tradeoff-Entscheidungen treffen.** Du darfst NICHT entscheiden "Implementation > Verification" oder "Context-Effizienz > Prompt-Compliance". Wenn der Prompt sagt "rufe Skill X auf", dann rufst du Skill X auf — unabhängig von Context-Verbrauch oder Zeitaufwand. Die Prioritäten definiert der Prompt, nicht du. Wenn du einen Tradeoff für nötig hältst: dokumentiere ihn EXPLIZIT und begründe — aber führe die Anweisung trotzdem aus.
 
 Der Main-Agent darf NUR:
 - ✅ Agents dispatchen und koordinieren

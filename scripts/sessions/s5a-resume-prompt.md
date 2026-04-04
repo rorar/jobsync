@@ -81,6 +81,7 @@ Sage die Wahrheit und nur die Wahrheit: Was habe ich übersprungen und wo sind d
 - ❌ Code Read/Edit/Write (außer BUGS.md, CHANGELOG.md, docs/)
 - ❌ Tests schreiben, Findings fixen
 - ❌ Skills durch `Agent("...")` ersetzen — verwende `Skill()` Tool
+- ❌ **Eigenständige Tradeoff-Entscheidungen treffen.** Du darfst NICHT entscheiden "Implementation > Verification" oder "Context-Effizienz > Prompt-Compliance". Wenn der Prompt sagt "rufe Skill X auf", dann rufst du Skill X auf — unabhängig von Context-Verbrauch oder Zeitaufwand. Die Prioritäten definiert der Prompt, nicht du. Wenn du einen Tradeoff für nötig hältst: dokumentiere ihn EXPLIZIT und begründe — aber führe die Anweisung trotzdem aus.
 
 ### Git
 - Konventionelle Commits mit `Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>`
