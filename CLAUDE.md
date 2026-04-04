@@ -202,6 +202,41 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **Allium Spec:** `specs/scheduler-coordination.allium` — authoritative specification for all coordination rules.
 
+### Webhook Notification Channel (ROADMAP 0.6 Phase 2)
+
+**Multi-Channel Architecture:** Notification dispatcher refactored from hardcoded in-app to `ChannelRouter` pattern. Each channel implements `NotificationChannel` interface (`dispatch`, `isAvailable`, `isEnabled`).
+
+**Current structure:** `src/lib/notifications/`:
+- **types.ts** — NotificationChannel, NotificationDraft, ChannelResult, WebhookPayload, WebhookDeliveryResult
+- **channel-router.ts** — ChannelRouter singleton (register channels, route to all enabled). `globalThis` pattern.
+- **channels/in-app.channel.ts** — InAppChannel (creates Notification DB record)
+- **channels/webhook.channel.ts** — WebhookChannel (HMAC signing, retry, auto-deactivation)
+
+**Webhook Delivery:**
+- HMAC-SHA256 signing: `X-Webhook-Signature: sha256=<hmac>` header
+- Headers: `X-Webhook-Event`, `Content-Type: application/json`, `User-Agent: JobSync-Webhook/1.0`
+- Retry: 3 attempts with 1s/5s/30s backoff, 10s timeout via AbortController
+- `redirect: "manual"` on fetch (SSRF protection via open redirector prevention)
+- Concurrent delivery via `Promise.allSettled()` (independent endpoints)
+
+**Failure Handling:**
+- Atomic `failureCount` increment via Prisma `{ increment: 1 }`
+- After 3 failed attempts: in-app notification "Webhook delivery failed"
+- After 5 consecutive failures: auto-deactivate endpoint + notification
+- Success resets `failureCount` to 0
+
+**SSRF Protection:** `validateWebhookUrl()` in `src/lib/url-validation.ts` — SUPERSET of existing validators. Blocks: IMDS (169.254.*), RFC 1918 (10.x, 172.16-31.x, 192.168.x), localhost (127.x, ::1), non-http(s), embedded credentials, IPv6 private (fc00::/7, fe80::/10), IPv4-mapped IPv6 (::ffff:*). Validated on create AND on dispatch.
+
+**Secret Storage:** AES-encrypted via `src/lib/encryption.ts`. Secret shown once on creation, then only as masked prefix.
+
+**Server Actions:** `src/actions/webhook.actions.ts` — CRUD with ADR-015 IDOR protection (userId in all queries). Max 10 endpoints per user.
+
+**Settings UI:** `src/components/settings/WebhookSettings.tsx` — endpoint list with active toggle, event selection, create form with client-side URL validation, secret-once dialog, delete confirmation.
+
+**shouldNotify() Channel-Aware:** `src/models/notification.model.ts` — accepts optional `channel` parameter. When inApp is disabled but webhook is enabled, webhook still fires.
+
+**Allium Spec:** `specs/notification-dispatch.allium` — WebhookEndpoint entity, WebhookDelivery/RetryExhaustion/AutoDeactivation rules.
+
 ### Public API v1 (ROADMAP 7.1 Phase 1)
 
 REST API as "Open Host Service" (DDD) — manually designed surface over existing data layer.

@@ -274,7 +274,7 @@ Intake (Automation ODER Manual) → Staging Area → Processing → Inbox → Tr
 - **Voraussetzung für:** JobDeck Dual-Use (2.7), CRM (5), Bewerbungsunterlagen (4)
 - Allium Spec: `specs/vacancy-pipeline.allium` (zu erstellen)
 
-### 0.6 Unified Notification System — PHASE 1 DONE (3 Channel-Phasen offen)
+### 0.6 Unified Notification System — PHASE 1+2 DONE (Webhook Channel, 2 Channel-Phasen offen)
 Application Service für Dispatch + bestehende Connectors für Delivery. **Dispatch ≠ Delivery.**
 
 **Implementiert (2026-03-29):**
@@ -293,10 +293,10 @@ Application Service für Dispatch + bestehende Connectors für Delivery. **Dispa
 - **Delivery (extern):** E-Mail (→ Communication Connector 1.12), Browser Push, Webhook (→ 1.3), In-App (DB-Write)
 - **Preferences:** Teil von UserSettings (kein eigenes Aggregate). Channels, Digest-Modus, Quiet Hours, per-Typ-Overrides.
 - **Phasen:**
-  1. In-App Notifications (Bell-Icon, DB-backed) — unblocked 0.4 (Degradation) und 0.5 (Promotion)
-  2. E-Mail Channel via Communication Connector (1.12)
-  3. Browser Push Channel
-  4. Webhook Channel für n8n-Integration (1.3)
+  1. ✅ In-App Notifications (Bell-Icon, DB-backed) — unblocked 0.4 (Degradation) und 0.5 (Promotion)
+  2. ✅ Webhook Channel (HMAC signing, retry, auto-deactivation, Settings UI) — S5a
+  3. E-Mail Channel via Communication Connector (1.12) — S5b
+  4. Browser Push Channel — S5b
 - **Key Insight:** Job-Alerts (1.5) und CRM-Reminders (5.4) sind **Notification-Rules**, keine eigenen Systeme. Sie werden als Konfiguration des Dispatchers modelliert.
 - **Domain Event Bus (architektonischer Owner):**
   - 0.6 besitzt den Event Bus als Infrastruktur — nicht nur für Notifications, sondern als **genereller Publish/Subscribe-Mechanismus** für Domain Events
@@ -2126,11 +2126,17 @@ Generierte persönliche Landingpage die den Bewerbungs-Funnel invertiert: Statt 
 
 ---
 
-## 10. Sprint E: UI-Lücken schließen (Backend→Frontend Alignment)
+## 10. Sprint E: UI-Lücken schließen (Backend→Frontend Alignment) -- DONE (S5a)
 
 **Rationale:** Sprint C5+C6 haben Backend-Capabilities gebaut die nie an die UI angeschlossen wurden. 8 Server Actions sind ohne Consumer, 1 Page ist nicht navigierbar. Dieser Sprint schließt die Lücken.
 
-### Sprint E1: Kritische UI-Lücken (Feature komplett ohne UI)
+**Implementiert (2026-04-04, Session S5a):**
+- E1: 4 kritische UI-Lücken geschlossen (Enrichment Panel, Status Timeline, Kanban Reorder, Sidebar Link)
+- E2: 4 Backend-Capabilities exponiert (Funnel Widget, Health Check, Global Undo, Retention Cleanup)
+- 8 orphaned Server Actions haben jetzt UI-Consumer
+- 74 neue Tests (10+12+18+13+4+10+7), 150 Suites total
+
+### Sprint E1: Kritische UI-Lücken (Feature komplett ohne UI) -- DONE
 
 | # | Feature | Backend vorhanden | UI zu bauen | Komplexität |
 |---|---------|-------------------|-------------|-------------|
@@ -2158,7 +2164,7 @@ Generierte persönliche Landingpage die den Bewerbungs-Funnel invertiert: Statt 
 
 ---
 
-## Implementierte Features (Stand: 2026-04-03)
+## Implementierte Features (Stand: 2026-04-04)
 
 | Feature | Status |
 |---|---|
@@ -2189,6 +2195,8 @@ Generierte persönliche Landingpage die den Bewerbungs-Funnel invertiert: Statt 
 | Roadmap 0.5: Vacancy Pipeline (Kern-Pipeline) | ⏳ Teilweise (Archive/Trash, Undo, Bulk ausstehend) |
 | Sprint A: Architecture Debt (10 Items) | ✅ Verifiziert |
 | Sprint B: UX/UI Gaps (10 Items) | ✅ Verifiziert |
+| Sprint E: UI-Lücken schließen (8 Items) | ✅ Implementiert (S5a, 74 Tests) |
+| Roadmap 0.6 Phase 2: Webhook Channel | ✅ Implementiert (HMAC, Retry, SSRF, ChannelRouter, Settings UI) |
 | Security Audit: 25+ Vulnerabilities | ✅ Gefixt (ADR-015 bis ADR-025) |
 | Allium Specs (21 Specs, ~10345 Lines) | ✅ Spezifiziert + Aligned |
 | Test Suite: 140 Suites, 2606 Tests, 79 E2E | ✅ Grün |
