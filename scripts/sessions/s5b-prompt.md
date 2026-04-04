@@ -325,3 +325,22 @@ Agenten, Skills und Plugins dürfen jederzeit online suchen (WebSearch, WebFetch
 - [ ] CLAUDE.md aktualisiert (Notification Channels Architektur — alle 4 Channels)
 - [ ] Build grün + Tests grün + E2E grün
 - [ ] Branch `session/s5b-email-push` nach main mergen
+
+## PFLICHT: Ehrlichkeits-Gate VOR dem Merge (Learning aus S5a)
+
+BEVOR du den Branch mergst, beantworte diese Fragen EHRLICH und VOLLSTÄNDIG. Keine Beschönigungen, keine "good enough" Bewertungen. Dieses Gate hat in S5a mehr Gaps aufgedeckt als alle Checkpoints zusammen.
+
+**Frage 1 — Selbstreflexion (beantworte JEDE Unterfrage):**
+- Wo habe ich Abkürzungen genommen und warum?
+- Wo habe ich KEINE spezialisierten Skills ODER Agents verwendet, obwohl die Anweisungen es verlangen?
+- Was fehlt in dieser Session ODER wurde nicht bearbeitet, obwohl die Anweisungen es verlangen?
+- Habe ich die Dokumentation aktualisiert (BUGS.md, CHANGELOG.md, ROADMAP.md, CLAUDE.md, docs/reviews/)?
+- Habe ich die nächste Session über meine Arbeit informiert ODER was offen/deferred ist? (`project_s5b_deferred_items.md`, MEMORY.md Update)
+
+**Frage 2 — Wahrheits-Check:**
+Sage die Wahrheit und nur die Wahrheit: Was habe ich übersprungen und wo sind die Lücken?
+
+**Nach der Beantwortung:**
+- Fixe ALLE identifizierten Lücken bevor du mergst
+- Wenn Context knapp: dokumentiere die Lücken in BUGS.md + `project_s5b_deferred_items.md`
+- ERST wenn alle Lücken gefixt ODER dokumentiert sind → merge
