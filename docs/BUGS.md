@@ -1,8 +1,21 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-04-04
+# Bug Tracker — Collected 2026-03-24, Updated 2026-04-05
 
-**Total: 283 bugs found, 281 fixed, 2 open (accepted risk)**
+**Total: 290 bugs found, 288 fixed, 2 open (accepted risk)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing)
+
+## S5b Review Findings (2026-04-05)
+
+### Fixed in S5b — CHECK Phase (6 findings + 1 pre-existing test fix)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| S5b-F01 | **HIGH** | sw-push.js open redirect via push payload URL | Validate relative path, block external URLs |
+| S5b-F02 | MEDIUM | Unused `t()` import in email.channel.ts | Removed |
+| S5b-F03 | MEDIUM | Hardcoded English aria-labels on password toggle | i18n keys for show/hide password |
+| S5b-F04 | MEDIUM | HTML lang="en" hardcoded in email templates | Locale-aware `<html lang>` |
+| S5b-F05 | MEDIUM | Push 404 not treated as stale subscription | Cleanup on 404+410 |
+| S5b-F06 | MEDIUM | Missing role="alert" on error states | Added to SmtpSettings + PushSettings |
+| S5b-F07 | MEDIUM | env-sync.spec.ts failing (pre-existing) | Aligned with allowlisted keys + auth gate |
 
 ## S5a-Resume Flashlight Findings (2026-04-04)
 

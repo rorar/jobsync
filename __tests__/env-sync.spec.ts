@@ -1,6 +1,11 @@
 import fs from "fs/promises";
 import path from "path";
+import { getCurrentUser } from "@/utils/user.utils";
 import { syncEnvVariable } from "@/lib/env-sync";
+
+jest.mock("@/utils/user.utils", () => ({
+  getCurrentUser: jest.fn(),
+}));
 
 // Spy on the actual fs/promises methods
 const readFileSpy = jest.spyOn(fs, "readFile");
@@ -11,6 +16,7 @@ describe("syncEnvVariable", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (getCurrentUser as jest.Mock).mockResolvedValue({ id: "test-user-id" });
   });
 
   afterEach(() => {
@@ -27,14 +33,14 @@ describe("syncEnvVariable", () => {
     readFileSpy.mockResolvedValue("EXISTING_KEY=value1\nOTHER_KEY=value2" as any);
     writeFileSpy.mockResolvedValue(undefined as any);
 
-    const result = await syncEnvVariable("NEW_KEY", "new_value");
+    const result = await syncEnvVariable("NEXTAUTH_URL", "http://localhost:3737");
 
     expect(result).toEqual({ success: true });
     expect(writeFileSpy).toHaveBeenCalledWith(
       path.join(process.cwd(), ".env"),
-      "EXISTING_KEY=value1\nOTHER_KEY=value2\nNEW_KEY=new_value"
+      "EXISTING_KEY=value1\nOTHER_KEY=value2\nNEXTAUTH_URL=http://localhost:3737"
     );
-    expect(process.env.NEW_KEY).toBe("new_value");
+    expect(process.env.NEXTAUTH_URL).toBe("http://localhost:3737");
   });
 
   it("updates an existing key", async () => {
@@ -58,67 +64,67 @@ describe("syncEnvVariable", () => {
 
   it("removes a key when value is undefined", async () => {
     readFileSpy.mockResolvedValue(
-      "KEEP_ME=yes\nREMOVE_ME=bye\nALSO_KEEP=true" as any
+      "KEEP_ME=yes\nALLOWED_DEV_ORIGINS=http://old:3000\nALSO_KEEP=true" as any
     );
     writeFileSpy.mockResolvedValue(undefined as any);
 
-    const result = await syncEnvVariable("REMOVE_ME", undefined);
+    const result = await syncEnvVariable("ALLOWED_DEV_ORIGINS", undefined);
 
     expect(result).toEqual({ success: true });
     expect(writeFileSpy).toHaveBeenCalledWith(
       path.join(process.cwd(), ".env"),
       "KEEP_ME=yes\nALSO_KEEP=true"
     );
-    expect(process.env.REMOVE_ME).toBeUndefined();
+    expect(process.env.ALLOWED_DEV_ORIGINS).toBeUndefined();
   });
 
   it("removes a key when value is empty string", async () => {
-    process.env.TO_REMOVE = "something";
-    readFileSpy.mockResolvedValue("TO_REMOVE=something\nOTHER=val" as any);
+    process.env.NEXTAUTH_URL = "http://localhost:3737";
+    readFileSpy.mockResolvedValue("NEXTAUTH_URL=http://localhost:3737\nOTHER=val" as any);
     writeFileSpy.mockResolvedValue(undefined as any);
 
-    const result = await syncEnvVariable("TO_REMOVE", "");
+    const result = await syncEnvVariable("NEXTAUTH_URL", "");
 
     expect(result).toEqual({ success: true });
     expect(writeFileSpy).toHaveBeenCalledWith(
       path.join(process.cwd(), ".env"),
       "OTHER=val"
     );
-    expect(process.env.TO_REMOVE).toBeUndefined();
+    expect(process.env.NEXTAUTH_URL).toBeUndefined();
   });
 
   it("creates .env when it does not exist", async () => {
     readFileSpy.mockRejectedValue(new Error("ENOENT: no such file"));
     writeFileSpy.mockResolvedValue(undefined as any);
 
-    const result = await syncEnvVariable("BRAND_NEW", "fresh_value");
+    const result = await syncEnvVariable("NEXTAUTH_URL", "http://localhost:3737");
 
     expect(result).toEqual({ success: true });
     expect(writeFileSpy).toHaveBeenCalledWith(
       path.join(process.cwd(), ".env"),
-      "\nBRAND_NEW=fresh_value"
+      "\nNEXTAUTH_URL=http://localhost:3737"
     );
-    expect(process.env.BRAND_NEW).toBe("fresh_value");
+    expect(process.env.NEXTAUTH_URL).toBe("http://localhost:3737");
   });
 
   it("handles write errors gracefully", async () => {
-    readFileSpy.mockResolvedValue("KEY=val" as any);
+    readFileSpy.mockResolvedValue("NEXTAUTH_URL=http://old:3000" as any);
     writeFileSpy.mockRejectedValue(new Error("Permission denied"));
 
-    const result = await syncEnvVariable("KEY", "new_val");
+    const result = await syncEnvVariable("NEXTAUTH_URL", "http://localhost:3737");
 
     expect(result).toEqual({ success: false });
   });
 
   it("does not modify other keys when updating one", async () => {
-    readFileSpy.mockResolvedValue("FIRST=1\nSECOND=2\nTHIRD=3" as any);
+    readFileSpy.mockResolvedValue("FIRST=1\nNEXTAUTH_URL=http://old:3000\nTHIRD=3" as any);
     writeFileSpy.mockResolvedValue(undefined as any);
 
-    await syncEnvVariable("SECOND", "updated");
+    await syncEnvVariable("NEXTAUTH_URL", "http://localhost:3737");
 
     const writtenContent = writeFileSpy.mock.calls[0][1] as string;
     expect(writtenContent).toContain("FIRST=1");
-    expect(writtenContent).toContain("SECOND=updated");
+    expect(writtenContent).toContain("NEXTAUTH_URL=http://localhost:3737");
     expect(writtenContent).toContain("THIRD=3");
   });
 
@@ -126,7 +132,7 @@ describe("syncEnvVariable", () => {
     readFileSpy.mockResolvedValue("EXISTING=value" as any);
     writeFileSpy.mockResolvedValue(undefined as any);
 
-    const result = await syncEnvVariable("NONEXISTENT", undefined);
+    const result = await syncEnvVariable("ALLOWED_DEV_ORIGINS", undefined);
 
     expect(result).toEqual({ success: true });
     expect(writeFileSpy).toHaveBeenCalledWith(

@@ -20,6 +20,7 @@ import type {
   ModuleDeactivatedPayload,
   ModuleReactivatedPayload,
   RetentionCompletedPayload,
+  JobStatusChangedPayload,
 } from "../event-types";
 import prisma from "@/lib/db";
 import type { NotificationType } from "@/models/notification.model";
@@ -31,6 +32,8 @@ import type { UserSettingsData } from "@/models/userSettings.model";
 import { channelRouter } from "@/lib/notifications/channel-router";
 import { InAppChannel } from "@/lib/notifications/channels/in-app.channel";
 import { WebhookChannel } from "@/lib/notifications/channels/webhook.channel";
+import { EmailChannel } from "@/lib/notifications/channels/email.channel";
+import { PushChannel } from "@/lib/notifications/channels/push.channel";
 import type { NotificationDraft } from "@/lib/notifications/types";
 import { t } from "@/i18n/server";
 import { DEFAULT_LOCALE, isValidLocale } from "@/i18n/locales";
@@ -43,6 +46,8 @@ import { DEFAULT_LOCALE, isValidLocale } from "@/i18n/locales";
 // so duplicate registration is guarded internally.
 channelRouter.register(new InAppChannel());
 channelRouter.register(new WebhookChannel());
+channelRouter.register(new EmailChannel());
+channelRouter.register(new PushChannel());
 
 // ---------------------------------------------------------------------------
 // VacancyStaged batch buffer (spec: rule BatchSummary)
@@ -258,6 +263,29 @@ async function handleRetentionCompleted(
   });
 }
 
+async function handleJobStatusChanged(
+  event: DomainEvent<typeof DomainEventType.JobStatusChanged>,
+): Promise<void> {
+  const payload = event.payload as JobStatusChangedPayload;
+  const locale = await resolveLocale(payload.userId);
+  const message = t(locale, "notifications.jobStatusChanged")
+    .replace("{newStatus}", payload.newStatusValue)
+    .replace("{jobId}", payload.jobId);
+
+  await dispatchNotification({
+    userId: payload.userId,
+    type: "job_status_changed" satisfies NotificationType,
+    message,
+    data: {
+      jobId: payload.jobId,
+      previousStatus: payload.previousStatusValue,
+      newStatus: payload.newStatusValue,
+      note: payload.note,
+      historyEntryId: payload.historyEntryId,
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
@@ -269,6 +297,7 @@ export function registerNotificationDispatcher(): void {
   eventBus.subscribe(DomainEventType.ModuleDeactivated, handleModuleDeactivated);
   eventBus.subscribe(DomainEventType.ModuleReactivated, handleModuleReactivated);
   eventBus.subscribe(DomainEventType.RetentionCompleted, handleRetentionCompleted);
+  eventBus.subscribe(DomainEventType.JobStatusChanged, handleJobStatusChanged);
 }
 
 // ---------------------------------------------------------------------------

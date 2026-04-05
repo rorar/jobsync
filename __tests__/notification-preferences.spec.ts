@@ -44,15 +44,22 @@ describe("CONFIGURABLE_NOTIFICATION_TYPES", () => {
     expect(CONFIGURABLE_NOTIFICATION_TYPES).toContain("retention_completed");
   });
 
-  it("contains at least 7 entries", () => {
-    expect(CONFIGURABLE_NOTIFICATION_TYPES.length).toBeGreaterThanOrEqual(7);
+  it("includes newly added notification types", () => {
+    expect(CONFIGURABLE_NOTIFICATION_TYPES).toContain("module_reactivated");
+    expect(CONFIGURABLE_NOTIFICATION_TYPES).toContain("module_unreachable");
+    expect(CONFIGURABLE_NOTIFICATION_TYPES).toContain("vacancy_batch_staged");
+    expect(CONFIGURABLE_NOTIFICATION_TYPES).toContain("job_status_changed");
+  });
+
+  it("contains at least 11 entries", () => {
+    expect(CONFIGURABLE_NOTIFICATION_TYPES.length).toBeGreaterThanOrEqual(11);
   });
 });
 
 describe("shouldNotify()", () => {
   const basePrefs: NotificationPreferences = {
     enabled: true,
-    channels: { inApp: true, webhook: false },
+    channels: { inApp: true, webhook: false, email: false, push: false },
     perType: {},
   };
 
@@ -72,7 +79,7 @@ describe("shouldNotify()", () => {
     it("returns false when all channels are disabled", () => {
       const prefs: NotificationPreferences = {
         ...basePrefs,
-        channels: { inApp: false, webhook: false },
+        channels: { inApp: false, webhook: false, email: false, push: false },
       };
       expect(shouldNotify(prefs, "vacancy_promoted")).toBe(false);
     });
@@ -80,7 +87,7 @@ describe("shouldNotify()", () => {
     it("returns false when specific channel is disabled", () => {
       const prefs: NotificationPreferences = {
         ...basePrefs,
-        channels: { inApp: false, webhook: true },
+        channels: { inApp: false, webhook: true, email: false, push: false },
       };
       expect(shouldNotify(prefs, "vacancy_promoted", "inApp")).toBe(false);
     });
@@ -88,7 +95,7 @@ describe("shouldNotify()", () => {
     it("returns true when any channel is enabled (no channel specified)", () => {
       const prefs: NotificationPreferences = {
         ...basePrefs,
-        channels: { inApp: false, webhook: true },
+        channels: { inApp: false, webhook: true, email: false, push: false },
       };
       expect(shouldNotify(prefs, "vacancy_promoted")).toBe(true);
     });
@@ -96,7 +103,7 @@ describe("shouldNotify()", () => {
     it("returns true for specific enabled channel", () => {
       const prefs: NotificationPreferences = {
         ...basePrefs,
-        channels: { inApp: true, webhook: false },
+        channels: { inApp: true, webhook: false, email: false, push: false },
       };
       expect(shouldNotify(prefs, "vacancy_promoted", "inApp")).toBe(true);
     });
@@ -221,7 +228,7 @@ describe("shouldNotify()", () => {
     it("global disabled takes precedence over everything", () => {
       const prefs: NotificationPreferences = {
         enabled: false,
-        channels: { inApp: true, webhook: false },
+        channels: { inApp: true, webhook: false, email: false, push: false },
         perType: { vacancy_promoted: { enabled: true } },
       };
       expect(shouldNotify(prefs, "vacancy_promoted")).toBe(false);
@@ -230,7 +237,7 @@ describe("shouldNotify()", () => {
     it("all channels disabled takes precedence over per-type enabled", () => {
       const prefs: NotificationPreferences = {
         enabled: true,
-        channels: { inApp: false, webhook: false },
+        channels: { inApp: false, webhook: false, email: false, push: false },
         perType: { vacancy_promoted: { enabled: true } },
       };
       expect(shouldNotify(prefs, "vacancy_promoted")).toBe(false);

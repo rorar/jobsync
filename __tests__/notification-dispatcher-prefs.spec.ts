@@ -36,6 +36,7 @@ jest.mock("@/i18n/dictionaries", () => ({
       "notifications.moduleDeactivated": "Module {name} deactivated. {automationCount} automation(s) paused.",
       "notifications.moduleReactivated": "Module {name} reactivated. {automationCount} automation(s) remain paused.",
       "notifications.batchStaged": "{count} new vacancies staged from automation",
+      "notifications.jobStatusChanged": "Job status changed to {newStatus}",
     };
     return translations[key] ?? key;
   }),
@@ -135,7 +136,7 @@ describe("NotificationDispatcher flushStagedBuffer with preferences", () => {
       settings: JSON.stringify({
         notifications: {
           enabled: false,
-          channels: { inApp: true, webhook: false },
+          channels: { inApp: true, webhook: false, email: false, push: false },
           perType: {},
         },
       }),
@@ -159,7 +160,7 @@ describe("NotificationDispatcher flushStagedBuffer with preferences", () => {
       settings: JSON.stringify({
         notifications: {
           enabled: true,
-          channels: { inApp: true, webhook: false },
+          channels: { inApp: true, webhook: false, email: false, push: false },
           perType: { vacancy_batch_staged: { enabled: false } },
         },
       }),

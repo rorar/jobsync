@@ -235,7 +235,47 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **shouldNotify() Channel-Aware:** `src/models/notification.model.ts` — accepts optional `channel` parameter. When inApp is disabled but webhook is enabled, webhook still fires.
 
-**Allium Spec:** `specs/notification-dispatch.allium` — WebhookEndpoint entity, WebhookDelivery/RetryExhaustion/AutoDeactivation rules.
+**Allium Spec:** `specs/notification-dispatch.allium` — All 4 channels, WebhookEndpoint/SmtpConfig/VapidConfig/WebPushSubscription entities, delivery rules per channel.
+
+### Email Notification Channel (ROADMAP 0.6 Phase 3)
+
+**EmailChannel** (`src/lib/notifications/channels/email.channel.ts`) — SMTP delivery via nodemailer. TLS enforced (TLSv1.2+, rejectUnauthorized). Rate-limited 10/min per user.
+
+**SmtpConfig** Prisma model — one per user (userId @unique), AES-encrypted password. Fields: host, port, username, password (encrypted), fromAddress, tlsRequired, active.
+
+**Current structure:** `src/lib/email/`:
+- **templates.ts** — `renderEmailTemplate(type, data, locale)` → `{subject, html, text}`. Inline CSS, locale-aware HTML lang tag.
+
+**Security:**
+- SMTP host SSRF validation via `src/lib/smtp-validation.ts` (blocks private IPs, IMDS, localhost) — validated on save AND on every dispatch
+- Password encrypted at rest, decrypted only at send time. `import "server-only"` on decrypt files.
+- Rate limiting: `src/lib/email-rate-limit.ts` (10 emails/min, test button 1/60s)
+
+**Server Actions:** `src/actions/smtp.actions.ts` — `saveSmtpConfig()`, `getSmtpConfig()`, `testSmtpConnection()`, `deleteSmtpConfig()`
+
+**Settings UI:** `src/components/settings/SmtpSettings.tsx` — SMTP form, password show/hide, test email with countdown, delete confirmation
+
+### Browser Push Notification Channel (ROADMAP 0.6 Phase 4)
+
+**PushChannel** (`src/lib/notifications/channels/push.channel.ts`) — Browser push delivery via web-push VAPID protocol. Concurrent delivery to all subscriptions. Rate-limited 20/min per user.
+
+**Prisma models:**
+- **VapidConfig** — one per user (userId @unique), AES-encrypted privateKey. Auto-generated on first push enable.
+- **WebPushSubscription** — multiple per user (different browsers/devices). AES-encrypted p256dh + auth keys. @@unique([userId, endpoint]).
+
+**Current structure:** `src/lib/push/`:
+- **vapid.ts** — `getOrCreateVapidKeys()`, `rotateVapidKeys()` (deletes all subscriptions)
+- **rate-limit.ts** — `checkPushDispatchRateLimit()` (20/min), `checkPushTestRateLimit()` (1/60s)
+
+**Stale Subscription Handling:** 410 Gone or 404 Not Found → silently delete subscription.
+
+**Service Worker:** `public/sw-push.js` — minimal push-only (NOT full PWA). Shows notification, handles click navigation. URL validation prevents open redirect.
+
+**VAPID Key Rotation:** Confirmation dialog warns that ALL subscriptions become invalid. Users must re-enable push after rotation.
+
+**Server Actions:** `src/actions/push.actions.ts` — `subscribePush()`, `unsubscribePush()`, `getVapidPublicKeyAction()`, `rotateVapidKeysAction()`, `sendTestPush()`
+
+**Settings UI:** `src/components/settings/PushSettings.tsx` — enable/disable push, device count, test push, VAPID rotation warning
 
 ### Public API v1 (ROADMAP 7.1 Phase 1)
 

@@ -9,6 +9,7 @@ export const notifications = {
     "notifications.moduleDeactivated": "Module {name} deactivated. {automationCount} automation(s) paused.",
     "notifications.moduleReactivated": "Module {name} reactivated. {automationCount} automation(s) remain paused.",
     "notifications.batchStaged": "{count} new vacancies staged from automation",
+    "notifications.jobStatusChanged": "Job status changed to {newStatus}",
   },
   de: {
     "notifications.title": "Benachrichtigungen",
@@ -20,6 +21,7 @@ export const notifications = {
     "notifications.moduleDeactivated": "Modul {name} deaktiviert. {automationCount} Automatisierung(en) pausiert.",
     "notifications.moduleReactivated": "Modul {name} reaktiviert. {automationCount} Automatisierung(en) bleiben pausiert.",
     "notifications.batchStaged": "{count} neue Stellenangebote aus Automatisierung bereitgestellt",
+    "notifications.jobStatusChanged": "Job-Status geändert zu {newStatus}",
   },
   fr: {
     "notifications.title": "Notifications",
@@ -31,6 +33,7 @@ export const notifications = {
     "notifications.moduleDeactivated": "Module {name} d\u00e9sactiv\u00e9. {automationCount} automatisation(s) en pause.",
     "notifications.moduleReactivated": "Module {name} r\u00e9activ\u00e9. {automationCount} automatisation(s) restent en pause.",
     "notifications.batchStaged": "{count} nouvelles offres mises en attente depuis l'automatisation",
+    "notifications.jobStatusChanged": "Statut de l'emploi changé en {newStatus}",
   },
   es: {
     "notifications.title": "Notificaciones",
@@ -42,5 +45,6 @@ export const notifications = {
     "notifications.moduleDeactivated": "M\u00f3dulo {name} desactivado. {automationCount} automatizaci\u00f3n(es) en pausa.",
     "notifications.moduleReactivated": "M\u00f3dulo {name} reactivado. {automationCount} automatizaci\u00f3n(es) siguen en pausa.",
     "notifications.batchStaged": "{count} nuevas vacantes preparadas desde la automatizaci\u00f3n",
+    "notifications.jobStatusChanged": "Estado del empleo cambiado a {newStatus}",
   },
 } as const;
