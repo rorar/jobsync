@@ -17,6 +17,36 @@ import webpush from "web-push";
 import { encrypt, decrypt } from "@/lib/encryption";
 import prisma from "@/lib/db";
 
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** Default VAPID subject when no SMTP config exists */
+const DEFAULT_VAPID_SUBJECT = "mailto:noreply@jobsync.local";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve VAPID subject (mailto: URI) from user's SMTP config if available.
+ * Falls back to a generic noreply address.
+ */
+export async function resolveVapidSubject(userId: string): Promise<string> {
+  try {
+    const smtp = await prisma.smtpConfig.findFirst({
+      where: { userId, active: true },
+      select: { fromAddress: true },
+    });
+    if (smtp?.fromAddress) {
+      return `mailto:${smtp.fromAddress}`;
+    }
+  } catch {
+    // Best-effort: fall through to default
+  }
+  return DEFAULT_VAPID_SUBJECT;
+}
+
 /**
  * Get existing VAPID keys or generate new ones for a user.
  * The private key is returned decrypted for immediate use.

@@ -12,12 +12,11 @@ import prisma from "@/lib/db";
 import { getCurrentUser } from "@/utils/user.utils";
 import { handleError } from "@/lib/utils";
 import { encrypt, decrypt } from "@/lib/encryption";
-import { getOrCreateVapidKeys, rotateVapidKeys } from "@/lib/push/vapid";
+import { getOrCreateVapidKeys, rotateVapidKeys, resolveVapidSubject } from "@/lib/push/vapid";
 import { checkTestPushRateLimit } from "@/lib/push/rate-limit";
+import { resolveUserLocale } from "@/lib/locale-resolver";
 import { t } from "@/i18n/server";
-import { DEFAULT_LOCALE, isValidLocale } from "@/i18n/locales";
 import { ActionResult } from "@/models/actionResult";
-import type { UserSettingsData } from "@/models/userSettings.model";
 import webpush from "web-push";
 
 // ---------------------------------------------------------------------------
@@ -47,41 +46,6 @@ const MAX_AUTH_LENGTH = 128;
 
 /** Push send timeout in milliseconds */
 const PUSH_TIMEOUT_MS = 10_000;
-
-/** Default VAPID subject when no SMTP config exists */
-const DEFAULT_VAPID_SUBJECT = "mailto:noreply@jobsync.local";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-async function resolveUserLocale(userId: string): Promise<string> {
-  try {
-    const row = await prisma.userSettings.findUnique({ where: { userId } });
-    if (!row) return DEFAULT_LOCALE;
-    const parsed: UserSettingsData = JSON.parse(row.settings);
-    const locale = parsed.display?.locale;
-    if (locale && isValidLocale(locale)) return locale;
-    return DEFAULT_LOCALE;
-  } catch {
-    return DEFAULT_LOCALE;
-  }
-}
-
-async function resolveVapidSubject(userId: string): Promise<string> {
-  try {
-    const smtp = await prisma.smtpConfig.findFirst({
-      where: { userId, active: true },
-      select: { fromAddress: true },
-    });
-    if (smtp?.fromAddress) {
-      return `mailto:${smtp.fromAddress}`;
-    }
-  } catch {
-    // Best-effort: fall through to default
-  }
-  return DEFAULT_VAPID_SUBJECT;
-}
 
 // ---------------------------------------------------------------------------
 // Server Actions

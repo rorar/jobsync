@@ -78,11 +78,14 @@ jest.mock("@/lib/encryption", () => ({
 
 const mockGetOrCreateVapidKeys = jest.fn();
 const mockRotateVapidKeys = jest.fn();
+const mockResolveVapidSubject = jest.fn().mockResolvedValue("mailto:noreply@jobsync.local");
 
 jest.mock("@/lib/push/vapid", () => ({
   getOrCreateVapidKeys: (...args: unknown[]) =>
     mockGetOrCreateVapidKeys(...args),
   rotateVapidKeys: (...args: unknown[]) => mockRotateVapidKeys(...args),
+  resolveVapidSubject: (...args: unknown[]) =>
+    mockResolveVapidSubject(...args),
 }));
 
 // ---------------------------------------------------------------------------
@@ -94,6 +97,17 @@ const mockCheckTestPushRateLimit = jest.fn();
 jest.mock("@/lib/push/rate-limit", () => ({
   checkTestPushRateLimit: (...args: unknown[]) =>
     mockCheckTestPushRateLimit(...args),
+}));
+
+// ---------------------------------------------------------------------------
+// Locale resolver mock
+// ---------------------------------------------------------------------------
+
+const mockResolveUserLocale = jest.fn().mockResolvedValue("en");
+
+jest.mock("@/lib/locale-resolver", () => ({
+  resolveUserLocale: (...args: unknown[]) =>
+    mockResolveUserLocale(...args),
 }));
 
 // ---------------------------------------------------------------------------

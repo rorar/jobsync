@@ -29,6 +29,8 @@ export function createSmtpTransporter(config: SmtpTransportConfig) {
       user: config.username,
       pass: config.decryptedPassword,
     },
+    // Port 465 uses implicit TLS (secure: true), so STARTTLS (requireTLS) is not applicable.
+    // For other ports (587, 25), requireTLS forces STARTTLS upgrade based on user config.
     requireTLS: config.tlsRequired && config.port !== 465,
     tls: {
       minVersion: "TLSv1.2",

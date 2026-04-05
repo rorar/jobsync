@@ -23,6 +23,7 @@ import webpush, { WebPushError } from "web-push";
 import prisma from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 import { checkPushDispatchRateLimit } from "@/lib/push/rate-limit";
+import { resolveVapidSubject } from "@/lib/push/vapid";
 import type {
   NotificationChannel,
   NotificationDraft,
@@ -34,36 +35,12 @@ import type {
 // ---------------------------------------------------------------------------
 
 const PUSH_TIMEOUT_MS = 10_000;
-const DEFAULT_VAPID_SUBJECT = "mailto:noreply@jobsync.local";
 
 /**
  * Push notification title — the app name "JobSync" is locale-invariant
  * (proper noun / brand name), so a constant is used instead of i18n.
  */
 const PUSH_TITLE = "JobSync";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve VAPID subject (mailto: URI) from user's SMTP config if available.
- * Falls back to a generic noreply address.
- */
-async function resolveVapidSubject(userId: string): Promise<string> {
-  try {
-    const smtp = await prisma.smtpConfig.findFirst({
-      where: { userId, active: true },
-      select: { fromAddress: true },
-    });
-    if (smtp?.fromAddress) {
-      return `mailto:${smtp.fromAddress}`;
-    }
-  } catch {
-    // Best-effort: fall through to default
-  }
-  return DEFAULT_VAPID_SUBJECT;
-}
 
 // ---------------------------------------------------------------------------
 // PushChannel
@@ -271,5 +248,4 @@ export class PushChannel implements NotificationChannel {
 export const _testHelpers = {
   resolveVapidSubject,
   PUSH_TIMEOUT_MS,
-  DEFAULT_VAPID_SUBJECT,
 };
