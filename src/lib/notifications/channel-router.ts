@@ -18,6 +18,8 @@
  * Spec: specs/notification-dispatch.allium
  */
 
+import "server-only";
+
 import { shouldNotify } from "@/models/notification.model";
 import type { NotificationPreferences, NotificationChannelId } from "@/models/notification.model";
 import type { NotificationChannel, NotificationDraft, ChannelResult } from "./types";
@@ -47,33 +49,41 @@ export class ChannelRouter {
   /**
    * Route a notification draft to all enabled channels for the given user.
    *
+   * Phase 1: Synchronous preference gating (fast, no I/O)
+   * Phase 2: Concurrent availability check + dispatch (Promise.allSettled)
+   * Phase 3: Collect results from settled promises
+   *
    * @param draft - The notification to dispatch
    * @param prefs - Resolved user preferences (caller resolves once)
    */
   async route(draft: NotificationDraft, prefs: NotificationPreferences): Promise<ChannelRouterResult> {
-    const results: ChannelResult[] = [];
+    // Phase 1: Synchronous preference gating (fast, no I/O)
+    const eligibleChannels = this.channels.filter((channel) => {
+      const channelId = channel.name as NotificationChannelId;
+      return shouldNotify(prefs, draft.type, channelId);
+    });
 
-    for (const channel of this.channels) {
-      try {
-        // Check preference-level gating per channel
-        const channelId = channel.name as NotificationChannelId;
-        if (!shouldNotify(prefs, draft.type, channelId)) {
-          continue;
-        }
-
-        // Check infrastructure availability
+    // Phase 2: Concurrent availability check + dispatch
+    const settled = await Promise.allSettled(
+      eligibleChannels.map(async (channel) => {
         const available = await channel.isAvailable(draft.userId);
-        if (!available) {
-          continue;
-        }
+        if (!available) return null;
+        return channel.dispatch(draft, draft.userId);
+      }),
+    );
 
-        // Dispatch with error isolation
-        const result = await channel.dispatch(draft, draft.userId);
-        results.push(result);
-      } catch (error) {
-        // Error isolation: one channel failure doesn't block others
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        console.error(`[ChannelRouter] Channel "${channel.name}" threw:`, error);
+    // Phase 3: Collect results
+    const results: ChannelResult[] = [];
+    for (let i = 0; i < settled.length; i++) {
+      const outcome = settled[i];
+      if (outcome.status === "fulfilled") {
+        if (outcome.value !== null) {
+          results.push(outcome.value);
+        }
+      } else {
+        const channel = eligibleChannels[i];
+        const errorMessage = outcome.reason instanceof Error ? outcome.reason.message : "Unknown error";
+        console.error(`[ChannelRouter] Channel "${channel.name}" threw:`, outcome.reason);
         results.push({ success: false, channel: channel.name, error: errorMessage });
       }
     }

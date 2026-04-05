@@ -2,7 +2,7 @@
  * Notification Channel Types — Multi-Channel Architecture
  *
  * Defines the channel abstraction layer for notification delivery.
- * Channels: InApp (existing), Webhook (D1), Email (D2 future), Push (D3 future).
+ * Channels: InApp, Webhook (D1), Email (D2), Push (D3). All 4 channels implemented.
  *
  * Spec: specs/notification-dispatch.allium
  */

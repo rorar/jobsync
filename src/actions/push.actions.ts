@@ -11,11 +11,14 @@
 import prisma from "@/lib/db";
 import { getCurrentUser } from "@/utils/user.utils";
 import { handleError } from "@/lib/utils";
-import { encrypt } from "@/lib/encryption";
+import { encrypt, decrypt } from "@/lib/encryption";
 import { getOrCreateVapidKeys, rotateVapidKeys } from "@/lib/push/vapid";
 import { checkTestPushRateLimit } from "@/lib/push/rate-limit";
-import { PushChannel } from "@/lib/notifications/channels/push.channel";
+import { t } from "@/i18n/server";
+import { DEFAULT_LOCALE, isValidLocale } from "@/i18n/locales";
 import { ActionResult } from "@/models/actionResult";
+import type { UserSettingsData } from "@/models/userSettings.model";
+import webpush from "web-push";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,6 +39,49 @@ export interface PushSubscriptionInput {
 
 /** Maximum subscriptions per user (prevent abuse) */
 const MAX_SUBSCRIPTIONS_PER_USER = 10;
+
+/** Input length limits for subscription fields (prevent oversized payloads) */
+const MAX_ENDPOINT_LENGTH = 2048;
+const MAX_P256DH_LENGTH = 256;
+const MAX_AUTH_LENGTH = 128;
+
+/** Push send timeout in milliseconds */
+const PUSH_TIMEOUT_MS = 10_000;
+
+/** Default VAPID subject when no SMTP config exists */
+const DEFAULT_VAPID_SUBJECT = "mailto:noreply@jobsync.local";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function resolveUserLocale(userId: string): Promise<string> {
+  try {
+    const row = await prisma.userSettings.findUnique({ where: { userId } });
+    if (!row) return DEFAULT_LOCALE;
+    const parsed: UserSettingsData = JSON.parse(row.settings);
+    const locale = parsed.display?.locale;
+    if (locale && isValidLocale(locale)) return locale;
+    return DEFAULT_LOCALE;
+  } catch {
+    return DEFAULT_LOCALE;
+  }
+}
+
+async function resolveVapidSubject(userId: string): Promise<string> {
+  try {
+    const smtp = await prisma.smtpConfig.findFirst({
+      where: { userId, active: true },
+      select: { fromAddress: true },
+    });
+    if (smtp?.fromAddress) {
+      return `mailto:${smtp.fromAddress}`;
+    }
+  } catch {
+    // Best-effort: fall through to default
+  }
+  return DEFAULT_VAPID_SUBJECT;
+}
 
 // ---------------------------------------------------------------------------
 // Server Actions
@@ -80,6 +126,17 @@ export async function subscribePush(
       return { success: false, message: "push.invalidEndpoint" };
     }
     if (!input.keys?.p256dh || !input.keys?.auth) {
+      return { success: false, message: "push.invalidKeys" };
+    }
+
+    // Input length validation (prevent oversized payloads)
+    if (input.endpoint.length > MAX_ENDPOINT_LENGTH) {
+      return { success: false, message: "push.invalidEndpoint" };
+    }
+    if (input.keys.p256dh.length > MAX_P256DH_LENGTH) {
+      return { success: false, message: "push.invalidKeys" };
+    }
+    if (input.keys.auth.length > MAX_AUTH_LENGTH) {
       return { success: false, message: "push.invalidKeys" };
     }
 
@@ -214,44 +271,99 @@ export async function rotateVapidKeysAction(): Promise<
 /**
  * Send a test push notification to all of the current user's subscriptions.
  * Rate limited: 1 test push per 60 seconds per user.
+ *
+ * Sends directly via web-push instead of through PushChannel.dispatch()
+ * to avoid double-charging rate limits (test rate limit + dispatch rate limit).
  */
 export async function sendTestPush(): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "errors.unauthorized" };
 
-    // Rate limit: 1 test per 60 seconds
+    // Rate limit: 1 test per 60 seconds (only rate limit for test pushes)
     const rateCheck = checkTestPushRateLimit(user.id);
     if (!rateCheck.allowed) {
       return { success: false, message: "push.testRateLimited" };
     }
 
-    // Check if push is available
-    const channel = new PushChannel();
-    const available = await channel.isAvailable(user.id);
-    if (!available) {
+    // Load VAPID keys
+    const vapidConfig = await prisma.vapidConfig.findUnique({
+      where: { userId: user.id },
+    });
+    if (!vapidConfig) {
       return { success: false, message: "push.noSubscriptions" };
     }
 
-    // Send test notification through the PushChannel
-    const result = await channel.dispatch(
-      {
-        userId: user.id,
-        type: "module_unreachable", // Using a valid NotificationType
-        message: "push.testBody",
-        data: { test: true },
+    // Load subscriptions (ADR-015: userId in where)
+    const subscriptions = await prisma.webPushSubscription.findMany({
+      where: { userId: user.id },
+      select: {
+        id: true,
+        endpoint: true,
+        p256dh: true,
+        auth: true,
+        iv: true,
       },
-      user.id,
+    });
+    if (subscriptions.length === 0) {
+      return { success: false, message: "push.noSubscriptions" };
+    }
+
+    // Decrypt VAPID private key
+    let vapidPrivateKey: string;
+    try {
+      vapidPrivateKey = decrypt(vapidConfig.privateKey, vapidConfig.iv);
+    } catch {
+      return { success: false, message: "push.testFailed" };
+    }
+
+    // Resolve user locale and translate the test message body
+    const locale = await resolveUserLocale(user.id);
+    const translatedBody = t(locale, "settings.pushTestBody");
+
+    // Resolve VAPID subject
+    const vapidSubject = await resolveVapidSubject(user.id);
+
+    // Build payload with "vacancy_promoted" type — semantically neutral,
+    // consistent with SMTP test approach (no dedicated test type exists)
+    const payload = JSON.stringify({
+      title: "JobSync",
+      body: translatedBody,
+      url: "/dashboard",
+      tag: "vacancy_promoted",
+    });
+
+    // Send to all subscriptions concurrently
+    const results = await Promise.allSettled(
+      subscriptions.map(async (sub) => {
+        const ivParts = sub.iv.split("|");
+        const ivP256dh = ivParts[0];
+        const ivAuth = ivParts[1] ?? ivParts[0];
+
+        const p256dh = decrypt(sub.p256dh, ivP256dh);
+        const auth = decrypt(sub.auth, ivAuth);
+
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh, auth } },
+          payload,
+          {
+            vapidDetails: {
+              subject: vapidSubject,
+              publicKey: vapidConfig.publicKey,
+              privateKey: vapidPrivateKey,
+            },
+            timeout: PUSH_TIMEOUT_MS,
+          },
+        );
+      }),
     );
 
-    if (result.success) {
+    const anySuccess = results.some((r) => r.status === "fulfilled");
+    if (anySuccess) {
       return { success: true };
     }
 
-    return {
-      success: false,
-      message: "push.testFailed",
-    };
+    return { success: false, message: "push.testFailed" };
   } catch (error) {
     return handleError(error, "push.testFailed");
   }

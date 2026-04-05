@@ -18,14 +18,15 @@
  * - rejectUnauthorized: true (no self-signed certs)
  */
 
-import nodemailer from "nodemailer";
+import "server-only";
+
 import prisma from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 import { validateSmtpHost } from "@/lib/smtp-validation";
 import { checkEmailRateLimit } from "@/lib/email-rate-limit";
 import { renderEmailTemplate } from "@/lib/email/templates";
-import { DEFAULT_LOCALE, isValidLocale } from "@/i18n/locales";
-import type { UserSettingsData } from "@/models/userSettings.model";
+import { createSmtpTransporter } from "@/lib/email/transport";
+import { resolveUserLocale } from "@/lib/locale-resolver";
 import type {
   NotificationChannel,
   NotificationDraft,
@@ -33,31 +34,8 @@ import type {
 } from "../types";
 
 // ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const SEND_TIMEOUT_MS = 30_000; // 30s timeout for SMTP operations
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Resolve the user's preferred locale from their settings.
- * Falls back to DEFAULT_LOCALE ("en") if settings are unavailable.
- */
-async function resolveUserLocale(userId: string): Promise<string> {
-  try {
-    const row = await prisma.userSettings.findUnique({ where: { userId } });
-    if (!row) return DEFAULT_LOCALE;
-    const parsed: UserSettingsData = JSON.parse(row.settings);
-    const locale = parsed.display?.locale;
-    if (locale && isValidLocale(locale)) return locale;
-    return DEFAULT_LOCALE;
-  } catch {
-    return DEFAULT_LOCALE;
-  }
-}
 
 /**
  * Resolve the user's email address from SmtpConfig.fromAddress.
@@ -137,22 +115,12 @@ export class EmailChannel implements NotificationChannel {
       );
 
       // 8. Create nodemailer transporter with TLS enforcement
-      const transporter = nodemailer.createTransport({
+      const transporter = createSmtpTransporter({
         host: config.host,
         port: config.port,
-        secure: config.port === 465, // true for 465 (implicit TLS), false for others (STARTTLS)
-        auth: {
-          user: config.username,
-          pass: decryptedPassword,
-        },
-        tls: {
-          rejectUnauthorized: true, // reject self-signed certs
-          minVersion: "TLSv1.2",
-        },
-        requireTLS: config.tlsRequired, // enforce STARTTLS on non-465 ports
-        connectionTimeout: SEND_TIMEOUT_MS,
-        greetingTimeout: SEND_TIMEOUT_MS,
-        socketTimeout: SEND_TIMEOUT_MS,
+        username: config.username,
+        decryptedPassword,
+        tlsRequired: config.tlsRequired,
       });
 
       // 9. Send email
@@ -198,7 +166,5 @@ export class EmailChannel implements NotificationChannel {
 // ---------------------------------------------------------------------------
 
 export const _testHelpers = {
-  resolveUserLocale,
   resolveRecipientEmail,
-  SEND_TIMEOUT_MS,
 };

@@ -10,6 +10,8 @@
  * Spec: specs/notification-dispatch.allium (contract NotificationDispatcher)
  */
 
+import "server-only";
+
 import { eventBus } from "../event-bus";
 import { DomainEventType } from "../event-types";
 import type {
@@ -65,35 +67,37 @@ const FLUSH_DELAY_MS = 5_000;
 const stagedBuffers = new Map<string, StagedBuffer>();
 
 // ---------------------------------------------------------------------------
-// Preference Resolution (direct Prisma, not via server action)
+// Preference & Locale Resolution (single DB query per user)
 // ---------------------------------------------------------------------------
 
-async function resolvePreferences(userId: string): Promise<NotificationPreferences> {
+interface UserSettingsResolved {
+  preferences: NotificationPreferences;
+  locale: string;
+}
+
+async function resolveUserSettings(userId: string): Promise<UserSettingsResolved> {
   try {
     const row = await prisma.userSettings.findUnique({ where: { userId } });
-    if (!row) return DEFAULT_NOTIFICATION_PREFERENCES;
+    if (!row) return { preferences: DEFAULT_NOTIFICATION_PREFERENCES, locale: DEFAULT_LOCALE };
     const parsed: UserSettingsData = JSON.parse(row.settings);
-    return parsed.notifications ?? DEFAULT_NOTIFICATION_PREFERENCES;
+    const preferences = parsed.notifications ?? DEFAULT_NOTIFICATION_PREFERENCES;
+    const rawLocale = parsed.display?.locale;
+    const locale = rawLocale && isValidLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE;
+    return { preferences, locale };
   } catch {
-    return DEFAULT_NOTIFICATION_PREFERENCES;
+    return { preferences: DEFAULT_NOTIFICATION_PREFERENCES, locale: DEFAULT_LOCALE };
   }
 }
 
-/**
- * Resolve the user's preferred locale from their settings.
- * Falls back to DEFAULT_LOCALE ("en") if settings are unavailable or unparseable.
- */
+// Backward-compatible wrappers used by _testHelpers and event handlers
+async function resolvePreferences(userId: string): Promise<NotificationPreferences> {
+  const { preferences } = await resolveUserSettings(userId);
+  return preferences;
+}
+
 async function resolveLocale(userId: string): Promise<string> {
-  try {
-    const row = await prisma.userSettings.findUnique({ where: { userId } });
-    if (!row) return DEFAULT_LOCALE;
-    const parsed: UserSettingsData = JSON.parse(row.settings);
-    const locale = parsed.display?.locale;
-    if (locale && isValidLocale(locale)) return locale;
-    return DEFAULT_LOCALE;
-  } catch {
-    return DEFAULT_LOCALE;
-  }
+  const { locale } = await resolveUserSettings(userId);
+  return locale;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,12 +109,12 @@ async function resolveLocale(userId: string): Promise<string> {
  * Replaces the old direct prisma.notification.create() calls.
  */
 async function dispatchNotification(draft: NotificationDraft): Promise<void> {
-  const prefs = await resolvePreferences(draft.userId);
+  const { preferences } = await resolveUserSettings(draft.userId);
 
   // Fire-and-forget: do NOT await channel routing.
   // Webhook delivery can retry for up to 36s — blocking here would stall
   // the EventBus publish() loop and freeze the calling Server Action.
-  channelRouter.route(draft, prefs).catch((err) => {
+  channelRouter.route(draft, preferences).catch((err) => {
     console.error("[NotificationDispatcher] Channel routing failed:", err);
   });
 }

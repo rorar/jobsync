@@ -71,7 +71,7 @@ function wrapHtml(header: string, body: string, footer: string, locale: string):
           <!-- Footer -->
           <tr>
             <td style="padding:16px 24px;border-top:1px solid #e4e4e7;background-color:#fafafa;">
-              <p style="margin:0;color:#71717a;font-size:12px;line-height:1.5;">${escapeHtml(footer)}</p>
+              <p style="margin:0;color:#636363;font-size:12px;line-height:1.5;">${escapeHtml(footer)}</p>
             </td>
           </tr>
         </table>
@@ -89,6 +89,14 @@ function escapeHtml(str: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * Strip control characters from plain-text content.
+ * Preserves \t (0x09), \n (0x0A), \r (0x0D) which are valid in email bodies.
+ */
+function sanitizePlainText(str: string): string {
+  return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +131,8 @@ export function renderEmailTemplate(
   `;
 
   const html = wrapHtml(header, htmlBody, footer, locale);
-  const text = `${greeting}\n\n${message}\n\n---\n${footer}`;
+  const sanitizedMessage = sanitizePlainText(message);
+  const text = `${greeting}\n\n${sanitizedMessage}\n\n---\n${footer}`;
 
   return { subject, html, text };
 }
@@ -144,10 +153,26 @@ export function renderTestEmail(locale: string): RenderedEmail {
   `;
 
   const html = wrapHtml(header, htmlBody, footer, locale);
-  const text = `${greeting}\n\n${body}\n\n---\n${footer}`;
+  const sanitizedBody = sanitizePlainText(body);
+  const text = `${greeting}\n\n${sanitizedBody}\n\n---\n${footer}`;
 
   return { subject, html, text };
 }
+
+// ---------------------------------------------------------------------------
+// Placeholder map — maps data field names to template placeholder names
+//
+// The i18n templates use placeholders like {name}, {automationCount}, etc.
+// The structured data uses field names like moduleId, affectedAutomationCount.
+// This map translates data fields to placeholder names for single-pass replacement.
+// ---------------------------------------------------------------------------
+
+const PLACEHOLDER_MAP: Record<string, string> = {
+  moduleId: "name",
+  affectedAutomationCount: "automationCount",
+  pausedAutomationCount: "automationCount",
+  purgedCount: "count",
+};
 
 // ---------------------------------------------------------------------------
 // Message Builder — reuses notification i18n keys with data interpolation
@@ -176,36 +201,15 @@ function buildNotificationMessage(
   const key = messageKeyMap[type];
   let message = t(locale, key);
 
-  // Interpolate data placeholders
+  // Replace placeholders: for each data entry, replace both the direct field name
+  // (e.g., {moduleId}) and the aliased template name (e.g., {name}) if mapped.
   for (const [k, v] of Object.entries(data)) {
-    message = message.replace(`{${k}}`, String(v ?? ""));
-  }
-
-  // Map common placeholder names from structured data to template variables
-  // The notification templates use {name}, {automationCount}, {count}, etc.
-  if (data.moduleId) {
-    message = message.replace("{name}", String(data.moduleId));
-  }
-  if (data.affectedAutomationCount !== undefined) {
-    message = message.replace("{automationCount}", String(data.affectedAutomationCount));
-  }
-  if (data.pausedAutomationCount !== undefined) {
-    message = message.replace("{automationCount}", String(data.pausedAutomationCount));
-  }
-  if (data.succeeded !== undefined) {
-    message = message.replace("{succeeded}", String(data.succeeded));
-  }
-  if (data.actionType) {
-    message = message.replace("{actionType}", String(data.actionType));
-  }
-  if (data.purgedCount !== undefined) {
-    message = message.replace("{count}", String(data.purgedCount));
-  }
-  if (data.count !== undefined) {
-    message = message.replace("{count}", String(data.count));
-  }
-  if (data.newStatus) {
-    message = message.replace("{newStatus}", String(data.newStatus));
+    const value = String(v ?? "");
+    message = message.replace(`{${k}}`, value);
+    const alias = PLACEHOLDER_MAP[k];
+    if (alias) {
+      message = message.replace(`{${alias}}`, value);
+    }
   }
 
   return message;

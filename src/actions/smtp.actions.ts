@@ -15,10 +15,9 @@ import { encrypt, decrypt, getLast4 } from "@/lib/encryption";
 import { validateSmtpHost } from "@/lib/smtp-validation";
 import { checkTestEmailRateLimit } from "@/lib/email-rate-limit";
 import { renderTestEmail } from "@/lib/email/templates";
-import { DEFAULT_LOCALE, isValidLocale } from "@/i18n/locales";
+import { createSmtpTransporter } from "@/lib/email/transport";
+import { resolveUserLocale } from "@/lib/locale-resolver";
 import { ActionResult } from "@/models/actionResult";
-import type { UserSettingsData } from "@/models/userSettings.model";
-import nodemailer from "nodemailer";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,27 +51,18 @@ export interface SaveSmtpConfigInput {
 // Constants
 // ---------------------------------------------------------------------------
 
-const SEND_TIMEOUT_MS = 30_000;
-
 /** Basic email format validation (RFC 5322 simplified) */
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Input length limits (RFC 5321 and practical limits) */
+const MAX_HOST_LENGTH = 255;
+const MAX_USERNAME_LENGTH = 255;
+const MAX_PASSWORD_LENGTH = 1024;
+const MAX_FROM_ADDRESS_LENGTH = 320; // RFC 5321 max mailbox length
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-async function resolveUserLocale(userId: string): Promise<string> {
-  try {
-    const row = await prisma.userSettings.findUnique({ where: { userId } });
-    if (!row) return DEFAULT_LOCALE;
-    const parsed: UserSettingsData = JSON.parse(row.settings);
-    const locale = parsed.display?.locale;
-    if (locale && isValidLocale(locale)) return locale;
-    return DEFAULT_LOCALE;
-  } catch {
-    return DEFAULT_LOCALE;
-  }
-}
 
 function validateInput(data: SaveSmtpConfigInput, requirePassword: boolean): {
   valid: boolean;
@@ -81,6 +71,9 @@ function validateInput(data: SaveSmtpConfigInput, requirePassword: boolean): {
   // Host validation (SSRF)
   if (!data.host || data.host.trim() === "") {
     return { valid: false, error: "smtp.hostEmpty" };
+  }
+  if (data.host.trim().length > MAX_HOST_LENGTH) {
+    return { valid: false, error: "smtp.hostTooLong" };
   }
   const hostCheck = validateSmtpHost(data.host.trim());
   if (!hostCheck.valid) {
@@ -96,15 +89,24 @@ function validateInput(data: SaveSmtpConfigInput, requirePassword: boolean): {
   if (!data.username || data.username.trim() === "") {
     return { valid: false, error: "smtp.usernameEmpty" };
   }
+  if (data.username.trim().length > MAX_USERNAME_LENGTH) {
+    return { valid: false, error: "smtp.usernameTooLong" };
+  }
 
   // Password (required for create, optional for update)
   if (requirePassword && (!data.password || data.password.trim() === "")) {
     return { valid: false, error: "smtp.passwordEmpty" };
   }
+  if (data.password && data.password.length > MAX_PASSWORD_LENGTH) {
+    return { valid: false, error: "smtp.passwordTooLong" };
+  }
 
   // From address
   if (!data.fromAddress || data.fromAddress.trim() === "") {
     return { valid: false, error: "smtp.fromAddressEmpty" };
+  }
+  if (data.fromAddress.trim().length > MAX_FROM_ADDRESS_LENGTH) {
+    return { valid: false, error: "smtp.fromAddressTooLong" };
   }
   if (!EMAIL_REGEX.test(data.fromAddress.trim())) {
     return { valid: false, error: "smtp.fromAddressInvalid" };
@@ -291,22 +293,12 @@ export async function testSmtpConnection(): Promise<ActionResult> {
     const { subject, html, text } = renderTestEmail(locale);
 
     // Create transporter with TLS enforcement
-    const transporter = nodemailer.createTransport({
+    const transporter = createSmtpTransporter({
       host: config.host,
       port: config.port,
-      secure: config.port === 465,
-      auth: {
-        user: config.username,
-        pass: decryptedPassword,
-      },
-      tls: {
-        rejectUnauthorized: true,
-        minVersion: "TLSv1.2",
-      },
-      requireTLS: config.tlsRequired,
-      connectionTimeout: SEND_TIMEOUT_MS,
-      greetingTimeout: SEND_TIMEOUT_MS,
-      socketTimeout: SEND_TIMEOUT_MS,
+      username: config.username,
+      decryptedPassword,
+      tlsRequired: config.tlsRequired,
     });
 
     // Send test email to the fromAddress itself

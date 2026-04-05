@@ -14,13 +14,15 @@
  * Spec: specs/notification-dispatch.allium
  */
 
+import "server-only";
+
 import { createHmac } from "crypto";
 import prisma from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 import { validateWebhookUrl } from "@/lib/url-validation";
 import { t } from "@/i18n/server";
+import { resolveUserLocale } from "@/lib/locale-resolver";
 import type { NotificationType } from "@/models/notification.model";
-import type { UserSettingsData } from "@/models/userSettings.model";
 import type {
   NotificationChannel,
   NotificationDraft,
@@ -144,21 +146,6 @@ async function deliverWithRetry(
     error: `All ${MAX_ATTEMPTS} delivery attempts failed`,
     attemptNumber: MAX_ATTEMPTS,
   };
-}
-
-/**
- * Resolve the user's preferred locale from their settings.
- * Falls back to "en" if settings are unavailable or unparseable.
- */
-async function resolveUserLocale(userId: string): Promise<string> {
-  try {
-    const row = await prisma.userSettings.findUnique({ where: { userId } });
-    if (!row) return "en";
-    const parsed: UserSettingsData = JSON.parse(row.settings);
-    return parsed.display?.locale ?? "en";
-  } catch {
-    return "en";
-  }
 }
 
 /**
@@ -375,7 +362,6 @@ export const _testHelpers = {
   deliverWithRetry,
   notifyDeliveryFailed,
   notifyEndpointDeactivated,
-  resolveUserLocale,
   delay,
   RETRY_BACKOFFS_MS,
   MAX_ATTEMPTS,

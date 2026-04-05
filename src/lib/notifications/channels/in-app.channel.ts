@@ -7,6 +7,8 @@
  * Creates Prisma Notification records directly (the original behavior).
  */
 
+import "server-only";
+
 import prisma from "@/lib/db";
 import type { NotificationType } from "@/models/notification.model";
 import type { NotificationChannel, NotificationDraft, ChannelResult } from "../types";

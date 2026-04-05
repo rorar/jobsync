@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * PushChannel — Browser Push Notification Channel
  *
@@ -33,6 +35,12 @@ import type {
 
 const PUSH_TIMEOUT_MS = 10_000;
 const DEFAULT_VAPID_SUBJECT = "mailto:noreply@jobsync.local";
+
+/**
+ * Push notification title — the app name "JobSync" is locale-invariant
+ * (proper noun / brand name), so a constant is used instead of i18n.
+ */
+const PUSH_TITLE = "JobSync";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -118,7 +126,7 @@ export class PushChannel implements NotificationChannel {
 
       // 6. Build push payload
       const payload = JSON.stringify({
-        title: "JobSync",
+        title: PUSH_TITLE,
         body: notification.message,
         url: "/dashboard",
         tag: notification.type,
@@ -164,13 +172,19 @@ export class PushChannel implements NotificationChannel {
             return { success: true };
           } catch (err) {
             if (err instanceof WebPushError) {
-              // 401/403/404/410: subscription is stale, invalid, or gone — clean it up
-              if (
-                err.statusCode === 401 ||
-                err.statusCode === 403 ||
-                err.statusCode === 404 ||
-                err.statusCode === 410
-              ) {
+              // 401/403: VAPID auth failure — transient, preserve subscription
+              if (err.statusCode === 401 || err.statusCode === 403) {
+                console.warn(
+                  `[PushChannel] VAPID auth failure (${err.statusCode}) for ${sub.endpoint} — subscription preserved`,
+                );
+                return {
+                  success: false,
+                  error: `VAPID auth failure (${err.statusCode})`,
+                };
+              }
+
+              // 404/410: subscription is gone or not found — clean it up
+              if (err.statusCode === 404 || err.statusCode === 410) {
                 await prisma.webPushSubscription
                   .delete({
                     where: { id: sub.id, userId },
@@ -179,14 +193,10 @@ export class PushChannel implements NotificationChannel {
                     // Already deleted or race condition — ignore
                   });
 
-                if (err.statusCode === 401 || err.statusCode === 403) {
-                  console.error(
-                    `[PushChannel] VAPID auth failure (${err.statusCode}) for ${sub.endpoint}`,
-                  );
-                  return { success: false, error: `VAPID auth failure (${err.statusCode})` };
-                }
-
-                return { success: false, error: `Subscription expired (${err.statusCode})` };
+                return {
+                  success: false,
+                  error: `Subscription expired (${err.statusCode})`,
+                };
               }
             }
 
