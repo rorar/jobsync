@@ -165,7 +165,7 @@ export default function PushSettings() {
       if (!vapidResult.success || !vapidResult.data) {
         toast({
           variant: "destructive",
-          title: t("settings.pushTestFailed"),
+          title: t("settings.pushSubscribeFailed"),
           description: vapidResult.message
             ? t(vapidResult.message)
             : undefined,
@@ -231,14 +231,14 @@ export default function PushSettings() {
       } else {
         toast({
           variant: "destructive",
-          title: t("settings.pushTestFailed"),
+          title: t("settings.pushSubscribeFailed"),
           description: result.message ? t(result.message) : undefined,
         });
       }
     } catch {
       toast({
         variant: "destructive",
-        title: t("settings.pushTestFailed"),
+        title: t("settings.pushSubscribeFailed"),
       });
     } finally {
       setSubscribing(false);
@@ -270,7 +270,7 @@ export default function PushSettings() {
     } catch {
       toast({
         variant: "destructive",
-        title: t("settings.pushTestFailed"),
+        title: t("settings.pushUnsubscribeFailed"),
       });
     } finally {
       setUnsubscribing(false);
@@ -426,7 +426,7 @@ export default function PushSettings() {
           {permissionDenied && !isSubscribed && (
             <div className="rounded-md border border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20 px-4 py-3" role="alert">
               <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                {t("settings.pushPermissionDenied")}
+                {t("settings.pushPermissionBlockedHint")}
               </p>
             </div>
           )}
@@ -463,7 +463,7 @@ export default function PushSettings() {
             ) : (
               <Button
                 onClick={handleSubscribe}
-                disabled={subscribing}
+                disabled={subscribing || permissionDenied}
               >
                 {subscribing ? (
                   <Loader2
@@ -495,10 +495,10 @@ export default function PushSettings() {
                 {testing
                   ? t("settings.pushTestSending")
                   : cooldown > 0
-                    ? t("settings.pushTestCooldown").replace(
+                    ? <span aria-live="polite">{t("settings.pushTestCooldown").replace(
                         "{seconds}",
                         String(cooldown),
-                      )
+                      )}</span>
                     : t("settings.pushTestTitle")}
               </Button>
             )}
@@ -550,7 +550,7 @@ export default function PushSettings() {
                     <AlertDialogCancel>
                       {t("settings.cancel")}
                     </AlertDialogCancel>
-                    <AlertDialogAction onClick={handleRotate}>
+                    <AlertDialogAction onClick={handleRotate} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                       {t("settings.pushRotateConfirm")}
                     </AlertDialogAction>
                   </AlertDialogFooter>

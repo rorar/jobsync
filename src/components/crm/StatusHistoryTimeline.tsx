@@ -13,11 +13,12 @@ import {
   RefreshCw,
   ArrowRight,
   MessageSquare,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** Maximum entries shown before collapsing with a "Show all" button */
-const DEFAULT_VISIBLE_LIMIT = 20;
+/** Number of entries fetched per page */
+const PAGE_SIZE = 50;
 
 interface StatusHistoryTimelineProps {
   jobId: string;
@@ -74,16 +75,18 @@ export function StatusHistoryTimeline({ jobId }: StatusHistoryTimelineProps) {
   const { t, locale } = useTranslations();
   const [entries, setEntries] = useState<StatusHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     setError(false);
     try {
-      const response = await getJobStatusHistory(jobId);
+      const response = await getJobStatusHistory(jobId, PAGE_SIZE, 0);
       if (response.success && response.data) {
         setEntries(response.data);
+        setHasMore(response.data.length >= PAGE_SIZE);
       } else {
         setError(true);
       }
@@ -93,6 +96,21 @@ export function StatusHistoryTimeline({ jobId }: StatusHistoryTimelineProps) {
       setLoading(false);
     }
   }, [jobId]);
+
+  const loadMore = useCallback(async () => {
+    setLoadingMore(true);
+    try {
+      const response = await getJobStatusHistory(jobId, PAGE_SIZE, entries.length);
+      if (response.success && response.data) {
+        setEntries((prev) => [...prev, ...response.data!]);
+        setHasMore(response.data.length >= PAGE_SIZE);
+      }
+    } catch {
+      // Silently fail -- user can retry
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [jobId, entries.length]);
 
   useEffect(() => {
     fetchHistory();
@@ -143,111 +161,107 @@ export function StatusHistoryTimeline({ jobId }: StatusHistoryTimelineProps) {
         )}
 
         {/* Timeline entries */}
-        {!loading && !error && entries.length > 0 && (() => {
-          const isTruncated = !showAll && entries.length > DEFAULT_VISIBLE_LIMIT;
-          const visibleEntries = isTruncated
-            ? entries.slice(0, DEFAULT_VISIBLE_LIMIT)
-            : entries;
+        {!loading && !error && entries.length > 0 && (
+          <>
+            <div
+              className="max-h-80 overflow-y-auto pr-1"
+              role="list"
+              aria-label={t("jobs.statusHistory")}
+            >
+              {entries.map((entry, index) => {
+                const isLast = index === entries.length - 1;
+                const isInitial = !entry.previousStatusValue;
 
-          return (
-            <>
-              <div
-                className="max-h-80 overflow-y-auto pr-1"
-                role="list"
-                aria-label={t("jobs.statusHistory")}
-              >
-                {visibleEntries.map((entry, index) => {
-                  const isLast = index === visibleEntries.length - 1;
-                  const isInitial = !entry.previousStatusValue;
-
-                  return (
-                    <div
-                      key={entry.id}
-                      className="flex gap-3"
-                      role="listitem"
-                    >
-                      {/* Timeline connector */}
-                      <div className="flex flex-col items-center pt-1">
-                        <div
-                          className={cn(
-                            "h-3 w-3 rounded-full border-2 shrink-0",
-                            entry.newStatusValue === "rejected" || entry.newStatusValue === "expired"
-                              ? "border-destructive bg-destructive/20"
-                              : entry.newStatusValue === "interview" || entry.newStatusValue === "offer" || entry.newStatusValue === "accepted"
-                                ? "border-green-500 bg-green-500/20"
-                                : "border-primary bg-primary/20",
-                          )}
-                          role="img"
-                          aria-label={entry.newStatusLabel}
-                        />
-                        {!isLast && (
-                          <div className="w-0.5 flex-1 bg-border mt-1 min-h-[1rem]" />
+                return (
+                  <div
+                    key={entry.id}
+                    className="flex gap-3"
+                    role="listitem"
+                  >
+                    {/* Timeline connector */}
+                    <div className="flex flex-col items-center pt-1">
+                      <div
+                        className={cn(
+                          "h-3 w-3 rounded-full border-2 shrink-0",
+                          entry.newStatusValue === "rejected" || entry.newStatusValue === "expired"
+                            ? "border-destructive bg-destructive/20"
+                            : entry.newStatusValue === "interview" || entry.newStatusValue === "offer" || entry.newStatusValue === "accepted"
+                              ? "border-green-500 bg-green-500/20"
+                              : "border-primary bg-primary/20",
                         )}
-                      </div>
-
-                      {/* Entry content */}
-                      <div className={cn("flex-1 pb-4", isLast && "pb-0")}>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {isInitial ? (
-                            <span className="text-sm text-muted-foreground">
-                              {t("jobs.statusHistoryInitial")}
-                            </span>
-                          ) : (
-                            <>
-                              <Badge
-                                variant="outline"
-                                className={cn("text-xs", getStatusColor(entry.previousStatusValue))}
-                              >
-                                {entry.previousStatusLabel}
-                              </Badge>
-                              <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                            </>
-                          )}
-                          <Badge
-                            className={cn("text-xs", getStatusColor(entry.newStatusValue))}
-                          >
-                            {entry.newStatusLabel}
-                          </Badge>
-                        </div>
-
-                        {/* Note */}
-                        {entry.note && (
-                          <div className="flex items-start gap-1.5 mt-1.5">
-                            <MessageSquare className="h-3 w-3 text-muted-foreground mt-0.5 shrink-0" />
-                            <p className="text-xs text-muted-foreground italic">
-                              {entry.note}
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Timestamp */}
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {formatDateShort(new Date(entry.changedAt), locale)}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Show all / Show less toggle */}
-              {entries.length > DEFAULT_VISIBLE_LIMIT && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full mt-2 text-xs"
-                  onClick={() => setShowAll((prev) => !prev)}
-                >
-                  {showAll
-                    ? t("jobs.statusHistoryShowLess")
-                    : t("jobs.statusHistoryShowAll").replace(
-                        "{count}",
-                        String(entries.length),
+                        role="img"
+                        aria-label={entry.newStatusLabel}
+                      />
+                      {!isLast && (
+                        <div className="w-0.5 flex-1 bg-border mt-1 min-h-[1rem]" />
                       )}
-                </Button>
-              )}
-            </>
-          );
-        })()}
+                    </div>
+
+                    {/* Entry content */}
+                    <div className={cn("flex-1 pb-4", isLast && "pb-0")}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {isInitial ? (
+                          <span className="text-sm text-muted-foreground">
+                            {t("jobs.statusHistoryInitial")}
+                          </span>
+                        ) : (
+                          <>
+                            <Badge
+                              variant="outline"
+                              className={cn("text-xs", getStatusColor(entry.previousStatusValue))}
+                            >
+                              {entry.previousStatusLabel}
+                            </Badge>
+                            <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                          </>
+                        )}
+                        <Badge
+                          className={cn("text-xs", getStatusColor(entry.newStatusValue))}
+                        >
+                          {entry.newStatusLabel}
+                        </Badge>
+                      </div>
+
+                      {/* Note */}
+                      {entry.note && (
+                        <div className="flex items-start gap-1.5 mt-1.5">
+                          <MessageSquare className="h-3 w-3 text-muted-foreground mt-0.5 shrink-0" />
+                          <p className="text-xs text-muted-foreground italic">
+                            {entry.note}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Timestamp */}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatDateShort(new Date(entry.changedAt), locale)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Load more pagination */}
+            {hasMore && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full mt-2 text-xs"
+                onClick={loadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    {t("jobs.statusHistoryLoading")}
+                  </>
+                ) : (
+                  t("jobs.statusHistoryLoadMore")
+                )}
+              </Button>
+            )}
+          </>
+        )}
       </CardContent>
     </Card>
   );

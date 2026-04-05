@@ -16,7 +16,7 @@ export function Toaster() {
   const { t } = useTranslations()
 
   return (
-    <ToastProvider>
+    <ToastProvider duration={5000}>
       {toasts.map(function ({ id, title, description, action, ...props }) {
         return (
           <Toast key={id} {...props}>

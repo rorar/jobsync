@@ -1025,12 +1025,18 @@ export const updateKanbanOrder = async (
  */
 export const getJobStatusHistory = async (
   jobId: string,
+  take: number = 50,
+  skip: number = 0,
 ): Promise<ActionResult<StatusHistoryEntry[]>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Not authenticated");
     }
+
+    // Clamp pagination parameters
+    const safeTake = Math.min(Math.max(1, Math.floor(take)), 200);
+    const safeSkip = Math.max(0, Math.floor(skip));
 
     // Verify job ownership (IDOR safe)
     const job = await prisma.job.findFirst({
@@ -1048,6 +1054,8 @@ export const getJobStatusHistory = async (
         newStatus: { select: { label: true, value: true } },
       },
       orderBy: { changedAt: "asc" },
+      take: safeTake,
+      skip: safeSkip,
     });
 
     const entries: StatusHistoryEntry[] = history.map((h) => ({

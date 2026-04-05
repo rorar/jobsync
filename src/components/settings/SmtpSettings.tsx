@@ -188,7 +188,8 @@ export default function SmtpSettings() {
   // Handlers
   // -------------------------------------------------------------------------
 
-  const handleSave = async () => {
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!isFormValid()) return;
     setSaving(true);
     try {
@@ -400,257 +401,268 @@ export default function SmtpSettings() {
           </CardTitle>
           <CardDescription>{t("settings.smtpDescription")}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Host + Port row */}
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-4">
+        <CardContent>
+          <form onSubmit={handleSave} className="space-y-4" method="POST" action="">
+            {/* Host + Port row */}
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="smtp-host">{t("settings.smtpHost")}</Label>
+                <Input
+                  id="smtp-host"
+                  type="text"
+                  placeholder={t("settings.smtpHostPlaceholder")}
+                  value={form.host}
+                  onChange={(e) => updateField("host", e.target.value)}
+                  disabled={!showForm || saving}
+                  required
+                  aria-required="true"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="smtp-port">{t("settings.smtpPort")}</Label>
+                <Input
+                  id="smtp-port"
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={form.port}
+                  onChange={(e) =>
+                    updateField("port", parseInt(e.target.value, 10) || 587)
+                  }
+                  disabled={!showForm || saving}
+                  required
+                  aria-required="true"
+                />
+              </div>
+            </div>
+
+            {/* Username */}
             <div className="space-y-1">
-              <Label htmlFor="smtp-host">{t("settings.smtpHost")}</Label>
+              <Label htmlFor="smtp-username">
+                {t("settings.smtpUsername")}
+              </Label>
               <Input
-                id="smtp-host"
+                id="smtp-username"
                 type="text"
-                placeholder={t("settings.smtpHostPlaceholder")}
-                value={form.host}
-                onChange={(e) => updateField("host", e.target.value)}
+                value={form.username}
+                onChange={(e) => updateField("username", e.target.value)}
                 disabled={!showForm || saving}
+                autoComplete="username"
                 required
+                aria-required="true"
               />
             </div>
+
+            {/* Password */}
             <div className="space-y-1">
-              <Label htmlFor="smtp-port">{t("settings.smtpPort")}</Label>
+              <Label htmlFor="smtp-password">
+                {t("settings.smtpPassword")}
+              </Label>
+              {showForm ? (
+                <div className="relative">
+                  <Input
+                    id="smtp-password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder={
+                      hasExistingPassword
+                        ? t("settings.smtpPasswordNew")
+                        : undefined
+                    }
+                    value={form.password}
+                    onChange={(e) => updateField("password", e.target.value)}
+                    disabled={saving}
+                    autoComplete="current-password"
+                    className="pr-10"
+                    required={!hasExistingPassword}
+                    aria-required={!hasExistingPassword ? "true" : undefined}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? t("settings.smtpHidePassword") : t("settings.smtpShowPassword")}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground py-2">
+                  {passwordMask || t("settings.smtpPasswordMask")}
+                </p>
+              )}
+            </div>
+
+            {/* From Address */}
+            <div className="space-y-1">
+              <Label htmlFor="smtp-from">
+                {t("settings.smtpFromAddress")}
+              </Label>
               <Input
-                id="smtp-port"
-                type="number"
-                min={1}
-                max={65535}
-                value={form.port}
-                onChange={(e) =>
-                  updateField("port", parseInt(e.target.value, 10) || 587)
+                id="smtp-from"
+                type="email"
+                placeholder={t("settings.smtpFromAddressPlaceholder")}
+                value={form.fromAddress}
+                onChange={(e) => updateField("fromAddress", e.target.value)}
+                disabled={!showForm || saving}
+                required
+                aria-required="true"
+              />
+            </div>
+
+            {/* TLS Required switch */}
+            <div className="flex items-center justify-between rounded-md border px-4 py-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="smtp-tls" className="text-sm font-medium">
+                  {t("settings.smtpTlsRequired")}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.smtpTlsDesc")}
+                </p>
+              </div>
+              <Switch
+                id="smtp-tls"
+                checked={form.tlsRequired}
+                onCheckedChange={(checked) =>
+                  updateField("tlsRequired", checked)
                 }
                 disabled={!showForm || saving}
-                required
               />
             </div>
-          </div>
 
-          {/* Username */}
-          <div className="space-y-1">
-            <Label htmlFor="smtp-username">
-              {t("settings.smtpUsername")}
-            </Label>
-            <Input
-              id="smtp-username"
-              type="text"
-              value={form.username}
-              onChange={(e) => updateField("username", e.target.value)}
-              disabled={!showForm || saving}
-              autoComplete="username"
-              required
-            />
-          </div>
-
-          {/* Password */}
-          <div className="space-y-1">
-            <Label htmlFor="smtp-password">
-              {t("settings.smtpPassword")}
-            </Label>
-            {showForm ? (
-              <div className="relative">
-                <Input
-                  id="smtp-password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder={
-                    hasExistingPassword
-                      ? t("settings.smtpPasswordNew")
-                      : undefined
-                  }
-                  value={form.password}
-                  onChange={(e) => updateField("password", e.target.value)}
-                  disabled={saving}
-                  autoComplete="new-password"
-                  className="pr-10"
-                  required={!hasExistingPassword}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                  onClick={() => setShowPassword(!showPassword)}
-                  aria-label={showPassword ? t("settings.smtpHidePassword") : t("settings.smtpShowPassword")}
-                  tabIndex={-1}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <Eye className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </Button>
+            {/* Active switch */}
+            <div className="flex items-center justify-between rounded-md border px-4 py-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="smtp-active" className="text-sm font-medium">
+                  {t("settings.smtpActive")}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.smtpActiveDesc")}
+                </p>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground py-2">
-                {passwordMask || t("settings.smtpPasswordMask")}
-              </p>
-            )}
-          </div>
-
-          {/* From Address */}
-          <div className="space-y-1">
-            <Label htmlFor="smtp-from">
-              {t("settings.smtpFromAddress")}
-            </Label>
-            <Input
-              id="smtp-from"
-              type="email"
-              placeholder={t("settings.smtpFromAddressPlaceholder")}
-              value={form.fromAddress}
-              onChange={(e) => updateField("fromAddress", e.target.value)}
-              disabled={!showForm || saving}
-              required
-            />
-          </div>
-
-          {/* TLS Required switch */}
-          <div className="flex items-center justify-between rounded-md border px-4 py-3">
-            <div className="space-y-0.5">
-              <Label htmlFor="smtp-tls" className="text-sm font-medium">
-                {t("settings.smtpTlsRequired")}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t("settings.smtpTlsDesc")}
-              </p>
+              <Switch
+                id="smtp-active"
+                checked={form.active}
+                onCheckedChange={(checked) => updateField("active", checked)}
+                disabled={!showForm || saving}
+              />
             </div>
-            <Switch
-              id="smtp-tls"
-              checked={form.tlsRequired}
-              onCheckedChange={(checked) =>
-                updateField("tlsRequired", checked)
-              }
-              disabled={!showForm || saving}
-            />
-          </div>
 
-          {/* Active switch */}
-          <div className="flex items-center justify-between rounded-md border px-4 py-3">
-            <div className="space-y-0.5">
-              <Label htmlFor="smtp-active" className="text-sm font-medium">
-                {t("settings.smtpActive")}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t("settings.smtpActiveDesc")}
-              </p>
-            </div>
-            <Switch
-              id="smtp-active"
-              checked={form.active}
-              onCheckedChange={(checked) => updateField("active", checked)}
-              disabled={!showForm || saving}
-            />
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex flex-wrap gap-2 pt-2">
-            {showForm ? (
-              <>
-                {/* Save */}
-                <Button
-                  onClick={handleSave}
-                  disabled={!isFormValid() || saving}
-                >
-                  {saving ? (
-                    <Loader2
-                      className="h-4 w-4 animate-spin motion-reduce:animate-none mr-2"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <Save className="h-4 w-4 mr-2" aria-hidden="true" />
-                  )}
-                  {saving
-                    ? t("settings.smtpSaving")
-                    : t("settings.smtpSave")}
-                </Button>
-
-                {/* Cancel (only when editing existing config) */}
-                {hasConfig && (
-                  <Button variant="outline" onClick={handleCancelEdit}>
-                    {t("settings.cancel")}
+            {/* Action buttons */}
+            <div className="flex flex-wrap gap-2 pt-2">
+              {showForm ? (
+                <>
+                  {/* Save */}
+                  <Button
+                    type="submit"
+                    disabled={!isFormValid() || saving}
+                  >
+                    {saving ? (
+                      <Loader2
+                        className="h-4 w-4 animate-spin motion-reduce:animate-none mr-2"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" aria-hidden="true" />
+                    )}
+                    {saving
+                      ? t("settings.smtpSaving")
+                      : t("settings.smtpSave")}
                   </Button>
-                )}
-              </>
-            ) : (
-              <>
-                {/* Edit */}
-                <Button variant="outline" onClick={handleEdit}>
-                  {t("settings.smtpSave")}
-                </Button>
 
-                {/* Test email */}
-                <Button
-                  variant="outline"
-                  onClick={handleTest}
-                  disabled={testing || cooldown > 0}
-                >
-                  {testing ? (
-                    <Loader2
-                      className="h-4 w-4 animate-spin motion-reduce:animate-none mr-2"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <Send className="h-4 w-4 mr-2" aria-hidden="true" />
+                  {/* Cancel (only when editing existing config) */}
+                  {hasConfig && (
+                    <Button type="button" variant="outline" onClick={handleCancelEdit}>
+                      {t("settings.cancel")}
+                    </Button>
                   )}
-                  {testing
-                    ? t("settings.smtpTestSending")
-                    : cooldown > 0
-                      ? t("settings.smtpTestCooldown").replace(
-                          "{seconds}",
-                          String(cooldown),
-                        )
-                      : t("settings.smtpTestEmail")}
-                </Button>
+                </>
+              ) : (
+                <>
+                  {/* Edit */}
+                  <Button type="button" variant="outline" onClick={handleEdit} disabled={testing}>
+                    {t("settings.smtpEdit")}
+                  </Button>
 
-                {/* Delete */}
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="text-destructive hover:text-destructive"
-                      disabled={deleting}
-                    >
-                      {deleting ? (
+                  {/* Test email */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleTest}
+                    disabled={testing || cooldown > 0}
+                  >
+                    {testing ? (
+                      <>
                         <Loader2
                           className="h-4 w-4 animate-spin motion-reduce:animate-none mr-2"
                           aria-hidden="true"
                         />
-                      ) : (
-                        <Trash2
-                          className="h-4 w-4 mr-2"
-                          aria-hidden="true"
-                        />
-                      )}
-                      {t("settings.smtpDelete")}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        {t("settings.smtpDeleteConfirm")}
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {t("settings.smtpDeleteConfirmDesc")}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>
-                        {t("settings.cancel")}
-                      </AlertDialogCancel>
-                      <AlertDialogAction onClick={handleDelete}>
-                        {t("settings.delete")}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </>
-            )}
-          </div>
+                        {t("settings.smtpTestingConnection")}
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4 mr-2" aria-hidden="true" />
+                        {cooldown > 0
+                          ? <span aria-live="polite">{t("settings.smtpTestCooldown").replace(
+                              "{seconds}",
+                              String(cooldown),
+                            )}</span>
+                          : t("settings.smtpTestEmail")}
+                      </>
+                    )}
+                  </Button>
+
+                  {/* Delete */}
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="text-destructive hover:text-destructive"
+                        disabled={deleting || testing}
+                      >
+                        {deleting ? (
+                          <Loader2
+                            className="h-4 w-4 animate-spin motion-reduce:animate-none mr-2"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <Trash2
+                            className="h-4 w-4 mr-2"
+                            aria-hidden="true"
+                          />
+                        )}
+                        {t("settings.smtpDelete")}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          {t("settings.smtpDeleteConfirm")}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {t("settings.smtpDeleteConfirmDesc")}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>
+                          {t("settings.cancel")}
+                        </AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete}>
+                          {t("settings.delete")}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </>
+              )}
+            </div>
+          </form>
         </CardContent>
       </Card>
     </div>

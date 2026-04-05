@@ -165,69 +165,82 @@ export default function StatusFunnelWidget() {
         )}
         {state.status === "loaded" && isEmpty && <EmptyState />}
         {state.status === "loaded" && !isEmpty && (
-          <div className="space-y-1.5" role="list" aria-label={t("dashboard.pipeline")}>
-            {PIPELINE_STAGES.map((stage, i) => {
-              const count = countsForStages[i];
-              const widthPercent = (count / maxCount) * 100;
-              const isDropoff = biggestDropoff === i;
+          <>
+            <p className="text-xs text-muted-foreground mb-2 tabular-nums">
+              {t("dashboard.totalJobsTracked").replace(
+                "{count}",
+                formatNumber(totalJobs, locale),
+              )}
+            </p>
+            <div className="space-y-1.5" role="list" aria-label={t("dashboard.pipeline")}>
+              {PIPELINE_STAGES.map((stage, i) => {
+                const count = countsForStages[i];
+                const widthPercent = (count / maxCount) * 100;
+                const percentage = totalJobs > 0 ? Math.round((count / totalJobs) * 100) : 0;
+                const isDropoff = biggestDropoff === i;
+                const tooltipText = `${t(stage.i18nKey)}: ${formatNumber(count, locale)} (${formatNumber(percentage, locale)}%)`;
 
-              return (
-                <div key={stage.value} role="listitem">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "text-xs font-medium w-20 shrink-0 truncate",
-                        stage.textColor,
-                      )}
-                    >
-                      {t(stage.i18nKey)}
-                    </span>
-                    <div className="flex-1 h-6 bg-muted rounded-sm overflow-hidden relative">
-                      <div
-                        className={cn(
-                          "h-full rounded-sm transition-all duration-500 ease-out",
-                          stage.barColor,
-                          isDropoff && "ring-2 ring-orange-400 ring-offset-1",
-                        )}
-                        style={{
-                          width: `${Math.max(widthPercent, count > 0 ? 4 : 0)}%`,
-                        }}
-                        role="meter"
-                        aria-label={`${t(stage.i18nKey)}: ${count}`}
-                        aria-valuenow={count}
-                        aria-valuemin={0}
-                        aria-valuemax={maxCount}
-                      />
+                return (
+                  <div key={stage.value} role="listitem">
+                    <div className="flex items-center gap-2">
                       <span
-                        className="absolute inset-y-0 right-2 flex items-center text-xs font-semibold tabular-nums text-foreground"
-                      >
-                        {count}
-                      </span>
-                    </div>
-                  </div>
-                  {/* Conversion arrow between stages */}
-                  {i < PIPELINE_STAGES.length - 1 && countsForStages[i] > 0 && (
-                    <div className="flex items-center gap-2 ml-20 pl-2">
-                      <span className={cn(
-                        "text-[10px] tabular-nums",
-                        isDropoff
-                          ? "text-orange-500 font-semibold"
-                          : "text-muted-foreground",
-                      )}>
-                        {isDropoff && (
-                          <>
-                            <TrendingDown className="inline-block w-3 h-3 mr-0.5 -mt-px" aria-hidden="true" />
-                            <span className="sr-only">{t("dashboard.biggestDropoff")}: </span>
-                          </>
+                        className={cn(
+                          "text-xs font-medium w-20 shrink-0 truncate",
+                          stage.textColor,
                         )}
-                        {formatNumber(conversionPercent(countsForStages[i], countsForStages[i + 1]) ?? 0, locale)}%
+                      >
+                        {t(stage.i18nKey)}
                       </span>
+                      <div
+                        className="flex-1 h-6 bg-muted rounded-sm overflow-hidden relative"
+                        title={tooltipText}
+                      >
+                        <div
+                          className={cn(
+                            "h-full rounded-sm transition-all duration-500 ease-out",
+                            stage.barColor,
+                            isDropoff && "ring-2 ring-orange-400 ring-offset-1",
+                          )}
+                          style={{
+                            width: `${Math.max(widthPercent, count > 0 ? 4 : 0)}%`,
+                          }}
+                          role="meter"
+                          aria-label={tooltipText}
+                          aria-valuenow={count}
+                          aria-valuemin={0}
+                          aria-valuemax={maxCount}
+                        />
+                        <span
+                          className="absolute inset-y-0 right-2 flex items-center text-xs font-semibold tabular-nums text-foreground"
+                        >
+                          {count}
+                        </span>
+                      </div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    {/* Conversion arrow between stages */}
+                    {i < PIPELINE_STAGES.length - 1 && countsForStages[i] > 0 && (
+                      <div className="flex items-center gap-2 ml-20 pl-2">
+                        <span className={cn(
+                          "text-[10px] tabular-nums",
+                          isDropoff
+                            ? "text-orange-500 font-semibold"
+                            : "text-muted-foreground",
+                        )}>
+                          {isDropoff && (
+                            <>
+                              <TrendingDown className="inline-block w-3 h-3 mr-0.5 -mt-px" aria-hidden="true" />
+                              <span className="sr-only">{t("dashboard.biggestDropoff")}: </span>
+                            </>
+                          )}
+                          {formatNumber(conversionPercent(countsForStages[i], countsForStages[i + 1]) ?? 0, locale)}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </CardContent>
     </Card>
