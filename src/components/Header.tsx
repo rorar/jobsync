@@ -70,7 +70,12 @@ async function Header() {
         user={user}
         signOutAction={async () => {
           "use server";
-          await signOut();
+          const baseUrl = (
+            process.env.AUTH_URL ??
+            process.env.NEXTAUTH_URL ??
+            "http://localhost:3737"
+          ).replace(/\/$/, "");
+          await signOut({ redirectTo: `${baseUrl}/` });
         }}
       />
     </header>
