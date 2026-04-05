@@ -33,6 +33,7 @@ import { channelRouter } from "@/lib/notifications/channel-router";
 import { InAppChannel } from "@/lib/notifications/channels/in-app.channel";
 import { WebhookChannel } from "@/lib/notifications/channels/webhook.channel";
 import { EmailChannel } from "@/lib/notifications/channels/email.channel";
+import { PushChannel } from "@/lib/notifications/channels/push.channel";
 import type { NotificationDraft } from "@/lib/notifications/types";
 import { t } from "@/i18n/server";
 import { DEFAULT_LOCALE, isValidLocale } from "@/i18n/locales";
@@ -46,6 +47,7 @@ import { DEFAULT_LOCALE, isValidLocale } from "@/i18n/locales";
 channelRouter.register(new InAppChannel());
 channelRouter.register(new WebhookChannel());
 channelRouter.register(new EmailChannel());
+channelRouter.register(new PushChannel());
 
 // ---------------------------------------------------------------------------
 // VacancyStaged batch buffer (spec: rule BatchSummary)

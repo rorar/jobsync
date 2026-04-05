@@ -9,6 +9,7 @@ import DisplaySettings from "@/components/settings/DisplaySettings";
 import ErrorLogSettings from "@/components/settings/ErrorLogSettings";
 import NotificationSettings from "@/components/settings/NotificationSettings";
 import PublicApiKeySettings from "@/components/settings/PublicApiKeySettings";
+import PushSettings from "@/components/settings/PushSettings";
 import SmtpSettings from "@/components/settings/SmtpSettings";
 import WebhookSettings from "@/components/settings/WebhookSettings";
 import CompanyBlacklistSettings from "@/components/settings/CompanyBlacklistSettings";
@@ -38,6 +39,7 @@ function Settings() {
           {activeSection === "notifications" && <NotificationSettings />}
           {activeSection === "webhooks" && <WebhookSettings />}
           {activeSection === "email" && <SmtpSettings />}
+          {activeSection === "push" && <PushSettings />}
           {activeSection === "blacklist" && <CompanyBlacklistSettings />}
           {activeSection === "developer" && <DeveloperSettings />}
           {activeSection === "error-log" && <ErrorLogSettings />}

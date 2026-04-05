@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, Ban, Bell, Bot, Bug, Database, Globe, Key, Mail, Palette, Webhook, Zap } from "lucide-react";
+import { AlertTriangle, Ban, Bell, BellRing, Bot, Bug, Database, Globe, Key, Mail, Palette, Webhook, Zap } from "lucide-react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ export type SettingsSection =
   | "notifications"
   | "webhooks"
   | "email"
+  | "push"
   | "blacklist"
   | "developer"
   | "error-log";
@@ -37,6 +38,7 @@ const SETTINGS_SECTIONS: {
   { id: "notifications", labelKey: "settings.sidebarNotifications", icon: Bell },
   { id: "webhooks", labelKey: "webhook.title", icon: Webhook },
   { id: "email", labelKey: "settings.sidebarEmail", icon: Mail },
+  { id: "push", labelKey: "settings.sidebarPush", icon: BellRing },
   { id: "blacklist", labelKey: "blacklist.sidebarBlacklist", icon: Ban },
   { id: "developer", labelKey: "settings.sidebarDeveloper", icon: Bug },
   { id: "error-log", labelKey: "settings.sidebarErrorLog", icon: AlertTriangle },
