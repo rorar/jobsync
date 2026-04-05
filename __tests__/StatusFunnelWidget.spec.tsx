@@ -27,7 +27,7 @@ const i18nDict: Record<string, string> = {
   "dashboard.noPipeline":
     "No jobs in the pipeline yet. Start by bookmarking a job!",
   "dashboard.retryButton": "Retry",
-  "errors.fetchStatusDistribution": "Failed to fetch status distribution",
+  "dashboard.fetchStatusDistributionError": "Failed to load status distribution",
 };
 
 jest.mock("@/i18n", () => ({
@@ -151,14 +151,14 @@ describe("StatusFunnelWidget", () => {
     it("shows error message and retry button on failure", async () => {
       mockGetStatusDistribution.mockResolvedValue({
         success: false,
-        message: "errors.fetchStatusDistribution",
+        message: "dashboard.fetchStatusDistributionError",
       });
 
       render(<StatusFunnelWidget />);
 
       await waitFor(() => {
         expect(
-          screen.getByText("Failed to fetch status distribution"),
+          screen.getByText("Failed to load status distribution"),
         ).toBeInTheDocument();
       });
 
@@ -169,7 +169,7 @@ describe("StatusFunnelWidget", () => {
       mockGetStatusDistribution
         .mockResolvedValueOnce({
           success: false,
-          message: "errors.fetchStatusDistribution",
+          message: "dashboard.fetchStatusDistributionError",
         })
         .mockResolvedValueOnce({
           success: true,
@@ -344,7 +344,7 @@ describe("StatusFunnelWidget", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText("Failed to fetch status distribution"),
+          screen.getByText("Failed to load status distribution"),
         ).toBeInTheDocument();
       });
 

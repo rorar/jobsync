@@ -88,6 +88,7 @@ export default function WebhookSettings() {
   const [urlError, setUrlError] = useState<string | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<NotificationType[]>([]);
   const [creating, setCreating] = useState(false);
+  const [eventsError, setEventsError] = useState(false);
 
   // Secret dialog
   const [showSecretDialog, setShowSecretDialog] = useState(false);
@@ -157,10 +158,7 @@ export default function WebhookSettings() {
     }
 
     if (selectedEvents.length === 0) {
-      toast({
-        variant: "destructive",
-        title: t("webhook.selectEvents"),
-      });
+      setEventsError(true);
       return;
     }
 
@@ -173,6 +171,7 @@ export default function WebhookSettings() {
         setUrl("");
         setUrlError(null);
         setSelectedEvents([]);
+        setEventsError(false);
         await fetchEndpoints();
       } else {
         toast({
@@ -274,11 +273,14 @@ export default function WebhookSettings() {
   };
 
   const toggleEvent = (event: NotificationType) => {
-    setSelectedEvents((prev) =>
-      prev.includes(event)
+    setSelectedEvents((prev) => {
+      const next = prev.includes(event)
         ? prev.filter((e) => e !== event)
-        : [...prev, event],
-    );
+        : [...prev, event];
+      // Clear validation error when at least one event is selected
+      if (next.length > 0) setEventsError(false);
+      return next;
+    });
   };
 
   const limitReached = endpoints.length >= MAX_ENDPOINTS;
@@ -364,8 +366,13 @@ export default function WebhookSettings() {
 
           {/* Event selection */}
           <div className="space-y-2">
-            <Label>{t("webhook.eventsLabel")}</Label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Label id="webhook-events-label">{t("webhook.eventsLabel")}</Label>
+            <div
+              role="group"
+              aria-labelledby="webhook-events-label"
+              aria-describedby={eventsError ? "webhook-events-error" : undefined}
+              className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+            >
               {WEBHOOK_EVENT_TYPES.map((event) => (
                 <label
                   key={event}
@@ -382,6 +389,11 @@ export default function WebhookSettings() {
                 </label>
               ))}
             </div>
+            {eventsError && (
+              <p id="webhook-events-error" role="alert" className="text-sm text-destructive">
+                {t("webhook.eventsRequired")}
+              </p>
+            )}
           </div>
 
           {/* Limit warning */}
@@ -407,34 +419,36 @@ export default function WebhookSettings() {
       </Card>
 
       {/* Endpoint list */}
-      {endpoints.length === 0 ? (
-        <Card>
-          <CardContent className="py-8 text-center">
-            <Webhook className="h-8 w-8 mx-auto text-muted-foreground mb-2" aria-hidden="true" />
-            <p className="text-sm font-medium">{t("webhook.noEndpoints")}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {t("webhook.noEndpointsDesc")}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-2">
-          {endpoints.map((endpoint) => (
-            <EndpointRow
-              key={endpoint.id}
-              endpoint={endpoint}
-              locale={locale}
-              t={t}
-              isExpanded={expanded.has(endpoint.id)}
-              onToggleExpand={() => toggleExpanded(endpoint.id)}
-              onToggleActive={handleToggleActive}
-              onDelete={handleDelete}
-              toggling={toggling}
-              deleting={deleting}
-            />
-          ))}
-        </div>
-      )}
+      <div aria-live="polite">
+        {endpoints.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center">
+              <Webhook className="h-8 w-8 mx-auto text-muted-foreground mb-2" aria-hidden="true" />
+              <p className="text-sm font-medium">{t("webhook.noEndpoints")}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {t("webhook.noEndpointsDesc")}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {endpoints.map((endpoint) => (
+              <EndpointRow
+                key={endpoint.id}
+                endpoint={endpoint}
+                locale={locale}
+                t={t}
+                isExpanded={expanded.has(endpoint.id)}
+                onToggleExpand={() => toggleExpanded(endpoint.id)}
+                onToggleActive={handleToggleActive}
+                onDelete={handleDelete}
+                toggling={toggling}
+                deleting={deleting}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Secret created dialog */}
       <Dialog

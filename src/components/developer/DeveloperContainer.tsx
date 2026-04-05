@@ -40,8 +40,8 @@ function StatusBanner({ message }: { message: StatusMessage }) {
     <div
       className={`flex items-start gap-3 rounded-lg border p-4 ${
         message.type === "error"
-          ? "border-red-200 bg-red-50 text-red-900"
-          : "border-green-200 bg-green-50 text-green-900"
+          ? "border-red-200 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+          : "border-green-200 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-200"
       }`}
     >
       {message.type === "error" ? (
@@ -81,11 +81,6 @@ export function MockActivitiesCard() {
   };
 
   const handleClear = async () => {
-    if (
-      !confirm(t("developer.confirmClearActivities"))
-    )
-      return;
-
     setIsClearing(true);
     setMessage(null);
     const result = await clearMockActivitiesAction();
@@ -133,15 +128,34 @@ export function MockActivitiesCard() {
             <p className="text-sm text-muted-foreground mb-4">
               {t("developer.clearMockActivitiesDesc")}
             </p>
-            <Button
-              onClick={handleClear}
-              disabled={isClearing || isGenerating}
-              variant="destructive"
-              className="w-full"
-            >
-              {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isClearing ? t("developer.clearing") : t("developer.clearMockActivities")}
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  disabled={isClearing || isGenerating}
+                  variant="destructive"
+                  className="w-full"
+                >
+                  {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isClearing ? t("developer.clearing") : t("developer.clearMockActivities")}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {t("developer.clearMockActivities")}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {t("developer.confirmClearActivities")}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleClear}>
+                    {t("developer.clearMockActivities")}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </CardContent>
       </Card>
@@ -155,8 +169,6 @@ export function ClearAllMockDataCard() {
   const [message, setMessage] = useState<StatusMessage | null>(null);
 
   const handleClearAll = async () => {
-    if (!confirm(t("developer.confirmClearAllMockData"))) return;
-
     setIsClearing(true);
     setMessage(null);
 
@@ -190,15 +202,34 @@ export function ClearAllMockDataCard() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button
-            onClick={handleClearAll}
-            disabled={isClearing}
-            variant="destructive"
-            className="w-full"
-          >
-            {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isClearing ? t("developer.clearing") : t("developer.clearAllMockData")}
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                disabled={isClearing}
+                variant="destructive"
+                className="w-full"
+              >
+                {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isClearing ? t("developer.clearing") : t("developer.clearAllMockData")}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {t("developer.clearAllMockData")}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t("developer.confirmClearAllMockData")}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                <AlertDialogAction onClick={handleClearAll}>
+                  {t("developer.clearAllMockData")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </CardContent>
       </Card>
     </div>
@@ -211,8 +242,6 @@ export function ClearE2ETestDataCard() {
   const [message, setMessage] = useState<StatusMessage | null>(null);
 
   const handleClear = async () => {
-    if (!confirm(t("developer.confirmClearE2ETestData"))) return;
-
     setIsClearing(true);
     setMessage(null);
     const result = await clearE2ETestDataAction();
@@ -238,15 +267,34 @@ export function ClearE2ETestDataCard() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button
-            onClick={handleClear}
-            disabled={isClearing}
-            variant="destructive"
-            className="w-full"
-          >
-            {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isClearing ? t("developer.clearing") : t("developer.clearE2ETestData")}
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                disabled={isClearing}
+                variant="destructive"
+                className="w-full"
+              >
+                {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isClearing ? t("developer.clearing") : t("developer.clearE2ETestData")}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {t("developer.clearE2ETestData")}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t("developer.confirmClearE2ETestData")}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                <AlertDialogAction onClick={handleClear}>
+                  {t("developer.clearE2ETestData")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </CardContent>
       </Card>
     </div>
@@ -275,11 +323,6 @@ export function MockProfileCard() {
   };
 
   const handleClear = async () => {
-    if (
-      !confirm(t("developer.confirmClearProfile"))
-    )
-      return;
-
     setIsClearing(true);
     setMessage(null);
     const result = await clearMockProfileDataAction();
@@ -327,15 +370,34 @@ export function MockProfileCard() {
             <p className="text-sm text-muted-foreground mb-4">
               {t("developer.clearMockProfileDesc")}
             </p>
-            <Button
-              onClick={handleClear}
-              disabled={isClearing || isGenerating}
-              variant="destructive"
-              className="w-full"
-            >
-              {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isClearing ? t("developer.clearing") : t("developer.clearMockProfile")}
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  disabled={isClearing || isGenerating}
+                  variant="destructive"
+                  className="w-full"
+                >
+                  {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isClearing ? t("developer.clearing") : t("developer.clearMockProfile")}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {t("developer.clearMockProfile")}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {t("developer.confirmClearProfile")}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleClear}>
+                    {t("developer.clearMockProfile")}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </CardContent>
       </Card>

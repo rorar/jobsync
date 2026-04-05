@@ -1,8 +1,25 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-04-03
+# Bug Tracker — Collected 2026-03-24, Updated 2026-04-04
 
-**Total: 281 bugs found, 281 fixed, 0 open**
+**Total: 283 bugs found, 281 fixed, 2 open (accepted risk)**
 
-### Status: ✅ All bugs are fixed.
+### Status: ⚠️ 2 known issues (accepted risk, pre-existing)
+
+## S5a-Resume Flashlight Findings (2026-04-04)
+
+### Open — Accepted Risk (pre-existing, not S5a-introduced)
+| ID | Severity | Finding | Status |
+|----|----------|---------|--------|
+| FL-1 | MEDIUM | `google-favicon/index.ts` fetch without `redirect: "manual"` — constructed URL could redirect to internal IP. Pre-existing (S4). | Accepted: URL is constructed from domain, not user-supplied. SSRF risk low. |
+| FL-2 | LOW | `validateOllamaUrl()` does not block IPv4-mapped IPv6 (`::ffff:127.0.0.1`). Pre-existing by design — Ollama is intended for localhost. | Accepted: By design (ADR in security-rules.allium). |
+
+### Verified Clean (S5a Flashlight)
+| Check | Result |
+|-------|--------|
+| IDOR: `where: { id }` without userId in actions | All instances preceded by ownership check. Correct pattern for SQLite. |
+| SSRF: `redirect: "manual"` on S5a fetches | webhook.channel.ts has it. All S5a-introduced fetches protected. |
+| IPv4-mapped IPv6 in validateWebhookUrl | Tested and blocks `::ffff:*` addresses. |
+| Rate limits on server actions | enrichment.actions.ts has limits. Other actions rely on NextAuth session. Pre-existing pattern. |
+| DNS rebinding on webhook dispatch | validateWebhookUrl called on EVERY dispatch (not just create). Correct per spec. |
 
 ## Session S4 (2026-04-03) — Data Enrichment + S3 Deferred Fixes + Catch-Up
 

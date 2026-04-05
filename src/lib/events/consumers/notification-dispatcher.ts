@@ -82,7 +82,13 @@ async function resolvePreferences(userId: string): Promise<NotificationPreferenc
  */
 async function dispatchNotification(draft: NotificationDraft): Promise<void> {
   const prefs = await resolvePreferences(draft.userId);
-  await channelRouter.route(draft, prefs);
+
+  // Fire-and-forget: do NOT await channel routing.
+  // Webhook delivery can retry for up to 36s — blocking here would stall
+  // the EventBus publish() loop and freeze the calling Server Action.
+  channelRouter.route(draft, prefs).catch((err) => {
+    console.error("[NotificationDispatcher] Channel routing failed:", err);
+  });
 }
 
 // ---------------------------------------------------------------------------

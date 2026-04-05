@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Card,
   CardContent,
@@ -100,6 +100,7 @@ function ApiKeySettings() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
   const [checking, setChecking] = useState<string | null>(null);
+  const addButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   useEffect(() => {
     fetchKeys();
@@ -210,8 +211,15 @@ function ApiKeySettings() {
   };
 
   const handleCancel = () => {
+    const moduleId = editingModule;
     setEditingModule(null);
     setInputValue("");
+    // Restore focus to the Add/Update button for the module that was being edited
+    if (moduleId) {
+      requestAnimationFrame(() => {
+        addButtonRefs.current.get(moduleId)?.focus();
+      });
+    }
   };
 
   const handleToggleStatus = async (module: ModuleConfig) => {
@@ -373,7 +381,7 @@ function ApiKeySettings() {
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" aria-live="polite">
                       <span
                         className={`inline-block h-2 w-2 rounded-full ${
                           module.healthStatus === "healthy" ? "bg-green-500" :
@@ -381,7 +389,7 @@ function ApiKeySettings() {
                           module.healthStatus === "unreachable" ? "bg-red-500" :
                           "bg-gray-400"
                         }`}
-                        title={module.healthStatus}
+                        aria-hidden="true"
                       />
                       <span className={`text-xs font-medium ${module.status === "active" ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>
                         {module.status === "active" ? t("settings.moduleActive") : t("settings.moduleInactive")}
@@ -449,6 +457,10 @@ function ApiKeySettings() {
                 ) : (
                   <div className="flex gap-2">
                     <Button
+                      ref={(el) => {
+                        if (el) addButtonRefs.current.set(module.id, el);
+                        else addButtonRefs.current.delete(module.id);
+                      }}
                       size="sm"
                       variant="outline"
                       onClick={() => {

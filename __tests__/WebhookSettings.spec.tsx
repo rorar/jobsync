@@ -310,8 +310,9 @@ describe("WebhookSettings", () => {
       expect(screen.getByText("Delete webhook endpoint?")).toBeInTheDocument();
     });
 
-    // Click confirm
-    const confirmButton = screen.getByRole("button", { name: "Delete" });
+    // Click confirm within the dialog
+    const dialog = screen.getByRole("alertdialog");
+    const confirmButton = within(dialog).getByRole("button", { name: "Delete" });
     await user.click(confirmButton);
 
     await waitFor(() => {

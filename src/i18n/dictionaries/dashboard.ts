@@ -27,6 +27,7 @@ export const dashboard = {
     "dashboard.conversionRate": "{percent}% conversion",
     "dashboard.noPipeline": "No jobs in the pipeline yet. Start by bookmarking a job!",
     "dashboard.retryButton": "Retry",
+    "dashboard.fetchStatusDistributionError": "Failed to load status distribution",
   },
   de: {
     "dashboard.title": "Dashboard",
@@ -56,6 +57,7 @@ export const dashboard = {
     "dashboard.conversionRate": "{percent}% Konversion",
     "dashboard.noPipeline": "Noch keine Jobs in der Pipeline. Merke dir einen Job vor!",
     "dashboard.retryButton": "Erneut versuchen",
+    "dashboard.fetchStatusDistributionError": "Statusverteilung konnte nicht geladen werden",
   },
   fr: {
     "dashboard.title": "Tableau de bord",
@@ -85,6 +87,7 @@ export const dashboard = {
     "dashboard.conversionRate": "{percent}% de conversion",
     "dashboard.noPipeline": "Aucun emploi dans le pipeline. Commencez par enregistrer un emploi !",
     "dashboard.retryButton": "Réessayer",
+    "dashboard.fetchStatusDistributionError": "Impossible de charger la distribution des statuts",
   },
   es: {
     "dashboard.title": "Panel",
@@ -114,5 +117,6 @@ export const dashboard = {
     "dashboard.conversionRate": "{percent}% de conversión",
     "dashboard.noPipeline": "Aún no hay empleos en el pipeline. ¡Empieza guardando un empleo!",
     "dashboard.retryButton": "Reintentar",
+    "dashboard.fetchStatusDistributionError": "No se pudo cargar la distribución de estados",
   },
 } as const;
