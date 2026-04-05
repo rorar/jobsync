@@ -18,7 +18,7 @@ import { createHmac } from "crypto";
 import prisma from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 import { validateWebhookUrl } from "@/lib/url-validation";
-import { t } from "@/i18n/dictionaries";
+import { t } from "@/i18n/server";
 import type { NotificationType } from "@/models/notification.model";
 import type { UserSettingsData } from "@/models/userSettings.model";
 import type {

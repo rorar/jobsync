@@ -32,6 +32,8 @@ import { channelRouter } from "@/lib/notifications/channel-router";
 import { InAppChannel } from "@/lib/notifications/channels/in-app.channel";
 import { WebhookChannel } from "@/lib/notifications/channels/webhook.channel";
 import type { NotificationDraft } from "@/lib/notifications/types";
+import { t } from "@/i18n/server";
+import { DEFAULT_LOCALE, isValidLocale } from "@/i18n/locales";
 
 // ---------------------------------------------------------------------------
 // Channel Registration (one-time)
@@ -72,6 +74,23 @@ async function resolvePreferences(userId: string): Promise<NotificationPreferenc
   }
 }
 
+/**
+ * Resolve the user's preferred locale from their settings.
+ * Falls back to DEFAULT_LOCALE ("en") if settings are unavailable or unparseable.
+ */
+async function resolveLocale(userId: string): Promise<string> {
+  try {
+    const row = await prisma.userSettings.findUnique({ where: { userId } });
+    if (!row) return DEFAULT_LOCALE;
+    const parsed: UserSettingsData = JSON.parse(row.settings);
+    const locale = parsed.display?.locale;
+    if (locale && isValidLocale(locale)) return locale;
+    return DEFAULT_LOCALE;
+  } catch {
+    return DEFAULT_LOCALE;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Dispatch Helper
 // ---------------------------------------------------------------------------
@@ -100,10 +119,14 @@ async function flushStagedBuffer(automationId: string): Promise<void> {
   if (!entry) return;
   stagedBuffers.delete(automationId);
 
+  const locale = await resolveLocale(entry.userId);
+  const message = t(locale, "notifications.batchStaged")
+    .replace("{count}", String(entry.count));
+
   const draft: NotificationDraft = {
     userId: entry.userId,
     type: "vacancy_batch_staged" satisfies NotificationType,
-    message: `${entry.count} new vacancies staged from automation`,
+    message,
     automationId,
     data: { count: entry.count, automationId },
   };
@@ -119,11 +142,12 @@ async function handleVacancyPromoted(
   event: DomainEvent<typeof DomainEventType.VacancyPromoted>,
 ): Promise<void> {
   const payload = event.payload as VacancyPromotedPayload;
+  const locale = await resolveLocale(payload.userId);
 
   await dispatchNotification({
     userId: payload.userId,
     type: "vacancy_promoted" satisfies NotificationType,
-    message: `Job created from staged vacancy`,
+    message: t(locale, "notifications.vacancyPromoted"),
     data: { stagedVacancyId: payload.stagedVacancyId, jobId: payload.jobId },
   });
 }
@@ -158,11 +182,15 @@ async function handleBulkActionCompleted(
   event: DomainEvent<typeof DomainEventType.BulkActionCompleted>,
 ): Promise<void> {
   const payload = event.payload as BulkActionCompletedPayload;
+  const locale = await resolveLocale(payload.userId);
+  const message = t(locale, "notifications.bulkActionCompleted")
+    .replace("{succeeded}", String(payload.succeeded))
+    .replace("{actionType}", payload.actionType);
 
   await dispatchNotification({
     userId: payload.userId,
     type: "bulk_action_completed" satisfies NotificationType,
-    message: `${payload.succeeded} items ${payload.actionType}d successfully`,
+    message,
     data: {
       actionType: payload.actionType,
       succeeded: payload.succeeded,
@@ -176,11 +204,15 @@ async function handleModuleDeactivated(
   event: DomainEvent<typeof DomainEventType.ModuleDeactivated>,
 ): Promise<void> {
   const payload = event.payload as ModuleDeactivatedPayload;
+  const locale = await resolveLocale(payload.userId);
+  const message = t(locale, "notifications.moduleDeactivated")
+    .replace("{name}", payload.moduleId)
+    .replace("{automationCount}", String(payload.affectedAutomationIds.length));
 
   await dispatchNotification({
     userId: payload.userId,
     type: "module_deactivated" satisfies NotificationType,
-    message: `Module ${payload.moduleId} deactivated. ${payload.affectedAutomationIds.length} automation(s) paused.`,
+    message,
     moduleId: payload.moduleId,
     data: {
       moduleId: payload.moduleId,
@@ -193,11 +225,15 @@ async function handleModuleReactivated(
   event: DomainEvent<typeof DomainEventType.ModuleReactivated>,
 ): Promise<void> {
   const payload = event.payload as ModuleReactivatedPayload;
+  const locale = await resolveLocale(payload.userId);
+  const message = t(locale, "notifications.moduleReactivated")
+    .replace("{name}", payload.moduleId)
+    .replace("{automationCount}", String(payload.pausedAutomationCount));
 
   await dispatchNotification({
     userId: payload.userId,
     type: "module_reactivated" satisfies NotificationType,
-    message: `Module ${payload.moduleId} reactivated. ${payload.pausedAutomationCount} automation(s) remain paused.`,
+    message,
     moduleId: payload.moduleId,
     data: {
       moduleId: payload.moduleId,
@@ -210,11 +246,14 @@ async function handleRetentionCompleted(
   event: DomainEvent<typeof DomainEventType.RetentionCompleted>,
 ): Promise<void> {
   const payload = event.payload as RetentionCompletedPayload;
+  const locale = await resolveLocale(payload.userId);
+  const message = t(locale, "notifications.retentionCompleted")
+    .replace("{count}", String(payload.purgedCount));
 
   await dispatchNotification({
     userId: payload.userId,
     type: "retention_completed" satisfies NotificationType,
-    message: `${payload.purgedCount} expired vacancies cleaned up`,
+    message,
     data: { purgedCount: payload.purgedCount, hashesCreated: payload.hashesCreated },
   });
 }

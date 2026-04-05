@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useTranslations } from "@/i18n";
+import { useTranslations, formatNumber } from "@/i18n";
 import {
   getStatusDistribution,
   StatusDistribution,
@@ -87,7 +87,7 @@ function findBiggestDropoff(counts: number[]): number | null {
 }
 
 export default function StatusFunnelWidget() {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const [state, setState] = useState<FetchState>({ status: "loading" });
 
   const fetchData = useCallback(async () => {
@@ -150,7 +150,7 @@ export default function StatusFunnelWidget() {
               <p className="text-xs text-muted-foreground mt-0.5">
                 {t("dashboard.conversionRate").replace(
                   "{percent}",
-                  String(headlineConversion),
+                  formatNumber(headlineConversion, locale),
                 )}{" "}
                 → {t("dashboard.statusApplied")}
               </p>
@@ -215,9 +215,12 @@ export default function StatusFunnelWidget() {
                           : "text-muted-foreground",
                       )}>
                         {isDropoff && (
-                          <TrendingDown className="inline-block w-3 h-3 mr-0.5 -mt-px" />
+                          <>
+                            <TrendingDown className="inline-block w-3 h-3 mr-0.5 -mt-px" aria-hidden="true" />
+                            <span className="sr-only">{t("dashboard.biggestDropoff")}: </span>
+                          </>
                         )}
-                        {conversionPercent(countsForStages[i], countsForStages[i + 1]) ?? 0}%
+                        {formatNumber(conversionPercent(countsForStages[i], countsForStages[i + 1]) ?? 0, locale)}%
                       </span>
                     </div>
                   )}

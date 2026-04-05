@@ -4,6 +4,9 @@
  * Verifies that the dispatcher checks user preferences before creating notifications.
  */
 
+// Mock "server-only" to prevent runtime error in test environment
+jest.mock("server-only", () => ({}));
+
 import { _testHelpers } from "@/lib/events/consumers/notification-dispatcher";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
 
@@ -21,6 +24,22 @@ jest.mock("@/lib/db", () => ({
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
     },
   },
+}));
+
+// Mock i18n dictionaries — returns template strings with placeholders
+jest.mock("@/i18n/dictionaries", () => ({
+  t: jest.fn((_locale: string, key: string) => {
+    const translations: Record<string, string> = {
+      "notifications.vacancyPromoted": "Job created from staged vacancy",
+      "notifications.bulkActionCompleted": "{succeeded} items {actionType} successfully",
+      "notifications.retentionCompleted": "{count} expired vacancies cleaned up",
+      "notifications.moduleDeactivated": "Module {name} deactivated. {automationCount} automation(s) paused.",
+      "notifications.moduleReactivated": "Module {name} reactivated. {automationCount} automation(s) remain paused.",
+      "notifications.batchStaged": "{count} new vacancies staged from automation",
+    };
+    return translations[key] ?? key;
+  }),
+  getDictionary: jest.fn(() => ({})),
 }));
 
 describe("NotificationDispatcher resolvePreferences", () => {

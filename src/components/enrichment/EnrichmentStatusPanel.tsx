@@ -261,7 +261,7 @@ export function EnrichmentStatusPanel({
 
         {/* Results list */}
         {!loading && !error && results.length > 0 && (
-          <div className="space-y-2">
+          <div className="space-y-2" aria-live="polite" aria-atomic="false">
             {results.map((result) => (
               <div
                 key={result.id}
@@ -301,6 +301,7 @@ export function EnrichmentStatusPanel({
                   onClick={() => handleRefresh(result.id)}
                   disabled={refreshingId === result.id}
                   aria-label={t("enrichment.refreshButton")}
+                  aria-busy={refreshingId === result.id}
                   className="shrink-0"
                 >
                   {refreshingId === result.id ? (

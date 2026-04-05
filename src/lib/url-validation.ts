@@ -92,6 +92,29 @@ export function validateWebhookUrl(url: string): {
     return { valid: false, error: "webhook.ssrfBlocked" };
   }
 
+  // Block 100.64.0.0/10 (Carrier-Grade NAT, RFC 6598)
+  // Covers 100.64.0.0 – 100.127.255.255. Used by AWS VPCs, Tailscale, WireGuard.
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(cleanHostname)) {
+    return { valid: false, error: "webhook.ssrfBlocked" };
+  }
+
+  // Block 192.0.0.0/24 (IETF Protocol Assignments, RFC 6890)
+  if (/^192\.0\.0\./.test(cleanHostname)) {
+    return { valid: false, error: "webhook.ssrfBlocked" };
+  }
+
+  // Block 198.18.0.0/15 (Benchmarking, RFC 2544)
+  // Covers 198.18.0.0 – 198.19.255.255
+  if (/^198\.1[89]\./.test(cleanHostname)) {
+    return { valid: false, error: "webhook.ssrfBlocked" };
+  }
+
+  // Block 240.0.0.0/4 (Reserved/Future, RFC 1112) including 255.255.255.255 broadcast
+  // Covers 240.0.0.0 – 255.255.255.255
+  if (/^(24\d|25[0-5])\./.test(cleanHostname)) {
+    return { valid: false, error: "webhook.ssrfBlocked" };
+  }
+
   // Block IPv6 private/link-local addresses
   // fc00::/7 (Unique Local Addresses) — covers fc00:: and fd00::
   if (/^f[cd]/i.test(cleanHostname)) {

@@ -24,6 +24,7 @@ const i18nDict: Record<string, string> = {
   "dashboard.statusOffer": "Offer",
   "dashboard.statusHired": "Hired",
   "dashboard.conversionRate": "{percent}% conversion",
+  "dashboard.biggestDropoff": "Biggest drop-off",
   "dashboard.noPipeline":
     "No jobs in the pipeline yet. Start by bookmarking a job!",
   "dashboard.retryButton": "Retry",
@@ -35,6 +36,7 @@ jest.mock("@/i18n", () => ({
     t: (key: string) => i18nDict[key] ?? key,
     locale: "en",
   })),
+  formatNumber: (value: number, _locale?: string) => String(value),
 }));
 
 jest.mock("lucide-react", () => ({

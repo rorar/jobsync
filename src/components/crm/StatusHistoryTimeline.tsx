@@ -177,6 +177,8 @@ export function StatusHistoryTimeline({ jobId }: StatusHistoryTimelineProps) {
                                 ? "border-green-500 bg-green-500/20"
                                 : "border-primary bg-primary/20",
                           )}
+                          role="img"
+                          aria-label={entry.newStatusLabel}
                         />
                         {!isLast && (
                           <div className="w-0.5 flex-1 bg-border mt-1 min-h-[1rem]" />

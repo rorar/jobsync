@@ -61,6 +61,82 @@ describe("validateWebhookUrl — SSRF protection", () => {
     });
   });
 
+  describe("blocks Carrier-Grade NAT (RFC 6598, 100.64.0.0/10)", () => {
+    it("blocks 100.64.0.1 (start of CGN range)", () => {
+      expect(validateWebhookUrl("http://100.64.0.1/hook").valid).toBe(false);
+      expect(validateWebhookUrl("http://100.64.0.1/hook").error).toBe("webhook.ssrfBlocked");
+    });
+
+    it("blocks 100.100.0.1 (mid CGN range)", () => {
+      expect(validateWebhookUrl("http://100.100.0.1/hook").valid).toBe(false);
+    });
+
+    it("blocks 100.127.255.255 (end of CGN range)", () => {
+      expect(validateWebhookUrl("http://100.127.255.255/hook").valid).toBe(false);
+    });
+
+    it("allows 100.63.0.1 (below CGN range)", () => {
+      expect(validateWebhookUrl("https://100.63.0.1/hook").valid).toBe(true);
+    });
+
+    it("allows 100.128.0.1 (above CGN range)", () => {
+      expect(validateWebhookUrl("https://100.128.0.1/hook").valid).toBe(true);
+    });
+  });
+
+  describe("blocks IETF Protocol Assignments (RFC 6890, 192.0.0.0/24)", () => {
+    it("blocks 192.0.0.1", () => {
+      expect(validateWebhookUrl("http://192.0.0.1/hook").valid).toBe(false);
+      expect(validateWebhookUrl("http://192.0.0.1/hook").error).toBe("webhook.ssrfBlocked");
+    });
+
+    it("blocks 192.0.0.255 (end of range)", () => {
+      expect(validateWebhookUrl("http://192.0.0.255/hook").valid).toBe(false);
+    });
+
+    it("allows 192.0.1.1 (outside /24)", () => {
+      expect(validateWebhookUrl("https://192.0.1.1/hook").valid).toBe(true);
+    });
+  });
+
+  describe("blocks Benchmarking (RFC 2544, 198.18.0.0/15)", () => {
+    it("blocks 198.18.0.1 (start of range)", () => {
+      expect(validateWebhookUrl("http://198.18.0.1/hook").valid).toBe(false);
+      expect(validateWebhookUrl("http://198.18.0.1/hook").error).toBe("webhook.ssrfBlocked");
+    });
+
+    it("blocks 198.19.255.255 (end of range)", () => {
+      expect(validateWebhookUrl("http://198.19.255.255/hook").valid).toBe(false);
+    });
+
+    it("allows 198.17.0.1 (below range)", () => {
+      expect(validateWebhookUrl("https://198.17.0.1/hook").valid).toBe(true);
+    });
+
+    it("allows 198.20.0.1 (above range)", () => {
+      expect(validateWebhookUrl("https://198.20.0.1/hook").valid).toBe(true);
+    });
+  });
+
+  describe("blocks Reserved/Future (RFC 1112, 240.0.0.0/4)", () => {
+    it("blocks 240.0.0.1 (start of reserved range)", () => {
+      expect(validateWebhookUrl("http://240.0.0.1/hook").valid).toBe(false);
+      expect(validateWebhookUrl("http://240.0.0.1/hook").error).toBe("webhook.ssrfBlocked");
+    });
+
+    it("blocks 250.1.2.3 (mid reserved range)", () => {
+      expect(validateWebhookUrl("http://250.1.2.3/hook").valid).toBe(false);
+    });
+
+    it("blocks 255.255.255.255 (broadcast)", () => {
+      expect(validateWebhookUrl("http://255.255.255.255/hook").valid).toBe(false);
+    });
+
+    it("allows 239.255.255.255 (just below reserved range — multicast)", () => {
+      expect(validateWebhookUrl("https://239.255.255.255/hook").valid).toBe(true);
+    });
+  });
+
   describe("blocks localhost variants", () => {
     it("blocks 'localhost'", () => {
       const result = validateWebhookUrl("http://localhost/hook");
@@ -170,6 +246,22 @@ describe("validateWebhookUrl — SSRF protection", () => {
 
     it("blocks ::FFFF:10.0.0.1 (case-insensitive)", () => {
       expect(validateWebhookUrl("http://[::FFFF:10.0.0.1]/hook").valid).toBe(false);
+    });
+
+    it("blocks ::ffff:100.64.0.1 (CGN via IPv4-mapped IPv6)", () => {
+      expect(validateWebhookUrl("http://[::ffff:100.64.0.1]/hook").valid).toBe(false);
+    });
+
+    it("blocks ::ffff:192.0.0.1 (IETF Protocol Assignments via IPv4-mapped IPv6)", () => {
+      expect(validateWebhookUrl("http://[::ffff:192.0.0.1]/hook").valid).toBe(false);
+    });
+
+    it("blocks ::ffff:198.18.0.1 (Benchmarking via IPv4-mapped IPv6)", () => {
+      expect(validateWebhookUrl("http://[::ffff:198.18.0.1]/hook").valid).toBe(false);
+    });
+
+    it("blocks ::ffff:240.0.0.1 (Reserved via IPv4-mapped IPv6)", () => {
+      expect(validateWebhookUrl("http://[::ffff:240.0.0.1]/hook").valid).toBe(false);
     });
   });
 
