@@ -1,5 +1,51 @@
 # Changelog
 
+## [2026-04-05] Session S5b-Resume — Comprehensive Review + Fixes
+
+### Fixed — Critical
+- **CRITICAL**: sendTestPush() sent raw i18n key "push.testBody" as browser notification body → resolves locale and translates
+
+### Fixed — Security & Architecture (16 HIGH findings)
+- 6 channel/infrastructure files missing `import "server-only"` guard → added to all
+- PushChannel deleted subscriptions on 401/403 VAPID auth failures → only 404/410 now
+- resolveUserLocale duplicated 4× with inconsistent behavior → extracted to shared `locale-resolver.ts`
+- Nodemailer transport config duplicated → extracted to shared `email/transport.ts`
+- ChannelRouter dispatched channels sequentially → concurrent via `Promise.allSettled`
+- Input length validation added to SMTP (host/username/password/fromAddress) and Push (endpoint/p256dh/auth)
+- sendTestPush used wrong NotificationType + double-charged rate limits → fixed
+
+### Fixed — Accessibility (WCAG 2.2 AA)
+- SmtpSettings inputs not in `<form>` element (WCAG 1.3.1) → wrapped in form
+- Password toggle unreachable by keyboard (tabIndex={-1}) → removed
+- No progress indication during 30s SMTP timeout → descriptive loading text
+- Edit/Delete clickable during test-in-flight → disabled
+- Missing aria-required, aria-live, destructive button styling → added
+- Email template footer contrast 4.2:1 → 4.78:1 (#636363)
+
+### Fixed — Code Quality
+- buildNotificationMessage double-replacement bug → single PLACEHOLDER_MAP pass
+- Dispatcher 2 DB calls for same user row → combined resolveUserSettings
+- Plain-text email body control-char sanitization → sanitizePlainText()
+- Stale "D2 future" / "D3 future" comment in types.ts → updated
+
+### Fixed — S5a Deferred LOW Items (L1-L5)
+- ToastProvider explicit `duration={5000}`
+- StatusFunnelWidget hover tooltips with count + percentage
+- StatusHistoryTimeline server-side pagination (take:50 + Load more)
+- "N jobs tracked" line in StatusFunnelWidget
+
+### Added — Tests (+78 tests)
+- `smtp-actions.spec.ts` — 29 tests (IDOR, encryption, SSRF, validation)
+- `push-actions.spec.ts` — 38 tests (subscription limits, rate limits, translated push)
+- PushChannel 401/403 non-deletion regression tests
+- Email template placeholder interpolation tests
+- StatusFunnelWidget + StatusHistoryTimeline updated tests
+- E2E: `smtp-settings.spec.ts` (5 tests) + `push-settings.spec.ts` (3 tests)
+
+### Updated — Specs & Docs
+- `notification-dispatch.allium`: 5 spec bugs fixed (QuietHours invariant, email recipient, 404/410, VAPID auth, ordering note)
+- `docs/reviews/s5b/`: 12 review reports (code quality, architecture, security, performance, testing, WCAG, interaction, data storytelling, STRIDE, flashlight, consolidated)
+
 ## [2026-04-05] Session S5b — Email + Push Notification Channels
 
 ### Added — Phase 1: Foundation

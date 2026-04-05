@@ -1,8 +1,51 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-05
 
-**Total: 290 bugs found, 288 fixed, 2 open (accepted risk)**
+**Total: 323 bugs found, 321 fixed, 2 open (accepted risk)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing)
+
+## S5b-Resume Review Findings (2026-04-05)
+
+### Fixed in S5b-Resume — Comprehensive Review (33 findings)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| A1 | **CRITICAL** | sendTestPush sends raw i18n key "push.testBody" as notification body | Translate via t(locale, key) before dispatch |
+| A2 | HIGH | sendTestPush uses wrong NotificationType module_unreachable | Changed to vacancy_promoted |
+| A3 | HIGH | sendTestPush double-charges rate limits (new PushChannel instance) | Direct web-push call, bypassing dispatch rate limit |
+| A4 | HIGH | PushChannel deletes subscriptions on 401/403 (VAPID auth = transient) | Only delete on 404/410, preserve on 401/403 |
+| A5 | MED | No input length validation on subscribePush | Max lengths: endpoint 2048, p256dh 256, auth 128 |
+| A6 | LOW | PushSettings uses pushTestFailed toast for non-test errors | Dedicated pushSubscribeFailed/pushUnsubscribeFailed keys |
+| B1 | **HIGH** | SmtpSettings inputs not in form element (WCAG 1.3.1) | Wrapped in form with onSubmit |
+| B2 | HIGH | Password toggle tabIndex={-1} (keyboard unreachable) | Removed tabIndex |
+| B3 | HIGH | No progress indication during 30s SMTP timeout | Added smtpTestingConnection i18n text |
+| B4 | HIGH | Edit/Delete clickable during test-in-flight | Disabled when testing |
+| B5 | MED | SmtpSettings Edit button reuses Save i18n key | New smtpEdit key |
+| B6 | MED | Missing aria-required on required inputs | Added aria-required="true" |
+| B7 | MED | Missing aria-live for cooldown countdown | Added aria-live="polite" |
+| B8 | MED | VAPID rotation button uses primary not destructive styling | Changed to destructive variant |
+| B9 | MED | Push Enable stays clickable after browser blocks permission | Disabled + hint text |
+| B10 | MED | autoComplete="new-password" triggers password gen | Changed to current-password |
+| C1 | HIGH | Sequential channel dispatch blocks push behind SMTP | Promise.allSettled for concurrent dispatch |
+| C2 | HIGH | 6 channel files missing import "server-only" | Added to all 6 files |
+| C3 | MED | Dispatcher 2 DB calls for same user row | Combined into resolveUserSettings |
+| D1 | HIGH | resolveUserLocale duplicated 4x with inconsistent behavior | Extracted to shared locale-resolver.ts |
+| D2 | HIGH | Nodemailer transport config duplicated | Extracted to shared email/transport.ts |
+| D4 | MED | buildNotificationMessage double replacement bug | Single PLACEHOLDER_MAP pass |
+| D5 | MED | No input length validation on saveSmtpConfig | Max lengths: host 255, username 255, password 1024, from 320 |
+| D6 | MED | Email template footer contrast 4.2:1 < 4.5:1 AA | Changed to #636363 (4.78:1) |
+| D7 | MED | Plain-text email body no control-char sanitization | sanitizePlainText strips control chars |
+| L1 | LOW | ToastProvider missing explicit duration | Added duration={5000} |
+| L2 | LOW | StatusFunnelWidget no hover tooltips | Added title with count + percentage |
+| L3 | LOW | StatusHistoryTimeline no pagination | take:50 + Load more button |
+| L5 | LOW | totalJobs not displayed in funnel | Added "N jobs tracked" line |
+
+### Deferred to Next Session (documented, not S5b-resume bugs)
+| ID | Severity | Finding | Reason |
+|----|----------|---------|--------|
+| PERF-2 | HIGH(perf) | Sync PBKDF2 in encryption.ts blocks event loop | Shared module needs broader testing |
+| PERF-3 | HIGH(perf) | 15 redundant DB queries per notification | Architectural refactor (DispatchContext) |
+| PERF-4 | MED(perf) | No SMTP connection pooling | Enhancement, backlog |
+| FL-3 | MED | auth.actions.ts signup/authenticate no rate limiting | Pre-existing, not S5b-introduced |
 
 ## S5b Review Findings (2026-04-05)
 

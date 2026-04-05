@@ -5,6 +5,9 @@
 -- Includes: Notification entity, NotificationPreference, dispatch rules,
 --           preference checking, quiet hours, deduplication, channel routing,
 --           batch summaries, notification bell UI contract
+-- Note: Section ordering diverges from the language reference (actors/enums precede
+--        entities; triggers follow rules). Preserved to avoid breaking cross-file
+--        references. LOW priority to reorder.
 -- Excludes:
 --   - Event Bus infrastructure (covered by event-bus.allium)
 --   - Module lifecycle notifications (trigger rules in module-lifecycle.allium)
@@ -212,7 +215,7 @@ entity VapidConfig {
 entity WebPushSubscription {
   -- Browser push subscription for a specific device/browser.
   -- Keys are AES-encrypted at rest.
-  -- Deleted on 410 Gone or VAPID key rotation.
+  -- Deleted on 410 Gone / 404 Not Found or VAPID key rotation.
 
   id: String                          -- UUID
   userId: String
@@ -505,7 +508,7 @@ rule EmailDelivery {
 
   ensures: email sent via nodemailer with:
     from: config.fromAddress
-    to: config.fromAddress              -- self-hosted: user emails themselves
+    to: user.email                      -- the user's account email (from NextAuth identity)
     subject: template.subject
     html: template.html
     text: template.text
@@ -536,9 +539,17 @@ rule PushDelivery {
 
     ensures: web-push sendNotification with VAPID signing
 
-    if delivery returns 410 Gone:
+    if delivery returns 410 Gone or 404 Not Found:
       ensures: subscription deleted (stale)
       -- Silent cleanup — not an error condition.
+      -- Some push services return 404 instead of 410 for expired subscriptions.
+
+    if delivery returns 401 or 403:
+      ensures: error logged as VAPID auth failure
+      ensures: subscription preserved (NOT deleted)
+      -- 401/403 indicate VAPID authentication problems, not stale subscriptions.
+      -- Deleting subscriptions on auth failures would cause permanent data loss
+      -- from transient configuration issues.
 
     if delivery fails with other error:
       ensures: error logged, continue to next subscription
@@ -549,7 +560,8 @@ rule PushDelivery {
     -- VAPID subject derived from user's SMTP fromAddress or 'mailto:noreply@jobsync.local'.
     -- Subscription keys (p256dh, auth) are AES-encrypted at rest.
     -- Delivery to all subscriptions is concurrent (Promise.allSettled).
-    -- 410 Gone indicates browser has unsubscribed — silently remove.
+    -- 410 Gone or 404 Not Found indicates browser has unsubscribed — silently remove.
+    -- 401/403 are VAPID auth problems — log but preserve subscriptions.
 }
 
 -- =============================================================================
@@ -627,8 +639,7 @@ invariant NoDuplicateWithinWindow {
 
 invariant QuietHoursRespected {
   ensures: no Notification is created during user's quiet hours
-    unless it was queued before quiet hours started
-  note: "Notifications during quiet hours are delayed, not dropped."
+  note: "Notifications during quiet hours are dropped, not delayed. This is MVP behavior. Future: queuing with deliverAt instead of dropping."
 }
 
 invariant WebhookUrlSafe {
