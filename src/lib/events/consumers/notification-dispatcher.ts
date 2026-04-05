@@ -32,6 +32,7 @@ import type { UserSettingsData } from "@/models/userSettings.model";
 import { channelRouter } from "@/lib/notifications/channel-router";
 import { InAppChannel } from "@/lib/notifications/channels/in-app.channel";
 import { WebhookChannel } from "@/lib/notifications/channels/webhook.channel";
+import { EmailChannel } from "@/lib/notifications/channels/email.channel";
 import type { NotificationDraft } from "@/lib/notifications/types";
 import { t } from "@/i18n/server";
 import { DEFAULT_LOCALE, isValidLocale } from "@/i18n/locales";
@@ -44,6 +45,7 @@ import { DEFAULT_LOCALE, isValidLocale } from "@/i18n/locales";
 // so duplicate registration is guarded internally.
 channelRouter.register(new InAppChannel());
 channelRouter.register(new WebhookChannel());
+channelRouter.register(new EmailChannel());
 
 // ---------------------------------------------------------------------------
 // VacancyStaged batch buffer (spec: rule BatchSummary)
