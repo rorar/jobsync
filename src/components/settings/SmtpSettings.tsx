@@ -328,7 +328,7 @@ export default function SmtpSettings() {
             {t("settings.smtpDescription")}
           </p>
         </div>
-        <div className="text-center py-8">
+        <div className="text-center py-8" role="alert">
           <p className="text-destructive">{t("settings.smtpLoadFailed")}</p>
           <Button
             variant="outline"
@@ -476,7 +476,7 @@ export default function SmtpSettings() {
                   size="sm"
                   className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
                   onClick={() => setShowPassword(!showPassword)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? t("settings.smtpHidePassword") : t("settings.smtpShowPassword")}
                   tabIndex={-1}
                 >
                   {showPassword ? (

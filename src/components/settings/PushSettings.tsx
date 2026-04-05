@@ -424,7 +424,7 @@ export default function PushSettings() {
         <CardContent className="space-y-4">
           {/* Permission denied warning */}
           {permissionDenied && !isSubscribed && (
-            <div className="rounded-md border border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20 px-4 py-3">
+            <div className="rounded-md border border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20 px-4 py-3" role="alert">
               <p className="text-sm text-yellow-800 dark:text-yellow-200">
                 {t("settings.pushPermissionDenied")}
               </p>

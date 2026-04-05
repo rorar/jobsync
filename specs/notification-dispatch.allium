@@ -9,7 +9,6 @@
 --   - Event Bus infrastructure (covered by event-bus.allium)
 --   - Module lifecycle notifications (trigger rules in module-lifecycle.allium)
 --   - Notification persistence (Prisma model — implementation concern)
---   - Push notification / email delivery (future channels — not yet implemented)
 -- Dependencies:
 --   - DomainEvent, DomainEventType from event-bus.allium
 --   - EventBus contract from event-bus.allium
@@ -46,14 +45,15 @@ enum NotificationType {
   | vacancy_batch_staged            -- summary for automation run batch
   | bulk_action_completed
   | retention_completed
+  -- Job lifecycle
+  | job_status_changed                -- user's job application status changed
 }
 
 enum NotificationChannel {
   inApp                             -- write to Notification table (MVP)
   | webhook                         -- POST to user-configured URL (D1)
-  -- Future channels:
-  -- | email                        -- send via SMTP/transactional email
-  -- | push                         -- browser push notification
+  | email                           -- send via SMTP/nodemailer (D2)
+  | push                            -- browser push notification via VAPID (D3)
 }
 
 enum DigestMode {
@@ -85,6 +85,20 @@ config {
     -- Backoff delays between retry attempts.
   WEBHOOK_AUTO_DEACTIVATE_THRESHOLD: Integer = 5
     -- Consecutive failures before auto-deactivation.
+
+  -- Email channel constants
+  EMAIL_RATE_LIMIT_PER_MINUTE: Integer = 10
+    -- Maximum email notifications per user per minute.
+  EMAIL_TEST_COOLDOWN_SECONDS: Integer = 60
+    -- Minimum interval between test emails.
+
+  -- Push channel constants
+  PUSH_RATE_LIMIT_PER_MINUTE: Integer = 20
+    -- Maximum push notifications per user per minute.
+  PUSH_TEST_COOLDOWN_SECONDS: Integer = 60
+    -- Minimum interval between test push notifications.
+  MAX_PUSH_SUBSCRIPTIONS_PER_USER: Integer = 10
+    -- Maximum browser subscriptions per user.
 }
 
 -- =============================================================================
@@ -131,9 +145,8 @@ entity NotificationPreference {
 value ChannelConfig {
   inApp: Boolean = true               -- in-app notifications (MVP, always available)
   webhook: Boolean = false             -- webhook notifications (D1, user must configure endpoints)
-  -- Future:
-  -- email: Boolean = false
-  -- push: Boolean = false
+  email: Boolean = false              -- email notifications (D2, user must configure SMTP)
+  push: Boolean = false               -- push notifications (D3, user must enable in browser)
 }
 
 value TypePreference {
@@ -160,6 +173,54 @@ entity WebhookEndpoint {
   events: String                      -- JSON array of subscribed NotificationType values
   active: Boolean = true              -- deactivated after AUTO_DEACTIVATE_THRESHOLD failures
   failureCount: Integer = 0           -- consecutive delivery failures (reset on success)
+  createdAt: DateTime = now()
+  updatedAt: DateTime
+}
+
+entity SmtpConfig {
+  -- User's SMTP configuration for email notification delivery.
+  -- Password is AES-encrypted at rest; decrypted only at send time.
+
+  id: String                          -- UUID
+  userId: String                      -- unique: one config per user
+  host: String                        -- validated against SSRF rules
+  port: Integer = 587
+  username: String
+  password: String                    -- AES-encrypted
+  iv: String                          -- AES initialization vector
+  fromAddress: String
+  tlsRequired: Boolean = true
+  active: Boolean = true
+  createdAt: DateTime = now()
+  updatedAt: DateTime
+}
+
+entity VapidConfig {
+  -- VAPID key pair for browser push notification signing.
+  -- Private key is AES-encrypted at rest.
+  -- One per user, auto-generated on first push enable.
+
+  id: String                          -- UUID
+  userId: String                      -- unique: one config per user
+  publicKey: String
+  privateKey: String                  -- AES-encrypted
+  iv: String                          -- AES initialization vector
+  createdAt: DateTime = now()
+  updatedAt: DateTime
+}
+
+entity WebPushSubscription {
+  -- Browser push subscription for a specific device/browser.
+  -- Keys are AES-encrypted at rest.
+  -- Deleted on 410 Gone or VAPID key rotation.
+
+  id: String                          -- UUID
+  userId: String
+  endpoint: String                    -- push service endpoint URL
+  p256dh: String                      -- AES-encrypted
+  auth: String                        -- AES-encrypted
+  iv: String                          -- AES initialization vector
+  expirationTime: DateTime?
   createdAt: DateTime = now()
   updatedAt: DateTime
 }
@@ -304,9 +365,15 @@ rule ChannelRouting {
       -- Delivers to all active WebhookEndpoints subscribed to this event type.
       -- See WebhookDelivery rule for retry, signing, and failure handling.
 
-    -- Future channels:
-    -- if channel = email: ensures: EmailQueued(...)
-    -- if channel = push: ensures: PushNotificationSent(...)
+    if channel = email:
+      ensures: EmailDelivery(draft, userId)
+      -- Delivers via SMTP using user's SmtpConfig.
+      -- See EmailDelivery rule for TLS enforcement and rate limiting.
+
+    if channel = push:
+      ensures: PushDelivery(draft, userId)
+      -- Delivers to all user's WebPushSubscriptions via VAPID.
+      -- See PushDelivery rule for stale subscription handling.
 
   @guidance
     -- Error isolation: one channel failure does not block others.
@@ -421,6 +488,70 @@ rule WebhookAutoDeactivation {
     -- Failure count resets to 0 on any successful delivery (see WebhookDelivery rule).
 }
 
+rule EmailDelivery {
+  -- "Deliver notifications via SMTP email."
+  when: ChannelRouter routes notification to email channel
+  let config = SmtpConfig where userId = userId and active = true
+
+  requires: config exists
+  requires: checkEmailRateLimit(userId) = allowed
+  requires: validateSmtpHost(config.host) = valid
+
+  -- TLS enforcement
+  requires: config.tlsRequired = true implies STARTTLS or implicit TLS (port 465)
+
+  -- Template rendering
+  let template = renderEmailTemplate(notificationType, data, userLocale)
+
+  ensures: email sent via nodemailer with:
+    from: config.fromAddress
+    to: config.fromAddress              -- self-hosted: user emails themselves
+    subject: template.subject
+    html: template.html
+    text: template.text
+
+  @guidance
+    -- Rate limit: 10 emails per minute per user.
+    -- TLS: rejectUnauthorized=true, minVersion='TLSv1.2'.
+    -- Port 465 uses implicit TLS (secure: true).
+    -- Other ports use STARTTLS (requireTLS from config).
+    -- SMTP host validated against SSRF rules on every dispatch.
+    -- Password decrypted from AES only at send time.
+}
+
+rule PushDelivery {
+  -- "Deliver notifications via browser push (VAPID)."
+  when: ChannelRouter routes notification to push channel
+  let vapidKeys = VapidConfig where userId = userId
+  let subscriptions = WebPushSubscription[] where userId = userId
+
+  requires: vapidKeys exists
+  requires: subscriptions is not empty
+  requires: checkPushDispatchRateLimit(userId) = allowed
+
+  for_each subscription in subscriptions:
+    -- Decrypt subscription keys
+    let p256dh = decrypt(subscription.p256dh, subscription.iv)
+    let auth = decrypt(subscription.auth, subscription.iv)
+
+    ensures: web-push sendNotification with VAPID signing
+
+    if delivery returns 410 Gone:
+      ensures: subscription deleted (stale)
+      -- Silent cleanup — not an error condition.
+
+    if delivery fails with other error:
+      ensures: error logged, continue to next subscription
+      -- One failed subscription does not block others.
+
+  @guidance
+    -- Rate limit: 20 pushes per minute per user.
+    -- VAPID subject derived from user's SMTP fromAddress or 'mailto:noreply@jobsync.local'.
+    -- Subscription keys (p256dh, auth) are AES-encrypted at rest.
+    -- Delivery to all subscriptions is concurrent (Promise.allSettled).
+    -- 410 Gone indicates browser has unsubscribed — silently remove.
+}
+
 -- =============================================================================
 -- Event-to-Notification Mapping
 -- =============================================================================
@@ -462,6 +593,11 @@ trigger RetentionCompleted -> Notification {
   message: "Retention cleanup: {purgedCount} expired vacancies removed"
 }
 
+trigger JobStatusChanged -> Notification {
+  type: job_status_changed
+  message: "Job status changed to {newStatus}"
+}
+
 -- =============================================================================
 -- Invariants
 -- =============================================================================
@@ -474,8 +610,8 @@ invariant NotificationsOwnedByUser {
 
 invariant PreferencesDefaults {
   ensures: for_each user in User where NotificationPreference does not exist:
-    effective preferences are { enabled: true, channels: { inApp: true }, perType: {}, digestMode: immediate }
-  note: "Users without explicit preferences get all notifications via inApp channel."
+    effective preferences are { enabled: true, channels: { inApp: true, webhook: false, email: false, push: false }, perType: {}, digestMode: immediate }
+  note: "Users without explicit preferences get all notifications via inApp channel only."
   note: "Preferences are created lazily on first settings access, not at user registration."
 }
 
@@ -502,6 +638,24 @@ invariant WebhookUrlSafe {
   note: "Blocks private IPs (10.x, 172.16-31.x, 192.168.x), IMDS (169.254.169.254),"
   note: "localhost, non-http(s) protocols, and cloud metadata endpoints."
   note: "Re-validated at dispatch time because DNS resolution may change (DNS rebinding)."
+}
+
+invariant SmtpHostSafe {
+  ensures: for_each config in SmtpConfig:
+    validateSmtpHost(config.host) = valid
+  note: "SSRF validation on save AND on each dispatch."
+}
+
+invariant VapidKeysEncrypted {
+  ensures: for_each config in VapidConfig:
+    config.privateKey is AES-encrypted
+  note: "Private key never stored in plaintext."
+}
+
+invariant PushSubscriptionKeysEncrypted {
+  ensures: for_each sub in WebPushSubscription:
+    sub.p256dh is AES-encrypted and sub.auth is AES-encrypted
+  note: "Subscription keys encrypted at rest."
 }
 
 -- =============================================================================
@@ -549,7 +703,7 @@ surface NotificationPreferencesPanel {
   exposes:
     -- Global toggle: enabled/disabled
     -- Per-type toggles: each NotificationType with enabled switch
-    -- Channel selection: which channels are active (inApp + webhook; email/push shown as disabled)
+    -- Channel selection: which channels are active (inApp, webhook, email, push)
     -- Quiet hours: start time, end time, timezone picker
     -- Digest mode: immediate / hourly / daily selector
 

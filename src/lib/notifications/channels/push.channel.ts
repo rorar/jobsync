@@ -163,16 +163,26 @@ export class PushChannel implements NotificationChannel {
             });
             return { success: true };
           } catch (err) {
-            // 410 Gone: subscription is stale, clean it up
-            if (err instanceof WebPushError && err.statusCode === 410) {
-              await prisma.webPushSubscription
-                .delete({
-                  where: { id: sub.id, userId },
-                })
-                .catch(() => {
-                  // Already deleted or race condition — ignore
-                });
-              return { success: false, error: "Subscription expired (410 Gone)" };
+            if (err instanceof WebPushError) {
+              // 404 or 410: subscription is stale/gone, clean it up
+              if (err.statusCode === 410 || err.statusCode === 404) {
+                await prisma.webPushSubscription
+                  .delete({
+                    where: { id: sub.id, userId },
+                  })
+                  .catch(() => {
+                    // Already deleted or race condition — ignore
+                  });
+                return { success: false, error: `Subscription expired (${err.statusCode})` };
+              }
+
+              // 401/403: VAPID authentication failure — log at error level
+              if (err.statusCode === 401 || err.statusCode === 403) {
+                console.error(
+                  `[PushChannel] VAPID auth failure (${err.statusCode}) for ${sub.endpoint}`,
+                );
+                return { success: false, error: `VAPID auth failure (${err.statusCode})` };
+              }
             }
 
             const message =

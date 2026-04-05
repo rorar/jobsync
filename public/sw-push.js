@@ -22,6 +22,10 @@ self.addEventListener("push", function (event) {
 
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
-  const url = event.notification.data?.url || "/dashboard";
+  var raw = event.notification.data?.url || "/dashboard";
+  // Security: only allow relative paths (same-origin navigation).
+  // Block absolute URLs, protocol-relative URLs, and javascript: URIs
+  // to prevent a malicious push payload from navigating to a phishing site.
+  var url = typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
   event.waitUntil(clients.openWindow(url));
 });

@@ -43,9 +43,9 @@ const SUBJECT_KEYS: Record<NotificationType, string> = {
 // HTML Layout
 // ---------------------------------------------------------------------------
 
-function wrapHtml(header: string, body: string, footer: string): string {
+function wrapHtml(header: string, body: string, footer: string, locale: string): string {
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${escapeHtml(locale)}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -122,7 +122,7 @@ export function renderEmailTemplate(
     <p style="margin:0 0 16px;color:#27272a;font-size:14px;line-height:1.6;">${escapeHtml(message)}</p>
   `;
 
-  const html = wrapHtml(header, htmlBody, footer);
+  const html = wrapHtml(header, htmlBody, footer, locale);
   const text = `${greeting}\n\n${message}\n\n---\n${footer}`;
 
   return { subject, html, text };
@@ -143,7 +143,7 @@ export function renderTestEmail(locale: string): RenderedEmail {
     <p style="margin:0 0 16px;color:#27272a;font-size:14px;line-height:1.6;">${escapeHtml(body)}</p>
   `;
 
-  const html = wrapHtml(header, htmlBody, footer);
+  const html = wrapHtml(header, htmlBody, footer, locale);
   const text = `${greeting}\n\n${body}\n\n---\n${footer}`;
 
   return { subject, html, text };

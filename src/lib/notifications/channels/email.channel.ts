@@ -24,7 +24,6 @@ import { decrypt } from "@/lib/encryption";
 import { validateSmtpHost } from "@/lib/smtp-validation";
 import { checkEmailRateLimit } from "@/lib/email-rate-limit";
 import { renderEmailTemplate } from "@/lib/email/templates";
-import { t } from "@/i18n/server";
 import { DEFAULT_LOCALE, isValidLocale } from "@/i18n/locales";
 import type { UserSettingsData } from "@/models/userSettings.model";
 import type {
