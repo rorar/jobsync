@@ -74,13 +74,11 @@ export async function getVapidPublicKey(
 export async function rotateVapidKeys(
   userId: string,
 ): Promise<{ publicKey: string }> {
-  // Delete all existing subscriptions (they'll be invalid with new keys)
-  await prisma.webPushSubscription.deleteMany({ where: { userId } });
-
-  // Delete old config (ignore if doesn't exist)
-  await prisma.vapidConfig
-    .delete({ where: { userId } })
-    .catch(() => {});
+  // Atomically delete subscriptions and old config in a single transaction
+  await prisma.$transaction([
+    prisma.webPushSubscription.deleteMany({ where: { userId } }),
+    prisma.vapidConfig.deleteMany({ where: { userId } }),
+  ]);
 
   // Generate new keys
   const keys = await getOrCreateVapidKeys(userId);

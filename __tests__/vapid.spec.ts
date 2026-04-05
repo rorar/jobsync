@@ -14,8 +14,9 @@ jest.mock("server-only", () => ({}));
 
 const mockVapidConfigFindUnique = jest.fn();
 const mockVapidConfigCreate = jest.fn();
-const mockVapidConfigDelete = jest.fn();
+const mockVapidConfigDeleteMany = jest.fn().mockResolvedValue({ count: 0 });
 const mockWebPushSubscriptionDeleteMany = jest.fn().mockResolvedValue({ count: 0 });
+const mockTransaction = jest.fn().mockImplementation((queries: unknown[]) => Promise.all(queries as Promise<unknown>[]));
 
 jest.mock("@/lib/db", () => ({
   __esModule: true,
@@ -23,12 +24,13 @@ jest.mock("@/lib/db", () => ({
     vapidConfig: {
       findUnique: (...args: unknown[]) => mockVapidConfigFindUnique(...args),
       create: (...args: unknown[]) => mockVapidConfigCreate(...args),
-      delete: (...args: unknown[]) => mockVapidConfigDelete(...args),
+      deleteMany: (...args: unknown[]) => mockVapidConfigDeleteMany(...args),
     },
     webPushSubscription: {
       deleteMany: (...args: unknown[]) =>
         mockWebPushSubscriptionDeleteMany(...args),
     },
+    $transaction: (...args: unknown[]) => mockTransaction(...args),
   },
 }));
 
@@ -188,7 +190,6 @@ describe("VAPID Key Management", () => {
     it("deletes subscriptions and old config, then creates new keys", async () => {
       // First call to findUnique (inside rotateVapidKeys -> getOrCreateVapidKeys): no existing
       mockVapidConfigFindUnique.mockResolvedValue(null);
-      mockVapidConfigDelete.mockResolvedValue({});
       mockVapidConfigCreate.mockResolvedValue({
         userId: TEST_USER_ID,
         publicKey: "BGeneratedPublicKey",
@@ -200,13 +201,14 @@ describe("VAPID Key Management", () => {
 
       expect(result).toEqual({ publicKey: "BGeneratedPublicKey" });
 
-      // Verify subscriptions were deleted first
+      // Verify $transaction was called with deleteMany queries
+      expect(mockTransaction).toHaveBeenCalledTimes(1);
+
+      // Verify subscriptions and config were deleted via transaction
       expect(mockWebPushSubscriptionDeleteMany).toHaveBeenCalledWith({
         where: { userId: TEST_USER_ID },
       });
-
-      // Verify old config deletion was attempted
-      expect(mockVapidConfigDelete).toHaveBeenCalledWith({
+      expect(mockVapidConfigDeleteMany).toHaveBeenCalledWith({
         where: { userId: TEST_USER_ID },
       });
 
@@ -215,11 +217,11 @@ describe("VAPID Key Management", () => {
       expect(mockVapidConfigCreate).toHaveBeenCalledTimes(1);
     });
 
-    it("handles missing old config gracefully (delete throws)", async () => {
+    it("handles missing old config gracefully (deleteMany returns count 0)", async () => {
       mockVapidConfigFindUnique.mockResolvedValue(null);
-      mockVapidConfigDelete.mockRejectedValue(
-        new Error("Record not found"),
-      );
+      // deleteMany with no matching records returns { count: 0 } — never throws
+      mockVapidConfigDeleteMany.mockResolvedValue({ count: 0 });
+      mockWebPushSubscriptionDeleteMany.mockResolvedValue({ count: 0 });
       mockVapidConfigCreate.mockResolvedValue({
         userId: TEST_USER_ID,
         publicKey: "BGeneratedPublicKey",
@@ -227,10 +229,11 @@ describe("VAPID Key Management", () => {
         iv: "generated-iv",
       });
 
-      // Should not throw — .catch() swallows the delete error
+      // Should not throw — deleteMany is idempotent (no-op when missing)
       const result = await rotateVapidKeys(TEST_USER_ID);
 
       expect(result).toEqual({ publicKey: "BGeneratedPublicKey" });
+      expect(mockTransaction).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -162,10 +162,10 @@ function buildNotificationMessage(
   const messageKeyMap: Record<NotificationType, string> = {
     module_deactivated: "notifications.moduleDeactivated",
     module_reactivated: "notifications.moduleReactivated",
-    module_unreachable: "notifications.moduleDeactivated", // uses same template
-    cb_escalation: "notifications.moduleDeactivated",
-    consecutive_failures: "notifications.moduleDeactivated",
-    auth_failure: "notifications.moduleDeactivated",
+    module_unreachable: "notifications.moduleUnreachable",
+    cb_escalation: "notifications.cbEscalation",
+    consecutive_failures: "notifications.consecutiveFailures",
+    auth_failure: "notifications.authFailure",
     vacancy_promoted: "notifications.vacancyPromoted",
     vacancy_batch_staged: "notifications.batchStaged",
     bulk_action_completed: "notifications.bulkActionCompleted",

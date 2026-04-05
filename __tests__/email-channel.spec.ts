@@ -93,8 +93,10 @@ jest.mock("@/i18n/locales", () => ({
 // ---------------------------------------------------------------------------
 
 const mockSendMail = jest.fn().mockResolvedValue({ messageId: "msg-1" });
+const mockClose = jest.fn();
 const mockCreateTransport = jest.fn().mockReturnValue({
   sendMail: mockSendMail,
+  close: mockClose,
 });
 
 jest.mock("nodemailer", () => ({
@@ -181,12 +183,12 @@ describe("EmailChannel", () => {
       );
     });
 
-    it("returns success (skip silently) when no SMTP config", async () => {
+    it("returns failure when no SMTP config", async () => {
       mockSmtpConfigFindFirst.mockResolvedValue(null);
 
       const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
 
-      expect(result).toEqual({ success: true, channel: "email" });
+      expect(result).toEqual({ success: false, channel: "email", error: "No active SMTP configuration" });
       expect(mockCreateTransport).not.toHaveBeenCalled();
       expect(mockSendMail).not.toHaveBeenCalled();
     });

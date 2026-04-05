@@ -8,9 +8,17 @@
 /* eslint-disable no-restricted-globals */
 
 self.addEventListener("push", function (event) {
-  const data = event.data ? event.data.json() : {};
-  const title = data.title || "JobSync";
-  const options = {
+  var data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (e) {
+      // Fallback: treat payload as plain text if JSON parsing fails
+      data = { body: event.data.text() };
+    }
+  }
+  var title = data.title || "JobSync";
+  var options = {
     body: data.body || "",
     icon: "/favicon.ico",
     badge: "/favicon.ico",

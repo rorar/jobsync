@@ -198,21 +198,21 @@ describe("PushChannel", () => {
       });
     });
 
-    it("returns success (skip silently) when no VAPID keys", async () => {
+    it("returns failure when no VAPID keys", async () => {
       mockVapidConfigFindUnique.mockResolvedValue(null);
 
       const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
 
-      expect(result).toEqual({ success: true, channel: "push" });
+      expect(result).toEqual({ success: false, channel: "push", error: "No VAPID keys configured" });
       expect(mockSendNotification).not.toHaveBeenCalled();
     });
 
-    it("returns success (skip silently) when no subscriptions", async () => {
+    it("returns failure when no subscriptions", async () => {
       mockWebPushSubscriptionFindMany.mockResolvedValue([]);
 
       const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
 
-      expect(result).toEqual({ success: true, channel: "push" });
+      expect(result).toEqual({ success: false, channel: "push", error: "No push subscriptions" });
       expect(mockSendNotification).not.toHaveBeenCalled();
     });
 

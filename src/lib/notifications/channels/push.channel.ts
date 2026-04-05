@@ -81,7 +81,7 @@ export class PushChannel implements NotificationChannel {
         where: { userId },
       });
       if (!vapidConfig) {
-        return { success: true, channel: this.name }; // No config = skip silently
+        return { success: false, channel: this.name, error: "No VAPID keys configured" };
       }
 
       // 3. Load all subscriptions for user
@@ -97,7 +97,7 @@ export class PushChannel implements NotificationChannel {
       });
 
       if (subscriptions.length === 0) {
-        return { success: true, channel: this.name }; // No subscriptions = skip
+        return { success: false, channel: this.name, error: "No push subscriptions" };
       }
 
       // 4. Decrypt VAPID private key
@@ -164,8 +164,13 @@ export class PushChannel implements NotificationChannel {
             return { success: true };
           } catch (err) {
             if (err instanceof WebPushError) {
-              // 404 or 410: subscription is stale/gone, clean it up
-              if (err.statusCode === 410 || err.statusCode === 404) {
+              // 401/403/404/410: subscription is stale, invalid, or gone — clean it up
+              if (
+                err.statusCode === 401 ||
+                err.statusCode === 403 ||
+                err.statusCode === 404 ||
+                err.statusCode === 410
+              ) {
                 await prisma.webPushSubscription
                   .delete({
                     where: { id: sub.id, userId },
@@ -173,15 +178,15 @@ export class PushChannel implements NotificationChannel {
                   .catch(() => {
                     // Already deleted or race condition — ignore
                   });
-                return { success: false, error: `Subscription expired (${err.statusCode})` };
-              }
 
-              // 401/403: VAPID authentication failure — log at error level
-              if (err.statusCode === 401 || err.statusCode === 403) {
-                console.error(
-                  `[PushChannel] VAPID auth failure (${err.statusCode}) for ${sub.endpoint}`,
-                );
-                return { success: false, error: `VAPID auth failure (${err.statusCode})` };
+                if (err.statusCode === 401 || err.statusCode === 403) {
+                  console.error(
+                    `[PushChannel] VAPID auth failure (${err.statusCode}) for ${sub.endpoint}`,
+                  );
+                  return { success: false, error: `VAPID auth failure (${err.statusCode})` };
+                }
+
+                return { success: false, error: `Subscription expired (${err.statusCode})` };
               }
             }
 
@@ -235,12 +240,17 @@ export class PushChannel implements NotificationChannel {
   }
 
   async isAvailable(userId: string): Promise<boolean> {
-    // Has VAPID keys AND at least one subscription
-    const [vapid, subCount] = await Promise.all([
-      prisma.vapidConfig.findUnique({ where: { userId } }),
-      prisma.webPushSubscription.count({ where: { userId } }),
-    ]);
-    return !!vapid && subCount > 0;
+    try {
+      // Has VAPID keys AND at least one subscription
+      const [vapid, subCount] = await Promise.all([
+        prisma.vapidConfig.findUnique({ where: { userId } }),
+        prisma.webPushSubscription.count({ where: { userId } }),
+      ]);
+      return !!vapid && subCount > 0;
+    } catch (error) {
+      console.error("[PushChannel] isAvailable check failed:", error);
+      return false;
+    }
   }
 }
 

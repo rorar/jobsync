@@ -1,5 +1,6 @@
 export const settings = {
   en: {
+    "settings.pageTitle": "Settings",
     "settings.aiModule": "AI Module",
     "settings.aiModuleDesc": "Configure which AI module and model to use for matching and analysis.",
     "settings.aiModuleLabel": "AI Module",
@@ -219,6 +220,7 @@ export const settings = {
     "settings.pushRotateConfirm": "Rotate Keys",
   },
   de: {
+    "settings.pageTitle": "Einstellungen",
     "settings.aiModule": "KI-Modul",
     "settings.aiModuleDesc": "Konfiguriere das KI-Modul und das Modell für Abgleich und Analyse.",
     "settings.aiModuleLabel": "KI-Modul",
@@ -438,6 +440,7 @@ export const settings = {
     "settings.pushRotateConfirm": "Schlüssel rotieren",
   },
   fr: {
+    "settings.pageTitle": "Param\u00e8tres",
     "settings.aiModule": "Module IA",
     "settings.aiModuleDesc": "Configurez le module IA et le modèle à utiliser pour la correspondance et l'analyse.",
     "settings.aiModuleLabel": "Module IA",
@@ -657,6 +660,7 @@ export const settings = {
     "settings.pushRotateConfirm": "Rotation des clés",
   },
   es: {
+    "settings.pageTitle": "Configuraci\u00f3n",
     "settings.aiModule": "Módulo de IA",
     "settings.aiModuleDesc": "Configura el módulo de IA y el modelo a utilizar para coincidencias y análisis.",
     "settings.aiModuleLabel": "Módulo de IA",

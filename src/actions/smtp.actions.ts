@@ -310,13 +310,17 @@ export async function testSmtpConnection(): Promise<ActionResult> {
     });
 
     // Send test email to the fromAddress itself
-    await transporter.sendMail({
-      from: config.fromAddress,
-      to: config.fromAddress,
-      subject: `[JobSync] ${subject}`,
-      html,
-      text,
-    });
+    try {
+      await transporter.sendMail({
+        from: config.fromAddress,
+        to: config.fromAddress,
+        subject: `[JobSync] ${subject}`,
+        html,
+        text,
+      });
+    } finally {
+      transporter.close();
+    }
 
     return { success: true };
   } catch (error) {

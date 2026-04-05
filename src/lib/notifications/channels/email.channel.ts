@@ -98,7 +98,7 @@ export class EmailChannel implements NotificationChannel {
         where: { userId, active: true },
       });
       if (!config) {
-        return { success: true, channel: this.name }; // No config = skip silently
+        return { success: false, channel: this.name, error: "No active SMTP configuration" };
       }
 
       // 3. Decrypt password
@@ -158,13 +158,17 @@ export class EmailChannel implements NotificationChannel {
       // 9. Send email
       const fullSubject = `[JobSync] ${subject}`;
 
-      await transporter.sendMail({
-        from: config.fromAddress,
-        to: recipientEmail,
-        subject: fullSubject,
-        html,
-        text,
-      });
+      try {
+        await transporter.sendMail({
+          from: config.fromAddress,
+          to: recipientEmail,
+          subject: fullSubject,
+          html,
+          text,
+        });
+      } finally {
+        transporter.close();
+      }
 
       return { success: true, channel: this.name };
     } catch (error) {
@@ -176,11 +180,16 @@ export class EmailChannel implements NotificationChannel {
   }
 
   async isAvailable(userId: string): Promise<boolean> {
-    // Check if user has an active SmtpConfig
-    const count = await prisma.smtpConfig.count({
-      where: { userId, active: true },
-    });
-    return count > 0;
+    try {
+      // Check if user has an active SmtpConfig
+      const count = await prisma.smtpConfig.count({
+        where: { userId, active: true },
+      });
+      return count > 0;
+    } catch (error) {
+      console.error("[EmailChannel] isAvailable check failed:", error);
+      return false;
+    }
   }
 }
 

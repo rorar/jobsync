@@ -67,7 +67,10 @@ export default function SettingsSidebar({
   }, [refreshCount]);
 
   return (
-    <nav className="flex flex-col gap-1 w-48 shrink-0">
+    <nav
+      className="flex md:flex-col gap-1 md:w-48 md:shrink-0 overflow-x-auto"
+      aria-label={t("settings.pageTitle")}
+    >
       {SETTINGS_SECTIONS.map((section) => {
         const Icon = section.icon;
         const isActive = activeSection === section.id;
@@ -82,6 +85,7 @@ export default function SettingsSidebar({
                 : "border-l-transparent hover:border-l-muted-foreground/25",
             )}
             onClick={() => onSectionChange(section.id)}
+            aria-current={isActive ? "page" : undefined}
           >
             <Icon className="h-4 w-4" />
             {t(section.labelKey)}
