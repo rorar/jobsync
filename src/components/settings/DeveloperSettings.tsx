@@ -8,9 +8,18 @@ import { Button } from "../ui/button";
 import { toast } from "../ui/use-toast";
 import { Check, Loader2 } from "lucide-react";
 import { getUserSettings, updateUserSettings } from "@/actions/userSettings.actions";
-import { syncEnvVariable } from "@/lib/env-sync";
+import { syncEnvVariable, getEnvVariable } from "@/lib/env-sync";
 import { useTranslations } from "@/i18n";
 import type { DeveloperSettings as DeveloperSettingsType } from "@/models/userSettings.model";
+
+function isValidBaseUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return ["http:", "https:"].includes(parsed.protocol) && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
 
 const defaultDeveloper: DeveloperSettingsType = {
   debugLogging: true,
@@ -25,6 +34,8 @@ function DeveloperSettings() {
   const { t } = useTranslations();
   const [isLoading, setIsLoading] = useState(true);
   const [settings, setSettings] = useState<DeveloperSettingsType>(defaultDeveloper);
+  const [baseUrl, setBaseUrl] = useState("");
+  const [baseUrlSaving, setBaseUrlSaving] = useState(false);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -44,12 +55,45 @@ function DeveloperSettings() {
         }
       } catch (error) {
         console.error("Error fetching developer settings:", error);
+        // Load current base URL from env
+        const currentBaseUrl = await getEnvVariable("NEXTAUTH_URL");
+        if (currentBaseUrl) setBaseUrl(currentBaseUrl);
       } finally {
         setIsLoading(false);
       }
     };
     fetchSettings();
   }, []);
+
+  const handleBaseUrlSave = async () => {
+    const trimmed = baseUrl.trim().replace(/\/$/, "");
+    if (trimmed && !isValidBaseUrl(trimmed)) {
+      toast({
+        variant: "destructive",
+        title: t("settings.error"),
+        description: "URL must be http:// or https:// with no credentials",
+      });
+      return;
+    }
+    setBaseUrlSaving(true);
+    try {
+      const result = await syncEnvVariable("NEXTAUTH_URL", trimmed || undefined);
+      if (result.success) {
+        setBaseUrl(trimmed);
+        toast({
+          variant: "success",
+          title: t("settings.saved"),
+          description: t("settings.baseUrlSaved"),
+        });
+      } else {
+        toast({ variant: "destructive", title: t("settings.error"), description: t("settings.saveFailed") });
+      }
+    } catch {
+      toast({ variant: "destructive", title: t("settings.error"), description: t("settings.saveFailed") });
+    } finally {
+      setBaseUrlSaving(false);
+    }
+  };
 
   const handleToggle = async (update: Partial<DeveloperSettingsType>) => {
     const newSettings: DeveloperSettingsType = {
@@ -203,6 +247,47 @@ function DeveloperSettings() {
             aria-label={t("settings.automationLoggerLogs")}
           />
         </div>
+        {/* Server Base URL */}
+        <div className="rounded-lg border p-4 space-y-2">
+          <div className="space-y-0.5">
+            <Label htmlFor="base-url">{t("settings.baseUrl")}</Label>
+            <p className="text-sm text-muted-foreground">
+              {t("settings.baseUrlDesc")}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              id="base-url"
+              placeholder="http://your-server-ip:port"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              onKeyDown={async (e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  await handleBaseUrlSave();
+                }
+              }}
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              className="shrink-0"
+              disabled={baseUrlSaving}
+              onClick={handleBaseUrlSave}
+              aria-label={t("common.save")}
+            >
+              {baseUrlSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t("settings.baseUrlHint")}
+          </p>
+        </div>
+
         {/* Allowed Dev Origins */}
         <div className="rounded-lg border p-4 space-y-2">
           <div className="space-y-0.5">
