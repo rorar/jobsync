@@ -112,5 +112,6 @@ export interface WebhookEndpointDTO {
 export interface ChannelConfig {
   inApp: boolean;
   webhook: boolean;
-  // future: email: boolean; push: boolean;
+  email: boolean;
+  push: boolean;
 }

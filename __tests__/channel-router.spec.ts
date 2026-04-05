@@ -39,7 +39,7 @@ const TEST_USER_ID = "user-42";
 
 const DEFAULT_PREFS: NotificationPreferences = {
   enabled: true,
-  channels: { inApp: true, webhook: true },
+  channels: { inApp: true, webhook: true, email: false, push: false },
   perType: {},
 };
 

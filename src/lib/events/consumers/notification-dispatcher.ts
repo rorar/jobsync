@@ -20,6 +20,7 @@ import type {
   ModuleDeactivatedPayload,
   ModuleReactivatedPayload,
   RetentionCompletedPayload,
+  JobStatusChangedPayload,
 } from "../event-types";
 import prisma from "@/lib/db";
 import type { NotificationType } from "@/models/notification.model";
@@ -258,6 +259,29 @@ async function handleRetentionCompleted(
   });
 }
 
+async function handleJobStatusChanged(
+  event: DomainEvent<typeof DomainEventType.JobStatusChanged>,
+): Promise<void> {
+  const payload = event.payload as JobStatusChangedPayload;
+  const locale = await resolveLocale(payload.userId);
+  const message = t(locale, "notifications.jobStatusChanged")
+    .replace("{newStatus}", payload.newStatusValue)
+    .replace("{jobId}", payload.jobId);
+
+  await dispatchNotification({
+    userId: payload.userId,
+    type: "job_status_changed" satisfies NotificationType,
+    message,
+    data: {
+      jobId: payload.jobId,
+      previousStatus: payload.previousStatusValue,
+      newStatus: payload.newStatusValue,
+      note: payload.note,
+      historyEntryId: payload.historyEntryId,
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
@@ -269,6 +293,7 @@ export function registerNotificationDispatcher(): void {
   eventBus.subscribe(DomainEventType.ModuleDeactivated, handleModuleDeactivated);
   eventBus.subscribe(DomainEventType.ModuleReactivated, handleModuleReactivated);
   eventBus.subscribe(DomainEventType.RetentionCompleted, handleRetentionCompleted);
+  eventBus.subscribe(DomainEventType.JobStatusChanged, handleJobStatusChanged);
 }
 
 // ---------------------------------------------------------------------------

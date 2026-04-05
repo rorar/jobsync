@@ -42,6 +42,7 @@ jest.mock("@/i18n/dictionaries", () => ({
       "notifications.moduleDeactivated": "Module {name} deactivated. {automationCount} automation(s) paused.",
       "notifications.moduleReactivated": "Module {name} reactivated. {automationCount} automation(s) remain paused.",
       "notifications.batchStaged": "{count} new vacancies staged from automation",
+      "notifications.jobStatusChanged": "Job status changed to {newStatus}",
     };
     return translations[key] ?? key;
   }),

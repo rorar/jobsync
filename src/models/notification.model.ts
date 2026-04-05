@@ -9,7 +9,8 @@ export type NotificationType =
   | "vacancy_promoted"
   | "vacancy_batch_staged"
   | "bulk_action_completed"
-  | "retention_completed";
+  | "retention_completed"
+  | "job_status_changed";
 
 export interface Notification {
   id: string;
@@ -31,7 +32,8 @@ export interface NotificationPreferences {
   channels: {
     inApp: boolean;
     webhook: boolean;
-    // future: email: boolean; push: boolean;
+    email: boolean;
+    push: boolean;
   };
   perType: Partial<Record<NotificationType, { enabled: boolean }>>;
   quietHours?: {
@@ -44,7 +46,7 @@ export interface NotificationPreferences {
 
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   enabled: true,
-  channels: { inApp: true, webhook: false },
+  channels: { inApp: true, webhook: false, email: false, push: false },
   perType: {},
 };
 
@@ -56,9 +58,13 @@ export const CONFIGURABLE_NOTIFICATION_TYPES: NotificationType[] = [
   "consecutive_failures",
   "cb_escalation",
   "module_deactivated",
+  "module_reactivated",
+  "module_unreachable",
   "vacancy_promoted",
+  "vacancy_batch_staged",
   "bulk_action_completed",
   "retention_completed",
+  "job_status_changed",
 ];
 
 /** Channel identifiers for shouldNotify checks */
