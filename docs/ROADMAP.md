@@ -274,29 +274,30 @@ Intake (Automation ODER Manual) → Staging Area → Processing → Inbox → Tr
 - **Voraussetzung für:** JobDeck Dual-Use (2.7), CRM (5), Bewerbungsunterlagen (4)
 - Allium Spec: `specs/vacancy-pipeline.allium` (zu erstellen)
 
-### 0.6 Unified Notification System — PHASE 1+2 DONE (Webhook Channel, 2 Channel-Phasen offen)
+### 0.6 Unified Notification System — ALL 4 CHANNELS DONE
 Application Service für Dispatch + bestehende Connectors für Delivery. **Dispatch ≠ Delivery.**
 
-**Implementiert (2026-03-29):**
+**Implementiert (2026-03-29 bis 2026-04-05):**
 - ✅ TypedEventBus (in-process pub/sub, error isolation, wildcard, async handlers)
-- ✅ 11 Domain Event Types (typed discriminated union, VacancyPromoted/Dismissed/Staged/Archived/Trashed + Bulk/Module/Retention)
+- ✅ 12 Domain Event Types (typed discriminated union, incl. JobStatusChanged)
 - ✅ NotificationDispatcher Consumer (Event→Notification mapping, staged vacancy batching)
 - ✅ AuditLogger Consumer (wildcard subscriber für Debug-Logging)
 - ✅ Consumer Registration at startup (`instrumentation.ts`, hot-reload guard)
 - ✅ In-App Notification UI (NotificationBell + NotificationDropdown + NotificationItem)
-- ✅ Notification Preferences (JSON on UserSettings, per-type enable/disable, quiet hours)
+- ✅ Notification Preferences (JSON on UserSettings, per-type enable/disable, quiet hours, 4-channel config)
 - ✅ NotificationSettings UI Komponente
-- ✅ Allium Specs: `event-bus.allium`, `notification-dispatch.allium`
+- ✅ Allium Specs: `event-bus.allium`, `notification-dispatch.allium` (all 4 channels)
 - ✅ emitEvent() → EventBus.publish() Migration (alle Callsites)
+- ✅ ChannelRouter Multi-Channel Architecture (ADR-026)
 
 - **Dispatch (intern):** `NotificationDispatcher` subscribt Domain Events → prüft User-Preferences → routet an Channels
-- **Delivery (extern):** E-Mail (→ Communication Connector 1.12), Browser Push, Webhook (→ 1.3), In-App (DB-Write)
+- **Delivery (extern):** E-Mail (nodemailer SMTP), Browser Push (VAPID), Webhook (HMAC), In-App (DB-Write)
 - **Preferences:** Teil von UserSettings (kein eigenes Aggregate). Channels, Digest-Modus, Quiet Hours, per-Typ-Overrides.
 - **Phasen:**
   1. ✅ In-App Notifications (Bell-Icon, DB-backed) — unblocked 0.4 (Degradation) und 0.5 (Promotion)
   2. ✅ Webhook Channel (HMAC signing, retry, auto-deactivation, Settings UI) — S5a
-  3. E-Mail Channel via Communication Connector (1.12) — S5b
-  4. Browser Push Channel — S5b
+  3. ✅ E-Mail Channel (nodemailer SMTP, TLS enforcement, rate limiting, templates × 4 Locales, Settings UI) — S5b
+  4. ✅ Browser Push Channel (web-push VAPID, service worker, stale subscription handling, Settings UI) — S5b
 - **Key Insight:** Job-Alerts (1.5) und CRM-Reminders (5.4) sind **Notification-Rules**, keine eigenen Systeme. Sie werden als Konfiguration des Dispatchers modelliert.
 - **Domain Event Bus (architektonischer Owner):**
   - 0.6 besitzt den Event Bus als Infrastruktur — nicht nur für Notifications, sondern als **genereller Publish/Subscribe-Mechanismus** für Domain Events
@@ -2197,7 +2198,9 @@ Generierte persönliche Landingpage die den Bewerbungs-Funnel invertiert: Statt 
 | Sprint B: UX/UI Gaps (10 Items) | ✅ Verifiziert |
 | Sprint E: UI-Lücken schließen (8 Items) | ✅ Implementiert (S5a, 74 Tests) |
 | Roadmap 0.6 Phase 2: Webhook Channel | ✅ Implementiert (HMAC, Retry, SSRF, ChannelRouter, Settings UI) |
+| Roadmap 0.6 Phase 3: Email Channel | ✅ Implementiert (nodemailer SMTP, TLS, Rate Limit, Templates, Settings UI) |
+| Roadmap 0.6 Phase 4: Push Channel | ✅ Implementiert (web-push VAPID, Service Worker, Settings UI) |
 | Security Audit: 25+ Vulnerabilities | ✅ Gefixt (ADR-015 bis ADR-025) |
 | Allium Specs (21 Specs, ~10345 Lines) | ✅ Spezifiziert + Aligned |
-| Test Suite: 140 Suites, 2606 Tests, 79 E2E | ✅ Grün |
-| Bug Tracker: 281 Bugs | ✅ Alle gefixt |
+| Test Suite: 157 Suites, 2918 Tests, 79 E2E | ✅ Grün |
+| Bug Tracker: 288 Bugs | ✅ Alle gefixt (2 accepted risk) |

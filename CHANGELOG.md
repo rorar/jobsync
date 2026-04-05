@@ -1,5 +1,60 @@
 # Changelog
 
+## [2026-04-05] Session S5b — Email + Push Notification Channels
+
+### Added — Phase 1: Foundation
+- `job_status_changed` NotificationType + dispatcher wiring for JobStatusChanged events
+- Multi-channel preferences: `email` and `push` fields in NotificationPreferences.channels
+- 4 missing types added to CONFIGURABLE_NOTIFICATION_TYPES (S5a deferred L6)
+
+### Added — Sprint D2: Email Notification Channel
+- **SmtpConfig** Prisma model (AES-encrypted password, TLS default, one per user)
+- **EmailChannel** adapter implementing NotificationChannel interface
+- nodemailer SMTP transport with TLS enforcement (TLSv1.2+, rejectUnauthorized)
+- SMTP host SSRF validation (blocks private IPs, IMDS, localhost)
+- Rate limiting: 10 emails/min per user, test button 1/60s cooldown
+- HTML email templates for all 11 NotificationTypes × 4 locales (EN, DE, FR, ES)
+- Server actions: saveSmtpConfig, getSmtpConfig, testSmtpConnection, deleteSmtpConfig
+- **SmtpSettings** UI: SMTP config form, password show/hide, test email with countdown, delete confirmation
+- Settings sidebar "Email" entry
+
+### Added — Sprint D3: Browser Push Notification Channel
+- **VapidConfig** + **WebPushSubscription** Prisma models (AES-encrypted keys)
+- **PushChannel** adapter implementing NotificationChannel interface
+- web-push VAPID protocol for push delivery
+- VAPID key auto-generation and rotation (with subscription cleanup)
+- Stale subscription handling (410 Gone + 404 → silent delete)
+- Rate limiting: 20 pushes/min per user, test push 1/60s
+- Minimal service worker (`public/sw-push.js` — push-only, not full PWA)
+- Server actions: subscribePush, unsubscribePush, getVapidPublicKeyAction, rotateVapidKeysAction, sendTestPush
+- **PushSettings** UI: enable/disable, device count, test push, VAPID rotation warning
+- Settings sidebar "Push" entry
+
+### Fixed — CHECK Phase (6 findings)
+- **HIGH**: sw-push.js open redirect via push payload URL → validate relative paths
+- **MEDIUM**: Unused t() import in email.channel.ts
+- **MEDIUM**: Hardcoded English aria-labels on password toggle → i18n
+- **MEDIUM**: HTML lang="en" hardcoded in email templates → locale-aware
+- **MEDIUM**: Push 404 not treated as stale subscription → cleanup on 404+410
+- **MEDIUM**: Missing role="alert" on error states in SmtpSettings/PushSettings
+
+### Specs
+- `notification-dispatch.allium` updated with all 4 channels (in-app, webhook, email, push)
+- Added entities: SmtpConfig, VapidConfig, WebPushSubscription
+- Added rules: EmailDelivery, PushDelivery
+- Added invariants: SmtpHostSafe, VapidKeysEncrypted, PushSubscriptionKeysEncrypted
+
+### Testing
+- 100 new tests across 6 test suites (email-channel, push-channel, smtp-validation, email-rate-limit, email-templates, vapid)
+- Total: 157 suites, 2918 tests (up from 151/2818)
+
+### Stats
+- 7 findings fixed (1 HIGH, 6 MEDIUM)
+- +3,800 LOC added
+- 3 new Prisma models, 3 migrations
+- 2 new npm packages (nodemailer, web-push)
+- All 4 notification channels operational (in-app, webhook, email, push)
+
 ## [2026-04-04] Session S5a — UI Gaps + Webhook Channel
 
 ### Added — Sprint E1: Critical UI Gaps (4 items)
