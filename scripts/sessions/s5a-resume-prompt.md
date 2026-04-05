@@ -77,6 +77,11 @@ Sage die Wahrheit und nur die Wahrheit: Was habe ich übersprungen und wo sind d
 
 ## Übergreifende Regeln
 
+### Ressourcen-Regeln (10 GB RAM / 4 Cores System)
+- **Tests NICHT simultan zu Agents:** `bash scripts/test.sh` und `bun run build` NUR ausführen wenn KEINE Agents laufen. Warte bis alle Agents fertig sind, DANN teste/builde.
+- **E2E / Chromium NACHEINANDER:** Playwright-Tests (`npx playwright test`) NIEMALS parallel zu anderen Agents oder Builds. E2E ist ein eigener sequenzieller Schritt NACH allen Fixes.
+- **Agenten-Parallelität:** Parallele Agents sind erlaubt, aber KEINE gleichzeitigen Build/Test/E2E-Prozesse dazu.
+
 ### VERBOTEN für den Main-Agent
 - ❌ Code Read/Edit/Write (außer BUGS.md, CHANGELOG.md, docs/)
 - ❌ Tests schreiben, Findings fixen

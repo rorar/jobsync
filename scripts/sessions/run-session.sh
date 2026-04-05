@@ -128,7 +128,7 @@ write_inner_script() {
 #!/usr/bin/env bash
 set -euo pipefail
 cd -- ${PROJECT_DIR@Q} || exit 1
-claude -p --dangerously-skip-permissions --effort max --verbose < ${prompt_file@Q}
+systemd-run --user --scope --property=MemoryMax=7936M --property=MemoryHigh=7168M --property=TasksMax=300 -- claude -p --dangerously-skip-permissions --effort max --verbose < ${prompt_file@Q}
 INNER_SCRIPT
   else
     # Interactive: pass prompt as the first message argument.
@@ -151,7 +151,7 @@ INNER_SCRIPT
 set -euo pipefail
 cd -- ${PROJECT_DIR@Q} || exit 1
 _prompt=\$(< ${prompt_file@Q})
-claude --dangerously-skip-permissions --effort max --verbose "\$_prompt"
+systemd-run --user --scope --property=MemoryMax=7936M --property=MemoryHigh=7168M --property=TasksMax=300 -- claude --dangerously-skip-permissions --effort max --verbose "\$_prompt"
 INNER_SCRIPT
   fi
 

@@ -195,6 +195,11 @@ source scripts/env.sh && bun run build  # Build prüfen
 **Für Fixes — nach FILES aufteilen, NICHT nach Finding-Typ (Learning aus S3-Resume):**
 Gruppiere ALLE Findings (egal ob Security, WCAG, Performance) nach betroffenen Files. Ein Agent bekommt ALLE Findings für seine File-Gruppe.
 
+### Ressourcen-Regeln (10 GB RAM / 4 Cores System)
+- **Tests NICHT simultan zu Agents:** `bash scripts/test.sh` und `bun run build` NUR ausführen wenn KEINE Agents laufen. Warte bis alle Agents fertig sind, DANN teste/builde.
+- **E2E / Chromium NACHEINANDER:** Playwright-Tests (`npx playwright test`) NIEMALS parallel zu anderen Agents oder Builds. E2E ist ein eigener sequenzieller Schritt NACH allen Fixes.
+- **Agenten-Parallelität:** Parallele Agents sind erlaubt, aber KEINE gleichzeitigen Build/Test/E2E-Prozesse dazu.
+
 ### VERBOTEN für den Main-Agent
 Der Main-Agent darf KEINE der folgenden Aktionen selbst ausführen:
 - ❌ Code lesen/schreiben mit Read/Edit/Write (außer Koordinations-Files wie BUGS.md, CHANGELOG.md, ROADMAP.md, CLAUDE.md)
