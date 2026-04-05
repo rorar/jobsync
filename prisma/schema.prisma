@@ -44,6 +44,8 @@ model User {
   EnrichmentLog     EnrichmentLog[]
   WebhookEndpoint   WebhookEndpoint[]
   smtpConfig        SmtpConfig?
+  vapidConfig          VapidConfig?
+  webPushSubscriptions WebPushSubscription[]
 }
 
 model ApiKey {
@@ -678,6 +680,33 @@ model WebhookEndpoint {
   updatedAt    DateTime @updatedAt
 
   @@index([userId, active])
+}
+
+model VapidConfig {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publicKey  String
+  privateKey String   // AES-encrypted
+  iv         String   // IV for AES decryption
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model WebPushSubscription {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint       String
+  p256dh         String    // AES-encrypted
+  auth           String    // AES-encrypted
+  iv             String    // IV for AES decryption (shared for p256dh + auth)
+  expirationTime DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
+  @@unique([userId, endpoint])
 }
 
 model SmtpConfig {
