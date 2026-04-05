@@ -2,7 +2,7 @@
  * StatusHistoryTimeline component tests
  *
  * Tests: loading state, empty state, timeline rendering,
- * error state with retry, note display, and multiple entries.
+ * error state with retry, note display, pagination (Load more).
  */
 import "@testing-library/jest-dom";
 import React from "react";
@@ -27,6 +27,7 @@ jest.mock("@/i18n", () => ({
         "jobs.statusHistoryRetry": "Retry",
         "jobs.statusHistoryShowAll": "Show all ({count})",
         "jobs.statusHistoryShowLess": "Show less",
+        "jobs.statusHistoryLoadMore": "Load more",
       };
       return dict[key] ?? key;
     },
@@ -50,6 +51,9 @@ jest.mock("lucide-react", () => ({
   ),
   MessageSquare: (props: React.SVGProps<SVGSVGElement>) => (
     <svg data-testid="icon-message" {...props} />
+  ),
+  Loader2: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg data-testid="icon-loader" {...props} />
   ),
 }));
 
@@ -271,7 +275,7 @@ describe("StatusHistoryTimeline", () => {
     });
   });
 
-  it("passes jobId to the action", async () => {
+  it("passes jobId with pagination params to the action", async () => {
     mockGetJobStatusHistory.mockResolvedValue({
       success: true,
       data: [],
@@ -280,11 +284,11 @@ describe("StatusHistoryTimeline", () => {
     render(<StatusHistoryTimeline jobId="job-42" />);
 
     await waitFor(() => {
-      expect(mockGetJobStatusHistory).toHaveBeenCalledWith("job-42");
+      expect(mockGetJobStatusHistory).toHaveBeenCalledWith("job-42", 50, 0);
     });
   });
 
-  describe("entry limit and Show all toggle", () => {
+  describe("pagination with Load more", () => {
     function makeManyEntries(count: number) {
       return Array.from({ length: count }, (_, i) => ({
         id: `hist-${i}`,
@@ -293,11 +297,11 @@ describe("StatusHistoryTimeline", () => {
         newStatusLabel: `Status ${i}`,
         newStatusValue: i % 2 === 0 ? "applied" : "draft",
         note: null,
-        changedAt: new Date(`2026-01-${String(i + 1).padStart(2, "0")}`),
+        changedAt: new Date(`2026-01-${String((i % 28) + 1).padStart(2, "0")}`),
       }));
     }
 
-    it("shows all entries when count is within the default limit", async () => {
+    it("does not show Load more when fewer entries than page size", async () => {
       const entries = makeManyEntries(15);
       mockGetJobStatusHistory.mockResolvedValue({
         success: true,
@@ -311,13 +315,11 @@ describe("StatusHistoryTimeline", () => {
         expect(items).toHaveLength(15);
       });
 
-      // No toggle button should be present
-      expect(screen.queryByText(/Show all/)).not.toBeInTheDocument();
-      expect(screen.queryByText("Show less")).not.toBeInTheDocument();
+      expect(screen.queryByText("Load more")).not.toBeInTheDocument();
     });
 
-    it("truncates entries and shows Show all button when exceeding limit", async () => {
-      const entries = makeManyEntries(30);
+    it("shows Load more when entries equal page size (50)", async () => {
+      const entries = makeManyEntries(50);
       mockGetJobStatusHistory.mockResolvedValue({
         success: true,
         data: entries,
@@ -327,62 +329,41 @@ describe("StatusHistoryTimeline", () => {
 
       await waitFor(() => {
         const items = screen.getAllByRole("listitem");
-        expect(items).toHaveLength(20); // DEFAULT_VISIBLE_LIMIT
+        expect(items).toHaveLength(50);
       });
 
-      expect(screen.getByText("Show all (30)")).toBeInTheDocument();
+      expect(screen.getByText("Load more")).toBeInTheDocument();
     });
 
-    it("expands all entries when Show all is clicked", async () => {
-      const entries = makeManyEntries(25);
-      mockGetJobStatusHistory.mockResolvedValue({
-        success: true,
-        data: entries,
-      });
+    it("appends entries when Load more is clicked", async () => {
+      const firstPage = makeManyEntries(50);
+      const secondPage = makeManyEntries(10).map((e, i) => ({
+        ...e,
+        id: `hist-second-${i}`,
+      }));
+
+      mockGetJobStatusHistory
+        .mockResolvedValueOnce({ success: true, data: firstPage })
+        .mockResolvedValueOnce({ success: true, data: secondPage });
 
       render(<StatusHistoryTimeline jobId="job-1" />);
 
       await waitFor(() => {
-        expect(screen.getByText("Show all (25)")).toBeInTheDocument();
+        expect(screen.getByText("Load more")).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByText("Show all (25)"));
+      fireEvent.click(screen.getByText("Load more"));
 
       await waitFor(() => {
         const items = screen.getAllByRole("listitem");
-        expect(items).toHaveLength(25);
+        expect(items).toHaveLength(60);
       });
 
-      expect(screen.getByText("Show less")).toBeInTheDocument();
-    });
+      // Second call should pass skip=50
+      expect(mockGetJobStatusHistory).toHaveBeenCalledWith("job-1", 50, 50);
 
-    it("collapses back when Show less is clicked", async () => {
-      const entries = makeManyEntries(25);
-      mockGetJobStatusHistory.mockResolvedValue({
-        success: true,
-        data: entries,
-      });
-
-      render(<StatusHistoryTimeline jobId="job-1" />);
-
-      await waitFor(() => {
-        expect(screen.getByText("Show all (25)")).toBeInTheDocument();
-      });
-
-      // Expand
-      fireEvent.click(screen.getByText("Show all (25)"));
-      await waitFor(() => {
-        expect(screen.getByText("Show less")).toBeInTheDocument();
-      });
-
-      // Collapse
-      fireEvent.click(screen.getByText("Show less"));
-      await waitFor(() => {
-        const items = screen.getAllByRole("listitem");
-        expect(items).toHaveLength(20);
-      });
-
-      expect(screen.getByText("Show all (25)")).toBeInTheDocument();
+      // Load more should be hidden since second page returned fewer than 50
+      expect(screen.queryByText("Load more")).not.toBeInTheDocument();
     });
   });
 });

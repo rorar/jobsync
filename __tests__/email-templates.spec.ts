@@ -13,8 +13,17 @@ jest.mock("server-only", () => ({}));
 // i18n mock — returns locale-prefixed strings for verification
 // ---------------------------------------------------------------------------
 
+const mockTranslate = jest.fn(
+  (locale: string, key: string) => `[${locale}]${key}`,
+);
+
 jest.mock("@/i18n/dictionaries", () => ({
-  t: jest.fn((locale: string, key: string) => `[${locale}]${key}`),
+  t: (...args: unknown[]) => mockTranslate(...(args as [string, string])),
+}));
+
+// Also mock @/i18n/server since templates.ts imports t from there
+jest.mock("@/i18n/server", () => ({
+  t: (...args: unknown[]) => mockTranslate(...(args as [string, string])),
 }));
 
 // ---------------------------------------------------------------------------
@@ -184,6 +193,78 @@ describe("Email Templates", () => {
       expect(result.html).toContain("<!DOCTYPE html>");
       expect(result.html).toContain("background-color:#18181b");
       expect(result.html).toContain("border-top:1px solid #e4e4e7");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // F6: buildNotificationMessage interpolation
+  // (tested indirectly through renderEmailTemplate)
+  // -----------------------------------------------------------------------
+
+  describe("buildNotificationMessage interpolation", () => {
+    afterEach(() => {
+      // Restore default mock behavior
+      mockTranslate.mockImplementation(
+        (locale: string, key: string) => `[${locale}]${key}`,
+      );
+    });
+
+    it("interpolates moduleId and affectedAutomationCount for module_deactivated", () => {
+      // Override mock to return template with placeholders
+      mockTranslate.mockImplementation((locale: string, key: string) => {
+        if (key === "notifications.moduleDeactivated") {
+          return "Module {moduleId} deactivated. {affectedAutomationCount} automations paused.";
+        }
+        return `[${locale}]${key}`;
+      });
+
+      const result = renderEmailTemplate(
+        "module_deactivated",
+        { moduleId: "eures", affectedAutomationCount: 3 },
+        "en",
+      );
+
+      expect(result.text).toContain("eures");
+      expect(result.text).toContain("3");
+      // Placeholders should be replaced
+      expect(result.text).not.toContain("{moduleId}");
+      expect(result.text).not.toContain("{affectedAutomationCount}");
+    });
+
+    it("interpolates purgedCount for retention_completed", () => {
+      mockTranslate.mockImplementation((locale: string, key: string) => {
+        if (key === "notifications.retentionCompleted") {
+          return "Retention complete: {purgedCount} records purged.";
+        }
+        return `[${locale}]${key}`;
+      });
+
+      const result = renderEmailTemplate(
+        "retention_completed",
+        { purgedCount: 42 },
+        "en",
+      );
+
+      expect(result.text).toContain("42");
+      expect(result.text).not.toContain("{purgedCount}");
+    });
+
+    it("interpolates newStatusValue for job_status_changed", () => {
+      mockTranslate.mockImplementation((locale: string, key: string) => {
+        if (key === "notifications.jobStatusChanged") {
+          return "Job status changed to {newStatusValue}.";
+        }
+        return `[${locale}]${key}`;
+      });
+
+      const result = renderEmailTemplate(
+        "job_status_changed",
+        { newStatusValue: "Interview" },
+        "en",
+      );
+
+      expect(result.text).toContain("Interview");
+      expect(result.text).not.toContain("{newStatusValue}");
     });
   });
 });

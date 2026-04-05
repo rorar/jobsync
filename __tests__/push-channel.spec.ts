@@ -198,6 +198,60 @@ describe("PushChannel", () => {
       });
     });
 
+    // F4: 401/403 VAPID auth failure — subscription preserved
+    it("should NOT delete subscription on 401 VAPID auth failure", async () => {
+      const { WebPushError: MockWebPushError } = jest.requireMock("web-push") as {
+        WebPushError: new (message: string, statusCode: number) => Error & { statusCode: number };
+      };
+      const authError = new MockWebPushError("Unauthorized", 401);
+
+      mockSendNotification.mockRejectedValue(authError);
+
+      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+
+      expect(result.channel).toBe("push");
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("VAPID auth failure (401)");
+      // Subscription must NOT be deleted on 401 — it is a server config issue
+      expect(mockWebPushSubscriptionDelete).not.toHaveBeenCalled();
+    });
+
+    it("should NOT delete subscription on 403 VAPID auth failure", async () => {
+      const { WebPushError: MockWebPushError } = jest.requireMock("web-push") as {
+        WebPushError: new (message: string, statusCode: number) => Error & { statusCode: number };
+      };
+      const forbiddenError = new MockWebPushError("Forbidden", 403);
+
+      mockSendNotification.mockRejectedValue(forbiddenError);
+
+      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+
+      expect(result.channel).toBe("push");
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("VAPID auth failure (403)");
+      // Subscription must NOT be deleted on 403 — it is a server config issue
+      expect(mockWebPushSubscriptionDelete).not.toHaveBeenCalled();
+    });
+
+    it("should delete subscription on 404 Not Found", async () => {
+      const { WebPushError: MockWebPushError } = jest.requireMock("web-push") as {
+        WebPushError: new (message: string, statusCode: number) => Error & { statusCode: number };
+      };
+      const notFoundError = new MockWebPushError("Not Found", 404);
+
+      mockSendNotification.mockRejectedValue(notFoundError);
+
+      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+
+      expect(result.channel).toBe("push");
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Subscription expired (404)");
+      // 404 means the subscription endpoint no longer exists — delete it
+      expect(mockWebPushSubscriptionDelete).toHaveBeenCalledWith({
+        where: { id: SUBSCRIPTION_1.id, userId: TEST_USER_ID },
+      });
+    });
+
     it("returns failure when no VAPID keys", async () => {
       mockVapidConfigFindUnique.mockResolvedValue(null);
 

@@ -14,7 +14,6 @@ jest.mock("server-only", () => ({}));
 
 const mockSmtpConfigFindFirst = jest.fn();
 const mockSmtpConfigCount = jest.fn();
-const mockUserSettingsFindUnique = jest.fn();
 const mockUserFindUnique = jest.fn();
 
 jest.mock("@/lib/db", () => ({
@@ -23,9 +22,6 @@ jest.mock("@/lib/db", () => ({
     smtpConfig: {
       findFirst: (...args: unknown[]) => mockSmtpConfigFindFirst(...args),
       count: (...args: unknown[]) => mockSmtpConfigCount(...args),
-    },
-    userSettings: {
-      findUnique: (...args: unknown[]) => mockUserSettingsFindUnique(...args),
     },
     user: {
       findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
@@ -74,18 +70,11 @@ jest.mock("@/lib/email/templates", () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// i18n mock
+// Locale resolver mock
 // ---------------------------------------------------------------------------
 
-jest.mock("@/i18n/server", () => ({
-  t: jest.fn((_locale: string, key: string) => key),
-}));
-
-jest.mock("@/i18n/locales", () => ({
-  DEFAULT_LOCALE: "en",
-  isValidLocale: jest.fn((code: string) =>
-    ["en", "de", "fr", "es"].includes(code),
-  ),
+jest.mock("@/lib/locale-resolver", () => ({
+  resolveUserLocale: jest.fn().mockResolvedValue("en"),
 }));
 
 // ---------------------------------------------------------------------------
@@ -104,6 +93,14 @@ jest.mock("nodemailer", () => ({
   default: {
     createTransport: (...args: unknown[]) => mockCreateTransport(...args),
   },
+}));
+
+// ---------------------------------------------------------------------------
+// Transport factory mock (uses mocked nodemailer internally)
+// ---------------------------------------------------------------------------
+
+jest.mock("@/lib/email/transport", () => ({
+  createSmtpTransporter: (...args: unknown[]) => mockCreateTransport(...args),
 }));
 
 // ---------------------------------------------------------------------------
@@ -156,7 +153,6 @@ describe("EmailChannel", () => {
     mockCheckEmailRateLimit.mockReturnValue({ allowed: true });
     mockSmtpConfigFindFirst.mockResolvedValue(SMTP_CONFIG);
     mockValidateSmtpHost.mockReturnValue({ valid: true });
-    mockUserSettingsFindUnique.mockResolvedValue(null);
     mockUserFindUnique.mockResolvedValue({ email: "user@example.com" });
     mockSendMail.mockResolvedValue({ messageId: "msg-1" });
   });
@@ -225,21 +221,21 @@ describe("EmailChannel", () => {
       expect(mockCreateTransport).not.toHaveBeenCalled();
     });
 
-    it("enforces TLS (requireTLS from config)", async () => {
+    it("passes TLS config to shared transporter factory", async () => {
       await channel.dispatch(NOTIFICATION, TEST_USER_ID);
 
       expect(mockCreateTransport).toHaveBeenCalledWith(
         expect.objectContaining({
-          requireTLS: true,
-          tls: expect.objectContaining({
-            rejectUnauthorized: true,
-            minVersion: "TLSv1.2",
-          }),
+          host: SMTP_CONFIG.host,
+          port: SMTP_CONFIG.port,
+          username: SMTP_CONFIG.username,
+          decryptedPassword: "decrypted-password",
+          tlsRequired: SMTP_CONFIG.tlsRequired,
         }),
       );
     });
 
-    it("uses port 465 with secure: true", async () => {
+    it("passes port 465 config to shared transporter factory", async () => {
       const config465 = { ...SMTP_CONFIG, port: 465 };
       mockSmtpConfigFindFirst.mockResolvedValue(config465);
 
@@ -248,19 +244,17 @@ describe("EmailChannel", () => {
       expect(mockCreateTransport).toHaveBeenCalledWith(
         expect.objectContaining({
           port: 465,
-          secure: true,
         }),
       );
     });
 
-    it("uses non-465 port with secure: false", async () => {
+    it("passes non-465 port config to shared transporter factory", async () => {
       // Default fixture uses port 587
       await channel.dispatch(NOTIFICATION, TEST_USER_ID);
 
       expect(mockCreateTransport).toHaveBeenCalledWith(
         expect.objectContaining({
           port: 587,
-          secure: false,
         }),
       );
     });

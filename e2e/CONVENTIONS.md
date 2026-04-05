@@ -154,6 +154,9 @@ Each domain aggregate has exactly one spec file. No duplicates.
 | Automation | `e2e/crud/automation-crud.spec.ts` |
 | Question | `e2e/crud/question-crud.spec.ts` |
 | Profile | `e2e/crud/profile-crud.spec.ts` |
+| Webhook Settings | `e2e/crud/webhook-settings.spec.ts` |
+| SMTP Settings | `e2e/crud/smtp-settings.spec.ts` |
+| Push Settings | `e2e/crud/push-settings.spec.ts` |
 | Auth | `e2e/smoke/signin.spec.ts` |
 | Locale | `e2e/smoke/locale-switching.spec.ts` |
 

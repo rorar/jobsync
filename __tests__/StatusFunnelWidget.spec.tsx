@@ -25,6 +25,7 @@ const i18nDict: Record<string, string> = {
   "dashboard.statusHired": "Hired",
   "dashboard.conversionRate": "{percent}% conversion",
   "dashboard.biggestDropoff": "Biggest drop-off",
+  "dashboard.totalJobsTracked": "{count} jobs tracked",
   "dashboard.noPipeline":
     "No jobs in the pipeline yet. Start by bookmarking a job!",
   "dashboard.retryButton": "Retry",
@@ -236,7 +237,7 @@ describe("StatusFunnelWidget", () => {
       });
     });
 
-    it("renders meter elements with correct aria attributes", async () => {
+    it("renders meter elements with correct aria attributes including percentage", async () => {
       mockGetStatusDistribution.mockResolvedValue({
         success: true,
         data: makeDistribution(),
@@ -251,10 +252,48 @@ describe("StatusFunnelWidget", () => {
       const meters = screen.getAllByRole("meter");
       expect(meters).toHaveLength(5);
 
-      // First meter (Bookmarked: 40)
+      // First meter (Bookmarked: 40) — totalJobs=81, percentage=49%
       expect(meters[0]).toHaveAttribute("aria-valuenow", "40");
       expect(meters[0]).toHaveAttribute("aria-valuemin", "0");
       expect(meters[0]).toHaveAttribute("aria-valuemax", "40");
+      expect(meters[0]).toHaveAttribute(
+        "aria-label",
+        expect.stringContaining("Bookmarked: 40"),
+      );
+    });
+
+    it("displays total jobs tracked", async () => {
+      mockGetStatusDistribution.mockResolvedValue({
+        success: true,
+        data: makeDistribution(),
+      });
+
+      render(<StatusFunnelWidget />);
+
+      await waitFor(() => {
+        // 40 + 25 + 10 + 4 + 2 = 81
+        expect(screen.getByText("81 jobs tracked")).toBeInTheDocument();
+      });
+    });
+
+    it("renders hover tooltips on funnel bars with count and percentage", async () => {
+      mockGetStatusDistribution.mockResolvedValue({
+        success: true,
+        data: makeDistribution({ bookmarked: 50, applied: 25, interview: 15, offer: 5, accepted: 5 }),
+      });
+
+      render(<StatusFunnelWidget />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Bookmarked")).toBeInTheDocument();
+      });
+
+      // totalJobs = 100, so Bookmarked: 50 (50%)
+      const bookmarkedBar = screen.getByTitle("Bookmarked: 50 (50%)");
+      expect(bookmarkedBar).toBeInTheDocument();
+
+      const appliedBar = screen.getByTitle("Applied: 25 (25%)");
+      expect(appliedBar).toBeInTheDocument();
     });
 
     it("renders a list with listitem roles", async () => {

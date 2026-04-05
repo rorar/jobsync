@@ -8,6 +8,9 @@
  * Spec: specs/notification-dispatch.allium
  */
 
+// Mock "server-only" to prevent runtime error in test environment
+jest.mock("server-only", () => ({}));
+
 // ---------------------------------------------------------------------------
 // shouldNotify mock — controls per-channel gating
 // ---------------------------------------------------------------------------
