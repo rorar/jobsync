@@ -77,6 +77,9 @@ Sage die Wahrheit und nur die Wahrheit: Was habe ich übersprungen und wo sind d
 
 ## Übergreifende Regeln
 
+### SYSTEM-CONSTRAINT: Max 2 parallele Agents
+Dieses System hat 10 GB RAM / 4 CPU Cores. Jeder Agent + MCP Servers verbraucht ~800 MB. Bei mehr als 2 parallelen Agents + Build thrashed das System und hängt. NIEMALS mehr als 2 Agents gleichzeitig dispatchen. Sequenziell ist besser als System-Crash.
+
 ### VERBOTEN für den Main-Agent
 - ❌ Code Read/Edit/Write (außer BUGS.md, CHANGELOG.md, docs/)
 - ❌ Tests schreiben, Findings fixen

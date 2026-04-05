@@ -159,6 +159,31 @@ INNER_SCRIPT
 }
 
 # ---------------------------------------------------------------------------
+# resource_check — abort if system is too loaded to start a session
+# ---------------------------------------------------------------------------
+resource_check() {
+  local avail_mb
+  avail_mb=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo "0")
+  if [[ "$avail_mb" -lt 2000 ]]; then
+    printf 'ABORT: Only %s MB RAM available (need 2000+).\n' "$avail_mb" >&2
+    printf 'Kill other sessions first: %s --kill <id>\n' "$0" >&2
+    exit 1
+  fi
+
+  local load_1min
+  load_1min=$(awk '{printf "%d", $1}' /proc/loadavg 2>/dev/null || echo "0")
+  local cores
+  cores=$(nproc 2>/dev/null || echo "4")
+  if [[ "$load_1min" -gt "$((cores * 2))" ]]; then
+    printf 'ABORT: Load average %s too high for %s cores.\n' "$load_1min" "$cores" >&2
+    printf 'Wait for load to drop or kill running sessions.\n' >&2
+    exit 1
+  fi
+
+  printf 'Resource check: %s MB RAM available, load %s/%s cores — OK\n' "$avail_mb" "$load_1min" "$cores"
+}
+
+# ---------------------------------------------------------------------------
 # run_session
 # ---------------------------------------------------------------------------
 run_session() {
@@ -176,6 +201,8 @@ run_session() {
       "$session_id" "$tmux_name"
     exit 0
   fi
+
+  resource_check
 
   mkdir -p -- "$LOG_DIR"
   local log_file="$LOG_DIR/${session_id}-$(date +%Y%m%d-%H%M%S).log"

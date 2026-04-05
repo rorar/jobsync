@@ -195,6 +195,9 @@ source scripts/env.sh && bun run build  # Build prüfen
 **Für Fixes — nach FILES aufteilen, NICHT nach Finding-Typ (Learning aus S3-Resume):**
 Gruppiere ALLE Findings (egal ob Security, WCAG, Performance) nach betroffenen Files. Ein Agent bekommt ALLE Findings für seine File-Gruppe.
 
+### SYSTEM-CONSTRAINT: Max 2 parallele Agents
+Dieses System hat 10 GB RAM / 4 CPU Cores. Jeder Agent + MCP Servers verbraucht ~800 MB. Bei mehr als 2 parallelen Agents + Build thrashed das System und hängt. NIEMALS mehr als 2 Agents gleichzeitig dispatchen. Sequenziell ist besser als System-Crash.
+
 ### VERBOTEN für den Main-Agent
 Der Main-Agent darf KEINE der folgenden Aktionen selbst ausführen:
 - ❌ Code lesen/schreiben mit Read/Edit/Write (außer Koordinations-Files wie BUGS.md, CHANGELOG.md, ROADMAP.md, CLAUDE.md)
