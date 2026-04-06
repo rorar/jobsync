@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/i18n";
+import { escoOccupationUrl, escoIscoGroupUrl, euresSearchUrl } from "@/lib/eu-portal-urls";
 
 const ESCO_URI_PREFIX = "http://data.europa.eu/esco/";
 
@@ -38,7 +39,7 @@ interface EscoDetails {
  * Shows title, ISCO code, description, group info, and portal links.
  */
 function OccupationDetailPopover({ uri }: { uri: string }) {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const [details, setDetails] = useState<EscoDetails | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -108,7 +109,7 @@ function OccupationDetailPopover({ uri }: { uri: string }) {
                 <Network className="h-3 w-3 text-muted-foreground" />
                 <span className="text-muted-foreground">{t("automations.iscoGroup")}</span>
                 <a
-                  href={details.broaderIscoGroup.uri}
+                  href={escoIscoGroupUrl(details.broaderIscoGroup.uri, locale)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"
@@ -118,30 +119,26 @@ function OccupationDetailPopover({ uri }: { uri: string }) {
               </div>
             )}
             <div className="flex gap-2 pt-1 border-t">
-              {details.escoUrl && (
-                <a
-                  href={details.escoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-primary hover:underline"
-                >
-                  <Briefcase className="h-3 w-3" />
-                  {t("automations.escoPortal")}
-                  <ExternalLink className="h-2.5 w-2.5" />
-                </a>
-              )}
-              {details.euresSearchUrl && (
-                <a
-                  href={details.euresSearchUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-primary hover:underline"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  {t("automations.euresJobs")}
-                  <ExternalLink className="h-2.5 w-2.5" />
-                </a>
-              )}
+              <a
+                href={escoOccupationUrl(uri, locale, details.title)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                <Briefcase className="h-3 w-3" />
+                {t("automations.escoPortal")}
+                <ExternalLink className="h-2.5 w-2.5" />
+              </a>
+              <a
+                href={euresSearchUrl(details.title, locale)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-primary hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {t("automations.euresJobs")}
+                <ExternalLink className="h-2.5 w-2.5" />
+              </a>
             </div>
           </div>
         )}

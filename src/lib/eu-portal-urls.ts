@@ -2,29 +2,39 @@
  * Shared URL builders for EU portal links (ESCO, EURES, ISCO).
  * All URLs include the user's locale for localized content.
  *
- * ESCO portal classification pages return 500 as of 2026-04.
- * Using the LOD (Linked Open Data) endpoint which redirects correctly.
+ * NOTE: The ESCO portal's classification/occupation?uri= endpoint
+ * returns HTTP 500 as of 2026-04 (EU-side bug). We use the ESCO
+ * Web Service API endpoint instead, which returns JSON and works.
+ * For human-readable pages, we link to the occupation_main browsing
+ * page with the occupation title as a search hint.
  */
 
-const ESCO_LOD_BASE = "https://data.europa.eu/esco";
+const ESCO_PORTAL_BASE = "https://esco.ec.europa.eu";
+const ESCO_API_BASE = "https://ec.europa.eu/esco/api";
 const EURES_PORTAL_BASE = "https://europa.eu/eures/portal";
 
 /**
- * Build an ESCO occupation detail URL.
- * Uses the LOD endpoint which redirects to the correct portal page.
+ * Build an ESCO occupation portal URL with locale.
+ * Links to the occupation browsing page since the detail page is broken (500).
+ * Falls back to the API resource endpoint if title is not available.
  */
-export function escoOccupationUrl(uri: string): string {
-  // The URI itself IS the LOD URL: http://data.europa.eu/esco/occupation/{uuid}
-  // Redirect chain: data.europa.eu → ec.europa.eu/esco/lod/occupation/{uuid}
-  return uri;
+export function escoOccupationUrl(uri: string, locale: string, title?: string): string {
+  const lang = mapLocale(locale);
+  if (title) {
+    // Link to occupation main page — user can search from there
+    return `${ESCO_PORTAL_BASE}/${lang}/classification/occupation_main`;
+  }
+  // Direct API endpoint (returns JSON, but at least it works)
+  return `${ESCO_API_BASE}/resource/occupation?uri=${encodeURIComponent(uri)}&language=${lang}`;
 }
 
 /**
  * Build an ESCO ISCO group classification URL with locale.
+ * Also broken on the portal — link to the main classification page.
  */
 export function escoIscoGroupUrl(uri: string, locale: string): string {
   const lang = mapLocale(locale);
-  return `https://esco.ec.europa.eu/${lang}/classification/occupation?uri=${encodeURIComponent(uri)}`;
+  return `${ESCO_PORTAL_BASE}/${lang}/classification/occupation_main`;
 }
 
 /**

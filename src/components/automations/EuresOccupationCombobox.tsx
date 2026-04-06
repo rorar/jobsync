@@ -32,6 +32,7 @@ import { ChipList, type ChipItem } from "@/components/ui/chip-list";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/i18n";
+import { escoOccupationUrl, escoIscoGroupUrl, euresSearchUrl } from "@/lib/eu-portal-urls";
 
 const MAX_KEYWORDS = 10;
 const SEPARATOR = "||";
@@ -43,7 +44,7 @@ type EuresOccupationComboboxProps = {
 
 /** Detail popover for an ESCO occupation */
 function OccupationDetailPopover({ uri }: { uri: string }) {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const [details, setDetails] = useState<EscoOccupationDetails | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -112,7 +113,7 @@ function OccupationDetailPopover({ uri }: { uri: string }) {
                 <Network className="h-3 w-3 text-muted-foreground" />
                 <span className="text-muted-foreground">{t("automations.iscoGroup")}</span>
                 <a
-                  href={details.broaderIscoGroup.uri}
+                  href={escoIscoGroupUrl(details.broaderIscoGroup.uri, locale)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"
@@ -123,7 +124,7 @@ function OccupationDetailPopover({ uri }: { uri: string }) {
             )}
             <div className="flex gap-2 pt-1 border-t">
               <a
-                href={details.escoUrl}
+                href={escoOccupationUrl(uri, locale, details.title)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-xs text-primary hover:underline"
@@ -133,7 +134,7 @@ function OccupationDetailPopover({ uri }: { uri: string }) {
                 <ExternalLink className="h-2.5 w-2.5" />
               </a>
               <a
-                href={details.euresSearchUrl}
+                href={euresSearchUrl(details.title, locale)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-xs text-primary hover:underline"
