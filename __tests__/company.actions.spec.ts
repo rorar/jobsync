@@ -30,6 +30,9 @@ jest.mock("@prisma/client", () => {
     job: {
       count: jest.fn(),
     },
+    logoAsset: {
+      findFirst: jest.fn(),
+    },
   };
   return { PrismaClient: jest.fn(() => mPrismaClient) };
 });
@@ -117,6 +120,7 @@ describe("Company Actions", () => {
           label: true,
           value: true,
           logoUrl: true,
+          logoAssetId: true,
           createdBy: true,
           _count: {
             select: {
@@ -573,6 +577,7 @@ describe("Company Actions", () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (prisma.workExperience.count as jest.Mock).mockResolvedValue(0);
       (prisma.job.count as jest.Mock).mockResolvedValue(0);
+      (prisma.logoAsset.findFirst as jest.Mock).mockResolvedValue(null);
       const mockDeleted = { id: "company-id", label: "Test Company" };
       (prisma.company.delete as jest.Mock).mockResolvedValue(mockDeleted);
 

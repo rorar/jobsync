@@ -57,9 +57,9 @@ describe("syncEnvVariable", () => {
     expect(result).toEqual({ success: true });
     expect(writeFileSpy).toHaveBeenCalledWith(
       path.join(process.cwd(), ".env"),
-      "SOME_KEY=old_value\nALLOWED_DEV_ORIGINS=http://new:3737"
+      "SOME_KEY=old_value\nALLOWED_DEV_ORIGINS=new"
     );
-    expect(process.env.ALLOWED_DEV_ORIGINS).toBe("http://new:3737");
+    expect(process.env.ALLOWED_DEV_ORIGINS).toBe("new");
   });
 
   it("removes a key when value is undefined", async () => {
@@ -153,7 +153,7 @@ describe("syncEnvVariable", () => {
     expect(result).toEqual({ success: true });
     expect(writeFileSpy).toHaveBeenCalledWith(
       path.join(process.cwd(), ".env"),
-      "\nALLOWED_DEV_ORIGINS=http://192.168.1.100:3737, http://myhost.ts.net:3737"
+      "\nALLOWED_DEV_ORIGINS=192.168.1.100, myhost.ts.net"
     );
   });
 });
