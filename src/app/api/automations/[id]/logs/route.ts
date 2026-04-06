@@ -48,13 +48,19 @@ export async function GET(
   const stream = new ReadableStream({
     start(controller) {
       let isClosed = false;
+      let interval: ReturnType<typeof setInterval> | undefined;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
 
       const cleanup = () => {
         if (isClosed) return;
         isClosed = true;
-        clearInterval(interval);
-        clearTimeout(timeout);
-        controller.close();
+        if (interval) clearInterval(interval);
+        if (timeout) clearTimeout(timeout);
+        try {
+          controller.close();
+        } catch {
+          // Stream already closed
+        }
       };
 
       // Send initial logs
@@ -85,7 +91,7 @@ export async function GET(
       }
 
       // Poll for new logs every second (only reached when a run is active)
-      const interval = setInterval(() => {
+      interval = setInterval(() => {
         if (isClosed) return;
         const currentStore = automationLogger.getStore(automationId);
         if (currentStore) {
@@ -111,7 +117,7 @@ export async function GET(
       req.signal.addEventListener("abort", cleanup);
 
       // Auto-close after 10 minutes
-      const timeout = setTimeout(cleanup, 10 * 60 * 1000);
+      timeout = setTimeout(cleanup, 10 * 60 * 1000);
     },
   });
 
