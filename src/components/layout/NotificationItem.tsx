@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslations, formatRelativeTime } from "@/i18n";
 import type { Notification, NotificationType } from "@/models/notification.model";
+import Link from "next/link";
 
 interface NotificationItemProps {
   notification: Notification;
@@ -84,9 +85,18 @@ export function NotificationItem({
         >
           {notification.message}
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {formatRelativeTime(notification.createdAt, locale)}
-        </p>
+        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{formatRelativeTime(notification.createdAt, locale)}</span>
+          {notification.automationId && (
+            <Link
+              href={`/dashboard/automations/${notification.automationId}`}
+              className="hover:underline hover:text-foreground"
+              onClick={(e) => e.stopPropagation()}
+            >
+              →
+            </Link>
+          )}
+        </div>
       </div>
       <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
         <Button

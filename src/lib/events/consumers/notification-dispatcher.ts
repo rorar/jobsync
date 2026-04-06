@@ -128,9 +128,17 @@ async function flushStagedBuffer(automationId: string): Promise<void> {
   if (!entry) return;
   stagedBuffers.delete(automationId);
 
+  // Fetch automation name for the notification message
+  const automation = await prisma.automation.findFirst({
+    where: { id: automationId, userId: entry.userId },
+    select: { name: true },
+  });
+  const automationName = automation?.name ?? automationId;
+
   const locale = await resolveLocale(entry.userId);
   const message = t(locale, "notifications.batchStaged")
-    .replace("{count}", String(entry.count));
+    .replace("{count}", String(entry.count))
+    .replace("{name}", automationName);
 
   const draft: NotificationDraft = {
     userId: entry.userId,

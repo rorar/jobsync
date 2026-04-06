@@ -12,7 +12,7 @@ export const notifications = {
     "notifications.cbEscalation": "Circuit breaker tripped for module {name}. {automationCount} automation(s) paused.",
     "notifications.consecutiveFailures": "Module {name} failed {failureCount} consecutive runs. {automationCount} automation(s) paused.",
     "notifications.authFailure": "Authentication failed for module {name}. {automationCount} automation(s) paused.",
-    "notifications.batchStaged": "{count} new vacancies staged from automation",
+    "notifications.batchStaged": "{count} new vacancies staged from \"{name}\"",
     "notifications.jobStatusChanged": "Job status changed to {newStatus}",
   },
   de: {
@@ -28,7 +28,7 @@ export const notifications = {
     "notifications.cbEscalation": "Circuit-Breaker ausgelöst für Modul {name}. {automationCount} Automatisierung(en) pausiert.",
     "notifications.consecutiveFailures": "Modul {name} ist {failureCount} Mal hintereinander fehlgeschlagen. {automationCount} Automatisierung(en) pausiert.",
     "notifications.authFailure": "Authentifizierung fehlgeschlagen für Modul {name}. {automationCount} Automatisierung(en) pausiert.",
-    "notifications.batchStaged": "{count} neue Stellenangebote aus Automatisierung bereitgestellt",
+    "notifications.batchStaged": "{count} neue Stellenangebote aus \"{name}\"",
     "notifications.jobStatusChanged": "Job-Status geändert zu {newStatus}",
   },
   fr: {
@@ -44,7 +44,7 @@ export const notifications = {
     "notifications.cbEscalation": "Disjoncteur d\u00e9clench\u00e9 pour le module {name}. {automationCount} automatisation(s) en pause.",
     "notifications.consecutiveFailures": "Le module {name} a \u00e9chou\u00e9 {failureCount} fois cons\u00e9cutives. {automationCount} automatisation(s) en pause.",
     "notifications.authFailure": "\u00c9chec d'authentification pour le module {name}. {automationCount} automatisation(s) en pause.",
-    "notifications.batchStaged": "{count} nouvelles offres mises en attente depuis l'automatisation",
+    "notifications.batchStaged": "{count} nouvelles offres mises en attente depuis \"{name}\"",
     "notifications.jobStatusChanged": "Statut de l'emploi changé en {newStatus}",
   },
   es: {
@@ -60,7 +60,7 @@ export const notifications = {
     "notifications.cbEscalation": "Disyuntor activado para el m\u00f3dulo {name}. {automationCount} automatizaci\u00f3n(es) en pausa.",
     "notifications.consecutiveFailures": "El m\u00f3dulo {name} fall\u00f3 {failureCount} veces consecutivas. {automationCount} automatizaci\u00f3n(es) en pausa.",
     "notifications.authFailure": "Error de autenticaci\u00f3n para el m\u00f3dulo {name}. {automationCount} automatizaci\u00f3n(es) en pausa.",
-    "notifications.batchStaged": "{count} nuevas vacantes preparadas desde la automatizaci\u00f3n",
+    "notifications.batchStaged": "{count} nuevas vacantes preparadas desde \"{name}\"",
     "notifications.jobStatusChanged": "Estado del empleo cambiado a {newStatus}",
   },
 } as const;

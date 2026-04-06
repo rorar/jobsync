@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "@/i18n";
 import {
   Dialog,
   DialogContent,
@@ -42,8 +43,14 @@ export function DiscoveredJobDetail({
   onRefresh,
 }: DiscoveredJobDetailProps) {
   const [loadingAction, setLoadingAction] = useState<"accept" | "dismiss" | null>(null);
+  const { locale } = useTranslations();
 
   if (!job) return null;
+
+  // Append user locale to EURES portal URLs
+  const jobUrl = job.jobUrl && job.jobUrl.includes("europa.eu/eures/")
+    ? `${job.jobUrl}${job.jobUrl.includes("?") ? "&" : "?"}lang=${locale}`
+    : job.jobUrl;
 
   const handleAccept = async () => {
     setLoadingAction("accept");
@@ -87,9 +94,9 @@ export function DiscoveredJobDetail({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {job.JobTitle.label}
-            {job.jobUrl && (
+            {jobUrl && (
               <a
-                href={job.jobUrl}
+                href={jobUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-foreground"

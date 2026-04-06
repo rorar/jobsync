@@ -78,13 +78,13 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-center justify-between border-b px-4 py-3">
+      <div className="flex items-center justify-between gap-2 border-b px-4 py-3 min-w-0">
         <h3 className="text-sm font-semibold">{t("notifications.title")}</h3>
         {hasUnread && (
           <Button
             variant="ghost"
             size="sm"
-            className="h-auto px-2 py-1 text-xs"
+            className="h-auto px-2 py-1 text-xs whitespace-nowrap shrink-0"
             onClick={handleMarkAllAsRead}
           >
             <CheckCheck className="mr-1 h-3 w-3" />

@@ -129,7 +129,12 @@ export function DiscoveredJobsList({
               const jobTitle = (job as any).JobTitle?.label ?? (job as any).title ?? "—";
               const companyName = (job as any).Company?.label ?? (job as any).employerName ?? "—";
               const locationName = (job as any).Location?.label ?? (job as any).location ?? null;
-              const sourceUrl = job.jobUrl ?? (job as any).sourceUrl ?? null;
+              const rawSourceUrl = job.jobUrl ?? (job as any).sourceUrl ?? null;
+              // Append user locale to EURES portal URLs so the job detail page
+              // renders in the user's language (EURES defaults to English otherwise)
+              const sourceUrl = rawSourceUrl && rawSourceUrl.includes("europa.eu/eures/")
+                ? `${rawSourceUrl}${rawSourceUrl.includes("?") ? "&" : "?"}lang=${locale}`
+                : rawSourceUrl;
 
               return (
                 <TableRow key={job.id}>
