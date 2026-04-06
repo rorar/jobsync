@@ -21,6 +21,32 @@ function isValidBaseUrl(url: string): boolean {
   }
 }
 
+/**
+ * Extracts hostnames from a comma-separated origins string.
+ * Strips protocols, ports, and paths — Next.js allowedDevOrigins
+ * expects bare hostnames (e.g., "192.168.1.100", "myhost.ts.net").
+ */
+function normalizeDevOrigins(raw: string): { normalized: string; wasChanged: boolean } {
+  const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  const normalized: string[] = [];
+  let wasChanged = false;
+
+  for (const part of parts) {
+    try {
+      // If it looks like a URL (has ://), extract hostname
+      const parsed = new URL(part.includes("://") ? part : `http://${part}`);
+      const hostname = parsed.hostname;
+      if (hostname !== part) wasChanged = true;
+      normalized.push(hostname);
+    } catch {
+      // Keep as-is if not parseable (e.g., wildcard patterns like *.example.com)
+      normalized.push(part);
+    }
+  }
+
+  return { normalized: normalized.join(", "), wasChanged };
+}
+
 const defaultDeveloper: DeveloperSettingsType = {
   debugLogging: true,
   logCategories: {
@@ -96,6 +122,18 @@ function DeveloperSettings() {
   };
 
   const handleToggle = async (update: Partial<DeveloperSettingsType>) => {
+    // Normalize allowedDevOrigins to bare hostnames
+    if ("allowedDevOrigins" in update && update.allowedDevOrigins) {
+      const { normalized, wasChanged } = normalizeDevOrigins(update.allowedDevOrigins);
+      update = { ...update, allowedDevOrigins: normalized };
+      if (wasChanged) {
+        toast({
+          title: t("settings.allowedDevOriginsNormalized"),
+          description: t("settings.allowedDevOriginsNormalizedDesc"),
+        });
+      }
+    }
+
     const newSettings: DeveloperSettingsType = {
       ...settings,
       ...update,
@@ -299,7 +337,7 @@ function DeveloperSettings() {
           <div className="flex gap-2">
             <Input
               id="allowed-dev-origins"
-              placeholder="http://192.168.1.100:3737, http://myhost.ts.net:3737"
+              placeholder="192.168.1.100, myhost.ts.net"
               value={settings.allowedDevOrigins ?? ""}
               onChange={(e) =>
                 setSettings({ ...settings, allowedDevOrigins: e.target.value })

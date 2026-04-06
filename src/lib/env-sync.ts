@@ -32,7 +32,27 @@ function validateValueForKey(key: WritableEnvKey, value: string): boolean {
     }
   }
 
-  return true; // ALLOWED_DEV_ORIGINS: free-form comma-separated origins
+  return true; // ALLOWED_DEV_ORIGINS: comma-separated hostnames
+}
+
+/**
+ * Normalizes ALLOWED_DEV_ORIGINS values to bare hostnames.
+ * Strips protocols, ports, and paths — Next.js expects hostnames only.
+ */
+function normalizeAllowedDevOrigins(value: string): string {
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((part) => {
+      try {
+        const parsed = new URL(part.includes("://") ? part : `http://${part}`);
+        return parsed.hostname;
+      } catch {
+        return part; // Keep as-is (e.g., wildcard patterns)
+      }
+    })
+    .join(", ");
 }
 
 /**
@@ -61,6 +81,11 @@ export async function syncEnvVariable(
   // Finding 3+4: Server-side value validation
   if (value && !validateValueForKey(key, value)) {
     return { success: false };
+  }
+
+  // Normalize ALLOWED_DEV_ORIGINS to bare hostnames
+  if (key === "ALLOWED_DEV_ORIGINS" && value) {
+    value = normalizeAllowedDevOrigins(value);
   }
 
   try {
