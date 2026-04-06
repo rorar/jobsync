@@ -321,8 +321,22 @@ function AddCompany({
                   noPreviewLabel={t("admin.companyLogoNoPreview")}
                   invalidUrlLabel={t("admin.companyLogoInvalidUrl")}
                   notImageLabel={t("admin.companyLogoNotImage")}
-                  onResolvedUrl={(resolved) => {
+                  onResolvedUrl={async (resolved) => {
                     form.setValue("logoUrl", resolved, { shouldDirty: true });
+                    // Auto-save for existing companies so the logo updates everywhere
+                    if (editCompany?.id) {
+                      const data = form.getValues();
+                      const res = await updateCompany({ ...data, logoUrl: resolved });
+                      if (res?.success) {
+                        reloadCompanies();
+                        toast({
+                          variant: "success",
+                          title: t("admin.companyLogoResolved"),
+                          description: t("admin.companyLogoResolvedAutoSaved"),
+                        });
+                        return;
+                      }
+                    }
                     toast({
                       variant: "success",
                       title: t("admin.companyLogoResolved"),
