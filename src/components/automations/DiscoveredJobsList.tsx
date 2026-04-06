@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "@/i18n";
 import { formatDateShort } from "@/i18n";
+import { euresJobDetailUrl } from "@/lib/eu-portal-urls";
 import {
   Card,
   CardContent,
@@ -130,11 +131,7 @@ export function DiscoveredJobsList({
               const companyName = (job as any).Company?.label ?? (job as any).employerName ?? "—";
               const locationName = (job as any).Location?.label ?? (job as any).location ?? null;
               const rawSourceUrl = job.jobUrl ?? (job as any).sourceUrl ?? null;
-              // Append user locale to EURES portal URLs so the job detail page
-              // renders in the user's language (EURES defaults to English otherwise)
-              const sourceUrl = rawSourceUrl && rawSourceUrl.includes("europa.eu/eures/")
-                ? `${rawSourceUrl}${rawSourceUrl.includes("?") ? "&" : "?"}lang=${locale}`
-                : rawSourceUrl;
+              const sourceUrl = rawSourceUrl ? euresJobDetailUrl(rawSourceUrl, locale) : null;
 
               return (
                 <TableRow key={job.id}>

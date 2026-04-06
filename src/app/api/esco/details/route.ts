@@ -72,9 +72,9 @@ export async function GET(
         }
       : undefined;
 
-    // Build portal URLs
-    const escoUrl = `https://esco.ec.europa.eu/en/classification/occupation?uri=${encodeURIComponent(uri)}`;
-    const euresSearchUrl = `https://europa.eu/eures/portal/jv-se/home?keyword=${encodeURIComponent(title)}`;
+    // Build portal URLs with user locale
+    const escoUrl = uri; // LOD URI redirects to correct portal page
+    const euresSearchUrl = `https://europa.eu/eures/portal/jv-se/home?keyword=${encodeURIComponent(title)}&lang=${userLocale}`;
 
     return NextResponse.json(
       { uri, title, code, description, broaderIscoGroup, escoUrl, euresSearchUrl },

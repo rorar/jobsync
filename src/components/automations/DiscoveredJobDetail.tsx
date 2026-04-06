@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "@/i18n";
+import { euresJobDetailUrl } from "@/lib/eu-portal-urls";
 import {
   Dialog,
   DialogContent,
@@ -47,10 +48,7 @@ export function DiscoveredJobDetail({
 
   if (!job) return null;
 
-  // Append user locale to EURES portal URLs
-  const jobUrl = job.jobUrl && job.jobUrl.includes("europa.eu/eures/")
-    ? `${job.jobUrl}${job.jobUrl.includes("?") ? "&" : "?"}lang=${locale}`
-    : job.jobUrl;
+  const jobUrl = job.jobUrl ? euresJobDetailUrl(job.jobUrl, locale) : job.jobUrl;
 
   const handleAccept = async () => {
     setLoadingAction("accept");

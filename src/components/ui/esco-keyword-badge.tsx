@@ -108,7 +108,7 @@ function OccupationDetailPopover({ uri }: { uri: string }) {
                 <Network className="h-3 w-3 text-muted-foreground" />
                 <span className="text-muted-foreground">{t("automations.iscoGroup")}</span>
                 <a
-                  href={`https://esco.ec.europa.eu/en/classification/occupation?uri=${encodeURIComponent(details.broaderIscoGroup.uri)}`}
+                  href={details.broaderIscoGroup.uri}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"
