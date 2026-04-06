@@ -70,6 +70,7 @@ export default function RecentCardToggle({
                 <div className="hidden sm:flex">
                   <CompanyLogo
                     logoUrl={job.Company?.logoUrl}
+                    logoAssetId={job.Company?.logoAssetId}
                     companyName={job.Company?.label || "?"}
                     size="md"
                   />

@@ -100,6 +100,7 @@ function MyJobsTable({
                 <TableCell className="hidden sm:table-cell">
                   <CompanyLogo
                     logoUrl={job.Company?.logoUrl}
+                    logoAssetId={job.Company?.logoAssetId}
                     companyName={job.Company?.label ?? ""}
                     size="md"
                   />

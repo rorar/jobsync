@@ -93,6 +93,7 @@ function CompaniesTable({
                 <TableCell className="hidden sm:table-cell">
                   <CompanyLogo
                     logoUrl={company.logoUrl}
+                    logoAssetId={company.logoAssetId}
                     companyName={company.label}
                     size="md"
                   />

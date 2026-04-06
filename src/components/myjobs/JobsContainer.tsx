@@ -85,6 +85,7 @@ function kanbanBoardToJobResponses(board: KanbanBoardData): JobResponse[] {
           value: "",
           createdBy: "",
           logoUrl: kanbanJob.companyLogoUrl,
+          logoAssetId: kanbanJob.companyLogoAssetId,
         },
         Status: {
           id: column.statusId,

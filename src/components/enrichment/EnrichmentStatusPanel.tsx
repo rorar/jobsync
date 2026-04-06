@@ -28,6 +28,7 @@ interface EnrichmentStatusPanelProps {
   companyId: string;
   companyName: string;
   logoUrl?: string | null;
+  logoAssetId?: string | null;
 }
 
 /** Map dimension string to i18n key */
@@ -105,6 +106,7 @@ export function EnrichmentStatusPanel({
   companyId,
   companyName,
   logoUrl,
+  logoAssetId,
 }: EnrichmentStatusPanelProps) {
   const { t, locale } = useTranslations();
   const [results, setResults] = useState<EnrichmentResult[]>([]);
@@ -196,6 +198,7 @@ export function EnrichmentStatusPanel({
         <div className="flex items-center gap-2">
           <CompanyLogo
             logoUrl={logoUrl}
+            logoAssetId={logoAssetId}
             companyName={companyName}
             size="sm"
           />

@@ -81,6 +81,7 @@ function JobDetails({ job }: { job: JobResponse }) {
               <div className="flex items-center gap-2 mb-1">
                 <CompanyLogo
                   logoUrl={job?.Company?.logoUrl}
+                  logoAssetId={job?.Company?.logoAssetId}
                   companyName={job?.Company?.label ?? ""}
                   size="lg"
                 />
@@ -151,6 +152,7 @@ function JobDetails({ job }: { job: JobResponse }) {
                 companyId={job.Company.id}
                 companyName={job.Company.label}
                 logoUrl={job.Company.logoUrl}
+                logoAssetId={job.Company.logoAssetId}
               />
             )}
             <StatusHistoryTimeline jobId={job.id} />

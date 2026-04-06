@@ -9,7 +9,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
-import { ImageIcon, Loader, PlusCircle } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  ImageIcon,
+  Loader,
+  Loader2,
+  PlusCircle,
+  Trash2,
+  RefreshCw,
+} from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { AddCompanyFormSchema } from "@/models/addCompanyForm.schema";
@@ -28,6 +37,23 @@ import { addCompany, updateCompany } from "@/actions/company.actions";
 import { checkLogoUrl } from "@/actions/logoCheck.actions";
 import { Company } from "@/models/job.model";
 import { useTranslations } from "@/i18n";
+import {
+  getLogoAssetForCompany,
+  deleteLogoAsset,
+  triggerLogoDownload,
+} from "@/actions/logoAsset.actions";
+import type { LogoAssetInfo } from "@/actions/logoAsset.actions";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../ui/alert-dialog";
 
 /** Supported image file extensions for company logo URLs. */
 const SUPPORTED_IMAGE_EXTENSIONS = [
@@ -158,6 +184,206 @@ function LogoPreview({
         onError={handleError}
         className={`max-h-20 max-w-[200px] object-contain ${imgStatus === "loading" ? "hidden" : ""}`}
       />
+    </div>
+  );
+}
+
+/**
+ * Displays the cached logo asset status for a company in edit mode.
+ * Shows ready/pending/failed states with appropriate actions.
+ */
+function LogoAssetStatus({
+  companyId,
+  onAssetDeleted,
+}: {
+  companyId: string;
+  onAssetDeleted: () => void;
+}) {
+  const { t } = useTranslations();
+  const [asset, setAsset] = useState<LogoAssetInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [redownloading, setRedownloading] = useState(false);
+
+  const fetchAsset = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await getLogoAssetForCompany(companyId);
+      if (result.success) {
+        setAsset(result.data ?? null);
+      }
+    } catch {
+      // Silently fail — section just won't show
+    } finally {
+      setLoading(false);
+    }
+  }, [companyId]);
+
+  useEffect(() => {
+    fetchAsset();
+  }, [fetchAsset]);
+
+  // Poll for pending status
+  useEffect(() => {
+    if (asset?.status !== "pending") return;
+    const interval = setInterval(fetchAsset, 3000);
+    return () => clearInterval(interval);
+  }, [asset?.status, fetchAsset]);
+
+  const handleDelete = async () => {
+    if (!asset) return;
+    setDeleting(true);
+    try {
+      const result = await deleteLogoAsset(asset.id);
+      if (result.success) {
+        setAsset(null);
+        onAssetDeleted();
+        toast({
+          variant: "success",
+          description: t("logoAsset.deleted"),
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          description: t("logoAsset.deleteFailed"),
+        });
+      }
+    } catch {
+      toast({
+        variant: "destructive",
+        description: t("logoAsset.deleteFailed"),
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleRedownload = async () => {
+    setRedownloading(true);
+    try {
+      const result = await triggerLogoDownload(companyId);
+      if (result.success) {
+        toast({
+          variant: "success",
+          description: t("logoAsset.redownloadStarted"),
+        });
+        // Refetch to get the new pending status
+        await fetchAsset();
+      } else {
+        toast({
+          variant: "destructive",
+          description: t("logoAsset.redownloadFailed"),
+        });
+      }
+    } catch {
+      toast({
+        variant: "destructive",
+        description: t("logoAsset.redownloadFailed"),
+      });
+    } finally {
+      setRedownloading(false);
+    }
+  };
+
+  // Don't render anything while loading or when no asset exists
+  if (loading || !asset) return null;
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  };
+
+  // Ready state
+  if (asset.status === "ready") {
+    return (
+      <div className="flex items-start gap-3 p-3 rounded-md border border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20">
+        <CheckCircle className="h-4 w-4 mt-0.5 text-green-600 dark:text-green-400 shrink-0" />
+        <div className="flex-1 min-w-0 space-y-1">
+          <p className="text-sm font-medium text-green-700 dark:text-green-300">
+            {t("logoAsset.statusReady")}
+          </p>
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+            <span>{t("logoAsset.fileSize")}: {formatFileSize(asset.fileSize)}</span>
+            {asset.width && asset.height && (
+              <span>{t("logoAsset.dimensions")}: {asset.width} x {asset.height}px</span>
+            )}
+            <span>{t("logoAsset.mimeType")}: {asset.mimeType}</span>
+          </div>
+        </div>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="shrink-0 text-destructive hover:text-destructive"
+              disabled={deleting}
+            >
+              {deleting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("common.delete")}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("logoAsset.deleteConfirm")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete}>
+                {t("common.delete")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    );
+  }
+
+  // Pending state
+  if (asset.status === "pending") {
+    return (
+      <div className="flex items-center gap-3 p-3 rounded-md border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20">
+        <Loader2 className="h-4 w-4 text-amber-600 dark:text-amber-400 animate-spin motion-reduce:animate-none shrink-0" />
+        <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+          {t("logoAsset.statusPending")}
+        </p>
+      </div>
+    );
+  }
+
+  // Failed state
+  return (
+    <div className="flex items-start gap-3 p-3 rounded-md border border-destructive/30 bg-destructive/5">
+      <AlertCircle className="h-4 w-4 mt-0.5 text-destructive shrink-0" />
+      <div className="flex-1 min-w-0 space-y-1">
+        <p className="text-sm font-medium text-destructive">
+          {t("logoAsset.statusFailed")}
+        </p>
+        {asset.errorMessage && (
+          <p className="text-xs text-muted-foreground">
+            {t("logoAsset.errorPrefix")}: {asset.errorMessage}
+          </p>
+        )}
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        className="shrink-0"
+        onClick={handleRedownload}
+        disabled={redownloading}
+      >
+        {redownloading ? (
+          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin motion-reduce:animate-none" />
+        ) : (
+          <RefreshCw className="h-3.5 w-3.5 mr-1" />
+        )}
+        {t("logoAsset.redownload")}
+      </Button>
     </div>
   );
 }
@@ -345,6 +571,16 @@ function AddCompany({
                   }}
                 />
                 {/* TODO: File upload integration point — add upload dropzone/button here */}
+
+                {/* CACHED LOGO STATUS — only in edit mode */}
+                {editCompany?.id && (
+                  <div className="mt-3">
+                    <LogoAssetStatus
+                      companyId={editCompany.id}
+                      onAssetDeleted={reloadCompanies}
+                    />
+                  </div>
+                )}
               </div>
               <div className="md:col-span-2 mt-4">
                 <DialogFooter

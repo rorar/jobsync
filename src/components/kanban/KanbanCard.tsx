@@ -98,6 +98,7 @@ export const KanbanCard = React.memo(function KanbanCard({ job, statusValue, isD
           <div className="flex items-center gap-1.5">
             <CompanyLogo
               logoUrl={job.Company?.logoUrl}
+              logoAssetId={job.Company?.logoAssetId}
               companyName={job.Company?.label ?? ""}
               size="sm"
             />
