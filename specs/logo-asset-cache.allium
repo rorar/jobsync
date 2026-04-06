@@ -1,0 +1,315 @@
+-- allium: 3
+-- logo-asset-cache.allium
+
+-- Scope: Local Logo Asset Cache — downloading, storing, serving and managing
+--        company logo images as local assets on the persistent volume.
+--        Triggered by enrichment events or manual URL changes.
+-- Includes: Download lifecycle, bounding-box resize, disk storage,
+--           serving priority, deletion, re-download on URL change,
+--           global size/dimension config
+-- Excludes:
+--   - Enrichment discovery (covered by data-enrichment.allium)
+--   - Module registration/lifecycle (covered by module-lifecycle.allium)
+--   - Folder icon generation (future extension point EP-1)
+--   - File Explorer integration (future extension point EP-2)
+--   - Wikipedia logo discovery module (future extension point EP-3)
+-- Dependencies:
+--   - Company from shared-entities.allium
+--   - EnrichmentCompleted event from data-enrichment.allium
+--   - EventBus from event-bus.allium
+--   - User, UserSettings from shared-entities.allium
+
+-- =============================================================================
+-- Actors
+-- =============================================================================
+
+actor User {
+  -- Configures logo asset limits (max size, max dimension).
+  -- Deletes logo assets from company edit UI.
+  -- Views locally-served logos in all company-displaying surfaces.
+}
+
+actor System {
+  -- Downloads logo images on enrichment events.
+  -- Resizes to fit bounding box. Stores on persistent volume.
+  -- Re-downloads when source URL changes.
+}
+
+-- =============================================================================
+-- Enumerations
+-- =============================================================================
+
+enum LogoAssetStatus {
+  pending             -- Download initiated, not yet complete
+  | ready             -- Image downloaded, processed, stored on disk
+  | failed            -- Download failed after validation/processing
+  -- Note: there is no "stale" status. Freshness is determined by
+  -- comparing sourceUrl against the latest enrichment result URL.
+  -- If they differ, a re-download is triggered.
+}
+
+-- =============================================================================
+-- External Entities
+-- =============================================================================
+
+external entity Company {
+  -- From shared-entities.allium.
+  -- Fields referenced: id, userId, logoUrl, logoAssetId
+  -- logoUrl: external URL from enrichment (existing field)
+  -- logoAssetId: FK to LogoAsset (new field, nullable)
+}
+
+external entity EnrichmentResult {
+  -- From data-enrichment.allium.
+  -- Fields referenced: dimension, data (JSON with logoUrl), userId, companyId
+}
+
+external entity EventBus {
+  -- From event-bus.allium.
+  -- LogoAssetSubscriber subscribes to EnrichmentCompleted.
+}
+
+-- =============================================================================
+-- Config
+-- =============================================================================
+
+config {
+  MAX_FILE_SIZE_BYTES: Integer = 524288
+    -- 512 KB. Maximum stored file size after resize and compression.
+    -- Configurable per user via UserSettings.logoAsset.maxFileSize.
+  MAX_DIMENSION_PX: Integer = 512
+    -- Bounding box: neither width nor height exceeds this value.
+    -- Aspect ratio preserved — wide logos stay wide.
+    -- Configurable per user via UserSettings.logoAsset.maxDimension.
+  DOWNLOAD_TIMEOUT_MS: Integer = 10000
+    -- Maximum time to download a single logo image.
+  STORAGE_BASE_PATH: String = "/data/logos"
+    -- Root directory for logo assets on disk.
+    -- Same Docker volume as the database (survives rebuilds).
+    -- Files stored at: {STORAGE_BASE_PATH}/{userId}/{companyId}.{ext}
+  ACCEPTED_MIME_TYPES: Set<String> = {
+    "image/png", "image/jpeg", "image/gif",
+    "image/webp", "image/svg+xml",
+    "image/x-icon", "image/vnd.microsoft.icon"
+  }
+    -- Only these content types are downloaded. Others are rejected.
+}
+
+-- =============================================================================
+-- Entity
+-- =============================================================================
+
+entity LogoAsset {
+  -- A locally-cached copy of a company logo image.
+  -- One per (userId, companyId) combination.
+  -- The master asset from which future derived formats (folder icons,
+  -- File Explorer thumbnails) will be generated.
+
+  id: String                              -- UUID
+  userId: String                          -- Owner (IDOR: all queries scoped by userId)
+  companyId: String                       -- FK to Company
+  sourceUrl: String                       -- The external URL that was downloaded.
+                                          -- Used to detect URL changes on re-enrichment.
+  filePath: String                        -- Absolute path on disk.
+                                          -- Constructed server-side: never from user input.
+                                          -- Pattern: {STORAGE_BASE_PATH}/{userId}/{companyId}.{ext}
+  mimeType: String                        -- MIME type of the stored file (e.g., "image/png")
+  fileSize: Integer                       -- Bytes on disk after processing
+  width: Integer?                         -- Pixels after resize. Null for SVG (vector).
+  height: Integer?                        -- Pixels after resize. Null for SVG (vector).
+  status: LogoAssetStatus
+
+  createdAt: DateTime = now()
+  updatedAt: DateTime                     -- Auto-updated on any change
+
+  @@unique(userId, companyId)
+  @@index(userId, status)
+}
+
+-- =============================================================================
+-- Invariants
+-- =============================================================================
+
+invariant LogoAssetOwnership {
+  -- Every LogoAsset query (read or write) MUST include userId in the
+  -- where clause. Never query by id alone. (ADR-015)
+  forall asset: LogoAsset =>
+    asset.query.where contains userId
+}
+
+invariant BoundingBoxPreservesAspectRatio {
+  -- When a raster image is resized, both dimensions fit within
+  -- config.MAX_DIMENSION_PX. The aspect ratio is preserved:
+  -- a 1200x400 logo at max 512px becomes 512x171, not 512x512.
+  forall asset: LogoAsset where asset.width != null =>
+    asset.width <= config.MAX_DIMENSION_PX
+    and asset.height <= config.MAX_DIMENSION_PX
+}
+
+invariant SvgNotResized {
+  -- SVG files are stored as-is. They have no pixel dimensions.
+  -- Width and height are null for SVGs.
+  forall asset: LogoAsset where asset.mimeType = "image/svg+xml" =>
+    asset.width = null and asset.height = null
+}
+
+invariant FilePathNeverFromUserInput {
+  -- filePath is always constructed server-side from userId + companyId.
+  -- User-supplied strings never influence the path (prevents traversal).
+  forall asset: LogoAsset =>
+    asset.filePath starts_with config.STORAGE_BASE_PATH
+}
+
+-- =============================================================================
+-- Rules
+-- =============================================================================
+
+rule DownloadOnEnrichment {
+  -- "When enrichment discovers a logo URL, download and store it locally."
+  when: event: EnrichmentCompleted
+    where event.dimension = logo
+
+  let enrichedUrl = parseLogoUrl(event.data)
+    -- Extract logoUrl from the JSON data payload.
+
+  let existingAsset = LogoAsset.find(userId: event.userId, companyId: event.companyId)
+
+  requires: enrichedUrl != null
+
+  -- Skip if we already have this exact URL cached and ready
+  guard: existingAsset = null
+    or existingAsset.sourceUrl != enrichedUrl
+    or existingAsset.status = failed
+
+  ensures:
+    1. LogoAsset.upserted(
+         userId: event.userId,
+         companyId: event.companyId,
+         sourceUrl: enrichedUrl,
+         status: pending
+       )
+    2. downloadAndProcess(enrichedUrl, event.userId, event.companyId)
+    3. if download succeeds:
+         LogoAsset.updated(status: ready, filePath: ..., mimeType: ..., fileSize: ..., width: ..., height: ...)
+         Company.updated(logoAssetId: asset.id)
+       else:
+         LogoAsset.updated(status: failed)
+         -- Company.logoUrl remains as external fallback. No user-visible error.
+
+  @guidance
+    -- Download is fire-and-forget from the event handler's perspective.
+    -- Failure is silent to the user — the CompanyLogo component falls
+    -- back to the external URL or initials.
+}
+
+rule ReDownloadOnUrlChange {
+  -- "When enrichment returns a different URL than what's cached, re-download."
+  -- This is handled by DownloadOnEnrichment's guard condition:
+  -- existingAsset.sourceUrl != enrichedUrl triggers re-processing.
+  -- The old file is deleted from disk before the new one is written.
+  -- No separate rule needed — DownloadOnEnrichment covers this case.
+
+  @guidance
+    -- On re-download: delete old file first, then download new.
+    -- If download fails, the old file is gone but Company.logoUrl
+    -- still provides the external fallback.
+}
+
+rule ManualUrlSync {
+  -- "When user saves a company with a changed logo URL, trigger download."
+  when: company: Company.logoUrl.changed
+    where change triggered by user action (not by enrichment writeback)
+
+  ensures: downloadAndProcess(company.logoUrl, company.userId, company.id)
+    -- Same download flow as DownloadOnEnrichment.
+    -- Creates or updates LogoAsset for this company.
+
+  @guidance
+    -- This covers: manual URL entry, Wikipedia URL resolution,
+    -- and any other UI-driven logo URL change.
+    -- The AddCompany form already triggers updateCompany() on save.
+    -- The download can be initiated as a side effect of the save action.
+}
+
+rule DeletionFromUI {
+  -- "User can delete a cached logo from the company edit dialog."
+  when: user: User requests logo asset deletion for company
+
+  requires: LogoAsset.exists(userId: user.id, companyId: company.id)
+
+  ensures:
+    1. File deleted from disk at LogoAsset.filePath
+    2. LogoAsset record deleted from database
+    3. Company.logoAssetId set to null
+    -- Company.logoUrl is NOT cleared — it remains as the external fallback.
+    -- UI falls back to external URL or initials.
+}
+
+-- =============================================================================
+-- Black Boxes
+-- =============================================================================
+
+-- Download and processing pipeline.
+-- Details are implementation-level but the contract is specified.
+ensures: downloadAndProcess(
+  considering: {
+    sourceUrl,                          -- URL to download from
+    config.DOWNLOAD_TIMEOUT_MS,         -- Abort after this duration
+    config.ACCEPTED_MIME_TYPES,         -- Reject non-image responses
+    config.MAX_DIMENSION_PX,            -- Bounding box for resize
+    config.MAX_FILE_SIZE_BYTES,         -- Max stored size
+    mimeType                            -- SVGs skip resize
+  }
+)
+  -- Validates content-type before reading body.
+  -- Raster images: resized to fit bounding box, preserving aspect ratio.
+  -- SVGs: stored as-is (no resize, width/height set to null).
+  -- If fileSize > MAX_FILE_SIZE_BYTES after resize, increase compression.
+  -- PNG with transparency: NOT converted to JPEG (preserves alpha).
+  -- On failure: returns error, caller sets status = failed.
+
+-- =============================================================================
+-- Surface: CompanyLogo Component
+-- =============================================================================
+
+surface CompanyLogo {
+  -- Rendering priority for company logos across all UI surfaces.
+  -- This surface is already implemented; this spec adds the local-first check.
+
+  priority:
+    1. Company.logoAssetId is set AND LogoAsset.status = ready
+       -> serve from local: /api/logos/{logoAssetId}
+    2. Company.logoUrl is set
+       -> serve from external URL (existing behavior)
+    3. Neither
+       -> show initials avatar (existing behavior)
+
+  @guidance
+    -- The /api/logos/{id} route serves the file with:
+    -- - Auth check: userId must match LogoAsset.userId
+    -- - Cache-Control: public, max-age=86400, immutable
+    -- - Correct Content-Type from LogoAsset.mimeType
+    -- - Content-Disposition: inline
+}
+
+-- =============================================================================
+-- Extension Points (future — declared for forward compatibility)
+-- =============================================================================
+
+-- EP-1: Folder Icon Generation
+-- Derive OS-specific folder icons from a ready LogoAsset.
+-- Formats: .ico (Windows, multi-size: 16/32/48/256), .icns (macOS).
+-- Trigger: LogoAsset transitions to ready -> generate derived formats.
+-- Storage: alongside master asset (e.g., {companyId}/folder.ico).
+-- Use case: network-mounted company folders display the company logo.
+
+-- EP-2: File Explorer Integration
+-- LogoAsset appears in the File Explorer UI as a browsable asset.
+-- Company folders use LogoAsset as their folder icon.
+-- Requires: File Explorer ROADMAP item implemented first.
+
+-- EP-3: Wikipedia Logo Discovery Module
+-- Enrichment module for the logo dimension fallback chain.
+-- Input: company domain. Output: Wikimedia Commons direct URL.
+-- Chain position: Clearbit -> Google Favicon -> Wikipedia -> Placeholder.
+-- Separate from URL normalization in logoCheck.actions.ts.
