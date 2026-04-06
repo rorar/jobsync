@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { CompanyLogo } from "@/components/ui/company-logo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useTranslations, formatDateShort } from "@/i18n";
@@ -67,13 +67,13 @@ export default function RecentCardToggle({
         {activeIndex === 0
           ? jobs.map((job) => (
               <div key={job.id} className="flex items-center gap-4">
-                <Avatar className="hidden h-8 w-8 sm:flex">
-                  <AvatarImage
-                    src={job.Company?.logoUrl || "/images/jobsync-logo.svg"}
-                    alt="Avatar"
+                <div className="hidden sm:flex">
+                  <CompanyLogo
+                    logoUrl={job.Company?.logoUrl}
+                    companyName={job.Company?.label || "?"}
+                    size="md"
                   />
-                  <AvatarFallback>JS</AvatarFallback>
-                </Avatar>
+                </div>
                 <Link href={`/dashboard/myjobs/${job?.id}`}>
                   <div className="grid gap-1">
                     <p className="text-sm font-medium leading-none">

@@ -16,6 +16,7 @@ import { toast } from "../ui/use-toast";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
 import { AlertDialog } from "@/models/alertDialog.model";
 import { useTranslations } from "@/i18n";
+import { CompanyLogo } from "@/components/ui/company-logo";
 
 type CompaniesTableProps = {
   companies: Company[];
@@ -90,11 +91,10 @@ function CompaniesTable({
             return (
               <TableRow key={company.id}>
                 <TableCell className="hidden sm:table-cell">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    alt="Company logo"
-                    className="w-8 h-8 rounded-md object-cover"
-                    src={company.logoUrl || "/images/jobsync-logo.svg"}
+                  <CompanyLogo
+                    logoUrl={company.logoUrl}
+                    companyName={company.label}
+                    size="md"
                   />
                 </TableCell>
                 <TableCell className="font-medium">{company.label}</TableCell>

@@ -123,7 +123,7 @@ export function CompanyLogo({
         width={sizeConfig.px}
         height={sizeConfig.px}
         className={cn(
-          "aspect-square h-full w-full object-cover transition-opacity motion-reduce:transition-none",
+          "aspect-square h-full w-full object-contain transition-opacity motion-reduce:transition-none",
           imageState === "loaded" ? "opacity-100" : "opacity-0",
         )}
         onLoad={handleLoad}
