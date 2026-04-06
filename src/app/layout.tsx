@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ErrorCaptureInit } from "@/components/ErrorCaptureInit";
 import { getUserLocale } from "@/i18n/server";
+import { LocaleProvider } from "@/i18n/locale-context";
 
 export const dynamic = "force-dynamic";
 
@@ -37,14 +38,16 @@ export default async function RootLayout({ children }: Readonly<Props>) {
         )}
       >
         {process.env.NODE_ENV === "development" && <ErrorCaptureInit />}
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          {children}
-        </ThemeProvider>
+        <LocaleProvider locale={locale}>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+          </ThemeProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

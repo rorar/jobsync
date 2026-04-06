@@ -14,6 +14,9 @@
 // ─── Translation (Client) ──────────────────────────────────────────
 export { useTranslations } from "./use-translations";
 
+// ─── Locale Context (SSR-safe locale propagation) ───────────────────
+export { LocaleProvider } from "./locale-context";
+
 // ─── Locale Utilities (client-safe, no server-only) ────────────────
 export {
   SUPPORTED_LOCALES,
