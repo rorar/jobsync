@@ -213,11 +213,40 @@ external entity Automation {
 -- Rules: Intake
 -- =============================================================================
 
-rule AutomatedVacancyIntake {
-  -- "When an automation discovers a vacancy, it is staged for review."
-  -- Called by the runner after connector.search() + optional AI matching.
+rule CollectOnlyMode {
+  -- "When AI scoring is disabled, all discovered vacancies go directly to
+  --  staging without match scores. No AI provider is contacted."
+  -- The runner checks matchThreshold before loading the AI model.
+  -- matchThreshold = 0 signals "collect only" mode (set by ToggleAiScoring
+  -- in automation-wizard.allium).
   when: AutomationRunCompleted(automationId: String, vacancies: DiscoveredVacancy[])
   let automation = Automation where id = automationId
+
+  requires: automation.matchThreshold = 0
+
+  for_each vacancy in vacancies:
+    ensures: StagedVacancy.created(
+      ...vacancy fields...,
+      matchScore: null,
+      matchData: null,
+      status: staged,
+      discoveredAt: now()
+    )
+
+  @guidance
+    -- This rule takes priority over AI-scored intake when matchThreshold = 0.
+    -- No model is loaded, no resume text is prepared, no LLM calls are made.
+    -- The user reviews all vacancies manually in the staging queue.
+    -- Dedup still applies (same as AutomatedVacancyIntake).
+}
+
+rule AutomatedVacancyIntake {
+  -- "When an automation discovers a vacancy, it is staged for review."
+  -- Called by the runner after connector.search() + AI matching.
+  -- Only applies when AI scoring is enabled (matchThreshold > 0).
+  when: AutomationRunCompleted(automationId: String, vacancies: DiscoveredVacancy[])
+  let automation = Automation where id = automationId
+  requires: automation.matchThreshold > 0
 
   for_each vacancy in vacancies:
     let dedupKey = DedupKey(userId: automation.userId, sourceBoard: vacancy.sourceBoard, externalId: vacancy.externalId)
