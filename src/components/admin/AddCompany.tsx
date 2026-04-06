@@ -25,6 +25,7 @@ import {
 import { Input } from "../ui/input";
 import { toast } from "../ui/use-toast";
 import { addCompany, updateCompany } from "@/actions/company.actions";
+import { checkLogoUrl } from "@/actions/logoCheck.actions";
 import { Company } from "@/models/job.model";
 import { useTranslations } from "@/i18n";
 
@@ -71,17 +72,21 @@ function LogoPreview({
   alt,
   noPreviewLabel,
   invalidUrlLabel,
+  notImageLabel,
 }: {
   url: string | undefined;
   alt: string;
   noPreviewLabel: string;
   invalidUrlLabel: string;
+  notImageLabel: string;
 }) {
   const [imgStatus, setImgStatus] = useState<"idle" | "loading" | "loaded" | "error">("idle");
+  const [serverContentType, setServerContentType] = useState<string | null>(null);
 
   useEffect(() => {
     if (!url) {
       setImgStatus("idle");
+      setServerContentType(null);
       return;
     }
     if (!isPlausibleImageUrl(url)) {
@@ -89,6 +94,20 @@ function LogoPreview({
       return;
     }
     setImgStatus("loading");
+    setServerContentType(null);
+
+    // Check content-type server-side in parallel with <img> load.
+    // Only used to enhance the error message if the <img> fails —
+    // never overrides a successful image load (CDNs may block server HEAD
+    // requests while serving images fine to browsers).
+    let cancelled = false;
+    checkLogoUrl(url).then((result) => {
+      if (cancelled) return;
+      if (!result.isImage && result.contentType) {
+        setServerContentType(result.contentType);
+      }
+    });
+    return () => { cancelled = true; };
   }, [url]);
 
   const handleLoad = useCallback(() => setImgStatus("loaded"), []);
@@ -108,11 +127,12 @@ function LogoPreview({
 
   // URL present but unsupported or image failed to load
   if (imgStatus === "error") {
+    const isNotImage = serverContentType?.startsWith("text/");
     return (
       <div className="flex items-center justify-center w-full h-24 rounded-md border border-dashed border-destructive/40 bg-destructive/5">
-        <div className="flex flex-col items-center gap-1 text-destructive text-sm">
+        <div className="flex flex-col items-center gap-1 text-destructive text-sm text-center px-4">
           <ImageIcon className="h-6 w-6" />
-          <span>{invalidUrlLabel}</span>
+          <span>{isNotImage ? notImageLabel : invalidUrlLabel}</span>
         </div>
       </div>
     );
@@ -293,6 +313,7 @@ function AddCompany({
                   alt={form.watch("company") || "Company logo"}
                   noPreviewLabel={t("admin.companyLogoNoPreview")}
                   invalidUrlLabel={t("admin.companyLogoInvalidUrl")}
+                  notImageLabel={t("admin.companyLogoNotImage")}
                 />
                 {/* TODO: File upload integration point — add upload dropzone/button here */}
               </div>
