@@ -120,7 +120,7 @@ function OccupationDetailPopover({ uri }: { uri: string }) {
             )}
             <div className="flex gap-2 pt-1 border-t">
               <a
-                href={escoOccupationUrl(uri, locale, details.title)}
+                href={escoOccupationUrl(uri, locale)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-xs text-primary hover:underline"
