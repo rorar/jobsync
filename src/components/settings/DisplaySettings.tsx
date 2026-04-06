@@ -90,9 +90,11 @@ function DisplaySettings() {
           variant: "success",
           title: t("settings.themeSaved"),
         });
-        // Reload to apply new locale to server-rendered components
+        // Reload to apply new locale to server-rendered components.
+        // Small delay lets the server action response stream finish,
+        // avoiding "Error in input stream" from aborting mid-response.
         if (data.locale !== document.documentElement.lang) {
-          window.location.reload();
+          setTimeout(() => window.location.reload(), 100);
         }
       } else {
         toast({
