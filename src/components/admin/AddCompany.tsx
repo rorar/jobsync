@@ -73,20 +73,24 @@ function LogoPreview({
   noPreviewLabel,
   invalidUrlLabel,
   notImageLabel,
+  onResolvedUrl,
 }: {
   url: string | undefined;
   alt: string;
   noPreviewLabel: string;
   invalidUrlLabel: string;
   notImageLabel: string;
+  onResolvedUrl?: (resolvedUrl: string) => void;
 }) {
   const [imgStatus, setImgStatus] = useState<"idle" | "loading" | "loaded" | "error">("idle");
   const [serverContentType, setServerContentType] = useState<string | null>(null);
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!url) {
       setImgStatus("idle");
       setServerContentType(null);
+      setResolvedUrl(null);
       return;
     }
     if (!isPlausibleImageUrl(url)) {
@@ -95,20 +99,23 @@ function LogoPreview({
     }
     setImgStatus("loading");
     setServerContentType(null);
+    setResolvedUrl(null);
 
     // Check content-type server-side in parallel with <img> load.
-    // Only used to enhance the error message if the <img> fails —
-    // never overrides a successful image load (CDNs may block server HEAD
-    // requests while serving images fine to browsers).
+    // Also resolves Wikipedia media page URLs to direct Wikimedia image URLs.
     let cancelled = false;
     checkLogoUrl(url).then((result) => {
       if (cancelled) return;
-      if (!result.isImage && result.contentType) {
+      if (result.resolvedUrl) {
+        setResolvedUrl(result.resolvedUrl);
+        // Auto-apply the resolved URL
+        onResolvedUrl?.(result.resolvedUrl);
+      } else if (!result.isImage && result.contentType) {
         setServerContentType(result.contentType);
       }
     });
     return () => { cancelled = true; };
-  }, [url]);
+  }, [url]); // eslint-disable-line react-hooks/exhaustive-deps -- onResolvedUrl is stable
 
   const handleLoad = useCallback(() => setImgStatus("loaded"), []);
   const handleError = useCallback(() => setImgStatus("error"), []);
@@ -314,6 +321,14 @@ function AddCompany({
                   noPreviewLabel={t("admin.companyLogoNoPreview")}
                   invalidUrlLabel={t("admin.companyLogoInvalidUrl")}
                   notImageLabel={t("admin.companyLogoNotImage")}
+                  onResolvedUrl={(resolved) => {
+                    form.setValue("logoUrl", resolved, { shouldDirty: true });
+                    toast({
+                      variant: "success",
+                      title: t("admin.companyLogoResolved"),
+                      description: t("admin.companyLogoResolvedDesc"),
+                    });
+                  }}
                 />
                 {/* TODO: File upload integration point — add upload dropzone/button here */}
               </div>
