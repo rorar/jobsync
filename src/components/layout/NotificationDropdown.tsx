@@ -49,26 +49,28 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
   const handleMarkAsRead = async (notificationId: string) => {
     const result = await markAsRead(notificationId);
     if (result.success) {
+      let unread = 0;
       setNotifications((prev) => {
         const updated = prev.map((n) =>
           n.id === notificationId ? { ...n, read: true } : n,
         );
-        const unread = updated.filter((n) => !n.read).length;
-        onCountChange?.(unread);
+        unread = updated.filter((n) => !n.read).length;
         return updated;
       });
+      onCountChange?.(unread);
     }
   };
 
   const handleDismiss = async (notificationId: string) => {
     const result = await dismissNotification(notificationId);
     if (result.success) {
+      let unread = 0;
       setNotifications((prev) => {
         const updated = prev.filter((n) => n.id !== notificationId);
-        const unread = updated.filter((n) => !n.read).length;
-        onCountChange?.(unread);
+        unread = updated.filter((n) => !n.read).length;
         return updated;
       });
+      onCountChange?.(unread);
     }
   };
 
