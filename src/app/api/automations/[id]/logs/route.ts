@@ -1,7 +1,12 @@
+import "server-only";
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import db from "@/lib/db";
 import { automationLogger } from "@/lib/automation-logger";
+
+// SSE route must never be statically rendered or cached
+export const dynamic = "force-dynamic";
 
 function createSSEErrorResponse(message: string): NextResponse {
   const encoder = new TextEncoder();

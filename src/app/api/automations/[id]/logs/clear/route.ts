@@ -1,7 +1,11 @@
+import "server-only";
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import db from "@/lib/db";
 import { automationLogger } from "@/lib/automation-logger";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(
   req: NextRequest,
