@@ -435,7 +435,6 @@ export function WizardShell({ wizard, resumes, editResumeTitle }: WizardShellPro
                 value={state.availableModules.find((m) => m.moduleId === state.jobBoard)?.name || state.jobBoard || "-"}
               />
               <ReviewKeywords
-                jobBoard={state.jobBoard}
                 keywords={state.form.getValues("keywords")}
                 hasWidgetOverride={!!KeywordsWidget}
               />
@@ -574,18 +573,17 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
 }
 
 function ReviewKeywords({
-  jobBoard,
   keywords,
   hasWidgetOverride,
 }: {
-  jobBoard: string;
   keywords: string;
   hasWidgetOverride: boolean;
 }) {
   const { t } = useTranslations();
 
-  // When widget override is present (e.g. EURES ESCO), keywords are ||-separated
-  if (hasWidgetOverride && keywords?.includes("||")) {
+  // When widget override is present (e.g. EURES ESCO), render keywords
+  // through EscoKeywordBadge which resolves URIs to "Title (Code)"
+  if (hasWidgetOverride) {
     return (
       <div className="flex justify-between items-start">
         <span className="text-muted-foreground">{t("automations.reviewKeywords")}</span>
