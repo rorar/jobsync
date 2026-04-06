@@ -9,6 +9,8 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
+import { logoAssetService } from "@/lib/assets/logo-asset-service";
+import fs from "fs/promises";
 
 export const getCompanyList = async (
   page: number = 1,
@@ -37,6 +39,7 @@ export const getCompanyList = async (
                 label: true,
                 value: true,
                 logoUrl: true,
+                logoAssetId: true,
                 createdBy: true,
                 _count: {
                   select: {
@@ -197,6 +200,12 @@ export const updateCompany = async (
       throw new Error("Company already exists!");
     }
 
+    // Detect logoUrl change for logo asset download trigger
+    const existingCompany = await prisma.company.findFirst({
+      where: { id, createdBy: user.id },
+      select: { logoUrl: true },
+    });
+
     // Ownership enforced at Prisma level, not via client-submitted createdBy
     const res = await prisma.company.update({
       where: {
@@ -209,6 +218,18 @@ export const updateCompany = async (
         logoUrl,
       },
     });
+
+    // If logoUrl changed and is non-empty, fire-and-forget download
+    if (logoUrl && logoUrl !== existingCompany?.logoUrl) {
+      logoAssetService
+        .downloadAndProcess(logoUrl, user.id, id)
+        .catch((error) => {
+          console.error(
+            "[updateCompany] Fire-and-forget logo download failed:",
+            error,
+          );
+        });
+    }
 
     return { success: true, data: res };
   } catch (error) {
@@ -277,6 +298,29 @@ export const deleteCompanyById = async (
       throw new Error(
         `Company cannot be deleted due to ${jobs} number of associated jobs! `,
       );
+    }
+
+    // Cleanup logo asset file before company deletion (disk + DB handled by cascade)
+    const logoAsset = await prisma.logoAsset.findFirst({
+      where: { companyId, userId: user.id },
+      select: { filePath: true },
+    });
+    if (logoAsset?.filePath) {
+      try {
+        await fs.unlink(logoAsset.filePath);
+        // Try to remove empty directories (company-level, then user-level)
+        const path = await import("path");
+        const companyDir = path.dirname(logoAsset.filePath);
+        try {
+          await fs.rmdir(companyDir);
+          const userDir = path.dirname(companyDir);
+          await fs.rmdir(userDir);
+        } catch {
+          // Directory not empty — expected
+        }
+      } catch {
+        // File already gone — proceed
+      }
     }
 
     const res = await prisma.company.delete({

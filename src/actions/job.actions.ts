@@ -653,6 +653,7 @@ export interface KanbanJob {
   title: string;
   company: string;
   companyLogoUrl: string | null;
+  companyLogoAssetId: string | null;
   location: string | null;
   matchScore: number | null;
   dueDate: Date | null;
@@ -826,7 +827,7 @@ export const getKanbanBoard = async (): Promise<ActionResult<KanbanBoard>> => {
       select: {
         id: true,
         JobTitle: { select: { label: true } },
-        Company: { select: { label: true, logoUrl: true } },
+        Company: { select: { label: true, logoUrl: true, logoAssetId: true } },
         Location: { select: { label: true } },
         Status: { select: { id: true, value: true, label: true } },
         matchScore: true,
@@ -851,6 +852,7 @@ export const getKanbanBoard = async (): Promise<ActionResult<KanbanBoard>> => {
         title: job.JobTitle.label,
         company: job.Company.label,
         companyLogoUrl: job.Company.logoUrl ?? null,
+        companyLogoAssetId: job.Company.logoAssetId ?? null,
         location: job.Location?.label ?? null,
         matchScore: job.matchScore,
         dueDate: job.dueDate,
