@@ -1104,3 +1104,74 @@ export const mockStagedVacancyReady: StagedVacancy = {
   status: "ready",
   matchScore: 92,
 };
+
+// ─── Logo Asset ───────────────────────────────────────────────────────────
+
+export interface LogoAssetFixture {
+  id: string;
+  userId: string;
+  companyId: string;
+  sourceUrl: string;
+  filePath: string;
+  mimeType: string;
+  fileSize: number;
+  width: number | null;
+  height: number | null;
+  status: string;
+  errorMessage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const mockLogoAsset: LogoAssetFixture = {
+  id: "logo-asset-fixture-id",
+  userId: mockUser.id,
+  companyId: mockCompany.id,
+  sourceUrl: "https://logo.clearbit.com/acme.com",
+  filePath: "/data/logos/logo-asset-fixture-id.png",
+  mimeType: "image/png",
+  fileSize: 24576,
+  width: 256,
+  height: 256,
+  status: "ready",
+  errorMessage: null,
+  createdAt: new Date("2026-04-06T10:00:00.000Z"),
+  updatedAt: new Date("2026-04-06T10:00:00.000Z"),
+};
+
+export const mockLogoAssetPending: LogoAssetFixture = {
+  ...mockLogoAsset,
+  id: "logo-asset-pending-id",
+  companyId: mockCompanySvgLogo.id,
+  sourceUrl: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+  filePath: "/data/logos/logo-asset-pending-id.png",
+  status: "pending",
+  fileSize: 0,
+  width: null,
+  height: null,
+};
+
+export const mockLogoAssetFailed: LogoAssetFixture = {
+  ...mockLogoAsset,
+  id: "logo-asset-failed-id",
+  companyId: mockCompanyNoLogo.id,
+  sourceUrl: "https://example.com/broken-logo.png",
+  filePath: "/data/logos/logo-asset-failed-id.png",
+  status: "failed",
+  errorMessage: "Download failed: 404 Not Found",
+  fileSize: 0,
+  width: null,
+  height: null,
+};
+
+export const mockLogoAssetSvg: LogoAssetFixture = {
+  ...mockLogoAsset,
+  id: "logo-asset-svg-id",
+  companyId: mockCompanySvgInline.id,
+  sourceUrl: "https://upload.wikimedia.org/wikipedia/commons/0/0e/Shopify_logo_2018.svg",
+  filePath: "/data/logos/logo-asset-svg-id.svg",
+  mimeType: "image/svg+xml",
+  fileSize: 4096,
+  width: null,
+  height: null,
+};

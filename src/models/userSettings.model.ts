@@ -43,18 +43,29 @@ export interface AutomationSettings {
   performanceWarningThreshold: number;
 }
 
+export interface LogoAssetConfig {
+  maxFileSize: number;    // Default: 524288 (512KB)
+  maxDimension: number;   // Default: 512px bounding box
+}
+
 export interface UserSettingsData {
   ai: AiSettings;
   display: DisplaySettings;
   developer?: DeveloperSettings;
   automation?: AutomationSettings;
   notifications?: NotificationPreferences;
+  logoAsset?: LogoAssetConfig;
 }
 
 export interface UserSettings {
   userId: string;
   settings: UserSettingsData;
 }
+
+export const defaultLogoAssetConfig: LogoAssetConfig = {
+  maxFileSize: 524288,   // 512KB
+  maxDimension: 512,     // 512px bounding box
+};
 
 export const defaultUserSettings: UserSettingsData = {
   ai: {

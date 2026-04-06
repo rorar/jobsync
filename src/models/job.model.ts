@@ -69,6 +69,7 @@ export interface Company {
   value: string;
   createdBy: string;
   logoUrl?: string | null;
+  logoAssetId?: string | null;
   _count?: {
     jobsApplied: number;
   };

@@ -46,6 +46,7 @@ model User {
   smtpConfig        SmtpConfig?
   vapidConfig          VapidConfig?
   webPushSubscriptions WebPushSubscription[]
+  LogoAsset            LogoAsset[]
 }
 
 model ApiKey {
@@ -249,6 +250,9 @@ model Company {
   value           String
   jobsApplied     Job[]
   logoUrl         String? // field is optional
+  logoAssetId     String?          @unique
+  logoAsset       LogoAsset?       @relation("CompanyActiveLogo", fields: [logoAssetId], references: [id], onDelete: SetNull)
+  logoAssets      LogoAsset[]      @relation("LogoAssetCompany")
   createdBy       String // userId
   user            User             @relation(fields: [createdBy], references: [id])
   workExperiences WorkExperience[]
@@ -725,4 +729,27 @@ model SmtpConfig {
   updatedAt   DateTime @updatedAt
 
   @@index([userId])
+}
+
+model LogoAsset {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  companyId    String
+  company      Company  @relation("LogoAssetCompany", fields: [companyId], references: [id], onDelete: Cascade)
+  sourceUrl    String
+  filePath     String
+  mimeType     String
+  fileSize     Int
+  width        Int?
+  height       Int?
+  status       String   @default("pending")  // "pending" | "ready" | "failed"
+  errorMessage String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  activeOnCompany Company? @relation("CompanyActiveLogo")
+
+  @@unique([userId, companyId])
+  @@index([userId, status])
 }
