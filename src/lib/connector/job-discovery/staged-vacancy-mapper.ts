@@ -16,7 +16,7 @@ interface StagedVacancyInput {
   applicationInstructions: string | null;
   source: string;
   automationId: string;
-  matchScore: number;
+  matchScore: number | null;
   matchData: string | null;
   status: string;
   discoveredAt: Date;
@@ -26,7 +26,7 @@ export function mapDiscoveredVacancyToStagedInput(params: {
   vacancy: DiscoveredVacancy;
   userId: string;
   automationId: string;
-  matchScore: number;
+  matchScore: number | null;
   matchData: string | null;
 }): StagedVacancyInput {
   const { vacancy, userId, automationId, matchScore, matchData } = params;

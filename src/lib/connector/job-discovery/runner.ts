@@ -399,12 +399,28 @@ export async function runAutomation(
     let jobsSaved = 0;
     let aiError: string | null = null;
 
-    const aiSettings = await getUserAiSettings(automation.userId);
-    const modelName = aiSettings.model || getDefaultModelForModule(aiSettings.moduleId);
-    const resolvedModel = await getModel(aiSettings.moduleId, modelName, automation.userId);
-    const resumeText = convertResumeForMatch(resume as ResumeWithSections);
+    // When AI scoring is disabled (matchThreshold === 0), skip AI matching entirely.
+    // All jobs go directly to staging without scores — the user reviews them manually.
+    const aiScoringEnabled = automation.matchThreshold > 0;
 
-    // JSearch returns full job details, no separate extraction needed
+    let resolvedModel: any = null;
+    let resumeText = "";
+    let aiSettings: any = null;
+    let modelName = "";
+
+    if (aiScoringEnabled) {
+      aiSettings = await getUserAiSettings(automation.userId);
+      modelName = aiSettings.model || getDefaultModelForModule(aiSettings.moduleId);
+      resolvedModel = await getModel(aiSettings.moduleId, modelName, automation.userId);
+      resumeText = convertResumeForMatch(resume as ResumeWithSections);
+    } else {
+      automationLogger.log(
+        automation.id,
+        "info",
+        "AI scoring disabled — saving all jobs to staging without match scores",
+      );
+    }
+
     for (const job of jobsToProcess) {
       automationLogger.log(
         automation.id,
@@ -415,46 +431,59 @@ export async function runAutomation(
       jobsProcessed++;
       reportRunProgress(automation.id, run.id, "match", { searched: jobsSearched, deduped: jobsDeduplicated, processed: jobsProcessed, matched: jobsMatched, saved: jobsSaved });
 
-      automationLogger.log(
-        automation.id,
-        "info",
-        `Analyzing job match for: ${job.title} (using ${aiSettings.moduleId}/${modelName})`,
-      );
+      let matchScore: number | null = null;
+      let matchData: string | null = null;
 
-      const matchResult = await matchJobToResume(
-        job,
-        resumeText,
-        resolvedModel,
-      );
-
-      if (!matchResult.success) {
-        if (matchResult.error === "ai_unavailable") {
-          aiError = `AI provider (${aiSettings.moduleId}) is not available. Please check your settings.`;
-          automationLogger.log(automation.id, "error", aiError);
-          break;
-        }
-        automationLogger.log(
-          automation.id,
-          "warning",
-          `AI matching failed: ${matchResult.error}`,
-        );
-        continue;
-      }
-
-      automationLogger.log(
-        automation.id,
-        "info",
-        `Match score: ${matchResult.score}% (threshold: ${automation.matchThreshold}%)`,
-        { score: matchResult.score, threshold: automation.matchThreshold },
-      );
-
-      if (matchResult.score < automation.matchThreshold) {
+      if (aiScoringEnabled) {
         automationLogger.log(
           automation.id,
           "info",
-          `Job skipped - score below threshold`,
+          `Analyzing job match for: ${job.title} (using ${aiSettings.moduleId}/${modelName})`,
         );
-        continue;
+
+        const matchResult = await matchJobToResume(
+          job,
+          resumeText,
+          resolvedModel,
+        );
+
+        if (!matchResult.success) {
+          if (matchResult.error === "ai_unavailable") {
+            aiError = `AI provider (${aiSettings.moduleId}) is not available. Please check your settings.`;
+            automationLogger.log(automation.id, "error", aiError);
+            break;
+          }
+          automationLogger.log(
+            automation.id,
+            "warning",
+            `AI matching failed: ${matchResult.error}`,
+          );
+          continue;
+        }
+
+        automationLogger.log(
+          automation.id,
+          "info",
+          `Match score: ${matchResult.score}% (threshold: ${automation.matchThreshold}%)`,
+          { score: matchResult.score, threshold: automation.matchThreshold },
+        );
+
+        if (matchResult.score < automation.matchThreshold) {
+          automationLogger.log(
+            automation.id,
+            "info",
+            `Job skipped - score below threshold`,
+          );
+          continue;
+        }
+
+        matchScore = matchResult.score;
+        matchData = JSON.stringify({
+          ...matchResult.data,
+          resumeId: resume.id,
+          resumeTitle: resume.title,
+          matchedAt: new Date().toISOString(),
+        });
       }
 
       jobsMatched++;
@@ -462,11 +491,10 @@ export async function runAutomation(
       automationLogger.log(
         automation.id,
         "success",
-        `Job matched! Saving to database...`,
-        {
-          title: job.title,
-          company: job.employerName,
-        },
+        aiScoringEnabled
+          ? `Job matched! Saving to database...`
+          : `Saving to staging queue...`,
+        { title: job.title, company: job.employerName },
       );
 
       try {
@@ -474,13 +502,8 @@ export async function runAutomation(
           vacancy: { ...job, sourceUrl: normalizeJobUrl(job.sourceUrl) },
           userId: automation.userId,
           automationId: automation.id,
-          matchScore: matchResult.score,
-          matchData: JSON.stringify({
-            ...matchResult.data,
-            resumeId: resume.id,
-            resumeTitle: resume.title,
-            matchedAt: new Date().toISOString(),
-          }),
+          matchScore,
+          matchData,
         });
 
         // Find-then-create-or-update: if same (userId, sourceBoard, externalId) exists
