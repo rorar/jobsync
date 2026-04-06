@@ -6,7 +6,7 @@
 --        Triggered by enrichment events or manual URL changes.
 -- Includes: Download lifecycle, bounding-box resize, disk storage,
 --           serving priority, deletion, re-download on URL change,
---           global size/dimension config
+--           global size/dimension config, SVG sanitization, SSRF protection
 -- Excludes:
 --   - Enrichment discovery (covered by data-enrichment.allium)
 --   - Module registration/lifecycle (covered by module-lifecycle.allium)
@@ -18,6 +18,7 @@
 --   - EnrichmentCompleted event from data-enrichment.allium
 --   - EventBus from event-bus.allium
 --   - User, UserSettings from shared-entities.allium
+--   - validateWebhookUrl from security-rules.allium (SSRF protection)
 
 -- =============================================================================
 -- Actors
@@ -31,8 +32,9 @@ actor User {
 
 actor System {
   -- Downloads logo images on enrichment events.
-  -- Resizes to fit bounding box. Stores on persistent volume.
-  -- Re-downloads when source URL changes.
+  -- Sanitizes SVGs. Resizes raster images to fit bounding box.
+  -- Stores on persistent volume. Re-downloads when source URL changes.
+  -- Cleans up on company deletion.
 }
 
 -- =============================================================================
@@ -77,6 +79,10 @@ config {
   MAX_FILE_SIZE_BYTES: Integer = 524288
     -- 512 KB. Maximum stored file size after resize and compression.
     -- Configurable per user via UserSettings.logoAsset.maxFileSize.
+  MAX_DOWNLOAD_BYTES: Integer = 1048576
+    -- 1 MB. Abort download if response body exceeds this before processing.
+    -- Safety margin above MAX_FILE_SIZE_BYTES to allow for resize headroom.
+    -- Prevents memory exhaustion from malicious/misconfigured servers.
   MAX_DIMENSION_PX: Integer = 512
     -- Bounding box: neither width nor height exceeds this value.
     -- Aspect ratio preserved — wide logos stay wide.
@@ -86,7 +92,8 @@ config {
   STORAGE_BASE_PATH: String = "/data/logos"
     -- Root directory for logo assets on disk.
     -- Same Docker volume as the database (survives rebuilds).
-    -- Files stored at: {STORAGE_BASE_PATH}/{userId}/{companyId}.{ext}
+    -- Directory-per-company layout for EP-1 compatibility:
+    -- {STORAGE_BASE_PATH}/{userId}/{companyId}/logo.{ext}
   ACCEPTED_MIME_TYPES: Set<String> = {
     "image/png", "image/jpeg", "image/gif",
     "image/webp", "image/svg+xml",
@@ -112,12 +119,14 @@ entity LogoAsset {
                                           -- Used to detect URL changes on re-enrichment.
   filePath: String                        -- Absolute path on disk.
                                           -- Constructed server-side: never from user input.
-                                          -- Pattern: {STORAGE_BASE_PATH}/{userId}/{companyId}.{ext}
+                                          -- Pattern: {STORAGE_BASE_PATH}/{userId}/{companyId}/logo.{ext}
   mimeType: String                        -- MIME type of the stored file (e.g., "image/png")
   fileSize: Integer                       -- Bytes on disk after processing
   width: Integer?                         -- Pixels after resize. Null for SVG (vector).
   height: Integer?                        -- Pixels after resize. Null for SVG (vector).
   status: LogoAssetStatus
+  errorMessage: String?                   -- Error detail when status = failed. Null on success.
+                                          -- Aids debugging; not shown to end users.
 
   createdAt: DateTime = now()
   updatedAt: DateTime                     -- Auto-updated on any change
@@ -146,9 +155,11 @@ invariant BoundingBoxPreservesAspectRatio {
     and asset.height <= config.MAX_DIMENSION_PX
 }
 
-invariant SvgNotResized {
-  -- SVG files are stored as-is. They have no pixel dimensions.
-  -- Width and height are null for SVGs.
+invariant SvgSanitized {
+  -- SVG files are sanitized before storage to prevent stored XSS.
+  -- Removed: <script>, event handlers (onload, onclick, etc.),
+  -- javascript: URIs, xlink:href to external resources, <foreignObject>.
+  -- SVGs have no pixel dimensions (width/height = null).
   forall asset: LogoAsset where asset.mimeType = "image/svg+xml" =>
     asset.width = null and asset.height = null
 }
@@ -158,6 +169,23 @@ invariant FilePathNeverFromUserInput {
   -- User-supplied strings never influence the path (prevents traversal).
   forall asset: LogoAsset =>
     asset.filePath starts_with config.STORAGE_BASE_PATH
+}
+
+invariant DownloadUrlValidation {
+  -- The sourceUrl MUST pass SSRF validation before any fetch is performed.
+  -- Uses validateWebhookUrl() or equivalent: blocks private IPs (RFC 1918),
+  -- IMDS (169.254.*), localhost (127.*, ::1), non-http(s) schemes,
+  -- embedded credentials, and IPv6 private ranges.
+  -- Applies to both enrichment-sourced and user-supplied URLs.
+  forall asset: LogoAsset =>
+    asset.sourceUrl passes validateWebhookUrl()
+}
+
+invariant MagicByteValidation {
+  -- Content-Type header alone is not trusted. After download, the first
+  -- bytes of the file are checked against known magic byte signatures
+  -- to confirm the actual format matches the declared MIME type.
+  -- Mismatches are rejected (status = failed).
 }
 
 -- =============================================================================
@@ -172,34 +200,43 @@ rule DownloadOnEnrichment {
   let enrichedUrl = parseLogoUrl(event.data)
     -- Extract logoUrl from the JSON data payload.
 
-  let existingAsset = LogoAsset.find(userId: event.userId, companyId: event.companyId)
+  -- EnrichmentCompleted carries domainKey (not companyId directly).
+  -- Resolve companyId from the EnrichmentResult linked to this event,
+  -- or look up Company by domainKey + userId.
+  let company = resolveCompany(event.userId, event.domainKey)
 
-  requires: enrichedUrl != null
+  requires: enrichedUrl != null and company != null
 
-  -- Skip if we already have this exact URL cached and ready
+  let existingAsset = LogoAsset.find(userId: event.userId, companyId: company.id)
+
+  -- Skip if we already have this exact URL cached and ready,
+  -- or if a download is already in progress (prevents concurrent downloads).
   guard: existingAsset = null
-    or existingAsset.sourceUrl != enrichedUrl
+    or (existingAsset.sourceUrl != enrichedUrl and existingAsset.status != pending)
     or existingAsset.status = failed
 
   ensures:
     1. LogoAsset.upserted(
          userId: event.userId,
-         companyId: event.companyId,
+         companyId: company.id,
          sourceUrl: enrichedUrl,
-         status: pending
+         status: pending,
+         errorMessage: null
        )
-    2. downloadAndProcess(enrichedUrl, event.userId, event.companyId)
+    2. downloadAndProcess(enrichedUrl, event.userId, company.id)
     3. if download succeeds:
          LogoAsset.updated(status: ready, filePath: ..., mimeType: ..., fileSize: ..., width: ..., height: ...)
          Company.updated(logoAssetId: asset.id)
        else:
-         LogoAsset.updated(status: failed)
+         LogoAsset.updated(status: failed, errorMessage: ...)
          -- Company.logoUrl remains as external fallback. No user-visible error.
 
   @guidance
     -- Download is fire-and-forget from the event handler's perspective.
     -- Failure is silent to the user — the CompanyLogo component falls
     -- back to the external URL or initials.
+    -- The resolveCompany step uses EnrichmentResult.companyId if available,
+    -- otherwise looks up Company by domain matching on userId.
 }
 
 rule ReDownloadOnUrlChange {
@@ -245,6 +282,22 @@ rule DeletionFromUI {
     -- UI falls back to external URL or initials.
 }
 
+rule CleanupOnCompanyDeletion {
+  -- "When a company is deleted, clean up its logo asset."
+  when: company: Company.deleted
+
+  let asset = LogoAsset.find(userId: company.userId, companyId: company.id)
+
+  guard: asset != null
+
+  ensures:
+    1. File deleted from disk at asset.filePath
+       -- Also delete the company directory if empty (EP-1 compat).
+    2. LogoAsset record deleted from database
+       -- Prisma onDelete cascade handles the DB record if configured,
+       -- but the disk file requires explicit cleanup.
+}
+
 -- =============================================================================
 -- Black Boxes
 -- =============================================================================
@@ -255,18 +308,28 @@ ensures: downloadAndProcess(
   considering: {
     sourceUrl,                          -- URL to download from
     config.DOWNLOAD_TIMEOUT_MS,         -- Abort after this duration
+    config.MAX_DOWNLOAD_BYTES,          -- Abort if body exceeds this during streaming
     config.ACCEPTED_MIME_TYPES,         -- Reject non-image responses
     config.MAX_DIMENSION_PX,            -- Bounding box for resize
     config.MAX_FILE_SIZE_BYTES,         -- Max stored size
-    mimeType                            -- SVGs skip resize
+    mimeType                            -- SVGs get sanitized, not resized
   }
 )
-  -- Validates content-type before reading body.
-  -- Raster images: resized to fit bounding box, preserving aspect ratio.
-  -- SVGs: stored as-is (no resize, width/height set to null).
-  -- If fileSize > MAX_FILE_SIZE_BYTES after resize, increase compression.
-  -- PNG with transparency: NOT converted to JPEG (preserves alpha).
-  -- On failure: returns error, caller sets status = failed.
+  -- 1. SSRF validation: sourceUrl passes validateWebhookUrl() before fetch.
+  -- 2. Fetch with redirect: "manual" — reject redirects to prevent SSRF
+  --    via open redirect. If 3xx received, follow only if Location also
+  --    passes validateWebhookUrl(). Max 3 redirects.
+  -- 3. Content-Type header check: must be in ACCEPTED_MIME_TYPES.
+  -- 4. Streaming body read with abort at MAX_DOWNLOAD_BYTES.
+  -- 5. Magic byte validation: first bytes match declared MIME type.
+  -- 6. SVG: sanitize (strip <script>, event handlers, javascript: URIs,
+  --    xlink:href external refs, <foreignObject>). Store sanitized SVG.
+  --    Width/height set to null.
+  -- 7. Raster: resize to fit bounding box, preserving aspect ratio.
+  --    PNG with transparency: NOT converted to JPEG (preserves alpha).
+  --    If fileSize > MAX_FILE_SIZE_BYTES after resize, increase compression.
+  -- 8. Write to disk at {STORAGE_BASE_PATH}/{userId}/{companyId}/logo.{ext}
+  -- 9. On failure: return error with message, caller sets status = failed.
 
 -- =============================================================================
 -- Surface: CompanyLogo Component
@@ -289,6 +352,8 @@ surface CompanyLogo {
     -- - Auth check: userId must match LogoAsset.userId
     -- - Cache-Control: public, max-age=86400, immutable
     -- - Correct Content-Type from LogoAsset.mimeType
+    -- - SVGs served with Content-Security-Policy: sandbox (defense-in-depth
+    --   alongside sanitization — belt and suspenders)
     -- - Content-Disposition: inline
 }
 
@@ -300,12 +365,15 @@ surface CompanyLogo {
 -- Derive OS-specific folder icons from a ready LogoAsset.
 -- Formats: .ico (Windows, multi-size: 16/32/48/256), .icns (macOS).
 -- Trigger: LogoAsset transitions to ready -> generate derived formats.
--- Storage: alongside master asset (e.g., {companyId}/folder.ico).
+-- Storage: same company directory: {companyId}/folder.ico, folder.icns
+--          (directory-per-company layout adopted in this spec for compatibility).
 -- Use case: network-mounted company folders display the company logo.
+-- desktop.ini / Icon\r file generation for automatic OS icon display.
 
 -- EP-2: File Explorer Integration
 -- LogoAsset appears in the File Explorer UI as a browsable asset.
 -- Company folders use LogoAsset as their folder icon.
+-- LogoAsset metadata (dimensions, size, source) visible in file details panel.
 -- Requires: File Explorer ROADMAP item implemented first.
 
 -- EP-3: Wikipedia Logo Discovery Module
@@ -313,3 +381,5 @@ surface CompanyLogo {
 -- Input: company domain. Output: Wikimedia Commons direct URL.
 -- Chain position: Clearbit -> Google Favicon -> Wikipedia -> Placeholder.
 -- Separate from URL normalization in logoCheck.actions.ts.
+-- Note: Wikimedia API has strict user-agent requirements and rate limits.
+-- The module must set a descriptive User-Agent header and respect rate limits.
