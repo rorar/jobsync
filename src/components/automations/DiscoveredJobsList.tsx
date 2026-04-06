@@ -125,6 +125,11 @@ export function DiscoveredJobsList({
           <TableBody>
             {jobs.map((job) => {
               const isLoading = loadingAction === job.id;
+              // StagedVacancy uses flat strings; DiscoveredJob uses relations
+              const jobTitle = (job as any).JobTitle?.label ?? (job as any).title ?? "—";
+              const companyName = (job as any).Company?.label ?? (job as any).employerName ?? "—";
+              const locationName = (job as any).Location?.label ?? (job as any).location ?? null;
+              const sourceUrl = job.jobUrl ?? (job as any).sourceUrl ?? null;
 
               return (
                 <TableRow key={job.id}>
@@ -134,11 +139,11 @@ export function DiscoveredJobsList({
                         className="font-medium hover:underline cursor-pointer"
                         onClick={() => onViewDetails?.(job)}
                       >
-                        {job.JobTitle.label}
+                        {jobTitle}
                       </span>
-                      {job.jobUrl && (
+                      {sourceUrl && (
                         <a
-                          href={job.jobUrl}
+                          href={sourceUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-muted-foreground hover:text-foreground"
@@ -151,19 +156,23 @@ export function DiscoveredJobsList({
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-muted-foreground" />
-                      {job.Company.label}
+                      {companyName}
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-muted-foreground" />
-                      {job.Location?.label || "N/A"}
+                      {locationName || "N/A"}
                     </div>
                   </TableCell>
                   <TableCell className="text-center">
-                    <Badge variant={getScoreBadgeVariant(job.matchScore ?? 0)}>
-                      {job.matchScore ?? 0}%
-                    </Badge>
+                    {job.matchScore != null ? (
+                      <Badge variant={getScoreBadgeVariant(job.matchScore)}>
+                        {job.matchScore}%
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge
