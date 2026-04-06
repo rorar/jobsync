@@ -176,6 +176,24 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **Allium Spec:** `specs/data-enrichment.allium` — authoritative specification for all enrichment rules.
 
+### Logo Asset Cache (Local Logo Storage)
+
+**Domain Area:** `src/lib/assets/` — asset management (download, store, serve). Separate from enrichment (which discovers URLs). File Explorer will later live alongside it.
+
+**LogoAssetService** (`src/lib/assets/logo-asset-service.ts`) — `globalThis` singleton. Downloads logo images from enriched URLs, validates (SSRF, content-type, magic bytes), sanitizes SVGs, stores on persistent Docker volume at `/data/logos/{userId}/{companyId}/logo.{ext}`.
+
+**LogoAssetSubscriber** (`src/lib/assets/logo-asset-subscriber.ts`) — EventBus consumer for `EnrichmentCompleted` (logo dimension). Resolves companyId from domainKey, guards against duplicates, fires download as fire-and-forget.
+
+**Serving:** `GET /api/logos/[id]` — authenticated file serving with `Cache-Control: public, max-age=86400, immutable`, ETag, CSP sandbox for SVGs.
+
+**CompanyLogo Priority:** logoAssetId (local) → logoUrl (external) → initials avatar.
+
+**Server Actions:** `src/actions/logoAsset.actions.ts` — deleteLogoAsset, getLogoAssetForCompany, triggerLogoDownload.
+
+**Security:** SSRF validation (validateWebhookUrl) on all downloads + redirects. SVG sanitization (strip scripts, handlers, external refs). Magic byte validation. CSP sandbox on SVG serving. IDOR via userId in all queries.
+
+**Allium Spec:** `specs/logo-asset-cache.allium` — authoritative specification for all logo asset rules.
+
 ### Scheduler Coordination (ROADMAP 0.10)
 
 **RunCoordinator** (`src/lib/scheduler/run-coordinator.ts`) — Single entry point for ALL automation runs (scheduler + manual). Uses in-memory mutex per automationId to prevent double-execution.
