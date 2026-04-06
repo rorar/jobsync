@@ -476,6 +476,65 @@ POST /api/automations/[id]/run   Scheduler cron (hourly)
 
 **Cross-Refs:** Vorbereitung für 0.9 (bypassCache via RunOptions), 8.4 (RunCoordinator Interface → TaskQueue Adapter)
 
+### 0.11 Logo Asset Cache (Lokale Logo-Speicherung) -- DONE
+Firmenlogos werden beim Enrichment lokal heruntergeladen und auf dem persistenten Docker-Volume gespeichert. Reduziert externe Requests, eliminiert Abhängigkeit von Drittanbieter-Verfügbarkeit und schafft die Grundlage für Ordner-Icons und File Explorer.
+
+**Implementiert (2026-04-06):**
+- ✅ `LogoAsset` Prisma-Model + `Company.logoAssetId` Relation
+- ✅ Domänenbereich: `src/lib/assets/` (LogoAssetService Singleton, Subscriber, SVG-Sanitizer, Magic-Bytes-Validator, Image-Processor)
+- ✅ Download-Pipeline: SSRF-Validierung (validateWebhookUrl) → Fetch mit sicherer Redirect-Verfolgung (max. 3 Hops) → Content-Type + Magic-Bytes-Prüfung → SVG-Sanitisierung → Speicherung auf Disk
+- ✅ SVG-Sanitizer: Entfernt `<script>`, `<foreignObject>`, Event-Handler, `javascript:`-URIs, externe Referenzen. `data:`-URIs auf `image/*`-MIME-Typen beschränkt.
+- ✅ API-Route `/api/logos/[id]`: Authentifizierte Dateiauslieferung mit Cache-Control, ETag, CSP-Sandbox für SVGs
+- ✅ CompanyLogo Zwei-Slot-Fallback: Lokales Asset → Externe URL → Initialen-Avatar
+- ✅ AddCompany-Statusanzeige: Zeigt Bereit/Ausstehend/Fehlgeschlagen mit Löschen- und Erneut-Herunterladen-Buttons
+- ✅ LogoAssetSettings: Konfigurierbare Max-Dateigröße (512KB) und Max-Dimension (512px Bounding-Box)
+- ✅ Event-Subscriber: EnrichmentCompleted (Logo-Dimension) → automatischer Download (Fire-and-Forget)
+- ✅ Manuelle URL-Synchronisation: updateCompany erkennt logoUrl-Änderung → löst Download aus
+- ✅ Aufräumen bei Unternehmens-Löschung: Prisma-Cascade + Disk-Datei-Entfernung
+- ✅ Wikipedia-URL-Resolver: Löst Wikipedia-Medienseiten-URLs automatisch in direkte Wikimedia-Commons-Bild-Links auf
+- ✅ Logo-URL-Content-Type-Prüfung: Serverseitige HEAD-Anfrage erkennt Nicht-Bild-URLs
+- ✅ i18n: logoAsset-Dictionary in allen 4 Locales (EN, DE, FR, ES)
+- ✅ 101 Tests (4 Suites)
+- ✅ Allium Spec: `specs/logo-asset-cache.allium`
+
+**Architektur:**
+```
+EnrichmentCompleted Event (Logo-Dimension)
+        │
+        ▼
+  LogoAssetSubscriber (src/lib/assets/)
+        │
+        ├─ companyId aus domainKey + userId auflösen
+        ├─ SSRF-Validierung (validateWebhookUrl)
+        ├─ Download mit redirect:"manual" (max. 3 Hops)
+        ├─ Content-Type + Magic-Bytes-Prüfung
+        ├─ SVG: Sanitisierung / Raster: Dimensionen lesen
+        ├─ Speicherung: /data/logos/{userId}/{companyId}/logo.{ext}
+        ├─ LogoAsset-Upsert (status: ready)
+        └─ Company.logoAssetId setzen
+
+  CompanyLogo-Komponente
+        │
+        ├─ logoAssetId gesetzt → /api/logos/{id} (lokal)
+        ├─ logoUrl gesetzt     → externe URL (Fallback)
+        └─ Nichts              → Initialen-Avatar
+```
+
+**Sicherheit:**
+- SSRF: validateWebhookUrl auf alle Downloads + Redirect-Hops
+- SVG-XSS: Sanitizer + CSP-Sandbox bei Auslieferung (Belt-and-Suspenders)
+- MIME-Spoofing: Magic-Bytes-Validierung (Datei-Header muss zum Content-Type passen)
+- Pfad-Traversal: filePath nur aus UUIDs konstruiert, nie aus User-Input
+- IDOR: userId in allen Queries (ADR-015)
+- Download-DoS: 1MB Streaming-Limit, 10s Timeout
+
+**Erweiterungspunkte (future):**
+- **EP-1: Ordner-Icon-Generierung** — OS-spezifische Ordner-Icons (.ico/.icns) aus LogoAsset ableiten. Für netzwerkgemountete Unternehmensordner. Speicherung: `{companyId}/folder.ico`, `folder.icns`
+- **EP-2: File Explorer Integration** — LogoAsset als durchsuchbares Asset im File Explorer. Unternehmensordner zeigen Logo als Ordner-Icon. Setzt File Explorer Implementierung voraus.
+- **EP-3: Wikipedia Logo Discovery Modul** — Enrichment-Modul für Logo-Dimension-Fallback-Chain. Input: Firmendomain → Output: Wikimedia Commons URL. Chain: Clearbit → Google Favicon → **Wikipedia** → Placeholder. Wikimedia-API erfordert User-Agent-Header und Rate Limits.
+
+**Cross-Refs:** Nutzt 1.13 Data Enrichment Events, 0.10 EventBus. Vorbereitung für File Explorer (2.x), Ordner-Icons (EP-1), Wikipedia-Modul (EP-3).
+
 ---
 
 ## 1. Connectors
@@ -649,7 +708,7 @@ Anreicherung von Unternehmens-, Kontakt- und Bewerbungsdaten aus externen Quelle
 - DataEnrichmentConnector Interface + Fallback-Chain-Orchestrator
 - 3 Module: Clearbit Logo (free), Google Favicon, Meta/OpenGraph Parser
 - EnrichmentResult Cache (TTL, stale-if-error) + EnrichmentLog Audit Trail
-- CompanyLogo Komponente (Skeleton → Image → Initials Fallback)
+- CompanyLogo Komponente (Skeleton → Image → Initials Fallback) → erweitert in 0.11 mit lokalem Zwei-Slot-Fallback
 - EnrichmentModuleSettings in Settings (Activation Toggles)
 - Domain Events: EnrichmentCompleted, EnrichmentFailed
 - i18n: enrichment Namespace in 4 Locales
