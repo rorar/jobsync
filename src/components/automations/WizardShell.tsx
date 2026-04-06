@@ -57,6 +57,7 @@ import {
   Play,
 } from "lucide-react";
 import { parseKeywords, parseLocations } from "@/utils/automation.utils";
+import { EscoKeywordBadge } from "@/components/ui/esco-keyword-badge";
 import { DynamicParamsForm } from "@/components/automations/DynamicParamsForm";
 import { resolveWidgetOverrides } from "@/components/automations/widget-registry";
 import type { UseAutomationWizardReturn } from "@/components/automations/useAutomationWizard";
@@ -590,9 +591,7 @@ function ReviewKeywords({
         <span className="text-muted-foreground">{t("automations.reviewKeywords")}</span>
         <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
           {parseKeywords(keywords).map((kw) => (
-            <Badge key={kw} variant="secondary">
-              {kw}
-            </Badge>
+            <EscoKeywordBadge key={kw} keyword={kw} />
           ))}
         </div>
       </div>

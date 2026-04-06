@@ -198,6 +198,7 @@ export const automations = {
     "automations.iscoGroup": "ISCO Group:",
     "automations.escoPortal": "ESCO Portal",
     "automations.euresJobs": "EURES Jobs",
+    "automations.loadingOccupation": "Loading...",
 
     // EuresLocationCombobox - InfoTooltip
     "automations.tooltipCountryCodes": "Country Codes",
@@ -608,6 +609,7 @@ export const automations = {
     "automations.iscoGroup": "ISCO-Gruppe:",
     "automations.escoPortal": "ESCO-Portal",
     "automations.euresJobs": "EURES-Jobs",
+    "automations.loadingOccupation": "Laden...",
 
     // EuresLocationCombobox - InfoTooltip
     "automations.tooltipCountryCodes": "Ländercodes",
@@ -1018,6 +1020,7 @@ export const automations = {
     "automations.iscoGroup": "Groupe ISCO :",
     "automations.escoPortal": "Portail ESCO",
     "automations.euresJobs": "Emplois EURES",
+    "automations.loadingOccupation": "Chargement...",
 
     // EuresLocationCombobox - InfoTooltip
     "automations.tooltipCountryCodes": "Codes pays",
@@ -1428,6 +1431,7 @@ export const automations = {
     "automations.iscoGroup": "Grupo ISCO:",
     "automations.escoPortal": "Portal ESCO",
     "automations.euresJobs": "Empleos EURES",
+    "automations.loadingOccupation": "Cargando...",
 
     // EuresLocationCombobox - InfoTooltip
     "automations.tooltipCountryCodes": "Códigos de país",

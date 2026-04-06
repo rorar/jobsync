@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/tooltip";
 import { parseKeywords, parseLocations } from "@/utils/automation.utils";
 import { LocationBadge } from "@/components/ui/location-badge";
+import { EscoKeywordBadge } from "@/components/ui/esco-keyword-badge";
 import { RunStatusBadge } from "@/components/automations/RunStatusBadge";
 import type { AutomationWithResume } from "@/models/automation.model";
 
@@ -66,9 +67,7 @@ export function AutomationDetailHeader({
             <span className="font-medium text-foreground">{t("automations.keywords")}:</span>
             {parseKeywords(automation.keywords)
               .map((kw: string) => (
-                <Badge key={kw} variant="secondary" className="text-xs">
-                  {kw}
-                </Badge>
+                <EscoKeywordBadge key={kw} keyword={kw} />
               ))}
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">

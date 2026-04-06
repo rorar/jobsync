@@ -1,8 +1,15 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-04-05
+# Bug Tracker — Collected 2026-03-24, Updated 2026-04-06
 
-**Total: 323 bugs found, 321 fixed, 2 open (accepted risk)**
+**Total: 324 bugs found, 322 fixed, 2 open (accepted risk)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing)
+
+## ESCO Occupation URI Persistence Fix (2026-04-06)
+
+### Fixed — ESCO URIs not persisted (1 finding)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| ESCO-1 | **CRITICAL** | EuresOccupationCombobox stored ESCO title as keyword instead of URI; EURES connector searched by free-text instead of occupationUris filter | Store URI as keyword value, resolve titles for display via ESCO details API; chips show "Title (Code)" not raw URI; new EscoKeywordBadge component for list/detail/review display |
 
 ## S5b-Resume Review Findings (2026-04-05)
 

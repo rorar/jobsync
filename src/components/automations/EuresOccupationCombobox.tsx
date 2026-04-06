@@ -172,6 +172,9 @@ export function EuresOccupationCombobox({
     new Map(),
   );
 
+  // Track whether we have resolved URI keywords on mount
+  const resolvedRef = useRef(false);
+
   // Parse keywords from field value (separated by ||)
   const selectedKeywords = useMemo(() => {
     if (!field.value) return [];
@@ -180,6 +183,43 @@ export function EuresOccupationCombobox({
       .map((k) => k.trim())
       .filter(Boolean);
   }, [field.value]);
+
+  // Resolve ESCO URIs to metadata on mount/edit (when keywords contain URIs)
+  useEffect(() => {
+    if (resolvedRef.current) return;
+    const uriKeywords = selectedKeywords.filter((k) =>
+      k.startsWith("http://data.europa.eu/esco/"),
+    );
+    if (uriKeywords.length === 0) return;
+    resolvedRef.current = true;
+
+    // Fetch details for each URI keyword to populate escoMeta
+    Promise.all(
+      uriKeywords.map(async (uri) => {
+        try {
+          const res = await fetch(
+            `/api/esco/details?uri=${encodeURIComponent(uri)}`,
+          );
+          const data = await res.json();
+          if (data.title) {
+            return [
+              uri,
+              { uri, title: data.title, code: data.code ?? "" } as EscoSearchResult,
+            ] as const;
+          }
+        } catch {
+          // Ignore individual failures
+        }
+        return null;
+      }),
+    ).then((entries) => {
+      const newMeta = new Map(escoMeta);
+      for (const entry of entries) {
+        if (entry) newMeta.set(entry[0], entry[1]);
+      }
+      setEscoMeta(newMeta);
+    });
+  }, [selectedKeywords]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isMaxReached = selectedKeywords.length >= MAX_KEYWORDS;
 
@@ -275,16 +315,21 @@ export function EuresOccupationCombobox({
   // Build chip items with optional ESCO detail action
   const chipItems: ChipItem[] = selectedKeywords.map((keyword) => {
     const meta = escoMeta.get(keyword);
+    const isEscoUri = keyword.startsWith("http://data.europa.eu/esco/");
+    const displayLabel = meta
+      ? (meta.code ? `${meta.title} (${meta.code})` : meta.title)
+      : (isEscoUri ? t("automations.loadingOccupation") : keyword);
     return {
       value: keyword,
-      label: keyword,
-      action: meta ? <OccupationDetailPopover uri={meta.uri} /> : undefined,
+      label: displayLabel,
+      action: isEscoUri ? <OccupationDetailPopover uri={keyword} /> : undefined,
+      editable: !isEscoUri, // ESCO URI chips cannot be inline-edited
     };
   });
 
-  // Filter out already-selected results
+  // Filter out already-selected results (compare by URI since we store URIs)
   const filteredResults = results.filter(
-    (r) => !selectedKeywords.includes(r.title),
+    (r) => !selectedKeywords.includes(r.uri),
   );
 
   return (
@@ -372,7 +417,7 @@ export function EuresOccupationCombobox({
                       <CommandItem
                         key={result.uri}
                         onSelect={() => {
-                          addKeyword(result.title, result);
+                          addKeyword(result.uri, result);
                           setInputValue("");
                           setResults([]);
                         }}

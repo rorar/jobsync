@@ -51,6 +51,7 @@ import {
 } from "@/actions/automation.actions";
 import Link from "next/link";
 import { LocationBadge } from "@/components/ui/location-badge";
+import { EscoKeywordBadge } from "@/components/ui/esco-keyword-badge";
 import { RunStatusBadge } from "@/components/automations/RunStatusBadge";
 import { useSchedulerStatus } from "@/hooks/use-scheduler-status";
 import { parseKeywords, parseLocations } from "@/utils/automation.utils";
@@ -221,9 +222,7 @@ export function AutomationList({
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium text-foreground">{t("automations.keywords")}:</span>
                       {keywordChips.map((keyword, idx) => (
-                        <Badge key={idx} variant="secondary" className="text-xs">
-                          {keyword}
-                        </Badge>
+                        <EscoKeywordBadge key={idx} keyword={keyword} />
                       ))}
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">

@@ -143,18 +143,25 @@ export function createEuresConnector(): DataSourceConnector {
           ? requiredLanguagesRaw.split(",").map((s: string) => s.trim()).filter(Boolean)
           : [];
 
+        // Separate ESCO occupation URIs from free-text keywords.
+        // The EuresOccupationCombobox stores ESCO URIs as keywords,
+        // but the EURES API needs them in occupationUris, not in keywords.
+        const allKeywords = parseKeywords(params.keywords);
+        const escoUriPrefix = "http://data.europa.eu/esco/";
+        const occupationUris = allKeywords.filter((k) => k.startsWith(escoUriPrefix));
+        const freeTextKeywords = allKeywords.filter((k) => !k.startsWith(escoUriPrefix));
+
         const RESULTS_PER_PAGE = 50;
         const baseBody: EuresSearchRequest = {
           resultsPerPage: RESULTS_PER_PAGE,
           page: 1,
           sortSearch,
-          keywords: parseKeywords(params.keywords)
-            .map((keyword) => ({
+          keywords: freeTextKeywords.map((keyword) => ({
               keyword,
               specificSearchCode: "EVERYWHERE" as const,
             })),
           publicationPeriod,
-          occupationUris: [],
+          occupationUris,
           skillUris: [],
           requiredExperienceCodes,
           positionScheduleCodes,

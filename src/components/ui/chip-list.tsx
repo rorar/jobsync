@@ -11,6 +11,8 @@ export interface ChipItem {
   icon?: React.ReactNode;
   /** Optional action button rendered after the label (e.g., detail/link icon) */
   action?: React.ReactNode;
+  /** Per-item override: false prevents editing this specific chip even when list is editable */
+  editable?: boolean;
 }
 
 interface ChipListProps {
@@ -33,6 +35,8 @@ export function ChipList({
 
   const startEdit = (item: ChipItem) => {
     if (!editable || !onEdit) return;
+    // Per-item editable override: skip if explicitly set to false
+    if (item.editable === false) return;
     setEditingValue(item.value);
     setEditText(item.label);
   };
@@ -73,6 +77,8 @@ export function ChipList({
           );
         }
 
+        const itemEditable = editable && item.editable !== false;
+
         return (
           <Badge
             key={item.value}
@@ -81,12 +87,12 @@ export function ChipList({
           >
             {item.icon}
             <span
-              className={editable ? "cursor-pointer hover:underline" : undefined}
+              className={itemEditable ? "cursor-pointer hover:underline" : undefined}
               onClick={() => startEdit(item)}
-              role={editable ? "button" : undefined}
-              tabIndex={editable ? 0 : undefined}
+              role={itemEditable ? "button" : undefined}
+              tabIndex={itemEditable ? 0 : undefined}
               onKeyDown={
-                editable
+                itemEditable
                   ? (e) => {
                       if (e.key === "Enter") startEdit(item);
                     }
