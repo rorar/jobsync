@@ -1,5 +1,55 @@
 # Changelog
 
+## [2026-04-06] Logo Asset Cache + Dev Environment Fixes
+
+### Added — Logo Asset Cache (new feature)
+- **Local logo caching**: logos downloaded on enrichment, stored on persistent Docker volume
+- **LogoAsset Prisma model**: id, userId, companyId, sourceUrl, filePath, mimeType, fileSize, width?, height?, status, errorMessage?
+- **Download pipeline**: SSRF validation (validateWebhookUrl) → fetch with safe redirect following (max 3 hops) → content-type + magic byte validation → SVG sanitization → disk storage
+- **SVG sanitizer**: strips `<script>`, `<foreignObject>`, event handlers, `javascript:` URIs, external refs. `data:` URIs restricted to image/* MIME types only.
+- **Magic byte validator**: confirms file header matches declared Content-Type (PNG, JPEG, GIF, WebP, SVG, ICO)
+- **Image dimension reader**: reads width/height from binary headers (no native dependencies)
+- **API route** `/api/logos/[id]`: authenticated file serving with Cache-Control, ETag, CSP sandbox for SVGs
+- **CompanyLogo two-slot fallback**: local asset → external URL → initials avatar
+- **AddCompany status banner**: shows ready/pending/failed state with delete + re-download buttons
+- **LogoAssetSettings**: configurable max file size (512KB) and max dimension (512px bounding box)
+- **Event subscriber**: EnrichmentCompleted (logo dimension) → auto-download fire-and-forget
+- **Manual URL sync**: updateCompany detects logoUrl change → triggers download
+- **Company deletion cleanup**: Prisma cascade + disk file removal
+- **Wikipedia URL resolver**: auto-resolves Wikipedia media page URLs to direct Wikimedia Commons image links via API
+- **Logo URL content-type check**: server-side HEAD request detects non-image URLs (shows "URL points to a webpage, not an image")
+- **i18n**: logoAsset dictionary in all 4 locales (EN, DE, FR, ES)
+
+### Added — Tests (+101 tests)
+- `magic-bytes.spec.ts` — 22 tests (format detection, mismatches, edge cases)
+- `svg-sanitizer.spec.ts` — 32 tests (XSS vectors, passthrough, combined attacks)
+- `image-processor.spec.ts` — 25 tests (PNG/JPEG/GIF/WebP header parsing)
+- `logoAsset.actions.spec.ts` — 22 tests (CRUD, IDOR, fire-and-forget)
+
+### Fixed — Dev Environment
+- **SSR hydration mismatch**: `useTranslations()` fell back to "en" during SSR. Added `LocaleProvider` context that carries server-resolved locale into client components.
+- **SSE TDZ crash**: `cleanup()` in automation logs route referenced `const interval/timeout` before initialization. Declared as `let` at top of scope.
+- **SSE missing directives**: added `import "server-only"` + `export const dynamic = "force-dynamic"` to automation logs routes
+- **NotificationDropdown setState-during-render**: moved `onCountChange` calls outside setState updater
+- **allowedDevOrigins format**: Next.js 15 App Router expects bare hostnames, not full URLs. Auto-strips protocols/ports in UI + env-sync. Updated all descriptions/placeholders.
+- **CompanyLogo scaling**: `object-cover` → `object-contain` (no cropping, SVGs scale properly)
+- **CompaniesTable + RecentCardToggle**: migrated from raw `<img>` / `Avatar` to `CompanyLogo` component
+
+### Fixed — Security (from architect review)
+- SVG `data:` URIs restricted to `image/*` MIME types only (blocks `data:text/html` XSS)
+- Magic bytes: `<?xml` alone no longer triggers SVG detection (requires `<svg`)
+- `deleteAsset` uses `deleteMany` with userId (ADR-015 compliance)
+
+### Fixed — Performance (from performance review)
+- Kanban board query missing `logoAssetId` → added to select, type, and component wiring
+- `getStorageBase()` cached at module init (was calling `statSync` on every download)
+
+### Updated — Specs & Docs
+- `specs/logo-asset-cache.allium` — new Allium spec for logo asset rules
+- `docs/superpowers/specs/2026-04-06-logo-asset-cache-design.md` — design specification (rev 2)
+- `CLAUDE.md` — added Logo Asset Cache section under Connector Architecture
+- Project roadmap memory updated with committed feature + extension points
+
 ## [2026-04-05] Session S5b-Resume — Comprehensive Review + Fixes
 
 ### Fixed — Critical
