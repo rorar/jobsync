@@ -1,11 +1,12 @@
 "use client";
-import { Loader } from "lucide-react";
+import { ExternalLink, Loader } from "lucide-react";
 import { Button } from "../ui/button";
 import { useForm } from "react-hook-form";
 import { CreateResumeFormSchema } from "@/models/createResumeForm.schema";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useTransition } from "react";
+import { useEffect, useRef, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   Dialog,
   DialogContent,
@@ -44,8 +45,12 @@ function CreateResume({
 }: CreateResumeProps) {
   const [isPending, startTransition] = useTransition();
   const { t } = useTranslations();
+  const router = useRouter();
+  const shouldOpenAfterSave = useRef(false);
 
-  const pageTitle = resumeToEdit ? "Edit Resume Title" : "Create Resume";
+  const pageTitle = resumeToEdit
+    ? t("profile.editResumeTitle")
+    : t("profile.createResume");
 
   const form = useForm<z.infer<typeof CreateResumeFormSchema>>({
     resolver: zodResolver(CreateResumeFormSchema),
@@ -94,18 +99,23 @@ function CreateResume({
           description: response?.message,
         });
       } else {
+        const newId = (response.data as any)?.id;
         reset();
         setResumeDialogOpen(false);
         reloadResumes();
-        if ((response.data as any)?.id) {
-          setNewResumeId((response.data as any)?.id);
+        if (newId) {
+          setNewResumeId(newId);
         }
         toast({
           variant: "success",
-          description: `Resume title has been ${
-            resumeToEdit ? "updated" : "created"
-          } successfully`,
+          description: resumeToEdit
+            ? t("profile.resumeUpdated")
+            : t("profile.resumeCreated"),
         });
+        if (shouldOpenAfterSave.current && newId) {
+          router.push(`/dashboard/profile/resume/${newId}`);
+        }
+        shouldOpenAfterSave.current = false;
       }
     });
   };
@@ -116,7 +126,7 @@ function CreateResume({
         <DialogHeader>
           <DialogTitle>{pageTitle}</DialogTitle>
           <DialogDescription className="sr-only">
-            {resumeToEdit ? "Edit resume title and upload a new file" : "Create a new resume with a title and file upload"}
+            {resumeToEdit ? t("profile.editResumeDesc") : t("profile.createResumeDesc")}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -134,11 +144,11 @@ function CreateResume({
                 name="title"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Resume Title</FormLabel>
+                    <FormLabel>{t("profile.resumeTitle")}</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
-                        placeholder="Ex: Full Stack Developer Angular, Java"
+                        placeholder={t("profile.resumeTitlePlaceholder")}
                         data-testid="resume-title-input"
                       />
                     </FormControl>
@@ -161,7 +171,7 @@ function CreateResume({
                 name="file"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Upload Resume (Optional)</FormLabel>
+                    <FormLabel>{t("profile.uploadResumeOptional")}</FormLabel>
                     <FormControl>
                       <Input
                         type="file"
@@ -192,13 +202,24 @@ function CreateResume({
                     className="mt-2 md:mt-0 w-full"
                     onClick={closeDialog}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                 </div>
                 <Button type="submit" disabled={!isValid}>
-                  Save
+                  {t("common.save")}
                   {isPending && <Loader className="h-4 w-4 shrink-0 spinner" />}
                 </Button>
+                {!resumeToEdit && (
+                  <Button
+                    type="submit"
+                    disabled={!isValid}
+                    onClick={() => { shouldOpenAfterSave.current = true; }}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-1" />
+                    {t("profile.saveAndOpen")}
+                    {isPending && <Loader className="h-4 w-4 shrink-0 spinner" />}
+                  </Button>
+                )}
               </DialogFooter>
             </div>
           </form>
