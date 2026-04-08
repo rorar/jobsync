@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Building2, Calendar, Banknote } from "lucide-react";
+import { MapPin, Building2, Calendar, Banknote, Sparkles } from "lucide-react";
 import { useTranslations, formatDateShort } from "@/i18n";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 import type { ExitDirection } from "@/hooks/useDeckStack";
@@ -114,8 +114,13 @@ export function DeckCard({
             <MatchScoreRing score={vacancy.matchScore} />
           </div>
         ) : (
-          <Badge variant="secondary" className="text-xs">
-            {t("common.na")}
+          <Badge
+            variant="secondary"
+            className="text-xs inline-flex items-center gap-1 cursor-help"
+            title={t("deck.noScoreHint")}
+          >
+            <Sparkles className="h-3 w-3" aria-hidden="true" />
+            --
           </Badge>
         )}
       </div>

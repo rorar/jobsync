@@ -66,11 +66,14 @@ describe("DeckCard", () => {
     expect(svgEl?.textContent).toBe("85");
   });
 
-  it("renders N/A badge when matchScore is null", () => {
+  it("renders scoring placeholder with tooltip when matchScore is null", () => {
     const vacancy = makeVacancy({ matchScore: null });
     render(<DeckCard vacancy={vacancy} />);
 
-    expect(screen.getByText("N/A")).toBeInTheDocument();
+    expect(screen.getByText("--")).toBeInTheDocument();
+    // Badge should have a title tooltip
+    const badge = screen.getByText("--").closest("[title]");
+    expect(badge).toBeInTheDocument();
   });
 
   it("renders automation source line", () => {
