@@ -402,6 +402,28 @@ describe("EuresConnector.getDetails", () => {
     expect(result.error.type).toBe("network");
     expect((result.error as { message: string }).message).toContain("timed out");
   });
+
+  it("passes requestLang from options to the detail API URL", async () => {
+    mockResilientFetch.mockResolvedValueOnce(makeVacancyDetail());
+
+    await connector.getDetails!("jv-detail-001", { language: "de" });
+
+    expect(mockResilientFetch).toHaveBeenCalledWith(
+      expect.stringContaining("requestLang=de"),
+      expect.anything(),
+    );
+  });
+
+  it("defaults requestLang to en when no options provided", async () => {
+    mockResilientFetch.mockResolvedValueOnce(makeVacancyDetail());
+
+    await connector.getDetails!("jv-detail-001");
+
+    expect(mockResilientFetch).toHaveBeenCalledWith(
+      expect.stringContaining("requestLang=en"),
+      expect.anything(),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

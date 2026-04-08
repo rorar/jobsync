@@ -377,7 +377,8 @@ export async function runAutomation(
       for (let i = 0; i < jobsToProcess.length; i++) {
         const job = jobsToProcess[i];
         if (!job.externalId) continue;
-        const detail = await connector.getDetails(job.externalId);
+        const detailLang = searchParams.connectorParams?.language as string | undefined;
+        const detail = await connector.getDetails(job.externalId, { language: detailLang });
         if (detail.success) {
           jobsToProcess[i] = { ...job, ...detail.data, sourceUrl: job.sourceUrl };
         }

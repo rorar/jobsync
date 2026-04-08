@@ -270,6 +270,7 @@ export function createArbeitsagenturConnector(): DataSourceConnector {
 
     async getDetails(
       externalId: string,
+      _options?: import("../../types").GetDetailsOptions,
     ): Promise<ConnectorResult<DiscoveredVacancy>> {
       try {
         const url = `${DETAIL_URL}/${encodeURIComponent(externalId)}`;

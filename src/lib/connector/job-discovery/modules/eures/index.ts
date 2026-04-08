@@ -258,10 +258,11 @@ export function createEuresConnector(): DataSourceConnector {
 
     async getDetails(
       externalId: string,
+      options?: import("../../types").GetDetailsOptions,
     ): Promise<ConnectorResult<DiscoveredVacancy>> {
       try {
-        // requestLang query param ensures the API returns the vacancy in the requested language
-        const detailUrl = `${EURES_DETAIL_URL}/${encodeURIComponent(externalId)}?requestLang=en`;
+        const lang = options?.language ?? "en";
+        const detailUrl = `${EURES_DETAIL_URL}/${encodeURIComponent(externalId)}?requestLang=${encodeURIComponent(lang)}`;
         const detail = await resilientFetch<EuresVacancyDetail>(
           detailUrl,
           {
@@ -270,7 +271,7 @@ export function createEuresConnector(): DataSourceConnector {
           },
         );
 
-        return { success: true, data: translateDetail(detail, "en") };
+        return { success: true, data: translateDetail(detail, lang) };
       } catch (error) {
         if (error instanceof EuresApiError) {
           if (error.status === 429) {

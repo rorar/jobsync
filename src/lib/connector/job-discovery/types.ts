@@ -32,10 +32,15 @@ export interface SearchParams {
   connectorParams?: Record<string, unknown>;
 }
 
+export interface GetDetailsOptions {
+  /** Preferred response language (ISO 639-1, e.g. "de", "fr"). Defaults to "en". */
+  language?: string;
+}
+
 export interface DataSourceConnector {
   readonly id: string;
   readonly name: string;
   readonly requiresApiKey: boolean;
   search(params: SearchParams): Promise<ConnectorResult<DiscoveredVacancy[]>>;
-  getDetails?(externalId: string): Promise<ConnectorResult<DiscoveredVacancy>>;
+  getDetails?(externalId: string, options?: GetDetailsOptions): Promise<ConnectorResult<DiscoveredVacancy>>;
 }
