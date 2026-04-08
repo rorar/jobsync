@@ -15,6 +15,8 @@ import { useTranslations, formatRelativeTime } from "@/i18n";
 import type { Notification, NotificationType } from "@/models/notification.model";
 import Link from "next/link";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 interface NotificationItemProps {
   notification: Notification;
   onMarkAsRead: (id: string) => void;
@@ -79,7 +81,7 @@ function getNotificationLink(
   if (notification.type === "vacancy_promoted") {
     const data = parseNotificationData(notification.data);
     const jobId = data?.jobId;
-    if (typeof jobId === "string" && jobId) {
+    if (typeof jobId === "string" && UUID_RE.test(jobId)) {
       return { href: `/dashboard/myjobs/${jobId}`, labelKey: "notifications.viewJob" };
     }
   }
@@ -144,6 +146,7 @@ export function NotificationItem({
               href={link.href}
               className="text-xs text-muted-foreground hover:underline hover:text-foreground"
               onClick={(e) => e.stopPropagation()}
+              aria-label={t("notifications.viewAutomation")}
             >
               →
             </Link>
@@ -156,15 +159,15 @@ export function NotificationItem({
             onClick={(e) => e.stopPropagation()}
           >
             {t(link.labelKey)}
-            <ExternalLink className="h-3 w-3" />
+            <ExternalLink className="h-3 w-3" aria-hidden="true" />
           </Link>
         )}
       </div>
-      <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6"
+          className="h-8 w-8"
           onClick={(e) => {
             e.stopPropagation();
             onDismiss(notification.id);

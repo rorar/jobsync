@@ -15,6 +15,7 @@ import {
   archiveStagedVacancy,
   trashStagedVacancy,
   restoreFromTrash,
+  promoteStagedVacancyToJob,
 } from "@/actions/stagedVacancy.actions";
 import { addBlacklistEntry } from "@/actions/companyBlacklist.actions";
 import { toast } from "@/components/ui/use-toast";
@@ -39,7 +40,7 @@ import { BulkActionBar } from "./BulkActionBar";
 import { StagingNewItemsBanner } from "./StagingNewItemsBanner";
 import { ViewModeToggle, getPersistedViewMode } from "./ViewModeToggle";
 import type { ViewMode } from "./ViewModeToggle";
-import { DeckView } from "./DeckView";
+import { DeckView, AUTO_APPROVE_KEY } from "./DeckView";
 import { useStagingActions } from "@/hooks/useStagingActions";
 import type { DeckAction } from "@/hooks/useDeckStack";
 import type {
@@ -242,7 +243,7 @@ function StagingContainer() {
       } else if (action === "promote" || action === "superlike") {
         // Check auto-approve preference
         const autoApprove = (() => {
-          try { return localStorage.getItem("jobsync_deck_auto_approve") === "true"; }
+          try { return localStorage.getItem(AUTO_APPROVE_KEY) === "true"; }
           catch (e) {
             console.warn("[StagingContainer] Failed to read auto-approve preference:", e);
             return false;
@@ -251,7 +252,6 @@ function StagingContainer() {
 
         if (autoApprove) {
           // Skip dialog — promote immediately with defaults
-          const { promoteStagedVacancyToJob } = await import("@/actions/stagedVacancy.actions");
           const { success, message } = await promoteStagedVacancyToJob({
             stagedVacancyId: vacancy.id,
           });

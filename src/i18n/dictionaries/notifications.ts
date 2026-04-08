@@ -16,6 +16,7 @@ export const notifications = {
     "notifications.jobStatusChanged": "Job status changed to {newStatus}",
     "notifications.dismiss": "Dismiss",
     "notifications.viewJob": "View job",
+    "notifications.viewAutomation": "View automation",
   },
   de: {
     "notifications.title": "Benachrichtigungen",
@@ -34,6 +35,7 @@ export const notifications = {
     "notifications.jobStatusChanged": "Job-Status geändert zu {newStatus}",
     "notifications.dismiss": "Verwerfen",
     "notifications.viewJob": "Job ansehen",
+    "notifications.viewAutomation": "Automatisierung ansehen",
   },
   fr: {
     "notifications.title": "Notifications",
@@ -52,6 +54,7 @@ export const notifications = {
     "notifications.jobStatusChanged": "Statut de l'emploi changé en {newStatus}",
     "notifications.dismiss": "Ignorer",
     "notifications.viewJob": "Voir l'emploi",
+    "notifications.viewAutomation": "Voir l'automatisation",
   },
   es: {
     "notifications.title": "Notificaciones",
@@ -70,5 +73,6 @@ export const notifications = {
     "notifications.jobStatusChanged": "Estado del empleo cambiado a {newStatus}",
     "notifications.dismiss": "Descartar",
     "notifications.viewJob": "Ver empleo",
+    "notifications.viewAutomation": "Ver automatización",
   },
 } as const;

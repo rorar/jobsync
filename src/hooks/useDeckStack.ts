@@ -105,9 +105,11 @@ export function useDeckStack({
         const result = await actionPromise;
 
         if (result.success) {
-          // Normal flow: advance to next card, push undo, update stats
-          const entry: UndoEntry = { vacancy, action, index };
-          setUndoStack((prev) => [entry, ...prev].slice(0, MAX_UNDO_STACK));
+          // Skip has no server-side effect — don't add to undo stack
+          if (action !== "skip") {
+            const entry: UndoEntry = { vacancy, action, index };
+            setUndoStack((prev) => [entry, ...prev].slice(0, MAX_UNDO_STACK));
+          }
 
           setStats((prev) => ({
             ...prev,
