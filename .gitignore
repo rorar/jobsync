@@ -55,6 +55,7 @@ dev.db-journal
 /blob-report/
 /playwright/.cache/
 data/files/resumes
+data/logos
 .github/*
 !.github/workflows
 .claude/settings.local.json
