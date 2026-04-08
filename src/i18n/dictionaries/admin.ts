@@ -46,6 +46,9 @@ export const admin = {
     "admin.skillDeleted": "Skill deleted successfully",
     "admin.skillInUse": "Skill in use",
     "admin.skillInUseDesc": "Cannot delete a skill that is used by jobs or questions.",
+    "admin.companyLogo": "Company Logo",
+    "admin.companyDeleted": "Company has been deleted successfully",
+    "admin.appliedJobsExistDeleteDesc": "Associated jobs applied must be 0 to be able to delete this company",
   },
   de: {
     "admin.companies": "Unternehmen",
@@ -94,6 +97,9 @@ export const admin = {
     "admin.skillDeleted": "Fähigkeit erfolgreich gelöscht",
     "admin.skillInUse": "Fähigkeit in Verwendung",
     "admin.skillInUseDesc": "Eine Fähigkeit, die von Jobs oder Fragen verwendet wird, kann nicht gelöscht werden.",
+    "admin.companyLogo": "Unternehmenslogo",
+    "admin.companyDeleted": "Unternehmen wurde erfolgreich gelöscht",
+    "admin.appliedJobsExistDeleteDesc": "Die zugehörigen Bewerbungen müssen 0 sein, um dieses Unternehmen löschen zu können",
   },
   fr: {
     "admin.companies": "Entreprises",
@@ -142,6 +148,9 @@ export const admin = {
     "admin.skillDeleted": "Compétence supprimée avec succès",
     "admin.skillInUse": "Compétence utilisée",
     "admin.skillInUseDesc": "Impossible de supprimer une compétence utilisée par des emplois ou des questions.",
+    "admin.companyLogo": "Logo de l'entreprise",
+    "admin.companyDeleted": "Entreprise supprimée avec succès",
+    "admin.appliedJobsExistDeleteDesc": "Les candidatures associées doivent être à 0 pour pouvoir supprimer cette entreprise",
   },
   es: {
     "admin.companies": "Empresas",
@@ -190,5 +199,8 @@ export const admin = {
     "admin.skillDeleted": "Habilidad eliminada con éxito",
     "admin.skillInUse": "Habilidad en uso",
     "admin.skillInUseDesc": "No se puede eliminar una habilidad utilizada por empleos o preguntas.",
+    "admin.companyLogo": "Logo de la empresa",
+    "admin.companyDeleted": "Empresa eliminada con éxito",
+    "admin.appliedJobsExistDeleteDesc": "Las solicitudes asociadas deben ser 0 para poder eliminar esta empresa",
   },
 } as const;

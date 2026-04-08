@@ -126,12 +126,10 @@ export function DiscoveredJobsList({
           <TableBody>
             {jobs.map((job) => {
               const isLoading = loadingAction === job.id;
-              // StagedVacancy uses flat strings; DiscoveredJob uses relations
-              const jobTitle = (job as any).JobTitle?.label ?? (job as any).title ?? "—";
-              const companyName = (job as any).Company?.label ?? (job as any).employerName ?? "—";
-              const locationName = (job as any).Location?.label ?? (job as any).location ?? null;
-              const rawSourceUrl = job.jobUrl ?? (job as any).sourceUrl ?? null;
-              const sourceUrl = rawSourceUrl ? euresJobDetailUrl(rawSourceUrl, locale) : null;
+              const jobTitle = job.title ?? "—";
+              const companyName = job.employerName ?? "—";
+              const locationName = job.location ?? null;
+              const sourceUrl = job.sourceUrl ? euresJobDetailUrl(job.sourceUrl, locale) : null;
 
               return (
                 <TableRow key={job.id}>
@@ -179,21 +177,21 @@ export function DiscoveredJobsList({
                   <TableCell>
                     <Badge
                       variant={
-                        job.discoveryStatus === "accepted"
+                        job.status === "ready"
                           ? "default"
-                          : job.discoveryStatus === "dismissed"
+                          : job.status === "dismissed"
                             ? "secondary"
                             : "outline"
                       }
                     >
-                      {job.discoveryStatus}
+                      {job.status}
                     </Badge>
                   </TableCell>
                   <TableCell>
                     {job.discoveredAt ? formatDateShort(new Date(job.discoveredAt), locale) : "-"}
                   </TableCell>
                   <TableCell className="text-right">
-                    {job.discoveryStatus === "new" && (
+                    {job.status === "staged" && (
                       <div className="flex justify-end gap-2">
                         <Button
                           size="sm"

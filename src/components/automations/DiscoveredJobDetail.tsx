@@ -48,7 +48,7 @@ export function DiscoveredJobDetail({
 
   if (!job) return null;
 
-  const jobUrl = job.jobUrl ? euresJobDetailUrl(job.jobUrl, locale) : job.jobUrl;
+  const jobUrl = job.sourceUrl ? euresJobDetailUrl(job.sourceUrl, locale) : null;
 
   const handleAccept = async () => {
     setLoadingAction("accept");
@@ -91,7 +91,7 @@ export function DiscoveredJobDetail({
       <DialogContent className="max-w-2xl max-h-[90vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {job.JobTitle.label}
+            {job.title}
             {jobUrl && (
               <a
                 href={jobUrl}
@@ -106,11 +106,11 @@ export function DiscoveredJobDetail({
           <DialogDescription className="flex items-center gap-4">
             <span className="flex items-center gap-1">
               <Building2 className="h-4 w-4" />
-              {job.Company.label}
+              {job.employerName ?? "N/A"}
             </span>
             <span className="flex items-center gap-1">
               <MapPin className="h-4 w-4" />
-              {job.Location?.label || "N/A"}
+              {job.location ?? "N/A"}
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -121,7 +121,7 @@ export function DiscoveredJobDetail({
               <Badge variant="default" className="text-lg px-3 py-1">
                 {job.matchScore}% Match
               </Badge>
-              <Badge variant="outline">{job.discoveryStatus}</Badge>
+              <Badge variant="outline">{job.status}</Badge>
               {job.automation && (
                 <span className="text-sm text-muted-foreground">
                   from {job.automation.name}
@@ -140,7 +140,7 @@ export function DiscoveredJobDetail({
           </div>
         </ScrollArea>
 
-        {job.discoveryStatus === "new" && (
+        {job.status === "staged" && (
           <DialogFooter className="gap-2">
             <Button
               variant="outline"

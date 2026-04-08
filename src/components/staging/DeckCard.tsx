@@ -2,7 +2,8 @@
 
 import { memo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Building2, Calendar, Banknote, Sparkles } from "lucide-react";
+import { MapPin, Calendar, Banknote, Sparkles } from "lucide-react";
+import { CompanyLogo } from "@/components/ui/company-logo";
 import { useTranslations, formatDateShort } from "@/i18n";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 import type { ExitDirection } from "@/hooks/useDeckStack";
@@ -159,7 +160,7 @@ function DeckCardInner({
         </h3>
         {vacancy.employerName && (
           <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
-            <Building2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <CompanyLogo size="sm" companyName={vacancy.employerName} />
             {vacancy.employerName}
           </p>
         )}

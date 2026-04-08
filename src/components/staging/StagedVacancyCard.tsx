@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   MapPin,
-  Building2,
   Calendar,
   Banknote,
   ArrowUpCircle,
@@ -15,6 +14,7 @@ import {
   Trash2,
   Ban,
 } from "lucide-react";
+import { CompanyLogo } from "@/components/ui/company-logo";
 import { useTranslations, formatDateShort } from "@/i18n";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 
@@ -109,8 +109,8 @@ export function StagedVacancyCard({
       <CardContent className="pb-2">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
           {vacancy.employerName && (
-            <span className="inline-flex items-center gap-1">
-              <Building2 className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="inline-flex items-center gap-1.5">
+              <CompanyLogo size="sm" companyName={vacancy.employerName} />
               {vacancy.employerName}
             </span>
           )}

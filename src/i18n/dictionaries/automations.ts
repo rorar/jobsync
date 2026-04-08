@@ -131,6 +131,10 @@ export const automations = {
     "automations.jobAccepted": "Job accepted",
     "automations.jobAcceptedDesc": "The job has been added to your job list",
     "automations.jobDismissed": "Job dismissed",
+    "automations.detailFromAutomation": "from",
+    "automations.detailDescription": "Description",
+    "automations.detailDismiss": "Dismiss",
+    "automations.detailAccept": "Accept",
 
     // LogsTab
     "automations.automationLogs": "Automation Logs",
@@ -549,6 +553,10 @@ export const automations = {
     "automations.jobAccepted": "Stelle angenommen",
     "automations.jobAcceptedDesc": "Die Stelle wurde Ihrer Jobliste hinzugefügt",
     "automations.jobDismissed": "Stelle abgelehnt",
+    "automations.detailFromAutomation": "von",
+    "automations.detailDescription": "Beschreibung",
+    "automations.detailDismiss": "Ablehnen",
+    "automations.detailAccept": "Annehmen",
 
     // LogsTab
     "automations.automationLogs": "Automatisierungsprotokolle",
@@ -967,6 +975,10 @@ export const automations = {
     "automations.jobAccepted": "Emploi accepté",
     "automations.jobAcceptedDesc": "L'emploi a été ajouté à votre liste",
     "automations.jobDismissed": "Emploi rejeté",
+    "automations.detailFromAutomation": "de",
+    "automations.detailDescription": "Description",
+    "automations.detailDismiss": "Rejeter",
+    "automations.detailAccept": "Accepter",
 
     // LogsTab
     "automations.automationLogs": "Journaux d'automatisation",
@@ -1385,6 +1397,10 @@ export const automations = {
     "automations.jobAccepted": "Empleo aceptado",
     "automations.jobAcceptedDesc": "El empleo se ha añadido a su lista",
     "automations.jobDismissed": "Empleo descartado",
+    "automations.detailFromAutomation": "de",
+    "automations.detailDescription": "Descripción",
+    "automations.detailDismiss": "Descartar",
+    "automations.detailAccept": "Aceptar",
 
     // LogsTab
     "automations.automationLogs": "Registros de automatización",
