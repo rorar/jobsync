@@ -36,14 +36,14 @@ import { toast } from "../ui/use-toast";
 
 /** i18n description keys per enrichment module */
 const DESCRIPTION_KEYS: Record<string, TranslationKey> = {
-  clearbit: "enrichment.clearbitDescription",
+  logo_dev: "enrichment.logoDevDescription",
   google_favicon: "enrichment.googleFaviconDescription",
   meta_parser: "enrichment.metaParserDescription",
 };
 
 /** i18n display-name keys per enrichment module */
 const NAME_KEYS: Record<string, TranslationKey> = {
-  clearbit: "enrichment.clearbit",
+  logo_dev: "enrichment.logoDev",
   google_favicon: "enrichment.googleFavicon",
   meta_parser: "enrichment.metaParser",
 };

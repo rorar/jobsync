@@ -16,6 +16,9 @@ import type {
 import { ENRICHMENT_CONFIG } from "../../types";
 import { googleFaviconPolicy } from "./resilience";
 
+/** Domain validation regex — prevents injection of paths, query strings, or invalid characters */
+const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i;
+
 /**
  * Creates a Google Favicon enrichment connector.
  *
@@ -38,6 +41,17 @@ export function createGoogleFaviconModule(): DataEnrichmentConnector {
         };
       }
 
+      // Validate domain format to prevent injection
+      if (!DOMAIN_REGEX.test(domain)) {
+        return {
+          dimension: "logo",
+          status: "not_found",
+          data: {},
+          source: "google_favicon",
+          ttl: 0,
+        };
+      }
+
       const logoUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
 
       try {
@@ -45,6 +59,7 @@ export function createGoogleFaviconModule(): DataEnrichmentConnector {
           const response = await fetch(logoUrl, {
             method: "HEAD",
             signal,
+            redirect: "manual",
           });
 
           if (response.ok) {

@@ -233,9 +233,9 @@ test.describe("Enrichment", () => {
     ).toBeVisible();
 
     // Verify module cards are displayed — the three enrichment modules
-    // Clearbit Logo, Google Favicon, Link Preview Parser
+    // Logo.dev, Google Favicon, Link Preview Parser
     await expect(
-      page.getByText("Clearbit Logo"),
+      page.getByText("Logo.dev"),
     ).toBeVisible({ timeout: 10000 });
     await expect(
       page.getByText("Google Favicon"),
@@ -247,7 +247,7 @@ test.describe("Enrichment", () => {
     // Verify each module has an activation toggle (Switch)
     // The switch aria-label uses the pattern "Toggle {name} module"
     await expect(
-      page.getByRole("switch", { name: /Toggle Clearbit Logo module/i }),
+      page.getByRole("switch", { name: /Toggle Logo\.dev module/i }),
     ).toBeVisible();
     await expect(
       page.getByRole("switch", { name: /Toggle Google Favicon module/i }),

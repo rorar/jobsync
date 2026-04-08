@@ -10,10 +10,12 @@
 
 import { randomUUID } from "node:crypto";
 import { moduleRegistry } from "../registry";
+import { resolveCredential } from "../credential-resolver";
 import {
   ModuleStatus,
   HealthStatus,
   CircuitBreakerState,
+  CredentialType,
 } from "../manifest";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 import db from "@/lib/db";
@@ -35,7 +37,7 @@ export const DEFAULT_CHAINS: FallbackChainConfig[] = [
   {
     dimension: "logo",
     entries: [
-      { moduleId: "clearbit", priority: 1 },
+      { moduleId: "logo_dev", priority: 1 },
       { moduleId: "google_favicon", priority: 2 },
     ],
   },
@@ -151,11 +153,12 @@ export class EnrichmentOrchestrator {
       // Execute module with timeout
       const startMs = Date.now();
       try {
-        const connector = moduleRegistry.create(entry.moduleId) as DataEnrichmentConnector;
-        const result = await Promise.race([
-          connector.enrich(input),
-          this.createTimeout(ENRICHMENT_CONFIG.MODULE_TIMEOUT_MS),
-        ]);
+        // Resolve credential for key-based modules (PUSH pattern, same as runner.ts)
+        const credential = registered.manifest.credential.type !== CredentialType.NONE
+          ? await resolveCredential(registered.manifest.credential, userId)
+          : undefined;
+        const connector = moduleRegistry.create(entry.moduleId, credential) as DataEnrichmentConnector;
+        const result = await this.enrichWithTimeout(connector, input, ENRICHMENT_CONFIG.MODULE_TIMEOUT_MS);
 
         const latencyMs = Date.now() - startMs;
 
@@ -228,12 +231,23 @@ export class EnrichmentOrchestrator {
   }
 
   /**
-   * Create a timeout promise that rejects after ms milliseconds.
+   * Execute module enrichment with a timeout using AbortSignal.
+   * Uses AbortSignal.timeout() instead of setTimeout + Promise.race
+   * to avoid timer leaks when the module responds before the timeout.
    */
-  private createTimeout(ms: number): Promise<never> {
-    return new Promise((_resolve, reject) => {
-      setTimeout(() => reject(new Error("Module timeout exceeded")), ms);
-    });
+  private async enrichWithTimeout(
+    connector: DataEnrichmentConnector,
+    input: EnrichmentInput,
+    timeoutMs: number,
+  ): Promise<EnrichmentOutput> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const result = await connector.enrich(input);
+      return result;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   /**

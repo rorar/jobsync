@@ -73,18 +73,16 @@ describe("GoogleFaviconModule", () => {
       );
     });
 
-    it("encodes special characters in the domain", async () => {
-      mockFetch().mockResolvedValueOnce({ ok: true, status: 200 });
-
-      await module.enrich({
+    it("rejects domains with invalid characters (spaces)", async () => {
+      const result = await module.enrich({
         dimension: "logo",
         companyDomain: "ex ample.com",
       });
 
-      expect(mockFetch()).toHaveBeenCalledWith(
-        "https://www.google.com/s2/favicons?domain=ex%20ample.com&sz=128",
-        expect.anything(),
-      );
+      expect(result.status).toBe("not_found");
+      expect(result.source).toBe("google_favicon");
+      // Should not make a fetch call for invalid domains
+      expect(mockFetch()).not.toHaveBeenCalled();
     });
   });
 

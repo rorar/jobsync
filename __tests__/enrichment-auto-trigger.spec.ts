@@ -57,7 +57,7 @@ const { handleCompanyCreated, handleVacancyPromoted, extractDomainFromCompanyNam
 
 const logoChain = {
   dimension: "logo" as const,
-  entries: [{ moduleId: "clearbit", priority: 1 }],
+  entries: [{ moduleId: "logo_dev", priority: 1 }],
 };
 
 const deepLinkChain = {
@@ -134,7 +134,7 @@ describe("EnrichmentTrigger — CompanyCreated", () => {
       dimension: "logo",
       status: "found",
       data: { logoUrl: "https://example.com/logo.png" },
-      source: "clearbit",
+      source: "logo_dev",
       ttl: 86400,
     });
 
@@ -165,7 +165,7 @@ describe("EnrichmentTrigger — CompanyCreated", () => {
       dimension: "logo",
       status: "found",
       data: { logoUrl: "https://example.com/logo.png" },
-      source: "clearbit",
+      source: "logo_dev",
       ttl: 86400,
     });
 
@@ -196,7 +196,7 @@ describe("EnrichmentTrigger — CompanyCreated", () => {
       dimension: "logo",
       status: "found",
       data: { logoUrl: "https://example.com/logo.png" },
-      source: "clearbit",
+      source: "logo_dev",
       ttl: 86400,
     });
 
@@ -270,7 +270,7 @@ describe("EnrichmentTrigger — CompanyCreated", () => {
       dimension: "logo",
       status: "not_found",
       data: {},
-      source: "clearbit",
+      source: "logo_dev",
       ttl: 300,
     });
 
@@ -328,7 +328,7 @@ describe("EnrichmentTrigger — VacancyPromoted", () => {
       dimension: "logo",
       status: "found",
       data: { logoUrl: "https://example.com/logo.png" },
-      source: "clearbit",
+      source: "logo_dev",
       ttl: 86400,
     });
 
@@ -488,7 +488,7 @@ describe("EnrichmentTrigger — VacancyPromoted", () => {
       dimension: "logo",
       status: "found",
       data: { logoUrl: "https://example.com/logo.png" },
-      source: "clearbit",
+      source: "logo_dev",
       ttl: 86400,
     });
 

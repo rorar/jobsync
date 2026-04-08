@@ -88,8 +88,8 @@ const mockResult = {
   domainKey: "acme.com",
   companyId: "company-1",
   status: "found",
-  data: '{"logoUrl":"https://logo.clearbit.com/acme.com"}',
-  sourceModuleId: "clearbit",
+  data: '{"logoUrl":"https://img.logo.dev/acme.com"}',
+  sourceModuleId: "logo_dev",
   ttlSeconds: 2592000,
   expiresAt: new Date("2026-02-01"),
   createdAt: new Date("2026-01-01"),
@@ -190,7 +190,7 @@ describe("EnrichmentStatusPanel", () => {
       expect(screen.getByText("Logo")).toBeInTheDocument();
     });
     expect(screen.getByText("Completed")).toBeInTheDocument();
-    expect(screen.getByText(/clearbit/)).toBeInTheDocument();
+    expect(screen.getByText(/logo_dev/)).toBeInTheDocument();
   });
 
   it("handles trigger enrichment action", async () => {

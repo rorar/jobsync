@@ -216,10 +216,12 @@ class LogoAssetService {
         },
       });
 
-      // Step 11: Set Company.logoAssetId
+      // Step 11: Set Company.logoAssetId and clear external logoUrl
+      // The external URL may contain embedded API tokens (e.g. Logo.dev pk_ key).
+      // Now that the image is stored locally, the external URL is no longer needed.
       await db.company.updateMany({
         where: { id: companyId, createdBy: userId },
-        data: { logoAssetId: updatedAsset.id },
+        data: { logoAssetId: updatedAsset.id, logoUrl: null },
       });
 
       console.debug(

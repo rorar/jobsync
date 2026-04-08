@@ -23,9 +23,9 @@ jest.mock("@/i18n", () => ({
         "enrichment.noModules": "No enrichment modules registered",
         "enrichment.noModulesHint":
           "Enrichment modules will appear here once they are registered in the connector framework.",
-        "enrichment.clearbit": "Clearbit Logo",
-        "enrichment.clearbitDescription":
-          "Fetch company logos via Clearbit (free tier)",
+        "enrichment.logoDev": "Logo.dev",
+        "enrichment.logoDevDescription":
+          "High-quality company logos via Logo.dev (API key required)",
         "enrichment.googleFavicon": "Google Favicon",
         "enrichment.googleFaviconDescription":
           "Fetch website favicons via Google",
@@ -101,17 +101,18 @@ import EnrichmentModuleSettings from "@/components/settings/EnrichmentModuleSett
 
 const mockModules = [
   {
-    moduleId: "clearbit",
-    name: "Clearbit Logo",
+    moduleId: "logo_dev",
+    name: "Logo.dev",
     manifestVersion: 1,
     connectorType: "data_enrichment",
     status: "active",
     healthStatus: "healthy",
     credential: {
-      type: "none",
-      moduleId: "clearbit",
+      type: "api_key",
+      moduleId: "logo_dev",
       required: false,
-      sensitive: false,
+      sensitive: true,
+      envFallback: "LOGODEV_API_KEY",
     },
   },
   {
@@ -185,13 +186,13 @@ describe("EnrichmentModuleSettings", () => {
     render(<EnrichmentModuleSettings />);
 
     await waitFor(() => {
-      expect(screen.getByText("Clearbit Logo")).toBeInTheDocument();
+      expect(screen.getByText("Logo.dev")).toBeInTheDocument();
     });
 
     expect(screen.getByText("Google Favicon")).toBeInTheDocument();
     expect(screen.getByText("Link Preview Parser")).toBeInTheDocument();
     expect(
-      screen.getByText("Fetch company logos via Clearbit (free tier)"),
+      screen.getByText("High-quality company logos via Logo.dev (API key required)"),
     ).toBeInTheDocument();
   });
 
@@ -204,7 +205,7 @@ describe("EnrichmentModuleSettings", () => {
     render(<EnrichmentModuleSettings />);
 
     await waitFor(() => {
-      expect(screen.getByText("Clearbit Logo")).toBeInTheDocument();
+      expect(screen.getByText("Logo.dev")).toBeInTheDocument();
     });
 
     // 2 active + 1 inactive
@@ -223,7 +224,7 @@ describe("EnrichmentModuleSettings", () => {
     render(<EnrichmentModuleSettings />);
 
     await waitFor(() => {
-      expect(screen.getByText("Clearbit Logo")).toBeInTheDocument();
+      expect(screen.getByText("Logo.dev")).toBeInTheDocument();
     });
 
     const badges = screen.getAllByText("No API key required");
@@ -257,17 +258,17 @@ describe("EnrichmentModuleSettings", () => {
   it("calls deactivateModule after confirmation when toggling active module off", async () => {
     mockGetModuleManifests.mockResolvedValue({
       success: true,
-      data: [mockModules[0]], // clearbit (active)
+      data: [mockModules[0]], // logo_dev (active)
     });
     mockDeactivateModule.mockResolvedValue({
       success: true,
-      data: { moduleId: "clearbit", status: "inactive", pausedAutomations: 0 },
+      data: { moduleId: "logo_dev", status: "inactive", pausedAutomations: 0 },
     });
 
     render(<EnrichmentModuleSettings />);
 
     await waitFor(() => {
-      expect(screen.getByText("Clearbit Logo")).toBeInTheDocument();
+      expect(screen.getByText("Logo.dev")).toBeInTheDocument();
     });
 
     // Click the toggle -- should open the confirmation dialog
@@ -287,7 +288,7 @@ describe("EnrichmentModuleSettings", () => {
     fireEvent.click(confirmBtn);
 
     await waitFor(() => {
-      expect(mockDeactivateModule).toHaveBeenCalledWith("clearbit");
+      expect(mockDeactivateModule).toHaveBeenCalledWith("logo_dev");
     });
   });
 

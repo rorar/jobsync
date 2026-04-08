@@ -1,17 +1,17 @@
 /**
- * Clearbit Logo Module — Unit Tests
+ * Logo.dev Module — Unit Tests
  *
- * Tests the Clearbit Logo enrichment connector with mocked fetch.
+ * Tests the Logo.dev enrichment connector with mocked fetch.
  * No real network calls are made.
  */
 
-import { createClearbitModule } from "@/lib/connector/data-enrichment/modules/clearbit";
+import { createLogoDevModule } from "@/lib/connector/data-enrichment/modules/logo-dev";
 import { ENRICHMENT_CONFIG } from "@/lib/connector/data-enrichment/types";
 import type { EnrichmentInput } from "@/lib/connector/data-enrichment/types";
 
 // Mock the resilience policy to pass-through (unit tests focus on module logic, not Cockatiel)
-jest.mock("@/lib/connector/data-enrichment/modules/clearbit/resilience", () => ({
-  clearbitPolicy: {
+jest.mock("@/lib/connector/data-enrichment/modules/logo-dev/resilience", () => ({
+  logoDevPolicy: {
     execute: <T>(fn: (ctx: { signal: AbortSignal }) => Promise<T>) =>
       fn({ signal: new AbortController().signal }),
   },
@@ -31,11 +31,12 @@ function mockFetch() {
   return globalThis.fetch as jest.Mock;
 }
 
-describe("ClearbitLogoModule", () => {
-  const module = createClearbitModule();
+describe("LogoDevModule", () => {
+  const apiKey = "test-logo-dev-key";
+  const module = createLogoDevModule(apiKey);
 
   describe("successful enrichment", () => {
-    it("returns logo URL when Clearbit responds with 200", async () => {
+    it("returns logo URL when Logo.dev responds with 200", async () => {
       mockFetch().mockResolvedValueOnce({ ok: true, status: 200 });
 
       const input: EnrichmentInput = {
@@ -49,11 +50,10 @@ describe("ClearbitLogoModule", () => {
         dimension: "logo",
         status: "found",
         data: {
-          logoUrl: "https://logo.clearbit.com/github.com",
-          width: 128,
+          logoUrl: `https://img.logo.dev/github.com?token=${apiKey}&format=png`,
           format: "png",
         },
-        source: "clearbit",
+        source: "logo_dev",
         ttl: ENRICHMENT_CONFIG.LOGO_TTL_SECONDS,
       });
     });
@@ -68,7 +68,7 @@ describe("ClearbitLogoModule", () => {
 
       expect(mockFetch()).toHaveBeenCalledTimes(1);
       expect(mockFetch()).toHaveBeenCalledWith(
-        "https://logo.clearbit.com/example.com",
+        `https://img.logo.dev/example.com?token=${apiKey}&format=png`,
         expect.objectContaining({ method: "HEAD" }),
       );
     });
@@ -84,8 +84,29 @@ describe("ClearbitLogoModule", () => {
     });
   });
 
+  describe("without apiKey", () => {
+    it("returns not_found when no API key is provided", async () => {
+      const noKeyModule = createLogoDevModule();
+
+      const result = await noKeyModule.enrich({
+        dimension: "logo",
+        companyDomain: "github.com",
+      });
+
+      expect(result).toEqual({
+        dimension: "logo",
+        status: "not_found",
+        data: {},
+        source: "logo_dev",
+        ttl: 0,
+      });
+
+      expect(mockFetch()).not.toHaveBeenCalled();
+    });
+  });
+
   describe("not-found response", () => {
-    it("returns not_found when Clearbit responds with 404", async () => {
+    it("returns not_found when Logo.dev responds with 404", async () => {
       mockFetch().mockResolvedValueOnce({ ok: false, status: 404 });
 
       const result = await module.enrich({
@@ -97,12 +118,12 @@ describe("ClearbitLogoModule", () => {
         dimension: "logo",
         status: "not_found",
         data: {},
-        source: "clearbit",
+        source: "logo_dev",
         ttl: 0,
       });
     });
 
-    it("returns not_found when Clearbit responds with 500", async () => {
+    it("returns not_found when Logo.dev responds with 500", async () => {
       mockFetch().mockResolvedValueOnce({ ok: false, status: 500 });
 
       const result = await module.enrich({
@@ -111,6 +132,30 @@ describe("ClearbitLogoModule", () => {
       });
 
       expect(result.status).toBe("not_found");
+    });
+
+    it("returns not_found when Logo.dev responds with 401", async () => {
+      mockFetch().mockResolvedValueOnce({ ok: false, status: 401 });
+
+      const result = await module.enrich({
+        dimension: "logo",
+        companyDomain: "example.com",
+      });
+
+      expect(result.status).toBe("not_found");
+      expect(result.source).toBe("logo_dev");
+    });
+
+    it("returns not_found when Logo.dev responds with 403", async () => {
+      mockFetch().mockResolvedValueOnce({ ok: false, status: 403 });
+
+      const result = await module.enrich({
+        dimension: "logo",
+        companyDomain: "example.com",
+      });
+
+      expect(result.status).toBe("not_found");
+      expect(result.source).toBe("logo_dev");
     });
   });
 
@@ -124,7 +169,7 @@ describe("ClearbitLogoModule", () => {
         dimension: "logo",
         status: "error",
         data: {},
-        source: "clearbit",
+        source: "logo_dev",
         ttl: 0,
       });
 
@@ -141,7 +186,7 @@ describe("ClearbitLogoModule", () => {
         dimension: "logo",
         status: "error",
         data: {},
-        source: "clearbit",
+        source: "logo_dev",
         ttl: 0,
       });
 
@@ -160,7 +205,7 @@ describe("ClearbitLogoModule", () => {
         dimension: "logo",
         status: "error",
         data: {},
-        source: "clearbit",
+        source: "logo_dev",
         ttl: 0,
       });
     });
@@ -179,7 +224,7 @@ describe("ClearbitLogoModule", () => {
         dimension: "logo",
         status: "error",
         data: {},
-        source: "clearbit",
+        source: "logo_dev",
         ttl: 0,
       });
     });

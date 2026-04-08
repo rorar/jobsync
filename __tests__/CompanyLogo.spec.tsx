@@ -54,7 +54,7 @@ describe("CompanyLogo", () => {
       render(
         <CompanyLogo
           companyName="Google"
-          logoUrl="https://logo.clearbit.com/google.com"
+          logoUrl="https://img.logo.dev/google.com"
         />,
       );
       const img = screen.getByAltText("Google");

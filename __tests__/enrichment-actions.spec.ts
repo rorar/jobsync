@@ -75,13 +75,13 @@ describe("Enrichment Actions", () => {
       const mockCompany = { id: "company-1", label: "Acme Corp" };
       const mockChain = {
         dimension: "logo",
-        entries: [{ moduleId: "clearbit", priority: 1 }],
+        entries: [{ moduleId: "logo_dev", priority: 1 }],
       };
       const mockOutput = {
         dimension: "logo",
         status: "found",
-        data: { logoUrl: "https://logo.clearbit.com/acme.com" },
-        source: "clearbit",
+        data: { logoUrl: "https://img.logo.dev/acme.com" },
+        source: "logo_dev",
         ttl: 86400,
       };
       const mockResult = {
@@ -91,8 +91,8 @@ describe("Enrichment Actions", () => {
         domainKey: "acme.com",
         companyId: null,
         status: "found",
-        data: JSON.stringify({ logoUrl: "https://logo.clearbit.com/acme.com" }),
-        sourceModuleId: "clearbit",
+        data: JSON.stringify({ logoUrl: "https://img.logo.dev/acme.com" }),
+        sourceModuleId: "logo_dev",
         ttlSeconds: 86400,
         expiresAt: new Date(),
         createdAt: new Date(),
@@ -156,7 +156,7 @@ describe("Enrichment Actions", () => {
       mockDb.company.findFirst.mockResolvedValue({ id: "company-1", label: "Test" });
       mockGetChain.mockReturnValue({
         dimension: "logo",
-        entries: [{ moduleId: "clearbit", priority: 1 }],
+        entries: [{ moduleId: "logo_dev", priority: 1 }],
       });
       mockOrchestrator.execute.mockResolvedValue(null);
 
@@ -175,7 +175,7 @@ describe("Enrichment Actions", () => {
       const mockResults = [
         {
           id: "r1", userId: "user-1", dimension: "logo", domainKey: "acme.com",
-          companyId: "company-1", status: "found", data: "{}", sourceModuleId: "clearbit",
+          companyId: "company-1", status: "found", data: "{}", sourceModuleId: "logo_dev",
           ttlSeconds: 86400, expiresAt: new Date(), createdAt: new Date(), updatedAt: new Date(),
         },
       ];
@@ -219,7 +219,7 @@ describe("Enrichment Actions", () => {
     it("returns result for authenticated user", async () => {
       const mockResult = {
         id: "r1", userId: "user-1", dimension: "logo", domainKey: "acme.com",
-        companyId: "company-1", status: "found", data: "{}", sourceModuleId: "clearbit",
+        companyId: "company-1", status: "found", data: "{}", sourceModuleId: "logo_dev",
         ttlSeconds: 86400, expiresAt: new Date(), createdAt: new Date(), updatedAt: new Date(),
       };
       mockDb.enrichmentResult.findFirst.mockResolvedValue(mockResult);
@@ -267,7 +267,7 @@ describe("Enrichment Actions", () => {
     it("refreshes an existing result", async () => {
       const existingResult = {
         id: "r1", userId: "user-1", dimension: "logo", domainKey: "acme.com",
-        companyId: "company-1", status: "found", data: "{}", sourceModuleId: "clearbit",
+        companyId: "company-1", status: "found", data: "{}", sourceModuleId: "logo_dev",
         ttlSeconds: 86400, expiresAt: new Date(), createdAt: new Date(), updatedAt: new Date(),
       };
       const refreshedResult = { ...existingResult, updatedAt: new Date() };
@@ -277,11 +277,11 @@ describe("Enrichment Actions", () => {
         .mockResolvedValueOnce(refreshedResult); // second call: refreshed
       mockGetChain.mockReturnValue({
         dimension: "logo",
-        entries: [{ moduleId: "clearbit", priority: 1 }],
+        entries: [{ moduleId: "logo_dev", priority: 1 }],
       });
       mockOrchestrator.execute.mockResolvedValue({
         dimension: "logo", status: "found",
-        data: { logoUrl: "https://new.logo" }, source: "clearbit", ttl: 86400,
+        data: { logoUrl: "https://new.logo" }, source: "logo_dev", ttl: 86400,
       });
 
       const result = await refreshEnrichment("r1");

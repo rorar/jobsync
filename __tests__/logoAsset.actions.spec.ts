@@ -82,14 +82,14 @@ const mockAsset = {
   width: 256,
   height: 256,
   errorMessage: null,
-  sourceUrl: "https://logo.clearbit.com/acme.com",
+  sourceUrl: "https://img.logo.dev/acme.com",
   createdAt: new Date("2026-04-06T10:00:00.000Z"),
   updatedAt: new Date("2026-04-06T10:00:00.000Z"),
 };
 
 const mockCompany = {
   id: "company-fixture-id",
-  logoUrl: "https://logo.clearbit.com/acme.com",
+  logoUrl: "https://img.logo.dev/acme.com",
 };
 
 // ---------------------------------------------------------------------------

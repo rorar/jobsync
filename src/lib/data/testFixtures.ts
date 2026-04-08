@@ -1127,7 +1127,7 @@ export const mockLogoAsset: LogoAssetFixture = {
   id: "logo-asset-fixture-id",
   userId: mockUser.id,
   companyId: mockCompany.id,
-  sourceUrl: "https://logo.clearbit.com/acme.com",
+  sourceUrl: "https://img.logo.dev/acme.com?format=png",
   filePath: "/data/logos/logo-asset-fixture-id.png",
   mimeType: "image/png",
   fileSize: 24576,

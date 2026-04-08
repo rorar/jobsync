@@ -56,12 +56,12 @@ import EnrichmentModuleSettings from "@/components/settings/EnrichmentModuleSett
 
 const MODULES = [
   {
-    moduleId: "clearbit",
-    name: "Clearbit",
+    moduleId: "logo_dev",
+    name: "Logo.dev",
     connectorType: "DATA_ENRICHMENT",
     status: "active",
     healthStatus: "healthy",
-    credential: { moduleId: "clearbit", required: false, sensitive: false },
+    credential: { moduleId: "logo_dev", required: false, sensitive: true },
   },
 ];
 
@@ -88,7 +88,7 @@ describe("Health Check Button (EnrichmentModuleSettings)", () => {
     mockRunHealthCheck.mockResolvedValue({
       success: true,
       data: {
-        moduleId: "clearbit",
+        moduleId: "logo_dev",
         healthStatus: "healthy",
         success: true,
         responseTimeMs: 42,
@@ -104,7 +104,7 @@ describe("Health Check Button (EnrichmentModuleSettings)", () => {
     await user.click(screen.getByRole("button", { name: "settings.healthCheckNow" }));
 
     await waitFor(() => {
-      expect(mockRunHealthCheck).toHaveBeenCalledWith("clearbit");
+      expect(mockRunHealthCheck).toHaveBeenCalledWith("logo_dev");
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({ variant: "success" }),
       );
@@ -157,7 +157,7 @@ describe("Health Check Button (EnrichmentModuleSettings)", () => {
     resolve!({
       success: true,
       data: {
-        moduleId: "clearbit",
+        moduleId: "logo_dev",
         healthStatus: "healthy",
         success: true,
         responseTimeMs: 10,

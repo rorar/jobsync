@@ -12,15 +12,14 @@ import { moduleRegistry } from "../registry";
 import { enrichmentConnectorRegistry } from "./registry";
 
 // Import manifests + factories
-import { clearbitManifest } from "./modules/clearbit/manifest";
-import { createClearbitModule } from "./modules/clearbit";
+import { logoDevManifest } from "./modules/logo-dev/manifest";
+import { createLogoDevModule } from "./modules/logo-dev";
 import { googleFaviconManifest } from "./modules/google-favicon/manifest";
 import { createGoogleFaviconModule } from "./modules/google-favicon";
 import { metaParserManifest } from "./modules/meta-parser/manifest";
 import { createMetaParserModule } from "./modules/meta-parser";
-
 // Register with unified registry
-moduleRegistry.register(clearbitManifest, createClearbitModule);
+moduleRegistry.register(logoDevManifest, createLogoDevModule);
 moduleRegistry.register(googleFaviconManifest, createGoogleFaviconModule);
 moduleRegistry.register(metaParserManifest, createMetaParserModule);
 
