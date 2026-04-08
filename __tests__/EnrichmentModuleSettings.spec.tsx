@@ -114,6 +114,10 @@ const mockModules = [
       sensitive: true,
       envFallback: "LOGODEV_API_KEY",
     },
+    i18n: {
+      en: { name: "Logo.dev", description: "High-quality company logos via Logo.dev (API key required)" },
+      de: { name: "Logo.dev", description: "Hochwertige Firmenlogos über Logo.dev" },
+    },
   },
   {
     moduleId: "google_favicon",
@@ -128,6 +132,10 @@ const mockModules = [
       required: false,
       sensitive: false,
     },
+    i18n: {
+      en: { name: "Google Favicon", description: "Fetch website favicons via Google" },
+      de: { name: "Google Favicon", description: "Website-Favicons über Google abrufen" },
+    },
   },
   {
     moduleId: "meta_parser",
@@ -141,6 +149,10 @@ const mockModules = [
       moduleId: "meta_parser",
       required: false,
       sensitive: false,
+    },
+    i18n: {
+      en: { name: "Link Preview Parser", description: "Extract metadata from URLs (OpenGraph, meta tags)" },
+      de: { name: "Link-Vorschau-Parser", description: "Metadaten aus URLs extrahieren (OpenGraph, Meta-Tags)" },
     },
   },
 ];
