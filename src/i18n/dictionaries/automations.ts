@@ -318,6 +318,13 @@ export const automations = {
     // Connector Params — EURES: required languages
     "automations.params.requiredLanguages": "Required languages",
 
+    // Connector Params — EURES: keyword search scope
+    "automations.params.keywordSearchScope": "Keyword search scope",
+    "automations.paramOption.eures.specificSearchCode.EVERYWHERE": "Everywhere",
+    "automations.paramOption.eures.specificSearchCode.TITLE": "Job title only",
+    "automations.paramOption.eures.specificSearchCode.DESCRIPTION": "Description only",
+    "automations.paramOption.eures.specificSearchCode.EMPLOYER": "Employer name only",
+
     // Connector Params — EURES: sort order
     "automations.params.sortOrder": "Sort order",
     "automations.paramOption.eures.sortSearch.BEST_MATCH": "Best match",
@@ -728,6 +735,13 @@ export const automations = {
 
     // Connector Params — EURES: required languages
     "automations.params.requiredLanguages": "Erforderliche Sprachen",
+
+    // Connector Params — EURES: keyword search scope
+    "automations.params.keywordSearchScope": "Suchbereich für Schlüsselwörter",
+    "automations.paramOption.eures.specificSearchCode.EVERYWHERE": "Überall",
+    "automations.paramOption.eures.specificSearchCode.TITLE": "Nur Stellentitel",
+    "automations.paramOption.eures.specificSearchCode.DESCRIPTION": "Nur Beschreibung",
+    "automations.paramOption.eures.specificSearchCode.EMPLOYER": "Nur Arbeitgeber",
 
     // Connector Params — EURES: sort order
     "automations.params.sortOrder": "Sortierung",
@@ -1140,6 +1154,13 @@ export const automations = {
     // Connector Params — EURES: required languages
     "automations.params.requiredLanguages": "Langues requises",
 
+    // Connector Params — EURES: keyword search scope
+    "automations.params.keywordSearchScope": "Portée de recherche",
+    "automations.paramOption.eures.specificSearchCode.EVERYWHERE": "Partout",
+    "automations.paramOption.eures.specificSearchCode.TITLE": "Titre uniquement",
+    "automations.paramOption.eures.specificSearchCode.DESCRIPTION": "Description uniquement",
+    "automations.paramOption.eures.specificSearchCode.EMPLOYER": "Employeur uniquement",
+
     // Connector Params — EURES: sort order
     "automations.params.sortOrder": "Ordre de tri",
     "automations.paramOption.eures.sortSearch.BEST_MATCH": "Meilleure correspondance",
@@ -1550,6 +1571,13 @@ export const automations = {
 
     // Connector Params — EURES: required languages
     "automations.params.requiredLanguages": "Idiomas requeridos",
+
+    // Connector Params — EURES: keyword search scope
+    "automations.params.keywordSearchScope": "Ámbito de búsqueda",
+    "automations.paramOption.eures.specificSearchCode.EVERYWHERE": "En todas partes",
+    "automations.paramOption.eures.specificSearchCode.TITLE": "Solo título",
+    "automations.paramOption.eures.specificSearchCode.DESCRIPTION": "Solo descripción",
+    "automations.paramOption.eures.specificSearchCode.EMPLOYER": "Solo empleador",
 
     // Connector Params — EURES: sort order
     "automations.params.sortOrder": "Orden de clasificación",

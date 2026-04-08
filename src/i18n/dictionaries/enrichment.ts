@@ -20,9 +20,9 @@ export const enrichment = {
     "enrichment.lastEnriched": "Last enriched {date}",
     "enrichment.noLogo": "No logo available",
     "enrichment.refreshEnrichment": "Refresh enrichment data",
-    "enrichment.clearbit": "Clearbit Logo",
-    "enrichment.clearbitDescription":
-      "Fetch company logos via Clearbit (free tier)",
+    "enrichment.logoDev": "Logo.dev",
+    "enrichment.logoDevDescription":
+      "High-quality company logos via Logo.dev (API key required)",
     "enrichment.googleFavicon": "Google Favicon",
     "enrichment.googleFaviconDescription":
       "Fetch website favicons via Google",
@@ -60,6 +60,27 @@ export const enrichment = {
     "enrichment.deactivateConfirmDescription": "Deactivating this module will pause all automations that depend on it. You will need to manually reactivate them later.",
     "enrichment.deactivateConfirm": "Deactivate",
 
+    // Health-only monitoring modules
+    "enrichment.escoApi": "ESCO Classification API",
+    "enrichment.escoApiDescription": "EU ESCO occupation classification service (health monitoring)",
+    "enrichment.eurostatNuts": "Eurostat NUTS Regions",
+    "enrichment.eurostatNutsDescription": "EU Eurostat NUTS regional classification service (health monitoring)",
+    "enrichment.healthOnly": "Health monitoring only",
+
+    // Module Health Overview (Settings)
+    "enrichment.healthOverviewTitle": "API Status Overview",
+    "enrichment.healthOverviewDescription": "Health status of all registered external service modules",
+    "enrichment.sidebarApiStatus": "API Status",
+    "enrichment.lastChecked": "Last checked",
+    "enrichment.lastSuccess": "Last successful",
+    "enrichment.neverChecked": "Not checked yet",
+    "enrichment.checkingAll": "Checking all modules...",
+    "enrichment.checkAll": "Check All",
+    "enrichment.connectorGroup.job_discovery": "Job Discovery",
+    "enrichment.connectorGroup.ai_provider": "AI Provider",
+    "enrichment.connectorGroup.data_enrichment": "Data Enrichment",
+    "enrichment.connectorGroup.reference_data": "Reference Data",
+
     // Enrichment Status Panel (E1.1)
     "enrichment.statusPanel": "Enrichment Status",
     "enrichment.statusPanelDescription": "Data enrichment status for this company",
@@ -96,9 +117,9 @@ export const enrichment = {
     "enrichment.lastEnriched": "Zuletzt angereichert {date}",
     "enrichment.noLogo": "Kein Logo verfügbar",
     "enrichment.refreshEnrichment": "Anreicherungsdaten aktualisieren",
-    "enrichment.clearbit": "Clearbit Logo",
-    "enrichment.clearbitDescription":
-      "Firmenlogos über Clearbit abrufen (kostenlos)",
+    "enrichment.logoDev": "Logo.dev",
+    "enrichment.logoDevDescription":
+      "Hochwertige Firmenlogos über Logo.dev (API-Key erforderlich)",
     "enrichment.googleFavicon": "Google Favicon",
     "enrichment.googleFaviconDescription":
       "Website-Favicons über Google abrufen",
@@ -135,6 +156,27 @@ export const enrichment = {
     "enrichment.deactivateConfirmTitle": "Modul deaktivieren?",
     "enrichment.deactivateConfirmDescription": "Das Deaktivieren dieses Moduls pausiert alle Automatisierungen, die davon abhängen. Sie müssen diese später manuell wieder aktivieren.",
     "enrichment.deactivateConfirm": "Deaktivieren",
+
+    // Health-only monitoring modules
+    "enrichment.escoApi": "ESCO-Klassifikations-API",
+    "enrichment.escoApiDescription": "EU-ESCO-Berufsklassifikationsdienst (Statusüberwachung)",
+    "enrichment.eurostatNuts": "Eurostat-NUTS-Regionen",
+    "enrichment.eurostatNutsDescription": "EU-Eurostat-NUTS-Regionalklassifikationsdienst (Statusüberwachung)",
+    "enrichment.healthOnly": "Nur Statusüberwachung",
+
+    // Module Health Overview (Settings)
+    "enrichment.healthOverviewTitle": "API-Statusübersicht",
+    "enrichment.healthOverviewDescription": "Integritätsstatus aller registrierten externen Dienst-Module",
+    "enrichment.sidebarApiStatus": "API-Status",
+    "enrichment.lastChecked": "Zuletzt geprüft",
+    "enrichment.lastSuccess": "Letzter Erfolg",
+    "enrichment.neverChecked": "Noch nicht geprüft",
+    "enrichment.checkingAll": "Alle Module werden geprüft...",
+    "enrichment.checkAll": "Alle prüfen",
+    "enrichment.connectorGroup.job_discovery": "Stellensuche",
+    "enrichment.connectorGroup.ai_provider": "KI-Anbieter",
+    "enrichment.connectorGroup.data_enrichment": "Datenanreicherung",
+    "enrichment.connectorGroup.reference_data": "Referenzdaten",
 
     // Enrichment Status Panel (E1.1)
     "enrichment.statusPanel": "Anreicherungsstatus",
@@ -173,9 +215,9 @@ export const enrichment = {
     "enrichment.noLogo": "Aucun logo disponible",
     "enrichment.refreshEnrichment":
       "Actualiser les données d'enrichissement",
-    "enrichment.clearbit": "Logo Clearbit",
-    "enrichment.clearbitDescription":
-      "Récupérer les logos d'entreprise via Clearbit (gratuit)",
+    "enrichment.logoDev": "Logo.dev",
+    "enrichment.logoDevDescription":
+      "Logos d'entreprise de haute qualité via Logo.dev (clé API requise)",
     "enrichment.googleFavicon": "Favicon Google",
     "enrichment.googleFaviconDescription":
       "Récupérer les favicons via Google",
@@ -214,6 +256,27 @@ export const enrichment = {
     "enrichment.deactivateConfirmDescription": "La désactivation de ce module mettra en pause toutes les automatisations qui en dépendent. Vous devrez les réactiver manuellement par la suite.",
     "enrichment.deactivateConfirm": "Désactiver",
 
+    // Health-only monitoring modules
+    "enrichment.escoApi": "API de classification ESCO",
+    "enrichment.escoApiDescription": "Service de classification des professions ESCO de l'UE (surveillance de l'état)",
+    "enrichment.eurostatNuts": "Régions NUTS Eurostat",
+    "enrichment.eurostatNutsDescription": "Service de classification régionale NUTS d'Eurostat (surveillance de l'état)",
+    "enrichment.healthOnly": "Surveillance de l'état uniquement",
+
+    // Module Health Overview (Settings)
+    "enrichment.healthOverviewTitle": "Aperçu de l'état des API",
+    "enrichment.healthOverviewDescription": "État de santé de tous les modules de services externes enregistrés",
+    "enrichment.sidebarApiStatus": "État des API",
+    "enrichment.lastChecked": "Dernière vérification",
+    "enrichment.lastSuccess": "Dernier succès",
+    "enrichment.neverChecked": "Pas encore vérifié",
+    "enrichment.checkingAll": "Vérification de tous les modules...",
+    "enrichment.checkAll": "Tout vérifier",
+    "enrichment.connectorGroup.job_discovery": "Recherche d'emploi",
+    "enrichment.connectorGroup.ai_provider": "Fournisseur IA",
+    "enrichment.connectorGroup.data_enrichment": "Enrichissement de données",
+    "enrichment.connectorGroup.reference_data": "Données de référence",
+
     // Enrichment Status Panel (E1.1)
     "enrichment.statusPanel": "Statut d'enrichissement",
     "enrichment.statusPanelDescription": "Statut d'enrichissement des données pour cette entreprise",
@@ -250,9 +313,9 @@ export const enrichment = {
     "enrichment.lastEnriched": "Último enriquecimiento {date}",
     "enrichment.noLogo": "Logo no disponible",
     "enrichment.refreshEnrichment": "Actualizar datos de enriquecimiento",
-    "enrichment.clearbit": "Logo Clearbit",
-    "enrichment.clearbitDescription":
-      "Obtener logos de empresas vía Clearbit (gratuito)",
+    "enrichment.logoDev": "Logo.dev",
+    "enrichment.logoDevDescription":
+      "Logos de empresas de alta calidad vía Logo.dev (clave API requerida)",
     "enrichment.googleFavicon": "Favicon de Google",
     "enrichment.googleFaviconDescription":
       "Obtener favicons vía Google",
@@ -291,6 +354,27 @@ export const enrichment = {
     "enrichment.deactivateConfirmTitle": "Desactivar modulo?",
     "enrichment.deactivateConfirmDescription": "Desactivar este modulo pausara todas las automatizaciones que dependen de el. Debera reactivarlas manualmente mas tarde.",
     "enrichment.deactivateConfirm": "Desactivar",
+
+    // Health-only monitoring modules
+    "enrichment.escoApi": "API de clasificación ESCO",
+    "enrichment.escoApiDescription": "Servicio de clasificación de ocupaciones ESCO de la UE (monitoreo de estado)",
+    "enrichment.eurostatNuts": "Regiones NUTS de Eurostat",
+    "enrichment.eurostatNutsDescription": "Servicio de clasificación regional NUTS de Eurostat (monitoreo de estado)",
+    "enrichment.healthOnly": "Solo monitoreo de estado",
+
+    // Module Health Overview (Settings)
+    "enrichment.healthOverviewTitle": "Resumen del estado de las API",
+    "enrichment.healthOverviewDescription": "Estado de salud de todos los módulos de servicios externos registrados",
+    "enrichment.sidebarApiStatus": "Estado de API",
+    "enrichment.lastChecked": "Última verificación",
+    "enrichment.lastSuccess": "Último éxito",
+    "enrichment.neverChecked": "Aún no verificado",
+    "enrichment.checkingAll": "Verificando todos los módulos...",
+    "enrichment.checkAll": "Verificar todos",
+    "enrichment.connectorGroup.job_discovery": "Búsqueda de empleo",
+    "enrichment.connectorGroup.ai_provider": "Proveedor de IA",
+    "enrichment.connectorGroup.data_enrichment": "Enriquecimiento de datos",
+    "enrichment.connectorGroup.reference_data": "Datos de referencia",
 
     // Enrichment Status Panel (E1.1)
     "enrichment.statusPanel": "Estado de enriquecimiento",

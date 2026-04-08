@@ -1,4 +1,4 @@
-import { ConnectorType, CredentialType, type JobDiscoveryManifest } from "@/lib/connector/manifest";
+import { ConnectorType, CredentialType, type JobDiscoveryManifest, type DependencyHealthCheck } from "@/lib/connector/manifest";
 import { CACHE_POLICY_SEARCH } from "@/lib/connector/cache";
 
 export const euresManifest: JobDiscoveryManifest = {
@@ -14,7 +14,7 @@ export const euresManifest: JobDiscoveryManifest = {
     sensitive: false,
   },
   healthCheck: {
-    endpoint: "https://europa.eu/eures/eures-apps/api/jv-searchengine/public/jv-search/search",
+    endpoint: "https://europa.eu/eures/api/jv-searchengine/public/jv-search/search",
     timeoutMs: 15000,
     intervalMs: 300000,
   },
@@ -30,6 +30,32 @@ export const euresManifest: JobDiscoveryManifest = {
     maxConcurrent: 5,
   },
   cachePolicy: CACHE_POLICY_SEARCH,
+  dependencies: [
+    {
+      id: "esco_classification",
+      name: "ESCO Classification",
+      endpoint: "https://ec.europa.eu/esco/api/search?text=test&language=en&type=occupation&limit=1",
+      timeoutMs: 10000,
+      required: false,
+      usedFor: "Occupation search in Automation Wizard (EuresOccupationCombobox)",
+    },
+    {
+      id: "eurostat_nuts",
+      name: "Eurostat NUTS Regions",
+      endpoint: "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/codelist/ESTAT/GEO?format=JSON&lang=en",
+      timeoutMs: 10000,
+      required: false,
+      usedFor: "Region name i18n in location hierarchy (EuresLocationCombobox)",
+    },
+    {
+      id: "eures_country_stats",
+      name: "EURES Country Stats",
+      endpoint: "https://europa.eu/eures/api/jv-searchengine/public/statistics/getCountryStats",
+      timeoutMs: 10000,
+      required: false,
+      usedFor: "Country/region job counts in location hierarchy",
+    },
+  ] satisfies DependencyHealthCheck[],
   searchFieldOverrides: [
     { field: "keywords", widgetId: "eures-occupation" },
     { field: "location", widgetId: "eures-location" },
@@ -74,6 +100,11 @@ export const euresManifest: JobDiscoveryManifest = {
     {
       key: "requiredLanguages", type: "string", label: "automations.params.requiredLanguages",
       placeholder: "de(B2), en(C1)",
+    },
+    // Keyword search scope
+    {
+      key: "specificSearchCode", type: "select", label: "automations.params.keywordSearchScope",
+      defaultValue: "EVERYWHERE", options: ["EVERYWHERE", "TITLE", "DESCRIPTION", "EMPLOYER"],
     },
     // Sort order
     {

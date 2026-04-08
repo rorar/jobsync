@@ -16,6 +16,7 @@ export enum ConnectorType {
   JOB_DISCOVERY = "job_discovery",
   AI_PROVIDER = "ai_provider",
   DATA_ENRICHMENT = "data_enrichment",
+  REFERENCE_DATA = "reference_data",
 }
 
 export enum ModuleStatus {
@@ -125,6 +126,25 @@ export interface SearchFieldOverride {
 }
 
 // =============================================================================
+// Dependency Health Checks
+// =============================================================================
+
+export interface DependencyHealthCheck {
+  /** Stable identifier (e.g. "esco_classification") */
+  id: string;
+  /** Human-readable display name */
+  name: string;
+  /** Health probe URL (absolute) */
+  endpoint: string;
+  /** Probe timeout in milliseconds */
+  timeoutMs: number;
+  /** true = module cannot function without it, false = degraded mode */
+  required: boolean;
+  /** Human-readable purpose (e.g. "Occupation search in Automation Wizard") */
+  usedFor: string;
+}
+
+// =============================================================================
 // Contracts (Published Language)
 // =============================================================================
 
@@ -139,6 +159,8 @@ export interface ModuleManifest {
   resilience?: ResilienceConfig;
   /** Response caching policy (Stufe 1). If omitted, no caching. */
   cachePolicy?: CachePolicy;
+  /** External services this module depends on. Health-checked alongside the module. */
+  dependencies?: DependencyHealthCheck[];
 }
 
 export interface JobDiscoveryManifest extends ModuleManifest {
@@ -156,6 +178,12 @@ export interface AiManifest extends ModuleManifest {
 export interface DataEnrichmentManifest extends ModuleManifest {
   connectorType: ConnectorType.DATA_ENRICHMENT;
   supportedDimensions: string[];
+}
+
+export interface ReferenceDataManifest extends ModuleManifest {
+  connectorType: ConnectorType.REFERENCE_DATA;
+  /** Which taxonomy this module provides (e.g. "esco_occupations", "nuts_regions") */
+  taxonomy: string;
 }
 
 // =============================================================================

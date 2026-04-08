@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, Ban, Bell, BellRing, Bot, Bug, Database, Globe, HardDrive, Key, Mail, Palette, Webhook, Zap } from "lucide-react";
+import { Activity, AlertTriangle, Ban, Bell, BellRing, Bot, Bug, Database, Globe, HardDrive, Key, Mail, Palette, Webhook, Zap } from "lucide-react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ export type SettingsSection =
   | "appearance"
   | "automation"
   | "enrichment"
+  | "api-status"
   | "logo-cache"
   | "notifications"
   | "webhooks"
@@ -36,6 +37,7 @@ const SETTINGS_SECTIONS: {
   { id: "appearance", labelKey: "settings.sidebarAppearance", icon: Palette },
   { id: "automation", labelKey: "settings.sidebarAutomation", icon: Zap },
   { id: "enrichment", labelKey: "enrichment.sidebarEnrichment", icon: Database },
+  { id: "api-status", labelKey: "enrichment.sidebarApiStatus", icon: Activity },
   { id: "logo-cache", labelKey: "logoAsset.title", icon: HardDrive },
   { id: "notifications", labelKey: "settings.sidebarNotifications", icon: Bell },
   { id: "webhooks", labelKey: "webhook.title", icon: Webhook },

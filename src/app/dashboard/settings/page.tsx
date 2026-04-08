@@ -14,6 +14,7 @@ import SmtpSettings from "@/components/settings/SmtpSettings";
 import WebhookSettings from "@/components/settings/WebhookSettings";
 import CompanyBlacklistSettings from "@/components/settings/CompanyBlacklistSettings";
 import EnrichmentModuleSettings from "@/components/settings/EnrichmentModuleSettings";
+import ApiStatusOverview from "@/components/settings/ApiStatusOverview";
 import LogoAssetSettings from "@/components/settings/LogoAssetSettings";
 import SettingsSidebar, { type SettingsSection } from "@/components/settings/SettingsSidebar";
 import { useTranslations } from "@/i18n";
@@ -39,6 +40,7 @@ function Settings() {
           {activeSection === "appearance" && <DisplaySettings />}
           {activeSection === "automation" && <AutomationSettings />}
           {activeSection === "enrichment" && <EnrichmentModuleSettings />}
+          {activeSection === "api-status" && <ApiStatusOverview />}
           {activeSection === "logo-cache" && <LogoAssetSettings />}
           {activeSection === "notifications" && <NotificationSettings />}
           {activeSection === "webhooks" && <WebhookSettings />}

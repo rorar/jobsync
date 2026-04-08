@@ -4,13 +4,72 @@ import prisma from "@/lib/db";
 import { moduleRegistry } from "./registry";
 import { isBlockedHealthCheckUrl } from "@/lib/url-validation";
 import {
+  CredentialType,
   HealthStatus,
   ModuleStatus,
   type RegisteredModule,
   type HealthCheckConfig,
+  type DependencyHealthCheck,
 } from "./manifest";
 
 const MAX_FAILURES_BEFORE_UNREACHABLE = 3;
+
+export interface DependencyCheckResult {
+  id: string;
+  name: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface DependencyHealthResult {
+  /** Aggregate: healthy if all pass, degraded if any fail. Never unreachable. */
+  status: HealthStatus;
+  results: DependencyCheckResult[];
+}
+
+/**
+ * Check health of a module's declared dependencies.
+ * Returns DEGRADED if any fail, HEALTHY if all pass. Never UNREACHABLE.
+ * See: specs/module-lifecycle.allium, rule DependencyHealthDegradation
+ */
+export async function checkDependencyHealth(
+  dependencies: DependencyHealthCheck[],
+): Promise<DependencyHealthResult> {
+  if (dependencies.length === 0) {
+    return { status: HealthStatus.HEALTHY, results: [] };
+  }
+
+  const results: DependencyCheckResult[] = [];
+
+  for (const dep of dependencies) {
+    try {
+      const response = await fetch(dep.endpoint, {
+        method: "GET",
+        signal: AbortSignal.timeout(dep.timeoutMs),
+      });
+
+      results.push({
+        id: dep.id,
+        name: dep.name,
+        success: response.ok,
+        error: response.ok ? undefined : `HTTP ${response.status} ${response.statusText}`,
+      });
+    } catch (error) {
+      results.push({
+        id: dep.id,
+        name: dep.name,
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  const anyFailed = results.some((r) => !r.success);
+  return {
+    status: anyFailed ? HealthStatus.DEGRADED : HealthStatus.HEALTHY,
+    results,
+  };
+}
 
 interface HealthCheckResult {
   moduleId: string;
@@ -18,6 +77,7 @@ interface HealthCheckResult {
   healthStatus: HealthStatus;
   responseTimeMs: number;
   error?: string;
+  dependencyResults?: DependencyCheckResult[];
 }
 
 /**
@@ -60,8 +120,34 @@ export async function checkModuleHealth(
     };
   }
 
+  // For key-based modules, resolve credential from env for health check.
+  // Health checks are module-wide (no userId), so only env fallback is used.
+  // If no key is configured, return UNKNOWN rather than probing (which would 401/404).
+  let resolvedHealthConfig = healthConfig;
+  const cred = registered.manifest.credential;
+  if (cred.type !== CredentialType.NONE && cred.envFallback) {
+    const envKey = process.env[cred.envFallback];
+    if (!envKey) {
+      return {
+        moduleId,
+        success: false,
+        healthStatus: HealthStatus.UNKNOWN,
+        responseTimeMs: 0,
+        error: "No credential configured — health check skipped",
+      };
+    }
+    // Append token to health check endpoint if it's an absolute URL
+    if (healthConfig.endpoint?.startsWith("http")) {
+      const separator = healthConfig.endpoint.includes("?") ? "&" : "?";
+      resolvedHealthConfig = {
+        ...healthConfig,
+        endpoint: `${healthConfig.endpoint}${separator}token=${encodeURIComponent(envKey)}`,
+      };
+    }
+  }
+
   const start = Date.now();
-  const probeResult = await probeEndpoint(healthConfig, registered);
+  const probeResult = await probeEndpoint(resolvedHealthConfig, registered);
   const responseTimeMs = Date.now() - start;
 
   // Determine new health status based on probe result and consecutive failures
@@ -97,6 +183,19 @@ export async function checkModuleHealth(
     consecutiveFailures,
   );
 
+  // Check dependencies (spec: DependencyHealthDegradation rule)
+  const dependencies = registered.manifest.dependencies;
+  let depResult: DependencyHealthResult | undefined;
+  if (dependencies && dependencies.length > 0) {
+    depResult = await checkDependencyHealth(dependencies);
+    // Dependencies can only RAISE to degraded, never to unreachable
+    if (depResult.status === HealthStatus.DEGRADED && newHealthStatus === HealthStatus.HEALTHY) {
+      newHealthStatus = HealthStatus.DEGRADED;
+      // Re-update registry with degraded status
+      moduleRegistry.updateHealth(moduleId, newHealthStatus, new Date(), undefined, consecutiveFailures);
+    }
+  }
+
   // Persist to DB (best-effort)
   try {
     await prisma.moduleRegistration.upsert({
@@ -122,6 +221,7 @@ export async function checkModuleHealth(
     healthStatus: newHealthStatus,
     responseTimeMs,
     error: probeResult.error,
+    dependencyResults: depResult?.results,
   };
 }
 

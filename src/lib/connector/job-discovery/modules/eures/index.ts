@@ -131,6 +131,8 @@ export function createEuresConnector(): DataSourceConnector {
 
         const publicationPeriod = ((connectorParams.publicationPeriod as string) || "LAST_WEEK") as PublicationPeriod;
         const sortSearch = ((connectorParams.sortSearch as string) || "MOST_RECENT") as SortOrder;
+        type SpecificSearchCode = NonNullable<NonNullable<EuresSearchRequest["keywords"]>[number]["specificSearchCode"]>;
+        const specificSearchCode = ((connectorParams.specificSearchCode as string) || "EVERYWHERE") as SpecificSearchCode;
         const requiredExperienceCodes = ((connectorParams.requiredExperienceCodes as string[]) ?? []) as ExperienceCode[];
         const positionOfferingCodes = ((connectorParams.positionOfferingCodes as string[]) ?? []) as OfferingCode[];
         const positionScheduleCodes = ((connectorParams.positionScheduleCodes as string[]) ?? []) as ScheduleCode[];
@@ -158,7 +160,7 @@ export function createEuresConnector(): DataSourceConnector {
           sortSearch,
           keywords: freeTextKeywords.map((keyword) => ({
               keyword,
-              specificSearchCode: "EVERYWHERE" as const,
+              specificSearchCode,
             })),
           publicationPeriod,
           occupationUris,
@@ -258,8 +260,10 @@ export function createEuresConnector(): DataSourceConnector {
       externalId: string,
     ): Promise<ConnectorResult<DiscoveredVacancy>> {
       try {
+        // requestLang query param ensures the API returns the vacancy in the requested language
+        const detailUrl = `${EURES_DETAIL_URL}/${encodeURIComponent(externalId)}?requestLang=en`;
         const detail = await resilientFetch<EuresVacancyDetail>(
-          `${EURES_DETAIL_URL}/${encodeURIComponent(externalId)}`,
+          detailUrl,
           {
             method: "GET",
             headers: { Accept: "application/json" },

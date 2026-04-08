@@ -4,6 +4,8 @@ import prisma from "@/lib/db";
 import { moduleRegistry } from "@/lib/connector/registry";
 import "@/lib/connector/job-discovery/connectors";
 import "@/lib/connector/ai-provider/modules/connectors";
+import "@/lib/connector/data-enrichment/connectors";
+import "@/lib/connector/reference-data/connectors";
 import {
   ConnectorType,
   CredentialType,
@@ -17,6 +19,7 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { handleError } from "@/lib/utils";
 import { ActionResult } from "@/models/actionResult";
 import { checkModuleHealth } from "@/lib/connector/health-monitor";
+import { checkHealthCheckRateLimit } from "@/lib/health-rate-limit";
 
 // =============================================================================
 // Types
@@ -43,6 +46,7 @@ export interface ModuleManifestSummary {
   };
   connectorParamsSchema?: ConnectorParamsSchema;
   searchFieldOverrides?: SearchFieldOverride[];
+  dependencies?: { id: string; name: string; endpoint: string; timeoutMs: number; required: boolean; usedFor: string }[];
 }
 
 // =============================================================================
@@ -63,6 +67,8 @@ export async function getModuleManifests(
     : [
         ...moduleRegistry.getByType(ConnectorType.JOB_DISCOVERY),
         ...moduleRegistry.getByType(ConnectorType.AI_PROVIDER),
+        ...moduleRegistry.getByType(ConnectorType.DATA_ENRICHMENT),
+        ...moduleRegistry.getByType(ConnectorType.REFERENCE_DATA),
       ];
 
   // Trigger health checks for unknown-status modules (non-blocking).
@@ -100,6 +106,7 @@ export async function getModuleManifests(
       },
       connectorParamsSchema: jdManifest?.connectorParamsSchema,
       searchFieldOverrides: jdManifest?.searchFieldOverrides,
+      dependencies: m.manifest.dependencies,
     };
   });
 
@@ -324,6 +331,11 @@ export async function runHealthCheck(
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
+
+    const rateCheck = checkHealthCheckRateLimit(user.id);
+    if (!rateCheck.allowed) {
+      return { success: false, message: "Too many health checks — please wait a moment" };
+    }
 
     const result = await checkModuleHealth(moduleId);
 
