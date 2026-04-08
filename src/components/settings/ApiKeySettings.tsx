@@ -50,23 +50,14 @@ interface ModuleConfig {
   id: ApiKeyModuleId;
   moduleId: string;
   name: string;
-  i18n?: Record<string, { name: string; description: string }>;
+  i18n?: Record<string, { name: string; description: string; credentialHint?: string }>;
   placeholder: string;
   inputType: "password" | "text";
-  descriptionKey: TranslationKey;
   sensitive: boolean;
   status: "active" | "inactive" | "error";
   healthStatus: "healthy" | "degraded" | "unreachable" | "unknown";
   lastSuccessfulConnection?: string;
 }
-
-/** Fallback description keys per module — i18n keys defined in settings dictionary */
-const DESCRIPTION_KEYS: Record<string, TranslationKey> = {
-  openai: "settings.openaiDesc",
-  deepseek: "settings.deepseekDesc",
-  rapidapi: "settings.rapidapiDesc",
-  ollama: "settings.ollamaDesc",
-};
 
 function manifestToModuleConfig(m: ModuleManifestSummary): ModuleConfig {
   return {
@@ -76,7 +67,6 @@ function manifestToModuleConfig(m: ModuleManifestSummary): ModuleConfig {
     i18n: m.i18n,
     placeholder: m.credential.placeholder ?? "",
     inputType: m.credential.sensitive ? "password" : "text",
-    descriptionKey: DESCRIPTION_KEYS[m.credential.moduleId] ?? ("settings.apiKeysDesc" as TranslationKey),
     sensitive: m.credential.sensitive,
     status: m.status as "active" | "inactive" | "error",
     healthStatus: m.healthStatus as ModuleConfig["healthStatus"],
@@ -89,6 +79,13 @@ function getModuleName(module: ModuleConfig, locale: string): string {
   return module.i18n?.[locale]?.name
     ?? module.i18n?.["en"]?.name
     ?? module.name;
+}
+
+/** Resolve credential hint from manifest i18n */
+function getCredentialHint(module: ModuleConfig, locale: string): string {
+  return module.i18n?.[locale]?.credentialHint
+    ?? module.i18n?.["en"]?.credentialHint
+    ?? "";
 }
 
 const DEFAULT_OLLAMA_PLACEHOLDER = "http://127.0.0.1:11434";
@@ -377,7 +374,7 @@ function ApiKeySettings() {
                   <div>
                     <CardTitle className="text-base">{getModuleName(module, locale)}</CardTitle>
                     <CardDescription className="text-sm">
-                      {t(module.descriptionKey)}
+                      {getCredentialHint(module, locale)}
                       {module.id === "ollama" && (
                         <span className="block text-xs text-muted-foreground/70 mt-0.5">
                           Default: {defaultOllamaUrl}

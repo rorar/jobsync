@@ -151,6 +151,7 @@ export interface DependencyHealthCheck {
 export interface ModuleI18nEntry {
   name: string;
   description: string;
+  credentialHint?: string;  // description for API key settings field
 }
 
 /** Per-locale translations for module display in UI. Keyed by locale code. */

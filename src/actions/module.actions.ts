@@ -44,7 +44,7 @@ export interface ModuleManifestSummary {
   connectorParamsSchema?: ConnectorParamsSchema;
   searchFieldOverrides?: SearchFieldOverride[];
   dependencies?: { id: string; name: string; endpoint: string; timeoutMs: number; required: boolean; usedFor: string }[];
-  i18n?: Record<string, { name: string; description: string }>;
+  i18n?: Record<string, { name: string; description: string; credentialHint?: string }>;
 }
 
 // =============================================================================
