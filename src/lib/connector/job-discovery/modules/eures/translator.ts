@@ -29,6 +29,16 @@ export function translateEuresVacancy(
     salary: undefined,
     employmentType: mapScheduleCode(jv.positionScheduleCodes ?? []),
     externalId: jv.id,
+
+    // Extended fields
+    companyUrl: jv.employer?.website ?? undefined,
+    companyDescription: jv.employer?.description ? stripHtml(jv.employer.description) : undefined,
+    industryCodes: jv.employer?.sectorCodes?.length ? jv.employer.sectorCodes : undefined,
+    companySize: jv.employer?.organisationSizeCode ?? undefined,
+    positionOfferingCode: jv.positionOfferingCode ?? undefined,
+    numberOfPosts: jv.numberOfPosts ?? undefined,
+    occupationUris: jv.jobCategoriesCodes?.length ? jv.jobCategoriesCodes : undefined,
+    euresFlag: jv.euresFlag ?? undefined,
   };
 }
 

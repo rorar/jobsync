@@ -67,6 +67,18 @@ function translateDetail(
     applicationInstructions: profile.applicationInstructions
       ? stripDetailHtml(profile.applicationInstructions.join("\n"))
       : undefined,
+
+    // Extended fields from profile
+    positionOfferingCode: profile.positionOfferingCode ?? undefined,
+    numberOfPosts: profile.numberOfPosts ?? undefined,
+    occupationUris: profile.jobCategoriesCodes?.length ? profile.jobCategoriesCodes : undefined,
+    euresFlag: profile.euresFlag ?? undefined,
+    companyUrl: profile.employer?.website ?? undefined,
+    companyDescription: profile.employer?.description
+      ? stripDetailHtml(profile.employer.description)
+      : undefined,
+    industryCodes: profile.employer?.sectorCodes?.length ? profile.employer.sectorCodes : undefined,
+    companySize: profile.employer?.organisationSizeCode ?? undefined,
   };
 }
 

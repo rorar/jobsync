@@ -45,6 +45,25 @@ export const deck = {
     "deck.blockConfirmDescription": "This will blacklist \"{company}\" and dismiss this vacancy. All future vacancies from this company will be filtered out.",
     "deck.blockConfirm": "Block company",
     "deck.blockNoEmployerName": "Cannot block — company name unknown",
+    // Position offering codes
+    "deck.offering.apprenticeship": "Apprenticeship",
+    "deck.offering.contract": "Contract",
+    "deck.offering.directhire": "Direct Hire",
+    "deck.offering.internship": "Internship",
+    "deck.offering.seasonal": "Seasonal",
+    "deck.offering.temporary": "Temporary",
+    "deck.offering.volunteer": "Volunteer",
+    "deck.offering.selfemployed": "Self-employed",
+    // Education levels
+    "deck.education.basic": "Basic",
+    "deck.education.medium": "Secondary",
+    "deck.education.bachelor": "Bachelor",
+    "deck.education.master": "Master",
+    "deck.education.tertiary": "Tertiary",
+    "deck.education.doctoral": "Doctorate",
+    // Other new keys
+    "deck.immediateStart": "Immediate start",
+    "deck.positions": "{count} positions",
   },
   de: {
     "deck.dismiss": "Ablehnen",
@@ -92,6 +111,25 @@ export const deck = {
     "deck.blockConfirmDescription": "Dies blockiert \"{company}\" und lehnt diese Stelle ab. Alle zukünftigen Stellen dieses Unternehmens werden herausgefiltert.",
     "deck.blockConfirm": "Unternehmen blockieren",
     "deck.blockNoEmployerName": "Blockieren nicht möglich — Firmenname unbekannt",
+    // Position offering codes
+    "deck.offering.apprenticeship": "Ausbildung",
+    "deck.offering.contract": "Befristet",
+    "deck.offering.directhire": "Festanstellung",
+    "deck.offering.internship": "Praktikum",
+    "deck.offering.seasonal": "Saisonal",
+    "deck.offering.temporary": "Zeitarbeit",
+    "deck.offering.volunteer": "Ehrenamt",
+    "deck.offering.selfemployed": "Selbstständig",
+    // Education levels
+    "deck.education.basic": "Grundbildung",
+    "deck.education.medium": "Sekundarschule",
+    "deck.education.bachelor": "Bachelor",
+    "deck.education.master": "Master",
+    "deck.education.tertiary": "Tertiär",
+    "deck.education.doctoral": "Promotion",
+    // Other new keys
+    "deck.immediateStart": "Sofortiger Start",
+    "deck.positions": "{count} Stellen",
   },
   fr: {
     "deck.dismiss": "Rejeter",
@@ -139,6 +177,25 @@ export const deck = {
     "deck.blockConfirmDescription": "Ceci bloquera \"{company}\" et rejettera cette offre. Toutes les futures offres de cette entreprise seront filtrées.",
     "deck.blockConfirm": "Bloquer l'entreprise",
     "deck.blockNoEmployerName": "Impossible de bloquer — nom d'entreprise inconnu",
+    // Position offering codes
+    "deck.offering.apprenticeship": "Apprentissage",
+    "deck.offering.contract": "Contrat",
+    "deck.offering.directhire": "Embauche directe",
+    "deck.offering.internship": "Stage",
+    "deck.offering.seasonal": "Saisonnier",
+    "deck.offering.temporary": "Temporaire",
+    "deck.offering.volunteer": "Bénévolat",
+    "deck.offering.selfemployed": "Indépendant",
+    // Education levels
+    "deck.education.basic": "De base",
+    "deck.education.medium": "Secondaire",
+    "deck.education.bachelor": "Licence",
+    "deck.education.master": "Master",
+    "deck.education.tertiary": "Tertiaire",
+    "deck.education.doctoral": "Doctorat",
+    // Other new keys
+    "deck.immediateStart": "Début immédiat",
+    "deck.positions": "{count} postes",
   },
   es: {
     "deck.dismiss": "Rechazar",
@@ -186,5 +243,24 @@ export const deck = {
     "deck.blockConfirmDescription": "Esto bloqueará \"{company}\" y descartará esta vacante. Todas las futuras vacantes de esta empresa serán filtradas.",
     "deck.blockConfirm": "Bloquear empresa",
     "deck.blockNoEmployerName": "No se puede bloquear — nombre de empresa desconocido",
+    // Position offering codes
+    "deck.offering.apprenticeship": "Aprendizaje",
+    "deck.offering.contract": "Contrato",
+    "deck.offering.directhire": "Contratación directa",
+    "deck.offering.internship": "Prácticas",
+    "deck.offering.seasonal": "Estacional",
+    "deck.offering.temporary": "Temporal",
+    "deck.offering.volunteer": "Voluntariado",
+    "deck.offering.selfemployed": "Autónomo",
+    // Education levels
+    "deck.education.basic": "Básica",
+    "deck.education.medium": "Secundaria",
+    "deck.education.bachelor": "Grado",
+    "deck.education.master": "Máster",
+    "deck.education.tertiary": "Terciaria",
+    "deck.education.doctoral": "Doctorado",
+    // Other new keys
+    "deck.immediateStart": "Inicio inmediato",
+    "deck.positions": "{count} puestos",
   },
 } as const;

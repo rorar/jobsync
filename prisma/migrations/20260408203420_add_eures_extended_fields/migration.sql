@@ -1,0 +1,19 @@
+-- AlterTable
+ALTER TABLE "StagedVacancy" ADD COLUMN "companyDescription" TEXT;
+ALTER TABLE "StagedVacancy" ADD COLUMN "companySize" TEXT;
+ALTER TABLE "StagedVacancy" ADD COLUMN "companyUrl" TEXT;
+ALTER TABLE "StagedVacancy" ADD COLUMN "contractEndDate" TEXT;
+ALTER TABLE "StagedVacancy" ADD COLUMN "contractStartDate" TEXT;
+ALTER TABLE "StagedVacancy" ADD COLUMN "euresFlag" BOOLEAN;
+ALTER TABLE "StagedVacancy" ADD COLUMN "immediateStart" BOOLEAN;
+ALTER TABLE "StagedVacancy" ADD COLUMN "industryCodes" JSONB;
+ALTER TABLE "StagedVacancy" ADD COLUMN "numberOfPosts" INTEGER;
+ALTER TABLE "StagedVacancy" ADD COLUMN "occupationUris" JSONB;
+ALTER TABLE "StagedVacancy" ADD COLUMN "positionOfferingCode" TEXT;
+ALTER TABLE "StagedVacancy" ADD COLUMN "requiredEducationLevel" TEXT;
+ALTER TABLE "StagedVacancy" ADD COLUMN "requiredExperienceYears" INTEGER;
+ALTER TABLE "StagedVacancy" ADD COLUMN "salaryCurrency" TEXT;
+ALTER TABLE "StagedVacancy" ADD COLUMN "salaryMax" REAL;
+ALTER TABLE "StagedVacancy" ADD COLUMN "salaryMin" REAL;
+ALTER TABLE "StagedVacancy" ADD COLUMN "salaryPeriod" TEXT;
+ALTER TABLE "StagedVacancy" ADD COLUMN "workingLanguages" JSONB;

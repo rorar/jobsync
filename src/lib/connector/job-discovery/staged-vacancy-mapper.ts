@@ -14,6 +14,27 @@ interface StagedVacancyInput {
   postedAt: Date | null;
   applicationDeadline: string | null;
   applicationInstructions: string | null;
+
+  // Extended fields (ROADMAP 1.1b Phase 1)
+  companyUrl: string | null;
+  companyDescription: string | null;
+  industryCodes?: string[];
+  companySize: string | null;
+  positionOfferingCode: string | null;
+  numberOfPosts: number | null;
+  occupationUris?: string[];
+  requiredEducationLevel: string | null;
+  requiredExperienceYears: number | null;
+  workingLanguages?: string[];
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: string | null;
+  salaryPeriod: string | null;
+  immediateStart: boolean | null;
+  contractStartDate: string | null;
+  contractEndDate: string | null;
+  euresFlag: boolean | null;
+
   source: string;
   automationId: string;
   matchScore: number | null;
@@ -45,6 +66,24 @@ export function mapDiscoveredVacancyToStagedInput(params: {
     postedAt: vacancy.postedAt ?? null,
     applicationDeadline: vacancy.applicationDeadline ?? null,
     applicationInstructions: vacancy.applicationInstructions ?? null,
+    companyUrl: vacancy.companyUrl ?? null,
+    companyDescription: vacancy.companyDescription ?? null,
+    industryCodes: vacancy.industryCodes ?? undefined,
+    companySize: vacancy.companySize ?? null,
+    positionOfferingCode: vacancy.positionOfferingCode ?? null,
+    numberOfPosts: vacancy.numberOfPosts ?? null,
+    occupationUris: vacancy.occupationUris ?? undefined,
+    requiredEducationLevel: vacancy.requiredEducationLevel ?? null,
+    requiredExperienceYears: vacancy.requiredExperienceYears ?? null,
+    workingLanguages: vacancy.workingLanguages ?? undefined,
+    salaryMin: vacancy.salaryMin ?? null,
+    salaryMax: vacancy.salaryMax ?? null,
+    salaryCurrency: vacancy.salaryCurrency ?? null,
+    salaryPeriod: vacancy.salaryPeriod ?? null,
+    immediateStart: vacancy.immediateStart ?? null,
+    contractStartDate: vacancy.contractStartDate ?? null,
+    contractEndDate: vacancy.contractEndDate ?? null,
+    euresFlag: vacancy.euresFlag ?? null,
     source: "automation",
     automationId,
     matchScore,

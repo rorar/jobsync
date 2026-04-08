@@ -7,6 +7,7 @@ import {
   MapPin,
   Building2,
   Calendar,
+  Banknote,
   ArrowUpCircle,
   XCircle,
   RotateCcw,
@@ -16,6 +17,33 @@ import {
 } from "lucide-react";
 import { useTranslations, formatDateShort } from "@/i18n";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
+
+function formatSalaryRange(
+  min: number | null | undefined,
+  max: number | null | undefined,
+  currency: string | null | undefined,
+  period: string | null | undefined,
+): string {
+  const cur = currency ?? "EUR";
+  const fmt = (n: number) =>
+    new Intl.NumberFormat("de-DE", {
+      style: "currency",
+      currency: cur,
+      maximumFractionDigits: 0,
+    }).format(n);
+  const parts: string[] = [];
+  if (min != null && max != null && min !== max) {
+    parts.push(`${fmt(min)} – ${fmt(max)}`);
+  } else if (min != null) {
+    parts.push(`ab ${fmt(min)}`);
+  } else if (max != null) {
+    parts.push(`bis ${fmt(max)}`);
+  }
+  if (period && period !== "NS") {
+    parts.push(`/${period}`);
+  }
+  return parts.join(" ") || "";
+}
 
 type ActiveTab = "new" | "dismissed" | "archive" | "trash";
 
@@ -100,6 +128,44 @@ export function StagedVacancyCard({
         {vacancy.automation && (
           <div className="mt-1.5 text-xs text-muted-foreground">
             {t("staging.source")}: {vacancy.automation.name}
+          </div>
+        )}
+        {/* Extended meta badges */}
+        {(
+          (vacancy.positionOfferingCode && vacancy.positionOfferingCode !== "NS") ||
+          vacancy.salaryMin != null ||
+          vacancy.salaryMax != null ||
+          (vacancy.requiredEducationLevel && vacancy.requiredEducationLevel !== "NS") ||
+          vacancy.immediateStart ||
+          (vacancy.numberOfPosts != null && vacancy.numberOfPosts > 1)
+        ) && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+            {vacancy.positionOfferingCode && vacancy.positionOfferingCode !== "NS" && (
+              <Badge variant="outline" className="text-xs">
+                {t(`staging.offering.${vacancy.positionOfferingCode}`)}
+              </Badge>
+            )}
+            {(vacancy.salaryMin != null || vacancy.salaryMax != null) && (
+              <span className="inline-flex items-center gap-1">
+                <Banknote className="h-3 w-3 shrink-0" aria-hidden="true" />
+                {formatSalaryRange(vacancy.salaryMin, vacancy.salaryMax, vacancy.salaryCurrency, vacancy.salaryPeriod)}
+              </span>
+            )}
+            {vacancy.requiredEducationLevel && vacancy.requiredEducationLevel !== "NS" && (
+              <Badge variant="outline" className="text-xs">
+                {t(`staging.education.${vacancy.requiredEducationLevel}`)}
+              </Badge>
+            )}
+            {vacancy.immediateStart && (
+              <Badge variant="default" className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                {t("staging.immediateStart")}
+              </Badge>
+            )}
+            {vacancy.numberOfPosts != null && vacancy.numberOfPosts > 1 && (
+              <span className="text-xs">
+                {t("staging.positions").replace("{count}", String(vacancy.numberOfPosts))}
+              </span>
+            )}
           </div>
         )}
       </CardContent>

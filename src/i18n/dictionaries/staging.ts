@@ -42,6 +42,25 @@ export const staging = {
     "staging.undoAction": "Undo",
     "staging.bulkSuccess": "{succeeded} of {total} items processed",
     "staging.promotionFailed": "Failed to promote vacancy",
+    // Position offering codes
+    "staging.offering.apprenticeship": "Apprenticeship",
+    "staging.offering.contract": "Contract",
+    "staging.offering.directhire": "Direct Hire",
+    "staging.offering.internship": "Internship",
+    "staging.offering.seasonal": "Seasonal",
+    "staging.offering.temporary": "Temporary",
+    "staging.offering.volunteer": "Volunteer",
+    "staging.offering.selfemployed": "Self-employed",
+    // Education levels
+    "staging.education.basic": "Basic",
+    "staging.education.medium": "Secondary",
+    "staging.education.bachelor": "Bachelor",
+    "staging.education.master": "Master",
+    "staging.education.tertiary": "Tertiary",
+    "staging.education.doctoral": "Doctorate",
+    // Other new keys
+    "staging.immediateStart": "Immediate start",
+    "staging.positions": "{count} positions",
   },
   de: {
     "staging.title": "Staging-Queue",
@@ -86,6 +105,25 @@ export const staging = {
     "staging.undoAction": "Rückgängig",
     "staging.bulkSuccess": "{succeeded} von {total} Elementen verarbeitet",
     "staging.promotionFailed": "Stelle konnte nicht befördert werden",
+    // Position offering codes
+    "staging.offering.apprenticeship": "Ausbildung",
+    "staging.offering.contract": "Befristet",
+    "staging.offering.directhire": "Festanstellung",
+    "staging.offering.internship": "Praktikum",
+    "staging.offering.seasonal": "Saisonal",
+    "staging.offering.temporary": "Zeitarbeit",
+    "staging.offering.volunteer": "Ehrenamt",
+    "staging.offering.selfemployed": "Selbstständig",
+    // Education levels
+    "staging.education.basic": "Grundbildung",
+    "staging.education.medium": "Sekundarschule",
+    "staging.education.bachelor": "Bachelor",
+    "staging.education.master": "Master",
+    "staging.education.tertiary": "Tertiär",
+    "staging.education.doctoral": "Promotion",
+    // Other new keys
+    "staging.immediateStart": "Sofortiger Start",
+    "staging.positions": "{count} Stellen",
   },
   fr: {
     "staging.title": "File d'attente",
@@ -130,6 +168,25 @@ export const staging = {
     "staging.undoAction": "Annuler",
     "staging.bulkSuccess": "{succeeded} sur {total} éléments traités",
     "staging.promotionFailed": "Impossible de promouvoir l'offre",
+    // Position offering codes
+    "staging.offering.apprenticeship": "Apprentissage",
+    "staging.offering.contract": "Contrat",
+    "staging.offering.directhire": "Embauche directe",
+    "staging.offering.internship": "Stage",
+    "staging.offering.seasonal": "Saisonnier",
+    "staging.offering.temporary": "Temporaire",
+    "staging.offering.volunteer": "Bénévolat",
+    "staging.offering.selfemployed": "Indépendant",
+    // Education levels
+    "staging.education.basic": "De base",
+    "staging.education.medium": "Secondaire",
+    "staging.education.bachelor": "Licence",
+    "staging.education.master": "Master",
+    "staging.education.tertiary": "Tertiaire",
+    "staging.education.doctoral": "Doctorat",
+    // Other new keys
+    "staging.immediateStart": "Début immédiat",
+    "staging.positions": "{count} postes",
   },
   es: {
     "staging.title": "Cola de espera",
@@ -174,5 +231,24 @@ export const staging = {
     "staging.undoAction": "Deshacer",
     "staging.bulkSuccess": "{succeeded} de {total} elementos procesados",
     "staging.promotionFailed": "Error al promover la vacante",
+    // Position offering codes
+    "staging.offering.apprenticeship": "Aprendizaje",
+    "staging.offering.contract": "Contrato",
+    "staging.offering.directhire": "Contratación directa",
+    "staging.offering.internship": "Prácticas",
+    "staging.offering.seasonal": "Estacional",
+    "staging.offering.temporary": "Temporal",
+    "staging.offering.volunteer": "Voluntariado",
+    "staging.offering.selfemployed": "Autónomo",
+    // Education levels
+    "staging.education.basic": "Básica",
+    "staging.education.medium": "Secundaria",
+    "staging.education.bachelor": "Grado",
+    "staging.education.master": "Máster",
+    "staging.education.tertiary": "Terciaria",
+    "staging.education.doctoral": "Doctorado",
+    // Other new keys
+    "staging.immediateStart": "Inicio inmediato",
+    "staging.positions": "{count} puestos",
   },
 } as const;

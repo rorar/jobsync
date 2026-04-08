@@ -498,6 +498,26 @@ model StagedVacancy {
   applicationDeadline String?
   applicationInstructions String?
 
+  // Extended vacancy data (ROADMAP 1.1b Phase 1)
+  companyUrl              String?
+  companyDescription      String?
+  industryCodes           Json?     // string[] — NACE sector codes
+  companySize             String?
+  positionOfferingCode    String?   // apprenticeship, contract, directhire, internship, etc.
+  numberOfPosts           Int?
+  occupationUris          Json?     // string[] — ESCO Occupation URIs
+  requiredEducationLevel  String?   // basic, medium, bachelor, master, tertiary, doctoral
+  requiredExperienceYears Int?
+  workingLanguages        Json?     // string[] — ISO 639-1 codes
+  salaryMin               Float?
+  salaryMax               Float?
+  salaryCurrency          String?   // ISO 4217 (EUR, USD, etc.)
+  salaryPeriod            String?   // monthly, yearly, hourly
+  immediateStart          Boolean?
+  contractStartDate       String?
+  contractEndDate         String?
+  euresFlag               Boolean?
+
   // Source tracking
   source            String      @default("automation")  // "manual" | "automation"
   automationId      String?

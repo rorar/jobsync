@@ -19,6 +19,27 @@ export interface StagedVacancy {
   postedAt: Date | null;
   applicationDeadline: string | null;
   applicationInstructions: string | null;
+
+  // Extended fields (ROADMAP 1.1b Phase 1)
+  companyUrl: string | null;
+  companyDescription: string | null;
+  industryCodes: string[] | null;
+  companySize: string | null;
+  positionOfferingCode: string | null;
+  numberOfPosts: number | null;
+  occupationUris: string[] | null;
+  requiredEducationLevel: string | null;
+  requiredExperienceYears: number | null;
+  workingLanguages: string[] | null;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: string | null;
+  salaryPeriod: string | null;
+  immediateStart: boolean | null;
+  contractStartDate: string | null;
+  contractEndDate: string | null;
+  euresFlag: boolean | null;
+
   source: VacancySource;
   automationId: string | null;
   matchScore: number | null;
