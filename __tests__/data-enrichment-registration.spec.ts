@@ -5,9 +5,8 @@
  * into the unified ModuleRegistry with the expected metadata.
  */
 
-// Import barrels to trigger registrations as side-effects
-import "@/lib/connector/data-enrichment/connectors";
-import "@/lib/connector/reference-data/connectors";
+// Import register-all to trigger all module self-registrations as side-effects
+import "@/lib/connector/register-all";
 
 import { moduleRegistry } from "@/lib/connector/registry";
 import { ConnectorType } from "@/lib/connector/manifest";

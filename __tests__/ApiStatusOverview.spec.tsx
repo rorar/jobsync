@@ -31,11 +31,6 @@ jest.mock("@/i18n", () => ({
         "enrichment.connectorGroup.ai_provider": "AI Provider",
         "enrichment.connectorGroup.data_enrichment": "Data Enrichment",
         "enrichment.connectorGroup.reference_data": "Reference Data",
-        "enrichment.logoDev": "Logo.dev",
-        "enrichment.googleFavicon": "Google Favicon",
-        "enrichment.metaParser": "Link Preview Parser",
-        "enrichment.escoApi": "ESCO Classification API",
-        "enrichment.eurostatNuts": "Eurostat NUTS Regions",
         "settings.moduleInactive": "Inactive",
         "settings.healthCheckNow": "Check now",
       };
@@ -95,6 +90,7 @@ const jobDiscoveryModule = {
   healthStatus: "healthy",
   lastHealthCheck: undefined,
   credential: { type: "none", moduleId: "eures", required: false, sensitive: false },
+  i18n: { en: { name: "EURES", description: "EU job board" } },
 };
 
 const aiProviderModule = {
@@ -106,6 +102,7 @@ const aiProviderModule = {
   healthStatus: "unknown",
   lastHealthCheck: undefined,
   credential: { type: "none", moduleId: "ollama", required: false, sensitive: false },
+  i18n: { en: { name: "Ollama", description: "Local LLM provider" } },
 };
 
 const enrichmentModuleActive = {
@@ -117,6 +114,7 @@ const enrichmentModuleActive = {
   healthStatus: "healthy",
   lastHealthCheck: new Date("2026-04-06T10:00:00Z").toISOString(),
   credential: { type: "api_key", moduleId: "logo_dev", required: false, sensitive: true, envFallback: "LOGODEV_API_KEY" },
+  i18n: { en: { name: "Logo.dev", description: "Company logo service" } },
 };
 
 const referenceDataModule = {
@@ -128,6 +126,7 @@ const referenceDataModule = {
   healthStatus: "healthy",
   lastHealthCheck: new Date("2026-04-06T10:00:00Z").toISOString(),
   credential: { type: "none", moduleId: "esco_classification", required: false, sensitive: false },
+  i18n: { en: { name: "ESCO Classification API", description: "EU occupation taxonomy" } },
 };
 
 const enrichmentModuleDegraded = {
@@ -139,6 +138,7 @@ const enrichmentModuleDegraded = {
   healthStatus: "degraded",
   lastHealthCheck: undefined,
   credential: { type: "none", moduleId: "google_favicon", required: false, sensitive: false },
+  i18n: { en: { name: "Google Favicon", description: "Favicon service" } },
 };
 
 // ---------------------------------------------------------------------------
