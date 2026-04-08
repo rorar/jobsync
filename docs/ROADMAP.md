@@ -548,6 +548,29 @@ Bestehendes Modul für die Jobsuche über den Job Discovery Connector. Funktioni
   - https://jobsuche.api.bund.dev/
 - **Shared Kernel mit 1.9:** Vom Arbeitsvermittler erhaltene Bewerbungsvorschläge können als Jobs in JobSync importiert werden. Statuswechsel (→ beworben) wird zurück nach arbeitsagentur.de propagiert.
 
+### 1.1b EURES/Arbeitsagentur Translator Erweiterung (Follow-Up)
+Felder die von den APIs geliefert aber noch nicht in `DiscoveredVacancy` extrahiert werden.
+
+**Phase 1 — Strukturierte Felder (Translation, kein Enrichment):**
+- `employer.website` → `DiscoveredVacancy.companyUrl` (neues Feld)
+- `employer.sectorCodes` (NACE) → `DiscoveredVacancy.industryCodes` (neues Feld)
+- `employer.organisationSizeCode` → `DiscoveredVacancy.companySize` (neues Feld)
+- `employer.description` → `DiscoveredVacancy.companyDescription` (neues Feld)
+- Voraussetzung: `DiscoveredVacancy` Interface erweitern, Prisma-Schema für StagedVacancy anpassen
+- DDD-Einordnung: Reine ACL-Arbeit im EURES Translator, kein neuer Concern
+
+**Phase 2 — Kontaktdaten-Extraktion aus Freitext (Research Spike):**
+- `description` und `applicationInstructions` enthalten häufig eingebettete Kontaktdaten (E-Mail, Telefon, Ansprechpartner) als unstrukturierten Freitext
+- **Stichproben-Analyse erforderlich:** 50-100 EURES-Listings in DE/EN/FR sammeln, Freitext manuell annotieren
+  - Wie oft stehen Kontaktdaten drin? In welchem Format? Welche Sprachen?
+  - Wie konsistent sind die Muster? (Regex-fähig vs. NLP-nötig)
+- **Entscheidung nach Analyse:**
+  - Option A: Regex/Heuristiken im Translator (einfach, fragil, sprachabhängig)
+  - Option B: AI-gestützte Extraktion als Data Enrichment Dimension `contact` (→ 1.13, `FUTURE_ENRICHMENT_DIMENSIONS`)
+  - Option C: Hybrid — Regex für E-Mail/Telefon, AI für Ansprechpartner/Kontext
+- **Nicht nur EURES:** Arbeitsagentur und zukünftige Module (1.14 StepStone, Indeed) haben dasselbe Problem
+- Cross-Ref: Data Enrichment `contact` Dimension (→ 1.13), Document-Parsing Connector (→ 1.18), CareerBERT NLP (→ 9.1)
+
 ### 1.2 Workflow Connector
 - **Modul: n8n** — Workflow-Automatisierung für komplexe Multi-Step Workflows (z.B. Job gefunden → CV anpassen → Bewerbung senden)
 - (zukünftig: Modul: Zapier, Modul: Make)
@@ -858,6 +881,50 @@ Bidirektionale Synchronisation von JobSync-Tasks mit externen Aufgaben-Managemen
 **Abgrenzung:**
 - ≠ Workflow Connector (1.2): Workflow = Multi-Step Automatisierung (n8n). Task Sync = Aufgaben-Synchronisation.
 - ≠ Kalender Connector (1.7): Kalender = Termine/Interviews. Task Sync = Aufgaben/To-Dos.
+
+### 1.20 Reference Data Connector (Klassifikationssysteme)
+Eigener Connector-Typ (`reference_data`) für externe Klassifikations- und Taxonomie-Dienste, die von anderen Modulen als Dependencies konsumiert werden. Löst das architektonische Problem, dass Referenzdaten-APIs (ESCO, Eurostat) weder Job Discovery noch Data Enrichment sind — sie sind eigenständige externe Systeme mit eigener Verfügbarkeit.
+
+**Motivation:**
+- EURES hängt von 3 externen EU-APIs ab (ESCO Classification, Eurostat NUTS, EURES Stats), die unabhängig ausfallen können
+- Aktuell als `data_enrichment` mit `supportedDimensions: []` modelliert — Kategorie-Hack, verletzt `DataEnrichmentManifest`-Semantik
+- Beantwortet die offene Allium-Frage: "Should modules be able to declare dependencies on other modules?"
+
+**Interface:** `ReferenceDataConnector`
+- `lookup(query) → ConnectorResult<ReferenceEntry[]>` — Nachschlagen von Klassifikationseinträgen
+- `resolve(uri) → ConnectorResult<ReferenceEntry>` — Einzelnen Eintrag per URI auflösen
+- `listVersions() → ConnectorResult<TaxonomyVersion[]>` — Verfügbare Taxonomie-Versionen
+
+**EU-Module (Ist-Zustand, umzuziehen):**
+- **Modul: ESCO Classification** — `ec.europa.eu/esco/api` — Berufsklassifikation (Occupations, Skills, Qualifications). Consumer: EURES Occupation-Combobox, CareerBERT (→ 9.1), Skillsets (→ 4.1)
+- **Modul: Eurostat NUTS** — `ec.europa.eu/eurostat/api/dissemination/sdmx` — Regionale Gebietseinheiten (NUTS-Codes, i18n-Namen). Consumer: EURES Location-Combobox
+- **Modul: EURES Country Stats** — `europa.eu/eures/api/.../getCountryStats` — Länderdaten mit Job-Zählung. Consumer: EURES Location-Hierarchie
+
+**Internationale Module (Discovery — zu evaluieren):**
+- **Modul: O\*NET** — `services.onetcenter.org` — US-Berufsklassifikation (Standard Occupational Classification). 1.000+ Berufsprofile mit Skills, Abilities, Work Styles. Frei nutzbar (US DoL). Relevant für: US-Job-Discovery-Module, Cross-Referenzierung ESCO↔SOC, CareerBERT Skill-Taxonomie-Erweiterung
+- **Modul: NAICS** — `api.census.gov` — North American Industry Classification System. Wirtschaftszweigklassifikation (US/CA/MX). Relevant für: Branchen-Filter in US-Job-Discovery-Modulen, Firmenklassifikation, Analogon zu EU-NACE-Codes
+- (zukünftig: NACE Rev. 2 von Eurostat, SOC UK von ONS)
+- Hinweis: ISCO-08 wird NICHT separat benötigt — ISCO-Gruppen kommen als embedded Relation aus der ESCO API (`broaderIscoGroup`)
+
+**Manifest-Erweiterung — Module Dependencies:**
+```
+contract ModuleManifest {
+  ...existing fields...
+  dependencies: ModuleDependency[]?  -- other modules this module requires
+}
+value ModuleDependency {
+  moduleId: String       -- e.g. "esco_classification"
+  required: Boolean      -- false = degraded mode possible, true = cannot function
+  usedFor: String        -- human-readable: "Occupation search in Automation Wizard"
+}
+```
+
+**UI:** API Status Overview zeigt Dependencies als Baumstruktur unter dem Eltern-Modul (→ bestehende `ApiStatusOverview.tsx` erweitern). Degraded-Dependencies lösen Warning-Badge am Eltern-Modul aus.
+
+**Abgrenzung:**
+- ≠ Data Enrichment (1.13): Enrichment = reaktive Datenanreicherung (Logo, Link-Preview). Reference Data = aktive Taxonomie-Nachschlage-Dienste.
+- ≠ AI Provider: Keine Inferenz, rein deklarative Klassifikationsdaten.
+- Cross-Ref: CareerBERT (→ 9.1) nutzt ESCO-Centroids, Skillsets (→ 4.1) nutzt ESCO/NACE, Onboarding (→ 2.1) nutzt ESCO-Taxonomie
 
 ---
 
@@ -1934,6 +2001,71 @@ Infrastructure Service — kein Domain-Concern. Distinct von DSGVO-Export (6.1):
 ### 8.7 Module SDK & Package Convention
 Strukturierte Methode für Community-Module ohne Core-Fork. Phase 1 des Plugin-Systems.
 
+**Phase 0 — Self-Contained Modules (Manifest v2, intern):**
+Vorstufe für externe Module: Interne Module müssen zuerst selbstbeschreibend sein, bevor ein externes SDK darauf aufbauen kann. Alles was ein Modul definiert, lebt in seinem Verzeichnis. Hinzufügen = Verzeichnis erstellen + 1 Import-Zeile. Entfernen = Verzeichnis löschen + 1 Import-Zeile.
+
+- **Motivation:** Beim Clearbit→Logo.dev-Austausch (2026-04-08) waren 15+ Dateien über das Projekt betroffen weil i18n-Keys und UI-Maps außerhalb des Modul-Verzeichnisses leben. Größte Fehlerquelle: vergessene/verwaiste i18n-Keys, inkonsistente `NAME_KEYS`/`DESCRIPTION_KEYS`-Maps in UI-Komponenten. Bereits als offener Punkt in `project_module_lifecycle_deferred.md` gelistet: "DESCRIPTION_KEYS map in ApiKeySettings.tsx — last hardcoded registry remnant (i18n keys not yet in manifest)".
+
+- **Phase 0a — i18n im Modul-Manifest:**
+  - Jedes Modul exportiert eine `i18n.ts` mit Translations pro Locale (name, description)
+  - `ModuleManifest` bekommt ein `i18n`-Feld: `i18n: Record<string, { name: string, description: string }>`
+  - UI-Komponenten lesen `manifest.i18n[locale].name` statt globaler `NAME_KEYS`/`DESCRIPTION_KEYS`-Maps
+  - `EnrichmentModuleSettings.tsx` und `ApiStatusOverview.tsx` entfernen hardcoded Maps
+  - Globale `enrichment.ts` Dictionary behält nur Feature-Level Keys (Dimensionen, Health-Status, etc.) — keine Modul-spezifischen Keys mehr
+  - Allium Spec: `ModuleManifest` Contract um `i18n`-Feld erweitern
+
+- **Phase 0b — Self-Registration (import = register):**
+  - Jedes Modul registriert sich selbst beim Import statt in einem externen Barrel:
+    ```typescript
+    // modules/logo-dev/index.ts — Self-Registration
+    import { moduleRegistry } from "@/lib/connector/registry";
+    import { logoDevManifest } from "./manifest";
+    moduleRegistry.register(logoDevManifest, () => new LogoDevConnector());
+    ```
+  - Der `connectorType` auf dem Manifest bestimmt die Zugehörigkeit — der Entwickler muss nicht wissen welches Barrel zu welchem Connector gehört
+  - **4 per-Connector Barrels** (`data-enrichment/connectors.ts`, `job-discovery/connectors.ts`, `ai-provider/connectors.ts`, `reference-data/connectors.ts`) werden durch **1 zentrales** `connector/register-all.ts` ersetzt:
+    ```typescript
+    // connector/register-all.ts — nur Side-Effect-Imports
+    import "./job-discovery/modules/eures";
+    import "./job-discovery/modules/arbeitsagentur";
+    import "./data-enrichment/modules/logo-dev";
+    import "./reference-data/modules/esco-classification";
+    // ...
+    ```
+  - Verzeichnisstruktur (gruppiert nach Connector) bleibt als Konvention für menschliche Navigation — ist aber nicht mehr technisch erzwungen
+  - **Allium-Validierung:** Die Spec-Regel `ModuleRegistration` sagt "Registration happens at application startup" — Self-Registration on import erfüllt das. Die Spec schreibt nicht vor WER die Registration auslöst (Domain-Event, nicht Implementation).
+
+- **Phase 0c — Co-located Tests (optional):**
+  - Modul-Tests im Modul-Verzeichnis: `modules/logo-dev/__tests__/`
+  - Jest-Config: Glob-Pattern erweitern für `modules/**/__tests__/**`
+  - Pragmatische Alternative: `/new-module` Scaffolding-Skill der Tests automatisch generiert
+
+- **Bewusst nicht umgesetzt — vollständige Auto-Discovery:**
+  - Ideal wäre `glob("modules/*/manifest.ts")` beim Start → gar kein `register-all.ts` mehr
+  - In Next.js wegen Tree-Shaking zur Build-Zeit nicht praktikabel — Side-Effect-Imports müssen explizit gelistet sein
+  - `register-all.ts` als explizite Import-Liste ist der pragmatische Mittelweg
+
+- **Architektur-Analyse: Was sich NICHT ändert (Allium-Diskurs 2026-04-08):**
+  Der Shared Kernel auf Connector-Ebene ist von Self-Registration nicht betroffen:
+  - `resilience.ts` (Cockatiel Shared Kernel) — baut Policies aus `manifest.resilience`, connector-agnostisch. Jedes Modul hat bereits eine eigene `resilience.ts` im Modul-Verzeichnis die den Shared Kernel importiert. Pattern bleibt identisch.
+  - `health-monitor.ts` — nutzt `moduleRegistry.get()`, egal wo registriert
+  - `credential-resolver.ts` — liest `manifest.credential`, egal wo registriert
+  - `degradation.ts` — nutzt `moduleRegistry` + Prisma, egal wo registriert
+  - `rate-limiter.ts` (TokenBucket) — modul-agnostisch
+  - **Facade-Registries** (`data-enrichment/registry.ts`, `job-discovery/registry.ts` etc.) — bleiben als typisierte Query-Layer. Sie registrieren nichts (`.register()` ist bereits No-Op), sie filtern nur per `moduleRegistry.getByType()`. Unverändert.
+
+- **⚠ Aufmerksamkeitspunkt: Import-Reihenfolge bei Facade-Abfragen:**
+  Die Facade-Registries (`enrichmentConnectorRegistry.create()`, `getEnrichmentModuleByDimension()`) und der `EnrichmentOrchestrator` rufen `moduleRegistry.getByType()` / `moduleRegistry.create()` auf. Module MÜSSEN registriert sein bevor die erste Facade-Abfrage erfolgt. Garantie: `register-all.ts` wird in `module.actions.ts` und in den Runner-Startup-Paths importiert — bevor jede Facade aufgerufen wird. Bei Self-Registration muss sichergestellt werden, dass `register-all.ts` NICHT lazy-loaded wird (kein `dynamic import()`), sondern als synchroner Top-Level-Import eingebunden bleibt.
+
+- **Voraussetzung:** Module Lifecycle Manager (→ 0.4) implementiert
+- **Konsumenten:** Marketplace (→ 2.11), Phase 1 Module SDK (unten), alle zukünftigen Module
+- **Abgrenzung:**
+  - ≠ Marketplace (2.11): Marketplace ist die UI-Surface. Self-Contained Modules sind die Architektur dahinter.
+  - ≠ Phase 1 Module SDK (unten): SDK ist für externe Entwickler. Phase 0 ist interne Modul-Struktur.
+- **DDD-Einordnung:** Module werden zu echten Self-Contained Systems im Bounded-Context-Sinne — ein Modul-Verzeichnis ist die physische Manifestation des Bounded Context. Die `connectorType`-Deklaration auf dem Manifest ist die Published Language: Das Modul sagt selbst zu welchem Connector es gehört, statt dass ein Barrel es von außen zuordnet.
+- **Allium Spec:** `ModuleManifest` Contract um `i18n`-Feld erweitern. Registration-Regel `@guidance` aktualisieren (Self-Registration als empfohlenes Pattern).
+
+**Phase 1 — Externe Module (SDK):**
 - **Package-Format:** npm Package das ein `ModuleManifest` exportiert
 - **Konvention:** `package.json` → `"jobsync": { "manifest": "./manifest.ts" }` Feld
 - **Auto-Discovery:** Lifecycle Manager scannt installierte Packages nach `jobsync`-Feld bei Startup

@@ -142,14 +142,18 @@ value EnrichmentOutput {
 value LogoData {
   -- Dimension-specific payload for logo enrichment.
   logoUrl: String                       -- URL to the company logo image
+  width: Integer?                       -- Image width in pixels (when known)
+  height: Integer?                      -- Image height in pixels (when known)
+  format: String?                       -- Image format (e.g. "png", "svg")
 }
 
 value DeepLinkData {
   -- Dimension-specific payload for deep_link enrichment.
   title: String?                        -- OpenGraph og:title or <title>
   description: String?                  -- OpenGraph og:description or meta description
-  imageUrl: String?                     -- OpenGraph og:image
+  image: String?                        -- OpenGraph og:image
   siteName: String?                     -- OpenGraph og:site_name
+  favicon: String?                      -- Favicon URL (from <link rel="icon">)
 }
 
 -- =============================================================================
@@ -440,8 +444,11 @@ rule ExecuteFallbackChain {
         latencyMs: 0,
         errorMessage: "Module inactive"
       )
-    -- Skip unhealthy modules (unreachable)
-    else if module.healthStatus = unreachable:
+    -- Skip unhealthy modules (unreachable or degraded)
+    -- In enrichment chains, degraded modules are also skipped because calling
+    -- a degraded service wastes fallback chain budget. This differs from job
+    -- discovery where degraded modules are still attempted.
+    else if module.healthStatus = unreachable or module.healthStatus = degraded:
       ensures: EnrichmentLog.created(
         userId: userId,
         enrichmentResultId: null,
@@ -451,7 +458,7 @@ rule ExecuteFallbackChain {
         chainPosition: chainPosition,
         outcome: skipped,
         latencyMs: 0,
-        errorMessage: "Module unreachable"
+        errorMessage: "Module " + module.healthStatus
       )
     -- Skip circuit-broken modules
     else if module.circuitBreakerState = open:
@@ -784,8 +791,11 @@ surface EnrichmentModuleSettings {
 -- Phase 1 chains are declared here as system configuration.
 -- Future: chains may become user-configurable or admin-configurable.
 
--- Logo chain: Clearbit -> Google Favicon -> Placeholder
--- Module: clearbit (credential: none, dimension: logo)
+-- Logo chain: Logo.dev -> Google Favicon -> Placeholder
+-- Module: logo_dev (credential: api_key, required: false, envFallback: LOGODEV_API_KEY, dimension: logo)
+--   Uses https://img.logo.dev/{domain}?token={key}&format=png
+--   Requires API key (free tier available). Without key, module is skipped.
+--   Replaces Clearbit (dead since 2025-12-01, DNS no longer resolves).
 -- Module: google_favicon (credential: none, dimension: logo)
 --   Uses https://www.google.com/s2/favicons?domain={domain}&sz=128
 -- Placeholder is not a module — it is the fallback when all modules fail.
@@ -825,23 +835,25 @@ event EnrichmentFailed {
 
 -- Data Enrichment Modules (Phase 1)
 
--- Module: clearbit
--- manifest: { id: "clearbit", manifestVersion: 1, connectorType: data_enrichment,
+-- Module: logo_dev
+-- manifest: { id: "logo_dev", manifestVersion: 1, connectorType: data_enrichment,
 --   supportedDimensions: { logo },
---   credential: { type: none, moduleId: "clearbit", required: false, sensitive: false },
---   healthCheck: { endpoint: "https://logo.clearbit.com/clearbit.com", timeoutMs: 5000 },
+--   credential: { type: api_key, moduleId: "logo_dev", required: false, envFallback: "LOGODEV_API_KEY",
+--     sensitive: true, placeholder: "pk_..." },
+--   healthCheck: { endpoint: "https://img.logo.dev/google.com?format=png", timeoutMs: 5000, intervalMs: 300000 },
 --   resilience: { retryAttempts: 1, retryBackoff: none, circuitBreaker: true,
---     circuitBreakerThreshold: 3, timeoutMs: 5000 } }
--- Note: Clearbit Logo API (free tier) does not require an API key.
+--     circuitBreakerThreshold: 3, circuitBreakerCooldownMs: 30000, timeoutMs: 5000 } }
+-- Note: Logo.dev requires an API key (free tier available). Without key, module is skipped.
+-- Replaces Clearbit Logo API (dead since 2025-12-01, DNS no longer resolves).
 
 -- Module: google_favicon
 -- manifest: { id: "google_favicon", manifestVersion: 1, connectorType: data_enrichment,
 --   supportedDimensions: { logo },
 --   credential: { type: none },
 --   healthCheck: { endpoint: "https://www.google.com/s2/favicons?domain=google.com&sz=128",
---     timeoutMs: 5000 },
+--     timeoutMs: 5000, intervalMs: 300000 },
 --   resilience: { retryAttempts: 1, retryBackoff: none, circuitBreaker: true,
---     circuitBreakerThreshold: 5, timeoutMs: 5000 } }
+--     circuitBreakerThreshold: 3, circuitBreakerCooldownMs: 30000, timeoutMs: 5000 } }
 
 -- Module: meta_parser
 -- manifest: { id: "meta_parser", manifestVersion: 1, connectorType: data_enrichment,
@@ -849,7 +861,7 @@ event EnrichmentFailed {
 --   credential: { type: none },
 --   healthCheck: null,
 --   resilience: { retryAttempts: 1, retryBackoff: none, circuitBreaker: true,
---     circuitBreakerThreshold: 5, timeoutMs: 10000 } }
+--     circuitBreakerThreshold: 3, circuitBreakerCooldownMs: 30000, timeoutMs: 10000 } }
 -- Note: meta_parser has no health check because it fetches arbitrary URLs.
 -- Health is determined by circuit breaker state (actual request outcomes).
 
@@ -863,6 +875,6 @@ open question "Should users be able to manually override enrichment results (e.g
 
 open question "What is the maximum number of concurrent enrichment requests per user? Current config is 5, but this may need tuning based on actual usage patterns."
 
-open question "Should fallback chains be user-configurable (e.g., user disables Clearbit and only uses Google Favicon)? Currently chains are system-level configuration."
+open question "Should fallback chains be user-configurable (e.g., user disables Logo.dev and only uses Google Favicon)? Currently chains are system-level configuration."
 
 open question "How should enrichment results be purged? Unlike StagedVacancy which has DSGVO retention rules, enrichment results are derived data. A simple TTL-based expiry with no privacy-preserving hash retention may suffice."

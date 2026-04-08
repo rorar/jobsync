@@ -29,7 +29,7 @@ actor System {
 -- Enums
 -- =============================================================================
 
-enum ConnectorType { job_discovery | ai_provider }
+enum ConnectorType { job_discovery | ai_provider | data_enrichment | reference_data }
 -- Future: kalender | communication | geo | webhook | workflow | bewertungsportal | dokumentenworkflow
 
 enum ModuleStatus { active | inactive | error }
@@ -75,6 +75,11 @@ contract ModuleManifest {
 
   -- Caching (ROADMAP 0.9 Stufe 1)
   cachePolicy: CachePolicy?           -- response caching policy; null = no caching
+
+  -- Dependencies
+  dependencies: DependencyHealthCheck[]?  -- external services this module depends on
+                                          -- declared dependencies are health-checked alongside the module
+                                          -- and exposed in the Module Health Overview surface
 }
 
 -- Connector-specific extensions of the base contract.
@@ -94,6 +99,19 @@ contract JobDiscoveryManifest extends ModuleManifest {
 
 contract AiManifest extends ModuleManifest {
   modelSelection: ModelSelectionConfig  -- how models are discovered and selected
+}
+
+contract DataEnrichmentManifest extends ModuleManifest {
+  supportedDimensions: String[]         -- enrichment dimensions this module can serve (e.g. "logo", "deep_link")
+                                        -- empty array [] for health-only modules (status monitoring, no enrichment)
+}
+
+contract ReferenceDataManifest extends ModuleManifest {
+  taxonomy: String                      -- which taxonomy this module provides (e.g. "esco_occupations", "nuts_regions")
+  -- Note: No connector interface yet (health-only modules).
+  -- A lookup() interface will be added when the first consumer needs programmatic access
+  -- (e.g. Skillsets 4.1, CareerBERT 9.1). Until then, reference data is consumed via
+  -- API proxy routes, not through the connector layer.
 }
 
 -- =============================================================================
@@ -144,6 +162,16 @@ value ResilienceConfig {
 value ModelSelectionConfig {
   defaultModel: String?               -- e.g. "llama3.2"
   listEndpoint: String?               -- API path to list available models (e.g. "/models")
+}
+
+value DependencyHealthCheck {
+  id: String                            -- stable identifier (e.g. "esco_classification")
+  name: String                          -- human-readable display name
+  endpoint: String                      -- health probe URL (absolute)
+  timeoutMs: Integer = 5000            -- probe timeout in milliseconds
+  required: Boolean = false             -- true = hard dependency (module cannot function without it)
+                                        -- false = soft dependency (module degrades gracefully)
+  usedFor: String                       -- human-readable purpose (e.g. "Occupation search in Automation Wizard")
 }
 
 value ConnectorParamField {
@@ -483,6 +511,33 @@ rule HealthStatusEscalation {
   -- Only the latter justify pausing automations because they reflect actual work failing.
 }
 
+rule DependencyHealthDegradation {
+  -- "When a module's dependency becomes unreachable, the module's health degrades."
+  -- Dependencies are checked alongside the module's primary health check.
+  -- A failed dependency can degrade the parent but NEVER make it unreachable —
+  -- only the primary health check controls the unreachable transition.
+  when: HealthCheckDue(moduleId: String)
+  let module = RegisteredModule where manifest.id = moduleId
+  requires: module.status = active
+  requires: module.manifest.dependencies != null
+
+  let depResults = for_each dep in module.manifest.dependencies:
+    HealthProbe.execute(endpoint: dep.endpoint, timeout: dep.timeoutMs)
+
+  ensures:
+    if any depResult in depResults is not success:
+      module.healthStatus = max(module.healthStatus, degraded)
+        -- max() means: if the module is already unreachable (from its own health check),
+        -- it stays unreachable. If it was healthy, it becomes degraded.
+
+  @guidance
+    -- This rule runs as part of the regular health check cycle (HealthCheckExecution).
+    -- The primary health check determines the base status (healthy/degraded/unreachable).
+    -- Dependency checks can only RAISE the status to degraded, never lower it.
+    -- This preserves the distinction: primary = "can I reach you?",
+    -- dependency = "can your features work fully?"
+}
+
 -- =============================================================================
 -- Rules: Circuit Breaker State
 -- =============================================================================
@@ -714,6 +769,34 @@ surface NotificationInbox {
     -- Users see alerts even when not actively using the app
 }
 
+surface ModuleHealthOverview {
+  facing actor: User
+  context entity: RegisteredModule[]
+
+  exposes:
+    all registered modules grouped by connectorType,
+    per module: id, name, healthStatus, lastHealthCheck, lastSuccessfulConnection,
+      circuitBreakerState, credential.type,
+      dependencies: per dep: id, name, healthStatus, required, usedFor
+
+  provides:
+    TriggerHealthCheck(moduleId)
+      -- Manual re-check: runs the module's health probe on demand
+
+  @guarantee AllModulesVisible
+    -- Shows ALL registered modules regardless of credential type or connector type
+    -- Keyless modules (EURES, Arbeitsagentur, ESCO, Eurostat) are visible
+    -- Key-based modules show credential status alongside health
+    -- Dependencies shown as tree structure under parent module
+
+  @guidance
+    -- The ModuleMarketplace surface handles activation/deactivation and configuration.
+    -- This surface is a read-oriented health dashboard that ensures no module is invisible
+    -- just because it has credential.type = none and therefore no Settings panel entry.
+    -- credential.type is exposed so the UI can distinguish key-based from keyless modules
+    -- and avoid showing a "configure credentials" action for modules that need none.
+}
+
 -- =============================================================================
 -- Current Module Inventory (Ist-Zustand)
 -- =============================================================================
@@ -724,13 +807,21 @@ surface NotificationInbox {
 -- manifest: { id: "eures", manifestVersion: 1, connectorType: job_discovery,
 --   automationType: discovery, credential: { type: none },
 --   settingsSchema: null,
---   healthCheck: { endpoint: "https://europa.eu/eures/eures-apps/api/jv-searchengine/public/jv-search/search", timeoutMs: 15000 },
+--   healthCheck: { endpoint: "https://europa.eu/eures/api/jv-searchengine/public/jv-search/search", timeoutMs: 15000 },
 --   resilience: { retryAttempts: 3, retryBackoff: exponential, circuitBreaker: true, timeoutMs: 15000,
 --     rateLimitTokens: 3, rateLimitRefillMs: 500, maxConcurrent: 5 } }
 -- searchFieldOverrides: [ { field: keywords, widgetId: "eures-occupation" }, { field: location, widgetId: "eures-location" } ]
--- connectorParamsSchema: 9 fields [ publicationPeriod(select), requiredExperienceCodes(multiselect),
+-- connectorParamsSchema: 10 fields [ publicationPeriod(select), requiredExperienceCodes(multiselect),
 --   positionOfferingCodes(multiselect), positionScheduleCodes(multiselect), educationLevelCodes(multiselect),
---   sectorCodes(multiselect), euresFlagCodes(multiselect), requiredLanguages(string), sortSearch(select) ]
+--   sectorCodes(multiselect), euresFlagCodes(multiselect), requiredLanguages(string),
+--   specificSearchCode(select: EVERYWHERE|TITLE|DESCRIPTION|EMPLOYER), sortSearch(select) ]
+-- dependencies: [ { id: "esco_classification", name: "ESCO Classification", required: false,
+--     usedFor: "Occupation search in Automation Wizard (EuresOccupationCombobox)" },
+--   { id: "eurostat_nuts", name: "Eurostat NUTS Regions", required: false,
+--     usedFor: "Region name i18n in location hierarchy (EuresLocationCombobox)" },
+--   { id: "eures_country_stats", name: "EURES Country Stats", required: false,
+--     endpoint: "https://europa.eu/eures/api/jv-searchengine/public/statistics/getCountryStats",
+--     usedFor: "Country/region job counts in location hierarchy" } ]
 
 -- Module: arbeitsagentur
 -- manifest: { id: "arbeitsagentur", manifestVersion: 1, connectorType: job_discovery,
@@ -778,11 +869,66 @@ surface NotificationInbox {
 --   resilience: null }
 -- modelSelection: { defaultModel: "deepseek-chat", listEndpoint: "/models" }
 
+-- Data Enrichment Modules
+
+-- Module: logo_dev
+-- manifest: { id: "logo_dev", manifestVersion: 1, connectorType: data_enrichment,
+--   credential: { type: api_key, moduleId: "logo_dev", required: false, envFallback: "LOGODEV_API_KEY",
+--     sensitive: false, placeholder: "pk_..." },
+-- Note: sensitive=false because pk_ is a publishable key (like Stripe pk_live_).
+--   Designed for client-side use in <img> tags. See ADR-026.
+--   healthCheck: { endpoint: "https://img.logo.dev/google.com?format=png", timeoutMs: 5000, intervalMs: 300000 },
+--   resilience: { retryAttempts: 1, retryBackoff: none, circuitBreaker: true,
+--     circuitBreakerThreshold: 3, circuitBreakerCooldownMs: 30000, timeoutMs: 5000 } }
+-- supportedDimensions: [ logo ]
+-- Note: Logo.dev requires an API key (free tier available). Without key, module is skipped
+--   and the chain falls through to google_favicon. Replaces Clearbit (dead since 2025-12-01).
+
+-- Module: google_favicon
+-- manifest: { id: "google_favicon", manifestVersion: 1, connectorType: data_enrichment,
+--   credential: { type: none, required: false },
+--   healthCheck: { endpoint: "https://www.google.com/s2/favicons?domain=google.com&sz=128", timeoutMs: 5000, intervalMs: 300000 },
+--   resilience: { retryAttempts: 1, retryBackoff: none, circuitBreaker: true,
+--     circuitBreakerThreshold: 3, circuitBreakerCooldownMs: 30000, timeoutMs: 5000 } }
+-- supportedDimensions: [ logo ]
+
+-- Module: meta_parser
+-- manifest: { id: "meta_parser", manifestVersion: 1, connectorType: data_enrichment,
+--   credential: { type: none, required: false },
+--   healthCheck: null,
+--   resilience: { retryAttempts: 1, retryBackoff: none, circuitBreaker: true,
+--     circuitBreakerThreshold: 3, circuitBreakerCooldownMs: 30000, timeoutMs: 10000 } }
+-- supportedDimensions: [ deep_link ]
+
+-- Reference Data Modules
+
+-- Module: esco_classification
+-- manifest: { id: "esco_classification", manifestVersion: 1, connectorType: reference_data,
+--   taxonomy: "esco_occupations",
+--   credential: { type: none },
+--   healthCheck: { endpoint: "https://ec.europa.eu/esco/api/search?text=test&language=en&type=occupation&limit=1", timeoutMs: 10000 },
+--   resilience: null }
+-- Note: esco.ec.europa.eu (portal) returns 403/500 — use ec.europa.eu/esco/api (API) instead
+-- Note: ISCO groups are embedded in ESCO responses (broaderIscoGroup), not a separate API
+
+-- Module: eurostat_nuts
+-- manifest: { id: "eurostat_nuts", manifestVersion: 1, connectorType: reference_data,
+--   taxonomy: "nuts_regions",
+--   credential: { type: none },
+--   healthCheck: { endpoint: "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/codelist/ESTAT/GEO?format=JSON&lang=en", timeoutMs: 10000 },
+--   resilience: null }
+
 -- =============================================================================
 -- Open Questions
 -- =============================================================================
 
-open question "Should modules be able to declare dependencies on other modules? (e.g., CareerBERT module depends on an AI module for embeddings)"
+-- Resolved: Module dependencies modeled as DependencyHealthCheck[] on ModuleManifest.
+-- Modules declare their external service dependencies with health endpoints.
+-- Dependencies affect health status derivation (DependencyHealthDegradation rule)
+-- and are visible in the ModuleHealthOverview surface.
+-- Full module-to-module runtime dependencies (e.g., CareerBERT → AI module for embeddings)
+-- will extend this mechanism when needed — the DependencyHealthCheck value type can be
+-- promoted to a ModuleDependency that references registered modules by ID.
 
 -- Resolved: manifestVersion: Integer added to ModuleManifest (all modules start at 1)
 

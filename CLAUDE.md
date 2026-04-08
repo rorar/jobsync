@@ -89,7 +89,7 @@ All external integrations follow the **App ↔ Connector ↔ Module** pattern:
 App (Core Logic)
   ↕ ConnectorResult<T> / DiscoveredVacancy / ActionResult
 Connector (Shared ACL — ONE interface, ONE registry)
-  - DataSourceConnector / AIProviderConnector / DataEnrichmentConnector interfaces
+  - DataSourceConnector / AIProviderConnector / DataEnrichmentConnector / ReferenceDataConnector interfaces
   - ModuleRegistry: unified registry with manifests + factories
   - Runner: orchestrates search + matching with credential PUSH
   - Orchestrator: fallback chains per enrichment dimension
@@ -97,7 +97,8 @@ Connector (Shared ACL — ONE interface, ONE registry)
 Modules (each declares a Manifest + implements a Connector interface)
   - EURES, Arbeitsagentur, JSearch (Job Discovery)
   - Ollama, OpenAI, DeepSeek (AI Provider)
-  - Clearbit, Google Favicon, Meta/OpenGraph Parser (Data Enrichment)
+  - Logo.dev, Google Favicon, Meta/OpenGraph Parser (Data Enrichment)
+  - ESCO Classification, Eurostat NUTS (Reference Data — health-only)
 ```
 
 **Key principle:** The Connector is the shared domain layer. Modules are pluggable implementations. Each Module declares a `ModuleManifest` describing its identity, credentials, health, resilience, and settings.
@@ -117,18 +118,29 @@ New modules (StepStone, Indeed, etc.) work without wizard code changes — they 
 **Unified Registry:** `src/lib/connector/registry.ts` — single `ModuleRegistry` stores `RegisteredModule` entities (manifest + runtime state). The old `ConnectorRegistry` and `AIProviderRegistry` are thin facades.
 
 **Current structure:** `src/lib/connector/`:
-- **Shared Kernel:** `manifest.ts` (types), `registry.ts` (unified registry), `resilience.ts` (policy builder), `health-monitor.ts`, `degradation.ts`, `credential-resolver.ts`
+- **Shared Kernel:** `manifest.ts` (types + `DependencyHealthCheck`), `registry.ts` (unified registry), `resilience.ts` (Cockatiel policy builder), `health-monitor.ts` (+ dependency health checking), `degradation.ts`, `credential-resolver.ts`
 - **Job Discovery** (`job-discovery/`): `types.ts`, `registry.ts` (facade), `runner.ts`, `connectors.ts` (registration barrel)
-  - Modules: `modules/eures/`, `modules/arbeitsagentur/`, `modules/jsearch/` (each with `index.ts`, `manifest.ts`)
+  - Modules: `modules/eures/`, `modules/arbeitsagentur/`, `modules/jsearch/` (each with `index.ts`, `manifest.ts`, `resilience.ts`)
 - **AI Provider** (`ai-provider/`): `types.ts`, `registry.ts` (facade), `modules/connectors.ts` (registration barrel)
   - Modules: `modules/ollama/`, `modules/openai/`, `modules/deepseek/` (each with `index.ts`, `manifest.ts`)
+- **Reference Data** (`reference-data/`): `types.ts`, `registry.ts` (facade), `connectors.ts` (registration barrel)
+  - Modules: `modules/esco-classification/`, `modules/eurostat-nuts/` (health-only, no connector interface yet)
 
-**For new Modules:** Create `modules/{name}/` with:
-1. `manifest.ts` — declares `JobDiscoveryManifest` or `AiManifest` (credentials, health, resilience)
-2. `index.ts` — implements `DataSourceConnector` or `AIProviderConnector`
-3. Register in `connectors.ts`: `moduleRegistry.register(manifest, factory)`
+**For new Modules:** Create `modules/{name}/` under the appropriate connector directory with:
+1. `manifest.ts` — declares the appropriate manifest type:
+   - `JobDiscoveryManifest` (job search modules)
+   - `AiManifest` (AI provider modules)
+   - `DataEnrichmentManifest` (enrichment modules, declares `supportedDimensions`)
+   - `ReferenceDataManifest` (taxonomy/classification services, declares `taxonomy`)
+   - Optional: `dependencies: DependencyHealthCheck[]` for modules that depend on external services
+2. `index.ts` — implements the connector interface (`DataSourceConnector`, `AIProviderConnector`, `DataEnrichmentConnector`, or `ReferenceDataConnector`)
+3. `resilience.ts` (if manifest declares `resilience`) — thin wrapper calling `buildResiliencePolicy()` from Shared Kernel
+4. Register in the connector's `connectors.ts` barrel: `moduleRegistry.register(manifest, factory)`
+5. Add `envFallback` entry to `.env.example` if module has `credential.type: api_key`
 
-That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilience code.
+That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilience code. The `connectorType` on the manifest determines which connector group the module belongs to.
+
+**Note:** Roadmap 8.7 Phase 0 will simplify this further — modules will self-register on import, eliminating the manual barrel edit.
 
 **Credential Resolution (PUSH):** `credential-resolver.ts` resolves credentials from manifest config (DB → Env → Default). Runner calls `resolveCredential()` before module instantiation.
 
@@ -150,12 +162,24 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 **Current structure:** `src/lib/connector/data-enrichment/`:
 - **types.ts** — DataEnrichmentConnector, EnrichmentDimension, LogoData, DeepLinkData, FallbackChainConfig, ENRICHMENT_CONFIG
 - **registry.ts** — Facade: `getActiveEnrichmentModules()`, `getEnrichmentModuleByDimension()`
-- **orchestrator.ts** — `EnrichmentOrchestrator.execute()`: cache check → chain execution → persist result → publish events. `globalThis` singleton.
-- **connectors.ts** — Registration barrel (imports clearbit, google-favicon, meta-parser)
-- **Modules:** `modules/clearbit/`, `modules/google-favicon/`, `modules/meta-parser/` (each with `index.ts` + `manifest.ts`)
+- **orchestrator.ts** — `EnrichmentOrchestrator.execute()`: cache check → chain execution → persist result → publish events. `globalThis` singleton. Resolves credentials via PUSH pattern for key-based modules.
+- **connectors.ts** — Registration barrel (imports logo-dev, google-favicon, meta-parser)
+- **Modules:** `modules/logo-dev/`, `modules/google-favicon/`, `modules/meta-parser/` (each with `index.ts` + `manifest.ts`)
+
+### Reference Data Connector (ROADMAP 1.20)
+
+**Purpose:** Health-only connector for taxonomy/classification services (ESCO, Eurostat NUTS). These are not enrichment modules — they provide reference data that other modules depend on.
+
+**Current structure:** `src/lib/connector/reference-data/`:
+- **types.ts** — `ReferenceDataConnector` interface (health-only, no lookup yet)
+- **registry.ts** — Facade over `moduleRegistry` for `reference_data` modules
+- **connectors.ts** — Registration barrel (imports esco-classification, eurostat-nuts)
+- **Modules:** `modules/esco-classification/`, `modules/eurostat-nuts/` (each with `index.ts` + `manifest.ts`)
+
+**Module Dependencies:** Modules can declare `dependencies: DependencyHealthCheck[]` in their manifest. The health monitor probes dependencies alongside the main health check. A failed dependency can **degrade** the parent but **never** make it unreachable (spec rule `DependencyHealthDegradation`). EURES declares ESCO, Eurostat, and EURES Country Stats as dependencies.
 
 **Enrichment Dimensions (Phase 1):**
-- **Logo:** Company domain → logo URL. Chain: Clearbit → Google Favicon → Placeholder
+- **Logo:** Company domain → logo URL. Chain: Logo.dev (optional key) → Google Favicon → Placeholder
 - **DeepLink:** URL → OpenGraph metadata. Chain: Meta Parser (single module)
 
 **Cache:** `EnrichmentResult` table with TTL-based stale-if-error. Unique key: `(userId, dimension, domainKey)`.
@@ -169,7 +193,7 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **Security:**
 - Meta-parser: `redirect: "manual"` (SSRF protection), streaming body read (100KB limit), XSS sanitization on all extracted values
-- Clearbit: domain regex validation before URL construction
+- Logo.dev: domain regex validation before URL construction
 - ALL Prisma queries include `userId` (IDOR protection, ADR-015)
 
 **Domain Events:** `EnrichmentCompleted`, `EnrichmentFailed` — published via TypedEventBus.
@@ -425,7 +449,9 @@ Use consistent domain terms across code, UI, specs, and documentation:
 |---|---|---|
 | `DiscoveredVacancy` | A job found by an automation | "scraped job", "result" |
 | `Connector` | ACL that translates external APIs to domain types | "scraper", "fetcher" |
-| `Module` | External system behind a Connector | "API", "service", "provider" |
+| `ConnectorType` | Category of connector (`job_discovery`, `ai_provider`, `data_enrichment`, `reference_data`) | "connector category", "module type" |
+| `Module` | External system behind a Connector, self-describes via Manifest | "API", "service", "provider" |
+| `Dependency` | External service a module depends on (declared via `DependencyHealthCheck[]` on manifest) | "sub-API", "child module" |
 | `AiModuleId` | Enum identifying an AI Module (ollama, openai, deepseek) | `AiProvider`, `ProviderType` |
 | `Automation` | A scheduled job search configuration | "cron job", "task" |
 | `ActionResult<T>` | Typed server action response | `Promise<any>` |
