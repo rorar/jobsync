@@ -123,6 +123,42 @@ value UndoToken {
                                     -- All items in a batch share one UndoToken.
 }
 
+value DiscoveredVacancy {
+  -- Core fields
+  title: String
+  employerName: String
+  location: String
+  description: String
+  sourceUrl: String
+  sourceBoard: String
+  postedAt: DateTime?
+  salary: String?
+  employmentType: String?
+  externalId: String?
+  applicationDeadline: String?
+  applicationInstructions: String?
+
+  -- Extended fields (ROADMAP 1.1b)
+  companyUrl: String?
+  companyDescription: String?
+  industryCodes: List<String>?
+  companySize: String?
+  positionOfferingCode: String?
+  numberOfPosts: Integer?
+  occupationUris: List<String>?
+  requiredEducationLevel: String?
+  requiredExperienceYears: Integer?
+  workingLanguages: List<String>?
+  salaryMin: Decimal?
+  salaryMax: Decimal?
+  salaryCurrency: String?
+  salaryPeriod: String?
+  immediateStart: Boolean?
+  contractStartDate: String?
+  contractEndDate: String?
+  euresFlag: Boolean?
+}
+
 value CompensationFunction {
   -- A closure that reverses a domain action.
   -- Captured at the time the action is performed (holds the previous state).
@@ -157,6 +193,26 @@ entity StagedVacancy {
   postedAt: DateTime?
   applicationDeadline: String?
   applicationInstructions: String?
+
+  -- Extended vacancy data (ROADMAP 1.1b Phase 1)
+  companyUrl: String?
+  companyDescription: String?
+  industryCodes: List<String>?
+  companySize: String?
+  positionOfferingCode: String?
+  numberOfPosts: Integer?
+  occupationUris: List<String>?
+  requiredEducationLevel: String?
+  requiredExperienceYears: Integer?
+  workingLanguages: List<String>?
+  salaryMin: Decimal?
+  salaryMax: Decimal?
+  salaryCurrency: String?
+  salaryPeriod: String?
+  immediateStart: Boolean?
+  contractStartDate: String?
+  contractEndDate: String?
+  euresFlag: Boolean?
 
   -- Source tracking
   source: VacancySource             -- manual or automation
@@ -279,6 +335,8 @@ rule AutomatedVacancyIntake {
       automationId: automation.id,
       matchScore: vacancy.matchScore,
       matchData: vacancy.matchData,
+      -- Extended fields mapped 1:1 from DiscoveredVacancy when present
+      ...extended vacancy fields from DiscoveredVacancy...,
       status: staged,
       discoveredAt: now()
     )
@@ -997,7 +1055,9 @@ surface StagingQueue {
     tab "Archiv": StagedVacancy where archivedAt != null
     tab "Papierkorb": StagedVacancy where trashedAt != null
 
-    -- Per vacancy: title, employerName, location, matchScore, sourceBoard, discoveredAt, status
+    -- Per vacancy: title, employerName, location, matchScore, sourceBoard, discoveredAt, status,
+    --   positionOfferingCode, salaryMin, salaryMax, salaryCurrency, salaryPeriod,
+    --   requiredEducationLevel, immediateStart, numberOfPosts, occupationUris, euresFlag
 
     -- Filters: status, sourceBoard, date range, matchScore range
     -- Sort: discoveredAt desc (default), matchScore desc, title asc
