@@ -9,6 +9,7 @@
 
 import { ConnectorType, CredentialType } from "@/lib/connector/manifest";
 import type { ReferenceDataManifest } from "@/lib/connector/manifest";
+import { eurostatNutsI18n } from "./i18n";
 
 export const eurostatNutsManifest: ReferenceDataManifest = {
   id: "eurostat_nuts",
@@ -28,4 +29,5 @@ export const eurostatNutsManifest: ReferenceDataManifest = {
     timeoutMs: 10000,
     intervalMs: 300000,
   },
+  i18n: eurostatNutsI18n,
 };

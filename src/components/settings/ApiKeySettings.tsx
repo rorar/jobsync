@@ -50,36 +50,42 @@ interface ModuleConfig {
   id: ApiKeyModuleId;
   moduleId: string;
   name: string;
+  i18n?: Record<string, { name: string; description: string; credentialHint?: string }>;
   placeholder: string;
   inputType: "password" | "text";
-  descriptionKey: TranslationKey;
   sensitive: boolean;
   status: "active" | "inactive" | "error";
   healthStatus: "healthy" | "degraded" | "unreachable" | "unknown";
   lastSuccessfulConnection?: string;
 }
 
-/** Fallback description keys per module — i18n keys defined in settings dictionary */
-const DESCRIPTION_KEYS: Record<string, TranslationKey> = {
-  openai: "settings.openaiDesc",
-  deepseek: "settings.deepseekDesc",
-  rapidapi: "settings.rapidapiDesc",
-  ollama: "settings.ollamaDesc",
-};
-
 function manifestToModuleConfig(m: ModuleManifestSummary): ModuleConfig {
   return {
     id: m.credential.moduleId as ApiKeyModuleId,
     moduleId: m.moduleId,
     name: m.name,
+    i18n: m.i18n,
     placeholder: m.credential.placeholder ?? "",
     inputType: m.credential.sensitive ? "password" : "text",
-    descriptionKey: DESCRIPTION_KEYS[m.credential.moduleId] ?? ("settings.apiKeysDesc" as TranslationKey),
     sensitive: m.credential.sensitive,
     status: m.status as "active" | "inactive" | "error",
     healthStatus: m.healthStatus as ModuleConfig["healthStatus"],
     lastSuccessfulConnection: m.lastSuccessfulConnection,
   };
+}
+
+/** Resolve display name from manifest i18n, falling back to manifest.name */
+function getModuleName(module: ModuleConfig, locale: string): string {
+  return module.i18n?.[locale]?.name
+    ?? module.i18n?.["en"]?.name
+    ?? module.name;
+}
+
+/** Resolve credential hint from manifest i18n */
+function getCredentialHint(module: ModuleConfig, locale: string): string {
+  return module.i18n?.[locale]?.credentialHint
+    ?? module.i18n?.["en"]?.credentialHint
+    ?? "";
 }
 
 const DEFAULT_OLLAMA_PLACEHOLDER = "http://127.0.0.1:11434";
@@ -161,7 +167,7 @@ function ApiKeySettings() {
         toast({
           variant: "success",
           title: t("settings.apiKeySaved"),
-          description: t("settings.keyVerifiedAndSaved").replace("{module}", modules.find((m) => m.id === moduleId)?.name ?? moduleId),
+          description: t("settings.keyVerifiedAndSaved").replace("{module}", (() => { const m = modules.find((mod) => mod.id === moduleId); return m ? getModuleName(m, locale) : moduleId; })()),
         });
         setEditingModule(null);
         setInputValue("");
@@ -193,7 +199,7 @@ function ApiKeySettings() {
         toast({
           variant: "success",
           title: t("settings.apiKeyDeleted"),
-          description: t("settings.keyRemoved").replace("{module}", modules.find((m) => m.id === moduleId)?.name ?? moduleId),
+          description: t("settings.keyRemoved").replace("{module}", (() => { const m = modules.find((mod) => mod.id === moduleId); return m ? getModuleName(m, locale) : moduleId; })()),
         });
         await fetchKeys();
       } else {
@@ -236,7 +242,7 @@ function ApiKeySettings() {
           const paused = result.data.pausedAutomations;
           toast({
             variant: "default",
-            title: `${module.name} — ${t("settings.moduleInactive")}`,
+            title: `${getModuleName(module, locale)} — ${t("settings.moduleInactive")}`,
             description:
               paused > 0
                 ? `${t("settings.moduleDeactivated")} ${t("settings.automationsPaused").replace("{count}", String(paused))}`
@@ -259,7 +265,7 @@ function ApiKeySettings() {
           );
           toast({
             variant: "success",
-            title: `${module.name} — ${t("settings.moduleActive")}`,
+            title: `${getModuleName(module, locale)} — ${t("settings.moduleActive")}`,
             description: t("settings.moduleActivated"),
           });
         } else {
@@ -306,7 +312,7 @@ function ApiKeySettings() {
           variant: result.data.success ? "success" : "destructive",
           title: t("settings.healthCheckNow"),
           description: t("settings.healthCheckSuccess")
-            .replace("{module}", module.name)
+            .replace("{module}", getModuleName(module, locale))
             .replace("{status}", t(HEALTH_STATUS_KEYS[result.data.healthStatus] ?? "enrichment.health.unknown"))
             .replace("{time}", String(result.data.responseTimeMs)),
         });
@@ -314,14 +320,15 @@ function ApiKeySettings() {
         toast({
           variant: "destructive",
           title: t("settings.healthCheckNow"),
-          description: t("settings.healthCheckFailed").replace("{module}", module.name),
+          description: t("settings.healthCheckFailed").replace("{module}", getModuleName(module, locale)),
         });
       }
-    } catch {
+    } catch (error) {
+      console.error(`[ApiKeySettings] Health check failed for "${module.moduleId}":`, error);
       toast({
         variant: "destructive",
         title: t("settings.error"),
-        description: t("settings.healthCheckFailed").replace("{module}", module.name),
+        description: t("settings.healthCheckFailed").replace("{module}", getModuleName(module, locale)),
       });
     } finally {
       setChecking(null);
@@ -365,9 +372,9 @@ function ApiKeySettings() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-base">{module.name}</CardTitle>
+                    <CardTitle className="text-base">{getModuleName(module, locale)}</CardTitle>
                     <CardDescription className="text-sm">
-                      {t(module.descriptionKey)}
+                      {getCredentialHint(module, locale)}
                       {module.id === "ollama" && (
                         <span className="block text-xs text-muted-foreground/70 mt-0.5">
                           Default: {defaultOllamaUrl}
@@ -398,7 +405,7 @@ function ApiKeySettings() {
                         checked={module.status === "active"}
                         disabled={toggling === module.moduleId}
                         onCheckedChange={() => handleToggleStatus(module)}
-                        aria-label={`Toggle ${module.name} module`}
+                        aria-label={`Toggle ${getModuleName(module, locale)} module`}
                       />
                     </div>
                     {existingKey ? (

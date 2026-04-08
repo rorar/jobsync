@@ -1,5 +1,6 @@
 import { ConnectorType, CredentialType, type JobDiscoveryManifest } from "@/lib/connector/manifest";
 import { CACHE_POLICY_SEARCH } from "@/lib/connector/cache";
+import { jsearchI18n } from "./i18n";
 
 export const jsearchManifest: JobDiscoveryManifest = {
   id: "jsearch",
@@ -30,4 +31,5 @@ export const jsearchManifest: JobDiscoveryManifest = {
     rateLimitRefillMs: 1000,
     maxConcurrent: 3,
   },
+  i18n: jsearchI18n,
 };

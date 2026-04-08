@@ -1,4 +1,5 @@
 import { ConnectorType, CredentialType, type AiManifest } from "@/lib/connector/manifest";
+import { ollamaI18n } from "./i18n";
 
 export const ollamaManifest: AiManifest = {
   id: "ollama",
@@ -23,4 +24,5 @@ export const ollamaManifest: AiManifest = {
     defaultModel: "llama3.2",
     listEndpoint: "/api/tags",
   },
+  i18n: ollamaI18n,
 };

@@ -12,6 +12,7 @@
 
 import { ConnectorType, CredentialType } from "@/lib/connector/manifest";
 import type { ReferenceDataManifest } from "@/lib/connector/manifest";
+import { escoClassificationI18n } from "./i18n";
 
 export const escoClassificationManifest: ReferenceDataManifest = {
   id: "esco_classification",
@@ -31,4 +32,5 @@ export const escoClassificationManifest: ReferenceDataManifest = {
     timeoutMs: 10000,
     intervalMs: 300000,
   },
+  i18n: escoClassificationI18n,
 };

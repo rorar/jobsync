@@ -13,6 +13,7 @@
 
 import { ConnectorType, CredentialType } from "@/lib/connector/manifest";
 import type { DataEnrichmentManifest } from "@/lib/connector/manifest";
+import { logoDevI18n } from "./i18n";
 
 export const logoDevManifest: DataEnrichmentManifest = {
   id: "logo_dev",
@@ -41,4 +42,5 @@ export const logoDevManifest: DataEnrichmentManifest = {
     circuitBreakerCooldownMs: 30000,
     timeoutMs: 5000,
   },
+  i18n: logoDevI18n,
 };

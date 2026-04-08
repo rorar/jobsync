@@ -51,7 +51,7 @@ import { Resume } from "@/models/profile.model";
 import CreateResume from "../profile/CreateResume";
 import { getResumeList } from "@/actions/profile.actions";
 import { TagInput } from "./TagInput";
-import { connectorRegistry } from "@/lib/connector/job-discovery/connectors";
+import { connectorRegistry } from "@/lib/connector/job-discovery/registry";
 import { createJobTitle } from "@/actions/jobtitle.actions";
 import { addCompany } from "@/actions/company.actions";
 import { createLocation, createJobSource } from "@/actions/job.actions";

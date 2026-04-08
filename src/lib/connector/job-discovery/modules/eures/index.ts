@@ -5,6 +5,8 @@ import type {
   SearchParams,
 } from "../../types";
 import type { components } from "./generated";
+import { moduleRegistry } from "@/lib/connector/registry";
+import { euresManifest } from "./manifest";
 
 type EuresSearchRequest = components["schemas"]["JobSearchRequest"];
 type EuresSearchResponse = components["schemas"]["JobSearchResponse"];
@@ -319,3 +321,6 @@ export function createEuresConnector(): DataSourceConnector {
     },
   };
 }
+
+// Self-registration
+moduleRegistry.register(euresManifest, createEuresConnector);

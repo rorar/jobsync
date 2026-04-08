@@ -2,6 +2,8 @@ import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { LanguageModel } from "ai";
 import { resolveApiKey } from "@/lib/api-key-resolver";
 import type { AIProviderConnector, AIConnectorResult } from "../../types";
+import { moduleRegistry } from "@/lib/connector/registry";
+import { deepseekManifest } from "./manifest";
 
 const DEEPSEEK_API_BASE = "https://api.deepseek.com";
 const HEALTH_CHECK_TIMEOUT_MS = 10000;
@@ -134,3 +136,6 @@ export function createDeepSeekConnector(): AIProviderConnector {
     },
   };
 }
+
+// Self-registration
+moduleRegistry.register(deepseekManifest, createDeepSeekConnector);

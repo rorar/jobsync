@@ -34,20 +34,6 @@ import { useTranslations } from "@/i18n";
 import type { TranslationKey } from "@/i18n";
 import { toast } from "../ui/use-toast";
 
-/** i18n description keys per enrichment module */
-const DESCRIPTION_KEYS: Record<string, TranslationKey> = {
-  logo_dev: "enrichment.logoDevDescription",
-  google_favicon: "enrichment.googleFaviconDescription",
-  meta_parser: "enrichment.metaParserDescription",
-};
-
-/** i18n display-name keys per enrichment module */
-const NAME_KEYS: Record<string, TranslationKey> = {
-  logo_dev: "enrichment.logoDev",
-  google_favicon: "enrichment.googleFavicon",
-  meta_parser: "enrichment.metaParser",
-};
-
 /** i18n dimension label keys */
 const DIMENSION_KEYS: Record<string, TranslationKey> = {
   logo: "enrichment.dimension.logo",
@@ -62,8 +48,22 @@ const HEALTH_STATUS_KEYS: Record<string, TranslationKey> = {
   unknown: "enrichment.health.unknown",
 };
 
+/** Resolve display name from manifest i18n, falling back to manifest.name */
+function getModuleName(module: ModuleManifestSummary, locale: string): string {
+  return module.i18n?.[locale]?.name
+    ?? module.i18n?.["en"]?.name
+    ?? module.name;
+}
+
+/** Resolve description from manifest i18n */
+function getModuleDescription(module: ModuleManifestSummary, locale: string, t: (key: TranslationKey) => string): string {
+  return module.i18n?.[locale]?.description
+    ?? module.i18n?.["en"]?.description
+    ?? t("enrichment.modulesDescription");
+}
+
 function EnrichmentModuleSettings() {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const [modules, setModules] = useState<ModuleManifestSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
@@ -115,7 +115,7 @@ function EnrichmentModuleSettings() {
         const paused = result.data.pausedAutomations;
         toast({
           variant: "default",
-          title: `${getModuleName(module)} — ${t("settings.moduleInactive")}`,
+          title: `${getModuleName(module, locale)} — ${t("settings.moduleInactive")}`,
           description:
             paused > 0
               ? `${t("settings.moduleDeactivated")} ${t("settings.automationsPaused").replace("{count}", String(paused))}`
@@ -154,7 +154,7 @@ function EnrichmentModuleSettings() {
         );
         toast({
           variant: "success",
-          title: `${getModuleName(module)} — ${t("settings.moduleActive")}`,
+          title: `${getModuleName(module, locale)} — ${t("settings.moduleActive")}`,
           description: t("settings.moduleActivated"),
         });
       } else {
@@ -193,7 +193,7 @@ function EnrichmentModuleSettings() {
           variant: result.data.success ? "success" : "destructive",
           title: t("settings.healthCheckNow"),
           description: t("settings.healthCheckSuccess")
-            .replace("{module}", getModuleName(module))
+            .replace("{module}", getModuleName(module, locale))
             .replace("{status}", t(HEALTH_STATUS_KEYS[result.data.healthStatus] ?? "enrichment.health.unknown"))
             .replace("{time}", String(result.data.responseTimeMs)),
         });
@@ -201,29 +201,20 @@ function EnrichmentModuleSettings() {
         toast({
           variant: "destructive",
           title: t("settings.healthCheckNow"),
-          description: t("settings.healthCheckFailed").replace("{module}", getModuleName(module)),
+          description: t("settings.healthCheckFailed").replace("{module}", getModuleName(module, locale)),
         });
       }
-    } catch {
+    } catch (error) {
+      console.error(`[EnrichmentModuleSettings] Health check failed for "${module.moduleId}":`, error);
       toast({
         variant: "destructive",
         title: t("settings.error"),
-        description: t("settings.healthCheckFailed").replace("{module}", getModuleName(module)),
+        description: t("settings.healthCheckFailed").replace("{module}", getModuleName(module, locale)),
       });
     } finally {
       setChecking(null);
     }
   };
-
-  /** Resolve display name via i18n, falling back to manifest name */
-  function getModuleName(module: ModuleManifestSummary): string {
-    const key = NAME_KEYS[module.moduleId];
-    if (key) {
-      const translated = t(key);
-      if (translated !== key) return translated;
-    }
-    return module.name;
-  }
 
   if (isLoading) {
     return (
@@ -270,24 +261,16 @@ function EnrichmentModuleSettings() {
       ) : (
         <div className="grid gap-4">
           {modules.map((module) => {
-            // Extract supported dimensions from the manifest
-            // The manifest extension stores supportedDimensions, but the
-            // serialized summary does not have it directly. We use the
-            // moduleId to infer from known modules.
-            const descKey =
-              DESCRIPTION_KEYS[module.moduleId] ??
-              ("enrichment.modulesDescription" as TranslationKey);
-
             return (
               <Card key={module.moduleId}>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle className="text-base">
-                        {getModuleName(module)}
+                        {getModuleName(module, locale)}
                       </CardTitle>
                       <CardDescription className="text-sm">
-                        {t(descKey)}
+                        {getModuleDescription(module, locale, t)}
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-3">
@@ -324,7 +307,7 @@ function EnrichmentModuleSettings() {
                           checked={module.status === "active"}
                           disabled={toggling === module.moduleId}
                           onCheckedChange={() => handleToggleStatus(module)}
-                          aria-label={t("enrichment.toggleModule").replace("{name}", getModuleName(module))}
+                          aria-label={t("enrichment.toggleModule").replace("{name}", getModuleName(module, locale))}
                         />
                       </div>
                     </div>

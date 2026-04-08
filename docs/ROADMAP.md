@@ -2006,7 +2006,7 @@ Vorstufe für externe Module: Interne Module müssen zuerst selbstbeschreibend s
 
 - **Motivation:** Beim Clearbit→Logo.dev-Austausch (2026-04-08) waren 15+ Dateien über das Projekt betroffen weil i18n-Keys und UI-Maps außerhalb des Modul-Verzeichnisses leben. Größte Fehlerquelle: vergessene/verwaiste i18n-Keys, inkonsistente `NAME_KEYS`/`DESCRIPTION_KEYS`-Maps in UI-Komponenten. Bereits als offener Punkt in `project_module_lifecycle_deferred.md` gelistet: "DESCRIPTION_KEYS map in ApiKeySettings.tsx — last hardcoded registry remnant (i18n keys not yet in manifest)".
 
-- **Phase 0a — i18n im Modul-Manifest:**
+- **Phase 0a — i18n im Modul-Manifest: ✅ DONE (2026-04-08)**
   - Jedes Modul exportiert eine `i18n.ts` mit Translations pro Locale (name, description)
   - `ModuleManifest` bekommt ein `i18n`-Feld: `i18n: Record<string, { name: string, description: string }>`
   - UI-Komponenten lesen `manifest.i18n[locale].name` statt globaler `NAME_KEYS`/`DESCRIPTION_KEYS`-Maps
@@ -2014,7 +2014,7 @@ Vorstufe für externe Module: Interne Module müssen zuerst selbstbeschreibend s
   - Globale `enrichment.ts` Dictionary behält nur Feature-Level Keys (Dimensionen, Health-Status, etc.) — keine Modul-spezifischen Keys mehr
   - Allium Spec: `ModuleManifest` Contract um `i18n`-Feld erweitern
 
-- **Phase 0b — Self-Registration (import = register):**
+- **Phase 0b — Self-Registration (import = register): ✅ DONE (2026-04-08)**
   - Jedes Modul registriert sich selbst beim Import statt in einem externen Barrel:
     ```typescript
     // modules/logo-dev/index.ts — Self-Registration

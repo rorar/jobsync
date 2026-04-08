@@ -12,6 +12,7 @@
 
 import { ConnectorType, CredentialType } from "@/lib/connector/manifest";
 import type { DataEnrichmentManifest } from "@/lib/connector/manifest";
+import { metaParserI18n } from "./i18n";
 
 export const metaParserManifest: DataEnrichmentManifest = {
   id: "meta_parser",
@@ -33,4 +34,5 @@ export const metaParserManifest: DataEnrichmentManifest = {
     circuitBreakerCooldownMs: 30000,
     timeoutMs: 10000,
   },
+  i18n: metaParserI18n,
 };

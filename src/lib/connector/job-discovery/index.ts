@@ -3,5 +3,5 @@ export * from "./utils";
 export * from "./mapper";
 export * from "./schedule";
 export { createJSearchConnector } from "./modules/jsearch";
-export { connectorRegistry } from "./connectors";
+export { connectorRegistry } from "./registry";
 export { runAutomation, type RunnerResult } from "./runner";

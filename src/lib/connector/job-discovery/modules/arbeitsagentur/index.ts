@@ -9,6 +9,8 @@ import type {
   ArbeitsagenturJob,
   ArbeitsagenturJobDetail,
 } from "./types";
+import { moduleRegistry } from "@/lib/connector/registry";
+import { arbeitsagenturManifest } from "./manifest";
 import {
   resilientFetch,
   ArbeitsagenturApiError,
@@ -324,3 +326,6 @@ export function createArbeitsagenturConnector(): DataSourceConnector {
     },
   };
 }
+
+// Self-registration
+moduleRegistry.register(arbeitsagenturManifest, createArbeitsagenturConnector);

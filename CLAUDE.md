@@ -118,29 +118,34 @@ New modules (StepStone, Indeed, etc.) work without wizard code changes — they 
 **Unified Registry:** `src/lib/connector/registry.ts` — single `ModuleRegistry` stores `RegisteredModule` entities (manifest + runtime state). The old `ConnectorRegistry` and `AIProviderRegistry` are thin facades.
 
 **Current structure:** `src/lib/connector/`:
-- **Shared Kernel:** `manifest.ts` (types + `DependencyHealthCheck`), `registry.ts` (unified registry), `resilience.ts` (Cockatiel policy builder), `health-monitor.ts` (+ dependency health checking), `degradation.ts`, `credential-resolver.ts`
-- **Job Discovery** (`job-discovery/`): `types.ts`, `registry.ts` (facade), `runner.ts`, `connectors.ts` (registration barrel)
-  - Modules: `modules/eures/`, `modules/arbeitsagentur/`, `modules/jsearch/` (each with `index.ts`, `manifest.ts`, `resilience.ts`)
-- **AI Provider** (`ai-provider/`): `types.ts`, `registry.ts` (facade), `modules/connectors.ts` (registration barrel)
-  - Modules: `modules/ollama/`, `modules/openai/`, `modules/deepseek/` (each with `index.ts`, `manifest.ts`)
-- **Reference Data** (`reference-data/`): `types.ts`, `registry.ts` (facade), `connectors.ts` (registration barrel)
+- **Shared Kernel:** `manifest.ts` (types + `DependencyHealthCheck` + `ModuleI18n`), `registry.ts` (unified registry), `register-all.ts` (central module registration), `resilience.ts` (Cockatiel policy builder), `health-monitor.ts` (+ dependency health checking), `degradation.ts`, `credential-resolver.ts`
+- **Job Discovery** (`job-discovery/`): `types.ts`, `registry.ts` (facade), `runner.ts`
+  - Modules: `modules/eures/`, `modules/arbeitsagentur/`, `modules/jsearch/` (each with `index.ts`, `manifest.ts`, `i18n.ts`, `resilience.ts`)
+- **AI Provider** (`ai-provider/`): `types.ts`, `registry.ts` (facade)
+  - Modules: `modules/ollama/`, `modules/openai/`, `modules/deepseek/` (each with `index.ts`, `manifest.ts`, `i18n.ts`)
+- **Reference Data** (`reference-data/`): `types.ts`, `registry.ts` (facade)
   - Modules: `modules/esco-classification/`, `modules/eurostat-nuts/` (health-only, no connector interface yet)
 
 **For new Modules:** Create `modules/{name}/` under the appropriate connector directory with:
-1. `manifest.ts` — declares the appropriate manifest type:
+1. `i18n.ts` — co-located translations for 4 locales (en, de, fr, es), exports `ModuleI18n`
+2. `manifest.ts` — declares the appropriate manifest type with `i18n` field:
    - `JobDiscoveryManifest` (job search modules)
    - `AiManifest` (AI provider modules)
    - `DataEnrichmentManifest` (enrichment modules, declares `supportedDimensions`)
    - `ReferenceDataManifest` (taxonomy/classification services, declares `taxonomy`)
    - Optional: `dependencies: DependencyHealthCheck[]` for modules that depend on external services
-2. `index.ts` — implements the connector interface (`DataSourceConnector`, `AIProviderConnector`, `DataEnrichmentConnector`, or `ReferenceDataConnector`)
-3. `resilience.ts` (if manifest declares `resilience`) — thin wrapper calling `buildResiliencePolicy()` from Shared Kernel
-4. Register in the connector's `connectors.ts` barrel: `moduleRegistry.register(manifest, factory)`
-5. Add `envFallback` entry to `.env.example` if module has `credential.type: api_key`
+3. `index.ts` — implements the connector interface + self-registers at bottom of file:
+   ```typescript
+   moduleRegistry.register(manifest, createMyModule);
+   ```
+4. `resilience.ts` (if manifest declares `resilience`) — thin wrapper calling `buildResiliencePolicy()`
+5. Add import line in `src/lib/connector/register-all.ts`:
+   ```typescript
+   import "./my-connector/modules/my-module";
+   ```
+6. Add `envFallback` entry to `.env.example` if module has `credential.type: api_key`
 
-That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilience code. The `connectorType` on the manifest determines which connector group the module belongs to.
-
-**Note:** Roadmap 8.7 Phase 0 will simplify this further — modules will self-register on import, eliminating the manual barrel edit.
+That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilience code, no global i18n dictionary edits. The module is fully self-contained.
 
 **Credential Resolution (PUSH):** `credential-resolver.ts` resolves credentials from manifest config (DB → Env → Default). Runner calls `resolveCredential()` before module instantiation.
 
@@ -163,8 +168,7 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 - **types.ts** — DataEnrichmentConnector, EnrichmentDimension, LogoData, DeepLinkData, FallbackChainConfig, ENRICHMENT_CONFIG
 - **registry.ts** — Facade: `getActiveEnrichmentModules()`, `getEnrichmentModuleByDimension()`
 - **orchestrator.ts** — `EnrichmentOrchestrator.execute()`: cache check → chain execution → persist result → publish events. `globalThis` singleton. Resolves credentials via PUSH pattern for key-based modules.
-- **connectors.ts** — Registration barrel (imports logo-dev, google-favicon, meta-parser)
-- **Modules:** `modules/logo-dev/`, `modules/google-favicon/`, `modules/meta-parser/` (each with `index.ts` + `manifest.ts`)
+- **Modules:** `modules/logo-dev/`, `modules/google-favicon/`, `modules/meta-parser/` (each with `index.ts`, `manifest.ts`, `i18n.ts`)
 
 ### Reference Data Connector (ROADMAP 1.20)
 
@@ -173,8 +177,7 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 **Current structure:** `src/lib/connector/reference-data/`:
 - **types.ts** — `ReferenceDataConnector` interface (health-only, no lookup yet)
 - **registry.ts** — Facade over `moduleRegistry` for `reference_data` modules
-- **connectors.ts** — Registration barrel (imports esco-classification, eurostat-nuts)
-- **Modules:** `modules/esco-classification/`, `modules/eurostat-nuts/` (each with `index.ts` + `manifest.ts`)
+- **Modules:** `modules/esco-classification/`, `modules/eurostat-nuts/` (each with `index.ts`, `manifest.ts`, `i18n.ts`)
 
 **Module Dependencies:** Modules can declare `dependencies: DependencyHealthCheck[]` in their manifest. The health monitor probes dependencies alongside the main health check. A failed dependency can **degrade** the parent but **never** make it unreachable (spec rule `DependencyHealthDegradation`). EURES declares ESCO, Eurostat, and EURES Country Stats as dependencies.
 

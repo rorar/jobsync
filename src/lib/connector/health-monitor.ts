@@ -211,8 +211,8 @@ export async function checkModuleHealth(
         healthStatus: newHealthStatus,
       },
     });
-  } catch {
-    // DB persistence failure doesn't break health monitoring
+  } catch (dbError) {
+    console.error(`[checkModuleHealth] Failed to persist health status for "${moduleId}" to DB:`, dbError);
   }
 
   return {

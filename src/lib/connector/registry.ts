@@ -52,7 +52,15 @@ class ModuleRegistry {
    * Idempotent — re-registration is a no-op (safe for HMR).
    */
   register(manifest: ModuleManifest, factory: ConnectorFactory): void {
-    if (this.entries.has(manifest.id)) return;
+    if (this.entries.has(manifest.id)) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn(
+          `[ModuleRegistry] Duplicate module id "${manifest.id}" — second registration ignored. ` +
+          `This is expected during HMR but indicates a bug if you see it on fresh startup.`
+        );
+      }
+      return;
+    }
 
     const registered: RegisteredModule = {
       manifest,

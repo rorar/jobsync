@@ -1,4 +1,5 @@
 import { ConnectorType, CredentialType, type AiManifest } from "@/lib/connector/manifest";
+import { openaiI18n } from "./i18n";
 
 export const openaiManifest: AiManifest = {
   id: "openai",
@@ -22,4 +23,5 @@ export const openaiManifest: AiManifest = {
     defaultModel: "gpt-4o-mini",
     listEndpoint: "/models",
   },
+  i18n: openaiI18n,
 };

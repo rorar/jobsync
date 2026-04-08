@@ -2,10 +2,7 @@
 
 import prisma from "@/lib/db";
 import { moduleRegistry } from "@/lib/connector/registry";
-import "@/lib/connector/job-discovery/connectors";
-import "@/lib/connector/ai-provider/modules/connectors";
-import "@/lib/connector/data-enrichment/connectors";
-import "@/lib/connector/reference-data/connectors";
+import "@/lib/connector/register-all";
 import {
   ConnectorType,
   CredentialType,
@@ -47,6 +44,7 @@ export interface ModuleManifestSummary {
   connectorParamsSchema?: ConnectorParamsSchema;
   searchFieldOverrides?: SearchFieldOverride[];
   dependencies?: { id: string; name: string; endpoint: string; timeoutMs: number; required: boolean; usedFor: string }[];
+  i18n?: Record<string, { name: string; description: string; credentialHint?: string }>;
 }
 
 // =============================================================================
@@ -77,7 +75,9 @@ export async function getModuleManifests(
     (m) => m.healthStatus === HealthStatus.UNKNOWN,
   );
   for (const mod of unknownModules) {
-    checkModuleHealth(mod.manifest.id).catch(() => {});
+    checkModuleHealth(mod.manifest.id).catch((err) => {
+      console.error(`[getModuleManifests] Background health check failed for "${mod.manifest.id}":`, err);
+    });
   }
 
   const summaries: ModuleManifestSummary[] = modules.map((m) => {
@@ -107,6 +107,7 @@ export async function getModuleManifests(
       connectorParamsSchema: jdManifest?.connectorParamsSchema,
       searchFieldOverrides: jdManifest?.searchFieldOverrides,
       dependencies: m.manifest.dependencies,
+      i18n: m.manifest.i18n,
     };
   });
 
@@ -265,8 +266,11 @@ export async function deactivateModule(
             automationId: auto.id,
           })),
         });
-      } catch {
-        // best-effort — don't let notification failure block deactivation
+      } catch (notifyError) {
+        console.error(
+          `[deactivateModule] Failed to create notifications for ${affectedAutomations.length} paused automations (module: ${moduleId}):`,
+          notifyError,
+        );
       }
     }
 
@@ -308,8 +312,8 @@ async function syncRegistryFromDb(): Promise<void> {
       moduleRegistry.setStatus(row.moduleId, status);
     }
     dbSynced = true;
-  } catch {
-    // DB not available — use in-memory defaults (all active)
+  } catch (syncError) {
+    console.error("[syncRegistryFromDb] Failed to sync module status from DB — using in-memory defaults:", syncError);
   }
 }
 
