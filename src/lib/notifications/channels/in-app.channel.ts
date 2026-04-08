@@ -25,6 +25,7 @@ export class InAppChannel implements NotificationChannel {
           message: notification.message,
           ...(notification.moduleId ? { moduleId: notification.moduleId } : {}),
           ...(notification.automationId ? { automationId: notification.automationId } : {}),
+          ...(notification.data ? { data: notification.data as object } : {}),
         },
       });
       return { success: true, channel: this.name };

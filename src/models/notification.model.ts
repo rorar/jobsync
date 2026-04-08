@@ -19,6 +19,7 @@ export interface Notification {
   message: string;
   moduleId: string | null;
   automationId: string | null;
+  data: Record<string, unknown> | null;
   read: boolean;
   createdAt: Date;
 }

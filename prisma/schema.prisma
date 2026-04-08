@@ -469,6 +469,7 @@ model Notification {
   message      String
   moduleId     String?
   automationId String?
+  data         Json?
   read         Boolean  @default(false)
   createdAt    DateTime @default(now())
 

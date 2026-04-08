@@ -83,12 +83,13 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
         {hasUnread && (
           <Button
             variant="ghost"
-            size="sm"
-            className="h-auto px-2 py-1 text-xs whitespace-nowrap shrink-0"
+            size="icon"
+            className="h-8 w-8 shrink-0"
             onClick={handleMarkAllAsRead}
+            aria-label={t("notifications.markAllRead")}
+            title={t("notifications.markAllRead")}
           >
-            <CheckCheck className="mr-1 h-3 w-3" />
-            {t("notifications.markAllRead")}
+            <CheckCheck className="h-4 w-4" />
           </Button>
         )}
       </div>
