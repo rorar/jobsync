@@ -20,15 +20,6 @@ export const enrichment = {
     "enrichment.lastEnriched": "Last enriched {date}",
     "enrichment.noLogo": "No logo available",
     "enrichment.refreshEnrichment": "Refresh enrichment data",
-    "enrichment.logoDev": "Logo.dev",
-    "enrichment.logoDevDescription":
-      "High-quality company logos via Logo.dev (API key required)",
-    "enrichment.googleFavicon": "Google Favicon",
-    "enrichment.googleFaviconDescription":
-      "Fetch website favicons via Google",
-    "enrichment.metaParser": "Link Preview Parser",
-    "enrichment.metaParserDescription":
-      "Extract metadata from URLs (OpenGraph, meta tags)",
     "enrichment.noModules": "No enrichment modules registered",
     "enrichment.noModulesHint":
       "Enrichment modules will appear here once they are registered in the connector framework.",
@@ -60,11 +51,6 @@ export const enrichment = {
     "enrichment.deactivateConfirmDescription": "Deactivating this module will pause all automations that depend on it. You will need to manually reactivate them later.",
     "enrichment.deactivateConfirm": "Deactivate",
 
-    // Health-only monitoring modules
-    "enrichment.escoApi": "ESCO Classification API",
-    "enrichment.escoApiDescription": "EU ESCO occupation classification service (health monitoring)",
-    "enrichment.eurostatNuts": "Eurostat NUTS Regions",
-    "enrichment.eurostatNutsDescription": "EU Eurostat NUTS regional classification service (health monitoring)",
     "enrichment.healthOnly": "Health monitoring only",
 
     // Module Health Overview (Settings)
@@ -117,15 +103,6 @@ export const enrichment = {
     "enrichment.lastEnriched": "Zuletzt angereichert {date}",
     "enrichment.noLogo": "Kein Logo verfügbar",
     "enrichment.refreshEnrichment": "Anreicherungsdaten aktualisieren",
-    "enrichment.logoDev": "Logo.dev",
-    "enrichment.logoDevDescription":
-      "Hochwertige Firmenlogos über Logo.dev (API-Key erforderlich)",
-    "enrichment.googleFavicon": "Google Favicon",
-    "enrichment.googleFaviconDescription":
-      "Website-Favicons über Google abrufen",
-    "enrichment.metaParser": "Link-Vorschau-Parser",
-    "enrichment.metaParserDescription":
-      "Metadaten aus URLs extrahieren (OpenGraph, Meta-Tags)",
     "enrichment.noModules": "Keine Anreicherungs-Module registriert",
     "enrichment.noModulesHint":
       "Anreicherungs-Module werden hier angezeigt, sobald sie im Connector-Framework registriert sind.",
@@ -157,11 +134,6 @@ export const enrichment = {
     "enrichment.deactivateConfirmDescription": "Das Deaktivieren dieses Moduls pausiert alle Automatisierungen, die davon abhängen. Sie müssen diese später manuell wieder aktivieren.",
     "enrichment.deactivateConfirm": "Deaktivieren",
 
-    // Health-only monitoring modules
-    "enrichment.escoApi": "ESCO-Klassifikations-API",
-    "enrichment.escoApiDescription": "EU-ESCO-Berufsklassifikationsdienst (Statusüberwachung)",
-    "enrichment.eurostatNuts": "Eurostat-NUTS-Regionen",
-    "enrichment.eurostatNutsDescription": "EU-Eurostat-NUTS-Regionalklassifikationsdienst (Statusüberwachung)",
     "enrichment.healthOnly": "Nur Statusüberwachung",
 
     // Module Health Overview (Settings)
@@ -215,15 +187,6 @@ export const enrichment = {
     "enrichment.noLogo": "Aucun logo disponible",
     "enrichment.refreshEnrichment":
       "Actualiser les données d'enrichissement",
-    "enrichment.logoDev": "Logo.dev",
-    "enrichment.logoDevDescription":
-      "Logos d'entreprise de haute qualité via Logo.dev (clé API requise)",
-    "enrichment.googleFavicon": "Favicon Google",
-    "enrichment.googleFaviconDescription":
-      "Récupérer les favicons via Google",
-    "enrichment.metaParser": "Analyseur d'aperçu de lien",
-    "enrichment.metaParserDescription":
-      "Extraire les métadonnées des URLs (OpenGraph, balises meta)",
     "enrichment.noModules": "Aucun module d'enrichissement enregistré",
     "enrichment.noModulesHint":
       "Les modules d'enrichissement apparaîtront ici une fois enregistrés dans le framework connecteur.",
@@ -256,11 +219,6 @@ export const enrichment = {
     "enrichment.deactivateConfirmDescription": "La désactivation de ce module mettra en pause toutes les automatisations qui en dépendent. Vous devrez les réactiver manuellement par la suite.",
     "enrichment.deactivateConfirm": "Désactiver",
 
-    // Health-only monitoring modules
-    "enrichment.escoApi": "API de classification ESCO",
-    "enrichment.escoApiDescription": "Service de classification des professions ESCO de l'UE (surveillance de l'état)",
-    "enrichment.eurostatNuts": "Régions NUTS Eurostat",
-    "enrichment.eurostatNutsDescription": "Service de classification régionale NUTS d'Eurostat (surveillance de l'état)",
     "enrichment.healthOnly": "Surveillance de l'état uniquement",
 
     // Module Health Overview (Settings)
@@ -313,15 +271,6 @@ export const enrichment = {
     "enrichment.lastEnriched": "Último enriquecimiento {date}",
     "enrichment.noLogo": "Logo no disponible",
     "enrichment.refreshEnrichment": "Actualizar datos de enriquecimiento",
-    "enrichment.logoDev": "Logo.dev",
-    "enrichment.logoDevDescription":
-      "Logos de empresas de alta calidad vía Logo.dev (clave API requerida)",
-    "enrichment.googleFavicon": "Favicon de Google",
-    "enrichment.googleFaviconDescription":
-      "Obtener favicons vía Google",
-    "enrichment.metaParser": "Analizador de vista previa de enlaces",
-    "enrichment.metaParserDescription":
-      "Extraer metadatos de URLs (OpenGraph, etiquetas meta)",
     "enrichment.noModules":
       "No hay módulos de enriquecimiento registrados",
     "enrichment.noModulesHint":
@@ -355,11 +304,6 @@ export const enrichment = {
     "enrichment.deactivateConfirmDescription": "Desactivar este modulo pausara todas las automatizaciones que dependen de el. Debera reactivarlas manualmente mas tarde.",
     "enrichment.deactivateConfirm": "Desactivar",
 
-    // Health-only monitoring modules
-    "enrichment.escoApi": "API de clasificación ESCO",
-    "enrichment.escoApiDescription": "Servicio de clasificación de ocupaciones ESCO de la UE (monitoreo de estado)",
-    "enrichment.eurostatNuts": "Regiones NUTS de Eurostat",
-    "enrichment.eurostatNutsDescription": "Servicio de clasificación regional NUTS de Eurostat (monitoreo de estado)",
     "enrichment.healthOnly": "Solo monitoreo de estado",
 
     // Module Health Overview (Settings)

@@ -39,15 +39,6 @@ const HEALTH_STATUS_KEYS: Record<string, TranslationKey> = {
   unknown: "enrichment.health.unknown",
 };
 
-/** i18n keys for module display names (enrichment modules that have i18n keys) */
-const MODULE_NAME_KEYS: Record<string, TranslationKey> = {
-  logo_dev: "enrichment.logoDev",
-  google_favicon: "enrichment.googleFavicon",
-  meta_parser: "enrichment.metaParser",
-  esco_classification: "enrichment.escoApi",
-  eurostat_nuts: "enrichment.eurostatNuts",
-};
-
 /** Health status sort priority (problems first) */
 const HEALTH_SORT_ORDER: Record<string, number> = {
   unreachable: 0,
@@ -80,8 +71,13 @@ function relativeTime(isoString: string | undefined): string | null {
   return `${Math.floor(hours / 24)}d`;
 }
 
+/** Resolve display name from manifest i18n, falling back to manifest.name */
+function getModuleName(module: ModuleManifestSummary, locale: string): string {
+  return module.i18n?.[locale]?.name ?? module.name;
+}
+
 function ApiStatusOverview() {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const [modules, setModules] = useState<ModuleManifestSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
@@ -186,16 +182,6 @@ function ApiStatusOverview() {
     setIsCheckingAll(false);
     setChecking(new Set());
   };
-
-  /** Resolve display name via i18n, falling back to manifest name */
-  function getModuleName(module: ModuleManifestSummary): string {
-    const key = MODULE_NAME_KEYS[module.moduleId];
-    if (key) {
-      const translated = t(key);
-      if (translated !== key) return translated;
-    }
-    return module.name;
-  }
 
   /** Group modules by connector type, sorted by health status */
   function getGroupedModules(): Map<string, ModuleManifestSummary[]> {
@@ -309,7 +295,7 @@ function ApiStatusOverview() {
                   <ModuleStatusRow
                     key={module.moduleId}
                     module={module}
-                    moduleName={getModuleName(module)}
+                    moduleName={getModuleName(module, locale)}
                     isChecking={checking.has(module.moduleId)}
                     onCheck={() => handleHealthCheck(module.moduleId)}
                     t={t}

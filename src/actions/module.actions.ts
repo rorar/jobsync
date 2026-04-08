@@ -47,6 +47,7 @@ export interface ModuleManifestSummary {
   connectorParamsSchema?: ConnectorParamsSchema;
   searchFieldOverrides?: SearchFieldOverride[];
   dependencies?: { id: string; name: string; endpoint: string; timeoutMs: number; required: boolean; usedFor: string }[];
+  i18n?: Record<string, { name: string; description: string }>;
 }
 
 // =============================================================================
@@ -107,6 +108,7 @@ export async function getModuleManifests(
       connectorParamsSchema: jdManifest?.connectorParamsSchema,
       searchFieldOverrides: jdManifest?.searchFieldOverrides,
       dependencies: m.manifest.dependencies,
+      i18n: m.manifest.i18n,
     };
   });
 

@@ -3,6 +3,8 @@ import type { LanguageModel } from "ai";
 import { resolveApiKey } from "@/lib/api-key-resolver";
 import { validateOllamaUrl } from "@/lib/url-validation";
 import type { AIProviderConnector, AIConnectorResult } from "../../types";
+import { moduleRegistry } from "@/lib/connector/registry";
+import { ollamaManifest } from "./manifest";
 
 const OLLAMA_DEFAULT_BASE_URL = "http://127.0.0.1:11434";
 const HEALTH_CHECK_TIMEOUT_MS = 5000;
@@ -104,3 +106,6 @@ async function resolveBaseUrl(userId?: string): Promise<string> {
   }
   return url;
 }
+
+// Self-registration
+moduleRegistry.register(ollamaManifest, createOllamaConnector);

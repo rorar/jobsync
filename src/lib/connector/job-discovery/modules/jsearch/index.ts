@@ -11,6 +11,8 @@ import {
   TaskCancelledError,
   BulkheadRejectedError,
 } from "./resilience";
+import { moduleRegistry } from "@/lib/connector/registry";
+import { jsearchManifest } from "./manifest";
 
 const JSEARCH_BASE_URL = "https://jsearch.p.rapidapi.com";
 
@@ -200,3 +202,6 @@ function formatSalary(job: JSearchJob): string | undefined {
   }
   return undefined;
 }
+
+// Self-registration
+moduleRegistry.register(jsearchManifest, createJSearchConnector);

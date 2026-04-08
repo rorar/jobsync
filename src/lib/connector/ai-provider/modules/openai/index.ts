@@ -2,6 +2,8 @@ import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import { resolveApiKey } from "@/lib/api-key-resolver";
 import type { AIProviderConnector, AIConnectorResult } from "../../types";
+import { moduleRegistry } from "@/lib/connector/registry";
+import { openaiManifest } from "./manifest";
 
 const OPENAI_API_BASE = "https://api.openai.com/v1";
 const HEALTH_CHECK_TIMEOUT_MS = 10000;
@@ -134,3 +136,6 @@ export function createOpenAIConnector(): AIProviderConnector {
     },
   };
 }
+
+// Self-registration
+moduleRegistry.register(openaiManifest, createOpenAIConnector);

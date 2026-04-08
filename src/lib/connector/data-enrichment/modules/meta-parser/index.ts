@@ -17,6 +17,8 @@ import type {
 } from "../../types";
 import { ENRICHMENT_CONFIG } from "../../types";
 import { metaParserPolicy } from "./resilience";
+import { moduleRegistry } from "@/lib/connector/registry";
+import { metaParserManifest } from "./manifest";
 
 /** Maximum HTML size to parse (100KB) to prevent memory issues */
 const MAX_HTML_SIZE = 100_000;
@@ -380,3 +382,6 @@ export function createMetaParserModule(): DataEnrichmentConnector {
     },
   };
 }
+
+// Self-registration
+moduleRegistry.register(metaParserManifest, createMetaParserModule);

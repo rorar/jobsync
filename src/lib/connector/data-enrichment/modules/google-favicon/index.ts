@@ -15,6 +15,8 @@ import type {
 } from "../../types";
 import { ENRICHMENT_CONFIG } from "../../types";
 import { googleFaviconPolicy } from "./resilience";
+import { moduleRegistry } from "@/lib/connector/registry";
+import { googleFaviconManifest } from "./manifest";
 
 /** Domain validation regex — prevents injection of paths, query strings, or invalid characters */
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i;
@@ -92,3 +94,6 @@ export function createGoogleFaviconModule(): DataEnrichmentConnector {
     },
   };
 }
+
+// Self-registration
+moduleRegistry.register(googleFaviconManifest, createGoogleFaviconModule);
