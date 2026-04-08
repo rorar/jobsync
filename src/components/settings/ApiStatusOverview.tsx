@@ -19,6 +19,7 @@ import { CredentialType } from "@/lib/connector/manifest";
 import { useTranslations } from "@/i18n";
 import type { TranslationKey } from "@/i18n";
 import { toast } from "../ui/use-toast";
+import { getModuleName } from "@/lib/connector/i18n-utils";
 
 /** Connector group display order */
 const CONNECTOR_GROUPS = ["job_discovery", "ai_provider", "data_enrichment", "reference_data"] as const;
@@ -69,13 +70,6 @@ function relativeTime(isoString: string | undefined): string | null {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h`;
   return `${Math.floor(hours / 24)}d`;
-}
-
-/** Resolve display name from manifest i18n, falling back to manifest.name */
-function getModuleName(module: ModuleManifestSummary, locale: string): string {
-  return module.i18n?.[locale]?.name
-    ?? module.i18n?.["en"]?.name
-    ?? module.name;
 }
 
 function ApiStatusOverview() {

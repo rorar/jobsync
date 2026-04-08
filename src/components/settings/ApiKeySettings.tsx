@@ -45,6 +45,7 @@ import type {
 } from "@/models/apiKey.model";
 import { useTranslations, formatDateCompact } from "@/i18n";
 import type { TranslationKey } from "@/i18n";
+import { getModuleName, getCredentialHint } from "@/lib/connector/i18n-utils";
 
 interface ModuleConfig {
   id: ApiKeyModuleId;
@@ -72,20 +73,6 @@ function manifestToModuleConfig(m: ModuleManifestSummary): ModuleConfig {
     healthStatus: m.healthStatus as ModuleConfig["healthStatus"],
     lastSuccessfulConnection: m.lastSuccessfulConnection,
   };
-}
-
-/** Resolve display name from manifest i18n, falling back to manifest.name */
-function getModuleName(module: ModuleConfig, locale: string): string {
-  return module.i18n?.[locale]?.name
-    ?? module.i18n?.["en"]?.name
-    ?? module.name;
-}
-
-/** Resolve credential hint from manifest i18n */
-function getCredentialHint(module: ModuleConfig, locale: string): string {
-  return module.i18n?.[locale]?.credentialHint
-    ?? module.i18n?.["en"]?.credentialHint
-    ?? "";
 }
 
 const DEFAULT_OLLAMA_PLACEHOLDER = "http://127.0.0.1:11434";

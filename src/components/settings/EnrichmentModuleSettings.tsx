@@ -33,6 +33,7 @@ import { ConnectorType } from "@/lib/connector/manifest";
 import { useTranslations } from "@/i18n";
 import type { TranslationKey } from "@/i18n";
 import { toast } from "../ui/use-toast";
+import { getModuleName, getModuleDescription } from "@/lib/connector/i18n-utils";
 
 /** i18n dimension label keys */
 const DIMENSION_KEYS: Record<string, TranslationKey> = {
@@ -48,19 +49,6 @@ const HEALTH_STATUS_KEYS: Record<string, TranslationKey> = {
   unknown: "enrichment.health.unknown",
 };
 
-/** Resolve display name from manifest i18n, falling back to manifest.name */
-function getModuleName(module: ModuleManifestSummary, locale: string): string {
-  return module.i18n?.[locale]?.name
-    ?? module.i18n?.["en"]?.name
-    ?? module.name;
-}
-
-/** Resolve description from manifest i18n */
-function getModuleDescription(module: ModuleManifestSummary, locale: string, t: (key: TranslationKey) => string): string {
-  return module.i18n?.[locale]?.description
-    ?? module.i18n?.["en"]?.description
-    ?? t("enrichment.modulesDescription");
-}
 
 function EnrichmentModuleSettings() {
   const { t, locale } = useTranslations();
@@ -270,7 +258,7 @@ function EnrichmentModuleSettings() {
                         {getModuleName(module, locale)}
                       </CardTitle>
                       <CardDescription className="text-sm">
-                        {getModuleDescription(module, locale, t)}
+                        {getModuleDescription(module, locale, t("enrichment.modulesDescription"))}
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-3">

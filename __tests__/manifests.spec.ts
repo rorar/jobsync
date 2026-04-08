@@ -4,11 +4,18 @@ import { jsearchManifest } from "@/lib/connector/job-discovery/modules/jsearch/m
 import { ollamaManifest } from "@/lib/connector/ai-provider/modules/ollama/manifest";
 import { openaiManifest } from "@/lib/connector/ai-provider/modules/openai/manifest";
 import { deepseekManifest } from "@/lib/connector/ai-provider/modules/deepseek/manifest";
+import { logoDevManifest } from "@/lib/connector/data-enrichment/modules/logo-dev/manifest";
+import { googleFaviconManifest } from "@/lib/connector/data-enrichment/modules/google-favicon/manifest";
+import { metaParserManifest } from "@/lib/connector/data-enrichment/modules/meta-parser/manifest";
+import { escoClassificationManifest } from "@/lib/connector/reference-data/modules/esco-classification/manifest";
+import { eurostatNutsManifest } from "@/lib/connector/reference-data/modules/eurostat-nuts/manifest";
 import {
   ConnectorType,
   CredentialType,
   type ModuleManifest,
   type AiManifest,
+  type DataEnrichmentManifest,
+  type ReferenceDataManifest,
 } from "@/lib/connector/manifest";
 
 const allManifests: ModuleManifest[] = [
@@ -18,10 +25,17 @@ const allManifests: ModuleManifest[] = [
   ollamaManifest,
   openaiManifest,
   deepseekManifest,
+  logoDevManifest,
+  googleFaviconManifest,
+  metaParserManifest,
+  escoClassificationManifest,
+  eurostatNutsManifest,
 ];
 
 const jobDiscoveryManifests = [euresManifest, arbeitsagenturManifest, jsearchManifest];
 const aiManifests: AiManifest[] = [ollamaManifest, openaiManifest, deepseekManifest];
+const dataEnrichmentManifests: DataEnrichmentManifest[] = [logoDevManifest, googleFaviconManifest, metaParserManifest];
+const referenceDataManifests: ReferenceDataManifest[] = [escoClassificationManifest, eurostatNutsManifest];
 
 describe("Module Manifests", () => {
   describe.each(allManifests.map((m) => [m.id, m] as const))(
@@ -95,9 +109,44 @@ describe("Module Manifests", () => {
     });
   });
 
+  describe("Data Enrichment manifests", () => {
+    it.each(dataEnrichmentManifests.map((m) => [m.id, m] as const))(
+      "%s should have connectorType DATA_ENRICHMENT",
+      (_id, manifest) => {
+        expect(manifest.connectorType).toBe(ConnectorType.DATA_ENRICHMENT);
+      },
+    );
+
+    it.each(dataEnrichmentManifests.map((m) => [m.id, m] as const))(
+      "%s should have a non-empty supportedDimensions array",
+      (_id, manifest) => {
+        expect(manifest.supportedDimensions).toBeDefined();
+        expect(Array.isArray(manifest.supportedDimensions)).toBe(true);
+        expect(manifest.supportedDimensions.length).toBeGreaterThan(0);
+      },
+    );
+  });
+
+  describe("Reference Data manifests", () => {
+    it.each(referenceDataManifests.map((m) => [m.id, m] as const))(
+      "%s should have connectorType REFERENCE_DATA",
+      (_id, manifest) => {
+        expect(manifest.connectorType).toBe(ConnectorType.REFERENCE_DATA);
+      },
+    );
+
+    it.each(referenceDataManifests.map((m) => [m.id, m] as const))(
+      "%s should have a non-empty taxonomy string",
+      (_id, manifest) => {
+        expect(typeof manifest.taxonomy).toBe("string");
+        expect(manifest.taxonomy.length).toBeGreaterThan(0);
+      },
+    );
+  });
+
   describe("Manifest count", () => {
-    it("should have exactly 6 manifests total", () => {
-      expect(allManifests).toHaveLength(6);
+    it("should have exactly 11 manifests total", () => {
+      expect(allManifests).toHaveLength(11);
     });
 
     it("should have 3 job discovery manifests", () => {
@@ -106,6 +155,14 @@ describe("Module Manifests", () => {
 
     it("should have 3 AI provider manifests", () => {
       expect(aiManifests).toHaveLength(3);
+    });
+
+    it("should have 3 data enrichment manifests", () => {
+      expect(dataEnrichmentManifests).toHaveLength(3);
+    });
+
+    it("should have 2 reference data manifests", () => {
+      expect(referenceDataManifests).toHaveLength(2);
     });
   });
 });

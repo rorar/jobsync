@@ -33,4 +33,18 @@ describe("Module manifest i18n", () => {
       }
     });
   }
+
+  const modulesWithCredentials = moduleIds.filter(id => {
+    const mod = moduleRegistry.get(id);
+    return mod?.manifest.credential?.type !== "none" && mod?.manifest.credential?.required;
+  });
+
+  for (const moduleId of modulesWithCredentials) {
+    it(`module ${moduleId} has credentialHint for en locale`, () => {
+      const mod = moduleRegistry.get(moduleId);
+      const hint = mod?.manifest.i18n?.["en"]?.credentialHint;
+      expect(hint).toBeDefined();
+      expect(hint!.length).toBeGreaterThan(0);
+    });
+  }
 });
