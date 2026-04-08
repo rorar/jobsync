@@ -130,8 +130,9 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
 
   // DnD handlers
   const handleDragStart = useCallback((event: DragStartEvent) => {
+    if (isPending) return;
     setActiveId(event.active.id as string);
-  }, []);
+  }, [isPending]);
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const over = event.over;
@@ -399,7 +400,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
         aria-label={t("jobs.kanbanBoard")}
       >
         <DndContext
-          sensors={isPending ? [] : sensors}
+          sensors={sensors}
           collisionDetection={closestCenter}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
