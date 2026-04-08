@@ -1813,6 +1813,14 @@ Vollständiges Redesign der Teststrategie nach ISTQB-Foundation-Prinzipien. Ziel
 - Kriterium: Nur Tests die MEHRERE Schichten durchqueren UND nicht durch niedrigere Ebenen abdeckbar sind
 - Kandidaten: Login Flow, Job Create→Edit→Delete, Automation Wizard→Run→Status, Kanban DnD→Status Change, Staging→Promote→Job
 
+**Discovery: Self-Contained Module E2E Coverage (offen):**
+- Frage: Sollen Module automatisch E2E-Coverage bekommen, oder reicht Property-Based + Component-Level?
+- E2E hat in der Vergangenheit echte Bugs gefunden die Unit/Component Tests nicht abdeckten
+- Option A: Manifest-driven E2E Test — iteriert alle registrierten Module, prüft Sichtbarkeit in Settings UI + Wizard (1 Testdatei, automatisch für neue Module)
+- Option B: Property-Based + Component Tests decken Modul-Sichtbarkeit ab, E2E nur für kritische User Flows
+- Option C: Hybrid — 1 generischer E2E Smoke Test für "alle Module sichtbar", Rest in niedrigeren Ebenen
+- Entscheidung: Während 8.0 Migration Phase 1-2 evaluieren, basierend auf Erfahrung welche Bugs die neuen Test-Ebenen tatsächlich fangen
+
 **Migration (Strangler Fig):**
 - Phase 1: fast-check + testcontainers Setup, erste Property-Tests für State Machine + ActionResult
 - Phase 2: Integrationstests für Server Actions (ersetzen gemockte Prisma-Tests)
