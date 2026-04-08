@@ -53,6 +53,9 @@ function translateDetail(
     ? `${location.cityName}, ${location.countryCode.toUpperCase()}`
     : location?.countryCode?.toUpperCase() ?? "Europe";
 
+  // Salary structure
+  const salary0 = profile.offeredRemunerationPackage?.salaries?.[0];
+
   return {
     title: profile.title ?? "",
     employerName: profile.employer?.name ?? "",
@@ -79,6 +82,26 @@ function translateDetail(
       : undefined,
     industryCodes: profile.employer?.sectorCodes?.length ? profile.employer.sectorCodes : undefined,
     companySize: profile.employer?.organisationSizeCode ?? undefined,
+
+    // Salary fields
+    salaryMin: salary0?.minimumSalary ?? undefined,
+    salaryMax: salary0?.maximumSalary ?? undefined,
+    salaryCurrency: salary0?.currencyCode ?? undefined,
+    salaryPeriod: salary0?.payingIntervalCode ?? undefined,
+    salary: profile.offeredRemunerationPackage?.description
+      ?? (salary0 ? formatSalary(salary0) : undefined),
+
+    // Requirements
+    requiredEducationLevel: profile.requiredEducationLevelCode ?? undefined,
+    requiredExperienceYears: profile.requiredYearsOfExperience ?? undefined,
+
+    // Languages & workplace
+    workingLanguages: profile.workingLanguageCodes?.length ? profile.workingLanguageCodes : undefined,
+
+    // Contract details
+    immediateStart: profile.immediateStartIndicator ?? undefined,
+    contractStartDate: profile.employmentPeriod?.startDateText ?? undefined,
+    contractEndDate: profile.employmentPeriod?.endDateText ?? undefined,
   };
 }
 
@@ -109,6 +132,29 @@ function mapDetailScheduleCode(
     case "FlexTime": return "part_time";
     default: return undefined;
   }
+}
+
+function formatSalary(salary: {
+  minimumSalary?: number | null;
+  maximumSalary?: number | null;
+  currencyCode?: string | null;
+  payingIntervalCode?: string | null;
+}): string | undefined {
+  const parts: string[] = [];
+  const cur = salary.currencyCode ?? "EUR";
+  if (salary.minimumSalary != null && salary.maximumSalary != null && salary.minimumSalary !== salary.maximumSalary) {
+    parts.push(`${salary.minimumSalary.toLocaleString()} \u2013 ${salary.maximumSalary.toLocaleString()} ${cur}`);
+  } else if (salary.minimumSalary != null) {
+    parts.push(`${salary.minimumSalary.toLocaleString()}+ ${cur}`);
+  } else if (salary.maximumSalary != null) {
+    parts.push(`\u2264${salary.maximumSalary.toLocaleString()} ${cur}`);
+  } else {
+    return undefined;
+  }
+  if (salary.payingIntervalCode) {
+    parts.push(`/${salary.payingIntervalCode}`);
+  }
+  return parts.join(" ");
 }
 
 export function createEuresConnector(): DataSourceConnector {

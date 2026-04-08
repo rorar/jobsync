@@ -149,6 +149,7 @@ export interface paths {
          * Get job statistics by country
          * @description Returns hierarchical statistics of job vacancies grouped by country and NUTS
          *     sub-regions. Each country entry contains nested region entries in `children`.
+         *     Includes an `NS` (not specified) entry for vacancies without a classified country.
          */
         get: operations["getCountryStats"];
         put?: never;
@@ -169,6 +170,7 @@ export interface paths {
         /**
          * Get job statistics by NACE sector
          * @description Returns job vacancy counts grouped by NACE economic sector codes.
+         *     Includes an `NS` (not specified) entry for vacancies without a classified sector.
          */
         get: operations["getSectorStats"];
         put?: never;
@@ -248,7 +250,14 @@ export interface paths {
         };
         /**
          * Get translation language codes
-         * @description Returns the list of ISO 639-1 language codes supported for machine translation.
+         * @description Returns the list of language codes supported for machine translation. The list
+         *     uses BCP 47 / IETF language tags, which include ISO 639-1 two-letter codes
+         *     (e.g. `de`, `fr`), ISO 639-3 three-letter codes (e.g. `fil`, `yue`), locale
+         *     variants (e.g. `fr-CA`, `pt-PT`), script variants (e.g. `zh-Hans`, `sr-Cyrl`),
+         *     and two special entries: `transliteration` and `dictionary`.
+         *
+         *     This endpoint returns the Azure Translator supported language list. Note that
+         *     translation is currently disabled (`/translation/enabled` returns `false`).
          */
         get: operations["getTranslationLanguages"];
         put?: never;
@@ -270,6 +279,12 @@ export interface paths {
          * Autocomplete occupation names
          * @description Returns type-ahead occupation name suggestions based on a keyword prefix.
          *     Results are ranked by vacancy frequency (most common first).
+         *
+         *     **Rate limiting:** This endpoint enforces stricter rate limits than other EURES
+         *     endpoints. Exceeding the limit returns `401 Unauthorized` with a
+         *     `WWW-Authenticate: Bearer` header (despite not being an authentication issue).
+         *     The cooldown period is approximately 60 seconds. Callers making rapid successive
+         *     requests should implement backoff logic.
          */
         get: operations["autocompleteOccupations"];
         put?: never;
@@ -291,7 +306,7 @@ export interface paths {
          * Get all ISO 639-1 languages
          * @description Returns the complete list of ISO 639-1 languages with an `euresSupported` flag
          *     indicating which languages are fully supported by the EURES portal (26 supported,
-         *     130+ total).
+         *     185 total).
          */
         get: operations["getIsoLanguages"];
         put?: never;
@@ -623,7 +638,7 @@ export interface components {
              *     }
              */
             locationMap: {
-                [key: string]: string[];
+                [key: string]: (string | null)[];
             };
             /**
              * @description Indicates whether the vacancy is flagged as a EURES vacancy, meaning it is
@@ -894,8 +909,9 @@ export interface components {
              */
             reference: string;
             /**
-             * @description Numeric document identifier string.
-             * @example 10001
+             * @description Document identifier string. May be a numeric string (e.g. `30871838`)
+             *     or include a prefix (e.g. `ID-17102704`).
+             * @example 30871838
              */
             documentId: string;
             /**
@@ -965,6 +981,239 @@ export interface components {
              * @example 2025-06-30
              */
             lastApplicationDate?: string | null;
+            /** @description Employment period details including start/end dates, or null. */
+            employmentPeriod?: components["schemas"]["EmploymentPeriod"] | null;
+            /**
+             * @description Whether the position is available for immediate start.
+             * @example false
+             */
+            immediateStartIndicator?: boolean;
+            /** @description Remuneration and benefits details, or null. */
+            offeredRemunerationPackage?: components["schemas"]["OfferedRemunerationPackage"] | null;
+            /** @description Contact persons for the vacancy. Frequently an empty array. */
+            personContacts?: components["schemas"]["PersonContact"][];
+            /**
+             * @description Language requirements specific to the position. Each entry specifies a
+             *     language code with optional required/desired CEFR skill levels and
+             *     associated ESCO skill URIs. Frequently an empty array.
+             */
+            positionLanguages?: components["schemas"]["PositionLanguage"][];
+            /** @description Driving license categories required for the position. */
+            requiredDrivingLicenses?: string[];
+            /** @description Required education level code, or null if not specified. */
+            requiredEducationLevelCode?: string | null;
+            /** @description Required professional experiences with ESCO occupation categories and duration. */
+            requiredExperiences?: components["schemas"]["RequiredExperience"][];
+            /**
+             * @description Required qualification level as a numeric code string (e.g. "3").
+             *     Corresponds to EQF levels. Null if not specified.
+             * @example 3
+             */
+            requiredQualificationLevelCode?: string | null;
+            /** @description ESCO skill URIs required for the position. */
+            requiredSkills?: string[];
+            /** @description Minimum years of experience required, or null. */
+            requiredYearsOfExperience?: number | null;
+            /** @description Travel requirement details, or null. */
+            travelPreference?: components["schemas"]["TravelPreference"] | null;
+            /**
+             * @description ISO 639-1 codes of languages used in the workplace.
+             * @example [
+             *       "de"
+             *     ]
+             */
+            workingLanguageCodes?: string[];
+        };
+        /** @description Employment period details for a job vacancy. */
+        EmploymentPeriod: {
+            /**
+             * Format: int64
+             * @description Start date as Unix timestamp in milliseconds, or null.
+             * @example 1770076800000
+             */
+            startDate?: number | null;
+            /**
+             * @description Human-readable start date string.
+             * @example 03 February  2026
+             */
+            startDateText?: string;
+            /**
+             * Format: int64
+             * @description End date as Unix timestamp in milliseconds, or null for open-ended.
+             */
+            endDate?: number | null;
+            /** @description Human-readable end date string, or empty string. */
+            endDateText?: string;
+            /** @description Free-text description of the employment period, or empty string. */
+            periodDescription?: string;
+        };
+        /** @description Compensation and benefits offered for the position. */
+        OfferedRemunerationPackage: {
+            /** @description Free-text description of the remuneration package. */
+            description?: string;
+            /**
+             * @description Code indicating the basis of remuneration (e.g. `salaried`).
+             * @example salaried
+             */
+            remunerationBasisCode?: string;
+            /** @description List of additional benefits descriptions. */
+            benefitsSummaries?: string[];
+            /** @description Salary details for the position. */
+            salaries?: components["schemas"]["Salary"][];
+        };
+        /** @description Salary details for a position. */
+        Salary: {
+            /** @description Minimum salary amount, or null. */
+            minimumSalary?: number | null;
+            /** @description Maximum salary amount, or null. */
+            maximumSalary?: number | null;
+            /** @description Reference salary amount, or null. */
+            referenceSalary?: number | null;
+            /** @description ISO 4217 currency code (e.g. `EUR`), or null. */
+            currencyCode?: string | null;
+            /**
+             * @description Pay interval code, or null. Observed values include `month`.
+             * @example month
+             */
+            payingIntervalCode?: string | null;
+            /**
+             * @description Type of remuneration. Observed values include `basepay` and `commission`.
+             * @example basepay
+             */
+            remunerationTypeCode?: string | null;
+        };
+        /** @description Required professional experience entry. */
+        RequiredExperience: {
+            /**
+             * Format: uri
+             * @description ESCO occupation URI classifying the required experience.
+             * @example http://data.europa.eu/esco/occupation/36494988-69d2-4420-9db4-eb56605ac983
+             */
+            categoryCode?: string;
+            /** @description Duration of required experience. */
+            measure?: {
+                /**
+                 * @description Numeric duration value.
+                 * @example 0
+                 */
+                value?: number;
+                /**
+                 * @description Unit of the duration (e.g. `year`).
+                 * @example year
+                 */
+                unitCode?: string;
+            };
+            /** @description Free-text description of the required experience. */
+            description?: string;
+        };
+        /** @description Contact person for a job vacancy. */
+        PersonContact: {
+            /**
+             * @description First name of the contact person. May be empty string.
+             * @example Erika
+             */
+            givenName?: string;
+            /**
+             * @description Last name of the contact person.
+             * @example Krüger
+             */
+            familyName?: string;
+            communications?: components["schemas"]["Communications"];
+        };
+        /** @description Communication channels for a contact person. */
+        Communications: {
+            /** @description Postal addresses. */
+            addresses?: components["schemas"]["Location"][];
+            /** @description Landline telephone numbers. */
+            telephoneNumbers?: components["schemas"]["TelephoneNumber"][];
+            /** @description Mobile telephone numbers. */
+            mobileTelephoneNumbers?: components["schemas"]["TelephoneNumber"][];
+            /** @description Fax numbers. */
+            faxNumbers?: components["schemas"]["TelephoneNumber"][];
+            /** @description Telephone-based instant messaging identifiers. */
+            telephoneInstantMessages?: Record<string, never>[];
+            /** @description Web-based instant messaging identifiers. */
+            webInstantMessages?: Record<string, never>[];
+            /** @description Email addresses. */
+            emails?: components["schemas"]["EmailAddress"][];
+            /** @description Web profile URLs. */
+            webProfiles?: Record<string, never>[];
+        };
+        /** @description Telephone number with optional dialing codes. */
+        TelephoneNumber: {
+            /** @description Area dialing code, or null. */
+            areaDialing?: string | null;
+            /** @description Country dialing code, or null. */
+            countryDialing?: string | null;
+            /**
+             * @description The telephone number.
+             * @example 0621624288
+             */
+            dialNumber?: string;
+        };
+        /** @description Email address entry. */
+        EmailAddress: {
+            /**
+             * Format: email
+             * @description Email address.
+             * @example contact@example.com
+             */
+            uri?: string;
+        };
+        /** @description Language requirement for a position with optional CEFR proficiency levels. */
+        PositionLanguage: {
+            /**
+             * @description Required CEFR proficiency level (lowercase, e.g. `a1`, `b1`, `c2`),
+             *     or null if no required level is specified.
+             * @example b1
+             */
+            requiredSkillLevel?: string | null;
+            /**
+             * @description Desired CEFR proficiency level (lowercase), or null if no desired
+             *     level is specified.
+             */
+            desiredSkillLevel?: string | null;
+            /**
+             * @description ISO 639-1 language code.
+             * @example en
+             */
+            languageCode?: string;
+            /** @description Additional competency descriptors. Frequently empty. */
+            competencies?: Record<string, never>[];
+            /** @description ESCO skill URIs associated with this language requirement. */
+            skillsEscoUri?: string[];
+        };
+        /** @description Travel requirement details for a position. */
+        TravelPreference: {
+            /**
+             * @description Whether travel willingness is required, or null if unknown.
+             * @example true
+             */
+            willingToTravelIndicator?: boolean | null;
+            /** @description Expected travel percentage, or null. */
+            travelPercentage?: number | null;
+            /**
+             * @description Free-text description of travel requirements. Values observed include
+             *     `UNKNOWN`, empty string, or localized text (e.g. `Nicht erforderlich`,
+             *     `Uneingeschränkt`).
+             * @example
+             */
+            description?: string;
+        };
+        /** @description Structured building address detail within a location. */
+        BuildingAddress: {
+            /**
+             * @description Building or house number.
+             * @example 2
+             */
+            buildingNumber?: string | null;
+            /**
+             * @description Street name.
+             * @example Uiverweg
+             */
+            streetName?: string | null;
+            /** @description Unit, suite, or apartment number, or null. */
+            unit?: string | null;
         };
         /** @description Geographic location associated with a job vacancy. */
         Location: {
@@ -974,21 +1223,23 @@ export interface components {
              */
             countryCode?: string;
             /**
-             * @description NUTS region code.
+             * @description NUTS region code, or null when not specified.
              * @example SE110
              */
-            region?: string;
+            region?: string | null;
             /**
-             * @description City or municipality name.
+             * @description City or municipality name, or null.
              * @example Stockholm
              */
-            cityName?: string;
+            cityName?: string | null;
             /**
-             * @description Postal code.
+             * @description Postal code, or null.
              * @example 11428
              */
-            postalCode?: string;
+            postalCode?: string | null;
             addressLines?: string[];
+            /** @description Structured building address detail, or null. */
+            buildingAddress?: components["schemas"]["BuildingAddress"] | null;
         };
         OccupationAutocompleteResponse: {
             /** @description Occupation suggestions ranked by vacancy frequency. */
@@ -1058,6 +1309,8 @@ export interface components {
             lastModificationDate?: string | null;
             status?: string | null;
             mainRole?: string | null;
+            /** @description User ranking level, or null for anonymous/unranked users. */
+            userRanking?: string | null;
             rights?: string[];
         };
         /** @description Navigation menu entry for a portal section. */
@@ -1393,7 +1646,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description List of translation language codes */
+            /** @description List of translation language codes (BCP 47 tags) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1437,6 +1690,16 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OccupationAutocompleteResponse"];
                 };
+            };
+            /**
+             * @description Rate limit exceeded. Returns an empty body with `WWW-Authenticate: Bearer`
+             *     header. This is not an authentication error — retry after ~60 seconds.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

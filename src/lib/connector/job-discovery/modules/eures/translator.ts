@@ -58,13 +58,13 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-function formatLocation(locationMap: Record<string, string[]>): string {
+function formatLocation(locationMap: Record<string, (string | null)[]>): string {
   const entries = Object.entries(locationMap);
   if (entries.length === 0) return "Europe";
 
   return entries
     .map(([country, cities]) => {
-      const city = cities?.find((c) => c?.length > 0);
+      const city = cities?.find((c) => c != null && c.length > 0);
       return city ? `${city}, ${country}` : country;
     })
     .join("; ");
