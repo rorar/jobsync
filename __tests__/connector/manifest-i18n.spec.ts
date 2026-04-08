@@ -5,8 +5,9 @@
 
 import "@/lib/connector/register-all";
 import { moduleRegistry } from "@/lib/connector/registry";
+import { SUPPORTED_LOCALES } from "@/i18n/locales";
 
-const REQUIRED_LOCALES = ["en", "de", "fr", "es"];
+const REQUIRED_LOCALES = SUPPORTED_LOCALES.map((l) => l.code);
 
 describe("Module manifest i18n", () => {
   const moduleIds = moduleRegistry.availableModules();
@@ -25,7 +26,8 @@ describe("Module manifest i18n", () => {
       for (const locale of REQUIRED_LOCALES) {
         it(`has ${locale} translation with name and description`, () => {
           const mod = moduleRegistry.get(moduleId);
-          const entry = mod?.manifest.i18n?.[locale];
+          const i18n = mod?.manifest.i18n as Record<string, { name: string; description: string }> | undefined;
+          const entry = i18n?.[locale];
           expect(entry).toBeDefined();
           expect(entry?.name.length).toBeGreaterThan(0);
           expect(entry?.description.length).toBeGreaterThan(0);
@@ -44,7 +46,7 @@ describe("Module manifest i18n", () => {
       const mod = moduleRegistry.get(moduleId);
       const hint = mod?.manifest.i18n?.["en"]?.credentialHint;
       expect(hint).toBeDefined();
-      expect(hint!.length).toBeGreaterThan(0);
+      expect((hint ?? "").length).toBeGreaterThan(0);
     });
   }
 });

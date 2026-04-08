@@ -1,6 +1,6 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-04-06
+# Bug Tracker — Collected 2026-03-24, Updated 2026-04-08
 
-**Total: 337 bugs found, 335 fixed, 2 open (accepted risk)**
+**Total: 350 bugs found, 348 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing)
 

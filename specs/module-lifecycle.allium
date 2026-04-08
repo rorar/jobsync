@@ -187,8 +187,9 @@ value DependencyHealthCheck {
 
 value ModuleI18n {
   -- Map of locale code to display strings
-  -- Each entry: { name: String, description: String }
-  -- Example: { en: { name: "EURES", description: "EU job search" }, de: { name: "EURES", description: "EU-Stellensuche" } }
+  -- Each entry: { name: String, description: String, credentialHint: String? }
+  -- credentialHint: UI hint for API key/endpoint settings field (optional, only for modules with credentials)
+  -- Example: { en: { name: "EURES", description: "EU job search", credentialHint: "Enter your API key..." } }
 }
 
 value ConnectorParamField {

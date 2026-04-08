@@ -148,6 +148,9 @@ export interface DependencyHealthCheck {
 // Module i18n (Self-Contained Module Pattern)
 // =============================================================================
 
+/** Supported locale codes — keep in sync with SUPPORTED_LOCALES in @/i18n/locales.ts */
+type LocaleCode = "en" | "de" | "fr" | "es";
+
 export interface ModuleI18nEntry {
   name: string;
   description: string;
@@ -155,7 +158,7 @@ export interface ModuleI18nEntry {
 }
 
 /** Per-locale translations for module display in UI. Keyed by locale code. */
-export type ModuleI18n = Record<string, ModuleI18nEntry>;
+export type ModuleI18n = Partial<Record<LocaleCode, ModuleI18nEntry>>;
 
 // =============================================================================
 // Contracts (Published Language)

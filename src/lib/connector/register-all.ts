@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * Central Module Registration — imports all modules to trigger self-registration.
  *

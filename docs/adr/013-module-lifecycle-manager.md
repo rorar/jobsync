@@ -92,3 +92,7 @@ Implement a Module Lifecycle Manager based on the Allium specification (`specs/m
 - JSearch gained resilience wrapper (retry, CB, timeout, rate limit)
 - 106 connector-specific tests added
 - Pagination safety cap (MAX_PAGES=20)
+
+## Amendment (2026-04-08)
+
+The "Per-Connector Barrel" pattern described in this ADR (one `connectors.ts` per connector type) was superseded by ADR-028 (Self-Contained Modules). Modules now self-register via `moduleRegistry.register()` in their own `index.ts`, and a single `register-all.ts` replaces all 4 barrel files. See ADR-028 for rationale.
