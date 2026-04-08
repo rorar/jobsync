@@ -78,8 +78,8 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
   useEffect(() => {
     try {
       localStorage.setItem(AUTO_APPROVE_KEY, String(autoApprove));
-    } catch {
-      // localStorage may be unavailable
+    } catch (e) {
+      console.warn("[DeckView] Failed to persist auto-approve preference:", e);
     }
   }, [autoApprove]);
 
@@ -263,6 +263,7 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
 
       {/* Action buttons */}
       <div className="flex items-center justify-center gap-4 sm:gap-6 mt-6">
+        {/* Group 1: Negative actions (Dismiss + Block) */}
         {/* Dismiss */}
         <button
           type="button"
@@ -291,6 +292,10 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
           <Ban className="h-4 w-4" />
         </button>
 
+        {/* Divider */}
+        <div className="h-8 w-px bg-border mx-1" aria-hidden="true" />
+
+        {/* Group 2: Positive actions (Super-Like + Promote) */}
         {/* Super-Like */}
         <button
           type="button"
@@ -319,6 +324,10 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
           <Check className="h-7 w-7" />
         </button>
 
+        {/* Divider */}
+        <div className="h-8 w-px bg-border mx-1" aria-hidden="true" />
+
+        {/* Group 3: Neutral actions (Skip + Undo) */}
         {/* Skip */}
         <button
           type="button"
@@ -334,7 +343,7 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
         {canUndo && (
           <button
             type="button"
-            className="h-10 w-10 rounded-full bg-muted text-muted-foreground hover:bg-accent active:scale-90 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="h-10 w-10 rounded-full bg-muted text-muted-foreground hover:bg-accent active:scale-90 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-dashed border-muted-foreground/30"
             onClick={undo}
             disabled={isAnimating}
             aria-label={t("deck.undoTooltip")}
@@ -353,7 +362,8 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
           checked={autoApprove}
           onChange={(e) => setAutoApprove(e.target.checked)}
         />
-        {t("deck.autoApprove")}
+        <span>{t("deck.autoApprove")}</span>
+        <span className="text-xs text-muted-foreground/70">— {t("deck.autoApproveHint")}</span>
       </label>
 
       {/* Swipe hint (mobile only, first card only) */}

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/i18n";
 import {
   getNotifications,
@@ -43,6 +44,11 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
     if (result.success) {
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       onCountChange?.(0);
+    } else {
+      toast({
+        variant: "destructive",
+        description: result.message || t("common.error"),
+      });
     }
   };
 
@@ -58,6 +64,11 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
         return updated;
       });
       onCountChange?.(unread);
+    } else {
+      toast({
+        variant: "destructive",
+        description: result.message || t("common.error"),
+      });
     }
   };
 
@@ -71,6 +82,11 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
         return updated;
       });
       onCountChange?.(unread);
+    } else {
+      toast({
+        variant: "destructive",
+        description: result.message || t("common.error"),
+      });
     }
   };
 

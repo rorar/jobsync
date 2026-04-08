@@ -41,6 +41,7 @@ export const staging = {
     "staging.selectVacancy": "Select vacancy",
     "staging.undoAction": "Undo",
     "staging.bulkSuccess": "{succeeded} of {total} items processed",
+    "staging.promotionFailed": "Failed to promote vacancy",
   },
   de: {
     "staging.title": "Staging-Queue",
@@ -84,6 +85,7 @@ export const staging = {
     "staging.selectVacancy": "Vakanz auswählen",
     "staging.undoAction": "Rückgängig",
     "staging.bulkSuccess": "{succeeded} von {total} Elementen verarbeitet",
+    "staging.promotionFailed": "Stelle konnte nicht befördert werden",
   },
   fr: {
     "staging.title": "File d'attente",
@@ -127,6 +129,7 @@ export const staging = {
     "staging.selectVacancy": "Sélectionner le poste",
     "staging.undoAction": "Annuler",
     "staging.bulkSuccess": "{succeeded} sur {total} éléments traités",
+    "staging.promotionFailed": "Impossible de promouvoir l'offre",
   },
   es: {
     "staging.title": "Cola de espera",
@@ -170,5 +173,6 @@ export const staging = {
     "staging.selectVacancy": "Seleccionar vacante",
     "staging.undoAction": "Deshacer",
     "staging.bulkSuccess": "{succeeded} de {total} elementos procesados",
+    "staging.promotionFailed": "Error al promover la vacante",
   },
 } as const;

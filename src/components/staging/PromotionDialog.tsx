@@ -78,6 +78,13 @@ export function PromotionDialog({
           description: message,
         });
       }
+    } catch (error) {
+      console.error("[PromotionDialog] Promotion failed:", error);
+      toast({
+        variant: "destructive",
+        title: t("staging.error"),
+        description: t("staging.promotionFailed"),
+      });
     } finally {
       setSubmitting(false);
     }

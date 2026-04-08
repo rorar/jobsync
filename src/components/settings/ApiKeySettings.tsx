@@ -102,13 +102,21 @@ function ApiKeySettings() {
     getCredentialModules().then((result) => {
       if (result.success && result.data) {
         setModules(result.data.map(manifestToModuleConfig));
+      } else {
+        console.error("[ApiKeySettings] Failed to load credential modules:", result.message);
       }
+    }).catch((error) => {
+      console.error("[ApiKeySettings] getCredentialModules rejected:", error);
     });
     // Load env key presence status (boolean only — never the actual value)
     getEnvApiKeyStatus().then((result) => {
       if (result.success && result.data) {
         setEnvKeyStatus(result.data);
+      } else {
+        console.error("[ApiKeySettings] Failed to load env key status:", result.message);
       }
+    }).catch((error) => {
+      console.error("[ApiKeySettings] getEnvApiKeyStatus rejected:", error);
     });
   }, []);
 

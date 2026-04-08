@@ -23,6 +23,16 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { RecordsPerPageSelector } from "@/components/RecordsPerPageSelector";
 import { RecordsCount } from "@/components/RecordsCount";
 import Loading from "@/components/Loading";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { StagedVacancyCard } from "./StagedVacancyCard";
 import { PromotionDialog } from "./PromotionDialog";
 import { BulkActionBar } from "./BulkActionBar";
@@ -69,6 +79,9 @@ function StagingContainer() {
   const [promotionVacancy, setPromotionVacancy] =
     useState<StagedVacancyWithAutomation | null>(null);
   const [promotionOpen, setPromotionOpen] = useState(false);
+  const [blockConfirmVacancy, setBlockConfirmVacancy] = useState<StagedVacancyWithAutomation | null>(null);
+  const [blockConfirmOpen, setBlockConfirmOpen] = useState(false);
+  const blockResolveRef = useRef<((result: { success: boolean }) => void) | null>(null);
   const hasSearched = useRef(false);
   const [mounted, setMounted] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -200,6 +213,20 @@ function StagingContainer() {
   // Ref to resolve the promotion dialog promise from outside
   const promotionResolveRef = useRef<((result: { success: boolean }) => void) | null>(null);
 
+  // Cleanup: resolve pending promises on unmount to prevent permanent UI freeze
+  useEffect(() => {
+    return () => {
+      if (promotionResolveRef.current) {
+        promotionResolveRef.current({ success: false });
+        promotionResolveRef.current = null;
+      }
+      if (blockResolveRef.current) {
+        blockResolveRef.current({ success: false });
+        blockResolveRef.current = null;
+      }
+    };
+  }, []);
+
   // Deck mode action handler — maps DeckAction to existing server actions
   // Returns { success } so useDeckStack can roll back the card on failure
   const handleDeckAction = useCallback(
@@ -216,7 +243,10 @@ function StagingContainer() {
         // Check auto-approve preference
         const autoApprove = (() => {
           try { return localStorage.getItem("jobsync_deck_auto_approve") === "true"; }
-          catch { return false; }
+          catch (e) {
+            console.warn("[StagingContainer] Failed to read auto-approve preference:", e);
+            return false;
+          }
         })();
 
         if (autoApprove) {
@@ -241,17 +271,21 @@ function StagingContainer() {
           setPromotionOpen(true);
         });
       } else if (action === "block") {
-        // Block company + dismiss vacancy
-        if (vacancy.employerName) {
-          await handleBlockCompany(vacancy.employerName);
+        // Block company + dismiss vacancy — requires confirmation
+        if (!vacancy.employerName) {
+          toast({
+            variant: "destructive",
+            title: t("staging.error"),
+            description: t("deck.blockNoEmployerName"),
+          });
+          return { success: false };
         }
-        const { success, message } = await dismissStagedVacancy(vacancy.id);
-        if (success) {
-          toast({ variant: "success", description: t("deck.actionBlocked") });
-        } else {
-          toast({ variant: "destructive", title: t("staging.error"), description: message });
-        }
-        return { success };
+        // Open confirmation dialog and wait
+        return new Promise<{ success: boolean }>((resolve) => {
+          blockResolveRef.current = resolve;
+          setBlockConfirmVacancy(vacancy);
+          setBlockConfirmOpen(true);
+        });
       } else if (action === "skip") {
         // Skip does not call any server action — handled by useDeckStack
         return { success: true };
@@ -457,6 +491,51 @@ function StagingContainer() {
           reload();
         }}
       />
+      <AlertDialog open={blockConfirmOpen} onOpenChange={(open) => {
+        setBlockConfirmOpen(open);
+        if (!open) {
+          queueMicrotask(() => {
+            if (blockResolveRef.current) {
+              blockResolveRef.current({ success: false });
+              blockResolveRef.current = null;
+            }
+          });
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("deck.blockConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("deck.blockConfirmDescription").replace("{company}", blockConfirmVacancy?.employerName ?? "")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (blockConfirmVacancy?.employerName) {
+                  await handleBlockCompany(blockConfirmVacancy.employerName);
+                }
+                const { success, message } = await dismissStagedVacancy(blockConfirmVacancy!.id);
+                if (success) {
+                  toast({ variant: "success", description: t("deck.actionBlocked") });
+                } else {
+                  toast({ variant: "destructive", title: t("staging.error"), description: message });
+                }
+                if (blockResolveRef.current) {
+                  blockResolveRef.current({ success });
+                  blockResolveRef.current = null;
+                }
+                setBlockConfirmOpen(false);
+                if (success) reload();
+              }}
+            >
+              {t("deck.blockConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

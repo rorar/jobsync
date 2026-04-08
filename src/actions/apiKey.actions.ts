@@ -86,7 +86,7 @@ export async function getEnvApiKeyStatus(): Promise<ActionResult<Record<string, 
 
     return { success: true, data: result };
   } catch (error) {
-    return handleError(error, "errors.fetchApiKeys");
+    return handleError(error, "errors.fetchEnvApiKeyStatus");
   }
 }
 

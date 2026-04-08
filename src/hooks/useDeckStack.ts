@@ -94,7 +94,10 @@ export function useDeckStack({
       const actionPromise = action === "skip"
         ? Promise.resolve({ success: true })
         : onAction(vacancy, action).catch(
-            (): { success: boolean } => ({ success: false }),
+            (error): { success: boolean } => {
+              console.error(`[useDeckStack] Action "${action}" failed:`, error);
+              return { success: false };
+            },
           );
 
       // 3. After animation delay, check result
@@ -153,8 +156,8 @@ export function useDeckStack({
     }));
 
     if (onUndo) {
-      onUndo(entry).catch(() => {
-        // Undo failed — error handling is done by the caller via toast
+      onUndo(entry).catch((error) => {
+        console.error("[useDeckStack] Undo failed:", error);
       });
     }
   }, [undoStack, onUndo]);

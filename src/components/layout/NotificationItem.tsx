@@ -61,8 +61,8 @@ function parseNotificationData(
       if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
         return parsed as Record<string, unknown>;
       }
-    } catch {
-      // ignore parse errors
+    } catch (e) {
+      console.warn("[parseNotificationData] Failed to parse notification data:", data, e);
     }
   }
   return null;
@@ -139,23 +139,26 @@ export function NotificationItem({
         </p>
         <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
           <span>{formatRelativeTime(notification.createdAt, locale)}</span>
-          {link && (
+          {link && !link.labelKey && (
             <Link
               href={link.href}
-              className="inline-flex items-center gap-1 hover:underline hover:text-foreground"
+              className="text-xs text-muted-foreground hover:underline hover:text-foreground"
               onClick={(e) => e.stopPropagation()}
             >
-              {link.labelKey ? (
-                <>
-                  {t(link.labelKey)}
-                  <ExternalLink className="h-3 w-3" />
-                </>
-              ) : (
-                "→"
-              )}
+              →
             </Link>
           )}
         </div>
+        {link && link.labelKey && (
+          <Link
+            href={link.href}
+            className="mt-1 text-sm text-primary hover:underline inline-flex items-center gap-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {t(link.labelKey)}
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        )}
       </div>
       <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
         <Button
