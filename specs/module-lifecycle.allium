@@ -164,6 +164,12 @@ value ResilienceConfig {
   maxConcurrent: Integer?             -- bulkhead limit
 }
 
+value CachePolicy {
+  ttl: Integer                          -- cache time-to-live in seconds
+  scope: shared | per_user              -- shared = global cache; per_user = user-specific cache
+  localeSensitive: Boolean              -- whether locale affects cache key
+}
+
 value ModelSelectionConfig {
   defaultModel: String?               -- e.g. "llama3.2"
   listEndpoint: String?               -- API path to list available models (e.g. "/models")

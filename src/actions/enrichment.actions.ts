@@ -6,6 +6,7 @@ import { ActionResult } from "@/models/actionResult";
 import { getCurrentUser } from "@/utils/user.utils";
 import { revalidatePath } from "next/cache";
 import { checkRateLimit } from "@/lib/api/rate-limit";
+import "@/lib/connector/register-all";
 import {
   enrichmentOrchestrator,
   getChainForDimension,

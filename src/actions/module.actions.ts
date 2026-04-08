@@ -75,7 +75,9 @@ export async function getModuleManifests(
     (m) => m.healthStatus === HealthStatus.UNKNOWN,
   );
   for (const mod of unknownModules) {
-    checkModuleHealth(mod.manifest.id).catch(() => {});
+    checkModuleHealth(mod.manifest.id).catch((err) => {
+      console.error(`[getModuleManifests] Background health check failed for "${mod.manifest.id}":`, err);
+    });
   }
 
   const summaries: ModuleManifestSummary[] = modules.map((m) => {
@@ -264,8 +266,11 @@ export async function deactivateModule(
             automationId: auto.id,
           })),
         });
-      } catch {
-        // best-effort — don't let notification failure block deactivation
+      } catch (notifyError) {
+        console.error(
+          `[deactivateModule] Failed to create notifications for ${affectedAutomations.length} paused automations (module: ${moduleId}):`,
+          notifyError,
+        );
       }
     }
 
@@ -307,8 +312,8 @@ async function syncRegistryFromDb(): Promise<void> {
       moduleRegistry.setStatus(row.moduleId, status);
     }
     dbSynced = true;
-  } catch {
-    // DB not available — use in-memory defaults (all active)
+  } catch (syncError) {
+    console.error("[syncRegistryFromDb] Failed to sync module status from DB — using in-memory defaults:", syncError);
   }
 }
 

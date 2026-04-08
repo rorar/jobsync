@@ -1,6 +1,9 @@
 // Mock "server-only" to prevent runtime error in test environment
 jest.mock("server-only", () => ({}));
 
+// Mock register-all as a no-op so module self-registrations don't run
+jest.mock("@/lib/connector/register-all", () => {});
+
 // Mock debug to silence scheduler log output
 jest.mock("@/lib/debug", () => ({
   debugLog: jest.fn(),

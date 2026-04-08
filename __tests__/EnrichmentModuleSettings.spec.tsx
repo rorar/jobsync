@@ -23,15 +23,6 @@ jest.mock("@/i18n", () => ({
         "enrichment.noModules": "No enrichment modules registered",
         "enrichment.noModulesHint":
           "Enrichment modules will appear here once they are registered in the connector framework.",
-        "enrichment.logoDev": "Logo.dev",
-        "enrichment.logoDevDescription":
-          "High-quality company logos via Logo.dev (API key required)",
-        "enrichment.googleFavicon": "Google Favicon",
-        "enrichment.googleFaviconDescription":
-          "Fetch website favicons via Google",
-        "enrichment.metaParser": "Link Preview Parser",
-        "enrichment.metaParserDescription":
-          "Extract metadata from URLs (OpenGraph, meta tags)",
         "enrichment.noCredentialRequired": "No API key required",
         "settings.moduleActive": "Active",
         "settings.moduleInactive": "Inactive",

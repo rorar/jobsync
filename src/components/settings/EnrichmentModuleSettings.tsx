@@ -50,12 +50,16 @@ const HEALTH_STATUS_KEYS: Record<string, TranslationKey> = {
 
 /** Resolve display name from manifest i18n, falling back to manifest.name */
 function getModuleName(module: ModuleManifestSummary, locale: string): string {
-  return module.i18n?.[locale]?.name ?? module.name;
+  return module.i18n?.[locale]?.name
+    ?? module.i18n?.["en"]?.name
+    ?? module.name;
 }
 
 /** Resolve description from manifest i18n */
 function getModuleDescription(module: ModuleManifestSummary, locale: string, t: (key: TranslationKey) => string): string {
-  return module.i18n?.[locale]?.description ?? t("enrichment.modulesDescription");
+  return module.i18n?.[locale]?.description
+    ?? module.i18n?.["en"]?.description
+    ?? t("enrichment.modulesDescription");
 }
 
 function EnrichmentModuleSettings() {
@@ -200,7 +204,8 @@ function EnrichmentModuleSettings() {
           description: t("settings.healthCheckFailed").replace("{module}", getModuleName(module, locale)),
         });
       }
-    } catch {
+    } catch (error) {
+      console.error(`[EnrichmentModuleSettings] Health check failed for "${module.moduleId}":`, error);
       toast({
         variant: "destructive",
         title: t("settings.error"),

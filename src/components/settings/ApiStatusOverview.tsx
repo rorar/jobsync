@@ -73,7 +73,9 @@ function relativeTime(isoString: string | undefined): string | null {
 
 /** Resolve display name from manifest i18n, falling back to manifest.name */
 function getModuleName(module: ModuleManifestSummary, locale: string): string {
-  return module.i18n?.[locale]?.name ?? module.name;
+  return module.i18n?.[locale]?.name
+    ?? module.i18n?.["en"]?.name
+    ?? module.name;
 }
 
 function ApiStatusOverview() {
@@ -135,7 +137,8 @@ function ApiStatusOverview() {
         });
       }
       return result;
-    } catch {
+    } catch (error) {
+      console.error(`[ApiStatusOverview] Health check failed for "${moduleId}":`, error);
       if (!silent) {
         toast({
           variant: "destructive",

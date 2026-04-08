@@ -1,4 +1,5 @@
 import "server-only";
+import "./register-all";
 
 import { moduleRegistry } from "./registry";
 import { checkModuleHealth } from "./health-monitor";
