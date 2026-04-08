@@ -1193,3 +1193,106 @@ export const mockLogoAssetSvg: LogoAssetFixture = {
   width: null,
   height: null,
 };
+
+// ─── Enrichment Result ───────────────────────────────────────────────────
+
+export interface EnrichmentResultFixture {
+  id: string;
+  userId: string;
+  dimension: string;
+  domainKey: string;
+  companyId: string | null;
+  status: string;
+  data: string;
+  sourceModuleId: string;
+  ttlSeconds: number;
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const mockEnrichmentResult: EnrichmentResultFixture = {
+  id: "enrichment-result-fixture-id",
+  userId: mockUser.id,
+  dimension: "logo",
+  domainKey: "acme.com",
+  companyId: mockCompany.id,
+  status: "found",
+  data: JSON.stringify({ logoUrl: "https://img.logo.dev/acme.com?format=png" }),
+  sourceModuleId: "logo_dev",
+  ttlSeconds: 2592000,
+  expiresAt: new Date("2026-05-06T10:00:00.000Z"),
+  createdAt: new Date("2026-04-06T10:00:00.000Z"),
+  updatedAt: new Date("2026-04-06T10:00:00.000Z"),
+};
+
+export const mockEnrichmentResultNotFound: EnrichmentResultFixture = {
+  ...mockEnrichmentResult,
+  id: "enrichment-result-not-found-id",
+  status: "not_found",
+  data: JSON.stringify({}),
+  sourceModuleId: "google_favicon",
+};
+
+export const mockEnrichmentResultDeepLink: EnrichmentResultFixture = {
+  ...mockEnrichmentResult,
+  id: "enrichment-result-deep-link-id",
+  dimension: "deep_link",
+  status: "found",
+  data: JSON.stringify({
+    title: "Acme Corp - Careers",
+    description: "Join our team at Acme Corp",
+    ogImage: "https://acme.com/og-image.png",
+  }),
+  sourceModuleId: "meta_parser",
+};
+
+// ─── Enrichment Log ──────────────────────────────────────────────────────
+
+export interface EnrichmentLogFixture {
+  id: string;
+  userId: string;
+  enrichmentResultId: string | null;
+  dimension: string;
+  domainKey: string;
+  moduleId: string;
+  chainPosition: number;
+  outcome: string;
+  latencyMs: number;
+  errorMessage: string | null;
+  createdAt: Date;
+}
+
+export const mockEnrichmentLog: EnrichmentLogFixture = {
+  id: "enrichment-log-fixture-id",
+  userId: mockUser.id,
+  enrichmentResultId: mockEnrichmentResult.id,
+  dimension: "logo",
+  domainKey: "acme.com",
+  moduleId: "logo_dev",
+  chainPosition: 1,
+  outcome: "found",
+  latencyMs: 245,
+  errorMessage: null,
+  createdAt: new Date("2026-04-06T10:00:00.000Z"),
+};
+
+export const mockEnrichmentLogFailed: EnrichmentLogFixture = {
+  ...mockEnrichmentLog,
+  id: "enrichment-log-failed-id",
+  moduleId: "google_favicon",
+  chainPosition: 2,
+  outcome: "error",
+  latencyMs: 5012,
+  errorMessage: "Timeout after 5000ms",
+};
+
+export const mockEnrichmentLogSkipped: EnrichmentLogFixture = {
+  ...mockEnrichmentLog,
+  id: "enrichment-log-skipped-id",
+  moduleId: "meta_parser",
+  chainPosition: 3,
+  outcome: "skipped",
+  latencyMs: 0,
+  errorMessage: null,
+};

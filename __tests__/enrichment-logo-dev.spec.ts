@@ -50,7 +50,7 @@ describe("LogoDevModule", () => {
         dimension: "logo",
         status: "found",
         data: {
-          logoUrl: `https://img.logo.dev/github.com?token=${apiKey}&format=png`,
+          logoUrl: "https://img.logo.dev/github.com?format=png",
           format: "png",
         },
         source: "logo_dev",

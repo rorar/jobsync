@@ -460,4 +460,85 @@ describe("EnrichmentOrchestrator", () => {
       expect(mockModuleRegistry.create).toHaveBeenCalledWith("logo_dev", undefined);
     });
   });
+
+  // =========================================================================
+  // H-10: Additional tests for orchestrator coverage
+  // =========================================================================
+
+  it("skips degraded modules in fallback chain", async () => {
+    const successConnector = createMockConnector({ source: "google_favicon" });
+
+    mockModuleRegistry.get.mockImplementation((id: string) => {
+      if (id === "logo_dev") {
+        return createMockRegistered("logo_dev", { healthStatus: HealthStatus.DEGRADED });
+      }
+      return createMockRegistered(id);
+    });
+    mockModuleRegistry.create.mockReturnValue(successConnector);
+
+    const result = await orchestrator.execute("user-1", testInput, testChain);
+
+    expect(result).not.toBeNull();
+    // logo_dev was skipped due to DEGRADED status, only google_favicon was called
+    expect(mockModuleRegistry.create).toHaveBeenCalledTimes(1);
+    expect(mockModuleRegistry.create).toHaveBeenCalledWith("google_favicon", undefined);
+  });
+
+  it("enforces chain timeout", async () => {
+    // Mock Date.now() to simulate time passing beyond CHAIN_TIMEOUT_MS (10000ms)
+    const startTime = 1000000;
+    // chainDeadline will be set to startTime + 10000 = 1010000
+    // After the first module attempt, we advance time past the deadline
+
+    const dateNowSpy = jest.spyOn(Date, "now");
+    // 1st call: chainDeadline = Date.now() + 10000 => startTime + 10000 = 1010000
+    // 2nd call: loop i=0 timeout check => startTime (not timed out yet)
+    // 3rd call: startMs for first module attempt
+    // 4th call: latencyMs after first module (fails), now we advance time
+    // 5th+ calls: loop i=1 timeout check => past deadline
+    dateNowSpy
+      .mockReturnValueOnce(startTime)       // chainDeadline calculation
+      .mockReturnValueOnce(startTime)       // loop i=0: timeout check (OK)
+      .mockReturnValueOnce(startTime)       // startMs for module attempt
+      .mockReturnValueOnce(startTime + 500) // latencyMs after module error
+      .mockReturnValue(startTime + 11000);  // all subsequent: past deadline
+
+    const slowConnector: DataEnrichmentConnector = {
+      enrich: jest.fn().mockRejectedValue(new Error("Slow")),
+    };
+
+    mockModuleRegistry.get.mockImplementation((id: string) => createMockRegistered(id));
+    mockModuleRegistry.create.mockReturnValue(slowConnector);
+
+    const result = await orchestrator.execute("user-1", testInput, testChain);
+
+    // Chain should have timed out after first module, returning null
+    expect(result).toBeNull();
+    // Only the first module should have been attempted (second was skipped due to timeout)
+    expect(mockModuleRegistry.create).toHaveBeenCalledTimes(1);
+
+    dateNowSpy.mockRestore();
+  });
+
+  it("includes userId in cache key", async () => {
+    const connector = createMockConnector();
+    mockModuleRegistry.get.mockReturnValue(createMockRegistered("logo_dev"));
+    mockModuleRegistry.create.mockReturnValue(connector);
+
+    await orchestrator.execute("user-42", testInput, testChain);
+
+    // Verify cache.get was called with a key containing the userId
+    expect(mockConnectorCache.get).toHaveBeenCalledTimes(1);
+    const getCacheKey = mockConnectorCache.get.mock.calls[0][0] as string;
+    expect(getCacheKey).toContain("user-42");
+
+    // Verify cache.set was called with a key containing the userId
+    expect(mockConnectorCache.set).toHaveBeenCalledTimes(1);
+    const setCacheKey = mockConnectorCache.set.mock.calls[0][0] as string;
+    expect(setCacheKey).toContain("user-42");
+
+    // Verify the full key structure: enrichment:logo:user-42:example.com
+    expect(getCacheKey).toBe("enrichment:logo:user-42:example.com");
+    expect(setCacheKey).toBe("enrichment:logo:user-42:example.com");
+  });
 });

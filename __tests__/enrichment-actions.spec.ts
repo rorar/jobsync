@@ -6,7 +6,9 @@ import {
 } from "@/actions/enrichment.actions";
 import { getCurrentUser } from "@/utils/user.utils";
 import db from "@/lib/db";
+import { checkRateLimit } from "@/lib/api/rate-limit";
 import { enrichmentOrchestrator, getChainForDimension } from "@/lib/connector/data-enrichment/orchestrator";
+import { ENRICHMENT_CONFIG } from "@/lib/connector/data-enrichment/types";
 
 jest.mock("@/lib/db", () => ({
   __esModule: true,
@@ -58,6 +60,7 @@ const mockOrchestrator = enrichmentOrchestrator as unknown as {
 };
 
 const mockGetChain = getChainForDimension as jest.Mock;
+const mockCheckRateLimit = checkRateLimit as jest.Mock;
 
 describe("Enrichment Actions", () => {
   const mockUser = { id: "user-1", name: "Test", email: "test@test.com" };
@@ -164,6 +167,34 @@ describe("Enrichment Actions", () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toBe("enrichment.allModulesFailed");
+    });
+
+    it("returns rate limited error when rate limit exceeded", async () => {
+      mockCheckRateLimit.mockReturnValueOnce({ allowed: false, remaining: 0, limit: 10, resetAt: 0 });
+
+      const result = await triggerEnrichment("company-1", "logo");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("enrichment.rateLimited");
+      // Orchestrator should NOT have been called
+      expect(mockOrchestrator.execute).not.toHaveBeenCalled();
+    });
+
+    it("returns concurrency error when max concurrent reached", async () => {
+      // Fill the inflight map to max capacity for user-1
+      const gInflight = globalThis as unknown as { __enrichmentInflight?: Map<string, number> };
+      gInflight.__enrichmentInflight ??= new Map<string, number>();
+      gInflight.__enrichmentInflight.set("user-1", ENRICHMENT_CONFIG.MAX_CONCURRENT_PER_USER);
+
+      const result = await triggerEnrichment("company-1", "logo");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("enrichment.tooManyConcurrent");
+      // Orchestrator should NOT have been called
+      expect(mockOrchestrator.execute).not.toHaveBeenCalled();
+
+      // Clean up: remove inflight entry
+      gInflight.__enrichmentInflight.delete("user-1");
     });
   });
 
@@ -310,6 +341,19 @@ describe("Enrichment Actions", () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toBe("enrichment.notAuthenticated");
+    });
+
+    it("respects rate limiting", async () => {
+      mockCheckRateLimit.mockReturnValueOnce({ allowed: false, remaining: 0, limit: 10, resetAt: 0 });
+
+      const result = await refreshEnrichment("r1");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("enrichment.rateLimited");
+      // DB lookup should NOT have happened (rate check is before DB query)
+      expect(mockDb.enrichmentResult.findFirst).not.toHaveBeenCalled();
+      // Orchestrator should NOT have been called
+      expect(mockOrchestrator.execute).not.toHaveBeenCalled();
     });
   });
 });

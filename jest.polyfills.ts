@@ -16,6 +16,15 @@ if (typeof global.TransformStream === "undefined") {
   global.TransformStream = TransformStream as typeof global.TransformStream;
 }
 
+// AbortSignal.timeout polyfill (Node.js <17.3 / some test environments)
+if (typeof AbortSignal.timeout !== "function") {
+  AbortSignal.timeout = (ms: number) => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException("TimeoutError", "TimeoutError")), ms);
+    return controller.signal;
+  };
+}
+
 // Mock fetch API globals for Next.js 15
 if (typeof global.Request === "undefined") {
   global.Request = class Request {} as any;
