@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Building2, Calendar, Banknote, Sparkles } from "lucide-react";
 import { useTranslations, formatDateShort } from "@/i18n";
@@ -67,7 +67,7 @@ function MatchScoreRing({ score }: { score: number }) {
   );
 }
 
-export function DeckCard({
+function DeckCardInner({
   vacancy,
   exitDirection,
   isPreview = false,
@@ -103,7 +103,7 @@ export function DeckCard({
     >
       {/* Header: Source badge + Match score */}
       <div className="px-5 pt-5 flex items-center justify-between">
-        <Badge variant="outline" className="text-xs">
+        <Badge variant="outline" className="text-xs" title={vacancy.sourceBoard}>
           {vacancy.sourceBoard}
         </Badge>
         {vacancy.matchScore != null ? (
@@ -197,3 +197,5 @@ export function DeckCard({
     </div>
   );
 }
+
+export const DeckCard = memo(DeckCardInner);

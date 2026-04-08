@@ -39,6 +39,17 @@ jest.mock("@/i18n", () => ({
         "deck.viaAutomation": 'via "{name}" automation',
         "deck.cardAnnouncement": "Vacancy {current} of {total}: {title}",
         "deck.cardAnnouncementNoScore": "Vacancy {current} of {total}: {title}",
+        "deck.blockTooltip": "Block this company",
+        "deck.skipTooltip": "Skip for now",
+        "deck.block": "Block",
+        "deck.skip": "Skip",
+        "deck.autoApprove": "Auto-approve promoted",
+        "deck.autoApproveHint": "Skip manual confirmation for promoted vacancies",
+        "deck.actionDismissed": "Dismissed",
+        "deck.actionPromoted": "Promoted",
+        "deck.actionSuperLiked": "Super-liked",
+        "deck.actionBlocked": "Blocked",
+        "deck.actionSkipped": "Skipped",
         "deck.swipeHint": "Swipe to decide",
         "common.na": "N/A",
       };
@@ -209,5 +220,50 @@ describe("DeckView", () => {
     fireEvent.click(screen.getByLabelText("Dismiss this vacancy"));
 
     expect(screen.queryByText(/Swipe to decide/)).not.toBeInTheDocument();
+  });
+
+  it("renders block and skip buttons with correct aria-labels", () => {
+    render(
+      <DeckView
+        vacancies={testVacancies}
+        onAction={mockOnAction}
+        onBackToList={mockOnBackToList}
+      />,
+    );
+
+    expect(screen.getByLabelText("Block this company")).toBeInTheDocument();
+    expect(screen.getByLabelText("Skip for now")).toBeInTheDocument();
+  });
+
+  it("renders auto-approve checkbox", () => {
+    render(
+      <DeckView
+        vacancies={testVacancies}
+        onAction={mockOnAction}
+        onBackToList={mockOnBackToList}
+      />,
+    );
+
+    const checkbox = screen.getByRole("checkbox");
+    expect(checkbox).toBeInTheDocument();
+    expect(screen.getByText("Auto-approve promoted")).toBeInTheDocument();
+  });
+
+  it("renders keyboard hints for B and N keys", () => {
+    render(
+      <DeckView
+        vacancies={testVacancies}
+        onAction={mockOnAction}
+        onBackToList={mockOnBackToList}
+      />,
+    );
+
+    // B key for Block
+    expect(screen.getByText("B")).toBeInTheDocument();
+    expect(screen.getByText("Block")).toBeInTheDocument();
+
+    // N key for Skip
+    expect(screen.getByText("N")).toBeInTheDocument();
+    expect(screen.getByText("Skip")).toBeInTheDocument();
   });
 });

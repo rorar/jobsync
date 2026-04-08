@@ -17,6 +17,7 @@ jest.mock("@/i18n", () => ({
     t: (key: string) => {
       const dict: Record<string, string> = {
         "deck.matchScore": "Match",
+        "deck.noScoreHint": "No AI scoring performed for this vacancy",
         "deck.noDescription": "No description available.",
         "deck.showMore": "Show more",
         "deck.showLess": "Show less",
@@ -71,9 +72,8 @@ describe("DeckCard", () => {
     render(<DeckCard vacancy={vacancy} />);
 
     expect(screen.getByText("--")).toBeInTheDocument();
-    // Badge should have a title tooltip
     const badge = screen.getByText("--").closest("[title]");
-    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute("title", "No AI scoring performed for this vacancy");
   });
 
   it("renders automation source line", () => {
@@ -151,5 +151,12 @@ describe("DeckCard", () => {
     const cardEl = container.firstChild as HTMLElement;
     expect(cardEl.className).toContain("scale-[0.90]");
     expect(cardEl.className).toContain("opacity-25");
+  });
+
+  it("applies exit-down animation class for down direction", () => {
+    const vacancy = makeVacancy();
+    const { container } = render(<DeckCard vacancy={vacancy} exitDirection="down" />);
+
+    expect(container.firstChild).toHaveClass("animate-deck-exit-down");
   });
 });

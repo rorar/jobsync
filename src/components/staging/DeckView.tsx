@@ -169,7 +169,9 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
           {t("deck.sessionCompleteDescription")
             .replace("{count}", String(stats.promoted + stats.dismissed + stats.superLiked + stats.blocked + stats.skipped))
             .replace("{promoted}", String(stats.promoted + stats.superLiked))
-            .replace("{dismissed}", String(stats.dismissed))}
+            .replace("{dismissed}", String(stats.dismissed))
+            .replace("{blocked}", String(stats.blocked))
+            .replace("{skipped}", String(stats.skipped))}
         </p>
         <div className="flex gap-3 mt-6">
           <Button variant="outline" onClick={onBackToList}>
@@ -289,7 +291,7 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
         {/* Block company */}
         <button
           type="button"
-          className={`h-10 w-10 rounded-full bg-red-100/60 text-red-500 hover:bg-red-200 active:bg-red-300 active:scale-90 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ${
+          className={`ml-1 h-10 w-10 rounded-full bg-red-100/60 text-red-500 hover:bg-red-200 active:bg-red-300 active:scale-90 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ${
             highlightBlock ? "ring-2 ring-red-500 scale-110" : ""
           }`}
           onClick={() => { setShowSwipeHint(false); block(); setLastAction(t("deck.actionBlocked")); }}

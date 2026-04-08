@@ -289,4 +289,83 @@ describe("useDeckStack", () => {
     expect(result.current.canUndo).toBe(true);
     expect(result.current.currentIndex).toBe(1);
   });
+
+  it("block sets exit direction down and calls onAction with 'block'", async () => {
+    const { result } = renderHook(() =>
+      useDeckStack({ vacancies, onAction: mockOnAction }),
+    );
+
+    act(() => {
+      result.current.block();
+    });
+
+    // Exit direction is set immediately (optimistic)
+    expect(result.current.exitDirection).toBe("down");
+
+    await act(async () => {
+      await advanceTimersAndFlush(300);
+    });
+
+    expect(mockOnAction).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "v1" }),
+      "block",
+    );
+    expect(result.current.stats.blocked).toBe(1);
+  });
+
+  it("skip advances card without calling onAction", async () => {
+    const { result } = renderHook(() =>
+      useDeckStack({ vacancies, onAction: mockOnAction }),
+    );
+
+    await act(async () => {
+      result.current.skip();
+      await advanceTimersAndFlush(300);
+    });
+
+    // onAction should NOT have been called — skip bypasses server action
+    expect(mockOnAction).not.toHaveBeenCalled();
+    expect(result.current.stats.skipped).toBe(1);
+    expect(result.current.currentIndex).toBe(1);
+    expect(result.current.currentVacancy?.id).toBe("v2");
+  });
+
+  it("skip does not push to undo stack", async () => {
+    const { result } = renderHook(() =>
+      useDeckStack({ vacancies, onAction: mockOnAction }),
+    );
+
+    await act(async () => {
+      result.current.skip();
+      await advanceTimersAndFlush(300);
+    });
+
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it("undo reverses blocked stat", async () => {
+    const { result } = renderHook(() =>
+      useDeckStack({ vacancies, onAction: mockOnAction, onUndo: mockOnUndo }),
+    );
+
+    // Block the first vacancy
+    await act(async () => {
+      result.current.block();
+      await advanceTimersAndFlush(300);
+    });
+
+    expect(result.current.stats.blocked).toBe(1);
+    expect(result.current.currentIndex).toBe(1);
+    expect(result.current.canUndo).toBe(true);
+
+    // Undo the block
+    await act(async () => {
+      result.current.undo();
+    });
+
+    expect(result.current.stats.blocked).toBe(0);
+    expect(result.current.currentIndex).toBe(0);
+    expect(result.current.currentVacancy?.id).toBe("v1");
+    expect(mockOnUndo).toHaveBeenCalled();
+  });
 });

@@ -218,6 +218,10 @@ describe("NotificationDispatcher", () => {
           type: "vacancy_batch_staged",
           message: expect.stringContaining("3"),
           automationId: "auto-1",
+          data: expect.objectContaining({
+            count: 3,
+            automationId: "auto-1",
+          }),
         }),
       });
 

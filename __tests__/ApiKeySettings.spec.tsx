@@ -55,6 +55,8 @@ jest.mock("@/i18n", () => ({
         "enrichment.health.degraded": "Degraded",
         "enrichment.health.unreachable": "Unreachable",
         "enrichment.health.unknown": "Unknown",
+        "settings.envConfigured": "ENV",
+        "settings.envConfiguredTooltip": "Set via environment variable",
       };
       return dict[key] ?? key;
     },
@@ -80,6 +82,7 @@ const mockGetUserApiKeys = jest.fn();
 const mockSaveApiKey = jest.fn();
 const mockDeleteApiKey = jest.fn();
 const mockGetDefaultOllamaBaseUrl = jest.fn();
+const mockGetEnvApiKeyStatus = jest.fn();
 
 jest.mock("@/actions/apiKey.actions", () => ({
   getUserApiKeys: (...args: unknown[]) => mockGetUserApiKeys(...args),
@@ -87,7 +90,8 @@ jest.mock("@/actions/apiKey.actions", () => ({
   deleteApiKey: (...args: unknown[]) => mockDeleteApiKey(...args),
   getDefaultOllamaBaseUrl: (...args: unknown[]) =>
     mockGetDefaultOllamaBaseUrl(...args),
-  getEnvApiKeyStatus: jest.fn().mockResolvedValue({ success: true, data: {} }),
+  getEnvApiKeyStatus: (...args: unknown[]) =>
+    mockGetEnvApiKeyStatus(...args),
 }));
 
 jest.mock("next/navigation", () => ({
@@ -212,6 +216,7 @@ function setupDefaultMocks() {
     success: true,
     data: [openaiModule, ollamaModule],
   });
+  mockGetEnvApiKeyStatus.mockResolvedValue({ success: true, data: {} });
 }
 
 // ---------------------------------------------------------------------------
@@ -464,5 +469,58 @@ describe("ApiKeySettings", () => {
         }),
       );
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // 7. ENV badge for environment-configured keys
+  // -------------------------------------------------------------------------
+
+  it("shows ENV badge for modules with environment-configured keys", async () => {
+    // No user-saved keys, but rapidapi has an env var set
+    mockGetUserApiKeys.mockResolvedValue({ success: true, data: [] });
+    mockGetEnvApiKeyStatus.mockResolvedValue({
+      success: true,
+      data: { rapidapi: true },
+    });
+
+    // Use a module whose credential.moduleId matches "rapidapi"
+    const rapidapiModule = {
+      moduleId: "jsearch",
+      name: "JSearch",
+      manifestVersion: 1,
+      connectorType: "job_discovery",
+      status: "active",
+      healthStatus: "healthy",
+      credential: {
+        type: "api_key",
+        moduleId: "rapidapi",
+        required: true,
+        sensitive: true,
+        placeholder: "your-rapidapi-key",
+      },
+      i18n: {
+        en: {
+          name: "JSearch",
+          description: "Job search via RapidAPI",
+          credentialHint: "Enter your RapidAPI key",
+        },
+      },
+    };
+
+    mockGetCredentialModules.mockResolvedValue({
+      success: true,
+      data: [rapidapiModule],
+    });
+
+    render(<ApiKeySettings />);
+
+    await waitFor(() => {
+      expect(screen.getByText("JSearch")).toBeInTheDocument();
+    });
+
+    // The ENV badge should be visible (no user key, but env var is set)
+    expect(screen.getByText("ENV")).toBeInTheDocument();
+    // "Not configured" badge should NOT appear since env key is detected
+    expect(screen.queryByText("Not configured")).not.toBeInTheDocument();
   });
 });

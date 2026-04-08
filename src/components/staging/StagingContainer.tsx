@@ -24,18 +24,9 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { RecordsPerPageSelector } from "@/components/RecordsPerPageSelector";
 import { RecordsCount } from "@/components/RecordsCount";
 import Loading from "@/components/Loading";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { StagedVacancyCard } from "./StagedVacancyCard";
 import { PromotionDialog } from "./PromotionDialog";
+import { BlockConfirmationDialog } from "./BlockConfirmationDialog";
 import { BulkActionBar } from "./BulkActionBar";
 import { StagingNewItemsBanner } from "./StagingNewItemsBanner";
 import { ViewModeToggle, getPersistedViewMode } from "./ViewModeToggle";
@@ -491,51 +482,38 @@ function StagingContainer() {
           reload();
         }}
       />
-      <AlertDialog open={blockConfirmOpen} onOpenChange={(open) => {
-        setBlockConfirmOpen(open);
-        if (!open) {
-          queueMicrotask(() => {
-            if (blockResolveRef.current) {
-              blockResolveRef.current({ success: false });
-              blockResolveRef.current = null;
-            }
-          });
-        }
-      }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("deck.blockConfirmTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("deck.blockConfirmDescription").replace("{company}", blockConfirmVacancy?.employerName ?? "")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={async () => {
-                if (blockConfirmVacancy?.employerName) {
-                  await handleBlockCompany(blockConfirmVacancy.employerName);
-                }
-                const { success, message } = await dismissStagedVacancy(blockConfirmVacancy!.id);
-                if (success) {
-                  toast({ variant: "success", description: t("deck.actionBlocked") });
-                } else {
-                  toast({ variant: "destructive", title: t("staging.error"), description: message });
-                }
-                if (blockResolveRef.current) {
-                  blockResolveRef.current({ success });
-                  blockResolveRef.current = null;
-                }
-                setBlockConfirmOpen(false);
-                if (success) reload();
-              }}
-            >
-              {t("deck.blockConfirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <BlockConfirmationDialog
+        open={blockConfirmOpen}
+        onOpenChange={(open) => {
+          setBlockConfirmOpen(open);
+          if (!open) {
+            queueMicrotask(() => {
+              if (blockResolveRef.current) {
+                blockResolveRef.current({ success: false });
+                blockResolveRef.current = null;
+              }
+            });
+          }
+        }}
+        vacancy={blockConfirmVacancy}
+        onConfirm={async () => {
+          if (blockConfirmVacancy?.employerName) {
+            await handleBlockCompany(blockConfirmVacancy.employerName);
+          }
+          const { success, message } = await dismissStagedVacancy(blockConfirmVacancy!.id);
+          if (success) {
+            toast({ variant: "success", description: t("deck.actionBlocked") });
+          } else {
+            toast({ variant: "destructive", title: t("staging.error"), description: message });
+          }
+          if (blockResolveRef.current) {
+            blockResolveRef.current({ success });
+            blockResolveRef.current = null;
+          }
+          setBlockConfirmOpen(false);
+          if (success) reload();
+        }}
+      />
     </>
   );
 }
