@@ -1,0 +1,16 @@
+{
+  "review_id": "deck-notification-apikey_20260408_143000",
+  "target": "DeckView, DeckCard, StagingContainer, NotificationDropdown, NotificationItem, ApiKeySettings",
+  "focus_areas": ["usability", "visual"],
+  "context": "DAU/BDU analysis of new features",
+  "platform": "responsive",
+  "status": "complete",
+  "started_at": "2026-04-08T14:30:00Z",
+  "issues_found": 13,
+  "severity_counts": {
+    "critical": 1,
+    "major": 4,
+    "minor": 5,
+    "suggestion": 3
+  }
+}
