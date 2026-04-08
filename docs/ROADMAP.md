@@ -2035,7 +2035,7 @@ Vorstufe für externe Module: Interne Module müssen zuerst selbstbeschreibend s
   - Verzeichnisstruktur (gruppiert nach Connector) bleibt als Konvention für menschliche Navigation — ist aber nicht mehr technisch erzwungen
   - **Allium-Validierung:** Die Spec-Regel `ModuleRegistration` sagt "Registration happens at application startup" — Self-Registration on import erfüllt das. Die Spec schreibt nicht vor WER die Registration auslöst (Domain-Event, nicht Implementation).
 
-- **Phase 0c — Co-located Tests (optional):**
+- **Phase 0c — Co-located Tests: ✅ DONE (2026-04-08)**
   - Modul-Tests im Modul-Verzeichnis: `modules/logo-dev/__tests__/`
   - Jest-Config: Glob-Pattern erweitern für `modules/**/__tests__/**`
   - Pragmatische Alternative: `/new-module` Scaffolding-Skill der Tests automatisch generiert
