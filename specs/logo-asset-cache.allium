@@ -226,10 +226,17 @@ rule DownloadOnEnrichment {
     2. downloadAndProcess(enrichedUrl, event.userId, company.id)
     3. if download succeeds:
          LogoAsset.updated(status: ready, filePath: ..., mimeType: ..., fileSize: ..., width: ..., height: ...)
-         Company.updated(logoAssetId: asset.id)
+         Company.updated(
+           logoAssetId: asset.id,
+           logoUrl: stripTokenFromUrl(enrichedUrl)
+         )
+         -- Company.logoUrl is preserved as external fallback with embedded
+         -- API tokens stripped (e.g. Logo.dev pk_ keys removed from query
+         -- string). The URL structure is preserved so it can still serve
+         -- as a usable external fallback when the local asset is unavailable.
        else:
          LogoAsset.updated(status: failed, errorMessage: ...)
-         -- Company.logoUrl remains as external fallback. No user-visible error.
+         -- Company.logoUrl is unchanged. No user-visible error.
 
   @guidance
     -- Download is fire-and-forget from the event handler's perspective.
@@ -249,7 +256,7 @@ rule ReDownloadOnUrlChange {
   @guidance
     -- On re-download: delete old file first, then download new.
     -- If download fails, the old file is gone but Company.logoUrl
-    -- still provides the external fallback.
+    -- still provides the external fallback (with tokens stripped).
 }
 
 rule ManualUrlSync {
@@ -278,8 +285,9 @@ rule DeletionFromUI {
     1. File deleted from disk at LogoAsset.filePath
     2. LogoAsset record deleted from database
     3. Company.logoAssetId set to null
-    -- Company.logoUrl is NOT cleared — it remains as the external fallback.
-    -- UI falls back to external URL or initials.
+    -- Company.logoUrl is NOT cleared — it remains as the external fallback
+    -- (token-stripped URL from the download step). UI falls back to the
+    -- external URL or initials.
 }
 
 rule CleanupOnCompanyDeletion {
@@ -329,7 +337,11 @@ ensures: downloadAndProcess(
   --    PNG with transparency: NOT converted to JPEG (preserves alpha).
   --    If fileSize > MAX_FILE_SIZE_BYTES after resize, increase compression.
   -- 8. Write to disk at {STORAGE_BASE_PATH}/{userId}/{companyId}/logo.{ext}
-  -- 9. On failure: return error with message, caller sets status = failed.
+  -- 9. Set Company.logoAssetId and Company.logoUrl. The logoUrl is set to
+  --    stripTokenFromUrl(sourceUrl): embedded API tokens (e.g. ?token=pk_...)
+  --    are stripped from the query string before persisting. The URL structure
+  --    is preserved as a usable external fallback.
+  -- 10. On failure: return error with message, caller sets status = failed.
 
 -- =============================================================================
 -- Surface: CompanyLogo Component

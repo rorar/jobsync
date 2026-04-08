@@ -1,8 +1,15 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-08
 
-**Total: 395 bugs found, 393 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
+**Total: 396 bugs found, 394 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing)
+
+## Cross-User Enrichment Cache Fix (2026-04-08)
+
+### Fixed — Security (1 finding)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| CACHE-1 | **HIGH** | Enrichment in-memory cache key did not include userId, allowing cross-user data leakage. User B could receive User A's cached enrichment result, bypassing DB persistence and audit trail. | Added userId to `buildEnrichmentCacheKey()` in orchestrator.ts. See ADR-029. |
 
 ## Bugfix Session (2026-04-08)
 

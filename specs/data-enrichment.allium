@@ -237,6 +237,10 @@ entity EnrichmentLog {
     -- EnrichmentLog entries are immutable after creation.
     -- They form an append-only audit trail for observability.
     -- Deleted only via cascade when parent EnrichmentResult is purged.
+    -- Log writes are best-effort and non-blocking: the orchestrator
+    -- fires log creation as fire-and-forget (not awaited). Failures
+    -- are silently caught. Enrichment chain execution is never blocked
+    -- or failed by a log write error.
 }
 
 -- =============================================================================
@@ -263,6 +267,13 @@ config {
     -- Maximum time for a single module call within the chain.
   MAX_CONCURRENT_PER_USER: Integer = 5
     -- Maximum in-flight enrichment requests per user to prevent abuse.
+  MAX_CONCURRENT_EVENT_ENRICHMENTS: Integer = 5
+    -- Maximum concurrent event-triggered enrichment executions (global).
+    -- A semaphore throttles enrichments triggered by domain events
+    -- (CompanyCreated, VacancyPromoted) to prevent resource exhaustion
+    -- when many events arrive in a burst. Excess requests queue until
+    -- a slot becomes available. This is separate from MAX_CONCURRENT_PER_USER,
+    -- which limits manual/API-triggered requests per user.
   PLACEHOLDER_LOGO_PATH: String = "/images/company-placeholder.svg"
     -- Fallback when no logo is found or enrichment fails.
 }
@@ -278,10 +289,16 @@ rule TriggerEnrichmentOnCompanyCreated {
 
   let domain = extractDomain(company.label)
     -- Black box: extracts a plausible domain from the company name.
+    -- Shared utility in data-enrichment/domain-extractor.
     -- Returns null if the name is not domain-like (e.g., "Acme Corp").
 
   requires: domain != null
     -- Only attempt logo enrichment if we can derive a domain.
+
+  -- Skip if a fresh result already exists in the database
+  let existing = EnrichmentResult
+    where dimension = logo and domainKey = domain and userId = company.created_by.id
+  guard: not exists existing or existing.needsRefresh
 
   ensures: executeChain(
     userId: company.created_by.id,
@@ -298,6 +315,9 @@ rule TriggerEnrichmentOnCompanyCreated {
     -- (e.g., "github.com") use it directly. Otherwise try common patterns
     -- (e.g., "GitHub" -> "github.com"). If unsure, return null and skip.
     -- The enrichment is best-effort — no failure is visible to the user.
+    -- The DB freshness check (existing result with status = found and
+    -- expiresAt > now) prevents redundant chain executions when the same
+    -- company domain is created multiple times in quick succession.
 }
 
 rule TriggerEnrichmentOnJobImported {
@@ -476,7 +496,12 @@ rule ExecuteFallbackChain {
     else:
       -- Attempt enrichment via this module
       let result = enrich(module, input)
-        -- Black box: calls module.enrich(input) with timeout.
+        -- Black box: calls module.enrich(input) with per-module timeout.
+        -- Timeout is enforced via Promise.race: the module call races
+        -- against a timeout promise (config.MODULE_TIMEOUT_MS). If the
+        -- timeout wins, the call rejects with a timeout error. No
+        -- AbortController/signal propagation — the losing promise is
+        -- abandoned but may continue executing in the background.
         -- Returns EnrichmentOutput on success, raises on failure.
 
       if result != null and result.status = found:
@@ -536,7 +561,8 @@ rule ExecuteFallbackChain {
     -- The chain is executed sequentially, not in parallel.
     -- On first success, the chain short-circuits (remaining modules are not called).
     -- The total chain execution is bounded by config.CHAIN_TIMEOUT_MS.
-    -- Individual module calls are bounded by config.MODULE_TIMEOUT_MS.
+    -- Individual module calls are bounded by config.MODULE_TIMEOUT_MS via
+    -- Promise.race (module call races a timeout promise; no signal propagation).
     -- All external calls MUST go through the resilience wrapper (circuit breaker
     -- + timeout) provisioned from the module's manifest.resilience config.
     -- Enrichment NEVER blocks the triggering operation. If called from a
@@ -544,6 +570,13 @@ rule ExecuteFallbackChain {
     -- Results are persisted via upsert on the (userId, dimension, domainKey)
     -- unique constraint. There is no separate "request" entity — the
     -- EnrichmentResult is created or updated directly by the orchestrator.
+    -- EnrichmentLog writes are best-effort and non-blocking (fire-and-forget).
+    -- Log persistence failures are silently caught and never propagate to
+    -- the chain execution. This ensures that audit logging cannot cause
+    -- enrichment failures.
+    -- The in-memory cache key is user-scoped:
+    -- enrichment:{dimension}:{userId}:{domainKey}. This ensures that
+    -- cached results are never shared across users.
 }
 
 -- SkipInactiveModules is embedded in ExecuteFallbackChain as conditional branches.
@@ -630,6 +663,7 @@ rule ApplyLogoResult {
   let company = Company where id = result.companyId
     or (extractDomain(label) = result.domainKey
         and created_by.id = result.userId)
+    -- extractDomain: shared utility in data-enrichment/domain-extractor.
 
   ensures:
     if exists company and company.logo_url = null:
@@ -712,6 +746,14 @@ invariant DomainKeyUniquenessPerUser {
       a != b and a.userId = b.userId and a.dimension = b.dimension
         implies a.domainKey != b.domainKey
 }
+
+@invariant EventEnrichmentConcurrencyBounded
+  -- Event-triggered enrichments (CompanyCreated, VacancyPromoted) are
+  -- throttled by a semaphore with capacity config.MAX_CONCURRENT_EVENT_ENRICHMENTS.
+  -- When the limit is reached, additional event-triggered enrichments queue
+  -- until a slot is released. This prevents resource exhaustion during
+  -- bulk imports or rapid company creation sequences.
+  -- Manual and API-triggered enrichments are not subject to this limit.
 
 @invariant EnrichmentNonBlocking
   -- Enrichment never blocks the triggering operation.

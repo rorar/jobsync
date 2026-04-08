@@ -168,6 +168,10 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 - **types.ts** — DataEnrichmentConnector, EnrichmentDimension, LogoData, DeepLinkData, FallbackChainConfig, ENRICHMENT_CONFIG
 - **registry.ts** — Facade: `getActiveEnrichmentModules()`, `getEnrichmentModuleByDimension()`
 - **orchestrator.ts** — `EnrichmentOrchestrator.execute()`: cache check → chain execution → persist result → publish events. `globalThis` singleton. Resolves credentials via PUSH pattern for key-based modules.
+  - Cache keys include `userId` to prevent cross-user data leakage (ADR-029).
+  - Per-module timeout uses `Promise.race` (not AbortSignal propagation). Chain-level timeout at `CHAIN_TIMEOUT_MS`.
+  - Enrichment log writes (`logAttempt`) are fire-and-forget (void return, `.catch(() => {})`) — best-effort, non-blocking.
+- **domain-extractor.ts** — shared `extractDomain(input)` utility. Used by both `enrichment.actions.ts` and `enrichment-trigger.ts`.
 - **Modules:** `modules/logo-dev/`, `modules/google-favicon/`, `modules/meta-parser/` (each with `index.ts`, `manifest.ts`, `i18n.ts`)
 
 ### Reference Data Connector (ROADMAP 1.20)
@@ -189,6 +193,8 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 **Audit:** `EnrichmentLog` append-only trail per module attempt (chain position, outcome, latency).
 
 **Server Actions:** `src/actions/enrichment.actions.ts` — `triggerEnrichment()`, `getEnrichmentStatus()`, `getEnrichmentResult()`, `refreshEnrichment()`. Rate-limited per user.
+
+**Event-Triggered Enrichment:** `src/lib/events/consumers/enrichment-trigger.ts` — subscribes to `CompanyCreated` and `VacancyPromoted` events. Checks DB for existing fresh results before executing chain (cache-before-chain). Concurrent event-triggered enrichments are throttled by an in-memory semaphore (`MAX_CONCURRENT_ENRICHMENTS=5`).
 
 **UI Components:**
 - `src/components/ui/company-logo.tsx` — CompanyLogo (skeleton → image → initials fallback)
@@ -213,7 +219,9 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **Serving:** `GET /api/logos/[id]` — authenticated file serving with `Cache-Control: public, max-age=86400, immutable`, ETag, CSP sandbox for SVGs.
 
-**CompanyLogo Priority:** logoAssetId (local) → logoUrl (external) → initials avatar.
+**CompanyLogo Priority:** logoAssetId (local) → logoUrl (external fallback, token-stripped) → initials avatar.
+
+**Token Stripping:** `stripTokenFromUrl()` removes API tokens (e.g., Logo.dev `pk_` key) from URLs before storing as `Company.logoUrl`. Preserves the URL as an external fallback per Allium spec.
 
 **Server Actions:** `src/actions/logoAsset.actions.ts` — deleteLogoAsset, getLogoAssetForCompany, triggerLogoDownload.
 
