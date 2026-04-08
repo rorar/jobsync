@@ -30,6 +30,7 @@ import {
   getUserApiKeys,
   saveApiKey,
   deleteApiKey,
+  getEnvApiKeyStatus,
 } from "@/actions/apiKey.actions";
 import {
   getCredentialModules,
@@ -83,6 +84,7 @@ function ApiKeySettings() {
   const { t, locale } = useTranslations();
   const [modules, setModules] = useState<ModuleConfig[]>([]);
   const [keys, setKeys] = useState<ApiKeyClientResponse[]>([]);
+  const [envKeyStatus, setEnvKeyStatus] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [editingModule, setEditingModule] = useState<ApiKeyModuleId | null>(
     null,
@@ -100,6 +102,12 @@ function ApiKeySettings() {
     getCredentialModules().then((result) => {
       if (result.success && result.data) {
         setModules(result.data.map(manifestToModuleConfig));
+      }
+    });
+    // Load env key presence status (boolean only — never the actual value)
+    getEnvApiKeyStatus().then((result) => {
+      if (result.success && result.data) {
+        setEnvKeyStatus(result.data);
       }
     });
   }, []);
@@ -404,6 +412,13 @@ function ApiKeySettings() {
                         {module.sensitive
                           ? `····${existingKey.last4}`
                           : existingKey.displayValue || existingKey.last4}
+                      </Badge>
+                    ) : envKeyStatus[module.id] ? (
+                      <Badge
+                        className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-900"
+                        title={t("settings.envConfiguredTooltip")}
+                      >
+                        {t("settings.envConfigured")}
                       </Badge>
                     ) : (
                       <Badge variant="secondary">{t("settings.notConfigured")}</Badge>

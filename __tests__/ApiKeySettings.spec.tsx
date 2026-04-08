@@ -87,6 +87,7 @@ jest.mock("@/actions/apiKey.actions", () => ({
   deleteApiKey: (...args: unknown[]) => mockDeleteApiKey(...args),
   getDefaultOllamaBaseUrl: (...args: unknown[]) =>
     mockGetDefaultOllamaBaseUrl(...args),
+  getEnvApiKeyStatus: jest.fn().mockResolvedValue({ success: true, data: {} }),
 }));
 
 jest.mock("next/navigation", () => ({

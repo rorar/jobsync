@@ -12,6 +12,7 @@ import type {
   ApiKeyModuleId,
 } from "@/models/apiKey.model";
 import { moduleRegistry } from "@/lib/connector/registry";
+import { ConnectorType, CredentialType } from "@/lib/connector/manifest";
 import "@/lib/connector/register-all";
 
 export async function getUserApiKeys(): Promise<ActionResult<ApiKeyClientResponse[]>> {
@@ -48,6 +49,42 @@ export async function getUserApiKeys(): Promise<ActionResult<ApiKeyClientRespons
         };
       }),
     };
+  } catch (error) {
+    return handleError(error, "errors.fetchApiKeys");
+  }
+}
+
+/**
+ * Check which modules have API keys set via environment variables.
+ * Returns a map of credential moduleId → boolean (true if env var is set).
+ * SECURITY: Never returns the actual env value — only a boolean presence check.
+ */
+export async function getEnvApiKeyStatus(): Promise<ActionResult<Record<string, boolean>>> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "Not authenticated" };
+
+    const allTypes = [
+      ConnectorType.JOB_DISCOVERY,
+      ConnectorType.AI_PROVIDER,
+      ConnectorType.DATA_ENRICHMENT,
+      ConnectorType.REFERENCE_DATA,
+    ];
+
+    const result: Record<string, boolean> = {};
+
+    for (const type of allTypes) {
+      const modules = moduleRegistry.getByType(type);
+      for (const mod of modules) {
+        const cred = mod.manifest.credential;
+        if (cred.type === CredentialType.NONE) continue;
+        if (cred.envFallback) {
+          result[cred.moduleId] = !!process.env[cred.envFallback];
+        }
+      }
+    }
+
+    return { success: true, data: result };
   } catch (error) {
     return handleError(error, "errors.fetchApiKeys");
   }
