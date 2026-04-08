@@ -20,6 +20,27 @@ import { logoAssetService } from "./logo-asset-service";
 import db from "@/lib/db";
 
 // ---------------------------------------------------------------------------
+// Domain Base Extraction (reverse lookup: domain → company name)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the base name from a domain key for company lookup.
+ * E.g. "acme.co.uk" → "acme", "www.example.com" → "example"
+ *
+ * This is specific to the reverse-lookup use case (domain → company name),
+ * distinct from the forward extractDomain() in domain-extractor.ts.
+ */
+function extractDomainBase(domainKey: string): string {
+  // Remove protocol if present
+  let domain = domainKey.replace(/^https?:\/\//, "");
+  // Remove www prefix
+  domain = domain.replace(/^www\./, "");
+  // Split by dots and take the first part (e.g., "acme" from "acme.co.uk")
+  const parts = domain.split(".");
+  return parts[0]?.toLowerCase() || domain.toLowerCase();
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
@@ -93,13 +114,14 @@ async function handleEnrichmentCompleted(
   if (!companyId) {
     // Fallback: find a company by domain-based lookup
     // The domainKey is typically the company domain (e.g., "acme.com")
-    // Try to find a company whose value matches
+    // Use prefix match (startsWith) instead of substring match (contains)
+    // to avoid false positives and enable index usage.
     try {
-      const domainBase = domainKey.replace(/\.com$/, "").toLowerCase();
+      const domainBase = extractDomainBase(domainKey);
       const company = await db.company.findFirst({
         where: {
           createdBy: userId,
-          value: { contains: domainBase },
+          value: { startsWith: domainBase },
         },
         select: { id: true },
       });

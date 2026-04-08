@@ -1,6 +1,8 @@
 "use server";
 
 import { getCurrentUser } from "@/utils/user.utils";
+import { validateWebhookUrl } from "@/lib/url-validation";
+import { checkRateLimit } from "@/lib/api/rate-limit";
 
 const IMAGE_CONTENT_TYPES = [
   "image/png",
@@ -11,6 +13,8 @@ const IMAGE_CONTENT_TYPES = [
   "image/x-icon",
   "image/vnd.microsoft.icon",
 ];
+
+const MAX_REDIRECTS = 3;
 
 /**
  * Wikipedia media page URL pattern.
@@ -50,11 +54,17 @@ async function resolveWikimediaUrl(url: string): Promise<string | null> {
     const pages = data?.query?.pages;
     if (!pages) return null;
 
-    // Pages is an object keyed by page ID; get the first one
     const page = Object.values(pages)[0] as {
       imageinfo?: { url: string }[];
     };
-    return page?.imageinfo?.[0]?.url ?? null;
+    const resolvedUrl = page?.imageinfo?.[0]?.url ?? null;
+
+    if (resolvedUrl) {
+      const ssrfCheck = validateWebhookUrl(resolvedUrl);
+      if (!ssrfCheck.valid) return null;
+    }
+
+    return resolvedUrl;
   } catch {
     return null;
   }
@@ -75,11 +85,17 @@ export async function checkLogoUrl(
   const user = await getCurrentUser();
   if (!user) return { isImage: false, contentType: null };
 
+  const rateResult = checkRateLimit(`logoCheck:${user.id}`, 20, 60_000);
+  if (!rateResult.allowed) return { isImage: false, contentType: null };
+
   try {
     const parsed = new URL(url);
     if (!["http:", "https:"].includes(parsed.protocol)) {
       return { isImage: false, contentType: null };
     }
+
+    const ssrfCheck = validateWebhookUrl(url);
+    if (!ssrfCheck.valid) return { isImage: false, contentType: null };
 
     // Try to resolve Wikipedia media page URLs first
     const wikimediaUrl = await resolveWikimediaUrl(url);
@@ -87,16 +103,33 @@ export async function checkLogoUrl(
       return { isImage: true, contentType: "image/svg+xml", resolvedUrl: wikimediaUrl };
     }
 
-    const response = await fetch(url, {
-      method: "HEAD",
-      redirect: "follow",
-      signal: AbortSignal.timeout(5000),
-    });
+    // Follow redirects manually with SSRF validation on each hop
+    let currentUrl = url;
+    for (let i = 0; i <= MAX_REDIRECTS; i++) {
+      const response = await fetch(currentUrl, {
+        method: "HEAD",
+        redirect: "manual",
+        signal: AbortSignal.timeout(5000),
+      });
 
-    const contentType = response.headers.get("content-type")?.split(";")[0]?.trim() ?? null;
-    const isImage = contentType !== null && IMAGE_CONTENT_TYPES.some((t) => contentType.startsWith(t));
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location) break;
 
-    return { isImage, contentType };
+        const redirectUrl = new URL(location, currentUrl).toString();
+        const redirectCheck = validateWebhookUrl(redirectUrl);
+        if (!redirectCheck.valid) return { isImage: false, contentType: null };
+
+        currentUrl = redirectUrl;
+        continue;
+      }
+
+      const contentType = response.headers.get("content-type")?.split(";")[0]?.trim() ?? null;
+      const isImage = contentType !== null && IMAGE_CONTENT_TYPES.some((t) => contentType.startsWith(t));
+      return { isImage, contentType };
+    }
+
+    return { isImage: false, contentType: null };
   } catch {
     return { isImage: false, contentType: null };
   }

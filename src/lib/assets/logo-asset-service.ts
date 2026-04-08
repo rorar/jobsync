@@ -100,6 +100,25 @@ async function getLogoAssetConfig(userId: string): Promise<LogoAssetConfig> {
 }
 
 // ---------------------------------------------------------------------------
+// URL Sanitization
+// ---------------------------------------------------------------------------
+
+/**
+ * Strip embedded API tokens from a logo URL before storing as fallback.
+ * Preserves the URL structure so it can still serve as an external fallback
+ * (per Allium spec), but removes sensitive credentials like Logo.dev pk_ keys.
+ */
+function stripTokenFromUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.delete("token");
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Download Pipeline
 // ---------------------------------------------------------------------------
 
@@ -216,12 +235,12 @@ class LogoAssetService {
         },
       });
 
-      // Step 11: Set Company.logoAssetId and clear external logoUrl
-      // The external URL may contain embedded API tokens (e.g. Logo.dev pk_ key).
-      // Now that the image is stored locally, the external URL is no longer needed.
+      // Step 11: Set Company.logoAssetId and preserve external logoUrl as fallback
+      // The external URL is kept as a spec-compliant fallback (Allium: logo-asset-cache),
+      // but any embedded API tokens (e.g. Logo.dev pk_ key) are stripped for security.
       await db.company.updateMany({
         where: { id: companyId, createdBy: userId },
-        data: { logoAssetId: updatedAsset.id, logoUrl: null },
+        data: { logoAssetId: updatedAsset.id, logoUrl: stripTokenFromUrl(sourceUrl) },
       });
 
       console.debug(

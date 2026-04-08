@@ -19,6 +19,9 @@ import fs from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 
+/** Safety limit: refuse to serve files larger than 2MB (prevents memory exhaustion) */
+const MAX_SERVE_BYTES = 2 * 1024 * 1024;
+
 /** UUID v4 validation pattern */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -75,9 +78,16 @@ export async function GET(
       });
     }
 
-    // Read file from disk
+    // Verify file exists and check size before reading into memory
     let fileBuffer: Buffer;
     try {
+      const fileStat = await fs.stat(asset.filePath);
+      if (!fileStat.isFile() || fileStat.size > MAX_SERVE_BYTES) {
+        return NextResponse.json(
+          { error: "File not found on disk" },
+          { status: 404 },
+        );
+      }
       fileBuffer = await fs.readFile(asset.filePath);
     } catch {
       return NextResponse.json(
