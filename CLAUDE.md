@@ -127,20 +127,25 @@ New modules (StepStone, Indeed, etc.) work without wizard code changes — they 
   - Modules: `modules/esco-classification/`, `modules/eurostat-nuts/` (health-only, no connector interface yet)
 
 **For new Modules:** Create `modules/{name}/` under the appropriate connector directory with:
-1. `manifest.ts` — declares the appropriate manifest type:
+1. `i18n.ts` — co-located translations for 4 locales (en, de, fr, es), exports `ModuleI18n`
+2. `manifest.ts` — declares the appropriate manifest type with `i18n` field:
    - `JobDiscoveryManifest` (job search modules)
    - `AiManifest` (AI provider modules)
    - `DataEnrichmentManifest` (enrichment modules, declares `supportedDimensions`)
    - `ReferenceDataManifest` (taxonomy/classification services, declares `taxonomy`)
    - Optional: `dependencies: DependencyHealthCheck[]` for modules that depend on external services
-2. `index.ts` — implements the connector interface (`DataSourceConnector`, `AIProviderConnector`, `DataEnrichmentConnector`, or `ReferenceDataConnector`)
-3. `resilience.ts` (if manifest declares `resilience`) — thin wrapper calling `buildResiliencePolicy()` from Shared Kernel
-4. Register in the connector's `connectors.ts` barrel: `moduleRegistry.register(manifest, factory)`
-5. Add `envFallback` entry to `.env.example` if module has `credential.type: api_key`
+3. `index.ts` — implements the connector interface + self-registers at bottom of file:
+   ```typescript
+   moduleRegistry.register(manifest, createMyModule);
+   ```
+4. `resilience.ts` (if manifest declares `resilience`) — thin wrapper calling `buildResiliencePolicy()`
+5. Add import line in `src/lib/connector/register-all.ts`:
+   ```typescript
+   import "./my-connector/modules/my-module";
+   ```
+6. Add `envFallback` entry to `.env.example` if module has `credential.type: api_key`
 
-That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilience code. The `connectorType` on the manifest determines which connector group the module belongs to.
-
-**Note:** Roadmap 8.7 Phase 0 will simplify this further — modules will self-register on import, eliminating the manual barrel edit.
+That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilience code, no global i18n dictionary edits. The module is fully self-contained.
 
 **Credential Resolution (PUSH):** `credential-resolver.ts` resolves credentials from manifest config (DB → Env → Default). Runner calls `resolveCredential()` before module instantiation.
 

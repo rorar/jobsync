@@ -1,8 +1,33 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-06
 
-**Total: 324 bugs found, 322 fixed, 2 open (accepted risk)**
+**Total: 337 bugs found, 335 fixed, 2 open (accepted risk)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing)
+
+## Manifest v2 Self-Contained Modules (2026-04-08)
+
+### Fixed in Manifest v2 — CHECK Phase (13 findings)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| MV2-C1 | **CRITICAL** | enrichment.actions.ts missing register-all import (silent empty enrichment) | Added import |
+| MV2-C2 | **CRITICAL** | health-scheduler.ts missing register-all import (0 health timers) | Added import |
+| MV2-C3 | **CRITICAL** | Silent catch hides notification failures on module deactivation | Added error logging |
+| MV2-H1 | HIGH | syncRegistryFromDb swallows all DB errors silently | Added error logging |
+| MV2-H2 | HIGH | checkModuleHealth fire-and-forget discards errors | Added error logging |
+| MV2-H3 | HIGH | handleHealthCheck catch has no error variable (3 components) | Added error + console.error |
+| MV2-I1 | IMPORTANT | ApiKeySettings uses module.name instead of manifest.i18n | Migrated to i18n pattern |
+| MV2-M1 | MEDIUM | No English intermediate fallback in getModuleDescription | Added en fallback chain |
+| MV2-M2 | MEDIUM | No English intermediate fallback in ApiStatusOverview | Added en fallback chain |
+| MV2-M3 | MEDIUM | Registry register() silently ignores duplicate IDs | Dev-mode console.warn |
+| MV2-M4 | MEDIUM | Health monitor DB persistence catch is silent | Added error logging |
+| MV2-L1 | LOW | Test mock has stale i18n keys (dead code) | Removed stale keys |
+| MV2-S1 | SPEC | CachePolicy value type missing from Allium spec | Added to spec |
+
+### Deferred (Allium weed — pre-existing, not Manifest v2)
+| ID | Severity | Finding | Reason |
+|----|----------|---------|--------|
+| AW-1 | LOW | RegisteredModule.activatedBy in spec but not in code | Audit trail aspirational — implement when needed |
+| AW-2 | LOW | automationType optional in code vs defaulted in spec | TypeScript idiomatic — all modules set explicitly |
 
 ## ESCO Occupation URI Persistence Fix (2026-04-06)
 
