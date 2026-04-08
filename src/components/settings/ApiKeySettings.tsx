@@ -30,7 +30,6 @@ import {
   getUserApiKeys,
   saveApiKey,
   deleteApiKey,
-  getDefaultOllamaBaseUrl,
 } from "@/actions/apiKey.actions";
 import {
   getCredentialModules,
@@ -54,6 +53,8 @@ interface ModuleConfig {
   name: string;
   i18n?: ModuleI18n;
   placeholder: string;
+  defaultValue?: string;
+  credentialType: string; // "api_key" | "endpoint_url" | "none"
   inputType: "password" | "text";
   sensitive: boolean;
   status: "active" | "inactive" | "error";
@@ -68,6 +69,8 @@ function manifestToModuleConfig(m: ModuleManifestSummary): ModuleConfig {
     name: m.name,
     i18n: m.i18n,
     placeholder: m.credential.placeholder ?? "",
+    defaultValue: m.credential.defaultValue,
+    credentialType: m.credential.type,
     inputType: m.credential.sensitive ? "password" : "text",
     sensitive: m.credential.sensitive,
     status: m.status as "active" | "inactive" | "error",
@@ -76,16 +79,11 @@ function manifestToModuleConfig(m: ModuleManifestSummary): ModuleConfig {
   };
 }
 
-const DEFAULT_OLLAMA_PLACEHOLDER = "http://127.0.0.1:11434";
-
 function ApiKeySettings() {
   const { t, locale } = useTranslations();
   const [modules, setModules] = useState<ModuleConfig[]>([]);
   const [keys, setKeys] = useState<ApiKeyClientResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [defaultOllamaUrl, setDefaultOllamaUrl] = useState(
-    DEFAULT_OLLAMA_PLACEHOLDER,
-  );
   const [editingModule, setEditingModule] = useState<ApiKeyModuleId | null>(
     null,
   );
@@ -98,7 +96,6 @@ function ApiKeySettings() {
 
   useEffect(() => {
     fetchKeys();
-    getDefaultOllamaBaseUrl().then(setDefaultOllamaUrl);
     // Load module manifests from registry
     getCredentialModules().then((result) => {
       if (result.success && result.data) {
@@ -368,9 +365,9 @@ function ApiKeySettings() {
                     <CardTitle className="text-base">{getModuleName(module, locale)}</CardTitle>
                     <CardDescription className="text-sm">
                       {getCredentialHint(module, locale)}
-                      {module.id === "ollama" && (
+                      {module.credentialType === "endpoint_url" && module.defaultValue && (
                         <span className="block text-xs text-muted-foreground/70 mt-0.5">
-                          Default: {defaultOllamaUrl}
+                          Default: {module.defaultValue}
                         </span>
                       )}
                       {module.lastSuccessfulConnection && (
@@ -419,14 +416,14 @@ function ApiKeySettings() {
                   <div className="space-y-3">
                     <div>
                       <Label htmlFor={`key-${module.id}`}>
-                        {module.id === "ollama" ? t("settings.baseUrl") : t("settings.apiKey")}
+                        {module.credentialType === "endpoint_url" ? t("settings.baseUrl") : t("settings.apiKey")}
                       </Label>
                       <Input
                         id={`key-${module.id}`}
                         type={module.inputType}
                         placeholder={
-                          module.id === "ollama"
-                            ? defaultOllamaUrl
+                          module.credentialType === "endpoint_url"
+                            ? (module.defaultValue ?? module.placeholder)
                             : module.placeholder
                         }
                         value={inputValue}
