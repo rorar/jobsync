@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 
-export type DeckAction = "dismiss" | "promote" | "superlike";
-export type ExitDirection = "left" | "right" | "up" | null;
+export type DeckAction = "dismiss" | "promote" | "superlike" | "block" | "skip";
+export type ExitDirection = "left" | "right" | "up" | "down" | null;
 
 interface UndoEntry {
   vacancy: StagedVacancyWithAutomation;
@@ -16,6 +16,8 @@ interface DeckStats {
   promoted: number;
   dismissed: number;
   superLiked: number;
+  blocked: number;
+  skipped: number;
 }
 
 interface UseDeckStackOptions {
@@ -40,6 +42,8 @@ interface UseDeckStackReturn {
   dismiss: () => void;
   promote: () => void;
   superLike: () => void;
+  block: () => void;
+  skip: () => void;
   undo: () => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }
@@ -57,7 +61,7 @@ export function useDeckStack({
   const [exitDirection, setExitDirection] = useState<ExitDirection>(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
-  const [stats, setStats] = useState<DeckStats>({ promoted: 0, dismissed: 0, superLiked: 0 });
+  const [stats, setStats] = useState<DeckStats>({ promoted: 0, dismissed: 0, superLiked: 0, blocked: 0, skipped: 0 });
   const containerRef = useRef<HTMLDivElement | null>(null);
   const animatingRef = useRef(false);
 
@@ -75,17 +79,23 @@ export function useDeckStack({
       setIsAnimating(true);
 
       const direction: ExitDirection =
-        action === "dismiss" ? "left" : action === "promote" ? "right" : "up";
+        action === "dismiss" ? "left"
+          : action === "promote" ? "right"
+            : action === "block" ? "down"
+              : action === "skip" ? "right"
+                : "up";
 
       // 1. Start exit animation immediately (optimistic)
       setExitDirection(direction);
 
-      // 2. Fire server action in parallel with animation
+      // 2. Fire server action in parallel with animation (skip bypasses onAction)
       const vacancy = currentVacancy;
       const index = currentIndex;
-      const actionPromise = onAction(vacancy, action).catch(
-        (): { success: boolean } => ({ success: false }),
-      );
+      const actionPromise = action === "skip"
+        ? Promise.resolve({ success: true })
+        : onAction(vacancy, action).catch(
+            (): { success: boolean } => ({ success: false }),
+          );
 
       // 3. After animation delay, check result
       setTimeout(async () => {
@@ -101,6 +111,8 @@ export function useDeckStack({
             promoted: prev.promoted + (action === "promote" ? 1 : 0),
             dismissed: prev.dismissed + (action === "dismiss" ? 1 : 0),
             superLiked: prev.superLiked + (action === "superlike" ? 1 : 0),
+            blocked: prev.blocked + (action === "block" ? 1 : 0),
+            skipped: prev.skipped + (action === "skip" ? 1 : 0),
           }));
 
           setExitDirection(null);
@@ -121,6 +133,8 @@ export function useDeckStack({
   const dismiss = useCallback(() => performAction("dismiss"), [performAction]);
   const promote = useCallback(() => performAction("promote"), [performAction]);
   const superLike = useCallback(() => performAction("superlike"), [performAction]);
+  const block = useCallback(() => performAction("block"), [performAction]);
+  const skip = useCallback(() => performAction("skip"), [performAction]);
 
   const undo = useCallback(async () => {
     if (animatingRef.current || undoStack.length === 0) return;
@@ -134,6 +148,8 @@ export function useDeckStack({
       promoted: prev.promoted - (entry.action === "promote" ? 1 : 0),
       dismissed: prev.dismissed - (entry.action === "dismiss" ? 1 : 0),
       superLiked: prev.superLiked - (entry.action === "superlike" ? 1 : 0),
+      blocked: prev.blocked - (entry.action === "block" ? 1 : 0),
+      skipped: prev.skipped - (entry.action === "skip" ? 1 : 0),
     }));
 
     if (onUndo) {
@@ -179,6 +195,15 @@ export function useDeckStack({
           e.preventDefault();
           superLike();
           break;
+        case "b":
+        case "arrowdown":
+          e.preventDefault();
+          block();
+          break;
+        case "n":
+          e.preventDefault();
+          skip();
+          break;
         case "z":
           e.preventDefault();
           undo();
@@ -188,7 +213,7 @@ export function useDeckStack({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [enabled, dismiss, promote, superLike, undo]);
+  }, [enabled, dismiss, promote, superLike, block, skip, undo]);
 
   return {
     currentIndex,
@@ -205,6 +230,8 @@ export function useDeckStack({
     dismiss,
     promote,
     superLike,
+    block,
+    skip,
     undo,
     containerRef,
   };

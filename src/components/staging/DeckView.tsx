@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   X,
@@ -9,6 +9,8 @@ import {
   Undo2,
   Inbox,
   CheckCircle2,
+  Ban,
+  ChevronRight,
 } from "lucide-react";
 import { useTranslations } from "@/i18n";
 import { useDeckStack } from "@/hooks/useDeckStack";
@@ -28,9 +30,25 @@ const SWIPE_DISTANCE_X = 100;
 const SWIPE_DISTANCE_Y = 80;
 const SWIPE_VELOCITY = 0.5;
 
+// Threshold for button highlight during drag
+const HIGHLIGHT_THRESHOLD = 30;
+
+// localStorage key for auto-approve preference
+const AUTO_APPROVE_KEY = "jobsync_deck_auto_approve";
+
+function getAutoApproveDefault(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(AUTO_APPROVE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckViewProps) {
   const { t } = useTranslations();
   const [showSwipeHint, setShowSwipeHint] = useState(true);
+  const [autoApprove, setAutoApprove] = useState(getAutoApproveDefault);
   const {
     currentIndex,
     currentVacancy,
@@ -45,6 +63,8 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
     dismiss,
     promote,
     superLike,
+    block,
+    skip,
     undo,
     containerRef,
   } = useDeckStack({ vacancies, onAction, onUndo });
@@ -53,6 +73,15 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
   const [dragDelta, setDragDelta] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  // Persist auto-approve to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(AUTO_APPROVE_KEY, String(autoApprove));
+    } catch {
+      // localStorage may be unavailable
+    }
+  }, [autoApprove]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (isAnimating || !currentVacancy) return;
@@ -85,18 +114,28 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
     } else if (dragDelta.y < -SWIPE_DISTANCE_Y || velocityY < -SWIPE_VELOCITY) {
       setShowSwipeHint(false);
       superLike();
+    } else if (dragDelta.y > SWIPE_DISTANCE_Y || velocityY > SWIPE_VELOCITY) {
+      setShowSwipeHint(false);
+      block();
     }
     // else: spring back (reset delta)
 
     dragStart.current = null;
     setIsDragging(false);
     setDragDelta({ x: 0, y: 0 });
-  }, [isDragging, dragDelta, promote, dismiss, superLike]);
+  }, [isDragging, dragDelta, promote, dismiss, superLike, block]);
 
   // Calculate overlay opacities during drag
   const rightOverlay = Math.min(1, Math.max(0, dragDelta.x / SWIPE_DISTANCE_X));
   const leftOverlay = Math.min(1, Math.max(0, -dragDelta.x / SWIPE_DISTANCE_X));
   const upOverlay = Math.min(1, Math.max(0, -dragDelta.y / SWIPE_DISTANCE_Y));
+  const downOverlay = Math.min(1, Math.max(0, dragDelta.y / SWIPE_DISTANCE_Y));
+
+  // Button highlight states based on drag direction
+  const highlightPromote = isDragging && dragDelta.x > HIGHLIGHT_THRESHOLD;
+  const highlightDismiss = isDragging && dragDelta.x < -HIGHLIGHT_THRESHOLD;
+  const highlightSuperLike = isDragging && dragDelta.y < -HIGHLIGHT_THRESHOLD;
+  const highlightBlock = isDragging && dragDelta.y > HIGHLIGHT_THRESHOLD;
 
   // Empty state
   if (totalCount === 0) {
@@ -120,7 +159,7 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
         <h3 className="text-lg font-medium mt-4">{t("deck.sessionCompleteTitle")}</h3>
         <p className="text-sm text-muted-foreground mt-2">
           {t("deck.sessionCompleteDescription")
-            .replace("{count}", String(stats.promoted + stats.dismissed + stats.superLiked))
+            .replace("{count}", String(stats.promoted + stats.dismissed + stats.superLiked + stats.blocked + stats.skipped))
             .replace("{promoted}", String(stats.promoted + stats.superLiked))
             .replace("{dismissed}", String(stats.dismissed))}
         </p>
@@ -150,7 +189,7 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
 
       {/* Card stack */}
       <div
-        className="relative w-full max-w-lg mx-auto"
+        className="relative w-full max-w-lg md:max-w-xl lg:max-w-2xl mx-auto"
         style={{ minHeight: "320px" }}
       >
         {/* Third card (background preview) */}
@@ -189,27 +228,32 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
             <DeckCard vacancy={currentVacancy} exitDirection={exitDirection} />
 
             {/* Swipe overlays */}
-            {isDragging && (rightOverlay > 0 || leftOverlay > 0 || upOverlay > 0) && (
+            {isDragging && (rightOverlay > 0 || leftOverlay > 0 || upOverlay > 0 || downOverlay > 0) && (
               <div
                 className={`absolute inset-0 rounded-xl flex items-center justify-center pointer-events-none ${
-                  rightOverlay > leftOverlay && rightOverlay > upOverlay
+                  rightOverlay > leftOverlay && rightOverlay > upOverlay && rightOverlay > downOverlay
                     ? "bg-emerald-500/15 dark:bg-emerald-400/10"
-                    : leftOverlay > upOverlay
+                    : leftOverlay > upOverlay && leftOverlay > downOverlay
                       ? "bg-red-500/15 dark:bg-red-400/10"
-                      : "bg-blue-500/15 dark:bg-blue-400/10"
+                      : downOverlay > upOverlay
+                        ? "bg-red-500/15 dark:bg-red-400/10"
+                        : "bg-blue-500/15 dark:bg-blue-400/10"
                 }`}
                 style={{
-                  opacity: Math.max(rightOverlay, leftOverlay, upOverlay),
+                  opacity: Math.max(rightOverlay, leftOverlay, upOverlay, downOverlay),
                 }}
               >
-                {rightOverlay > leftOverlay && rightOverlay > upOverlay && (
+                {rightOverlay > leftOverlay && rightOverlay > upOverlay && rightOverlay > downOverlay && (
                   <Check className="h-16 w-16 text-emerald-600 dark:text-emerald-400 opacity-80" />
                 )}
-                {leftOverlay > rightOverlay && leftOverlay > upOverlay && (
+                {leftOverlay > rightOverlay && leftOverlay > upOverlay && leftOverlay > downOverlay && (
                   <X className="h-16 w-16 text-red-600 dark:text-red-400 opacity-80" />
                 )}
-                {upOverlay > rightOverlay && upOverlay > leftOverlay && (
+                {upOverlay > rightOverlay && upOverlay > leftOverlay && upOverlay > downOverlay && (
                   <Star className="h-16 w-16 text-blue-600 dark:text-blue-400 opacity-80" />
+                )}
+                {downOverlay > rightOverlay && downOverlay > leftOverlay && downOverlay > upOverlay && (
+                  <Ban className="h-16 w-16 text-red-600 dark:text-red-400 opacity-80" />
                 )}
               </div>
             )}
@@ -218,10 +262,13 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
       </div>
 
       {/* Action buttons */}
-      <div className="flex items-center justify-center gap-6 sm:gap-8 mt-6">
+      <div className="flex items-center justify-center gap-4 sm:gap-6 mt-6">
+        {/* Dismiss */}
         <button
           type="button"
-          className="h-14 w-14 rounded-full bg-red-100 text-red-600 hover:bg-red-200 active:bg-red-300 active:scale-90 dark:bg-red-950/50 dark:text-red-400 dark:hover:bg-red-950/70 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
+          className={`h-14 w-14 rounded-full bg-red-100 text-red-600 hover:bg-red-200 active:bg-red-300 active:scale-90 dark:bg-red-950/50 dark:text-red-400 dark:hover:bg-red-950/70 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ${
+            highlightDismiss ? "ring-2 ring-red-500 scale-110" : ""
+          }`}
           onClick={() => { setShowSwipeHint(false); dismiss(); }}
           disabled={isAnimating || !currentVacancy}
           aria-label={t("deck.dismissTooltip")}
@@ -230,9 +277,26 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
           <X className="h-6 w-6" />
         </button>
 
+        {/* Block company */}
         <button
           type="button"
-          className="h-12 w-12 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 active:bg-blue-300 active:scale-90 dark:bg-blue-950/50 dark:text-blue-400 dark:hover:bg-blue-950/70 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
+          className={`h-10 w-10 rounded-full bg-red-100/60 text-red-500 hover:bg-red-200 active:bg-red-300 active:scale-90 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ${
+            highlightBlock ? "ring-2 ring-red-500 scale-110" : ""
+          }`}
+          onClick={() => { setShowSwipeHint(false); block(); }}
+          disabled={isAnimating || !currentVacancy}
+          aria-label={t("deck.blockTooltip")}
+          title={t("deck.blockTooltip")}
+        >
+          <Ban className="h-4 w-4" />
+        </button>
+
+        {/* Super-Like */}
+        <button
+          type="button"
+          className={`h-12 w-12 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 active:bg-blue-300 active:scale-90 dark:bg-blue-950/50 dark:text-blue-400 dark:hover:bg-blue-950/70 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ${
+            highlightSuperLike ? "ring-2 ring-blue-500 scale-110" : ""
+          }`}
           onClick={() => { setShowSwipeHint(false); superLike(); }}
           disabled={isAnimating || !currentVacancy}
           aria-label={t("deck.superLikeTooltip")}
@@ -241,15 +305,30 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
           <Star className="h-5 w-5" />
         </button>
 
+        {/* Promote */}
         <button
           type="button"
-          className="h-16 w-16 rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 active:bg-emerald-300 active:scale-90 dark:bg-emerald-950/50 dark:text-emerald-400 dark:hover:bg-emerald-950/70 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
+          className={`h-16 w-16 rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 active:bg-emerald-300 active:scale-90 dark:bg-emerald-950/50 dark:text-emerald-400 dark:hover:bg-emerald-950/70 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ${
+            highlightPromote ? "ring-2 ring-emerald-500 scale-110" : ""
+          }`}
           onClick={() => { setShowSwipeHint(false); promote(); }}
           disabled={isAnimating || !currentVacancy}
           aria-label={t("deck.promoteTooltip")}
           title={t("deck.promoteTooltip")}
         >
           <Check className="h-7 w-7" />
+        </button>
+
+        {/* Skip */}
+        <button
+          type="button"
+          className="h-10 w-10 rounded-full bg-muted text-muted-foreground hover:bg-accent active:scale-90 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
+          onClick={() => { setShowSwipeHint(false); skip(); }}
+          disabled={isAnimating || !currentVacancy}
+          aria-label={t("deck.skipTooltip")}
+          title={t("deck.skipTooltip")}
+        >
+          <ChevronRight className="h-5 w-5" />
         </button>
 
         {canUndo && (
@@ -266,6 +345,17 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
         )}
       </div>
 
+      {/* Auto-approve toggle */}
+      <label className="flex items-center gap-2 mt-4 text-sm text-muted-foreground cursor-pointer select-none">
+        <input
+          type="checkbox"
+          className="h-4 w-4 rounded border-input accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          checked={autoApprove}
+          onChange={(e) => setAutoApprove(e.target.checked)}
+        />
+        {t("deck.autoApprove")}
+      </label>
+
       {/* Swipe hint (mobile only, first card only) */}
       {showSwipeHint && currentIndex === 0 && (
         <p className="mt-3 text-center text-xs text-muted-foreground animate-pulse motion-reduce:animate-none sm:hidden">
@@ -275,7 +365,7 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
 
       {/* Keyboard hints (hidden on mobile) */}
       <div
-        className="hidden sm:flex items-center justify-center gap-4 mt-4 text-xs text-muted-foreground"
+        className="hidden sm:flex items-center justify-center gap-4 mt-4 text-xs text-muted-foreground flex-wrap"
         aria-hidden="true"
       >
         <span className="inline-flex items-center gap-1.5">
@@ -295,6 +385,18 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
             S
           </kbd>
           {t("deck.superLike")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded border border-border bg-muted px-1 text-[10px] font-medium font-mono">
+            B
+          </kbd>
+          {t("deck.block")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded border border-border bg-muted px-1 text-[10px] font-medium font-mono">
+            N
+          </kbd>
+          {t("deck.skip")}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded border border-border bg-muted px-1 text-[10px] font-medium font-mono">

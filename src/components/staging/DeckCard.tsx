@@ -81,7 +81,9 @@ export function DeckCard({
       ? "animate-deck-exit-left"
       : exitDirection === "right"
         ? "animate-deck-exit-right"
-        : "animate-deck-exit-up"
+        : exitDirection === "down"
+          ? "animate-deck-exit-down"
+          : "animate-deck-exit-up"
     : "";
 
   const previewClass = isPreview
@@ -93,7 +95,7 @@ export function DeckCard({
   return (
     <div
       className={`
-        w-full max-w-lg mx-auto rounded-xl shadow-lg dark:shadow-lg dark:shadow-black/20
+        w-full max-w-lg md:max-w-xl lg:max-w-2xl mx-auto rounded-xl shadow-lg dark:shadow-lg dark:shadow-black/20
         bg-card text-card-foreground border border-border overflow-hidden
         motion-reduce:!animate-none motion-reduce:!transition-none
         ${animationClass} ${previewClass}

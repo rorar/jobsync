@@ -185,7 +185,7 @@ function StagingContainer() {
     setPromotionOpen(true);
   };
 
-  const handleBlockCompany = async (companyName: string) => {
+  const handleBlockCompany = useCallback(async (companyName: string) => {
     const result = await addBlacklistEntry(companyName, "contains");
     if (result.success) {
       toast({ title: t("blacklist.blocked") });
@@ -195,7 +195,10 @@ function StagingContainer() {
         variant: "destructive",
       });
     }
-  };
+  }, [t]);
+
+  // Ref to resolve the promotion dialog promise from outside
+  const promotionResolveRef = useRef<((result: { success: boolean }) => void) | null>(null);
 
   // Deck mode action handler — maps DeckAction to existing server actions
   // Returns { success } so useDeckStack can roll back the card on failure
@@ -210,15 +213,52 @@ function StagingContainer() {
         }
         return { success };
       } else if (action === "promote" || action === "superlike") {
-        // Open the promotion dialog for both promote and super-like
-        setPromotionVacancy(vacancy);
-        setPromotionOpen(true);
-        // Promotion dialog handles its own success/failure — always succeed from deck perspective
+        // Check auto-approve preference
+        const autoApprove = (() => {
+          try { return localStorage.getItem("jobsync_deck_auto_approve") === "true"; }
+          catch { return false; }
+        })();
+
+        if (autoApprove) {
+          // Skip dialog — promote immediately with defaults
+          const { promoteStagedVacancyToJob } = await import("@/actions/stagedVacancy.actions");
+          const { success, message } = await promoteStagedVacancyToJob({
+            stagedVacancyId: vacancy.id,
+          });
+          if (success) {
+            toast({ variant: "success", description: t("staging.promoted") });
+            reload();
+          } else {
+            toast({ variant: "destructive", title: t("staging.error"), description: message });
+          }
+          return { success };
+        }
+
+        // Open the promotion dialog and wait for result
+        return new Promise<{ success: boolean }>((resolve) => {
+          promotionResolveRef.current = resolve;
+          setPromotionVacancy(vacancy);
+          setPromotionOpen(true);
+        });
+      } else if (action === "block") {
+        // Block company + dismiss vacancy
+        if (vacancy.employerName) {
+          await handleBlockCompany(vacancy.employerName);
+        }
+        const { success, message } = await dismissStagedVacancy(vacancy.id);
+        if (success) {
+          toast({ variant: "success", description: t("deck.actionBlocked") });
+        } else {
+          toast({ variant: "destructive", title: t("staging.error"), description: message });
+        }
+        return { success };
+      } else if (action === "skip") {
+        // Skip does not call any server action — handled by useDeckStack
         return { success: true };
       }
       return { success: true };
     },
-    [t],
+    [t, reload, handleBlockCompany],
   );
 
   const handleDeckUndo = useCallback(
@@ -392,9 +432,30 @@ function StagingContainer() {
       </Card>
       <PromotionDialog
         open={promotionOpen}
-        onOpenChange={setPromotionOpen}
+        onOpenChange={(open) => {
+          setPromotionOpen(open);
+          // If dialog is closing and we still have a pending promise,
+          // it means it was NOT resolved via onSuccess — treat as cancel.
+          // Use queueMicrotask to let onSuccess fire first if both are called
+          // in the same synchronous block (PromotionDialog calls onOpenChange then onSuccess).
+          if (!open) {
+            queueMicrotask(() => {
+              if (promotionResolveRef.current) {
+                promotionResolveRef.current({ success: false });
+                promotionResolveRef.current = null;
+              }
+            });
+          }
+        }}
         vacancy={promotionVacancy}
-        onSuccess={reload}
+        onSuccess={() => {
+          // Resolve the promise as success — called synchronously after onOpenChange(false)
+          if (promotionResolveRef.current) {
+            promotionResolveRef.current({ success: true });
+            promotionResolveRef.current = null;
+          }
+          reload();
+        }}
       />
     </>
   );

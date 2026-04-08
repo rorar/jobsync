@@ -91,6 +91,9 @@ const config = {
   			'deck-exit-up': {
   				to: { transform: 'translateY(-150%) scale(0.8)', opacity: '0' }
   			},
+  			'deck-exit-down': {
+  				to: { transform: 'translateY(150%) scale(0.8)', opacity: '0' }
+  			},
   			'deck-enter': {
   				from: { transform: 'scale(0.95) translateY(8px)', opacity: '0.5' },
   				to: { transform: 'scale(1) translateY(0)', opacity: '1' }
@@ -102,6 +105,7 @@ const config = {
   			'deck-exit-right': 'deck-exit-right 300ms cubic-bezier(0.4, 0, 0.2, 1) forwards',
   			'deck-exit-left': 'deck-exit-left 300ms cubic-bezier(0.4, 0, 0.2, 1) forwards',
   			'deck-exit-up': 'deck-exit-up 300ms cubic-bezier(0.4, 0, 0.2, 1) forwards',
+  			'deck-exit-down': 'deck-exit-down 300ms cubic-bezier(0.4, 0, 0.2, 1) forwards',
   			'deck-enter': 'deck-enter 250ms cubic-bezier(0, 0, 0.2, 1) forwards'
   		}
   	}

@@ -129,6 +129,8 @@ describe("useDeckStack", () => {
       promoted: 1,
       dismissed: 1,
       superLiked: 1,
+      blocked: 0,
+      skipped: 0,
     });
   });
 
@@ -236,7 +238,7 @@ describe("useDeckStack", () => {
     expect(result.current.isAnimating).toBe(false);
 
     // Stats should NOT have changed
-    expect(result.current.stats).toEqual({ promoted: 0, dismissed: 0, superLiked: 0 });
+    expect(result.current.stats).toEqual({ promoted: 0, dismissed: 0, superLiked: 0, blocked: 0, skipped: 0 });
 
     // Undo stack should be empty (action failed, nothing to undo)
     expect(result.current.canUndo).toBe(false);
