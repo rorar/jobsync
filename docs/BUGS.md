@@ -1,8 +1,73 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-08
 
-**Total: 350 bugs found, 348 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
+**Total: 395 bugs found, 393 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing)
+
+## Bugfix Session (2026-04-08)
+
+### Fixed — Test Failures (5 suites, 23 tests)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| BF-T1 | **HIGH** | notification-dispatcher: missing `prisma.automation.findFirst` mock | Added mock |
+| BF-T2 | **HIGH** | CreateResume/AddJob/ProfileContainer: missing `useRouter` mock | Added next/navigation mock |
+| BF-T3 | MEDIUM | CreateResume: ambiguous "Save" button match (2 buttons) | `getAllByRole` instead of `getByRole` |
+
+### Fixed — i18n (4 findings)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| BF-I1 | MEDIUM | staging.promote DE: "befoerdern" (missing umlaut) | Fixed to "befördern" |
+| BF-I2 | MEDIUM | 4 missing settings.notificationType keys for Settings UI | Added in all 4 locales |
+| BF-I3 | LOW | NotificationItem "Dismiss" aria-label hardcoded English | i18n key `notifications.dismiss` |
+| BF-I4 | LOW | Unused `Trash2` import in NotificationItem | Removed |
+
+### Fixed — Notifications (3 findings)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| BF-N1 | **HIGH** | `NotificationDraft.data` not persisted to DB (jobId lost) | `data Json?` field + migration |
+| BF-N2 | MEDIUM | vacancy_promoted notification has no link to created job | `getNotificationLink()` + `notifications.viewJob` i18n |
+| BF-N3 | MEDIUM | "Mark all as read" button text always visible | Icon-only with aria-label/title |
+
+### Fixed — API Key ENV Sync (1 finding)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| BF-E1 | MEDIUM | .env API keys invisible in Settings UI | `getEnvApiKeyStatus()` + blue ENV badge |
+
+### Fixed — DeckView UX (7 features)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| BF-D1 | **HIGH** | No block company action in deck | Swipe-down + Ban button + confirmation dialog |
+| BF-D2 | MEDIUM | No skip/next action in deck | Skip button + N key |
+| BF-D3 | MEDIUM | No auto-approve option | Checkbox with localStorage + hint text |
+| BF-D4 | MEDIUM | No button highlight on swipe | Conditional ring-2 + scale-110 |
+| BF-D5 | MEDIUM | Card too narrow on desktop | Responsive max-w-lg md:max-w-xl lg:max-w-2xl |
+| BF-D6 | LOW | Cancel promotion doesn't return card to deck | Promise-ref pattern |
+| BF-D7 | LOW | Keyboard shortcuts missing for new actions | B/ArrowDown = block, N = skip |
+
+### Fixed — VERIFY Findings (20 findings from design review + silent failure hunter)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| BF-V1 | **CRITICAL** | Block company no confirmation dialog | AlertDialog with company name + consequences |
+| BF-V2 | **CRITICAL** | Promise-ref leak on unmount → permanent UI freeze | useEffect cleanup |
+| BF-V3 | **CRITICAL** | Silent JSON parse catch in NotificationItem | console.warn logging |
+| BF-V4 | **HIGH** | getEnvApiKeyStatus reuses wrong error key | Distinct error key |
+| BF-V5 | **HIGH** | ApiKeySettings silently ignores server action failures | Error logging + catch handlers |
+| BF-V6 | **HIGH** | Block silently skips when employerName missing | Guard + error toast |
+| BF-V7 | **HIGH** | useDeckStack .catch() swallows all errors | console.error logging |
+| BF-V8 | **HIGH** | useDeckStack undo .catch() suppresses errors | console.error logging |
+| BF-V9 | MEDIUM | NotificationDropdown no feedback on action failures | Error toasts added |
+| BF-V10 | MEDIUM | localStorage catches don't log | console.warn added |
+| BF-V11 | MEDIUM | PromotionDialog missing catch block | catch + error toast |
+| BF-V12 | MEDIUM | Auto-approve localStorage read no logging | console.warn added |
+| BF-V13 | MEDIUM | Action buttons without visual grouping | Dividers between groups |
+| BF-V14 | MEDIUM | Auto-approve no explanation | Hint text via i18n |
+| BF-V15 | MEDIUM | Notification job link too subtle | Own line, text-primary |
+| BF-V16 | MEDIUM | Skip/undo buttons visually identical | Undo: dashed border |
+
+### Infrastructure
+| ID | Finding | Fix |
+|----|---------|-----|
+| BF-INF1 | `.tracks/` directories (2.8GB) causing Jest duplicate mock warnings | Removed |
 
 ## Manifest v2 Self-Contained Modules (2026-04-08)
 
