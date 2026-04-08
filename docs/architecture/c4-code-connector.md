@@ -785,18 +785,13 @@
 
 ### Connector Registration
 
-**`connectors.ts`** — Global connector initialization
+**`register-all.ts`** — Central module registration entry point
 
-- **Description**: Registers all available connectors in the global registry.
-- **Location**: `src/lib/connector/job-discovery/connectors.ts:1-11`
-- **Code**:
-  ```typescript
-  connectorRegistry.register("jsearch", createJSearchConnector);
-  connectorRegistry.register("eures", createEuresConnector);
-  connectorRegistry.register("arbeitsagentur", createArbeitsagenturConnector);
-  ```
-- **Side Effects**: Called during app initialization; populates connectorRegistry
-- **Export**: `connectorRegistry` (singleton)
+- **Description**: Triggers self-registration of all modules by importing each module's index.ts.
+- **Location**: `src/lib/connector/register-all.ts`
+- **Pattern**: Each module calls `moduleRegistry.register(manifest, factory)` at the bottom of its own `index.ts`; `register-all.ts` imports each module to trigger that side effect.
+- **Side Effects**: Called during app initialization; populates moduleRegistry with all modules
+- **Export**: none (import for side effects only)
 
 ---
 
@@ -1311,7 +1306,7 @@ New job discovery modules should follow the same pattern:
 1. Create `src/lib/connector/job-discovery/modules/{name}/index.ts` implementing `DataSourceConnector`
 2. Create `src/lib/connector/job-discovery/modules/{name}/types.ts` for API-specific types
 3. Create `src/lib/connector/job-discovery/modules/{name}/resilience.ts` for fault tolerance (if external API)
-4. Register in `src/lib/connector/job-discovery/connectors.ts` via `connectorRegistry.register()`
+4. Self-registers in its own `index.ts` (bottom of file) via `moduleRegistry.register(manifest, factory)`; add one import line in `src/lib/connector/register-all.ts` to trigger it
 
 ---
 

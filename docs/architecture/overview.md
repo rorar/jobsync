@@ -169,7 +169,7 @@ Module Implementations  (modules/eures/, modules/arbeitsagentur/, ...)
 
 This is an Anti-Corruption Layer (ACL) in DDD terminology. The connector boundary acts as a translation surface so that EURES-specific concepts (`jvProfile`, `locationCode`) never leak into the app layer. The app always receives `DiscoveredVacancy` regardless of which module performed the search.
 
-**Why this matters for maintenance:** Adding a new job board requires only three files — `manifest.ts`, `index.ts` (implementing `DataSourceConnector`), and one `register()` call in `connectors.ts`. No existing application code changes. No hardcoded arrays to update.
+**Why this matters for maintenance:** Adding a new job board requires only three files — `manifest.ts`, `index.ts` (implementing `DataSourceConnector`, self-registering at the bottom), and one import line in `register-all.ts`. No existing application code changes. No hardcoded arrays to update.
 
 ### 3.2 Module Lifecycle Manager
 
@@ -301,6 +301,7 @@ The connector boundary lives in `src/lib/connector/` and is the architectural he
 src/lib/connector/
   manifest.ts            — Type definitions: ModuleManifest, RegisteredModule, enums
   registry.ts            — Unified ModuleRegistry (singleton)
+  register-all.ts        — Central entry point: imports each module's index.ts to trigger self-registration
   credential-resolver.ts — PUSH credential resolution (DB → Env → Default)
   resilience.ts          — buildResiliencePolicy() from manifest config
   health-monitor.ts      — checkModuleHealth() + checkAllModuleHealth()
@@ -316,7 +317,6 @@ src/lib/connector/
     runner.ts            — runAutomation() — orchestrates search, dedup, AI match, save
     mapper.ts            — mapDiscoveredVacancyToJobRecord()
     schedule.ts          — calculateNextRunAt()
-    connectors.ts        — registration barrel (registers all job discovery modules)
     modules/
       eures/             — EURES module (manifest.ts + index.ts)
       arbeitsagentur/    — Arbeitsagentur module
@@ -327,7 +327,6 @@ src/lib/connector/
     registry.ts          — AIProviderRegistry facade
     index.ts             — getModel() — resolves LanguageModel from module ID
     modules/
-      connectors.ts      — registration barrel (registers all AI modules)
       ollama/            — Ollama module (manifest.ts + index.ts)
       openai/            — OpenAI module
       deepseek/          — DeepSeek module
@@ -337,7 +336,7 @@ src/lib/connector/
 
 - The `moduleRegistry` singleton is the only authoritative source of module state at runtime.
 - Both `ConnectorRegistry` and `AIProviderRegistry` are facades; they exist only to preserve existing import paths.
-- Registration barrels (`connectors.ts`) are intentionally separate per connector type to maintain the `server-only` boundary.
+- `register-all.ts` is the single central entry point for module registration; each module self-registers in its own `index.ts` and `register-all.ts` triggers those registrations via import.
 - The `Function` type is not used in the registry. Factories use `(...args: never[]) => unknown` to satisfy TypeScript parameter contravariance while remaining callable at runtime.
 
 ### 4.4 Module Implementations
@@ -485,13 +484,13 @@ sequenceDiagram
 
 ### 6.1 Registration
 
-Modules register at application startup, not at request time. Each connector type has a `connectors.ts` barrel file that calls `moduleRegistry.register(manifest, factory)` for each module it owns:
+Modules register at application startup, not at request time. Each module self-registers at the bottom of its own `index.ts`, and `register-all.ts` triggers those registrations by importing each module:
 
-```
-// Example: src/lib/connector/job-discovery/connectors.ts
-import "../registry";           // ensure registry singleton exists
-import "./modules/eures/manifest";
-moduleRegistry.register(euresManifest, (credential?: string) => new EuresConnector(credential));
+```typescript
+// Example: src/lib/connector/job-discovery/modules/eures/index.ts
+// Self-registration at bottom of file:
+moduleRegistry.register(euresManifest, createEuresConnector);
+// Triggered by: src/lib/connector/register-all.ts importing each module
 ```
 
 Registration is idempotent — re-registering the same module ID is a no-op, making it safe for Next.js Hot Module Replacement. On registration, the `RegisteredModule` entity is initialized with `status = ACTIVE`, `healthStatus = UNKNOWN`, `circuitBreakerState = CLOSED`, `consecutiveFailures = 0`.

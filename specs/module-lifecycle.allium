@@ -721,7 +721,7 @@ invariant SettingsFromManifest {
   ensures: Settings UI for any module is derived from its ModuleManifest
   note: "No hardcoded module lists in UI components"
   -- known_violation resolved: ApiKeySettings.tsx now queries registry via getCredentialModules()
-  -- residual: DESCRIPTION_KEYS static map remains (i18n keys not yet in manifest)
+  -- resolved: DESCRIPTION_KEYS replaced by manifest.i18n credentialHint (ADR-028, 2026-04-08)
 }
 
 -- =============================================================================

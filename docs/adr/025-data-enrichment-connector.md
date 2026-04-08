@@ -133,3 +133,7 @@ The chain configuration is declarative (`DEFAULT_CHAINS` in `orchestrator.ts`). 
 - `src/components/settings/EnrichmentModuleSettings.tsx` -- Module activation toggles
 - `prisma/schema.prisma` -- EnrichmentResult + EnrichmentLog models
 - `specs/data-enrichment.allium` -- Allium specification (821 lines)
+
+## Amendment (2026-04-08)
+
+References to `connectors.ts` barrel registration are superseded by ADR-028 (Self-Contained Modules). Modules now self-register in their own `index.ts`, imported by `register-all.ts`. The enrichment chain config and orchestrator patterns are unchanged.

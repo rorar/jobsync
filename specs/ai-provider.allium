@@ -153,7 +153,7 @@ rule RegisterAIModules {
     ensures: moduleRegistry.register(openaiManifest, createOpenAIConnector)
     ensures: moduleRegistry.register(deepseekManifest, createDeepSeekConnector)
 
-    -- Registration happens at import time via the connectors.ts barrel file.
+    -- Registration happens at import time via self-registration in each module's index.ts (triggered by register-all.ts).
     -- The unified ModuleRegistry manages both Job Discovery and AI Provider modules.
     -- AIProviderRegistry is a thin facade over ModuleRegistry filtered by ConnectorType.
 }

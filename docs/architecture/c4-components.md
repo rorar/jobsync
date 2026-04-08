@@ -277,7 +277,7 @@ The facade registry (`ConnectorRegistry`) delegates to the Shared Kernel `Module
 - `src/lib/connector/job-discovery/schedule.ts` — `calculateNextRunAt()`, `ScheduleFrequency`
 - `src/lib/connector/job-discovery/utils.ts` — `normalizeJobUrl()`
 - `src/lib/connector/job-discovery/registry.ts` — `ConnectorRegistry` facade
-- `src/lib/connector/job-discovery/connectors.ts` — Module registration barrel (triggers all three module registrations)
+- `src/lib/connector/register-all.ts` — Central module registration entry point (imports each module's index.ts to trigger self-registration)
 - `src/lib/connector/job-discovery/index.ts` — Public barrel export
 - `src/lib/connector/job-discovery/modules/eures/index.ts` — EURES `DataSourceConnector` implementation
 - `src/lib/connector/job-discovery/modules/eures/manifest.ts` — EURES `JobDiscoveryManifest`
@@ -372,7 +372,7 @@ The facade registry (`AIProviderRegistry`) delegates to the Shared Kernel `Modul
 - `src/lib/connector/ai-provider/config.ts` — AI provider configuration constants
 - `src/lib/connector/ai-provider/rate-limiter.ts` — `checkRateLimit()` per-user AI rate limiter
 - `src/lib/connector/ai-provider/index.ts` — Public barrel export
-- `src/lib/connector/ai-provider/modules/connectors.ts` — Module registration barrel
+- `src/lib/connector/register-all.ts` — Central module registration entry point (shared; already listed above)
 - `src/lib/connector/ai-provider/modules/ollama/index.ts` — Ollama `AIProviderConnector`
 - `src/lib/connector/ai-provider/modules/ollama/manifest.ts` — Ollama `AiManifest`
 - `src/lib/connector/ai-provider/modules/openai/index.ts` — OpenAI `AIProviderConnector`

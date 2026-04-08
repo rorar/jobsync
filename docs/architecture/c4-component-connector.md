@@ -29,7 +29,7 @@ The Connector Architecture container is composed of six logical components.
 
 ### 1. Connector Shared Layer
 
-**Files**: `src/lib/connector/job-discovery/types.ts`, `src/lib/connector/job-discovery/registry.ts`, `src/lib/connector/job-discovery/connectors.ts`, `src/lib/connector/job-discovery/index.ts`
+**Files**: `src/lib/connector/job-discovery/types.ts`, `src/lib/connector/job-discovery/registry.ts`, `src/lib/connector/register-all.ts`, `src/lib/connector/job-discovery/index.ts`
 
 **Purpose**: Defines the shared domain language and the plugin registry that binds the App layer to the module implementations. This is the ACL kernel — everything else depends on it but it depends on nothing module-specific.
 
@@ -462,6 +462,6 @@ Each module owns its own resilience policy instance (circuit breaker, bulkhead).
 
 - **Roadmap 0.1 complete**: Connector unification done. Job discovery modules at `src/lib/connector/job-discovery/modules/`, AI provider modules at `src/lib/connector/ai-provider/modules/`. See ADR-010.
 - **Connector marketplace**: Settings UI to activate/deactivate individual connectors and modules; pauses dependent automations on deactivation (documented in CLAUDE.md).
-- **New job discovery modules**: Implement by creating `src/lib/connector/job-discovery/modules/{name}/index.ts` (implements `DataSourceConnector`) and registering in `connectors.ts`. No changes to Runner, Mapper, Scheduler, or Manual Run API are needed.
+- **New job discovery modules**: Implement by creating `src/lib/connector/job-discovery/modules/{name}/index.ts` (implements `DataSourceConnector`; self-registers in its own `index.ts`, imported by `register-all.ts`). No changes to Runner, Mapper, Scheduler, or Manual Run API are needed.
 - **New AI provider modules**: Implement by creating `src/lib/connector/ai-provider/modules/{name}/` implementing `AIProviderConnector`.
 - **Domain Events** (Roadmap Section 5): `JobDiscovered` events should be emitted from the Runner on successful job persistence, enabling future CRM and notification integrations without coupling to the Runner directly.
