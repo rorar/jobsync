@@ -145,6 +145,18 @@ export interface DependencyHealthCheck {
 }
 
 // =============================================================================
+// Module i18n (Self-Contained Module Pattern)
+// =============================================================================
+
+export interface ModuleI18nEntry {
+  name: string;
+  description: string;
+}
+
+/** Per-locale translations for module display in UI. Keyed by locale code. */
+export type ModuleI18n = Record<string, ModuleI18nEntry>;
+
+// =============================================================================
 // Contracts (Published Language)
 // =============================================================================
 
@@ -161,6 +173,8 @@ export interface ModuleManifest {
   cachePolicy?: CachePolicy;
   /** External services this module depends on. Health-checked alongside the module. */
   dependencies?: DependencyHealthCheck[];
+  /** Per-locale display name and description. UI reads this instead of global i18n dictionaries. */
+  i18n?: ModuleI18n;
 }
 
 export interface JobDiscoveryManifest extends ModuleManifest {

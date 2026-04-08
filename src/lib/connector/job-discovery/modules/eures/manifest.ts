@@ -1,4 +1,5 @@
 import { ConnectorType, CredentialType, type JobDiscoveryManifest, type DependencyHealthCheck } from "@/lib/connector/manifest";
+import { euresI18n } from "./i18n";
 import { CACHE_POLICY_SEARCH } from "@/lib/connector/cache";
 
 export const euresManifest: JobDiscoveryManifest = {
@@ -112,4 +113,5 @@ export const euresManifest: JobDiscoveryManifest = {
       defaultValue: "MOST_RECENT", options: ["BEST_MATCH", "MOST_RECENT"],
     },
   ],
+  i18n: euresI18n,
 };

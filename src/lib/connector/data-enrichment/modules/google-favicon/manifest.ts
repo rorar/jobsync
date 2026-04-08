@@ -9,6 +9,7 @@
 
 import { ConnectorType, CredentialType } from "@/lib/connector/manifest";
 import type { DataEnrichmentManifest } from "@/lib/connector/manifest";
+import { googleFaviconI18n } from "./i18n";
 
 export const googleFaviconManifest: DataEnrichmentManifest = {
   id: "google_favicon",
@@ -35,4 +36,5 @@ export const googleFaviconManifest: DataEnrichmentManifest = {
     circuitBreakerCooldownMs: 30000,
     timeoutMs: 5000,
   },
+  i18n: googleFaviconI18n,
 };

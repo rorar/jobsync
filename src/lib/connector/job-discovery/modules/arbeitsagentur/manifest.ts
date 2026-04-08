@@ -1,5 +1,6 @@
 import { ConnectorType, CredentialType, type JobDiscoveryManifest } from "@/lib/connector/manifest";
 import { CACHE_POLICY_SEARCH } from "@/lib/connector/cache";
+import { arbeitsagenturI18n } from "./i18n";
 
 export const arbeitsagenturManifest: JobDiscoveryManifest = {
   id: "arbeitsagentur",
@@ -36,4 +37,5 @@ export const arbeitsagenturManifest: JobDiscoveryManifest = {
     { key: "arbeitszeit", type: "select", label: "automations.params.arbeitszeit", options: ["vz", "tz", "snw", "mj", "ho"] },
     { key: "befristung", type: "select", label: "automations.params.befristung", options: [1, 2] },
   ],
+  i18n: arbeitsagenturI18n,
 };

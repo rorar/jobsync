@@ -80,6 +80,11 @@ contract ModuleManifest {
   dependencies: DependencyHealthCheck[]?  -- external services this module depends on
                                           -- declared dependencies are health-checked alongside the module
                                           -- and exposed in the Module Health Overview surface
+
+  -- i18n
+  i18n: ModuleI18n?                     -- per-locale translations for UI display
+                                        -- keyed by locale code (e.g. "en", "de", "fr", "es")
+                                        -- UI reads manifest.i18n[locale].name instead of global i18n dictionaries
 }
 
 -- Connector-specific extensions of the base contract.
@@ -172,6 +177,12 @@ value DependencyHealthCheck {
   required: Boolean = false             -- true = hard dependency (module cannot function without it)
                                         -- false = soft dependency (module degrades gracefully)
   usedFor: String                       -- human-readable purpose (e.g. "Occupation search in Automation Wizard")
+}
+
+value ModuleI18n {
+  -- Map of locale code to display strings
+  -- Each entry: { name: String, description: String }
+  -- Example: { en: { name: "EURES", description: "EU job search" }, de: { name: "EURES", description: "EU-Stellensuche" } }
 }
 
 value ConnectorParamField {

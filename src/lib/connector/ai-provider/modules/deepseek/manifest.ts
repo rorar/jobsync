@@ -1,4 +1,5 @@
 import { ConnectorType, CredentialType, type AiManifest } from "@/lib/connector/manifest";
+import { deepseekI18n } from "./i18n";
 
 export const deepseekManifest: AiManifest = {
   id: "deepseek",
@@ -22,4 +23,5 @@ export const deepseekManifest: AiManifest = {
     defaultModel: "deepseek-chat",
     listEndpoint: "/models",
   },
+  i18n: deepseekI18n,
 };
