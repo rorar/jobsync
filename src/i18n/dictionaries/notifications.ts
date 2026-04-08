@@ -14,6 +14,8 @@ export const notifications = {
     "notifications.authFailure": "Authentication failed for module {name}. {automationCount} automation(s) paused.",
     "notifications.batchStaged": "{count} new vacancies staged from \"{name}\"",
     "notifications.jobStatusChanged": "Job status changed to {newStatus}",
+    "notifications.dismiss": "Dismiss",
+    "notifications.viewJob": "View job",
   },
   de: {
     "notifications.title": "Benachrichtigungen",
@@ -30,6 +32,8 @@ export const notifications = {
     "notifications.authFailure": "Authentifizierung fehlgeschlagen für Modul {name}. {automationCount} Automatisierung(en) pausiert.",
     "notifications.batchStaged": "{count} neue Stellenangebote aus \"{name}\"",
     "notifications.jobStatusChanged": "Job-Status geändert zu {newStatus}",
+    "notifications.dismiss": "Verwerfen",
+    "notifications.viewJob": "Job ansehen",
   },
   fr: {
     "notifications.title": "Notifications",
@@ -46,6 +50,8 @@ export const notifications = {
     "notifications.authFailure": "\u00c9chec d'authentification pour le module {name}. {automationCount} automatisation(s) en pause.",
     "notifications.batchStaged": "{count} nouvelles offres mises en attente depuis \"{name}\"",
     "notifications.jobStatusChanged": "Statut de l'emploi changé en {newStatus}",
+    "notifications.dismiss": "Ignorer",
+    "notifications.viewJob": "Voir l'emploi",
   },
   es: {
     "notifications.title": "Notificaciones",
@@ -62,5 +68,7 @@ export const notifications = {
     "notifications.authFailure": "Error de autenticaci\u00f3n para el m\u00f3dulo {name}. {automationCount} automatizaci\u00f3n(es) en pausa.",
     "notifications.batchStaged": "{count} nuevas vacantes preparadas desde \"{name}\"",
     "notifications.jobStatusChanged": "Estado del empleo cambiado a {newStatus}",
+    "notifications.dismiss": "Descartar",
+    "notifications.viewJob": "Ver empleo",
   },
 } as const;

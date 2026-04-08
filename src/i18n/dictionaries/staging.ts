@@ -48,7 +48,7 @@ export const staging = {
     "staging.tabDismissed": "Abgelehnt",
     "staging.tabArchive": "Archiv",
     "staging.tabTrash": "Papierkorb",
-    "staging.promote": "Zum Job befoerdern",
+    "staging.promote": "Zum Job befördern",
     "staging.dismiss": "Ablehnen",
     "staging.restore": "Wiederherstellen",
     "staging.archive": "Archivieren",
