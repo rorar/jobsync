@@ -181,4 +181,6 @@ class ModuleRegistry {
   }
 }
 
-export const moduleRegistry = new ModuleRegistry();
+const g = globalThis as unknown as { __moduleRegistry?: ModuleRegistry };
+g.__moduleRegistry ??= new ModuleRegistry();
+export const moduleRegistry = g.__moduleRegistry;

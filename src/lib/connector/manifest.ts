@@ -7,6 +7,7 @@
  */
 
 import type { CachePolicy } from "./cache";
+import type { EnrichmentDimension } from "./data-enrichment/types";
 
 // =============================================================================
 // Enums
@@ -195,7 +196,7 @@ export interface AiManifest extends ModuleManifest {
 
 export interface DataEnrichmentManifest extends ModuleManifest {
   connectorType: ConnectorType.DATA_ENRICHMENT;
-  supportedDimensions: string[];
+  supportedDimensions: EnrichmentDimension[];
 }
 
 export interface ReferenceDataManifest extends ModuleManifest {

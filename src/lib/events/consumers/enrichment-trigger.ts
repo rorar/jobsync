@@ -23,36 +23,37 @@ import {
   getChainForDimension,
 } from "@/lib/connector/data-enrichment/orchestrator";
 import { applyLogoWriteback } from "@/lib/connector/data-enrichment/logo-writeback";
+import { extractDomain } from "@/lib/connector/data-enrichment/domain-extractor";
 import db from "@/lib/db";
 
+// Backwards compatibility: re-export extractDomain as extractDomainFromCompanyName
+export { extractDomain as extractDomainFromCompanyName } from "@/lib/connector/data-enrichment/domain-extractor";
+
+// ---------------------------------------------------------------------------
+// Concurrency Limiter
+// ---------------------------------------------------------------------------
+
+const MAX_CONCURRENT_ENRICHMENTS = 5;
+let activeEnrichments = 0;
+const enrichmentQueue: Array<() => void> = [];
+
 /**
- * Extract a plausible domain from a company name.
- *
- * Strategy:
- * 1. If input already looks like a domain (contains dot, no spaces), use as-is.
- * 2. Otherwise strip common legal suffixes, lowercase, remove non-alphanumeric,
- *    and append ".com".
- * 3. Return null for names that can't be reasonably converted.
+ * In-memory semaphore — limits concurrent event-triggered enrichments.
+ * Limitation: per-process only; does not coordinate across multiple Node.js instances.
+ * Acceptable for self-hosted single-instance deployment (current architecture).
  */
-export function extractDomainFromCompanyName(companyName: string): string | null {
-  const trimmed = companyName?.trim();
-  if (!trimmed || trimmed.length < 2) return null;
-
-  // If it already looks like a domain (e.g. "acme.com")
-  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(trimmed)) {
-    return trimmed.toLowerCase();
+async function withEnrichmentLimit<T>(fn: () => Promise<T>): Promise<T> {
+  if (activeEnrichments >= MAX_CONCURRENT_ENRICHMENTS) {
+    await new Promise<void>((resolve) => enrichmentQueue.push(resolve));
   }
-
-  // Strip common legal suffixes before converting to domain
-  const cleaned = trimmed
-    .replace(/\b(AG|GmbH|Inc\.?|Ltd\.?|SE|SA|SAS|Corp\.?|LLC|PLC|NV|BV)\b/gi, "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-
-  if (!cleaned || cleaned.length < 2) return null;
-
-  return `${cleaned}.com`;
+  activeEnrichments++;
+  try {
+    return await fn();
+  } finally {
+    activeEnrichments--;
+    const next = enrichmentQueue.shift();
+    if (next) next();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +64,7 @@ async function handleCompanyCreated(
   event: DomainEvent<typeof DomainEventType.CompanyCreated>,
 ): Promise<void> {
   const payload = event.payload as CompanyCreatedPayload;
-  const domain = extractDomainFromCompanyName(payload.companyName);
+  const domain = extractDomain(payload.companyName);
 
   if (!domain) {
     console.debug(
@@ -78,41 +79,51 @@ async function handleCompanyCreated(
     return;
   }
 
+  // Skip if a fresh result already exists in the database
+  const existing = await db.enrichmentResult.findFirst({
+    where: { userId: payload.userId, dimension: "logo", domainKey: domain },
+    select: { status: true, expiresAt: true },
+  });
+  if (existing && existing.status === "found" && existing.expiresAt && existing.expiresAt > new Date()) {
+    return;
+  }
+
   console.debug(
     `[EnrichmentTrigger] CompanyCreated → logo enrichment for domain "${domain}"`,
   );
 
   // Fire-and-forget: enrichment is best-effort, never blocks company creation
-  enrichmentOrchestrator
-    .execute(payload.userId, {
-      dimension: "logo",
-      companyDomain: domain,
-      companyName: payload.companyName,
-    }, chain)
-    .then(async (output) => {
-      // Link result to company if enrichment succeeded
-      if (output && output.status === "found") {
-        try {
-          await db.enrichmentResult.updateMany({
-            where: {
-              userId: payload.userId,
-              dimension: "logo",
-              domainKey: domain,
-              companyId: null,
-            },
-            data: { companyId: payload.companyId },
-          });
+  withEnrichmentLimit(() =>
+    enrichmentOrchestrator
+      .execute(payload.userId, {
+        dimension: "logo",
+        companyDomain: domain,
+        companyName: payload.companyName,
+      }, chain)
+      .then(async (output) => {
+        // Link result to company if enrichment succeeded
+        if (output && output.status === "found") {
+          try {
+            await db.enrichmentResult.updateMany({
+              where: {
+                userId: payload.userId,
+                dimension: "logo",
+                domainKey: domain,
+                companyId: null,
+              },
+              data: { companyId: payload.companyId },
+            });
 
-          // Logo writeback via shared helper
-          await applyLogoWriteback(db, payload.userId, payload.companyId, output);
-        } catch {
-          // Best-effort link — do not break on failure
+            // Logo writeback via shared helper
+            await applyLogoWriteback(db, payload.userId, payload.companyId, output);
+          } catch {
+            // Best-effort link — do not break on failure
+          }
         }
-      }
-    })
-    .catch(() => {
-      // Silently swallow enrichment errors — spec: best-effort
-    });
+      }),
+  ).catch(() => {
+    // Silently swallow enrichment errors — spec: best-effort
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -144,62 +155,74 @@ async function handleVacancyPromoted(
 
   // --- Logo enrichment (if company has a domain) ---
   if (job.Company) {
-    const domain = extractDomainFromCompanyName(job.Company.label);
+    const domain = extractDomain(job.Company.label);
     if (domain) {
+      // Skip if a fresh logo result already exists
+      const existingLogo = await db.enrichmentResult.findFirst({
+        where: { userId: payload.userId, dimension: "logo", domainKey: domain },
+        select: { status: true, expiresAt: true },
+      });
       const logoChain = getChainForDimension("logo");
-      if (logoChain) {
+      if (logoChain && !(existingLogo && existingLogo.status === "found" && existingLogo.expiresAt && existingLogo.expiresAt > new Date())) {
         console.debug(
           `[EnrichmentTrigger] VacancyPromoted → logo enrichment for domain "${domain}"`,
         );
 
         // Fire-and-forget
-        enrichmentOrchestrator
-          .execute(payload.userId, {
-            dimension: "logo",
-            companyDomain: domain,
-            companyName: job.Company.label,
-          }, logoChain)
-          .then(async (output) => {
-            if (output && output.status === "found" && job!.Company) {
-              try {
-                // Link result to company
-                await db.enrichmentResult.updateMany({
-                  where: {
-                    userId: payload.userId,
-                    dimension: "logo",
-                    domainKey: domain,
-                    companyId: null,
-                  },
-                  data: { companyId: job!.Company.id },
-                });
+        withEnrichmentLimit(() =>
+          enrichmentOrchestrator
+            .execute(payload.userId, {
+              dimension: "logo",
+              companyDomain: domain,
+              companyName: job.Company.label,
+            }, logoChain)
+            .then(async (output) => {
+              if (output && output.status === "found" && job!.Company) {
+                try {
+                  // Link result to company
+                  await db.enrichmentResult.updateMany({
+                    where: {
+                      userId: payload.userId,
+                      dimension: "logo",
+                      domainKey: domain,
+                      companyId: null,
+                    },
+                    data: { companyId: job!.Company.id },
+                  });
 
-                // Logo writeback via shared helper
-                await applyLogoWriteback(db, payload.userId, job!.Company.id, output);
-              } catch {
-                // Best-effort
+                  // Logo writeback via shared helper
+                  await applyLogoWriteback(db, payload.userId, job!.Company.id, output);
+                } catch {
+                  // Best-effort
+                }
               }
-            }
-          })
-          .catch(() => {});
+            }),
+        ).catch(() => {});
       }
     }
   }
 
   // --- Deep link enrichment (if job has a URL) ---
   if (job.jobUrl) {
+    // Skip if a fresh deep_link result already exists
+    const existingDeepLink = await db.enrichmentResult.findFirst({
+      where: { userId: payload.userId, dimension: "deep_link", domainKey: job.jobUrl },
+      select: { status: true, expiresAt: true },
+    });
     const deepLinkChain = getChainForDimension("deep_link");
-    if (deepLinkChain) {
+    if (deepLinkChain && !(existingDeepLink && existingDeepLink.status === "found" && existingDeepLink.expiresAt && existingDeepLink.expiresAt > new Date())) {
       console.debug(
         `[EnrichmentTrigger] VacancyPromoted → deep_link enrichment for "${job.jobUrl}"`,
       );
 
       // Fire-and-forget
-      enrichmentOrchestrator
-        .execute(payload.userId, {
-          dimension: "deep_link",
-          url: job.jobUrl,
-        }, deepLinkChain)
-        .catch(() => {});
+      withEnrichmentLimit(() =>
+        enrichmentOrchestrator
+          .execute(payload.userId, {
+            dimension: "deep_link",
+            url: job.jobUrl ?? undefined,
+          }, deepLinkChain),
+      ).catch(() => {});
     }
   }
 }
@@ -221,5 +244,5 @@ export function registerEnrichmentTrigger(): void {
 export const _testHelpers = {
   handleCompanyCreated,
   handleVacancyPromoted,
-  extractDomainFromCompanyName,
+  extractDomainFromCompanyName: extractDomain,
 };

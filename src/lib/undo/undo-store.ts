@@ -170,8 +170,10 @@ class UndoStore {
   }
 }
 
-// Singleton — shared across server actions in the same process
-export const undoStore = new UndoStore();
+// Singleton on globalThis — survives HMR
+const g = globalThis as unknown as { __undoStore?: UndoStore };
+g.__undoStore ??= new UndoStore();
+export const undoStore = g.__undoStore;
 
 /**
  * Create an UndoEntry with the default TTL.

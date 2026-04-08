@@ -99,4 +99,6 @@ class AutomationLoggerService {
   }
 }
 
-export const automationLogger = new AutomationLoggerService();
+const g = globalThis as unknown as { __automationLogger?: AutomationLoggerService };
+g.__automationLogger ??= new AutomationLoggerService();
+export const automationLogger = g.__automationLogger;

@@ -69,11 +69,11 @@ export function getChainForDimension(
 // ==========================================
 
 /** Build a cache key for enrichment results */
-function buildEnrichmentCacheKey(dimension: string, domainKey: string): string {
+function buildEnrichmentCacheKey(userId: string, dimension: string, domainKey: string): string {
   return ConnectorCache.buildKey({
     module: "enrichment",
     operation: dimension,
-    params: domainKey,
+    params: `${userId}:${domainKey}`,
   });
 }
 
@@ -113,7 +113,7 @@ export class EnrichmentOrchestrator {
 
     // Check in-memory cache first
     const cached = connectorCache.get<EnrichmentOutput>(
-      buildEnrichmentCacheKey(input.dimension, domainKey),
+      buildEnrichmentCacheKey(userId, input.dimension, domainKey),
     );
     if (cached) {
       return cached;
@@ -127,26 +127,26 @@ export class EnrichmentOrchestrator {
 
       // Check chain timeout
       if (Date.now() >= chainDeadline) {
-        await this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "timeout", 0, "Chain timeout exceeded");
+        this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "timeout", 0, "Chain timeout exceeded");
         break;
       }
 
       // Skip inactive modules
       const registered = moduleRegistry.get(entry.moduleId);
       if (!registered || registered.status !== ModuleStatus.ACTIVE) {
-        await this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "skipped", 0, "Module inactive");
+        this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "skipped", 0, "Module inactive");
         continue;
       }
 
       // Skip unhealthy modules (UNREACHABLE or DEGRADED — Fix 9)
       if (registered.healthStatus === HealthStatus.UNREACHABLE || registered.healthStatus === HealthStatus.DEGRADED) {
-        await this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "skipped", 0, `Module ${registered.healthStatus}`);
+        this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "skipped", 0, `Module ${registered.healthStatus}`);
         continue;
       }
 
       // Skip circuit-broken modules
       if (registered.circuitBreakerState === CircuitBreakerState.OPEN) {
-        await this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "skipped", 0, "Circuit breaker open");
+        this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "skipped", 0, "Circuit breaker open");
         continue;
       }
 
@@ -168,12 +168,12 @@ export class EnrichmentOrchestrator {
             userId, input.dimension, domainKey, entry.moduleId, result,
           );
 
-          await this.logAttempt(userId, enrichmentResult?.id ?? null, input.dimension, domainKey, entry.moduleId, i + 1, "success", latencyMs);
+          this.logAttempt(userId, enrichmentResult?.id ?? null, input.dimension, domainKey, entry.moduleId, i + 1, "success", latencyMs);
 
           // Cache the result
           const ttl = result.ttl || getTtlForDimension(input.dimension);
           connectorCache.set(
-            buildEnrichmentCacheKey(input.dimension, domainKey),
+            buildEnrichmentCacheKey(userId, input.dimension, domainKey),
             result,
             ttl,
           );
@@ -193,12 +193,12 @@ export class EnrichmentOrchestrator {
         }
 
         // Module returned not_found or error -- log and try next
-        await this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, result.status === "not_found" ? "not_found" : "error", latencyMs, result.status === "error" ? "Module returned error status" : undefined);
+        this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, result.status === "not_found" ? "not_found" : "error", latencyMs, result.status === "error" ? "Module returned error status" : undefined);
 
       } catch (error) {
         const latencyMs = Date.now() - startMs;
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        await this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "error", latencyMs, errorMessage);
+        this.logAttempt(userId, null, input.dimension, domainKey, entry.moduleId, i + 1, "error", latencyMs, errorMessage);
       }
     }
 
@@ -231,30 +231,27 @@ export class EnrichmentOrchestrator {
   }
 
   /**
-   * Execute module enrichment with a timeout using AbortSignal.
-   * Uses AbortSignal.timeout() instead of setTimeout + Promise.race
-   * to avoid timer leaks when the module responds before the timeout.
+   * Execute module enrichment with a timeout using Promise.race.
+   * Rejects with an error if the module does not respond within timeoutMs.
    */
   private async enrichWithTimeout(
     connector: DataEnrichmentConnector,
     input: EnrichmentInput,
     timeoutMs: number,
   ): Promise<EnrichmentOutput> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const result = await connector.enrich(input);
-      return result;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    return Promise.race([
+      connector.enrich(input),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Module timeout exceeded")), timeoutMs)
+      ),
+    ]);
   }
 
   /**
    * Log an enrichment attempt to the database.
-   * Best-effort -- failures are silently caught.
+   * Fire-and-forget -- never awaited, failures are silently caught.
    */
-  private async logAttempt(
+  private logAttempt(
     userId: string,
     enrichmentResultId: string | null,
     dimension: string,
@@ -264,24 +261,20 @@ export class EnrichmentOrchestrator {
     outcome: string,
     latencyMs: number,
     errorMessage?: string,
-  ): Promise<void> {
-    try {
-      await db.enrichmentLog.create({
-        data: {
-          userId,
-          enrichmentResultId,
-          dimension,
-          domainKey,
-          moduleId,
-          chainPosition,
-          outcome,
-          latencyMs,
-          errorMessage: errorMessage?.slice(0, 500),
-        },
-      });
-    } catch {
-      // Best-effort logging -- do not break enrichment chain on log failure
-    }
+  ): void {
+    db.enrichmentLog.create({
+      data: {
+        userId,
+        enrichmentResultId,
+        dimension,
+        domainKey,
+        moduleId,
+        chainPosition,
+        outcome,
+        latencyMs,
+        errorMessage: errorMessage?.slice(0, 500),
+      },
+    }).catch(() => {});
   }
 
   /**

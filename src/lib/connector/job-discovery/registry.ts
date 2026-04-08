@@ -26,4 +26,6 @@ class ConnectorRegistry {
   }
 }
 
-export const connectorRegistry = new ConnectorRegistry();
+const g = globalThis as unknown as { __connectorRegistry?: ConnectorRegistry };
+g.__connectorRegistry ??= new ConnectorRegistry();
+export const connectorRegistry = g.__connectorRegistry;

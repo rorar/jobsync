@@ -18,6 +18,7 @@ import {
   type EnrichmentResult,
 } from "@/lib/connector/data-enrichment/types";
 import { applyLogoWriteback } from "@/lib/connector/data-enrichment/logo-writeback";
+import { extractDomain } from "@/lib/connector/data-enrichment/domain-extractor";
 
 /** Per-user enrichment rate limit: 10 requests per minute */
 const ENRICHMENT_RATE_LIMIT = 10;
@@ -304,34 +305,4 @@ export async function refreshEnrichment(
   } catch (error) {
     return handleError(error, "enrichment.refreshFailed");
   }
-}
-
-/**
- * Extract a domain from a company name.
- *
- * Strategy:
- * 1. If input already looks like a domain (contains dot, no spaces), use as-is.
- * 2. Otherwise strip common legal suffixes, lowercase, remove non-alphanumeric,
- *    and append ".com".
- * 3. Return null for names that can't be reasonably converted.
- */
-function extractDomain(companyName: string): string | null {
-  const trimmed = companyName.trim();
-  if (!trimmed || trimmed.length < 2) return null;
-
-  // If it already looks like a domain (e.g. "acme.com")
-  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(trimmed)) {
-    return trimmed.toLowerCase();
-  }
-
-  // Strip common legal suffixes before converting to domain
-  const cleaned = trimmed
-    .replace(/\b(AG|GmbH|Inc\.?|Ltd\.?|SE|SA|SAS|Corp\.?|LLC|PLC|NV|BV)\b/gi, "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-
-  if (!cleaned || cleaned.length < 2) return null;
-
-  return `${cleaned}.com`;
 }

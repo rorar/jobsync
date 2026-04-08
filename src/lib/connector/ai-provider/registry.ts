@@ -26,4 +26,6 @@ class AIProviderRegistry {
   }
 }
 
-export const aiProviderRegistry = new AIProviderRegistry();
+const g = globalThis as unknown as { __aiProviderRegistry?: AIProviderRegistry };
+g.__aiProviderRegistry ??= new AIProviderRegistry();
+export const aiProviderRegistry = g.__aiProviderRegistry;

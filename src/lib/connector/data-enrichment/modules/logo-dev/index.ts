@@ -66,11 +66,12 @@ export function createLogoDevModule(apiKey?: string): DataEnrichmentConnector {
         };
       }
 
-      const logoUrl = `https://img.logo.dev/${encodeURIComponent(domain)}?token=${encodeURIComponent(apiKey)}&format=png`;
+      const tokenizedUrl = `https://img.logo.dev/${encodeURIComponent(domain)}?token=${encodeURIComponent(apiKey)}&format=png`;
+      const cleanLogoUrl = `https://img.logo.dev/${encodeURIComponent(domain)}?format=png`;
 
       try {
         return await logoDevPolicy.execute(async ({ signal }) => {
-          const response = await fetch(logoUrl, {
+          const response = await fetch(tokenizedUrl, {
             method: "HEAD",
             signal,
             redirect: "manual",
@@ -80,7 +81,7 @@ export function createLogoDevModule(apiKey?: string): DataEnrichmentConnector {
             return {
               dimension: "logo" as const,
               status: "found" as const,
-              data: { logoUrl, format: "png" },
+              data: { logoUrl: cleanLogoUrl, format: "png" },
               source: "logo_dev",
               ttl: ENRICHMENT_CONFIG.LOGO_TTL_SECONDS,
             };

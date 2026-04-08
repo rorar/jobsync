@@ -12,11 +12,7 @@
  */
 
 import type { PrismaClient } from "@prisma/client";
-
-interface EnrichmentOutput {
-  status: string;
-  data: unknown;
-}
+import type { EnrichmentOutput } from "./types";
 
 /**
  * Write enrichment logo URL back to the Company record.

@@ -98,18 +98,6 @@ export const ENRICHMENT_CONFIG = {
 } as const;
 
 // ==========================================
-// Manifest Extension
-// ==========================================
-
-// DataEnrichmentManifest extends the base ModuleManifest
-// Import the base from the shared manifest module
-// This will be used by each module's manifest.ts
-
-export interface DataEnrichmentManifestExtension {
-  supportedDimensions: EnrichmentDimension[];
-}
-
-// ==========================================
 // Re-exports for convenience
 // ==========================================
 

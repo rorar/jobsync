@@ -6,18 +6,14 @@
  */
 
 import { moduleRegistry } from "../registry";
-import { ConnectorType } from "../manifest";
-import type { DataEnrichmentConnector, DataEnrichmentManifestExtension, EnrichmentDimension } from "./types";
+import { ConnectorType, type DataEnrichmentManifest } from "../manifest";
+import type { DataEnrichmentConnector, EnrichmentDimension } from "./types";
 
 /**
  * Facade on the unified ModuleRegistry, filtered to DATA_ENRICHMENT modules.
  * Preserves the existing public API pattern for all callers.
  */
 class EnrichmentConnectorRegistry {
-  register(_id: string, _factory: () => DataEnrichmentConnector): void {
-    // No-op: modules self-register via moduleRegistry in their own index.ts
-  }
-
   create(id: string): DataEnrichmentConnector {
     return moduleRegistry.create(id) as DataEnrichmentConnector;
   }
@@ -33,7 +29,9 @@ class EnrichmentConnectorRegistry {
   }
 }
 
-export const enrichmentConnectorRegistry = new EnrichmentConnectorRegistry();
+const g = globalThis as unknown as { __enrichmentConnectorRegistry?: EnrichmentConnectorRegistry };
+g.__enrichmentConnectorRegistry ??= new EnrichmentConnectorRegistry();
+export const enrichmentConnectorRegistry = g.__enrichmentConnectorRegistry;
 
 /**
  * Get all active enrichment modules.
@@ -44,12 +42,12 @@ export function getActiveEnrichmentModules() {
 
 /**
  * Get active enrichment modules that support a given dimension.
- * Filters by the supportedDimensions array on the manifest extension.
+ * Filters by the supportedDimensions array on the manifest.
  */
 export function getEnrichmentModuleByDimension(dimension: EnrichmentDimension) {
   return getActiveEnrichmentModules()
     .filter((m) => {
-      const ext = m.manifest as unknown as DataEnrichmentManifestExtension;
-      return ext.supportedDimensions?.includes(dimension);
+      const manifest = m.manifest as DataEnrichmentManifest;
+      return manifest.supportedDimensions?.includes(dimension);
     });
 }
