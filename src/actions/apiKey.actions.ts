@@ -12,8 +12,7 @@ import type {
   ApiKeyModuleId,
 } from "@/models/apiKey.model";
 import { moduleRegistry } from "@/lib/connector/registry";
-import "@/lib/connector/job-discovery/connectors";
-import "@/lib/connector/ai-provider/modules/connectors";
+import "@/lib/connector/register-all";
 
 export async function getUserApiKeys(): Promise<ActionResult<ApiKeyClientResponse[]>> {
   try {

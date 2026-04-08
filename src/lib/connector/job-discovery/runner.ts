@@ -5,7 +5,7 @@ import type {
   AutomationRunStatus,
 } from "@/models/automation.model";
 import type { ConnectorError, DiscoveredVacancy } from "./types";
-import "./connectors"; // trigger registration
+import "../register-all"; // trigger all module registrations
 import { moduleRegistry } from "../registry";
 import { resolveCredential } from "../credential-resolver";
 import { checkConsecutiveRunFailures } from "../degradation";

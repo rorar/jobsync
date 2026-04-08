@@ -27,7 +27,7 @@ import { handleError } from "@/lib/utils";
 import { ActionResult } from "@/models/actionResult";
 import { validateConnectorParams } from "@/lib/connector/params-validator";
 import { moduleRegistry } from "@/lib/connector/registry";
-import "@/lib/connector/job-discovery/connectors"; // ensure module registration
+import "@/lib/connector/register-all"; // trigger all module registrations
 import { getAutomationSettingsForUser } from "@/actions/userSettings.actions";
 
 /** Narrow Prisma string fields to domain enums for Automation (with resume included). */

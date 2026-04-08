@@ -1,4 +1,4 @@
-import "./modules/connectors"; // triggers eager registration
+import "../register-all"; // trigger all module registrations
 import { AiModuleId } from "@/models/ai.model";
 import { aiProviderRegistry } from "./registry";
 

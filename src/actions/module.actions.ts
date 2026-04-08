@@ -2,10 +2,7 @@
 
 import prisma from "@/lib/db";
 import { moduleRegistry } from "@/lib/connector/registry";
-import "@/lib/connector/job-discovery/connectors";
-import "@/lib/connector/ai-provider/modules/connectors";
-import "@/lib/connector/data-enrichment/connectors";
-import "@/lib/connector/reference-data/connectors";
+import "@/lib/connector/register-all";
 import {
   ConnectorType,
   CredentialType,
