@@ -19,6 +19,13 @@ jest.mock("@/actions/job.actions", () => ({
 
 jest.mock("next/navigation", () => ({
   redirect: jest.fn(),
+  useRouter: jest.fn(() => ({
+    push: jest.fn(),
+    refresh: jest.fn(),
+    back: jest.fn(),
+    replace: jest.fn(),
+    prefetch: jest.fn(),
+  })),
 }));
 
 global.ResizeObserver = jest.fn().mockImplementation(() => ({

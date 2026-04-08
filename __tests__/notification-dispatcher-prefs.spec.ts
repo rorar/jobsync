@@ -13,6 +13,7 @@ import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
 // Mock Prisma
 const mockCreate = jest.fn().mockResolvedValue({});
 const mockFindUnique = jest.fn();
+const mockAutomationFindFirst = jest.fn().mockResolvedValue({ name: "Test Automation" });
 
 jest.mock("@/lib/db", () => ({
   __esModule: true,
@@ -22,6 +23,9 @@ jest.mock("@/lib/db", () => ({
     },
     userSettings: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
+    },
+    automation: {
+      findFirst: (...args: unknown[]) => mockAutomationFindFirst(...args),
     },
   },
 }));

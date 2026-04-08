@@ -3,6 +3,17 @@ import { Resume } from "@/models/profile.model";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
+jest.mock("next/navigation", () => ({
+  useRouter: jest.fn(() => ({
+    push: jest.fn(),
+    refresh: jest.fn(),
+    back: jest.fn(),
+    replace: jest.fn(),
+    prefetch: jest.fn(),
+  })),
+  redirect: jest.fn(),
+}));
+
 describe("CreateResume Component", () => {
   const mockReloadResumes = jest.fn();
   const mockSetResumeDialogOpen = jest.fn();
@@ -71,7 +82,8 @@ describe("CreateResume Component", () => {
     fireEvent.change(titleInput, { target: { value: "Temporary Title" } });
     fireEvent.change(titleInput, { target: { value: "" } });
 
-    const saveButton = screen.getByRole("button", { name: /save/i });
+    const saveButtons = screen.getAllByRole("button", { name: /save/i });
+    const saveButton = saveButtons[0]; // "Save" button (not "Save & Open")
     expect(saveButton).toBeDisabled();
     fireEvent.click(saveButton);
 

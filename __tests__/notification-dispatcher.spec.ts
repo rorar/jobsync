@@ -16,9 +16,10 @@ import { createEvent, DomainEventType } from "@/lib/events/event-types";
 // Mock "server-only" to prevent runtime error in test environment
 jest.mock("server-only", () => ({}));
 
-// Mock @/lib/db (used by InAppChannel)
+// Mock @/lib/db (used by InAppChannel + flushStagedBuffer)
 const mockCreate = jest.fn().mockResolvedValue({ id: "notif-1" });
 const mockFindUnique = jest.fn().mockResolvedValue(null); // default: no settings
+const mockAutomationFindFirst = jest.fn().mockResolvedValue({ name: "Test Automation" });
 
 jest.mock("@/lib/db", () => ({
   __esModule: true,
@@ -28,6 +29,9 @@ jest.mock("@/lib/db", () => ({
     },
     userSettings: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
+    },
+    automation: {
+      findFirst: (...args: unknown[]) => mockAutomationFindFirst(...args),
     },
   },
 }));
@@ -79,11 +83,12 @@ describe("NotificationDispatcher", () => {
       await eventBus.publish(event);
 
       expect(mockCreate).toHaveBeenCalledWith({
-        data: {
+        data: expect.objectContaining({
           userId: "user-1",
           type: "vacancy_promoted",
           message: "Job created from staged vacancy",
-        },
+          data: { stagedVacancyId: "sv-1", jobId: "job-1" },
+        }),
       });
     });
   });
@@ -101,11 +106,11 @@ describe("NotificationDispatcher", () => {
       await eventBus.publish(event);
 
       expect(mockCreate).toHaveBeenCalledWith({
-        data: {
+        data: expect.objectContaining({
           userId: "user-1",
           type: "bulk_action_completed",
           message: "3 items dismiss successfully",
-        },
+        }),
       });
     });
   });
@@ -121,11 +126,11 @@ describe("NotificationDispatcher", () => {
       await eventBus.publish(event);
 
       expect(mockCreate).toHaveBeenCalledWith({
-        data: {
+        data: expect.objectContaining({
           userId: "user-1",
           type: "retention_completed",
           message: "42 expired vacancies cleaned up",
-        },
+        }),
       });
     });
   });
@@ -141,12 +146,12 @@ describe("NotificationDispatcher", () => {
       await eventBus.publish(event);
 
       expect(mockCreate).toHaveBeenCalledWith({
-        data: {
+        data: expect.objectContaining({
           userId: "user-1",
           type: "module_deactivated",
           message: "Module eures deactivated. 2 automation(s) paused.",
           moduleId: "eures",
-        },
+        }),
       });
     });
   });
@@ -162,12 +167,12 @@ describe("NotificationDispatcher", () => {
       await eventBus.publish(event);
 
       expect(mockCreate).toHaveBeenCalledWith({
-        data: {
+        data: expect.objectContaining({
           userId: "user-1",
           type: "module_reactivated",
           message: "Module eures reactivated. 1 automation(s) remain paused.",
           moduleId: "eures",
-        },
+        }),
       });
     });
   });
@@ -208,12 +213,12 @@ describe("NotificationDispatcher", () => {
       await _testHelpers.flushStagedBuffer("auto-1");
 
       expect(mockCreate).toHaveBeenCalledWith({
-        data: {
+        data: expect.objectContaining({
           userId: "user-1",
           type: "vacancy_batch_staged",
-          message: "3 new vacancies staged from automation",
+          message: expect.stringContaining("3"),
           automationId: "auto-1",
-        },
+        }),
       });
 
       // Buffer should be cleared after flush

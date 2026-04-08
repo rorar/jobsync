@@ -3,6 +3,17 @@ import "@testing-library/jest-dom";
 import ProfileContainer from "@/components/profile/ProfileContainer";
 import React from "react";
 
+jest.mock("next/navigation", () => ({
+  useRouter: jest.fn(() => ({
+    push: jest.fn(),
+    refresh: jest.fn(),
+    back: jest.fn(),
+    replace: jest.fn(),
+    prefetch: jest.fn(),
+  })),
+  redirect: jest.fn(),
+}));
+
 jest.mock("@/actions/profile.actions", () => ({
   getResumeList: jest.fn(() =>
     Promise.resolve({
