@@ -8,7 +8,7 @@ import type { DataSourceConnector } from "./types";
  */
 class ConnectorRegistry {
   register(_id: string, _factory: () => DataSourceConnector): void {
-    // No-op: registration now happens in connectors.ts via moduleRegistry
+    // No-op: modules self-register via moduleRegistry in their own index.ts
   }
 
   create(id: string): DataSourceConnector {

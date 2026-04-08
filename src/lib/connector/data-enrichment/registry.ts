@@ -15,7 +15,7 @@ import type { DataEnrichmentConnector, DataEnrichmentManifestExtension, Enrichme
  */
 class EnrichmentConnectorRegistry {
   register(_id: string, _factory: () => DataEnrichmentConnector): void {
-    // No-op: registration now happens in connectors.ts via moduleRegistry
+    // No-op: modules self-register via moduleRegistry in their own index.ts
   }
 
   create(id: string): DataEnrichmentConnector {

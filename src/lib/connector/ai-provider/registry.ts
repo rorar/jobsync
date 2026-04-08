@@ -8,7 +8,7 @@ import type { AIProviderConnector } from "./types";
  */
 class AIProviderRegistry {
   register(_id: string, _factory: () => AIProviderConnector): void {
-    // No-op: registration now happens in modules/connectors.ts via moduleRegistry
+    // No-op: modules self-register via moduleRegistry in their own index.ts
   }
 
   create(id: string): AIProviderConnector {

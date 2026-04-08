@@ -46,12 +46,13 @@ import type {
 import { useTranslations, formatDateCompact } from "@/i18n";
 import type { TranslationKey } from "@/i18n";
 import { getModuleName, getCredentialHint } from "@/lib/connector/i18n-utils";
+import type { ModuleI18n } from "@/lib/connector/manifest";
 
 interface ModuleConfig {
   id: ApiKeyModuleId;
   moduleId: string;
   name: string;
-  i18n?: Record<string, { name: string; description: string; credentialHint?: string }>;
+  i18n?: ModuleI18n;
   placeholder: string;
   inputType: "password" | "text";
   sensitive: boolean;
@@ -120,6 +121,11 @@ function ApiKeySettings() {
     }
   };
 
+  const resolveModuleName = (id: string) => {
+    const m = modules.find((mod) => mod.id === id);
+    return m ? getModuleName(m, locale) : id;
+  };
+
   const getKeyForModule = (moduleId: ApiKeyModuleId) =>
     keys.find((k) => k.moduleId === moduleId);
 
@@ -154,7 +160,7 @@ function ApiKeySettings() {
         toast({
           variant: "success",
           title: t("settings.apiKeySaved"),
-          description: t("settings.keyVerifiedAndSaved").replace("{module}", (() => { const m = modules.find((mod) => mod.id === moduleId); return m ? getModuleName(m, locale) : moduleId; })()),
+          description: t("settings.keyVerifiedAndSaved").replace("{module}", resolveModuleName(moduleId)),
         });
         setEditingModule(null);
         setInputValue("");
@@ -186,7 +192,7 @@ function ApiKeySettings() {
         toast({
           variant: "success",
           title: t("settings.apiKeyDeleted"),
-          description: t("settings.keyRemoved").replace("{module}", (() => { const m = modules.find((mod) => mod.id === moduleId); return m ? getModuleName(m, locale) : moduleId; })()),
+          description: t("settings.keyRemoved").replace("{module}", resolveModuleName(moduleId)),
         });
         await fetchKeys();
       } else {

@@ -1,7 +1,7 @@
-import type { ModuleI18nEntry } from "./manifest";
+import type { ModuleI18n } from "./manifest";
 
 type I18nSource = {
-  i18n?: Record<string, ModuleI18nEntry & { credentialHint?: string }>;
+  i18n?: ModuleI18n;
   name: string;
 };
 

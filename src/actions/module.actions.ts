@@ -9,8 +9,10 @@ import {
   HealthStatus,
   ModuleStatus,
   type ConnectorParamsSchema,
-  type SearchFieldOverride,
+  type DependencyHealthCheck,
   type JobDiscoveryManifest,
+  type ModuleI18n,
+  type SearchFieldOverride,
 } from "@/lib/connector/manifest";
 import { getCurrentUser } from "@/utils/user.utils";
 import { handleError } from "@/lib/utils";
@@ -43,8 +45,8 @@ export interface ModuleManifestSummary {
   };
   connectorParamsSchema?: ConnectorParamsSchema;
   searchFieldOverrides?: SearchFieldOverride[];
-  dependencies?: { id: string; name: string; endpoint: string; timeoutMs: number; required: boolean; usedFor: string }[];
-  i18n?: Record<string, { name: string; description: string; credentialHint?: string }>;
+  dependencies?: DependencyHealthCheck[];
+  i18n?: ModuleI18n;
 }
 
 // =============================================================================

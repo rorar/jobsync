@@ -60,7 +60,7 @@ All module-specific i18n keys are removed from the global dictionaries under `sr
 
 ### Risks
 
-- **Missing import in new entry points:** Future developers adding a new server-side entry point may not know to import `register-all`. Mitigation: explicit imports in all 5 known entry points at time of writing, plus test coverage that asserts a non-empty registry.
+- **Missing import in new entry points:** Future developers adding a new server-side entry point may not know to import `register-all`. Mitigation: explicit imports in all 7 known entry points at time of writing (module.actions.ts, automation.actions.ts, apiKey.actions.ts, enrichment.actions.ts, runner.ts, providers.ts, health-scheduler.ts), plus test coverage that asserts a non-empty registry.
 
 ## Alternatives Considered
 
