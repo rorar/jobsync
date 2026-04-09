@@ -1,8 +1,119 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-09
 
-**Total: 406 bugs found, 404 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
+**Total: 442 bugs found, 440 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
 
-### Status: ⚠️ 2 known issues (accepted risk, pre-existing)
+### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
+
+## Sprint 2 HIGH Fixes (2026-04-09)
+
+36 HIGH findings across 8 parallel work streams (Stream A through H).
+Each stream's implementer agent invoked a dimension-specific skill via
+the Skill tool with the combined (a)+(b) instrumentation — verbatim
+quoted passage from the skill + rejected-alternative with justification.
+Detailed per-finding analysis lives in the review reports under
+`.team-feature/stream-5b-*.md`; this section summarizes what each
+stream delivered.
+
+### Fixed — Stream A: Notification architecture + dispatcher perf (4 findings)
+| ID | Severity | Summary | Commit |
+|----|----------|---------|--------|
+| H-A-01 | HIGH | `activateModule` was a dead publisher — never emitted `ModuleReactivated` even though `notification-dispatcher.handleModuleReactivated` was fully wired. Symmetric twin of Sprint 1 CRIT-A1. | `5925785` |
+| H-A-04 | HIGH | 5 legacy direct-writer notification sites (degradation.ts × 3, webhook.channel.ts × 2) bypassed `shouldNotify()` preference gating, violating `QuietHoursRespected` invariant. | `5925785` |
+| H-A-07 | HIGH | `shouldNotify` was architecturally exempt by construction — called only by `ChannelRouter.route`, so every direct writer bypassed it. Fixed by introducing a shared `prepareEnforcedNotification[s]` helper at the channel-router layer that the 5 legacy sites call BEFORE their physical prisma.notification.create*. | `5925785` |
+| H-P-01 | HIGH | Double `userSettings.findUnique` per notification event (resolveLocale + dispatchNotification internally resolving again). `dispatchNotification` now accepts optional `preferences` argument; handlers read once and thread through. | `5925785` |
+
+### Fixed — Stream B: Deck + staging contract fixes (6 findings)
+| ID | Severity | Summary | Commit |
+|----|----------|---------|--------|
+| H-A-02 | HIGH | "Undo theatre" — `useDeckStack` pushed every successful action to `undoStack` but `handleDeckUndo` only reverses dismiss. Fixed via type-narrowed `REVERSIBLE_DECK_ACTIONS = ["dismiss"] as const` allowlist + `isReversibleAction` guard. | `7969542` |
+| H-A-03 | HIGH | `PromotionDialog` `success && !data` defensive branch produced contradictory UX (green success toast + card rollback). Fixed by failing loud — destructive toast + `console.error` + dialog stays open. | `7969542` |
+| H-T-01 | HIGH | Sprint 1 CRIT-Y1 had no regression guard — deck button 44×44 sizes could silently regress. Added className pinning on DeckCard Info + DeckView Block/Skip/Undo. | `7969542` |
+| H-T-03 | HIGH | Sprint 1.5 CRIT-A-06 only covered the DISMISS sheet adapter; promote/superLike/block had no coverage. Extended `StagingContainerDeckSheetRouting.spec.tsx` with 3 more adapter tests. | `7969542` |
+| H-T-06 | HIGH | `StagedVacancyCard` body was mouse-only (`role="presentation"` + `onClick`, no keyboard handler). Fixed by removing the body handler entirely; Details button is the sole keyboard entry point. | `7969542` |
+| H-NEW-04 | HIGH | Footer buttons (Promote/Dismiss/Archive/Trash/Block/Restore/Details) had generic aria-labels; 20 cards = 120 undifferentiated announcements. Now threads `vacancy.title + employerName` into each button's aria-label. | `7969542` |
+
+### Fixed — Stream C: Blacklist event seam + DB index (2 findings)
+| ID | Severity | Summary | Commit |
+|----|----------|---------|--------|
+| H-A-05 | HIGH | `companyBlacklist.addBlacklistEntry` retroactively trashed StagedVacancy rows via `updateMany` without emitting domain events. Consumers (audit, notification, analytics) silently missed bulk trashings. Rewrote to use `$transaction` callback form with pre-flight `findMany`; emits one `VacancyTrashed` per row + one `BulkActionCompleted` envelope with `actionType: "blacklist_trash"` post-commit. | `1024dba` |
+| H-P-02 | HIGH | `StagedVacancy.employerName` had no index for the new retroactive `updateMany` contains/startsWith filter. Added `@@index([userId, employerName])` via a new Prisma migration `20260409220000_add_staged_vacancy_employer_name_index`. | `1024dba` |
+
+### Fixed — Stream D: Security hardening (5 findings)
+| ID | Severity | Summary | Commit |
+|----|----------|---------|--------|
+| H-S-01 | HIGH | **SVG XSS loophole — the claimed fix in commit `db2f050` was never actually applied.** `git show --name-only db2f050` revealed the claimed files were never touched, and `__tests__/svg-sanitizer.spec.ts:337-343` literally asserted `data:image/svg+xml` XSS vectors were ALLOWED through. Fixed by closing the `svg+xml` allowlist and inverting the bad assertion. | `5133bb6` |
+| H-S-02 | HIGH | Meta parser SSRF allowlist drifted from `validateWebhookUrl` (missing CGNAT 100.64.0.0/10, 192.0.0.0/24, 198.18.0.0/15, 240.0.0.0/4, IPv4-mapped IPv6). Fixed by deleting the local allowlist and delegating to the canonical `validateWebhookUrl`. | `5133bb6` |
+| H-S-03 | HIGH | `applyLogoWriteback` persisted tokenized URLs verbatim to `Company.logoUrl`, safe only by the accident that logo-dev pre-cleans. Added defense-in-depth `stripCredentialsFromUrl` at the writeback site. | `5133bb6` |
+| H-S-05 | HIGH | `stripTokenFromUrl` only handled `token` param; missed `key`, `api_key`, `access_token`, `sig`, `signature`, `X-Amz-Signature`, `auth`, and 4 more common credential patterns. Replaced with `stripCredentialsFromUrl` covering 11 default parameter names + optional extra list. | `5133bb6` |
+| H-T-05 | HIGH | `withEnrichmentLimit` semaphore had zero tests and a race-risk comment. Added `resetSemaphoreForTesting` + `getActiveEnrichmentsCountForTesting` helpers (ESM exports are read-only from consumers) and an 8-test spec covering single-task, max-parallel, race guard, queue drain, error release, and unblock-after-throw. | `5133bb6` |
+
+### Fixed — Stream E: DB + event-bus performance (5 findings)
+| ID | Severity | Summary | Commit |
+|----|----------|---------|--------|
+| H-P-04 | HIGH | `bulk-action.service.ts` ran 2·N sequential Prisma queries per bulk action (1000 items = 2000 round-trips). Rewrote as batched `findMany` + `updateMany`/`deleteMany`. | `b40e7e8` |
+| H-P-05 | HIGH | `retention.service.ts` ran 2·N + batch sequentially (5000 rows = ~10k round-trips). Rewrote as batched `findMany` + dedup pre-filter (SQLite has no `skipDuplicates`) + `createMany` + `deleteMany`, chunked at 300 per call. 5000 rows now ~40 round-trips. | `b40e7e8` |
+| H-P-06 | HIGH | `eventBus.publish` dispatched consumers via sequential `for ... await` — any slow consumer blocked every publisher. Fixed via `Promise.allSettled`. OrderGuarantee preserved; consumer ordering assumption verified across all 5 consumers. | `b40e7e8` |
+| H-P-07 | HIGH | `runner.ts` dedup scan was unbounded by time — scanned the user's ENTIRE staging history every run. Added 90-day `createdAt` bound + status-aware filter (`notIn: ["dismissed", "promoted"]`). | `b40e7e8` |
+| H-P-08 | HIGH | `promoter.ts` ran 3 fuzzy `OR`-`contains` scans INSIDE a write transaction (SQLite global write lock held during scans). Rewrote as two-phase resolve-then-commit — scans run outside the transaction, commit holds the lock briefly. | `b40e7e8` |
+
+### Fixed — Stream F: Test coverage gaps + Jest config (2 findings + orchestrator fixups)
+| ID | Severity | Summary | Commit |
+|----|----------|---------|--------|
+| H-T-04 | HIGH | 5 production files without matching specs. Created `StagedVacancyCard.spec.tsx` (40 tests), `DiscoveredJobDetail.spec.tsx` (27 tests), `SuperLikeCelebrationHost.spec.tsx` (5 tests). (`NotificationDropdown.spec.tsx` is owned by Stream H; `StagedVacancyDetailContent` confirmed LOW — transitively covered.) | `e446bc6` |
+| H-P-03 | HIGH | Jest `collectCoverage: true` default ran v8 coverage on every invocation (3-5× slower). Switched to `collectCoverage: false` default + opt-in `--coverage` flag in `scripts/test.sh`. | `e446bc6` |
+
+### Fixed — Stream G: Accessibility UI components (7 findings)
+| ID | Severity | Summary | Commit |
+|----|----------|---------|--------|
+| H-Y-01 | HIGH | `MatchScoreRing.tsx` hardcoded English `aria-label="Match score: {score}"`. Added `ariaLabel` + `ariaHidden` props, decorative-by-default. | `3c2f338` |
+| H-Y-02 | HIGH | `StagedVacancyDetailContent` MatchScoreRing had no sr-only fallback. Now passes translated `ariaLabel` via the new prop. | `3c2f338` |
+| H-Y-03 | HIGH | `DiscoveredJobsList` icon-only Accept/Dismiss buttons had empty accessible names. Added translated, context-rich aria-labels. | `3c2f338` |
+| H-Y-04 | HIGH | External-link anchors in DiscoveredJobsList + DiscoveredJobDetail had no accessible name. Added translated `externalLinkAria` with `{job}` and `{employer}` placeholders. | `3c2f338` |
+| H-Y-05 | HIGH | `DiscoveredJobsList` clickable `<span>` job title with no keyboard affordance. Replaced with native `<button type="button">` (unstyled visual). | `3c2f338` |
+| H-Y-06 | HIGH | `ViewModeToggle` + `KanbanViewModeToggle` color-only active state (WCAG 1.4.1). Migrated to new shared `ToolbarRadioGroup` primitive with Check-glyph overlay. | `3c2f338` |
+| H-Y-07 | HIGH | `RecentCardToggle` + `NumberCardToggle` + `WeeklyBarChartToggle` had NO role, NO aria-checked — plain color-swap button groups. Migrated to `ToolbarRadioGroup` primitive. | `3c2f338` |
+
+### Fixed — Stream H: A11y site-wide + NotificationDropdown (5 findings)
+| ID | Severity | Summary | Commit |
+|----|----------|---------|--------|
+| H-NEW-01 | HIGH | **Site-wide missing skip link (WCAG 2.4.1 Level A).** No `<a href="#main">` anywhere. Added SkipLink as first focusable element in root `<body>`, `<main id="main-content" tabIndex={-1}>` in dashboard layout. | `c85af40` |
+| H-NEW-02 | HIGH | Three anonymous `<nav>` landmarks (NVDA: "navigation, navigation, navigation") + no `aria-current="page"` on active NavLink. Added translated aria-labels + `aria-current`. | `c85af40` |
+| H-NEW-03 | HIGH | `DashboardError` had 3 hardcoded English strings, no `role="alert"`, no focus management, leaked `error.message` to AT users. Full rewrite with i18n + `role="alert"` + programmatic focus + scrubbed error message. | `c85af40` |
+| H-NEW-05 | HIGH | `NotificationDropdown` used `role="feed"` with nested `<section>` children — WAI-ARIA spec violation (feed owns `article` only). Replaced with `role="region"`. Also fixed a subtle DST bug in `getGroupKey`. | `c85af40` |
+| H-T-07 | HIGH | `NotificationDropdown.groupNotifications` pure function had no tests + 6 subtle bug classes (DST, timezone, future dates, bucket boundaries, empty-group omission, non-deterministic default `new Date()`). Added 17 regression tests. | `c85af40` |
+
+### Deferred (out of Sprint 2 scope)
+| ID | Severity | Summary | Reason deferred |
+|----|----------|---------|-----------------|
+| H-P-09 | HIGH | **Zero observability infrastructure.** No OpenTelemetry, no Prometheus metrics, no distributed tracing, no Core Web Vitals. Every other perf finding is invisible in production. | Massive cross-cutting piece that deserves its own dedicated sprint with an architectural design phase. Deferring does NOT make any of the other 5 Stream E perf fixes less valid — those stand on their own merits. Tracked in `.team-feature/stream-5b-performance-specialist.md`. |
+
+### Open follow-ups surfaced during Sprint 2 (not in scope for Sprint 3 HIGH tier)
+- **`specs/event-bus.allium` out of sync** — still describes the sequential `ErrorIsolation` loop that Stream E's H-P-06 fix replaced with `Promise.allSettled`. Invariants are still preserved, but the spec text should be updated or annotated with a small ADR documenting the switch. Not urgent because the invariants are still correct.
+- **`StagingContainer.handleDeckAction:296-301` has a similar H-A-03 defensive branch** that still silently proceeds with `createdJobId:undefined` in the auto-approve flow. Stream B fixed only the PromotionDialog side; the StagingContainer side is a symmetric leak that a follow-up should patch the same way (destructive toast + early return).
+- **`StagingLayoutToggle` not migrated to `ToolbarRadioGroup` primitive** (Sprint 1 CRIT-Y2 owner, intentionally not touched). Two implementations of the same pattern coexist until a future migration. The primitive's spec enforces the same invariants, so migration will be behavior-preserving.
+- **`src/app/global-error.tsx`** likely has the same hardcoded-English issue that Stream H fixed for the dashboard error boundary. Not in Sprint 2 scope; should be audited in a follow-up.
+- **`/signin` + `/signup` layouts don't render `<main id="main-content">`**, so the skip link is a no-op on auth pages. Follow-up: add the main landmark to the auth layout.
+- **`NavLink` active-route detection uses `pathname.startsWith(\`${route}/dashboard\`)`** which looks like a pre-existing typo. NOT fixed by Stream H (unrelated to a11y scope). Flagged for architecture review.
+- **`WeeklyBarChartToggle` chart labels still English** ("Jobs", "Activities") — they are caller-provided `label` field on `ChartConfig`. Requires a ChartConfig `labelKey`/`labelFallback` refactor, out of scope for Stream G.
+
+### Skill invocation test results (Sprint 2)
+All 8 Sprint 2 stream agents invoked their assigned skills via the Skill tool with the combined (a)+(b) instrumentation. The verbatim quoted passages + rejected alternatives were present in every report. Specialization uplift from the spot-check phase (~82% median on HIGH findings) justified the pattern. Skills used:
+- `backend-development:architecture-patterns` — Streams A, B, C
+- `security-scanning:threat-mitigation-mapping` — Stream D
+- `developer-essentials:sql-optimization-patterns` — Stream E
+- `javascript-typescript:javascript-testing-patterns` — Stream F
+- `ui-design:accessibility-compliance` — Streams G, H
+
+### Honesty-gate catches during Sprint 2
+1. **`db2f050` claimed SVG sanitizer fixes that were never applied** (Stream D / H-S-01). `git show --name-only db2f050` revealed the claimed files were never touched, AND the test file literally encoded the vulnerability as expected behavior. This is a paper-trail honesty failure from a prior sprint; Sprint 2 fixed both the code and the test.
+2. **22/3792 test failures discovered during the final verification run** (not during agent-level tsc checks) — all test-side issues, no production bugs. Fixed inline:
+   - Stream D's enrichment-trigger-semaphore had 8 failures because ESM `export let` is read-only from consumers; fixed by adding `resetSemaphoreForTesting` helper.
+   - Stream E's retention.spec had 6 failures because `jest.clearAllMocks()` doesn't drain unconsumed `mockResolvedValueOnce` queue values (leaking between tests); fixed by switching to `mockReset`.
+   - Stream F's DiscoveredJobDetail had 4 failures because DialogTitle accessible name includes the external-link aria-label (exact-match vs regex); fixed by switching to regex matching. Also fixed a wrong expectation about the raw-enum fallback.
+   - Stream F's StagedVacancyCard had 1 failure because the CompanyLogo mock rendered the employer name as children, creating a multi-match; fixed by making the mock empty.
+   - Stream B's DeckView H-T-01 Undo test had 1 failure because real-timer + setTimeout(400) raced against useDeckStack's internal setTimeout(300); fixed by switching to `jest.useFakeTimers()` + `advanceTimersByTime`.
+   - Stream E's runner-dedup-bounds had 1 failure because raw-ms subtraction drifts by the DST offset when production uses `setDate(getDate() - 90)`; fixed by using the same calendar-day math.
+   - Stream C's companyBlacklist refactor broke `security-sprint-c.spec.ts:SEC-14` which still mocked the array-form `$transaction`; fixed by updating the mock to invoke the callback.
 
 ## Sprint 1.5 CRITICAL Hotfixes (2026-04-09)
 
