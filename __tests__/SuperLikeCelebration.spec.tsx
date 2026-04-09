@@ -370,6 +370,58 @@ describe("SuperLikeCelebration", () => {
     expect(baseProps.onDismiss).not.toHaveBeenCalled();
   });
 
+  it("global Escape listener does NOT consume the event — sibling listeners co-handle (CRIT-Y3 risk mitigation)", () => {
+    // Regression guard for the cross-component Escape interaction risk
+    // flagged in the CRIT-Y3 commit message: if the user opens
+    // PromotionDialog or StagedVacancyDetailSheet WHILE a celebration is
+    // visible, BOTH Escape handlers must fire on the same keypress so
+    // "one keypress clears everything" works. This requires the
+    // celebration's global keydown listener to NOT call preventDefault
+    // or stopPropagation on the event.
+    //
+    // We simulate the scenario by installing a sibling `document`
+    // keydown listener (standing in for Radix Dialog's DismissableLayer
+    // escape handler) and verifying BOTH listeners fire on a single
+    // dispatch, and the event is not marked as consumed.
+    const siblingSpy = jest.fn();
+    const siblingListener = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        siblingSpy(e);
+      }
+    };
+    document.addEventListener("keydown", siblingListener);
+
+    try {
+      render(<SuperLikeCelebration {...baseProps} />);
+
+      (document.activeElement as HTMLElement | null)?.blur?.();
+
+      const event = new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        document.dispatchEvent(event);
+      });
+
+      // Both handlers fired on the same event.
+      expect(baseProps.onDismiss).toHaveBeenCalledTimes(1);
+      expect(baseProps.onDismiss).toHaveBeenCalledWith("job-123");
+      expect(siblingSpy).toHaveBeenCalledTimes(1);
+
+      // The celebration's handler did NOT consume the event — critical
+      // for coexistence with Radix Dialog / DismissableLayer (which uses
+      // `event.defaultPrevented` as a "someone else already handled this"
+      // signal in some layer patterns).
+      expect(event.defaultPrevented).toBe(false);
+      // jsdom exposes `cancelBubble` to reflect stopPropagation state.
+      expect((event as KeyboardEvent & { cancelBubble: boolean }).cancelBubble).toBe(false);
+    } finally {
+      document.removeEventListener("keydown", siblingListener);
+    }
+  });
+
   it("exposes an accessible name containing BOTH 'Super-liked!' and the vacancy title (CRIT-Y3 ARIA masking fix)", () => {
     render(<SuperLikeCelebration {...baseProps} />);
 

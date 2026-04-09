@@ -116,6 +116,9 @@ The full refactor to event emission for the remaining 5 sites above (in `degrada
 - Stream C commit: `af6d328` (degradation.ts + webhook.channel.ts late-binding)
 - Stream 4 enforcement script: `1c2c593` (`scripts/check-notification-writers.sh`)
 - Prisma migration to top-level 5W+H columns: `132bb96` (the bifurcation called out as a risk is now schema-enforceable)
+- Sprint 1 CRIT-A1: `8c2e66b` (deactivateModule event-emission refactor; Decision B — module.actions.ts removed from the legacy writer list)
+- Sprint 1 CRIT-A2: `2b6ed92` (PromotionDialog.onSuccess jobId threading; Decision A — concrete implementation of the `{ success, createdJobId? }` contract through the default auto-approve=OFF flow)
+- Sprint 1 CRIT-Y3 cross-component smoke test: verified in `__tests__/SuperLikeCelebration.spec.tsx` — the celebration's global Escape listener does NOT consume the event, so sibling handlers (Radix Dialog's DismissableLayer, any future modal) co-handle the same keypress cleanly
 - Stream E grace period + `isExiting` contract: `SuperLikeCelebrationHost`
 - Blind-spot report: `.team-feature/stream-h-blindspot.md` (Patterns 2, 3, 7)
 - Honesty gate findings #16, #17 (Decision C) and the dispatcher i18n bug (Decision B)
