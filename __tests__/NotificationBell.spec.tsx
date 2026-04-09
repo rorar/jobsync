@@ -71,6 +71,12 @@ jest.mock("lucide-react", () => ({
   ),
 }));
 
+// Mock the media query hook — the bell renders Popover on desktop and
+// Sheet on mobile. Default to desktop so Popover is exercised.
+jest.mock("@/hooks/use-media-query", () => ({
+  useMediaQuery: jest.fn(() => true),
+}));
+
 // Mock Radix Popover to render inline (portals don't work in JSDOM)
 jest.mock("@/components/ui/popover", () => ({
   Popover: ({ children }: { children: React.ReactNode }) => (
@@ -78,14 +84,25 @@ jest.mock("@/components/ui/popover", () => ({
   ),
   PopoverTrigger: ({
     children,
-    asChild,
-    ...props
   }: {
     children: React.ReactNode;
     asChild?: boolean;
   }) => <>{children}</>,
   PopoverContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
+  ),
+}));
+
+// Mock Radix Sheet (used on mobile) for completeness — if the default for
+// useMediaQuery changes, the mobile branch should still render without errors.
+jest.mock("@/components/ui/sheet", () => ({
+  Sheet: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SheetTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SheetContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SheetTitle: ({ children }: { children: React.ReactNode }) => (
+    <h2>{children}</h2>
   ),
 }));
 

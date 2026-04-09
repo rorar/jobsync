@@ -17,6 +17,47 @@ export const notifications = {
     "notifications.dismiss": "Dismiss",
     "notifications.viewJob": "View job",
     "notifications.viewAutomation": "View automation",
+
+    // 5W+H rework — parametric titles (late-bound at render time)
+    "notifications.moduleDeactivated.title": "Module paused: {moduleName}",
+    "notifications.moduleReactivated.title": "Module reactivated: {moduleName}",
+    "notifications.moduleUnreachable.title": "Module unreachable: {moduleName}",
+    "notifications.cbEscalation.title": "Circuit breaker tripped",
+    "notifications.consecutiveFailures.title": "{count} consecutive failures",
+    "notifications.authFailure.title": "Authentication failed",
+    "notifications.vacancyPromoted.title": "New job added",
+    "notifications.vacancyBatchStaged.title": "{count} new vacancies from {automationName}",
+    "notifications.bulkActionCompleted.title": "{action}: {count} items",
+    "notifications.retentionCompleted.title": "Data retention complete",
+    "notifications.jobStatusChanged.title": "Job status: {status}",
+
+    // Reason / context strings (shared vocabulary)
+    "notifications.reason.moduleTimeout": "Module did not respond within the configured timeout",
+    "notifications.reason.authExpired": "API key invalid or expired",
+    "notifications.reason.circuitBreaker": "Too many failures, circuit breaker opened",
+    "notifications.reason.manualDeactivation": "Deactivated by user",
+
+    // Action button labels (shared vocabulary)
+    "notifications.action.viewStaged": "View staged",
+    "notifications.action.openJob": "Open job",
+    "notifications.action.viewStaging": "Go to staging",
+    "notifications.action.openModules": "Open module settings",
+    "notifications.action.openAutomation": "Open automation",
+    "notifications.action.openApiKeys": "Manage API keys",
+    "notifications.action.viewSettings": "View settings",
+    "notifications.action.dismiss": "Dismiss",
+
+    // Group headers (time buckets)
+    "notifications.group.today": "Today",
+    "notifications.group.yesterday": "Yesterday",
+    "notifications.group.thisWeek": "This week",
+    "notifications.group.earlier": "Earlier",
+    "notifications.group.unreadCount": "{count} unread",
+
+    // Generic actor labels
+    "notifications.actor.system": "System",
+    "notifications.actor.automation": "Automation",
+    "notifications.actor.user": "You",
   },
   de: {
     "notifications.title": "Benachrichtigungen",
@@ -36,6 +77,47 @@ export const notifications = {
     "notifications.dismiss": "Verwerfen",
     "notifications.viewJob": "Job ansehen",
     "notifications.viewAutomation": "Automatisierung ansehen",
+
+    // 5W+H rework — parametric titles
+    "notifications.moduleDeactivated.title": "Modul pausiert: {moduleName}",
+    "notifications.moduleReactivated.title": "Modul reaktiviert: {moduleName}",
+    "notifications.moduleUnreachable.title": "Modul nicht erreichbar: {moduleName}",
+    "notifications.cbEscalation.title": "Circuit-Breaker ausgelöst",
+    "notifications.consecutiveFailures.title": "{count} aufeinanderfolgende Fehler",
+    "notifications.authFailure.title": "Authentifizierung fehlgeschlagen",
+    "notifications.vacancyPromoted.title": "Neuer Job hinzugefügt",
+    "notifications.vacancyBatchStaged.title": "{count} neue Stellenangebote aus {automationName}",
+    "notifications.bulkActionCompleted.title": "{action}: {count} Elemente",
+    "notifications.retentionCompleted.title": "Datenaufbewahrung abgeschlossen",
+    "notifications.jobStatusChanged.title": "Job-Status: {status}",
+
+    // Reason / context strings
+    "notifications.reason.moduleTimeout": "Modul hat nicht innerhalb des konfigurierten Zeitlimits geantwortet",
+    "notifications.reason.authExpired": "API-Schlüssel ungültig oder abgelaufen",
+    "notifications.reason.circuitBreaker": "Zu viele Fehler, Circuit-Breaker geöffnet",
+    "notifications.reason.manualDeactivation": "Vom Benutzer deaktiviert",
+
+    // Action button labels
+    "notifications.action.viewStaged": "Vorbereitete anzeigen",
+    "notifications.action.openJob": "Job öffnen",
+    "notifications.action.viewStaging": "Zur Vorbereitung",
+    "notifications.action.openModules": "Moduleinstellungen öffnen",
+    "notifications.action.openAutomation": "Automatisierung öffnen",
+    "notifications.action.openApiKeys": "API-Schlüssel verwalten",
+    "notifications.action.viewSettings": "Einstellungen anzeigen",
+    "notifications.action.dismiss": "Verwerfen",
+
+    // Group headers
+    "notifications.group.today": "Heute",
+    "notifications.group.yesterday": "Gestern",
+    "notifications.group.thisWeek": "Diese Woche",
+    "notifications.group.earlier": "Früher",
+    "notifications.group.unreadCount": "{count} ungelesen",
+
+    // Generic actor labels
+    "notifications.actor.system": "System",
+    "notifications.actor.automation": "Automatisierung",
+    "notifications.actor.user": "Sie",
   },
   fr: {
     "notifications.title": "Notifications",
@@ -55,6 +137,47 @@ export const notifications = {
     "notifications.dismiss": "Ignorer",
     "notifications.viewJob": "Voir l'emploi",
     "notifications.viewAutomation": "Voir l'automatisation",
+
+    // 5W+H rework — parametric titles
+    "notifications.moduleDeactivated.title": "Module en pause : {moduleName}",
+    "notifications.moduleReactivated.title": "Module réactivé : {moduleName}",
+    "notifications.moduleUnreachable.title": "Module injoignable : {moduleName}",
+    "notifications.cbEscalation.title": "Disjoncteur déclenché",
+    "notifications.consecutiveFailures.title": "{count} échecs consécutifs",
+    "notifications.authFailure.title": "Échec d'authentification",
+    "notifications.vacancyPromoted.title": "Nouvel emploi ajouté",
+    "notifications.vacancyBatchStaged.title": "{count} nouvelles offres de {automationName}",
+    "notifications.bulkActionCompleted.title": "{action} : {count} éléments",
+    "notifications.retentionCompleted.title": "Rétention des données terminée",
+    "notifications.jobStatusChanged.title": "Statut de l'emploi : {status}",
+
+    // Reason / context strings
+    "notifications.reason.moduleTimeout": "Le module n'a pas répondu dans le délai configuré",
+    "notifications.reason.authExpired": "Clé API invalide ou expirée",
+    "notifications.reason.circuitBreaker": "Trop d'échecs, disjoncteur ouvert",
+    "notifications.reason.manualDeactivation": "Désactivé par l'utilisateur",
+
+    // Action button labels
+    "notifications.action.viewStaged": "Voir la file d'attente",
+    "notifications.action.openJob": "Ouvrir l'emploi",
+    "notifications.action.viewStaging": "Aller à la file d'attente",
+    "notifications.action.openModules": "Ouvrir les modules",
+    "notifications.action.openAutomation": "Ouvrir l'automatisation",
+    "notifications.action.openApiKeys": "Gérer les clés API",
+    "notifications.action.viewSettings": "Voir les paramètres",
+    "notifications.action.dismiss": "Ignorer",
+
+    // Group headers
+    "notifications.group.today": "Aujourd'hui",
+    "notifications.group.yesterday": "Hier",
+    "notifications.group.thisWeek": "Cette semaine",
+    "notifications.group.earlier": "Plus ancien",
+    "notifications.group.unreadCount": "{count} non lu(s)",
+
+    // Generic actor labels
+    "notifications.actor.system": "Système",
+    "notifications.actor.automation": "Automatisation",
+    "notifications.actor.user": "Vous",
   },
   es: {
     "notifications.title": "Notificaciones",
@@ -74,5 +197,46 @@ export const notifications = {
     "notifications.dismiss": "Descartar",
     "notifications.viewJob": "Ver empleo",
     "notifications.viewAutomation": "Ver automatización",
+
+    // 5W+H rework — parametric titles
+    "notifications.moduleDeactivated.title": "Módulo en pausa: {moduleName}",
+    "notifications.moduleReactivated.title": "Módulo reactivado: {moduleName}",
+    "notifications.moduleUnreachable.title": "Módulo inalcanzable: {moduleName}",
+    "notifications.cbEscalation.title": "Disyuntor activado",
+    "notifications.consecutiveFailures.title": "{count} fallos consecutivos",
+    "notifications.authFailure.title": "Error de autenticación",
+    "notifications.vacancyPromoted.title": "Nuevo empleo añadido",
+    "notifications.vacancyBatchStaged.title": "{count} nuevas vacantes de {automationName}",
+    "notifications.bulkActionCompleted.title": "{action}: {count} elementos",
+    "notifications.retentionCompleted.title": "Retención de datos completada",
+    "notifications.jobStatusChanged.title": "Estado del empleo: {status}",
+
+    // Reason / context strings
+    "notifications.reason.moduleTimeout": "El módulo no respondió dentro del tiempo configurado",
+    "notifications.reason.authExpired": "Clave API inválida o expirada",
+    "notifications.reason.circuitBreaker": "Demasiados fallos, disyuntor abierto",
+    "notifications.reason.manualDeactivation": "Desactivado por el usuario",
+
+    // Action button labels
+    "notifications.action.viewStaged": "Ver preparadas",
+    "notifications.action.openJob": "Abrir empleo",
+    "notifications.action.viewStaging": "Ir a preparación",
+    "notifications.action.openModules": "Abrir módulos",
+    "notifications.action.openAutomation": "Abrir automatización",
+    "notifications.action.openApiKeys": "Gestionar claves API",
+    "notifications.action.viewSettings": "Ver configuración",
+    "notifications.action.dismiss": "Descartar",
+
+    // Group headers
+    "notifications.group.today": "Hoy",
+    "notifications.group.yesterday": "Ayer",
+    "notifications.group.thisWeek": "Esta semana",
+    "notifications.group.earlier": "Anterior",
+    "notifications.group.unreadCount": "{count} sin leer",
+
+    // Generic actor labels
+    "notifications.actor.system": "Sistema",
+    "notifications.actor.automation": "Automatización",
+    "notifications.actor.user": "Tú",
   },
 } as const;

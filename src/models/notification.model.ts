@@ -12,6 +12,67 @@ export type NotificationType =
   | "retention_completed"
   | "job_status_changed";
 
+/**
+ * Severity of a notification — drives icon/color.
+ */
+export type NotificationSeverity = "info" | "success" | "warning" | "error";
+
+/**
+ * Who dispatched the notification (actor).
+ */
+export type NotificationActorType =
+  | "system"
+  | "module"
+  | "automation"
+  | "user"
+  | "enrichment";
+
+/**
+ * Extended notification data — carried in the existing `data: Record<string, unknown>`
+ * JSON blob, no schema migration required.
+ *
+ * This is the 5W+H late-binding enrichment:
+ *  - WHAT: titleKey + titleParams (resolved at render time in the user's current locale)
+ *  - WHO: actorType + actorId (+ optional actorNameKey for localized display)
+ *  - WHY: reasonKey + reasonParams (optional contextual sentence)
+ *  - HOW/WHERE: actionUrl + actionLabelKey (deep link)
+ *  - SEVERITY: icon/color driver
+ *
+ * Existing notifications without these fields continue to work: the renderer
+ * falls back to the legacy `message` field.
+ *
+ * Follow-up: promote these to first-class Prisma columns once a schema
+ * migration is scheduled (deferred from task 4, Stream E).
+ */
+export interface NotificationDataExtended {
+  [key: string]: unknown;
+
+  /** i18n key for WHAT (late-bound at render time) */
+  titleKey?: string;
+  /** Parameters for titleKey — substituted as `{paramName}` */
+  titleParams?: Record<string, string | number>;
+
+  /** Actor type (WHO) */
+  actorType?: NotificationActorType;
+  /** Stable actor identifier (e.g. moduleId, automationId) */
+  actorId?: string;
+  /** i18n key for the actor display name (falls back to actorId, then generic) */
+  actorNameKey?: string;
+
+  /** i18n key for the WHY sentence (optional context) */
+  reasonKey?: string;
+  /** Parameters for reasonKey */
+  reasonParams?: Record<string, string | number>;
+
+  /** Visual severity (icon/color) */
+  severity?: NotificationSeverity;
+
+  /** Deep-link target (WHERE). Prefer `buildNotificationActions()` for type-driven routing. */
+  actionUrl?: string;
+  /** i18n key for the CTA label (HOW) */
+  actionLabelKey?: string;
+}
+
 export interface Notification {
   id: string;
   userId: string;

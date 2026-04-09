@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -18,6 +18,85 @@ import { NotificationItem } from "./NotificationItem";
 interface NotificationDropdownProps {
   onCountChange?: (count: number) => void;
 }
+
+// ---------------------------------------------------------------------------
+// Date grouping helpers
+// ---------------------------------------------------------------------------
+
+type GroupKey = "today" | "yesterday" | "thisWeek" | "earlier";
+
+interface NotificationGroup {
+  key: GroupKey;
+  labelKey: string;
+  notifications: Notification[];
+  unreadCount: number;
+}
+
+/** Return midnight of the given date in the local timezone. */
+function startOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
+ * Bucket a notification by how old it is relative to `now`.
+ * Groups: today, yesterday, thisWeek (last 7d excl. today/yesterday), earlier.
+ */
+function getGroupKey(createdAt: Date, now: Date): GroupKey {
+  const today = startOfDay(now);
+  const created = startOfDay(createdAt);
+  const diffMs = today.getTime() - created.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) return "today";
+  if (diffDays === 1) return "yesterday";
+  if (diffDays < 7) return "thisWeek";
+  return "earlier";
+}
+
+/**
+ * Group notifications by time bucket, preserving ordering within each group.
+ * Empty groups are omitted entirely.
+ */
+function groupNotifications(
+  notifications: Notification[],
+  now: Date = new Date(),
+): NotificationGroup[] {
+  const buckets: Record<GroupKey, Notification[]> = {
+    today: [],
+    yesterday: [],
+    thisWeek: [],
+    earlier: [],
+  };
+
+  for (const n of notifications) {
+    const createdAt =
+      n.createdAt instanceof Date ? n.createdAt : new Date(n.createdAt);
+    const key = getGroupKey(createdAt, now);
+    buckets[key].push(n);
+  }
+
+  const order: Array<{ key: GroupKey; labelKey: string }> = [
+    { key: "today", labelKey: "notifications.group.today" },
+    { key: "yesterday", labelKey: "notifications.group.yesterday" },
+    { key: "thisWeek", labelKey: "notifications.group.thisWeek" },
+    { key: "earlier", labelKey: "notifications.group.earlier" },
+  ];
+
+  return order
+    .filter((g) => buckets[g.key].length > 0)
+    .map((g) => ({
+      key: g.key,
+      labelKey: g.labelKey,
+      notifications: buckets[g.key],
+      unreadCount: buckets[g.key].filter((n) => !n.read).length,
+    }));
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export function NotificationDropdown({ onCountChange }: NotificationDropdownProps) {
   const { t } = useTranslations();
@@ -91,6 +170,11 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
   };
 
   const hasUnread = notifications.some((n) => !n.read);
+  const groups = useMemo(
+    () => groupNotifications(notifications),
+    [notifications],
+  );
+  const totalItems = notifications.length;
 
   return (
     <div className="flex flex-col">
@@ -109,7 +193,7 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
           </Button>
         )}
       </div>
-      <ScrollArea className="max-h-80">
+      <ScrollArea className="max-h-96">
         {loading ? (
           <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
             {t("common.loading")}
@@ -119,15 +203,52 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
             {t("notifications.noNotifications")}
           </div>
         ) : (
-          <div className="divide-y">
-            {notifications.map((notification) => (
-              <NotificationItem
-                key={notification.id}
-                notification={notification}
-                onMarkAsRead={handleMarkAsRead}
-                onDismiss={handleDismiss}
-              />
-            ))}
+          <div
+            role="feed"
+            aria-busy={loading}
+            aria-label={t("notifications.title")}
+            className="divide-y"
+          >
+            {(() => {
+              // Render groups with running position offsets so each item
+              // gets a stable aria-posinset across the whole feed.
+              let runningIndex = 0;
+              return groups.map((group) => {
+                const groupItems = group.notifications.map((n) => {
+                  runningIndex += 1;
+                  return { notification: n, position: runningIndex };
+                });
+                return (
+                  <section
+                    key={group.key}
+                    aria-label={t(group.labelKey)}
+                    className="divide-y"
+                  >
+                    <header className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b bg-muted/60 px-4 py-1.5 text-xs font-semibold text-muted-foreground backdrop-blur">
+                      <span>{t(group.labelKey)}</span>
+                      {group.unreadCount > 0 && (
+                        <span className="text-[10px] font-normal text-muted-foreground/80">
+                          {t("notifications.group.unreadCount").replace(
+                            "{count}",
+                            String(group.unreadCount),
+                          )}
+                        </span>
+                      )}
+                    </header>
+                    {groupItems.map(({ notification, position }) => (
+                      <NotificationItem
+                        key={notification.id}
+                        notification={notification}
+                        onMarkAsRead={handleMarkAsRead}
+                        onDismiss={handleDismiss}
+                        positionInSet={position}
+                        setSize={totalItems}
+                      />
+                    ))}
+                  </section>
+                );
+              });
+            })()}
           </div>
         )}
       </ScrollArea>

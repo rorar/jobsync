@@ -6,44 +6,37 @@ import {
   XCircle,
   CheckCircle2,
   Briefcase,
-  ExternalLink,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useTranslations, formatRelativeTime } from "@/i18n";
-import type { Notification, NotificationType } from "@/models/notification.model";
-import Link from "next/link";
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import {
+  useTranslations,
+  formatRelativeTime,
+  formatDateTime,
+} from "@/i18n";
+import type {
+  Notification,
+  NotificationType,
+  NotificationDataExtended,
+} from "@/models/notification.model";
+import {
+  buildNotificationActions,
+  formatNotificationTitle,
+  formatNotificationReason,
+  formatNotificationActor,
+  resolveNotificationSeverity,
+} from "@/lib/notifications/deep-links";
 
 interface NotificationItemProps {
   notification: Notification;
   onMarkAsRead: (id: string) => void;
   onDismiss: (id: string) => void;
-}
-
-function getNotificationIcon(type: NotificationType) {
-  switch (type) {
-    case "auth_failure":
-    case "module_unreachable":
-      return <XCircle className="h-4 w-4 text-destructive" />;
-    case "cb_escalation":
-    case "consecutive_failures":
-    case "module_deactivated":
-      return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-    case "module_reactivated":
-      return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-    case "vacancy_promoted":
-      return <Briefcase className="h-4 w-4 text-primary" />;
-    case "bulk_action_completed":
-    case "retention_completed":
-      return <CheckCircle2 className="h-4 w-4 text-primary" />;
-    case "vacancy_batch_staged":
-      return <Info className="h-4 w-4 text-blue-500" />;
-    default:
-      return <Info className="h-4 w-4 text-muted-foreground" />;
-  }
+  /** Index of this item in the visible feed (for aria-posinset) */
+  positionInSet?: number;
+  /** Total number of items in the visible feed (for aria-setsize) */
+  setSize?: number;
 }
 
 /**
@@ -52,16 +45,16 @@ function getNotificationIcon(type: NotificationType) {
  */
 function parseNotificationData(
   data: unknown,
-): Record<string, unknown> | null {
+): NotificationDataExtended | null {
   if (!data) return null;
   if (typeof data === "object" && !Array.isArray(data)) {
-    return data as Record<string, unknown>;
+    return data as NotificationDataExtended;
   }
   if (typeof data === "string") {
     try {
       const parsed = JSON.parse(data);
       if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        return parsed as Record<string, unknown>;
+        return parsed as NotificationDataExtended;
       }
     } catch (e) {
       console.warn("[parseNotificationData] Failed to parse notification data:", data, e);
@@ -71,99 +64,171 @@ function parseNotificationData(
 }
 
 /**
- * Derive a contextual link from notification type and data.
- * Returns href + i18n label key, or null if no link is applicable.
+ * Icon for a given severity — visual shorthand so users can scan quickly.
+ * Severity is either stored in `data.severity` or derived from the type.
  */
-function getNotificationLink(
-  notification: Notification,
-): { href: string; labelKey: string } | null {
-  // vacancy_promoted -> link to the created job
-  if (notification.type === "vacancy_promoted") {
-    const data = parseNotificationData(notification.data);
-    const jobId = data?.jobId;
-    if (typeof jobId === "string" && UUID_RE.test(jobId)) {
-      return { href: `/dashboard/myjobs/${jobId}`, labelKey: "notifications.viewJob" };
-    }
+function SeverityIcon({
+  severity,
+  type,
+}: {
+  severity: "info" | "success" | "warning" | "error";
+  type: NotificationType;
+}) {
+  // Vacancy pipeline events get a briefcase regardless of severity — it's
+  // a stronger domain cue than a generic status glyph.
+  if (type === "vacancy_promoted") {
+    return <Briefcase className="h-4 w-4 text-primary" aria-hidden="true" />;
   }
-
-  // Fallback: automation link (arrow only, no label key)
-  if (notification.automationId) {
-    return {
-      href: `/dashboard/automations/${notification.automationId}`,
-      labelKey: "",
-    };
+  switch (severity) {
+    case "error":
+      return <XCircle className="h-4 w-4 text-destructive" aria-hidden="true" />;
+    case "warning":
+      return (
+        <AlertTriangle
+          className="h-4 w-4 text-yellow-500"
+          aria-hidden="true"
+        />
+      );
+    case "success":
+      return (
+        <CheckCircle2
+          className="h-4 w-4 text-green-500"
+          aria-hidden="true"
+        />
+      );
+    case "info":
+    default:
+      return <Info className="h-4 w-4 text-blue-500" aria-hidden="true" />;
   }
-
-  return null;
 }
 
 export function NotificationItem({
   notification,
   onMarkAsRead,
   onDismiss,
+  positionInSet,
+  setSize,
 }: NotificationItemProps) {
   const { t, locale } = useTranslations();
-  const link = getNotificationLink(notification);
+  const data = parseNotificationData(notification.data);
+  const type = notification.type as NotificationType;
 
-  const handleClick = () => {
+  const severity = resolveNotificationSeverity(type, data);
+  const actions = buildNotificationActions(type, data);
+  const title = formatNotificationTitle(data, notification.message, t);
+  const reason = formatNotificationReason(data, t);
+  const actor = formatNotificationActor(data, t);
+
+  const createdAt =
+    notification.createdAt instanceof Date
+      ? notification.createdAt
+      : new Date(notification.createdAt);
+  const relativeTime = formatRelativeTime(createdAt, locale);
+  const absoluteTime = formatDateTime(createdAt, locale);
+  const isoTime = createdAt.toISOString();
+
+  const titleId = `notif-title-${notification.id}`;
+  const reasonId = reason ? `notif-reason-${notification.id}` : undefined;
+
+  const handleMarkRead = () => {
     if (!notification.read) {
       onMarkAsRead(notification.id);
     }
   };
 
+  const handleActionClick = () => {
+    // Clicking an action both navigates (via Link) and marks as read.
+    // Navigation is handled by Next.js Link; we only update read state here.
+    handleMarkRead();
+  };
+
   return (
-    <div
+    <article
       className={cn(
-        "group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/50 cursor-pointer",
-        !notification.read && "bg-muted/30",
+        "group relative flex gap-3 px-4 py-3 transition-colors hover:bg-muted/50",
+        !notification.read && "bg-muted/30 border-l-2 border-l-primary",
       )}
-      onClick={handleClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          handleClick();
-        }
-      }}
+      aria-labelledby={titleId}
+      aria-describedby={reasonId}
+      aria-posinset={positionInSet}
+      aria-setsize={setSize}
     >
+      {/* Severity icon — decorative + non-text visual cue */}
       <div className="mt-0.5 flex-shrink-0">
-        {getNotificationIcon(notification.type as NotificationType)}
+        <SeverityIcon severity={severity} type={type} />
       </div>
+
       <div className="flex-1 min-w-0">
+        {/* Header row: actor name + relative time (+ unread dot) */}
+        <div className="flex items-baseline justify-between gap-2">
+          <div className="flex items-baseline gap-2 min-w-0 flex-1">
+            {actor && (
+              <span className="text-xs font-semibold text-muted-foreground truncate">
+                {actor}
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground/70" aria-hidden="true">
+              {actor ? "·" : ""}
+            </span>
+            <time
+              dateTime={isoTime}
+              title={absoluteTime}
+              className="text-xs text-muted-foreground whitespace-nowrap"
+            >
+              {relativeTime}
+            </time>
+          </div>
+          {!notification.read && (
+            <>
+              {/* Non-visual cue so screen readers announce unread state */}
+              <span className="sr-only">•</span>
+              <span
+                className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1"
+                aria-hidden="true"
+              />
+            </>
+          )}
+        </div>
+
+        {/* Body: title (WHAT) + optional reason (WHY) */}
         <p
+          id={titleId}
           className={cn(
-            "text-sm leading-snug",
+            "mt-1 text-sm leading-snug",
             !notification.read ? "font-medium" : "text-muted-foreground",
           )}
         >
-          {notification.message}
+          {title}
         </p>
-        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{formatRelativeTime(notification.createdAt, locale)}</span>
-          {link && !link.labelKey && (
-            <Link
-              href={link.href}
-              className="text-xs text-muted-foreground hover:underline hover:text-foreground"
-              onClick={(e) => e.stopPropagation()}
-              aria-label={t("notifications.viewAutomation")}
-            >
-              →
-            </Link>
-          )}
-        </div>
-        {link && link.labelKey && (
-          <Link
-            href={link.href}
-            className="mt-1 text-sm text-primary hover:underline inline-flex items-center gap-1"
-            onClick={(e) => e.stopPropagation()}
+        {reason && (
+          <p
+            id={reasonId}
+            className="mt-0.5 text-xs text-muted-foreground line-clamp-2"
           >
-            {t(link.labelKey)}
-            <ExternalLink className="h-3 w-3" aria-hidden="true" />
-          </Link>
+            {reason}
+          </p>
+        )}
+
+        {/* Footer: action buttons (HOW → WHERE) */}
+        {actions.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {actions.map((action, idx) => (
+              <Button
+                key={`${action.url}-${idx}`}
+                asChild
+                size="sm"
+                variant={action.variant === "primary" ? "default" : "ghost"}
+                onClick={handleActionClick}
+              >
+                <Link href={action.url}>{t(action.labelKey)}</Link>
+              </Button>
+            ))}
+          </div>
         )}
       </div>
-      <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+
+      {/* Dismiss button — always visible on touch, hover-revealed on desktop */}
+      <div className="flex-shrink-0 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity">
         <Button
           variant="ghost"
           size="icon"
@@ -172,16 +237,11 @@ export function NotificationItem({
             e.stopPropagation();
             onDismiss(notification.id);
           }}
-          aria-label={t("notifications.dismiss")}
+          aria-label={t("notifications.action.dismiss")}
         >
-          <X className="h-3 w-3" />
+          <X className="h-3 w-3" aria-hidden="true" />
         </Button>
       </div>
-      {!notification.read && (
-        <div className="mt-2 flex-shrink-0">
-          <div className="h-2 w-2 rounded-full bg-primary" />
-        </div>
-      )}
-    </div>
+    </article>
   );
 }

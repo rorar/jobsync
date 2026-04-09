@@ -87,7 +87,12 @@ describe("NotificationDispatcher", () => {
           userId: "user-1",
           type: "vacancy_promoted",
           message: "Job created from staged vacancy",
-          data: { stagedVacancyId: "sv-1", jobId: "job-1" },
+          // `data` now also carries late-bound i18n fields (titleKey, actorType,
+          // severity) — we only assert on the contextual ids here.
+          data: expect.objectContaining({
+            stagedVacancyId: "sv-1",
+            jobId: "job-1",
+          }),
         }),
       });
     });

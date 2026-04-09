@@ -25,7 +25,10 @@ import type {
   JobStatusChangedPayload,
 } from "../event-types";
 import prisma from "@/lib/db";
-import type { NotificationType } from "@/models/notification.model";
+import type {
+  NotificationType,
+  NotificationDataExtended,
+} from "@/models/notification.model";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
 } from "@/models/notification.model";
@@ -128,7 +131,9 @@ async function flushStagedBuffer(automationId: string): Promise<void> {
   if (!entry) return;
   stagedBuffers.delete(automationId);
 
-  // Fetch automation name for the notification message
+  // Fetch automation name for the notification message (English fallback).
+  // The authoritative late-bound title comes from `data.titleKey + titleParams`
+  // and is resolved in the UI at render time via formatNotificationTitle().
   const automation = await prisma.automation.findFirst({
     where: { id: automationId, userId: entry.userId },
     select: { name: true },
@@ -136,16 +141,29 @@ async function flushStagedBuffer(automationId: string): Promise<void> {
   const automationName = automation?.name ?? automationId;
 
   const locale = await resolveLocale(entry.userId);
+  // Legacy `message` fallback: still dispatched for email/webhook/push channels
+  // and for historical compatibility with clients that don't read structured data.
   const message = t(locale, "notifications.batchStaged")
     .replace("{count}", String(entry.count))
     .replace("{name}", automationName);
+
+  const extendedData: NotificationDataExtended = {
+    count: entry.count,
+    automationId,
+    // 5W+H structured fields — rendered late by the UI
+    titleKey: "notifications.vacancyBatchStaged.title",
+    titleParams: { count: entry.count, automationName },
+    actorType: "automation",
+    actorId: automationId,
+    severity: "info",
+  };
 
   const draft: NotificationDraft = {
     userId: entry.userId,
     type: "vacancy_batch_staged" satisfies NotificationType,
     message,
     automationId,
-    data: { count: entry.count, automationId },
+    data: extendedData,
   };
 
   await dispatchNotification(draft);
@@ -161,11 +179,19 @@ async function handleVacancyPromoted(
   const payload = event.payload as VacancyPromotedPayload;
   const locale = await resolveLocale(payload.userId);
 
+  const extendedData: NotificationDataExtended = {
+    stagedVacancyId: payload.stagedVacancyId,
+    jobId: payload.jobId,
+    titleKey: "notifications.vacancyPromoted.title",
+    actorType: "system",
+    severity: "success",
+  };
+
   await dispatchNotification({
     userId: payload.userId,
     type: "vacancy_promoted" satisfies NotificationType,
     message: t(locale, "notifications.vacancyPromoted"),
-    data: { stagedVacancyId: payload.stagedVacancyId, jobId: payload.jobId },
+    data: extendedData,
   });
 }
 
@@ -204,16 +230,22 @@ async function handleBulkActionCompleted(
     .replace("{succeeded}", String(payload.succeeded))
     .replace("{actionType}", payload.actionType);
 
+  const extendedData: NotificationDataExtended = {
+    actionType: payload.actionType,
+    succeeded: payload.succeeded,
+    failed: payload.failed,
+    itemCount: payload.itemIds.length,
+    titleKey: "notifications.bulkActionCompleted.title",
+    titleParams: { action: payload.actionType, count: payload.succeeded },
+    actorType: "user",
+    severity: payload.failed > 0 ? "warning" : "success",
+  };
+
   await dispatchNotification({
     userId: payload.userId,
     type: "bulk_action_completed" satisfies NotificationType,
     message,
-    data: {
-      actionType: payload.actionType,
-      succeeded: payload.succeeded,
-      failed: payload.failed,
-      itemCount: payload.itemIds.length,
-    },
+    data: extendedData,
   });
 }
 
@@ -226,15 +258,23 @@ async function handleModuleDeactivated(
     .replace("{name}", payload.moduleId)
     .replace("{automationCount}", String(payload.affectedAutomationIds.length));
 
+  const extendedData: NotificationDataExtended = {
+    moduleId: payload.moduleId,
+    affectedAutomationCount: payload.affectedAutomationIds.length,
+    titleKey: "notifications.moduleDeactivated.title",
+    titleParams: { moduleName: payload.moduleId },
+    actorType: "module",
+    actorId: payload.moduleId,
+    reasonKey: "notifications.reason.manualDeactivation",
+    severity: "warning",
+  };
+
   await dispatchNotification({
     userId: payload.userId,
     type: "module_deactivated" satisfies NotificationType,
     message,
     moduleId: payload.moduleId,
-    data: {
-      moduleId: payload.moduleId,
-      affectedAutomationCount: payload.affectedAutomationIds.length,
-    },
+    data: extendedData,
   });
 }
 
@@ -247,15 +287,22 @@ async function handleModuleReactivated(
     .replace("{name}", payload.moduleId)
     .replace("{automationCount}", String(payload.pausedAutomationCount));
 
+  const extendedData: NotificationDataExtended = {
+    moduleId: payload.moduleId,
+    pausedAutomationCount: payload.pausedAutomationCount,
+    titleKey: "notifications.moduleReactivated.title",
+    titleParams: { moduleName: payload.moduleId },
+    actorType: "module",
+    actorId: payload.moduleId,
+    severity: "success",
+  };
+
   await dispatchNotification({
     userId: payload.userId,
     type: "module_reactivated" satisfies NotificationType,
     message,
     moduleId: payload.moduleId,
-    data: {
-      moduleId: payload.moduleId,
-      pausedAutomationCount: payload.pausedAutomationCount,
-    },
+    data: extendedData,
   });
 }
 
@@ -267,11 +314,20 @@ async function handleRetentionCompleted(
   const message = t(locale, "notifications.retentionCompleted")
     .replace("{count}", String(payload.purgedCount));
 
+  const extendedData: NotificationDataExtended = {
+    purgedCount: payload.purgedCount,
+    hashesCreated: payload.hashesCreated,
+    titleKey: "notifications.retentionCompleted.title",
+    titleParams: { count: payload.purgedCount },
+    actorType: "system",
+    severity: "success",
+  };
+
   await dispatchNotification({
     userId: payload.userId,
     type: "retention_completed" satisfies NotificationType,
     message,
-    data: { purgedCount: payload.purgedCount, hashesCreated: payload.hashesCreated },
+    data: extendedData,
   });
 }
 
@@ -284,17 +340,23 @@ async function handleJobStatusChanged(
     .replace("{newStatus}", payload.newStatusValue)
     .replace("{jobId}", payload.jobId);
 
+  const extendedData: NotificationDataExtended = {
+    jobId: payload.jobId,
+    previousStatus: payload.previousStatusValue,
+    newStatus: payload.newStatusValue,
+    note: payload.note,
+    historyEntryId: payload.historyEntryId,
+    titleKey: "notifications.jobStatusChanged.title",
+    titleParams: { status: payload.newStatusValue },
+    actorType: "user",
+    severity: "info",
+  };
+
   await dispatchNotification({
     userId: payload.userId,
     type: "job_status_changed" satisfies NotificationType,
     message,
-    data: {
-      jobId: payload.jobId,
-      previousStatus: payload.previousStatusValue,
-      newStatus: payload.newStatusValue,
-      note: payload.note,
-      historyEntryId: payload.historyEntryId,
-    },
+    data: extendedData,
   });
 }
 
