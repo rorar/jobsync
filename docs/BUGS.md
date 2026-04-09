@@ -95,6 +95,7 @@ stream delivered.
 - **`/signin` + `/signup` layouts don't render `<main id="main-content">`**, so the skip link is a no-op on auth pages. Follow-up: add the main landmark to the auth layout.
 - **`NavLink` active-route detection uses `pathname.startsWith(\`${route}/dashboard\`)`** which looks like a pre-existing typo. NOT fixed by Stream H (unrelated to a11y scope). Flagged for architecture review.
 - **`WeeklyBarChartToggle` chart labels still English** ("Jobs", "Activities") — they are caller-provided `label` field on `ChartConfig`. Requires a ChartConfig `labelKey`/`labelFallback` refactor, out of scope for Stream G.
+- **`Sidebar` secondary `<nav>` wrapping a single link** — the a11y specialist review suggested demoting it from a `<nav>` landmark to a plain `<div>` on the grounds that "a single link is not a navigation landmark" (WAI-ARIA landmark guidelines recommend against landmarks with only one meaningful child). Stream H took the less disruptive fix — added an `aria-label` — but the cleaner structural refactor is still pending. Low-severity a11y cleanup; fold into a future sprint that touches Sidebar.
 
 ### Skill invocation test results (Sprint 2)
 All 8 Sprint 2 stream agents invoked their assigned skills via the Skill tool with the combined (a)+(b) instrumentation. The verbatim quoted passages + rejected alternatives were present in every report. Specialization uplift from the spot-check phase (~82% median on HIGH findings) justified the pattern. Skills used:
