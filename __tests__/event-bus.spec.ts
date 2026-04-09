@@ -274,6 +274,134 @@ describe("TypedEventBus", () => {
     });
   });
 
+  // ───────────────────────────────────────────────────────────────────────
+  // Sprint 2 H-P-06: parallel consumer dispatch
+  // ───────────────────────────────────────────────────────────────────────
+
+  describe("parallel consumer dispatch (H-P-06)", () => {
+    it("dispatches all consumers concurrently, not sequentially", async () => {
+      // Three 50ms handlers. Sequentially they would take 150ms; in parallel
+      // they should complete well under 120ms. We use a 100ms ceiling with
+      // a generous buffer to avoid CI flakiness.
+      const delay = (ms: number) =>
+        new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+      eventBus.subscribe("VacancyPromoted", async () => {
+        await delay(50);
+      });
+      eventBus.subscribe("VacancyPromoted", async () => {
+        await delay(50);
+      });
+      eventBus.subscribe("VacancyPromoted", async () => {
+        await delay(50);
+      });
+
+      const start = Date.now();
+      await eventBus.publish(
+        createEvent("VacancyPromoted", {
+          stagedVacancyId: "sv-1",
+          jobId: "job-1",
+          userId: "user-1",
+        }),
+      );
+      const elapsed = Date.now() - start;
+
+      // Sequential would be ~150ms; parallel must be much less.
+      // Allow plenty of headroom for CI timer drift.
+      expect(elapsed).toBeLessThan(120);
+    });
+
+    it("publish() still awaits EVERY handler before resolving", async () => {
+      // Parallelism must not regress to fire-and-forget: callers still need
+      // to observe side-effects after `await publish(...)`.
+      const sideEffects: string[] = [];
+
+      eventBus.subscribe("VacancyDismissed", async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 20));
+        sideEffects.push("slow-handler-done");
+      });
+      eventBus.subscribe("VacancyDismissed", () => {
+        sideEffects.push("sync-handler-done");
+      });
+
+      await eventBus.publish(
+        createEvent("VacancyDismissed", {
+          stagedVacancyId: "sv-1",
+          userId: "user-1",
+        }),
+      );
+
+      // Both handlers must have committed their side-effects by the time
+      // publish resolves.
+      expect(sideEffects).toContain("slow-handler-done");
+      expect(sideEffects).toContain("sync-handler-done");
+    });
+
+    it("isolates a rejecting handler from the parallel batch", async () => {
+      const consoleSpy = jest.spyOn(console, "error").mockImplementation();
+      const received: string[] = [];
+
+      eventBus.subscribe("VacancyPromoted", async () => {
+        throw new Error("parallel reject");
+      });
+      eventBus.subscribe("VacancyPromoted", async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 10));
+        received.push("parallel-survivor");
+      });
+      eventBus.subscribe("VacancyPromoted", () => {
+        received.push("sync-survivor");
+      });
+
+      await eventBus.publish(
+        createEvent("VacancyPromoted", {
+          stagedVacancyId: "sv-1",
+          jobId: "job-1",
+          userId: "user-1",
+        }),
+      );
+
+      expect(received).toContain("parallel-survivor");
+      expect(received).toContain("sync-survivor");
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[EventBus] Consumer failed"),
+        expect.any(Error),
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it("preserves per-handler cross-publish ordering (OrderGuarantee)", async () => {
+      // Parallel dispatch must NOT break the invariant that publish(A) then
+      // publish(B) delivers A before B to every handler.
+      const order: string[] = [];
+
+      eventBus.subscribe("VacancyStaged", async (event) => {
+        // Variable delay to try to invert ordering if publish was buggy
+        await new Promise<void>((resolve) => setTimeout(resolve, 5));
+        order.push(event.payload.stagedVacancyId);
+      });
+
+      await eventBus.publish(
+        createEvent("VacancyStaged", {
+          stagedVacancyId: "first",
+          userId: "u",
+          sourceBoard: "eures",
+          automationId: null,
+        }),
+      );
+      await eventBus.publish(
+        createEvent("VacancyStaged", {
+          stagedVacancyId: "second",
+          userId: "u",
+          sourceBoard: "eures",
+          automationId: null,
+        }),
+      );
+
+      expect(order).toEqual(["first", "second"]);
+    });
+  });
+
   describe("handlerCount", () => {
     it("returns count for specific event type", () => {
       eventBus.subscribe("VacancyPromoted", () => { /* noop */ });

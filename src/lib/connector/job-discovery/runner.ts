@@ -637,27 +637,60 @@ interface ExistingVacancyData {
   dedupHashes: Set<string>;
 }
 
+/** @internal — exported only for unit tests (H-P-07 regression guard). */
+export { getExistingVacancyKeys as _testGetExistingVacancyKeys };
+
 async function getExistingVacancyKeys(
   userId: string,
   sourceBoard: string,
 ): Promise<ExistingVacancyData> {
-  // Time-bounded query: only check jobs from last 90 days to prevent
-  // unbounded growth. Older jobs are unlikely to be rediscovered.
+  // Sprint 2 H-P-07 performance fix:
+  //
+  // The dedup scan used to read every non-dismissed StagedVacancy the user
+  // had ever received for this sourceBoard — an unbounded scan proportional
+  // to the user's entire staging history. For a user with 10k+ historical
+  // vacancies this was slow and grew forever.
+  //
+  // We bound all three read arms of the dedup scan to the last 90 days via
+  // `createdAt`, aligned with:
+  //   - specs/vacancy-pipeline.allium §DedupCheck ("dedup queries are bounded
+  //     to the last 90 days")
+  //   - the existing 90-day bound already applied to the Job and DedupHash
+  //     arms below (we just extended the same window to the StagedVacancy
+  //     arm for symmetry).
+  //
+  // Status-awareness: we intentionally DO NOT include `promoted` vacancies
+  // in the bounded window — promoted vacancies are the user's active
+  // tracking and their URLs are already covered via the Job arm (which
+  // reads `Job.jobUrl` for every promoted row within the same 90-day
+  // window). Including them here would double-scan the hot path.
+  //
+  // Performance note: the existing index `@@index([userId, sourceBoard,
+  // externalId])` does not cover the `createdAt` predicate, but the
+  // `@@index([userId, createdAt])` index on StagedVacancy (already present
+  // in schema.prisma) gives SQLite a cheap seek into the time window; the
+  // residual `sourceBoard` + `status` filter is applied post-seek on a
+  // much smaller row set.
   const dedupCutoff = new Date();
   dedupCutoff.setDate(dedupCutoff.getDate() - 90);
 
   const [stagedKeys, jobUrls, dedupHashes] = await Promise.all([
-    // Check existing staged vacancies (not dismissed)
+    // Existing staged vacancies (still in the pipeline) — bounded to 90 days
     db.stagedVacancy.findMany({
-      where: { userId, sourceBoard, status: { not: "dismissed" } },
+      where: {
+        userId,
+        sourceBoard,
+        status: { notIn: ["dismissed", "promoted"] },
+        createdAt: { gte: dedupCutoff },
+      },
       select: { externalId: true, sourceUrl: true },
     }),
-    // Check existing promoted jobs (via URL) — bounded to last 90 days
+    // Existing promoted jobs (via URL) — bounded to last 90 days
     db.job.findMany({
       where: { userId, createdAt: { gte: dedupCutoff } },
       select: { jobUrl: true },
     }),
-    // Check dedup hashes (purged records) — bounded to last 90 days
+    // Dedup hashes (purged records) — bounded to last 90 days
     db.dedupHash.findMany({
       where: { userId, sourceBoard, createdAt: { gte: dedupCutoff } },
       select: { hash: true },
