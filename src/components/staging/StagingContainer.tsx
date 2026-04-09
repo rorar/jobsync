@@ -193,14 +193,21 @@ function StagingContainer() {
   const handleBlockCompany = useCallback(async (companyName: string) => {
     const result = await addBlacklistEntry(companyName, "contains");
     if (result.success) {
-      toast({ title: t("blacklist.blocked") });
+      const trashedCount = result.data?.trashedCount ?? 0;
+      toast({
+        title: t("blacklist.blocked"),
+        description: trashedCount > 0
+          ? t("blacklist.filtered").replace("{count}", String(trashedCount))
+          : undefined,
+      });
+      reload();
     } else {
       toast({
         title: result.message ? t(result.message) : t("common.error"),
         variant: "destructive",
       });
     }
-  }, [t]);
+  }, [t, reload]);
 
   // Ref to resolve the promotion dialog promise from outside
   const promotionResolveRef = useRef<((result: { success: boolean }) => void) | null>(null);
@@ -500,18 +507,11 @@ function StagingContainer() {
           if (blockConfirmVacancy?.employerName) {
             await handleBlockCompany(blockConfirmVacancy.employerName);
           }
-          const { success, message } = await dismissStagedVacancy(blockConfirmVacancy!.id);
-          if (success) {
-            toast({ variant: "success", description: t("deck.actionBlocked") });
-          } else {
-            toast({ variant: "destructive", title: t("staging.error"), description: message });
-          }
           if (blockResolveRef.current) {
-            blockResolveRef.current({ success });
+            blockResolveRef.current({ success: true });
             blockResolveRef.current = null;
           }
           setBlockConfirmOpen(false);
-          if (success) reload();
         }}
       />
     </>

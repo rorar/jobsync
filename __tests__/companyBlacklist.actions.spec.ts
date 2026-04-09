@@ -18,6 +18,10 @@ jest.mock("@/lib/db", () => ({
       delete: jest.fn(),
       deleteMany: jest.fn(),
     },
+    stagedVacancy: {
+      updateMany: jest.fn(),
+    },
+    $transaction: jest.fn(),
   },
 }));
 
@@ -29,6 +33,8 @@ const mockCompanyBlacklist = db.companyBlacklist as unknown as {
   delete: jest.Mock;
   deleteMany: jest.Mock;
 };
+
+const mockTransaction = (db as unknown as { $transaction: jest.Mock }).$transaction;
 
 jest.mock("@/utils/user.utils", () => ({
   getCurrentUser: jest.fn(),
@@ -76,26 +82,111 @@ describe("CompanyBlacklist Actions", () => {
   });
 
   describe("addBlacklistEntry", () => {
-    it("creates a new entry", async () => {
+    const mockEntry = {
+      id: "e1", userId: "user-1", pattern: "Acme", matchType: "contains",
+      reason: "Bad reviews", createdAt: new Date(), updatedAt: new Date(),
+    };
+
+    beforeEach(() => {
+      // $transaction executes the array of promises and returns their results
+      mockTransaction.mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops));
+    });
+
+    it("creates entry and trashes matching staged vacancies in transaction", async () => {
       mockCompanyBlacklist.findUnique.mockResolvedValue(null);
-      const mockEntry = {
-        id: "e1", userId: "user-1", pattern: "Acme", matchType: "contains",
-        reason: "Bad reviews", createdAt: new Date(), updatedAt: new Date(),
-      };
       mockCompanyBlacklist.create.mockResolvedValue(mockEntry);
+      (db as unknown as { stagedVacancy: { updateMany: jest.Mock } }).stagedVacancy.updateMany
+        .mockResolvedValue({ count: 3 });
 
       const result = await addBlacklistEntry("Acme", "contains", "Bad reviews");
 
       expect(result.success).toBe(true);
       expect(result.data!.pattern).toBe("Acme");
-      expect(mockCompanyBlacklist.create).toHaveBeenCalledWith({
-        data: {
-          userId: "user-1",
-          pattern: "Acme",
-          matchType: "contains",
-          reason: "Bad reviews",
-        },
+      expect(result.data!.trashedCount).toBe(3);
+      expect(mockTransaction).toHaveBeenCalled();
+    });
+
+    it("uses contains filter for contains match type", async () => {
+      mockCompanyBlacklist.findUnique.mockResolvedValue(null);
+      mockCompanyBlacklist.create.mockResolvedValue(mockEntry);
+      const mockUpdateMany = (db as unknown as { stagedVacancy: { updateMany: jest.Mock } })
+        .stagedVacancy.updateMany;
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+
+      await addBlacklistEntry("Acme", "contains");
+
+      expect(mockUpdateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            employerName: { contains: "Acme" },
+            userId: "user-1",
+            trashedAt: null,
+            archivedAt: null,
+            promotedToJobId: null,
+          }),
+        }),
+      );
+    });
+
+    it("uses startsWith filter for starts_with match type", async () => {
+      mockCompanyBlacklist.findUnique.mockResolvedValue(null);
+      mockCompanyBlacklist.create.mockResolvedValue({
+        ...mockEntry, matchType: "starts_with",
       });
+      const mockUpdateMany = (db as unknown as { stagedVacancy: { updateMany: jest.Mock } })
+        .stagedVacancy.updateMany;
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+
+      await addBlacklistEntry("Acme", "starts_with");
+
+      expect(mockUpdateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            employerName: { startsWith: "Acme" },
+          }),
+        }),
+      );
+    });
+
+    it("uses equals filter for exact match type", async () => {
+      mockCompanyBlacklist.findUnique.mockResolvedValue(null);
+      mockCompanyBlacklist.create.mockResolvedValue({
+        ...mockEntry, matchType: "exact",
+      });
+      const mockUpdateMany = (db as unknown as { stagedVacancy: { updateMany: jest.Mock } })
+        .stagedVacancy.updateMany;
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+
+      await addBlacklistEntry("Acme Corp", "exact");
+
+      expect(mockUpdateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            employerName: { equals: "Acme Corp" },
+          }),
+        }),
+      );
+    });
+
+    it("only trashes non-promoted non-archived non-trashed vacancies", async () => {
+      mockCompanyBlacklist.findUnique.mockResolvedValue(null);
+      mockCompanyBlacklist.create.mockResolvedValue(mockEntry);
+      const mockUpdateMany = (db as unknown as { stagedVacancy: { updateMany: jest.Mock } })
+        .stagedVacancy.updateMany;
+      mockUpdateMany.mockResolvedValue({ count: 2 });
+
+      await addBlacklistEntry("Acme", "contains");
+
+      expect(mockUpdateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            trashedAt: null,
+            archivedAt: null,
+            promotedToJobId: null,
+          }),
+          data: { trashedAt: expect.any(Date) },
+        }),
+      );
     });
 
     it("rejects empty pattern", async () => {
@@ -105,28 +196,14 @@ describe("CompanyBlacklist Actions", () => {
       expect(result.message).toBe("blacklist.patternRequired");
     });
 
-    it("rejects duplicate pattern", async () => {
+    it("rejects duplicate pattern without trashing vacancies", async () => {
       mockCompanyBlacklist.findUnique.mockResolvedValue({ id: "existing" });
 
       const result = await addBlacklistEntry("Acme", "contains");
 
       expect(result.success).toBe(false);
       expect(result.message).toBe("blacklist.alreadyExists");
-    });
-
-    it("trims pattern whitespace", async () => {
-      mockCompanyBlacklist.findUnique.mockResolvedValue(null);
-      const mockEntry = {
-        id: "e1", userId: "user-1", pattern: "Acme", matchType: "exact",
-        reason: null, createdAt: new Date(), updatedAt: new Date(),
-      };
-      mockCompanyBlacklist.create.mockResolvedValue(mockEntry);
-
-      await addBlacklistEntry("  Acme  ", "exact");
-
-      expect(mockCompanyBlacklist.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ pattern: "Acme" }),
-      });
+      expect(mockTransaction).not.toHaveBeenCalled();
     });
 
     it("returns error for unauthenticated user", async () => {
@@ -136,6 +213,7 @@ describe("CompanyBlacklist Actions", () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toBe("blacklist.notAuthenticated");
+      expect(mockTransaction).not.toHaveBeenCalled();
     });
   });
 

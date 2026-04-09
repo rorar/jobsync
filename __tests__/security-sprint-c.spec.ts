@@ -82,6 +82,9 @@ jest.mock("@/lib/db", () => ({
     create: jest.fn(),
     delete: jest.fn(),
   },
+  stagedVacancy: {
+    updateMany: jest.fn(),
+  },
   task: {
     findFirst: jest.fn(),
     update: jest.fn(),
@@ -298,6 +301,11 @@ describe("SEC-14: matchType runtime validation", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+    // addBlacklistEntry now uses $transaction([create, updateMany]) — execute the ops array
+    (prisma.$transaction as jest.Mock).mockImplementation(
+      (ops: Promise<unknown>[]) => Promise.all(ops),
+    );
+    (prisma.stagedVacancy.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
   });
 
   it("returns { success: false, message: 'Invalid match type' } for unknown matchType", async () => {
@@ -342,6 +350,10 @@ describe("SEC-14: matchType runtime validation", () => {
     for (const mt of ["exact", "contains", "starts_with", "ends_with"] as const) {
       jest.clearAllMocks();
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.$transaction as jest.Mock).mockImplementation(
+        (ops: Promise<unknown>[]) => Promise.all(ops),
+      );
+      (prisma.stagedVacancy.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.companyBlacklist.findUnique as jest.Mock).mockResolvedValue(null);
       (prisma.companyBlacklist.create as jest.Mock).mockResolvedValue({
         id: "bl-x", userId: mockUser.id, pattern: "Acme", matchType: mt,

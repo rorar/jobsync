@@ -43,11 +43,24 @@ export async function getBlacklistEntries(): Promise<
  */
 const VALID_MATCH_TYPES: readonly string[] = ["exact", "contains", "starts_with", "ends_with"] as const;
 
+/** Build a Prisma string filter from blacklist match type + pattern. */
+function buildEmployerNameFilter(
+  pattern: string,
+  matchType: BlacklistMatchType,
+): { contains: string } | { startsWith: string } | { endsWith: string } | { equals: string } {
+  switch (matchType) {
+    case "contains": return { contains: pattern };
+    case "starts_with": return { startsWith: pattern };
+    case "ends_with": return { endsWith: pattern };
+    case "exact": return { equals: pattern };
+  }
+}
+
 export async function addBlacklistEntry(
   pattern: string,
   matchType: BlacklistMatchType = "contains",
   reason?: string,
-): Promise<ActionResult<CompanyBlacklist>> {
+): Promise<ActionResult<CompanyBlacklist & { trashedCount?: number }>> {
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "blacklist.notAuthenticated" };
@@ -85,21 +98,39 @@ export async function addBlacklistEntry(
       return { success: false, message: "blacklist.alreadyExists" };
     }
 
-    const entry = await prisma.companyBlacklist.create({
-      data: {
-        userId: user.id,
-        pattern: trimmedPattern,
-        matchType,
-        reason: trimmedReason || null,
-      },
-    });
+    // Build Prisma filter for employer name matching
+    const employerFilter = buildEmployerNameFilter(trimmedPattern, matchType);
+
+    // Transaction: create blacklist entry + retroactively trash matching staged vacancies
+    const [entry, trashResult] = await prisma.$transaction([
+      prisma.companyBlacklist.create({
+        data: {
+          userId: user.id,
+          pattern: trimmedPattern,
+          matchType,
+          reason: trimmedReason || null,
+        },
+      }),
+      prisma.stagedVacancy.updateMany({
+        where: {
+          userId: user.id,
+          employerName: employerFilter,
+          trashedAt: null,
+          archivedAt: null,
+          promotedToJobId: null,
+        },
+        data: { trashedAt: new Date() },
+      }),
+    ]);
 
     revalidatePath("/settings");
+    revalidatePath("/staging");
     return {
       success: true,
       data: {
         ...entry,
         matchType: entry.matchType as BlacklistMatchType,
+        trashedCount: trashResult.count,
       },
     };
   } catch (error) {
