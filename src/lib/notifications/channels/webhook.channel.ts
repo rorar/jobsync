@@ -22,7 +22,10 @@ import { decrypt } from "@/lib/encryption";
 import { validateWebhookUrl } from "@/lib/url-validation";
 import { t } from "@/i18n/server";
 import { resolveUserLocale } from "@/lib/locale-resolver";
-import type { NotificationType } from "@/models/notification.model";
+import type {
+  NotificationType,
+  NotificationDataExtended,
+} from "@/models/notification.model";
 import type {
   NotificationChannel,
   NotificationDraft,
@@ -151,6 +154,15 @@ async function deliverWithRetry(
 /**
  * Create an in-app notification for webhook delivery failure.
  * Best-effort: logs errors but never throws.
+ *
+ * i18n — late-binding pattern (mirrors notification-dispatcher):
+ *   - `message` is resolved in the user's current locale at write time and
+ *     kept as a backward-compat fallback for email/webhook channels and
+ *     older clients that don't read `data`.
+ *   - `data.titleKey + titleParams` carry the structured 5W+H metadata so
+ *     the UI can re-render in the user's current locale at view time via
+ *     formatNotificationTitle(), even if the user changes their locale
+ *     after the notification was written.
  */
 async function notifyDeliveryFailed(
   userId: string,
@@ -163,11 +175,22 @@ async function notifyDeliveryFailed(
     const message = template
       .replace("{eventType}", eventType)
       .replace("{url}", endpointUrl);
+    const extendedData: NotificationDataExtended = {
+      endpointUrl,
+      eventType,
+      titleKey: "webhook.deliveryFailed",
+      titleParams: { eventType, url: endpointUrl },
+      actorType: "system",
+      actorNameKey: "notifications.actor.system",
+      severity: "error",
+    };
     await prisma.notification.create({
       data: {
         userId,
         type: "module_unreachable" satisfies NotificationType,
+        // English/user-locale fallback — structured title is late-bound via data.titleKey.
         message,
+        data: extendedData as object,
       },
     });
   } catch (error) {
@@ -178,6 +201,8 @@ async function notifyDeliveryFailed(
 /**
  * Create an in-app notification for webhook endpoint auto-deactivation.
  * Best-effort: logs errors but never throws.
+ *
+ * i18n — late-binding pattern: see `notifyDeliveryFailed` for rationale.
  */
 async function notifyEndpointDeactivated(
   userId: string,
@@ -187,11 +212,21 @@ async function notifyEndpointDeactivated(
     const locale = await resolveUserLocale(userId);
     const template = t(locale, "webhook.endpointDeactivated");
     const message = template.replace("{url}", endpointUrl);
+    const extendedData: NotificationDataExtended = {
+      endpointUrl,
+      titleKey: "webhook.endpointDeactivated",
+      titleParams: { url: endpointUrl },
+      actorType: "system",
+      actorNameKey: "notifications.actor.system",
+      severity: "warning",
+    };
     await prisma.notification.create({
       data: {
         userId,
         type: "module_unreachable" satisfies NotificationType,
+        // English/user-locale fallback — structured title is late-bound via data.titleKey.
         message,
+        data: extendedData as object,
       },
     });
   } catch (error) {

@@ -417,6 +417,44 @@ describe("WebhookChannel", () => {
       });
     });
 
+    it("populates data.titleKey + 5W+H metadata for late-bound i18n on delivery failure", async () => {
+      const endpoint = makeEndpoint({ url: "https://late-bind.example.com/hook" });
+      mockFindMany.mockResolvedValue([endpoint]);
+      getMockFetch().mockResolvedValue({ ok: false, status: 500 });
+
+      await dispatchWithFakeTimers(
+        channel,
+        makeDraft({ type: "vacancy_promoted" }),
+        TEST_USER_ID,
+      );
+
+      const failureCall = mockNotificationCreate.mock.calls.find((c: unknown[]) => {
+        const row = (c[0] as { data: { data?: { titleKey?: string } } }).data;
+        return row.data?.titleKey === "webhook.deliveryFailed";
+      });
+      expect(failureCall).toBeDefined();
+      const payload = (failureCall as unknown[])[0] as {
+        data: { data: Record<string, unknown>; message: string };
+      };
+      expect(payload.data.data).toEqual(
+        expect.objectContaining({
+          titleKey: "webhook.deliveryFailed",
+          titleParams: {
+            eventType: "vacancy_promoted",
+            url: "https://late-bind.example.com/hook",
+          },
+          actorType: "system",
+          actorNameKey: "notifications.actor.system",
+          severity: "error",
+          endpointUrl: "https://late-bind.example.com/hook",
+          eventType: "vacancy_promoted",
+        }),
+      );
+      // Backward-compat locale-resolved message must still be populated
+      expect(typeof payload.data.message).toBe("string");
+      expect(payload.data.message.length).toBeGreaterThan(0);
+    });
+
     it("uses atomic increment for failureCount after all retries exhausted", async () => {
       const endpoint = makeEndpoint({ failureCount: 2 });
       mockFindMany.mockResolvedValue([endpoint]);
@@ -482,6 +520,43 @@ describe("WebhookChannel", () => {
           ).data.message.includes("deactivated due to repeated failures"),
       );
       expect(deactivationCall).toBeDefined();
+    });
+
+    it("populates data.titleKey + 5W+H metadata for late-bound i18n on auto-deactivation", async () => {
+      const endpoint = makeEndpoint({
+        url: "https://late-bind-deact.example.com/hook",
+        failureCount: 4,
+      });
+      mockFindMany.mockResolvedValue([endpoint]);
+      mockUpdate.mockResolvedValueOnce({ failureCount: 5 }).mockResolvedValue({});
+      getMockFetch().mockResolvedValue({ ok: false, status: 500 });
+
+      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+
+      const deactivationCall = mockNotificationCreate.mock.calls.find(
+        (c: unknown[]) => {
+          const row = (
+            c[0] as { data: { data?: { titleKey?: string } } }
+          ).data;
+          return row.data?.titleKey === "webhook.endpointDeactivated";
+        },
+      );
+      expect(deactivationCall).toBeDefined();
+      const payload = (deactivationCall as unknown[])[0] as {
+        data: { data: Record<string, unknown>; message: string };
+      };
+      expect(payload.data.data).toEqual(
+        expect.objectContaining({
+          titleKey: "webhook.endpointDeactivated",
+          titleParams: { url: "https://late-bind-deact.example.com/hook" },
+          actorType: "system",
+          actorNameKey: "notifications.actor.system",
+          severity: "warning",
+          endpointUrl: "https://late-bind-deact.example.com/hook",
+        }),
+      );
+      expect(typeof payload.data.message).toBe("string");
+      expect(payload.data.message.length).toBeGreaterThan(0);
     });
 
     it("does not deactivate when failureCount is below threshold", async () => {

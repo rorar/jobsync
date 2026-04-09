@@ -3,6 +3,7 @@ import "server-only";
 import prisma from "@/lib/db";
 import { emitEvent, createEvent } from "@/lib/events";
 import { DomainEventType } from "@/lib/events/event-types";
+import type { NotificationDataExtended } from "@/models/notification.model";
 import { moduleRegistry } from "./registry";
 import { ModuleStatus, CircuitBreakerState } from "./manifest";
 
@@ -13,10 +14,35 @@ import { ModuleStatus, CircuitBreakerState } from "./manifest";
  * - AuthFailureEscalation: immediate pause on auth failure
  * - ConsecutiveRunFailureEscalation: pause after N consecutive failed runs
  * - CircuitBreakerEscalation: pause after N consecutive CB opens
+ *
+ * Notification i18n — late-binding pattern
+ * ----------------------------------------
+ * Degradation notifications are written directly via prisma (not through the
+ * notification-dispatcher), because they are produced inside module runtime
+ * code paths that cannot easily round-trip through the event bus for
+ * per-automation fan-out. To avoid freezing the message in one locale at
+ * write time (the old bug), we mirror the dispatcher pattern:
+ *
+ *   - `message`     — English fallback (backward compat for email/webhook
+ *                     channels and older clients that don't read `data`).
+ *   - `data.titleKey` + `titleParams` — late-bound at render time in the
+ *                     user's current locale via formatNotificationTitle().
+ *   - `data.actorType/actorId`, `reasonKey`, `severity` — 5W+H metadata
+ *                     consumed by deep-links.ts helpers.
+ *
+ * Keys referenced here already exist in src/i18n/dictionaries/notifications.ts.
  */
 
 const CONSECUTIVE_RUN_FAILURE_THRESHOLD = 5;
 const CB_ESCALATION_THRESHOLD = 3;
+
+// Soft upper bound on free-text fragments stored inside notification data.
+// Matches the length guard used for the English `message` fallback.
+const NAME_TRUNCATION_LENGTH = 200;
+
+function truncate(value: string, maxLength = NAME_TRUNCATION_LENGTH): string {
+  return value.length > maxLength ? value.slice(0, maxLength) : value;
+}
 
 // =============================================================================
 // AuthFailureEscalation (Allium spec rule)
@@ -75,19 +101,37 @@ export async function handleAuthFailure(
       },
     });
 
-    // Create persistent notifications using createMany (no N+1)
-    // TODO(i18n): Notification messages are stored in English. Migrate to structured
-    // i18n format { key, params } when notification rendering supports it.
+    // Create persistent notifications using createMany (no N+1).
+    //
+    // i18n: `message` is the English fallback; authoritative title is carried
+    // in `data.titleKey + titleParams` and resolved at render time in the
+    // user's current locale (see formatNotificationTitle()).
     try {
-      const safeModuleName = registered.manifest.name.slice(0, 200);
+      const safeModuleName = truncate(registered.manifest.name);
       await prisma.notification.createMany({
-        data: affectedAutomations.map((auto) => ({
-          userId: auto.userId,
-          type: "auth_failure",
-          message: `Automation "${auto.name.slice(0, 200)}" paused: authentication failed for module "${safeModuleName}". Please check your credentials.`,
-          moduleId,
-          automationId: auto.id,
-        })),
+        data: affectedAutomations.map((auto) => {
+          const safeAutomationName = truncate(auto.name);
+          const extendedData: NotificationDataExtended = {
+            moduleId,
+            moduleName: safeModuleName,
+            automationId: auto.id,
+            automationName: safeAutomationName,
+            titleKey: "notifications.authFailure.title",
+            actorType: "module",
+            actorId: moduleId,
+            reasonKey: "notifications.reason.authExpired",
+            severity: "error",
+          };
+          return {
+            userId: auto.userId,
+            type: "auth_failure",
+            // English fallback — structured title is late-bound via data.titleKey.
+            message: `Automation "${safeAutomationName}" paused: authentication failed for module "${safeModuleName}". Please check your credentials.`,
+            moduleId,
+            automationId: auto.id,
+            data: extendedData as object,
+          };
+        }),
       });
     } catch (err) {
       console.warn("[Degradation] Failed to create auth_failure notifications:", err);
@@ -163,16 +207,30 @@ export async function checkConsecutiveRunFailures(
       },
     });
 
-    // Create persistent notification for the automation owner
-    // TODO(i18n): Notification messages are stored in English. Migrate to structured
-    // i18n format { key, params } when notification rendering supports it.
+    // Create persistent notification for the automation owner.
+    //
+    // i18n: `message` is the English fallback; authoritative title is carried
+    // in `data.titleKey + titleParams` and resolved at render time in the
+    // user's current locale (see formatNotificationTitle()).
     try {
+      const safeAutomationName = truncate(automation.name);
+      const extendedData: NotificationDataExtended = {
+        automationId,
+        automationName: safeAutomationName,
+        failureCount: CONSECUTIVE_RUN_FAILURE_THRESHOLD,
+        titleKey: "notifications.consecutiveFailures.title",
+        titleParams: { count: CONSECUTIVE_RUN_FAILURE_THRESHOLD },
+        actorType: "automation",
+        actorId: automationId,
+        severity: "warning",
+      };
       await prisma.notification.create({
         data: {
           userId: automation.userId,
           type: "consecutive_failures",
-          message: `Automation "${automation.name.slice(0, 200)}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
+          message: `Automation "${safeAutomationName}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
           automationId,
+          data: extendedData as object,
         },
       });
     } catch (err) {
@@ -244,19 +302,38 @@ export async function handleCircuitBreakerTrip(
       },
     });
 
-    // Create persistent notifications using createMany (no N+1)
-    // TODO(i18n): Notification messages are stored in English. Migrate to structured
-    // i18n format { key, params } when notification rendering supports it.
+    // Create persistent notifications using createMany (no N+1).
+    //
+    // i18n: `message` is the English fallback; authoritative title is carried
+    // in `data.titleKey + titleParams` and resolved at render time in the
+    // user's current locale (see formatNotificationTitle()).
     try {
-      const safeModuleName = registered.manifest.name.slice(0, 200);
+      const safeModuleName = truncate(registered.manifest.name);
       await prisma.notification.createMany({
-        data: affectedAutomations.map((auto) => ({
-          userId: auto.userId,
-          type: "cb_escalation",
-          message: `Automation "${auto.name.slice(0, 200)}" paused: module "${safeModuleName}" circuit breaker tripped ${newFailureCount} times.`,
-          moduleId,
-          automationId: auto.id,
-        })),
+        data: affectedAutomations.map((auto) => {
+          const safeAutomationName = truncate(auto.name);
+          const extendedData: NotificationDataExtended = {
+            moduleId,
+            moduleName: safeModuleName,
+            automationId: auto.id,
+            automationName: safeAutomationName,
+            failureCount: newFailureCount,
+            titleKey: "notifications.cbEscalation.title",
+            actorType: "module",
+            actorId: moduleId,
+            reasonKey: "notifications.reason.circuitBreaker",
+            severity: "warning",
+          };
+          return {
+            userId: auto.userId,
+            type: "cb_escalation",
+            // English fallback — structured title is late-bound via data.titleKey.
+            message: `Automation "${safeAutomationName}" paused: module "${safeModuleName}" circuit breaker tripped ${newFailureCount} times.`,
+            moduleId,
+            automationId: auto.id,
+            data: extendedData as object,
+          };
+        }),
       });
     } catch (err) {
       console.warn("[Degradation] Failed to create cb_escalation notifications:", err);

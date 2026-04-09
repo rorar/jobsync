@@ -173,6 +173,37 @@ describe("Degradation Rules", () => {
       });
     });
 
+    it("should populate data.titleKey + 5W+H metadata for late-bound i18n", async () => {
+      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (mockRegistry.get as jest.Mock).mockReturnValue({
+        manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+      });
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-late-bind", userId: "user-late-bind", name: "Late Bind Auto" },
+      ]);
+
+      await handleAuthFailure("jsearch", "401 Unauthorized");
+
+      const call = (mockPrisma.notification.createMany as jest.Mock).mock.calls[0][0];
+      const row = call.data[0];
+      expect(row.data).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.authFailure.title",
+          actorType: "module",
+          actorId: "jsearch",
+          reasonKey: "notifications.reason.authExpired",
+          severity: "error",
+          moduleId: "jsearch",
+          moduleName: "JSearch",
+          automationId: "auto-late-bind",
+          automationName: "Late Bind Auto",
+        }),
+      );
+      // Backward-compat English `message` must still be populated
+      expect(typeof row.message).toBe("string");
+      expect(row.message.length).toBeGreaterThan(0);
+    });
+
     it("should not create notifications when 0 automations are affected", async () => {
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([]);
       (mockRegistry.get as jest.Mock).mockReturnValue({
@@ -342,6 +373,46 @@ describe("Degradation Rules", () => {
         }),
       );
     });
+
+    it("should populate data.titleKey + 5W+H metadata for late-bound i18n", async () => {
+      (mockPrisma.automationRun.findMany as jest.Mock).mockResolvedValue([
+        { status: "failed" },
+        { status: "failed" },
+        { status: "failed" },
+        { status: "failed" },
+        { status: "failed" },
+      ]);
+      (mockPrisma.automation.findFirst as jest.Mock).mockResolvedValue({
+        id: "auto-late-bind",
+        status: "active",
+        name: "Late Bind Cons",
+        userId: "user-late-bind",
+      });
+      (mockPrisma.automation.update as jest.Mock).mockResolvedValue({});
+
+      await checkConsecutiveRunFailures("auto-late-bind");
+
+      const call = (mockPrisma.notification.create as jest.Mock).mock.calls[0][0];
+      expect(call.data).toEqual(
+        expect.objectContaining({
+          userId: "user-late-bind",
+          type: "consecutive_failures",
+          automationId: "auto-late-bind",
+          data: expect.objectContaining({
+            titleKey: "notifications.consecutiveFailures.title",
+            titleParams: { count: 5 },
+            actorType: "automation",
+            actorId: "auto-late-bind",
+            severity: "warning",
+            automationId: "auto-late-bind",
+            automationName: "Late Bind Cons",
+            failureCount: 5,
+          }),
+        }),
+      );
+      expect(typeof call.data.message).toBe("string");
+      expect(call.data.message.length).toBeGreaterThan(0);
+    });
   });
 
   describe("handleCircuitBreakerTrip", () => {
@@ -466,6 +537,35 @@ describe("Degradation Rules", () => {
           }),
         ]),
       });
+    });
+
+    it("should populate data.titleKey + 5W+H metadata for late-bound i18n", async () => {
+      registerModule("mod-cb-late-bind", 2);
+      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-late-bind", userId: "user-late-bind", name: "CB Late Bind" },
+      ]);
+
+      await handleCircuitBreakerTrip("mod-cb-late-bind");
+
+      const call = (mockPrisma.notification.createMany as jest.Mock).mock.calls[0][0];
+      const row = call.data[0];
+      expect(row.data).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.cbEscalation.title",
+          actorType: "module",
+          actorId: "mod-cb-late-bind",
+          reasonKey: "notifications.reason.circuitBreaker",
+          severity: "warning",
+          moduleId: "mod-cb-late-bind",
+          moduleName: "mod-cb-late-bind",
+          automationId: "auto-late-bind",
+          automationName: "CB Late Bind",
+          failureCount: 3,
+        }),
+      );
+      expect(typeof row.message).toBe("string");
+      expect(row.message.length).toBeGreaterThan(0);
     });
 
     it("should not create notifications below threshold", async () => {
