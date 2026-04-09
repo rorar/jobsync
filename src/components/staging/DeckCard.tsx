@@ -86,9 +86,17 @@ function DeckCardInner({
         </Badge>
         <div className="flex items-center gap-1.5">
           {onInfoClick && !isPreview && (
+            // WCAG 2.5.5 AAA / 2.5.8 AA (CRIT-Y1): the pointer target is
+            // 44×44 via the h-11 w-11 button. The visible pill inside stays
+            // at 28×28 (h-7 w-7) to preserve the header's visual weight —
+            // the extra padding becomes an invisible hit-area around the
+            // glyph. Hover/active feedback is forwarded to the visible pill
+            // via Tailwind's `group` utility so the full 44×44 area reacts.
+            // The `i` keyboard shortcut still focuses/activates this button
+            // because it is the focusable element.
             <button
               type="button"
-              className="h-7 w-7 rounded-full bg-muted text-muted-foreground hover:bg-accent active:scale-90 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="group h-11 w-11 rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               onPointerDown={(e) => e.stopPropagation()}
               onPointerUp={(e) => e.stopPropagation()}
               onClick={(e) => {
@@ -98,7 +106,12 @@ function DeckCardInner({
               aria-label={t("deck.detailsTooltip")}
               title={t("deck.detailsTooltip")}
             >
-              <Info className="h-4 w-4" aria-hidden="true" />
+              <span
+                aria-hidden="true"
+                className="h-7 w-7 rounded-full bg-muted text-muted-foreground group-hover:bg-accent group-active:scale-90 flex items-center justify-center transition-all duration-150"
+              >
+                <Info className="h-4 w-4" />
+              </span>
             </button>
           )}
           {vacancy.matchScore != null ? (

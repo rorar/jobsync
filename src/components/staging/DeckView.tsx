@@ -374,9 +374,10 @@ export function DeckView({
         </button>
 
         {/* Block company */}
+        {/* WCAG 2.5.5 AAA (CRIT-Y1): button grown from 40×40 to 44×44. */}
         <button
           type="button"
-          className={`ml-1 h-10 w-10 rounded-full bg-red-100/60 text-red-500 hover:bg-red-200 active:bg-red-300 active:scale-90 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ${
+          className={`ml-1 h-11 w-11 rounded-full bg-red-100/60 text-red-500 hover:bg-red-200 active:bg-red-300 active:scale-90 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ${
             highlightBlock ? "ring-2 ring-red-500 scale-110" : ""
           }`}
           onClick={() => { setShowSwipeHint(false); block(); setLastAction(t("deck.actionBlocked")); }}
@@ -423,10 +424,11 @@ export function DeckView({
         <div className="h-8 w-px bg-border mx-1" aria-hidden="true" />
 
         {/* Group 3: Neutral actions (Skip + Undo) */}
+        {/* WCAG 2.5.5 AAA (CRIT-Y1): Skip + Undo grown from 40×40 to 44×44. */}
         {/* Skip */}
         <button
           type="button"
-          className="h-10 w-10 rounded-full bg-muted text-muted-foreground hover:bg-accent active:scale-90 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
+          className="h-11 w-11 rounded-full bg-muted text-muted-foreground hover:bg-accent active:scale-90 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
           onClick={() => { setShowSwipeHint(false); skip(); setLastAction(t("deck.actionSkipped")); }}
           disabled={isAnimating || !currentVacancy}
           aria-label={t("deck.skipTooltip")}
@@ -438,7 +440,7 @@ export function DeckView({
         {canUndo && (
           <button
             type="button"
-            className="h-10 w-10 rounded-full bg-muted text-muted-foreground hover:bg-accent active:scale-90 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-dashed border-muted-foreground/30"
+            className="h-11 w-11 rounded-full bg-muted text-muted-foreground hover:bg-accent active:scale-90 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-dashed border-muted-foreground/30"
             onClick={undo}
             disabled={isAnimating}
             aria-label={t("deck.undoTooltip")}
