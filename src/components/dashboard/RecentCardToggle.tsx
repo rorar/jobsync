@@ -3,10 +3,13 @@
 import { useState } from "react";
 import { CompanyLogo } from "@/components/ui/company-logo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 import { useTranslations, formatDateShort } from "@/i18n";
 import { JobResponse } from "@/models/job.model";
 import Link from "next/link";
+import {
+  ToolbarRadioGroup,
+  type ToolbarRadioOption,
+} from "@/components/ui/toolbar-radio-group";
 
 type RecentActivity = {
   id: string;
@@ -21,50 +24,56 @@ interface RecentCardToggleProps {
   activities: RecentActivity[];
 }
 
+type RecentTab = "jobs" | "activities";
+
 function formatDuration(totalMinutes: number) {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return totalMinutes === 0 ? "0min" : `${hours}h ${minutes}min`;
 }
 
+/**
+ * Sprint 2 Stream G (H-Y-07): migrated from a plain color-swap button
+ * group (no ARIA semantics, no non-color indicator) to the shared
+ * `ToolbarRadioGroup` primitive. Screen readers now announce the
+ * radiogroup purpose + selected option, and sighted users get the
+ * Check glyph in addition to the background colour change (WCAG 1.4.1).
+ */
 export default function RecentCardToggle({
   jobs,
   activities,
 }: RecentCardToggleProps) {
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState<RecentTab>("jobs");
   const { t, locale } = useTranslations();
 
-  const tabs = [t("dashboard.jobs"), t("dashboard.activities")] as const;
+  const jobsLabel = t("dashboard.jobs");
+  const activitiesLabel = t("dashboard.activities");
+
+  const options: ToolbarRadioOption<RecentTab>[] = [
+    { value: "jobs", label: jobsLabel },
+    { value: "activities", label: activitiesLabel },
+  ];
+
+  const currentLabel = activeTab === "jobs" ? jobsLabel : activitiesLabel;
 
   return (
     <Card className="mb-2">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-green-600">
-            {t("dashboard.recent")} {tabs[activeIndex]}
+            {t("dashboard.recent")} {currentLabel}
           </CardTitle>
-          <div className="flex rounded-md border text-xs">
-            {tabs.map((tab, index) => (
-              <button
-                key={tab}
-                onClick={() => setActiveIndex(index)}
-                className={cn(
-                  "px-2 py-1 transition-colors",
-                  index === 0 && "rounded-l-md",
-                  index === tabs.length - 1 && "rounded-r-md",
-                  activeIndex === index
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted",
-                )}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
+          <ToolbarRadioGroup<RecentTab>
+            ariaLabel={t("dashboard.recent")}
+            value={activeTab}
+            onChange={setActiveTab}
+            options={options}
+            activeIndicatorTestId="recent-card-active-indicator"
+          />
         </div>
       </CardHeader>
       <CardContent className="grid gap-6">
-        {activeIndex === 0
+        {activeTab === "jobs"
           ? jobs.map((job) => (
               <div key={job.id} className="flex items-center gap-4">
                 <div className="hidden sm:flex">

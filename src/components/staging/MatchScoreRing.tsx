@@ -18,6 +18,29 @@
  * placeholder ring with an em-dash is rendered. Both call sites already
  * guard against null externally, but the safety net keeps the contract
  * crisp and avoids accidental NaN renders if a caller forgets.
+ *
+ * Accessibility (Sprint 2 Stream G H-Y-01 / H-Y-02):
+ *
+ * The old implementation hardcoded `aria-label="Match score: {score}"` in
+ * English, which DE/FR/ES users heard untranslated. It was ALSO redundant
+ * with DeckCard's sr-only sibling span that already announced the score in
+ * the user's locale — AT users heard the score twice.
+ *
+ * The fix exposes two accessibility props:
+ *
+ *   - `ariaLabel`  — optional translated label. When provided AND
+ *                    `ariaHidden` is falsy, it becomes the SVG's accessible
+ *                    name (`role="img"` + `aria-label`). Callers MUST pass
+ *                    a locale-translated string.
+ *   - `ariaHidden` — when `true`, the SVG is hidden from assistive tech
+ *                    entirely (`role="presentation"`, `aria-hidden="true"`).
+ *                    Use this in DeckCard where a visually-hidden sibling
+ *                    span already announces the score in the user's locale.
+ *
+ * When neither prop is set (legacy call sites), the SVG falls back to a
+ * `role="presentation"` + `aria-hidden="true"` state rather than emitting
+ * the old English-only label. Any new call site MUST explicitly choose one
+ * of the two modes — making the accessibility contract explicit.
  */
 
 interface MatchScoreRingProps {
@@ -25,6 +48,17 @@ interface MatchScoreRingProps {
   score: number | null | undefined;
   /** Outer pixel size of the ring (width = height). Defaults to 44px. */
   size?: number;
+  /**
+   * Translated accessible name. Pass a locale-translated string from
+   * `useTranslations()`. Ignored when `ariaHidden` is `true`.
+   */
+  ariaLabel?: string;
+  /**
+   * When `true`, hides the SVG from assistive tech. Use this when a sibling
+   * element (e.g. an sr-only span) already announces the score in the
+   * user's locale, to prevent double-announcement.
+   */
+  ariaHidden?: boolean;
 }
 
 const RADIUS = 16;
@@ -46,15 +80,26 @@ function getStrokeColorClass(score: number): string {
   return "stroke-red-500 dark:stroke-red-400";
 }
 
-export function MatchScoreRing({ score, size = 44 }: MatchScoreRingProps) {
+export function MatchScoreRing({
+  score,
+  size = 44,
+  ariaLabel,
+  ariaHidden,
+}: MatchScoreRingProps) {
   const hasScore = typeof score === "number" && Number.isFinite(score);
   const safeScore: number = hasScore ? (score as number) : 0;
   const clamped = Math.max(0, Math.min(100, safeScore));
   const filled = (clamped / 100) * CIRCUMFERENCE;
 
-  const ariaLabel = hasScore
-    ? `Match score ${clamped} of 100`
-    : "Match score not available";
+  // Accessibility mode resolution (H-Y-01 / H-Y-02):
+  //   - ariaHidden takes precedence: fully hide from AT.
+  //   - ariaLabel → use as accessible name (role="img").
+  //   - neither: decorative, hide from AT (caller MUST provide announcement).
+  const isDecorative = ariaHidden === true || !ariaLabel;
+
+  const svgA11yProps = isDecorative
+    ? ({ role: "presentation", "aria-hidden": true } as const)
+    : ({ role: "img", "aria-label": ariaLabel } as const);
 
   return (
     <svg
@@ -62,8 +107,7 @@ export function MatchScoreRing({ score, size = 44 }: MatchScoreRingProps) {
       width={size}
       height={size}
       className="shrink-0"
-      role="img"
-      aria-label={ariaLabel}
+      {...svgA11yProps}
     >
       <circle
         cx={VIEW_BOX / 2}

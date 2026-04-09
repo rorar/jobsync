@@ -113,7 +113,14 @@ export function StagedVacancyDetailContent({
           )}
         </div>
         {vacancy.matchScore != null && (
-          <MatchScoreRing score={vacancy.matchScore} size={48} />
+          <MatchScoreRing
+            score={vacancy.matchScore}
+            size={48}
+            ariaLabel={t("staging.matchScoreAria").replace(
+              "{score}",
+              String(vacancy.matchScore),
+            )}
+          />
         )}
       </header>
 

@@ -3,9 +3,12 @@
 import { useState } from "react";
 import { ResponsiveBar } from "@nivo/bar";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { cn } from "@/lib/utils";
 import { useTranslations } from "@/i18n";
 import { formatDecimal } from "@/i18n";
+import {
+  ToolbarRadioGroup,
+  type ToolbarRadioOption,
+} from "@/components/ui/toolbar-radio-group";
 
 type ChartConfig = {
   label: string;
@@ -19,6 +22,11 @@ type WeeklyBarChartToggleProps = {
   charts: ChartConfig[];
 };
 
+/**
+ * Sprint 2 Stream G (H-Y-07): migrated from a plain color-swap button
+ * group (no ARIA semantics, no non-color indicator) to the shared
+ * `ToolbarRadioGroup` primitive.
+ */
 export default function WeeklyBarChartToggle({
   charts,
 }: WeeklyBarChartToggleProps) {
@@ -50,6 +58,14 @@ export default function WeeklyBarChartToggle({
         )
       : null;
 
+  const options: ToolbarRadioOption<string>[] = charts.map((chart, index) => ({
+    value: String(index),
+    // NOTE: Chart labels come from the server (e.g. "Activities", "Jobs") and
+    // are not translated yet. Passing them through as-is preserves existing
+    // behaviour — a follow-up task should add a translation lookup table.
+    label: chart.label,
+  }));
+
   return (
     <Card className="mb-2 lg:mb-0">
       <CardHeader className="pb-3">
@@ -64,24 +80,13 @@ export default function WeeklyBarChartToggle({
               </span>
             )}
           </div>
-          <div className="flex rounded-md border text-xs">
-            {charts.map((chart, index) => (
-              <button
-                key={chart.label}
-                onClick={() => setActiveIndex(index)}
-                className={cn(
-                  "px-2 py-1 transition-colors",
-                  index === 0 && "rounded-l-md",
-                  index === charts.length - 1 && "rounded-r-md",
-                  activeIndex === index
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted",
-                )}
-              >
-                {chart.label}
-              </button>
-            ))}
-          </div>
+          <ToolbarRadioGroup<string>
+            ariaLabel={t("dashboard.weekly")}
+            value={String(activeIndex)}
+            onChange={(next) => setActiveIndex(Number(next))}
+            options={options}
+            activeIndicatorTestId="weekly-chart-active-indicator"
+          />
         </div>
       </CardHeader>
 

@@ -131,24 +131,52 @@ export function DiscoveredJobsList({
               const locationName = job.location ?? null;
               const sourceUrl = job.sourceUrl ? euresJobDetailUrl(job.sourceUrl, locale) : null;
 
+              const jobContext = companyName !== "—" ? `${jobTitle} — ${companyName}` : jobTitle;
+              const viewDetailsLabel = t("automations.discoveredJob.viewDetailsAria").replace(
+                "{job}",
+                jobContext,
+              );
+              const externalLinkLabel = t("automations.discoveredJob.externalLinkAria").replace(
+                "{job}",
+                jobContext,
+              );
+              const acceptLabel = t("automations.discoveredJob.acceptAria").replace(
+                "{job}",
+                jobContext,
+              );
+              const dismissLabel = t("automations.discoveredJob.dismissAria").replace(
+                "{job}",
+                jobContext,
+              );
+
               return (
                 <TableRow key={job.id}>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <span
-                        className="font-medium hover:underline cursor-pointer"
+                      {/*
+                       * H-Y-05: Native <button> replaces the keyboard-orphaned
+                       * <span onClick>. Unstyled classes preserve the visual
+                       * (no background, no border) so the job title still reads
+                       * as body text, but keyboard users can tab to it and
+                       * activate it with Enter or Space.
+                       */}
+                      <button
+                        type="button"
+                        className="text-left font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm bg-transparent border-0 p-0 cursor-pointer"
                         onClick={() => onViewDetails?.(job)}
+                        aria-label={viewDetailsLabel}
                       >
                         {jobTitle}
-                      </span>
+                      </button>
                       {sourceUrl && (
                         <a
                           href={sourceUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-foreground"
+                          className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+                          aria-label={externalLinkLabel}
                         >
-                          <ExternalLink className="h-4 w-4" />
+                          <ExternalLink className="h-4 w-4" aria-hidden="true" />
                         </a>
                       )}
                     </div>
@@ -198,11 +226,12 @@ export function DiscoveredJobsList({
                           variant="outline"
                           onClick={() => handleAccept(job.id)}
                           disabled={isLoading}
+                          aria-label={acceptLabel}
                         >
                           {isLoading ? (
-                            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+                            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                           ) : (
-                            <Check className="h-4 w-4" />
+                            <Check className="h-4 w-4" aria-hidden="true" />
                           )}
                         </Button>
                         <Button
@@ -210,11 +239,12 @@ export function DiscoveredJobsList({
                           variant="ghost"
                           onClick={() => handleDismiss(job.id)}
                           disabled={isLoading}
+                          aria-label={dismissLabel}
                         >
                           {isLoading ? (
-                            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+                            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                           ) : (
-                            <X className="h-4 w-4" />
+                            <X className="h-4 w-4" aria-hidden="true" />
                           )}
                         </Button>
                       </div>

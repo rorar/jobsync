@@ -50,6 +50,17 @@ export function DiscoveredJobDetail({
 
   const jobUrl = job.sourceUrl ? euresJobDetailUrl(job.sourceUrl, locale) : null;
 
+  // H-Y-04: external-link anchor requires an accessible name. Compose it
+  // from the job title + employer so screen reader users know where the
+  // link lands ("Open job 'Software Engineer' at Acme in new tab").
+  const jobContextForAria =
+    job.employerName && job.title
+      ? `${job.title} — ${job.employerName}`
+      : job.title ?? t("automations.discoveredJob.notAvailable");
+  const externalLinkAria = t(
+    "automations.discoveredJob.externalLinkAria",
+  ).replace("{job}", jobContextForAria);
+
   // Map the raw status enum to a translated label. Falls back to the raw
   // status string if the key is missing (e.g. during a future enum drift),
   // so users never see an empty badge.
@@ -110,9 +121,10 @@ export function DiscoveredJobDetail({
                 href={jobUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+                aria-label={externalLinkAria}
               >
-                <ExternalLink className="h-4 w-4" />
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
               </a>
             )}
           </DialogTitle>

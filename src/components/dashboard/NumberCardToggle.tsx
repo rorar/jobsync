@@ -11,7 +11,10 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useTranslations } from "@/i18n";
 import { TrendingDown, TrendingUp } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  ToolbarRadioGroup,
+  type ToolbarRadioOption,
+} from "@/components/ui/toolbar-radio-group";
 
 interface NumberCardToggleProps {
   data: {
@@ -27,33 +30,33 @@ const periodLabelKeys: Record<string, string> = {
   "Last 30 days": "dashboard.period30Days",
 };
 
+/**
+ * Sprint 2 Stream G (H-Y-07): migrated from a plain color-swap button
+ * group (no ARIA semantics, no non-color indicator) to the shared
+ * `ToolbarRadioGroup` primitive.
+ */
 export default function NumberCardToggle({ data }: NumberCardToggleProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const current = data[activeIndex];
   const { t } = useTranslations();
 
+  const options: ToolbarRadioOption<string>[] = data.map((item, index) => ({
+    // Index-backed value keeps state stable even if two periods share a label.
+    value: String(index),
+    label: periodLabelKeys[item.label] ? t(periodLabelKeys[item.label]) : item.label,
+  }));
+
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-end">
-          <div className="flex rounded-md border text-xs">
-            {data.map((item, index) => (
-              <button
-                key={item.label}
-                onClick={() => setActiveIndex(index)}
-                className={cn(
-                  "px-2 py-1 transition-colors",
-                  index === 0 && "rounded-l-md",
-                  index === data.length - 1 && "rounded-r-md",
-                  activeIndex === index
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted",
-                )}
-              >
-                {periodLabelKeys[item.label] ? t(periodLabelKeys[item.label]) : item.label}
-              </button>
-            ))}
-          </div>
+          <ToolbarRadioGroup<string>
+            ariaLabel={t("dashboard.jobsApplied")}
+            value={String(activeIndex)}
+            onChange={(next) => setActiveIndex(Number(next))}
+            options={options}
+            activeIndicatorTestId="number-card-active-indicator"
+          />
         </div>
         <CardTitle className="text-4xl">
           {current.num}{" "}
