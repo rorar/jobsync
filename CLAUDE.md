@@ -419,6 +419,17 @@ Implemented in `module.actions.ts` and `degradation.ts`. Spec: `specs/module-lif
 - **Pattern A (preferred):** Move to a file with `import "server-only"` (e.g., `src/lib/blacklist-query.ts`)
 - **Pattern B:** Add `const user = await getCurrentUser(); if (!user || user.id !== userId) return defaults;`
 - **Runtime validation:** TypeScript union types (`matchType`, `TaskStatus`, `BulkActionType`) are erased at runtime — validate with array/enum check at the server action boundary.
+- **Admin-only actions (Sprint 1.5 CRIT-S-04):** Any `"use server"` export that mutates SHARED singleton state (module registry, system toggles, cross-tenant automations) MUST gate on `authorizeAdminAction()` from `src/lib/auth/admin.ts` AND `checkAdminActionRateLimit()` from `src/lib/auth/admin-rate-limit.ts`. Gating only on `getCurrentUser()` (any authenticated user) is a cross-tenant privilege escalation — see `src/actions/module.actions.ts:activateModule/deactivateModule` for the reference implementation.
+
+### Admin Authorization Tiered Rule (Sprint 1.5 CRIT-S-04)
+JobSync has NO role/RBAC model — admin status is derived from a tiered rule evaluated per call in `src/lib/auth/admin.ts`:
+- **Tier A — `ADMIN_USER_IDS` env var (comma-separated user ids):** if set, only listed ids are admins. Matches the ADR-018 env-var pattern (`AUTH_SECRET`). Required for multi-user deployments.
+- **Tier B — single-user implicit:** if `ADMIN_USER_IDS` is unset AND `prisma.user.count() === 1` AND the sole user's id matches the session user, that user is admin. Preserves the zero-config self-hosted single-user UX.
+- **Tier C — fail-closed:** if `ADMIN_USER_IDS` is unset AND the DB has more than one user, every admin call is DENIED. Multi-user deployments MUST configure `ADMIN_USER_IDS` and restart the instance.
+- **Rate limit:** 10 admin actions per minute per user (sliding window, in-memory on `globalThis`). Enforced by `checkAdminActionRateLimit()` in `src/lib/auth/admin-rate-limit.ts`.
+- **Audit log:** every admin call emits a structured `[admin-audit]` JSON line on stderr via `writeAdminAuditLog()`. Schema: `{ kind, ts, action, targetId, actorId, actorEmail, allowed, tier, reason, ...extra }`. A follow-up sprint will promote this to a Prisma `AdminAuditLog` model once a migration slot is available.
+- **Allium invariant:** `AdminOnlyModuleLifecycle` in `specs/module-lifecycle.allium`.
+- **Enforcement sites today:** `activateModule` and `deactivateModule` in `src/actions/module.actions.ts`. Any NEW server action that mutates shared singleton state must add the same gate.
 
 ### API Security
 - **Pre-auth IP rate limiting:** `withApiAuth()` applies 120 req/min by IP BEFORE API key validation to prevent DoS via invalid key flooding (ADR-019).
@@ -456,7 +467,9 @@ Implemented in `module.actions.ts` and `degradation.ts`. Spec: `specs/module-lif
 
 `src/components/staging/StagedVacancyDetailSheet.tsx` — responsive Sheet (right on desktop, bottom on mobile) that shows the full vacancy details. Opened via the Details button on `StagedVacancyCard` (list mode) or the Info button in the deck action rail (`i` keyboard shortcut, deck mode). The sheet preserves the deck position — it never advances `currentIndex` on open/close.
 
-**Deck action routing invariant (ADR-030):** any action taken against a deck card from ANY entry point (swipe, action-rail button, details sheet, keyboard shortcut) MUST route through `useDeckStack.performAction` (via `StagingContainer.handleDeckAction`). Direct calls to list-mode handlers like `handleDismiss(id)` / `handlePromote(vacancy)` from deck-mode code will silently break deck stats, the undo stack, exit animations, card advancement, and the super-like celebration fly-in. In `StagingContainer.tsx`, the sheet action adapters (`detailsDismissAdapter`, `detailsPromoteAdapter`, `detailsSuperLikeAdapter`, `detailsBlockAdapter`) are **mode-aware**: they branch on `detailsMode === "deck"` vs `"list"`.
+**Deck action routing invariant (ADR-030 Decision C + Sprint 1.5 CRIT-A-06 correction):** any action taken against a deck card from ANY entry point (swipe, action-rail button, details sheet, keyboard shortcut) MUST route through `useDeckStack.performAction` (the state machine). This is NOT the same as `StagingContainer.handleDeckAction` — the latter is the server-action dispatcher that `useDeckStack` consumes via its `onAction` prop. Routing sheet adapters through `handleDeckAction` instead of `performAction` bypasses the state machine: the server action fires but `currentIndex`, `undoStack`, `stats`, the exit animation, and the super-like celebration fly-in all stay stale. This was the CRIT-A-06 bug in the original honesty-gate hotfix (`2caab7e`).
+
+The Sprint 1.5 fix exposes `DeckView` as a `forwardRef<DeckViewHandle, DeckViewProps>` with a `DeckViewHandle` imperative interface (`dismiss`, `promote`, `superLike`, `block`, `skip`). `StagingContainer` holds a `deckViewRef` and the sheet adapters in deck mode call `deckViewRef.current?.dismiss()` (etc.) — the SAME imperatives the swipe handlers and action-rail buttons use, guaranteeing every deck entry point flows through `performAction`. The four adapter functions (`detailsDismissAdapter`, `detailsPromoteAdapter`, `detailsSuperLikeAdapter`, `detailsBlockAdapter`) are still **mode-aware**, but now their deck branch goes through the ref handle and their list branch calls the direct list-mode handlers (`handleDismiss(id)` / `handlePromote(vacancy)` / ...). Regression guard: `__tests__/StagingContainerDeckSheetRouting.spec.tsx` mounts the real container + view + hook + sheet and asserts the deck counter advances after a sheet dismiss.
 
 ### Super-Like Celebration
 

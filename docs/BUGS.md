@@ -1,8 +1,32 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-09
 
-**Total: 404 bugs found, 402 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
+**Total: 406 bugs found, 404 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing)
+
+## Sprint 1.5 CRITICAL Hotfixes (2026-04-09)
+
+Out-of-cycle security hotfixes triggered by the specialist-reviewer pass
+(`.team-feature/stream-5b-security-specialist.md`). Both findings were missed
+by Sprint 1's team review + Sprint 2 Phase 1 baseline reviewers.
+
+### Fixed — Security (1 finding)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| CRIT-S-04 | **CRITICAL** | `src/actions/module.actions.ts:activateModule/deactivateModule` were `"use server"` exports that accepted any authenticated user and toggled modules GLOBALLY across all tenants. Any logged-in user could call `deactivateModule({ moduleId: "eures" })` from devtools and pause every other user's EURES automations on the deployment — one-line cross-tenant privilege escalation (OWASP A01). Missed by `/agent-teams:team-review` Stream 5, Sprint 1 CRIT-A1 (which refactored the same function without reviewing its auth), and all 5 baseline Sprint 2 reviewers. Only the specialist `comprehensive-review:security-auditor` caught it (H-S-04). | Added `src/lib/auth/admin.ts` + `src/lib/auth/admin-rate-limit.ts`. Introduced tiered admin authorization (Tier A: `ADMIN_USER_IDS` env var allowlist — matches ADR-018 pattern; Tier B: sole-user-in-DB implicit admin for zero-config self-hosted UX; Tier C: multi-user without env var fails closed). Gated `activateModule` and `deactivateModule` with `authorizeAdminAction()` + `checkAdminActionRateLimit()` (10/min per user). Every admin call emits a structured `[admin-audit]` JSON line to stderr for observability. Added new invariant `AdminOnlyModuleLifecycle` to `specs/module-lifecycle.allium` and wired it into the `ModuleActivation` / `ModuleDeactivation` rules. Added 10 regression tests covering all three tiers, the stale-session guard, rate-limit overflow, and the DB-error fail-closed path. |
+
+### Fixed — Architecture (1 finding)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| CRIT-A-06 | **CRITICAL** | The ADR-030 Decision C hotfix commit `2caab7e` was semantically incomplete: it routed the `StagedVacancyDetailSheet` adapters in deck mode to `StagingContainer.handleDeckAction`, which is the SERVER-ACTION dispatcher consumed by `useDeckStack` via its `onAction` prop — NOT the state machine `useDeckStack.performAction` itself. Result: when the user dismissed from the sheet in deck mode, the server dismiss succeeded but `currentIndex`, `undoStack`, `stats`, and the exit animation all stayed stale — the card remained visible in front of the user after the sheet closed. Promote/superlike/block masked the symptom via the auto-approve `reload()` path, but dismiss (which has no `reload()`) fully exposed the bug. No test caught it because the existing sheet test was isolated with mocked callbacks and never mounted a real `StagingContainer` + `DeckView` + `useDeckStack` integration. Architecture specialist finding H-A-06 in `.team-feature/stream-5b-architecture-specialist.md`. The honesty gate had claimed the Decision C invariant was enforced — in reality, the invariant was false in the code. | Refactored `src/components/staging/DeckView.tsx` to `forwardRef` with a `DeckViewHandle` interface that exposes the hook's public imperatives (`dismiss`, `promote`, `superLike`, `block`, `skip`) via `useImperativeHandle`. Rewrote the sheet adapters in `src/components/staging/StagingContainer.tsx` so that `detailsDismissAdapter`, `detailsPromoteAdapter`, `detailsSuperLikeAdapter`, and `detailsBlockAdapter` call `deckViewRef.current?.<action>()` in deck mode — the SAME imperatives the swipe handlers and action-rail buttons invoke. `handleDeckAction` now remains exclusively the `onAction` dispatcher for the hook. Added `__tests__/StagingContainerDeckSheetRouting.spec.tsx` — a NEW integration test that mounts the real container + view + hook + sheet and asserts the deck counter advances from "1 / 3" to "2 / 3" after a sheet-originated dismiss (the regression that had no prior test coverage). Updated ADR-030 Decision C with a Sprint 1.5 correction note and strengthened `DeckActionRoutingInvariant` in `specs/vacancy-pipeline.allium` to explicitly distinguish `performAction` (state machine) from `handleDeckAction` (server-action dispatcher). |
+
+### Skill invocation test result
+Sprint 1.5 continues the Sprint 1 experiment of delegating work to subagents with explicit skill invocation instructions. The CRIT-S-04 agent invoked `backend-development:architecture-patterns`, quoted a literal load-bearing passage from the skill, named three concrete rules that shaped the fix, and named one alternative it rejected because of a specific rule from the skill. See the agent's final report for the combined (a)+(b) instrumentation output.
+
+### Open follow-ups (out of scope for this hotfix)
+- `.env.example` needs a new `ADMIN_USER_IDS` entry — the hotfix scope did not include `.env.example`, so the orchestrator should append this in the merge commit or a follow-up.
+- `src/lib/connector/degradation.ts` still bypasses the admin gate for its internal signals (`handleAuthFailure`, `handleCircuitBreakerTrip`). This is intentional per the existing `AutomationDegradation` rules (module-level runtime signals affect the shared external service) but deserves an ADR cross-reference.
+- Promoting `[admin-audit]` from `console.warn` to a dedicated `AdminAuditLog` Prisma model is a follow-up sprint task — the hotfix pipeline cannot run migrations, so audit entries currently live only on stderr.
 
 ## Sprint 1 CRITICAL Fixes (2026-04-09)
 

@@ -84,6 +84,27 @@ The full refactor to event emission for the remaining 5 sites above (in `degrada
 
 **Decision C:** Any action taken against a deck card from any entry point MUST route through `useDeckStack.performAction`. In practice, this means: in `StagingContainer.tsx`, sheet action adapters are **mode-aware** — they call `handleDeckAction(vacancy, action)` when `detailsMode === "deck"` and the direct handlers (`handleDismiss(id)`, `handlePromote(vacancy)`, ...) when `detailsMode === "list"`. Tests in `__tests__/useDeckStack.spec.ts` and `__tests__/DeckView.spec.tsx` cover the deck path; the sheet-routing path is covered by the Phase 3 integration.
 
+> **Sprint 1.5 correction — 2026-04-09 (CRIT-A-06)**
+>
+> The original hotfix commit `2caab7e` for Decision C was **semantically incomplete**: it routed the sheet adapters in deck mode to `StagingContainer.handleDeckAction`, which is the **server-action dispatcher** that `useDeckStack` consumes via its `onAction` prop — NOT the state machine `useDeckStack.performAction` itself. These are **different abstractions**:
+>
+> - `handleDeckAction` calls the server action (`dismissStagedVacancy`, `promoteStagedVacancyToJob`, etc.) and returns an `ActionResult<T>`.
+> - `useDeckStack.performAction` (a) invokes `onAction` (which in turn calls the server action), (b) drives the exit animation, (c) updates `currentIndex`, (d) pushes onto `undoStack`, (e) updates `stats`, (f) fires `onSuperLikeSuccess` for super-likes.
+>
+> As a result of the conflation: when a user dismissed from the details sheet in deck mode, the server dismiss succeeded but `currentIndex`, `undoStack`, `stats`, and the exit animation all stayed stale. The user closed the sheet and saw the same card still in front of them. Promote/superlike/block masked the symptom via the auto-approve `reload()` path, but **dismiss** — which has no `reload()` — fully exposed the bug. No test caught it because the sheet test was isolated with mocked callbacks and never mounted a real `StagingContainer`+`DeckView`+`useDeckStack` integration.
+>
+> The architecture specialist review (H-A-06) flagged this. The Sprint 1.5 fix exposes `DeckView` as a `forwardRef` with an imperative handle (`dismiss`, `promote`, `superLike`, `block`, `skip`) backed by the SAME imperatives the swipe/action-rail buttons use. `StagingContainer` holds a `deckViewRef` and the sheet adapters in deck mode now call `deckViewRef.current?.dismiss()` — guaranteeing that every deck entry point flows through `performAction` per the invariant.
+>
+> Files touched:
+> - `src/components/staging/DeckView.tsx` — `forwardRef` + `useImperativeHandle` + `DeckViewHandle` interface export
+> - `src/components/staging/StagingContainer.tsx` — `deckViewRef` + adapter rewrite (deck-mode branches no longer reference `handleDeckAction`)
+> - `__tests__/StagingContainerDeckSheetRouting.spec.tsx` — NEW integration regression guard that mounts the container+view+hook+sheet and asserts the deck counter advances after a sheet dismiss (the bug that had no prior test coverage)
+> - `specs/vacancy-pipeline.allium` — strengthened `DeckActionRoutingInvariant` with a note distinguishing `performAction` from `handleDeckAction`
+>
+> Fix commit: `5415d89` (orchestrator will backfill). Originally broken hotfix: `2caab7e`.
+>
+> Lesson: the honesty gate missed its own gate. The original hotfix's commit message claimed "`handleDeckAction` is the single source of truth for deck state" — this was false. `handleDeckAction` is the single source of truth for **server-action dispatch**; `useDeckStack.performAction` is the single source of truth for **the deck state machine**. Conflating the two is exactly the abstraction-boundary confusion ADR-030 was meant to prevent. Future reviewers of this ADR: the invariant is enforced IF AND ONLY IF the sheet adapters in deck mode drive `useDeckStack`'s public imperatives (via the `DeckViewHandle` ref), NOT the server-action dispatcher.
+
 ## Consequences
 
 ### Positive
@@ -118,6 +139,7 @@ The full refactor to event emission for the remaining 5 sites above (in `degrada
 - Prisma migration to top-level 5W+H columns: `132bb96` (the bifurcation called out as a risk is now schema-enforceable)
 - Sprint 1 CRIT-A1: `8c2e66b` (deactivateModule event-emission refactor; Decision B — module.actions.ts removed from the legacy writer list)
 - Sprint 1 CRIT-A2: `2b6ed92` (PromotionDialog.onSuccess jobId threading; Decision A — concrete implementation of the `{ success, createdJobId? }` contract through the default auto-approve=OFF flow)
+- Sprint 1.5 CRIT-A-06: `5415d89` (Decision C correction — the original hotfix `2caab7e` routed through the wrong dispatcher; fix exposes `DeckView` via `forwardRef` + `useImperativeHandle` so sheet adapters invoke `useDeckStack.performAction` directly). Architecture specialist finding: H-A-06 in `.team-feature/stream-5b-architecture-specialist.md`. Regression test: `__tests__/StagingContainerDeckSheetRouting.spec.tsx`.
 - Sprint 1 CRIT-Y3 cross-component smoke test: verified in `__tests__/SuperLikeCelebration.spec.tsx` — the celebration's global Escape listener does NOT consume the event, so sibling handlers (Radix Dialog's DismissableLayer, any future modal) co-handle the same keypress cleanly
 - Stream E grace period + `isExiting` contract: `SuperLikeCelebrationHost`
 - Blind-spot report: `.team-feature/stream-h-blindspot.md` (Patterns 2, 3, 7)
