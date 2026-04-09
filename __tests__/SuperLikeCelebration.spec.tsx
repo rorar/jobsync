@@ -60,6 +60,37 @@ beforeAll(() => {
   }
 });
 
+/**
+ * Helper: build a matchMedia mock where only the given media query strings
+ * match. Required because jsdom does not ship a matchMedia implementation.
+ *
+ * Module-scope helper so both `SuperLikeCelebration` and
+ * `SuperLikeCelebrationHost` describes can share it — the component now
+ * also reads `prefers-reduced-motion` via `matchMedia` for its mount-focus
+ * effect (CRIT-Y3).
+ */
+function mockMatchMedia(matchingQueries: string[]) {
+  const listeners = new Map<string, Set<(ev: MediaQueryListEvent) => void>>();
+  window.matchMedia = jest.fn((query: string): MediaQueryList => {
+    const matches = matchingQueries.includes(query);
+    return {
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: (_type: string, listener: EventListener) => {
+        if (!listeners.has(query)) listeners.set(query, new Set());
+        listeners.get(query)!.add(listener as (ev: MediaQueryListEvent) => void);
+      },
+      removeEventListener: (_type: string, listener: EventListener) => {
+        listeners.get(query)?.delete(listener as (ev: MediaQueryListEvent) => void);
+      },
+      addListener: jest.fn(), // deprecated legacy API
+      removeListener: jest.fn(),
+      dispatchEvent: jest.fn().mockReturnValue(true),
+    } as unknown as MediaQueryList;
+  }) as unknown as typeof window.matchMedia;
+}
+
 describe("SuperLikeCelebration", () => {
   const baseProps = {
     id: "job-123",
@@ -72,6 +103,10 @@ describe("SuperLikeCelebration", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // The mount-focus effect reads `prefers-reduced-motion` via matchMedia.
+    // Default: normal motion (no matching queries). Individual focus tests
+    // override with `(prefers-reduced-motion: reduce)`.
+    mockMatchMedia([]);
   });
 
   it("renders the celebration title and vacancy subtitle", () => {
@@ -166,35 +201,210 @@ describe("SuperLikeCelebration", () => {
     const card = screen.getByTestId("super-like-celebration");
     expect(card).not.toHaveAttribute("data-exiting");
   });
+
+  // ─── CRIT-Y3 / WCAG 2.1.1 / 2.2.1 / 1.3.1 remediation ─────────────
+
+  it("moves keyboard focus to the 'Open job' CTA after the slide-in animation (CRIT-Y3)", () => {
+    jest.useFakeTimers();
+    try {
+      render(<SuperLikeCelebration {...baseProps} />);
+
+      const cta = screen.getByRole("button", { name: /Open job/i });
+
+      // BEFORE the mount-focus timer fires, the CTA should not be focused
+      // (document.body is the default active element in jsdom).
+      expect(document.activeElement).not.toBe(cta);
+
+      // Advance past the 320ms focus-on-mount delay.
+      act(() => {
+        jest.advanceTimersByTime(400);
+      });
+
+      // After the delay, focus has moved to the CTA.
+      expect(document.activeElement).toBe(cta);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("moves focus immediately when prefers-reduced-motion is set (CRIT-Y3)", () => {
+    mockMatchMedia(["(prefers-reduced-motion: reduce)"]);
+    jest.useFakeTimers();
+    try {
+      render(<SuperLikeCelebration {...baseProps} />);
+
+      const cta = screen.getByRole("button", { name: /Open job/i });
+
+      // Delay should be 0ms under reduced motion — one tick is enough.
+      act(() => {
+        jest.advanceTimersByTime(0);
+      });
+
+      expect(document.activeElement).toBe(cta);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("does NOT pause the auto-dismiss timer on the programmatic mount-focus (CRIT-Y3)", () => {
+    jest.useFakeTimers();
+    try {
+      render(<SuperLikeCelebration {...baseProps} />);
+
+      // Advance past the mount-focus delay — focus moves to CTA, but the
+      // programmatic focus must NOT pause the timer. The timer should
+      // still fire auto-dismiss after the remaining ~5680ms.
+      act(() => {
+        jest.advanceTimersByTime(320);
+      });
+
+      // The CTA is focused, but onDismiss has not fired yet.
+      expect(baseProps.onDismiss).not.toHaveBeenCalled();
+
+      // Advance to just past the 6s auto-dismiss mark. If the timer had
+      // been paused by the programmatic focus, onDismiss would never fire.
+      act(() => {
+        jest.advanceTimersByTime(6000);
+      });
+
+      expect(baseProps.onDismiss).toHaveBeenCalledTimes(1);
+      expect(baseProps.onDismiss).toHaveBeenCalledWith("job-123");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("PAUSES the auto-dismiss timer when a subsequent focus event enters the celebration (WCAG 2.2.1)", () => {
+    jest.useFakeTimers();
+    try {
+      render(<SuperLikeCelebration {...baseProps} />);
+
+      // Advance past the mount-focus delay so the programmatic focus
+      // (and its skip-flag) is fully consumed.
+      act(() => {
+        jest.advanceTimersByTime(320);
+      });
+
+      // Simulate the user tabbing AWAY from the CTA (blur resumes timer)
+      // then back to the Close button (focus should now pause normally).
+      const cta = screen.getByRole("button", { name: /Open job/i });
+      const close = screen.getByRole("button", { name: /Close celebration/i });
+
+      // First blur away — this resumes the (already-running) timer.
+      act(() => {
+        cta.blur();
+      });
+
+      // Now explicitly focus the close button. This is a user-initiated
+      // focus event, so `handleFocusIn` must pause the timer.
+      act(() => {
+        close.focus();
+      });
+
+      // Advance FAR beyond the 6s auto-dismiss — if the focus-pause did
+      // not take effect, onDismiss would have fired. It must not have.
+      act(() => {
+        jest.advanceTimersByTime(10_000);
+      });
+
+      expect(baseProps.onDismiss).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("dismisses on global Escape key press even when focus is outside the celebration (CRIT-Y3)", () => {
+    // No userEvent / fake timers here — Escape dispatch is synchronous and
+    // the focus is elsewhere (document.body).
+    render(<SuperLikeCelebration {...baseProps} />);
+
+    // Ensure focus is on document.body, not inside the celebration. This
+    // simulates the keyboard user who never Tabbed into the card.
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    expect(document.activeElement).toBe(document.body);
+
+    // Dispatch a document-level Escape keydown.
+    act(() => {
+      const event = new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true,
+      });
+      document.dispatchEvent(event);
+    });
+
+    expect(baseProps.onDismiss).toHaveBeenCalledWith("job-123");
+    expect(baseProps.onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT dismiss on non-Escape keys (global listener is Escape-specific)", () => {
+    render(<SuperLikeCelebration {...baseProps} />);
+
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "a", bubbles: true }),
+      );
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: " ", bubbles: true }),
+      );
+    });
+
+    expect(baseProps.onDismiss).not.toHaveBeenCalled();
+  });
+
+  it("removes the global Escape listener on unmount (no leaks across celebrations)", () => {
+    const { unmount } = render(<SuperLikeCelebration {...baseProps} />);
+
+    unmount();
+
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+
+    // After unmount, the handler must be gone — onDismiss should not fire.
+    expect(baseProps.onDismiss).not.toHaveBeenCalled();
+  });
+
+  it("exposes an accessible name containing BOTH 'Super-liked!' and the vacancy title (CRIT-Y3 ARIA masking fix)", () => {
+    render(<SuperLikeCelebration {...baseProps} />);
+
+    // The role="status" container's accessible name is computed from
+    // `aria-labelledby` pointing at the title + subtitle paragraphs. The
+    // live-region announcement must include BOTH pieces of information so
+    // AT users know which vacancy was super-liked.
+    const card = screen.getByRole("status");
+    const accessibleName = card.getAttribute("aria-labelledby");
+    expect(accessibleName).toBeTruthy();
+
+    // Resolve the aria-labelledby ids and concatenate their text content
+    // to simulate what a screen reader would compute.
+    const ids = accessibleName!.split(/\s+/);
+    const resolvedText = ids
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" ")
+      .trim();
+
+    expect(resolvedText).toMatch(/Super-liked/i);
+    expect(resolvedText).toContain("Senior Full-Stack Engineer");
+  });
+
+  it("does NOT use a static aria-label that would mask the vacancy title (regression guard)", () => {
+    render(<SuperLikeCelebration {...baseProps} />);
+
+    const card = screen.getByRole("status");
+    // The previous implementation set aria-label="Super-liked!" which
+    // overrode the accessible name and hid the vacancy title from AT.
+    // Explicitly guard against reintroducing it.
+    expect(card).not.toHaveAttribute("aria-label");
+  });
 });
 
 // ─── Host grace period ─────────────────────────────────────────────
-
-/**
- * Helper: build a matchMedia mock where only the given media query strings
- * match. Required because jsdom does not ship a matchMedia implementation.
- */
-function mockMatchMedia(matchingQueries: string[]) {
-  const listeners = new Map<string, Set<(ev: MediaQueryListEvent) => void>>();
-  window.matchMedia = jest.fn((query: string): MediaQueryList => {
-    const matches = matchingQueries.includes(query);
-    return {
-      matches,
-      media: query,
-      onchange: null,
-      addEventListener: (_type: string, listener: EventListener) => {
-        if (!listeners.has(query)) listeners.set(query, new Set());
-        listeners.get(query)!.add(listener as (ev: MediaQueryListEvent) => void);
-      },
-      removeEventListener: (_type: string, listener: EventListener) => {
-        listeners.get(query)?.delete(listener as (ev: MediaQueryListEvent) => void);
-      },
-      addListener: jest.fn(), // deprecated legacy API
-      removeListener: jest.fn(),
-      dispatchEvent: jest.fn().mockReturnValue(true),
-    } as unknown as MediaQueryList;
-  }) as unknown as typeof window.matchMedia;
-}
 
 describe("SuperLikeCelebrationHost — grace period", () => {
   const item1: CelebrationItem = {

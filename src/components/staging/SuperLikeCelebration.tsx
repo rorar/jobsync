@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Sparkles, X, ArrowRight } from "lucide-react";
 import { useTranslations } from "@/i18n";
+
+// Delay before moving focus to the "Open job" CTA on mount. Matches the
+// 280ms slide-in animation plus a small buffer so the focus jump happens
+// after the card has settled (the visual flash of focus ring mid-slide is
+// jarring). `prefers-reduced-motion` bypasses the delay entirely.
+// See CRIT-Y3 remediation — WCAG 2.4.3 (Focus Order) / 2.1.1 (Keyboard).
+const FOCUS_ON_MOUNT_DELAY_MS = 320;
 
 /**
  * Props for the presentational super-like celebration card.
@@ -46,12 +53,24 @@ const SWIPE_VELOCITY_Y = 0.4; // px / ms
  * - Slide-up + fade entry (CSS, 280ms ease-out). Reduced motion → fade only.
  * - Auto-dismisses after 6s. Pauses on hover/focus, resumes with remaining time.
  * - Swipe-down dismiss via pointer events (48px or 0.4 px/ms threshold).
- * - X button + CTA both dismiss.
+ * - X button + CTA both dismiss. A global Escape listener also dismisses the
+ *   celebration from anywhere on the page (the CTA is NOT a modal, so the
+ *   listener attaches to `document`, not the card).
  * - `role="status"` + `aria-live="polite"` (NOT assertive — never interrupts SR users).
+ * - On mount, focus moves to the "Open job" CTA after the slide-in animation
+ *   completes so keyboard users can act without Tab-hunting through the DOM.
+ *   The initial programmatic focus does NOT pause the auto-dismiss timer;
+ *   only subsequent user focus events do. `prefers-reduced-motion` bypasses
+ *   the focus delay.
+ * - The `role="status"` container intentionally has NO `aria-label`: an
+ *   `aria-label` would override the visible text content and mask the
+ *   vacancy title from screen readers (WCAG 1.3.1 / 4.1.2). Letting the
+ *   accessible name fall back to the visible content ensures AT users hear
+ *   both "Super-liked!" AND the vacancy title on the polite live announcement.
  *
- * The component does NOT manage focus and does NOT trap focus. It is mounted
- * inside a `pointer-events-none` wrapper so the user can keep swiping the
- * deck behind it; only the inner card captures pointer events.
+ * The component does NOT trap focus. It is mounted inside a
+ * `pointer-events-none` wrapper so the user can keep swiping the deck behind
+ * it; only the inner card captures pointer events.
  */
 export function SuperLikeCelebration({
   id,
@@ -64,6 +83,13 @@ export function SuperLikeCelebration({
 }: SuperLikeCelebrationProps) {
   const { t } = useTranslations();
 
+  // Stable ids for aria-labelledby wiring. Using two ids (title + subtitle)
+  // rather than a combined string means translators don't need a new
+  // interpolated key, and the visible text content stays the single source
+  // of truth for the announcement.
+  const titleId = useId();
+  const subtitleId = useId();
+
   // Auto-dismiss timer state. We track `remainingMs` in a ref so re-renders
   // do NOT reset the timer. `pausedAt` is the wall-clock time the timer was
   // paused (hover/focus); when resumed we subtract elapsed-while-running.
@@ -74,6 +100,16 @@ export function SuperLikeCelebration({
   // Track whether this instance has already dismissed (prevents double-fire
   // during exit animations / unmount races).
   const hasDismissedRef = useRef<boolean>(false);
+
+  // Ref to the primary CTA so we can programmatically move keyboard focus
+  // on mount (CRIT-Y3 / WCAG 2.1.1 — Keyboard). See the mount effect below.
+  const ctaRef = useRef<HTMLButtonElement | null>(null);
+  // The programmatic mount-focus synthesizes a `focusin` event which would
+  // otherwise pause the auto-dismiss timer indefinitely. Flip this flag
+  // BEFORE calling `.focus()` and have the focus-in handler consume it so
+  // the first (programmatic) focus is ignored, but subsequent user focus
+  // events still pause the timer (WCAG 2.2.1 — Timing Adjustable).
+  const skipNextFocusPauseRef = useRef<boolean>(false);
 
   const handleDismiss = useCallback(() => {
     if (hasDismissedRef.current) return;
@@ -125,6 +161,72 @@ export function SuperLikeCelebration({
     }, remaining);
   }, [handleDismiss]);
 
+  // Focus-pause wrapper: the programmatic mount-focus flips
+  // `skipNextFocusPauseRef` so it is consumed here without pausing the
+  // timer, leaving subsequent user focus events free to pause normally.
+  // WCAG 2.2.1 (Timing Adjustable) — keyboard-only users with the
+  // celebration focused must not have the 6s auto-dismiss race against
+  // them while they read the title.
+  const handleFocusIn = useCallback(() => {
+    if (skipNextFocusPauseRef.current) {
+      skipNextFocusPauseRef.current = false;
+      return;
+    }
+    pauseTimer();
+  }, [pauseTimer]);
+
+  // Programmatic focus on mount: move focus to the "Open job" CTA so a
+  // keyboard user can act on the celebration immediately, without tabbing
+  // through the rest of the DOM (CRIT-Y3 / WCAG 2.1.1). The delay covers
+  // the slide-in animation (280ms) with a small buffer; reduced-motion
+  // users jump straight to the CTA. Skip focusing while `isExiting` — the
+  // card is committed to leaving and stealing focus mid-exit would be
+  // disorienting.
+  useEffect(() => {
+    if (isExiting) return;
+
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const delay = prefersReducedMotion ? 0 : FOCUS_ON_MOUNT_DELAY_MS;
+
+    const focusTimer = setTimeout(() => {
+      const cta = ctaRef.current;
+      if (!cta) return;
+      // If focus has somehow already landed on the CTA (e.g. the user
+      // clicked it during the slide-in), there is nothing to do.
+      if (typeof document !== "undefined" && document.activeElement === cta) {
+        return;
+      }
+      // Mark the forthcoming focus event as programmatic so `handleFocusIn`
+      // does NOT pause the timer.
+      skipNextFocusPauseRef.current = true;
+      cta.focus();
+    }, delay);
+
+    return () => clearTimeout(focusTimer);
+    // Re-run if `id` changes (shouldn't happen — host remounts via `key`)
+    // or if `isExiting` toggles during the grace period.
+  }, [id, isExiting]);
+
+  // Global Escape listener: closes the celebration from anywhere on the
+  // page, not just when focus is inside the card. Without this, a keyboard
+  // user who never Tabs into the celebration cannot dismiss it except by
+  // waiting out the 6s timer (CRIT-Y3 / WCAG 2.1.1). Guarded by
+  // `isExiting` so we do not re-fire during the grace period.
+  useEffect(() => {
+    if (isExiting) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleDismiss();
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [isExiting, handleDismiss]);
+
   // Pointer-driven swipe-down dismiss (matches the deck's pointer pattern).
   const dragStartRef = useRef<{ y: number; time: number } | null>(null);
   const [dragY, setDragY] = useState(0);
@@ -171,7 +273,15 @@ export function SuperLikeCelebration({
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      aria-label={t("deck.superLikeCelebration.title")}
+      // CRIT-Y3 remediation: use `aria-labelledby` pointing at the
+      // title + subtitle paragraphs rather than a static `aria-label`.
+      // A static `aria-label="Super-liked!"` overrode the accessible name
+      // and hid the vacancy title from screen readers. Pointing at both
+      // ids keeps the announcement ("Super-liked! Senior Full-Stack
+      // Engineer") aligned with the visible content without dragging the
+      // button labels ("Open job", "Close celebration") into the live
+      // announcement (WCAG 1.3.1 / 4.1.2).
+      aria-labelledby={`${titleId} ${subtitleId}`}
       data-testid="super-like-celebration"
       data-exiting={isExiting ? "true" : undefined}
       className="superlike-celebration pointer-events-auto relative w-[min(92vw,400px)] mx-4 rounded-2xl border border-blue-200 bg-card shadow-lg shadow-blue-500/10 dark:border-blue-900/60 dark:shadow-blue-400/5 motion-reduce:!transition-none motion-reduce:!transform-none"
@@ -194,7 +304,11 @@ export function SuperLikeCelebration({
       onPointerCancel={isExiting ? undefined : handlePointerUp}
       onMouseEnter={isExiting ? undefined : pauseTimer}
       onMouseLeave={isExiting ? undefined : resumeTimer}
-      onFocusCapture={isExiting ? undefined : pauseTimer}
+      // Focus-pause wraps `pauseTimer` via `handleFocusIn` so the
+      // programmatic mount-focus does NOT pause the timer indefinitely.
+      // `onFocusCapture` / `onBlurCapture` fire for focus changes anywhere
+      // inside the container (React normalizes focus bubbling).
+      onFocusCapture={isExiting ? undefined : handleFocusIn}
       onBlurCapture={isExiting ? undefined : resumeTimer}
     >
       {/* Inline keyframes — keeps the component self-contained with no
@@ -242,18 +356,28 @@ export function SuperLikeCelebration({
           <Sparkles className="h-5 w-5" aria-hidden="true" />
         </div>
 
-        {/* Title + subtitle stack */}
+        {/* Title + subtitle stack — referenced by `aria-labelledby` on the
+            outer container so the screen reader announcement contains both
+            "Super-liked!" AND the vacancy title. */}
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground leading-tight">
+          <p id={titleId} className="text-sm font-semibold text-foreground leading-tight">
             {t("deck.superLikeCelebration.title")}
           </p>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground" title={vacancyTitle}>
+          <p
+            id={subtitleId}
+            className="mt-0.5 truncate text-xs text-muted-foreground"
+            title={vacancyTitle}
+          >
             {vacancyTitle}
           </p>
         </div>
 
-        {/* Primary CTA — "Open job" */}
+        {/* Primary CTA — "Open job". `ctaRef` is used by the mount-focus
+            effect to move keyboard focus here immediately after the
+            slide-in animation, so keyboard users can act on the
+            celebration without Tab-hunting the rest of the DOM. */}
         <button
+          ref={ctaRef}
           type="button"
           onClick={() => onOpenJob(jobId)}
           className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-xs font-medium text-white shadow-sm transition-colors hover:bg-blue-700 active:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:bg-blue-500 dark:hover:bg-blue-400 dark:active:bg-blue-600"
