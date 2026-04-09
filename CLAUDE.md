@@ -447,6 +447,49 @@ Implemented in `module.actions.ts` and `degradation.ts`. Spec: `specs/module-lif
 - `src/components/ui/chip-list.tsx` — Multi-select badge chips with edit/remove
 - `src/components/ui/info-tooltip.tsx` — Info icon with popover (hover + tap)
 - `src/components/ui/command.tsx` — Has `touch-action: pan-y` for mobile scroll fix
+- `src/components/ui/badge.tsx` — Base class includes `whitespace-nowrap` so badges grow to fit translated text instead of wrapping
+- `src/components/staging/MatchScoreRing.tsx` — Shared circular match-score ring. Used by `DeckCard` and `StagedVacancyDetailContent`. Props: `{ score: number | null | undefined; size?: number }`
+- `src/hooks/use-media-query.ts` — SSR-safe media query hook. Used by `StagedVacancyDetailSheet` (right/bottom side) and `NotificationBell` (Popover/Sheet). Returns `false` during SSR, hydrates on mount.
+- `src/hooks/useStagingLayout.ts` — Persists staging layout size (`compact` / `default` / `comfortable`) in `localStorage` key `jobsync-staging-layout-size`. Mirrors the pattern of `useKanbanState`.
+
+### Staging Details Sheet + Deck Action Routing
+
+`src/components/staging/StagedVacancyDetailSheet.tsx` — responsive Sheet (right on desktop, bottom on mobile) that shows the full vacancy details. Opened via the Details button on `StagedVacancyCard` (list mode) or the Info button in the deck action rail (`i` keyboard shortcut, deck mode). The sheet preserves the deck position — it never advances `currentIndex` on open/close.
+
+**Deck action routing invariant (ADR-030):** any action taken against a deck card from ANY entry point (swipe, action-rail button, details sheet, keyboard shortcut) MUST route through `useDeckStack.performAction` (via `StagingContainer.handleDeckAction`). Direct calls to list-mode handlers like `handleDismiss(id)` / `handlePromote(vacancy)` from deck-mode code will silently break deck stats, the undo stack, exit animations, card advancement, and the super-like celebration fly-in. In `StagingContainer.tsx`, the sheet action adapters (`detailsDismissAdapter`, `detailsPromoteAdapter`, `detailsSuperLikeAdapter`, `detailsBlockAdapter`) are **mode-aware**: they branch on `detailsMode === "deck"` vs `"list"`.
+
+### Super-Like Celebration
+
+`src/components/staging/SuperLikeCelebration.tsx` + `SuperLikeCelebrationHost.tsx` — bottom-center fly-in that celebrates a successful super-like and offers to open the newly created Job. Mounted inside `DeckView`, fed by `useSuperLikeCelebrations` (FIFO queue, max 5). Auto-dismisses after 6s with hover-pause + resume. Swipe-down / X / ESC dismiss. `role="status" aria-live="polite"`. Uses `Sparkles` icon (NOT `Star` — that's the action icon).
+
+**Grace period:** when a new celebration replaces an outgoing one, the host plays a 1500ms slide-down exit animation before sliding up the next card. `SuperLikeCelebration` accepts an `isExiting` prop that disables pointer handlers and applies the exit keyframe. `prefers-reduced-motion` bypasses the grace period entirely.
+
+**Test pattern:** jsdom does not implement `setPointerCapture`. `__tests__/SuperLikeCelebration.spec.tsx` stubs `setPointerCapture` / `releasePointerCapture` / `hasPointerCapture` on `HTMLElement.prototype` in `beforeAll` so `userEvent.click` works against the component's pointerdown listeners. Same pattern used in `JobsContainer.spec.tsx`.
+
+### `useDeckStack.onAction` Contract (ADR-030)
+
+```typescript
+onAction: (vacancy, action) => Promise<{ success: boolean; createdJobId?: string }>
+```
+
+Callers populate `createdJobId` for actions that produce a Job (currently `promote` and `superlike`). The hook forwards it to:
+- `options.onSuperLikeSuccess?.(jobId, vacancy)` — triggers the celebration fly-in
+- `options.onSuperLikeUndone?.(jobId)` — removes the matching celebration from the queue on undo
+
+The contract is additive — callers that only destructure `{ success }` keep working.
+
+### Notification Late-Binding Pattern (ADR-030)
+
+`src/lib/notifications/deep-links.ts` — centralized `buildNotificationActions(type, data)` mapping from notification type to deep-link URL + CTA label. Also exports `formatNotificationTitle(data, message, t)`, `formatNotificationReason(data, t)`, `formatNotificationActor(data, t)`, `resolveNotificationSeverity(data)`.
+
+**Rule:** server-side notification creation MUST populate `data.titleKey + titleParams` (and optionally `reasonKey`, `reasonParams`, `actorType`, `actorId`, `severity`). The legacy `message` field is kept populated in English as a fallback for email/webhook/push channels and pre-migration clients. UI components use `formatNotificationTitle` at render time, so notifications correctly re-localize when the user switches locale.
+
+**Current direct writers** (all patched to satisfy the late-binding invariant inline, pending a full event-emission refactor):
+- `src/lib/notifications/channels/in-app.channel.ts` — legitimate (the channel implementation)
+- `src/lib/connector/degradation.ts` — 3 sites
+- `src/lib/notifications/channels/webhook.channel.ts` — 2 sites
+
+Any new notification-creating code path MUST populate the structured fields.
 
 ## Domain-Driven Design (DDD) Principles
 

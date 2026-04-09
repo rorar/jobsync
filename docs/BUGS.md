@@ -1,8 +1,25 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-04-08
+# Bug Tracker — Collected 2026-03-24, Updated 2026-04-09
 
-**Total: 396 bugs found, 394 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
+**Total: 399 bugs found, 397 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing)
+
+## UX Sprint + Honesty Gate Fixes (2026-04-09)
+
+### Fixed — UI / Rendering (1 finding)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| HYDR-1 | MEDIUM | `<div>` cannot be a descendant of `<p>` in DeckCard. After the Building2 → CompanyLogo swap, `CompanyLogo` (which renders a `<div role="img">`) was wrapped in a `<p>` tag in `DeckCard.tsx` / `StagedVacancyCard.tsx`, causing React hydration errors on the staging page. | Changed the wrapper `<p>` to `<div>`. Fixed in commit `b69c6e1`. |
+
+### Fixed — i18n / Late-Binding (1 finding, 5 sites)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| NOTIF-LB1 | MEDIUM | Notification dispatcher stored locale-resolved strings in `Notification.message` at dispatch time, freezing notifications into the dispatcher-time locale. Same bug existed in 5 sites: `notification-dispatcher.ts` + `degradation.ts` (3 sites, `handleAuthFailure`/`checkConsecutiveRunFailures`/`handleCircuitBreakerTrip`) + `webhook.channel.ts` (2 sites, `notifyDeliveryFailed`/`notifyEndpointDeactivated`). | Store `titleKey + titleParams` in `data: Json` and resolve at render time via `formatNotificationTitle(data, message, t)`. Legacy `message` kept as English fallback for email/webhook/push. Dispatcher fixed in previous sprint (commit `42ea3cb`); degradation + webhook.channel fixed in Stream C this sprint. See ADR-030. |
+
+### Fixed — UX / Action Routing (1 finding)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| DECK-ROUTE1 | **HIGH** | `StagedVacancyDetailSheet` action buttons in deck mode bypassed `useDeckStack.performAction`, silently breaking deck stats, undo stack, exit animation, card advancement, and the super-like celebration fly-in. Additionally, `onSuperLike={detailsPromoteAdapter}` wired super-like to the promote adapter by mistake — super-like from the sheet silently behaved as a plain promote. | Made sheet adapters mode-aware: deck-mode actions route through `handleDeckAction(vacancy, action)`, list-mode actions use the direct handlers. Added `detailsSuperLikeAdapter`. Fixed in hotfix commit `2caab7e`. See ADR-030. |
 
 ## Cross-User Enrichment Cache Fix (2026-04-08)
 

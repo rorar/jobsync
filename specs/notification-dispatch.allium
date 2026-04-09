@@ -620,6 +620,28 @@ invariant NotificationsOwnedByUser {
   note: "Notifications are tenant-isolated. Users only see their own notifications."
 }
 
+invariant LateBoundLocale {
+  -- Notifications are written with their i18n key and params, not a resolved
+  -- string. The UI resolves them at render time so notifications re-localize
+  -- when the viewer switches locale.
+  ensures: for_each notification in Notification:
+    notification.data.titleKey is present (a valid i18n key)
+    or notification.message is the fallback English resolved string for pre-migration clients
+  note: "Late-binding i18n pattern. Before ADR-030, the dispatcher stored `t(key, locale).replace(...)` directly in `Notification.message`, freezing the locale at dispatch time. Now servers store `data.titleKey + titleParams` and the UI late-binds via formatNotificationTitle(). The legacy `message` field is still populated in English as a fallback for email/webhook/push channels."
+  note: "See ADR-030."
+}
+
+invariant SingleNotificationWriter {
+  -- Aspirational. All Notification writes SHOULD flow through the channel
+  -- router via domain events. Direct `prisma.notification.create()` calls
+  -- are legitimate ONLY in `in-app.channel.ts` (the channel implementation).
+  ensures: for_each direct_call to prisma.notification.create in src:
+    call_site is in src/lib/notifications/channels/in-app.channel.ts
+    or call_site is tracked as a legacy exception in ADR-030
+  note: "Currently 5 legitimate legacy direct-writers are patched inline to satisfy LateBoundLocale: 3 in degradation.ts, 2 in webhook.channel.ts. Tracked in ADR-030 as deferred work — the full refactor to event emission is out of scope for the current sprint."
+  note: "Any NEW direct `prisma.notification.create()` call site is a spec violation."
+}
+
 invariant PreferencesDefaults {
   ensures: for_each user in User where NotificationPreference does not exist:
     effective preferences are { enabled: true, channels: { inApp: true, webhook: false, email: false, push: false }, perType: {}, digestMode: immediate }

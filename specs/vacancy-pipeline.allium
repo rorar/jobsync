@@ -1040,6 +1040,36 @@ invariant TrashRetentionCompliance {
   note: "DedupHash records are not personal data (one-way hash) and are retained indefinitely."
 }
 
+invariant DeckActionRoutingInvariant {
+  -- The staging deck maintains its own state machine (currentIndex, stats,
+  -- undo stack, optimistic card-exit animations) in `useDeckStack.performAction`.
+  -- Every action taken against a deck card MUST flow through this state machine
+  -- regardless of the entry point: swipe, action-rail button, details sheet,
+  -- keyboard shortcut, future bulk actions, future context menus.
+  --
+  -- Bypassing `performAction` and calling the underlying server action directly
+  -- silently breaks ALL of the following:
+  --   - deck stats (stats.promoted, stats.dismissed, stats.superLiked)
+  --   - the undo stack (the action cannot be undone)
+  --   - the optimistic card-exit animation
+  --   - super-like celebration fly-in (onSuperLikeSuccess callback)
+  --   - card advancement (the deck index does not move, user sees the same card)
+  --
+  -- Enforcement: in StagingContainer.tsx, sheet action adapters MUST be
+  -- mode-aware. In deck mode they route through `handleDeckAction(vacancy, action)`.
+  -- In list mode they use the direct handlers. Tests in DeckView.spec.tsx and
+  -- useDeckStack.spec.ts cover the deck path.
+
+  ensures: for_each action in { dismiss, promote, superlike, block, skip }:
+    for_each entry_point in { swipe, action_rail_button, details_sheet, keyboard_shortcut }:
+      when a deck card is the subject:
+        the action flows through useDeckStack.performAction
+        and NOT directly through the list-mode handlers
+
+  note: "See ADR-030 (Decision C). The honesty gate caught this after commit — the StagedVacancyDetailSheet Phase 3 wiring had gone straight to the list handlers, silently breaking the entire deck state machine when actions fired from the sheet. Fixed in hotfix 2caab7e."
+  note: "Any new deck entry point (context menu, bulk action, mobile long-press, URL deep-link) MUST satisfy this invariant."
+}
+
 -- =============================================================================
 -- Surfaces
 -- =============================================================================
