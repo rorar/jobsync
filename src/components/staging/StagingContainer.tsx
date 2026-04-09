@@ -229,35 +229,6 @@ function StagingContainer() {
     }
   }, [t, reload]);
 
-  // Adapters: details sheet callbacks receive a vacancy, but existing
-  // handlers (handleDismiss etc.) take an id. Small closures bridge the gap.
-  const detailsDismissAdapter = useCallback(
-    async (vacancy: StagedVacancyWithAutomation) => {
-      await handleDismiss(vacancy.id);
-    },
-    [handleDismiss],
-  );
-  const detailsArchiveAdapter = useCallback(
-    async (vacancy: StagedVacancyWithAutomation) => {
-      await handleArchive(vacancy.id);
-    },
-    [handleArchive],
-  );
-  const detailsPromoteAdapter = useCallback(
-    (vacancy: StagedVacancyWithAutomation) => {
-      handlePromote(vacancy);
-    },
-    [],
-  );
-  const detailsBlockAdapter = useCallback(
-    async (vacancy: StagedVacancyWithAutomation) => {
-      if (vacancy.employerName) {
-        await handleBlockCompany(vacancy.employerName);
-      }
-    },
-    [handleBlockCompany],
-  );
-
   // Ref to resolve the promotion dialog promise from outside
   const promotionResolveRef = useRef<((result: { success: boolean; createdJobId?: string }) => void) | null>(null);
 
@@ -358,6 +329,76 @@ function StagingContainer() {
       // For now, undo only works for dismiss actions
     },
     [t],
+  );
+
+  // Details sheet adapters — mode-aware routing.
+  //
+  // In LIST mode, the sheet fires against the usual CRUD handlers (handleDismiss
+  // takes an id, handlePromote opens the PromotionDialog, etc.).
+  //
+  // In DECK mode, the sheet MUST route through `handleDeckAction` so that:
+  //   - deck stats (stats.promoted, stats.dismissed, stats.superLiked) update,
+  //   - the undo stack records the action,
+  //   - the optimistic card-exit animation plays,
+  //   - super-like triggers the onSuperLikeSuccess → celebration fly-in,
+  //   - the deck index advances so the next card appears.
+  //
+  // Without this routing, sheet actions in deck mode would silently bypass the
+  // deck state machine — the user would close the sheet and see the same card
+  // still in front of them with stale stats (honesty gate finding #17).
+  const detailsDismissAdapter = useCallback(
+    async (vacancy: StagedVacancyWithAutomation) => {
+      if (detailsMode === "deck") {
+        await handleDeckAction(vacancy, "dismiss");
+      } else {
+        await handleDismiss(vacancy.id);
+      }
+    },
+    [detailsMode, handleDeckAction, handleDismiss],
+  );
+  const detailsArchiveAdapter = useCallback(
+    async (vacancy: StagedVacancyWithAutomation) => {
+      // Archive is a list-only action — not a deck action.
+      // In deck mode, the sheet does not expose an Archive button.
+      await handleArchive(vacancy.id);
+    },
+    [handleArchive],
+  );
+  const detailsPromoteAdapter = useCallback(
+    async (vacancy: StagedVacancyWithAutomation) => {
+      if (detailsMode === "deck") {
+        await handleDeckAction(vacancy, "promote");
+      } else {
+        handlePromote(vacancy);
+      }
+    },
+    [detailsMode, handleDeckAction],
+  );
+  // Super-like is a DISTINCT action from promote: in deck mode it triggers
+  // the celebration fly-in via onSuperLikeSuccess. Wiring this to the promote
+  // adapter (as the previous integration commit did) silently swallowed the
+  // celebration — honesty gate finding #16.
+  const detailsSuperLikeAdapter = useCallback(
+    async (vacancy: StagedVacancyWithAutomation) => {
+      if (detailsMode === "deck") {
+        await handleDeckAction(vacancy, "superlike");
+      } else {
+        // In list mode, super-like falls back to promote (same server action,
+        // no deck to feed the celebration hook). Explicit fallback — not a typo.
+        handlePromote(vacancy);
+      }
+    },
+    [detailsMode, handleDeckAction],
+  );
+  const detailsBlockAdapter = useCallback(
+    async (vacancy: StagedVacancyWithAutomation) => {
+      if (detailsMode === "deck") {
+        await handleDeckAction(vacancy, "block");
+      } else if (vacancy.employerName) {
+        await handleBlockCompany(vacancy.employerName);
+      }
+    },
+    [detailsMode, handleDeckAction, handleBlockCompany],
   );
 
   const onTabChange = (value: string) => {
@@ -530,7 +571,7 @@ function StagingContainer() {
         onDismiss={detailsDismissAdapter}
         onArchive={detailsArchiveAdapter}
         onPromote={detailsPromoteAdapter}
-        onSuperLike={detailsPromoteAdapter}
+        onSuperLike={detailsSuperLikeAdapter}
         onBlock={detailsBlockAdapter}
       />
       <PromotionDialog
