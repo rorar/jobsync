@@ -81,12 +81,7 @@ export const SIDEBAR_LINKS: {
     label: "Dashboard",
     labelKey: "nav.dashboard",
   },
-  {
-    icon: BriefcaseBusiness,
-    route: "/dashboard/myjobs",
-    label: "My Jobs",
-    labelKey: "nav.myJobs",
-  },
+  // Workflow order: discover (automations) → triage (staging) → track (myjobs)
   {
     icon: Zap,
     route: "/dashboard/automations",
@@ -98,6 +93,12 @@ export const SIDEBAR_LINKS: {
     route: "/dashboard/staging",
     label: "Staging Queue",
     labelKey: "nav.stagingQueue",
+  },
+  {
+    icon: BriefcaseBusiness,
+    route: "/dashboard/myjobs",
+    label: "My Jobs",
+    labelKey: "nav.myJobs",
   },
   {
     icon: SquareCheckBig,
