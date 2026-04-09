@@ -33,6 +33,7 @@ import { StagingNewItemsBanner } from "./StagingNewItemsBanner";
 import { ViewModeToggle, getPersistedViewMode } from "./ViewModeToggle";
 import type { ViewMode } from "./ViewModeToggle";
 import { DeckView, AUTO_APPROVE_KEY } from "./DeckView";
+import type { DeckViewHandle } from "./DeckView";
 import { StagingLayoutToggle } from "./StagingLayoutToggle";
 import { useStagingActions } from "@/hooks/useStagingActions";
 import { useStagingLayout, getStagingMaxWidthClass } from "@/hooks/useStagingLayout";
@@ -81,6 +82,11 @@ function StagingContainer() {
   const [detailsVacancy, setDetailsVacancy] = useState<StagedVacancyWithAutomation | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsMode, setDetailsMode] = useState<"list" | "deck">("list");
+  // Imperative handle to `DeckView`'s internal `useDeckStack` state machine.
+  // Used by the details-sheet adapters in deck mode so sheet actions flow
+  // through `performAction` (the ADR-030 Decision C invariant) instead of the
+  // server-action dispatcher. See CRIT-A-06 / DeckViewHandle docstring.
+  const deckViewRef = useRef<DeckViewHandle>(null);
   const hasSearched = useRef(false);
   const [mounted, setMounted] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -343,28 +349,47 @@ function StagingContainer() {
 
   // Details sheet adapters — mode-aware routing.
   //
-  // In LIST mode, the sheet fires against the usual CRUD handlers (handleDismiss
-  // takes an id, handlePromote opens the PromotionDialog, etc.).
+  // In LIST mode, the sheet fires against the usual CRUD handlers
+  // (`handleDismiss(id)`, `handlePromote(vacancy)`, etc.).
   //
-  // In DECK mode, the sheet MUST route through `handleDeckAction` so that:
-  //   - deck stats (stats.promoted, stats.dismissed, stats.superLiked) update,
-  //   - the undo stack records the action,
-  //   - the optimistic card-exit animation plays,
-  //   - super-like triggers the onSuperLikeSuccess → celebration fly-in,
-  //   - the deck index advances so the next card appears.
+  // In DECK mode, the sheet MUST route through `deckViewRef.current.*` so
+  // that the action flows through `useDeckStack.performAction` (the state
+  // machine) rather than `handleDeckAction` (the server-action dispatcher).
+  // `useDeckStack.performAction`:
+  //   - drives deck stats (`stats.promoted`, `stats.dismissed`, ...),
+  //   - pushes onto the undo stack,
+  //   - plays the optimistic card-exit animation,
+  //   - advances `currentIndex` on success / rolls back on failure,
+  //   - triggers `onSuperLikeSuccess` → celebration fly-in for super-likes.
   //
-  // Without this routing, sheet actions in deck mode would silently bypass the
-  // deck state machine — the user would close the sheet and see the same card
-  // still in front of them with stale stats (honesty gate finding #17).
+  // `handleDeckAction` only does step (1) — the raw server-action dispatch —
+  // because it is the callback `useDeckStack` consumes via its `onAction`
+  // prop. Calling `handleDeckAction` directly from the sheet performs the
+  // server mutation but leaves the entire deck state machine stale. That was
+  // CRIT-A-06 (Sprint 1.5): the previous hotfix (`2caab7e`, honesty-gate bug
+  // #17) routed sheet adapters here without noticing the `performAction`
+  // vs. `handleDeckAction` distinction. The fix is to call the imperatives
+  // the hook already exposes — which are the SAME functions the swipe
+  // handlers and action-rail buttons invoke.
+  //
+  // Why no `vacancy` argument on the deck-mode path: the sheet is only
+  // opened for the deck's current card (invariant: "The sheet preserves the
+  // deck position — it never advances `currentIndex` on open/close" — see
+  // CLAUDE.md "Staging Details Sheet + Deck Action Routing"). The hook's
+  // imperatives operate on `currentVacancy` which IS the sheet's `vacancy`
+  // by construction.
+  //
+  // @see docs/adr/030-deck-action-contract-and-notification-late-binding.md Decision C
+  // @see specs/vacancy-pipeline.allium `DeckActionRoutingInvariant`
   const detailsDismissAdapter = useCallback(
     async (vacancy: StagedVacancyWithAutomation) => {
       if (detailsMode === "deck") {
-        await handleDeckAction(vacancy, "dismiss");
+        deckViewRef.current?.dismiss();
       } else {
         await handleDismiss(vacancy.id);
       }
     },
-    [detailsMode, handleDeckAction, handleDismiss],
+    [detailsMode, handleDismiss],
   );
   const detailsArchiveAdapter = useCallback(
     async (vacancy: StagedVacancyWithAutomation) => {
@@ -377,38 +402,39 @@ function StagingContainer() {
   const detailsPromoteAdapter = useCallback(
     async (vacancy: StagedVacancyWithAutomation) => {
       if (detailsMode === "deck") {
-        await handleDeckAction(vacancy, "promote");
+        deckViewRef.current?.promote();
       } else {
         handlePromote(vacancy);
       }
     },
-    [detailsMode, handleDeckAction],
+    [detailsMode],
   );
   // Super-like is a DISTINCT action from promote: in deck mode it triggers
-  // the celebration fly-in via onSuperLikeSuccess. Wiring this to the promote
-  // adapter (as the previous integration commit did) silently swallowed the
-  // celebration — honesty gate finding #16.
+  // the celebration fly-in via `onSuperLikeSuccess`, which only fires from
+  // inside `useDeckStack.performAction`. Routing through the ref is therefore
+  // mandatory for the celebration to appear. Wiring this to the promote
+  // adapter silently swallows the celebration — honesty gate finding #16.
   const detailsSuperLikeAdapter = useCallback(
     async (vacancy: StagedVacancyWithAutomation) => {
       if (detailsMode === "deck") {
-        await handleDeckAction(vacancy, "superlike");
+        deckViewRef.current?.superLike();
       } else {
         // In list mode, super-like falls back to promote (same server action,
         // no deck to feed the celebration hook). Explicit fallback — not a typo.
         handlePromote(vacancy);
       }
     },
-    [detailsMode, handleDeckAction],
+    [detailsMode],
   );
   const detailsBlockAdapter = useCallback(
     async (vacancy: StagedVacancyWithAutomation) => {
       if (detailsMode === "deck") {
-        await handleDeckAction(vacancy, "block");
+        deckViewRef.current?.block();
       } else if (vacancy.employerName) {
         await handleBlockCompany(vacancy.employerName);
       }
     },
-    [detailsMode, handleDeckAction, handleBlockCompany],
+    [detailsMode, handleBlockCompany],
   );
 
   const onTabChange = (value: string) => {
@@ -459,6 +485,7 @@ function StagingContainer() {
           {mounted && viewMode === "deck" ? (
             /* Deck View — card-based swipe UI for "new" tab only */
             <DeckView
+              ref={deckViewRef}
               vacancies={activeTab === "new" ? vacancies : []}
               onAction={handleDeckAction}
               onUndo={handleDeckUndo}

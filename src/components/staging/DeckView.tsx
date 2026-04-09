@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   X,
@@ -19,6 +19,42 @@ import { DeckCard } from "./DeckCard";
 import { SuperLikeCelebrationHost } from "./SuperLikeCelebrationHost";
 import { useSuperLikeCelebrations } from "@/hooks/useSuperLikeCelebrations";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
+
+/**
+ * Imperative handle exposed via `ref` on `<DeckView>`. Used by
+ * `StagingContainer` so external entry points (currently: the details sheet
+ * in deck mode) can drive the deck state machine WITHOUT bypassing
+ * `useDeckStack.performAction`.
+ *
+ * This is the fix for CRIT-A-06 (Sprint 1.5). The previous hotfix (`2caab7e`,
+ * honesty-gate remediation for bug #17) routed sheet actions through
+ * `StagingContainer.handleDeckAction`, which is the SERVER-ACTION dispatcher
+ * consumed by `useDeckStack.performAction` via its `onAction` prop — NOT the
+ * state machine itself. As a result, sheet-triggered dismiss/promote/superlike/
+ * block actions fired the server action but left `currentIndex`, `undoStack`,
+ * `stats`, and the exit animation in a stale state. The card visually stayed
+ * in front of the user after the sheet closed.
+ *
+ * With this handle, the sheet adapters in deck mode now call
+ * `deckViewRef.current?.dismiss()` etc. — which invokes the SAME imperatives
+ * the swipe/action-rail buttons use, guaranteeing that every deck entry point
+ * flows through `performAction` per the ADR-030 Decision C invariant.
+ *
+ * @see docs/adr/030-deck-action-contract-and-notification-late-binding.md Decision C
+ * @see specs/vacancy-pipeline.allium `DeckActionRoutingInvariant`
+ */
+export interface DeckViewHandle {
+  /** Dismiss the current card (routes through `useDeckStack.performAction`). */
+  dismiss: () => void;
+  /** Promote the current card (routes through `useDeckStack.performAction`). */
+  promote: () => void;
+  /** Super-like the current card (routes through `useDeckStack.performAction`). */
+  superLike: () => void;
+  /** Block the current card's company (routes through `useDeckStack.performAction`). */
+  block: () => void;
+  /** Skip the current card (routes through `useDeckStack.performAction`). */
+  skip: () => void;
+}
 
 interface DeckViewProps {
   vacancies: StagedVacancyWithAutomation[];
@@ -67,14 +103,17 @@ function getAutoApproveDefault(): boolean {
   }
 }
 
-export function DeckView({
-  vacancies,
-  onAction,
-  onUndo,
-  onBackToList,
-  onOpenDetails,
-  isDetailsOpen = false,
-}: DeckViewProps) {
+export const DeckView = forwardRef<DeckViewHandle, DeckViewProps>(function DeckView(
+  {
+    vacancies,
+    onAction,
+    onUndo,
+    onBackToList,
+    onOpenDetails,
+    isDetailsOpen = false,
+  }: DeckViewProps,
+  ref,
+) {
   const { t } = useTranslations();
   const [showSwipeHint, setShowSwipeHint] = useState(true);
   const [autoApprove, setAutoApprove] = useState(getAutoApproveDefault);
@@ -109,6 +148,22 @@ export function DeckView({
       celebrations.add({ jobId, vacancyTitle: vacancy.title }),
     onSuperLikeUndone: (jobId) => celebrations.removeByJobId(jobId),
   });
+
+  // Expose the deck state machine's imperatives to the parent via ref so the
+  // details sheet (mounted as a sibling of DeckView in StagingContainer) can
+  // drive the SAME `performAction` pipeline the swipe/action-rail buttons use.
+  // See DeckViewHandle above for the ADR-030 Decision C invariant rationale.
+  useImperativeHandle(
+    ref,
+    () => ({
+      dismiss,
+      promote,
+      superLike,
+      block,
+      skip,
+    }),
+    [dismiss, promote, superLike, block, skip],
+  );
 
   // Touch/pointer drag state
   const [dragDelta, setDragDelta] = useState({ x: 0, y: 0 });
@@ -554,4 +609,4 @@ export function DeckView({
       />
     </div>
   );
-}
+});

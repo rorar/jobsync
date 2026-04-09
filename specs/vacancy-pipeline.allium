@@ -1055,19 +1055,52 @@ invariant DeckActionRoutingInvariant {
   --   - super-like celebration fly-in (onSuperLikeSuccess callback)
   --   - card advancement (the deck index does not move, user sees the same card)
   --
-  -- Enforcement: in StagingContainer.tsx, sheet action adapters MUST be
-  -- mode-aware. In deck mode they route through `handleDeckAction(vacancy, action)`.
-  -- In list mode they use the direct handlers. Tests in DeckView.spec.tsx and
-  -- useDeckStack.spec.ts cover the deck path.
+  -- CRITICAL DISTINCTION (Sprint 1.5 / CRIT-A-06): `useDeckStack.performAction`
+  -- is NOT the same as `StagingContainer.handleDeckAction`. The two abstractions
+  -- are layered but distinct:
+  --   - `performAction` is the STATE MACHINE (animation, index, stats, undo,
+  --     celebration). It lives inside the hook and is exposed to callers via
+  --     the hook's public imperatives (`dismiss`, `promote`, `superLike`,
+  --     `block`, `skip`).
+  --   - `handleDeckAction` is the SERVER-ACTION DISPATCHER supplied to the
+  --     hook via the `onAction` prop. `performAction` calls it internally to
+  --     mutate server state, then drives the state machine based on the
+  --     result.
+  -- Calling `handleDeckAction` directly from an external entry point (like
+  -- the details sheet in deck mode) fires the server action but leaves the
+  -- state machine stale — this is exactly the bug CRIT-A-06 caught. The
+  -- original hotfix (`2caab7e`) for Decision C made this mistake: it routed
+  -- the sheet adapters to `handleDeckAction`, believing that was "the single
+  -- source of truth for deck state". It was not. The fix is to invoke the
+  -- hook's public imperatives, NOT `handleDeckAction`.
+  --
+  -- Enforcement: `src/components/staging/DeckView.tsx` exposes a
+  -- `forwardRef` + `useImperativeHandle` surface (`DeckViewHandle` — see
+  -- the hook wiring comment in StagingContainer.tsx). In deck mode, the
+  -- sheet adapters call `deckViewRef.current.dismiss()` etc. — the SAME
+  -- imperatives the swipe handlers and action-rail buttons invoke. In list
+  -- mode they still use the direct CRUD handlers. Regression test:
+  -- `__tests__/StagingContainerDeckSheetRouting.spec.tsx` (mounts the real
+  -- container + view + hook + sheet and asserts the deck counter advances
+  -- after a sheet-originated dismiss).
 
   ensures: for_each action in { dismiss, promote, superlike, block, skip }:
     for_each entry_point in { swipe, action_rail_button, details_sheet, keyboard_shortcut }:
       when a deck card is the subject:
         the action flows through useDeckStack.performAction
-        and NOT directly through the list-mode handlers
+        (via one of the hook's public imperatives: dismiss, promote,
+         superLike, block, skip — NEVER via `handleDeckAction` directly,
+         because `handleDeckAction` is the `onAction` dispatcher and only
+         performs the server mutation, not the state-machine updates)
+        and NOT through the list-mode handlers.
 
-  note: "See ADR-030 (Decision C). The honesty gate caught this after commit — the StagedVacancyDetailSheet Phase 3 wiring had gone straight to the list handlers, silently breaking the entire deck state machine when actions fired from the sheet. Fixed in hotfix 2caab7e."
-  note: "Any new deck entry point (context menu, bulk action, mobile long-press, URL deep-link) MUST satisfy this invariant."
+  ensures: when an external entry point (e.g. the details sheet) needs to
+    drive the deck state machine, it MUST do so through a ref to the hook's
+    public imperatives (DeckViewHandle in src/components/staging/DeckView.tsx),
+    never by calling the `onAction` prop payload directly.
+
+  note: "See ADR-030 (Decision C) including the Sprint 1.5 correction note. The honesty gate caught the original Phase 3 wiring — the StagedVacancyDetailSheet went straight to the list handlers. The first hotfix attempt (`2caab7e`) routed through `handleDeckAction`, which was semantically wrong because `handleDeckAction` is the server-action dispatcher, not the state machine. Sprint 1.5 CRIT-A-06 completed the fix by exposing `DeckView` as `forwardRef` + `useImperativeHandle` and making the sheet adapters invoke the hook's public imperatives."
+  note: "Any new deck entry point (context menu, bulk action, mobile long-press, URL deep-link) MUST satisfy this invariant. Reviewer checklist: does the new call site invoke a DeckView imperative (via ref) or a wrapper that calls `useDeckStack.performAction` indirectly? If it calls a server action (dismissStagedVacancy, promoteStagedVacancyToJob, etc.) directly OR calls `StagingContainer.handleDeckAction` directly, it is a violation."
 }
 
 -- =============================================================================
