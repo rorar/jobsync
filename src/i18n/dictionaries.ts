@@ -39,6 +39,10 @@ const core = {
     "nav.settings": "Settings",
     "nav.toggleMenu": "Toggle Menu",
     "nav.appTitle": "JobSync - Job Search Assistant",
+    "nav.skipToContent": "Skip to main content",
+    "nav.primaryNavigation": "Primary navigation",
+    "nav.secondaryNavigation": "Secondary navigation",
+    "nav.mobileNavigation": "Mobile navigation",
 
     // Auth
     "auth.signIn": "Sign In",
@@ -181,6 +185,12 @@ const core = {
     "errors.fetchStatusHistory": "Failed to fetch status history",
     "errors.fetchStatusDistribution": "Failed to fetch status distribution",
     "errors.fetchValidTransitions": "Failed to fetch valid transitions",
+
+    // Error boundary (dashboard error page)
+    "errors.somethingWentWrong": "Something went wrong",
+    "errors.genericDescription": "We hit an unexpected problem loading this page. Please try again or return to the dashboard.",
+    "errors.tryAgain": "Try again",
+    "errors.goToDashboard": "Go to Dashboard",
   },
   de: {
     "nav.dashboard": "Dashboard",
@@ -196,6 +206,10 @@ const core = {
     "nav.settings": "Einstellungen",
     "nav.toggleMenu": "Menü umschalten",
     "nav.appTitle": "JobSync - Jobsuche-Assistent",
+    "nav.skipToContent": "Zum Hauptinhalt springen",
+    "nav.primaryNavigation": "Hauptnavigation",
+    "nav.secondaryNavigation": "Sekundäre Navigation",
+    "nav.mobileNavigation": "Mobile Navigation",
 
     "auth.signIn": "Anmelden",
     "auth.createAccount": "Konto erstellen",
@@ -334,6 +348,12 @@ const core = {
     "errors.fetchStatusHistory": "Statusverlauf konnte nicht abgerufen werden",
     "errors.fetchStatusDistribution": "Statusverteilung konnte nicht abgerufen werden",
     "errors.fetchValidTransitions": "Gültige Übergänge konnten nicht abgerufen werden",
+
+    // Error boundary (dashboard error page)
+    "errors.somethingWentWrong": "Etwas ist schiefgelaufen",
+    "errors.genericDescription": "Beim Laden dieser Seite ist ein unerwartetes Problem aufgetreten. Bitte versuche es erneut oder kehre zum Dashboard zurück.",
+    "errors.tryAgain": "Erneut versuchen",
+    "errors.goToDashboard": "Zum Dashboard",
   },
   fr: {
     "nav.dashboard": "Tableau de bord",
@@ -349,6 +369,10 @@ const core = {
     "nav.settings": "Paramètres",
     "nav.toggleMenu": "Basculer le menu",
     "nav.appTitle": "JobSync - Assistant de recherche d'emploi",
+    "nav.skipToContent": "Aller au contenu principal",
+    "nav.primaryNavigation": "Navigation principale",
+    "nav.secondaryNavigation": "Navigation secondaire",
+    "nav.mobileNavigation": "Navigation mobile",
 
     "auth.signIn": "Se connecter",
     "auth.createAccount": "Créer un compte",
@@ -487,6 +511,12 @@ const core = {
     "errors.fetchStatusHistory": "Impossible de récupérer l'historique des statuts",
     "errors.fetchStatusDistribution": "Impossible de récupérer la distribution des statuts",
     "errors.fetchValidTransitions": "Impossible de récupérer les transitions valides",
+
+    // Error boundary (dashboard error page)
+    "errors.somethingWentWrong": "Une erreur est survenue",
+    "errors.genericDescription": "Un problème inattendu est survenu lors du chargement de cette page. Veuillez réessayer ou retourner au tableau de bord.",
+    "errors.tryAgain": "Réessayer",
+    "errors.goToDashboard": "Retour au tableau de bord",
   },
   es: {
     "nav.dashboard": "Panel",
@@ -502,6 +532,10 @@ const core = {
     "nav.settings": "Configuración",
     "nav.toggleMenu": "Alternar menú",
     "nav.appTitle": "JobSync - Asistente de búsqueda de empleo",
+    "nav.skipToContent": "Saltar al contenido principal",
+    "nav.primaryNavigation": "Navegación principal",
+    "nav.secondaryNavigation": "Navegación secundaria",
+    "nav.mobileNavigation": "Navegación móvil",
 
     "auth.signIn": "Iniciar sesión",
     "auth.createAccount": "Crear cuenta",
@@ -640,6 +674,12 @@ const core = {
     "errors.fetchStatusHistory": "No se pudo obtener el historial de estados",
     "errors.fetchStatusDistribution": "No se pudo obtener la distribución de estados",
     "errors.fetchValidTransitions": "No se pudieron obtener las transiciones válidas",
+
+    // Error boundary (dashboard error page)
+    "errors.somethingWentWrong": "Algo salió mal",
+    "errors.genericDescription": "Se produjo un problema inesperado al cargar esta página. Por favor, inténtalo de nuevo o regresa al panel.",
+    "errors.tryAgain": "Intentar de nuevo",
+    "errors.goToDashboard": "Ir al panel",
   },
 } as const;
 

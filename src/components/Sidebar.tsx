@@ -14,7 +14,17 @@ function Sidebar() {
 
   return (
     <aside className="fixed inset-y-0 left-0 z-10 hidden w-14 flex-col border-r bg-background sm:flex">
-      <nav className="flex flex-col items-center gap-4 px-2 sm:py-5">
+      {/*
+        H-NEW-02 — WAI-ARIA landmark rule: multiple navigation landmarks
+        MUST carry unique accessible names. Without `aria-label`, NVDA's
+        landmark list reads "navigation, navigation, navigation" for the
+        three chrome navs (sidebar primary, sidebar secondary, mobile
+        header). Each label is translated via the shared nav.* keys.
+      */}
+      <nav
+        aria-label={t("nav.primaryNavigation")}
+        className="flex flex-col items-center gap-4 px-2 sm:py-5"
+      >
         <Link
           href="/"
           className="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:h-8 md:w-8 md:text-base"
@@ -40,7 +50,10 @@ function Sidebar() {
           })}
         </TooltipProvider>
       </nav>
-      <nav className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5">
+      <nav
+        aria-label={t("nav.secondaryNavigation")}
+        className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5"
+      >
         <TooltipProvider>
           <NavLink
             label={t("nav.settings")}

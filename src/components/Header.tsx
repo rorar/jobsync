@@ -32,7 +32,16 @@ async function Header() {
         </SheetTrigger>
         <SheetContent side="left" className="sm:max-w-xs">
           <SheetTitle className="sr-only">{t(locale, "nav.toggleMenu")}</SheetTitle>
-          <nav className="grid gap-6 text-lg font-medium">
+          {/*
+            H-NEW-02 — the mobile Sheet renders a third <nav> landmark.
+            Without a unique accessible name, AT users hear "navigation"
+            three times with no disambiguation. Labeled with "Mobile
+            navigation" in all 4 locales.
+          */}
+          <nav
+            aria-label={t(locale, "nav.mobileNavigation")}
+            className="grid gap-6 text-lg font-medium"
+          >
             <SheetClose asChild>
               <Link
                 href="/"

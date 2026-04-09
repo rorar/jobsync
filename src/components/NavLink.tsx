@@ -24,8 +24,16 @@ function NavLink({ label, Icon, route, pathname }: NavLinkProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
+        {/*
+          H-NEW-02 — WCAG 1.3.1 + 4.1.2: the active route was only
+          communicated via `border-b-2` + icon color (color-only,
+          invisible in forced-colors mode and to screen readers).
+          `aria-current="page"` is the spec-defined mechanism for
+          "this is the current page in a set of related pages".
+        */}
         <Link
           href={route}
+          aria-current={isActive ? "page" : undefined}
           className={cn("navlink", {
             "border-b-2 border-black dark:border-white": isActive,
           })}

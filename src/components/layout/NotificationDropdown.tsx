@@ -23,17 +23,20 @@ interface NotificationDropdownProps {
 // Date grouping helpers
 // ---------------------------------------------------------------------------
 
-type GroupKey = "today" | "yesterday" | "thisWeek" | "earlier";
+export type GroupKey = "today" | "yesterday" | "thisWeek" | "earlier";
 
-interface NotificationGroup {
+export interface NotificationGroup {
   key: GroupKey;
   labelKey: string;
   notifications: Notification[];
   unreadCount: number;
 }
 
-/** Return midnight of the given date in the local timezone. */
-function startOfDay(date: Date): Date {
+/**
+ * Return midnight of the given date in the local timezone.
+ * Exported for unit testing (H-T-07).
+ */
+export function startOfDay(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   return d;
@@ -42,24 +45,53 @@ function startOfDay(date: Date): Date {
 /**
  * Bucket a notification by how old it is relative to `now`.
  * Groups: today, yesterday, thisWeek (last 7d excl. today/yesterday), earlier.
+ *
+ * DST-safe: instead of dividing by `86_400_000` (which silently mis-counts
+ * on the 23h / 25h DST boundary days), we compare local-calendar `startOfDay`
+ * anchors and decrement `created` one day at a time. Works correctly across
+ * DST transitions because `setDate(d - 1)` rolls back calendar days rather
+ * than raw milliseconds.
+ *
+ * Future dates (clock skew on the client or stale server-sent timestamps)
+ * are bucketed as "today" intentionally — a notification the user just
+ * received should never land in the past.
+ *
+ * Exported for unit testing (H-T-07).
  */
-function getGroupKey(createdAt: Date, now: Date): GroupKey {
+export function getGroupKey(createdAt: Date, now: Date): GroupKey {
   const today = startOfDay(now);
   const created = startOfDay(createdAt);
-  const diffMs = today.getTime() - created.getTime();
-  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffDays <= 0) return "today";
-  if (diffDays === 1) return "yesterday";
-  if (diffDays < 7) return "thisWeek";
+  // Future dates -> "today" bucket.
+  if (created.getTime() >= today.getTime()) {
+    return "today";
+  }
+
+  // Walk back one calendar day at a time (DST-safe). Yesterday = 1 step.
+  const yesterday = startOfDay(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (created.getTime() >= yesterday.getTime()) {
+    return "yesterday";
+  }
+
+  // This week = within the last 7 calendar days (excluding today / yesterday).
+  const sixDaysAgo = startOfDay(now);
+  sixDaysAgo.setDate(sixDaysAgo.getDate() - 6);
+  if (created.getTime() >= sixDaysAgo.getTime()) {
+    return "thisWeek";
+  }
+
   return "earlier";
 }
 
 /**
  * Group notifications by time bucket, preserving ordering within each group.
- * Empty groups are omitted entirely.
+ * Empty groups are omitted entirely. `now` is injected (not computed inline)
+ * so unit tests can pin a deterministic clock.
+ *
+ * Exported for unit testing (H-T-07).
  */
-function groupNotifications(
+export function groupNotifications(
   notifications: Notification[],
   now: Date = new Date(),
 ): NotificationGroup[] {
@@ -203,15 +235,30 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
             {t("notifications.noNotifications")}
           </div>
         ) : (
+          /*
+            H-NEW-05 — WAI-ARIA 1.2: the `feed` role's "Required Owned
+            Elements" rule allows ONLY `role="article"` children. Our
+            previous markup nested `<section>` group wrappers directly
+            inside the feed, which is an authoring violation and breaks
+            `aria-posinset`/`aria-setsize` navigation in NVDA.
+
+            The feed pattern is also overkill for a notification dropdown
+            (feeds are intended for infinite streams where AT users walk
+            article-by-article with keyboard-driven pagination). We drop
+            `role="feed"` entirely and use a labelled `region` landmark
+            instead. Each `<NotificationItem>` remains an `<article>` and
+            still carries `aria-posinset` / `aria-setsize` for
+            per-article AT navigation.
+          */
           <div
-            role="feed"
+            role="region"
             aria-busy={loading}
             aria-label={t("notifications.title")}
             className="divide-y"
           >
             {(() => {
               // Render groups with running position offsets so each item
-              // gets a stable aria-posinset across the whole feed.
+              // gets a stable aria-posinset across the whole list.
               let runningIndex = 0;
               return groups.map((group) => {
                 const groupItems = group.notifications.map((n) => {
