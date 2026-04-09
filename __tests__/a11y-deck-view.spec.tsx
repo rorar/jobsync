@@ -15,6 +15,21 @@ import { mockStagedVacancy } from "@/lib/data/testFixtures";
 // Mocks
 // ---------------------------------------------------------------------------
 
+// Mock next/navigation — SuperLikeCelebrationHost calls useRouter() which
+// throws "invariant expected app router to be mounted" outside a Next app.
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+    forward: jest.fn(),
+    refresh: jest.fn(),
+    prefetch: jest.fn(),
+  }),
+  usePathname: () => "/dashboard/staging",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 jest.mock("@/i18n", () => ({
   useTranslations: jest.fn(() => ({
     t: (key: string) => {

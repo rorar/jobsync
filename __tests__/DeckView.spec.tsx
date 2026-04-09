@@ -11,6 +11,22 @@ import { DeckView } from "@/components/staging/DeckView";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 import { mockStagedVacancy } from "@/lib/data/testFixtures";
 
+// Mock next/navigation — the deck now mounts SuperLikeCelebrationHost which
+// calls useRouter() at render time. Without this mock the hook throws
+// "invariant expected app router to be mounted".
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+    forward: jest.fn(),
+    refresh: jest.fn(),
+    prefetch: jest.fn(),
+  }),
+  usePathname: () => "/dashboard/staging",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 // Mock i18n
 jest.mock("@/i18n", () => ({
   useTranslations: jest.fn(() => ({

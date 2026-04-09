@@ -83,6 +83,21 @@ jest.mock("@/components/staging/StagedVacancyCard", () => ({
   StagedVacancyCard: () => null,
 }));
 
+jest.mock("@/components/staging/StagedVacancyDetailSheet", () => ({
+  StagedVacancyDetailSheet: () => null,
+}));
+
+jest.mock("@/components/staging/StagingLayoutToggle", () => ({
+  StagingLayoutToggle: () => null,
+}));
+
+jest.mock("@/hooks/useStagingLayout", () => ({
+  useStagingLayout: () => ({ size: "default", setSize: jest.fn() }),
+  getStagingMaxWidthClass: () => "max-w-5xl",
+  getPersistedStagingLayoutSize: () => "default",
+  persistStagingLayoutSize: jest.fn(),
+}));
+
 jest.mock("@/components/staging/PromotionDialog", () => ({
   PromotionDialog: () => null,
 }));

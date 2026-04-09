@@ -25,6 +25,7 @@ import { RecordsPerPageSelector } from "@/components/RecordsPerPageSelector";
 import { RecordsCount } from "@/components/RecordsCount";
 import Loading from "@/components/Loading";
 import { StagedVacancyCard } from "./StagedVacancyCard";
+import { StagedVacancyDetailSheet } from "./StagedVacancyDetailSheet";
 import { PromotionDialog } from "./PromotionDialog";
 import { BlockConfirmationDialog } from "./BlockConfirmationDialog";
 import { BulkActionBar } from "./BulkActionBar";
@@ -32,7 +33,9 @@ import { StagingNewItemsBanner } from "./StagingNewItemsBanner";
 import { ViewModeToggle, getPersistedViewMode } from "./ViewModeToggle";
 import type { ViewMode } from "./ViewModeToggle";
 import { DeckView, AUTO_APPROVE_KEY } from "./DeckView";
+import { StagingLayoutToggle } from "./StagingLayoutToggle";
 import { useStagingActions } from "@/hooks/useStagingActions";
+import { useStagingLayout, getStagingMaxWidthClass } from "@/hooks/useStagingLayout";
 import type { DeckAction } from "@/hooks/useDeckStack";
 import type {
   StagedVacancyWithAutomation,
@@ -73,11 +76,16 @@ function StagingContainer() {
   const [promotionOpen, setPromotionOpen] = useState(false);
   const [blockConfirmVacancy, setBlockConfirmVacancy] = useState<StagedVacancyWithAutomation | null>(null);
   const [blockConfirmOpen, setBlockConfirmOpen] = useState(false);
-  const blockResolveRef = useRef<((result: { success: boolean }) => void) | null>(null);
+  const blockResolveRef = useRef<((result: { success: boolean; createdJobId?: string }) => void) | null>(null);
+  // Details sheet (Stream C / task 2) — opened from list card click or deck Info button
+  const [detailsVacancy, setDetailsVacancy] = useState<StagedVacancyWithAutomation | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsMode, setDetailsMode] = useState<"list" | "deck">("list");
   const hasSearched = useRef(false);
   const [mounted, setMounted] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const { size: layoutSize, setSize: setLayoutSize } = useStagingLayout();
 
   useEffect(() => {
     setMounted(true);
@@ -190,6 +198,18 @@ function StagingContainer() {
     setPromotionOpen(true);
   };
 
+  // Open the details sheet (Stream C / task 2). `mode` selects the footer
+  // action set: list mode offers the full CRUD; deck mode offers the 4 swipe
+  // actions + skip. The sheet NEVER advances the deck index on open/close.
+  const handleOpenDetails = useCallback(
+    (vacancy: StagedVacancyWithAutomation, mode: "list" | "deck") => {
+      setDetailsVacancy(vacancy);
+      setDetailsMode(mode);
+      setDetailsOpen(true);
+    },
+    [],
+  );
+
   const handleBlockCompany = useCallback(async (companyName: string) => {
     const result = await addBlacklistEntry(companyName, "contains");
     if (result.success) {
@@ -209,8 +229,37 @@ function StagingContainer() {
     }
   }, [t, reload]);
 
+  // Adapters: details sheet callbacks receive a vacancy, but existing
+  // handlers (handleDismiss etc.) take an id. Small closures bridge the gap.
+  const detailsDismissAdapter = useCallback(
+    async (vacancy: StagedVacancyWithAutomation) => {
+      await handleDismiss(vacancy.id);
+    },
+    [handleDismiss],
+  );
+  const detailsArchiveAdapter = useCallback(
+    async (vacancy: StagedVacancyWithAutomation) => {
+      await handleArchive(vacancy.id);
+    },
+    [handleArchive],
+  );
+  const detailsPromoteAdapter = useCallback(
+    (vacancy: StagedVacancyWithAutomation) => {
+      handlePromote(vacancy);
+    },
+    [],
+  );
+  const detailsBlockAdapter = useCallback(
+    async (vacancy: StagedVacancyWithAutomation) => {
+      if (vacancy.employerName) {
+        await handleBlockCompany(vacancy.employerName);
+      }
+    },
+    [handleBlockCompany],
+  );
+
   // Ref to resolve the promotion dialog promise from outside
-  const promotionResolveRef = useRef<((result: { success: boolean }) => void) | null>(null);
+  const promotionResolveRef = useRef<((result: { success: boolean; createdJobId?: string }) => void) | null>(null);
 
   // Cleanup: resolve pending promises on unmount to prevent permanent UI freeze
   useEffect(() => {
@@ -227,9 +276,13 @@ function StagingContainer() {
   }, []);
 
   // Deck mode action handler — maps DeckAction to existing server actions
-  // Returns { success } so useDeckStack can roll back the card on failure
+  // Returns { success, createdJobId? } so useDeckStack can roll back the card
+  // on failure and forward the created Job id to the super-like fly-in.
   const handleDeckAction = useCallback(
-    async (vacancy: StagedVacancyWithAutomation, action: DeckAction): Promise<{ success: boolean }> => {
+    async (
+      vacancy: StagedVacancyWithAutomation,
+      action: DeckAction,
+    ): Promise<{ success: boolean; createdJobId?: string }> => {
       if (action === "dismiss") {
         const { success, message } = await dismissStagedVacancy(vacancy.id);
         if (success) {
@@ -250,20 +303,20 @@ function StagingContainer() {
 
         if (autoApprove) {
           // Skip dialog — promote immediately with defaults
-          const { success, message } = await promoteStagedVacancyToJob({
+          const result = await promoteStagedVacancyToJob({
             stagedVacancyId: vacancy.id,
           });
-          if (success) {
+          if (result.success) {
             toast({ variant: "success", description: t("staging.promoted") });
             reload();
           } else {
-            toast({ variant: "destructive", title: t("staging.error"), description: message });
+            toast({ variant: "destructive", title: t("staging.error"), description: result.message });
           }
-          return { success };
+          return { success: result.success, createdJobId: result.data?.jobId };
         }
 
         // Open the promotion dialog and wait for result
-        return new Promise<{ success: boolean }>((resolve) => {
+        return new Promise<{ success: boolean; createdJobId?: string }>((resolve) => {
           promotionResolveRef.current = resolve;
           setPromotionVacancy(vacancy);
           setPromotionOpen(true);
@@ -279,7 +332,7 @@ function StagingContainer() {
           return { success: false };
         }
         // Open confirmation dialog and wait
-        return new Promise<{ success: boolean }>((resolve) => {
+        return new Promise<{ success: boolean; createdJobId?: string }>((resolve) => {
           blockResolveRef.current = resolve;
           setBlockConfirmVacancy(vacancy);
           setBlockConfirmOpen(true);
@@ -328,10 +381,12 @@ function StagingContainer() {
 
   return (
     <>
+      <div className={`mx-auto w-full ${getStagingMaxWidthClass(layoutSize)} transition-[max-width] duration-200`}>
       <Card className="h-full">
         <CardHeader className="flex-row justify-between items-center">
           <CardTitle>{t("staging.title")}</CardTitle>
           <div className="flex items-center gap-2">
+            <StagingLayoutToggle value={layoutSize} onChange={setLayoutSize} />
             <ViewModeToggle value={viewMode} onChange={setViewMode} />
             {viewMode === "list" && (
               <div className="relative">
@@ -357,6 +412,8 @@ function StagingContainer() {
               onAction={handleDeckAction}
               onUndo={handleDeckUndo}
               onBackToList={() => setViewMode("list")}
+              onOpenDetails={(vacancy) => handleOpenDetails(vacancy, "deck")}
+              isDetailsOpen={detailsOpen}
             />
           ) : mounted ? (
             <Tabs value={activeTab} onValueChange={onTabChange}>
@@ -414,6 +471,7 @@ function StagingContainer() {
                         onRestoreFromTrash={handleRestoreFromTrash}
                         onPromote={handlePromote}
                         onBlockCompany={handleBlockCompany}
+                        onOpenDetails={(v) => handleOpenDetails(v, "list")}
                       />
                     ))}
                     <div className="flex items-center justify-between mt-4">
@@ -462,6 +520,19 @@ function StagingContainer() {
         </CardContent>
         <CardFooter />
       </Card>
+      </div>
+      {/* Details sheet (Stream C / task 2) — sibling to dialogs, portaled */}
+      <StagedVacancyDetailSheet
+        vacancy={detailsVacancy}
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        mode={detailsMode}
+        onDismiss={detailsDismissAdapter}
+        onArchive={detailsArchiveAdapter}
+        onPromote={detailsPromoteAdapter}
+        onSuperLike={detailsPromoteAdapter}
+        onBlock={detailsBlockAdapter}
+      />
       <PromotionDialog
         open={promotionOpen}
         onOpenChange={(open) => {
