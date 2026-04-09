@@ -1,9 +1,15 @@
 /**
- * Unit tests for module.actions.ts — focused on Manifest v2 migration paths:
- * - getModuleManifests(): i18n field, dependencies field
- * - deactivateModule(): automation pausing + ModuleDeactivated event emission
- *   (single-writer invariant — see ADR-030 / specs/notification-dispatch.allium)
- * - syncRegistryFromDb(): fail-open behavior
+ * Unit tests for module.actions.ts — focused on:
+ * - Manifest v2 migration paths:
+ *   - getModuleManifests(): i18n field, dependencies field
+ *   - deactivateModule(): automation pausing + ModuleDeactivated event emission
+ *     (single-writer invariant — see ADR-030 / specs/notification-dispatch.allium)
+ *   - syncRegistryFromDb(): fail-open behavior
+ * - Sprint 1.5 CRIT-S-04 regression suite:
+ *   - requireAdmin tiered authorization (Tier A explicit list, Tier B single
+ *     user implicit, Tier C multi-user fail-closed)
+ *   - activateModule / deactivateModule reject non-admin callers
+ *   - admin-action rate limit (10/min per user)
  */
 
 // Mock auth
@@ -17,11 +23,15 @@ jest.mock("@/utils/user.utils", () => ({
 // regresses and calls it, Jest will throw `Cannot read properties of undefined`
 // which is a loud, correct failure mode for the SingleNotificationWriter
 // invariant (ADR-030 / specs/notification-dispatch.allium).
+// `user.count` + `user.findFirst` are mocked because the admin authorization
+// helper (src/lib/auth/admin.ts) queries them as part of Tier B / Tier C
+// resolution — see Sprint 1.5 CRIT-S-04.
 jest.mock("@/lib/db", () => ({
   __esModule: true,
   default: {
     moduleRegistration: { findMany: jest.fn(), upsert: jest.fn() },
     automation: { findMany: jest.fn(), updateMany: jest.fn() },
+    user: { count: jest.fn(), findFirst: jest.fn() },
   },
 }));
 
@@ -69,7 +79,11 @@ jest.mock("@/lib/events", () => ({
   },
 }));
 
-import { getModuleManifests, deactivateModule } from "@/actions/module.actions";
+import {
+  getModuleManifests,
+  deactivateModule,
+  activateModule,
+} from "@/actions/module.actions";
 import { getCurrentUser } from "@/utils/user.utils";
 import { moduleRegistry } from "@/lib/connector/registry";
 import prisma from "@/lib/db";
@@ -121,12 +135,32 @@ describe("module.actions", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Keep ADMIN_USER_IDS unset by default so Tier B (single-user implicit)
+    // is exercised. Individual admin tests override this.
+    delete process.env.ADMIN_USER_IDS;
     // Default: authenticated user
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
     // Default: empty DB (syncRegistryFromDb succeeds with no rows)
     (prisma.moduleRegistration.findMany as jest.Mock).mockResolvedValue([]);
     // Default: no modules
     (moduleRegistry.getByType as jest.Mock).mockReturnValue([]);
+    // Default admin posture: single-user implicit (Tier B). User count is 1
+    // and the sole user's id matches the session user. Reset the rate limit
+    // store so tests do not carry state across runs.
+    (prisma.user.count as jest.Mock).mockResolvedValue(1);
+    (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: mockUser.id });
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { resetAdminActionRateLimitStore } = require(
+      "@/lib/auth/admin-rate-limit",
+    );
+    resetAdminActionRateLimitStore();
+    // Silence the admin-audit console.warn emitted by authorizeAdminAction
+    // during the existing deactivateModule tests.
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    (console.warn as jest.Mock).mockRestore?.();
   });
 
   // ===========================================================================
@@ -321,6 +355,228 @@ describe("module.actions", () => {
       expect(result.success).toBe(false);
       expect(result.message).toBe("Not authenticated");
       expect(emitEvent).not.toHaveBeenCalled();
+    });
+  });
+
+  // ===========================================================================
+  // Sprint 1.5 CRIT-S-04 — cross-tenant privilege escalation regression suite
+  //
+  // These tests verify the three-tier admin authorization rule from
+  // src/lib/auth/admin.ts:
+  //   Tier A — ADMIN_USER_IDS env var explicit list
+  //   Tier B — single-user DB implicit admin
+  //   Tier C — multi-user without env var: fail-closed
+  //
+  // The authorization is enforced at the top of activateModule and
+  // deactivateModule. Non-admin callers must receive ActionResult
+  // { success: false, errorCode: "UNAUTHORIZED" } WITHOUT any side-effect
+  // on moduleRegistry, prisma.moduleRegistration, prisma.automation, or the
+  // domain event bus.
+  // ===========================================================================
+
+  describe("CRIT-S-04 — admin authorization (tiered rule)", () => {
+    const moduleId = "eures";
+    const aliceId = "user-alice";
+    const bobId = "user-bob";
+
+    beforeEach(() => {
+      // Registry has a module in INACTIVE state (ready to activate) — most
+      // admin tests use this to assert the mutation path is skipped when
+      // authorization fails.
+      (moduleRegistry.get as jest.Mock).mockReturnValue(
+        makeRegisteredModule({ id: moduleId }),
+      );
+      (prisma.moduleRegistration.upsert as jest.Mock).mockResolvedValue({});
+      (prisma.automation.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    });
+
+    describe("Tier A — ADMIN_USER_IDS explicit list", () => {
+      it("allows a user whose id is in ADMIN_USER_IDS", async () => {
+        process.env.ADMIN_USER_IDS = `${aliceId},${bobId}`;
+        (getCurrentUser as jest.Mock).mockResolvedValue({
+          id: aliceId,
+          name: "Alice",
+          email: "alice@example.com",
+        });
+        // Reject fallback tiers so a bug forcing Tier B/C would be obvious.
+        (prisma.user.count as jest.Mock).mockResolvedValue(5);
+
+        const result = await deactivateModule(moduleId);
+
+        expect(result.success).toBe(true);
+        expect(prisma.user.count).not.toHaveBeenCalled();
+      });
+
+      it("denies a user whose id is NOT in ADMIN_USER_IDS (multi-user deployment)", async () => {
+        process.env.ADMIN_USER_IDS = aliceId;
+        (getCurrentUser as jest.Mock).mockResolvedValue({
+          id: bobId,
+          name: "Bob",
+          email: "bob@example.com",
+        });
+        (prisma.user.count as jest.Mock).mockResolvedValue(5);
+
+        const result = await deactivateModule(moduleId);
+
+        expect(result.success).toBe(false);
+        expect(result.errorCode).toBe("UNAUTHORIZED");
+        // NO side-effect on shared state
+        expect(moduleRegistry.setStatus).not.toHaveBeenCalled();
+        expect(prisma.moduleRegistration.upsert).not.toHaveBeenCalled();
+        expect(prisma.automation.findMany).not.toHaveBeenCalled();
+        expect(prisma.automation.updateMany).not.toHaveBeenCalled();
+        expect(emitEvent).not.toHaveBeenCalled();
+        // Tier A short-circuits before the DB count fallback
+        expect(prisma.user.count).not.toHaveBeenCalled();
+      });
+
+      it("denies activateModule when ADMIN_USER_IDS excludes the caller", async () => {
+        process.env.ADMIN_USER_IDS = aliceId;
+        (getCurrentUser as jest.Mock).mockResolvedValue({
+          id: bobId,
+          name: "Bob",
+          email: "bob@example.com",
+        });
+        // Make the registry report INACTIVE so the happy path would proceed
+        (moduleRegistry.get as jest.Mock).mockReturnValue({
+          ...makeRegisteredModule({ id: moduleId }),
+          status: "inactive",
+        });
+
+        const result = await activateModule(moduleId);
+
+        expect(result.success).toBe(false);
+        expect(result.errorCode).toBe("UNAUTHORIZED");
+        expect(moduleRegistry.setStatus).not.toHaveBeenCalled();
+        expect(prisma.moduleRegistration.upsert).not.toHaveBeenCalled();
+      });
+
+      it("handles comma/whitespace variants in ADMIN_USER_IDS", async () => {
+        process.env.ADMIN_USER_IDS = `  ${aliceId}  ,,  ${bobId}  `;
+        (getCurrentUser as jest.Mock).mockResolvedValue({
+          id: bobId,
+          name: "Bob",
+          email: "bob@example.com",
+        });
+
+        const result = await deactivateModule(moduleId);
+
+        expect(result.success).toBe(true);
+      });
+    });
+
+    describe("Tier B — single-user implicit admin", () => {
+      it("allows the sole user when ADMIN_USER_IDS is unset and userCount === 1", async () => {
+        delete process.env.ADMIN_USER_IDS;
+        (getCurrentUser as jest.Mock).mockResolvedValue({
+          id: aliceId,
+          name: "Alice",
+          email: "alice@example.com",
+        });
+        (prisma.user.count as jest.Mock).mockResolvedValue(1);
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: aliceId });
+
+        const result = await deactivateModule(moduleId);
+
+        expect(result.success).toBe(true);
+      });
+
+      it("denies a stale session whose user id no longer matches the sole DB user", async () => {
+        // Session pinned to user-alice but DB contains a different sole user
+        delete process.env.ADMIN_USER_IDS;
+        (getCurrentUser as jest.Mock).mockResolvedValue({
+          id: aliceId,
+          name: "Alice",
+          email: "alice@example.com",
+        });
+        (prisma.user.count as jest.Mock).mockResolvedValue(1);
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: "user-ghost" });
+
+        const result = await deactivateModule(moduleId);
+
+        expect(result.success).toBe(false);
+        expect(result.errorCode).toBe("UNAUTHORIZED");
+        expect(emitEvent).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("Tier C — multi-user fail-closed", () => {
+      it("denies any caller when ADMIN_USER_IDS is unset and userCount > 1", async () => {
+        delete process.env.ADMIN_USER_IDS;
+        (getCurrentUser as jest.Mock).mockResolvedValue({
+          id: aliceId,
+          name: "Alice",
+          email: "alice@example.com",
+        });
+        (prisma.user.count as jest.Mock).mockResolvedValue(7);
+
+        const result = await deactivateModule(moduleId);
+
+        expect(result.success).toBe(false);
+        expect(result.errorCode).toBe("UNAUTHORIZED");
+        // No cross-tenant blast radius: shared state must remain untouched
+        expect(moduleRegistry.setStatus).not.toHaveBeenCalled();
+        expect(prisma.moduleRegistration.upsert).not.toHaveBeenCalled();
+        expect(prisma.automation.updateMany).not.toHaveBeenCalled();
+        expect(emitEvent).not.toHaveBeenCalled();
+        // findFirst is never reached — the count gate rejects first
+        expect(prisma.user.findFirst).not.toHaveBeenCalled();
+      });
+
+      it("denies when prisma.user.count throws (fail-closed on DB error)", async () => {
+        delete process.env.ADMIN_USER_IDS;
+        (getCurrentUser as jest.Mock).mockResolvedValue({
+          id: aliceId,
+          name: "Alice",
+          email: "alice@example.com",
+        });
+        (prisma.user.count as jest.Mock).mockRejectedValue(
+          new Error("DB connection refused"),
+        );
+        // Silence the console.error emitted by checkAdminAuthorization
+        const consoleSpy = jest
+          .spyOn(console, "error")
+          .mockImplementation(() => {});
+
+        const result = await deactivateModule(moduleId);
+
+        expect(result.success).toBe(false);
+        expect(result.errorCode).toBe("UNAUTHORIZED");
+        expect(emitEvent).not.toHaveBeenCalled();
+
+        consoleSpy.mockRestore();
+      });
+    });
+
+    describe("admin-action rate limiting", () => {
+      it("rejects the 11th call in a minute even for an authorized admin", async () => {
+        // Tier A admin to isolate the rate-limit behaviour
+        process.env.ADMIN_USER_IDS = aliceId;
+        (getCurrentUser as jest.Mock).mockResolvedValue({
+          id: aliceId,
+          name: "Alice",
+          email: "alice@example.com",
+        });
+        // Registry alternates between INACTIVE and ACTIVE so each call does
+        // meaningful work (but idempotent on the path that matters).
+        (moduleRegistry.get as jest.Mock).mockReturnValue({
+          ...makeRegisteredModule({ id: moduleId }),
+          status: "active",
+        });
+
+        // 10 successful calls (rate window allows 10)
+        for (let i = 0; i < 10; i++) {
+          const result = await deactivateModule(moduleId);
+          expect(result.success).toBe(true);
+        }
+
+        // 11th must be rate-limited
+        const over = await deactivateModule(moduleId);
+        expect(over.success).toBe(false);
+        expect(over.errorCode).toBe("UNAUTHORIZED");
+        expect(over.message).toBe("errors.tooManyRequests");
+      });
     });
   });
 

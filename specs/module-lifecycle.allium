@@ -401,6 +401,7 @@ rule ConnectorParamsValidation {
 rule ModuleActivation {
   -- "When a module is activated, its connector group becomes active."
   when: ActivateModule(moduleId: String, by: User)
+  requires: by is authorized as admin  -- see invariant AdminOnlyModuleLifecycle
   let module = RegisteredModule where manifest.id = moduleId
   requires: module.status = inactive or module.status = error
   requires: module.isConfigured
@@ -419,6 +420,7 @@ rule ModuleActivation {
 rule ModuleDeactivation {
   -- "When a module is deactivated and automations use it, those automations are paused."
   when: DeactivateModule(moduleId: String, by: User)
+  requires: by is authorized as admin  -- see invariant AdminOnlyModuleLifecycle
   let module = RegisteredModule where manifest.id = moduleId
   requires: module.status = active
 
@@ -722,6 +724,31 @@ invariant SettingsFromManifest {
   note: "No hardcoded module lists in UI components"
   -- known_violation resolved: ApiKeySettings.tsx now queries registry via getCredentialModules()
   -- resolved: DESCRIPTION_KEYS replaced by manifest.i18n credentialHint (ADR-028, 2026-04-08)
+}
+
+invariant AdminOnlyModuleLifecycle {
+  -- "Only admins can activate or deactivate a module."
+  -- Introduced by Sprint 1.5 CRIT-S-04. Previously the `ActivateModule` and
+  -- `DeactivateModule` rules checked only `by: User` — ANY authenticated user
+  -- passed the gate. Because modules are shared singletons (not per-user),
+  -- and because deactivation cascades into every tenant's active automations
+  -- (see rule ModuleDeactivation), non-admin callers could pause every other
+  -- user's job-discovery pipeline from a single browser Server Action call.
+  ensures: for_each call in (ActivateModule, DeactivateModule):
+    call.by is authorized as admin
+      via AdminAuthorizationRule(
+        explicit_list = env.ADMIN_USER_IDS,  -- Tier A
+        implicit_single_user = userCount() = 1 and sole User.id = call.by.id,  -- Tier B
+        otherwise = denied  -- Tier C (fail-closed)
+      )
+  ensures: every admin call emits an AdminAuditLog entry
+    naming {actorId, action, targetId, tier, allowed, ts}
+  ensures: admin-action rate <= 10 per minute per actor
+  note: "Implemented in src/lib/auth/admin.ts (requireAdmin/authorizeAdminAction)"
+  note: "Rate limit implemented in src/lib/auth/admin-rate-limit.ts"
+  note: "Enforcement sites: src/actions/module.actions.ts (activateModule, deactivateModule)"
+  note: "JobSync has NO role model — tiered rule preserves zero-config single-user UX while closing the multi-tenant gap"
+  related_adr: "ADR-015 (IDOR ownership), ADR-018 (env-var security pattern), ADR-019 (use-server export security)"
 }
 
 -- =============================================================================

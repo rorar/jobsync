@@ -20,6 +20,8 @@ import { ActionResult } from "@/models/actionResult";
 import { checkModuleHealth } from "@/lib/connector/health-monitor";
 import { checkHealthCheckRateLimit } from "@/lib/health-rate-limit";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
+import { authorizeAdminAction } from "@/lib/auth/admin";
+import { checkAdminActionRateLimit } from "@/lib/auth/admin-rate-limit";
 
 // =============================================================================
 // Types
@@ -158,6 +160,30 @@ export async function activateModule(
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
 
+    // Admin authorization — see specs/module-lifecycle.allium invariant
+    // `AdminOnlyModuleLifecycle`. Module activation mutates shared singleton
+    // state and therefore requires admin tier (CRIT-S-04).
+    const authz = await authorizeAdminAction(user, {
+      action: "activateModule",
+      targetId: moduleId,
+    });
+    if (!authz.allowed) {
+      return {
+        success: false,
+        message: authz.reason ?? "errors.notAuthorized",
+        errorCode: "UNAUTHORIZED",
+      };
+    }
+
+    const rate = checkAdminActionRateLimit(user.id);
+    if (!rate.allowed) {
+      return {
+        success: false,
+        message: "errors.tooManyRequests",
+        errorCode: "UNAUTHORIZED",
+      };
+    }
+
     const registered = moduleRegistry.get(moduleId);
     if (!registered) {
       return { success: false, message: `Module "${moduleId}" not found` };
@@ -204,6 +230,30 @@ export async function deactivateModule(
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
+
+    // Admin authorization — see specs/module-lifecycle.allium invariant
+    // `AdminOnlyModuleLifecycle`. Module deactivation pauses automations for
+    // EVERY user on this deployment, so it is admin-only (CRIT-S-04).
+    const authz = await authorizeAdminAction(user, {
+      action: "deactivateModule",
+      targetId: moduleId,
+    });
+    if (!authz.allowed) {
+      return {
+        success: false,
+        message: authz.reason ?? "errors.notAuthorized",
+        errorCode: "UNAUTHORIZED",
+      };
+    }
+
+    const rate = checkAdminActionRateLimit(user.id);
+    if (!rate.allowed) {
+      return {
+        success: false,
+        message: "errors.tooManyRequests",
+        errorCode: "UNAUTHORIZED",
+      };
+    }
 
     const registered = moduleRegistry.get(moduleId);
     if (!registered) {
