@@ -602,10 +602,15 @@ function StagingContainer() {
           }
         }}
         vacancy={promotionVacancy}
-        onSuccess={() => {
-          // Resolve the promise as success — called synchronously after onOpenChange(false)
+        onSuccess={(result) => {
+          // Resolve the promise as success — called synchronously after onOpenChange(false).
+          // Thread the created Job's id through so `useDeckStack.performAction`
+          // can forward it to `onSuperLikeSuccess` and trigger the celebration
+          // fly-in. Before the CRIT-A2 fix, `onSuccess` was parameterless and
+          // the jobId was silently dropped, leaving the celebration dead in the
+          // default (auto-approve=OFF) flow.
           if (promotionResolveRef.current) {
-            promotionResolveRef.current({ success: true });
+            promotionResolveRef.current({ success: true, createdJobId: result.jobId });
             promotionResolveRef.current = null;
           }
           reload();

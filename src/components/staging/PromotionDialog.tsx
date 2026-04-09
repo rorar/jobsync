@@ -18,11 +18,33 @@ import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/i18n";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 
+/**
+ * Shape surfaced to `onSuccess` after a successful promotion. Mirrors the
+ * `data` payload of `promoteStagedVacancyToJob`'s `ActionResult`. The jobId
+ * is THREADED through to `useDeckStack.performAction` so the super-like
+ * celebration fly-in can link to the newly created Job (ADR-030 Decision A).
+ *
+ * Keeping the full shape (jobId + stagedVacancyId) — not just jobId — so
+ * future callers can disambiguate which staged vacancy was just promoted
+ * without re-reading component state.
+ */
+export interface PromotionDialogSuccessResult {
+  jobId: string;
+  stagedVacancyId: string;
+}
+
 interface PromotionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   vacancy: StagedVacancyWithAutomation | null;
-  onSuccess: () => void;
+  /**
+   * Fired after the server action returns success. Receives the created
+   * Job's id so callers can forward it into the deck state machine
+   * (see `StagingContainer.promotionResolveRef`) and downstream celebration
+   * hooks. ADR-030 Decision A — contract is additive: the shape mirrors the
+   * server action's `ActionResult<{ jobId, stagedVacancyId }>.data` payload.
+   */
+  onSuccess: (result: PromotionDialogSuccessResult) => void;
 }
 
 export function PromotionDialog({
@@ -57,25 +79,46 @@ export function PromotionDialog({
 
     setSubmitting(true);
     try {
-      const { success, message } = await promoteStagedVacancyToJob({
+      const result = await promoteStagedVacancyToJob({
         stagedVacancyId: vacancy.id,
         jobTitleOverride: titleOverride || undefined,
         companyOverride: companyOverride || undefined,
         locationOverride: locationOverride || undefined,
       });
 
-      if (success) {
+      if (result.success && result.data) {
         toast({
           variant: "success",
           description: t("staging.promoted"),
         });
         onOpenChange(false);
-        onSuccess();
+        // Thread the created Job id through to the caller so the deck state
+        // machine can forward it to `onSuperLikeSuccess` and the celebration
+        // fly-in (ADR-030 Decision A). Before this fix, `onSuccess()` was
+        // parameterless and the jobId was silently dropped — CRIT-A2.
+        onSuccess({
+          jobId: result.data.jobId,
+          stagedVacancyId: result.data.stagedVacancyId,
+        });
+      } else if (result.success && !result.data) {
+        // Defensive: the server action declared `ActionResult<{jobId,...}>`
+        // but returned success without `data`. Surface a dev-only warning so
+        // silent contract drift is visible in the console; still treat the
+        // flow as successful for the user.
+        console.warn(
+          "[PromotionDialog] promoteStagedVacancyToJob returned success without data — cannot forward jobId",
+          { stagedVacancyId: vacancy.id, result },
+        );
+        toast({
+          variant: "success",
+          description: t("staging.promoted"),
+        });
+        onOpenChange(false);
       } else {
         toast({
           variant: "destructive",
           title: t("staging.error"),
-          description: message,
+          description: result.message,
         });
       }
     } catch (error) {
