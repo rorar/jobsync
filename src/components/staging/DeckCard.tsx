@@ -159,10 +159,10 @@ function DeckCardInner({
           {vacancy.title}
         </h3>
         {vacancy.employerName && (
-          <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
+          <div className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
             <CompanyLogo size="sm" companyName={vacancy.employerName} />
             {vacancy.employerName}
-          </p>
+          </div>
         )}
       </div>
 

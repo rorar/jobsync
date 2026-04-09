@@ -109,10 +109,10 @@ export function StagedVacancyCard({
       <CardContent className="pb-2">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
           {vacancy.employerName && (
-            <span className="inline-flex items-center gap-1.5">
+            <div className="inline-flex items-center gap-1.5">
               <CompanyLogo size="sm" companyName={vacancy.employerName} />
               {vacancy.employerName}
-            </span>
+            </div>
           )}
           {vacancy.location && (
             <span className="inline-flex items-center gap-1">
