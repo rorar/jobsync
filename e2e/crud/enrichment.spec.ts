@@ -13,10 +13,14 @@ async function ensureEnglishLocale(page: Page) {
 }
 
 async function navigateToJobs(page: Page) {
+  // Force table view via localStorage before navigation
+  await page.addInitScript(() => {
+    localStorage.setItem("jobsync-myjobs-view-mode", "table");
+  });
   await page.goto("/dashboard/myjobs");
   await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-job-btn").waitFor({ state: "visible" });
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(1000);
 }
 
 /**
@@ -74,6 +78,7 @@ async function createJob(
     company: string;
     location: string;
     url?: string;
+    source?: string;
   },
 ) {
   await page.getByTestId("add-job-btn").click();
@@ -106,6 +111,14 @@ async function createJob(
     opts.location,
   );
   await expect(page.getByLabel("Location")).toContainText(opts.location);
+
+  // Fill Job Source (required by Zod schema, .min(2))
+  await selectOrCreateComboboxOption(
+    page,
+    "Job Source",
+    "Search source",
+    opts.source ?? "Manual",
+  );
 
   await page.locator(".tiptap").click();
   await page.locator(".tiptap").fill("E2E enrichment test description.");
