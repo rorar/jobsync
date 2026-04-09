@@ -10,6 +10,13 @@ interface UndoEntry {
   vacancy: StagedVacancyWithAutomation;
   action: DeckAction;
   index: number;
+  /**
+   * Set when the action was a successful super-like (or promote) and the
+   * server action surfaced the newly created Job's id. Used by the
+   * super-like celebration host to drop the matching celebration when the
+   * user undoes the super-like.
+   */
+  createdJobId?: string;
 }
 
 interface DeckStats {
@@ -22,9 +29,37 @@ interface DeckStats {
 
 interface UseDeckStackOptions {
   vacancies: StagedVacancyWithAutomation[];
-  onAction: (vacancy: StagedVacancyWithAutomation, action: DeckAction) => Promise<{ success: boolean }>;
+  /**
+   * Server-action dispatcher invoked when the user takes a deck action. The
+   * promise must resolve to `{ success }`; on `superlike` / `promote` it may
+   * additionally include `createdJobId` so the deck can hand the new Job's id
+   * downstream (e.g. to the super-like celebration fly-in).
+   */
+  onAction: (
+    vacancy: StagedVacancyWithAutomation,
+    action: DeckAction,
+  ) => Promise<{ success: boolean; createdJobId?: string }>;
   onUndo?: (entry: UndoEntry) => Promise<void>;
   enabled?: boolean;
+  /**
+   * When `true`, the hook's keyboard shortcuts (dismiss/promote/super-like/
+   * block/skip/undo) are suppressed. The detail sheet owner is responsible for
+   * handling its own keyboard events while open. Defaults to `false`.
+   */
+  isDetailsOpen?: boolean;
+  /**
+   * Fired after a successful super-like action whose server response surfaced
+   * a `createdJobId`. The host (e.g. `DeckView`) uses this to enqueue a
+   * celebration entry. Optional — no-op if omitted.
+   */
+  onSuperLikeSuccess?: (jobId: string, vacancy: StagedVacancyWithAutomation) => void;
+  /**
+   * Fired when an undo reverses a previous super-like, so consumers can
+   * remove the matching celebration (the created Job no longer exists).
+   * Note: undo currently only persists for `dismiss`; this callback is wired
+   * for forward-compatibility once super-like undo is implemented end-to-end.
+   */
+  onSuperLikeUndone?: (jobId: string) => void;
 }
 
 interface UseDeckStackReturn {
@@ -56,6 +91,9 @@ export function useDeckStack({
   onAction,
   onUndo,
   enabled = true,
+  isDetailsOpen = false,
+  onSuperLikeSuccess,
+  onSuperLikeUndone,
 }: UseDeckStackOptions): UseDeckStackReturn {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [exitDirection, setExitDirection] = useState<ExitDirection>(null);
@@ -91,14 +129,15 @@ export function useDeckStack({
       // 2. Fire server action in parallel with animation (skip bypasses onAction)
       const vacancy = currentVacancy;
       const index = currentIndex;
-      const actionPromise = action === "skip"
-        ? Promise.resolve({ success: true })
-        : onAction(vacancy, action).catch(
-            (error): { success: boolean } => {
-              console.error(`[useDeckStack] Action "${action}" failed:`, error);
-              return { success: false };
-            },
-          );
+      const actionPromise: Promise<{ success: boolean; createdJobId?: string }> =
+        action === "skip"
+          ? Promise.resolve({ success: true })
+          : onAction(vacancy, action).catch(
+              (error): { success: boolean; createdJobId?: string } => {
+                console.error(`[useDeckStack] Action "${action}" failed:`, error);
+                return { success: false };
+              },
+            );
 
       // 3. After animation delay, check result
       setTimeout(async () => {
@@ -107,7 +146,12 @@ export function useDeckStack({
         if (result.success) {
           // Skip has no server-side effect — don't add to undo stack
           if (action !== "skip") {
-            const entry: UndoEntry = { vacancy, action, index };
+            const entry: UndoEntry = {
+              vacancy,
+              action,
+              index,
+              createdJobId: result.createdJobId,
+            };
             setUndoStack((prev) => [entry, ...prev].slice(0, MAX_UNDO_STACK));
           }
 
@@ -119,6 +163,13 @@ export function useDeckStack({
             blocked: prev.blocked + (action === "block" ? 1 : 0),
             skipped: prev.skipped + (action === "skip" ? 1 : 0),
           }));
+
+          // Notify host of a successful super-like so it can enqueue the
+          // celebration fly-in. Only fires when the server action surfaced a
+          // createdJobId — silently no-ops otherwise (e.g. promote-only flow).
+          if (action === "superlike" && result.createdJobId) {
+            onSuperLikeSuccess?.(result.createdJobId, vacancy);
+          }
 
           setExitDirection(null);
           setCurrentIndex((prev) => prev + 1);
@@ -132,7 +183,7 @@ export function useDeckStack({
         animatingRef.current = false;
       }, ANIMATION_DURATION);
     },
-    [currentVacancy, currentIndex, onAction],
+    [currentVacancy, currentIndex, onAction, onSuperLikeSuccess],
   );
 
   const dismiss = useCallback(() => performAction("dismiss"), [performAction]);
@@ -157,16 +208,26 @@ export function useDeckStack({
       skipped: prev.skipped - (entry.action === "skip" ? 1 : 0),
     }));
 
+    // If we just undid a super-like with a known createdJobId, drop the
+    // matching celebration so the user does not see a CTA pointing at a Job
+    // that no longer exists. The host's celebration queue is keyed by jobId.
+    if (entry.action === "superlike" && entry.createdJobId) {
+      onSuperLikeUndone?.(entry.createdJobId);
+    }
+
     if (onUndo) {
       onUndo(entry).catch((error) => {
         console.error("[useDeckStack] Undo failed:", error);
       });
     }
-  }, [undoStack, onUndo]);
+  }, [undoStack, onUndo, onSuperLikeUndone]);
 
   // Keyboard shortcuts — only when container is focused and not in an input
   useEffect(() => {
     if (!enabled) return;
+    // Gate all deck-wide shortcuts while the detail sheet is open so the user
+    // can type / scroll inside the sheet without triggering card actions.
+    if (isDetailsOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't intercept when typing in inputs
@@ -218,7 +279,7 @@ export function useDeckStack({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [enabled, dismiss, promote, superLike, block, skip, undo]);
+  }, [enabled, isDetailsOpen, dismiss, promote, superLike, block, skip, undo]);
 
   return {
     currentIndex,

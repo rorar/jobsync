@@ -2,7 +2,7 @@
 
 import { memo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Calendar, Banknote, Sparkles } from "lucide-react";
+import { MapPin, Calendar, Banknote, Sparkles, Info } from "lucide-react";
 import { CompanyLogo } from "@/components/ui/company-logo";
 import { useTranslations, formatDateShort } from "@/i18n";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
@@ -40,6 +40,7 @@ interface DeckCardProps {
   exitDirection?: ExitDirection;
   isPreview?: boolean;
   previewLevel?: 1 | 2;
+  onInfoClick?: (vacancy: StagedVacancyWithAutomation) => void;
 }
 
 function MatchScoreRing({ score }: { score: number }) {
@@ -100,6 +101,7 @@ function DeckCardInner({
   exitDirection,
   isPreview = false,
   previewLevel = 1,
+  onInfoClick,
 }: DeckCardProps) {
   const { t, locale } = useTranslations();
   const [expanded, setExpanded] = useState(false);
@@ -129,28 +131,46 @@ function DeckCardInner({
         ${animationClass} ${previewClass}
       `}
     >
-      {/* Header: Source badge + Match score */}
-      <div className="px-5 pt-5 flex items-center justify-between">
+      {/* Header: Source badge + Info button + Match score */}
+      <div className="px-5 pt-5 flex items-center justify-between gap-2">
         <Badge variant="outline" className="text-xs" title={vacancy.sourceBoard}>
           {vacancy.sourceBoard}
         </Badge>
-        {vacancy.matchScore != null ? (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground sr-only">
-              {t("deck.matchScore")}: {vacancy.matchScore}%
-            </span>
-            <MatchScoreRing score={vacancy.matchScore} />
-          </div>
-        ) : (
-          <Badge
-            variant="secondary"
-            className="text-xs inline-flex items-center gap-1 cursor-help"
-            title={t("deck.noScoreHint")}
-          >
-            <Sparkles className="h-3 w-3" aria-hidden="true" />
-            --
-          </Badge>
-        )}
+        <div className="flex items-center gap-1.5">
+          {onInfoClick && !isPreview && (
+            <button
+              type="button"
+              className="h-7 w-7 rounded-full bg-muted text-muted-foreground hover:bg-accent active:scale-90 flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onInfoClick(vacancy);
+              }}
+              aria-label={t("deck.detailsTooltip")}
+              title={t("deck.detailsTooltip")}
+            >
+              <Info className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+          {vacancy.matchScore != null ? (
+            <>
+              <span className="text-xs text-muted-foreground sr-only">
+                {t("deck.matchScore")}: {vacancy.matchScore}%
+              </span>
+              <MatchScoreRing score={vacancy.matchScore} />
+            </>
+          ) : (
+            <Badge
+              variant="secondary"
+              className="text-xs inline-flex items-center gap-1 cursor-help"
+              title={t("deck.noScoreHint")}
+            >
+              <Sparkles className="h-3 w-3" aria-hidden="true" />
+              --
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Title + Employer */}

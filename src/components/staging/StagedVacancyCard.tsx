@@ -13,6 +13,7 @@ import {
   Archive,
   Trash2,
   Ban,
+  Info,
 } from "lucide-react";
 import { CompanyLogo } from "@/components/ui/company-logo";
 import { useTranslations, formatDateShort } from "@/i18n";
@@ -59,6 +60,7 @@ interface StagedVacancyCardProps {
   onRestoreFromTrash: (id: string) => void;
   onPromote: (vacancy: StagedVacancyWithAutomation) => void;
   onBlockCompany?: (companyName: string) => void;
+  onOpenDetails?: (vacancy: StagedVacancyWithAutomation) => void;
 }
 
 export function StagedVacancyCard({
@@ -73,11 +75,25 @@ export function StagedVacancyCard({
   onRestoreFromTrash,
   onPromote,
   onBlockCompany,
+  onOpenDetails,
 }: StagedVacancyCardProps) {
   const { t, locale } = useTranslations();
 
+  const handleBodyClick = onOpenDetails
+    ? () => onOpenDetails(vacancy)
+    : undefined;
+
   return (
     <Card className={`mb-3 ${selected ? "ring-2 ring-primary/50" : ""}`}>
+      <div
+        role="presentation"
+        onClick={handleBodyClick}
+        className={
+          onOpenDetails
+            ? "cursor-pointer hover:bg-muted/40 transition-colors duration-150"
+            : undefined
+        }
+      >
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-2">
@@ -87,6 +103,7 @@ export function StagedVacancyCard({
                 className="h-4 w-4 mt-1 rounded border-input accent-primary shrink-0"
                 checked={selected}
                 onChange={() => onToggleSelect(vacancy.id)}
+                onClick={(e) => e.stopPropagation()}
                 aria-label={`${t("staging.selectVacancy")}: ${vacancy.title}`}
               />
             )}
@@ -169,14 +186,33 @@ export function StagedVacancyCard({
           </div>
         )}
       </CardContent>
+      </div>
       <CardFooter className="pt-2 flex items-center gap-2 flex-wrap">
+        {onOpenDetails && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 gap-1 text-xs"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenDetails(vacancy);
+            }}
+            aria-label={`${t("staging.details")}: ${vacancy.title}`}
+          >
+            <Info className="h-3.5 w-3.5" />
+            {t("staging.details")}
+          </Button>
+        )}
         {activeTab === "new" && (
           <>
             <Button
               size="sm"
               variant="default"
               className="h-7 gap-1 text-xs"
-              onClick={() => onPromote(vacancy)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPromote(vacancy);
+              }}
             >
               <ArrowUpCircle className="h-3.5 w-3.5" />
               {t("staging.promote")}
@@ -185,7 +221,10 @@ export function StagedVacancyCard({
               size="sm"
               variant="outline"
               className="h-7 gap-1 text-xs"
-              onClick={() => onDismiss(vacancy.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDismiss(vacancy.id);
+              }}
             >
               <XCircle className="h-3.5 w-3.5" />
               {t("staging.dismiss")}
@@ -194,7 +233,10 @@ export function StagedVacancyCard({
               size="sm"
               variant="ghost"
               className="h-7 gap-1 text-xs"
-              onClick={() => onArchive(vacancy.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onArchive(vacancy.id);
+              }}
             >
               <Archive className="h-3.5 w-3.5" />
               {t("staging.archive")}
@@ -203,7 +245,10 @@ export function StagedVacancyCard({
               size="sm"
               variant="ghost"
               className="h-7 gap-1 text-xs text-destructive"
-              onClick={() => onTrash(vacancy.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onTrash(vacancy.id);
+              }}
             >
               <Trash2 className="h-3.5 w-3.5" />
               {t("staging.trash")}
@@ -213,7 +258,10 @@ export function StagedVacancyCard({
                 size="sm"
                 variant="ghost"
                 className="h-7 gap-1 text-xs"
-                onClick={() => onBlockCompany(vacancy.employerName!)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onBlockCompany(vacancy.employerName!);
+                }}
               >
                 <Ban className="h-3.5 w-3.5" />
                 {t("blacklist.blockCompany")}
@@ -227,7 +275,10 @@ export function StagedVacancyCard({
               size="sm"
               variant="outline"
               className="h-7 gap-1 text-xs"
-              onClick={() => onRestore(vacancy.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRestore(vacancy.id);
+              }}
             >
               <RotateCcw className="h-3.5 w-3.5" />
               {t("staging.restore")}
@@ -236,7 +287,10 @@ export function StagedVacancyCard({
               size="sm"
               variant="ghost"
               className="h-7 gap-1 text-xs text-destructive"
-              onClick={() => onTrash(vacancy.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onTrash(vacancy.id);
+              }}
             >
               <Trash2 className="h-3.5 w-3.5" />
               {t("staging.trash")}
@@ -248,7 +302,10 @@ export function StagedVacancyCard({
             size="sm"
             variant="outline"
             className="h-7 gap-1 text-xs"
-            onClick={() => onRestore(vacancy.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRestore(vacancy.id);
+            }}
           >
             <RotateCcw className="h-3.5 w-3.5" />
             {t("staging.restore")}
@@ -259,7 +316,10 @@ export function StagedVacancyCard({
             size="sm"
             variant="outline"
             className="h-7 gap-1 text-xs"
-            onClick={() => onRestoreFromTrash(vacancy.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRestoreFromTrash(vacancy.id);
+            }}
           >
             <RotateCcw className="h-3.5 w-3.5" />
             {t("staging.restore")}

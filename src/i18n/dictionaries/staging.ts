@@ -61,6 +61,24 @@ export const staging = {
     // Other new keys
     "staging.immediateStart": "Immediate start",
     "staging.positions": "{count} positions",
+    // Layout size toggle
+    "staging.layoutSize.label": "Layout size",
+    "staging.layoutSize.compact": "Compact",
+    "staging.layoutSize.default": "Default",
+    "staging.layoutSize.comfortable": "Comfortable",
+    // Details sheet (Stream C — task 2)
+    "staging.details": "Details",
+    "staging.detailsTitle": "Vacancy details",
+    "staging.detailsClose": "Close details",
+    "staging.detailsFullDescription": "Full description",
+    "staging.detailsAboutCompany": "About the company",
+    "staging.detailsApplicationInfo": "How to apply",
+    "staging.detailsSource": "Source",
+    "staging.detailsOpenExternal": "View original posting",
+    "staging.detailsNoDescription": "No description available",
+    "staging.detailsClassification": "Classification",
+    "staging.detailsAutomation": "Automation",
+    "staging.requiredExperience": "years experience",
   },
   de: {
     "staging.title": "Staging-Queue",
@@ -124,6 +142,24 @@ export const staging = {
     // Other new keys
     "staging.immediateStart": "Sofortiger Start",
     "staging.positions": "{count} Stellen",
+    // Layout size toggle
+    "staging.layoutSize.label": "Layout-Größe",
+    "staging.layoutSize.compact": "Kompakt",
+    "staging.layoutSize.default": "Standard",
+    "staging.layoutSize.comfortable": "Komfortabel",
+    // Details sheet (Stream C — task 2)
+    "staging.details": "Details",
+    "staging.detailsTitle": "Vakanz-Details",
+    "staging.detailsClose": "Details schließen",
+    "staging.detailsFullDescription": "Vollständige Beschreibung",
+    "staging.detailsAboutCompany": "Über das Unternehmen",
+    "staging.detailsApplicationInfo": "Bewerbung",
+    "staging.detailsSource": "Quelle",
+    "staging.detailsOpenExternal": "Originalanzeige öffnen",
+    "staging.detailsNoDescription": "Keine Beschreibung verfügbar",
+    "staging.detailsClassification": "Klassifikation",
+    "staging.detailsAutomation": "Automatisierung",
+    "staging.requiredExperience": "Jahre Erfahrung",
   },
   fr: {
     "staging.title": "File d'attente",
@@ -187,6 +223,24 @@ export const staging = {
     // Other new keys
     "staging.immediateStart": "Début immédiat",
     "staging.positions": "{count} postes",
+    // Layout size toggle
+    "staging.layoutSize.label": "Taille de la mise en page",
+    "staging.layoutSize.compact": "Compact",
+    "staging.layoutSize.default": "Défaut",
+    "staging.layoutSize.comfortable": "Confortable",
+    // Details sheet (Stream C — task 2)
+    "staging.details": "Détails",
+    "staging.detailsTitle": "Détails de l'offre",
+    "staging.detailsClose": "Fermer les détails",
+    "staging.detailsFullDescription": "Description complète",
+    "staging.detailsAboutCompany": "À propos de l'entreprise",
+    "staging.detailsApplicationInfo": "Comment postuler",
+    "staging.detailsSource": "Source",
+    "staging.detailsOpenExternal": "Voir l'offre originale",
+    "staging.detailsNoDescription": "Aucune description disponible",
+    "staging.detailsClassification": "Classification",
+    "staging.detailsAutomation": "Automatisation",
+    "staging.requiredExperience": "années d'expérience",
   },
   es: {
     "staging.title": "Cola de espera",
@@ -250,5 +304,23 @@ export const staging = {
     // Other new keys
     "staging.immediateStart": "Inicio inmediato",
     "staging.positions": "{count} puestos",
+    // Layout size toggle
+    "staging.layoutSize.label": "Tamaño de diseño",
+    "staging.layoutSize.compact": "Compacto",
+    "staging.layoutSize.default": "Predeterminado",
+    "staging.layoutSize.comfortable": "Cómodo",
+    // Details sheet (Stream C — task 2)
+    "staging.details": "Detalles",
+    "staging.detailsTitle": "Detalles de la oferta",
+    "staging.detailsClose": "Cerrar detalles",
+    "staging.detailsFullDescription": "Descripción completa",
+    "staging.detailsAboutCompany": "Sobre la empresa",
+    "staging.detailsApplicationInfo": "Cómo postular",
+    "staging.detailsSource": "Fuente",
+    "staging.detailsOpenExternal": "Ver publicación original",
+    "staging.detailsNoDescription": "Sin descripción disponible",
+    "staging.detailsClassification": "Clasificación",
+    "staging.detailsAutomation": "Automatización",
+    "staging.requiredExperience": "años de experiencia",
   },
 } as const;
