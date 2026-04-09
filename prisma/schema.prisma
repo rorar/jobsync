@@ -558,6 +558,11 @@ model StagedVacancy {
   @@index([userId, automationId])
   @@index([userId, createdAt])
   @@index([trashedAt])
+  // Accelerates CompanyBlacklist retroactive-trash updateMany (Sprint 2 Stream C H-P-02).
+  // Satisfies the (userId = ? AND employerName = ?) and (userId = ? AND employerName LIKE 'x%')
+  // seeks emitted by the `exact` and `starts_with` match types; `contains`/`ends_with`
+  // still scan but only over (userId, employerName) b-tree leaves instead of heap pages.
+  @@index([userId, employerName])
 }
 
 model DedupHash {

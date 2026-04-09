@@ -9,6 +9,7 @@ import type {
 } from "@/models/companyBlacklist.model";
 import { getCurrentUser } from "@/utils/user.utils";
 import { revalidatePath } from "next/cache";
+import { emitEvent, createEvent } from "@/lib/events";
 
 /**
  * Get all blacklist entries for the current user.
@@ -101,17 +102,22 @@ export async function addBlacklistEntry(
     // Build Prisma filter for employer name matching
     const employerFilter = buildEmployerNameFilter(trimmedPattern, matchType);
 
-    // Transaction: create blacklist entry + retroactively trash matching staged vacancies
-    const [entry, trashResult] = await prisma.$transaction([
-      prisma.companyBlacklist.create({
-        data: {
-          userId: user.id,
-          pattern: trimmedPattern,
-          matchType,
-          reason: trimmedReason || null,
-        },
-      }),
-      prisma.stagedVacancy.updateMany({
+    // Transaction (H-A-05 + H-P-02):
+    //   1. pre-flight findMany selects the IDs of staged vacancies that match
+    //      the new blacklist pattern. Prisma doesn't support RETURNING on
+    //      updateMany for SQLite, so we need an explicit read to know which
+    //      rows were trashed — the alternative (updateMany then re-query)
+    //      loses the "transitioning set" (other concurrent actions could
+    //      move rows in or out of the predicate).
+    //   2. updateMany by `id IN (...)` rewrites the write as an indexed PK
+    //      lookup instead of a second LIKE scan. The H-P-02 composite index
+    //      `(userId, employerName)` covers the pre-flight findMany; the
+    //      updateMany now bypasses the LIKE altogether.
+    //   3. create the blacklist row last so the write lock window is tight.
+    // Events are emitted AFTER the transaction commits so consumers never
+    // observe a trashed vacancy before the blacklist row is visible.
+    const { entry, trashedIds } = await prisma.$transaction(async (tx) => {
+      const matching = await tx.stagedVacancy.findMany({
         where: {
           userId: user.id,
           employerName: employerFilter,
@@ -119,9 +125,67 @@ export async function addBlacklistEntry(
           archivedAt: null,
           promotedToJobId: null,
         },
-        data: { trashedAt: new Date() },
-      }),
-    ]);
+        select: { id: true },
+      });
+      const ids = matching.map((row) => row.id);
+
+      if (ids.length > 0) {
+        await tx.stagedVacancy.updateMany({
+          where: {
+            // Keep userId in the WHERE clause even though we already filtered
+            // above — defense-in-depth IDOR guard (ADR-015).
+            userId: user.id,
+            id: { in: ids },
+            trashedAt: null,
+            archivedAt: null,
+            promotedToJobId: null,
+          },
+          data: { trashedAt: new Date() },
+        });
+      }
+
+      const created = await tx.companyBlacklist.create({
+        data: {
+          userId: user.id,
+          pattern: trimmedPattern,
+          matchType,
+          reason: trimmedReason || null,
+        },
+      });
+
+      return { entry: created, trashedIds: ids };
+    });
+
+    // H-A-05 domain-event seam: emit one VacancyTrashed per row (satisfies
+    // the per-row contract documented in specs/vacancy-pipeline.allium rule
+    // TrashVacancy) + one BulkActionCompleted envelope so batch-aware
+    // consumers (audit log, analytics, notification summaries) still see the
+    // aggregate shape. Both shapes are now in the event stream — consumers
+    // subscribe to whichever they prefer.
+    //
+    // Events fire AFTER commit to preserve causal ordering (consumers never
+    // see a VacancyTrashed for a row that is still untrashed in the DB).
+    // emitEvent is fire-and-forget and error-isolated per ErrorIsolation
+    // rule in specs/event-bus.allium.
+    for (const trashedId of trashedIds) {
+      emitEvent(
+        createEvent("VacancyTrashed", {
+          stagedVacancyId: trashedId,
+          userId: user.id,
+        }),
+      );
+    }
+    if (trashedIds.length > 0) {
+      emitEvent(
+        createEvent("BulkActionCompleted", {
+          actionType: "blacklist_trash",
+          itemIds: trashedIds,
+          userId: user.id,
+          succeeded: trashedIds.length,
+          failed: 0,
+        }),
+      );
+    }
 
     revalidatePath("/settings");
     revalidatePath("/staging");
@@ -130,7 +194,7 @@ export async function addBlacklistEntry(
       data: {
         ...entry,
         matchType: entry.matchType as BlacklistMatchType,
-        trashedCount: trashResult.count,
+        trashedCount: trashedIds.length,
       },
     };
   } catch (error) {

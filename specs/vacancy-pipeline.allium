@@ -946,6 +946,61 @@ rule BlacklistManagement {
   surface: Settings → Company Blacklist section
 }
 
+rule BlacklistRetroactiveTrash {
+  -- "Adding a blacklist entry retroactively trashes any already-staged
+  --  vacancies whose employerName matches the new pattern."
+  -- Introduced in Sprint 2 after commit 70b9f44 shipped the behaviour
+  -- without a domain-event seam (review finding H-A-05). This rule
+  -- documents the seam explicitly so consumers (audit log, CRM sync,
+  -- analytics, retention accounting) can observe the bulk trashing.
+  when: AddBlacklistEntry(userId, pattern, matchType) succeeds
+
+  let matched = StagedVacancy[]
+    where userId = userId
+      and matchesBlacklistEntry(employerName, { pattern, matchType })
+      and trashedAt = null
+      and archivedAt = null
+      and promotedToJobId = null
+
+  ensures: for_each vacancy in matched:
+    vacancy.trashedAt = now()
+    VacancyTrashed.emitted(stagedVacancyId: vacancy.id, userId: userId)
+  -- One VacancyTrashed event per matched row — the same shape emitted by
+  -- the single-row TrashVacancy rule. Every existing consumer works
+  -- without any changes: audit-logger, notification-dispatcher, future
+  -- analytics, and CRM sync see the bulk trashing as a series of per-row
+  -- transitions.
+  ensures: if matched.length > 0:
+    BulkActionCompleted.emitted(
+      actionType: "blacklist_trash",
+      itemIds: matched.map(v => v.id),
+      userId: userId,
+      succeeded: matched.length,
+      failed: 0
+    )
+  -- A BulkActionCompleted envelope is ALSO emitted so batch-aware
+  -- consumers keep the per-batch shape (single notification, aggregate
+  -- analytics row). The actionType "blacklist_trash" is a dedicated
+  -- discriminator distinct from the interactive BulkActionType enum
+  -- (dismiss | archive | trash | restore | restoreFromTrash) because
+  -- the origin is a blacklist write, not an interactive bulk action.
+
+  @guidance
+    -- Implementation: src/actions/companyBlacklist.actions.ts runs
+    -- a pre-flight findMany inside the transaction to capture the
+    -- matching id set (Prisma/SQLite does not support RETURNING on
+    -- updateMany), then emits events AFTER the transaction commits so
+    -- consumers never observe a trashed vacancy before the blacklist
+    -- row itself is visible. Events are fire-and-forget per the
+    -- event-bus ErrorIsolation rule.
+    -- Performance: the (userId, employerName) composite index covers
+    -- the pre-flight findMany for the exact + starts_with match types;
+    -- contains + ends_with still scan the user's partition but only
+    -- over the index's b-tree leaves.
+    -- The updateMany is rewritten as a (userId, id IN ids) PK lookup
+    -- after the findMany so the write lock window is short.
+}
+
 -- =============================================================================
 -- Domain Events
 -- =============================================================================

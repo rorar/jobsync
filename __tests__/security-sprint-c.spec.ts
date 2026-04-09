@@ -83,6 +83,7 @@ jest.mock("@/lib/db", () => ({
     delete: jest.fn(),
   },
   stagedVacancy: {
+    findMany: jest.fn(),
     updateMany: jest.fn(),
   },
   task: {
@@ -301,10 +302,16 @@ describe("SEC-14: matchType runtime validation", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
-    // addBlacklistEntry now uses $transaction([create, updateMany]) — execute the ops array
+    // Sprint 2 H-A-05: addBlacklistEntry now uses the callback form of
+    // $transaction with a transactional client (findMany → updateMany →
+    // create). The callback is invoked with a `tx` proxy that delegates
+    // to the same mocked prisma methods used outside transactions.
     (prisma.$transaction as jest.Mock).mockImplementation(
-      (ops: Promise<unknown>[]) => Promise.all(ops),
+      async (callback: (tx: typeof prisma) => Promise<unknown>) => {
+        return callback(prisma);
+      },
     );
+    (prisma.stagedVacancy.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.stagedVacancy.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
   });
 
