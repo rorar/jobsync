@@ -39,9 +39,9 @@ async function ensureResumeExists(page: Page, resumeTitle: string) {
 
   await page.getByRole("button", { name: "New Resume" }).click();
   await page.getByPlaceholder("Ex: Full Stack Developer").fill(resumeTitle);
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
-    page.getByText(/Resume title has been/i).first(),
+    page.getByText(/Resume created successfully/i).first(),
   ).toBeVisible({ timeout: 10000 });
 }
 
@@ -235,13 +235,13 @@ test.describe("Enrichment", () => {
     // Verify module cards are displayed — the three enrichment modules
     // Logo.dev, Google Favicon, Link Preview Parser
     await expect(
-      page.getByText("Logo.dev"),
+      page.getByRole("heading", { name: "Logo.dev" }),
     ).toBeVisible({ timeout: 10000 });
     await expect(
-      page.getByText("Google Favicon"),
+      page.getByRole("heading", { name: "Google Favicon" }),
     ).toBeVisible();
     await expect(
-      page.getByText("Link Preview Parser"),
+      page.getByRole("heading", { name: "Link Preview Parser" }),
     ).toBeVisible();
 
     // Verify each module has an activation toggle (Switch)
@@ -261,5 +261,73 @@ test.describe("Enrichment", () => {
     // Verify the "No API key required" badge is shown
     const noKeyBadges = page.getByText("No API key required");
     await expect(noKeyBadges.first()).toBeVisible();
+  });
+
+  test("module activation toggle persists after reload", async ({ page }) => {
+    test.setTimeout(60_000);
+
+    await navigateToEnrichmentSettings(page);
+
+    // Find the Google Favicon module toggle (credential-free, safe to toggle)
+    const faviconToggle = page.getByRole("switch", {
+      name: /Toggle Google Favicon module/i,
+    });
+    await expect(faviconToggle).toBeVisible({ timeout: 10000 });
+
+    // Read initial state
+    const wasActive = await faviconToggle.isChecked();
+
+    if (wasActive) {
+      // Deactivate: click toggle → confirmation dialog → confirm
+      await faviconToggle.click();
+      const confirmDialog = page.getByRole("alertdialog");
+      await expect(confirmDialog).toBeVisible({ timeout: 5000 });
+      await confirmDialog
+        .getByRole("button", { name: /deactivate|confirm/i })
+        .click();
+
+      // Wait for toast confirming deactivation
+      await expect(
+        page.getByText(/inactive/i).first(),
+      ).toBeVisible({ timeout: 10000 });
+
+      // Reload and verify toggle is OFF
+      await navigateToEnrichmentSettings(page);
+      const toggleAfterReload = page.getByRole("switch", {
+        name: /Toggle Google Favicon module/i,
+      });
+      await expect(toggleAfterReload).toBeVisible({ timeout: 10000 });
+      await expect(toggleAfterReload).not.toBeChecked();
+
+      // Re-activate to restore original state
+      await toggleAfterReload.click();
+      await expect(
+        page.getByText(/active/i).first(),
+      ).toBeVisible({ timeout: 10000 });
+    } else {
+      // Activate: click toggle (no confirmation needed)
+      await faviconToggle.click();
+
+      // Wait for toast confirming activation
+      await expect(
+        page.getByText(/active/i).first(),
+      ).toBeVisible({ timeout: 10000 });
+
+      // Reload and verify toggle is ON
+      await navigateToEnrichmentSettings(page);
+      const toggleAfterReload = page.getByRole("switch", {
+        name: /Toggle Google Favicon module/i,
+      });
+      await expect(toggleAfterReload).toBeVisible({ timeout: 10000 });
+      await expect(toggleAfterReload).toBeChecked();
+
+      // Deactivate to restore original state
+      await toggleAfterReload.click();
+      const confirmDialog = page.getByRole("alertdialog");
+      await expect(confirmDialog).toBeVisible({ timeout: 5000 });
+      await confirmDialog
+        .getByRole("button", { name: /deactivate|confirm/i })
+        .click();
+    }
   });
 });
