@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CompanyLogo } from "@/components/ui/company-logo";
+import { MatchScoreRing } from "./MatchScoreRing";
 import { useTranslations, formatDateShort } from "@/i18n";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 
@@ -49,63 +50,6 @@ function formatSalaryRange(
     parts.push(`/${period}`);
   }
   return parts.join(" ");
-}
-
-function MatchScoreRing({ score }: { score: number }) {
-  const circumference = 2 * Math.PI * 16;
-  const filled = (score / 100) * circumference;
-
-  const colorClass =
-    score >= 80
-      ? "text-emerald-500 dark:text-emerald-400"
-      : score >= 60
-        ? "text-blue-500 dark:text-blue-400"
-        : score >= 40
-          ? "text-amber-700 dark:text-amber-400"
-          : "text-red-500 dark:text-red-400";
-
-  const strokeClass =
-    score >= 80
-      ? "stroke-emerald-500 dark:stroke-emerald-400"
-      : score >= 60
-        ? "stroke-blue-500 dark:stroke-blue-400"
-        : score >= 40
-          ? "stroke-amber-500 dark:stroke-amber-400"
-          : "stroke-red-500 dark:stroke-red-400";
-
-  return (
-    <svg viewBox="0 0 40 40" className="h-12 w-12 shrink-0" aria-hidden="true">
-      <circle
-        cx="20"
-        cy="20"
-        r="16"
-        fill="none"
-        className="stroke-muted"
-        strokeWidth="3"
-      />
-      <circle
-        cx="20"
-        cy="20"
-        r="16"
-        fill="none"
-        className={strokeClass}
-        strokeWidth="3"
-        strokeDasharray={`${filled} ${circumference}`}
-        strokeDashoffset="0"
-        strokeLinecap="round"
-        transform="rotate(-90 20 20)"
-      />
-      <text
-        x="20"
-        y="20"
-        textAnchor="middle"
-        dominantBaseline="central"
-        className={`text-[11px] font-semibold fill-current ${colorClass}`}
-      >
-        {score}
-      </text>
-    </svg>
-  );
 }
 
 /**
@@ -168,7 +112,9 @@ export function StagedVacancyDetailContent({
             </div>
           )}
         </div>
-        {vacancy.matchScore != null && <MatchScoreRing score={vacancy.matchScore} />}
+        {vacancy.matchScore != null && (
+          <MatchScoreRing score={vacancy.matchScore} size={48} />
+        )}
       </header>
 
       {/* Meta row */}

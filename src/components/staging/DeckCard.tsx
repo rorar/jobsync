@@ -4,6 +4,7 @@ import { memo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Calendar, Banknote, Sparkles, Info } from "lucide-react";
 import { CompanyLogo } from "@/components/ui/company-logo";
+import { MatchScoreRing } from "./MatchScoreRing";
 import { useTranslations, formatDateShort } from "@/i18n";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 import type { ExitDirection } from "@/hooks/useDeckStack";
@@ -41,59 +42,6 @@ interface DeckCardProps {
   isPreview?: boolean;
   previewLevel?: 1 | 2;
   onInfoClick?: (vacancy: StagedVacancyWithAutomation) => void;
-}
-
-function MatchScoreRing({ score }: { score: number }) {
-  const circumference = 2 * Math.PI * 16; // r=16
-  const filled = (score / 100) * circumference;
-
-  const getColor = (s: number) => {
-    if (s >= 80) return "text-emerald-500 dark:text-emerald-400";
-    if (s >= 60) return "text-blue-500 dark:text-blue-400";
-    if (s >= 40) return "text-amber-700 dark:text-amber-400";
-    return "text-red-500 dark:text-red-400";
-  };
-
-  const getStrokeColor = (s: number) => {
-    if (s >= 80) return "stroke-emerald-500 dark:stroke-emerald-400";
-    if (s >= 60) return "stroke-blue-500 dark:stroke-blue-400";
-    if (s >= 40) return "stroke-amber-500 dark:stroke-amber-400";
-    return "stroke-red-500 dark:stroke-red-400";
-  };
-
-  return (
-    <svg viewBox="0 0 40 40" className="h-11 w-11" aria-hidden="true">
-      <circle
-        cx="20"
-        cy="20"
-        r="16"
-        fill="none"
-        className="stroke-muted"
-        strokeWidth="3"
-      />
-      <circle
-        cx="20"
-        cy="20"
-        r="16"
-        fill="none"
-        className={getStrokeColor(score)}
-        strokeWidth="3"
-        strokeDasharray={`${filled} ${circumference}`}
-        strokeDashoffset="0"
-        strokeLinecap="round"
-        transform="rotate(-90 20 20)"
-      />
-      <text
-        x="20"
-        y="20"
-        textAnchor="middle"
-        dominantBaseline="central"
-        className={`text-[11px] font-semibold fill-current ${getColor(score)}`}
-      >
-        {score}
-      </text>
-    </svg>
-  );
 }
 
 function DeckCardInner({

@@ -44,7 +44,7 @@ export function DiscoveredJobDetail({
   onRefresh,
 }: DiscoveredJobDetailProps) {
   const [loadingAction, setLoadingAction] = useState<"accept" | "dismiss" | null>(null);
-  const { locale } = useTranslations();
+  const { t, locale } = useTranslations();
 
   if (!job) return null;
 
@@ -56,12 +56,15 @@ export function DiscoveredJobDetail({
     setLoadingAction(null);
 
     if (result.success) {
-      toast({ title: "Job accepted", description: "The job has been added to your tracked jobs." });
+      toast({
+        title: t("automations.discoveredJob.acceptedTitle"),
+        description: t("automations.discoveredJob.acceptedDescription"),
+      });
       onOpenChange(false);
       onRefresh();
     } else {
       toast({
-        title: "Error",
+        title: t("automations.discoveredJob.errorTitle"),
         description: result.message,
         variant: "destructive",
       });
@@ -74,12 +77,12 @@ export function DiscoveredJobDetail({
     setLoadingAction(null);
 
     if (result.success) {
-      toast({ title: "Job dismissed" });
+      toast({ title: t("automations.discoveredJob.dismissedTitle") });
       onOpenChange(false);
       onRefresh();
     } else {
       toast({
-        title: "Error",
+        title: t("automations.discoveredJob.errorTitle"),
         description: result.message,
         variant: "destructive",
       });
@@ -106,11 +109,11 @@ export function DiscoveredJobDetail({
           <DialogDescription className="flex items-center gap-4">
             <span className="flex items-center gap-1">
               <Building2 className="h-4 w-4" />
-              {job.employerName ?? "N/A"}
+              {job.employerName ?? t("automations.discoveredJob.notAvailable")}
             </span>
             <span className="flex items-center gap-1">
               <MapPin className="h-4 w-4" />
-              {job.location ?? "N/A"}
+              {job.location ?? t("automations.discoveredJob.notAvailable")}
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -119,18 +122,20 @@ export function DiscoveredJobDetail({
           <div className="space-y-4 pr-4">
             <div className="flex items-center gap-4">
               <Badge variant="default" className="text-lg px-3 py-1">
-                {job.matchScore}% Match
+                {job.matchScore}% {t("automations.discoveredJob.matchSuffix")}
               </Badge>
               <Badge variant="outline">{job.status}</Badge>
               {job.automation && (
                 <span className="text-sm text-muted-foreground">
-                  from {job.automation.name}
+                  {t("automations.discoveredJob.fromAutomation")} {job.automation.name}
                 </span>
               )}
             </div>
 
             <div>
-              <h4 className="font-medium mb-2">Description</h4>
+              <h4 className="font-medium mb-2">
+                {t("automations.discoveredJob.descriptionHeading")}
+              </h4>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                 {job.description}
               </p>
@@ -152,7 +157,7 @@ export function DiscoveredJobDetail({
               ) : (
                 <X className="h-4 w-4 mr-2" />
               )}
-              Dismiss
+              {t("automations.discoveredJob.dismissButton")}
             </Button>
             <Button onClick={handleAccept} disabled={loadingAction !== null}>
               {loadingAction === "accept" ? (
@@ -160,7 +165,7 @@ export function DiscoveredJobDetail({
               ) : (
                 <Check className="h-4 w-4 mr-2" />
               )}
-              Accept
+              {t("automations.discoveredJob.acceptButton")}
             </Button>
           </DialogFooter>
         )}

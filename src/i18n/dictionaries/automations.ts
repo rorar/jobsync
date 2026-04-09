@@ -136,6 +136,18 @@ export const automations = {
     "automations.detailDismiss": "Dismiss",
     "automations.detailAccept": "Accept",
 
+    // DiscoveredJobDetail dialog
+    "automations.discoveredJob.matchSuffix": "Match",
+    "automations.discoveredJob.descriptionHeading": "Description",
+    "automations.discoveredJob.fromAutomation": "from",
+    "automations.discoveredJob.notAvailable": "N/A",
+    "automations.discoveredJob.acceptButton": "Accept",
+    "automations.discoveredJob.dismissButton": "Dismiss",
+    "automations.discoveredJob.errorTitle": "Error",
+    "automations.discoveredJob.acceptedTitle": "Job accepted",
+    "automations.discoveredJob.acceptedDescription": "The job has been added to your tracked jobs.",
+    "automations.discoveredJob.dismissedTitle": "Job dismissed",
+
     // LogsTab
     "automations.automationLogs": "Automation Logs",
     "automations.running": "Running",
@@ -557,6 +569,18 @@ export const automations = {
     "automations.detailDescription": "Beschreibung",
     "automations.detailDismiss": "Ablehnen",
     "automations.detailAccept": "Annehmen",
+
+    // DiscoveredJobDetail dialog
+    "automations.discoveredJob.matchSuffix": "Übereinstimmung",
+    "automations.discoveredJob.descriptionHeading": "Beschreibung",
+    "automations.discoveredJob.fromAutomation": "von",
+    "automations.discoveredJob.notAvailable": "k. A.",
+    "automations.discoveredJob.acceptButton": "Annehmen",
+    "automations.discoveredJob.dismissButton": "Ablehnen",
+    "automations.discoveredJob.errorTitle": "Fehler",
+    "automations.discoveredJob.acceptedTitle": "Stelle angenommen",
+    "automations.discoveredJob.acceptedDescription": "Die Stelle wurde zu Ihren verfolgten Stellen hinzugefügt.",
+    "automations.discoveredJob.dismissedTitle": "Stelle abgelehnt",
 
     // LogsTab
     "automations.automationLogs": "Automatisierungsprotokolle",
@@ -980,6 +1004,18 @@ export const automations = {
     "automations.detailDismiss": "Rejeter",
     "automations.detailAccept": "Accepter",
 
+    // DiscoveredJobDetail dialog
+    "automations.discoveredJob.matchSuffix": "Correspondance",
+    "automations.discoveredJob.descriptionHeading": "Description",
+    "automations.discoveredJob.fromAutomation": "depuis",
+    "automations.discoveredJob.notAvailable": "N/D",
+    "automations.discoveredJob.acceptButton": "Accepter",
+    "automations.discoveredJob.dismissButton": "Rejeter",
+    "automations.discoveredJob.errorTitle": "Erreur",
+    "automations.discoveredJob.acceptedTitle": "Emploi accepté",
+    "automations.discoveredJob.acceptedDescription": "L'emploi a été ajouté à vos emplois suivis.",
+    "automations.discoveredJob.dismissedTitle": "Emploi rejeté",
+
     // LogsTab
     "automations.automationLogs": "Journaux d'automatisation",
     "automations.running": "En cours",
@@ -1401,6 +1437,18 @@ export const automations = {
     "automations.detailDescription": "Descripción",
     "automations.detailDismiss": "Descartar",
     "automations.detailAccept": "Aceptar",
+
+    // DiscoveredJobDetail dialog
+    "automations.discoveredJob.matchSuffix": "Coincidencia",
+    "automations.discoveredJob.descriptionHeading": "Descripción",
+    "automations.discoveredJob.fromAutomation": "desde",
+    "automations.discoveredJob.notAvailable": "N/D",
+    "automations.discoveredJob.acceptButton": "Aceptar",
+    "automations.discoveredJob.dismissButton": "Descartar",
+    "automations.discoveredJob.errorTitle": "Error",
+    "automations.discoveredJob.acceptedTitle": "Empleo aceptado",
+    "automations.discoveredJob.acceptedDescription": "El empleo se ha añadido a sus empleos en seguimiento.",
+    "automations.discoveredJob.dismissedTitle": "Empleo descartado",
 
     // LogsTab
     "automations.automationLogs": "Registros de automatización",
