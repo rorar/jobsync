@@ -1,8 +1,22 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SuperLikeCelebration } from "./SuperLikeCelebration";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import type { CelebrationItem } from "@/hooks/useSuperLikeCelebrations";
+
+/**
+ * Grace period (ms) between a visible celebration sliding down and the next
+ * one sliding up. Derived from the consultation (§4) — a brief fade-out
+ * before the next card slides up makes rapid super-likes feel continuous
+ * rather than jarring. 1500ms covers the 300ms slide-out animation plus a
+ * perceptual beat that lets the eye settle before the next entrance.
+ *
+ * When `prefers-reduced-motion` is set we skip the grace period entirely —
+ * the slide animation is the only reason for the delay.
+ */
+const GRACE_PERIOD_MS = 1500;
 
 /**
  * Host that mounts the active super-like celebration card.
@@ -13,11 +27,9 @@ import type { CelebrationItem } from "@/hooks/useSuperLikeCelebrations";
  * behavior.
  *
  * Stacking semantics (FIFO, max 5) live in `useSuperLikeCelebrations`. This
- * component renders only the head of the queue (`current`).
- *
- * TODO(Phase 3+): Insert a 1500ms grace period between consecutive
- * celebrations so a rapidly-replaced card briefly fades out before the next
- * one slides up. For v1 we replace immediately — keeping scope tight.
+ * component renders only the head of the queue (`current`), with a grace
+ * period inserted between consecutive celebrations so the outgoing card can
+ * slide down before the incoming one slides up.
  */
 export interface SuperLikeCelebrationHostProps {
   /** The celebration that should be visible right now (or `null` for nothing). */
@@ -34,8 +46,79 @@ export function SuperLikeCelebrationHost({
   dismiss,
 }: SuperLikeCelebrationHostProps) {
   const router = useRouter();
+  const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
 
-  if (!current) return null;
+  // The celebration currently mounted inside the host. May lag behind
+  // `current` during a grace period while the outgoing card fades out.
+  const [displayedItem, setDisplayedItem] = useState<CelebrationItem | null>(
+    current,
+  );
+  // Whether the displayed celebration is in its exit animation (and thus
+  // should not be swapped until the grace period elapses).
+  const [isExiting, setIsExiting] = useState(false);
+  // Active grace-period timer, if any. Cleared on unmount or when a new
+  // transition supersedes it.
+  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    // Same item (or both null) — nothing to transition.
+    if (current?.id === displayedItem?.id) {
+      return;
+    }
+
+    // No visible item yet — show the next one immediately (no grace period
+    // on first mount; there's nothing to fade out).
+    if (displayedItem === null) {
+      setDisplayedItem(current);
+      setIsExiting(false);
+      return;
+    }
+
+    // Reduced motion: skip the grace period entirely and replace instantly.
+    // The animation is the only reason for the delay, so honor the user's
+    // preference by eliminating the transition.
+    if (prefersReducedMotion) {
+      if (transitionTimerRef.current) {
+        clearTimeout(transitionTimerRef.current);
+        transitionTimerRef.current = null;
+      }
+      setDisplayedItem(current);
+      setIsExiting(false);
+      return;
+    }
+
+    // A different celebration is queued (or the visible one was dismissed).
+    // Mark the currently displayed item as exiting and schedule the swap.
+    // If a previous grace period is still running, restart it so the new
+    // target wins — the outgoing card keeps fading out during the extension,
+    // which is acceptable for this rare rapid-dismiss edge case.
+    setIsExiting(true);
+    if (transitionTimerRef.current) {
+      clearTimeout(transitionTimerRef.current);
+    }
+    transitionTimerRef.current = setTimeout(() => {
+      setDisplayedItem(current);
+      setIsExiting(false);
+      transitionTimerRef.current = null;
+    }, GRACE_PERIOD_MS);
+  }, [current, displayedItem, prefersReducedMotion]);
+
+  // Clear any pending timer on unmount to avoid leaking timeouts across
+  // route transitions.
+  useEffect(() => {
+    return () => {
+      if (transitionTimerRef.current) {
+        clearTimeout(transitionTimerRef.current);
+        transitionTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  if (!displayedItem) return null;
+
+  // While exiting, suppress the "+N more" badge so it does not appear to
+  // belong to the next card before it mounts.
+  const effectiveQueueRemaining = isExiting ? 0 : queueRemaining;
 
   return (
     <div
@@ -46,16 +129,21 @@ export function SuperLikeCelebrationHost({
       }}
     >
       <SuperLikeCelebration
-        id={current.id}
-        jobId={current.jobId}
-        vacancyTitle={current.vacancyTitle}
-        queueRemaining={queueRemaining}
+        // key ties the instance to the displayed celebration so React
+        // mounts a fresh component (and a fresh slide-in animation) when
+        // the grace period elapses and a new item takes over.
+        key={displayedItem.id}
+        id={displayedItem.id}
+        jobId={displayedItem.jobId}
+        vacancyTitle={displayedItem.vacancyTitle}
+        queueRemaining={effectiveQueueRemaining}
+        isExiting={isExiting}
         onDismiss={dismiss}
         onOpenJob={(jobId) => {
           // Dismiss before navigating so the card does not flash on the next
           // route while React tears down. Navigation happens via the App
           // Router for client-side prefetch / transitions.
-          dismiss(current.id);
+          dismiss(displayedItem.id);
           router.push(`/dashboard/myjobs/${jobId}`);
         }}
       />

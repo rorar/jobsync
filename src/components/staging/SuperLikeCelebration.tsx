@@ -22,6 +22,15 @@ export interface SuperLikeCelebrationProps {
   onDismiss: (id: string) => void;
   /** Called when the user clicks the primary CTA. The host handles navigation. */
   onOpenJob: (jobId: string) => void;
+  /**
+   * When `true`, the card plays the slide-down exit animation instead of the
+   * slide-in entry. Driven by `SuperLikeCelebrationHost`'s grace period state
+   * when one celebration is being replaced by the next. Defaults to `false`.
+   *
+   * While exiting, pointer/swipe interactions are ignored — the card is
+   * committed to leaving and should not be re-dismissible mid-exit.
+   */
+  isExiting?: boolean;
 }
 
 // Auto-dismiss timing — see consultation §3.
@@ -51,6 +60,7 @@ export function SuperLikeCelebration({
   queueRemaining,
   onDismiss,
   onOpenJob,
+  isExiting = false,
 }: SuperLikeCelebrationProps) {
   const { t } = useTranslations();
 
@@ -163,23 +173,29 @@ export function SuperLikeCelebration({
       aria-atomic="true"
       aria-label={t("deck.superLikeCelebration.title")}
       data-testid="super-like-celebration"
+      data-exiting={isExiting ? "true" : undefined}
       className="superlike-celebration pointer-events-auto relative w-[min(92vw,400px)] mx-4 rounded-2xl border border-blue-200 bg-card shadow-lg shadow-blue-500/10 dark:border-blue-900/60 dark:shadow-blue-400/5 motion-reduce:!transition-none motion-reduce:!transform-none"
       style={{
-        // Slide-up + fade entry. Reduced motion: skip the slide entirely.
-        animation: "superlike-celebration-slide-in 280ms cubic-bezier(0.16, 1, 0.3, 1)",
+        // Slide-up + fade entry, or slide-down + fade exit when the host's
+        // grace period is running. Reduced motion: skip the slide entirely
+        // (the host also skips the grace period so this branch is rare).
+        animation: isExiting
+          ? "superlike-celebration-slide-out 300ms cubic-bezier(0.4, 0, 1, 1) forwards"
+          : "superlike-celebration-slide-in 280ms cubic-bezier(0.16, 1, 0.3, 1)",
         transform: isDragging ? `translateY(${dragY}px)` : undefined,
         opacity: isDragging ? Math.max(0.4, 1 - dragY / 200) : undefined,
         transition: isDragging ? "none" : "transform 200ms ease-out, opacity 200ms ease-out",
         touchAction: "pan-x", // allow horizontal browser gestures, capture vertical
+        pointerEvents: isExiting ? "none" : undefined,
       }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-      onMouseEnter={pauseTimer}
-      onMouseLeave={resumeTimer}
-      onFocusCapture={pauseTimer}
-      onBlurCapture={resumeTimer}
+      onPointerDown={isExiting ? undefined : handlePointerDown}
+      onPointerMove={isExiting ? undefined : handlePointerMove}
+      onPointerUp={isExiting ? undefined : handlePointerUp}
+      onPointerCancel={isExiting ? undefined : handlePointerUp}
+      onMouseEnter={isExiting ? undefined : pauseTimer}
+      onMouseLeave={isExiting ? undefined : resumeTimer}
+      onFocusCapture={isExiting ? undefined : pauseTimer}
+      onBlurCapture={isExiting ? undefined : resumeTimer}
     >
       {/* Inline keyframes — keeps the component self-contained with no
           globals.css edit and respects prefers-reduced-motion. */}
@@ -188,14 +204,25 @@ export function SuperLikeCelebration({
           from { transform: translateY(100%); opacity: 0; }
           to   { transform: translateY(0);    opacity: 1; }
         }
+        @keyframes superlike-celebration-slide-out {
+          from { transform: translateY(0);    opacity: 1; }
+          to   { transform: translateY(100%); opacity: 0; }
+        }
         @media (prefers-reduced-motion: reduce) {
-          .superlike-celebration {
+          .superlike-celebration:not([data-exiting="true"]) {
             animation: superlike-celebration-fade-in 150ms linear !important;
+          }
+          .superlike-celebration[data-exiting="true"] {
+            animation: superlike-celebration-fade-out 150ms linear forwards !important;
           }
         }
         @keyframes superlike-celebration-fade-in {
           from { opacity: 0; }
           to   { opacity: 1; }
+        }
+        @keyframes superlike-celebration-fade-out {
+          from { opacity: 1; }
+          to   { opacity: 0; }
         }
       `}</style>
 
