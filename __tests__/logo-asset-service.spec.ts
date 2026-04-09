@@ -500,3 +500,119 @@ describe("LogoAssetService", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// stripCredentialsFromUrl unit tests (H-S-05)
+// Imported separately to avoid the globalThis singleton pattern in LogoAssetService.
+// ---------------------------------------------------------------------------
+
+// Re-require the module to access the named export
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { stripCredentialsFromUrl } = require("@/lib/assets/logo-asset-service");
+
+describe("stripCredentialsFromUrl (H-S-05)", () => {
+  it("strips 'token' parameter (Logo.dev default)", () => {
+    const result = stripCredentialsFromUrl(
+      "https://img.logo.dev/acme.com?format=png&token=pk_abc123",
+    );
+    expect(result).not.toContain("token=");
+    expect(result).toContain("format=png");
+  });
+
+  it("strips 'key' parameter (Google APIs)", () => {
+    const result = stripCredentialsFromUrl(
+      "https://api.example.com/logo?key=AIzaSy_secret&size=64",
+    );
+    expect(result).not.toContain("key=AIzaSy_secret");
+    expect(result).toContain("size=64");
+  });
+
+  it("strips 'api_key' parameter", () => {
+    const result = stripCredentialsFromUrl(
+      "https://api.example.com/logo?api_key=secret&size=64",
+    );
+    expect(result).not.toContain("api_key=secret");
+    expect(result).toContain("size=64");
+  });
+
+  it("strips 'apiKey' camelCase variant", () => {
+    const result = stripCredentialsFromUrl(
+      "https://api.example.com/logo?apiKey=secret&size=64",
+    );
+    expect(result).not.toContain("apiKey=secret");
+    expect(result).toContain("size=64");
+  });
+
+  it("strips 'access_token' (OAuth in URL)", () => {
+    const result = stripCredentialsFromUrl(
+      "https://api.example.com/logo?access_token=bearer_xyz&v=2",
+    );
+    expect(result).not.toContain("access_token=bearer_xyz");
+    expect(result).toContain("v=2");
+  });
+
+  it("strips 'sig' and 'signature' parameters", () => {
+    const result = stripCredentialsFromUrl(
+      "https://api.example.com/logo?sig=abc&signature=xyz&format=png",
+    );
+    expect(result).not.toContain("sig=abc");
+    expect(result).not.toContain("signature=xyz");
+    expect(result).toContain("format=png");
+  });
+
+  it("strips 'X-Amz-Signature' (AWS presigned URL)", () => {
+    const result = stripCredentialsFromUrl(
+      "https://bucket.s3.amazonaws.com/logo.png?X-Amz-Signature=abcdef&X-Amz-Expires=3600",
+    );
+    expect(result).not.toContain("X-Amz-Signature=abcdef");
+    expect(result).toContain("X-Amz-Expires=3600");
+  });
+
+  it("strips 'X-Amz-Security-Token' (AWS session token)", () => {
+    const result = stripCredentialsFromUrl(
+      "https://bucket.s3.amazonaws.com/logo.png?X-Amz-Security-Token=sess&X-Amz-Expires=3600",
+    );
+    expect(result).not.toContain("X-Amz-Security-Token=sess");
+    expect(result).toContain("X-Amz-Expires=3600");
+  });
+
+  it("strips 'auth' and 'secret' generic parameters", () => {
+    const result = stripCredentialsFromUrl(
+      "https://api.example.com/logo?auth=bearer&secret=mysecret&format=png",
+    );
+    expect(result).not.toContain("auth=bearer");
+    expect(result).not.toContain("secret=mysecret");
+    expect(result).toContain("format=png");
+  });
+
+  it("preserves clean URLs without modification", () => {
+    const clean = "https://img.logo.dev/acme.com?format=png&size=64";
+    const result = stripCredentialsFromUrl(clean);
+    expect(result).toBe(clean);
+  });
+
+  it("accepts extra param names via second argument", () => {
+    const result = stripCredentialsFromUrl(
+      "https://api.example.com/logo?myCustomCred=abc&format=png",
+      ["myCustomCred"],
+    );
+    expect(result).not.toContain("myCustomCred=abc");
+    expect(result).toContain("format=png");
+  });
+
+  it("strips multiple credential params in one pass", () => {
+    const result = stripCredentialsFromUrl(
+      "https://api.example.com/logo?token=t&key=k&api_key=a&format=png",
+    );
+    expect(result).not.toContain("token=");
+    expect(result).not.toContain("key=");
+    expect(result).not.toContain("api_key=");
+    expect(result).toContain("format=png");
+  });
+
+  it("returns unparseable URL unchanged", () => {
+    const bad = "not-a-valid-url";
+    const result = stripCredentialsFromUrl(bad);
+    expect(result).toBe(bad);
+  });
+});

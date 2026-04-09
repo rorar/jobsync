@@ -104,18 +104,75 @@ async function getLogoAssetConfig(userId: string): Promise<LogoAssetConfig> {
 // ---------------------------------------------------------------------------
 
 /**
- * Strip embedded API tokens from a logo URL before storing as fallback.
- * Preserves the URL structure so it can still serve as an external fallback
- * (per Allium spec), but removes sensitive credentials like Logo.dev pk_ keys.
+ * Common credential-bearing query parameter names across popular APIs.
+ *
+ * Covers:
+ *  - token       — Logo.dev, generic token patterns
+ *  - key         — Google APIs, generic
+ *  - api_key     — generic convention
+ *  - apiKey      — camelCase variant
+ *  - access_token — OAuth 2.0 bearer token in URL
+ *  - sig         — short signature (e.g. Twilio)
+ *  - signature   — long signature
+ *  - X-Amz-Signature — AWS SigV4 presigned URLs
+ *  - X-Amz-Security-Token — AWS session token in presigned URLs
+ *  - auth        — generic auth parameter
+ *  - secret      — generic secret parameter
+ *
+ * Callers may pass additional names via the second argument for module-specific
+ * parameters not covered by this global list.
  */
-function stripTokenFromUrl(url: string): string {
+const DEFAULT_CREDENTIAL_PARAMS = [
+  "token",
+  "key",
+  "api_key",
+  "apiKey",
+  "access_token",
+  "sig",
+  "signature",
+  "X-Amz-Signature",
+  "X-Amz-Security-Token",
+  "auth",
+  "secret",
+] as const;
+
+/**
+ * Strip credential-bearing query parameters from a URL before storing as
+ * fallback or writing to the database.
+ *
+ * Defense-in-depth: this function is called at every write site so that even
+ * if an upstream enrichment module fails to pre-clean the URL, credentials
+ * never reach Company.logoUrl or LogoAsset.sourceUrl.
+ *
+ * @param url              - URL to sanitize (returned unchanged if unparseable)
+ * @param extraParamNames  - Optional additional parameter names to strip beyond
+ *                           the global DEFAULT_CREDENTIAL_PARAMS list (e.g.
+ *                           module-specific names not in the global set).
+ */
+export function stripCredentialsFromUrl(
+  url: string,
+  extraParamNames: string[] = [],
+): string {
   try {
     const parsed = new URL(url);
-    parsed.searchParams.delete("token");
+    const toStrip = [...DEFAULT_CREDENTIAL_PARAMS, ...extraParamNames];
+    for (const name of toStrip) {
+      parsed.searchParams.delete(name);
+    }
     return parsed.toString();
   } catch {
     return url;
   }
+}
+
+/**
+ * @deprecated Use stripCredentialsFromUrl instead — it covers the full set of
+ * common credential parameter names, not just "token".
+ * Kept as an internal alias so existing call sites in this file compile without
+ * a mass rename.
+ */
+function stripTokenFromUrl(url: string): string {
+  return stripCredentialsFromUrl(url);
 }
 
 // ---------------------------------------------------------------------------

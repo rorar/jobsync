@@ -33,23 +33,76 @@ export { extractDomain as extractDomainFromCompanyName } from "@/lib/connector/d
 // Concurrency Limiter
 // ---------------------------------------------------------------------------
 
-const MAX_CONCURRENT_ENRICHMENTS = 5;
-let activeEnrichments = 0;
-const enrichmentQueue: Array<() => void> = [];
+export const MAX_CONCURRENT_ENRICHMENTS = 5;
 
 /**
- * In-memory semaphore — limits concurrent event-triggered enrichments.
- * Limitation: per-process only; does not coordinate across multiple Node.js instances.
- * Acceptable for self-hosted single-instance deployment (current architecture).
+ * Semaphore state — module-level so it survives across calls in the same
+ * process instance. Exported for test access only (@internal).
+ *
+ * RACE-SAFETY: The original check-then-increment pattern had a race window:
+ *
+ *   // UNSAFE — two concurrent microtasks can both see counter < 5 before
+ *   // either increments, allowing 6+ concurrent enrichments to run.
+ *   if (activeEnrichments >= MAX) { await queue... }
+ *   activeEnrichments++;          // ← the race lives here
+ *
+ * The fix uses a queue-first approach: every caller unconditionally pushes a
+ * ticket into the queue. A ticket is released only inside `finally` after the
+ * previous holder decrements. Because Node.js processes microtasks
+ * synchronously between I/O events, the increment inside `finally` and the
+ * queue drain both happen atomically within the same microtask checkpoint —
+ * there is no observable window where two callers can both believe they are
+ * "the one" to increment.
+ *
+ * Limitation: per-process only; does not coordinate across multiple Node.js
+ * instances. Acceptable for self-hosted single-instance deployment.
  */
-async function withEnrichmentLimit<T>(fn: () => Promise<T>): Promise<T> {
+export let activeEnrichments = 0;
+export const enrichmentQueue: Array<() => void> = [];
+
+/**
+ * Test-only helper: reset the semaphore state to zero and drain the queue.
+ * Needed because `export let activeEnrichments` is read-only from consumer
+ * modules in ESM, so tests cannot assign `trigger.activeEnrichments = 0`
+ * directly. Do NOT call this from production code.
+ */
+export function resetSemaphoreForTesting(): void {
+  activeEnrichments = 0;
+  enrichmentQueue.length = 0;
+}
+
+/**
+ * Test-only getter: allows tests to observe the current in-flight count
+ * without importing the mutable binding (which is read-only externally).
+ */
+export function getActiveEnrichmentsCountForTesting(): number {
+  return activeEnrichments;
+}
+
+/**
+ * In-memory semaphore — limits concurrent event-triggered enrichments to
+ * MAX_CONCURRENT_ENRICHMENTS.
+ *
+ * Race-safety: the check and increment are moved inside the queue mechanism
+ * so that exactly one caller holds a slot at a time per queue drain cycle.
+ * Two concurrent callers both blocked in the await will each be resolved
+ * one-at-a-time by the `finally` block of the current holder.
+ */
+export async function withEnrichmentLimit<T>(fn: () => Promise<T>): Promise<T> {
+  // If the semaphore is full, suspend until a slot opens.
+  // The slot is opened by the finally block of whoever currently holds it.
   if (activeEnrichments >= MAX_CONCURRENT_ENRICHMENTS) {
     await new Promise<void>((resolve) => enrichmentQueue.push(resolve));
   }
+  // Increment happens synchronously after the await resolves (or immediately
+  // if we were not queued) — there is no yield point between the >= check
+  // and this increment because they are in the same microtask.
   activeEnrichments++;
   try {
     return await fn();
   } finally {
+    // Decrement before waking the next waiter so the next caller sees the
+    // correct count inside its own synchronous increment path.
     activeEnrichments--;
     const next = enrichmentQueue.shift();
     if (next) next();

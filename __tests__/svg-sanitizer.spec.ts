@@ -334,12 +334,37 @@ describe("sanitizeSvg", () => {
       expect(result).not.toContain("data:text/html");
     });
 
-    it("allows data:image/svg+xml in href (image allowlist)", () => {
+    it("REJECTS data:image/svg+xml in href (XSS vector — SVGs execute in parent context)", () => {
+      // data:image/svg+xml is NOT safe as an inline data URI. An embedded SVG
+      // inherits the outer SVG's origin and execution context, allowing an attacker
+      // to base64-encode an inner SVG with onload="alert(1)" that fires on load.
+      // The sanitizer MUST strip svg+xml data URIs; only raster types (png/jpeg/gif/webp)
+      // are safe as inline data: URIs.
+      // REGRESSION GUARD: this assertion MUST stay inverted. If it ever reverts to
+      // expect(result).toContain("data:image/svg+xml"), the XSS vector is re-opened.
       const input = `<svg><image href="data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9ImFsZXJ0KDEpIi8+"/></svg>`;
       const result = sanitize(input);
-      // data:image/svg+xml is in the image MIME type allowlist — it's intentionally kept
-      // The regex allows data:image/(png|jpeg|gif|webp|svg+xml); patterns
-      expect(result).toContain("data:image/svg+xml");
+      expect(result).not.toContain("data:image/svg+xml");
+      // The href attribute should be blanked, not removed
+      expect(result).toContain('href=""');
+    });
+
+    it("still allows data:image/png inline raster images (safe)", () => {
+      const input = `<svg><image href="data:image/png;base64,iVBORw0KGgo="/></svg>`;
+      const result = sanitize(input);
+      expect(result).toContain("data:image/png;base64,iVBORw0KGgo=");
+    });
+
+    it("still allows data:image/jpeg inline raster images (safe)", () => {
+      const input = `<svg><image href="data:image/jpeg;base64,/9j/4AAQ="/></svg>`;
+      const result = sanitize(input);
+      expect(result).toContain("data:image/jpeg;base64");
+    });
+
+    it("still allows data:image/webp inline raster images (safe)", () => {
+      const input = `<svg><image href="data:image/webp;base64,UklGR"/></svg>`;
+      const result = sanitize(input);
+      expect(result).toContain("data:image/webp;base64");
     });
   });
 

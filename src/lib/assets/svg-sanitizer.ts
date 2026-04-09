@@ -45,18 +45,25 @@ export function sanitizeSvg(input: Buffer): Buffer {
 
   // Strip external xlink:href and href references (keep internal #fragment refs)
   // Match xlink:href="..." or href="..." where value does NOT start with #
+  //
+  // SECURITY: data:image/svg+xml is explicitly BLOCKED even though it is an image
+  // MIME type. An SVG embedded via data:image/svg+xml executes in the same origin
+  // as the parent SVG, inheriting its event handler context. An attacker can craft
+  // a base64-encoded inner SVG with onload="alert(1)" that fires when the outer SVG
+  // loads. Only raster MIME types (png, jpeg, gif, webp) are safe as inline data URIs.
   svg = svg.replace(
     /(\s+)(xlink:href|href)\s*=\s*"(?!#)([^"]*)"/gi,
     (match, space, attr, value) => {
-      // Allow data: URIs only for image MIME types (blocks data:text/html XSS)
-      if (/^data:image\/(png|jpeg|gif|webp|svg\+xml);/i.test(value)) return match;
+      // Allow data: URIs only for RASTER image MIME types (NOT svg+xml — XSS vector)
+      if (/^data:image\/(png|jpeg|gif|webp);/i.test(value)) return match;
       return `${space}${attr}=""`;
     },
   );
   svg = svg.replace(
     /(\s+)(xlink:href|href)\s*=\s*'(?!#)([^']*)'/gi,
     (match, space, attr, value) => {
-      if (/^data:image\/(png|jpeg|gif|webp|svg\+xml);/i.test(value)) return match;
+      // Allow data: URIs only for RASTER image MIME types (NOT svg+xml — XSS vector)
+      if (/^data:image\/(png|jpeg|gif|webp);/i.test(value)) return match;
       return `${space}${attr}=''`;
     },
   );

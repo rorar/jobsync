@@ -13,6 +13,7 @@
 
 import type { PrismaClient } from "@prisma/client";
 import type { EnrichmentOutput } from "./types";
+import { stripCredentialsFromUrl } from "@/lib/assets/logo-asset-service";
 
 /**
  * Write enrichment logo URL back to the Company record.
@@ -44,12 +45,18 @@ export async function applyLogoWriteback(
   const logoUrl = logoData?.logoUrl as string | undefined;
   if (!logoUrl) return;
 
+  // Defense-in-depth: strip credential parameters before writing to the DB.
+  // This ensures that even if an upstream enrichment module (e.g. a future
+  // module that does not pre-clean its URL the way logo-dev/index.ts does)
+  // passes a tokenized URL, credentials never reach Company.logoUrl.
+  const safeLogoUrl = stripCredentialsFromUrl(logoUrl);
+
   await db.company.updateMany({
     where: {
       id: companyId,
       createdBy: userId,
       logoUrl: null,
     },
-    data: { logoUrl },
+    data: { logoUrl: safeLogoUrl },
   });
 }
