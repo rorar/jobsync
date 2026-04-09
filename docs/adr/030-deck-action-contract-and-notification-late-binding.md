@@ -75,10 +75,11 @@ We adopt three related architectural rules:
 
 Aspirational: all notification writes SHOULD route through the channel router via domain events so the late-binding is enforced in one place. Current known direct writers (patched inline to satisfy the invariant):
 - `src/lib/notifications/channels/in-app.channel.ts` — legitimate (the channel implementation itself)
-- `src/lib/connector/degradation.ts` — 3 sites, patched in Stream C (commit TBD)
-- `src/lib/notifications/channels/webhook.channel.ts` — 2 sites, patched in Stream C (commit TBD)
+- `src/lib/connector/degradation.ts` — 3 sites, patched in Stream C (commit `af6d328`)
+- `src/lib/notifications/channels/webhook.channel.ts` — 2 sites, patched in Stream C (commit `af6d328`)
+- `src/actions/module.actions.ts` — 1 site in `deactivateModule`. Surfaced after this ADR was written, by the `scripts/check-notification-writers.sh` grep enforcement added in commit `1c2c593`. Not originally listed because earlier blind-spot scans only looked under `src/lib/`. Also produces duplicate notifications (the same deactivation is observed by `notification-dispatcher.ts:handleModuleDeactivated`). Scheduled for removal as Sprint 1 CRIT-A1 — the `deactivateModule` direct write will be deleted and the dispatcher's `ModuleDeactivated` handler becomes the single writer.
 
-The full refactor to event emission is tracked as deferred work.
+The full refactor to event emission is tracked as deferred work; the Sprint 1 CRIT-A1 fix absorbs the `module.actions.ts` piece of it.
 
 **Decision C:** Any action taken against a deck card from any entry point MUST route through `useDeckStack.performAction`. In practice, this means: in `StagingContainer.tsx`, sheet action adapters are **mode-aware** — they call `handleDeckAction(vacancy, action)` when `detailsMode === "deck"` and the direct handlers (`handleDismiss(id)`, `handlePromote(vacancy)`, ...) when `detailsMode === "list"`. Tests in `__tests__/useDeckStack.spec.ts` and `__tests__/DeckView.spec.tsx` cover the deck path; the sheet-routing path is covered by the Phase 3 integration.
 
@@ -111,7 +112,9 @@ The full refactor to event emission is tracked as deferred work.
 ## References
 
 - Stream A hotfix commit: `2caab7e` (deck action routing fix)
-- Stream C commits: degradation.ts + webhook.channel.ts late-binding (this sprint)
+- Stream C commit: `af6d328` (degradation.ts + webhook.channel.ts late-binding)
+- Stream 4 enforcement script: `1c2c593` (`scripts/check-notification-writers.sh`)
+- Prisma migration to top-level 5W+H columns: `132bb96` (the bifurcation called out as a risk is now schema-enforceable)
 - Stream E grace period + `isExiting` contract: `SuperLikeCelebrationHost`
 - Blind-spot report: `.team-feature/stream-h-blindspot.md` (Patterns 2, 3, 7)
 - Honesty gate findings #16, #17 (Decision C) and the dispatcher i18n bug (Decision B)
