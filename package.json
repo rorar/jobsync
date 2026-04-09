@@ -12,7 +12,8 @@
     "test:watch": "jest --watch",
     "generate:eures": "openapi-typescript https://rorar.github.io/EURES-API-Documentation/openapi.yaml -o src/lib/scraper/eures/generated.ts",
     "i18n:extract": "lingui extract --clean",
-    "i18n:compile": "lingui compile --typescript"
+    "i18n:compile": "lingui compile --typescript",
+    "check:notification-writers": "bash scripts/check-notification-writers.sh"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.4",
