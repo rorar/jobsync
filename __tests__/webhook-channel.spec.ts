@@ -789,4 +789,126 @@ describe("WebhookChannel", () => {
       expect(getMockFetch()).not.toHaveBeenCalled();
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Sprint 2 H-A-04 / H-A-07 — shouldNotify preference gating
+  //
+  // The webhook channel creates in-app notifications in TWO places
+  // (notifyDeliveryFailed, notifyEndpointDeactivated). Before Sprint 2 both
+  // called `prisma.notification.create` directly, bypassing `shouldNotify()`.
+  // Quiet hours, per-type toggles, and the global kill switch were silently
+  // ignored — violating specs/notification-dispatch.allium invariant
+  // `QuietHoursRespected`.
+  //
+  // The fix routes both call sites through `prepareEnforcedNotification()`
+  // which resolves `UserSettings` and applies `shouldNotify()` BEFORE the
+  // physical Prisma write. These tests pin the three gate behaviours for
+  // each of the 2 call sites.
+  // -------------------------------------------------------------------------
+  describe("shouldNotify preference gating (H-A-04 / H-A-07)", () => {
+    function makeSettings(notifications: unknown) {
+      return {
+        settings: JSON.stringify({
+          ai: { moduleId: "ollama" },
+          display: { theme: "system", locale: "en" },
+          notifications,
+        }),
+      };
+    }
+
+    it("notifyDeliveryFailed — suppresses the in-app row when global kill switch is off", async () => {
+      const endpoint = makeEndpoint();
+      mockFindMany.mockResolvedValue([endpoint]);
+      getMockFetch().mockResolvedValue({ ok: false, status: 500 });
+      mockUserSettingsFindUnique.mockResolvedValue(
+        makeSettings({
+          enabled: false,
+          channels: { inApp: true, webhook: true, email: false, push: false },
+          perType: {},
+        }),
+      );
+
+      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+
+      // No in-app failure notification should be written — the webhook
+      // delivery still happened (and failed), but the spec says global
+      // kill-switch suppresses ALL in-app writes regardless of source.
+      expect(mockNotificationCreate).not.toHaveBeenCalled();
+    });
+
+    it("notifyDeliveryFailed — suppresses the in-app row when inApp channel is disabled", async () => {
+      const endpoint = makeEndpoint();
+      mockFindMany.mockResolvedValue([endpoint]);
+      getMockFetch().mockResolvedValue({ ok: false, status: 500 });
+      mockUserSettingsFindUnique.mockResolvedValue(
+        makeSettings({
+          enabled: true,
+          channels: { inApp: false, webhook: true, email: false, push: false },
+          perType: {},
+        }),
+      );
+
+      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+
+      expect(mockNotificationCreate).not.toHaveBeenCalled();
+    });
+
+    it("notifyDeliveryFailed — suppresses the in-app row when perType.module_unreachable is disabled", async () => {
+      const endpoint = makeEndpoint();
+      mockFindMany.mockResolvedValue([endpoint]);
+      getMockFetch().mockResolvedValue({ ok: false, status: 500 });
+      mockUserSettingsFindUnique.mockResolvedValue(
+        makeSettings({
+          enabled: true,
+          channels: { inApp: true, webhook: true, email: false, push: false },
+          perType: { module_unreachable: { enabled: false } },
+        }),
+      );
+
+      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+
+      expect(mockNotificationCreate).not.toHaveBeenCalled();
+    });
+
+    it("notifyEndpointDeactivated — suppresses the in-app row when inApp channel is disabled", async () => {
+      const endpoint = makeEndpoint({ failureCount: 4 });
+      mockFindMany.mockResolvedValue([endpoint]);
+      mockUpdate
+        .mockResolvedValueOnce({ failureCount: 5 })
+        .mockResolvedValue({});
+      getMockFetch().mockResolvedValue({ ok: false, status: 500 });
+      mockUserSettingsFindUnique.mockResolvedValue(
+        makeSettings({
+          enabled: true,
+          channels: { inApp: false, webhook: true, email: false, push: false },
+          perType: {},
+        }),
+      );
+
+      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+
+      // Auto-deactivation still happens on the webhook endpoint itself —
+      // only the in-app row that informs the user is gated out.
+      expect(mockUpdate).toHaveBeenCalledWith({
+        where: { id: "ep-1", userId: TEST_USER_ID },
+        data: { active: false },
+      });
+      expect(mockNotificationCreate).not.toHaveBeenCalled();
+    });
+
+    it("preserves legacy behaviour when UserSettings returns null (default preferences)", async () => {
+      // Regression guard: the default `null` settings path is what every
+      // pre-Sprint-2 test in this file relies on. It must keep producing
+      // a `prisma.notification.create` call so the existing suite passes
+      // unchanged.
+      const endpoint = makeEndpoint();
+      mockFindMany.mockResolvedValue([endpoint]);
+      getMockFetch().mockResolvedValue({ ok: false, status: 500 });
+      mockUserSettingsFindUnique.mockResolvedValue(null);
+
+      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+
+      expect(mockNotificationCreate).toHaveBeenCalled();
+    });
+  });
 });

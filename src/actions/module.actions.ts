@@ -212,6 +212,56 @@ export async function activateModule(
       },
     });
 
+    // Emit ModuleReactivated domain event per distinct affected user
+    // (Sprint 2 H-A-01: close the symmetric twin of Sprint 1 CRIT-A1 — the
+    // handler `notification-dispatcher.handleModuleReactivated` was already
+    // wired and registered, but no publisher existed, so users never received
+    // the "module back online" notification).
+    //
+    // Pattern mirrors deactivateModule: query the set of automations that
+    // this module left paused (pauseReason = "module_deactivated"), group
+    // by userId, and emit ONE ModuleReactivated event per distinct user.
+    // The dispatcher then writes a single per-user summary notification
+    // ("Module X reactivated. Y automation(s) remain paused") through the
+    // channel router — in-app + webhook + email + push, gated by each
+    // user's preferences. Reactivation intentionally does NOT auto-resume
+    // the paused automations (see CLAUDE.md — "user must manually reactivate").
+    //
+    // Best-effort: if the lookup or emission fails, log and continue —
+    // the authoritative module activation DB write has already succeeded
+    // above, so returning a failure to the admin would be misleading.
+    try {
+      const pausedByModule = await prisma.automation.findMany({
+        where: {
+          jobBoard: moduleId,
+          status: "paused",
+          pauseReason: "module_deactivated",
+        },
+        select: { id: true, userId: true },
+      });
+
+      if (pausedByModule.length > 0) {
+        const countsByUser = new Map<string, number>();
+        for (const auto of pausedByModule) {
+          countsByUser.set(auto.userId, (countsByUser.get(auto.userId) ?? 0) + 1);
+        }
+        for (const [userId, pausedAutomationCount] of countsByUser) {
+          emitEvent(
+            createEvent(DomainEventTypes.ModuleReactivated, {
+              moduleId,
+              userId,
+              pausedAutomationCount,
+            }),
+          );
+        }
+      }
+    } catch (notifyErr) {
+      console.warn(
+        `[activateModule] Failed to emit ModuleReactivated events for "${moduleId}":`,
+        notifyErr,
+      );
+    }
+
     return { success: true, data: { moduleId, status: ModuleStatus.ACTIVE } };
   } catch (error) {
     return handleError(error, "errors.activateModule");

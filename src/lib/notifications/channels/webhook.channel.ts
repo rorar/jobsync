@@ -22,10 +22,8 @@ import { decrypt } from "@/lib/encryption";
 import { validateWebhookUrl } from "@/lib/url-validation";
 import { t } from "@/i18n/server";
 import { resolveUserLocale } from "@/lib/locale-resolver";
-import type {
-  NotificationType,
-  NotificationDataExtended,
-} from "@/models/notification.model";
+import { prepareEnforcedNotification } from "@/lib/notifications/channel-router";
+import type { NotificationType } from "@/models/notification.model";
 import type {
   NotificationChannel,
   NotificationDraft,
@@ -165,6 +163,13 @@ async function deliverWithRetry(
  *     changes their locale after the notification was written. The same
  *     values are dual-written into the legacy `data.*` blob for backward
  *     compat during rollout.
+ *
+ * Preference gating (Sprint 2 H-A-04 / H-A-07):
+ *   Routed through `prepareEnforcedNotification()` which calls shouldNotify()
+ *   (global kill switch, perType, quiet hours, inApp channel gate) BEFORE
+ *   the physical write. The physical `prisma.notification.create` stays
+ *   here so that `scripts/check-notification-writers.sh`'s allowlist is
+ *   unchanged — the invariant is enforced by the gate helper.
  */
 async function notifyDeliveryFailed(
   userId: string,
@@ -179,29 +184,23 @@ async function notifyDeliveryFailed(
       .replace("{url}", endpointUrl);
     const titleKey = "webhook.deliveryFailed";
     const titleParams = { eventType, url: endpointUrl };
-    const extendedData: NotificationDataExtended = {
-      endpointUrl,
-      eventType,
+
+    const gated = await prepareEnforcedNotification({
+      userId,
+      type: "module_unreachable" satisfies NotificationType,
+      message,
       titleKey,
       titleParams,
       actorType: "system",
-      actorNameKey: "notifications.actor.system",
       severity: "error",
-    };
-    await prisma.notification.create({
-      data: {
-        userId,
-        type: "module_unreachable" satisfies NotificationType,
-        // English/user-locale fallback — structured title is late-bound via top-level `titleKey`.
-        message,
-        data: extendedData as object,
-        // Top-level 5W+H columns (ADR-030)
-        titleKey,
-        titleParams: titleParams as object,
-        actorType: "system",
-        severity: "error",
+      extraData: {
+        endpointUrl,
+        eventType,
+        actorNameKey: "notifications.actor.system",
       },
     });
+    if (gated.suppressed) return;
+    await prisma.notification.create({ data: gated.row });
   } catch (error) {
     console.error("[WebhookChannel] Failed to create failure notification:", error);
   }
@@ -212,6 +211,9 @@ async function notifyDeliveryFailed(
  * Best-effort: logs errors but never throws.
  *
  * i18n — late-binding pattern: see `notifyDeliveryFailed` for rationale.
+ *
+ * Preference gating (Sprint 2 H-A-04 / H-A-07): routed through
+ * `prepareEnforcedNotification()` — see `notifyDeliveryFailed` for rationale.
  */
 async function notifyEndpointDeactivated(
   userId: string,
@@ -223,28 +225,22 @@ async function notifyEndpointDeactivated(
     const message = template.replace("{url}", endpointUrl);
     const titleKey = "webhook.endpointDeactivated";
     const titleParams = { url: endpointUrl };
-    const extendedData: NotificationDataExtended = {
-      endpointUrl,
+
+    const gated = await prepareEnforcedNotification({
+      userId,
+      type: "module_unreachable" satisfies NotificationType,
+      message,
       titleKey,
       titleParams,
       actorType: "system",
-      actorNameKey: "notifications.actor.system",
       severity: "warning",
-    };
-    await prisma.notification.create({
-      data: {
-        userId,
-        type: "module_unreachable" satisfies NotificationType,
-        // English/user-locale fallback — structured title is late-bound via top-level `titleKey`.
-        message,
-        data: extendedData as object,
-        // Top-level 5W+H columns (ADR-030)
-        titleKey,
-        titleParams: titleParams as object,
-        actorType: "system",
-        severity: "warning",
+      extraData: {
+        endpointUrl,
+        actorNameKey: "notifications.actor.system",
       },
     });
+    if (gated.suppressed) return;
+    await prisma.notification.create({ data: gated.row });
   } catch (error) {
     console.error("[WebhookChannel] Failed to create deactivation notification:", error);
   }

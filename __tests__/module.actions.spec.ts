@@ -66,7 +66,8 @@ jest.mock("@/lib/utils", () => ({
 }));
 
 // Mock the domain event bus — deactivateModule publishes ModuleDeactivated
-// events instead of writing notifications directly.
+// events and activateModule publishes ModuleReactivated events instead of
+// writing notifications directly (Sprint 1 CRIT-A1 + Sprint 2 H-A-01).
 jest.mock("@/lib/events", () => ({
   emitEvent: jest.fn(),
   createEvent: jest.fn((type: string, payload: unknown) => ({
@@ -76,6 +77,7 @@ jest.mock("@/lib/events", () => ({
   })),
   DomainEventTypes: {
     ModuleDeactivated: "ModuleDeactivated",
+    ModuleReactivated: "ModuleReactivated",
   },
 }));
 
@@ -355,6 +357,152 @@ describe("module.actions", () => {
       expect(result.success).toBe(false);
       expect(result.message).toBe("Not authenticated");
       expect(emitEvent).not.toHaveBeenCalled();
+    });
+  });
+
+  // ===========================================================================
+  // activateModule — ModuleReactivated event emission (Sprint 2 H-A-01)
+  //
+  // The symmetric twin of Sprint 1 CRIT-A1: deactivateModule emits
+  // ModuleDeactivated events, so activateModule MUST emit ModuleReactivated
+  // events. Before the Sprint 2 fix the dispatcher handler was wired and
+  // registered but NO publisher existed — users never received the
+  // "module back online" notification ("dead publisher path").
+  //
+  // The emission pattern mirrors deactivateModule: the action queries
+  // automations that this module left paused (pauseReason = "module_deactivated"),
+  // groups them by userId, and emits ONE ModuleReactivated event per
+  // distinct user. Reactivation does NOT auto-resume paused automations
+  // (CLAUDE.md: "user must manually reactivate").
+  // ===========================================================================
+
+  describe("activateModule — ModuleReactivated emission (H-A-01)", () => {
+    const moduleId = "eures";
+
+    beforeEach(() => {
+      // Registry has the module in INACTIVE state (ready to activate)
+      (moduleRegistry.get as jest.Mock).mockReturnValue({
+        ...makeRegisteredModule({ id: moduleId }),
+        status: "inactive",
+      });
+      (prisma.moduleRegistration.upsert as jest.Mock).mockResolvedValue({});
+      (prisma.automation.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    });
+
+    it("emits ONE ModuleReactivated event per distinct paused user", async () => {
+      // Three paused automations across two users — the dispatcher model is
+      // per-user, so we expect exactly ONE event per distinct user.
+      (prisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-1", userId: "user-1" },
+        { id: "auto-2", userId: "user-1" },
+        { id: "auto-3", userId: "user-2" },
+      ]);
+
+      const result = await activateModule(moduleId);
+
+      expect(result.success).toBe(true);
+      // findMany must be called with the exact filter the action uses —
+      // only pauses that were caused by deactivating THIS module.
+      expect(prisma.automation.findMany).toHaveBeenCalledWith({
+        where: {
+          jobBoard: moduleId,
+          status: "paused",
+          pauseReason: "module_deactivated",
+        },
+        select: { id: true, userId: true },
+      });
+      expect(emitEvent).toHaveBeenCalledTimes(2);
+      expect(emitEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "ModuleReactivated",
+          payload: {
+            moduleId,
+            userId: "user-1",
+            pausedAutomationCount: 2,
+          },
+        }),
+      );
+      expect(emitEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "ModuleReactivated",
+          payload: {
+            moduleId,
+            userId: "user-2",
+            pausedAutomationCount: 1,
+          },
+        }),
+      );
+    });
+
+    it("does not emit ModuleReactivated when no paused automations remain", async () => {
+      (prisma.automation.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await activateModule(moduleId);
+
+      expect(result.success).toBe(true);
+      expect(emitEvent).not.toHaveBeenCalled();
+    });
+
+    it("still returns success when ModuleReactivated emission lookup fails", async () => {
+      // The authoritative module activation DB write already succeeded above
+      // the try block, so a notification lookup failure MUST NOT flip the
+      // action's result to error — the admin UI would then show a false
+      // failure toast while the module is actually active.
+      (prisma.automation.findMany as jest.Mock).mockRejectedValue(
+        new Error("DB connection refused"),
+      );
+
+      // Silence the console.warn emitted by the catch block
+      const consoleSpy = jest
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      const result = await activateModule(moduleId);
+
+      expect(result.success).toBe(true);
+      expect(result.data?.status).toBe(ModuleStatus.ACTIVE);
+      expect(emitEvent).not.toHaveBeenCalled();
+      // Persistence still happened
+      expect(prisma.moduleRegistration.upsert).toHaveBeenCalled();
+      expect(moduleRegistry.setStatus).toHaveBeenCalledWith(
+        moduleId,
+        ModuleStatus.ACTIVE,
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it("short-circuits without emitting when the module is already ACTIVE", async () => {
+      // Registry reports ACTIVE — the action returns early and must NOT
+      // touch prisma.automation or emit any events.
+      (moduleRegistry.get as jest.Mock).mockReturnValue({
+        ...makeRegisteredModule({ id: moduleId }),
+        status: ModuleStatus.ACTIVE,
+      });
+
+      const result = await activateModule(moduleId);
+
+      expect(result.success).toBe(true);
+      expect(result.data?.status).toBe(ModuleStatus.ACTIVE);
+      expect(prisma.moduleRegistration.upsert).not.toHaveBeenCalled();
+      expect(prisma.automation.findMany).not.toHaveBeenCalled();
+      expect(emitEvent).not.toHaveBeenCalled();
+    });
+
+    it("never calls prisma.notification directly (SingleNotificationWriter invariant)", async () => {
+      // ADR-030 / specs/notification-dispatch.allium — activateModule must
+      // route ALL notification creation through domain events. The prisma
+      // mock has no `notification` key, so any regression that adds a
+      // direct write will throw synchronously.
+      (prisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-1", userId: "user-1" },
+      ]);
+
+      const result = await activateModule(moduleId);
+
+      expect(result.success).toBe(true);
+      expect((prisma as unknown as Record<string, unknown>).notification).toBeUndefined();
     });
   });
 

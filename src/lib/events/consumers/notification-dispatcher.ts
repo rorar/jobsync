@@ -103,15 +103,13 @@ async function resolveUserSettings(userId: string): Promise<UserSettingsResolved
   }
 }
 
-// Backward-compatible wrappers used by _testHelpers and event handlers
+// Backward-compatible wrapper used by _testHelpers (exported as part of the
+// public test surface). Handlers call `resolveUserSettings` directly so they
+// can thread both `preferences` and `locale` into `dispatchNotification` with
+// a single DB read (Sprint 2 H-P-01).
 async function resolvePreferences(userId: string): Promise<NotificationPreferences> {
   const { preferences } = await resolveUserSettings(userId);
   return preferences;
-}
-
-async function resolveLocale(userId: string): Promise<string> {
-  const { locale } = await resolveUserSettings(userId);
-  return locale;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,14 +119,26 @@ async function resolveLocale(userId: string): Promise<string> {
 /**
  * Build a NotificationDraft and route through all channels.
  * Replaces the old direct prisma.notification.create() calls.
+ *
+ * Performance (Sprint 2 H-P-01): callers MAY pass pre-resolved
+ * `NotificationPreferences` via the second argument to avoid a second
+ * `userSettings.findUnique` read inside the same handler invocation. Each
+ * handler already reads `resolveUserSettings(userId)` to derive the locale
+ * for the English fallback message, so threading the preferences through
+ * eliminates the duplicate query. The default branch (no preferences arg)
+ * keeps the old code path for any caller that has not been migrated.
  */
-async function dispatchNotification(draft: NotificationDraft): Promise<void> {
-  const { preferences } = await resolveUserSettings(draft.userId);
+async function dispatchNotification(
+  draft: NotificationDraft,
+  preferences?: NotificationPreferences,
+): Promise<void> {
+  const resolved =
+    preferences ?? (await resolveUserSettings(draft.userId)).preferences;
 
   // Fire-and-forget: do NOT await channel routing.
   // Webhook delivery can retry for up to 36s — blocking here would stall
   // the EventBus publish() loop and freeze the calling Server Action.
-  channelRouter.route(draft, preferences).catch((err) => {
+  channelRouter.route(draft, resolved).catch((err) => {
     console.error("[NotificationDispatcher] Channel routing failed:", err);
   });
 }
@@ -152,7 +162,10 @@ async function flushStagedBuffer(automationId: string): Promise<void> {
   });
   const automationName = automation?.name ?? automationId;
 
-  const locale = await resolveLocale(entry.userId);
+  // Single userSettings read (Sprint 2 H-P-01): resolve preferences + locale
+  // together and thread both into dispatchNotification to avoid a second
+  // `userSettings.findUnique` inside `dispatchNotification`.
+  const { preferences, locale } = await resolveUserSettings(entry.userId);
   // Legacy `message` fallback: still dispatched for email/webhook/push channels
   // and for historical compatibility with clients that don't read structured data.
   const message = t(locale, "notifications.batchStaged")
@@ -191,7 +204,7 @@ async function flushStagedBuffer(automationId: string): Promise<void> {
     severity,
   };
 
-  await dispatchNotification(draft);
+  await dispatchNotification(draft, preferences);
 }
 
 // ---------------------------------------------------------------------------
@@ -202,7 +215,8 @@ async function handleVacancyPromoted(
   event: DomainEvent<typeof DomainEventType.VacancyPromoted>,
 ): Promise<void> {
   const payload = event.payload as VacancyPromotedPayload;
-  const locale = await resolveLocale(payload.userId);
+  // Single userSettings read (Sprint 2 H-P-01)
+  const { preferences, locale } = await resolveUserSettings(payload.userId);
 
   const titleKey = "notifications.vacancyPromoted.title";
   const severity: NotificationSeverity = "success";
@@ -218,15 +232,18 @@ async function handleVacancyPromoted(
     severity,
   };
 
-  await dispatchNotification({
-    userId: payload.userId,
-    type: "vacancy_promoted" satisfies NotificationType,
-    message: t(locale, "notifications.vacancyPromoted"),
-    data: extendedData,
-    titleKey,
-    actorType,
-    severity,
-  });
+  await dispatchNotification(
+    {
+      userId: payload.userId,
+      type: "vacancy_promoted" satisfies NotificationType,
+      message: t(locale, "notifications.vacancyPromoted"),
+      data: extendedData,
+      titleKey,
+      actorType,
+      severity,
+    },
+    preferences,
+  );
 }
 
 async function handleVacancyStaged(
@@ -259,7 +276,8 @@ async function handleBulkActionCompleted(
   event: DomainEvent<typeof DomainEventType.BulkActionCompleted>,
 ): Promise<void> {
   const payload = event.payload as BulkActionCompletedPayload;
-  const locale = await resolveLocale(payload.userId);
+  // Single userSettings read (Sprint 2 H-P-01)
+  const { preferences, locale } = await resolveUserSettings(payload.userId);
   const message = t(locale, "notifications.bulkActionCompleted")
     .replace("{succeeded}", String(payload.succeeded))
     .replace("{actionType}", payload.actionType);
@@ -280,23 +298,27 @@ async function handleBulkActionCompleted(
     severity,
   };
 
-  await dispatchNotification({
-    userId: payload.userId,
-    type: "bulk_action_completed" satisfies NotificationType,
-    message,
-    data: extendedData,
-    titleKey,
-    titleParams,
-    actorType,
-    severity,
-  });
+  await dispatchNotification(
+    {
+      userId: payload.userId,
+      type: "bulk_action_completed" satisfies NotificationType,
+      message,
+      data: extendedData,
+      titleKey,
+      titleParams,
+      actorType,
+      severity,
+    },
+    preferences,
+  );
 }
 
 async function handleModuleDeactivated(
   event: DomainEvent<typeof DomainEventType.ModuleDeactivated>,
 ): Promise<void> {
   const payload = event.payload as ModuleDeactivatedPayload;
-  const locale = await resolveLocale(payload.userId);
+  // Single userSettings read (Sprint 2 H-P-01)
+  const { preferences, locale } = await resolveUserSettings(payload.userId);
   const message = t(locale, "notifications.moduleDeactivated")
     .replace("{name}", payload.moduleId)
     .replace("{automationCount}", String(payload.affectedAutomationIds.length));
@@ -318,26 +340,30 @@ async function handleModuleDeactivated(
     severity,
   };
 
-  await dispatchNotification({
-    userId: payload.userId,
-    type: "module_deactivated" satisfies NotificationType,
-    message,
-    moduleId: payload.moduleId,
-    data: extendedData,
-    titleKey,
-    titleParams,
-    actorType,
-    actorId: payload.moduleId,
-    reasonKey,
-    severity,
-  });
+  await dispatchNotification(
+    {
+      userId: payload.userId,
+      type: "module_deactivated" satisfies NotificationType,
+      message,
+      moduleId: payload.moduleId,
+      data: extendedData,
+      titleKey,
+      titleParams,
+      actorType,
+      actorId: payload.moduleId,
+      reasonKey,
+      severity,
+    },
+    preferences,
+  );
 }
 
 async function handleModuleReactivated(
   event: DomainEvent<typeof DomainEventType.ModuleReactivated>,
 ): Promise<void> {
   const payload = event.payload as ModuleReactivatedPayload;
-  const locale = await resolveLocale(payload.userId);
+  // Single userSettings read (Sprint 2 H-P-01)
+  const { preferences, locale } = await resolveUserSettings(payload.userId);
   const message = t(locale, "notifications.moduleReactivated")
     .replace("{name}", payload.moduleId)
     .replace("{automationCount}", String(payload.pausedAutomationCount));
@@ -357,25 +383,29 @@ async function handleModuleReactivated(
     severity,
   };
 
-  await dispatchNotification({
-    userId: payload.userId,
-    type: "module_reactivated" satisfies NotificationType,
-    message,
-    moduleId: payload.moduleId,
-    data: extendedData,
-    titleKey,
-    titleParams,
-    actorType,
-    actorId: payload.moduleId,
-    severity,
-  });
+  await dispatchNotification(
+    {
+      userId: payload.userId,
+      type: "module_reactivated" satisfies NotificationType,
+      message,
+      moduleId: payload.moduleId,
+      data: extendedData,
+      titleKey,
+      titleParams,
+      actorType,
+      actorId: payload.moduleId,
+      severity,
+    },
+    preferences,
+  );
 }
 
 async function handleRetentionCompleted(
   event: DomainEvent<typeof DomainEventType.RetentionCompleted>,
 ): Promise<void> {
   const payload = event.payload as RetentionCompletedPayload;
-  const locale = await resolveLocale(payload.userId);
+  // Single userSettings read (Sprint 2 H-P-01)
+  const { preferences, locale } = await resolveUserSettings(payload.userId);
   const message = t(locale, "notifications.retentionCompleted")
     .replace("{count}", String(payload.purgedCount));
 
@@ -393,23 +423,27 @@ async function handleRetentionCompleted(
     severity,
   };
 
-  await dispatchNotification({
-    userId: payload.userId,
-    type: "retention_completed" satisfies NotificationType,
-    message,
-    data: extendedData,
-    titleKey,
-    titleParams,
-    actorType,
-    severity,
-  });
+  await dispatchNotification(
+    {
+      userId: payload.userId,
+      type: "retention_completed" satisfies NotificationType,
+      message,
+      data: extendedData,
+      titleKey,
+      titleParams,
+      actorType,
+      severity,
+    },
+    preferences,
+  );
 }
 
 async function handleJobStatusChanged(
   event: DomainEvent<typeof DomainEventType.JobStatusChanged>,
 ): Promise<void> {
   const payload = event.payload as JobStatusChangedPayload;
-  const locale = await resolveLocale(payload.userId);
+  // Single userSettings read (Sprint 2 H-P-01)
+  const { preferences, locale } = await resolveUserSettings(payload.userId);
   const message = t(locale, "notifications.jobStatusChanged")
     .replace("{newStatus}", payload.newStatusValue)
     .replace("{jobId}", payload.jobId);
@@ -431,16 +465,19 @@ async function handleJobStatusChanged(
     severity,
   };
 
-  await dispatchNotification({
-    userId: payload.userId,
-    type: "job_status_changed" satisfies NotificationType,
-    message,
-    data: extendedData,
-    titleKey,
-    titleParams,
-    actorType,
-    severity,
-  });
+  await dispatchNotification(
+    {
+      userId: payload.userId,
+      type: "job_status_changed" satisfies NotificationType,
+      message,
+      data: extendedData,
+      titleKey,
+      titleParams,
+      actorType,
+      severity,
+    },
+    preferences,
+  );
 }
 
 // ---------------------------------------------------------------------------

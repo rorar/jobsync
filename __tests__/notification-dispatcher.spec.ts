@@ -340,4 +340,119 @@ describe("NotificationDispatcher", () => {
       await expect(eventBus.publish(event)).resolves.toBeUndefined();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 2 H-P-01 — single UserSettings read per notification event
+  //
+  // Before the fix every handler called resolveLocale(userId) AND the
+  // dispatchNotification helper called resolveUserSettings(userId) internally
+  // → two identical `prisma.userSettings.findUnique` reads per event.
+  //
+  // After the fix the handler resolves both preferences and locale in ONE
+  // call and threads the result into dispatchNotification, which accepts an
+  // optional `preferences` arg to skip the redundant read.
+  //
+  // These tests pin the read-count invariant against regression.
+  // ---------------------------------------------------------------------------
+  describe("H-P-01 — single UserSettings read per event", () => {
+    it("VacancyPromoted: userSettings.findUnique is called exactly once", async () => {
+      const event = createEvent(DomainEventType.VacancyPromoted, {
+        stagedVacancyId: "sv-1",
+        jobId: "job-1",
+        userId: "user-1",
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockFindUnique).toHaveBeenCalledTimes(1);
+      expect(mockFindUnique).toHaveBeenCalledWith({
+        where: { userId: "user-1" },
+      });
+    });
+
+    it("ModuleDeactivated: userSettings.findUnique is called exactly once", async () => {
+      const event = createEvent(DomainEventType.ModuleDeactivated, {
+        moduleId: "eures",
+        userId: "user-1",
+        affectedAutomationIds: ["auto-1"],
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockFindUnique).toHaveBeenCalledTimes(1);
+    });
+
+    it("ModuleReactivated: userSettings.findUnique is called exactly once", async () => {
+      const event = createEvent(DomainEventType.ModuleReactivated, {
+        moduleId: "eures",
+        userId: "user-1",
+        pausedAutomationCount: 3,
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockFindUnique).toHaveBeenCalledTimes(1);
+    });
+
+    it("BulkActionCompleted: userSettings.findUnique is called exactly once", async () => {
+      const event = createEvent(DomainEventType.BulkActionCompleted, {
+        actionType: "dismiss",
+        itemIds: ["sv-1"],
+        userId: "user-1",
+        succeeded: 1,
+        failed: 0,
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockFindUnique).toHaveBeenCalledTimes(1);
+    });
+
+    it("RetentionCompleted: userSettings.findUnique is called exactly once", async () => {
+      const event = createEvent(DomainEventType.RetentionCompleted, {
+        userId: "user-1",
+        purgedCount: 10,
+        hashesCreated: 10,
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockFindUnique).toHaveBeenCalledTimes(1);
+    });
+
+    it("JobStatusChanged: userSettings.findUnique is called exactly once", async () => {
+      const event = createEvent(DomainEventType.JobStatusChanged, {
+        jobId: "job-1",
+        userId: "user-1",
+        previousStatusValue: "interested",
+        newStatusValue: "applied",
+        historyEntryId: "hist-1",
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockFindUnique).toHaveBeenCalledTimes(1);
+    });
+
+    it("VacancyStaged batch flush: userSettings.findUnique is called exactly once per flush", async () => {
+      // Stage 2 vacancies so there is a non-trivial buffer to flush.
+      for (let i = 0; i < 2; i++) {
+        await eventBus.publish(
+          createEvent(DomainEventType.VacancyStaged, {
+            stagedVacancyId: `sv-${i}`,
+            userId: "user-1",
+            sourceBoard: "eures",
+            automationId: "auto-hp01",
+          }),
+        );
+      }
+      // Staging alone does not read settings (individual stagings are buffered).
+      expect(mockFindUnique).not.toHaveBeenCalled();
+
+      // Flush triggers exactly ONE settings read for the batch summary.
+      await _testHelpers.flushStagedBuffer("auto-hp01");
+
+      expect(mockFindUnique).toHaveBeenCalledTimes(1);
+    });
+  });
 });

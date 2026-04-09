@@ -20,6 +20,15 @@ jest.mock("@/lib/db", () => {
       create: jest.fn().mockResolvedValue({}),
       createMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
+    // Sprint 2 H-A-04 / H-A-07: the preference-gate helper reads
+    // UserSettings before writing. Default mock returns `null` so the
+    // helper falls back to DEFAULT_NOTIFICATION_PREFERENCES (enabled,
+    // inApp=true, no perType override, no quiet hours) — which matches
+    // the historical unconditional-write behaviour the existing tests
+    // rely on.
+    userSettings: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
   };
   return { __esModule: true, default: mockPrisma };
 });
@@ -647,6 +656,214 @@ describe("Degradation Rules", () => {
 
       // Should not throw
       expect(() => handleCircuitBreakerRecovery("unknown")).not.toThrow();
+    });
+  });
+
+  // ===========================================================================
+  // Sprint 2 H-A-04 / H-A-07 — shouldNotify preference gating
+  //
+  // Before the Sprint 2 fix the 3 direct-writer sites in degradation.ts
+  // (handleAuthFailure, checkConsecutiveRunFailures, handleCircuitBreakerTrip)
+  // called `prisma.notification.create*` directly, bypassing `shouldNotify()`.
+  // Quiet hours, per-type toggles, and the global kill switch were silently
+  // ignored — violating specs/notification-dispatch.allium invariant
+  // `QuietHoursRespected`.
+  //
+  // The fix routes every draft through `prepareEnforcedNotification*()`
+  // which resolves `UserSettings` and applies `shouldNotify()` BEFORE the
+  // physical Prisma write. These tests pin the three gate behaviours for
+  // each of the 3 sites.
+  // ===========================================================================
+
+  describe("shouldNotify preference gating (H-A-04 / H-A-07)", () => {
+    // Helper to make UserSettings row carry a JSON-serialized preferences
+    // blob that mirrors what the real settings store writes.
+    function makeSettings(notifications: unknown) {
+      return {
+        settings: JSON.stringify({
+          ai: { moduleId: "ollama" },
+          display: { theme: "system", locale: "en" },
+          notifications,
+        }),
+      };
+    }
+
+    it("handleAuthFailure — suppresses all rows when global kill switch is off", async () => {
+      (mockRegistry.get as jest.Mock).mockReturnValue({
+        manifest: {
+          name: "JSearch",
+          connectorType: ConnectorType.JOB_DISCOVERY,
+          credential: { required: true },
+        },
+      });
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-1", userId: "user-off", name: "Off Auto" },
+      ]);
+      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({
+        count: 1,
+      });
+      // Global kill switch OFF for this user
+      (mockPrisma.userSettings.findUnique as jest.Mock).mockResolvedValue(
+        makeSettings({
+          enabled: false,
+          channels: { inApp: true, webhook: false, email: false, push: false },
+          perType: {},
+        }),
+      );
+
+      const result = await handleAuthFailure("jsearch", "401 Unauthorized");
+
+      // Degradation itself is NOT blocked by the gate — the automation still
+      // pauses and the outer flow reports the correct pausedCount.
+      expect(result).toEqual({ pausedCount: 1 });
+      expect(mockPrisma.automation.updateMany).toHaveBeenCalled();
+      // But the notification write MUST be suppressed.
+      expect(mockPrisma.notification.createMany).not.toHaveBeenCalled();
+    });
+
+    it("handleAuthFailure — suppresses rows when inApp channel is disabled", async () => {
+      (mockRegistry.get as jest.Mock).mockReturnValue({
+        manifest: {
+          name: "JSearch",
+          connectorType: ConnectorType.JOB_DISCOVERY,
+          credential: { required: true },
+        },
+      });
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-1", userId: "user-noinapp", name: "NoInApp" },
+      ]);
+      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({
+        count: 1,
+      });
+      (mockPrisma.userSettings.findUnique as jest.Mock).mockResolvedValue(
+        makeSettings({
+          enabled: true,
+          channels: { inApp: false, webhook: true, email: false, push: false },
+          perType: {},
+        }),
+      );
+
+      await handleAuthFailure("jsearch", "401 Unauthorized");
+
+      expect(mockPrisma.notification.createMany).not.toHaveBeenCalled();
+    });
+
+    it("handleAuthFailure — suppresses rows when perType.auth_failure is disabled", async () => {
+      (mockRegistry.get as jest.Mock).mockReturnValue({
+        manifest: {
+          name: "JSearch",
+          connectorType: ConnectorType.JOB_DISCOVERY,
+          credential: { required: true },
+        },
+      });
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-1", userId: "user-nop", name: "NoPerType" },
+      ]);
+      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({
+        count: 1,
+      });
+      (mockPrisma.userSettings.findUnique as jest.Mock).mockResolvedValue(
+        makeSettings({
+          enabled: true,
+          channels: { inApp: true, webhook: false, email: false, push: false },
+          perType: { auth_failure: { enabled: false } },
+        }),
+      );
+
+      await handleAuthFailure("jsearch", "401 Unauthorized");
+
+      expect(mockPrisma.notification.createMany).not.toHaveBeenCalled();
+    });
+
+    it("handleAuthFailure — still writes a row when the user has defaults (null settings)", async () => {
+      // Regression guard: the default `null` settings path in the shared
+      // mock is what the legacy degradation tests rely on, and must keep
+      // producing a createMany call so that all pre-Sprint-2 assertions
+      // continue to pass.
+      (mockRegistry.get as jest.Mock).mockReturnValue({
+        manifest: {
+          name: "JSearch",
+          connectorType: ConnectorType.JOB_DISCOVERY,
+          credential: { required: true },
+        },
+      });
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-1", userId: "user-default", name: "Default Auto" },
+      ]);
+      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({
+        count: 1,
+      });
+      (mockPrisma.userSettings.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await handleAuthFailure("jsearch", "401 Unauthorized");
+
+      expect(mockPrisma.notification.createMany).toHaveBeenCalledTimes(1);
+    });
+
+    it("checkConsecutiveRunFailures — suppresses row when inApp channel is disabled", async () => {
+      (mockPrisma.automationRun.findMany as jest.Mock).mockResolvedValue([
+        { status: "failed" },
+        { status: "failed" },
+        { status: "failed" },
+        { status: "failed" },
+        { status: "failed" },
+      ]);
+      (mockPrisma.automation.findFirst as jest.Mock).mockResolvedValue({
+        id: "auto-gated",
+        status: "active",
+        name: "Gated Auto",
+        userId: "user-gated",
+      });
+      (mockPrisma.automation.update as jest.Mock).mockResolvedValue({});
+      (mockPrisma.userSettings.findUnique as jest.Mock).mockResolvedValue(
+        makeSettings({
+          enabled: true,
+          channels: { inApp: false, webhook: false, email: false, push: false },
+          perType: {},
+        }),
+      );
+
+      const result = await checkConsecutiveRunFailures("auto-gated");
+
+      // Pausing still happens — only the notification write is gated.
+      expect(result).toEqual({ paused: true });
+      expect(mockPrisma.automation.update).toHaveBeenCalled();
+      expect(mockPrisma.notification.create).not.toHaveBeenCalled();
+    });
+
+    it("handleCircuitBreakerTrip — suppresses all rows when perType.cb_escalation is disabled", async () => {
+      mockRegistry._testMap.set("mod-cb-gate", {
+        manifest: {
+          id: "mod-cb-gate",
+          name: "mod-cb-gate",
+          connectorType: ConnectorType.JOB_DISCOVERY,
+        },
+        status: ModuleStatus.ACTIVE,
+        consecutiveFailures: 2,
+      });
+      (mockRegistry.get as jest.Mock).mockImplementation((id: string) =>
+        mockRegistry._testMap.get(id),
+      );
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-cb-gate", userId: "user-cb-gate", name: "CB Gated" },
+      ]);
+      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({
+        count: 1,
+      });
+      (mockPrisma.userSettings.findUnique as jest.Mock).mockResolvedValue(
+        makeSettings({
+          enabled: true,
+          channels: { inApp: true, webhook: false, email: false, push: false },
+          perType: { cb_escalation: { enabled: false } },
+        }),
+      );
+
+      const result = await handleCircuitBreakerTrip("mod-cb-gate");
+
+      // Pausing still happens — only the notification write is gated.
+      expect(result).toEqual({ pausedCount: 1 });
+      expect(mockPrisma.automation.updateMany).toHaveBeenCalled();
+      expect(mockPrisma.notification.createMany).not.toHaveBeenCalled();
     });
   });
 });

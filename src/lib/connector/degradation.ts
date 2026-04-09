@@ -3,7 +3,11 @@ import "server-only";
 import prisma from "@/lib/db";
 import { emitEvent, createEvent } from "@/lib/events";
 import { DomainEventType } from "@/lib/events/event-types";
-import type { NotificationDataExtended } from "@/models/notification.model";
+import {
+  prepareEnforcedNotification,
+  prepareEnforcedNotifications,
+  type EnforcedNotificationDraft,
+} from "@/lib/notifications/channel-router";
 import { moduleRegistry } from "./registry";
 import { ModuleStatus, CircuitBreakerState } from "./manifest";
 
@@ -32,6 +36,17 @@ import { ModuleStatus, CircuitBreakerState } from "./manifest";
  *                     formatNotificationTitle().
  *   - Legacy `data.*` blob — kept populated during rollout for pre-migration
  *                     clients and tests that still read `data.titleKey`.
+ *
+ * Preference gating (Sprint 2 H-A-04 / H-A-07)
+ * --------------------------------------------
+ * Each direct write below is routed through `enforcedNotificationCreate*()`
+ * (defined in `@/lib/notifications/channel-router`). The helper invokes
+ * `shouldNotify()` before touching Prisma, so the global kill switch, the
+ * per-type toggle, quiet hours, and the per-channel "inApp" gate are
+ * uniformly respected — closing the QuietHoursRespected /
+ * SingleNotificationWriter gap. The writer remains in this file for
+ * physical locality (the `scripts/check-notification-writers.sh` allowlist
+ * is intentionally unchanged), but the gate is now authoritative.
  *
  * Keys referenced here already exist in src/i18n/dictionaries/notifications.ts.
  */
@@ -105,6 +120,13 @@ export async function handleAuthFailure(
     });
 
     // Create persistent notifications using createMany (no N+1).
+    // Preference gating (Sprint 2 H-A-04 / H-A-07): drafts are routed
+    // through `prepareEnforcedNotifications()` which applies `shouldNotify()`
+    // per user BEFORE any Prisma write. Only rows that pass the gate
+    // (global kill switch + perType + quiet hours + inApp channel) make it
+    // into the createMany payload. The physical write stays here (this file
+    // is on `scripts/check-notification-writers.sh`'s allowlist) so the
+    // invariant is enforced by the gate helper, not by moving the call.
     //
     // i18n: `message` is the English fallback; authoritative title is carried
     // in the top-level `titleKey + titleParams` columns (ADR-030) and resolved
@@ -114,20 +136,9 @@ export async function handleAuthFailure(
       const safeModuleName = truncate(registered.manifest.name);
       const titleKey = "notifications.authFailure.title";
       const reasonKey = "notifications.reason.authExpired";
-      await prisma.notification.createMany({
-        data: affectedAutomations.map((auto) => {
+      const drafts: EnforcedNotificationDraft[] = affectedAutomations.map(
+        (auto) => {
           const safeAutomationName = truncate(auto.name);
-          const extendedData: NotificationDataExtended = {
-            moduleId,
-            moduleName: safeModuleName,
-            automationId: auto.id,
-            automationName: safeAutomationName,
-            titleKey,
-            actorType: "module",
-            actorId: moduleId,
-            reasonKey,
-            severity: "error",
-          };
           return {
             userId: auto.userId,
             type: "auth_failure",
@@ -135,16 +146,24 @@ export async function handleAuthFailure(
             message: `Automation "${safeAutomationName}" paused: authentication failed for module "${safeModuleName}". Please check your credentials.`,
             moduleId,
             automationId: auto.id,
-            data: extendedData as object,
-            // Top-level 5W+H columns (ADR-030)
             titleKey,
             actorType: "module",
             actorId: moduleId,
             reasonKey,
             severity: "error",
+            extraData: {
+              moduleId,
+              moduleName: safeModuleName,
+              automationId: auto.id,
+              automationName: safeAutomationName,
+            },
           };
-        }),
-      });
+        },
+      );
+      const { rows } = await prepareEnforcedNotifications(drafts);
+      if (rows.length > 0) {
+        await prisma.notification.createMany({ data: rows });
+      }
     } catch (err) {
       console.warn("[Degradation] Failed to create auth_failure notifications:", err);
     }
@@ -220,6 +239,12 @@ export async function checkConsecutiveRunFailures(
     });
 
     // Create persistent notification for the automation owner.
+    // Preference gating (Sprint 2 H-A-04 / H-A-07): the draft is routed
+    // through `prepareEnforcedNotification()` which applies `shouldNotify()`
+    // BEFORE the Prisma write. If the user has in-app disabled / quiet
+    // hours / the per-type toggle off, the write is suppressed and the
+    // outer degradation flow (emitEvent, return paused=true) continues
+    // unchanged.
     //
     // i18n: `message` is the English fallback; authoritative title is carried
     // in the top-level `titleKey + titleParams` columns (ADR-030) and resolved
@@ -229,31 +254,25 @@ export async function checkConsecutiveRunFailures(
       const safeAutomationName = truncate(automation.name);
       const titleKey = "notifications.consecutiveFailures.title";
       const titleParams = { count: CONSECUTIVE_RUN_FAILURE_THRESHOLD };
-      const extendedData: NotificationDataExtended = {
+      const gated = await prepareEnforcedNotification({
+        userId: automation.userId,
+        type: "consecutive_failures",
+        message: `Automation "${safeAutomationName}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
         automationId,
-        automationName: safeAutomationName,
-        failureCount: CONSECUTIVE_RUN_FAILURE_THRESHOLD,
         titleKey,
         titleParams,
         actorType: "automation",
         actorId: automationId,
         severity: "warning",
-      };
-      await prisma.notification.create({
-        data: {
-          userId: automation.userId,
-          type: "consecutive_failures",
-          message: `Automation "${safeAutomationName}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
+        extraData: {
           automationId,
-          data: extendedData as object,
-          // Top-level 5W+H columns (ADR-030)
-          titleKey,
-          titleParams: titleParams as object,
-          actorType: "automation",
-          actorId: automationId,
-          severity: "warning",
+          automationName: safeAutomationName,
+          failureCount: CONSECUTIVE_RUN_FAILURE_THRESHOLD,
         },
       });
+      if (!gated.suppressed) {
+        await prisma.notification.create({ data: gated.row });
+      }
     } catch (err) {
       console.warn("[Degradation] Failed to create consecutive_failures notification:", err);
     }
@@ -324,6 +343,9 @@ export async function handleCircuitBreakerTrip(
     });
 
     // Create persistent notifications using createMany (no N+1).
+    // Preference gating (Sprint 2 H-A-04 / H-A-07): drafts are routed
+    // through `prepareEnforcedNotifications()` before the write — see
+    // `handleAuthFailure` for the full rationale.
     //
     // i18n: `message` is the English fallback; authoritative title is carried
     // in the top-level `titleKey + titleParams` columns (ADR-030) and resolved
@@ -333,21 +355,9 @@ export async function handleCircuitBreakerTrip(
       const safeModuleName = truncate(registered.manifest.name);
       const titleKey = "notifications.cbEscalation.title";
       const reasonKey = "notifications.reason.circuitBreaker";
-      await prisma.notification.createMany({
-        data: affectedAutomations.map((auto) => {
+      const drafts: EnforcedNotificationDraft[] = affectedAutomations.map(
+        (auto) => {
           const safeAutomationName = truncate(auto.name);
-          const extendedData: NotificationDataExtended = {
-            moduleId,
-            moduleName: safeModuleName,
-            automationId: auto.id,
-            automationName: safeAutomationName,
-            failureCount: newFailureCount,
-            titleKey,
-            actorType: "module",
-            actorId: moduleId,
-            reasonKey,
-            severity: "warning",
-          };
           return {
             userId: auto.userId,
             type: "cb_escalation",
@@ -355,16 +365,25 @@ export async function handleCircuitBreakerTrip(
             message: `Automation "${safeAutomationName}" paused: module "${safeModuleName}" circuit breaker tripped ${newFailureCount} times.`,
             moduleId,
             automationId: auto.id,
-            data: extendedData as object,
-            // Top-level 5W+H columns (ADR-030)
             titleKey,
             actorType: "module",
             actorId: moduleId,
             reasonKey,
             severity: "warning",
+            extraData: {
+              moduleId,
+              moduleName: safeModuleName,
+              automationId: auto.id,
+              automationName: safeAutomationName,
+              failureCount: newFailureCount,
+            },
           };
-        }),
-      });
+        },
+      );
+      const { rows } = await prepareEnforcedNotifications(drafts);
+      if (rows.length > 0) {
+        await prisma.notification.createMany({ data: rows });
+      }
     } catch (err) {
       console.warn("[Degradation] Failed to create cb_escalation notifications:", err);
     }
