@@ -162,11 +162,11 @@ function ErrorLogSettings() {
   const getSourceLabel = (source: ErrorEntry["source"]): string => {
     switch (source) {
       case "error-boundary":
-        return "Error Boundary";
+        return t("settings.errorSourceBoundary");
       case "unhandled-rejection":
-        return "Unhandled Rejection";
+        return t("settings.errorSourceUnhandled");
       case "console-error":
-        return "Console Error";
+        return t("settings.errorSourceConsole");
       default:
         return source;
     }
@@ -221,7 +221,10 @@ function ErrorLogSettings() {
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-medium text-muted-foreground">
             {errors.length > 0
-              ? `${errors.length} ${errors.length === 1 ? "error" : "errors"}`
+              ? (errors.length === 1
+                  ? t("settings.errorCountOne")
+                  : t("settings.errorCountMany")
+                ).replace("{count}", String(errors.length))
               : ""}
           </h4>
           {errors.length > 0 && (
@@ -284,7 +287,7 @@ function ErrorLogSettings() {
                             </span>
                             <Badge
                               variant={getSourceBadgeVariant(entry.source)}
-                              className="text-[10px] px-1.5 py-0"
+                              className="text-xs px-2 py-0.5"
                             >
                               {getSourceLabel(entry.source)}
                             </Badge>
@@ -302,7 +305,7 @@ function ErrorLogSettings() {
                         {entry.componentStack && (
                           <div className="mt-2">
                             <p className="text-xs font-medium text-muted-foreground mb-1">
-                              Component Stack:
+                              {t("settings.errorComponentStack")}
                             </p>
                             <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all font-mono max-h-32 overflow-auto">
                               {entry.componentStack}

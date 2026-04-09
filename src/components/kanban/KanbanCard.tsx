@@ -118,7 +118,12 @@ export const KanbanCard = React.memo(function KanbanCard({ job, statusValue, isD
 
             {/* Tags */}
             {tags.map((tag) => (
-              <Badge key={tag.id} variant="outline" className="text-[10px] px-1.5 py-0 h-5 max-w-[80px] truncate">
+              <Badge
+                key={tag.id}
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 h-5 max-w-[140px] truncate"
+                title={tag.label}
+              >
                 {tag.label}
               </Badge>
             ))}

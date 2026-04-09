@@ -339,12 +339,12 @@ function ModuleStatusRow({
           {moduleName}
         </span>
         {isKeyless && (
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 hidden sm:inline-flex">
+          <Badge variant="outline" className="text-xs px-2 py-0.5 shrink-0 hidden sm:inline-flex">
             {t("enrichment.noCredentialRequired")}
           </Badge>
         )}
         {isInactive && (
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
+          <Badge variant="secondary" className="text-xs px-2 py-0.5 shrink-0">
             {t("settings.moduleInactive")}
           </Badge>
         )}
