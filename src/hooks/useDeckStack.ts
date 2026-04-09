@@ -6,15 +6,60 @@ import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 export type DeckAction = "dismiss" | "promote" | "superlike" | "block" | "skip";
 export type ExitDirection = "left" | "right" | "up" | "down" | null;
 
+/**
+ * Actions whose effects can be reversed client-side today.
+ *
+ * Sprint 2 H-A-02 (Stream B / ADR-030 DeckActionRoutingInvariant follow-up):
+ * `useDeckStack` previously pushed EVERY successful action onto the undo
+ * stack, but `StagingContainer.handleDeckUndo` only reverses `dismiss`
+ * (via `restoreStagedVacancy`). Clicking Undo after a promote / superlike /
+ * block resurrected the card visually (`setCurrentIndex(entry.index)`) while
+ * the server-side aggregate stayed committed — the user then re-swiped the
+ * "ghost" card and got a silent rollback because the server precondition
+ * had already transitioned past "staged". This is the "undo theatre" bug.
+ *
+ * Per the skill's "fail loud at contract drift" guidance, the cleanest fix
+ * is to pin the honest contract at the shape level: only actions that the
+ * container can actually reverse belong on the stack. `dismiss` is the only
+ * such action today (its reversal is `restoreStagedVacancy`, which
+ * transitions `dismissed → staged`). Once `promote`, `superlike`, and
+ * `block` gain real server-side compensation (see M-A-09 / `undoStore`
+ * integration), this allowlist grows — the constant is the single source
+ * of truth, tests pin it, and nothing else in the hook encodes the rule.
+ *
+ * NOTE: this is a narrower contract than the generic `{ success: true }`
+ * return shape from `onAction`, which is intentional. The `success` flag
+ * reports server-side outcome; reversibility is a separate property owned
+ * by the client state machine. Conflating the two is what produced the bug.
+ */
+export const REVERSIBLE_DECK_ACTIONS = ["dismiss"] as const;
+export type ReversibleDeckAction = (typeof REVERSIBLE_DECK_ACTIONS)[number];
+
+function isReversibleAction(action: DeckAction): action is ReversibleDeckAction {
+  return (REVERSIBLE_DECK_ACTIONS as readonly DeckAction[]).includes(action);
+}
+
 interface UndoEntry {
   vacancy: StagedVacancyWithAutomation;
-  action: DeckAction;
+  /**
+   * Only reversible actions are recorded — see `REVERSIBLE_DECK_ACTIONS`
+   * and the H-A-02 comment above. Narrowing the type here is load-bearing:
+   * it prevents `undo()` from even attempting to reverse a `promote` or
+   * `block` because the entry simply never exists.
+   */
+  action: ReversibleDeckAction;
   index: number;
   /**
    * Set when the action was a successful super-like (or promote) and the
    * server action surfaced the newly created Job's id. Used by the
    * super-like celebration host to drop the matching celebration when the
    * user undoes the super-like.
+   *
+   * NOTE: superlike and promote are currently NOT in
+   * `REVERSIBLE_DECK_ACTIONS`, so this field is effectively dead code today.
+   * It is kept on the entry shape for forward-compatibility with M-A-09's
+   * `undoStore` integration, at which point promote/superlike become
+   * reversible and this id becomes load-bearing again.
    */
   createdJobId?: string;
 }
@@ -144,8 +189,14 @@ export function useDeckStack({
         const result = await actionPromise;
 
         if (result.success) {
-          // Skip has no server-side effect — don't add to undo stack
-          if (action !== "skip") {
+          // H-A-02: only record actions the container can actually reverse.
+          // See `REVERSIBLE_DECK_ACTIONS` for the honest allowlist. Skip is
+          // intentionally excluded because it has no server-side effect;
+          // promote/superlike/block are excluded because `handleDeckUndo`
+          // has no compensating action for them today. Recording them
+          // anyway produced the "undo theatre" symptom where the card
+          // visually returned but the server state stayed committed.
+          if (isReversibleAction(action)) {
             const entry: UndoEntry = {
               vacancy,
               action,
@@ -198,20 +249,27 @@ export function useDeckStack({
     setUndoStack(rest);
     setCurrentIndex(entry.index);
 
-    // Reverse stats
+    // Reverse stats. Today `entry.action` is narrowed to
+    // `ReversibleDeckAction` (only `"dismiss"`), so the other branches are
+    // dead code — but they are kept so the type expansion (M-A-09 / undoStore
+    // integration) just works when promote/superlike/block become reversible.
     setStats((prev) => ({
       ...prev,
-      promoted: prev.promoted - (entry.action === "promote" ? 1 : 0),
+      promoted:
+        prev.promoted - ((entry.action as DeckAction) === "promote" ? 1 : 0),
       dismissed: prev.dismissed - (entry.action === "dismiss" ? 1 : 0),
-      superLiked: prev.superLiked - (entry.action === "superlike" ? 1 : 0),
-      blocked: prev.blocked - (entry.action === "block" ? 1 : 0),
-      skipped: prev.skipped - (entry.action === "skip" ? 1 : 0),
+      superLiked:
+        prev.superLiked - ((entry.action as DeckAction) === "superlike" ? 1 : 0),
+      blocked:
+        prev.blocked - ((entry.action as DeckAction) === "block" ? 1 : 0),
+      skipped: prev.skipped - ((entry.action as DeckAction) === "skip" ? 1 : 0),
     }));
 
     // If we just undid a super-like with a known createdJobId, drop the
     // matching celebration so the user does not see a CTA pointing at a Job
-    // that no longer exists. The host's celebration queue is keyed by jobId.
-    if (entry.action === "superlike" && entry.createdJobId) {
+    // that no longer exists. Today `superlike` is NOT reversible so this
+    // branch is unreachable — kept for forward-compatibility with M-A-09.
+    if ((entry.action as DeckAction) === "superlike" && entry.createdJobId) {
       onSuperLikeUndone?.(entry.createdJobId);
     }
 

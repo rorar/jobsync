@@ -367,12 +367,59 @@ jest.mock("@/hooks/useStagingLayout", () => ({
   useStagingLayout: () => ({ size: "default", setSize: jest.fn() }),
   getStagingMaxWidthClass: () => "max-w-5xl",
 }));
-jest.mock("@/components/staging/PromotionDialog", () => ({
-  PromotionDialog: () => null,
-}));
-jest.mock("@/components/staging/BlockConfirmationDialog", () => ({
-  BlockConfirmationDialog: () => null,
-}));
+// The promotion dialog is stubbed to auto-trigger onSuccess when it opens
+// with a vacancy. This makes the auto-approve=OFF promote + super-like
+// paths through handleDeckAction deterministic without needing the real
+// dialog's form interaction.
+jest.mock("@/components/staging/PromotionDialog", () => {
+  const ReactMod = require("react");
+  return {
+    PromotionDialog: ({
+      open,
+      onSuccess,
+      vacancy,
+    }: {
+      open: boolean;
+      onOpenChange: (open: boolean) => void;
+      vacancy: { id: string; title: string } | null;
+      onSuccess: (result: { jobId: string; stagedVacancyId: string }) => void;
+    }) => {
+      ReactMod.useEffect(() => {
+        if (open && vacancy) {
+          onSuccess({ jobId: "job-from-dialog", stagedVacancyId: vacancy.id });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [open]);
+      return null;
+    },
+  };
+});
+
+// The block confirmation dialog is stubbed to auto-invoke onConfirm when
+// opened, so the block adapter's awaited promise resolves without needing
+// a real confirmation click.
+jest.mock("@/components/staging/BlockConfirmationDialog", () => {
+  const ReactMod = require("react");
+  return {
+    BlockConfirmationDialog: ({
+      open,
+      onConfirm,
+    }: {
+      open: boolean;
+      onOpenChange: (open: boolean) => void;
+      vacancy: { id: string; title: string } | null;
+      onConfirm: () => Promise<void> | void;
+    }) => {
+      ReactMod.useEffect(() => {
+        if (open) {
+          void onConfirm();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [open]);
+      return null;
+    },
+  };
+});
 jest.mock("@/components/staging/BulkActionBar", () => ({
   BulkActionBar: () => null,
 }));
@@ -663,6 +710,178 @@ describe("StagingContainer — deck-sheet routing invariant (CRIT-A-06)", () => 
     await flushDeckAnimation();
 
     // After flush, the state machine advances.
+    await waitFor(() => {
+      expect(screen.getByText("2 / 3")).toBeInTheDocument();
+    });
+  });
+
+  // -----------------------------------------------------------------
+  // Sprint 2 H-T-03 remainder — per-adapter coverage (promote/superLike/
+  // block). The Sprint 1.5 hotfix test above only covered DISMISS; the
+  // other three deck-mode sheet adapters had zero regression coverage.
+  // These tests follow the same pattern: open the sheet, click the
+  // matching footer button, flush the animation, assert the counter
+  // advanced.
+  //
+  // Auto-approve=ON is set per-test for promote/superlike so
+  // `handleDeckAction` takes the direct `promoteStagedVacancyToJob` path
+  // and the awaited Promise resolves synchronously (no dialog needed).
+  // For block, the BlockConfirmationDialog mock auto-invokes onConfirm
+  // on open, so the adapter's Promise resolves via the same mechanism.
+  // -----------------------------------------------------------------
+
+  it("H-T-03: sheet-promote in deck mode advances the deck state machine (auto-approve=ON)", async () => {
+    // Force the promote branch through the auto-approve path so
+    // `handleDeckAction` calls `promoteStagedVacancyToJob` directly and
+    // returns `{success, createdJobId}` from the awaited server mock.
+    window.localStorage.setItem("jobsync_deck_auto_approve", "true");
+
+    await act(async () => {
+      render(<StagingContainer />);
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText("1 / 3")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("deck-card-info"));
+    });
+
+    const footer = await screen.findByTestId("sheet-footer");
+    const sheetPromoteButton = within(footer).getByRole("button", {
+      name: /Promote$/i,
+    });
+
+    await act(async () => {
+      fireEvent.click(sheetPromoteButton);
+      await Promise.resolve();
+    });
+
+    // Server-side promote must have fired with v1's id.
+    expect(mockPromote).toHaveBeenCalledWith(
+      expect.objectContaining({ stagedVacancyId: "v1" }),
+    );
+
+    // Counter stays at 1/3 until the 300ms animation timer fires —
+    // this is the signature that performAction is driving the state
+    // machine (handleDeckAction alone would not set the timer).
+    expect(screen.getByText("1 / 3")).toBeInTheDocument();
+
+    await flushDeckAnimation();
+
+    // Deck counter MUST advance to 2 / 3.
+    await waitFor(() => {
+      expect(screen.getByText("2 / 3")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("deck-card-v2")).toBeInTheDocument();
+
+    // Clean up localStorage for other tests.
+    window.localStorage.setItem("jobsync_deck_auto_approve", "false");
+  });
+
+  it("H-T-03: sheet-superLike in deck mode advances the deck state machine (auto-approve=ON)", async () => {
+    // Same auto-approve trick — superlike goes through the same
+    // `handleDeckAction` promote branch in StagingContainer.
+    window.localStorage.setItem("jobsync_deck_auto_approve", "true");
+
+    await act(async () => {
+      render(<StagingContainer />);
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText("1 / 3")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("deck-card-info"));
+    });
+
+    const footer = await screen.findByTestId("sheet-footer");
+    const sheetSuperLikeButton = within(footer).getByRole("button", {
+      name: /Super-Like/i,
+    });
+
+    await act(async () => {
+      fireEvent.click(sheetSuperLikeButton);
+      await Promise.resolve();
+    });
+
+    // Server-side promote must have fired (super-like routes through
+    // the same handleDeckAction promote branch when auto-approve is on).
+    expect(mockPromote).toHaveBeenCalledWith(
+      expect.objectContaining({ stagedVacancyId: "v1" }),
+    );
+
+    await flushDeckAnimation();
+
+    // Deck counter MUST advance to 2 / 3.
+    await waitFor(() => {
+      expect(screen.getByText("2 / 3")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("deck-card-v2")).toBeInTheDocument();
+
+    window.localStorage.setItem("jobsync_deck_auto_approve", "false");
+  });
+
+  it("H-T-03: sheet-block in deck mode advances the deck state machine", async () => {
+    // The block path requires the BlockConfirmationDialog to resolve;
+    // the stub at the top of this file auto-invokes onConfirm on open so
+    // the adapter's Promise resolves through the whole chain:
+    //   sheet-click → detailsBlockAdapter → deckViewRef.current.block()
+    //     → useDeckStack.performAction("block")
+    //     → onAction = handleDeckAction("block")
+    //     → returns Promise stored in blockResolveRef
+    //     → setBlockConfirmOpen(true)
+    //     → BlockConfirmationDialog stub useEffect → onConfirm()
+    //     → handleBlockCompany → addBlacklistEntry (mocked success)
+    //     → blockResolveRef.current({success:true}) resolves the Promise
+    //     → performAction's setTimeout(300ms) flushes → currentIndex++
+    await act(async () => {
+      render(<StagingContainer />);
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText("1 / 3")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("deck-card-info"));
+    });
+
+    const footer = await screen.findByTestId("sheet-footer");
+    const sheetBlockButton = within(footer).getByRole("button", {
+      name: /Block/i,
+    });
+
+    // Click the block button — this synchronously kicks off the chain up
+    // to the setBlockConfirmOpen(true) state commit.
+    await act(async () => {
+      fireEvent.click(sheetBlockButton);
+    });
+
+    // The BlockConfirmationDialog stub's useEffect runs after the commit
+    // above, firing onConfirm() which awaits addBlacklistEntry (mocked).
+    // Flush a few microtasks so the auto-confirm promise chain resolves.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Now advance the performAction animation timer + flush once more so
+    // the awaited actionPromise inside the setTimeout callback runs.
+    await flushDeckAnimation();
+    await flushDeckAnimation();
+
+    // Deck counter MUST advance to 2 / 3 — this only happens if
+    // performAction drove the state machine end-to-end.
     await waitFor(() => {
       expect(screen.getByText("2 / 3")).toBeInTheDocument();
     });

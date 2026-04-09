@@ -2,10 +2,16 @@
  * useDeckStack hook tests
  *
  * Tests: navigation, action dispatching, exit direction, undo stack,
- * stats tracking, session completion, animation guard, rollback on failure.
+ * stats tracking, session completion, animation guard, rollback on failure,
+ * H-A-02 undo-reversibility invariant (only `REVERSIBLE_DECK_ACTIONS`
+ * populate the stack — see the hook's top-of-file comment).
  */
 import { renderHook, act } from "@testing-library/react";
-import { useDeckStack } from "@/hooks/useDeckStack";
+import {
+  useDeckStack,
+  REVERSIBLE_DECK_ACTIONS,
+  type DeckAction,
+} from "@/hooks/useDeckStack";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 import { mockStagedVacancy } from "@/lib/data/testFixtures";
 
@@ -343,7 +349,72 @@ describe("useDeckStack", () => {
     expect(result.current.canUndo).toBe(false);
   });
 
-  it("undo reverses blocked stat", async () => {
+  // ---------------------------------------------------------------------
+  // H-A-02 regression guards — undo allowlist + "undo theatre" prevention
+  // ---------------------------------------------------------------------
+
+  it("H-A-02: REVERSIBLE_DECK_ACTIONS exports exactly the actions the container can reverse", () => {
+    // Pin the honest allowlist at the constant level. The container today
+    // only implements `restoreStagedVacancy` (the reversal for `dismiss`);
+    // promote/superlike/block have no server-side compensation yet.
+    //
+    // If someone adds a new reversible action (e.g. promote via undoStore),
+    // they MUST update this assertion AND implement the reversal in
+    // `StagingContainer.handleDeckUndo`. A mismatch here means the hook is
+    // quietly regressing to undo-theatre territory.
+    expect([...REVERSIBLE_DECK_ACTIONS]).toEqual(["dismiss"]);
+  });
+
+  it("H-A-02: successful promote does NOT create an undo entry (not in allowlist)", async () => {
+    const { result } = renderHook(() =>
+      useDeckStack({ vacancies, onAction: mockOnAction, onUndo: mockOnUndo }),
+    );
+
+    await act(async () => {
+      result.current.promote();
+      await advanceTimersAndFlush(300);
+    });
+
+    // Stats advance, index advances, but the undo stack STAYS EMPTY —
+    // because promote has no compensating action today, recording it would
+    // resurrect a "ghost card" on undo (the H-A-02 bug).
+    expect(result.current.stats.promoted).toBe(1);
+    expect(result.current.currentIndex).toBe(1);
+    expect(result.current.canUndo).toBe(false);
+
+    // Calling undo with an empty stack must be a no-op.
+    await act(async () => {
+      result.current.undo();
+    });
+    expect(result.current.currentIndex).toBe(1); // did not revert
+    expect(result.current.stats.promoted).toBe(1); // did not revert
+    expect(mockOnUndo).not.toHaveBeenCalled();
+  });
+
+  it("H-A-02: successful superlike does NOT create an undo entry (not in allowlist)", async () => {
+    const superlikeOnAction = jest
+      .fn()
+      .mockResolvedValue({ success: true, createdJobId: "job-42" });
+    const { result } = renderHook(() =>
+      useDeckStack({
+        vacancies,
+        onAction: superlikeOnAction,
+        onUndo: mockOnUndo,
+      }),
+    );
+
+    await act(async () => {
+      result.current.superLike();
+      await advanceTimersAndFlush(300);
+    });
+
+    expect(result.current.stats.superLiked).toBe(1);
+    expect(result.current.currentIndex).toBe(1);
+    // Even with a populated createdJobId, superlike is NOT reversible yet.
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it("H-A-02: successful block does NOT create an undo entry (not in allowlist)", async () => {
     const { result } = renderHook(() =>
       useDeckStack({ vacancies, onAction: mockOnAction, onUndo: mockOnUndo }),
     );
@@ -354,18 +425,94 @@ describe("useDeckStack", () => {
       await advanceTimersAndFlush(300);
     });
 
+    // Stats and index still advance (the server action succeeded), but
+    // block is NOT in REVERSIBLE_DECK_ACTIONS so there's no undo entry.
+    // This prevents the "undo theatre" where the card visually returns
+    // but the blacklist entry is already committed server-side.
     expect(result.current.stats.blocked).toBe(1);
+    expect(result.current.currentIndex).toBe(1);
+    expect(result.current.canUndo).toBe(false);
+
+    // Undo is a no-op on empty stack.
+    await act(async () => {
+      result.current.undo();
+    });
+    expect(result.current.stats.blocked).toBe(1); // stat did NOT revert
+    expect(result.current.currentIndex).toBe(1); // index did NOT revert
+    expect(mockOnUndo).not.toHaveBeenCalled();
+  });
+
+  it("H-A-02: dismiss IS reversible — undo restores state and calls onUndo", async () => {
+    // Sanity check that the narrower allowlist still lets the one
+    // currently-reversible action flow through end-to-end.
+    const { result } = renderHook(() =>
+      useDeckStack({ vacancies, onAction: mockOnAction, onUndo: mockOnUndo }),
+    );
+
+    await act(async () => {
+      result.current.dismiss();
+      await advanceTimersAndFlush(300);
+    });
+
+    expect(result.current.stats.dismissed).toBe(1);
     expect(result.current.currentIndex).toBe(1);
     expect(result.current.canUndo).toBe(true);
 
-    // Undo the block
     await act(async () => {
       result.current.undo();
     });
 
-    expect(result.current.stats.blocked).toBe(0);
+    expect(result.current.stats.dismissed).toBe(0);
     expect(result.current.currentIndex).toBe(0);
-    expect(result.current.currentVacancy?.id).toBe("v1");
-    expect(mockOnUndo).toHaveBeenCalled();
+    expect(mockOnUndo).toHaveBeenCalledTimes(1);
+    // The entry passed to onUndo must carry the narrowed action type.
+    const entry = mockOnUndo.mock.calls[0][0];
+    expect(entry.action).toBe("dismiss" satisfies DeckAction);
+  });
+
+  it("H-A-02: mixed sequence — dismiss, promote, dismiss yields undo stack of two dismisses", async () => {
+    // Guards against a regression where the push-site filter leaks: if the
+    // allowlist check were accidentally bypassed, the stack would contain
+    // `["dismiss", "promote", "dismiss"]` (in reverse order). The honest
+    // shape is ONLY the two dismisses.
+    const { result } = renderHook(() =>
+      useDeckStack({ vacancies, onAction: mockOnAction, onUndo: mockOnUndo }),
+    );
+
+    await act(async () => {
+      result.current.dismiss();
+      await advanceTimersAndFlush(300);
+    });
+    await act(async () => {
+      result.current.promote();
+      await advanceTimersAndFlush(300);
+    });
+    await act(async () => {
+      result.current.dismiss();
+      await advanceTimersAndFlush(300);
+    });
+
+    // Undo twice — both entries must be dismisses, not the promote.
+    await act(async () => {
+      result.current.undo();
+    });
+    expect(mockOnUndo).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ action: "dismiss" }),
+    );
+
+    expect(result.current.canUndo).toBe(true);
+
+    await act(async () => {
+      result.current.undo();
+    });
+    expect(mockOnUndo).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ action: "dismiss" }),
+    );
+
+    // Stack is now empty; the promote was never recorded.
+    expect(result.current.canUndo).toBe(false);
+    expect(mockOnUndo).toHaveBeenCalledTimes(2);
   });
 });

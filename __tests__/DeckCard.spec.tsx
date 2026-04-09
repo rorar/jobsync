@@ -159,4 +159,32 @@ describe("DeckCard", () => {
 
     expect(container.firstChild).toHaveClass("animate-deck-exit-down");
   });
+
+  // ---------------------------------------------------------------------
+  // H-T-01 regression guard — CRIT-Y1 (WCAG 2.5.5 AAA / 2.5.8 AA)
+  // The deck Info button was grown to 44x44 in Sprint 1. No test pinned
+  // the dimensions, so a future className refactor could silently regress
+  // the touch target back to 40x40. This test pins `h-11 w-11` on the
+  // focusable button element — the visible pill inside stays 28x28 by
+  // design (see DeckCard.tsx lines 89-99 for the group-utility rationale).
+  // ---------------------------------------------------------------------
+  it("H-T-01: Info button pointer target is h-11 w-11 (CRIT-Y1 regression guard)", () => {
+    const vacancy = makeVacancy();
+    const onInfoClick = jest.fn();
+    render(<DeckCard vacancy={vacancy} onInfoClick={onInfoClick} />);
+
+    // The focusable element is the native <button> — it owns the 44x44
+    // hit area. Match by the aria-label the component sets.
+    const infoButton = screen.getByRole("button", { name: "deck.detailsTooltip" });
+    expect(infoButton).toHaveClass("h-11");
+    expect(infoButton).toHaveClass("w-11");
+  });
+
+  it("H-T-01: Info button is NOT rendered when onInfoClick is absent", () => {
+    const vacancy = makeVacancy();
+    render(<DeckCard vacancy={vacancy} />);
+    expect(
+      screen.queryByRole("button", { name: "deck.detailsTooltip" }),
+    ).not.toBeInTheDocument();
+  });
 });

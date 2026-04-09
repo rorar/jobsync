@@ -79,21 +79,37 @@ export function StagedVacancyCard({
 }: StagedVacancyCardProps) {
   const { t, locale } = useTranslations();
 
-  const handleBodyClick = onOpenDetails
-    ? () => onOpenDetails(vacancy)
-    : undefined;
-
+  // Sprint 2 H-T-06: the previous `handleBodyClick` + `role="presentation"`
+  // wrapper made the card body a mouse-only entry point — a keyboard user
+  // could not open the details sheet from the body itself (only via the
+  // Details button in the footer, which is fine, but axe flagged the body
+  // wrapper as `click-events-have-key-events`). Two refactor options were
+  // considered:
+  //
+  //   (a) Convert the wrapper to `role="button"` with `tabIndex={0}` and
+  //       Enter/Space handling. Rejected: the wrapper contains interactive
+  //       children (checkbox, Details/Promote/Dismiss/.../Block buttons),
+  //       which makes it a nested interactive element — invalid ARIA,
+  //       violates WCAG 4.1.2 Name/Role/Value, and causes screen readers
+  //       to announce the whole card as "button: Senior Software Engineer
+  //       ... Promote button Dismiss button" in a single blob.
+  //
+  //   (b) Keep the wrapper as `role="presentation"` and add a native
+  //       `<button>` overlay. Same nested-interactive problem; the overlay
+  //       would swallow clicks intended for the footer buttons.
+  //
+  //   (c) Remove the body click-to-open entirely and rely on the Details
+  //       button as the sole explicit entry point (already present in the
+  //       footer with a per-vacancy aria-label). Picked: preserves the
+  //       visual design, matches keyboard users' expectations, and avoids
+  //       ANY nested-interactive trap.
+  //
+  // The hover/cursor feedback is moved to the Details button itself —
+  // the card still renders as a visual unit, just without a click handler
+  // on the body wrapper. This is the skill's "simplicity over cleverness"
+  // principle: one obvious entry point beats two overlapping ones.
   return (
     <Card className={`mb-3 ${selected ? "ring-2 ring-primary/50" : ""}`}>
-      <div
-        role="presentation"
-        onClick={handleBodyClick}
-        className={
-          onOpenDetails
-            ? "cursor-pointer hover:bg-muted/40 transition-colors duration-150"
-            : undefined
-        }
-      >
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-2">
@@ -186,145 +202,145 @@ export function StagedVacancyCard({
           </div>
         )}
       </CardContent>
-      </div>
       <CardFooter className="pt-2 flex items-center gap-2 flex-wrap">
-        {onOpenDetails && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 gap-1 text-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenDetails(vacancy);
-            }}
-            aria-label={`${t("staging.details")}: ${vacancy.title}`}
-          >
-            <Info className="h-3.5 w-3.5" />
-            {t("staging.details")}
-          </Button>
-        )}
-        {activeTab === "new" && (
-          <>
-            <Button
-              size="sm"
-              variant="default"
-              className="h-7 gap-1 text-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-                onPromote(vacancy);
-              }}
-            >
-              <ArrowUpCircle className="h-3.5 w-3.5" />
-              {t("staging.promote")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1 text-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDismiss(vacancy.id);
-              }}
-            >
-              <XCircle className="h-3.5 w-3.5" />
-              {t("staging.dismiss")}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 gap-1 text-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-                onArchive(vacancy.id);
-              }}
-            >
-              <Archive className="h-3.5 w-3.5" />
-              {t("staging.archive")}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 gap-1 text-xs text-destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                onTrash(vacancy.id);
-              }}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              {t("staging.trash")}
-            </Button>
-            {onBlockCompany && vacancy.employerName && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 gap-1 text-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onBlockCompany(vacancy.employerName!);
-                }}
-              >
-                <Ban className="h-3.5 w-3.5" />
-                {t("blacklist.blockCompany")}
-              </Button>
-            )}
-          </>
-        )}
-        {activeTab === "dismissed" && (
-          <>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1 text-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRestore(vacancy.id);
-              }}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              {t("staging.restore")}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 gap-1 text-xs text-destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                onTrash(vacancy.id);
-              }}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              {t("staging.trash")}
-            </Button>
-          </>
-        )}
-        {activeTab === "archive" && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 gap-1 text-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRestore(vacancy.id);
-            }}
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            {t("staging.restore")}
-          </Button>
-        )}
-        {activeTab === "trash" && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 gap-1 text-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRestoreFromTrash(vacancy.id);
-            }}
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            {t("staging.restore")}
-          </Button>
-        )}
+        {/*
+          Sprint 2 H-NEW-04: every footer button now carries a per-vacancy
+          accessible name built from `vacancyContext`. Previously only the
+          Details button threaded the vacancy title through `aria-label`;
+          Promote / Dismiss / Archive / Trash / Block / Restore rendered
+          only their generic verb text, producing a screen-reader stream of
+          "Promote button; Dismiss button; Archive button; ..." across 20
+          cards — WCAG 2.4.6 / 4.1.2 violation. The context string includes
+          the vacancy title AND the employer name when present, so users
+          can disambiguate between "Promote: Senior Engineer at TechCorp"
+          and "Promote: Senior Engineer at Another Co". Visible button
+          text is unchanged; the override only affects accessible names.
+        */}
+        {(() => {
+          const vacancyContext = vacancy.employerName
+            ? `${vacancy.title} — ${vacancy.employerName}`
+            : vacancy.title;
+          return (
+            <>
+              {onOpenDetails && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => onOpenDetails(vacancy)}
+                  aria-label={`${t("staging.details")}: ${vacancyContext}`}
+                >
+                  <Info className="h-3.5 w-3.5" />
+                  {t("staging.details")}
+                </Button>
+              )}
+              {activeTab === "new" && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="h-7 gap-1 text-xs"
+                    onClick={() => onPromote(vacancy)}
+                    aria-label={`${t("staging.promote")}: ${vacancyContext}`}
+                  >
+                    <ArrowUpCircle className="h-3.5 w-3.5" />
+                    {t("staging.promote")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1 text-xs"
+                    onClick={() => onDismiss(vacancy.id)}
+                    aria-label={`${t("staging.dismiss")}: ${vacancyContext}`}
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                    {t("staging.dismiss")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 gap-1 text-xs"
+                    onClick={() => onArchive(vacancy.id)}
+                    aria-label={`${t("staging.archive")}: ${vacancyContext}`}
+                  >
+                    <Archive className="h-3.5 w-3.5" />
+                    {t("staging.archive")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 gap-1 text-xs text-destructive"
+                    onClick={() => onTrash(vacancy.id)}
+                    aria-label={`${t("staging.trash")}: ${vacancyContext}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {t("staging.trash")}
+                  </Button>
+                  {onBlockCompany && vacancy.employerName && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 gap-1 text-xs"
+                      onClick={() => onBlockCompany(vacancy.employerName!)}
+                      aria-label={`${t("blacklist.blockCompany")}: ${vacancy.employerName}`}
+                    >
+                      <Ban className="h-3.5 w-3.5" />
+                      {t("blacklist.blockCompany")}
+                    </Button>
+                  )}
+                </>
+              )}
+              {activeTab === "dismissed" && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1 text-xs"
+                    onClick={() => onRestore(vacancy.id)}
+                    aria-label={`${t("staging.restore")}: ${vacancyContext}`}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    {t("staging.restore")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 gap-1 text-xs text-destructive"
+                    onClick={() => onTrash(vacancy.id)}
+                    aria-label={`${t("staging.trash")}: ${vacancyContext}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {t("staging.trash")}
+                  </Button>
+                </>
+              )}
+              {activeTab === "archive" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => onRestore(vacancy.id)}
+                  aria-label={`${t("staging.restore")}: ${vacancyContext}`}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  {t("staging.restore")}
+                </Button>
+              )}
+              {activeTab === "trash" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => onRestoreFromTrash(vacancy.id)}
+                  aria-label={`${t("staging.restore")}: ${vacancyContext}`}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  {t("staging.restore")}
+                </Button>
+              )}
+            </>
+          );
+        })()}
       </CardFooter>
     </Card>
   );

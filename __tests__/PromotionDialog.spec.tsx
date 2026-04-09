@@ -289,34 +289,166 @@ describe("PromotionDialog — CRIT-A2 jobId threading", () => {
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 
-  it("warns and skips onSuccess when the server action returns success without data", async () => {
-    // Defensive branch: the server action declared
-    // `ActionResult<{jobId,...}>` but returned success with no `data`. The
-    // dialog must surface a dev warning and must NOT call `onSuccess` with a
-    // bogus/undefined jobId — downstream celebration code would crash.
+  // -------------------------------------------------------------------
+  // Sprint 2 H-A-03 regression guards
+  // Previously the "success && !data" branch fired a SUCCESS toast AND
+  // closed the dialog without calling onSuccess — producing a
+  // contradictory UX where the user saw "Promoted!" while the deck
+  // rolled the card back. The fix flips this to "fail loud at contract
+  // drift": destructive toast, dialog stays OPEN, no onSuccess, an
+  // error-level log (so it's visible in telemetry). These tests pin
+  // every piece of the new behaviour so a future refactor cannot
+  // silently re-introduce the contradiction.
+  // -------------------------------------------------------------------
+  it("H-A-03: fires destructive toast when the server action returns success without data", async () => {
     promoteMock.mockResolvedValue({
       success: true,
       // Intentionally omit `data` to simulate contract drift.
     });
 
-    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
-
-    const { onSuccess, onOpenChange } = renderDialog();
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const { onSuccess } = renderDialog();
 
     await act(async () => {
       clickPromote();
     });
 
     await waitFor(() => {
-      expect(onOpenChange).toHaveBeenCalledWith(false);
+      expect(toastMock).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: "destructive" }),
+      );
     });
 
+    // Must NOT have fired a success toast.
+    expect(toastMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ variant: "success" }),
+    );
+    // Must NOT have called onSuccess — downstream celebration would
+    // crash on undefined.jobId.
     expect(onSuccess).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("returned success without data"),
-      expect.any(Object),
+
+    errorSpy.mockRestore();
+  });
+
+  it("H-A-03: does NOT close the dialog when the server action returns success without data", async () => {
+    promoteMock.mockResolvedValue({
+      success: true,
+      // Intentionally omit `data` to simulate contract drift.
+    });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const { onOpenChange } = renderDialog();
+
+    await act(async () => {
+      clickPromote();
+    });
+
+    // Give the async handler time to run.
+    await waitFor(() => {
+      expect(toastMock).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: "destructive" }),
+      );
+    });
+
+    // The dialog stays OPEN so the user can press Cancel explicitly.
+    // `onOpenChange(false)` must NOT have fired in this flow.
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+
+    errorSpy.mockRestore();
+  });
+
+  it("H-A-03: logs an error (not just a warn) on contract drift for telemetry visibility", async () => {
+    promoteMock.mockResolvedValue({
+      success: true,
+      // Intentionally omit `data`.
+    });
+
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    renderDialog();
+
+    await act(async () => {
+      clickPromote();
+    });
+
+    await waitFor(() => {
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Contract drift"),
+        expect.any(Object),
+      );
+    });
+
+    errorSpy.mockRestore();
+  });
+
+  it("H-A-03: end-to-end — contract drift resolves promotionResolveRef to { success: false } via cancel", async () => {
+    // Full chain simulation: the user presses Cancel after the
+    // destructive toast, which triggers onOpenChange(false), which
+    // fires the StagingContainer microtask cleanup that resolves
+    // promotionResolveRef with { success: false }. The deck card rolls
+    // back — an HONEST failure signal, not a contradictory success.
+    promoteMock.mockResolvedValue({
+      success: true,
+      // Intentionally omit `data`.
+    });
+
+    const promotionResolveRef: {
+      current: ((result: { success: boolean; createdJobId?: string }) => void) | null;
+    } = { current: null };
+
+    const resolvedWith = new Promise<{
+      success: boolean;
+      createdJobId?: string;
+    }>((resolve) => {
+      promotionResolveRef.current = resolve;
+    });
+
+    // Verbatim StagingContainer wiring.
+    const onOpenChange = (open: boolean) => {
+      if (!open) {
+        queueMicrotask(() => {
+          if (promotionResolveRef.current) {
+            promotionResolveRef.current({ success: false });
+            promotionResolveRef.current = null;
+          }
+        });
+      }
+    };
+    const onSuccess = jest.fn();
+
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    render(
+      <PromotionDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        vacancy={vacancy}
+        onSuccess={onSuccess}
+      />,
     );
 
-    warnSpy.mockRestore();
+    await act(async () => {
+      clickPromote();
+    });
+
+    // After the destructive toast fires, simulate the user clicking Cancel.
+    await waitFor(() => {
+      expect(toastMock).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: "destructive" }),
+      );
+    });
+    expect(onSuccess).not.toHaveBeenCalled();
+
+    // Simulate Cancel click — the dialog's footer "Cancel" button.
+    const cancelBtn = screen.getByRole("button", { name: "common.cancel" });
+    await act(async () => {
+      fireEvent.click(cancelBtn);
+    });
+
+    const resolved = await resolvedWith;
+    // The deck ref MUST see a failure signal — NOT { success: true }.
+    expect(resolved).toEqual({ success: false });
+    // And the success handler was never called.
+    expect(onSuccess).not.toHaveBeenCalled();
+
+    errorSpy.mockRestore();
   });
 });

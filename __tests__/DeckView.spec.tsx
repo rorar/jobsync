@@ -6,7 +6,7 @@
  */
 import "@testing-library/jest-dom";
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { DeckView } from "@/components/staging/DeckView";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 import { mockStagedVacancy } from "@/lib/data/testFixtures";
@@ -281,5 +281,96 @@ describe("DeckView", () => {
     // N key for Skip
     expect(screen.getByText("N")).toBeInTheDocument();
     expect(screen.getByText("Skip")).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------
+  // H-T-01 regression guard — CRIT-Y1 (WCAG 2.5.5 AAA / 2.5.8 AA)
+  // Sprint 1 grew the Block / Skip / Undo action-rail buttons from 40x40
+  // to 44x44 (`h-11 w-11`) to satisfy WCAG 2.5.5 AAA. No test pinned the
+  // dimensions, so a future refactor could silently regress the hit area.
+  // We assert the class on each button by scoping to its aria-label.
+  //
+  // Note: the Dismiss / Super-Like / Promote buttons intentionally remain
+  // LARGER than 44x44 (h-14/h-12/h-16) as the visually prominent swipe
+  // targets — they have always been compliant. Only Block, Skip, and
+  // Undo were the previously-sub-44 buttons that CRIT-Y1 fixed.
+  // ---------------------------------------------------------------------
+  it("H-T-01: Block button pointer target is h-11 w-11 (CRIT-Y1)", () => {
+    render(
+      <DeckView
+        vacancies={testVacancies}
+        onAction={mockOnAction}
+        onBackToList={mockOnBackToList}
+      />,
+    );
+    const blockBtn = screen.getByLabelText("Block this company");
+    expect(blockBtn).toHaveClass("h-11");
+    expect(blockBtn).toHaveClass("w-11");
+  });
+
+  it("H-T-01: Skip button pointer target is h-11 w-11 (CRIT-Y1)", () => {
+    render(
+      <DeckView
+        vacancies={testVacancies}
+        onAction={mockOnAction}
+        onBackToList={mockOnBackToList}
+      />,
+    );
+    const skipBtn = screen.getByLabelText("Skip for now");
+    expect(skipBtn).toHaveClass("h-11");
+    expect(skipBtn).toHaveClass("w-11");
+  });
+
+  it("H-T-01: Undo button pointer target is h-11 w-11 once visible (CRIT-Y1)", async () => {
+    // Undo only renders after a successful reversible action
+    // (H-A-02: dismiss is the only reversible action today). We drive a
+    // dismiss click, flush the 300ms animation window deterministically
+    // via fake timers, flush the resolved-promise microtask, then check
+    // the Undo button's pointer-target classes. This avoids a real-time
+    // sleep + the flakiness that Stream B flagged in the original spec.
+    jest.useFakeTimers();
+    try {
+      const onAction = jest
+        .fn()
+        .mockImplementation(() => Promise.resolve({ success: true }));
+      render(
+        <DeckView
+          vacancies={testVacancies}
+          onAction={onAction}
+          onBackToList={mockOnBackToList}
+        />,
+      );
+
+      // At mount, Undo is not rendered.
+      expect(
+        screen.queryByLabelText("Undo last action"),
+      ).not.toBeInTheDocument();
+
+      // Click dismiss; animation kicks in immediately and a setTimeout(300)
+      // is queued inside useDeckStack.performAction.
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText("Dismiss this vacancy"));
+      });
+
+      // Advance past the 300ms animation window. The setTimeout callback
+      // awaits the already-resolved actionPromise and pushes to undoStack.
+      // Wrap in act(async) so React flushes state updates AND the awaited
+      // microtask between tick advancement and assertion.
+      await act(async () => {
+        jest.advanceTimersByTime(400);
+        // Flush any pending microtasks (the awaited onAction promise
+        // inside setTimeout's callback) so the setState for undoStack
+        // can land before we assert.
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(onAction).toHaveBeenCalledTimes(1);
+      const undoBtn = screen.getByLabelText("Undo last action");
+      expect(undoBtn).toHaveClass("h-11");
+      expect(undoBtn).toHaveClass("w-11");
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

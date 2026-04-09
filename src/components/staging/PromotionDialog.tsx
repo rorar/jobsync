@@ -101,19 +101,45 @@ export function PromotionDialog({
           stagedVacancyId: result.data.stagedVacancyId,
         });
       } else if (result.success && !result.data) {
-        // Defensive: the server action declared `ActionResult<{jobId,...}>`
-        // but returned success without `data`. Surface a dev-only warning so
-        // silent contract drift is visible in the console; still treat the
-        // flow as successful for the user.
-        console.warn(
-          "[PromotionDialog] promoteStagedVacancyToJob returned success without data — cannot forward jobId",
+        // H-A-03 (Sprint 2): contract drift — the server action declared
+        // `ActionResult<{ jobId, stagedVacancyId }>` but returned success
+        // WITHOUT `data`. The previous defensive branch fired a SUCCESS
+        // toast AND closed the dialog without calling `onSuccess`, which
+        // resolved `StagingContainer.promotionResolveRef` to
+        // `{ success: false }` via the `onOpenChange` microtask cleanup.
+        // Net effect: the user saw a green toast ("Promoted!") while the
+        // deck visually rolled the card back. Contradictory UX.
+        //
+        // Per the skill's "fail loud at contract drift" guidance, we now:
+        //   1. surface a destructive toast (honest signal to the user),
+        //   2. log a structured error so the drift is visible in telemetry,
+        //   3. leave the dialog OPEN so the user can retry or cancel
+        //      explicitly (cancel => onOpenChange(false) => microtask
+        //      resolves the deck ref to `{ success: false }` as expected),
+        //   4. NOT call `onSuccess` — downstream celebration code would
+        //      crash on `undefined.jobId`, and the deck state machine would
+        //      advance to a stale index.
+        //
+        // Rejected alternatives:
+        //   - Calling `onSuccess` with a placeholder `jobId: ""`: makes the
+        //     celebration host dereference a non-existent Job, which both
+        //     404s on click and silently corrupts the celebration queue's
+        //     `removeByJobId` lookup. Worse than the current bug.
+        //   - Refining `ActionResult` to enforce
+        //     `{ success: true, data: T }` at the type level: touches ~80
+        //     call sites across the codebase, out of scope for Stream B.
+        console.error(
+          "[PromotionDialog] Contract drift: promoteStagedVacancyToJob returned success without data — aborting client flow",
           { stagedVacancyId: vacancy.id, result },
         );
         toast({
-          variant: "success",
-          description: t("staging.promoted"),
+          variant: "destructive",
+          title: t("staging.error"),
+          description: t("staging.promotionFailed"),
         });
-        onOpenChange(false);
+        // Deliberately DO NOT close the dialog and DO NOT call onSuccess.
+        // The user can press Cancel to dismiss (which resolves the deck ref
+        // to `{ success: false }` and rolls the card back — honest signal).
       } else {
         toast({
           variant: "destructive",
