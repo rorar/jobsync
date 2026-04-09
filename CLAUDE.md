@@ -608,7 +608,7 @@ Formal specifications in `specs/*.allium` capture domain behaviour:
 - **Refactoring** → existing tests must pass unchanged (or be updated if return shapes change)
 - **New Connector Module** → unit tests for translator, integration test for search/getDetails
 - **i18n changes** → dictionary consistency validation
-- Run `bash scripts/test.sh --no-coverage` before every commit — all tests must pass
+- Run `bash scripts/test.sh` before every commit — all tests must pass (coverage collection is OFF by default for speed; pass `--coverage` to opt in)
 - Run `source scripts/env.sh && bun run build` — zero type errors
 
 ### Test Infrastructure

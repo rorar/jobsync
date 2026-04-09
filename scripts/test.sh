@@ -25,6 +25,7 @@ echo "[test.sh] Using Node.js $(node --version)"
 
 ARGS=()
 HAS_WORKERS_FLAG=false
+HAS_COVERAGE_FLAG=false
 for arg in "$@"; do
   case "$arg" in
     --workers=*)
@@ -42,6 +43,13 @@ for arg in "$@"; do
       ARGS+=("$arg")
       HAS_WORKERS_FLAG=true
       ;;
+    --coverage)
+      # Opt-IN flag: pass --coverage to Jest, which overrides collectCoverage:false
+      # in jest.config.ts for this run only. Without this flag, coverage is skipped
+      # (the fast default). See H-P-03 and CLAUDE.md § Testing Requirements.
+      ARGS+=("$arg")
+      HAS_COVERAGE_FLAG=true
+      ;;
     *)
       ARGS+=("$arg")
       ;;
@@ -51,6 +59,10 @@ done
 if [[ "$HAS_WORKERS_FLAG" == "false" ]]; then
   echo "[test.sh] No worker flag supplied; defaulting to --maxWorkers=1 (VM resource guard)"
   ARGS=("--maxWorkers=1" "${ARGS[@]}")
+fi
+
+if [[ "$HAS_COVERAGE_FLAG" == "false" ]]; then
+  echo "[test.sh] No --coverage flag supplied; running without coverage (fast default, see H-P-03)"
 fi
 
 exec npx jest "${ARGS[@]}"

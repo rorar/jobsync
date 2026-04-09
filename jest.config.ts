@@ -34,7 +34,11 @@ const config: Config = {
   clearMocks: true,
 
   // Indicates whether the coverage information should be collected while executing the test
-  collectCoverage: true,
+  // DEFAULT: false — v8 coverage is 3-5× slower than uninstrumented runs on
+  // the 8GB NixOS VM. Pass `--coverage` to scripts/test.sh (or set the Jest
+  // `--coverage` flag directly) to opt IN. CI calls `bash scripts/test.sh
+  // --coverage` explicitly. See H-P-03 and CLAUDE.md § Testing Requirements.
+  collectCoverage: false,
 
   // An array of glob patterns indicating a set of files for which coverage information should be collected
   // collectCoverageFrom: undefined,
