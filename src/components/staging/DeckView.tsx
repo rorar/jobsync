@@ -16,13 +16,35 @@ import { useTranslations } from "@/i18n";
 import { useDeckStack } from "@/hooks/useDeckStack";
 import type { DeckAction } from "@/hooks/useDeckStack";
 import { DeckCard } from "./DeckCard";
+import { SuperLikeCelebrationHost } from "./SuperLikeCelebrationHost";
+import { useSuperLikeCelebrations } from "@/hooks/useSuperLikeCelebrations";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 
 interface DeckViewProps {
   vacancies: StagedVacancyWithAutomation[];
-  onAction: (vacancy: StagedVacancyWithAutomation, action: DeckAction) => Promise<{ success: boolean }>;
+  /**
+   * Server-action dispatcher. Must surface `createdJobId` for successful
+   * super-likes so the celebration fly-in can offer "Open job".
+   */
+  onAction: (
+    vacancy: StagedVacancyWithAutomation,
+    action: DeckAction,
+  ) => Promise<{ success: boolean; createdJobId?: string }>;
   onUndo?: (entry: { vacancy: StagedVacancyWithAutomation; action: DeckAction; index: number }) => Promise<void>;
   onBackToList: () => void;
+  /**
+   * Called when the user requests the full-detail sheet for the current card
+   * (via the in-card Info button or the `i` keyboard shortcut). The parent is
+   * responsible for rendering the sheet — `DeckView` only reports intent and
+   * tracks open state internally so it can gate drag handlers and keyboard
+   * shortcuts while the sheet is open.
+   */
+  onOpenDetails?: (vacancy: StagedVacancyWithAutomation) => void;
+  /**
+   * Whether the detail sheet is currently open. When `true`, pointer drag and
+   * deck-wide keyboard shortcuts are disabled so the underlying card stays put.
+   */
+  isDetailsOpen?: boolean;
 }
 
 // Swipe thresholds
@@ -45,11 +67,21 @@ function getAutoApproveDefault(): boolean {
   }
 }
 
-export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckViewProps) {
+export function DeckView({
+  vacancies,
+  onAction,
+  onUndo,
+  onBackToList,
+  onOpenDetails,
+  isDetailsOpen = false,
+}: DeckViewProps) {
   const { t } = useTranslations();
   const [showSwipeHint, setShowSwipeHint] = useState(true);
   const [autoApprove, setAutoApprove] = useState(getAutoApproveDefault);
   const [lastAction, setLastAction] = useState<string>("");
+  // Super-like celebration queue (Stream D / task 3). Owns the FIFO state for
+  // the fly-in card; rendered by SuperLikeCelebrationHost below.
+  const celebrations = useSuperLikeCelebrations();
   const {
     currentIndex,
     currentVacancy,
@@ -68,7 +100,15 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
     skip,
     undo,
     containerRef,
-  } = useDeckStack({ vacancies, onAction, onUndo });
+  } = useDeckStack({
+    vacancies,
+    onAction,
+    onUndo,
+    isDetailsOpen,
+    onSuperLikeSuccess: (jobId, vacancy) =>
+      celebrations.add({ jobId, vacancyTitle: vacancy.title }),
+    onSuperLikeUndone: (jobId) => celebrations.removeByJobId(jobId),
+  });
 
   // Touch/pointer drag state
   const [dragDelta, setDragDelta] = useState({ x: 0, y: 0 });
@@ -91,22 +131,63 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
     return () => clearTimeout(timer);
   }, [lastAction]);
 
+  // Keyboard shortcut: `i` opens the details sheet. This listener is separate
+  // from `useDeckStack`'s shortcuts so it can fire even when the sheet is not
+  // open yet, and so it never fires while the sheet is already open.
+  useEffect(() => {
+    if (!onOpenDetails) return;
+    if (isDetailsOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "i") return;
+
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      const container = containerRef.current;
+      if (!container || !container.contains(target)) return;
+
+      if (!currentVacancy) return;
+      e.preventDefault();
+      onOpenDetails(currentVacancy);
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onOpenDetails, isDetailsOpen, currentVacancy, containerRef]);
+
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (isDetailsOpen) return;
     if (isAnimating || !currentVacancy) return;
     dragStart.current = { x: e.clientX, y: e.clientY, time: Date.now() };
     setIsDragging(true);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  }, [isAnimating, currentVacancy]);
+  }, [isAnimating, currentVacancy, isDetailsOpen]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (isDetailsOpen) return;
     if (!dragStart.current || !isDragging) return;
     setDragDelta({
       x: e.clientX - dragStart.current.x,
       y: e.clientY - dragStart.current.y,
     });
-  }, [isDragging]);
+  }, [isDragging, isDetailsOpen]);
 
   const handlePointerUp = useCallback(() => {
+    if (isDetailsOpen) {
+      // Reset any in-flight drag state defensively if the sheet opened mid-drag.
+      dragStart.current = null;
+      setIsDragging(false);
+      setDragDelta({ x: 0, y: 0 });
+      return;
+    }
     if (!dragStart.current || !isDragging) return;
     const elapsed = Date.now() - dragStart.current.time;
     const velocityX = elapsed > 0 ? dragDelta.x / elapsed : 0;
@@ -131,7 +212,7 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
     dragStart.current = null;
     setIsDragging(false);
     setDragDelta({ x: 0, y: 0 });
-  }, [isDragging, dragDelta, promote, dismiss, superLike, block]);
+  }, [isDragging, dragDelta, promote, dismiss, superLike, block, isDetailsOpen]);
 
   // Calculate overlay opacities during drag
   const rightOverlay = Math.min(1, Math.max(0, dragDelta.x / SWIPE_DISTANCE_X));
@@ -235,7 +316,11 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
               cursor: isDragging ? "grabbing" : "grab",
             }}
           >
-            <DeckCard vacancy={currentVacancy} exitDirection={exitDirection} />
+            <DeckCard
+              vacancy={currentVacancy}
+              exitDirection={exitDirection}
+              onInfoClick={onOpenDetails}
+            />
 
             {/* Swipe overlays */}
             {isDragging && (rightOverlay > 0 || leftOverlay > 0 || upOverlay > 0 || downOverlay > 0) && (
@@ -424,6 +509,14 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
           </kbd>
           {t("deck.undo")}
         </span>
+        {onOpenDetails && (
+          <span className="inline-flex items-center gap-1.5">
+            <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded border border-border bg-muted px-1 text-[10px] font-medium font-mono">
+              {t("deck.detailsShortcut")}
+            </kbd>
+            {t("staging.details")}
+          </span>
+        )}
       </div>
 
       {/* Screen reader live regions */}
@@ -448,6 +541,15 @@ export function DeckView({ vacancies, onAction, onUndo, onBackToList }: DeckView
       <div aria-live="assertive" aria-atomic="true" className="sr-only">
         {lastAction}
       </div>
+
+      {/* Super-like celebration fly-in (Stream D / task 3). Mounted as a
+          fixed-position sibling so it floats above the deck without
+          intercepting swipes — its outer wrapper is pointer-events-none. */}
+      <SuperLikeCelebrationHost
+        current={celebrations.current}
+        queueRemaining={celebrations.queueRemaining}
+        dismiss={celebrations.dismiss}
+      />
     </div>
   );
 }

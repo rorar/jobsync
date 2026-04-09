@@ -64,6 +64,17 @@ export const deck = {
     // Other new keys
     "deck.immediateStart": "Immediate start",
     "deck.positions": "{count} positions",
+    // --- Stream C (task 2): Details sheet shortcuts ---
+    "deck.detailsTooltip": "View details (i)",
+    "deck.detailsShortcut": "i",
+    // --- end Stream C ---
+    // --- Stream D (task 3): Super-like celebration fly-in ---
+    "deck.superLikeCelebration.title": "Super-liked!",
+    "deck.superLikeCelebration.subtitle": "Added to your jobs",
+    "deck.superLikeCelebration.openJob": "Open job",
+    "deck.superLikeCelebration.close": "Close celebration",
+    "deck.superLikeCelebration.moreQueued": "+{count} more",
+    // --- end Stream D ---
   },
   de: {
     "deck.dismiss": "Ablehnen",
@@ -130,6 +141,17 @@ export const deck = {
     // Other new keys
     "deck.immediateStart": "Sofortiger Start",
     "deck.positions": "{count} Stellen",
+    // --- Stream C (task 2): Details sheet shortcuts ---
+    "deck.detailsTooltip": "Details ansehen (i)",
+    "deck.detailsShortcut": "i",
+    // --- end Stream C ---
+    // --- Stream D (task 3): Super-like celebration fly-in ---
+    "deck.superLikeCelebration.title": "Super-geliked!",
+    "deck.superLikeCelebration.subtitle": "Zu deinen Jobs hinzugefügt",
+    "deck.superLikeCelebration.openJob": "Job öffnen",
+    "deck.superLikeCelebration.close": "Schließen",
+    "deck.superLikeCelebration.moreQueued": "+{count} weitere",
+    // --- end Stream D ---
   },
   fr: {
     "deck.dismiss": "Rejeter",
@@ -196,6 +218,17 @@ export const deck = {
     // Other new keys
     "deck.immediateStart": "Début immédiat",
     "deck.positions": "{count} postes",
+    // --- Stream C (task 2): Details sheet shortcuts ---
+    "deck.detailsTooltip": "Voir les détails (i)",
+    "deck.detailsShortcut": "i",
+    // --- end Stream C ---
+    // --- Stream D (task 3): Super-like celebration fly-in ---
+    "deck.superLikeCelebration.title": "Super-aimé !",
+    "deck.superLikeCelebration.subtitle": "Ajouté à vos offres",
+    "deck.superLikeCelebration.openJob": "Ouvrir l'offre",
+    "deck.superLikeCelebration.close": "Fermer",
+    "deck.superLikeCelebration.moreQueued": "+{count} de plus",
+    // --- end Stream D ---
   },
   es: {
     "deck.dismiss": "Rechazar",
@@ -262,5 +295,16 @@ export const deck = {
     // Other new keys
     "deck.immediateStart": "Inicio inmediato",
     "deck.positions": "{count} puestos",
+    // --- Stream C (task 2): Details sheet shortcuts ---
+    "deck.detailsTooltip": "Ver detalles (i)",
+    "deck.detailsShortcut": "i",
+    // --- end Stream C ---
+    // --- Stream D (task 3): Super-like celebration fly-in ---
+    "deck.superLikeCelebration.title": "¡Super favorito!",
+    "deck.superLikeCelebration.subtitle": "Añadido a tus trabajos",
+    "deck.superLikeCelebration.openJob": "Abrir trabajo",
+    "deck.superLikeCelebration.close": "Cerrar",
+    "deck.superLikeCelebration.moreQueued": "+{count} más",
+    // --- end Stream D ---
   },
 } as const;
