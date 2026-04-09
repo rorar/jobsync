@@ -87,8 +87,23 @@ const config: Config = {
   // A set of global variables that need to be available in all test environments
   // globals: {},
 
-  // The maximum amount of workers used to run your tests. Can be specified as % or a number. E.g. maxWorkers: 10% will use 10% of your CPU amount + 1 as the maximum worker number. maxWorkers: 2 will use a maximum of 2 workers.
-  // maxWorkers: "50%",
+  // VM resource guard: jobsync runs on an 8GB NixOS VM and has been trashed
+  // in the past when Jest used its default worker count (num_cpus - 1, which
+  // on a multi-core box can be 5-7 workers all loading the Next.js bundle
+  // into jsdom). Hard-default to a single worker here so even raw
+  // `npx jest` calls (e.g., from agents using the Bash tool without the
+  // test.sh wrapper) cannot exceed one process. Override via the
+  // `JEST_MAX_WORKERS` env var when running on a roomy machine.
+  //
+  // Historical context: `bash scripts/test.sh --workers=1` was silently
+  // ignored by Jest for months because Jest's actual flag is
+  // `--maxWorkers` — the script passed `--workers=1` through, Jest did
+  // not recognize it, and fell back to its default. This config setting
+  // + the test.sh translation fixes both sides. See
+  // `feedback_test_build_resources.md` in the user's memory.
+  maxWorkers: process.env.JEST_MAX_WORKERS
+    ? parseInt(process.env.JEST_MAX_WORKERS, 10)
+    : 1,
 
   // An array of directory names to be searched recursively up from the requiring module's location
   // moduleDirectories: [
