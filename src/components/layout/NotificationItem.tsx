@@ -27,6 +27,7 @@ import {
   formatNotificationReason,
   formatNotificationActor,
   resolveNotificationSeverity,
+  type NotificationFormatSource,
 } from "@/lib/notifications/deep-links";
 
 interface NotificationItemProps {
@@ -113,11 +114,27 @@ export function NotificationItem({
   const data = parseNotificationData(notification.data);
   const type = notification.type as NotificationType;
 
-  const severity = resolveNotificationSeverity(type, data);
+  // Prefer top-level columns on the Notification row (ADR-030) and fall back
+  // to the legacy `data.*` blob for pre-migration notifications. The legacy
+  // blob is still passed to `buildNotificationActions` because it carries
+  // contextual ids (jobId, automationId, stagedVacancyId, ...) that are NOT
+  // promoted to columns.
+  const formatSource: NotificationFormatSource = {
+    titleKey: notification.titleKey,
+    titleParams: notification.titleParams,
+    reasonKey: notification.reasonKey,
+    reasonParams: notification.reasonParams,
+    severity: notification.severity,
+    actorType: notification.actorType,
+    actorId: notification.actorId,
+    data,
+  };
+
+  const severity = resolveNotificationSeverity(type, formatSource);
   const actions = buildNotificationActions(type, data);
-  const title = formatNotificationTitle(data, notification.message, t);
-  const reason = formatNotificationReason(data, t);
-  const actor = formatNotificationActor(data, t);
+  const title = formatNotificationTitle(formatSource, notification.message, t);
+  const reason = formatNotificationReason(formatSource, t);
+  const actor = formatNotificationActor(formatSource, t);
 
   const createdAt =
     notification.createdAt instanceof Date

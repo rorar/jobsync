@@ -82,6 +82,15 @@ function makeNotification(overrides: Partial<Notification> = {}): Notification {
     automationId: null,
     read: false,
     data: null,
+    // ADR-030 top-level 5W+H columns — default to null so legacy fallback
+    // tests (read from `data.*`) still exercise the old path.
+    severity: null,
+    actorType: null,
+    actorId: null,
+    titleKey: null,
+    titleParams: null,
+    reasonKey: null,
+    reasonParams: null,
     createdAt: new Date("2026-04-08T12:00:00Z"),
     ...overrides,
   };
@@ -334,5 +343,103 @@ describe("NotificationItem", () => {
     );
     const article = container.querySelector("article");
     expect(article?.className).not.toContain("border-l-primary");
+  });
+
+  // ---------------------------------------------------------------------------
+  // ADR-030: top-level 5W+H columns — prefer columns, fall back to data.*
+  // ---------------------------------------------------------------------------
+
+  describe("ADR-030 top-level column precedence", () => {
+    it("prefers the top-level titleKey column over data.titleKey", () => {
+      // Dual-written notification: both carry a titleKey, but they differ.
+      // The top-level column must win so re-translations pick up any schema
+      // fix shipped after the legacy blob was persisted.
+      const notif = makeNotification({
+        type: "module_deactivated",
+        message: "legacy english fallback",
+        titleKey: "notifications.moduleDeactivated.title",
+        titleParams: { moduleName: "EURES (column)" },
+        data: {
+          titleKey: "notifications.moduleDeactivated.title",
+          titleParams: { moduleName: "EURES (legacy)" },
+        },
+      });
+      render(
+        <NotificationItem
+          notification={notif}
+          onMarkAsRead={mockMarkAsRead}
+          onDismiss={mockDismiss}
+        />,
+      );
+      // Top-level column wins
+      expect(
+        screen.getByText("Module paused: EURES (column)"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("Module paused: EURES (legacy)"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("falls back to legacy data.titleKey when top-level column is null", () => {
+      // Pre-migration notification: titleKey=null on the row, but legacy
+      // data.titleKey is still populated. The formatter must fall back.
+      const notif = makeNotification({
+        type: "module_deactivated",
+        message: "legacy english fallback",
+        titleKey: null,
+        titleParams: null,
+        data: {
+          titleKey: "notifications.moduleDeactivated.title",
+          titleParams: { moduleName: "EURES" },
+        },
+      });
+      render(
+        <NotificationItem
+          notification={notif}
+          onMarkAsRead={mockMarkAsRead}
+          onDismiss={mockDismiss}
+        />,
+      );
+      expect(screen.getByText("Module paused: EURES")).toBeInTheDocument();
+      expect(
+        screen.queryByText("legacy english fallback"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("prefers the top-level severity column over data.severity", () => {
+      // Top-level severity is "error"; legacy data.severity is "info".
+      // Columns win → the error icon should render. Use a type that does
+      // NOT short-circuit to the Briefcase icon (vacancy_promoted does).
+      const notif = makeNotification({
+        type: "module_deactivated",
+        severity: "error",
+        data: { severity: "info" },
+      });
+      const { container } = render(
+        <NotificationItem
+          notification={notif}
+          onMarkAsRead={mockMarkAsRead}
+          onDismiss={mockDismiss}
+        />,
+      );
+      // SeverityIcon renders the XCircle lucide stub for "error"; the
+      // lucide Proxy mock gives us `icon-XCircle` as the test-id.
+      expect(container.querySelector('[data-testid="icon-XCircle"]')).not.toBeNull();
+    });
+
+    it("uses the top-level actorType column when data.actorType is missing", () => {
+      const notif = makeNotification({
+        actorType: "system",
+        data: null,
+      });
+      render(
+        <NotificationItem
+          notification={notif}
+          onMarkAsRead={mockMarkAsRead}
+          onDismiss={mockDismiss}
+        />,
+      );
+      expect(screen.getByText("System")).toBeInTheDocument();
+    });
   });
 });

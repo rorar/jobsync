@@ -115,6 +115,102 @@ describe("formatNotificationReason", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// ADR-030: top-level column precedence + legacy fallback
+// ---------------------------------------------------------------------------
+
+describe("ADR-030 top-level column vs legacy fallback", () => {
+  it("prefers the top-level titleKey column over data.titleKey", () => {
+    // New-shape source with both top-level fields AND a legacy data blob;
+    // the top-level column must win so the latest schema fix takes effect.
+    const source = {
+      titleKey: "notifications.moduleDeactivated.title",
+      titleParams: { moduleName: "EURES (column)" },
+      data: {
+        titleKey: "notifications.moduleDeactivated.title",
+        titleParams: { moduleName: "EURES (legacy)" },
+      } as Record<string, unknown>,
+    };
+    expect(formatNotificationTitle(source, "fallback", t)).toBe(
+      "Module paused: EURES (column)",
+    );
+  });
+
+  it("falls back to legacy data.titleKey when the top-level column is null", () => {
+    // Pre-migration row: titleKey is null on the row but the legacy data
+    // blob still carries it. The formatter must fall back gracefully so
+    // existing notifications continue to render in the user's current locale.
+    const source = {
+      titleKey: null,
+      titleParams: null,
+      data: {
+        titleKey: "notifications.moduleDeactivated.title",
+        titleParams: { moduleName: "EURES" },
+      } as Record<string, unknown>,
+    };
+    expect(formatNotificationTitle(source, "fallback", t)).toBe(
+      "Module paused: EURES",
+    );
+  });
+
+  it("prefers the top-level reasonKey column over data.reasonKey", () => {
+    const source = {
+      reasonKey: "notifications.reason.authExpired",
+      data: {
+        reasonKey: "notifications.reason.manualDeactivation",
+      } as Record<string, unknown>,
+    };
+    expect(formatNotificationReason(source, t)).toBe(
+      "API key invalid or expired",
+    );
+  });
+
+  it("falls back to legacy data.reasonKey when top-level column is null", () => {
+    const source = {
+      reasonKey: null,
+      data: {
+        reasonKey: "notifications.reason.manualDeactivation",
+      } as Record<string, unknown>,
+    };
+    expect(formatNotificationReason(source, t)).toBe("Deactivated by user");
+  });
+
+  it("prefers the top-level actorId column over data.actorId", () => {
+    const source = {
+      actorId: "eures-column",
+      data: { actorId: "eures-legacy" } as Record<string, unknown>,
+    };
+    expect(formatNotificationActor(source, t)).toBe("eures-column");
+  });
+
+  it("falls back to legacy data.actorType when top-level column is null", () => {
+    const source = {
+      actorType: null,
+      actorId: null,
+      data: { actorType: "system" } as Record<string, unknown>,
+    };
+    expect(formatNotificationActor(source, t)).toBe("System");
+  });
+
+  it("treats a legacy blob (no `data` key) as the data source for backward compat", () => {
+    // This proves the old call-site signature still works: passing a raw
+    // NotificationDataExtended blob (no wrapping `data` key) resolves all
+    // fields from the blob exactly as before the migration.
+    const data: NotificationDataExtended = {
+      titleKey: "notifications.moduleDeactivated.title",
+      titleParams: { moduleName: "Legacy" },
+      actorType: "module",
+      actorId: "eures",
+      reasonKey: "notifications.reason.authExpired",
+    };
+    expect(formatNotificationTitle(data, "fallback", t)).toBe(
+      "Module paused: Legacy",
+    );
+    expect(formatNotificationReason(data, t)).toBe("API key invalid or expired");
+    expect(formatNotificationActor(data, t)).toBe("eures");
+  });
+});
+
 describe("formatNotificationActor", () => {
   it("uses actorNameKey when provided and resolvable", () => {
     const data: NotificationDataExtended = {

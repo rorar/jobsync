@@ -164,4 +164,25 @@ describe("resolveNotificationSeverity", () => {
       "info",
     );
   });
+
+  // ADR-030: top-level `severity` column wins over legacy `data.severity`.
+  it("prefers the top-level severity column over data.severity", () => {
+    const source = {
+      severity: "error" as const,
+      data: { severity: "info" } as Record<string, unknown>,
+    };
+    expect(resolveNotificationSeverity("vacancy_promoted", source)).toBe(
+      "error",
+    );
+  });
+
+  it("falls back to legacy data.severity when top-level column is null", () => {
+    const source = {
+      severity: null,
+      data: { severity: "warning" } as Record<string, unknown>,
+    };
+    expect(resolveNotificationSeverity("vacancy_promoted", source)).toBe(
+      "warning",
+    );
+  });
 });

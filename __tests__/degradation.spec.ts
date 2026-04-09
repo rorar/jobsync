@@ -186,6 +186,7 @@ describe("Degradation Rules", () => {
 
       const call = (mockPrisma.notification.createMany as jest.Mock).mock.calls[0][0];
       const row = call.data[0];
+      // Legacy `data.*` blob — dual-written during rollout for backward compat
       expect(row.data).toEqual(
         expect.objectContaining({
           titleKey: "notifications.authFailure.title",
@@ -197,6 +198,16 @@ describe("Degradation Rules", () => {
           moduleName: "JSearch",
           automationId: "auto-late-bind",
           automationName: "Late Bind Auto",
+        }),
+      );
+      // ADR-030: top-level 5W+H columns must also be populated (dual-write)
+      expect(row).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.authFailure.title",
+          actorType: "module",
+          actorId: "jsearch",
+          reasonKey: "notifications.reason.authExpired",
+          severity: "error",
         }),
       );
       // Backward-compat English `message` must still be populated
@@ -410,6 +421,16 @@ describe("Degradation Rules", () => {
           }),
         }),
       );
+      // ADR-030: top-level 5W+H columns must also be populated (dual-write)
+      expect(call.data).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.consecutiveFailures.title",
+          titleParams: { count: 5 },
+          actorType: "automation",
+          actorId: "auto-late-bind",
+          severity: "warning",
+        }),
+      );
       expect(typeof call.data.message).toBe("string");
       expect(call.data.message.length).toBeGreaterThan(0);
     });
@@ -562,6 +583,16 @@ describe("Degradation Rules", () => {
           automationId: "auto-late-bind",
           automationName: "CB Late Bind",
           failureCount: 3,
+        }),
+      );
+      // ADR-030: top-level 5W+H columns must also be populated (dual-write)
+      expect(row).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.cbEscalation.title",
+          actorType: "module",
+          actorId: "mod-cb-late-bind",
+          reasonKey: "notifications.reason.circuitBreaker",
+          severity: "warning",
         }),
       );
       expect(typeof row.message).toBe("string");

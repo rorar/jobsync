@@ -8,6 +8,14 @@ import type { Notification } from "@/models/notification.model";
 
 /**
  * Fetch notifications for the current user.
+ *
+ * The 5W+H structured fields (titleKey, titleParams, actorType, actorId,
+ * reasonKey, reasonParams, severity) are first-class top-level columns on
+ * the Notification model after ADR-030's Prisma migration. We do not
+ * restrict `select` here — Prisma returns every scalar column by default,
+ * including the new columns, so the domain `Notification` type returned by
+ * this action is always up-to-date with the schema.
+ *
  * @param unreadOnly - if true, only return unread notifications
  * @param limit - max number of notifications to return (default 20)
  */
@@ -30,7 +38,7 @@ export async function getNotifications(
       take: safeTake,
     });
 
-    return { success: true, data: notifications as Notification[] };
+    return { success: true, data: notifications as unknown as Notification[] };
   } catch (error) {
     return handleError(error, "errors.fetchNotifications");
   }

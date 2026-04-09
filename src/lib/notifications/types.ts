@@ -7,7 +7,11 @@
  * Spec: specs/notification-dispatch.allium
  */
 
-import type { NotificationType } from "@/models/notification.model";
+import type {
+  NotificationType,
+  NotificationSeverity,
+  NotificationActorType,
+} from "@/models/notification.model";
 
 // ---------------------------------------------------------------------------
 // Channel Abstraction
@@ -16,6 +20,11 @@ import type { NotificationType } from "@/models/notification.model";
 /**
  * A notification draft before channel dispatch.
  * Created by the NotificationDispatcher from domain events.
+ *
+ * 5W+H structured fields (ADR-030): these mirror the top-level columns on
+ * the `Notification` Prisma model. Writers populate them so the InAppChannel
+ * can persist them into the new typed columns while also keeping `data`
+ * populated for backward compat during the rollout.
  */
 export interface NotificationDraft {
   userId: string;
@@ -23,8 +32,16 @@ export interface NotificationDraft {
   message: string;
   moduleId?: string;
   automationId?: string;
-  /** Structured data for webhook payloads */
+  /** Structured data for webhook payloads (and legacy `data.*` fallback). */
   data?: Record<string, unknown>;
+  // 5W+H structured fields (mirror top-level Notification columns)
+  severity?: NotificationSeverity;
+  actorType?: NotificationActorType;
+  actorId?: string;
+  titleKey?: string;
+  titleParams?: Record<string, string | number>;
+  reasonKey?: string;
+  reasonParams?: Record<string, string | number>;
 }
 
 /**

@@ -7,6 +7,13 @@
  * For VacancyStaged events: buffers by automationId and emits a summary
  * notification after a flush interval (5 seconds of inactivity).
  *
+ * 5W+H structured fields (ADR-030): every handler populates the `titleKey`,
+ * `titleParams`, `actorType`, `actorId`, `reasonKey`, `reasonParams`, and
+ * `severity` fields on the `NotificationDraft`. During rollout we dual-write
+ * the same values into the legacy `data.*` blob so older readers still work.
+ * The InAppChannel persists both into the new top-level Prisma columns and
+ * the `data` JSON blob.
+ *
  * Spec: specs/notification-dispatch.allium (contract NotificationDispatcher)
  */
 
@@ -32,7 +39,11 @@ import type {
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
 } from "@/models/notification.model";
-import type { NotificationPreferences } from "@/models/notification.model";
+import type {
+  NotificationPreferences,
+  NotificationSeverity,
+  NotificationActorType,
+} from "@/models/notification.model";
 import type { UserSettingsData } from "@/models/userSettings.model";
 import { channelRouter } from "@/lib/notifications/channel-router";
 import { InAppChannel } from "@/lib/notifications/channels/in-app.channel";
@@ -132,8 +143,9 @@ async function flushStagedBuffer(automationId: string): Promise<void> {
   stagedBuffers.delete(automationId);
 
   // Fetch automation name for the notification message (English fallback).
-  // The authoritative late-bound title comes from `data.titleKey + titleParams`
-  // and is resolved in the UI at render time via formatNotificationTitle().
+  // The authoritative late-bound title comes from the top-level `titleKey +
+  // titleParams` columns (ADR-030) and is resolved in the UI at render time
+  // via formatNotificationTitle().
   const automation = await prisma.automation.findFirst({
     where: { id: automationId, userId: entry.userId },
     select: { name: true },
@@ -147,15 +159,21 @@ async function flushStagedBuffer(automationId: string): Promise<void> {
     .replace("{count}", String(entry.count))
     .replace("{name}", automationName);
 
+  const titleKey = "notifications.vacancyBatchStaged.title";
+  const titleParams = { count: entry.count, automationName };
+  const severity: NotificationSeverity = "info";
+  const actorType: NotificationActorType = "automation";
+
+  // Legacy `data.*` blob — dual-written alongside the top-level columns for
+  // backward compat during rollout (ADR-030).
   const extendedData: NotificationDataExtended = {
     count: entry.count,
     automationId,
-    // 5W+H structured fields — rendered late by the UI
-    titleKey: "notifications.vacancyBatchStaged.title",
-    titleParams: { count: entry.count, automationName },
-    actorType: "automation",
+    titleKey,
+    titleParams,
+    actorType,
     actorId: automationId,
-    severity: "info",
+    severity,
   };
 
   const draft: NotificationDraft = {
@@ -164,6 +182,13 @@ async function flushStagedBuffer(automationId: string): Promise<void> {
     message,
     automationId,
     data: extendedData,
+    // Top-level 5W+H fields (new) — persisted by InAppChannel into the
+    // first-class Prisma columns.
+    titleKey,
+    titleParams,
+    actorType,
+    actorId: automationId,
+    severity,
   };
 
   await dispatchNotification(draft);
@@ -179,12 +204,18 @@ async function handleVacancyPromoted(
   const payload = event.payload as VacancyPromotedPayload;
   const locale = await resolveLocale(payload.userId);
 
+  const titleKey = "notifications.vacancyPromoted.title";
+  const severity: NotificationSeverity = "success";
+  const actorType: NotificationActorType = "system";
+
+  // Dual-write: legacy `data.*` blob for backward compat + top-level columns
+  // for the new typed fields (ADR-030).
   const extendedData: NotificationDataExtended = {
     stagedVacancyId: payload.stagedVacancyId,
     jobId: payload.jobId,
-    titleKey: "notifications.vacancyPromoted.title",
-    actorType: "system",
-    severity: "success",
+    titleKey,
+    actorType,
+    severity,
   };
 
   await dispatchNotification({
@@ -192,6 +223,9 @@ async function handleVacancyPromoted(
     type: "vacancy_promoted" satisfies NotificationType,
     message: t(locale, "notifications.vacancyPromoted"),
     data: extendedData,
+    titleKey,
+    actorType,
+    severity,
   });
 }
 
@@ -230,15 +264,20 @@ async function handleBulkActionCompleted(
     .replace("{succeeded}", String(payload.succeeded))
     .replace("{actionType}", payload.actionType);
 
+  const titleKey = "notifications.bulkActionCompleted.title";
+  const titleParams = { action: payload.actionType, count: payload.succeeded };
+  const severity: NotificationSeverity = payload.failed > 0 ? "warning" : "success";
+  const actorType: NotificationActorType = "user";
+
   const extendedData: NotificationDataExtended = {
     actionType: payload.actionType,
     succeeded: payload.succeeded,
     failed: payload.failed,
     itemCount: payload.itemIds.length,
-    titleKey: "notifications.bulkActionCompleted.title",
-    titleParams: { action: payload.actionType, count: payload.succeeded },
-    actorType: "user",
-    severity: payload.failed > 0 ? "warning" : "success",
+    titleKey,
+    titleParams,
+    actorType,
+    severity,
   };
 
   await dispatchNotification({
@@ -246,6 +285,10 @@ async function handleBulkActionCompleted(
     type: "bulk_action_completed" satisfies NotificationType,
     message,
     data: extendedData,
+    titleKey,
+    titleParams,
+    actorType,
+    severity,
   });
 }
 
@@ -258,15 +301,21 @@ async function handleModuleDeactivated(
     .replace("{name}", payload.moduleId)
     .replace("{automationCount}", String(payload.affectedAutomationIds.length));
 
+  const titleKey = "notifications.moduleDeactivated.title";
+  const titleParams = { moduleName: payload.moduleId };
+  const reasonKey = "notifications.reason.manualDeactivation";
+  const severity: NotificationSeverity = "warning";
+  const actorType: NotificationActorType = "module";
+
   const extendedData: NotificationDataExtended = {
     moduleId: payload.moduleId,
     affectedAutomationCount: payload.affectedAutomationIds.length,
-    titleKey: "notifications.moduleDeactivated.title",
-    titleParams: { moduleName: payload.moduleId },
-    actorType: "module",
+    titleKey,
+    titleParams,
+    actorType,
     actorId: payload.moduleId,
-    reasonKey: "notifications.reason.manualDeactivation",
-    severity: "warning",
+    reasonKey,
+    severity,
   };
 
   await dispatchNotification({
@@ -275,6 +324,12 @@ async function handleModuleDeactivated(
     message,
     moduleId: payload.moduleId,
     data: extendedData,
+    titleKey,
+    titleParams,
+    actorType,
+    actorId: payload.moduleId,
+    reasonKey,
+    severity,
   });
 }
 
@@ -287,14 +342,19 @@ async function handleModuleReactivated(
     .replace("{name}", payload.moduleId)
     .replace("{automationCount}", String(payload.pausedAutomationCount));
 
+  const titleKey = "notifications.moduleReactivated.title";
+  const titleParams = { moduleName: payload.moduleId };
+  const severity: NotificationSeverity = "success";
+  const actorType: NotificationActorType = "module";
+
   const extendedData: NotificationDataExtended = {
     moduleId: payload.moduleId,
     pausedAutomationCount: payload.pausedAutomationCount,
-    titleKey: "notifications.moduleReactivated.title",
-    titleParams: { moduleName: payload.moduleId },
-    actorType: "module",
+    titleKey,
+    titleParams,
+    actorType,
     actorId: payload.moduleId,
-    severity: "success",
+    severity,
   };
 
   await dispatchNotification({
@@ -303,6 +363,11 @@ async function handleModuleReactivated(
     message,
     moduleId: payload.moduleId,
     data: extendedData,
+    titleKey,
+    titleParams,
+    actorType,
+    actorId: payload.moduleId,
+    severity,
   });
 }
 
@@ -314,13 +379,18 @@ async function handleRetentionCompleted(
   const message = t(locale, "notifications.retentionCompleted")
     .replace("{count}", String(payload.purgedCount));
 
+  const titleKey = "notifications.retentionCompleted.title";
+  const titleParams = { count: payload.purgedCount };
+  const severity: NotificationSeverity = "success";
+  const actorType: NotificationActorType = "system";
+
   const extendedData: NotificationDataExtended = {
     purgedCount: payload.purgedCount,
     hashesCreated: payload.hashesCreated,
-    titleKey: "notifications.retentionCompleted.title",
-    titleParams: { count: payload.purgedCount },
-    actorType: "system",
-    severity: "success",
+    titleKey,
+    titleParams,
+    actorType,
+    severity,
   };
 
   await dispatchNotification({
@@ -328,6 +398,10 @@ async function handleRetentionCompleted(
     type: "retention_completed" satisfies NotificationType,
     message,
     data: extendedData,
+    titleKey,
+    titleParams,
+    actorType,
+    severity,
   });
 }
 
@@ -340,16 +414,21 @@ async function handleJobStatusChanged(
     .replace("{newStatus}", payload.newStatusValue)
     .replace("{jobId}", payload.jobId);
 
+  const titleKey = "notifications.jobStatusChanged.title";
+  const titleParams = { status: payload.newStatusValue };
+  const severity: NotificationSeverity = "info";
+  const actorType: NotificationActorType = "user";
+
   const extendedData: NotificationDataExtended = {
     jobId: payload.jobId,
     previousStatus: payload.previousStatusValue,
     newStatus: payload.newStatusValue,
     note: payload.note,
     historyEntryId: payload.historyEntryId,
-    titleKey: "notifications.jobStatusChanged.title",
-    titleParams: { status: payload.newStatusValue },
-    actorType: "user",
-    severity: "info",
+    titleKey,
+    titleParams,
+    actorType,
+    severity,
   };
 
   await dispatchNotification({
@@ -357,6 +436,10 @@ async function handleJobStatusChanged(
     type: "job_status_changed" satisfies NotificationType,
     message,
     data: extendedData,
+    titleKey,
+    titleParams,
+    actorType,
+    severity,
   });
 }
 

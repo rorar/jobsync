@@ -3,26 +3,114 @@
  *
  * Centralized 5W+H helpers for the notification UI:
  *  - `buildNotificationActions(type, data)` — deep-link mapping per notification type
- *  - `formatNotificationTitle(data, fallback, t)` — late-bound i18n resolution
- *  - `formatNotificationReason(data, t)` — optional context sentence
- *  - `formatNotificationActor(data, t)` — actor display name
+ *  - `formatNotificationTitle(source, fallback, t)` — late-bound i18n resolution
+ *  - `formatNotificationReason(source, t)` — optional context sentence
+ *  - `formatNotificationActor(source, t)` — actor display name
  *
  * Why centralized: every notification must link somewhere. The mapping lives
  * here (single source of truth) and is consumed by `NotificationItem.tsx`.
  * Fallback rules kick in when contextual ids (automationId/jobId/moduleId) are
  * missing — we prefer a "safe" destination over no destination.
  *
- * Scope: this is a pragmatic implementation that reads from the existing
- * `data: Record<string, unknown>` JSON blob (no schema migration). See
- * `NotificationDataExtended` in `src/models/notification.model.ts`.
+ * After ADR-030 the 5W+H fields (titleKey, titleParams, actorType, actorId,
+ * reasonKey, reasonParams, severity) live as first-class top-level columns on
+ * the `Notification` Prisma model. The formatters accept either:
+ *   1. A full `Notification` (or any object that exposes the new column-shaped
+ *      fields) — the top-level fields take precedence, and the formatter falls
+ *      back to the legacy `data.*` blob only when the column is null/missing.
+ *   2. The legacy `NotificationDataExtended` blob — used by tests and older
+ *      call sites; treated as the only source of structured fields.
  *
  * Spec reference: .team-feature/consult-task4-notifications.md §3 (deep-link table)
  */
 
 import type {
+  Notification,
   NotificationDataExtended,
+  NotificationSeverity,
   NotificationType,
 } from "@/models/notification.model";
+
+// ---------------------------------------------------------------------------
+// Source adapter — prefer top-level columns, fall back to legacy `data.*`
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal shape used by the formatters. Any object with these optional fields
+ * can drive late-binding i18n resolution — a full `Notification`, a partial
+ * select, or the legacy `data.*` blob via `fromLegacyData()`.
+ */
+export interface NotificationFormatSource {
+  titleKey?: string | null;
+  titleParams?: Record<string, string | number> | null | unknown;
+  reasonKey?: string | null;
+  reasonParams?: Record<string, string | number> | null | unknown;
+  severity?: NotificationSeverity | null;
+  actorType?:
+    | "system"
+    | "module"
+    | "automation"
+    | "user"
+    | "enrichment"
+    | null;
+  actorId?: string | null;
+  /** Legacy `data` blob fallback — only used when a top-level field is null. */
+  data?: Record<string, unknown> | null;
+}
+
+/**
+ * Wrap a legacy `NotificationDataExtended | null` in a `NotificationFormatSource`
+ * so old call sites keep working. When invoked this way the formatter resolves
+ * everything from the blob (top-level fields are left undefined).
+ */
+function fromLegacyData(
+  data: NotificationDataExtended | null | undefined,
+): NotificationFormatSource {
+  return { data: (data ?? null) as Record<string, unknown> | null };
+}
+
+/**
+ * Pull a legacy field out of `source.data` when the top-level column is null.
+ * Centralizes the "prefer column, fall back to blob" rule in one place.
+ */
+function legacyField<T>(
+  source: NotificationFormatSource,
+  key: keyof NotificationDataExtended,
+): T | undefined {
+  const blob = source.data as NotificationDataExtended | null | undefined;
+  if (!blob) return undefined;
+  const value = blob[key];
+  return value === undefined ? undefined : (value as T);
+}
+
+/**
+ * Resolve a string field: top-level column wins, legacy `data.*` is fallback.
+ */
+function resolveStringField(
+  source: NotificationFormatSource,
+  top: string | null | undefined,
+  legacyKey: keyof NotificationDataExtended,
+): string | undefined {
+  if (typeof top === "string" && top.length > 0) return top;
+  const legacy = legacyField<unknown>(source, legacyKey);
+  return typeof legacy === "string" && legacy.length > 0 ? legacy : undefined;
+}
+
+/**
+ * Resolve a params object: top-level column wins, legacy `data.*` is fallback.
+ */
+function resolveParamsField(
+  source: NotificationFormatSource,
+  top: unknown,
+  legacyKey: keyof NotificationDataExtended,
+): Record<string, string | number> | undefined {
+  const candidate =
+    top && typeof top === "object" ? top : legacyField<unknown>(source, legacyKey);
+  if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+    return candidate as Record<string, string | number>;
+  }
+  return undefined;
+}
 
 // ---------------------------------------------------------------------------
 // Action Type + Builder
@@ -194,37 +282,84 @@ function substituteParams(
 }
 
 /**
+ * Normalize an input that can be either a new-shape source (Notification or
+ * partial with top-level columns) or the legacy `NotificationDataExtended`
+ * blob. Callers don't need to know which shape they hold.
+ */
+function toSource(
+  input: NotificationFormatSource | NotificationDataExtended | null | undefined,
+): NotificationFormatSource {
+  if (!input) return fromLegacyData(null);
+  // A NotificationFormatSource may carry its own nested `data` blob; a raw
+  // legacy blob has `titleKey` as its own top-level property. We detect the
+  // difference by checking for the column-shaped fields, which legacy blobs
+  // do not carry at the top level of the wrapping object — only inside.
+  const maybeSource = input as NotificationFormatSource;
+  if (
+    "data" in maybeSource &&
+    (maybeSource.data === null ||
+      (typeof maybeSource.data === "object" && !Array.isArray(maybeSource.data)))
+  ) {
+    return maybeSource;
+  }
+  // Treat it as a legacy data blob.
+  return fromLegacyData(input as NotificationDataExtended | null);
+}
+
+/**
  * Resolve the notification title in the user's current locale.
  *
- * Flow:
- *  1. If `data.titleKey` is present, resolve via `t()` and substitute `titleParams`.
- *  2. Otherwise fall back to the legacy `message` field (backward compat for
- *     notifications created before this change).
+ * Precedence (ADR-030):
+ *  1. Top-level `titleKey` column on the Notification row.
+ *  2. Legacy `data.titleKey` blob (pre-migration rows and current rollout dual-write).
+ *  3. The `fallbackMessage` argument (e.g. `notification.message`).
  *
- * The `t` function is typed loosely (`(key: string) => string`) so this helper
- * can be called from tests without the full i18n runtime.
+ * Accepts either a `NotificationFormatSource` (full or partial Notification)
+ * or a legacy `NotificationDataExtended` blob for backward compat. The `t`
+ * function is typed loosely (`(key: string) => string`) so this helper can
+ * be called from tests without the full i18n runtime.
  */
 export function formatNotificationTitle(
-  data: NotificationDataExtended | null,
+  source: NotificationFormatSource | NotificationDataExtended | null | undefined,
   fallbackMessage: string,
   t: (key: string) => string,
 ): string {
-  if (!data?.titleKey) return fallbackMessage;
-  const template = t(data.titleKey);
-  return substituteParams(template, data.titleParams);
+  const normalized = toSource(source);
+  const titleKey = resolveStringField(normalized, normalized.titleKey, "titleKey");
+  if (!titleKey) return fallbackMessage;
+  const template = t(titleKey);
+  const titleParams = resolveParamsField(
+    normalized,
+    normalized.titleParams,
+    "titleParams",
+  );
+  return substituteParams(template, titleParams);
 }
 
 /**
  * Resolve the optional reason sentence (WHY) for a notification.
  * Returns `null` when no `reasonKey` is present — the UI should hide the row.
+ *
+ * Precedence: top-level `reasonKey` column → legacy `data.reasonKey` → null.
  */
 export function formatNotificationReason(
-  data: NotificationDataExtended | null,
+  source: NotificationFormatSource | NotificationDataExtended | null | undefined,
   t: (key: string) => string,
 ): string | null {
-  if (!data?.reasonKey) return null;
-  const template = t(data.reasonKey);
-  return substituteParams(template, data.reasonParams);
+  const normalized = toSource(source);
+  const reasonKey = resolveStringField(
+    normalized,
+    normalized.reasonKey,
+    "reasonKey",
+  );
+  if (!reasonKey) return null;
+  const template = t(reasonKey);
+  const reasonParams = resolveParamsField(
+    normalized,
+    normalized.reasonParams,
+    "reasonParams",
+  );
+  return substituteParams(template, reasonParams);
 }
 
 /**
@@ -232,21 +367,27 @@ export function formatNotificationReason(
  *
  * Precedence:
  *  1. `data.actorNameKey` → resolved via i18n (e.g. "notifications.actor.system")
- *  2. `data.actorId` → used verbatim (module id is a reasonable display fallback)
- *  3. Generic fallback key per `actorType`
- *  4. Empty string (the UI should hide the slot)
+ *     (actorNameKey has no top-level column yet — it lives in the blob only).
+ *  2. Top-level `actorId` column → legacy `data.actorId` fallback.
+ *  3. Generic fallback key per `actorType` (top-level column → legacy fallback).
+ *  4. Empty string (the UI should hide the slot).
  */
 export function formatNotificationActor(
-  data: NotificationDataExtended | null,
+  source: NotificationFormatSource | NotificationDataExtended | null | undefined,
   t: (key: string) => string,
 ): string {
-  if (!data) return "";
-  if (data.actorNameKey) {
-    const resolved = t(data.actorNameKey);
-    if (resolved && resolved !== data.actorNameKey) return resolved;
+  const normalized = toSource(source);
+  const actorNameKey = legacyField<string>(normalized, "actorNameKey");
+  if (actorNameKey) {
+    const resolved = t(actorNameKey);
+    if (resolved && resolved !== actorNameKey) return resolved;
   }
-  if (data.actorId) return data.actorId;
-  switch (data.actorType) {
+  const actorId = resolveStringField(normalized, normalized.actorId, "actorId");
+  if (actorId) return actorId;
+  const actorType =
+    resolveStringField(normalized, normalized.actorType ?? null, "actorType") ??
+    undefined;
+  switch (actorType) {
     case "system":
       return t("notifications.actor.system");
     case "automation":
@@ -261,14 +402,18 @@ export function formatNotificationActor(
 /**
  * Derive a severity for the notification (defaults when not set in data).
  *
- * This mirrors the icon selection in the UI so it stays consistent with
- * the color tokens applied to the icon/border.
+ * Precedence: top-level `severity` column → legacy `data.severity` →
+ * type-based default. This mirrors the icon selection in the UI so it stays
+ * consistent with the color tokens applied to the icon/border.
  */
 export function resolveNotificationSeverity(
   type: NotificationType,
-  data: NotificationDataExtended | null,
+  source: NotificationFormatSource | NotificationDataExtended | null | undefined,
 ): "info" | "success" | "warning" | "error" {
-  if (data?.severity) return data.severity;
+  const normalized = toSource(source);
+  const severity =
+    normalized.severity ?? legacyField<NotificationSeverity>(normalized, "severity");
+  if (severity) return severity;
   switch (type) {
     case "auth_failure":
     case "module_unreachable":
@@ -287,4 +432,25 @@ export function resolveNotificationSeverity(
     default:
       return "info";
   }
+}
+
+/**
+ * Convenience helper — construct a `NotificationFormatSource` from a full
+ * `Notification` row. Callers in UI code can pass `notification` through this
+ * and get a clean interface the formatters accept. The `data` blob is
+ * preserved for legacy fallback reads.
+ */
+export function notificationFormatSource(
+  notification: Notification,
+): NotificationFormatSource {
+  return {
+    titleKey: notification.titleKey,
+    titleParams: notification.titleParams,
+    reasonKey: notification.reasonKey,
+    reasonParams: notification.reasonParams,
+    severity: notification.severity,
+    actorType: notification.actorType,
+    actorId: notification.actorId,
+    data: notification.data,
+  };
 }

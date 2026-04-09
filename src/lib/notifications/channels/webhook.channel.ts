@@ -155,14 +155,16 @@ async function deliverWithRetry(
  * Create an in-app notification for webhook delivery failure.
  * Best-effort: logs errors but never throws.
  *
- * i18n — late-binding pattern (mirrors notification-dispatcher):
+ * i18n — late-binding pattern (ADR-030):
  *   - `message` is resolved in the user's current locale at write time and
  *     kept as a backward-compat fallback for email/webhook channels and
- *     older clients that don't read `data`.
- *   - `data.titleKey + titleParams` carry the structured 5W+H metadata so
- *     the UI can re-render in the user's current locale at view time via
- *     formatNotificationTitle(), even if the user changes their locale
- *     after the notification was written.
+ *     older clients that don't read structured fields.
+ *   - Top-level `titleKey + titleParams` columns (ADR-030) carry the
+ *     structured 5W+H metadata so the UI can re-render in the user's current
+ *     locale at view time via formatNotificationTitle(), even if the user
+ *     changes their locale after the notification was written. The same
+ *     values are dual-written into the legacy `data.*` blob for backward
+ *     compat during rollout.
  */
 async function notifyDeliveryFailed(
   userId: string,
@@ -175,11 +177,13 @@ async function notifyDeliveryFailed(
     const message = template
       .replace("{eventType}", eventType)
       .replace("{url}", endpointUrl);
+    const titleKey = "webhook.deliveryFailed";
+    const titleParams = { eventType, url: endpointUrl };
     const extendedData: NotificationDataExtended = {
       endpointUrl,
       eventType,
-      titleKey: "webhook.deliveryFailed",
-      titleParams: { eventType, url: endpointUrl },
+      titleKey,
+      titleParams,
       actorType: "system",
       actorNameKey: "notifications.actor.system",
       severity: "error",
@@ -188,9 +192,14 @@ async function notifyDeliveryFailed(
       data: {
         userId,
         type: "module_unreachable" satisfies NotificationType,
-        // English/user-locale fallback — structured title is late-bound via data.titleKey.
+        // English/user-locale fallback — structured title is late-bound via top-level `titleKey`.
         message,
         data: extendedData as object,
+        // Top-level 5W+H columns (ADR-030)
+        titleKey,
+        titleParams: titleParams as object,
+        actorType: "system",
+        severity: "error",
       },
     });
   } catch (error) {
@@ -212,10 +221,12 @@ async function notifyEndpointDeactivated(
     const locale = await resolveUserLocale(userId);
     const template = t(locale, "webhook.endpointDeactivated");
     const message = template.replace("{url}", endpointUrl);
+    const titleKey = "webhook.endpointDeactivated";
+    const titleParams = { url: endpointUrl };
     const extendedData: NotificationDataExtended = {
       endpointUrl,
-      titleKey: "webhook.endpointDeactivated",
-      titleParams: { url: endpointUrl },
+      titleKey,
+      titleParams,
       actorType: "system",
       actorNameKey: "notifications.actor.system",
       severity: "warning",
@@ -224,9 +235,14 @@ async function notifyEndpointDeactivated(
       data: {
         userId,
         type: "module_unreachable" satisfies NotificationType,
-        // English/user-locale fallback — structured title is late-bound via data.titleKey.
+        // English/user-locale fallback — structured title is late-bound via top-level `titleKey`.
         message,
         data: extendedData as object,
+        // Top-level 5W+H columns (ADR-030)
+        titleKey,
+        titleParams: titleParams as object,
+        actorType: "system",
+        severity: "warning",
       },
     });
   } catch (error) {

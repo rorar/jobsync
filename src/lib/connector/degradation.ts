@@ -15,20 +15,23 @@ import { ModuleStatus, CircuitBreakerState } from "./manifest";
  * - ConsecutiveRunFailureEscalation: pause after N consecutive failed runs
  * - CircuitBreakerEscalation: pause after N consecutive CB opens
  *
- * Notification i18n — late-binding pattern
- * ----------------------------------------
+ * Notification i18n — late-binding pattern (ADR-030)
+ * --------------------------------------------------
  * Degradation notifications are written directly via prisma (not through the
  * notification-dispatcher), because they are produced inside module runtime
  * code paths that cannot easily round-trip through the event bus for
- * per-automation fan-out. To avoid freezing the message in one locale at
- * write time (the old bug), we mirror the dispatcher pattern:
+ * per-automation fan-out. The structured 5W+H fields are now first-class
+ * Prisma columns (ADR-030, `add_notification_structured_fields` migration).
+ * Writers here dual-write during rollout:
  *
  *   - `message`     — English fallback (backward compat for email/webhook
- *                     channels and older clients that don't read `data`).
- *   - `data.titleKey` + `titleParams` — late-bound at render time in the
- *                     user's current locale via formatNotificationTitle().
- *   - `data.actorType/actorId`, `reasonKey`, `severity` — 5W+H metadata
- *                     consumed by deep-links.ts helpers.
+ *                     channels and older clients that don't read structured fields).
+ *   - Top-level columns `titleKey`, `titleParams`, `actorType`, `actorId`,
+ *                     `reasonKey`, `severity` — new typed fields resolved at
+ *                     render time in the user's current locale via
+ *                     formatNotificationTitle().
+ *   - Legacy `data.*` blob — kept populated during rollout for pre-migration
+ *                     clients and tests that still read `data.titleKey`.
  *
  * Keys referenced here already exist in src/i18n/dictionaries/notifications.ts.
  */
@@ -104,10 +107,13 @@ export async function handleAuthFailure(
     // Create persistent notifications using createMany (no N+1).
     //
     // i18n: `message` is the English fallback; authoritative title is carried
-    // in `data.titleKey + titleParams` and resolved at render time in the
-    // user's current locale (see formatNotificationTitle()).
+    // in the top-level `titleKey + titleParams` columns (ADR-030) and resolved
+    // at render time in the user's current locale (see formatNotificationTitle()).
+    // We also dual-write the legacy `data.*` blob for backward compat.
     try {
       const safeModuleName = truncate(registered.manifest.name);
+      const titleKey = "notifications.authFailure.title";
+      const reasonKey = "notifications.reason.authExpired";
       await prisma.notification.createMany({
         data: affectedAutomations.map((auto) => {
           const safeAutomationName = truncate(auto.name);
@@ -116,20 +122,26 @@ export async function handleAuthFailure(
             moduleName: safeModuleName,
             automationId: auto.id,
             automationName: safeAutomationName,
-            titleKey: "notifications.authFailure.title",
+            titleKey,
             actorType: "module",
             actorId: moduleId,
-            reasonKey: "notifications.reason.authExpired",
+            reasonKey,
             severity: "error",
           };
           return {
             userId: auto.userId,
             type: "auth_failure",
-            // English fallback — structured title is late-bound via data.titleKey.
+            // English fallback — structured title is late-bound via top-level `titleKey`.
             message: `Automation "${safeAutomationName}" paused: authentication failed for module "${safeModuleName}". Please check your credentials.`,
             moduleId,
             automationId: auto.id,
             data: extendedData as object,
+            // Top-level 5W+H columns (ADR-030)
+            titleKey,
+            actorType: "module",
+            actorId: moduleId,
+            reasonKey,
+            severity: "error",
           };
         }),
       });
@@ -210,16 +222,19 @@ export async function checkConsecutiveRunFailures(
     // Create persistent notification for the automation owner.
     //
     // i18n: `message` is the English fallback; authoritative title is carried
-    // in `data.titleKey + titleParams` and resolved at render time in the
-    // user's current locale (see formatNotificationTitle()).
+    // in the top-level `titleKey + titleParams` columns (ADR-030) and resolved
+    // at render time in the user's current locale (see formatNotificationTitle()).
+    // We also dual-write the legacy `data.*` blob for backward compat.
     try {
       const safeAutomationName = truncate(automation.name);
+      const titleKey = "notifications.consecutiveFailures.title";
+      const titleParams = { count: CONSECUTIVE_RUN_FAILURE_THRESHOLD };
       const extendedData: NotificationDataExtended = {
         automationId,
         automationName: safeAutomationName,
         failureCount: CONSECUTIVE_RUN_FAILURE_THRESHOLD,
-        titleKey: "notifications.consecutiveFailures.title",
-        titleParams: { count: CONSECUTIVE_RUN_FAILURE_THRESHOLD },
+        titleKey,
+        titleParams,
         actorType: "automation",
         actorId: automationId,
         severity: "warning",
@@ -231,6 +246,12 @@ export async function checkConsecutiveRunFailures(
           message: `Automation "${safeAutomationName}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
           automationId,
           data: extendedData as object,
+          // Top-level 5W+H columns (ADR-030)
+          titleKey,
+          titleParams: titleParams as object,
+          actorType: "automation",
+          actorId: automationId,
+          severity: "warning",
         },
       });
     } catch (err) {
@@ -305,10 +326,13 @@ export async function handleCircuitBreakerTrip(
     // Create persistent notifications using createMany (no N+1).
     //
     // i18n: `message` is the English fallback; authoritative title is carried
-    // in `data.titleKey + titleParams` and resolved at render time in the
-    // user's current locale (see formatNotificationTitle()).
+    // in the top-level `titleKey + titleParams` columns (ADR-030) and resolved
+    // at render time in the user's current locale (see formatNotificationTitle()).
+    // We also dual-write the legacy `data.*` blob for backward compat.
     try {
       const safeModuleName = truncate(registered.manifest.name);
+      const titleKey = "notifications.cbEscalation.title";
+      const reasonKey = "notifications.reason.circuitBreaker";
       await prisma.notification.createMany({
         data: affectedAutomations.map((auto) => {
           const safeAutomationName = truncate(auto.name);
@@ -318,20 +342,26 @@ export async function handleCircuitBreakerTrip(
             automationId: auto.id,
             automationName: safeAutomationName,
             failureCount: newFailureCount,
-            titleKey: "notifications.cbEscalation.title",
+            titleKey,
             actorType: "module",
             actorId: moduleId,
-            reasonKey: "notifications.reason.circuitBreaker",
+            reasonKey,
             severity: "warning",
           };
           return {
             userId: auto.userId,
             type: "cb_escalation",
-            // English fallback — structured title is late-bound via data.titleKey.
+            // English fallback — structured title is late-bound via top-level `titleKey`.
             message: `Automation "${safeAutomationName}" paused: module "${safeModuleName}" circuit breaker tripped ${newFailureCount} times.`,
             moduleId,
             automationId: auto.id,
             data: extendedData as object,
+            // Top-level 5W+H columns (ADR-030)
+            titleKey,
+            actorType: "module",
+            actorId: moduleId,
+            reasonKey,
+            severity: "warning",
           };
         }),
       });

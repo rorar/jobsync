@@ -434,8 +434,16 @@ describe("WebhookChannel", () => {
       });
       expect(failureCall).toBeDefined();
       const payload = (failureCall as unknown[])[0] as {
-        data: { data: Record<string, unknown>; message: string };
+        data: {
+          data: Record<string, unknown>;
+          message: string;
+          titleKey?: string;
+          titleParams?: Record<string, unknown>;
+          actorType?: string;
+          severity?: string;
+        };
       };
+      // Legacy `data.*` blob — still populated for backward compat during rollout
       expect(payload.data.data).toEqual(
         expect.objectContaining({
           titleKey: "webhook.deliveryFailed",
@@ -448,6 +456,18 @@ describe("WebhookChannel", () => {
           severity: "error",
           endpointUrl: "https://late-bind.example.com/hook",
           eventType: "vacancy_promoted",
+        }),
+      );
+      // ADR-030: top-level 5W+H columns must also be populated (dual-write)
+      expect(payload.data).toEqual(
+        expect.objectContaining({
+          titleKey: "webhook.deliveryFailed",
+          titleParams: {
+            eventType: "vacancy_promoted",
+            url: "https://late-bind.example.com/hook",
+          },
+          actorType: "system",
+          severity: "error",
         }),
       );
       // Backward-compat locale-resolved message must still be populated
@@ -543,8 +563,16 @@ describe("WebhookChannel", () => {
       );
       expect(deactivationCall).toBeDefined();
       const payload = (deactivationCall as unknown[])[0] as {
-        data: { data: Record<string, unknown>; message: string };
+        data: {
+          data: Record<string, unknown>;
+          message: string;
+          titleKey?: string;
+          titleParams?: Record<string, unknown>;
+          actorType?: string;
+          severity?: string;
+        };
       };
+      // Legacy `data.*` blob — still populated for backward compat during rollout
       expect(payload.data.data).toEqual(
         expect.objectContaining({
           titleKey: "webhook.endpointDeactivated",
@@ -553,6 +581,15 @@ describe("WebhookChannel", () => {
           actorNameKey: "notifications.actor.system",
           severity: "warning",
           endpointUrl: "https://late-bind-deact.example.com/hook",
+        }),
+      );
+      // ADR-030: top-level 5W+H columns must also be populated (dual-write)
+      expect(payload.data).toEqual(
+        expect.objectContaining({
+          titleKey: "webhook.endpointDeactivated",
+          titleParams: { url: "https://late-bind-deact.example.com/hook" },
+          actorType: "system",
+          severity: "warning",
         }),
       );
       expect(typeof payload.data.message).toBe("string");

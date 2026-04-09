@@ -18,6 +18,11 @@ export class InAppChannel implements NotificationChannel {
 
   async dispatch(notification: NotificationDraft, userId: string): Promise<ChannelResult> {
     try {
+      // Dual-write the 5W+H structured fields (ADR-030): populate BOTH the
+      // new top-level columns (severity/actorType/actorId/titleKey/...) and
+      // the legacy `data.*` blob so older readers keep working during the
+      // rollout. The Notification Prisma model now owns the 7 columns as
+      // first-class nullable fields.
       await prisma.notification.create({
         data: {
           userId,
@@ -26,6 +31,14 @@ export class InAppChannel implements NotificationChannel {
           ...(notification.moduleId ? { moduleId: notification.moduleId } : {}),
           ...(notification.automationId ? { automationId: notification.automationId } : {}),
           ...(notification.data ? { data: notification.data as object } : {}),
+          // Top-level 5W+H columns (new)
+          ...(notification.severity ? { severity: notification.severity } : {}),
+          ...(notification.actorType ? { actorType: notification.actorType } : {}),
+          ...(notification.actorId ? { actorId: notification.actorId } : {}),
+          ...(notification.titleKey ? { titleKey: notification.titleKey } : {}),
+          ...(notification.titleParams ? { titleParams: notification.titleParams as object } : {}),
+          ...(notification.reasonKey ? { reasonKey: notification.reasonKey } : {}),
+          ...(notification.reasonParams ? { reasonParams: notification.reasonParams as object } : {}),
         },
       });
       return { success: true, channel: this.name };

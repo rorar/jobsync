@@ -470,6 +470,16 @@ model Notification {
   moduleId     String?
   automationId String?
   data         Json?
+  // 5W+H structured notification fields (ADR-030)
+  // Promoted from Notification.data JSON during the Prisma migration sprint.
+  // Legacy `data.*` writers continue to work during rollout via fallback.
+  severity     String?  // "info" | "success" | "warning" | "error"
+  actorType    String?  // "module" | "automation" | "system" | "user"
+  actorId      String?  // e.g. "eures", "arbeitsagentur", or a user id
+  titleKey     String?  // i18n key for the notification title (late-bound at render time)
+  titleParams  Json?    // { moduleName: "EURES", count: 5, ... }
+  reasonKey    String?  // optional i18n key for the reason/context line
+  reasonParams Json?    // params for reasonKey
   read         Boolean  @default(false)
   createdAt    DateTime @default(now())
 

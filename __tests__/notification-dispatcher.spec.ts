@@ -96,6 +96,36 @@ describe("NotificationDispatcher", () => {
         }),
       });
     });
+
+    it("dual-writes 5W+H fields to top-level columns and legacy data.* (ADR-030)", async () => {
+      const event = createEvent(DomainEventType.VacancyPromoted, {
+        stagedVacancyId: "sv-1",
+        jobId: "job-1",
+        userId: "user-1",
+      });
+
+      await eventBus.publish(event);
+
+      const call = mockCreate.mock.calls[0][0];
+      // Top-level 5W+H columns (ADR-030, new)
+      expect(call.data).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.vacancyPromoted.title",
+          actorType: "system",
+          severity: "success",
+        }),
+      );
+      // Legacy `data.*` blob — dual-written for backward compat during rollout
+      expect(call.data.data).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.vacancyPromoted.title",
+          actorType: "system",
+          severity: "success",
+          stagedVacancyId: "sv-1",
+          jobId: "job-1",
+        }),
+      );
+    });
   });
 
   describe("BulkActionCompleted", () => {
@@ -158,6 +188,40 @@ describe("NotificationDispatcher", () => {
           moduleId: "eures",
         }),
       });
+    });
+
+    it("dual-writes 5W+H fields to top-level columns and legacy data.* (ADR-030)", async () => {
+      const event = createEvent(DomainEventType.ModuleDeactivated, {
+        moduleId: "eures",
+        userId: "user-1",
+        affectedAutomationIds: ["auto-1", "auto-2"],
+      });
+
+      await eventBus.publish(event);
+
+      const call = mockCreate.mock.calls[0][0];
+      // Top-level 5W+H columns (ADR-030, new)
+      expect(call.data).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.moduleDeactivated.title",
+          titleParams: { moduleName: "eures" },
+          actorType: "module",
+          actorId: "eures",
+          reasonKey: "notifications.reason.manualDeactivation",
+          severity: "warning",
+        }),
+      );
+      // Legacy `data.*` blob — dual-written with identical values
+      expect(call.data.data).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.moduleDeactivated.title",
+          titleParams: { moduleName: "eures" },
+          actorType: "module",
+          actorId: "eures",
+          reasonKey: "notifications.reason.manualDeactivation",
+          severity: "warning",
+        }),
+      );
     });
   });
 
@@ -229,6 +293,18 @@ describe("NotificationDispatcher", () => {
           }),
         }),
       });
+
+      // ADR-030: top-level 5W+H columns must also be populated (dual-write)
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.data).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.vacancyBatchStaged.title",
+          titleParams: { count: 3, automationName: "Test Automation" },
+          actorType: "automation",
+          actorId: "auto-1",
+          severity: "info",
+        }),
+      );
 
       // Buffer should be cleared after flush
       expect(_testHelpers.stagedBuffers.has("auto-1")).toBe(false);

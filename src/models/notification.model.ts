@@ -28,21 +28,31 @@ export type NotificationActorType =
   | "enrichment";
 
 /**
- * Extended notification data — carried in the existing `data: Record<string, unknown>`
- * JSON blob, no schema migration required.
+ * Extended notification data — the legacy 5W+H late-binding enrichment carried
+ * in the `data: Json` blob.
  *
- * This is the 5W+H late-binding enrichment:
- *  - WHAT: titleKey + titleParams (resolved at render time in the user's current locale)
- *  - WHO: actorType + actorId (+ optional actorNameKey for localized display)
- *  - WHY: reasonKey + reasonParams (optional contextual sentence)
- *  - HOW/WHERE: actionUrl + actionLabelKey (deep link)
- *  - SEVERITY: icon/color driver
+ * HISTORICAL CONTEXT
+ * ------------------
+ * Originally the structured 5W+H fields (titleKey, titleParams, actorType,
+ * actorId, reasonKey, reasonParams, severity) lived inside this JSON blob as
+ * a pragmatic shortcut that avoided a Prisma migration. ADR-030 (Decision B)
+ * flagged that shortcut as follow-up work, and the structured fields have
+ * since been promoted to first-class nullable columns on the `Notification`
+ * model (see `Notification.titleKey` etc. below).
  *
- * Existing notifications without these fields continue to work: the renderer
- * falls back to the legacy `message` field.
+ * This interface is still used for:
+ *  1. Describing the shape of the legacy `data` blob for backward compat —
+ *     the UI formatters fall back to `data.*` when the top-level columns are
+ *     null (notifications created before the migration).
+ *  2. Writers dual-write the same values into BOTH `data` and the new
+ *     columns during rollout, so this shape remains authoritative for the
+ *     JSON payload.
+ *  3. Carrying contextual ids that are NOT promoted to columns (jobId,
+ *     stagedVacancyId, automationId, moduleId, endpointUrl, ...). Those
+ *     stay in `data` and power `buildNotificationActions()`.
  *
- * Follow-up: promote these to first-class Prisma columns once a schema
- * migration is scheduled (deferred from task 4, Stream E).
+ * New readers should prefer the top-level columns on `Notification` and
+ * only fall back to this blob for backward compat.
  */
 export interface NotificationDataExtended {
   [key: string]: unknown;
@@ -73,6 +83,18 @@ export interface NotificationDataExtended {
   actionLabelKey?: string;
 }
 
+/**
+ * Domain representation of a notification row.
+ *
+ * The 5W+H structured fields (titleKey, titleParams, actorType, actorId,
+ * reasonKey, reasonParams, severity) are first-class top-level columns after
+ * the `add_notification_structured_fields` Prisma migration (ADR-030).
+ *
+ * Legacy notifications created before the migration have `null` in the new
+ * columns and carry the same metadata inside `data: NotificationDataExtended`.
+ * UI formatters prefer the top-level columns and fall back to `data.*` for
+ * backward compat.
+ */
 export interface Notification {
   id: string;
   userId: string;
@@ -81,8 +103,32 @@ export interface Notification {
   moduleId: string | null;
   automationId: string | null;
   data: Record<string, unknown> | null;
+  // 5W+H structured fields — promoted from `data` to top-level columns.
+  // All nullable for backward compat with pre-migration rows.
+  severity: NotificationSeverity | null;
+  actorType: NotificationActorType | null;
+  actorId: string | null;
+  titleKey: string | null;
+  titleParams: Record<string, string | number> | null;
+  reasonKey: string | null;
+  reasonParams: Record<string, string | number> | null;
   read: boolean;
   createdAt: Date;
+}
+
+/**
+ * Type guard — returns true when the notification carries the new top-level
+ * structured fields (i.e. was created after the migration). Useful for
+ * discriminating between "prefer columns" and "fall back to data.*" paths.
+ */
+export function hasStructuredFields(
+  notification: Pick<Notification, "titleKey" | "severity" | "actorType">,
+): boolean {
+  return (
+    notification.titleKey !== null ||
+    notification.severity !== null ||
+    notification.actorType !== null
+  );
 }
 
 // ---------------------------------------------------------------------------
