@@ -1,8 +1,31 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-09
 
-**Total: 399 bugs found, 397 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
+**Total: 404 bugs found, 402 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing)
+
+## Sprint 1 CRITICAL Fixes (2026-04-09)
+
+5 findings from the `/agent-teams:team-review` run (Stream 5 of the UX sprint). Scope: 2 architecture + 3 accessibility.
+
+### Fixed — Architecture (2 findings)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| CRIT-A1 | **CRITICAL** | `src/actions/module.actions.ts:deactivateModule` called `prisma.notification.createMany()` directly with a pre-composed English string. Violated `LateBoundLocale` (non-English users saw English text), violated the aspirational `SingleNotificationWriter` invariant, and the adjacent `notification-dispatcher.handleModuleDeactivated` handler was dead code because `ModuleDeactivated` was subscribed but never emitted. | Deleted the direct `createMany` call and replaced it with `emitEvent(createEvent(DomainEventTypes.ModuleDeactivated, ...))` — one event per distinct affected user. The dispatcher handler now activates as the single writer, populates 5W+H structured fields, and routes through all enabled channels. Side-effect: users get ONE summary notification per deactivation (previously N, one per paused automation). Removed `module.actions.ts` from `scripts/check-notification-writers.sh` allowlist. |
+| CRIT-A2 | **CRITICAL** | `PromotionDialog.onSuccess: () => void` dropped the created `jobId` returned by `promoteStagedVacancyToJob`. `promotionResolveRef.current({ success: true })` then resolved `useDeckStack.performAction` without `createdJobId`, so the super-like celebration fly-in was dead in the default (auto-approve=OFF) flow. No test caught it because every existing test mocked or used the auto-approve path. | Refined `onSuccess` to `(result: PromotionDialogSuccessResult) => void`, destructured `result.data.jobId` in `handlePromote`, and updated `StagingContainer`'s `<PromotionDialog onSuccess>` callback to resolve the ref with `{ success: true, createdJobId: result.jobId }`. Added 5 regression tests covering the happy path, the full resolveRef chain, the microtask race with `onOpenChange`, the failure path, and a defensive `success && !data` warn-and-drop branch. |
+
+### Fixed — Accessibility (3 findings)
+| ID | Severity | Finding | Fix |
+|----|----------|---------|-----|
+| CRIT-Y1 | **CRITICAL** | DeckCard Info button was `h-7 w-7` (28×28 px) — fails WCAG 2.5.8 AA (24×24 minimum for adjacent targets) and 2.5.5 AAA (44×44). DeckView Block / Skip / Undo buttons were `h-10 w-10` (40×40) — pass AA but fail AAA. | Info button grown to 44×44 via an invisible hit-area wrapper (visible 28×28 pill preserved inside, feedback forwarded via Tailwind `group-hover` / `group-active`). Block/Skip/Undo grown from 40×40 to 44×44 directly. Focus ring preserved; keyboard `i` shortcut unchanged. Full 29-test suite passing (DeckCard + DeckView + a11y-deck-view). |
+| CRIT-Y2 | **CRITICAL** | `StagingLayoutToggle` signalled the active radio ONLY via background color (fails WCAG 1.4.1 Use of Color). Each radio had THREE redundant accessible name sources: `aria-label`, `sr-only` span, AND `title` attribute (causing multi-announcement + keyboard-interfering tooltip). | Added a `Check` glyph overlay (absolute, `pointer-events-none`, `aria-hidden`) in the top-right corner of the active radio — shape-based indicator survives protanopia/deuteranopia/tritanopia/forced-colors. Kept ONLY `aria-label`; removed `sr-only` span and `title` attribute. Layout dimensions unchanged. Added 14 unit tests covering the non-color indicator, keyboard nav, E2E selector preservation, and accessible name hygiene. |
+| CRIT-Y3 | **CRITICAL** | `SuperLikeCelebration` had 4 a11y issues: (1) "Open job" CTA was keyboard-orphaned (no programmatic focus on mount), (2) no global Escape listener (inner onKeyDown only fired if user had already Tab-ed in), (3) `aria-label` on the `role="status"` container masked the vacancy title from screen readers, and (4) auto-dismiss timer was not focus-pause-aware (only pointer-pause), violating WCAG 2.2.1. | (1) `ctaRef` + 320ms-delayed mount-focus effect respecting `prefers-reduced-motion`. (2) Global `document.addEventListener("keydown", ...)` with cleanup on unmount, guarded by `isExiting`. (3) Replaced static `aria-label` with `aria-labelledby={\`${titleId} ${subtitleId}\`}` via `useId()`, so the announcement contains BOTH "Super-liked!" and the vacancy title. (4) `skipNextFocusPauseRef` flag consumed by `handleFocusIn` so the programmatic mount-focus does not pause the timer indefinitely; subsequent user focus events pause normally. Added 9 new tests (25 total in the suite). |
+
+### Honesty gate catch
+ADR-030 had originally speculated that `deactivateModule` duplicated the dispatcher's work. During CRIT-A1 remediation, the agent discovered this was FACTUALLY WRONG — the dispatcher handler was dead code (event declared + subscribed but never emitted). The fix is still correct (activates the handler) but the UX side-effect is different from what the ADR predicted: fewer notifications per deactivation, not de-duplication of existing duplicates. ADR-030 has been corrected.
+
+### Skill invocation test result
+Sprint 1 was an experiment in delegating work to subagents with explicit skill invocation instructions ("invoke `<skill>` via the Skill tool before planning"). All 5 agents invoked their assigned skill (`backend-development:architecture-patterns` for A1/A2, `ui-design:accessibility-compliance` for Y1/Y2/Y3) and reported the concrete rules that shaped their fix. Option 3 from the pre-sprint plan (delegated with explicit skill invocation) worked as intended.
 
 ## UX Sprint + Honesty Gate Fixes (2026-04-09)
 
