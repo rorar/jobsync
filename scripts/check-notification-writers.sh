@@ -22,15 +22,15 @@ ALLOWED_FILES=(
   # The in-app channel implementation itself is the legitimate writer.
   "src/lib/notifications/channels/in-app.channel.ts"
   # Legacy legitimate exceptions patched to satisfy LateBoundLocale
-  # (ADR-030). Stream 2 of the next sprint will refactor these to
-  # event emission, after which they should be removed from this list.
+  # (ADR-030). A future sprint will refactor these to event emission,
+  # after which they should be removed from this list.
   "src/lib/connector/degradation.ts"
   "src/lib/notifications/channels/webhook.channel.ts"
-  # Additional legacy writer surfaced by the stream-4 grep enforcement
-  # (not originally listed in ADR-030). Also patched pending the
-  # event-emission refactor. TODO: add to ADR-030 legacy list or
-  # refactor to event emission as part of Stream 2.
-  "src/actions/module.actions.ts"
+  # NOTE: src/actions/module.actions.ts was in this list between Stream 4
+  # and Sprint 1 CRIT-A1. It was removed in the CRIT-A1 commit once the
+  # direct createMany was replaced with an emitEvent(ModuleDeactivated)
+  # call — the dispatcher's handleModuleDeactivated handler is now the
+  # single writer for this event, fully satisfying LateBoundLocale.
 )
 
 # Grep for the offending patterns across src/

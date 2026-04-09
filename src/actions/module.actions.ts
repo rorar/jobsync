@@ -19,6 +19,7 @@ import { handleError } from "@/lib/utils";
 import { ActionResult } from "@/models/actionResult";
 import { checkModuleHealth } from "@/lib/connector/health-monitor";
 import { checkHealthCheckRateLimit } from "@/lib/health-rate-limit";
+import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 
 // =============================================================================
 // Types
@@ -256,22 +257,29 @@ export async function deactivateModule(
         },
       });
 
-      // Create persistent notifications using createMany (no N+1)
-      // Each notification targets the automation's owner (global scope).
-      try {
-        await prisma.notification.createMany({
-          data: affectedAutomations.map((auto) => ({
-            userId: auto.userId,
-            type: "module_deactivated",
-            message: `Automation "${auto.name}" paused because module "${moduleId}" was deactivated.`,
+      // Emit ONE ModuleDeactivated domain event per distinct affected user.
+      // The notification-dispatcher consumer (in-app + webhook + email + push
+      // channels) is the single writer — see ADR-030 / specs/notification-dispatch.allium
+      // (invariants SingleNotificationWriter + LateBoundLocale). The dispatcher
+      // resolves the viewer's locale and populates structured titleKey/titleParams
+      // so users on non-English locales see correctly localized notifications
+      // that re-localize when the user switches language later.
+      const automationIdsByUser = new Map<string, string[]>();
+      for (const auto of affectedAutomations) {
+        const existing = automationIdsByUser.get(auto.userId);
+        if (existing) {
+          existing.push(auto.id);
+        } else {
+          automationIdsByUser.set(auto.userId, [auto.id]);
+        }
+      }
+      for (const [userId, automationIds] of automationIdsByUser) {
+        emitEvent(
+          createEvent(DomainEventTypes.ModuleDeactivated, {
             moduleId,
-            automationId: auto.id,
-          })),
-        });
-      } catch (notifyError) {
-        console.error(
-          `[deactivateModule] Failed to create notifications for ${affectedAutomations.length} paused automations (module: ${moduleId}):`,
-          notifyError,
+            userId,
+            affectedAutomationIds: automationIds,
+          }),
         );
       }
     }

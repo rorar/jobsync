@@ -488,7 +488,8 @@ The contract is additive — callers that only destructure `{ success }` keep wo
 - `src/lib/notifications/channels/in-app.channel.ts` — legitimate (the channel implementation)
 - `src/lib/connector/degradation.ts` — 3 sites
 - `src/lib/notifications/channels/webhook.channel.ts` — 2 sites
-- `src/actions/module.actions.ts` — 1 site in `deactivateModule` (surfaced by the `scripts/check-notification-writers.sh` grep enforcement, NOT originally listed in ADR-030 because earlier blind-spot scans only looked under `src/lib/`). Also produces duplicate notifications because the same event is also consumed by `notification-dispatcher.ts:handleModuleDeactivated`. Scheduled for removal in the Sprint 1 event-emission refactor.
+
+**Removed in Sprint 1 CRIT-A1**: `src/actions/module.actions.ts:deactivateModule` used to call `prisma.notification.createMany` directly. It now emits `ModuleDeactivated` via the domain event bus, and `notification-dispatcher.handleModuleDeactivated` is the single writer. As a side-effect, users now receive one summary notification per module deactivation (instead of N notifications, one per paused automation), and the notification goes through all enabled channels (in-app + webhook + email + push) instead of only in-app.
 
 **Enforcement:** `bash scripts/check-notification-writers.sh` (also `bun run check:notification-writers`) greps `src/` for `prisma.notification.(create|createMany)` and fails if any match lives outside the allowlist above. Run it before every commit that touches notification code.
 

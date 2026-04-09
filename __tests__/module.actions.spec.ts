@@ -1,7 +1,8 @@
 /**
  * Unit tests for module.actions.ts — focused on Manifest v2 migration paths:
  * - getModuleManifests(): i18n field, dependencies field
- * - deactivateModule(): automation pausing, notification error logging
+ * - deactivateModule(): automation pausing + ModuleDeactivated event emission
+ *   (single-writer invariant — see ADR-030 / specs/notification-dispatch.allium)
  * - syncRegistryFromDb(): fail-open behavior
  */
 
@@ -11,12 +12,16 @@ jest.mock("@/utils/user.utils", () => ({
 }));
 
 // Mock prisma (via @/lib/db)
+// Note: `notification` is intentionally NOT mocked — the deactivateModule path
+// must no longer touch prisma.notification directly. If the action ever
+// regresses and calls it, Jest will throw `Cannot read properties of undefined`
+// which is a loud, correct failure mode for the SingleNotificationWriter
+// invariant (ADR-030 / specs/notification-dispatch.allium).
 jest.mock("@/lib/db", () => ({
   __esModule: true,
   default: {
     moduleRegistration: { findMany: jest.fn(), upsert: jest.fn() },
     automation: { findMany: jest.fn(), updateMany: jest.fn() },
-    notification: { createMany: jest.fn() },
   },
 }));
 
@@ -50,10 +55,25 @@ jest.mock("@/lib/utils", () => ({
   })),
 }));
 
+// Mock the domain event bus — deactivateModule publishes ModuleDeactivated
+// events instead of writing notifications directly.
+jest.mock("@/lib/events", () => ({
+  emitEvent: jest.fn(),
+  createEvent: jest.fn((type: string, payload: unknown) => ({
+    type,
+    timestamp: new Date(),
+    payload,
+  })),
+  DomainEventTypes: {
+    ModuleDeactivated: "ModuleDeactivated",
+  },
+}));
+
 import { getModuleManifests, deactivateModule } from "@/actions/module.actions";
 import { getCurrentUser } from "@/utils/user.utils";
 import { moduleRegistry } from "@/lib/connector/registry";
 import prisma from "@/lib/db";
+import { emitEvent } from "@/lib/events";
 import {
   ConnectorType,
   CredentialType,
@@ -200,7 +220,6 @@ describe("module.actions", () => {
       // No affected automations by default
       (prisma.automation.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
-      (prisma.notification.createMany as jest.Mock).mockResolvedValue({ count: 0 });
     });
 
     it("pauses active automations that use the deactivated module", async () => {
@@ -210,7 +229,6 @@ describe("module.actions", () => {
       ];
       (prisma.automation.findMany as jest.Mock).mockResolvedValue(automations);
       (prisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 2 });
-      (prisma.notification.createMany as jest.Mock).mockResolvedValue({ count: 2 });
 
       const result = await deactivateModule(moduleId);
 
@@ -224,54 +242,67 @@ describe("module.actions", () => {
       });
     });
 
-    it("creates notifications for each automation owner after pausing", async () => {
+    it("emits one ModuleDeactivated event per distinct affected user", async () => {
+      // Two automations belonging to the same user, plus one for a second user.
+      // The dispatcher model is per-user — the consumer writes one summary
+      // notification per event. We therefore emit exactly ONE event per user,
+      // grouping the affected automation ids.
+      const automations = [
+        { id: "auto-1", name: "Daily Search", userId: "user-1" },
+        { id: "auto-2", name: "Weekly Sweep", userId: "user-1" },
+        { id: "auto-3", name: "EU Search", userId: "user-2" },
+      ];
+      (prisma.automation.findMany as jest.Mock).mockResolvedValue(automations);
+      (prisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 3 });
+
+      await deactivateModule(moduleId);
+
+      expect(emitEvent).toHaveBeenCalledTimes(2);
+
+      // user-1 gets both of their automations in a single event
+      expect(emitEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "ModuleDeactivated",
+          payload: {
+            moduleId,
+            userId: "user-1",
+            affectedAutomationIds: ["auto-1", "auto-2"],
+          },
+        }),
+      );
+      // user-2 gets their own event
+      expect(emitEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "ModuleDeactivated",
+          payload: {
+            moduleId,
+            userId: "user-2",
+            affectedAutomationIds: ["auto-3"],
+          },
+        }),
+      );
+    });
+
+    it("never calls prisma.notification directly (SingleNotificationWriter invariant)", async () => {
+      // ADR-030 / specs/notification-dispatch.allium — the deactivateModule
+      // path must route ALL notification creation through domain events so
+      // that the notification-dispatcher consumer is the single writer.
+      // We assert this at the mock level: `notification` is intentionally
+      // absent from the prisma mock, so any regression that re-introduces
+      // a direct write will throw synchronously.
       const automations = [
         { id: "auto-1", name: "Daily Search", userId: "user-1" },
       ];
       (prisma.automation.findMany as jest.Mock).mockResolvedValue(automations);
       (prisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-      (prisma.notification.createMany as jest.Mock).mockResolvedValue({ count: 1 });
-
-      await deactivateModule(moduleId);
-
-      expect(prisma.notification.createMany).toHaveBeenCalledWith({
-        data: [
-          expect.objectContaining({
-            userId: "user-1",
-            type: "module_deactivated",
-            automationId: "auto-1",
-            moduleId,
-          }),
-        ],
-      });
-    });
-
-    it("logs error but does not throw when notification creation fails", async () => {
-      const automations = [{ id: "auto-1", name: "Daily Search", userId: "user-1" }];
-      (prisma.automation.findMany as jest.Mock).mockResolvedValue(automations);
-      (prisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-      (prisma.notification.createMany as jest.Mock).mockRejectedValue(
-        new Error("DB constraint violation"),
-      );
-
-      const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
       const result = await deactivateModule(moduleId);
 
-      // Action still succeeds despite notification failure
       expect(result.success).toBe(true);
-      expect(result.data!.pausedAutomations).toBe(1);
-
-      // Error was logged
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining("[deactivateModule]"),
-        expect.any(Error),
-      );
-
-      consoleSpy.mockRestore();
+      expect((prisma as unknown as Record<string, unknown>).notification).toBeUndefined();
     });
 
-    it("skips automation updates when no active automations use the module", async () => {
+    it("skips automation updates and emits no events when no active automations use the module", async () => {
       (prisma.automation.findMany as jest.Mock).mockResolvedValue([]);
 
       const result = await deactivateModule(moduleId);
@@ -279,7 +310,7 @@ describe("module.actions", () => {
       expect(result.success).toBe(true);
       expect(result.data!.pausedAutomations).toBe(0);
       expect(prisma.automation.updateMany).not.toHaveBeenCalled();
-      expect(prisma.notification.createMany).not.toHaveBeenCalled();
+      expect(emitEvent).not.toHaveBeenCalled();
     });
 
     it("returns not-authenticated when user is missing", async () => {
@@ -289,6 +320,7 @@ describe("module.actions", () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toBe("Not authenticated");
+      expect(emitEvent).not.toHaveBeenCalled();
     });
   });
 
@@ -326,7 +358,18 @@ describe("syncRegistryFromDb — direct fail-open verification", () => {
       default: {
         moduleRegistration: { findMany: jest.fn() },
         automation: { findMany: jest.fn(), updateMany: jest.fn() },
-        notification: { createMany: jest.fn() },
+      },
+    }));
+
+    jest.mock("@/lib/events", () => ({
+      emitEvent: jest.fn(),
+      createEvent: jest.fn((type: string, payload: unknown) => ({
+        type,
+        timestamp: new Date(),
+        payload,
+      })),
+      DomainEventTypes: {
+        ModuleDeactivated: "ModuleDeactivated",
       },
     }));
 
