@@ -50,6 +50,16 @@ export function DiscoveredJobDetail({
 
   const jobUrl = job.sourceUrl ? euresJobDetailUrl(job.sourceUrl, locale) : null;
 
+  // Map the raw status enum to a translated label. Falls back to the raw
+  // status string if the key is missing (e.g. during a future enum drift),
+  // so users never see an empty badge.
+  const statusLabel = (() => {
+    if (!job.status) return "";
+    const key = `automations.discoveredJob.status.${job.status}`;
+    const translated = t(key);
+    return translated === key ? job.status : translated;
+  })();
+
   const handleAccept = async () => {
     setLoadingAction("accept");
     const result = await acceptDiscoveredJob(job.id);
@@ -124,7 +134,7 @@ export function DiscoveredJobDetail({
               <Badge variant="default" className="text-lg px-3 py-1">
                 {job.matchScore}% {t("automations.discoveredJob.matchSuffix")}
               </Badge>
-              <Badge variant="outline">{job.status}</Badge>
+              <Badge variant="outline">{statusLabel}</Badge>
               {job.automation && (
                 <span className="text-sm text-muted-foreground">
                   {t("automations.discoveredJob.fromAutomation")} {job.automation.name}

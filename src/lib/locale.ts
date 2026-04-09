@@ -25,7 +25,12 @@ export async function getUserLocale(): Promise<string> {
           if (parsed.locale && isValidLocale(parsed.locale)) {
             return parsed.locale;
           }
-        } catch {}
+        } catch (error) {
+          console.debug(
+            "[locale] userSettings.settings JSON parse failed: falling back to default",
+            error,
+          );
+        }
       }
     }
 
@@ -35,7 +40,12 @@ export async function getUserLocale(): Promise<string> {
     if (cookieLocale && isValidLocale(cookieLocale)) {
       return cookieLocale;
     }
-  } catch {}
+  } catch (error) {
+    console.debug(
+      "[locale] getUserLocale auth/DB/cookie read failed: falling back to default",
+      error,
+    );
+  }
 
   return DEFAULT_LOCALE;
 }
@@ -51,6 +61,11 @@ export async function getLocaleFromCookie(): Promise<string> {
     if (cookieLocale && isValidLocale(cookieLocale)) {
       return cookieLocale;
     }
-  } catch {}
+  } catch (error) {
+    console.debug(
+      "[locale] getLocaleFromCookie cookie read failed: falling back to default",
+      error,
+    );
+  }
   return DEFAULT_LOCALE;
 }

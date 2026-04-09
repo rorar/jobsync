@@ -147,6 +147,13 @@ export const automations = {
     "automations.discoveredJob.acceptedTitle": "Job accepted",
     "automations.discoveredJob.acceptedDescription": "The job has been added to your tracked jobs.",
     "automations.discoveredJob.dismissedTitle": "Job dismissed",
+    "automations.discoveredJob.status.staged": "Staged",
+    "automations.discoveredJob.status.processing": "Processing",
+    "automations.discoveredJob.status.ready": "Ready",
+    "automations.discoveredJob.status.promoted": "Promoted",
+    "automations.discoveredJob.status.dismissed": "Dismissed",
+    "automations.discoveredJob.status.archived": "Archived",
+    "automations.discoveredJob.status.trashed": "Trashed",
 
     // LogsTab
     "automations.automationLogs": "Automation Logs",
@@ -581,6 +588,13 @@ export const automations = {
     "automations.discoveredJob.acceptedTitle": "Stelle angenommen",
     "automations.discoveredJob.acceptedDescription": "Die Stelle wurde zu Ihren verfolgten Stellen hinzugefügt.",
     "automations.discoveredJob.dismissedTitle": "Stelle abgelehnt",
+    "automations.discoveredJob.status.staged": "Vorgemerkt",
+    "automations.discoveredJob.status.processing": "In Bearbeitung",
+    "automations.discoveredJob.status.ready": "Bereit",
+    "automations.discoveredJob.status.promoted": "Übernommen",
+    "automations.discoveredJob.status.dismissed": "Abgelehnt",
+    "automations.discoveredJob.status.archived": "Archiviert",
+    "automations.discoveredJob.status.trashed": "Im Papierkorb",
 
     // LogsTab
     "automations.automationLogs": "Automatisierungsprotokolle",
@@ -1015,6 +1029,13 @@ export const automations = {
     "automations.discoveredJob.acceptedTitle": "Emploi accepté",
     "automations.discoveredJob.acceptedDescription": "L'emploi a été ajouté à vos emplois suivis.",
     "automations.discoveredJob.dismissedTitle": "Emploi rejeté",
+    "automations.discoveredJob.status.staged": "En attente",
+    "automations.discoveredJob.status.processing": "En traitement",
+    "automations.discoveredJob.status.ready": "Prêt",
+    "automations.discoveredJob.status.promoted": "Promu",
+    "automations.discoveredJob.status.dismissed": "Rejeté",
+    "automations.discoveredJob.status.archived": "Archivé",
+    "automations.discoveredJob.status.trashed": "Dans la corbeille",
 
     // LogsTab
     "automations.automationLogs": "Journaux d'automatisation",
@@ -1449,6 +1470,13 @@ export const automations = {
     "automations.discoveredJob.acceptedTitle": "Empleo aceptado",
     "automations.discoveredJob.acceptedDescription": "El empleo se ha añadido a sus empleos en seguimiento.",
     "automations.discoveredJob.dismissedTitle": "Empleo descartado",
+    "automations.discoveredJob.status.staged": "En espera",
+    "automations.discoveredJob.status.processing": "Procesando",
+    "automations.discoveredJob.status.ready": "Listo",
+    "automations.discoveredJob.status.promoted": "Promovido",
+    "automations.discoveredJob.status.dismissed": "Descartado",
+    "automations.discoveredJob.status.archived": "Archivado",
+    "automations.discoveredJob.status.trashed": "En la papelera",
 
     // LogsTab
     "automations.automationLogs": "Registros de automatización",

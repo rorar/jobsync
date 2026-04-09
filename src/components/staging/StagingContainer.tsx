@@ -283,6 +283,16 @@ function StagingContainer() {
           } else {
             toast({ variant: "destructive", title: t("staging.error"), description: result.message });
           }
+          // Dev diagnostics — surface silent contract drift if the server
+          // action reports success but omits the created jobId. The deck
+          // celebration fly-in relies on createdJobId being populated, so a
+          // drift here would silently break super-like UX without any error.
+          if (result.success && !result.data?.jobId) {
+            console.warn(
+              "[StagingContainer] promoteStagedVacancyToJob succeeded but returned no jobId",
+              { stagedVacancyId: vacancy.id, result },
+            );
+          }
           return { success: result.success, createdJobId: result.data?.jobId };
         }
 
