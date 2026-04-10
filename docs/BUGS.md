@@ -1,8 +1,78 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-10
 
-**Total: 543 bugs found, 541 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
+**Total: 558 bugs found, 556 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
+
+## Sprint 5 Deferred-Items Cleanup (2026-04-10)
+
+15 items closed across 4 parallel streams. Sprint 5 is a dedicated cleanup of
+small-to-medium deferrals surfaced during Sprints 1-4 honesty gates, full
+reviews, and multi-stream scans. Each stream invoked a dimension-specific skill
+via the Skill tool with combined (a)+(b) instrumentation.
+
+**Skills per stream**:
+- Stream A (notification + event-bus + i18n): `backend-development:architecture-patterns`
+- Stream B (test coverage): `javascript-typescript:javascript-testing-patterns`
+- Stream C (i18n file split): `backend-development:architecture-patterns`
+- Stream D (database + audit + observability): `backend-development:architecture-patterns`
+
+### Fixed — Stream A: Notification hook + event-bus spec + i18n (3 items, commit `4da7989`)
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| L-A-05 ext | LOW | `rotateVapidKeysAction` missing `channelRouter.invalidateAvailability(user.id, "push")` hook. Sprint 4 Stream A only wired subscribe/unsubscribe — rotating VAPID keys deletes ALL WebPushSubscription rows but the 30s TTL cache kept claiming "push available". | Added the hook after `rotateVapidKeys()` succeeds, mirroring the subscribe/unsubscribe call sites. Stream B added call-chain test. |
+| M-Y-07 ext | LOW | Sprint 3 Stream H suggested the stricter `notifications.unreadLiveRegion` phrasing "3 unread notifications" instead of re-using `notifications.title`. Key was deferred. | Added `notifications.unreadLiveRegion` with `{count}` placeholder in all 4 locales (en/de/fr/es). KEY-ONLY; `NotificationBell.tsx` wiring deferred to the sprint that can update the test in lockstep. |
+| H-P-06 ext | LOW | Sprint 3 Stream A (commit `b1671d2`) partially synced `specs/event-bus.allium` to describe `Promise.allSettled` parallel dispatch, but left TWO stale references: `rule ConsumerRegistration` `@guidance` and the Open Questions RESOLVED comment both still claimed "sequential execution". Flashlight-effect blind spot. | Updated both stale sites to describe the parallel dispatch with cross-references to the post-H-P-06 `ErrorIsolation` and `OrderGuarantee` rules. |
+
+### Fixed — Stream B: Test coverage expansion (3 items, commit `84f9ea3`)
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| L-T-04 ext | LOW | Sprint 4 Stream D added `mockStagedVacancyWithAutomation` fixture but 3 test files still used the inline spread pattern `{ ...mockStagedVacancy, automation: {...} }`. | Migrated `DeckCard.spec.tsx`, `useDeckStack.spec.ts`, `StagingContainerDeckSheetRouting.spec.tsx` to use the shared fixture. Zero test assertions changed. |
+| L-A-07 test | LOW | Sprint 4 Stream A's 305-line `enforced-writer.ts` leaf module had no direct unit tests — `_enforcedWriterInternals.resolvePreferencesForEnforcer` fail-open branch only indirectly covered. | New `__tests__/enforced-writer.spec.ts` with 15 tests covering happy path, fail-open on DB error, fail-open on missing user, edge cases. |
+| invalidate-availability coverage | LOW | Sprint 4 Stream A added 8 `invalidateAvailability` hook sites across push/smtp/webhook.actions but the end-to-end call-chain behavior was untested. | New `__tests__/invalidate-availability-hooks.spec.ts` with 32 tests covering all 8 hook sites (including Stream A's new `rotateVapidKeysAction`) — happy path + unauthenticated negative + precondition-failing negative for each. |
+
+### Fixed — Stream C: i18n file split + cross-locale coverage (3 items, commit `45f4a6f`)
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| i18n split | LOW | Sprint 4 full-review added `EXTRA_ALLOWED_PREFIXES` workaround because `settings.ts` hosted TWO prefixes (`settings.*` + `developer.*`) in one file — a tactical hack, not the proper bounded-context-per-file pattern. | Extracted 44 `developer.*` keys × 4 locales (176 entries) into new `src/i18n/dictionaries/developer.ts`. Byte-equivalent value preservation — pure move refactor. Updated `dictionaries.ts` merge. |
+| dictionaries.spec | LOW | `dictionaries.spec.ts` had the Sprint 4 `EXTRA_ALLOWED_PREFIXES` workaround and excluded `notifications` namespace from cross-locale checks (Sprint 4 Stream A was mid-edit). | Added `developer` + `notifications` to `namespaceDictionaries`. Removed the `EXTRA_ALLOWED_PREFIXES` constant. Simplified the prefix check to a clean `key.startsWith(\`${nsName}.\`)`. Extended `merged dictionary completeness` to cover both new namespaces. |
+| smtp split | LOW (discovered non-issue) | Sprint 4's `EXTRA_ALLOWED_PREFIXES` included `"smtp."` for settings.ts but Stream C discovered `smtp.*` keys don't live in settings.ts at all — they live in `email.ts`. The workaround entry was dead code. | Documented the discovery. The `email.ts` split (4 prefixes across 78 keys) is a separate Sprint 6 follow-up — see § Open follow-ups below. |
+
+### Fixed — Stream D: Database schema + audit log + enrichment observability (3 items, commit `78b721f`)
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| CRIT-S-04 ext | LOW | Sprint 1.5 CRIT-S-04 deferred the `AdminAuditLog` Prisma model — audit entries lived only on stderr because the hotfix pipeline couldn't run migrations. | Added `AdminAuditLog` Prisma model + migration. Rewired `writeAdminAuditLog` as a Hexagonal port/adapter: primary DB adapter with fire-and-forget semantics + always-available stderr port as fallback source of truth. No FK to User (forensic durability), `actorId NOT NULL` (anonymous attempts stderr-only), `extra: String?` (SQLite JSON). New spec with 8 tests covering happy + fail-open paths + anonymous + fire-and-forget. |
+| Sprint 3 M-P-06 ext | LOW | `getStagedVacancies` sorts by `discoveredAt DESC` but the existing `@@index([userId, createdAt])` doesn't match. Sort cost was unchanged by Sprint 3's M-P-02 fix. | Added `@@index([userId, discoveredAt])` to `StagedVacancy`. Query engine can now serve the staging-list query as an index range scan. Kept existing composites for other access patterns. |
+| L-S-04 ext | LOW | Sprint 4 Stream C's `MAX_ENRICHMENT_QUEUE_LENGTH = 200` drop signal was `console.warn` only — not a queryable metric for operators. | Added module-level `enrichmentQueueDroppedCount` counter (per-process, mirroring the existing `activeEnrichments` pattern), structured `[enrichment-queue-drop]` stderr JSON line on each drop (domain, cumulative count, queue length, max cap), and test-only helpers for assertions. Legacy `console.warn` preserved for test backward compatibility. |
+
+### Multi-stream honesty gate — Sprint 5 open follow-ups surfaced
+
+Per `feedback_multi_stream_honesty_gate.md`, scanned each stream report's full Open Questions + Risks sections. Items added to the durable follow-up list below:
+
+**i18n (Stream C discovery — NEW DEFERRAL):**
+- **`email.ts` multi-prefix split** — hosts FOUR prefixes (`email.*`, `errors.*`, `push.*`, `smtp.*`) across 78 keys × 4 locales. Same antipattern Sprint 5 Stream C just fixed for `settings.ts`. Requires upfront decision on `errors.*` cross-cutting (core + email.ts both host it): (a) keep as multi-prefix file with documented exception, (b) create dedicated `errors.ts` namespace and migrate project-wide, or (c) rename email.ts's `errors.smtpFoo` to `smtp.errorFoo`. Half-day dedicated split sprint. **Tracked in CLAUDE.md § Deferred Sprint Work + memory file `project_deferred_sprints_for_future_sessions.md`.**
+
+**Notification UI (Stream A deferred):**
+- **`notifications.unreadLiveRegion` wiring** — Stream A added the i18n key in all 4 locales but KEY-ONLY. `NotificationBell.tsx` consumer wiring + test update is a coordinated source-and-test change that belongs in its own small sprint.
+- **`unsubscribeAllPush` / GDPR delete-account audit** — if a GDPR account-deletion flow exists or is added later, it would have the same flip-to-unavailable failure mode as `rotateVapidKeysAction` and need the same `invalidateAvailability` hook. 15-minute grep.
+- **Plural rules for i18n keys** — `"{count} unread notifications"` reads awkwardly when count=1. Systemic cross-cutting decision affecting every count-based key in the app. Needs LinguiJS ICU plural rules or a custom plural helper.
+
+**Admin audit UI consumer (Stream D setup for future feature):**
+- Stream D added the `AdminAuditLog` Prisma model + write path. No admin UI reads from it yet — that's a dedicated feature sprint with UX design (filter by actor/action, retention display, CSV export).
+
+**Observability (Stream D + H-P-09 cross-reference):**
+- Enrichment queue-drop counter is a per-process module-level number, not a Prometheus metric. When H-P-09 observability sprint runs, this counter should be exported via the chosen metrics backend.
+
+**Skill invocation result (Sprint 5)**:
+All 4 Sprint 5 stream agents invoked their assigned skill via the Skill tool with the combined (a)+(b) instrumentation — verbatim quoted passage + rejected alternative with justification. Pattern continues to work across 5 sprints (1, 1.5, 2, 3, 4, 5).
+
+**Honesty gate caught (Sprint 5)**:
+1. Post-sprint full-jest verification surfaced 3 test failures — all test-side:
+   - `admin-audit-db-write.spec.ts` used `setImmediate` which is not defined in jsdom → swapped for `setTimeout(_, 0)`
+   - Two `invalidate-availability-hooks.spec.ts` [NEGATIVE] tests failed because `jest.clearAllMocks()` doesn't drain `mockResolvedValueOnce` queues, so residual Once values from prior tests polluted the ordering → added explicit `mockReset()` calls in the affected tests
+   - ZERO production bugs. Final run: 215 suites / 4109 passed / 2 todo / 0 failed.
+2. Multi-stream honesty-gate scan caught Stream C's discovery that `smtp.*` keys live in `email.ts` (not `settings.ts`) — documented the next multi-prefix antipattern as a dedicated deferral in CLAUDE.md § Deferred Sprint Work.
+3. Sprint 5 adds a new memory file `project_deferred_sprints_for_future_sessions.md` + CLAUDE.md § Deferred Sprint Work section to prevent future sessions from re-surfacing KNOWN deferrals as "new" findings.
 
 ## Sprint 4 LOW Tier (2026-04-10)
 

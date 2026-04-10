@@ -669,6 +669,36 @@ Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` on
 - **After UI changes:** Must have consulted the ui-design agents before implementation (design-review, create-component, accessibility-audit) and for mobile responsiveness `/responsive-design`. Wait for findings, if needed share with other agents,  then implement.
 - **After feature implementation:** Check `docs/documentation-agents.md` for which documentation agent/skill to run. Docs grow WITH features — update README, write User Guide sections, generate API docs as features ship.
 
+## Deferred Sprint Work — Handoff to Future Sessions
+
+After Sprints 1-5 closed ~540 findings in the 2026-04-09/10 session series, a set of items remains DELIBERATELY DEFERRED. These are NOT new findings — they are known, tracked, and waiting for either dedicated sprints, human design decisions, or entry criteria to trigger them. **Before starting any "cleanup" or "more sprints" pass, read `docs/BUGS.md` § Sprint 5 follow-ups + the memory file `project_deferred_sprints_for_future_sessions.md`.**
+
+The deferred items split into three categories:
+
+### Dedicated-sprint items (too big for a standard cleanup pass)
+
+- **H-P-09 Observability infrastructure** — Zero OpenTelemetry / Prometheus / distributed tracing / Core Web Vitals. Needs architectural design phase picking the stack (OpenTelemetry + Tempo + Prometheus + Grafana, OR an off-the-shelf APM). 2-3 week dedicated sprint. See `docs/BUGS.md` Sprint 2 deferred section.
+- **M-A-09 undoStore split-brain full pipe-through** — Pipe `ActionResult.data.undoTokenId` through `useDeckStack.onAction` → `UndoEntry` → `handleDeckUndo` → `undoStore.compensate(tokenId)` so promote/superlike/block can join the `REVERSIBLE_DECK_ACTIONS` allowlist. Sprint 3 Stream B shipped only the minimal trimmed fix. Touches ADR-030 Decision A contract. 2-3 day focused sprint.
+- **getStagedVacancies cursor pagination** — Currently uses skip/offset which degrades at large offsets. Cursor-based fix ripples into StagingContainer + RecordsPerPageSelector + BulkActionBar select-all + StagingNewItemsBanner. 2-3 day focused sprint. Preemptive — no user has hit the slowness yet.
+- **email.ts multi-prefix split** (discovered Sprint 5 Stream C) — `src/i18n/dictionaries/email.ts` hosts FOUR prefixes (`email.*`, `errors.*`, `push.*`, `smtp.*`) across 78 keys. Same antipattern Sprint 5 Stream C fixed for `settings.ts`. Requires upfront decision on `errors.*` cross-cutting (core + email.ts both host it). Half-day pure split.
+
+### Design-gated items (need human decision before any agent touches them)
+
+- **6 input-adjacent settings buttons at 40×40** — kept because growing to 44×44 would misalign with h-10 Input height. Requires project-wide `<Input>` h-11 bump. Design review.
+- **react-day-picker --cell-size 2rem → 44px** — widens the popover significantly. User testing.
+- **TasksTable density toggle** — new UX feature, needs user-facing design.
+- **Dark-mode MatchScoreRing contrast audit** — Sprint 4 Stream E L-Y-05 only audited light-mode. Needs full dark-mode WCAG sweep.
+
+### Latent items (NOT blocking, quick wins ready when needed)
+
+- **`DropdownMenuTrigger asChild` + JSX comment ESLint rule** — latent codebase-wide footgun. 2-3 hours for custom ESLint rule + integration test.
+- **`notifications.unreadLiveRegion` wiring** — Sprint 5 Stream A added the key × 4 locales but deferred the NotificationBell.tsx wiring. 30 minutes.
+- **`unsubscribeAllPush` / GDPR delete-account invalidateAvailability audit** — Stream A Sprint 5 Open Question. 15 minutes.
+- **Admin audit UI consumer** — Sprint 5 Stream D added the `AdminAuditLog` Prisma model + write path. Feature work to surface the DB rows in a review UI. 1-day feature sprint.
+- **Plural rules for i18n keys** — systemic cross-cutting decision. Affects all count-based keys. Needs user decision on LinguiJS ICU vs per-key singular variant.
+
+**Rule for future sessions:** if any team-review surfaces one of these items as a "new" finding, redirect the reviewer to this section. Re-surfacing a known deferral as a fresh finding wastes reviewer budget and misrepresents the project's deferral discipline. Team-reviews should focus on what's NEW since the last sprint, not rediscover the backlog.
+
 ## Git Workflow
 
 - Upstream: `Gsync/jobsync` (fork) 
