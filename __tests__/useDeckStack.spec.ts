@@ -14,11 +14,11 @@ import {
   type DeckAction,
 } from "@/hooks/useDeckStack";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
-import { mockStagedVacancy } from "@/lib/data/testFixtures";
+import { mockStagedVacancyWithAutomation } from "@/lib/data/testFixtures";
 
 // Create test vacancies with automation field
 function makeVacancy(overrides: Partial<StagedVacancyWithAutomation> = {}): StagedVacancyWithAutomation {
-  return { ...mockStagedVacancy, automation: null, ...overrides };
+  return { ...mockStagedVacancyWithAutomation, automation: null, ...overrides };
 }
 
 const vacancies: StagedVacancyWithAutomation[] = [

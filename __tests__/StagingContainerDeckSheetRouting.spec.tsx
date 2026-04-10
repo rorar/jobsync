@@ -50,7 +50,7 @@ import {
   within,
 } from "@testing-library/react";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
-import { mockStagedVacancy } from "@/lib/data/testFixtures";
+import { mockStagedVacancyWithAutomation } from "@/lib/data/testFixtures";
 
 // ---------------------------------------------------------------------------
 // jsdom pointer-capture stub (same pattern as SuperLikeCelebration.spec.tsx)
@@ -500,7 +500,7 @@ import StagingContainer from "@/components/staging/StagingContainer";
 
 function makeVacancy(id: string, title: string): StagedVacancyWithAutomation {
   return {
-    ...mockStagedVacancy,
+    ...mockStagedVacancyWithAutomation,
     id,
     title,
     status: "staged",

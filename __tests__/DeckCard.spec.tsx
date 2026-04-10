@@ -10,7 +10,7 @@ import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { DeckCard } from "@/components/staging/DeckCard";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
-import { mockStagedVacancy } from "@/lib/data/testFixtures";
+import { mockStagedVacancyWithAutomation } from "@/lib/data/testFixtures";
 
 jest.mock("@/i18n", () => ({
   useTranslations: jest.fn(() => ({
@@ -33,8 +33,7 @@ jest.mock("@/i18n", () => ({
 
 function makeVacancy(overrides: Partial<StagedVacancyWithAutomation> = {}): StagedVacancyWithAutomation {
   return {
-    ...mockStagedVacancy,
-    automation: { id: "auto-1", name: "EU Tech Jobs" },
+    ...mockStagedVacancyWithAutomation,
     ...overrides,
   };
 }
