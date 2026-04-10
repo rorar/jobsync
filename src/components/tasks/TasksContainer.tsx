@@ -19,7 +19,7 @@ import {
   startActivityFromTask,
 } from "@/actions/task.actions";
 import { toast } from "../ui/use-toast";
-import { Task, TaskStatus, TASK_STATUSES } from "@/models/task.model";
+import { Task, TaskStatus, TASK_STATUSES, TASK_STATUS_LABEL_KEYS } from "@/models/task.model";
 import {
   Select,
   SelectContent,
@@ -286,7 +286,7 @@ function TasksContainer({
                           checked={statusFilter.includes(status)}
                           onCheckedChange={() => toggleStatusFilter(status)}
                         >
-                          {TASK_STATUSES[status]}
+                          {t(TASK_STATUS_LABEL_KEYS[status])}
                         </DropdownMenuCheckboxItem>
                       ),
                     )}

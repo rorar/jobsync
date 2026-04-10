@@ -17,7 +17,7 @@ import { useForm } from "react-hook-form";
 import { useEffect, useTransition } from "react";
 import { AddTaskFormSchema } from "@/models/addTaskForm.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Task, TASK_STATUSES, TaskStatus } from "@/models/task.model";
+import { Task, TASK_STATUSES, TASK_STATUS_LABEL_KEYS, TaskStatus } from "@/models/task.model";
 import { z } from "zod";
 import { toast } from "../ui/use-toast";
 import {
@@ -46,11 +46,15 @@ type TaskFormProps = {
   setDialogOpen: (open: boolean) => void;
 };
 
-const statusOptions = Object.entries(TASK_STATUSES).map(([value, label]) => ({
-  id: value,
-  label,
-  value,
-}));
+// Status options are built inside the component (not at module scope)
+// so they can use the translation function for locale-aware labels.
+function buildStatusOptions(t: (key: string) => string) {
+  return (Object.keys(TASK_STATUSES) as TaskStatus[]).map((value) => ({
+    id: value,
+    label: t(TASK_STATUS_LABEL_KEYS[value]),
+    value,
+  }));
+}
 
 export function TaskForm({
   activityTypes,
@@ -217,7 +221,7 @@ export function TaskForm({
                       <FormLabel>{t("tasks.status")}</FormLabel>
                       <SelectFormCtrl
                         label={t("tasks.taskStatus")}
-                        options={statusOptions}
+                        options={buildStatusOptions(t)}
                         field={field}
                       />
                       <FormMessage />

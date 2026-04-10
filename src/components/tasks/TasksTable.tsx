@@ -45,7 +45,7 @@ import {
 } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
 import { useState } from "react";
-import { Task, TASK_STATUSES, TaskStatus } from "@/models/task.model";
+import { Task, TASK_STATUSES, TASK_STATUS_LABEL_KEYS, TaskStatus } from "@/models/task.model";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
 
 type TasksTableProps = {
@@ -258,7 +258,7 @@ function TasksTable({
             statusColors[task.status],
           )}
         >
-          {TASK_STATUSES[task.status]}
+          {t(TASK_STATUS_LABEL_KEYS[task.status])}
         </Badge>
       </TableCell>
       <TableCell className="hidden md:table-cell py-1 px-2">
@@ -322,7 +322,7 @@ function TasksTable({
                           onSelect={() => onChangeTaskStatus(task.id, status)}
                           disabled={status === task.status}
                         >
-                          <span>{TASK_STATUSES[status]}</span>
+                          <span>{t(TASK_STATUS_LABEL_KEYS[status])}</span>
                         </DropdownMenuItem>
                       ),
                     )}
