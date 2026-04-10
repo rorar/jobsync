@@ -4,11 +4,62 @@
  * Tests: open/close behaviour, list vs deck action sets, auto-close on
  * action, fallback for missing description, external link security
  * attributes, and SheetTitle presence for accessibility.
+ *
+ * M-T-06: The Sheet primitive mock has been removed.  The real Radix Sheet
+ * now renders so focus-trap, Escape handling, and portal behaviour are
+ * exercised against the production code path rather than a hand-rolled fake.
+ *
+ * jsdom constraints addressed:
+ *   - Radix Dialog uses PointerCapture internally (drag-to-dismiss).  jsdom
+ *     does not implement it — we stub the three methods on HTMLElement.prototype
+ *     using the same pattern as SuperLikeCelebration.spec.tsx (CRIT-Y3).
+ *   - Radix portals render into document.body, outside the `container`
+ *     returned by `render()`.  All queries use `screen` (global) rather than
+ *     scoped `container` queries so portal content is found correctly.
+ *   - SheetTitle is now a real Radix `DialogTitle` — we query it via its text
+ *     content rather than a synthetic data-testid.
+ *
+ * Mocks kept minimal:
+ *   - @/i18n (translation keys)
+ *   - @/hooks/use-media-query (force desktop layout)
+ *   - @/components/ui/scroll-area (pass-through, avoids ResizeObserver)
+ *   - @/components/ui/company-logo (avoids fetch / image paths in jsdom)
  */
 import "@testing-library/jest-dom";
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
+
+// ---------------------------------------------------------------------------
+// jsdom: Pointer Capture stubs
+// Required because Radix Dialog calls setPointerCapture internally on
+// drag-to-dismiss handlers. Without the stub the component throws in jsdom.
+// Pattern identical to SuperLikeCelebration.spec.tsx (CRIT-Y3).
+// ---------------------------------------------------------------------------
+beforeAll(() => {
+  if (!("setPointerCapture" in HTMLElement.prototype)) {
+    Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
+      value: jest.fn(),
+      writable: true,
+      configurable: true,
+    });
+  }
+  if (!("releasePointerCapture" in HTMLElement.prototype)) {
+    Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", {
+      value: jest.fn(),
+      writable: true,
+      configurable: true,
+    });
+  }
+  if (!("hasPointerCapture" in HTMLElement.prototype)) {
+    Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
+      value: jest.fn().mockReturnValue(false),
+      writable: true,
+      configurable: true,
+    });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -58,68 +109,7 @@ jest.mock("@/hooks/use-media-query", () => ({
   useMediaQuery: jest.fn(() => true),
 }));
 
-// Mock the Sheet primitives to render inline (Radix portals don't work in JSDOM)
-jest.mock("@/components/ui/sheet", () => {
-  const React = require("react");
-  return {
-    Sheet: ({
-      open,
-      children,
-    }: {
-      open?: boolean;
-      onOpenChange?: (open: boolean) => void;
-      children: React.ReactNode;
-    }) => (open ? <div data-testid="sheet-root">{children}</div> : null),
-    SheetContent: ({
-      children,
-      className,
-    }: {
-      children: React.ReactNode;
-      side?: string;
-      className?: string;
-    }) => (
-      <div role="dialog" aria-modal="true" className={className}>
-        {children}
-      </div>
-    ),
-    SheetHeader: ({ children }: { children: React.ReactNode }) => (
-      <header>{children}</header>
-    ),
-    SheetFooter: ({
-      children,
-      className,
-    }: {
-      children: React.ReactNode;
-      className?: string;
-    }) => <footer className={className}>{children}</footer>,
-    SheetTitle: ({
-      children,
-      className,
-    }: {
-      children: React.ReactNode;
-      className?: string;
-    }) => (
-      <h2 data-testid="sheet-title" className={className}>
-        {children}
-      </h2>
-    ),
-    SheetDescription: ({
-      children,
-      id,
-      className,
-    }: {
-      children: React.ReactNode;
-      id?: string;
-      className?: string;
-    }) => (
-      <p id={id} className={className}>
-        {children}
-      </p>
-    ),
-  };
-});
-
-// ScrollArea renders children directly in tests
+// ScrollArea renders children directly in tests — avoids ResizeObserver
 jest.mock("@/components/ui/scroll-area", () => ({
   ScrollArea: ({
     children,
@@ -130,7 +120,7 @@ jest.mock("@/components/ui/scroll-area", () => ({
   }) => <div className={className}>{children}</div>,
 }));
 
-// CompanyLogo mock to avoid the IntersectionObserver / image loading paths
+// CompanyLogo mock — avoids fetch / image loading paths in jsdom
 jest.mock("@/components/ui/company-logo", () => ({
   CompanyLogo: ({ companyName }: { companyName: string }) => (
     <span data-testid="company-logo">{companyName}</span>
@@ -218,6 +208,7 @@ describe("StagedVacancyDetailSheet — open/close", () => {
 
   it("renders the dialog when open is true", () => {
     renderSheet({ open: true });
+    // Radix Sheet renders a portal into document.body with role="dialog"
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
@@ -229,6 +220,40 @@ describe("StagedVacancyDetailSheet — open/close", () => {
   it("does NOT crash when vacancy is null and open is true", () => {
     renderSheet({ vacancy: null, open: true });
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  // M-T-06 regression: Escape key triggers onOpenChange(false) via real Radix
+  // focus-trap + DismissableLayer. With the old Sheet mock, the Escape handler
+  // was a plain div listener that did not call onOpenChange at all.
+  it("calls onOpenChange(false) when Escape is pressed (real focus-trap)", async () => {
+    const onOpenChange = jest.fn();
+    renderSheet({ open: true, onOpenChange });
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+
+    // Radix Dialog handles Escape at the document level. fireEvent on the
+    // dialog element bubbles up correctly in jsdom.
+    await act(async () => {
+      fireEvent.keyDown(dialog, { key: "Escape", code: "Escape", bubbles: true });
+    });
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+  });
+
+  // M-T-06 regression: focus should be trapped inside the dialog. We assert
+  // that the first focusable element in the dialog receives focus after mount.
+  it("traps focus inside the dialog on open (first focusable element focused)", async () => {
+    renderSheet({ open: true });
+
+    const dialog = screen.getByRole("dialog");
+    // Allow Radix focus-trap's micro-task to settle
+    await waitFor(() => {
+      const active = document.activeElement;
+      expect(dialog.contains(active)).toBe(true);
+    });
   });
 });
 
@@ -290,9 +315,15 @@ describe("StagedVacancyDetailSheet — content", () => {
     expect(screen.getByText("No description available")).toBeInTheDocument();
   });
 
-  it("renders the SheetTitle element (may be sr-only)", () => {
+  // M-T-06: with the real Sheet, SheetTitle is a Radix DialogTitle element.
+  // We can no longer query by the synthetic data-testid="sheet-title" that the
+  // old mock attached; instead we confirm the title text is present in the DOM
+  // (the SheetTitle renders as role="heading" or as a visually-hidden span
+  // depending on className — but in either case the text is in the DOM).
+  it("renders the SheetTitle content in the DOM (may be sr-only)", () => {
     renderSheet();
-    expect(screen.getByTestId("sheet-title")).toBeInTheDocument();
+    // The sr-only SheetTitle renders the vacancy title text
+    expect(screen.getAllByText("Senior React Developer").length).toBeGreaterThan(0);
   });
 
   it("renders the match score when present", () => {
@@ -455,6 +486,52 @@ describe("StagedVacancyDetailSheet — deck mode actions", () => {
     await waitFor(() => {
       expect(onDismiss).toHaveBeenCalledTimes(1);
     });
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite — M-T-06 regression: focus management + Escape (real Radix Sheet)
+// These tests would be meaningless with a mock Sheet — they validate that the
+// real Radix primitive wires up focus-trap and keyboard handling correctly.
+// ---------------------------------------------------------------------------
+
+describe("StagedVacancyDetailSheet — focus management (M-T-06 regression)", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("the dialog renders with an open state (Radix data-state='open')", () => {
+    renderSheet({ open: true });
+    const dialog = screen.getByRole("dialog");
+    // `aria-modal="true"` is a focus-trap-dependent attribute that Radix
+    // does not always set in jsdom (the focus trap needs a real browser
+    // layout to engage). `data-state="open"` is the Radix-primitive
+    // equivalent that IS reliably rendered in both jsdom and production,
+    // and it is the idiom shadcn/ui styles key off of. Testing behavior
+    // (the dialog is in its open state) rather than implementation detail
+    // (a specific ARIA attribute that Radix may or may not render) per
+    // the javascript-testing-patterns skill "test behavior, not
+    // implementation" rule.
+    expect(dialog).toHaveAttribute("data-state", "open");
+  });
+
+  it("the Radix close button (X) is present and accessible", () => {
+    renderSheet({ open: true });
+    // Radix SheetContent renders a built-in close button with sr-only "Close" text.
+    const closeBtn = screen.getByRole("button", { name: /close/i });
+    expect(closeBtn).toBeInTheDocument();
+  });
+
+  it("clicking the Radix close button calls onOpenChange(false)", async () => {
+    const onOpenChange = jest.fn();
+    renderSheet({ open: true, onOpenChange });
+
+    const closeBtn = screen.getByRole("button", { name: /close/i });
+    await act(async () => {
+      fireEvent.click(closeBtn);
+    });
+
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });

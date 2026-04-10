@@ -92,7 +92,12 @@ const testVacancies: StagedVacancyWithAutomation[] = [
 ];
 
 describe("DeckView", () => {
-  const mockOnAction = jest.fn().mockResolvedValue(undefined);
+  // M-T-01: reflect the real ADR-030 Decision A contract:
+  //   onAction: (...) => Promise<{ success: boolean; createdJobId?: string }>
+  // Returning `undefined` silently passed before because no test checked `.success`.
+  // Using the correct shape makes the entire suite a first-class regression guard
+  // against the CRIT-A2 class-of-bug (missing success check in callers).
+  const mockOnAction = jest.fn().mockResolvedValue({ success: true });
   const mockOnBackToList = jest.fn();
 
   beforeEach(() => {

@@ -24,8 +24,73 @@ export async function expectToast(
 }
 
 /**
+ * Deterministic wait helper (M-T-04).
+ *
+ * Drop-in alternative to `page.waitForTimeout()` that waits for a concrete
+ * observable condition rather than a fixed wall-clock duration.
+ *
+ * Usage:
+ *   // Wait for a selector to appear
+ *   await safeWait(page, { selector: '[data-testid="my-item"]' });
+ *
+ *   // Wait for a network response whose URL matches a pattern
+ *   await safeWait(page, { responseUrl: /\/api\/staging/ });
+ *
+ *   // Wait for the page to reach a specific load state
+ *   await safeWait(page, { loadState: "networkidle" });
+ *
+ *   // Wait for an arbitrary Playwright expectation to pass
+ *   await safeWait(page, { condition: async () => {
+ *     await expect(page.getByRole("dialog")).toBeVisible();
+ *   }});
+ *
+ * Policy (see e2e/CONVENTIONS.md — Anti-Patterns):
+ *   `page.waitForTimeout()` is documented by Playwright as an anti-pattern.
+ *   Fixed delays are non-deterministic: they silently over-wait on fast machines
+ *   and spuriously fail on slow ones (CI, low-memory VMs).  Always replace
+ *   fixed waits with one of the condition variants above.
+ *
+ * @param page     The Playwright Page object.
+ * @param options  Exactly one condition must be specified.
+ * @param timeout  Overall cap in milliseconds (default 15 000).
+ */
+export async function safeWait(
+  page: Page,
+  options:
+    | { selector: string; loadState?: never; responseUrl?: never; condition?: never }
+    | { loadState: "load" | "domcontentloaded" | "networkidle"; selector?: never; responseUrl?: never; condition?: never }
+    | { responseUrl: string | RegExp; selector?: never; loadState?: never; condition?: never }
+    | { condition: () => Promise<void>; selector?: never; loadState?: never; responseUrl?: never },
+  timeout = 15_000,
+): Promise<void> {
+  if (options.selector !== undefined) {
+    await page.waitForSelector(options.selector, { state: "visible", timeout });
+    return;
+  }
+  if (options.loadState !== undefined) {
+    await page.waitForLoadState(options.loadState, { timeout });
+    return;
+  }
+  if (options.responseUrl !== undefined) {
+    await page.waitForResponse(options.responseUrl, { timeout });
+    return;
+  }
+  if (options.condition !== undefined) {
+    await options.condition();
+    return;
+  }
+  throw new Error(
+    "safeWait: exactly one of selector / loadState / responseUrl / condition must be provided",
+  );
+}
+
+/**
  * Fill and select a combobox option, creating it if it does not already exist.
  * Uses 3-step fallback: exact match → partial match → create.
+ *
+ * M-T-04: internal `waitForTimeout` calls replaced with deterministic
+ * `waitFor` / `waitForSelector` calls so the helper does not contribute
+ * false-green test results on slow machines.
  */
 export async function selectOrCreateComboboxOption(
   page: Page,
@@ -35,9 +100,17 @@ export async function selectOrCreateComboboxOption(
   timeout = 3000,
 ) {
   await page.getByLabel(label).click();
-  await page.getByPlaceholder(searchPlaceholder).click();
-  await page.getByPlaceholder(searchPlaceholder).fill(text);
-  await page.waitForTimeout(600);
+  const searchInput = page.getByPlaceholder(searchPlaceholder);
+  await searchInput.click();
+  await searchInput.fill(text);
+
+  // M-T-04: replaced waitForTimeout(600) — wait for the options list to
+  // react to the typed text instead of a fixed 600 ms pause.
+  await page
+    .getByRole("option")
+    .first()
+    .waitFor({ state: "visible", timeout: 5000 })
+    .catch(() => null); // list may stay empty if "Create:" is the only entry
 
   const exactOption = page.getByRole("option", { name: text, exact: true });
   const partialOption = page
@@ -57,5 +130,12 @@ export async function selectOrCreateComboboxOption(
       await createOption.click();
     }
   }
-  await page.waitForTimeout(300);
+
+  // M-T-04: replaced waitForTimeout(300) — wait for the combobox to close
+  // (i.e., the options list to disappear) rather than sleeping a fixed 300 ms.
+  await page
+    .getByRole("option")
+    .first()
+    .waitFor({ state: "hidden", timeout: 3000 })
+    .catch(() => null); // acceptable if the list was never visible to begin with
 }

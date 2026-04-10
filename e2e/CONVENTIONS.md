@@ -120,8 +120,59 @@ Available imports:
 | `login(page)` | UI login — only for smoke tests |
 | `expectToast(page, pattern, timeout?)` | Assert toast notification visible |
 | `selectOrCreateComboboxOption(page, label, placeholder, text, timeout?)` | 3-step combobox: exact → partial → create |
+| `safeWait(page, options, timeout?)` | Deterministic wait — replaces `waitForTimeout`. See below. |
 
 **Adding a new shared helper**: Only add helpers used by 3+ spec files. If it's aggregate-specific, keep it local.
+
+## No `waitForTimeout` Policy (M-T-04)
+
+`page.waitForTimeout()` is an **anti-pattern** documented by Playwright itself.
+Fixed-duration waits are non-deterministic:
+
+- On fast machines they waste time unnecessarily.
+- On slow machines (CI, NixOS VMs with 8 GB RAM, no swap) they silently expire
+  before the UI has settled, producing flaky failures.
+- They mask real performance regressions — a slow render that happens to fit
+  inside 800 ms today might not tomorrow.
+
+### Replace `waitForTimeout` with `safeWait`
+
+```typescript
+import { safeWait } from "../helpers";
+
+// BAD — fixed 800 ms sleep:
+await page.waitForTimeout(800);
+
+// GOOD — wait for the element that proves the UI has settled:
+await safeWait(page, { selector: '[data-testid="staging-list-item"]' });
+
+// GOOD — wait for a network response:
+await safeWait(page, { responseUrl: /\/api\/staging/ });
+
+// GOOD — wait for full page load:
+await safeWait(page, { loadState: "networkidle" });
+
+// GOOD — arbitrary Playwright assertion:
+await safeWait(page, {
+  condition: async () => {
+    await expect(page.getByRole("dialog")).toBeVisible();
+  },
+});
+```
+
+### Acceptable exceptions
+
+`waitForTimeout` may be used **only** when:
+
+1. The delay guards against a known browser animation whose completion has no
+   observable DOM or network signal (e.g., a CSS transition with no class
+   change at end). In that case, add a comment explaining why no condition
+   exists.
+2. A short debounce delay (≤ 100 ms) is needed to flush a React state batch
+   that cannot be awaited through the DOM.
+
+In both cases, keep the duration as short as possible and add a `// EXCEPTION:`
+comment with the reason.
 
 ## Anti-Patterns
 

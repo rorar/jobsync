@@ -3,9 +3,19 @@
  *
  * Verifies the StagedVacancyDetailSheet (task 2 of the UX sprint) opens from
  * the list-mode card, displays the vacancy title, and closes cleanly without
- * advancing any state. Skips gracefully when the seed user has no staged
- * vacancies — creating one would require running an automation, which is
- * out of scope for an E2E test.
+ * advancing any state.
+ *
+ * M-T-03: The test no longer silently skips when the seed user has no staged
+ * vacancies.  A silent skip turns into a green badge that masks broken coverage
+ * — the same class-of-bug that CRIT-A2 exposed in production.  Instead, we
+ * hard-fail with an actionable message so CI immediately surfaces the missing
+ * seed data.  Run `bun run seed-dev` (or the equivalent migration script) to
+ * create at least one staged vacancy before running E2E tests.
+ *
+ * M-T-04: All `waitForTimeout` calls replaced with deterministic `waitFor`
+ * conditions.  Fixed waits are documented as an anti-pattern in
+ * e2e/CONVENTIONS.md — they silently pass on fast machines and flake on slow
+ * ones.
  */
 import { test, expect, type Page } from "@playwright/test";
 
@@ -24,8 +34,18 @@ async function navigateToStaging(page: Page) {
     .getByRole("tab", { name: /New/i })
     .first()
     .waitFor({ state: "visible", timeout: 15000 });
-  // Give the list a moment to load
-  await page.waitForTimeout(800);
+
+  // M-T-04: replaced waitForTimeout(800) with a deterministic condition.
+  // Wait until at least one Details button OR an identifiable empty-state
+  // element is present so we know the async list-fetch has settled.
+  await page
+    .getByRole("button", { name: /^Details:/i })
+    .first()
+    .waitFor({ state: "visible", timeout: 10000 })
+    .catch(async () => {
+      // No details buttons — the list may be genuinely empty.  That is
+      // acceptable here; the test body handles that case below.
+    });
 }
 
 test.describe("Staging details sheet", () => {
@@ -46,10 +66,18 @@ test.describe("Staging details sheet", () => {
     const detailsButtons = page.getByRole("button", { name: /^Details:/i });
     const buttonCount = await detailsButtons.count();
 
-    test.skip(
-      buttonCount === 0,
-      "no staged vacancies in seed data — details sheet cannot be opened",
-    );
+    // M-T-03: hard failure instead of silent skip.
+    // A `test.skip()` here would produce a passing CI badge with zero coverage
+    // of the details-sheet path.  Failing loudly forces the seed data to be
+    // present and keeps the test meaningful.
+    if (buttonCount === 0) {
+      throw new Error(
+        "seed user has no staged vacancies — the staging details sheet test " +
+          "cannot exercise any code path.\n" +
+          "Fix: run `bun run seed-dev` (or your equivalent seed script) before " +
+          "running E2E tests to ensure at least one staged vacancy exists.",
+      );
+    }
 
     // Take the first card. Read its accessible name to learn the vacancy title.
     const firstButton = detailsButtons.first();
@@ -61,7 +89,8 @@ test.describe("Staging details sheet", () => {
     // Open the sheet
     await firstButton.click();
 
-    // The sheet (Radix Sheet) renders as role="dialog"
+    // The sheet (Radix Sheet) renders as role="dialog".
+    // M-T-04: use toBeVisible with timeout instead of waitForTimeout.
     const sheet = page.getByRole("dialog");
     await expect(sheet).toBeVisible({ timeout: 5000 });
 
@@ -78,7 +107,7 @@ test.describe("Staging details sheet", () => {
     // Close the sheet via Escape (most reliable cross-browser dismiss)
     await page.keyboard.press("Escape");
 
-    // Verify the dialog is gone
+    // Verify the dialog is gone — M-T-04: deterministic expect, no fixed wait.
     await expect(sheet).not.toBeVisible({ timeout: 5000 });
 
     // Verify the original card's Details button is still on the page —

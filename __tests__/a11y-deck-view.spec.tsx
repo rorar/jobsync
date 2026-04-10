@@ -2,6 +2,22 @@
  * Accessibility (axe-core) tests for DeckView component.
  *
  * Tests: empty state a11y, populated deck a11y.
+ *
+ * M-T-05: The DeckCard stub has been removed.  The real DeckCard now renders
+ * so axe-core exercises the actual production markup — including the header,
+ * salary meta, description, and the info button WCAG 2.5.5 hit-area.
+ *
+ * Only DeckCard's *heavy* dependencies are mocked (CompanyLogo, lucide-react)
+ * — not DeckCard itself.  The mock targets are:
+ *
+ *   - lucide-react: icon components throw in jsdom because they use SVG
+ *     APIs that aren't fully implemented.  Replace with lightweight spans.
+ *   - CompanyLogo: triggers fetch/IntersectionObserver paths in the browser.
+ *     In jsdom it degrades safely to initials, but we mock it anyway to keep
+ *     the test hermetic and avoid any cross-cutting fetch intercepts.
+ *
+ * Everything else (MatchScoreRing, Badge, the DeckCard layout itself) renders
+ * real so axe-core sees the true DOM structure.
  */
 import "@testing-library/jest-dom";
 import React from "react";
@@ -60,6 +76,25 @@ jest.mock("@/i18n", () => ({
           "Vacancy {current} of {total}: {title}",
         "deck.cardAnnouncementNoScore":
           "Vacancy {current} of {total}: {title}",
+        "deck.blockTooltip": "Block this company",
+        "deck.skipTooltip": "Skip for now",
+        "deck.block": "Block",
+        "deck.skip": "Skip",
+        "deck.autoApprove": "Auto-approve promoted",
+        "deck.autoApproveHint": "Skip manual confirmation for promoted vacancies",
+        "deck.actionDismissed": "Dismissed",
+        "deck.actionPromoted": "Promoted",
+        "deck.actionSuperLiked": "Super-liked",
+        "deck.actionBlocked": "Blocked",
+        "deck.actionSkipped": "Skipped",
+        "deck.swipeHint": "Swipe to decide",
+        "deck.detailsTooltip": "View details",
+        "deck.noScoreHint": "Score not available",
+        // DeckCard extended meta keys
+        "deck.immediateStart": "Immediate start",
+        "deck.positions": "{count} positions",
+        // CompanyLogo fallback label
+        "enrichment.noLogo": "No logo available",
         "common.na": "N/A",
       };
       return dict[key] ?? key;
@@ -69,14 +104,16 @@ jest.mock("@/i18n", () => ({
   formatDateShort: jest.fn(() => "Mar 20, 2026"),
 }));
 
-// DeckCard — stub to avoid deep dependency tree
-jest.mock("@/components/staging/DeckCard", () => ({
-  DeckCard: ({ vacancy }: { vacancy: StagedVacancyWithAutomation }) => (
-    <div data-testid="deck-card">{vacancy.title}</div>
+// M-T-05: CompanyLogo mocked to keep the test hermetic (no fetch / image load
+// paths in jsdom).  The real DeckCard renders everything else.
+jest.mock("@/components/ui/company-logo", () => ({
+  CompanyLogo: ({ companyName }: { companyName: string }) => (
+    <span data-testid="company-logo">{companyName}</span>
   ),
 }));
 
-// lucide-react — minimal icon stubs
+// lucide-react — lightweight icon stubs.  jsdom does not fully support SVG
+// APIs that some icon implementations require; stubs keep the test hermetic.
 jest.mock("lucide-react", () => {
   const icons = new Proxy(
     {},
@@ -114,10 +151,11 @@ function makeVacancy(
 // ---------------------------------------------------------------------------
 
 describe("DeckView a11y", () => {
-  const mockOnAction = jest.fn().mockResolvedValue(undefined);
+  // M-T-01 / M-T-05: mockOnAction reflects the real ADR-030 Decision A contract.
+  const mockOnAction = jest.fn().mockResolvedValue({ success: true });
   const mockOnBackToList = jest.fn();
 
-  it("DeckView with vacancies has no a11y violations", async () => {
+  it("DeckView with vacancies has no a11y violations (real DeckCard DOM)", async () => {
     const vacancies = [
       makeVacancy("v1", "Job Alpha"),
       makeVacancy("v2", "Job Beta"),
