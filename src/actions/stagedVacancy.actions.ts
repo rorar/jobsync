@@ -17,6 +17,18 @@ import { emitEvent } from "@/lib/events";
 import { undoStore, createUndoEntry } from "@/lib/undo";
 import { APP_CONSTANTS } from "@/lib/constants";
 import type { RetentionResult } from "@/lib/vacancy-pipeline/retention.service";
+import { STAGED_VACANCY_LIST_SELECT } from "./stagedVacancy.select";
+
+// Re-export the shared select shape as an async wrapper so tests and other
+// callers can pull it from the "use server" module if they need to. The
+// actual constant lives in a sibling non-action module (`stagedVacancy.select.ts`)
+// because Next.js forbids non-async exports from files with the `"use server"`
+// directive.
+export async function getStagedVacancyListSelect(): Promise<
+  typeof STAGED_VACANCY_LIST_SELECT
+> {
+  return STAGED_VACANCY_LIST_SELECT;
+}
 
 // Narrow Prisma string to domain enum
 function toStagedVacancy<T extends { status: string; source: string }>(
@@ -26,6 +38,26 @@ function toStagedVacancy<T extends { status: string; source: string }>(
     ...row,
     status: row.status as StagedVacancyStatus,
     source: row.source as "manual" | "automation",
+  };
+}
+
+// Fill list-mode rows to match the full `StagedVacancy` shape for callers that
+// expect every scalar to be present. `matchData` is the only heavy JSON column
+// the list UI never reads (see M-P-02 in .team-feature/stream-5b-performance.md
+// and the regression guard in __tests__/stagedVacancy-list-select.spec.ts).
+// Any future reader that needs `matchData` MUST re-fetch via `getStagedVacancyById`.
+function toListStagedVacancy<
+  T extends { status: string; source: string },
+>(row: T): T & {
+  status: StagedVacancyStatus;
+  source: "manual" | "automation";
+  matchData: null;
+} {
+  return {
+    ...row,
+    status: row.status as StagedVacancyStatus,
+    source: row.source as "manual" | "automation",
+    matchData: null,
   };
 }
 
@@ -79,9 +111,18 @@ export async function getStagedVacancies(
     }
 
     const [data, total] = await Promise.all([
+      // M-P-02: explicit `select` instead of `include`. The previous `include`
+      // clause pulled every scalar column plus the `matchData` JSON blob for
+      // every row in the list, paying the worst-case detail-sheet cost even
+      // when the user never opens the sheet. The shared `STAGED_VACANCY_LIST_SELECT`
+      // shape covers exactly the fields StagedVacancyCard and
+      // StagedVacancyDetailContent read (the sheet reuses the list row — it
+      // does not re-fetch) and deliberately omits `matchData`. See
+      // .team-feature/stream-5b-performance.md M-P-02 and the regression guard
+      // in __tests__/stagedVacancy-list-select.spec.ts.
       prisma.stagedVacancy.findMany({
         where: whereClause,
-        include: { automation: { select: { id: true, name: true } } },
+        select: STAGED_VACANCY_LIST_SELECT,
         orderBy: { discoveredAt: "desc" },
         skip: offset,
         take: safeTake,
@@ -91,7 +132,7 @@ export async function getStagedVacancies(
 
     return {
       success: true,
-      data: data.map(toStagedVacancy) as StagedVacancyWithAutomation[],
+      data: data.map(toListStagedVacancy) as StagedVacancyWithAutomation[],
       total,
     };
   } catch (error) {

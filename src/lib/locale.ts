@@ -22,7 +22,19 @@ export async function getUserLocale(): Promise<string> {
       if (settings?.settings) {
         try {
           const parsed = JSON.parse(settings.settings);
-          if (parsed.locale && isValidLocale(parsed.locale)) {
+          // M-A-03: writers persist the locale under `parsed.display.locale`
+          // (see `updateDisplaySettings` in `src/actions/userSettings.actions.ts`
+          // and the `DisplaySettings` shape in `src/models/userSettings.model.ts`).
+          // The previous read path looked at `parsed.locale`, which never
+          // exists in practice — every authenticated lookup silently fell
+          // back to the cookie / default locale. Canonical path first, with
+          // a legacy `parsed.locale` fallback in case any pre-migration rows
+          // still exist.
+          const displayLocale = parsed?.display?.locale;
+          if (displayLocale && isValidLocale(displayLocale)) {
+            return displayLocale;
+          }
+          if (parsed?.locale && isValidLocale(parsed.locale)) {
             return parsed.locale;
           }
         } catch (error) {
