@@ -39,6 +39,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DeleteAlertDialog } from "../DeleteAlertDialog";
 import { CompanyLogo } from "../ui/company-logo";
+import { getStatusLabel } from "@/lib/crm/status-labels";
 
 type MyJobsTableProps = {
   jobs: JobResponse[];
@@ -140,7 +141,7 @@ function MyJobsTable({
                         job.Status?.value === "interview" && "bg-green-500"
                       )}
                     >
-                      {job.Status?.label}
+                      {getStatusLabel(t, job.Status ?? null)}
                     </Badge>
                   )}
                 </TableCell>
@@ -204,7 +205,7 @@ function MyJobsTable({
                                   }}
                                   disabled={status.id === job.Status.id}
                                 >
-                                  <span>{status.label}</span>
+                                  <span>{getStatusLabel(t, status)}</span>
                                 </DropdownMenuItem>
                               ))}
                             </DropdownMenuSubContent>

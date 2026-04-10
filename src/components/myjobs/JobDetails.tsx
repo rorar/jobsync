@@ -1,5 +1,6 @@
 "use client";
 import { useTranslations, formatDateShort } from "@/i18n";
+import { getStatusLabel } from "@/lib/crm/status-labels";
 import { Badge } from "../ui/badge";
 import { cn, formatUrl } from "@/lib/utils";
 import { JobResponse } from "@/models/job.model";
@@ -112,7 +113,7 @@ function JobDetails({ job }: { job: JobResponse }) {
                   job.Status?.value === "interview" && "bg-green-500",
                 )}
               >
-                {job.Status?.label}
+                {getStatusLabel(t, job.Status ?? null)}
               </Badge>
             )}
             <span className="ml-2">

@@ -229,8 +229,8 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
         toast({
           variant: "destructive",
           title: t("jobs.kanbanInvalidTransition")
-            .replace("{from}", fromStatus.label)
-            .replace("{to}", toStatus.label),
+            .replace("{from}", getStatusLabel(t, fromStatus))
+            .replace("{to}", getStatusLabel(t, toStatus)),
         });
         return;
       }
@@ -339,8 +339,8 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
         toast({
           variant: "destructive",
           title: t("jobs.kanbanInvalidTransition")
-            .replace("{from}", fromStatus.label)
-            .replace("{to}", toStatus.label),
+            .replace("{from}", getStatusLabel(t, fromStatus))
+            .replace("{to}", getStatusLabel(t, toStatus)),
         });
         return;
       }
