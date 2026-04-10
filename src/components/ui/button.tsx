@@ -23,7 +23,18 @@ const buttonVariants = cva(
         default: "h-10 px-4 py-2",
         sm: "h-9 rounded-md px-3",
         lg: "h-11 rounded-md px-8",
+        // M-Y-06 (Sprint 3 Stream F): `icon` stays at 40x40 to avoid a
+        // high-blast-radius layout regression across 26 existing usages
+        // (inline toolbars in Header, Kanban column add buttons, admin
+        // tables, inline note card actions, calendar cells, etc. — all
+        // verified to assume a 40px footprint). A new `icon-lg` variant
+        // grows the same icon button to 44x44 so individual call sites
+        // can opt into WCAG 2.5.5 AAA (Target Size 44x44) without
+        // breaking sibling layouts. The recommended path for new code
+        // is `size="icon-lg"`; only keep `size="icon"` when the row
+        // height is pinned by external constraints.
         icon: "h-10 w-10",
+        "icon-lg": "h-11 w-11",
       },
     },
     defaultVariants: {

@@ -67,19 +67,43 @@ export const KanbanCard = React.memo(function KanbanCard({ job, statusValue, isD
       data-testid="kanban-card"
     >
       <div className="flex items-start gap-2 p-3">
-        {/* Drag handle */}
+        {/*
+          M-Y-05 (Sprint 3 Stream F): the drag handle was ~20x20 (h-4 w-4
+          icon + p-0.5), failing BOTH WCAG 2.5.5 AAA (44x44) AND 2.5.8 AA
+          (24x24 minimum). This was the worst target-size offender in the
+          codebase. Fixed using the Sprint 1 CRIT-Y1 hit-area wrapper
+          pattern (see DeckCard.tsx Info button, lines 89-115):
+            - The focusable <button> is h-11 w-11 (44x44) — satisfies AAA.
+            - The visible glyph stays small (h-4 w-4) inside an aria-hidden
+              span, so the compact card visual is preserved.
+            - Hover feedback is forwarded via Tailwind `group` utility so
+              the full 44x44 pointer area reacts, not just the glyph.
+            - The -my-2 negative margin absorbs the extra height so the
+              card's top padding (p-3) is not visually amplified; the
+              hit-area overflows vertically into the card padding and the
+              drag handle still visually aligns to the title row.
+          The @dnd-kit `{...attributes} {...listeners}` spread stays on
+          the native button so the drag interaction is unchanged.
+        */}
         <button
           type="button"
-          className="flex-shrink-0 mt-0.5 cursor-grab active:cursor-grabbing touch-none
-                     text-muted-foreground/50 hover:text-muted-foreground
+          className="group flex-shrink-0 h-11 w-11 -my-2 cursor-grab active:cursor-grabbing touch-none
+                     flex items-center justify-center
                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                     rounded p-0.5"
+                     rounded"
           {...attributes}
           {...listeners}
           aria-label={t("jobs.kanbanDragHandle").replace("{title}", job.JobTitle?.label ?? "")}
           aria-describedby="kanban-dnd-instructions"
         >
-          <GripVertical className="h-4 w-4" aria-hidden="true" />
+          <span
+            aria-hidden="true"
+            className="flex items-center justify-center rounded p-0.5
+                       text-muted-foreground/50 group-hover:text-muted-foreground
+                       transition-colors motion-reduce:transition-none"
+          >
+            <GripVertical className="h-4 w-4" aria-hidden="true" />
+          </span>
         </button>
 
         {/* Card content */}

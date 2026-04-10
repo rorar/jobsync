@@ -342,3 +342,60 @@ describe("ApiStatusOverview", () => {
     expect(badges.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// M-Y-04 (Sprint 3 Stream F) — per-row health-check button target size.
+//
+// WCAG 2.5.5 AAA / 2.5.8 AA: the health-check button was h-8 w-8 (32x32).
+// That technically passes 2.5.8 AA (24x24 minimum) but fails 2.5.5 AAA
+// (44x44 minimum). The Sprint 3 Stream F fix migrates the button from a
+// manual `className="h-8 w-8 p-0"` override to the new `size="icon-lg"`
+// variant (44x44) on the Shadcn Button. This test pins the new dimensions
+// so a future className refactor cannot silently regress.
+// ---------------------------------------------------------------------------
+
+describe("ApiStatusOverview — M-Y-04 health-check button size (WCAG 2.5.5 AAA)", () => {
+  it("per-row health-check button renders at 44x44 (h-11 w-11)", async () => {
+    mockGetModuleManifests.mockResolvedValue({
+      success: true,
+      data: [enrichmentModuleActive],
+    });
+
+    render(<ApiStatusOverview />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Logo.dev")).toBeInTheDocument();
+    });
+
+    // The button's accessible name is "Check now — Logo.dev" per the
+    // per-row aria-label template. Match the button by aria-label fragment.
+    const checkButton = screen.getByRole("button", {
+      name: /Check now — Logo\.dev/i,
+    });
+    expect(checkButton).toHaveClass("h-11");
+    expect(checkButton).toHaveClass("w-11");
+  });
+
+  it("per-row health-check button preserves its per-module accessible name", async () => {
+    mockGetModuleManifests.mockResolvedValue({
+      success: true,
+      data: [enrichmentModuleActive, enrichmentModuleDegraded],
+    });
+
+    render(<ApiStatusOverview />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Logo.dev")).toBeInTheDocument();
+      expect(screen.getByText("Google Favicon")).toBeInTheDocument();
+    });
+
+    // Two distinct buttons, one per module — guards against a regression
+    // where the per-row aria-label template is dropped.
+    expect(
+      screen.getByRole("button", { name: /Check now — Logo\.dev/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Check now — Google Favicon/i }),
+    ).toBeInTheDocument();
+  });
+});

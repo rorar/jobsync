@@ -1,8 +1,9 @@
 "use client";
 
+import React from "react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   MapPin,
   Calendar,
@@ -18,6 +19,90 @@ import {
 import { CompanyLogo } from "@/components/ui/company-logo";
 import { useTranslations, formatDateShort } from "@/i18n";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
+
+/**
+ * FooterActionButton — M-Y-01 (Sprint 3 Stream F) hit-area wrapper
+ *
+ * The footer buttons (Promote, Dismiss, Archive, Trash, Block, Restore,
+ * Details) were rendered with `h-7` (28px) — below the WCAG 2.5.5 AAA
+ * minimum of 44x44. The visible pill is preserved at 28 tall to keep
+ * the compact card density, but the focusable pointer target is now
+ * 44 tall via an outer wrapper button.
+ *
+ * Pattern mirrors Sprint 1 CRIT-Y1 DeckCard.Info (`DeckCard.tsx:89-115`):
+ *   - The outer native `<button>` owns the real keyboard/pointer target
+ *     and carries `min-h-[44px]`. Negative vertical margin (`-my-2`)
+ *     collapses the extra height into the card footer's padding so
+ *     the visual row height is unchanged.
+ *   - The inner `<span>` is aria-hidden and replicates the Shadcn
+ *     button variant styling at 28 tall (`h-7 gap-1 text-xs`). It
+ *     forwards hover/active feedback via Tailwind's `group` utility,
+ *     so the full 44x44 click area lights up the visible pill on
+ *     interaction.
+ *   - `aria-label` is forwarded to the outer button — the single
+ *     accessible-name source per WCAG 4.1.2.
+ *
+ * Nested interactive elements are avoided: the outer is the ONLY
+ * interactive element; the inner pill is a visual span.
+ */
+type FooterVariant = "default" | "outline" | "ghost";
+
+interface FooterActionButtonProps {
+  variant: FooterVariant;
+  onClick: () => void;
+  ariaLabel: string;
+  children: React.ReactNode;
+  /** Adds `text-destructive` to the visible pill (for Trash action). */
+  destructive?: boolean;
+  testId?: string;
+}
+
+function FooterActionButton({
+  variant,
+  onClick,
+  ariaLabel,
+  children,
+  destructive = false,
+  testId,
+}: FooterActionButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      data-testid={testId}
+      // Outer: 44 tall hit area, collapsed visually via negative margin.
+      // No visible style — all visual weight is on the inner pill span.
+      className="group inline-flex min-h-[44px] -my-2 items-center justify-center rounded-md
+                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
+      <span
+        aria-hidden="true"
+        // Inner: 28 tall visible pill — reuses Shadcn button variant colors
+        // via `buttonVariants`. We override sizing manually since Shadcn's
+        // built-in sm size would clobber our h-7. Hover feedback is forwarded
+        // from the outer wrapper via `group-hover` modifiers.
+        className={cn(
+          // Base: reproduces Shadcn Button's inline-flex/gap/text/ring layer
+          // minus focus-ring (owned by the outer button) and minus transition
+          // delay (hover feedback is instant on the outer hover group).
+          "inline-flex h-7 items-center justify-center gap-1 whitespace-nowrap rounded-md px-3 text-xs font-medium transition-colors",
+          // Variant colors via group-hover so the whole 44x44 area reacts.
+          variant === "default" &&
+            "bg-primary text-primary-foreground group-hover:bg-primary/90",
+          variant === "outline" &&
+            "border border-input bg-background group-hover:bg-accent group-hover:text-accent-foreground",
+          variant === "ghost" &&
+            "group-hover:bg-accent group-hover:text-accent-foreground",
+          destructive && "text-destructive",
+        )}
+      >
+        {children}
+      </span>
+    </button>
+  );
+}
+
 
 function formatSalaryRange(
   min: number | null | undefined,
@@ -63,7 +148,33 @@ interface StagedVacancyCardProps {
   onOpenDetails?: (vacancy: StagedVacancyWithAutomation) => void;
 }
 
-export function StagedVacancyCard({
+/**
+ * StagedVacancyCard — memoized via React.memo (M-P-03, Sprint 3 Stream F).
+ *
+ * Without memoization, every StagingContainer re-render forced all
+ * staged-vacancy cards to re-render even when no individual vacancy
+ * prop had changed identity. List pages render up to 50 cards at a
+ * time, so the dashboard re-render cost scaled linearly with list
+ * size on every server-action roundtrip.
+ *
+ * The memo is paired with the M-P-03 `useStagingActions.createHandler`
+ * stability fix (see `src/hooks/useStagingActions.ts`) — without stable
+ * handler identity the memo would be a no-op because handler props
+ * (onDismiss, onArchive, onTrash, onRestore, onRestoreFromTrash) would
+ * still change on every parent render. Both fixes MUST land together;
+ * either alone is invisible.
+ *
+ * `onPromote`, `onOpenDetails`, and `onBlockCompany` come from
+ * StagingContainer already wrapped in `useCallback` — the remaining
+ * callback props receive stable references via the `createHandler`
+ * identity fix. Default comparison via `Object.is` is sufficient; we
+ * don't need a custom areEqual because:
+ *   - `vacancy` is a new object on each reload but identity-equal
+ *     between renders that do not reload;
+ *   - `activeTab`, `selected` are primitives;
+ *   - handler props are now all stable.
+ */
+function StagedVacancyCardImpl({
   vacancy,
   activeTab,
   selected = false,
@@ -223,120 +334,112 @@ export function StagedVacancyCard({
           return (
             <>
               {onOpenDetails && (
-                <Button
-                  size="sm"
+                <FooterActionButton
                   variant="ghost"
-                  className="h-7 gap-1 text-xs"
                   onClick={() => onOpenDetails(vacancy)}
-                  aria-label={`${t("staging.details")}: ${vacancyContext}`}
+                  ariaLabel={`${t("staging.details")}: ${vacancyContext}`}
+                  testId="staged-vacancy-details-button"
                 >
                   <Info className="h-3.5 w-3.5" />
                   {t("staging.details")}
-                </Button>
+                </FooterActionButton>
               )}
               {activeTab === "new" && (
                 <>
-                  <Button
-                    size="sm"
+                  <FooterActionButton
                     variant="default"
-                    className="h-7 gap-1 text-xs"
                     onClick={() => onPromote(vacancy)}
-                    aria-label={`${t("staging.promote")}: ${vacancyContext}`}
+                    ariaLabel={`${t("staging.promote")}: ${vacancyContext}`}
+                    testId="staged-vacancy-promote-button"
                   >
                     <ArrowUpCircle className="h-3.5 w-3.5" />
                     {t("staging.promote")}
-                  </Button>
-                  <Button
-                    size="sm"
+                  </FooterActionButton>
+                  <FooterActionButton
                     variant="outline"
-                    className="h-7 gap-1 text-xs"
                     onClick={() => onDismiss(vacancy.id)}
-                    aria-label={`${t("staging.dismiss")}: ${vacancyContext}`}
+                    ariaLabel={`${t("staging.dismiss")}: ${vacancyContext}`}
+                    testId="staged-vacancy-dismiss-button"
                   >
                     <XCircle className="h-3.5 w-3.5" />
                     {t("staging.dismiss")}
-                  </Button>
-                  <Button
-                    size="sm"
+                  </FooterActionButton>
+                  <FooterActionButton
                     variant="ghost"
-                    className="h-7 gap-1 text-xs"
                     onClick={() => onArchive(vacancy.id)}
-                    aria-label={`${t("staging.archive")}: ${vacancyContext}`}
+                    ariaLabel={`${t("staging.archive")}: ${vacancyContext}`}
+                    testId="staged-vacancy-archive-button"
                   >
                     <Archive className="h-3.5 w-3.5" />
                     {t("staging.archive")}
-                  </Button>
-                  <Button
-                    size="sm"
+                  </FooterActionButton>
+                  <FooterActionButton
                     variant="ghost"
-                    className="h-7 gap-1 text-xs text-destructive"
+                    destructive
                     onClick={() => onTrash(vacancy.id)}
-                    aria-label={`${t("staging.trash")}: ${vacancyContext}`}
+                    ariaLabel={`${t("staging.trash")}: ${vacancyContext}`}
+                    testId="staged-vacancy-trash-button"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     {t("staging.trash")}
-                  </Button>
+                  </FooterActionButton>
                   {onBlockCompany && vacancy.employerName && (
-                    <Button
-                      size="sm"
+                    <FooterActionButton
                       variant="ghost"
-                      className="h-7 gap-1 text-xs"
                       onClick={() => onBlockCompany(vacancy.employerName!)}
-                      aria-label={`${t("blacklist.blockCompany")}: ${vacancy.employerName}`}
+                      ariaLabel={`${t("blacklist.blockCompany")}: ${vacancy.employerName}`}
+                      testId="staged-vacancy-block-button"
                     >
                       <Ban className="h-3.5 w-3.5" />
                       {t("blacklist.blockCompany")}
-                    </Button>
+                    </FooterActionButton>
                   )}
                 </>
               )}
               {activeTab === "dismissed" && (
                 <>
-                  <Button
-                    size="sm"
+                  <FooterActionButton
                     variant="outline"
-                    className="h-7 gap-1 text-xs"
                     onClick={() => onRestore(vacancy.id)}
-                    aria-label={`${t("staging.restore")}: ${vacancyContext}`}
+                    ariaLabel={`${t("staging.restore")}: ${vacancyContext}`}
+                    testId="staged-vacancy-restore-button"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
                     {t("staging.restore")}
-                  </Button>
-                  <Button
-                    size="sm"
+                  </FooterActionButton>
+                  <FooterActionButton
                     variant="ghost"
-                    className="h-7 gap-1 text-xs text-destructive"
+                    destructive
                     onClick={() => onTrash(vacancy.id)}
-                    aria-label={`${t("staging.trash")}: ${vacancyContext}`}
+                    ariaLabel={`${t("staging.trash")}: ${vacancyContext}`}
+                    testId="staged-vacancy-trash-button"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     {t("staging.trash")}
-                  </Button>
+                  </FooterActionButton>
                 </>
               )}
               {activeTab === "archive" && (
-                <Button
-                  size="sm"
+                <FooterActionButton
                   variant="outline"
-                  className="h-7 gap-1 text-xs"
                   onClick={() => onRestore(vacancy.id)}
-                  aria-label={`${t("staging.restore")}: ${vacancyContext}`}
+                  ariaLabel={`${t("staging.restore")}: ${vacancyContext}`}
+                  testId="staged-vacancy-restore-button"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   {t("staging.restore")}
-                </Button>
+                </FooterActionButton>
               )}
               {activeTab === "trash" && (
-                <Button
-                  size="sm"
+                <FooterActionButton
                   variant="outline"
-                  className="h-7 gap-1 text-xs"
                   onClick={() => onRestoreFromTrash(vacancy.id)}
-                  aria-label={`${t("staging.restore")}: ${vacancyContext}`}
+                  ariaLabel={`${t("staging.restore")}: ${vacancyContext}`}
+                  testId="staged-vacancy-restore-button"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   {t("staging.restore")}
-                </Button>
+                </FooterActionButton>
               )}
             </>
           );
@@ -345,3 +448,11 @@ export function StagedVacancyCard({
     </Card>
   );
 }
+
+// M-P-03 (Sprint 3 Stream F): wrap in React.memo so list-mode pages with
+// 20-50 cards don't re-render every card on every parent state change.
+// Paired with the `useStagingActions.createHandler` identity-stability
+// fix in the same sprint — without that, handler props would change on
+// every parent render and the memo would be a no-op.
+export const StagedVacancyCard = React.memo(StagedVacancyCardImpl);
+StagedVacancyCard.displayName = "StagedVacancyCard";

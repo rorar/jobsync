@@ -364,10 +364,17 @@ function ModuleStatusRow({
             {lastCheckedRel}
           </time>
         )}
+        {/*
+          M-Y-04 (Sprint 3 Stream F): the health-check button was h-8 w-8
+          (32x32), failing both WCAG 2.5.5 AAA (44x44) and 2.5.8 AA (24x24
+          passed but close to the minimum). Upgraded to `size="icon-lg"`
+          which resolves to 44x44 via buttonVariants. The row is tall
+          enough (py-2.5 + text content) to absorb the larger button
+          without reflow; verified against the grouped card layout.
+        */}
         <Button
-          size="sm"
+          size="icon-lg"
           variant="ghost"
-          className="h-8 w-8 p-0"
           disabled={isChecking || isInactive}
           onClick={onCheck}
           aria-label={`${t("settings.healthCheckNow")} — ${moduleName}`}
