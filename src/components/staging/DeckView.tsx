@@ -17,7 +17,7 @@ import { useDeckStack } from "@/hooks/useDeckStack";
 import type { DeckAction } from "@/hooks/useDeckStack";
 import { DeckCard } from "./DeckCard";
 import { SuperLikeCelebrationHost } from "./SuperLikeCelebrationHost";
-import { useSuperLikeCelebrations } from "@/hooks/useSuperLikeCelebrations";
+import { useSuperLikeCelebrationsContext } from "@/context/SuperLikeCelebrationsContext";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 
 /**
@@ -118,9 +118,19 @@ export const DeckView = forwardRef<DeckViewHandle, DeckViewProps>(function DeckV
   const [showSwipeHint, setShowSwipeHint] = useState(true);
   const [autoApprove, setAutoApprove] = useState(getAutoApproveDefault);
   const [lastAction, setLastAction] = useState<string>("");
-  // Super-like celebration queue (Stream D / task 3). Owns the FIFO state for
-  // the fly-in card; rendered by SuperLikeCelebrationHost below.
-  const celebrations = useSuperLikeCelebrations();
+  // Super-like celebration queue (Stream D / task 3). Owns the FIFO state
+  // for the fly-in card; rendered by SuperLikeCelebrationHost below.
+  //
+  // M-A-07 (Sprint 3 Stream B): consumed via
+  // `useSuperLikeCelebrationsContext` so the queue's lifetime is bound to
+  // the dashboard layout (via `SuperLikeCelebrationsProvider`) rather than
+  // `DeckView`'s own mount. That means clicking "Open job" on a celebration
+  // no longer destroys the queue when `router.push` navigates away — the
+  // remaining queued celebrations survive navigation and re-render under
+  // the next page that also consumes the context. In isolated component
+  // tests that don't wrap in the provider, the hook falls back to a
+  // component-local queue (same shape as the pre-fix behaviour).
+  const celebrations = useSuperLikeCelebrationsContext();
   const {
     currentIndex,
     currentVacancy,
@@ -189,12 +199,33 @@ export const DeckView = forwardRef<DeckViewHandle, DeckViewProps>(function DeckV
   // Keyboard shortcut: `i` opens the details sheet. This listener is separate
   // from `useDeckStack`'s shortcuts so it can fire even when the sheet is not
   // open yet, and so it never fires while the sheet is already open.
-  useEffect(() => {
-    if (!onOpenDetails) return;
-    if (isDetailsOpen) return;
+  //
+  // M-P-06: the previous implementation re-subscribed the `keydown` listener
+  // on every card advance because `currentVacancy` (which changes per card)
+  // was a direct dep of this effect. Power users triaging 50+ vacancies in
+  // one deck session triggered 50+ subscribe/unsubscribe cycles inside the
+  // 300ms swipe animation window. Fix: park the per-render inputs in a
+  // ref, subscribe the listener ONCE on mount, and read `ref.current` inside
+  // the handler. The ref write itself is O(1) and never tears down the DOM
+  // subscription. See .team-feature/stream-5b-performance.md M-P-06.
+  const detailsKeyHandlerStateRef = useRef({
+    onOpenDetails,
+    isDetailsOpen,
+    currentVacancy,
+  });
+  detailsKeyHandlerStateRef.current = {
+    onOpenDetails,
+    isDetailsOpen,
+    currentVacancy,
+  };
 
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== "i") return;
+
+      const state = detailsKeyHandlerStateRef.current;
+      if (!state.onOpenDetails) return;
+      if (state.isDetailsOpen) return;
 
       const target = e.target as HTMLElement;
       if (
@@ -209,14 +240,19 @@ export const DeckView = forwardRef<DeckViewHandle, DeckViewProps>(function DeckV
       const container = containerRef.current;
       if (!container || !container.contains(target)) return;
 
-      if (!currentVacancy) return;
+      if (!state.currentVacancy) return;
       e.preventDefault();
-      onOpenDetails(currentVacancy);
+      state.onOpenDetails(state.currentVacancy);
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onOpenDetails, isDetailsOpen, currentVacancy, containerRef]);
+    // Intentionally empty deps: the handler reads the latest inputs through
+    // `detailsKeyHandlerStateRef` so we only subscribe once on mount.
+    // `containerRef` is a stable ref from `useDeckStack` and does not need
+    // to be in the dep list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (isDetailsOpen) return;

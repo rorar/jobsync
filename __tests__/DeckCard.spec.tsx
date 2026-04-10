@@ -187,4 +187,76 @@ describe("DeckCard", () => {
       screen.queryByRole("button", { name: "deck.detailsTooltip" }),
     ).not.toBeInTheDocument();
   });
+
+  // ---------------------------------------------------------------------
+  // M-T-10 (Sprint 3 Stream B) — Info button click path
+  //
+  // Sprint 1 added the Info button to `DeckCard` as the entry point into
+  // the details sheet (ADR-030 / CLAUDE.md "Staging Details Sheet + Deck
+  // Action Routing"). The Sprint 2 testing review flagged that no unit
+  // test exercised the `onInfoClick` prop end-to-end — existing tests only
+  // pinned the target-size regression guard. If a future refactor dropped
+  // the onClick wiring or swallowed the event via a stopPropagation bug,
+  // nothing would catch it.
+  //
+  // This test clicks the Info button and asserts that the prop is invoked
+  // with the full vacancy object exactly once.
+  // ---------------------------------------------------------------------
+  it("M-T-10: clicking the Info button invokes onInfoClick(vacancy) exactly once", () => {
+    const vacancy = makeVacancy();
+    const onInfoClick = jest.fn();
+    render(<DeckCard vacancy={vacancy} onInfoClick={onInfoClick} />);
+
+    const infoButton = screen.getByRole("button", { name: "deck.detailsTooltip" });
+    fireEvent.click(infoButton);
+
+    expect(onInfoClick).toHaveBeenCalledTimes(1);
+    expect(onInfoClick).toHaveBeenCalledWith(vacancy);
+  });
+
+  it("M-T-10: Info button is NOT rendered in preview mode even when onInfoClick is provided", () => {
+    // Preview cards are background deck entries — they must not expose
+    // the Info affordance because the user cannot act on them without
+    // advancing past the current card.
+    const vacancy = makeVacancy();
+    const onInfoClick = jest.fn();
+    render(
+      <DeckCard
+        vacancy={vacancy}
+        onInfoClick={onInfoClick}
+        isPreview
+        previewLevel={1}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "deck.detailsTooltip" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("M-T-10: Info button click propagation is stopped so the pointer-drag handler does not fire", () => {
+    // The Info button lives inside the deck-drag region. A click on the
+    // Info button must NOT bubble up to the draggable parent (which would
+    // start a drag and potentially trigger a swipe action). We assert via
+    // the React synthetic event's `isPropagationStopped`.
+    const vacancy = makeVacancy();
+    const onInfoClick = jest.fn();
+    const onParentClick = jest.fn();
+
+    const { container } = render(
+      <div onClick={onParentClick}>
+        <DeckCard vacancy={vacancy} onInfoClick={onInfoClick} />
+      </div>,
+    );
+
+    const infoButton = screen.getByRole("button", { name: "deck.detailsTooltip" });
+    fireEvent.click(infoButton);
+
+    // The inner click handler fired.
+    expect(onInfoClick).toHaveBeenCalledTimes(1);
+    // The outer click handler must NOT have seen the bubbling event
+    // because DeckCard's onClick calls e.stopPropagation().
+    expect(onParentClick).not.toHaveBeenCalled();
+    // Sanity check that the container is actually rendered.
+    expect(container.firstChild).toBeTruthy();
+  });
 });

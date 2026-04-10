@@ -180,6 +180,74 @@ describe("SuperLikeCelebrationHost — router.push on Open Job", () => {
 
     expect(callOrder).toEqual(["dismiss", "push"]);
   });
+
+  // -------------------------------------------------------------------
+  // M-T-08 (Sprint 3 Stream B) — additional router.push assertions
+  //
+  // Sprint 2 left the test with a single happy-path router.push
+  // assertion. These additions cover:
+  //   1. `useRouter().push` invoked EXACTLY ONCE (not twice from a
+  //      double-click or re-render).
+  //   2. The push argument is the full, unescaped job route — pinning
+  //      the exact URL shape so a path refactor (e.g. from
+  //      `/dashboard/myjobs/:id` to `/dashboard/jobs/:id`) is caught.
+  //   3. Dismiss is called with the celebration's `id`, not the `jobId`
+  //      — important when a future fix decouples them.
+  // -------------------------------------------------------------------
+
+  it("M-T-08: router.push is invoked EXACTLY ONCE per Open job click", async () => {
+    const dismiss = jest.fn();
+    const item = makeItem({ jobId: "job-exactly-one" });
+
+    render(
+      <SuperLikeCelebrationHost
+        current={item}
+        queueRemaining={0}
+        dismiss={dismiss}
+      />,
+    );
+
+    const openJobButton = screen.getByRole("button", {
+      name: /deck\.superLikeCelebration\.openJob/i,
+    });
+    await userEvent.click(openJobButton);
+
+    expect(mockRouterPush).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).toHaveBeenCalledWith("/dashboard/myjobs/job-exactly-one");
+    expect(dismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("M-T-08: dismiss is called with the celebration's id, not with the raw jobId", async () => {
+    // Today `id === jobId` because `useSuperLikeCelebrations.add()` seeds
+    // both fields from the jobId. This test pins that the host uses the
+    // entry's `.id` field as the dismiss key, so a future dedupe refactor
+    // that gives celebrations a separate id (e.g. nanoid) won't silently
+    // break dismissal.
+    const dismiss = jest.fn();
+    const item: CelebrationItem = {
+      id: "celebration-id-123",
+      jobId: "job-456",
+      vacancyTitle: "Senior Engineer",
+      addedAt: Date.now(),
+    };
+
+    render(
+      <SuperLikeCelebrationHost
+        current={item}
+        queueRemaining={0}
+        dismiss={dismiss}
+      />,
+    );
+
+    const openJobButton = screen.getByRole("button", {
+      name: /deck\.superLikeCelebration\.openJob/i,
+    });
+    await userEvent.click(openJobButton);
+
+    expect(dismiss).toHaveBeenCalledWith("celebration-id-123");
+    // But the push uses the jobId because the route is keyed by job.
+    expect(mockRouterPush).toHaveBeenCalledWith("/dashboard/myjobs/job-456");
+  });
 });
 
 // ---------------------------------------------------------------------------
