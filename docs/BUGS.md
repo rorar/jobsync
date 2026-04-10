@@ -1,8 +1,134 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-04-09
+# Bug Tracker — Collected 2026-03-24, Updated 2026-04-10
 
-**Total: 488 bugs found, 486 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
+**Total: 538 bugs found, 536 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
+
+## Sprint 4 LOW Tier (2026-04-10)
+
+44 LOW findings resolved across 6 parallel streams. Each stream's implementer agent invoked a dimension-specific skill via the Skill tool with combined (a)+(b) instrumentation.
+
+**Skills per stream**:
+- Stream A (notification + event bus arch): `backend-development:architecture-patterns`
+- Stream B (performance + UI polish): `backend-development:architecture-patterns`
+- Stream C (security): `security-scanning:threat-mitigation-mapping`
+- Stream D (testing infra): `javascript-typescript:javascript-testing-patterns`
+- Stream E (accessibility): `ui-design:accessibility-compliance`
+- Stream F (`size="icon-lg"` sweep): `ui-design:accessibility-compliance`
+
+### Fixed — Stream A: Notification + event bus arch polish (7 findings)
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| L-A-02 | LOW | `deep-links.ts` formatters typed `t` as `(k: string) => string` — too loose; any string key compiles. | Introduced `NotificationTranslate = (key: TranslationKey) => string` type alias. When `TranslationKey` tightens to a literal union in a future sprint, the formatters will error on unknown keys. |
+| L-A-03 | LOW | Webhook-channel direct-writer `titleKey` values didn't follow the project-wide `notifications.<typeName>.title` convention. | Renamed to `notifications.webhook.deliveryFailed.title` / `notifications.webhook.endpointDeactivated.title`. Added i18n keys in all 4 locales. |
+| L-A-05 | LOW | `channelRouter.route` had no invalidation hook for Settings UI mutations — users could wait up to 30s for channel state changes to reflect in the availability cache. | `webhook.actions.ts`, `smtp.actions.ts`, `push.actions.ts` now call `channelRouter.invalidateAvailability(user.id, "<channel>")` after their mutations. Closes Sprint 3 M-P-01 follow-up. |
+| L-A-06 | LOW | `prisma/schema.prisma` `Json?` column usage is SQLite-specific (maps to `TEXT`) and would diverge on PostgreSQL (`jsonb`). No comment documented the divergence. | Added a section comment documenting the SQLite vs PostgreSQL mapping. Informational — no schema change. |
+| L-A-07 | LOW | `channel-router.ts` statically imports `webhook.channel.ts` which re-imports `prepareEnforcedNotification` from channel-router. Worked under ES-module hoisting but brittle. Sprint 3 honesty-gate follow-up. | Extracted `prepareEnforcedNotification` + `prepareEnforcedNotifications` + `EnforcedNotificationDraft` + related types into new leaf module `src/lib/notifications/enforced-writer.ts`. Clean Architecture "Dependencies point inward" — the leaf module has no dependencies on channel-router. `channel-router.ts`, `webhook.channel.ts`, `degradation.ts` all re-import from the leaf. |
+| L-A-dead | LOW | `NotificationActorType = "enrichment"` dead variant — no production writer populates it, but the formatter case and i18n key existed. Sprint 3 honesty-gate follow-up. | Removed `"enrichment"` from the `NotificationActorType` union in `notification.model.ts`, removed the formatter case in `deep-links.ts`, removed `notifications.actor.enrichment` i18n keys in all 4 locales. `notification-format.spec.ts` drift-guard assertion kept the variant via a documented type-cast escape (intentional — tests the runtime fallback). |
+
+### Fixed — Stream B: Performance + UI polish (9 findings + 3 Sprint 3 follow-ups)
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| L-P-01 | LOW | `ConnectorCache.buildKey` ran a regex-based sanitize on every lookup. | Hoisted `KEY_SEGMENT_DELIMITER_PATTERN` regex to module scope as a pre-compiled const. |
+| L-P-02 | LOW | `NotificationBell` polled every 30s per tab unconditionally — wasted bandwidth when the tab was hidden. | Page Visibility API: pause interval when `document.hidden === true`; resume + immediate catch-up fetch on `visibilitychange → visible`. |
+| L-P-02 bonus | LOW | `NotificationBell` still used `size="icon"` (40×40). | Migrated to `size="icon-lg"` (44×44). Header h-14 on mobile fits comfortably. |
+| L-P-03 | LOW | `SuperLikeCelebration` rendered inline `<style>{...}</style>` JSX with keyframe definitions — React re-created the `<style>` element on every render. | Extracted `@keyframes superlike-celebration-{slide-in,slide-out,fade-in,fade-out}` to `src/app/globals.css` with a `prefers-reduced-motion` override. Component uses a class name. |
+| L-P-04 | LOW | `CompanyLogo` re-initialized useState on every prop change, including shallow-equal parent re-renders — CompanyLogo flashed back to loading skeleton on every parent reload. | Added `prevUrlsRef` guard: state only resets when `logoUrl` or `logoAssetId` actually change. |
+| L-P-SPEC-01 | LOW | `StagedVacancyCard` created a new `Intl.NumberFormat("de-DE", ...)` per render for salary formatting. | Hoisted to module-scoped `SALARY_FORMATTER_CACHE: Map<string, Intl.NumberFormat>` keyed by currency; `getSalaryFormatter(currency)` accessor memoizes. Also added `group-focus-visible:bg-accent` to FooterActionButton for keyboard focus feedback. |
+| L-P-SPEC-02 | LOW (audit) | `prisma.notification.update({ where: { id, userId } })` audit — mixing `@id` with a non-unique filter used to be a type error pre-Prisma-5.0. | **SAFE on Prisma 6.19**: `extendedWhereUnique` promoted to stable in 5.1; query engine compiles into a single `UPDATE ... WHERE id = ? AND userId = ?` (not SELECT-then-UPDATE). Inline audit comment added to `src/actions/notification.actions.ts:93` (orchestrator applied during honesty-gate resolution; Stream B flagged it but the file was out of scope). |
+| scheduleDeckReload | Sprint 3 follow-up | Hardcoded `500` ms delay in `StagingContainer.scheduleDeckReload`. | Exported `ANIMATION_DURATION` constant from `useDeckStack.ts`; `StagingContainer` now computes delay as `DECK_ANIMATION_DURATION + DECK_RELOAD_BUFFER_MS` (200ms module-level constant). Symbolic form catches drift if animation duration is retuned. |
+| useStagingActions cache | Sprint 3 follow-up | `useRef<Map>` handler cache never evicted. Safe today but a dynamic action factory could leak. | Added `HANDLER_CACHE_MAX_ENTRIES = 20` + FIFO eviction + `console.warn` fail-loud when the cap is hit. Today's 5 stable action references stay well below the cap. |
+| FooterActionButton focus | Sprint 3 follow-up | Keyboard focus gave only the outer 44×44 ring, not the inner pill feedback. | Added `group-focus-visible:bg-*` variants to the inner pill classes in `StagedVacancyCard.tsx`. |
+
+### Fixed — Stream C: Security polish (6 findings)
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| L-A-01 | LOW | `checkLogoUrl` returned raw object instead of `ActionResult<T>`. Violated CLAUDE.md "Repository Pattern" convention for `"use server"` exports. | Wrapped return in `ActionResult<CheckLogoUrlData>`. Updated caller in `AddCompany.tsx`. |
+| L-S-01 | LOW | Jest coverage close-out verification. | **RESOLVED by Sprint 3 Stream F (commit `4f29f69`).** `collectCoverage: false` confirmed present in `jest.config.ts`. Added inline close-out comment. No further action. |
+| L-S-02 | LOW | `stagedBuffers` Map in `notification-dispatcher.ts` not globalThis-scoped — HMR module reload creates new Map while existing timer callbacks close over old reference, causing silent flush misses. | Moved to `globalThis.__notifStagedBuffers` using the singleton pattern from CLAUDE.md. Existing `_testHelpers.stagedBuffers` getter still works (returns the same reference). |
+| L-S-03 | LOW | `resolveWikimediaUrl` made unauthenticated outbound Wikimedia API calls without a function-level rate limit. The outer `checkLogoUrl` cap was per-auth-user and did not protect non-action call paths. | Added dedicated `wikimedia:global` rate limit (50/min) inside `resolveWikimediaUrl` via existing `checkRateLimit` helper. Layered on top of M-S-04's per-user cap (dual-layer defense-in-depth). |
+| L-S-04 | LOW | `enrichmentQueue` in `enrichment-trigger.ts` was unbounded — under bulk `CompanyCreated` event storms the queue grew without limit, risking OOM. | Added `MAX_ENRICHMENT_QUEUE_LENGTH = 200` constant. When queue is full, incoming task is dropped with `console.warn` including domain name. `withEnrichmentLimit(fn, domain?)` signature extension is backward compatible. Enrichment is best-effort per spec. |
+| L-S-06 | LOW | `logo-asset-subscriber.ts` read `logoUrl` from DB and passed to download without re-validating SSRF. DB row could be mutated between enrichment write and subscriber read. | Added `validateWebhookUrl(logoUrl)` guard in subscriber before `downloadAndProcess`. Drops with `console.warn` on failure. Defense-in-depth (first validation remains at orchestrator). |
+
+### Fixed — Stream D: Testing infrastructure polish (11 findings)
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| L-T-01 | LOW | `check-notification-writers.sh` grep pattern only matched `prisma.notification.*` — missed the `db.notification.*` alias attack surface. | Extended grep to `(prisma\|db)\.notification\.(create\|createMany)` with documentation block explaining the two attack surfaces. |
+| L-T-02 | LOW | `useSuperLikeCelebrations.spec.ts` dedupe test had a false positive — the assertion passed even when the dedupe logic was broken. | Strengthened dedupe test + added middle-item FIFO position test. |
+| L-T-03 | LOW | Jest had no slow-test detection. | Added `slowTestThreshold: 5` to `jest.config.ts`. Tests exceeding 5s now warn in Jest reporter output. |
+| L-T-04 | LOW | Missing `mockStagedVacancyWithAutomation` fixture in `testFixtures.ts` — tests inlined `{ ...mockStagedVacancy, automation: {...} }`. | Added the fixture. Legacy inline-spread call sites in 3 files (DeckCard, useDeckStack, StagingContainerDeckSheetRouting) noted as a follow-up migration. |
+| L-T-05 | LOW | `MatchScoreRing.spec.tsx` had no edge case tests for negative/NaN/Infinity scores. | Added 4 edge case tests covering negative, NaN, Infinity, -Infinity. |
+| L-T-06 | LOW | `undo-store.spec.ts` had no HMR-singleton reset test — module re-import could cross-contaminate tests. | Added `jest.resetModules()` + re-import HMR singleton test. |
+| L-T-07 | LOW | No regression guard for the `Badge` component's `whitespace-nowrap` class (prevents wrapped text in translated labels). | New `__tests__/badge.spec.tsx` with 6 variants × whitespace-nowrap assertions. |
+| dictionaries staging | Sprint 3 follow-up | `dictionaries.spec.ts` only cross-checked dashboard/jobs/activities/tasks — `staging`, `automations`, `settings` namespaces had no cross-locale consistency guard. | Added all three namespaces to `namespaceDictionaries`. Orchestrator fixup during Sprint 4 verification: added `EXTRA_ALLOWED_PREFIXES` map so `settings.ts` can host its legitimate multi-prefix keys (`developer.*`, `smtp.*`) without failing the prefix-equals-filename invariant. A future refactor should split those into dedicated namespace files. |
+| notification-dispatcher mocks | Sprint 3 follow-up | `notification-dispatcher.spec.ts` relied on `Promise.allSettled` swallowing undefined-Prisma-mock rejections for webhook/email/push. | Added explicit Jest mocks for `webhookEndpoint`, `smtpConfig`, `vapidConfig`, `webPushSubscription`. Tests no longer lean on swallowed rejections. |
+| E2E silent-skip | Sprint 3 follow-up | `e2e/crud/push-settings.spec.ts` and siblings had `test.skip(condition, ...)` anti-patterns that masked broken selectors. | Converted to throw patterns where applicable; documented the throw-vs-skip rule in `e2e/CONVENTIONS.md`. |
+| E2E waitForTimeout sweep | Sprint 3 follow-up | 65+ `waitForTimeout` calls across 10+ e2e specs (profile-crud, keyboard-ux, activity-crud, smtp-settings, task-crud, question-crud, enrichment, company-crud, job-crud, automation-crud, job-detail-panels). | Replaced with condition-based `waitForLoadState` / `safeWait` per the `selectOrCreateComboboxOption` reference pattern. Stream D's self-flagged risk: some replacements may expose CI races — follow-up if keyboard-ux tests go flaky post-merge. |
+
+### Fixed — Stream E: Accessibility polish (6 findings + 3 skeleton migrations + WeeklyBarChartToggle axisLeftLegendKey)
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| L-Y-02 | LOW | `StagingNewItemsBanner` wrapped both the announcement text AND the "Show new items" Button inside a single `role="status"` live region. Screen readers re-read the button label on every polite-region update. | Split into visible `aria-hidden="true"` label + sr-only `role="status" aria-live="polite"` region + sibling non-live Button. Visual layout unchanged. Regression guard: `getAllByText` assertion (the label is now intentionally duplicated in the DOM). |
+| L-Y-03 | LOW | `NotificationItem` unread indicator was a colored dot only — no non-color indicator for low-vision users. WCAG 1.4.1. | Added sr-only text via `t("notifications.unreadIndicator")` in all 4 locales. Colored dot kept for visual affordance. |
+| L-Y-04 | LOW | `DiscoveredJobsList` status badge rendered raw enum values ("applied", "archived") — not localized. | Wrapped via `t("automations.discoveredJob.status." + job.status)` with raw-enum fallback so unknown statuses stay visible. i18n keys added in all 4 locales. |
+| L-Y-05 | LOW | `MatchScoreRing` color palette had WCAG 1.4.11 non-text contrast failures: `amber-500` at 1.96:1 (need 3.0:1) and `emerald-500` at 2.61:1. | Migrated amber-500 → amber-700 (4.52:1 PASS) and emerald-500 → emerald-600 (3.39:1 PASS). Red-500 was already compliant. Dark-mode audit is a follow-up. |
+| L-NEW-01 | LOW | `DeckView` rendered TWO concurrent `aria-live="polite"` regions — VoiceOver/NVDA double-announced card changes. | Consolidated to ONE polite region that carries the `lastAction` prefix when present. The 3s `setTimeout` that clears `lastAction` is unchanged. `aria-atomic="true"` ensures the combined string is announced once per update. |
+| L-NEW-02 | LOW | `DiscoveredJobDetail` rendered the external-link anchor INSIDE the `DialogTitle`, causing screen readers to concatenate the link role into the heading name. | Moved anchor out to a sibling row inside `DialogHeader`. Heading's accessible name is now exactly the job title. |
+| skeleton migration | Sprint 3 follow-up | `EnrichmentStatusPanel.tsx`, `StatusHistoryTimeline.tsx`, `StatusFunnelWidget.tsx` had inline skeletons with hardcoded `aria-label="Loading"`. | Migrated to shared `<Skeleton label={t("common.loading")}>` primitive. StatusFunnelWidget additionally got `motion-reduce:animate-none` on the inner pulse divs (incidental improvement — previously missing). |
+| axisLeftLegendKey | Sprint 3 follow-up | `WeeklyBarChartToggle` chart axis legend was still English only (`axisLeftLegend: string`). Sprint 3 Stream G deliberately left this for a follow-up field. | Added optional `axisLeftLegendKey?: string` to `ChartConfig`. Resolves via `t(axisLeftLegendKey)` when set; falls back to `axisLeftLegend` for backward compatibility. `dashboard/page.tsx` consumer updated with `"dashboard.chartJobsApplied"` / `"dashboard.chartTimeSpent"` keys in all 4 locales. |
+
+### Fixed — Stream F: `size="icon"` → `size="icon-lg"` sweep (17 migrated, 6 kept with comment, 1 verified)
+
+| File | Outcome |
+|----|---------|
+| `ActivitiesTable.tsx`, `admin/{Companies,JobLocations,JobSources,JobTitles,Tags}Table.tsx`, `automations/{AutomationContainer,AutomationDetailHeader,AutomationList}.tsx`, `Header.tsx` (mobile menu), `kanban/KanbanColumn.tsx`, `myjobs/{MyJobsTable,NoteCard}.tsx`, `profile/{EducationCard,ExperienceCard,ResumeTable}.tsx`, `questions/QuestionCard.tsx` | **17 Migrated to `size="icon-lg"`** (44×44). Several also removed redundant `h-7 w-7` / `h-11 w-11` class overrides now that the variant encodes the dimensions. |
+| `settings/AutomationSettings.tsx`, `settings/DeveloperSettings.tsx` (×2), `settings/LogoAssetSettings.tsx` (×2) | **Kept at `size="icon"` (40×40)** with inline comment — buttons sit inside `Input`-adjacent form rows with a fixed `h-10` input height; growing to 44×44 would misalign the form controls. A project-wide `<Input>` height bump to h-11 is a design-review-gated follow-up. |
+| `tasks/TasksTable.tsx` | **Kept at `size="icon"`** — dense h-9 row layout; growing would break row height. Density toggle is a suggested follow-up. |
+| `ui/calendar.tsx`, `ui/calendar2.tsx` | **Kept at `size="icon"`** — react-day-picker header uses `--cell-size: 2rem` hard constraint. Promoting to 44×44 widens the popover significantly; user testing required. |
+| `ui/button.tsx` | **Verified** — the variant definition at line 37 (`"icon-lg": "h-11 w-11"`) still exists. No code change. |
+
+Stream F's migration (17/24 = 71%) comfortably clears the 62% floor in the prompt and satisfies WCAG 2.5.5 AAA for the majority of icon-only buttons. The 6 exceptions all carry inline comments explaining the layout constraint.
+
+### Multi-stream honesty gate — Sprint 4 open follow-ups surfaced
+
+Per `feedback_multi_stream_honesty_gate.md`, I extracted each of the 6 Sprint 4 stream reports' full "Open Questions" and "Risks / ripple-effects discovered" sections from the session transcript (stored in `/tmp/sprint4-stream-{a,b,c,d,e,f}.txt` during the scan) and cross-checked every item against this file. The scan surfaced items that the orchestrator's consolidated summary had under-represented:
+
+**Architecture + event bus** (Stream A):
+- **`rotateVapidKeysAction` invalidation gap**: the action deletes all `WebPushSubscription` rows (VAPID key rotation invalidates every subscription), which flips push-channel availability, but L-A-05 only wired `subscribePush` and `unsubscribePush`. For up to 30s after rotation the `isAvailable` cache may still say "push available". Single-line fix (`channelRouter.invalidateAvailability(user.id, "push")`) — slotted for a Sprint 4.x follow-up.
+- **Prisma `data`-blob dual-write deprecation**: inline comments in `enforced-writer.ts`, `deep-links.ts`, `notification.model.ts` still describe the dual-write into top-level columns AND the legacy `data` blob as a rollout mechanism from ADR-030. Dedicated clean-up sprint once the Prisma migration is rolled everywhere.
+- **`notifications` namespace cross-locale check**: Stream D added `staging`, `automations`, `settings` to the `dictionaries.spec.ts` namespace consistency check, but `notifications` is still NOT covered. Stream A manually mirrored 8 new + 4 removed keys across en/de/fr/es and verified. Follow-up: extend the test to include `notifications` so drift is caught automatically.
+- **Webhook `message` vs title divergence**: the long-form English `message` column powers email/webhook/push body fallbacks while the new `notifications.webhook.*.title` keys render a short localized title. This is the correct 5W+H pattern (message = fallback, titleKey = headline) but it's a semantic split new contributors should be aware of.
+
+**Performance + UI polish** (Stream B):
+- **L-P-SPEC-02 audit inline comment**: ✅ applied during honesty-gate resolution at `src/actions/notification.actions.ts:93`. Stream B flagged that the file was out of Stream B's scope.
+- **`SuperLikeCelebration` globals.css placement**: Stream B edited `src/app/globals.css` (implicit scope allowance from the L-P-03 fix description). Alternative was a `SuperLikeCelebration.module.css` file but would have needed PostCSS plugin verification — inline globals was cheaper.
+
+**Security** (Stream C):
+- "None. All findings in scope are resolved." (verbatim). Confirmed.
+
+**Testing infrastructure** (Stream D):
+- **MatchScoreRing cross-stream coordination**: Stream E changed `stroke-emerald-500` → `stroke-emerald-600` (L-Y-05 contrast fix). Stream D's L-T-05 tests use `stroke-red-500` (negative-score clamp test) which is unaffected. Cross-referenced.
+- **`keyboard-ux.spec.ts` CI race risk**: 37 `waitForTimeout` calls replaced in that file; some used `waitForLoadState("domcontentloaded")` which is faster than the original timers. If CI exposes races, follow-up fix is more specific `safeWait` calls per the `selectOrCreateComboboxOption` reference pattern.
+- **`mockStagedVacancyWithAutomation` migration path**: `DeckCard.spec.tsx`, `useDeckStack.spec.ts`, `StagingContainerDeckSheetRouting.spec.tsx` still use inline spread patterns. Non-blocking migration follow-up.
+- **`db.notification.*` grep false-positive scope**: the extended pattern could false-positive on test code that uses `db.notification` as a variable name — but the script is `src/` only, so the blast radius is contained.
+
+**Accessibility** (Stream E):
+- **DeckView `lastAction` 3s timeout interaction**: with the consolidated single live region, the card announcement keeps re-reading while `lastAction` is present (concatenated as a prefix). Acceptable because `aria-atomic="true"` means a combined single-announcement per update + the timer clears the prefix after 3s. A stricter fix would stage the announcements — out of scope for L-*.
+- **Dark-mode `MatchScoreRing` contrast**: L-Y-05 audited only the light-mode (white background) contrast. Dark-mode shades (`-400` variants on a dark card background) are not audited. Stream F or a future sprint can reuse the `getStrokeColorClass` audit-table structure.
+- **StatusFunnelWidget `motion-reduce:animate-none`** added incidentally during the skeleton migration. The old inline implementation was missing it entirely. If considered out of scope for L-*, can be reverted — but the fix is inside the replaced block.
+
+**`size="icon-lg"` sweep** (Stream F):
+- **6 input-adjacent settings buttons remediation**: would require growing `<Input>` to `h-11` project-wide. Design-review-gated follow-up.
+- **`react-day-picker --cell-size: 2rem` promotion**: eliminates the calendar exception but widens the popover significantly. User testing required.
+- **TasksTable "density" toggle**: opt-in 44×44 rows for AAA compliance while power users keep the dense 36px view. Suggested by Stream F per Sprint 3 Stream F's pattern.
+- **`DropdownMenuTrigger asChild` + JSX comment fragility**: adding a `{/* comment */}` between `<DropdownMenuTrigger asChild>` and `<Button>` trips Radix Slot's `React.Children.only` invariant at runtime. Latent codebase-wide footgun. Suggested remediation: ESLint rule forbidding JSX expression containers as direct children of `asChild`-prop JSX elements.
+
+**Skill invocation result (Sprint 4)**:
+All 6 Sprint 4 stream agents invoked their assigned skill via the Skill tool with the combined (a)+(b) instrumentation — verbatim quoted passage + rejected alternative with justification. Pattern continues to work across 4 sprints (1, 1.5, 2, 3, 4).
+
+**Honesty gate caught (Sprint 4)**:
+1. Post-sprint full-jest verification surfaced 8 test failures across 4 suites — all test-side (Promise executor race in queue-bound helper fixture, duplicate-DOM-text from L-Y-02's intentional dual-surface, settings dictionary multi-prefix reality, `.click()` vs `fireEvent.click()` React 18 flush timing, pre-existing `developer.*` / `smtp.*` prefixes in `settings.ts` surfaced by Stream D's cross-locale check). ZERO production bugs. All 4 suites fixed inline with javascript-testing-patterns skill guidance. Final run: 211 suites / 4031 passed / 2 todo / 0 failed.
+2. Multi-stream honesty-gate scan extracted each of the 6 raw agent return messages from the session transcript (not the orchestrator's consolidated summary) per `feedback_multi_stream_honesty_gate.md`. The scan caught the L-P-SPEC-02 inline comment that Stream B could not apply (out of scope) — applied during this pass.
 
 ## Sprint 3 MEDIUM Fixes (2026-04-09)
 
