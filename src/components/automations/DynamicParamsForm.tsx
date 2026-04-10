@@ -324,28 +324,47 @@ function MultiselectField({
 // Internal: language + CEFR proficiency level selector
 // ---------------------------------------------------------------------------
 
-/** ISO 639-1 codes for common European languages. */
-const LANGUAGE_OPTIONS = [
-  "bg", "cs", "da", "de", "el", "en", "es", "et", "fi", "fr",
-  "ga", "hr", "hu", "it", "lt", "lv", "mt", "nl", "no", "pl",
-  "pt", "ro", "sk", "sl", "sv",
-] as const;
-
-/** CEFR proficiency levels. */
+/** CEFR proficiency levels (standard — no API endpoint needed). */
 const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
 
-/** Native language names for display in the selector. */
-const LANGUAGE_NAMES: Record<string, string> = {
-  bg: "Български (BG)", cs: "Čeština (CS)", da: "Dansk (DA)",
-  de: "Deutsch (DE)", el: "Ελληνικά (EL)", en: "English (EN)",
-  es: "Español (ES)", et: "Eesti (ET)", fi: "Suomi (FI)",
-  fr: "Français (FR)", ga: "Gaeilge (GA)", hr: "Hrvatski (HR)",
-  hu: "Magyar (HU)", it: "Italiano (IT)", lt: "Lietuvių (LT)",
-  lv: "Latviešu (LV)", mt: "Malti (MT)", nl: "Nederlands (NL)",
-  no: "Norsk (NO)", pl: "Polski (PL)", pt: "Português (PT)",
-  ro: "Română (RO)", sk: "Slovenčina (SK)", sl: "Slovenščina (SL)",
-  sv: "Svenska (SV)",
-};
+/** Language entry from the EURES reference API. */
+interface EuresLanguage {
+  id: number;
+  isoCode: string;
+  label: string; // native script (e.g., "Deutsch", "English", "français")
+}
+
+/**
+ * Fetches the EURES portal's official language list via our proxy route.
+ * The route caches for 24h (stale-while-revalidate: 7d), so repeated
+ * calls within the same session are served from the browser/CDN cache.
+ *
+ * Falls back to an empty array on error — the user sees an empty dropdown
+ * with no crash. This is the "best-effort non-blocking" enrichment pattern
+ * from CLAUDE.md applied to reference data.
+ */
+function useEuresLanguages(): EuresLanguage[] {
+  const [languages, setLanguages] = React.useState<EuresLanguage[]>([]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/api/eures/languages")
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data: EuresLanguage[]) => {
+        if (!cancelled) setLanguages(data);
+      })
+      .catch(() => {
+        // Best-effort: empty list means no language dropdown, which is
+        // acceptable for a reference-data fetch failure.
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  return languages;
+}
 
 interface LanguageProficiencyFieldProps {
   field: ConnectorParamField;
@@ -358,9 +377,15 @@ interface LanguageProficiencyFieldProps {
 /**
  * Structured language + CEFR level selector.
  *
- * Replaces the old free-text input ("de(B2), en(C1)") with two dropdowns
- * + an add button + chip display. The serialized value is the same
- * comma-separated format the EURES API expects: "de(B2), en(C1)".
+ * Languages are fetched from the EURES reference API
+ * (`/api/eures/languages` → `shared-data-rest-api/public/reference/languages`)
+ * so the list is authoritative and always up-to-date with the portal.
+ * Labels are in the language's native script (matching the EURES advanced
+ * search UI at europa.eu/eures/portal/jv-se/advanced-search).
+ *
+ * CEFR levels (A1-C2) are standardized and hardcoded.
+ *
+ * Serialized value: same "de(B2), en(C1)" format the EURES search API expects.
  */
 function LanguageProficiencyField({
   field,
@@ -369,6 +394,8 @@ function LanguageProficiencyField({
   displayLabel,
   t,
 }: LanguageProficiencyFieldProps) {
+  const allLanguages = useEuresLanguages();
+
   // Parse the serialized string into an array of { lang, level } pairs.
   const entries: { lang: string; level: string }[] = (() => {
     if (typeof value !== "string" || value.trim() === "") return [];
@@ -392,10 +419,26 @@ function LanguageProficiencyField({
   const [pendingLang, setPendingLang] = React.useState("");
   const [pendingLevel, setPendingLevel] = React.useState("B2");
 
+  // Build a lookup for display names — native script from the API.
+  const langNameMap = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const lang of allLanguages) {
+      map.set(lang.isoCode, lang.label);
+    }
+    return map;
+  }, [allLanguages]);
+
   const usedLanguages = new Set(entries.map((e) => e.lang));
-  const availableLanguages = LANGUAGE_OPTIONS.filter(
-    (l) => !usedLanguages.has(l),
+  const availableLanguages = allLanguages.filter(
+    (l) => !usedLanguages.has(l.isoCode),
   );
+
+  const getDisplayName = (isoCode: string) => {
+    const native = langNameMap.get(isoCode);
+    return native
+      ? `${native} (${isoCode.toUpperCase()})`
+      : isoCode.toUpperCase();
+  };
 
   const addEntry = () => {
     if (!pendingLang || !pendingLevel) return;
@@ -423,13 +466,13 @@ function LanguageProficiencyField({
               className="gap-1.5 pr-1"
             >
               <span className="text-xs font-medium">
-                {LANGUAGE_NAMES[entry.lang] ?? entry.lang.toUpperCase()} — {entry.level}
+                {getDisplayName(entry.lang)} — {entry.level}
               </span>
               <button
                 type="button"
                 onClick={() => removeEntry(entry.lang)}
                 className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
-                aria-label={`${t("common.remove")} ${entry.lang.toUpperCase()} ${entry.level}`}
+                aria-label={`${t("common.remove")} ${getDisplayName(entry.lang)} ${entry.level}`}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -439,16 +482,22 @@ function LanguageProficiencyField({
       )}
 
       {/* Add row: language select + level select + add button */}
-      {availableLanguages.length > 0 && (
+      {(allLanguages.length === 0 || availableLanguages.length > 0) && (
         <div className="flex items-center gap-2">
           <Select value={pendingLang} onValueChange={setPendingLang}>
             <SelectTrigger className="flex-1">
-              <SelectValue placeholder={t("automations.params.selectLanguage")} />
+              <SelectValue
+                placeholder={
+                  allLanguages.length === 0
+                    ? t("common.loading")
+                    : t("automations.params.selectLanguage")
+                }
+              />
             </SelectTrigger>
             <SelectContent>
               {availableLanguages.map((lang) => (
-                <SelectItem key={lang} value={lang}>
-                  {LANGUAGE_NAMES[lang] ?? lang.toUpperCase()}
+                <SelectItem key={lang.isoCode} value={lang.isoCode}>
+                  {lang.label} ({lang.isoCode.toUpperCase()})
                 </SelectItem>
               ))}
             </SelectContent>
@@ -470,7 +519,7 @@ function LanguageProficiencyField({
           <button
             type="button"
             onClick={addEntry}
-            disabled={!pendingLang}
+            disabled={!pendingLang || allLanguages.length === 0}
             className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-3"
           >
             {t("common.add")}
