@@ -13,6 +13,7 @@ import { profile } from "./dictionaries/profile";
 import { questions } from "./dictionaries/questions";
 import { admin } from "./dictionaries/admin";
 import { settings } from "./dictionaries/settings";
+import { developer } from "./dictionaries/developer";
 import { staging } from "./dictionaries/staging";
 import { notifications } from "./dictionaries/notifications";
 import { api } from "./dictionaries/api";
@@ -696,7 +697,7 @@ function mergeDictionaries(...namespaces: Record<string, Record<string, string>>
   return merged;
 }
 
-const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, staging, notifications, api, blacklist, deck, enrichment, webhook, email, logoAsset);
+const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, developer, staging, notifications, api, blacklist, deck, enrichment, webhook, email, logoAsset);
 
 export type TranslationKey = string;
 export type Dictionary = Record<string, string>;
