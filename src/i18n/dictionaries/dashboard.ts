@@ -30,6 +30,15 @@ export const dashboard = {
     "dashboard.biggestDropoff": "Biggest drop-off",
     "dashboard.totalJobsTracked": "{count} jobs tracked",
     "dashboard.fetchStatusDistributionError": "Failed to load status distribution",
+    // M-NEW-01 — Progress bar accessible name for NumberCardToggle.
+    // `{value}` is the trend percentage. Two separate keys so translators
+    // can choose the correct phrasing for positive vs negative trends
+    // without a string-concatenation hack.
+    "dashboard.progressIncrease": "{value}% increase",
+    "dashboard.progressDecrease": "{value}% decrease",
+    // Sprint 2 follow-up: chart labels in WeeklyBarChartToggle.
+    "dashboard.chartJobs": "Jobs",
+    "dashboard.chartActivities": "Activities",
   },
   de: {
     "dashboard.title": "Dashboard",
@@ -62,6 +71,12 @@ export const dashboard = {
     "dashboard.biggestDropoff": "Größter Rückgang",
     "dashboard.totalJobsTracked": "{count} Jobs erfasst",
     "dashboard.fetchStatusDistributionError": "Statusverteilung konnte nicht geladen werden",
+    // M-NEW-01 — Progress bar accessible name (see EN comment).
+    "dashboard.progressIncrease": "{value}% Anstieg",
+    "dashboard.progressDecrease": "{value}% Rückgang",
+    // Sprint 2 follow-up: chart labels in WeeklyBarChartToggle.
+    "dashboard.chartJobs": "Jobs",
+    "dashboard.chartActivities": "Aktivitäten",
   },
   fr: {
     "dashboard.title": "Tableau de bord",
@@ -94,6 +109,12 @@ export const dashboard = {
     "dashboard.biggestDropoff": "Plus grande baisse",
     "dashboard.totalJobsTracked": "{count} emplois suivis",
     "dashboard.fetchStatusDistributionError": "Impossible de charger la distribution des statuts",
+    // M-NEW-01 — Progress bar accessible name (see EN comment).
+    "dashboard.progressIncrease": "{value}% de hausse",
+    "dashboard.progressDecrease": "{value}% de baisse",
+    // Sprint 2 follow-up: chart labels in WeeklyBarChartToggle.
+    "dashboard.chartJobs": "Emplois",
+    "dashboard.chartActivities": "Activités",
   },
   es: {
     "dashboard.title": "Panel",
@@ -126,5 +147,11 @@ export const dashboard = {
     "dashboard.biggestDropoff": "Mayor caída",
     "dashboard.totalJobsTracked": "{count} empleos registrados",
     "dashboard.fetchStatusDistributionError": "No se pudo cargar la distribución de estados",
+    // M-NEW-01 — Progress bar accessible name (see EN comment).
+    "dashboard.progressIncrease": "{value}% de aumento",
+    "dashboard.progressDecrease": "{value}% de descenso",
+    // Sprint 2 follow-up: chart labels in WeeklyBarChartToggle.
+    "dashboard.chartJobs": "Empleos",
+    "dashboard.chartActivities": "Actividades",
   },
 } as const;

@@ -74,9 +74,21 @@ export default function NumberCardToggle({ data }: NumberCardToggleProps) {
         </div>
       </CardContent>
       <CardFooter>
+        {/*
+          M-NEW-01 (Sprint 3 Stream G) — the Progress bar's accessible name
+          was previously hardcoded English ("increase" / "decrease"). The
+          baseline M-Y-08 findings missed it because it is not wrapped in
+          `role="status"` so the grep for "Loading" didn't match. Fixed by
+          routing the label through two translated keys (positive /
+          negative) with the trend value interpolated via `.replace()` —
+          this matches the repo-wide i18n placeholder convention.
+        */}
         <Progress
           value={current.trend}
-          aria-label={`${current.trend}% ${current.trend >= 0 ? "increase" : "decrease"}`}
+          aria-label={(current.trend >= 0
+            ? t("dashboard.progressIncrease")
+            : t("dashboard.progressDecrease")
+          ).replace("{value}", String(current.trend))}
         />
       </CardFooter>
     </Card>

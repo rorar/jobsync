@@ -80,6 +80,14 @@ export const staging = {
     "staging.detailsClassification": "Classification",
     "staging.detailsAutomation": "Automation",
     "staging.requiredExperience": "years experience",
+    // M-NEW-02 — WCAG 3.3.4: Error prevention for destructive bulk delete.
+    // The trash-tab "Delete Permanently" action is non-reversible and must
+    // be confirmed before it fires. These keys power the AlertDialog that
+    // wraps the bulk-delete button in BulkActionBar.
+    "staging.bulkDeleteConfirmTitle": "Delete {count} items permanently?",
+    "staging.bulkDeleteConfirmDescription": "This action cannot be undone. The selected vacancies will be permanently removed from the trash.",
+    "staging.bulkDeleteConfirmAction": "Delete permanently",
+    "staging.bulkDeleteConfirmCancel": "Cancel",
   },
   de: {
     "staging.title": "Staging-Queue",
@@ -162,6 +170,11 @@ export const staging = {
     "staging.detailsClassification": "Klassifikation",
     "staging.detailsAutomation": "Automatisierung",
     "staging.requiredExperience": "Jahre Erfahrung",
+    // M-NEW-02 — Confirmation dialog for bulk delete (see EN comment).
+    "staging.bulkDeleteConfirmTitle": "{count} Einträge endgültig löschen?",
+    "staging.bulkDeleteConfirmDescription": "Diese Aktion kann nicht rückgängig gemacht werden. Die ausgewählten Stellen werden endgültig aus dem Papierkorb entfernt.",
+    "staging.bulkDeleteConfirmAction": "Endgültig löschen",
+    "staging.bulkDeleteConfirmCancel": "Abbrechen",
   },
   fr: {
     "staging.title": "File d'attente",
@@ -244,6 +257,11 @@ export const staging = {
     "staging.detailsClassification": "Classification",
     "staging.detailsAutomation": "Automatisation",
     "staging.requiredExperience": "années d'expérience",
+    // M-NEW-02 — Confirmation dialog for bulk delete (see EN comment).
+    "staging.bulkDeleteConfirmTitle": "Supprimer définitivement {count} éléments ?",
+    "staging.bulkDeleteConfirmDescription": "Cette action est irréversible. Les offres sélectionnées seront définitivement supprimées de la corbeille.",
+    "staging.bulkDeleteConfirmAction": "Supprimer définitivement",
+    "staging.bulkDeleteConfirmCancel": "Annuler",
   },
   es: {
     "staging.title": "Cola de espera",
@@ -326,5 +344,10 @@ export const staging = {
     "staging.detailsClassification": "Clasificación",
     "staging.detailsAutomation": "Automatización",
     "staging.requiredExperience": "años de experiencia",
+    // M-NEW-02 — Confirmation dialog for bulk delete (see EN comment).
+    "staging.bulkDeleteConfirmTitle": "¿Eliminar {count} elementos permanentemente?",
+    "staging.bulkDeleteConfirmDescription": "Esta acción no se puede deshacer. Las ofertas seleccionadas se eliminarán definitivamente de la papelera.",
+    "staging.bulkDeleteConfirmAction": "Eliminar permanentemente",
+    "staging.bulkDeleteConfirmCancel": "Cancelar",
   },
 } as const;

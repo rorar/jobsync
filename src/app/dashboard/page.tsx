@@ -84,16 +84,29 @@ export default async function Dashboard() {
         <div className="grid gap-2 sm:grid-cols-2">
           <StatusFunnelWidget />
         </div>
+        {/*
+          Sprint 3 Stream G (Sprint 2 follow-up): the two `label` fields
+          below are stable internal identifiers, NOT user-facing text.
+          WeeklyBarChartToggle renders `labelKey` via `t()` for the
+          visible toolbar + card title, and the Activities-total-hours
+          gate still identifies the chart by `label === "Activities"`,
+          which stays stable across locales. The `axisLeftLegend` is
+          still English today — flagged as a follow-up because Nivo
+          accepts only a raw string and we'd need to reroute the axis
+          label through `t()` at call time.
+        */}
         <WeeklyBarChartToggle
           charts={[
             {
               label: "Jobs",
+              labelKey: "dashboard.chartJobs",
               data: weeklyData,
               keys: ["value"],
               axisLeftLegend: "JOBS APPLIED",
             },
             {
               label: "Activities",
+              labelKey: "dashboard.chartActivities",
               data: activitiesData,
               keys: activitiesDataKeys(activitiesData),
               groupMode: "stacked",

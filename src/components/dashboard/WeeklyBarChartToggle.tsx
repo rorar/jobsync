@@ -10,8 +10,45 @@ import {
   type ToolbarRadioOption,
 } from "@/components/ui/toolbar-radio-group";
 
-type ChartConfig = {
+/**
+ * Chart configuration for the weekly bar chart.
+ *
+ * Sprint 3 Stream G (Sprint 2 follow-up) — added the optional `labelKey`
+ * field to support localized chart labels.
+ *
+ * Historically the `label` field was a plain string (`"Jobs"`,
+ * `"Activities"`) rendered directly in the toolbar radio-group AND in
+ * the card title. That made the label frozen to whatever English text
+ * the server component passed in, and DE/FR/ES users saw "Weekly Jobs"
+ * instead of "Wöchentlich Jobs".
+ *
+ * The fix adds a parallel `labelKey` field. When set, the component
+ * looks it up via `t(labelKey)` and uses the translation. When unset,
+ * the legacy `label` string is used verbatim — this keeps the type
+ * backward compatible so a future server component with a dynamic
+ * category name (e.g. a custom chart tab) can still pass a raw string
+ * without a registry entry.
+ *
+ * Consumers SHOULD migrate to `labelKey` for any fixed-vocabulary
+ * label. The current consumer (`src/app/dashboard/page.tsx`) passes
+ * the two known categories via `labelKey: "dashboard.chartJobs"` and
+ * `labelKey: "dashboard.chartActivities"`.
+ */
+export type ChartConfig = {
+  /**
+   * Legacy plain-string label. Used as the visible label when
+   * `labelKey` is not set. Also still used as an identity check below
+   * for the Activities-only total-hours computation, so consumers
+   * migrating to `labelKey` should keep this populated with a stable
+   * internal identifier.
+   */
   label: string;
+  /**
+   * Optional i18n key for the localized label. When set, takes
+   * precedence over `label` for the visible text in the toolbar radio
+   * group and the card title.
+   */
+  labelKey?: string;
   data: any[];
   keys: string[];
   groupMode?: "grouped" | "stacked";
@@ -26,6 +63,10 @@ type WeeklyBarChartToggleProps = {
  * Sprint 2 Stream G (H-Y-07): migrated from a plain color-swap button
  * group (no ARIA semantics, no non-color indicator) to the shared
  * `ToolbarRadioGroup` primitive.
+ *
+ * Sprint 3 Stream G (Sprint 2 follow-up): chart labels are now
+ * localized via the optional `ChartConfig.labelKey` field, falling
+ * back to the raw `label` string for backward compatibility.
  */
 export default function WeeklyBarChartToggle({
   charts,
@@ -33,6 +74,15 @@ export default function WeeklyBarChartToggle({
   const [activeIndex, setActiveIndex] = useState(0);
   const current = charts[activeIndex];
   const { t, locale } = useTranslations();
+
+  /**
+   * Resolve a chart's visible label. Prefers the translated
+   * `labelKey` when set; otherwise falls back to the raw `label`.
+   * Centralized here so the toolbar options, the card title, and the
+   * total-hours gate all agree on the same resolution rule.
+   */
+  const resolveLabel = (chart: ChartConfig): string =>
+    chart.labelKey ? t(chart.labelKey) : chart.label;
 
   const roundedData = current.data.map((item) => {
     const newItem: any = { ...item };
@@ -44,26 +94,30 @@ export default function WeeklyBarChartToggle({
     return newItem;
   });
 
-  const totalHours =
-    current.label === "Activities"
-      ? roundedData.reduce(
-          (sum, item) =>
-            sum +
-            current.keys.reduce(
-              (keySum, key) =>
-                keySum + (typeof item[key] === "number" ? item[key] : 0),
-              0,
-            ),
-          0,
-        )
-      : null;
+  /*
+   * Keep the identity check on the raw `label` field, NOT on the
+   * resolved (translated) label. The stable internal identifier
+   * ("Activities") is what we're gating on — comparing against a
+   * translated string would break when the user's locale is not
+   * English. The resolved label is used ONLY for visible rendering.
+   */
+  const isActivitiesChart = current.label === "Activities";
+  const totalHours = isActivitiesChart
+    ? roundedData.reduce(
+        (sum, item) =>
+          sum +
+          current.keys.reduce(
+            (keySum, key) =>
+              keySum + (typeof item[key] === "number" ? item[key] : 0),
+            0,
+          ),
+        0,
+      )
+    : null;
 
   const options: ToolbarRadioOption<string>[] = charts.map((chart, index) => ({
     value: String(index),
-    // NOTE: Chart labels come from the server (e.g. "Activities", "Jobs") and
-    // are not translated yet. Passing them through as-is preserves existing
-    // behaviour — a follow-up task should add a translation lookup table.
-    label: chart.label,
+    label: resolveLabel(chart),
   }));
 
   return (
@@ -72,7 +126,7 @@ export default function WeeklyBarChartToggle({
         <div className="flex items-center justify-between mb-1 mt-3">
           <div className="flex items-baseline gap-2">
             <CardTitle className="text-green-600">
-              {t("dashboard.weekly")} {current.label}
+              {t("dashboard.weekly")} {resolveLabel(current)}
             </CardTitle>
             {totalHours !== null && (
               <span className="text-sm text-muted-foreground">
@@ -109,7 +163,7 @@ export default function WeeklyBarChartToggle({
             }
             enableTotals={current.groupMode === "stacked" ? true : false}
             valueFormat={(value) =>
-              current.label === "Activities"
+              isActivitiesChart
                 ? formatDecimal(value, locale, 1)
                 : formatDecimal(value, locale, 0)
             }

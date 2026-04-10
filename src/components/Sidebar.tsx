@@ -50,10 +50,19 @@ function Sidebar() {
           })}
         </TooltipProvider>
       </nav>
-      <nav
-        aria-label={t("nav.secondaryNavigation")}
-        className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5"
-      >
+      {/*
+        Sprint 3 Stream G — Sprint 2 follow-up. The secondary `<nav>`
+        landmark wraps a SINGLE link (Settings). WAI-ARIA guidance and
+        the Deque axe "region-single-landmark" best-practice both
+        discourage landmarks with only one meaningful child because
+        they add noise to the landmark list for zero navigational
+        benefit ("secondary navigation" followed by one item reads as
+        padding). Stream H (Sprint 2) added an `aria-label` here to
+        disambiguate three landmarks; that label is NOW redundant and
+        removed alongside the demotion. The primary `<nav>` above
+        continues to carry its translated `aria-label`.
+      */}
+      <div className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5">
         <TooltipProvider>
           <NavLink
             label={t("nav.settings")}
@@ -62,7 +71,7 @@ function Sidebar() {
             pathname={path}
           />
         </TooltipProvider>
-      </nav>
+      </div>
     </aside>
   );
 }

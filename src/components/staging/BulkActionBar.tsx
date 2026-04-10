@@ -1,7 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   XCircle,
   Archive,
@@ -30,6 +41,21 @@ export function BulkActionBar({
 }: BulkActionBarProps) {
   const { t } = useTranslations();
   const count = selectedIds.size;
+
+  /*
+   * M-NEW-02 (Sprint 3 Stream G) — WCAG 3.3.4 Level AA "Error Prevention
+   * (Legal, Financial, Data)" requires destructive data actions to be
+   * reversible, auto-checked, OR confirmed. Hard delete is not
+   * reversible (no undo token issued) and not auto-checked, so the
+   * confirmation path is the only compliant option. We gate the delete
+   * action on a Radix AlertDialog (`<AlertDialog>`), which bakes in
+   * modal focus trapping, Escape-to-cancel, and `role="alertdialog"`
+   * semantics for assistive tech.
+   *
+   * State owned locally (not lifted) because the dialog is purely a
+   * visual confirmation step — no parent component needs to observe it.
+   */
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   if (count === 0) return null;
 
@@ -164,11 +190,18 @@ export function BulkActionBar({
               <RotateCcw className="h-3.5 w-3.5" />
               {t("staging.bulkRestore")}
             </Button>
+            {/*
+              M-NEW-02 — Delete Permanently is guarded by an AlertDialog
+              (WCAG 3.3.4). Clicking the button only OPENS the dialog; the
+              actual `handleAction("delete")` fires from the dialog's
+              confirm button below.
+            */}
             <Button
               size="sm"
               variant="destructive"
               className="h-7 gap-1 text-xs"
-              onClick={() => handleAction("delete")}
+              onClick={() => setIsDeleteConfirmOpen(true)}
+              data-testid="bulk-delete-trigger"
             >
               <AlertTriangle className="h-3.5 w-3.5" />
               {t("staging.bulkDelete")}
@@ -176,6 +209,47 @@ export function BulkActionBar({
           </>
         )}
       </div>
+
+      {/*
+        M-NEW-02 — Radix AlertDialog renders a portal'd modal with
+        focus-trap, Escape-to-cancel, and role="alertdialog". Default
+        focus lands on the Cancel button (per Radix + WAI-ARIA APG
+        "Alert Dialog" recommendation) to make accidental confirms
+        harder.
+      */}
+      <AlertDialog
+        open={isDeleteConfirmOpen}
+        onOpenChange={setIsDeleteConfirmOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("staging.bulkDeleteConfirmTitle").replace(
+                "{count}",
+                String(count),
+              )}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("staging.bulkDeleteConfirmDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              {t("staging.bulkDeleteConfirmCancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                setIsDeleteConfirmOpen(false);
+                await handleAction("delete");
+              }}
+              data-testid="bulk-delete-confirm"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t("staging.bulkDeleteConfirmAction")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
