@@ -649,7 +649,7 @@ function StagingContainer() {
     <>
       <div className={`mx-auto w-full ${getStagingMaxWidthClass(layoutSize)} transition-[max-width] duration-200`}>
       <Card className="h-full">
-        <CardHeader className="flex-row justify-between items-center">
+        <CardHeader className="flex-row flex-wrap justify-between items-center gap-2">
           <CardTitle>{t("staging.title")}</CardTitle>
           <div className="flex items-center gap-2">
             <StagingLayoutToggle value={layoutSize} onChange={setLayoutSize} />
