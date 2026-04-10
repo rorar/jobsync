@@ -17,6 +17,7 @@ import type {
   EnrichmentCompletedPayload,
 } from "@/lib/events/event-types";
 import { logoAssetService } from "./logo-asset-service";
+import { validateWebhookUrl } from "@/lib/url-validation";
 import db from "@/lib/db";
 
 // ---------------------------------------------------------------------------
@@ -164,6 +165,21 @@ async function handleEnrichmentCompleted(
     }
   } catch {
     // Guard check failed — proceed with download anyway
+  }
+
+  // L-S-06: Defense-in-depth SSRF re-validation at the subscriber boundary.
+  // The logoUrl was validated at enrichment time (when the orchestrator wrote
+  // it to EnrichmentResult). However, if the DB row is mutated between
+  // enrichment and download (e.g. by an attacker with DB write access), the
+  // subscriber would blindly trust the stored URL. Re-validating here closes
+  // that trust gap. This is intentionally redundant — the first validation
+  // sits at the enrichment orchestrator; this is the subscriber's own guard.
+  const ssrfGuard = validateWebhookUrl(logoUrl);
+  if (!ssrfGuard.valid) {
+    console.warn(
+      `[LogoAssetSubscriber] Dropping download — logoUrl failed SSRF re-validation for company ${companyId}: ${ssrfGuard.error}`,
+    );
+    return;
   }
 
   // Fire-and-forget download

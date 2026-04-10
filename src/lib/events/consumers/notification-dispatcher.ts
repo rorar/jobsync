@@ -89,8 +89,19 @@ interface StagedBuffer {
 
 const FLUSH_DELAY_MS = 5_000;
 
+// L-S-02: Move stagedBuffers to globalThis so it survives HMR module reloads
+// in development. Under HMR the module is re-executed, which would create a
+// fresh Map reference while existing setTimeout callbacks still close over the
+// OLD reference — causing flush() to call stagedBuffers.get() on the new Map
+// and silently miss the entry. The globalThis singleton pattern (documented in
+// CLAUDE.md "Scheduler Coordination — Singleton Pattern") keeps the single
+// canonical Map alive across reloads. In production (no HMR) this is a no-op.
+const _g = globalThis as unknown as {
+  __notifStagedBuffers?: Map<string, StagedBuffer>;
+};
 /** In-memory buffer: automationId -> { userId, count, timer } */
-const stagedBuffers = new Map<string, StagedBuffer>();
+const stagedBuffers: Map<string, StagedBuffer> =
+  (_g.__notifStagedBuffers ??= new Map<string, StagedBuffer>());
 
 // ---------------------------------------------------------------------------
 // Preference & Locale Resolution (single DB query per user)

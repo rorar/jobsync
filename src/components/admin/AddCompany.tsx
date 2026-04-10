@@ -130,14 +130,20 @@ function LogoPreview({
     // Check content-type server-side in parallel with <img> load.
     // Also resolves Wikipedia media page URLs to direct Wikimedia image URLs.
     let cancelled = false;
+    // L-A-01: checkLogoUrl now returns ActionResult<CheckLogoUrlData>.
+    // On failure (rate limit, auth, SSRF) result.success is false — treat
+    // the same as a non-image result so the UI degrades gracefully.
     checkLogoUrl(url).then((result) => {
       if (cancelled) return;
-      if (result.resolvedUrl) {
-        setResolvedUrl(result.resolvedUrl);
+      if (!result.success) return;
+      const data = result.data;
+      if (!data) return;
+      if (data.resolvedUrl) {
+        setResolvedUrl(data.resolvedUrl);
         // Auto-apply the resolved URL
-        onResolvedUrl?.(result.resolvedUrl);
-      } else if (!result.isImage && result.contentType) {
-        setServerContentType(result.contentType);
+        onResolvedUrl?.(data.resolvedUrl);
+      } else if (!data.isImage && data.contentType) {
+        setServerContentType(data.contentType);
       }
     });
     return () => { cancelled = true; };

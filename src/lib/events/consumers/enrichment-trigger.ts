@@ -35,6 +35,14 @@ export { extractDomain as extractDomainFromCompanyName } from "@/lib/connector/d
 
 export const MAX_CONCURRENT_ENRICHMENTS = 5;
 
+// L-S-04: Hard cap on the overflow queue to prevent unbounded memory growth
+// under event storms (e.g. bulk CompanyCreated on a large import). Enrichment
+// is best-effort per specs/data-enrichment.allium — dropping a task is
+// acceptable because the next CompanyCreated event for the same domain will
+// retry. The cap is intentionally generous (200) to absorb realistic burst
+// sizes while still protecting the process from OOM.
+export const MAX_ENRICHMENT_QUEUE_LENGTH = 200;
+
 /**
  * Semaphore state — module-level so it survives across calls in the same
  * process instance. Exported for test access only (@internal).
@@ -88,10 +96,25 @@ export function getActiveEnrichmentsCountForTesting(): number {
  * Two concurrent callers both blocked in the await will each be resolved
  * one-at-a-time by the `finally` block of the current holder.
  */
-export async function withEnrichmentLimit<T>(fn: () => Promise<T>): Promise<T> {
+export async function withEnrichmentLimit<T>(
+  fn: () => Promise<T>,
+  domain?: string,
+): Promise<T> {
   // If the semaphore is full, suspend until a slot opens.
   // The slot is opened by the finally block of whoever currently holds it.
   if (activeEnrichments >= MAX_CONCURRENT_ENRICHMENTS) {
+    // L-S-04: Guard the queue against unbounded growth under event storms.
+    // Drop the incoming task when the queue is full — enrichment is
+    // best-effort (specs/data-enrichment.allium) and the next domain event
+    // for the same company will retry. Throwing here rejects the caller's
+    // Promise, which is caught by the .catch(() => {}) wrappers in
+    // handleCompanyCreated and handleVacancyPromoted.
+    if (enrichmentQueue.length >= MAX_ENRICHMENT_QUEUE_LENGTH) {
+      console.warn(
+        `[EnrichmentTrigger] Queue full, dropping enrichment for ${domain ?? "unknown"}`,
+      );
+      throw new Error("EnrichmentQueue full");
+    }
     await new Promise<void>((resolve) => enrichmentQueue.push(resolve));
   }
   // Increment happens synchronously after the await resolves (or immediately
@@ -181,7 +204,8 @@ async function handleCompanyCreated(
         // Best-effort link — do not break on failure
       }
     }
-  }).catch(() => {
+  // L-S-04: pass domain so the queue-full warn log includes the domain name.
+  }, domain).catch(() => {
     // Silently swallow enrichment errors — spec: best-effort
   });
 }
@@ -232,6 +256,7 @@ async function handleVacancyPromoted(
           );
 
           // Fire-and-forget — orchestrator handles the cache-before-chain.
+          // L-S-04: pass domain as second arg for queue-full warn log.
           withEnrichmentLimit(() =>
             enrichmentOrchestrator
               .execute(
@@ -264,7 +289,7 @@ async function handleVacancyPromoted(
                   }
                 }
               }),
-          ).catch(() => {});
+          domain).catch(() => {});
         }
       }
     }
@@ -278,6 +303,7 @@ async function handleVacancyPromoted(
         );
 
         // Fire-and-forget — orchestrator handles the cache-before-chain.
+        // L-S-04: pass job URL as domain label for queue-full warn log.
         withEnrichmentLimit(() =>
           enrichmentOrchestrator.execute(
             payload.userId,
@@ -287,7 +313,7 @@ async function handleVacancyPromoted(
             },
             deepLinkChain,
           ),
-        ).catch(() => {});
+        job!.jobUrl ?? undefined).catch(() => {});
       }
     }
   })();

@@ -3,6 +3,7 @@
 import { getCurrentUser } from "@/utils/user.utils";
 import { validateWebhookUrl } from "@/lib/url-validation";
 import { checkRateLimit } from "@/lib/api/rate-limit";
+import type { ActionResult } from "@/models/actionResult";
 
 // M-S-04: Global cap (all callers combined) to bound total outbound HEAD
 // requests regardless of how many authenticated users fire concurrently.
@@ -10,6 +11,14 @@ import { checkRateLimit } from "@/lib/api/rate-limit";
 // while still bounding the server's outbound request rate.
 const GLOBAL_LOGO_CHECK_LIMIT = 200;
 const GLOBAL_LOGO_CHECK_WINDOW_MS = 60_000;
+
+// L-S-03: Dedicated per-function rate limit for resolveWikimediaUrl.
+// The outer checkLogoUrl cap (above) is per-auth-user; it does NOT cover
+// call paths that invoke resolveWikimediaUrl outside the server action
+// (e.g. a scheduled job or a server-side enrichment pass). A global cap
+// keyed on "wikimedia:global" closes that gap.
+const WIKIMEDIA_RESOLVE_LIMIT = 50;
+const WIKIMEDIA_RESOLVE_WINDOW_MS = 60_000;
 
 const IMAGE_CONTENT_TYPES = [
   "image/png",
@@ -47,6 +56,17 @@ const WIKIPEDIA_MEDIA_PATTERN =
 async function resolveWikimediaUrl(url: string): Promise<string | null> {
   const match = url.match(WIKIPEDIA_MEDIA_PATTERN);
   if (!match) return null;
+
+  // L-S-03: Rate-limit the Wikimedia API call at the function boundary so
+  // that callers outside checkLogoUrl (e.g. scheduled jobs, enrichment
+  // pipelines) are also covered. Key is global (not per-user) because
+  // resolveWikimediaUrl is unauthenticated — there is no user context here.
+  const wikimediaRateResult = checkRateLimit(
+    "wikimedia:global",
+    WIKIMEDIA_RESOLVE_LIMIT,
+    WIKIMEDIA_RESOLVE_WINDOW_MS,
+  );
+  if (!wikimediaRateResult.allowed) return null;
 
   const filename = decodeURIComponent(match[1]);
 
@@ -98,20 +118,33 @@ async function resolveWikimediaUrl(url: string): Promise<string | null> {
   }
 }
 
-/**
- * Check if a URL serves an image by doing a HEAD request.
- * Returns the content type so the UI can show a specific error message.
- * Also resolves Wikipedia media page URLs to direct Wikimedia image URLs.
- */
-export async function checkLogoUrl(
-  url: string,
-): Promise<{
+/** Shape of the data payload returned by checkLogoUrl on success. */
+export interface CheckLogoUrlData {
   isImage: boolean;
   contentType: string | null;
   resolvedUrl?: string;
-}> {
+}
+
+/**
+ * Check if a URL serves an image by doing a HEAD request.
+ * Returns an ActionResult<CheckLogoUrlData> following the project's Pattern A
+ * convention for "use server" exports.
+ *
+ * L-A-01: previously returned a raw object — wrapped in ActionResult<T> so
+ * callers can uniformly handle success/failure via the typed contract
+ * documented in CLAUDE.md "Repository Pattern" and specs/action-result.allium.
+ *
+ * On rate-limit, auth, SSRF, or network failure the action returns
+ * {success: false, message: "..."} so the caller can distinguish a
+ * hard failure from a legitimate non-image result.
+ */
+export async function checkLogoUrl(
+  url: string,
+): Promise<ActionResult<CheckLogoUrlData>> {
   const user = await getCurrentUser();
-  if (!user) return { isImage: false, contentType: null };
+  if (!user) {
+    return { success: false, message: "Unauthenticated" };
+  }
 
   // M-S-04: Global cap checked BEFORE per-user cap. An authenticated attacker
   // who creates many sessions could still exhaust outbound request capacity
@@ -122,25 +155,34 @@ export async function checkLogoUrl(
     GLOBAL_LOGO_CHECK_LIMIT,
     GLOBAL_LOGO_CHECK_WINDOW_MS,
   );
-  if (!globalResult.allowed) return { isImage: false, contentType: null };
+  if (!globalResult.allowed) {
+    return { success: false, message: "Rate limit exceeded" };
+  }
 
   // Per-user cap: 20/min — unchanged.
   const rateResult = checkRateLimit(`logoCheck:${user.id}`, 20, 60_000);
-  if (!rateResult.allowed) return { isImage: false, contentType: null };
+  if (!rateResult.allowed) {
+    return { success: false, message: "Rate limit exceeded" };
+  }
 
   try {
     const parsed = new URL(url);
     if (!["http:", "https:"].includes(parsed.protocol)) {
-      return { isImage: false, contentType: null };
+      return { success: true, data: { isImage: false, contentType: null } };
     }
 
     const ssrfCheck = validateWebhookUrl(url);
-    if (!ssrfCheck.valid) return { isImage: false, contentType: null };
+    if (!ssrfCheck.valid) {
+      return { success: true, data: { isImage: false, contentType: null } };
+    }
 
     // Try to resolve Wikipedia media page URLs first
     const wikimediaUrl = await resolveWikimediaUrl(url);
     if (wikimediaUrl) {
-      return { isImage: true, contentType: "image/svg+xml", resolvedUrl: wikimediaUrl };
+      return {
+        success: true,
+        data: { isImage: true, contentType: "image/svg+xml", resolvedUrl: wikimediaUrl },
+      };
     }
 
     // Follow redirects manually with SSRF validation on each hop
@@ -158,7 +200,9 @@ export async function checkLogoUrl(
 
         const redirectUrl = new URL(location, currentUrl).toString();
         const redirectCheck = validateWebhookUrl(redirectUrl);
-        if (!redirectCheck.valid) return { isImage: false, contentType: null };
+        if (!redirectCheck.valid) {
+          return { success: true, data: { isImage: false, contentType: null } };
+        }
 
         currentUrl = redirectUrl;
         continue;
@@ -166,11 +210,11 @@ export async function checkLogoUrl(
 
       const contentType = response.headers.get("content-type")?.split(";")[0]?.trim() ?? null;
       const isImage = contentType !== null && IMAGE_CONTENT_TYPES.some((t) => contentType.startsWith(t));
-      return { isImage, contentType };
+      return { success: true, data: { isImage, contentType } };
     }
 
-    return { isImage: false, contentType: null };
+    return { success: true, data: { isImage: false, contentType: null } };
   } catch {
-    return { isImage: false, contentType: null };
+    return { success: true, data: { isImage: false, contentType: null } };
   }
 }

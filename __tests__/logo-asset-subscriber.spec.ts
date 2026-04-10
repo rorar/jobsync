@@ -39,6 +39,12 @@ jest.mock("@/lib/assets/logo-asset-service", () => ({
   },
 }));
 
+// L-S-06: mock validateWebhookUrl to test SSRF re-validation at subscriber boundary
+const mockValidateWebhookUrl = jest.fn();
+jest.mock("@/lib/url-validation", () => ({
+  validateWebhookUrl: (...args: unknown[]) => mockValidateWebhookUrl(...args),
+}));
+
 // Use a real EventBus instance for integration-style testing
 const mockSubscribe = jest.fn();
 
@@ -123,6 +129,9 @@ describe("LogoAssetSubscriber", () => {
 
     // downloadAndProcess resolves successfully
     mockDownloadAndProcess.mockResolvedValue(undefined);
+
+    // L-S-06: default validateWebhookUrl returns valid
+    mockValidateWebhookUrl.mockReturnValue({ valid: true });
   });
 
   it("triggers download for logo dimension enrichment completed", async () => {
@@ -232,6 +241,73 @@ describe("LogoAssetSubscriber", () => {
     await flushPromises();
 
     expect(mockDownloadAndProcess).toHaveBeenCalledWith(logoUrl, userId, companyId);
+  });
+
+  // -------------------------------------------------------------------------
+  // L-S-06: SSRF re-validation at subscriber boundary (defense-in-depth)
+  // -------------------------------------------------------------------------
+
+  describe("L-S-06: SSRF re-validation before download", () => {
+    it("calls validateWebhookUrl on the logoUrl before triggering download", async () => {
+      const event = createEnrichmentEvent();
+      await handler(event);
+      await flushPromises();
+
+      expect(mockValidateWebhookUrl).toHaveBeenCalledWith(logoUrl);
+      expect(mockDownloadAndProcess).toHaveBeenCalledWith(logoUrl, userId, companyId);
+    });
+
+    it("drops download and does NOT call downloadAndProcess when SSRF re-validation fails", async () => {
+      // Simulate DB row mutated to a private IP after enrichment wrote it
+      const mutatedLogoUrl = "http://10.0.0.1/private-logo.png";
+      mockEnrichmentResultFindUnique.mockResolvedValue({
+        companyId,
+        data: JSON.stringify({ logoUrl: mutatedLogoUrl }),
+        status: "found",
+      });
+      mockValidateWebhookUrl.mockReturnValue({
+        valid: false,
+        error: "webhook.ssrfBlocked",
+      });
+
+      const event = createEnrichmentEvent();
+      await handler(event);
+      await flushPromises();
+
+      expect(mockDownloadAndProcess).not.toHaveBeenCalled();
+    });
+
+    it("emits console.warn when logoUrl is dropped by SSRF re-validation", async () => {
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+      const mutatedLogoUrl = "http://169.254.169.254/meta-data";
+      mockEnrichmentResultFindUnique.mockResolvedValue({
+        companyId,
+        data: JSON.stringify({ logoUrl: mutatedLogoUrl }),
+        status: "found",
+      });
+      mockValidateWebhookUrl.mockReturnValue({
+        valid: false,
+        error: "webhook.ssrfBlocked",
+      });
+
+      const event = createEnrichmentEvent();
+      await handler(event);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("SSRF re-validation"),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it("proceeds with download when SSRF re-validation passes for safe URL", async () => {
+      mockValidateWebhookUrl.mockReturnValue({ valid: true });
+
+      const event = createEnrichmentEvent();
+      await handler(event);
+      await flushPromises();
+
+      expect(mockDownloadAndProcess).toHaveBeenCalledWith(logoUrl, userId, companyId);
+    });
   });
 
   it("uses startsWith instead of contains for company lookup", async () => {
