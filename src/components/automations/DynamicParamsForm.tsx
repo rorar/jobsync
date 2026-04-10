@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
+import Image from "next/image";
 import { useTranslations } from "@/i18n";
 import type { ConnectorParamsSchema, ConnectorParamField } from "@/lib/connector/manifest";
 
@@ -327,6 +328,46 @@ function MultiselectField({
 /** CEFR proficiency levels (standard — no API endpoint needed). */
 const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
 
+/**
+ * Maps ISO 639-1 language codes to ISO 3166-1 alpha-2 country codes for flag
+ * display. Flags represent countries, not languages — most map directly
+ * (de→DE, fr→FR) but some don't. This table covers all 26 EURES portal languages.
+ *
+ * Uses the same `public/flags/` SVG collection as the EuresLocationCombobox.
+ */
+const LANG_TO_COUNTRY_FLAG: Record<string, string> = {
+  bg: "bg", cs: "cz", da: "dk", de: "de", el: "gr", en: "gb", es: "es",
+  et: "ee", fi: "fi", fr: "fr", ga: "ie", hr: "hr", hu: "hu", is: "is",
+  it: "it", lt: "lt", lv: "lv", mt: "mt", nl: "nl", no: "no", pl: "pl",
+  pt: "pt", ro: "ro", sk: "sk", sl: "si", sv: "se",
+};
+
+/** Renders a country flag SVG for a given ISO 639-1 language code. */
+function LanguageFlag({ langCode, className }: { langCode: string; className?: string }) {
+  const countryCode = LANG_TO_COUNTRY_FLAG[langCode.toLowerCase()];
+  const [hasError, setHasError] = React.useState(false);
+
+  if (!countryCode || hasError) {
+    return (
+      <span
+        className={`inline-block shrink-0 rounded-full bg-muted ${className ?? ""}`}
+        style={{ width: 16, height: 16 }}
+      />
+    );
+  }
+
+  return (
+    <Image
+      src={`/flags/${countryCode}.svg`}
+      alt={countryCode.toUpperCase()}
+      className={`inline-block shrink-0 ${className ?? ""}`}
+      width={16}
+      height={16}
+      onError={() => setHasError(true)}
+    />
+  );
+}
+
 /** Language entry from the EURES reference API. */
 interface EuresLanguage {
   id: number;
@@ -465,6 +506,7 @@ function LanguageProficiencyField({
               variant="secondary"
               className="gap-1.5 pr-1"
             >
+              <LanguageFlag langCode={entry.lang} className="h-3.5 w-3.5 rounded-sm" />
               <span className="text-xs font-medium">
                 {getDisplayName(entry.lang)} — {entry.level}
               </span>
@@ -497,7 +539,10 @@ function LanguageProficiencyField({
             <SelectContent>
               {availableLanguages.map((lang) => (
                 <SelectItem key={lang.isoCode} value={lang.isoCode}>
-                  {lang.label} ({lang.isoCode.toUpperCase()})
+                  <span className="inline-flex items-center gap-2">
+                    <LanguageFlag langCode={lang.isoCode} className="h-3.5 w-3.5 rounded-sm" />
+                    {lang.label} ({lang.isoCode.toUpperCase()})
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
