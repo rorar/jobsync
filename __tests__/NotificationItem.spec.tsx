@@ -4,6 +4,12 @@
  * Tests the 5W+H rework: structured title/actor/reason/actions,
  * a11y (role="article", <time datetime>), late-bound i18n via titleKey,
  * dismiss button and deep-link action rendering.
+ *
+ * Sprint 3 Stream H additions:
+ *   - M-P-05 regression guard: `parseNotificationData` runs once per
+ *     distinct `(id, data)` pair, not on every render.
+ *   - M-Y-02 regression guard: dismiss button exposes a 44×44 pointer
+ *     target via the invisible hit-area wrapper pattern (CRIT-Y1).
  */
 import "@testing-library/jest-dom";
 import { render, screen, fireEvent } from "@testing-library/react";
@@ -440,6 +446,151 @@ describe("NotificationItem", () => {
         />,
       );
       expect(screen.getByText("System")).toBeInTheDocument();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 3 Stream H — M-Y-02: 44×44 dismiss button hit-area (CRIT-Y1)
+  // ---------------------------------------------------------------------------
+
+  describe("Sprint 3 Stream H — dismiss button hit-area (M-Y-02)", () => {
+    it("exposes a 44×44 pointer target via `h-11 w-11` outer button", () => {
+      render(
+        <NotificationItem
+          notification={makeNotification()}
+          onMarkAsRead={mockMarkAsRead}
+          onDismiss={mockDismiss}
+        />,
+      );
+      const dismissButton = screen.getByLabelText("Dismiss");
+      // The focusable element is a native <button> (NOT the previous
+      // Shadcn Button with h-8 w-8). Its class list must contain the
+      // WCAG 2.5.5 AAA 44px target utilities.
+      expect(dismissButton.tagName).toBe("BUTTON");
+      expect(dismissButton.className).toContain("h-11");
+      expect(dismissButton.className).toContain("w-11");
+    });
+
+    it("keeps the visible pill at 32×32 inside the 44×44 target", () => {
+      render(
+        <NotificationItem
+          notification={makeNotification()}
+          onMarkAsRead={mockMarkAsRead}
+          onDismiss={mockDismiss}
+        />,
+      );
+      const dismissButton = screen.getByLabelText("Dismiss");
+      // The visible pill is a direct <span aria-hidden="true"> child
+      // whose size utilities define the *visual* weight without
+      // shrinking the hit-area.
+      const pill = dismissButton.querySelector<HTMLElement>(
+        'span[aria-hidden="true"]',
+      );
+      expect(pill).not.toBeNull();
+      expect(pill?.className).toContain("h-8");
+      expect(pill?.className).toContain("w-8");
+    });
+
+    it("preserves keyboard focus ring on the 44×44 wrapper", () => {
+      render(
+        <NotificationItem
+          notification={makeNotification()}
+          onMarkAsRead={mockMarkAsRead}
+          onDismiss={mockDismiss}
+        />,
+      );
+      const dismissButton = screen.getByLabelText("Dismiss");
+      // The focus-visible ring MUST live on the focusable element
+      // (the 44×44 outer button), NOT on the decorative inner pill —
+      // otherwise keyboard users get a ring on a smaller visual target
+      // than their pointer hit-area, which is confusing.
+      expect(dismissButton.className).toContain("focus-visible:ring-2");
+    });
+
+    it("still fires onDismiss from the outer 44×44 target", () => {
+      // Regression: the hit-area refactor must NOT break the dismiss
+      // click flow (this was the CRIT-A-06 failure mode for DeckCard).
+      const notif = makeNotification({
+        type: "vacancy_promoted",
+        data: { jobId: "job-1" },
+        id: "notif-hitarea",
+      });
+      render(
+        <NotificationItem
+          notification={notif}
+          onMarkAsRead={mockMarkAsRead}
+          onDismiss={mockDismiss}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText("Dismiss"));
+      expect(mockDismiss).toHaveBeenCalledWith("notif-hitarea");
+      expect(mockMarkAsRead).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 3 Stream H — M-P-05: parseNotificationData memoization
+  // ---------------------------------------------------------------------------
+
+  describe("Sprint 3 Stream H — parseNotificationData memo (M-P-05)", () => {
+    it("does not re-parse stringified JSON when the parent re-renders with a stable data reference", () => {
+      // We can't patch the un-exported parseNotificationData directly,
+      // so we use console.warn as a proxy: feeding malformed JSON once
+      // triggers exactly ONE warn per parse. If the memo works, a
+      // parent re-render with the same `data` reference must NOT cause
+      // a second warn. Before the fix, the inline call re-parsed on
+      // every render and logged twice.
+      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
+
+      const malformed = "not-json{{{" as unknown as Record<string, unknown>;
+      const notif = makeNotification({
+        id: "memo-1",
+        data: malformed,
+      });
+
+      const { rerender } = render(
+        <NotificationItem
+          notification={notif}
+          onMarkAsRead={mockMarkAsRead}
+          onDismiss={mockDismiss}
+        />,
+      );
+      const warnCountAfterFirstRender = consoleSpy.mock.calls.length;
+      expect(warnCountAfterFirstRender).toBeGreaterThanOrEqual(1);
+
+      // Force a re-render with the SAME notification object reference.
+      // Without the useMemo, parseNotificationData would run again and
+      // bump the warn count. With the memo (keyed on `notification.id`
+      // + `notification.data`), the parsed value is reused.
+      rerender(
+        <NotificationItem
+          notification={notif}
+          onMarkAsRead={mockMarkAsRead}
+          onDismiss={mockDismiss}
+        />,
+      );
+      // MEMO GUARD: warn count must be unchanged on the second render.
+      expect(consoleSpy.mock.calls.length).toBe(warnCountAfterFirstRender);
+
+      // Sanity check: passing a DIFFERENT malformed data reference
+      // (same string, different identity) SHOULD re-parse because the
+      // memo is keyed on reference equality.
+      const notif2 = makeNotification({
+        id: "memo-2",
+        data: "also-not-json" as unknown as Record<string, unknown>,
+      });
+      rerender(
+        <NotificationItem
+          notification={notif2}
+          onMarkAsRead={mockMarkAsRead}
+          onDismiss={mockDismiss}
+        />,
+      );
+      expect(consoleSpy.mock.calls.length).toBeGreaterThan(
+        warnCountAfterFirstRender,
+      );
+
+      consoleSpy.mockRestore();
     });
   });
 });

@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { CheckCheck } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/i18n";
@@ -130,24 +129,81 @@ export function groupNotifications(
 // Component
 // ---------------------------------------------------------------------------
 
+// Shape returned by the `getNotifications` server action — extracted here
+// to type the in-flight promise ref without widening it to `any`.
+type GetNotificationsResult = Awaited<ReturnType<typeof getNotifications>>;
+
 export function NotificationDropdown({ onCountChange }: NotificationDropdownProps) {
   const { t } = useTranslations();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // M-P-SPEC-03 — request dedup + stale-result discard.
+  //
+  // Without dedup, opening the dropdown while a previous fetch is still in
+  // flight (e.g. rapid open/close, parent re-render, poll-triggered refresh)
+  // queues a second round-trip to the server. We coalesce concurrent calls
+  // by sharing the in-flight promise via `pendingFetchRef`.
+  //
+  // Server actions cannot be aborted via `AbortController` (Next.js does
+  // not propagate AbortSignal through the server-action RPC channel), so
+  // instead of cancelling the network request we cancel the RESULT: every
+  // fetch captures the current `fetchEpochRef` value, and on resolution we
+  // drop the payload if the epoch has advanced (dropdown closed / unmounted
+  // / superseded). This keeps state from being mutated after unmount and
+  // from being overwritten by an older response arriving late.
+  const pendingFetchRef = useRef<Promise<GetNotificationsResult> | null>(null);
+  const fetchEpochRef = useRef(0);
+  const isMountedRef = useRef(true);
+
   const fetchNotifications = useCallback(async () => {
-    setLoading(true);
-    const result = await getNotifications(false, 50);
-    if (result.success && result.data) {
-      setNotifications(result.data);
-      const unread = result.data.filter((n) => !n.read).length;
-      onCountChange?.(unread);
+    // If a fetch is already in flight, reuse its promise. The awaiting
+    // caller still runs the post-processing block below, but only the
+    // first caller triggers a network round-trip.
+    if (pendingFetchRef.current) {
+      return pendingFetchRef.current;
     }
-    setLoading(false);
+    const myEpoch = fetchEpochRef.current;
+    setLoading(true);
+    const pending = getNotifications(false, 50);
+    pendingFetchRef.current = pending;
+    try {
+      const result = await pending;
+      // If the epoch advanced while we were waiting, the caller no longer
+      // cares about this result — swallow it without touching state.
+      if (!isMountedRef.current || fetchEpochRef.current !== myEpoch) {
+        return result;
+      }
+      if (result.success && result.data) {
+        setNotifications(result.data);
+        const unread = result.data.filter((n) => !n.read).length;
+        onCountChange?.(unread);
+      }
+      return result;
+    } finally {
+      // Clear the in-flight ref ONLY if this is still the current one.
+      // A newer fetch may have started between the await and the finally,
+      // in which case we leave the newer one untouched.
+      if (pendingFetchRef.current === pending) {
+        pendingFetchRef.current = null;
+      }
+      if (isMountedRef.current && fetchEpochRef.current === myEpoch) {
+        setLoading(false);
+      }
+    }
   }, [onCountChange]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     fetchNotifications();
+    return () => {
+      // Bump the epoch so any in-flight fetch's result is discarded.
+      // Drop the shared promise reference so a remount starts a fresh
+      // request instead of resurrecting the old one.
+      fetchEpochRef.current += 1;
+      pendingFetchRef.current = null;
+      isMountedRef.current = false;
+    };
   }, [fetchNotifications]);
 
   const handleMarkAllAsRead = async () => {
@@ -213,16 +269,30 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
       <div className="flex items-center justify-between gap-2 border-b px-4 py-3 min-w-0">
         <h3 className="text-sm font-semibold">{t("notifications.title")}</h3>
         {hasUnread && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0"
+          /*
+            M-Y-03 (CRIT-Y1 flashlight) — WCAG 2.5.5 AAA / 2.5.8 AA: the
+            pointer target is 44×44 via the outer `h-11 w-11` button. The
+            visible pill inside stays at 32×32 (h-8 w-8) so the dropdown
+            header keeps its current visual rhythm. Hover/active feedback
+            is forwarded to the visible pill via Tailwind's `group` utility
+            so the full 44×44 area reacts. Same pattern as Sprint 1
+            DeckCard Info button (commit `be610fb`) + the sibling
+            NotificationItem dismiss button (M-Y-02).
+          */
+          <button
+            type="button"
+            className="group/markall h-11 w-11 shrink-0 rounded-md flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             onClick={handleMarkAllAsRead}
             aria-label={t("notifications.markAllRead")}
             title={t("notifications.markAllRead")}
           >
-            <CheckCheck className="h-4 w-4" />
-          </Button>
+            <span
+              aria-hidden="true"
+              className="h-8 w-8 rounded-md flex items-center justify-center text-muted-foreground transition-colors group-hover/markall:bg-accent group-hover/markall:text-accent-foreground group-active/markall:scale-95"
+            >
+              <CheckCheck className="h-4 w-4" />
+            </span>
+          </button>
         )}
       </div>
       <ScrollArea className="max-h-96">

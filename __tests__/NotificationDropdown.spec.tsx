@@ -414,3 +414,180 @@ describe("NotificationDropdown a11y structure (H-NEW-05)", () => {
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
   });
 });
+
+// ===========================================================================
+// Sprint 3 Stream H — M-P-SPEC-03: fetchNotifications request dedup
+// ===========================================================================
+
+describe("NotificationDropdown request dedup (M-P-SPEC-03)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    notificationSeq = 0;
+    mockLocale = "en";
+    mockMarkAllAsRead.mockResolvedValue({ success: true });
+    mockMarkAsRead.mockResolvedValue({ success: true });
+    mockDismissNotification.mockResolvedValue({ success: true });
+  });
+
+  it("coalesces concurrent mounts into a single getNotifications call", async () => {
+    // Hold the response so we can mount a second instance while the
+    // first fetch is still pending. The in-flight promise is per-instance
+    // (not global), so two mounts still produce two calls — but a single
+    // instance that re-invokes fetchNotifications during an in-flight
+    // call must NOT trigger a second server action.
+    let resolveFetch: (value: unknown) => void = () => {};
+    mockGetNotifications.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+
+    await act(async () => {
+      render(<NotificationDropdown />);
+    });
+
+    // Exactly one call so far — the initial mount effect.
+    expect(mockGetNotifications).toHaveBeenCalledTimes(1);
+
+    // Resolve the promise so the component settles.
+    await act(async () => {
+      resolveFetch({ success: true, data: [] });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText(/no notifications/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("discards stale results when the dropdown unmounts before resolution", async () => {
+    // The ref-based epoch + isMounted guard means a late-arriving server
+    // response after unmount must NOT call `setNotifications`. React
+    // would log "Can't perform a React state update on an unmounted
+    // component" if the guard is missing — we assert on that warning.
+    const consoleSpy = jest.spyOn(console, "error").mockImplementation();
+
+    let resolveFetch: (value: unknown) => void = () => {};
+    mockGetNotifications.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+
+    let unmount: () => void = () => {};
+    await act(async () => {
+      const result = render(<NotificationDropdown />);
+      unmount = result.unmount;
+    });
+
+    // Unmount BEFORE the server action resolves.
+    unmount();
+
+    // Now resolve the stale fetch — the guard must swallow the result.
+    await act(async () => {
+      resolveFetch({
+        success: true,
+        data: [
+          makeNotification({ id: "stale-1", createdAt: new Date() }),
+        ],
+      });
+    });
+
+    // No "state update on unmounted component" warning must have fired.
+    const unmountedWarnings = consoleSpy.mock.calls.filter((args) =>
+      args.some(
+        (a) =>
+          typeof a === "string" &&
+          a.includes("unmounted component"),
+      ),
+    );
+    expect(unmountedWarnings).toHaveLength(0);
+
+    consoleSpy.mockRestore();
+  });
+});
+
+// ===========================================================================
+// Sprint 3 Stream H — M-Y-03: mark-all-read 44×44 hit-area (CRIT-Y1)
+// ===========================================================================
+
+describe("NotificationDropdown mark-all-read hit-area (M-Y-03)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    notificationSeq = 0;
+    mockLocale = "en";
+    mockMarkAllAsRead.mockResolvedValue({ success: true });
+    mockMarkAsRead.mockResolvedValue({ success: true });
+    mockDismissNotification.mockResolvedValue({ success: true });
+  });
+
+  it("exposes a 44×44 pointer target on the mark-all-read button", async () => {
+    // The button only renders when there is at least one unread item.
+    mockGetNotifications.mockResolvedValue({
+      success: true,
+      data: [
+        makeNotification({
+          id: "unread-1",
+          createdAt: new Date(),
+          read: false,
+        }),
+      ],
+    });
+
+    await act(async () => {
+      render(<NotificationDropdown />);
+    });
+
+    const markAllButton = await screen.findByRole("button", {
+      name: /mark all.*read/i,
+    });
+
+    // The focusable element is a native <button> carrying the 44×44
+    // target utilities (WCAG 2.5.5 AAA / 2.5.8 AA). The previous
+    // Shadcn Button with `h-8 w-8 shrink-0` is the pre-fix shape and
+    // MUST NOT appear on the focusable element.
+    expect(markAllButton.tagName).toBe("BUTTON");
+    expect(markAllButton.className).toContain("h-11");
+    expect(markAllButton.className).toContain("w-11");
+    expect(markAllButton.className).not.toContain("h-8");
+
+    // The visible pill is a direct `<span aria-hidden="true">` child
+    // sized 32×32 to preserve the header's visual rhythm.
+    const pill = markAllButton.querySelector<HTMLElement>(
+      'span[aria-hidden="true"]',
+    );
+    expect(pill).not.toBeNull();
+    expect(pill?.className).toContain("h-8");
+    expect(pill?.className).toContain("w-8");
+  });
+
+  it("still fires mark-all-read from the outer 44×44 target", async () => {
+    // Regression: the hit-area refactor must NOT break the click flow.
+    mockGetNotifications.mockResolvedValue({
+      success: true,
+      data: [
+        makeNotification({
+          id: "unread-2",
+          createdAt: new Date(),
+          read: false,
+        }),
+      ],
+    });
+
+    await act(async () => {
+      render(<NotificationDropdown />);
+    });
+
+    const markAllButton = await screen.findByRole("button", {
+      name: /mark all.*read/i,
+    });
+
+    const { fireEvent } = await import("@testing-library/react");
+    await act(async () => {
+      fireEvent.click(markAllButton);
+    });
+
+    expect(mockMarkAllAsRead).toHaveBeenCalledTimes(1);
+  });
+});

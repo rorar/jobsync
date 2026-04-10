@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   Info,
   AlertTriangle,
@@ -111,7 +112,17 @@ export function NotificationItem({
   setSize,
 }: NotificationItemProps) {
   const { t, locale } = useTranslations();
-  const data = parseNotificationData(notification.data);
+  // M-P-05 — `parseNotificationData` runs `JSON.parse` + shape validation,
+  // measurable on dropdowns with 20+ items. Memoize keyed on the notification
+  // identity + the raw data reference. Notifications are server state and
+  // immutable per id, so a reference-equal `data` means the parsed object
+  // is still valid. If the server sends a new snapshot (different reference)
+  // the memo recomputes. No stale-closure risk because we never mutate the
+  // Notification object in place.
+  const data = useMemo(
+    () => parseNotificationData(notification.data),
+    [notification.id, notification.data],
+  );
   const type = notification.type as NotificationType;
 
   // Prefer top-level columns on the Notification row (ADR-030) and fall back
@@ -244,20 +255,38 @@ export function NotificationItem({
         )}
       </div>
 
-      {/* Dismiss button — always visible on touch, hover-revealed on desktop */}
+      {/*
+        Dismiss button — always visible on touch, hover-revealed on desktop.
+
+        M-Y-02 (CRIT-Y1 flashlight) — WCAG 2.5.5 AAA / 2.5.8 AA: the pointer
+        target is 44×44 via the outer `h-11 w-11` button. The visible pill
+        inside stays at 32×32 (h-8 w-8) to preserve the existing visual
+        weight — the extra padding becomes an invisible hit-area around the
+        glyph. Hover/active feedback is forwarded to the visible pill via
+        Tailwind's `group` utility so the full 44×44 area reacts. Same
+        pattern as Sprint 1 DeckCard Info button (commit `be610fb`).
+
+        The wrapping div keeps its `opacity-0 group-hover:opacity-100`
+        reveal behaviour on desktop — we only grow the hit-area, we do not
+        reveal the button earlier.
+      */}
       <div className="flex-shrink-0 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
+        <button
+          type="button"
+          className="group/dismiss h-11 w-11 rounded-md flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={(e) => {
             e.stopPropagation();
             onDismiss(notification.id);
           }}
           aria-label={t("notifications.action.dismiss")}
         >
-          <X className="h-3 w-3" aria-hidden="true" />
-        </Button>
+          <span
+            aria-hidden="true"
+            className="h-8 w-8 rounded-md flex items-center justify-center text-muted-foreground transition-colors group-hover/dismiss:bg-accent group-hover/dismiss:text-accent-foreground group-active/dismiss:scale-95"
+          >
+            <X className="h-3 w-3" aria-hidden="true" />
+          </span>
+        </button>
       </div>
     </article>
   );
