@@ -241,6 +241,19 @@ export async function rotateVapidKeysAction(): Promise<
     if (!user) return { success: false, message: "errors.unauthorized" };
 
     const result = await rotateVapidKeys(user.id);
+
+    // Sprint 5 L-A-05 Sprint-4-follow-up: rotateVapidKeys() deletes ALL of
+    // this user's WebPushSubscription rows alongside generating the new key
+    // pair. That flips push-channel availability from "available" to
+    // "unavailable" until the user re-subscribes. Without invalidating the
+    // cache, the 30s `availabilityCache` TTL in channel-router.ts keeps
+    // returning the stale "push available" verdict and any notification
+    // dispatched in that window silently routes to a now-empty subscription
+    // set. Mirror the existing subscribePush / unsubscribePush hooks
+    // (lines 163, 204). Spec: specs/notification-dispatch.allium invariant
+    // AvailabilityCacheTtl.
+    channelRouter.invalidateAvailability(user.id, "push");
+
     return { success: true, data: { publicKey: result.publicKey } };
   } catch (error) {
     return handleError(error, "push.errorRotatingKeys");

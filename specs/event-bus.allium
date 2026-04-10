@@ -407,7 +407,13 @@ rule ConsumerRegistration {
     -- Registration happens in a startup module (e.g., src/lib/events/consumers/index.ts).
     -- Each consumer exports a `register(bus: EventBus)` function.
     -- The startup module calls all register functions.
-    -- Order of registration determines handler execution order (per ErrorIsolation).
+    -- Sprint 2 H-P-06 update: registration order does NOT determine
+    -- handler execution order anymore. The parallel allSettled dispatch
+    -- in publish() schedules all handlers concurrently, so consumers
+    -- MUST NOT depend on observing another consumer's side-effects
+    -- within the same publish() call. See OrderGuarantee for the
+    -- ordering guarantees that ARE preserved (cross-publish FIFO per
+    -- event type) and ErrorIsolation for the parallel dispatch shape.
 }
 
 rule StubMigration {
@@ -456,7 +462,10 @@ invariant ImmutableEvents {
 
 -- RESOLVED: "Should the bus support async handlers?"
 -- Yes. publish() is async (returns Promise<void>), handlers may return void | Promise<void>.
--- Handlers are awaited sequentially within ErrorIsolation try/catch.
+-- Sprint 2 H-P-06: handlers are dispatched CONCURRENTLY via Promise.allSettled
+-- (no longer awaited sequentially). Per-handler error isolation is preserved
+-- inside the allSettled wrapper — see rule ErrorIsolation for the contract and
+-- rule OrderGuarantee for the ordering guarantees that survived parallelisation.
 
 open question "Should events be persisted to an EventLog table for audit/replay? Not needed now, but valuable for debugging and future event sourcing."
 
