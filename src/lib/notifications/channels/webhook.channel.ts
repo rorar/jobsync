@@ -22,7 +22,12 @@ import { decrypt } from "@/lib/encryption";
 import { validateWebhookUrl } from "@/lib/url-validation";
 import { t } from "@/i18n/server";
 import { resolveUserLocale } from "@/lib/locale-resolver";
-import { prepareEnforcedNotification } from "@/lib/notifications/channel-router";
+// Sprint 4 L-A (circular import extraction): import the enforced-writer
+// helper directly from the leaf module, NOT from `channel-router.ts`. The
+// old import path created a static import cycle because `channel-router.ts`
+// also statically imports this file to wire channels on the singleton.
+// See `src/lib/notifications/enforced-writer.ts` for the history.
+import { prepareEnforcedNotification } from "@/lib/notifications/enforced-writer";
 import type { NotificationType } from "@/models/notification.model";
 import type {
   NotificationChannel,
@@ -178,11 +183,17 @@ async function notifyDeliveryFailed(
 ): Promise<void> {
   try {
     const locale = await resolveUserLocale(userId);
+    // The sentence template still lives under the bare `webhook.*` key — it
+    // powers the English `message` fallback stored on the row (used by
+    // email/webhook/push channels and legacy readers). The late-bound title
+    // key follows the project-wide `notifications.*.title` convention so it
+    // sits alongside `notifications.moduleDeactivated.title` etc. and is
+    // greppable with the other 5W+H writers.
     const template = t(locale, "webhook.deliveryFailed");
     const message = template
       .replace("{eventType}", eventType)
       .replace("{url}", endpointUrl);
-    const titleKey = "webhook.deliveryFailed";
+    const titleKey = "notifications.webhook.deliveryFailed.title";
     const titleParams = { eventType, url: endpointUrl };
 
     const gated = await prepareEnforcedNotification({
@@ -221,9 +232,12 @@ async function notifyEndpointDeactivated(
 ): Promise<void> {
   try {
     const locale = await resolveUserLocale(userId);
+    // Same split as `notifyDeliveryFailed`: bare sentence key powers the
+    // English fallback `message`; the titleKey follows the project-wide
+    // `notifications.*.title` convention.
     const template = t(locale, "webhook.endpointDeactivated");
     const message = template.replace("{url}", endpointUrl);
-    const titleKey = "webhook.endpointDeactivated";
+    const titleKey = "notifications.webhook.endpointDeactivated.title";
     const titleParams = { url: endpointUrl };
 
     const gated = await prepareEnforcedNotification({

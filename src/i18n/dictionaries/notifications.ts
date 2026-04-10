@@ -30,6 +30,13 @@ export const notifications = {
     "notifications.bulkActionCompleted.title": "{action}: {count} items",
     "notifications.retentionCompleted.title": "Data retention complete",
     "notifications.jobStatusChanged.title": "Job status: {status}",
+    // Sprint 4 L-A-03: webhook-channel direct-writer titles — follow the
+    // `notifications.*.title` convention so they sit alongside the other
+    // 5W+H writers. The bare `webhook.deliveryFailed` / `webhook.endpoint
+    // Deactivated` keys (in `webhook.ts`) still power the English fallback
+    // `message` column stored on the row.
+    "notifications.webhook.deliveryFailed.title": "Webhook delivery failed",
+    "notifications.webhook.endpointDeactivated.title": "Webhook endpoint deactivated",
 
     // Reason / context strings (shared vocabulary)
     "notifications.reason.moduleTimeout": "Module did not respond within the configured timeout",
@@ -54,12 +61,19 @@ export const notifications = {
     "notifications.group.earlier": "Earlier",
     "notifications.group.unreadCount": "{count} unread",
 
-    // Generic actor labels
+    // Generic actor labels — Sprint 4 L-A removed `notifications.actor.
+    // enrichment` alongside the dead `NotificationActorType = "enrichment"`
+    // variant. When enrichment failure notifications land, the introducing
+    // sprint re-adds both in the same change.
     "notifications.actor.system": "System",
     "notifications.actor.module": "Module",
     "notifications.actor.automation": "Automation",
     "notifications.actor.user": "You",
-    "notifications.actor.enrichment": "Enrichment",
+
+    // L-Y-03 — sr-only word for the unread-dot indicator. Previously
+    // hardcoded as a bullet glyph, which AT reads as "bullet"/"black
+    // circle" instead of the semantic state.
+    "notifications.unreadIndicator": "Unread",
   },
   de: {
     "notifications.title": "Benachrichtigungen",
@@ -92,6 +106,8 @@ export const notifications = {
     "notifications.bulkActionCompleted.title": "{action}: {count} Elemente",
     "notifications.retentionCompleted.title": "Datenaufbewahrung abgeschlossen",
     "notifications.jobStatusChanged.title": "Job-Status: {status}",
+    "notifications.webhook.deliveryFailed.title": "Webhook-Zustellung fehlgeschlagen",
+    "notifications.webhook.endpointDeactivated.title": "Webhook-Endpunkt deaktiviert",
 
     // Reason / context strings
     "notifications.reason.moduleTimeout": "Modul hat nicht innerhalb des konfigurierten Zeitlimits geantwortet",
@@ -116,12 +132,16 @@ export const notifications = {
     "notifications.group.earlier": "Früher",
     "notifications.group.unreadCount": "{count} ungelesen",
 
-    // Generic actor labels
+    // Generic actor labels — Sprint 4 L-A removed `notifications.actor.
+    // enrichment` alongside the dead `NotificationActorType = "enrichment"`
+    // variant.
     "notifications.actor.system": "System",
     "notifications.actor.module": "Modul",
     "notifications.actor.automation": "Automatisierung",
     "notifications.actor.user": "Sie",
-    "notifications.actor.enrichment": "Anreicherung",
+
+    // L-Y-03 — sr-only word for the unread-dot indicator.
+    "notifications.unreadIndicator": "Ungelesen",
   },
   fr: {
     "notifications.title": "Notifications",
@@ -154,6 +174,8 @@ export const notifications = {
     "notifications.bulkActionCompleted.title": "{action} : {count} éléments",
     "notifications.retentionCompleted.title": "Rétention des données terminée",
     "notifications.jobStatusChanged.title": "Statut de l'emploi : {status}",
+    "notifications.webhook.deliveryFailed.title": "Échec de la livraison du webhook",
+    "notifications.webhook.endpointDeactivated.title": "Point de terminaison webhook désactivé",
 
     // Reason / context strings
     "notifications.reason.moduleTimeout": "Le module n'a pas répondu dans le délai configuré",
@@ -178,12 +200,16 @@ export const notifications = {
     "notifications.group.earlier": "Plus ancien",
     "notifications.group.unreadCount": "{count} non lu(s)",
 
-    // Generic actor labels
+    // Generic actor labels — Sprint 4 L-A removed `notifications.actor.
+    // enrichment` alongside the dead `NotificationActorType = "enrichment"`
+    // variant.
     "notifications.actor.system": "Système",
     "notifications.actor.module": "Module",
     "notifications.actor.automation": "Automatisation",
     "notifications.actor.user": "Vous",
-    "notifications.actor.enrichment": "Enrichissement",
+
+    // L-Y-03 — sr-only word for the unread-dot indicator.
+    "notifications.unreadIndicator": "Non lu",
   },
   es: {
     "notifications.title": "Notificaciones",
@@ -216,6 +242,8 @@ export const notifications = {
     "notifications.bulkActionCompleted.title": "{action}: {count} elementos",
     "notifications.retentionCompleted.title": "Retención de datos completada",
     "notifications.jobStatusChanged.title": "Estado del empleo: {status}",
+    "notifications.webhook.deliveryFailed.title": "Fallo en la entrega del webhook",
+    "notifications.webhook.endpointDeactivated.title": "Punto de conexión webhook desactivado",
 
     // Reason / context strings
     "notifications.reason.moduleTimeout": "El módulo no respondió dentro del tiempo configurado",
@@ -240,11 +268,15 @@ export const notifications = {
     "notifications.group.earlier": "Anterior",
     "notifications.group.unreadCount": "{count} sin leer",
 
-    // Generic actor labels
+    // Generic actor labels — Sprint 4 L-A removed `notifications.actor.
+    // enrichment` alongside the dead `NotificationActorType = "enrichment"`
+    // variant.
     "notifications.actor.system": "Sistema",
     "notifications.actor.module": "Módulo",
     "notifications.actor.automation": "Automatización",
     "notifications.actor.user": "Tú",
-    "notifications.actor.enrichment": "Enriquecimiento",
+
+    // L-Y-03 — sr-only word for the unread-dot indicator.
+    "notifications.unreadIndicator": "No leído",
   },
 } as const;

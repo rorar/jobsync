@@ -17,6 +17,7 @@ import { checkTestEmailRateLimit } from "@/lib/email-rate-limit";
 import { renderTestEmail } from "@/lib/email/templates";
 import { createSmtpTransporter } from "@/lib/email/transport";
 import { resolveUserLocale } from "@/lib/locale-resolver";
+import { channelRouter } from "@/lib/notifications/channel-router";
 import { ActionResult } from "@/models/actionResult";
 
 // ---------------------------------------------------------------------------
@@ -217,6 +218,12 @@ export async function saveSmtpConfig(
       });
     }
 
+    // Sprint 4 L-A Sprint-3-follow-up: drop the cached `isAvailable` result
+    // so the next dispatch picks up the new (or deactivated) SMTP config
+    // instead of waiting ≤30s for the ISAVAILABLE_CACHE_TTL_MS window.
+    // Spec: specs/notification-dispatch.allium invariant AvailabilityCacheTtl.
+    channelRouter.invalidateAvailability(user.id, "email");
+
     return {
       success: true,
       data: toDTO(config),
@@ -341,6 +348,12 @@ export async function deleteSmtpConfig(): Promise<ActionResult> {
     await prisma.smtpConfig.deleteMany({
       where: { userId: user.id },
     });
+
+    // Sprint 4 L-A Sprint-3-follow-up: deleting the SMTP row always flips
+    // the user from "email available" to "email unavailable". Drop the
+    // cache so the next dispatch stops trying to deliver to a missing
+    // config instead of waiting for the 30s TTL.
+    channelRouter.invalidateAvailability(user.id, "email");
 
     return { success: true };
   } catch (error) {

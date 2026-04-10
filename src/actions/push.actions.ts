@@ -16,6 +16,7 @@ import { getOrCreateVapidKeys, rotateVapidKeys, resolveVapidSubject } from "@/li
 import { checkTestPushRateLimit } from "@/lib/push/rate-limit";
 import { resolveUserLocale } from "@/lib/locale-resolver";
 import { t } from "@/i18n/server";
+import { channelRouter } from "@/lib/notifications/channel-router";
 import { ActionResult } from "@/models/actionResult";
 import webpush from "web-push";
 
@@ -153,6 +154,14 @@ export async function subscribePush(
       },
     });
 
+    // Sprint 4 L-A Sprint-3-follow-up: a new subscription flips the user
+    // from "push unavailable" to "push available" (or adds yet another
+    // device). Drop the cached `isAvailable` result so the next dispatch
+    // picks it up instead of waiting for the 30s ISAVAILABLE_CACHE_TTL_MS
+    // window. Spec: specs/notification-dispatch.allium invariant
+    // AvailabilityCacheTtl.
+    channelRouter.invalidateAvailability(user.id, "push");
+
     return { success: true };
   } catch (error) {
     return handleError(error, "push.errorSubscribing");
@@ -187,6 +196,12 @@ export async function unsubscribePush(
       .catch(() => {
         // Already deleted — not an error
       });
+
+    // Sprint 4 L-A Sprint-3-follow-up: deleting a subscription can flip
+    // the user from "push available" to "push unavailable" when this was
+    // their last device. Drop the cache so the next dispatch stops
+    // routing to a now-empty subscription set.
+    channelRouter.invalidateAvailability(user.id, "push");
 
     return { success: true };
   } catch (error) {

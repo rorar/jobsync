@@ -428,9 +428,17 @@ describe("WebhookChannel", () => {
         TEST_USER_ID,
       );
 
+      // Sprint 4 L-A-03: titleKey now follows the project-wide
+      // `notifications.*.title` convention (`notifications.webhook.
+      // deliveryFailed.title`) so it sits alongside the other 5W+H
+      // writers (notifications.moduleDeactivated.title, etc.). The bare
+      // `webhook.deliveryFailed` key stays in place for the English
+      // fallback `message` column.
       const failureCall = mockNotificationCreate.mock.calls.find((c: unknown[]) => {
         const row = (c[0] as { data: { data?: { titleKey?: string } } }).data;
-        return row.data?.titleKey === "webhook.deliveryFailed";
+        return (
+          row.data?.titleKey === "notifications.webhook.deliveryFailed.title"
+        );
       });
       expect(failureCall).toBeDefined();
       const payload = (failureCall as unknown[])[0] as {
@@ -446,7 +454,7 @@ describe("WebhookChannel", () => {
       // Legacy `data.*` blob — still populated for backward compat during rollout
       expect(payload.data.data).toEqual(
         expect.objectContaining({
-          titleKey: "webhook.deliveryFailed",
+          titleKey: "notifications.webhook.deliveryFailed.title",
           titleParams: {
             eventType: "vacancy_promoted",
             url: "https://late-bind.example.com/hook",
@@ -461,7 +469,7 @@ describe("WebhookChannel", () => {
       // ADR-030: top-level 5W+H columns must also be populated (dual-write)
       expect(payload.data).toEqual(
         expect.objectContaining({
-          titleKey: "webhook.deliveryFailed",
+          titleKey: "notifications.webhook.deliveryFailed.title",
           titleParams: {
             eventType: "vacancy_promoted",
             url: "https://late-bind.example.com/hook",
@@ -553,12 +561,18 @@ describe("WebhookChannel", () => {
 
       await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
 
+      // Sprint 4 L-A-03: same convention rename as notifyDeliveryFailed —
+      // `webhook.endpointDeactivated` → `notifications.webhook.endpoint
+      // Deactivated.title`.
       const deactivationCall = mockNotificationCreate.mock.calls.find(
         (c: unknown[]) => {
           const row = (
             c[0] as { data: { data?: { titleKey?: string } } }
           ).data;
-          return row.data?.titleKey === "webhook.endpointDeactivated";
+          return (
+            row.data?.titleKey ===
+            "notifications.webhook.endpointDeactivated.title"
+          );
         },
       );
       expect(deactivationCall).toBeDefined();
@@ -575,7 +589,7 @@ describe("WebhookChannel", () => {
       // Legacy `data.*` blob — still populated for backward compat during rollout
       expect(payload.data.data).toEqual(
         expect.objectContaining({
-          titleKey: "webhook.endpointDeactivated",
+          titleKey: "notifications.webhook.endpointDeactivated.title",
           titleParams: { url: "https://late-bind-deact.example.com/hook" },
           actorType: "system",
           actorNameKey: "notifications.actor.system",
@@ -586,7 +600,7 @@ describe("WebhookChannel", () => {
       // ADR-030: top-level 5W+H columns must also be populated (dual-write)
       expect(payload.data).toEqual(
         expect.objectContaining({
-          titleKey: "webhook.endpointDeactivated",
+          titleKey: "notifications.webhook.endpointDeactivated.title",
           titleParams: { url: "https://late-bind-deact.example.com/hook" },
           actorType: "system",
           severity: "warning",

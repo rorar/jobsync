@@ -7,6 +7,7 @@ import { handleError } from "@/lib/utils";
 import { encrypt } from "@/lib/encryption";
 import { ActionResult } from "@/models/actionResult";
 import { validateWebhookUrl } from "@/lib/url-validation";
+import { channelRouter } from "@/lib/notifications/channel-router";
 import type { NotificationType } from "@/models/notification.model";
 import type { WebhookEndpointDTO } from "@/lib/notifications/types";
 
@@ -136,6 +137,13 @@ export async function createWebhookEndpoint(
         failureCount: 0,
       },
     });
+
+    // Sprint 4 L-A Sprint-3-follow-up: drop the cached `isAvailable` result
+    // so the next dispatch sees the new endpoint instead of waiting ≤30s
+    // for the ISAVAILABLE_CACHE_TTL_MS window to expire. Spec:
+    // specs/notification-dispatch.allium invariant AvailabilityCacheTtl
+    // explicitly names this hook as the Settings-write escape valve.
+    channelRouter.invalidateAvailability(user.id, "webhook");
 
     return {
       success: true,
@@ -284,6 +292,12 @@ export async function updateWebhookEndpoint(
       return { success: false, message: "webhook.notFound", errorCode: "NOT_FOUND" };
     }
 
+    // Sprint 4 L-A Sprint-3-follow-up: an update can flip `active`, change
+    // the event list, or relocate the URL — any of which changes what the
+    // next dispatch should see. Drop the cached `isAvailable` result so
+    // the change is visible immediately instead of after the 30s TTL.
+    channelRouter.invalidateAvailability(user.id, "webhook");
+
     return { success: true, data: toDTO(updated) };
   } catch (error) {
     return handleError(error, "errors.updateWebhook");
@@ -312,6 +326,12 @@ export async function deleteWebhookEndpoint(
     await prisma.webhookEndpoint.deleteMany({
       where: { id, userId: user.id },
     });
+
+    // Sprint 4 L-A Sprint-3-follow-up: dropping an endpoint can flip the
+    // user from "webhook available" to "webhook unavailable" when this
+    // was their last active row. Drop the cache so the next dispatch
+    // doesn't keep routing to a zero-endpoint user for up to 30s.
+    channelRouter.invalidateAvailability(user.id, "webhook");
 
     return { success: true };
   } catch (error) {

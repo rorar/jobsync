@@ -30,6 +30,40 @@ import type {
   NotificationSeverity,
   NotificationType,
 } from "@/models/notification.model";
+import type { TranslationKey } from "@/i18n";
+
+// ---------------------------------------------------------------------------
+// Translator function type
+// ---------------------------------------------------------------------------
+
+/**
+ * Translator shape accepted by the notification formatters.
+ *
+ * Sprint 4 L-A-02 tightening: the original signature was `(key: string) =>
+ * string`, which matched literally every function on the planet and offered
+ * zero guarantees about what we were calling. The formatters are invoked
+ * from `NotificationItem.tsx` — a CLIENT component that passes the `t`
+ * returned by `useTranslations()` (see `src/i18n/use-translations.ts`,
+ * signature `(key: TranslationKey) => string`). This type alias is
+ * structurally identical (since `TranslationKey = string`), but:
+ *
+ *   1. It is GREPPABLE — searching for `NotificationTranslate` surfaces
+ *      every site that feeds the formatters, which matters when we
+ *      eventually tighten `TranslationKey` into a string-literal union.
+ *   2. It documents that the argument is the caller's dictionary key,
+ *      NOT free text — callers handing a random `String.prototype.toString`
+ *      at least have to mean to do so.
+ *   3. When `TranslationKey` becomes a literal union under a future
+ *      LinguiJS migration, every caller of the formatters surfaces a
+ *      TypeScript error at compile time instead of returning `key` on a
+ *      mistyped key at runtime.
+ *
+ * The signature deliberately does NOT accept a params record as a second
+ * arg: `useTranslations().t` is pure lookup, and the formatters apply their
+ * own `substituteParams()` pass afterwards. A params-accepting shape would
+ * be a dependency inversion that hides the templating pipeline.
+ */
+export type NotificationTranslate = (key: TranslationKey) => string;
 
 // ---------------------------------------------------------------------------
 // Source adapter — prefer top-level columns, fall back to legacy `data.*`
@@ -46,12 +80,17 @@ export interface NotificationFormatSource {
   reasonKey?: string | null;
   reasonParams?: Record<string, string | number> | null | unknown;
   severity?: NotificationSeverity | null;
+  // Sprint 4 L-A: removed `"enrichment"` — dead variant, no production
+  // writer ever populated it. See `NotificationActorType` in
+  // `src/models/notification.model.ts` for the full audit trail. Mirror
+  // the authoritative union there so `formatNotificationActor`'s
+  // compile-time exhaustiveness guard keeps firing against the source of
+  // truth.
   actorType?:
     | "system"
     | "module"
     | "automation"
     | "user"
-    | "enrichment"
     | null;
   actorId?: string | null;
   /** Legacy `data` blob fallback — only used when a top-level field is null. */
@@ -316,13 +355,14 @@ function toSource(
  *
  * Accepts either a `NotificationFormatSource` (full or partial Notification)
  * or a legacy `NotificationDataExtended` blob for backward compat. The `t`
- * function is typed loosely (`(key: string) => string`) so this helper can
- * be called from tests without the full i18n runtime.
+ * function is typed as `NotificationTranslate = (key: TranslationKey) =>
+ * string` (Sprint 4 L-A-02) so the formatters are greppable and will fail
+ * at compile time when `TranslationKey` tightens into a literal union.
  */
 export function formatNotificationTitle(
   source: NotificationFormatSource | NotificationDataExtended | null | undefined,
   fallbackMessage: string,
-  t: (key: string) => string,
+  t: NotificationTranslate,
 ): string {
   const normalized = toSource(source);
   const titleKey = resolveStringField(normalized, normalized.titleKey, "titleKey");
@@ -344,7 +384,7 @@ export function formatNotificationTitle(
  */
 export function formatNotificationReason(
   source: NotificationFormatSource | NotificationDataExtended | null | undefined,
-  t: (key: string) => string,
+  t: NotificationTranslate,
 ): string | null {
   const normalized = toSource(source);
   const reasonKey = resolveStringField(
@@ -372,17 +412,26 @@ export function formatNotificationReason(
  *  3. Generic fallback key per `actorType` (top-level column → legacy fallback).
  *  4. Empty string (the UI should hide the slot).
  *
- * EXHAUSTIVENESS (Sprint 3 M-A-01 + M-A-08): the switch below covers every
- * member of `NotificationActorType` — `system`, `module`, `automation`,
- * `user`, `enrichment`. The `default` branch uses a `never` assertion so
- * any future addition to the actor-type union will fail at compile time,
- * preventing silent fall-through (the original bug: `"module"` and
- * `"enrichment"` actors rendered as the raw `actorId` slug because the
- * switch had no matching case and fell into the empty-string default).
+ * EXHAUSTIVENESS (Sprint 3 M-A-01 + M-A-08, Sprint 4 L-A dead-variant
+ * removal): the switch below covers every member of `NotificationActorType`
+ * — `system`, `module`, `automation`, `user`. The `default` branch uses a
+ * `never` assertion so any future addition to the actor-type union will
+ * fail at compile time, preventing silent fall-through (the original bug:
+ * `"module"` actors rendered as the raw `actorId` slug because the switch
+ * had no matching case and fell into the empty-string default).
+ *
+ * Sprint 4 L-A removed the `"enrichment"` case after auditing every writer
+ * in `src/`: no production code path populates `actorType: "enrichment"`,
+ * and no spec (`specs/notification-dispatch.allium`, `specs/data-
+ * enrichment.allium`, `specs/logo-asset-cache.allium`) documents a planned
+ * enrichment notification writer. Dead-code removal trumps "planned but
+ * unimplemented" — when the enrichment-failure notifications land, they
+ * will re-introduce the union member AND the writer in the same sprint,
+ * and the `never` guard below will light up to remind the author.
  */
 export function formatNotificationActor(
   source: NotificationFormatSource | NotificationDataExtended | null | undefined,
-  t: (key: string) => string,
+  t: NotificationTranslate,
 ): string {
   const normalized = toSource(source);
   const actorNameKey = legacyField<string>(normalized, "actorNameKey");
@@ -410,8 +459,6 @@ export function formatNotificationActor(
       return t("notifications.actor.automation");
     case "user":
       return t("notifications.actor.user");
-    case "enrichment":
-      return t("notifications.actor.enrichment");
     default: {
       // Compile-time exhaustiveness guard — future additions to
       // `NotificationActorType` force a matching case here.

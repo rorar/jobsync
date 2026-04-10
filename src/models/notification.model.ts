@@ -19,13 +19,22 @@ export type NotificationSeverity = "info" | "success" | "warning" | "error";
 
 /**
  * Who dispatched the notification (actor).
+ *
+ * Sprint 4 L-A dead-variant removal: `"enrichment"` used to be a member of
+ * this union. A full audit (`src/`, `specs/`) turned up zero production
+ * writers populating `actorType: "enrichment"` and zero specs documenting a
+ * planned enrichment-failure notification writer. Dead code is worse than
+ * "planned but unimplemented" — when enrichment failure notifications land,
+ * the introducing sprint re-adds the variant AND its writer in the same
+ * change, and the `formatNotificationActor` `never` guard in
+ * `src/lib/notifications/deep-links.ts` will point at the exact site that
+ * needs a new `case`.
  */
 export type NotificationActorType =
   | "system"
   | "module"
   | "automation"
-  | "user"
-  | "enrichment";
+  | "user";
 
 /**
  * Extended notification data — the legacy 5W+H late-binding enrichment carried

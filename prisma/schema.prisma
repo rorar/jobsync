@@ -1,7 +1,31 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
-// Step: 1 run `npx prisma generate` 
+// Step: 1 run `npx prisma generate`
 // Step: 2 run `npx prisma migrate dev` after update, make sure code is updated afterwards
+//
+// ---------------------------------------------------------------------------
+// JSON / JSONB columns on SQLite (Sprint 4 L-A-06 documentation note)
+// ---------------------------------------------------------------------------
+//
+// Several models below declare columns as Prisma's cross-DB `Json?` type —
+// notably `Notification.data`, `Notification.titleParams`, `Notification.
+// reasonParams`, `StagedVacancy.industryCodes`, `StagedVacancy.
+// occupationUris`, `StagedVacancy.workingLanguages`. `Json` is Prisma's
+// DB-portable abstraction: on PostgreSQL it maps to `jsonb`, on MySQL to
+// `JSON`, and on SQLite — which is what JobSync ships with today — it
+// becomes a plain `TEXT` column. SQLite 3.38+ still exposes the full
+// `json_*()` function family over that TEXT blob (indexing, extraction,
+// path queries), so the storage choice is semantically equivalent. DB
+// tooling (Prisma Studio, sqlite3 .schema, Prisma migration diffs) will
+// show the column type as `TEXT` rather than `JSONB`, and that is NOT a
+// bug — it is the expected SQLite rendering of Prisma's `Json`.
+//
+// When JobSync migrates to PostgreSQL (ROADMAP 8.x), these same columns
+// will automatically be created as `jsonb` without any schema rewrite. If
+// you are debugging a column that appears as TEXT in `sqlite3` but shows
+// up as `Json?` in Prisma, look for the `Json?` declaration on the model
+// and cross-reference this comment.
+// ---------------------------------------------------------------------------
 
 generator client {
   provider = "prisma-client-js"

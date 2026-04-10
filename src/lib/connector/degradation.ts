@@ -7,7 +7,7 @@ import {
   prepareEnforcedNotification,
   prepareEnforcedNotifications,
   type EnforcedNotificationDraft,
-} from "@/lib/notifications/channel-router";
+} from "@/lib/notifications/enforced-writer";
 import { moduleRegistry } from "./registry";
 import { ModuleStatus, CircuitBreakerState } from "./manifest";
 

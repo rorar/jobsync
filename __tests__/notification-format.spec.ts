@@ -26,10 +26,14 @@ const DICTIONARY: Record<string, string> = {
   "notifications.actor.module": "Module",
   "notifications.actor.automation": "Automation",
   "notifications.actor.user": "You",
-  "notifications.actor.enrichment": "Enrichment",
 };
 
-const t = (key: string) => DICTIONARY[key] ?? key;
+// Sprint 4 L-A-02: the formatter parameter type is now `NotificationTranslate
+// = (key: TranslationKey) => string`. `TranslationKey` is a type alias for
+// `string` today, so this plain local lookup still satisfies the signature.
+// The explicit annotation pins the shape so accidental drift in the
+// formatter signature surfaces here at compile time.
+const t: (key: string) => string = (key) => DICTIONARY[key] ?? key;
 
 describe("formatNotificationTitle", () => {
   it("resolves titleKey with params", () => {
@@ -246,30 +250,33 @@ describe("formatNotificationActor", () => {
 
   // ---------------------------------------------------------------------------
   // Sprint 3 M-A-01 + M-A-08 — actor type exhaustiveness
+  // Sprint 4 L-A — dead variant `"enrichment"` removed
   //
-  // Before the fix, `formatNotificationActor` only handled `system`,
-  // `automation`, and `user` actor types. When a module lifecycle
+  // Before the Sprint 3 fix, `formatNotificationActor` only handled
+  // `system`, `automation`, and `user` actor types. When a module lifecycle
   // notification arrived with `actorType = "module"` AND no actorId set,
   // the function fell through the switch and returned an empty string —
-  // the UI showed an unlabelled actor slot. The `enrichment` actor type
-  // was never populated by any writer but also had no case, leaving the
-  // same latent bug.
+  // the UI showed an unlabelled actor slot.
   //
-  // The fix adds explicit cases for `module` and `enrichment` PLUS a
-  // `never` exhaustiveness guard that fails at compile time if
-  // `NotificationActorType` gains a new member without a matching case.
+  // Sprint 3 added explicit cases for `module` (and, pre-Sprint-4, for
+  // `enrichment`) PLUS a `never` exhaustiveness guard that fails at
+  // compile time if `NotificationActorType` gains a new member without a
+  // matching case.
   //
-  // See stream-5b-architecture.md findings M-A-01 + M-A-08.
+  // Sprint 4 L-A removed the `"enrichment"` variant entirely after an
+  // audit turned up zero production writers populating it and zero specs
+  // documenting a planned writer. When enrichment failure notifications
+  // land, the introducing sprint re-adds both the union member AND the
+  // writer in the same change, and the `never` guard points at the exact
+  // site that needs a new case.
+  //
+  // See stream-5b-architecture.md findings M-A-01 + M-A-08 and
+  // `.team-feature/stream-4a-architecture-result.md` for the L-A trail.
   // ---------------------------------------------------------------------------
   describe("M-A-01 + M-A-08 — exhaustive actor-type coverage", () => {
     it("renders the module generic label when actorType=module has no actorId", () => {
       const data: NotificationDataExtended = { actorType: "module" };
       expect(formatNotificationActor(data, t)).toBe("Module");
-    });
-
-    it("renders the enrichment generic label when actorType=enrichment has no actorId", () => {
-      const data: NotificationDataExtended = { actorType: "enrichment" };
-      expect(formatNotificationActor(data, t)).toBe("Enrichment");
     });
 
     it("still prefers actorId over the generic module label when actorId is set", () => {
@@ -284,20 +291,20 @@ describe("formatNotificationActor", () => {
       expect(formatNotificationActor(data, t)).toBe("logo_dev");
     });
 
-    it("still prefers actorId over the generic enrichment label when actorId is set", () => {
-      const data: NotificationDataExtended = {
-        actorType: "enrichment",
-        actorId: "logo-dev-dimension",
-      };
-      expect(formatNotificationActor(data, t)).toBe("logo-dev-dimension");
-    });
-
     it("falls back to empty string for an unknown actor type (no crash)", () => {
       // Runtime drift guard: even though the compile-time `never` exhaustiveness
       // check prevents this in TypeScript, we still assert graceful runtime
-      // behavior if an invalid value slips in via legacy DB data.
+      // behavior if an invalid value slips in via legacy DB data — including
+      // a legacy `"enrichment"` row written before Sprint 4 L-A removed the
+      // variant (such rows never existed in production, but the defensive
+      // branch costs nothing and documents the removal).
       const data = { actorType: "alien" } as unknown as NotificationDataExtended;
       expect(formatNotificationActor(data, t)).toBe("");
+
+      const legacyEnrichment = {
+        actorType: "enrichment",
+      } as unknown as NotificationDataExtended;
+      expect(formatNotificationActor(legacyEnrichment, t)).toBe("");
     });
   });
 });
