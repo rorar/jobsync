@@ -338,8 +338,29 @@ export const automations = {
     "automations.paramOption.eures.educationLevelCodes.tertiary": "Tertiary education",
     "automations.paramOption.eures.educationLevelCodes.doctoral": "Doctoral degree",
 
-    // Connector Params — EURES: sector
+    // Connector Params — EURES: sector (NACE Rev. 2 section codes)
     "automations.params.sector": "Industry sector",
+    "automations.paramOption.eures.sectorCodes.a": "Agriculture, forestry and fishing",
+    "automations.paramOption.eures.sectorCodes.b": "Mining and quarrying",
+    "automations.paramOption.eures.sectorCodes.c": "Manufacturing",
+    "automations.paramOption.eures.sectorCodes.d": "Electricity, gas, steam and air conditioning",
+    "automations.paramOption.eures.sectorCodes.e": "Water supply, sewerage, waste management",
+    "automations.paramOption.eures.sectorCodes.f": "Construction",
+    "automations.paramOption.eures.sectorCodes.g": "Wholesale and retail trade",
+    "automations.paramOption.eures.sectorCodes.h": "Transportation and storage",
+    "automations.paramOption.eures.sectorCodes.i": "Accommodation and food service",
+    "automations.paramOption.eures.sectorCodes.j": "Information and communication",
+    "automations.paramOption.eures.sectorCodes.k": "Financial and insurance activities",
+    "automations.paramOption.eures.sectorCodes.l": "Real estate activities",
+    "automations.paramOption.eures.sectorCodes.m": "Professional, scientific and technical",
+    "automations.paramOption.eures.sectorCodes.n": "Administrative and support services",
+    "automations.paramOption.eures.sectorCodes.o": "Public administration and defence",
+    "automations.paramOption.eures.sectorCodes.p": "Education",
+    "automations.paramOption.eures.sectorCodes.q": "Human health and social work",
+    "automations.paramOption.eures.sectorCodes.r": "Arts, entertainment and recreation",
+    "automations.paramOption.eures.sectorCodes.s": "Other service activities",
+    "automations.paramOption.eures.sectorCodes.t": "Household activities",
+    "automations.paramOption.eures.sectorCodes.u": "Extraterritorial organisations",
 
     // Connector Params — EURES: EURES flag
     "automations.params.euresFlag": "EURES flag",
@@ -783,8 +804,29 @@ export const automations = {
     "automations.paramOption.eures.educationLevelCodes.tertiary": "Tertiärbildung",
     "automations.paramOption.eures.educationLevelCodes.doctoral": "Doktorgrad",
 
-    // Connector Params — EURES: sector
+    // Connector Params — EURES: sector (NACE Rev. 2)
     "automations.params.sector": "Branche",
+    "automations.paramOption.eures.sectorCodes.a": "Land- und Forstwirtschaft, Fischerei",
+    "automations.paramOption.eures.sectorCodes.b": "Bergbau und Gewinnung von Steinen und Erden",
+    "automations.paramOption.eures.sectorCodes.c": "Verarbeitendes Gewerbe",
+    "automations.paramOption.eures.sectorCodes.d": "Energieversorgung",
+    "automations.paramOption.eures.sectorCodes.e": "Wasserversorgung, Abwasser- und Abfallentsorgung",
+    "automations.paramOption.eures.sectorCodes.f": "Baugewerbe",
+    "automations.paramOption.eures.sectorCodes.g": "Handel, Instandhaltung und Reparatur von Kfz",
+    "automations.paramOption.eures.sectorCodes.h": "Verkehr und Lagerei",
+    "automations.paramOption.eures.sectorCodes.i": "Gastgewerbe",
+    "automations.paramOption.eures.sectorCodes.j": "Information und Kommunikation",
+    "automations.paramOption.eures.sectorCodes.k": "Finanz- und Versicherungsdienstleistungen",
+    "automations.paramOption.eures.sectorCodes.l": "Grundstücks- und Wohnungswesen",
+    "automations.paramOption.eures.sectorCodes.m": "Freiberufliche, wissenschaftliche und technische Dienstleistungen",
+    "automations.paramOption.eures.sectorCodes.n": "Sonstige wirtschaftliche Dienstleistungen",
+    "automations.paramOption.eures.sectorCodes.o": "Öffentliche Verwaltung, Verteidigung, Sozialversicherung",
+    "automations.paramOption.eures.sectorCodes.p": "Erziehung und Unterricht",
+    "automations.paramOption.eures.sectorCodes.q": "Gesundheits- und Sozialwesen",
+    "automations.paramOption.eures.sectorCodes.r": "Kunst, Unterhaltung und Erholung",
+    "automations.paramOption.eures.sectorCodes.s": "Sonstige Dienstleistungen",
+    "automations.paramOption.eures.sectorCodes.t": "Private Haushalte",
+    "automations.paramOption.eures.sectorCodes.u": "Extraterritoriale Organisationen",
 
     // Connector Params — EURES: EURES flag
     "automations.params.euresFlag": "EURES-Kennzeichnung",
@@ -1228,8 +1270,29 @@ export const automations = {
     "automations.paramOption.eures.educationLevelCodes.tertiary": "Éducation supérieure",
     "automations.paramOption.eures.educationLevelCodes.doctoral": "Doctorat",
 
-    // Connector Params — EURES: sector
+    // Connector Params — EURES: sector (NACE Rev. 2)
     "automations.params.sector": "Secteur d'activité",
+    "automations.paramOption.eures.sectorCodes.a": "Agriculture, sylviculture et pêche",
+    "automations.paramOption.eures.sectorCodes.b": "Industries extractives",
+    "automations.paramOption.eures.sectorCodes.c": "Industrie manufacturière",
+    "automations.paramOption.eures.sectorCodes.d": "Production d'électricité, de gaz et de vapeur",
+    "automations.paramOption.eures.sectorCodes.e": "Gestion de l'eau et des déchets",
+    "automations.paramOption.eures.sectorCodes.f": "Construction",
+    "automations.paramOption.eures.sectorCodes.g": "Commerce, réparation automobile",
+    "automations.paramOption.eures.sectorCodes.h": "Transports et entreposage",
+    "automations.paramOption.eures.sectorCodes.i": "Hébergement et restauration",
+    "automations.paramOption.eures.sectorCodes.j": "Information et communication",
+    "automations.paramOption.eures.sectorCodes.k": "Activités financières et d'assurance",
+    "automations.paramOption.eures.sectorCodes.l": "Activités immobilières",
+    "automations.paramOption.eures.sectorCodes.m": "Activités scientifiques et techniques",
+    "automations.paramOption.eures.sectorCodes.n": "Activités de services administratifs",
+    "automations.paramOption.eures.sectorCodes.o": "Administration publique et défense",
+    "automations.paramOption.eures.sectorCodes.p": "Enseignement",
+    "automations.paramOption.eures.sectorCodes.q": "Santé humaine et action sociale",
+    "automations.paramOption.eures.sectorCodes.r": "Arts, spectacles et activités récréatives",
+    "automations.paramOption.eures.sectorCodes.s": "Autres activités de services",
+    "automations.paramOption.eures.sectorCodes.t": "Activités des ménages",
+    "automations.paramOption.eures.sectorCodes.u": "Organisations extraterritoriales",
 
     // Connector Params — EURES: EURES flag
     "automations.params.euresFlag": "Indicateur EURES",
@@ -1673,8 +1736,29 @@ export const automations = {
     "automations.paramOption.eures.educationLevelCodes.tertiary": "Educación superior",
     "automations.paramOption.eures.educationLevelCodes.doctoral": "Doctorado",
 
-    // Connector Params — EURES: sector
+    // Connector Params — EURES: sector (NACE Rev. 2)
     "automations.params.sector": "Sector industrial",
+    "automations.paramOption.eures.sectorCodes.a": "Agricultura, ganadería, silvicultura y pesca",
+    "automations.paramOption.eures.sectorCodes.b": "Industrias extractivas",
+    "automations.paramOption.eures.sectorCodes.c": "Industria manufacturera",
+    "automations.paramOption.eures.sectorCodes.d": "Suministro de energía eléctrica y gas",
+    "automations.paramOption.eures.sectorCodes.e": "Suministro de agua, saneamiento y gestión de residuos",
+    "automations.paramOption.eures.sectorCodes.f": "Construcción",
+    "automations.paramOption.eures.sectorCodes.g": "Comercio al por mayor y al por menor",
+    "automations.paramOption.eures.sectorCodes.h": "Transporte y almacenamiento",
+    "automations.paramOption.eures.sectorCodes.i": "Hostelería",
+    "automations.paramOption.eures.sectorCodes.j": "Información y comunicaciones",
+    "automations.paramOption.eures.sectorCodes.k": "Actividades financieras y de seguros",
+    "automations.paramOption.eures.sectorCodes.l": "Actividades inmobiliarias",
+    "automations.paramOption.eures.sectorCodes.m": "Actividades profesionales, científicas y técnicas",
+    "automations.paramOption.eures.sectorCodes.n": "Actividades administrativas y servicios auxiliares",
+    "automations.paramOption.eures.sectorCodes.o": "Administración pública y defensa",
+    "automations.paramOption.eures.sectorCodes.p": "Educación",
+    "automations.paramOption.eures.sectorCodes.q": "Actividades sanitarias y de servicios sociales",
+    "automations.paramOption.eures.sectorCodes.r": "Actividades artísticas, recreativas y de entretenimiento",
+    "automations.paramOption.eures.sectorCodes.s": "Otros servicios",
+    "automations.paramOption.eures.sectorCodes.t": "Actividades de los hogares",
+    "automations.paramOption.eures.sectorCodes.u": "Organismos extraterritoriales",
 
     // Connector Params — EURES: EURES flag
     "automations.params.euresFlag": "Indicador EURES",
