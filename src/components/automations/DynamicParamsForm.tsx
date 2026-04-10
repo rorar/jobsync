@@ -74,7 +74,7 @@ interface DynamicFieldProps {
 }
 
 function DynamicField({ moduleId, field, value, onChange }: DynamicFieldProps) {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
 
   /** Resolve an i18n key with raw-string fallback. */
   const resolveLabel = useCallback(
@@ -198,6 +198,7 @@ function DynamicField({ moduleId, field, value, onChange }: DynamicFieldProps) {
           onChange={onChange}
           displayLabel={displayLabel}
           t={t}
+          locale={locale}
         />
       );
 
@@ -413,6 +414,7 @@ interface LanguageProficiencyFieldProps {
   onChange: (key: string, value: unknown) => void;
   displayLabel: string;
   t: (key: string) => string;
+  locale: string;
 }
 
 /**
@@ -434,6 +436,7 @@ function LanguageProficiencyField({
   onChange,
   displayLabel,
   t,
+  locale,
 }: LanguageProficiencyFieldProps) {
   const allLanguages = useEuresLanguages();
 
@@ -460,14 +463,20 @@ function LanguageProficiencyField({
   const [pendingLang, setPendingLang] = React.useState("");
   const [pendingLevel, setPendingLevel] = React.useState("B2");
 
-  // Build a lookup for display names — native script from the API.
-  const langNameMap = React.useMemo(() => {
-    const map = new Map<string, string>();
-    for (const lang of allLanguages) {
-      map.set(lang.isoCode, lang.label);
-    }
-    return map;
-  }, [allLanguages]);
+  // Intl.DisplayNames translates ISO 639-1 codes into the user's locale
+  // natively — no hardcoded language name tables needed. This matches the
+  // EURES portal behavior where `lang=de` shows "Englisch" and `lang=es`
+  // shows "inglés" for the same `en` code.
+  const displayNames = React.useMemo(
+    () => {
+      try {
+        return new Intl.DisplayNames([locale], { type: "language" });
+      } catch {
+        return null; // Fallback if Intl.DisplayNames isn't supported
+      }
+    },
+    [locale],
+  );
 
   const usedLanguages = new Set(entries.map((e) => e.lang));
   const availableLanguages = allLanguages.filter(
@@ -475,9 +484,13 @@ function LanguageProficiencyField({
   );
 
   const getDisplayName = (isoCode: string) => {
-    const native = langNameMap.get(isoCode);
-    return native
-      ? `${native} (${isoCode.toUpperCase()})`
+    const localized = displayNames?.of(isoCode);
+    // Capitalize first letter for consistency across locales
+    const capitalized = localized
+      ? localized.charAt(0).toUpperCase() + localized.slice(1)
+      : null;
+    return capitalized
+      ? `${capitalized} (${isoCode.toUpperCase()})`
       : isoCode.toUpperCase();
   };
 
@@ -493,46 +506,86 @@ function LanguageProficiencyField({
     onChange(field.key, serialize(next));
   };
 
+  // Inline CEFR level change on an existing chip — mimics the EURES advanced
+  // search where each selected language shows a level dropdown directly on the
+  // chip, so the user can adjust without remove + re-add.
+  const updateLevel = (lang: string, newLevel: string) => {
+    const next = entries.map((e) =>
+      e.lang === lang ? { ...e, level: newLevel } : e,
+    );
+    onChange(field.key, serialize(next));
+  };
+
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <Label className="text-sm">{displayLabel}</Label>
 
-      {/* Selected language chips */}
+      {/* Selected language entries — each with flag, name, inline CEFR selector, remove */}
       {entries.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-col gap-1.5">
           {entries.map((entry) => (
-            <Badge
+            <div
               key={entry.lang}
-              variant="secondary"
-              className="gap-1.5 pr-1"
+              className="flex items-center gap-2 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm animate-in fade-in-50 slide-in-from-left-2 duration-200"
             >
-              <LanguageFlag langCode={entry.lang} className="h-3.5 w-3.5 rounded-sm" />
-              <span className="text-xs font-medium">
-                {getDisplayName(entry.lang)} — {entry.level}
+              <LanguageFlag langCode={entry.lang} className="h-4 w-4 rounded-sm shrink-0" />
+              <span className="font-medium flex-1 truncate">
+                {getDisplayName(entry.lang)}
               </span>
+              {/* Inline CEFR level picker — the user can change level without remove + re-add.
+                  Descriptive labels match the EURES portal's advanced search
+                  (e.g., "B2 — Mittlere Fortgeschrittene" in German). */}
+              <Select
+                value={entry.level}
+                onValueChange={(val) => updateLevel(entry.lang, val)}
+              >
+                <SelectTrigger className="h-7 w-auto min-w-[68px] text-xs px-2 border-dashed">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CEFR_LEVELS.map((level) => (
+                    <SelectItem key={level} value={level} className="text-xs">
+                      {t(`automations.cefrLevel.${level}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <button
                 type="button"
                 onClick={() => removeEntry(entry.lang)}
-                className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
-                aria-label={`${t("common.remove")} ${getDisplayName(entry.lang)} ${entry.level}`}
+                className="shrink-0 rounded-full p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                aria-label={`${t("common.remove")} ${getDisplayName(entry.lang)}`}
               >
-                <X className="h-3 w-3" />
+                <X className="h-3.5 w-3.5" />
               </button>
-            </Badge>
+            </div>
           ))}
         </div>
       )}
 
-      {/* Add row: language select + level select + add button */}
+      {/* Add language row */}
       {(allLanguages.length === 0 || availableLanguages.length > 0) && (
         <div className="flex items-center gap-2">
-          <Select value={pendingLang} onValueChange={setPendingLang}>
+          <Select value={pendingLang} onValueChange={(val) => {
+            setPendingLang(val);
+            // Auto-add on selection — no separate "Add" button needed.
+            // This mimics the EURES portal where clicking a language immediately
+            // adds it with the default CEFR level. The user can then adjust the
+            // level inline on the chip.
+            if (val) {
+              const next = [...entries, { lang: val, level: pendingLevel }];
+              onChange(field.key, serialize(next));
+              setPendingLang("");
+            }
+          }}>
             <SelectTrigger className="flex-1">
               <SelectValue
                 placeholder={
                   allLanguages.length === 0
                     ? t("common.loading")
-                    : t("automations.params.selectLanguage")
+                    : entries.length === 0
+                      ? t("automations.params.selectLanguage")
+                      : t("automations.params.addAnotherLanguage")
                 }
               />
             </SelectTrigger>
@@ -541,35 +594,20 @@ function LanguageProficiencyField({
                 <SelectItem key={lang.isoCode} value={lang.isoCode}>
                   <span className="inline-flex items-center gap-2">
                     <LanguageFlag langCode={lang.isoCode} className="h-3.5 w-3.5 rounded-sm" />
-                    {lang.label} ({lang.isoCode.toUpperCase()})
+                    {getDisplayName(lang.isoCode)}
                   </span>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-
-          <Select value={pendingLevel} onValueChange={setPendingLevel}>
-            <SelectTrigger className="w-[80px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CEFR_LEVELS.map((level) => (
-                <SelectItem key={level} value={level}>
-                  {level}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <button
-            type="button"
-            onClick={addEntry}
-            disabled={!pendingLang || allLanguages.length === 0}
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-3"
-          >
-            {t("common.add")}
-          </button>
         </div>
+      )}
+
+      {/* Hint text when empty */}
+      {entries.length === 0 && allLanguages.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {t("automations.params.languageHint")}
+        </p>
       )}
     </div>
   );

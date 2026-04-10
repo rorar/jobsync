@@ -370,6 +370,15 @@ export const automations = {
     // Connector Params — EURES: required languages
     "automations.params.requiredLanguages": "Required languages",
     "automations.params.selectLanguage": "Select language...",
+    "automations.params.addAnotherLanguage": "Add another language...",
+    "automations.params.languageHint": "Select required languages and proficiency levels. Jobs without language requirements are always included.",
+    // CEFR level descriptive labels (matching EURES portal advanced search)
+    "automations.cefrLevel.A1": "A1 — Beginner",
+    "automations.cefrLevel.A2": "A2 — Elementary",
+    "automations.cefrLevel.B1": "B1 — Intermediate",
+    "automations.cefrLevel.B2": "B2 — Upper intermediate",
+    "automations.cefrLevel.C1": "C1 — Advanced",
+    "automations.cefrLevel.C2": "C2 — Proficient",
 
     // Connector Params — EURES: keyword search scope
     "automations.params.keywordSearchScope": "Keyword search scope",
@@ -804,6 +813,15 @@ export const automations = {
     "automations.paramOption.eures.educationLevelCodes.master": "Master-Abschluss",
     "automations.paramOption.eures.educationLevelCodes.tertiary": "Tertiärbildung",
     "automations.paramOption.eures.educationLevelCodes.doctoral": "Doktorgrad",
+
+    "automations.params.addAnotherLanguage": "Weitere Sprache hinzufügen...",
+    "automations.params.languageHint": "Wählen Sie erforderliche Sprachen und Kenntnisstufen. Stellen ohne Sprachanforderungen werden immer angezeigt.",
+    "automations.cefrLevel.A1": "A1 — Anfänger",
+    "automations.cefrLevel.A2": "A2 — Grundkenntnisse",
+    "automations.cefrLevel.B1": "B1 — Fortgeschrittener Anfänger",
+    "automations.cefrLevel.B2": "B2 — Mittlere Fortgeschrittene",
+    "automations.cefrLevel.C1": "C1 — Fortgeschrittene",
+    "automations.cefrLevel.C2": "C2 — Kompetent",
 
     // Connector Params — EURES: sector (NACE Rev. 2)
     "automations.params.sector": "Branche",
@@ -1272,6 +1290,15 @@ export const automations = {
     "automations.paramOption.eures.educationLevelCodes.tertiary": "Éducation supérieure",
     "automations.paramOption.eures.educationLevelCodes.doctoral": "Doctorat",
 
+    "automations.params.addAnotherLanguage": "Ajouter une autre langue...",
+    "automations.params.languageHint": "Sélectionnez les langues et niveaux requis. Les offres sans exigences linguistiques sont toujours incluses.",
+    "automations.cefrLevel.A1": "A1 — Débutant",
+    "automations.cefrLevel.A2": "A2 — Élémentaire",
+    "automations.cefrLevel.B1": "B1 — Intermédiaire",
+    "automations.cefrLevel.B2": "B2 — Intermédiaire avancé",
+    "automations.cefrLevel.C1": "C1 — Avancé",
+    "automations.cefrLevel.C2": "C2 — Maîtrise",
+
     // Connector Params — EURES: sector (NACE Rev. 2)
     "automations.params.sector": "Secteur d'activité",
     "automations.paramOption.eures.sectorCodes.a": "Agriculture, sylviculture et pêche",
@@ -1738,6 +1765,15 @@ export const automations = {
     "automations.paramOption.eures.educationLevelCodes.master": "Máster",
     "automations.paramOption.eures.educationLevelCodes.tertiary": "Educación superior",
     "automations.paramOption.eures.educationLevelCodes.doctoral": "Doctorado",
+
+    "automations.params.addAnotherLanguage": "Añadir otro idioma...",
+    "automations.params.languageHint": "Seleccione los idiomas y niveles requeridos. Las ofertas sin requisitos lingüísticos siempre se incluyen.",
+    "automations.cefrLevel.A1": "A1 — Principiante",
+    "automations.cefrLevel.A2": "A2 — Elemental",
+    "automations.cefrLevel.B1": "B1 — Intermedio",
+    "automations.cefrLevel.B2": "B2 — Intermedio alto",
+    "automations.cefrLevel.C1": "C1 — Avanzado",
+    "automations.cefrLevel.C2": "C2 — Competente",
 
     // Connector Params — EURES: sector (NACE Rev. 2)
     "automations.params.sector": "Sector industrial",
