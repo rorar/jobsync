@@ -114,12 +114,17 @@ value BulkActionCompletedPayload {
 
 value ModuleDeactivatedPayload {
   moduleId: String
+  moduleName: String?                   -- Sprint 3 M-A-02: human-readable display name
+                                        -- resolved from the manifest at publish time.
+                                        -- Optional for backward compat; consumers MUST
+                                        -- fall back to moduleId when null.
   userId: String                        -- user who deactivated
   affectedAutomationIds: String[]       -- automations that were paused
 }
 
 value ModuleReactivatedPayload {
   moduleId: String
+  moduleName: String?                   -- Sprint 3 M-A-02: see ModuleDeactivatedPayload.moduleName
   userId: String                        -- user who reactivated
   pausedAutomationCount: Integer        -- how many automations remain paused
 }
@@ -240,9 +245,12 @@ contract EventBus {
   publish<T: DomainEventType>(event: DomainEvent<T>): Promise<Void>
     -- Publishes an event to all registered handlers for this event type
     -- AND to wildcard ("*") handlers.
-    -- Async dispatch: handlers execute in registration order, awaited sequentially.
-    -- Each handler is wrapped in error isolation (see ErrorIsolation rule).
-    -- Returns after all handlers have been invoked (or failed safely).
+    -- Async dispatch: handlers execute in PARALLEL via Promise.allSettled
+    -- (Sprint 2 H-P-06). The prior sequential await-loop was a performance
+    -- footgun — publish() latency was the SUM of every consumer's work,
+    -- not the MAX. Each handler is still wrapped in error isolation per
+    -- the ErrorIsolation rule; parallelism does NOT relax that invariant.
+    -- Returns after all handlers have settled (fulfilled or rejected).
 
   subscribe<T: DomainEventType>(
     eventType: T | "*",
@@ -276,43 +284,78 @@ contract EventBus {
 rule ErrorIsolation {
   -- "One consumer failure must not affect other consumers."
   -- When a handler throws (sync or rejects a Promise), the bus catches
-  -- the error, logs it, and continues dispatching to remaining handlers.
+  -- the error, logs it, and lets sibling handlers run to completion.
+  --
+  -- Sprint 2 H-P-06 update: handlers no longer execute sequentially —
+  -- they run concurrently via Promise.allSettled. The per-handler
+  -- isolation invariant still holds: allSettled guarantees a rejected
+  -- promise does not prevent sibling fulfilment, and the bus wraps each
+  -- invocation in its own async closure so even synchronous throws during
+  -- handler evaluation are caught instead of bubbling up to publish().
   when: EventBus.publish(event: DomainEvent)
   let typeHandlers = registered handlers for event.type
   let wildcardHandlers = registered handlers for "*"
   let allHandlers = typeHandlers + wildcardHandlers
 
+  ensures: allHandlers are invoked concurrently via Promise.allSettled
   ensures: for_each handler in allHandlers:
-    try:
+    -- The implementation wraps each handler call in an async closure
+    -- (`async (handler) => handler(event)`) so synchronous throws are
+    -- surfaced as rejected promises inside allSettled — they never
+    -- bubble out of publish().
+    try via allSettled:
       await handler.handle(event)
-    catch error:
+    on reject:
       log.error("[EventBus] Consumer failed for {event.type}", error)
-      -- Continue to next handler. Do NOT rethrow.
+      -- Sibling handlers continue unaffected; rejection is not rethrown.
 
   ensures: all handlers are invoked regardless of individual failures
   ensures: publish() does not throw even if all handlers fail
+  ensures: publish() resolves only after every handler settles (tests
+           and callers can observe side-effects after `await publish(...)`)
 
   @guidance
     -- This is critical for system stability. A bug in the NotificationDispatcher
     -- must never prevent the AuditLogger from recording the event.
-    -- Implementation: try/catch per handler invocation with await, not around the loop.
-    -- Wildcard handlers are dispatched after type-specific handlers.
+    -- Implementation: `Promise.allSettled(allHandlers.map(h => (async () => h(event))()))`
+    -- — the outer allSettled catches async rejections, the inner async IIFE
+    -- catches sync throws during handler evaluation.
+    -- Wildcard and type-specific handlers are both placed into the same
+    -- allSettled bag; there is no longer a strict "type handlers first"
+    -- ordering (see OrderGuarantee for what IS preserved).
 }
 
 rule OrderGuarantee {
   -- "Events are delivered to consumers in publish order per event type."
   -- When multiple events of the same type are published sequentially,
   -- consumers receive them in the same order.
+  --
+  -- Sprint 2 H-P-06 update: intra-publish handler ordering across
+  -- DIFFERENT consumers is NO LONGER GUARANTEED — the parallel
+  -- allSettled dispatch schedules handlers concurrently. The cross-
+  -- publish ordering guarantee still holds because publish() awaits
+  -- its own allSettled barrier before returning, so `await publish(A)
+  -- then await publish(B)` delivers A before B to every handler.
   when: EventBus.publish(event1: DomainEvent<T>) then EventBus.publish(event2: DomainEvent<T>)
 
   ensures: for_each handler subscribed to T:
     handler receives event1 before event2
+  -- Explicitly NOT ensured: "handler A observes handler B's side effects
+  -- within a single publish() call." Publishers that need causal ordering
+  -- across consumers must publish separate events and await them in order.
 
   @guidance
-    -- This is naturally satisfied by synchronous in-process dispatch.
-    -- If the bus is ever replaced with an async transport, this invariant
-    -- must be preserved (e.g., per-type FIFO queue).
+    -- Cross-publish ordering: preserved by the publish()-level allSettled
+    -- barrier. Each publish() does not return until every handler for that
+    -- event has settled, so the next publish() sees a stable state.
+    -- Intra-publish ordering across consumers: dropped by design (H-P-06).
+    -- All 5 production consumers (audit-logger, notification-dispatcher,
+    -- degradation-coordinator, enrichment-trigger, logo-asset-subscriber)
+    -- were audited and none depends on observing another consumer's
+    -- side-effects within the same dispatch.
     -- Cross-type ordering is NOT guaranteed and NOT required.
+    -- If the bus is ever replaced with an async transport, this invariant
+    -- must be preserved per-type (e.g., per-type FIFO queue).
 }
 
 rule TypeSafety {

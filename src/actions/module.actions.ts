@@ -249,6 +249,11 @@ export async function activateModule(
           emitEvent(
             createEvent(DomainEventTypes.ModuleReactivated, {
               moduleId,
+              // Sprint 3 M-A-02: carry the human-readable manifest name so
+              // consumers can render `titleParams.moduleName` without a
+              // registry round-trip (the registry is in-memory and may be
+              // stale cross-process; the payload is the authoritative snapshot).
+              moduleName: registered.manifest.name,
               userId,
               pausedAutomationCount,
             }),
@@ -377,6 +382,8 @@ export async function deactivateModule(
         emitEvent(
           createEvent(DomainEventTypes.ModuleDeactivated, {
             moduleId,
+            // Sprint 3 M-A-02: see ModuleReactivated emit site above.
+            moduleName: registered.manifest.name,
             userId,
             affectedAutomationIds: automationIds,
           }),
@@ -431,6 +438,42 @@ async function syncRegistryFromDb(): Promise<void> {
 // Health Monitoring (Allium spec rule: HealthCheckExecution)
 // =============================================================================
 
+/**
+ * Run a health check for the given module.
+ *
+ * Sprint 3 Stream C — Admin Gate Audit (confirmed-safe, no gate required):
+ * -------------------------------------------------------------------------
+ * The CRIT-S-04 hotfix intentionally excluded `runHealthCheck` from the
+ * `authorizeAdminAction()` gate. Sprint 3 Stream C audited the full call
+ * chain of `checkModuleHealth` in `src/lib/connector/health-monitor.ts`
+ * and confirmed the following:
+ *
+ * 1. `moduleRegistry.updateHealth(moduleId, newHealthStatus, ...)` — writes
+ *    ONLY health-status fields (HEALTHY / DEGRADED / UNREACHABLE). It does
+ *    NOT call `moduleRegistry.setStatus()` and does NOT change the module's
+ *    activation state (ACTIVE / INACTIVE).
+ *
+ * 2. `prisma.moduleRegistration.upsert({ update: { healthStatus, updatedAt } })`
+ *    — writes ONLY `healthStatus` and `updatedAt`. The `status` column
+ *    (active/inactive) is never touched by the health-monitor path.
+ *
+ * 3. Neither write cascades into pausing any user's automations.
+ *    The automation-pause cascade is exclusively triggered by
+ *    `handleAuthFailure`, `handleCircuitBreakerTrip`, and `deactivateModule`
+ *    — NOT by health check outcomes.
+ *
+ * Conclusion: `runHealthCheck` is CONFIRMED SAFE without an admin gate. The
+ * per-user rate limit (`checkHealthCheckRateLimit`) is the appropriate control.
+ * The critical distinction from CRIT-S-04:
+ *   - activateModule / deactivateModule → mutate module.status (ACTIVE/INACTIVE)
+ *     → cascade-pause every user's automations (cross-tenant write)
+ *   - runHealthCheck → mutate module.healthStatus (HEALTHY/DEGRADED/UNREACHABLE)
+ *     → zero automation cascade, informational only
+ *
+ * See: docs/BUGS.md (Sprint 1.5 open follow-up now closed),
+ *      specs/module-lifecycle.allium invariant AdminOnlyModuleLifecycle
+ *      (does NOT list runHealthCheck as an enforcement site — by design).
+ */
 export async function runHealthCheck(
   moduleId: string,
 ): Promise<

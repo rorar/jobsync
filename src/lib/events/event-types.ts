@@ -92,12 +92,26 @@ export interface BulkActionCompletedPayload {
 
 export interface ModuleDeactivatedPayload {
   moduleId: string;
+  /**
+   * Human-readable module display name (e.g. "EURES", "Logo.dev") resolved
+   * from the manifest at publish time. Optional because pre-Sprint-3 emit
+   * sites may not yet carry it and the dispatcher falls back to `moduleId`
+   * (the slug) for those. See Sprint 3 M-A-02 — consumers rendering a user-
+   * facing `titleParams.moduleName` should prefer this over the slug so
+   * users see "EURES" instead of "eures".
+   */
+  moduleName?: string;
   userId: string;
   affectedAutomationIds: string[];
 }
 
 export interface ModuleReactivatedPayload {
   moduleId: string;
+  /**
+   * Human-readable module display name — see `ModuleDeactivatedPayload.moduleName`.
+   * Optional for backward compat; consumers MUST fall back to `moduleId`.
+   */
+  moduleName?: string;
   userId: string;
   pausedAutomationCount: number;
 }

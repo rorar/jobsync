@@ -340,6 +340,64 @@ rule Deduplication {
     -- for the same module within 5 minutes are both delivered.
 }
 
+invariant AvailabilityCacheTtl {
+  -- Sprint 3 M-P-01 + M-P-SPEC-02: `channel.isAvailable(userId)` performs
+  -- per-channel DB round-trips. Under event-storm load a user with all
+  -- channels enabled pays ~4 DB round-trips per notification even when
+  -- nothing is configured. The ChannelRouter MUST cache availability
+  -- results per (userId, channelName) with a short TTL so repeated
+  -- dispatches within the cache window skip the DB path entirely.
+  --
+  -- The cache lives inside the ChannelRouter instance (not a free
+  -- global) so tests constructing a fresh router get a fresh cache,
+  -- and the singleton router survives HMR via globalThis as before.
+  --
+  -- Settings writes that mutate channel infrastructure (webhook CRUD,
+  -- SMTP CRUD, push subscribe/unsubscribe, VAPID rotation) MUST call
+  -- `channelRouter.invalidateAvailability(userId)` after the mutation
+  -- so the next dispatch picks up the change instantly instead of
+  -- waiting for the TTL to expire.
+
+  ensures: ChannelRouter caches isAvailable results with TTL
+  ensures: ChannelRouter.invalidateAvailability(userId) exists as a hook
+           for Settings writes
+  ensures: cache is per-router-instance (not a free global)
+
+  note: "Default TTL is ISAVAILABLE_CACHE_TTL_MS = 30s. Short enough to
+         pick up Settings changes within one dispatch cycle of a burst
+         even without an explicit invalidate() call, long enough to
+         amortize away the per-dispatch round-trip for retention sweeps
+         and bulk actions."
+  note: "Errors thrown by channel.isAvailable() are NOT cached — the next
+         dispatch retries, so a transient DB blip does not stick as a
+         false 'unavailable' signal."
+}
+
+invariant ExplicitChannelRegistration {
+  -- Sprint 3 M-A-05: channels MUST be registered on the singleton
+  -- ChannelRouter through the explicit `registerChannels()` call inside
+  -- `registerNotificationDispatcher()`, never as a side effect of module
+  -- import. This makes registration order deterministic (driven by the
+  -- `registerEventConsumers()` boot sequence), HMR-safe (idempotent via
+  -- a `__channelRouterRegistered` guard on globalThis), and test-
+  -- substitutable (tests can `clear()` + `_resetChannelRegistrationForTesting`
+  -- before calling the dispatcher).
+  ensures: every channelRouter.register() call for InAppChannel,
+           WebhookChannel, EmailChannel, PushChannel
+    is reachable only from registerChannels() in channel-router.ts
+  ensures: no top-level `new XChannel()` construction in any file under
+           src/lib/notifications/ other than channel-router.ts
+  note: "Sprint 3 M-A-05 fixed the original anti-pattern where the four
+         production channels were registered as a top-level side effect of
+         `import notification-dispatcher`. Any test, type consumer, or HMR
+         reload that touched the dispatcher module incurred channel
+         registration — and the order depended on the module import graph.
+         The fix pulls registration into a named function that the boot
+         sequence calls once."
+  note: "The guarded singleton `__channelRouterRegistered` mirrors the
+         `__eventConsumersRegistered` pattern in events/consumers/index.ts."
+}
+
 rule ChannelRouting {
   -- "Route notifications to all enabled channels via ChannelRouter."
   -- The ChannelRouter iterates registered channels and dispatches in parallel.

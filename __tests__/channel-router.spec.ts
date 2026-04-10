@@ -384,4 +384,178 @@ describe("ChannelRouter", () => {
       expect(router.channelNames).toEqual(["inApp", "webhook"]);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 3 M-P-01 + M-P-SPEC-02 — isAvailable cache
+  //
+  // The router must cache channel availability per (userId, channelName) with
+  // a short TTL so repeated dispatches within the cache window skip the
+  // per-channel DB round-trip. The cache lives on the router instance (not
+  // a free global) so a fresh `new ChannelRouter()` always starts cold.
+  // ---------------------------------------------------------------------------
+  describe("isAvailable cache (M-P-01 + M-P-SPEC-02)", () => {
+    it("caches isAvailable result across dispatches within the TTL window", async () => {
+      // Short TTL (1s) so the test does not have to wait 30 seconds.
+      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 1_000 });
+      const channel = makeMockChannel("webhook");
+      cachedRouter.register(channel);
+
+      await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
+      await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
+      await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
+
+      // isAvailable called exactly ONCE across 3 dispatches for the same user.
+      expect(channel.isAvailable).toHaveBeenCalledTimes(1);
+      expect(channel.dispatch).toHaveBeenCalledTimes(3);
+    });
+
+    it("does not cache across distinct users", async () => {
+      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 1_000 });
+      const channel = makeMockChannel("webhook");
+      cachedRouter.register(channel);
+
+      await cachedRouter.route(makeDraft({ userId: "user-A" }), DEFAULT_PREFS);
+      await cachedRouter.route(makeDraft({ userId: "user-B" }), DEFAULT_PREFS);
+
+      // Two distinct users — two isAvailable calls.
+      expect(channel.isAvailable).toHaveBeenCalledTimes(2);
+      expect(channel.isAvailable).toHaveBeenNthCalledWith(1, "user-A");
+      expect(channel.isAvailable).toHaveBeenNthCalledWith(2, "user-B");
+    });
+
+    it("does not cache across distinct channels", async () => {
+      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 1_000 });
+      const webhook = makeMockChannel("webhook");
+      const email = makeMockChannel("email");
+      cachedRouter.register(webhook);
+      cachedRouter.register(email);
+
+      // Need to allow email via prefs too for this test.
+      const prefs: NotificationPreferences = {
+        enabled: true,
+        channels: { inApp: true, webhook: true, email: true, push: false },
+        perType: {},
+      };
+      await cachedRouter.route(makeDraft(), prefs);
+
+      // Both channels see exactly one isAvailable call (not shared).
+      expect(webhook.isAvailable).toHaveBeenCalledTimes(1);
+      expect(email.isAvailable).toHaveBeenCalledTimes(1);
+    });
+
+    it("re-queries after the TTL expires", async () => {
+      jest.useFakeTimers();
+      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 1_000 });
+      const channel = makeMockChannel("webhook");
+      cachedRouter.register(channel);
+
+      await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
+      expect(channel.isAvailable).toHaveBeenCalledTimes(1);
+
+      // Advance the monotonic clock beyond the TTL. Because the cache uses
+      // Date.now(), we fake the system clock forward.
+      jest.setSystemTime(Date.now() + 2_000);
+
+      await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
+      expect(channel.isAvailable).toHaveBeenCalledTimes(2);
+
+      jest.useRealTimers();
+    });
+
+    it("invalidateAvailability(userId) drops the cache entry for that user only", async () => {
+      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 10_000 });
+      const channel = makeMockChannel("webhook");
+      cachedRouter.register(channel);
+
+      await cachedRouter.route(makeDraft({ userId: "user-A" }), DEFAULT_PREFS);
+      await cachedRouter.route(makeDraft({ userId: "user-B" }), DEFAULT_PREFS);
+      expect(channel.isAvailable).toHaveBeenCalledTimes(2);
+
+      // Invalidate only user-A; user-B remains cached.
+      cachedRouter.invalidateAvailability("user-A");
+
+      await cachedRouter.route(makeDraft({ userId: "user-A" }), DEFAULT_PREFS);
+      await cachedRouter.route(makeDraft({ userId: "user-B" }), DEFAULT_PREFS);
+
+      expect(channel.isAvailable).toHaveBeenCalledTimes(3);
+      expect(channel.isAvailable).toHaveBeenNthCalledWith(3, "user-A");
+    });
+
+    it("invalidateAvailability() with no args drops the whole cache", async () => {
+      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 10_000 });
+      const channel = makeMockChannel("webhook");
+      cachedRouter.register(channel);
+
+      await cachedRouter.route(makeDraft({ userId: "user-A" }), DEFAULT_PREFS);
+      await cachedRouter.route(makeDraft({ userId: "user-B" }), DEFAULT_PREFS);
+      expect(channel.isAvailable).toHaveBeenCalledTimes(2);
+
+      cachedRouter.invalidateAvailability();
+
+      await cachedRouter.route(makeDraft({ userId: "user-A" }), DEFAULT_PREFS);
+      await cachedRouter.route(makeDraft({ userId: "user-B" }), DEFAULT_PREFS);
+
+      expect(channel.isAvailable).toHaveBeenCalledTimes(4);
+    });
+
+    it("invalidateAvailability(userId, channelName) drops a single slot", async () => {
+      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 10_000 });
+      const webhook = makeMockChannel("webhook");
+      const email = makeMockChannel("email");
+      cachedRouter.register(webhook);
+      cachedRouter.register(email);
+
+      const prefs: NotificationPreferences = {
+        enabled: true,
+        channels: { inApp: true, webhook: true, email: true, push: false },
+        perType: {},
+      };
+      await cachedRouter.route(makeDraft(), prefs);
+      expect(webhook.isAvailable).toHaveBeenCalledTimes(1);
+      expect(email.isAvailable).toHaveBeenCalledTimes(1);
+
+      // Invalidate only the webhook slot for this user.
+      cachedRouter.invalidateAvailability(TEST_USER_ID, "webhook");
+
+      await cachedRouter.route(makeDraft(), prefs);
+      expect(webhook.isAvailable).toHaveBeenCalledTimes(2);
+      // email cache still intact.
+      expect(email.isAvailable).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not cache thrown errors (retries on next dispatch)", async () => {
+      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 10_000 });
+      const isAvailable = jest
+        .fn<Promise<boolean>, [string]>()
+        .mockRejectedValueOnce(new Error("transient DB blip"))
+        .mockResolvedValueOnce(true);
+      const channel = makeMockChannel("webhook", { isAvailable });
+      cachedRouter.register(channel);
+
+      // First call: rejects (no cache written). The router catches it via
+      // Promise.allSettled and surfaces an error ChannelResult.
+      const first = await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
+      expect(first.results[0].success).toBe(false);
+
+      // Second call: retries (cache was NOT populated with false on reject).
+      const second = await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
+      expect(channel.isAvailable).toHaveBeenCalledTimes(2);
+      expect(channel.dispatch).toHaveBeenCalledTimes(1);
+      expect(second.results[0].success).toBe(true);
+    });
+
+    it("has() and clear() test-helper hooks behave as expected", () => {
+      const cachedRouter = new ChannelRouter();
+      cachedRouter.register(makeMockChannel("inApp"));
+      cachedRouter.register(makeMockChannel("webhook"));
+
+      expect(cachedRouter.has("inApp")).toBe(true);
+      expect(cachedRouter.has("webhook")).toBe(true);
+      expect(cachedRouter.has("email")).toBe(false);
+
+      cachedRouter.clear();
+      expect(cachedRouter.channelCount).toBe(0);
+      expect(cachedRouter.has("inApp")).toBe(false);
+    });
+  });
 });

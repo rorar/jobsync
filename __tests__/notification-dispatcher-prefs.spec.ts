@@ -8,6 +8,11 @@
 jest.mock("server-only", () => ({}));
 
 import { _testHelpers } from "@/lib/events/consumers/notification-dispatcher";
+import {
+  registerChannels,
+  _resetChannelRegistrationForTesting,
+  channelRouter,
+} from "@/lib/notifications/channel-router";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
 
 // Mock Prisma
@@ -102,6 +107,16 @@ describe("NotificationDispatcher resolvePreferences", () => {
 });
 
 describe("NotificationDispatcher flushStagedBuffer with preferences", () => {
+  beforeAll(() => {
+    // Sprint 3 M-A-05: channel registration is no longer a side effect of
+    // importing notification-dispatcher.ts — it must be triggered explicitly.
+    // We reset the globalThis guard so the call below actually re-registers
+    // (idempotent, but we want a fresh state per test file).
+    channelRouter.clear();
+    _resetChannelRegistrationForTesting();
+    registerChannels();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();

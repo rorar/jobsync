@@ -45,25 +45,37 @@ import type {
   NotificationActorType,
 } from "@/models/notification.model";
 import type { UserSettingsData } from "@/models/userSettings.model";
-import { channelRouter } from "@/lib/notifications/channel-router";
-import { InAppChannel } from "@/lib/notifications/channels/in-app.channel";
-import { WebhookChannel } from "@/lib/notifications/channels/webhook.channel";
-import { EmailChannel } from "@/lib/notifications/channels/email.channel";
-import { PushChannel } from "@/lib/notifications/channels/push.channel";
+import {
+  channelRouter,
+  registerChannels,
+} from "@/lib/notifications/channel-router";
 import type { NotificationDraft } from "@/lib/notifications/types";
 import { t } from "@/i18n/server";
 import { DEFAULT_LOCALE, isValidLocale } from "@/i18n/locales";
 
 // ---------------------------------------------------------------------------
-// Channel Registration (one-time)
+// Channel Registration (explicit, Sprint 3 M-A-05)
 // ---------------------------------------------------------------------------
-
-// Register channels on first import. The channelRouter is a globalThis singleton,
-// so duplicate registration is guarded internally.
-channelRouter.register(new InAppChannel());
-channelRouter.register(new WebhookChannel());
-channelRouter.register(new EmailChannel());
-channelRouter.register(new PushChannel());
+//
+// Channel registration used to run as a top-level module side effect:
+//   channelRouter.register(new InAppChannel());
+//   channelRouter.register(new WebhookChannel());
+//   channelRouter.register(new EmailChannel());
+//   channelRouter.register(new PushChannel());
+//
+// That pattern meant any importer of this file (tests, type consumers, the
+// `_testHelpers` export, HMR reloads) incurred channel registration as a
+// side effect of `import notification-dispatcher`. Registration order
+// depended on module import order, which is fragile under HMR and Jest.
+//
+// The fix moves registration into `registerChannels()` (exported from
+// channel-router.ts) and calls it from `registerNotificationDispatcher()`
+// below. `registerEventConsumers()` in `consumers/index.ts` is the single
+// well-known init point that invokes `registerNotificationDispatcher()`,
+// so channels are now registered "on application boot" instead of "on
+// first import". Tests that want to inject mock channels substitute them
+// BEFORE calling `registerNotificationDispatcher`, matching the existing
+// `__tests__/channel-router.spec.ts` pattern.
 
 // ---------------------------------------------------------------------------
 // VacancyStaged batch buffer (spec: rule BatchSummary)
@@ -319,12 +331,16 @@ async function handleModuleDeactivated(
   const payload = event.payload as ModuleDeactivatedPayload;
   // Single userSettings read (Sprint 2 H-P-01)
   const { preferences, locale } = await resolveUserSettings(payload.userId);
+  // Sprint 3 M-A-02: prefer the payload's `moduleName` (authoritative display
+  // name captured at publish time) over the raw `moduleId` slug. Pre-Sprint-3
+  // events have no `moduleName` — fall back to the slug for compat.
+  const displayName = payload.moduleName ?? payload.moduleId;
   const message = t(locale, "notifications.moduleDeactivated")
-    .replace("{name}", payload.moduleId)
+    .replace("{name}", displayName)
     .replace("{automationCount}", String(payload.affectedAutomationIds.length));
 
   const titleKey = "notifications.moduleDeactivated.title";
-  const titleParams = { moduleName: payload.moduleId };
+  const titleParams = { moduleName: displayName };
   const reasonKey = "notifications.reason.manualDeactivation";
   const severity: NotificationSeverity = "warning";
   const actorType: NotificationActorType = "module";
@@ -364,12 +380,14 @@ async function handleModuleReactivated(
   const payload = event.payload as ModuleReactivatedPayload;
   // Single userSettings read (Sprint 2 H-P-01)
   const { preferences, locale } = await resolveUserSettings(payload.userId);
+  // Sprint 3 M-A-02: see handleModuleDeactivated.
+  const displayName = payload.moduleName ?? payload.moduleId;
   const message = t(locale, "notifications.moduleReactivated")
-    .replace("{name}", payload.moduleId)
+    .replace("{name}", displayName)
     .replace("{automationCount}", String(payload.pausedAutomationCount));
 
   const titleKey = "notifications.moduleReactivated.title";
-  const titleParams = { moduleName: payload.moduleId };
+  const titleParams = { moduleName: displayName };
   const severity: NotificationSeverity = "success";
   const actorType: NotificationActorType = "module";
 
@@ -485,6 +503,15 @@ async function handleJobStatusChanged(
 // ---------------------------------------------------------------------------
 
 export function registerNotificationDispatcher(): void {
+  // Sprint 3 M-A-05: register production channels on the singleton router
+  // BEFORE subscribing to events. `registerChannels()` is idempotent
+  // (guarded by `__channelRouterRegistered` on globalThis) so repeat calls
+  // during HMR or test boot are safe. Registration is synchronous — the
+  // channel modules are imported statically from channel-router.ts, not
+  // lazily inside this call, so tests that `jest.mock()` a channel file
+  // see the mocked constructor when `registerChannels()` instantiates it.
+  registerChannels();
+
   eventBus.subscribe(DomainEventType.VacancyPromoted, handleVacancyPromoted);
   eventBus.subscribe(DomainEventType.VacancyStaged, handleVacancyStaged);
   eventBus.subscribe(DomainEventType.BulkActionCompleted, handleBulkActionCompleted);

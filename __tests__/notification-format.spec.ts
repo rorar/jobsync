@@ -23,8 +23,10 @@ const DICTIONARY: Record<string, string> = {
   "notifications.reason.authExpired": "API key invalid or expired",
   "notifications.reason.manualDeactivation": "Deactivated by user",
   "notifications.actor.system": "System",
+  "notifications.actor.module": "Module",
   "notifications.actor.automation": "Automation",
   "notifications.actor.user": "You",
+  "notifications.actor.enrichment": "Enrichment",
 };
 
 const t = (key: string) => DICTIONARY[key] ?? key;
@@ -240,5 +242,62 @@ describe("formatNotificationActor", () => {
   it("returns empty string when no actor info present", () => {
     expect(formatNotificationActor(null, t)).toBe("");
     expect(formatNotificationActor({}, t)).toBe("");
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 3 M-A-01 + M-A-08 — actor type exhaustiveness
+  //
+  // Before the fix, `formatNotificationActor` only handled `system`,
+  // `automation`, and `user` actor types. When a module lifecycle
+  // notification arrived with `actorType = "module"` AND no actorId set,
+  // the function fell through the switch and returned an empty string —
+  // the UI showed an unlabelled actor slot. The `enrichment` actor type
+  // was never populated by any writer but also had no case, leaving the
+  // same latent bug.
+  //
+  // The fix adds explicit cases for `module` and `enrichment` PLUS a
+  // `never` exhaustiveness guard that fails at compile time if
+  // `NotificationActorType` gains a new member without a matching case.
+  //
+  // See stream-5b-architecture.md findings M-A-01 + M-A-08.
+  // ---------------------------------------------------------------------------
+  describe("M-A-01 + M-A-08 — exhaustive actor-type coverage", () => {
+    it("renders the module generic label when actorType=module has no actorId", () => {
+      const data: NotificationDataExtended = { actorType: "module" };
+      expect(formatNotificationActor(data, t)).toBe("Module");
+    });
+
+    it("renders the enrichment generic label when actorType=enrichment has no actorId", () => {
+      const data: NotificationDataExtended = { actorType: "enrichment" };
+      expect(formatNotificationActor(data, t)).toBe("Enrichment");
+    });
+
+    it("still prefers actorId over the generic module label when actorId is set", () => {
+      // The actorId path takes precedence: a module notification with a
+      // specific moduleId slug still renders the slug so users can identify
+      // WHICH module raised the event. The generic "Module" label is only
+      // the fallback when no concrete actorId exists.
+      const data: NotificationDataExtended = {
+        actorType: "module",
+        actorId: "logo_dev",
+      };
+      expect(formatNotificationActor(data, t)).toBe("logo_dev");
+    });
+
+    it("still prefers actorId over the generic enrichment label when actorId is set", () => {
+      const data: NotificationDataExtended = {
+        actorType: "enrichment",
+        actorId: "logo-dev-dimension",
+      };
+      expect(formatNotificationActor(data, t)).toBe("logo-dev-dimension");
+    });
+
+    it("falls back to empty string for an unknown actor type (no crash)", () => {
+      // Runtime drift guard: even though the compile-time `never` exhaustiveness
+      // check prevents this in TypeScript, we still assert graceful runtime
+      // behavior if an invalid value slips in via legacy DB data.
+      const data = { actorType: "alien" } as unknown as NotificationDataExtended;
+      expect(formatNotificationActor(data, t)).toBe("");
+    });
   });
 });

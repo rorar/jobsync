@@ -36,19 +36,41 @@ jest.mock("@/lib/db", () => ({
   },
 }));
 
-// Mock i18n dictionaries — returns template strings with placeholders
+// Mock i18n dictionaries — branches on locale so the Sprint 3 M-T-09 regression
+// guard can distinguish the `en` and `de` dispatch paths. Before this mock was
+// locale-branched every `t(locale, key)` call returned the same English string
+// regardless of the locale argument, which silently erased the Sprint 0/1
+// dispatcher-locale bug fix from test coverage (commit 42ea3cb — "fix dispatcher
+// locale bug"). See specs/notification-dispatch.allium invariant LateBoundLocale
+// for the rule this mock protects.
+const DISPATCHER_MOCK_TRANSLATIONS = {
+  en: {
+    "notifications.vacancyPromoted": "Job created from staged vacancy",
+    "notifications.bulkActionCompleted": "{succeeded} items {actionType} successfully",
+    "notifications.retentionCompleted": "{count} expired vacancies cleaned up",
+    "notifications.moduleDeactivated": "Module {name} deactivated. {automationCount} automation(s) paused.",
+    "notifications.moduleReactivated": "Module {name} reactivated. {automationCount} automation(s) remain paused.",
+    "notifications.batchStaged": "{count} new vacancies staged from automation",
+    "notifications.jobStatusChanged": "Job status changed to {newStatus}",
+  },
+  de: {
+    "notifications.vacancyPromoted": "Job aus bereitgestelltem Stellenangebot erstellt",
+    "notifications.bulkActionCompleted": "{succeeded} Elemente {actionType} erfolgreich",
+    "notifications.retentionCompleted": "{count} abgelaufene Stellenangebote bereinigt",
+    "notifications.moduleDeactivated": "Modul {name} deaktiviert. {automationCount} Automatisierung(en) pausiert.",
+    "notifications.moduleReactivated": "Modul {name} reaktiviert. {automationCount} Automatisierung(en) bleiben pausiert.",
+    "notifications.batchStaged": "{count} neue Stellenangebote aus der Automatisierung",
+    "notifications.jobStatusChanged": "Job-Status geändert zu {newStatus}",
+  },
+} as const;
+
 jest.mock("@/i18n/dictionaries", () => ({
-  t: jest.fn((_locale: string, key: string) => {
-    const translations: Record<string, string> = {
-      "notifications.vacancyPromoted": "Job created from staged vacancy",
-      "notifications.bulkActionCompleted": "{succeeded} items {actionType} successfully",
-      "notifications.retentionCompleted": "{count} expired vacancies cleaned up",
-      "notifications.moduleDeactivated": "Module {name} deactivated. {automationCount} automation(s) paused.",
-      "notifications.moduleReactivated": "Module {name} reactivated. {automationCount} automation(s) remain paused.",
-      "notifications.batchStaged": "{count} new vacancies staged from automation",
-      "notifications.jobStatusChanged": "Job status changed to {newStatus}",
-    };
-    return translations[key] ?? key;
+  t: jest.fn((locale: string, key: string) => {
+    const dict =
+      (DISPATCHER_MOCK_TRANSLATIONS as Record<string, Record<string, string>>)[
+        locale
+      ] ?? DISPATCHER_MOCK_TRANSLATIONS.en;
+    return dict[key] ?? key;
   }),
   getDictionary: jest.fn(() => ({})),
 }));
@@ -58,8 +80,22 @@ import {
   registerNotificationDispatcher,
   _testHelpers,
 } from "@/lib/events/consumers/notification-dispatcher";
+import { formatNotificationTitle } from "@/lib/notifications/deep-links";
+import {
+  channelRouter,
+  _resetChannelRegistrationForTesting,
+} from "@/lib/notifications/channel-router";
 
 describe("NotificationDispatcher", () => {
+  beforeAll(() => {
+    // Sprint 3 M-A-05: channel registration moved out of the
+    // notification-dispatcher import side effect. Force a clean state for
+    // this test file so the registerNotificationDispatcher() in beforeEach
+    // re-registers from scratch.
+    channelRouter.clear();
+    _resetChannelRegistrationForTesting();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
@@ -223,6 +259,53 @@ describe("NotificationDispatcher", () => {
         }),
       );
     });
+
+    // ---------------------------------------------------------------------
+    // Sprint 3 M-A-02 — moduleName display-name carried on the payload
+    //
+    // Before the fix, `ModuleDeactivatedPayload` only carried `moduleId`
+    // (the slug like "eures"). The dispatcher built `titleParams =
+    // { moduleName: payload.moduleId }`, assigning the raw slug to a field
+    // literally named `moduleName`. Users saw "Module paused: eures"
+    // instead of "Module paused: EURES". The fix extends the payload with
+    // `moduleName?: string` (optional for backward compat) and the
+    // dispatcher prefers it over `moduleId` when set.
+    // ---------------------------------------------------------------------
+    it("M-A-02 — uses payload.moduleName when provided", async () => {
+      const event = createEvent(DomainEventType.ModuleDeactivated, {
+        moduleId: "eures",
+        moduleName: "EURES", // human-readable display name from the manifest
+        userId: "user-1",
+        affectedAutomationIds: ["auto-1"],
+      });
+
+      await eventBus.publish(event);
+
+      const call = mockCreate.mock.calls[0][0];
+      // titleParams.moduleName MUST be the display name, not the slug.
+      expect(call.data.titleParams).toEqual({ moduleName: "EURES" });
+      // The English fallback `message` ALSO uses the display name, so
+      // email/webhook/push clients see "Module EURES deactivated." not
+      // "Module eures deactivated."
+      expect(call.data.message).toContain("EURES");
+      expect(call.data.message).not.toContain("eures");
+    });
+
+    it("M-A-02 — falls back to moduleId when payload.moduleName is absent", async () => {
+      // Backward-compat: pre-Sprint-3 emit sites do not populate moduleName.
+      // The dispatcher must fall back to the slug so those events still
+      // produce renderable notifications.
+      const event = createEvent(DomainEventType.ModuleDeactivated, {
+        moduleId: "eures",
+        userId: "user-1",
+        affectedAutomationIds: ["auto-1"],
+      });
+
+      await eventBus.publish(event);
+
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.data.titleParams).toEqual({ moduleName: "eures" });
+    });
   });
 
   describe("ModuleReactivated", () => {
@@ -243,6 +326,23 @@ describe("NotificationDispatcher", () => {
           moduleId: "eures",
         }),
       });
+    });
+
+    // Sprint 3 M-A-02 — symmetric guard: ModuleReactivated payload also
+    // accepts `moduleName` and the dispatcher uses it for titleParams.
+    it("M-A-02 — uses payload.moduleName when provided", async () => {
+      const event = createEvent(DomainEventType.ModuleReactivated, {
+        moduleId: "eures",
+        moduleName: "EURES",
+        userId: "user-1",
+        pausedAutomationCount: 2,
+      });
+
+      await eventBus.publish(event);
+
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.data.titleParams).toEqual({ moduleName: "EURES" });
+      expect(call.data.message).toContain("EURES");
     });
   });
 
@@ -453,6 +553,157 @@ describe("NotificationDispatcher", () => {
       await _testHelpers.flushStagedBuffer("auto-hp01");
 
       expect(mockFindUnique).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 3 M-T-09 — Dispatcher locale-fix regression guard
+  //
+  // Sprint 0/1 commit 42ea3cb ("feat(notifications): 5W+H layout, deep-links,
+  // fix dispatcher locale bug") fixed the bug that the dispatcher hardcoded
+  // `t("en", ...)` when resolving the English fallback message, erasing the
+  // recipient's locale from every notification. The fix threads the user's
+  // locale through `resolveUserSettings(userId)` and uses it both for the
+  // English fallback `message` field AND for the structured 5W+H columns
+  // (`titleKey`, `titleParams`) that the UI late-binds via
+  // `formatNotificationTitle()`.
+  //
+  // The existing test coverage did not exercise this path: the `t` mock
+  // ignored its `locale` argument entirely, so a regression back to
+  // `t("en", ...)` hardcoding would not have failed any test. Sprint 3 M-T-09
+  // rewrites the `t` mock (see top of this file) to branch on locale AND
+  // pins TWO regressions below:
+  //
+  //   1. The dispatcher passes the recipient's locale (`de`) through to the
+  //      English-fallback `message` field — so users on non-English locales
+  //      see the correct message even on clients that don't read the
+  //      structured `titleKey` (email / webhook / push / legacy readers).
+  //   2. The dispatcher ALSO writes the unresolved `titleKey + titleParams`
+  //      to the top-level Notification columns — so when a `de` user opens
+  //      the notification list in a `fr` browser session, the UI's
+  //      `formatNotificationTitle(source, fallback, t_fr)` call renders the
+  //      French title, not the frozen `de` message.
+  //
+  // Spec: specs/notification-dispatch.allium invariant `LateBoundLocale`.
+  // See also ADR-030 Decision B (late binding).
+  // ---------------------------------------------------------------------------
+  describe("M-T-09 — dispatcher locale fix regression guard", () => {
+    it("uses the recipient's locale for the English-fallback message (de user)", async () => {
+      // Mount a German user: the dispatcher's resolveUserSettings reads
+      // `parsed.display.locale` and the locale branches the mock `t()`.
+      mockFindUnique.mockResolvedValueOnce({
+        userId: "user-de",
+        settings: JSON.stringify({
+          display: { locale: "de" },
+          notifications: {
+            enabled: true,
+            channels: { inApp: true, webhook: false, email: false, push: false },
+            perType: {},
+          },
+        }),
+      });
+
+      const event = createEvent(DomainEventType.ModuleDeactivated, {
+        moduleId: "eures",
+        userId: "user-de",
+        affectedAutomationIds: ["auto-1"],
+      });
+
+      await eventBus.publish(event);
+
+      // The `message` field is the English-fallback dispatched to
+      // email/webhook/push/legacy readers — it must use the recipient's
+      // locale (the fix) rather than hard-coded English (the bug).
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.data.message).toMatch(/Modul .* deaktiviert/);
+      expect(call.data.message).not.toMatch(/Module .* deactivated/);
+    });
+
+    it("stores structured titleKey + titleParams so the UI can re-localize at render time", async () => {
+      // Dispatch in an `en` context: simulate a notification created while
+      // the dispatcher resolved the user as English. The top-level columns
+      // must still carry the unresolved `titleKey + titleParams` so a later
+      // UI render in any locale can produce the correct title.
+      mockFindUnique.mockResolvedValueOnce({
+        userId: "user-en",
+        settings: JSON.stringify({
+          display: { locale: "en" },
+          notifications: {
+            enabled: true,
+            channels: { inApp: true, webhook: false, email: false, push: false },
+            perType: {},
+          },
+        }),
+      });
+
+      const event = createEvent(DomainEventType.ModuleDeactivated, {
+        moduleId: "eures",
+        userId: "user-en",
+        affectedAutomationIds: ["auto-1"],
+      });
+
+      await eventBus.publish(event);
+
+      const call = mockCreate.mock.calls[0][0];
+      // Top-level structured columns must be populated (late binding).
+      expect(call.data.titleKey).toBe("notifications.moduleDeactivated.title");
+      expect(call.data.titleParams).toEqual({ moduleName: "eures" });
+
+      // Late-binding: a `de` viewer renders the same persisted row through
+      // formatNotificationTitle with a `de` translator and MUST receive the
+      // translated German title, NOT the English message frozen at dispatch.
+      const deTranslator = (key: string): string => {
+        const deDict: Record<string, string> = {
+          "notifications.moduleDeactivated.title": "Modul pausiert: {moduleName}",
+        };
+        return deDict[key] ?? key;
+      };
+      const title = formatNotificationTitle(
+        {
+          titleKey: call.data.titleKey,
+          titleParams: call.data.titleParams,
+          data: call.data.data ?? null,
+        },
+        call.data.message,
+        deTranslator,
+      );
+      expect(title).toBe("Modul pausiert: eures");
+    });
+
+    it("passes locale argument to t() so it is not silently erased by a hardcoded 'en'", async () => {
+      // Direct regression guard for the specific bug shape: if a future
+      // refactor replaces `t(locale, key)` with `t("en", key)` anywhere in
+      // the dispatcher, this assertion fires because the mock `t` is
+      // invoked with the correct locale discriminant.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const tMock = require("@/i18n/dictionaries").t as jest.Mock;
+      tMock.mockClear();
+
+      mockFindUnique.mockResolvedValueOnce({
+        userId: "user-de",
+        settings: JSON.stringify({
+          display: { locale: "de" },
+          notifications: {
+            enabled: true,
+            channels: { inApp: true, webhook: false, email: false, push: false },
+            perType: {},
+          },
+        }),
+      });
+
+      await eventBus.publish(
+        createEvent(DomainEventType.ModuleReactivated, {
+          moduleId: "eures",
+          userId: "user-de",
+          pausedAutomationCount: 2,
+        }),
+      );
+
+      // The dispatcher must have called `t("de", ...)` at least once —
+      // proving the locale threaded through to the translator.
+      const localesSeen = tMock.mock.calls.map((args: unknown[]) => args[0]);
+      expect(localesSeen).toContain("de");
+      expect(localesSeen).not.toContain("en");
     });
   });
 });

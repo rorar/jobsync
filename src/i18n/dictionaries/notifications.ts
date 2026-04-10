@@ -56,8 +56,10 @@ export const notifications = {
 
     // Generic actor labels
     "notifications.actor.system": "System",
+    "notifications.actor.module": "Module",
     "notifications.actor.automation": "Automation",
     "notifications.actor.user": "You",
+    "notifications.actor.enrichment": "Enrichment",
   },
   de: {
     "notifications.title": "Benachrichtigungen",
@@ -116,8 +118,10 @@ export const notifications = {
 
     // Generic actor labels
     "notifications.actor.system": "System",
+    "notifications.actor.module": "Modul",
     "notifications.actor.automation": "Automatisierung",
     "notifications.actor.user": "Sie",
+    "notifications.actor.enrichment": "Anreicherung",
   },
   fr: {
     "notifications.title": "Notifications",
@@ -176,8 +180,10 @@ export const notifications = {
 
     // Generic actor labels
     "notifications.actor.system": "Système",
+    "notifications.actor.module": "Module",
     "notifications.actor.automation": "Automatisation",
     "notifications.actor.user": "Vous",
+    "notifications.actor.enrichment": "Enrichissement",
   },
   es: {
     "notifications.title": "Notificaciones",
@@ -236,7 +242,9 @@ export const notifications = {
 
     // Generic actor labels
     "notifications.actor.system": "Sistema",
+    "notifications.actor.module": "Módulo",
     "notifications.actor.automation": "Automatización",
     "notifications.actor.user": "Tú",
+    "notifications.actor.enrichment": "Enriquecimiento",
   },
 } as const;

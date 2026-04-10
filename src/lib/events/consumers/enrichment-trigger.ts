@@ -132,49 +132,56 @@ async function handleCompanyCreated(
     return;
   }
 
-  // Skip if a fresh result already exists in the database
-  const existing = await db.enrichmentResult.findFirst({
-    where: { userId: payload.userId, dimension: "logo", domainKey: domain },
-    select: { status: true, expiresAt: true },
-  });
-  if (existing && existing.status === "found" && existing.expiresAt && existing.expiresAt > new Date()) {
-    return;
-  }
-
   console.debug(
     `[EnrichmentTrigger] CompanyCreated → logo enrichment for domain "${domain}"`,
   );
 
-  // Fire-and-forget: enrichment is best-effort, never blocks company creation
-  withEnrichmentLimit(() =>
-    enrichmentOrchestrator
-      .execute(payload.userId, {
+  // Sprint 3 M-A-06: the pre-flight `enrichmentResult.findFirst` cache check
+  // used to sit here, OUTSIDE the fire-and-forget closure. Because the event
+  // bus awaits each consumer (Promise.allSettled fan-out per H-P-06 still
+  // awaits this handler's returned promise), that await blocked the publish
+  // loop on a DB round-trip even when enrichment itself was non-blocking.
+  //
+  // The orchestrator's `execute()` already performs the authoritative
+  // cache-before-chain lookup (buildEnrichmentCacheKey + findFirst — see
+  // `src/lib/connector/data-enrichment/orchestrator.ts`), so the pre-flight
+  // here was redundant. We drop it entirely and rely on the orchestrator's
+  // internal cache layer — which keeps the dedup guarantee while moving
+  // ALL DB I/O off the publish path.
+  //
+  // Spec: specs/data-enrichment.allium (TriggerEnrichmentOnCompanyCreated
+  // rule — "best-effort, non-blocking") and event-bus.allium (publisher
+  // throughput).
+  void withEnrichmentLimit(async () => {
+    const output = await enrichmentOrchestrator.execute(
+      payload.userId,
+      {
         dimension: "logo",
         companyDomain: domain,
         companyName: payload.companyName,
-      }, chain)
-      .then(async (output) => {
-        // Link result to company if enrichment succeeded
-        if (output && output.status === "found") {
-          try {
-            await db.enrichmentResult.updateMany({
-              where: {
-                userId: payload.userId,
-                dimension: "logo",
-                domainKey: domain,
-                companyId: null,
-              },
-              data: { companyId: payload.companyId },
-            });
+      },
+      chain,
+    );
+    // Link result to company if enrichment succeeded
+    if (output && output.status === "found") {
+      try {
+        await db.enrichmentResult.updateMany({
+          where: {
+            userId: payload.userId,
+            dimension: "logo",
+            domainKey: domain,
+            companyId: null,
+          },
+          data: { companyId: payload.companyId },
+        });
 
-            // Logo writeback via shared helper
-            await applyLogoWriteback(db, payload.userId, payload.companyId, output);
-          } catch {
-            // Best-effort link — do not break on failure
-          }
-        }
-      }),
-  ).catch(() => {
+        // Logo writeback via shared helper
+        await applyLogoWriteback(db, payload.userId, payload.companyId, output);
+      } catch {
+        // Best-effort link — do not break on failure
+      }
+    }
+  }).catch(() => {
     // Silently swallow enrichment errors — spec: best-effort
   });
 }
@@ -188,96 +195,102 @@ async function handleVacancyPromoted(
 ): Promise<void> {
   const payload = event.payload as VacancyPromotedPayload;
 
-  // Look up the created job to find company and URL (IDOR: userId in where)
-  let job;
-  try {
-    job = await db.job.findFirst({
-      where: { id: payload.jobId, userId: payload.userId },
-      select: {
-        companyId: true,
-        jobUrl: true,
-        Company: { select: { id: true, label: true } },
-      },
-    });
-  } catch {
-    // DB read failure — cannot enrich without job data
-    return;
-  }
-
-  if (!job) return;
-
-  // --- Logo enrichment (if company has a domain) ---
-  if (job.Company) {
-    const domain = extractDomain(job.Company.label);
-    if (domain) {
-      // Skip if a fresh logo result already exists
-      const existingLogo = await db.enrichmentResult.findFirst({
-        where: { userId: payload.userId, dimension: "logo", domainKey: domain },
-        select: { status: true, expiresAt: true },
+  // Sprint 3 M-A-06: the job lookup + the two `enrichmentResult.findFirst`
+  // pre-flight cache checks used to run with `await` BEFORE the
+  // fire-and-forget enrichment call, blocking every publisher of
+  // VacancyPromoted on 3 DB round-trips. Moved entirely inside the
+  // fire-and-forget closure so this handler returns synchronously. The
+  // orchestrator's internal cache-before-chain lookup (see
+  // `orchestrator.ts:execute`) still guarantees dedup.
+  void (async () => {
+    // Look up the created job to find company and URL (IDOR: userId in where)
+    let job;
+    try {
+      job = await db.job.findFirst({
+        where: { id: payload.jobId, userId: payload.userId },
+        select: {
+          companyId: true,
+          jobUrl: true,
+          Company: { select: { id: true, label: true } },
+        },
       });
-      const logoChain = getChainForDimension("logo");
-      if (logoChain && !(existingLogo && existingLogo.status === "found" && existingLogo.expiresAt && existingLogo.expiresAt > new Date())) {
+    } catch {
+      // DB read failure — cannot enrich without job data
+      return;
+    }
+
+    if (!job) return;
+
+    // --- Logo enrichment (if company has a domain) ---
+    if (job.Company) {
+      const domain = extractDomain(job.Company.label);
+      if (domain) {
+        const logoChain = getChainForDimension("logo");
+        if (logoChain) {
+          console.debug(
+            `[EnrichmentTrigger] VacancyPromoted → logo enrichment for domain "${domain}"`,
+          );
+
+          // Fire-and-forget — orchestrator handles the cache-before-chain.
+          withEnrichmentLimit(() =>
+            enrichmentOrchestrator
+              .execute(
+                payload.userId,
+                {
+                  dimension: "logo",
+                  companyDomain: domain,
+                  companyName: job!.Company!.label,
+                },
+                logoChain,
+              )
+              .then(async (output) => {
+                if (output && output.status === "found" && job!.Company) {
+                  try {
+                    // Link result to company
+                    await db.enrichmentResult.updateMany({
+                      where: {
+                        userId: payload.userId,
+                        dimension: "logo",
+                        domainKey: domain,
+                        companyId: null,
+                      },
+                      data: { companyId: job!.Company.id },
+                    });
+
+                    // Logo writeback via shared helper
+                    await applyLogoWriteback(db, payload.userId, job!.Company.id, output);
+                  } catch {
+                    // Best-effort
+                  }
+                }
+              }),
+          ).catch(() => {});
+        }
+      }
+    }
+
+    // --- Deep link enrichment (if job has a URL) ---
+    if (job.jobUrl) {
+      const deepLinkChain = getChainForDimension("deep_link");
+      if (deepLinkChain) {
         console.debug(
-          `[EnrichmentTrigger] VacancyPromoted → logo enrichment for domain "${domain}"`,
+          `[EnrichmentTrigger] VacancyPromoted → deep_link enrichment for "${job.jobUrl}"`,
         );
 
-        // Fire-and-forget
+        // Fire-and-forget — orchestrator handles the cache-before-chain.
         withEnrichmentLimit(() =>
-          enrichmentOrchestrator
-            .execute(payload.userId, {
-              dimension: "logo",
-              companyDomain: domain,
-              companyName: job.Company.label,
-            }, logoChain)
-            .then(async (output) => {
-              if (output && output.status === "found" && job!.Company) {
-                try {
-                  // Link result to company
-                  await db.enrichmentResult.updateMany({
-                    where: {
-                      userId: payload.userId,
-                      dimension: "logo",
-                      domainKey: domain,
-                      companyId: null,
-                    },
-                    data: { companyId: job!.Company.id },
-                  });
-
-                  // Logo writeback via shared helper
-                  await applyLogoWriteback(db, payload.userId, job!.Company.id, output);
-                } catch {
-                  // Best-effort
-                }
-              }
-            }),
+          enrichmentOrchestrator.execute(
+            payload.userId,
+            {
+              dimension: "deep_link",
+              url: job!.jobUrl ?? undefined,
+            },
+            deepLinkChain,
+          ),
         ).catch(() => {});
       }
     }
-  }
-
-  // --- Deep link enrichment (if job has a URL) ---
-  if (job.jobUrl) {
-    // Skip if a fresh deep_link result already exists
-    const existingDeepLink = await db.enrichmentResult.findFirst({
-      where: { userId: payload.userId, dimension: "deep_link", domainKey: job.jobUrl },
-      select: { status: true, expiresAt: true },
-    });
-    const deepLinkChain = getChainForDimension("deep_link");
-    if (deepLinkChain && !(existingDeepLink && existingDeepLink.status === "found" && existingDeepLink.expiresAt && existingDeepLink.expiresAt > new Date())) {
-      console.debug(
-        `[EnrichmentTrigger] VacancyPromoted → deep_link enrichment for "${job.jobUrl}"`,
-      );
-
-      // Fire-and-forget
-      withEnrichmentLimit(() =>
-        enrichmentOrchestrator
-          .execute(payload.userId, {
-            dimension: "deep_link",
-            url: job.jobUrl ?? undefined,
-          }, deepLinkChain),
-      ).catch(() => {});
-    }
-  }
+  })();
 }
 
 // ---------------------------------------------------------------------------

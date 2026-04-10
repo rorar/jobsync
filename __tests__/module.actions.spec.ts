@@ -295,26 +295,35 @@ describe("module.actions", () => {
 
       expect(emitEvent).toHaveBeenCalledTimes(2);
 
+      // Sprint 3 M-A-02: ModuleDeactivatedPayload now carries the manifest's
+      // human-readable display name (`moduleName`) so consumers can render
+      // titleParams.moduleName without a registry round-trip. We use
+      // `expect.objectContaining` on the payload because the test factory
+      // `makeRegisteredModule` defaults `name = "Test Module"` and we don't
+      // want every assertion below to enumerate every payload field.
+
       // user-1 gets both of their automations in a single event
       expect(emitEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "ModuleDeactivated",
-          payload: {
+          payload: expect.objectContaining({
             moduleId,
+            moduleName: "Test Module",
             userId: "user-1",
             affectedAutomationIds: ["auto-1", "auto-2"],
-          },
+          }),
         }),
       );
       // user-2 gets their own event
       expect(emitEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "ModuleDeactivated",
-          payload: {
+          payload: expect.objectContaining({
             moduleId,
+            moduleName: "Test Module",
             userId: "user-2",
             affectedAutomationIds: ["auto-3"],
-          },
+          }),
         }),
       );
     });
@@ -413,24 +422,29 @@ describe("module.actions", () => {
         select: { id: true, userId: true },
       });
       expect(emitEvent).toHaveBeenCalledTimes(2);
+      // Sprint 3 M-A-02: ModuleReactivatedPayload now carries the manifest's
+      // human-readable display name (`moduleName`) — see ModuleDeactivated
+      // assertions above for the same pattern.
       expect(emitEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "ModuleReactivated",
-          payload: {
+          payload: expect.objectContaining({
             moduleId,
+            moduleName: "Test Module",
             userId: "user-1",
             pausedAutomationCount: 2,
-          },
+          }),
         }),
       );
       expect(emitEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "ModuleReactivated",
-          payload: {
+          payload: expect.objectContaining({
             moduleId,
+            moduleName: "Test Module",
             userId: "user-2",
             pausedAutomationCount: 1,
-          },
+          }),
         }),
       );
     });

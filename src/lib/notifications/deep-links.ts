@@ -371,6 +371,14 @@ export function formatNotificationReason(
  *  2. Top-level `actorId` column → legacy `data.actorId` fallback.
  *  3. Generic fallback key per `actorType` (top-level column → legacy fallback).
  *  4. Empty string (the UI should hide the slot).
+ *
+ * EXHAUSTIVENESS (Sprint 3 M-A-01 + M-A-08): the switch below covers every
+ * member of `NotificationActorType` — `system`, `module`, `automation`,
+ * `user`, `enrichment`. The `default` branch uses a `never` assertion so
+ * any future addition to the actor-type union will fail at compile time,
+ * preventing silent fall-through (the original bug: `"module"` and
+ * `"enrichment"` actors rendered as the raw `actorId` slug because the
+ * switch had no matching case and fell into the empty-string default).
  */
 export function formatNotificationActor(
   source: NotificationFormatSource | NotificationDataExtended | null | undefined,
@@ -384,18 +392,33 @@ export function formatNotificationActor(
   }
   const actorId = resolveStringField(normalized, normalized.actorId, "actorId");
   if (actorId) return actorId;
-  const actorType =
-    resolveStringField(normalized, normalized.actorType ?? null, "actorType") ??
-    undefined;
-  switch (actorType) {
+  const actorType = resolveStringField(
+    normalized,
+    normalized.actorType ?? null,
+    "actorType",
+  );
+  if (!actorType) return "";
+  // Narrow the loosely-typed string (resolveStringField returns `string | undefined`)
+  // to the authoritative union so the `never` guard below actually fires on drift.
+  const narrowed = actorType as NonNullable<NotificationFormatSource["actorType"]>;
+  switch (narrowed) {
     case "system":
       return t("notifications.actor.system");
+    case "module":
+      return t("notifications.actor.module");
     case "automation":
       return t("notifications.actor.automation");
     case "user":
       return t("notifications.actor.user");
-    default:
+    case "enrichment":
+      return t("notifications.actor.enrichment");
+    default: {
+      // Compile-time exhaustiveness guard — future additions to
+      // `NotificationActorType` force a matching case here.
+      const _exhaustive: never = narrowed;
+      void _exhaustive;
       return "";
+    }
   }
 }
 
