@@ -70,7 +70,56 @@ describe("UndoStore", () => {
       const result = await undoStore.undoById(entry.id);
       expect(result.success).toBe(false);
       expect(result.message).toContain("DB write failed");
-      // Token should be removed even on error
+      // Token should be removed even on error (M-S-06: removed BEFORE compensate)
+      expect(undoStore.get(entry.id)).toBeUndefined();
+    });
+
+    // M-S-06: Atomic ownership check — prevents TOCTOU
+    it("rejects undoById when userId does not match token owner (M-S-06)", async () => {
+      const entry = createUndoEntry("user-1", "test", ["item-1"], async () => {});
+      undoStore.push(entry);
+
+      const result = await undoStore.undoById(entry.id, "user-2");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("Not authorized");
+      // Token must NOT be consumed — still available for user-1
+      expect(undoStore.get(entry.id)).toBeDefined();
+    });
+
+    it("succeeds when userId matches token owner (M-S-06)", async () => {
+      let compensated = false;
+      const entry = createUndoEntry("user-1", "test", ["item-1"], async () => {
+        compensated = true;
+      });
+      undoStore.push(entry);
+
+      const result = await undoStore.undoById(entry.id, "user-1");
+
+      expect(result.success).toBe(true);
+      expect(compensated).toBe(true);
+      expect(undoStore.get(entry.id)).toBeUndefined();
+    });
+
+    // M-S-06: Token is removed BEFORE compensate() runs — concurrent
+    // calls for the same token will find nothing in the Map.
+    it("removes token from Map before running compensate so concurrent calls cannot double-execute (M-S-06)", async () => {
+      let callCount = 0;
+      const entry = createUndoEntry("user-1", "test", ["item-1"], async () => {
+        callCount++;
+      });
+      undoStore.push(entry);
+
+      // Simulate two concurrent calls for the same token
+      const [r1, r2] = await Promise.all([
+        undoStore.undoById(entry.id),
+        undoStore.undoById(entry.id),
+      ]);
+
+      // Exactly one should succeed; the other finds the token already gone
+      const successes = [r1, r2].filter((r) => r.success).length;
+      expect(successes).toBe(1);
+      expect(callCount).toBe(1);
       expect(undoStore.get(entry.id)).toBeUndefined();
     });
   });

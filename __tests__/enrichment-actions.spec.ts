@@ -70,6 +70,28 @@ describe("Enrichment Actions", () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
   });
 
+  // M-T-02: Clear globalThis.__enrichmentInflight after every test to
+  // prevent state leaking across tests. Any test that writes to the inflight
+  // map (e.g. the concurrency test) would otherwise corrupt subsequent tests
+  // that run in the same Jest worker process.
+  //
+  // CRITICAL: we `.clear()` the map, NOT `delete` the global. The production
+  // code at `src/actions/enrichment.actions.ts:31-33` caches a module-level
+  // REFERENCE to `gInflight.__enrichmentInflight` at import time:
+  //     const inflightMap = gInflight.__enrichmentInflight;
+  // If we delete the global, the production code's `inflightMap` reference
+  // still points at the now-orphaned Map. A test that re-creates the global
+  // (via `??= new Map()`) would create a NEW Map that the production code
+  // never sees — the concurrency check reads from the stale reference.
+  // Clearing the existing Map preserves the reference chain and achieves
+  // the cleanup goal. Per javascript-testing-patterns Best Practice 15
+  // "clean up after tests" — but the cleanup must not break the
+  // module-level contract the production code depends on.
+  afterEach(() => {
+    const g = globalThis as unknown as { __enrichmentInflight?: Map<string, number> };
+    g.__enrichmentInflight?.clear();
+  });
+
   // =========================================================================
   // triggerEnrichment
   // =========================================================================
@@ -181,7 +203,9 @@ describe("Enrichment Actions", () => {
     });
 
     it("returns concurrency error when max concurrent reached", async () => {
-      // Fill the inflight map to max capacity for user-1
+      // Fill the inflight map to max capacity for user-1.
+      // afterEach will clean up globalThis.__enrichmentInflight automatically
+      // (M-T-02 fix) — no manual delete needed here.
       const gInflight = globalThis as unknown as { __enrichmentInflight?: Map<string, number> };
       gInflight.__enrichmentInflight ??= new Map<string, number>();
       gInflight.__enrichmentInflight.set("user-1", ENRICHMENT_CONFIG.MAX_CONCURRENT_PER_USER);
@@ -192,9 +216,6 @@ describe("Enrichment Actions", () => {
       expect(result.message).toBe("enrichment.tooManyConcurrent");
       // Orchestrator should NOT have been called
       expect(mockOrchestrator.execute).not.toHaveBeenCalled();
-
-      // Clean up: remove inflight entry
-      gInflight.__enrichmentInflight.delete("user-1");
     });
   });
 

@@ -411,12 +411,11 @@ class LogoAssetService {
           throw new Error(`SSRF blocked redirect: ${redirectCheck.error}`);
         }
 
-        // Consume the body to free resources
-        try {
-          await response.body?.cancel();
-        } catch {
-          // Ignore cancel errors
-        }
+        // M-S-05: Cancel (await) the redirect response body to free the
+        // underlying connection before following the next hop.
+        // response.body?.cancel() returns a Promise — must be awaited.
+        // Errors are swallowed via catch: cancel is best-effort.
+        await response.body?.cancel().catch(() => {});
 
         currentUrl = resolvedLocation;
         continue;

@@ -266,5 +266,71 @@ describe("Email Templates", () => {
       expect(result.text).toContain("Interview");
       expect(result.text).not.toContain("{newStatusValue}");
     });
+
+    // M-S-07: Object fields MUST NOT produce "[object Object]" in email body
+    it("does NOT stringify nested objects into [object Object] (M-S-07)", () => {
+      mockTranslate.mockImplementation((locale: string, key: string) => {
+        if (key === "notifications.moduleDeactivated") {
+          return "Module deactivated. {affectedAutomationIds}";
+        }
+        return `[${locale}]${key}`;
+      });
+
+      const result = renderEmailTemplate(
+        "module_deactivated",
+        {
+          // affectedAutomationIds is an array — not on allowlist AND is an object
+          affectedAutomationIds: ["id-1", "id-2"],
+          // Nested object — never on allowlist
+          internalMeta: { debug: true, env: "prod" },
+        },
+        "en",
+      );
+
+      expect(result.text).not.toContain("[object Object]");
+      // The placeholder is left intact (not replaced with garbage)
+      expect(result.text).toContain("{affectedAutomationIds}");
+    });
+
+    // M-S-07: Unknown string fields (not on allowlist) are silently skipped
+    it("silently skips unknown field names not on the allowlist (M-S-07)", () => {
+      mockTranslate.mockImplementation((locale: string, key: string) => {
+        if (key === "notifications.authFailure") {
+          return "Auth failed: {unknownInternalField}";
+        }
+        return `[${locale}]${key}`;
+      });
+
+      const result = renderEmailTemplate(
+        "auth_failure",
+        { unknownInternalField: "sensitive-value" },
+        "en",
+      );
+
+      // The unknown field is NOT substituted
+      expect(result.text).not.toContain("sensitive-value");
+      // The placeholder literal remains intact
+      expect(result.text).toContain("{unknownInternalField}");
+    });
+
+    // M-S-07: null/undefined values produce empty string (not "null"/"undefined")
+    it("treats null and undefined values as empty string (M-S-07)", () => {
+      mockTranslate.mockImplementation((locale: string, key: string) => {
+        if (key === "notifications.moduleDeactivated") {
+          return "Module {moduleId} deactivated.";
+        }
+        return `[${locale}]${key}`;
+      });
+
+      const result = renderEmailTemplate(
+        "module_deactivated",
+        { moduleId: null as unknown as string },
+        "en",
+      );
+
+      // null value → empty string → placeholder left intact
+      expect(result.text).not.toContain("null");
+      expect(result.text).toContain("{moduleId}");
+    });
   });
 });

@@ -194,6 +194,33 @@ export async function handleAuthFailure(
 /**
  * When an automation's recent runs have all failed, pause it.
  * Called after each automation run completes.
+ *
+ * M-S-02 AUDIT — Security invariant (confirmed-safe, NOT a cross-user leak):
+ * -------------------------------------------------------------------------
+ * This function queries AutomationRun and Automation by `automationId` only,
+ * without an additional `userId` scope parameter. This is INTENTIONAL and
+ * correct per the following analysis:
+ *
+ * 1. Caller: the RunCoordinator (system-internal), which passes a validated
+ *    automationId from its own mutex/lock map — never a user-supplied value.
+ * 2. Scope: per-automation (one user's automation), NOT per-module. Each
+ *    Automation record belongs to exactly one User (Automation.userId).
+ *    The function reads that userId from the DB record (line below) and uses
+ *    it ONLY to scope the resulting notification and event to the owner.
+ *    It never touches another user's automations.
+ * 3. Contrast with handleAuthFailure / handleCircuitBreakerTrip: those
+ *    intentionally operate cross-user (module-level failures affect ALL users
+ *    running that module). ConsecutiveRunFailureEscalation is per-automation
+ *    by spec design (different automations may hit different code paths in
+ *    the same module — see specs/module-lifecycle.allium guidance on rule
+ *    ConsecutiveRunFailureEscalation).
+ * 4. No admin gate needed: this is a runtime signal (system-initiated),
+ *    not a user-initiated toggle. See BUGS.md Sprint 1.5 "runtime-signal
+ *    carve-out" and CLAUDE.md § Cross-User Degradation.
+ *
+ * Conclusion: leave as-is. Adding userId scope here would require the caller
+ * to know the userId before calling, which is a worse design (the caller is
+ * the scheduler, not an action handler that already has a session user).
  */
 export async function checkConsecutiveRunFailures(
   automationId: string,

@@ -13,6 +13,7 @@ const prisma = new PrismaClient();
 jest.mock("@prisma/client", () => {
   const mPrismaClient = {
     notification: {
+      findFirst: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
       create: jest.fn(),
@@ -163,6 +164,8 @@ describe("Notification Actions", () => {
   describe("markAsRead", () => {
     it("should mark a single notification as read", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      // M-S-01: findFirst pre-flight ownership check
+      (prisma.notification.findFirst as jest.Mock).mockResolvedValue({ id: "notif-1" });
       (prisma.notification.update as jest.Mock).mockResolvedValue({
         ...mockNotification,
         read: true,
@@ -171,6 +174,10 @@ describe("Notification Actions", () => {
       const result = await markAsRead("notif-1");
 
       expect(result).toEqual({ success: true });
+      expect(prisma.notification.findFirst).toHaveBeenCalledWith({
+        where: { id: "notif-1", userId: mockUser.id },
+        select: { id: true },
+      });
       expect(prisma.notification.update).toHaveBeenCalledWith({
         where: { id: "notif-1", userId: mockUser.id },
         data: { read: true },
@@ -183,11 +190,30 @@ describe("Notification Actions", () => {
       const result = await markAsRead("notif-1");
 
       expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(prisma.notification.findFirst).not.toHaveBeenCalled();
+      expect(prisma.notification.update).not.toHaveBeenCalled();
+    });
+
+    // M-S-01: non-owned id returns {success:false} not {success:true, data:[]}
+    it("should return NOT_FOUND when notification belongs to another user (M-S-01)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      // findFirst returns null — notification not owned by this user
+      (prisma.notification.findFirst as jest.Mock).mockResolvedValue(null);
+
+      const result = await markAsRead("notif-other-user");
+
+      expect(result).toEqual({
+        success: false,
+        message: "errors.notFound",
+        errorCode: "NOT_FOUND",
+      });
+      // Must NOT attempt the update when pre-flight fails
       expect(prisma.notification.update).not.toHaveBeenCalled();
     });
 
     it("should handle database errors (e.g. notification not found)", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.notification.findFirst as jest.Mock).mockResolvedValue({ id: "non-existent-id" });
       (prisma.notification.update as jest.Mock).mockRejectedValue(
         new Error("Record to update not found."),
       );
@@ -258,6 +284,8 @@ describe("Notification Actions", () => {
   describe("dismissNotification", () => {
     it("should delete the notification", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      // M-S-01: findFirst pre-flight ownership check
+      (prisma.notification.findFirst as jest.Mock).mockResolvedValue({ id: "notif-1" });
       (prisma.notification.delete as jest.Mock).mockResolvedValue(
         mockNotification,
       );
@@ -265,6 +293,10 @@ describe("Notification Actions", () => {
       const result = await dismissNotification("notif-1");
 
       expect(result).toEqual({ success: true });
+      expect(prisma.notification.findFirst).toHaveBeenCalledWith({
+        where: { id: "notif-1", userId: mockUser.id },
+        select: { id: true },
+      });
       expect(prisma.notification.delete).toHaveBeenCalledWith({
         where: { id: "notif-1", userId: mockUser.id },
       });
@@ -276,11 +308,30 @@ describe("Notification Actions", () => {
       const result = await dismissNotification("notif-1");
 
       expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(prisma.notification.findFirst).not.toHaveBeenCalled();
+      expect(prisma.notification.delete).not.toHaveBeenCalled();
+    });
+
+    // M-S-01: non-owned id returns {success:false} not {success:true}
+    it("should return NOT_FOUND when notification belongs to another user (M-S-01)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      // findFirst returns null — notification not owned by this user
+      (prisma.notification.findFirst as jest.Mock).mockResolvedValue(null);
+
+      const result = await dismissNotification("notif-other-user");
+
+      expect(result).toEqual({
+        success: false,
+        message: "errors.notFound",
+        errorCode: "NOT_FOUND",
+      });
+      // Must NOT attempt the delete when pre-flight fails
       expect(prisma.notification.delete).not.toHaveBeenCalled();
     });
 
     it("should handle database errors (e.g. notification not found)", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.notification.findFirst as jest.Mock).mockResolvedValue({ id: "non-existent-id" });
       (prisma.notification.delete as jest.Mock).mockRejectedValue(
         new Error("Record to delete does not exist."),
       );

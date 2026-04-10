@@ -24,6 +24,8 @@ describe("checkLogoUrl", () => {
     jest.clearAllMocks();
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
     (validateWebhookUrl as jest.Mock).mockReturnValue({ valid: true });
+    // M-S-04: checkRateLimit is now called twice (global cap then per-user cap).
+    // Default: both allowed.
     (checkRateLimit as jest.Mock).mockReturnValue({ allowed: true });
     global.fetch = jest.fn();
   });
@@ -138,7 +140,9 @@ describe("checkLogoUrl", () => {
   it("resolves Wikipedia media URLs via Wikimedia API", async () => {
     const wikimediaDirectUrl = "https://upload.wikimedia.org/wikipedia/commons/a/a1/Niederegger_Logo.svg";
 
+    // M-S-08: mock must include ok:true so the response.ok guard passes
     (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
       json: jest.fn().mockResolvedValue({
         query: {
           pages: {
@@ -159,12 +163,80 @@ describe("checkLogoUrl", () => {
     expect(result.resolvedUrl).toBe(wikimediaDirectUrl);
   });
 
-  it("respects rate limiting", async () => {
-    (checkRateLimit as jest.Mock).mockReturnValue({ allowed: false });
+  // M-S-08: Wikimedia API non-2xx → return null (don't parse JSON)
+  it("returns isImage:false when Wikimedia API returns non-2xx (M-S-08)", async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      // json should NOT be called
+      json: jest.fn().mockRejectedValue(new Error("should not parse")),
+    });
+
+    const result = await checkLogoUrl(
+      "https://de.wikipedia.org/wiki/Niederegger#/media/Datei:Niederegger_Logo.svg",
+    );
+
+    // Falls through to HEAD check after Wikimedia returns null
+    // HEAD fetch also needs to be set up; simplest: network error
+    expect(result.isImage).toBe(false);
+  });
+
+  // M-S-08: resolved URL not on wikimedia.org domain → rejected
+  it("rejects Wikimedia-resolved URL on non-Wikimedia domain (M-S-08)", async () => {
+    const maliciousUrl = "https://attacker.example.com/evil.svg";
+
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: jest.fn().mockResolvedValue({
+        query: {
+          pages: {
+            "999": {
+              imageinfo: [{ url: maliciousUrl }],
+            },
+          },
+        },
+      }),
+    });
+
+    const result = await checkLogoUrl(
+      "https://de.wikipedia.org/wiki/Niederegger#/media/Datei:Niederegger_Logo.svg",
+    );
+
+    // resolveWikimediaUrl returns null for non-.wikimedia.org URL;
+    // falls through to HEAD check which also fails (no second mock)
+    expect(result.isImage).toBe(false);
+    // Should NOT have called validateWebhookUrl with the malicious URL
+    // (domain check happens before ssrfCheck)
+    const ssrfCalls = (validateWebhookUrl as jest.Mock).mock.calls;
+    const calledWithMalicious = ssrfCalls.some(
+      ([url]: [string]) => url === maliciousUrl,
+    );
+    expect(calledWithMalicious).toBe(false);
+  });
+
+  it("respects rate limiting — global cap blocks before per-user (M-S-04)", async () => {
+    // First call to checkRateLimit (global cap) is blocked
+    (checkRateLimit as jest.Mock).mockReturnValueOnce({ allowed: false });
 
     const result = await checkLogoUrl("https://example.com/logo.png");
 
     expect(result.isImage).toBe(false);
     expect(global.fetch).not.toHaveBeenCalled();
+    // checkRateLimit called once (global), not twice
+    expect(checkRateLimit).toHaveBeenCalledTimes(1);
+    expect((checkRateLimit as jest.Mock).mock.calls[0][0]).toBe("logoCheck:global");
+  });
+
+  it("respects rate limiting — per-user cap blocks after global passes (M-S-04)", async () => {
+    // Global cap passes, per-user cap blocks
+    (checkRateLimit as jest.Mock)
+      .mockReturnValueOnce({ allowed: true })  // global
+      .mockReturnValueOnce({ allowed: false }); // per-user
+
+    const result = await checkLogoUrl("https://example.com/logo.png");
+
+    expect(result.isImage).toBe(false);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(checkRateLimit).toHaveBeenCalledTimes(2);
   });
 });

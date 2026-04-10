@@ -175,6 +175,63 @@ const PLACEHOLDER_MAP: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// M-S-07: Safe field allowlist
+//
+// Only these data field names are eligible for placeholder substitution.
+// Any field NOT in this set is silently ignored — it will never appear in
+// the rendered email body. This prevents:
+//   1. Stringification of nested objects into "[object Object]"
+//   2. Accidental inclusion of internal fields (automationIds array, userId)
+//      that were never intended for user-visible output
+//
+// When adding a new NotificationType whose template uses a new placeholder,
+// add the corresponding data field name here AND in PLACEHOLDER_MAP if it
+// needs an alias.
+// ---------------------------------------------------------------------------
+
+const ALLOWED_DATA_FIELDS = new Set<string>([
+  // Module-related
+  "moduleId",
+  "moduleName",
+  // Automation-related
+  "automationId",
+  "automationName",
+  "affectedAutomationCount",
+  "pausedAutomationCount",
+  "failureCount",
+  // Job/vacancy-related
+  "jobId",
+  "jobTitle",
+  "vacancyTitle",
+  "employerName",
+  "count",
+  "purgedCount",
+  // Status-related
+  "status",
+  "newStatusValue",
+  "reason",
+  // Batch
+  "batchSize",
+]);
+
+// ---------------------------------------------------------------------------
+// Safe value extractor — M-S-07
+//
+// Converts a data field value to a string suitable for email body substitution.
+// Only primitive types (string, number, boolean) are rendered. Objects, arrays,
+// null, undefined, and symbol values all produce an empty string — never
+// "[object Object]" or a JSON dump.
+// ---------------------------------------------------------------------------
+
+function safeStringValue(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string") return v.slice(0, 500); // hard length cap
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  // Arrays, objects, functions, symbols — never stringify into email body.
+  return "";
+}
+
+// ---------------------------------------------------------------------------
 // Message Builder — reuses notification i18n keys with data interpolation
 // ---------------------------------------------------------------------------
 
@@ -201,13 +258,22 @@ function buildNotificationMessage(
   const key = messageKeyMap[type];
   let message = t(locale, key);
 
-  // Replace placeholders: for each data entry, replace both the direct field name
-  // (e.g., {moduleId}) and the aliased template name (e.g., {name}) if mapped.
+  // M-S-07: Replace placeholders using the allowlisted fields only.
+  // Unknown fields are silently skipped (empty string substitution would leave
+  // the {placeholder} literal in the template, which is preferable to leaking
+  // internal data or rendering "[object Object]").
   for (const [k, v] of Object.entries(data)) {
-    const value = String(v ?? "");
-    message = message.replace(`{${k}}`, value);
+    // Skip fields that are not on the allowlist (arrays, objects, internal ids, etc.)
+    if (!ALLOWED_DATA_FIELDS.has(k)) continue;
+
+    const value = safeStringValue(v);
+    // Only substitute if we have a non-empty value; leave literal placeholder
+    // intact for empty values so template authors can debug missing fields.
+    if (value !== "") {
+      message = message.replace(`{${k}}`, value);
+    }
     const alias = PLACEHOLDER_MAP[k];
-    if (alias) {
+    if (alias && value !== "") {
       message = message.replace(`{${alias}}`, value);
     }
   }

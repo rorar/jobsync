@@ -64,6 +64,12 @@ export async function getUnreadCount(): Promise<ActionResult<number>> {
 
 /**
  * Mark a single notification as read.
+ *
+ * M-S-01: Explicit pre-flight ownership check returns {success:false} on
+ * zero-match queries (non-owned or non-existent id) rather than relying
+ * solely on Prisma P2025 being the only signal. This surfaces the correct
+ * contract to callers that destructure `success` without inspecting the
+ * error code.
  */
 export async function markAsRead(
   notificationId: string,
@@ -71,6 +77,18 @@ export async function markAsRead(
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
+
+    // Pre-flight ownership check (ADR-015): verify the notification exists
+    // and belongs to this user before attempting the update. Returns a
+    // consistent {success:false} for both "not found" and "wrong owner"
+    // so callers cannot distinguish the two cases (prevents enumeration).
+    const owned = await prisma.notification.findFirst({
+      where: { id: notificationId, userId: user.id },
+      select: { id: true },
+    });
+    if (!owned) {
+      return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
+    }
 
     await prisma.notification.update({
       where: { id: notificationId, userId: user.id },
@@ -104,6 +122,9 @@ export async function markAllAsRead(): Promise<ActionResult> {
 
 /**
  * Dismiss (delete) a single notification.
+ *
+ * M-S-01: Same explicit ownership pre-flight as markAsRead — returns
+ * {success:false} on zero-match instead of relying solely on P2025.
  */
 export async function dismissNotification(
   notificationId: string,
@@ -111,6 +132,15 @@ export async function dismissNotification(
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "Not authenticated" };
+
+    // Pre-flight ownership check (ADR-015): same pattern as markAsRead.
+    const owned = await prisma.notification.findFirst({
+      where: { id: notificationId, userId: user.id },
+      select: { id: true },
+    });
+    if (!owned) {
+      return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
+    }
 
     await prisma.notification.delete({
       where: { id: notificationId, userId: user.id },

@@ -4,6 +4,13 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { validateWebhookUrl } from "@/lib/url-validation";
 import { checkRateLimit } from "@/lib/api/rate-limit";
 
+// M-S-04: Global cap (all callers combined) to bound total outbound HEAD
+// requests regardless of how many authenticated users fire concurrently.
+// 200/min global is ~3× the per-user limit (20/min × reasonable concurrency)
+// while still bounding the server's outbound request rate.
+const GLOBAL_LOGO_CHECK_LIMIT = 200;
+const GLOBAL_LOGO_CHECK_WINDOW_MS = 60_000;
+
 const IMAGE_CONTENT_TYPES = [
   "image/png",
   "image/jpeg",
@@ -31,6 +38,11 @@ const WIKIPEDIA_MEDIA_PATTERN =
 /**
  * Resolve a Wikipedia media page URL to a direct Wikimedia Commons image URL.
  * Uses the public Wikimedia API (no auth needed).
+ *
+ * M-S-08 fixes applied:
+ * 1. response.ok guard — non-2xx responses are rejected before JSON parse.
+ * 2. Wikimedia domain validation — resolved URL must end with .wikimedia.org
+ *    to prevent the API from returning an attacker-controlled redirect target.
  */
 async function resolveWikimediaUrl(url: string): Promise<string | null> {
   const match = url.match(WIKIPEDIA_MEDIA_PATTERN);
@@ -49,6 +61,10 @@ async function resolveWikimediaUrl(url: string): Promise<string | null> {
     const response = await fetch(apiUrl.toString(), {
       signal: AbortSignal.timeout(5000),
     });
+
+    // M-S-08 fix 1: reject non-2xx before attempting JSON parse
+    if (!response.ok) return null;
+
     const data = await response.json();
 
     const pages = data?.query?.pages;
@@ -60,6 +76,18 @@ async function resolveWikimediaUrl(url: string): Promise<string | null> {
     const resolvedUrl = page?.imageinfo?.[0]?.url ?? null;
 
     if (resolvedUrl) {
+      // M-S-08 fix 2: validate the resolved URL is on a Wikimedia-owned domain
+      // before passing it downstream. This prevents the API from returning an
+      // attacker-controlled URL (e.g. via a future API compromise or redirect).
+      try {
+        const parsed = new URL(resolvedUrl);
+        if (!parsed.hostname.endsWith(".wikimedia.org")) {
+          return null;
+        }
+      } catch {
+        return null;
+      }
+
       const ssrfCheck = validateWebhookUrl(resolvedUrl);
       if (!ssrfCheck.valid) return null;
     }
@@ -85,6 +113,18 @@ export async function checkLogoUrl(
   const user = await getCurrentUser();
   if (!user) return { isImage: false, contentType: null };
 
+  // M-S-04: Global cap checked BEFORE per-user cap. An authenticated attacker
+  // who creates many sessions could still exhaust outbound request capacity
+  // with only per-user limits. The global cap bounds total server-side
+  // outbound HEAD/fetch requests regardless of how many users fire at once.
+  const globalResult = checkRateLimit(
+    "logoCheck:global",
+    GLOBAL_LOGO_CHECK_LIMIT,
+    GLOBAL_LOGO_CHECK_WINDOW_MS,
+  );
+  if (!globalResult.allowed) return { isImage: false, contentType: null };
+
+  // Per-user cap: 20/min — unchanged.
   const rateResult = checkRateLimit(`logoCheck:${user.id}`, 20, 60_000);
   if (!rateResult.allowed) return { isImage: false, contentType: null };
 

@@ -44,11 +44,29 @@ class UndoStore {
   /**
    * Execute undo for a specific token ID.
    * Returns success/failure. Token is removed after execution.
+   *
+   * M-S-06 — Atomic claim pattern:
+   * The optional `userId` parameter is checked INSIDE this method, not in a
+   * separate pre-flight call. This collapses the read→check→remove sequence
+   * into a single critical section, eliminating the TOCTOU window where two
+   * concurrent requests could both pass a separate ownership check and then
+   * both attempt to execute the same compensate() callback.
+   *
+   * Callers MUST pass `userId` when the token came from a user-initiated
+   * request (e.g. undoAction server action). The system-initiated path
+   * (undoLast with userId filtering) already owns its atomicity via the
+   * stack pop.
    */
-  async undoById(tokenId: string): Promise<UndoResult> {
+  async undoById(tokenId: string, userId?: string): Promise<UndoResult> {
     const entry = this.tokens.get(tokenId);
     if (!entry) {
       return { success: false, message: "Undo token not found or expired" };
+    }
+
+    // M-S-06: ownership check inside the same Map lookup — no separate
+    // undoStore.get() call in the caller, preventing TOCTOU.
+    if (userId !== undefined && entry.userId !== userId) {
+      return { success: false, message: "Not authorized" };
     }
 
     if (new Date() > entry.expiresAt) {
@@ -56,12 +74,16 @@ class UndoStore {
       return { success: false, message: "Undo window has expired" };
     }
 
+    // Remove before compensate() so that any concurrent call for the same
+    // token will find nothing in the Map and short-circuit. The compensation
+    // is thus idempotent from the store's perspective even if two requests
+    // race past the Map lookup check at the exact same tick.
+    this.remove(tokenId);
+
     try {
       await entry.compensate();
-      this.remove(tokenId);
       return { success: true };
     } catch (error) {
-      this.remove(tokenId);
       return {
         success: false,
         message: error instanceof Error ? error.message : "Undo failed",

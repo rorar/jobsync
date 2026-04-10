@@ -245,6 +245,9 @@ export function createMetaParserModule(): DataEnrichmentConnector {
 
               // Validate redirect target against SSRF rules
               if (!isValidExternalUrl(resolvedUrl)) {
+                // M-S-05: Cancel body before returning to avoid leaking the
+                // connection. Errors are swallowed — cancel is best-effort.
+                await response.body?.cancel().catch(() => {});
                 return {
                   dimension: "deep_link" as const,
                   status: "error" as const,
@@ -254,6 +257,11 @@ export function createMetaParserModule(): DataEnrichmentConnector {
                 };
               }
 
+              // M-S-05: Cancel the redirect response body before following
+              // the next hop so the underlying TCP connection is released.
+              // Without this, each redirect hop leaks an unconsumed body
+              // reader, holding the connection open until GC.
+              await response.body?.cancel().catch(() => {});
               currentUrl = resolvedUrl;
               continue;
             }

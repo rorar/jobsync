@@ -59,6 +59,11 @@ export async function GET(
     });
 
     if (!asset) {
+      // M-S-03: Uniform 404 for both "not owned" and "not found" cases.
+      // Do NOT distinguish them in the HTTP response — that would be an
+      // ownership enumeration oracle (attacker learns whether the ID is
+      // valid by observing a different message/code). Both cases return
+      // the same opaque 404.
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
@@ -78,22 +83,23 @@ export async function GET(
       });
     }
 
-    // Verify file exists and check size before reading into memory
+    // Verify file exists and check size before reading into memory.
+    // M-S-03: On disk-miss we return the SAME 404 as the ownership check
+    // above (uniform "Not found" body). The disk-miss detail is logged
+    // server-side only — never surfaced in the HTTP response.
     let fileBuffer: Buffer;
     try {
       const fileStat = await fs.stat(asset.filePath);
       if (!fileStat.isFile() || fileStat.size > MAX_SERVE_BYTES) {
-        return NextResponse.json(
-          { error: "File not found on disk" },
-          { status: 404 },
-        );
+        // Log internally so ops can detect stale DB records vs missing files.
+        console.warn(`[LogoRoute] Asset ${id} record exists but file missing or oversized: ${asset.filePath}`);
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
       }
       fileBuffer = await fs.readFile(asset.filePath);
     } catch {
-      return NextResponse.json(
-        { error: "File not found on disk" },
-        { status: 404 },
-      );
+      // Log internally; return opaque 404 to caller.
+      console.warn(`[LogoRoute] Asset ${id} file unreadable: ${asset.filePath}`);
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
     // Build response headers

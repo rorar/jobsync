@@ -748,6 +748,10 @@ invariant AdminOnlyModuleLifecycle {
   note: "Rate limit implemented in src/lib/auth/admin-rate-limit.ts"
   note: "Enforcement sites: src/actions/module.actions.ts (activateModule, deactivateModule)"
   note: "JobSync has NO role model — tiered rule preserves zero-config single-user UX while closing the multi-tenant gap"
+  note: "runHealthCheck is intentionally EXCLUDED from this gate — confirmed-safe by Sprint 3 Stream C audit."
+  note: "  Reason: checkModuleHealth writes only module.healthStatus (HEALTHY/DEGRADED/UNREACHABLE),"
+  note: "  NOT module.status (ACTIVE/INACTIVE). Health-status writes have zero automation-pause cascade."
+  note: "  Bounded by checkHealthCheckRateLimit (per-user). See docs/BUGS.md Sprint 1.5 follow-up (closed)."
   related_adr: "ADR-015 (IDOR ownership), ADR-018 (env-var security pattern), ADR-019 (use-server export security)"
 }
 
