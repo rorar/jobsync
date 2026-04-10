@@ -37,7 +37,10 @@ import type { DeckViewHandle } from "./DeckView";
 import { StagingLayoutToggle } from "./StagingLayoutToggle";
 import { useStagingActions } from "@/hooks/useStagingActions";
 import { useStagingLayout, getStagingMaxWidthClass } from "@/hooks/useStagingLayout";
-import type { DeckAction } from "@/hooks/useDeckStack";
+import {
+  ANIMATION_DURATION as DECK_ANIMATION_DURATION,
+  type DeckAction,
+} from "@/hooks/useDeckStack";
 import type {
   StagedVacancyWithAutomation,
   StagedVacancyStatus,
@@ -59,6 +62,19 @@ const TAB_BACKEND_MAP: Record<ActiveTab, "new" | "dismissed" | "archived" | "tra
   archive: "archived",
   trash: "trashed",
 };
+
+/**
+ * Safety margin added to `DECK_ANIMATION_DURATION` for the deferred reload
+ * helper. Covers the awaited server promise inside the timer callback plus
+ * React's commit / effect flush cycle. Kept as a named module-level
+ * constant so the intent is explicit and the value doesn't drift if the
+ * helper is ever inlined or restructured.
+ *
+ * Sprint 4 Stream B follow-up: replaces the previous inline `500` literal
+ * in `scheduleDeckReload` with a symbolic computation
+ * (`DECK_ANIMATION_DURATION + DECK_RELOAD_BUFFER_MS`).
+ */
+const DECK_RELOAD_BUFFER_MS = 200;
 
 function StagingContainer() {
   const { t } = useTranslations();
@@ -182,9 +198,18 @@ function StagingContainer() {
   //
   // Fix: defer reload() until AFTER `useDeckStack.performAction`'s post-
   // animation callback has had a chance to increment `currentIndex`. The
-  // hook uses `ANIMATION_DURATION = 300ms`; we wait 500ms to cover both
-  // the timer AND the awaited server promise inside the timer callback,
-  // plus a safety margin for React's commit / effect flush cycle.
+  // total delay is `DECK_ANIMATION_DURATION + DECK_RELOAD_BUFFER_MS`: the
+  // animation timer, plus a safety margin for the awaited server promise
+  // inside the timer callback AND React's commit / effect flush cycle.
+  //
+  // Sprint 4 Stream B follow-up: the reload delay was previously a bare
+  // `500` literal with a comment that said "300ms animation + 200ms
+  // buffer". That's fine until the animation duration changes — then the
+  // literal silently drifts. `DECK_ANIMATION_DURATION` is now imported
+  // from `useDeckStack` as the single source of truth, and this helper
+  // computes the total delay symbolically so it picks up any future
+  // retune without manual edits. `DECK_RELOAD_BUFFER_MS` is the local
+  // safety margin, kept as a named constant so the intent is explicit.
   //
   // Non-deck callers (list-mode CRUD via `useStagingActions.createHandler`)
   // still invoke `reload` directly — no animation races there, no need to
@@ -202,7 +227,7 @@ function StagingContainer() {
     deferredReloadTimerRef.current = setTimeout(() => {
       deferredReloadTimerRef.current = null;
       void reload();
-    }, 500);
+    }, DECK_ANIMATION_DURATION + DECK_RELOAD_BUFFER_MS);
   }, [reload]);
 
   // Clear any pending deck-reload timer on unmount to avoid a setState-

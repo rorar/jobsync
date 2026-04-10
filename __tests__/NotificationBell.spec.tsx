@@ -312,4 +312,134 @@ describe("NotificationBell", () => {
       }
     });
   });
+
+  // -------------------------------------------------------------------------
+  // L-P-02 (Sprint 4 Stream B) — Page Visibility API polling pause.
+  //
+  // The fix wraps the polling interval in a `visibilitychange` listener:
+  //   - When document.hidden === true, the interval is torn down.
+  //   - When the tab becomes visible again, fetchCount fires immediately
+  //     and the 30s cadence resumes.
+  //
+  // These tests pin the observable behaviour by stubbing `document.hidden`
+  // and dispatching the `visibilitychange` event, then counting the number
+  // of mock `getUnreadCount` calls across fake-timer advances.
+  //
+  // The tests DO NOT assert interval identity (implementation detail) —
+  // only call-count contracts.
+  // -------------------------------------------------------------------------
+
+  describe("L-P-02 — Page Visibility polling pause", () => {
+    // Helper to override document.hidden for the duration of a test.
+    // jsdom ships a readable `document.hidden` getter that always returns
+    // false; we need to replace it with a controllable value.
+    function setDocumentHidden(hidden: boolean) {
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => hidden,
+      });
+    }
+
+    afterEach(() => {
+      // Restore the default (visible) hidden getter so subsequent tests
+      // see a clean jsdom document.
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => false,
+      });
+    });
+
+    it("does NOT start polling when the tab is hidden at mount time", async () => {
+      jest.useFakeTimers();
+      try {
+        mockGetUnreadCount.mockResolvedValue({ success: true, data: 0 });
+        setDocumentHidden(true);
+
+        await act(async () => {
+          render(<NotificationBell />);
+        });
+
+        // Initial fetch always fires (SSR-safe bootstrap path), so the
+        // mock should be called exactly once.
+        expect(mockGetUnreadCount).toHaveBeenCalledTimes(1);
+
+        // Advance PAST the first poll interval. If polling were active
+        // we'd see a second call; with visibility-gated polling we
+        // should still see exactly the one initial call.
+        await act(async () => {
+          jest.advanceTimersByTime(60_000);
+        });
+        expect(mockGetUnreadCount).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("tears down polling when the tab becomes hidden", async () => {
+      jest.useFakeTimers();
+      try {
+        mockGetUnreadCount.mockResolvedValue({ success: true, data: 0 });
+        setDocumentHidden(false);
+
+        await act(async () => {
+          render(<NotificationBell />);
+        });
+        // Initial fetch.
+        expect(mockGetUnreadCount).toHaveBeenCalledTimes(1);
+
+        // Confirm the poll tick would fire under visible conditions:
+        // advance just past the 30s poll cadence.
+        await act(async () => {
+          jest.advanceTimersByTime(30_000);
+        });
+        expect(mockGetUnreadCount).toHaveBeenCalledTimes(2);
+
+        // Now simulate tab becoming hidden.
+        setDocumentHidden(true);
+        await act(async () => {
+          document.dispatchEvent(new Event("visibilitychange"));
+        });
+
+        // Advance by a further FULL poll cycle. No new fetch should
+        // fire because the interval was torn down.
+        await act(async () => {
+          jest.advanceTimersByTime(60_000);
+        });
+        expect(mockGetUnreadCount).toHaveBeenCalledTimes(2);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("fires an immediate fetch and resumes polling when the tab becomes visible", async () => {
+      jest.useFakeTimers();
+      try {
+        mockGetUnreadCount.mockResolvedValue({ success: true, data: 0 });
+        setDocumentHidden(true);
+
+        await act(async () => {
+          render(<NotificationBell />);
+        });
+        // Initial mount fetch.
+        expect(mockGetUnreadCount).toHaveBeenCalledTimes(1);
+
+        // Tab becomes visible — we expect an IMMEDIATE catch-up fetch
+        // AND a restarted interval.
+        setDocumentHidden(false);
+        await act(async () => {
+          document.dispatchEvent(new Event("visibilitychange"));
+        });
+        expect(mockGetUnreadCount).toHaveBeenCalledTimes(2);
+
+        // One poll cycle later, a third fetch should fire (cadence
+        // resumed).
+        await act(async () => {
+          jest.advanceTimersByTime(30_000);
+        });
+        expect(mockGetUnreadCount).toHaveBeenCalledTimes(3);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
 });

@@ -202,6 +202,37 @@ describe("SuperLikeCelebration", () => {
     expect(card).not.toHaveAttribute("data-exiting");
   });
 
+  // ─── L-P-03 (Sprint 4 Stream B) — keyframe hoist regression guard ─
+  //
+  // The fix removed the inline `<style>{...}</style>` JSX node that
+  // previously shipped the keyframe definitions with the component, and
+  // moved the CSS to `src/app/globals.css`. This test pins the contract
+  // at the DOM level: no `<style>` child must exist inside the
+  // celebration card. If a future refactor re-introduces inline styles,
+  // this test fails and the perf regression is caught immediately.
+
+  it("L-P-03: does NOT render an inline <style> node (keyframes are static globals.css)", () => {
+    const { container } = render(<SuperLikeCelebration {...baseProps} />);
+
+    // The component's outer container is the testid node; inspect all
+    // its descendants for a <style> tag.
+    const card = container.querySelector("[data-testid='super-like-celebration']");
+    expect(card).not.toBeNull();
+    const styleNode = card?.querySelector("style");
+    expect(styleNode).toBeNull();
+  });
+
+  it("L-P-03: still declares the `superlike-celebration` class so globals.css hooks match", () => {
+    const { container } = render(<SuperLikeCelebration {...baseProps} />);
+
+    const card = container.querySelector("[data-testid='super-like-celebration']");
+    expect(card).not.toBeNull();
+    // The class name IS the bridge between the React tree and the
+    // module-level CSS keyframes in globals.css. If it ever drops off,
+    // the animation silently stops playing.
+    expect(card?.className ?? "").toMatch(/superlike-celebration/);
+  });
+
   // ─── CRIT-Y3 / WCAG 2.1.1 / 2.2.1 / 1.3.1 remediation ─────────────
 
   it("moves keyboard focus to the 'Open job' CTA after the slide-in animation (CRIT-Y3)", () => {

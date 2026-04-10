@@ -10,6 +10,7 @@ import { renderHook, act } from "@testing-library/react";
 import {
   useDeckStack,
   REVERSIBLE_DECK_ACTIONS,
+  ANIMATION_DURATION,
   type DeckAction,
 } from "@/hooks/useDeckStack";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
@@ -363,6 +364,15 @@ describe("useDeckStack", () => {
     // `StagingContainer.handleDeckUndo`. A mismatch here means the hook is
     // quietly regressing to undo-theatre territory.
     expect([...REVERSIBLE_DECK_ACTIONS]).toEqual(["dismiss"]);
+  });
+
+  it("Sprint 4 Stream B: ANIMATION_DURATION is exported and matches the internal timer", () => {
+    // Exported as a constant port so `StagingContainer.scheduleDeckReload`
+    // can compute its total delay as `ANIMATION_DURATION + safety buffer`
+    // without hardcoding the number. Pin the value at 300ms — if the
+    // animation tuning changes, this test AND the internal `setTimeout`
+    // must move in lockstep.
+    expect(ANIMATION_DURATION).toBe(300);
   });
 
   it("H-A-02: successful promote does NOT create an undo entry (not in allowlist)", async () => {

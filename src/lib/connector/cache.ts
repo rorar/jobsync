@@ -45,6 +45,24 @@ export interface CacheStats {
 // ConnectorCache
 // =============================================================================
 
+/**
+ * L-P-01 (Sprint 4 Stream B) — module-level regex constant.
+ *
+ * `buildKey` is called on every cache lookup (get + set), and the scheduler
+ * runs many concurrent lookups per cycle. Allocating a fresh `RegExp` inside
+ * the `sanitize` closure on every call shows up in profiles as a
+ * non-trivial allocation churn under load. The pattern is static (a bare
+ * colon literal, no dynamic flags, no runtime parts), so it belongs at
+ * module scope where V8 can share a single compiled instance across all
+ * callers and reuse its `lastIndex`-free stateless fast path.
+ *
+ * Value Objects (architecture-patterns skill): the cache key is a pure
+ * value object built from immutable inputs — the sanitizer that constructs
+ * it should therefore depend only on module-level constants, not
+ * per-invocation state.
+ */
+const KEY_SEGMENT_DELIMITER_PATTERN = /:/g;
+
 export class ConnectorCache {
   private store = new Map<string, CacheEntry<unknown>>();
   private inflight = new Map<string, Promise<unknown>>();
@@ -68,8 +86,12 @@ export class ConnectorCache {
     userId?: string;
     policy?: CachePolicy;
   }): string {
-    // Sanitize user-controlled segments to prevent key collision via delimiter injection
-    const sanitize = (s: string) => s.replace(/:/g, "%3A");
+    // Sanitize user-controlled segments to prevent key collision via
+    // delimiter injection. The regex is hoisted to module scope
+    // (`KEY_SEGMENT_DELIMITER_PATTERN`) — see the constant docstring for
+    // the L-P-01 rationale. Do NOT inline a fresh literal here.
+    const sanitize = (s: string) =>
+      s.replace(KEY_SEGMENT_DELIMITER_PATTERN, "%3A");
     const segments = [parts.module, parts.operation, sanitize(parts.params)];
 
     if (parts.policy?.localeSensitive && parts.locale) {

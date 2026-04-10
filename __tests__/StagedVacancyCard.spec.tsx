@@ -1102,3 +1102,151 @@ describe("StagedVacancyCard — M-P-03 React.memo", () => {
     expect(screen.queryByText("Alpha Title")).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// L-P-SPEC-01 (Sprint 4 Stream B) — Intl.NumberFormat module-level cache.
+//
+// The formatter was previously constructed per-render, per-card. The fix
+// moves it to a module-level `SALARY_FORMATTER_CACHE` keyed by currency.
+// We cannot directly assert "constructor called once" from outside the
+// module (the cache is file-private), but we CAN pin the observable
+// behaviour: rendering two cards with the same currency produces the
+// same formatted output, and rendering a card with a different currency
+// switches symbols correctly without stale state.
+// ---------------------------------------------------------------------------
+
+describe("StagedVacancyCard — L-P-SPEC-01 salary formatter cache", () => {
+  it("formats salary with EUR symbol for default currency", () => {
+    render(
+      <StagedVacancyCard
+        {...baseHandlers}
+        vacancy={makeVacancy({
+          salaryMin: 60000,
+          salaryMax: 80000,
+          salaryCurrency: "EUR",
+          salaryPeriod: "YEAR",
+        })}
+        activeTab="new"
+      />,
+    );
+    // de-DE locale renders "60.000 €" / "80.000 €" with a non-breaking
+    // space between number and currency symbol. Use a regex to match
+    // the numeric portion flexibly.
+    const text = screen.getByText(/60\.000|60\s?000/);
+    expect(text).toBeInTheDocument();
+  });
+
+  it("formats salary with USD symbol when currency is USD", () => {
+    render(
+      <StagedVacancyCard
+        {...baseHandlers}
+        vacancy={makeVacancy({
+          salaryMin: 100000,
+          salaryMax: null,
+          salaryCurrency: "USD",
+          salaryPeriod: "YEAR",
+        })}
+        activeTab="new"
+      />,
+    );
+    // "ab 100.000 $" — ab prefix from the formatSalaryRange helper.
+    const text = screen.getByText(/ab.*100/);
+    expect(text).toBeInTheDocument();
+  });
+
+  it("renders multiple cards with the same currency without formatter drift", () => {
+    // Render two cards back-to-back with the same currency. Both should
+    // show the SAME symbol placement; if the cache were broken we'd see
+    // different outputs from stale state.
+    const { rerender } = render(
+      <StagedVacancyCard
+        {...baseHandlers}
+        vacancy={makeVacancy({
+          salaryMin: 50000,
+          salaryMax: 60000,
+          salaryCurrency: "EUR",
+          salaryPeriod: "YEAR",
+        })}
+        activeTab="new"
+      />,
+    );
+    const first = screen.getByText(/50\.000|50\s?000/).textContent;
+
+    rerender(
+      <StagedVacancyCard
+        {...baseHandlers}
+        vacancy={makeVacancy({
+          title: "Second",
+          salaryMin: 50000,
+          salaryMax: 60000,
+          salaryCurrency: "EUR",
+          salaryPeriod: "YEAR",
+        })}
+        activeTab="new"
+      />,
+    );
+    const second = screen.getByText(/50\.000|50\s?000/).textContent;
+    expect(second).toBe(first);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sprint 4 Stream B follow-up — FooterActionButton focus-visible forwarding.
+//
+// The inner pill previously had `group-hover:bg-accent` for mouse hover
+// but no `group-focus-visible:bg-accent` for keyboard focus. Keyboard
+// users saw the 44x44 outer focus ring but not the pill fill, which is
+// the primary "hover affordance" signal. These tests pin the
+// group-focus-visible: classes on each variant so a future refactor
+// that strips them would be caught.
+// ---------------------------------------------------------------------------
+
+describe("StagedVacancyCard — FooterActionButton focus-visible forwarding", () => {
+  it("default variant (Promote) inner pill has group-focus-visible fill", () => {
+    render(
+      <StagedVacancyCard
+        {...baseHandlers}
+        vacancy={makeVacancy()}
+        activeTab="new"
+      />,
+    );
+    const promoteBtn = screen.getByRole("button", {
+      name: /staging\.promote/i,
+    });
+    const pill = promoteBtn.querySelector("span[aria-hidden='true']");
+    expect(pill).not.toBeNull();
+    expect(pill?.className ?? "").toMatch(/group-focus-visible:bg-primary/);
+  });
+
+  it("outline variant (Dismiss) inner pill has group-focus-visible fill", () => {
+    render(
+      <StagedVacancyCard
+        {...baseHandlers}
+        vacancy={makeVacancy()}
+        activeTab="new"
+      />,
+    );
+    const dismissBtn = screen.getByRole("button", {
+      name: /staging\.dismiss/i,
+    });
+    const pill = dismissBtn.querySelector("span[aria-hidden='true']");
+    expect(pill).not.toBeNull();
+    expect(pill?.className ?? "").toMatch(/group-focus-visible:bg-accent/);
+  });
+
+  it("ghost variant (Archive) inner pill has group-focus-visible fill", () => {
+    render(
+      <StagedVacancyCard
+        {...baseHandlers}
+        vacancy={makeVacancy()}
+        activeTab="new"
+      />,
+    );
+    const archiveBtn = screen.getByRole("button", {
+      name: /staging\.archive/i,
+    });
+    const pill = archiveBtn.querySelector("span[aria-hidden='true']");
+    expect(pill).not.toBeNull();
+    expect(pill?.className ?? "").toMatch(/group-focus-visible:bg-accent/);
+  });
+});

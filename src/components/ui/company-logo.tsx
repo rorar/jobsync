@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/i18n";
 
@@ -66,9 +66,37 @@ export function CompanyLogo({
   >(primarySrc ? "loading" : "error");
   const [useFallback, setUseFallback] = useState(false);
 
-  // Reset state when props change
+  // L-P-04 (Sprint 4 Stream B) — state re-init guard.
+  //
+  // The previous effect re-ran on every `logoUrl` / `logoAssetId` reference
+  // change, even when the *values* were shallow-equal. This happened whenever
+  // the parent re-rendered with a fresh prop object (which `StagedVacancyCard`
+  // does on every reload cycle — the vacancy array is replaced as a unit).
+  // Resetting state on every parent re-render:
+  //   1. forced the <img> back into skeleton state and re-ran the loader
+  //      even though the URL was identical,
+  //   2. flashed the pulse skeleton over a logo that was already painted,
+  //   3. kept CompanyLogo out of the React.memo win bucket because its
+  //      internal state kept churning.
+  //
+  // Fix (skill: "Dependencies point inward"): use a ref to capture the last
+  // URL pair we actually reset for and only re-run the state reset when the
+  // URL values (not references) change. String compare is safe because both
+  // fields are string | null | undefined primitives. We deliberately do NOT
+  // use `useMemo` on the URL tuple — that would require an extra render just
+  // to settle, whereas the ref approach short-circuits inside the effect.
+  const prevUrlsRef = useRef<{ logoUrl: string | null | undefined; logoAssetId: string | null | undefined }>({
+    logoUrl,
+    logoAssetId,
+  });
   useEffect(() => {
-    const src = (logoAssetId ? `/api/logos/${logoAssetId}` : null) ?? (logoUrl || null);
+    const prev = prevUrlsRef.current;
+    if (prev.logoUrl === logoUrl && prev.logoAssetId === logoAssetId) {
+      return;
+    }
+    prevUrlsRef.current = { logoUrl, logoAssetId };
+    const src =
+      (logoAssetId ? `/api/logos/${logoAssetId}` : null) ?? (logoUrl || null);
     setImageState(src ? "loading" : "error");
     setUseFallback(false);
   }, [logoUrl, logoAssetId]);

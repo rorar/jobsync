@@ -88,12 +88,22 @@ function FooterActionButton({
           // delay (hover feedback is instant on the outer hover group).
           "inline-flex h-7 items-center justify-center gap-1 whitespace-nowrap rounded-md px-3 text-xs font-medium transition-colors",
           // Variant colors via group-hover so the whole 44x44 area reacts.
+          //
+          // Sprint 4 Stream B follow-up: `group-focus-visible` siblings
+          // forward the same visual feedback to keyboard focus. Previously
+          // keyboard users saw the 44x44 outer focus ring (from the outer
+          // button's `focus-visible:ring-*`) but the inner pill stayed
+          // flat — so the "where am I?" signal lived only in the ring,
+          // which is subtler than the hover fill. With
+          // `group-focus-visible` the pill lights up on keyboard focus
+          // the same way it does on mouse hover (WCAG 2.4.7 visible
+          // focus, APG "Focus Appearance" guidance on non-ring cues).
           variant === "default" &&
-            "bg-primary text-primary-foreground group-hover:bg-primary/90",
+            "bg-primary text-primary-foreground group-hover:bg-primary/90 group-focus-visible:bg-primary/90",
           variant === "outline" &&
-            "border border-input bg-background group-hover:bg-accent group-hover:text-accent-foreground",
+            "border border-input bg-background group-hover:bg-accent group-hover:text-accent-foreground group-focus-visible:bg-accent group-focus-visible:text-accent-foreground",
           variant === "ghost" &&
-            "group-hover:bg-accent group-hover:text-accent-foreground",
+            "group-hover:bg-accent group-hover:text-accent-foreground group-focus-visible:bg-accent group-focus-visible:text-accent-foreground",
           destructive && "text-destructive",
         )}
       >
@@ -104,6 +114,44 @@ function FooterActionButton({
 }
 
 
+/**
+ * L-P-SPEC-01 (Sprint 4 Stream B) — memoized Intl.NumberFormat per currency.
+ *
+ * `formatSalaryRange` was called per card, per render, which created up to
+ * 2 `Intl.NumberFormat` instances on every render of every StagedVacancyCard
+ * (one for the min, one for the max). `Intl.NumberFormat` construction is
+ * surprisingly expensive on cold paths — the ICU locale data and the
+ * currency-symbol lookup are non-trivial work, and V8 cannot optimize
+ * away the allocation because the constructor is a native binding.
+ *
+ * Fix (skill: Value Objects): formatter instances are immutable and thread-
+ * safe once constructed, so they can be hoisted to module scope and
+ * memoized per currency in a `Map`. The static portion (locale, style,
+ * maximumFractionDigits) lives in the builder; only the `currency` field
+ * varies per call. The Map is bounded in practice by the (tiny) set of
+ * currencies the user's automations return — typically just "EUR" plus
+ * occasional "USD" / "GBP" — so no eviction is needed.
+ *
+ * Note: we intentionally do NOT cache at the component level via
+ * `useMemo([])` — the Map lives on the module closure, which means the
+ * cache is shared across every StagedVacancyCard instance on the page,
+ * not re-allocated per mount. That's the whole point.
+ */
+const SALARY_FORMATTER_CACHE = new Map<string, Intl.NumberFormat>();
+
+function getSalaryFormatter(currency: string): Intl.NumberFormat {
+  let formatter = SALARY_FORMATTER_CACHE.get(currency);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat("de-DE", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    });
+    SALARY_FORMATTER_CACHE.set(currency, formatter);
+  }
+  return formatter;
+}
+
 function formatSalaryRange(
   min: number | null | undefined,
   max: number | null | undefined,
@@ -111,12 +159,11 @@ function formatSalaryRange(
   period: string | null | undefined,
 ): string {
   const cur = currency ?? "EUR";
-  const fmt = (n: number) =>
-    new Intl.NumberFormat("de-DE", {
-      style: "currency",
-      currency: cur,
-      maximumFractionDigits: 0,
-    }).format(n);
+  // L-P-SPEC-01: pull the shared formatter from the module-level cache
+  // instead of constructing a fresh `Intl.NumberFormat` per call. See the
+  // `SALARY_FORMATTER_CACHE` docstring above for the full rationale.
+  const formatter = getSalaryFormatter(cur);
+  const fmt = (n: number) => formatter.format(n);
   const parts: string[] = [];
   if (min != null && max != null && min !== max) {
     parts.push(`${fmt(min)} – ${fmt(max)}`);

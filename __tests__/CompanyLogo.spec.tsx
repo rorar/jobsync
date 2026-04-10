@@ -145,6 +145,109 @@ describe("CompanyLogo", () => {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // L-P-04 (Sprint 4 Stream B) — state re-init guard.
+  //
+  // The fix uses a ref to remember the last URL pair and short-circuits the
+  // reset effect when the VALUES haven't changed (regardless of prop object
+  // identity). These tests pin the two observable behaviours:
+  //
+  //   1. A re-render with the SAME logoUrl/logoAssetId values must NOT flash
+  //      the skeleton — the effect must no-op and the <img> must stay
+  //      painted (i.e. still visible, still pointing at the same src).
+  //   2. A re-render with a GENUINELY different logoUrl MUST re-init —
+  //      the new src must be reflected in the DOM.
+  //
+  // The skeleton is an `aria-hidden` pulse wrapper that appears only while
+  // `imageState === "loading"`, so checking for its absence after a
+  // same-value re-render is a tight test of the guard.
+  // -------------------------------------------------------------------------
+
+  describe("L-P-04 — state re-init guard on prop re-render", () => {
+    it("does NOT re-run the loading effect when props re-render with the same values", () => {
+      const { rerender, container } = render(
+        <CompanyLogo
+          companyName="Acme Corp"
+          logoUrl="https://example.com/logo.png"
+        />,
+      );
+
+      // Simulate image load so we leave the "loading" state.
+      const img = screen.getByAltText("Acme Corp");
+      fireEvent.load(img);
+
+      // Sanity: after load, the skeleton pulse is removed.
+      const skeletonAfterLoad = container.querySelector(".animate-pulse");
+      expect(skeletonAfterLoad).toBeNull();
+
+      // Re-render with a NEW prop object but the SAME URL value. Before
+      // the fix this would re-run the effect and flip imageState back to
+      // "loading", re-introducing the skeleton. After the fix the ref
+      // guards against the value-equal re-render.
+      rerender(
+        <CompanyLogo
+          companyName="Acme Corp"
+          logoUrl="https://example.com/logo.png"
+        />,
+      );
+
+      // The skeleton MUST NOT have reappeared.
+      const skeletonAfterRerender =
+        container.querySelector(".animate-pulse");
+      expect(skeletonAfterRerender).toBeNull();
+
+      // The img element should still be painted and pointing at the
+      // same src.
+      const imgAfterRerender = screen.getByAltText("Acme Corp");
+      expect(imgAfterRerender).toHaveAttribute(
+        "src",
+        "https://example.com/logo.png",
+      );
+    });
+
+    it("DOES re-run the loading effect when logoUrl actually changes", () => {
+      const { rerender, container } = render(
+        <CompanyLogo
+          companyName="Acme Corp"
+          logoUrl="https://example.com/first.png"
+        />,
+      );
+
+      fireEvent.load(screen.getByAltText("Acme Corp"));
+      expect(container.querySelector(".animate-pulse")).toBeNull();
+
+      // Re-render with a DIFFERENT URL value — the effect must re-init
+      // (skeleton back) and the img src must update.
+      rerender(
+        <CompanyLogo
+          companyName="Acme Corp"
+          logoUrl="https://example.com/second.png"
+        />,
+      );
+
+      const imgAfterRerender = screen.getByAltText("Acme Corp");
+      expect(imgAfterRerender).toHaveAttribute(
+        "src",
+        "https://example.com/second.png",
+      );
+      // Skeleton is back while the new image loads.
+      expect(container.querySelector(".animate-pulse")).not.toBeNull();
+    });
+
+    it("DOES re-run the loading effect when logoAssetId actually changes", () => {
+      const { rerender } = render(
+        <CompanyLogo companyName="Acme Corp" logoAssetId="first-id" />,
+      );
+      fireEvent.load(screen.getByAltText("Acme Corp"));
+
+      rerender(
+        <CompanyLogo companyName="Acme Corp" logoAssetId="second-id" />,
+      );
+      const img = screen.getByAltText("Acme Corp");
+      expect(img).toHaveAttribute("src", "/api/logos/second-id");
+    });
+  });
+
   describe("logoAssetId support", () => {
     it("renders local asset URL when logoAssetId provided", () => {
       render(

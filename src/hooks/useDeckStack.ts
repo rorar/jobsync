@@ -129,7 +129,30 @@ interface UseDeckStackReturn {
 }
 
 const MAX_UNDO_STACK = 5;
-const ANIMATION_DURATION = 300;
+
+/**
+ * Deck card exit animation duration, in milliseconds.
+ *
+ * Exported for cross-module consumers (e.g. `StagingContainer`'s
+ * `scheduleDeckReload` helper) that need to coordinate their own timers
+ * against the optimistic card exit. The constant is the single source of
+ * truth — if the animation tuning changes, callers pick up the new value
+ * without drift.
+ *
+ * Sprint 4 Stream B follow-up (ANIMATION_DURATION export): previously
+ * `StagingContainer.scheduleDeckReload` hardcoded a bare `500` ms delay,
+ * documented inline as "ANIMATION_DURATION (300ms) + 200ms safety buffer".
+ * That inline literal would silently drift if the animation duration ever
+ * changed. Exposing the constant lets the reload helper compute its delay
+ * as `ANIMATION_DURATION + 200`, which reads like spec and eliminates the
+ * drift risk.
+ *
+ * Architecture-patterns skill — "Ports / constant imports": the animation
+ * duration is a domain-level invariant owned by the deck state machine.
+ * Other modules consume it as a read-only port, not by duplicating the
+ * number at the call site.
+ */
+export const ANIMATION_DURATION = 300;
 
 export function useDeckStack({
   vacancies,

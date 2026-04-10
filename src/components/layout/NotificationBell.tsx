@@ -54,10 +54,84 @@ export function NotificationBell() {
     }
   }, []);
 
+  // L-P-02 (Sprint 4 Stream B) — Page Visibility API polling pause.
+  //
+  // Before: every open tab polled `getUnreadCount` every 30s indefinitely,
+  // regardless of whether the tab was visible. For a user with 5 tabs open
+  // across a workday (8h), that's 5 * 960 = 4800 server calls per user per
+  // day purely on background/hidden tabs where the count cannot possibly
+  // be useful (the bell is not visible). Under aggregate load this starts
+  // to approach the SSE-less design cost bucket that H-P-09 flagged.
+  //
+  // Fix: listen to `document.visibilitychange` and pause the interval
+  // while `document.hidden === true`. On resume, fire an immediate
+  // `fetchCount` so the user sees a fresh count the instant they come
+  // back to the tab — the 30s cadence resumes after that. When the tab
+  // is hidden, we tear down the interval entirely (not just skip inside
+  // the callback) so the browser can sleep the timer queue.
+  //
+  // Why not BroadcastChannel to dedupe across tabs: adds state sync
+  // complexity, needs a leader election to decide which tab polls, and
+  // doesn't help the single-tab case. Page Visibility alone cuts the
+  // wasted calls on the dominant "user has one active tab" path AND the
+  // "user has N background tabs" path, with zero cross-tab coordination.
+  //
+  // Architecture-patterns skill — "Dependencies point inward": the hook
+  // depends on the browser's visibility signal (an outward concern) but
+  // the polling cadence itself is a module-level constant
+  // (`POLL_INTERVAL_MS`), so switching to SSE later only changes the
+  // transport without touching the cadence policy.
   useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const startPolling = () => {
+      if (interval !== null) return;
+      interval = setInterval(fetchCount, POLL_INTERVAL_MS);
+    };
+
+    const stopPolling = () => {
+      if (interval !== null) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    // Initial fetch — always runs, regardless of initial visibility, so a
+    // freshly-mounted bell shows a count even if the tab was backgrounded
+    // at mount time (rare but possible on tab restore).
     fetchCount();
-    const interval = setInterval(fetchCount, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+
+    // SSR guard: `document` is not available during Next.js server render.
+    // If we're running in a non-browser environment, fall back to the
+    // legacy always-on polling — the component is a "use client" component
+    // so this branch only matters for Jest / non-jsdom test environments.
+    if (typeof document === "undefined") {
+      startPolling();
+      return () => stopPolling();
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        // Resume: fetch immediately to catch up, then restart the cadence.
+        fetchCount();
+        startPolling();
+      }
+    };
+
+    // Start polling if the tab is currently visible; otherwise wait for
+    // the user to come back. Either way, `handleVisibilityChange` will
+    // drive subsequent transitions.
+    if (!document.hidden) {
+      startPolling();
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      stopPolling();
+    };
   }, [fetchCount]);
 
   // M-Y-07 — announce on increase, debounced.
@@ -121,9 +195,18 @@ export function NotificationBell() {
       : t("notifications.title");
 
   const triggerButton = (
+    // L-P-02 bonus (Sprint 4 Stream B): migrated `size="icon"` (40x40) to
+    // `size="icon-lg"` (44x44) per Sprint 3 Stream F's new variant. The
+    // bell is the primary notification entry point — it needs to meet
+    // WCAG 2.5.5 AAA Target Size (44x44). The Header container is
+    // `h-14` (56px) on mobile and `sm:h-auto` on desktop, so the extra
+    // 4px fits comfortably without visual regression; the sibling
+    // UserAvatar is 36x36 (smaller than the old 40x40 bell anyway), so
+    // no alignment concerns. The 20x20 Bell glyph stays identical —
+    // only the focusable/pointer target grew.
     <Button
       variant="ghost"
-      size="icon"
+      size="icon-lg"
       className="relative"
       aria-label={ariaLabel}
     >

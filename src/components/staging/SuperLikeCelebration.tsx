@@ -311,34 +311,21 @@ export function SuperLikeCelebration({
       onFocusCapture={isExiting ? undefined : handleFocusIn}
       onBlurCapture={isExiting ? undefined : resumeTimer}
     >
-      {/* Inline keyframes — keeps the component self-contained with no
-          globals.css edit and respects prefers-reduced-motion. */}
-      <style>{`
-        @keyframes superlike-celebration-slide-in {
-          from { transform: translateY(100%); opacity: 0; }
-          to   { transform: translateY(0);    opacity: 1; }
-        }
-        @keyframes superlike-celebration-slide-out {
-          from { transform: translateY(0);    opacity: 1; }
-          to   { transform: translateY(100%); opacity: 0; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .superlike-celebration:not([data-exiting="true"]) {
-            animation: superlike-celebration-fade-in 150ms linear !important;
-          }
-          .superlike-celebration[data-exiting="true"] {
-            animation: superlike-celebration-fade-out 150ms linear forwards !important;
-          }
-        }
-        @keyframes superlike-celebration-fade-in {
-          from { opacity: 0; }
-          to   { opacity: 1; }
-        }
-        @keyframes superlike-celebration-fade-out {
-          from { opacity: 1; }
-          to   { opacity: 0; }
-        }
-      `}</style>
+      {/*
+        L-P-03 (Sprint 4 Stream B): the keyframe definitions previously lived
+        inline inside this component as `<style>{...}</style>`. React re-ran
+        the JSX on every render (pointer-drag, timer tick, isExiting flip),
+        which recreated the `<style>` DOM node and forced the browser to
+        re-parse an otherwise-static CSS block. The keyframes are now
+        declared once at the top of `src/app/globals.css` under the
+        `.superlike-celebration` scope, so the component just attaches the
+        class name and the animation is a pure CSS lookup. The class name
+        itself is static (see the outer `className=` prop a few lines up),
+        so there is nothing for React to diff here and zero re-render cost.
+
+        prefers-reduced-motion fall-through and the `data-exiting` grace
+        period selector are preserved identically in globals.css.
+      */}
 
       {/* "+N more" queue badge */}
       {queueRemaining > 0 && (

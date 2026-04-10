@@ -149,6 +149,73 @@
   }
 }
 
+/*
+ * L-P-03 (Sprint 4 Stream B) — SuperLikeCelebration keyframes.
+ *
+ * Previously lived inline inside `SuperLikeCelebration.tsx` as a
+ * `<style>{...}</style>` JSX node. React re-creates the inline `<style>`
+ * element on every render (even when the CSS string is identical), which
+ * invalidated the browser's stylesheet cache and forced re-parse on every
+ * pointer-drag / timer tick inside the celebration.
+ *
+ * Hoisting to globals.css makes the keyframes a static module-level
+ * resource: parsed once at document load, reused forever. The component
+ * now only attaches class names — zero re-render cost.
+ *
+ * prefers-reduced-motion: the fade-in/fade-out overrides are scoped to
+ * `.superlike-celebration` so only the celebration card is affected.
+ * Grace-period behaviour (`data-exiting="true"`) is preserved by matching
+ * the same attribute selector the inline version used.
+ */
+@keyframes superlike-celebration-slide-in {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes superlike-celebration-slide-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes superlike-celebration-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes superlike-celebration-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .superlike-celebration:not([data-exiting="true"]) {
+    animation: superlike-celebration-fade-in 150ms linear !important;
+  }
+  .superlike-celebration[data-exiting="true"] {
+    animation: superlike-celebration-fade-out 150ms linear forwards !important;
+  }
+}
+
 /* Override: For Calender component to hide month, year labels */
 .rdp-vhidden {
   @apply hidden;

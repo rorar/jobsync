@@ -90,6 +90,16 @@ export async function markAsRead(
       return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
     }
 
+    // L-P-SPEC-02 audit (Sprint 4 Stream B, verdict: SAFE on Prisma 6.19):
+    // The compound `where: { id, userId }` mixes the primary key with a
+    // non-unique filter. This pattern was a type error pre-Prisma-5.0,
+    // enabled as `extendedWhereUnique` preview in 5.0, and became stable
+    // in 5.1. JobSync is on @prisma/client 6.19, so the query engine
+    // compiles this into a SINGLE `UPDATE "Notification" SET "read" = ?
+    // WHERE "id" = ? AND "userId" = ?` — NOT a SELECT-then-UPDATE. The
+    // findFirst above is the ADR-015/M-S-01 ownership contract (returns
+    // NOT_FOUND instead of P2025), NOT a query-engine workaround —
+    // removing it would regress the fail-closed contract.
     await prisma.notification.update({
       where: { id: notificationId, userId: user.id },
       data: { read: true },

@@ -271,4 +271,90 @@ describe("ConnectorCache", () => {
       expect(stats.size).toBe(0);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // L-P-01 (Sprint 4 Stream B) — regex hoist regression guard.
+  //
+  // The fix hoisted the colon sanitizer regex out of `buildKey` into a
+  // module-level constant. These tests pin the observable behaviour that
+  // matters:
+  //   1. Colons inside the `params` segment are still escaped.
+  //   2. Colons in `locale` are still escaped (per-user AI with weird locale).
+  //   3. Repeated calls with the same input produce IDENTICAL output (no
+  //      hidden regex state drift like `lastIndex` leakage).
+  //   4. Repeated calls with different inputs isolate state between
+  //      invocations (the shared regex does not carry over between calls).
+  //
+  // There's no direct way to assert "regex allocated once" at runtime, so
+  // the test contracts pin the behavioural guarantee that a correct
+  // module-level regex would deliver.
+  // ---------------------------------------------------------------------------
+
+  describe("buildKey — L-P-01 regex hoist", () => {
+    it("sanitizes colons inside params segment", () => {
+      const key = ConnectorCache.buildKey({
+        module: "eures",
+        operation: "search",
+        params: "keywords=dev:lead",
+      });
+      expect(key).toBe("eures:search:keywords=dev%3Alead");
+    });
+
+    it("sanitizes colons inside locale-sensitive segment", () => {
+      const policy: CachePolicy = {
+        ttl: 300,
+        scope: "shared",
+        localeSensitive: true,
+      };
+      const key = ConnectorCache.buildKey({
+        module: "eures",
+        operation: "search",
+        params: "q=dev",
+        locale: "de:DE", // pathological — colon inside locale
+        policy,
+      });
+      expect(key).toBe("eures:search:q=dev:de%3ADE");
+    });
+
+    it("produces identical output for repeated calls with the same input", () => {
+      // A shared global regex with the /g flag carries an internal
+      // `lastIndex` that can leak between calls when `.test` or similar
+      // stateful methods are used. `String.prototype.replace` resets it
+      // per-call, but this test pins the contract so a future refactor
+      // to stateful regex methods would be caught.
+      const input = {
+        module: "eures",
+        operation: "search",
+        params: "a:b:c:d",
+      };
+      const k1 = ConnectorCache.buildKey(input);
+      const k2 = ConnectorCache.buildKey(input);
+      const k3 = ConnectorCache.buildKey(input);
+      expect(k1).toBe("eures:search:a%3Ab%3Ac%3Ad");
+      expect(k2).toBe(k1);
+      expect(k3).toBe(k1);
+    });
+
+    it("isolates state across calls with different inputs (shared regex safety)", () => {
+      const k1 = ConnectorCache.buildKey({
+        module: "eures",
+        operation: "search",
+        params: "alpha:beta",
+      });
+      const k2 = ConnectorCache.buildKey({
+        module: "jsearch",
+        operation: "search",
+        params: "gamma:delta",
+      });
+      expect(k1).toBe("eures:search:alpha%3Abeta");
+      expect(k2).toBe("jsearch:search:gamma%3Adelta");
+      // Re-run k1's input and confirm it still matches k1 exactly.
+      const k1Again = ConnectorCache.buildKey({
+        module: "eures",
+        operation: "search",
+        params: "alpha:beta",
+      });
+      expect(k1Again).toBe(k1);
+    });
+  });
 });

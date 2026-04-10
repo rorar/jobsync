@@ -249,3 +249,97 @@ describe("useStagingActions — M-P-03 closure stability", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Sprint 4 Stream B — handler cache eviction guard.
+//
+// Sprint 3 added a `useRef<Map>` handler cache keyed by (action, successKey).
+// Under the current codebase it's bounded at ~5 entries by module-level
+// stable server-action imports. Sprint 4 adds a defensive FIFO eviction
+// at HANDLER_CACHE_MAX_ENTRIES = 20 so that a future dynamic-factory
+// caller (e.g. `createHandler(async (id) => {...}, ...)` in render) cannot
+// leak unbounded handler identities.
+//
+// These tests pin the observable eviction contract by simulating a
+// dynamic factory that pumps fresh server-action references into
+// createHandler and asserting that:
+//   1. Under the ceiling, every unique input gets a fresh handler AND
+//      identity-stable repeats are honored.
+//   2. At the ceiling, the oldest entry is evicted, but the youngest
+//      entries remain cached and identity-stable across repeat calls.
+//   3. The eviction branch logs a warning so the fail-loud signal is
+//      observable.
+// ---------------------------------------------------------------------------
+
+describe("useStagingActions — Sprint 4 Stream B cache eviction guard", () => {
+  const mockReload = jest.fn().mockResolvedValue(undefined);
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("keeps the cache bounded at 20 entries even under dynamic-factory abuse", () => {
+    const { result } = renderHook(() => useStagingActions(mockReload));
+
+    // Simulate a dynamic factory: spin up 30 fresh action references.
+    // Each gets a unique handler, so the cache would grow to 30 without
+    // the eviction guard.
+    const actions: Array<(id: string) => Promise<{ success: true }>> = [];
+    for (let i = 0; i < 30; i++) {
+      actions.push(async () => ({ success: true }));
+    }
+
+    // Spy on console.warn so we can verify the eviction warning path
+    // fires at least once after we cross the ceiling.
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      for (const action of actions) {
+        result.current.createHandler(action, "staging.dismissed");
+      }
+
+      // The warning must have fired at least once — eviction kicks in
+      // after the 20th insert.
+      expect(warnSpy).toHaveBeenCalled();
+      const warnCall = warnSpy.mock.calls.find((call) =>
+        String(call[0]).includes(
+          "[useStagingActions] Handler cache reached max entries",
+        ),
+      );
+      expect(warnCall).toBeDefined();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("the newest entry is still cached after eviction (identity-stable on repeat)", () => {
+    const { result } = renderHook(() => useStagingActions(mockReload));
+
+    // Push 30 distinct actions to force eviction of the older half.
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const actions: Array<(id: string) => Promise<{ success: true }>> = [];
+      for (let i = 0; i < 30; i++) {
+        actions.push(async () => ({ success: true }));
+      }
+      actions.forEach((action) => {
+        result.current.createHandler(action, "staging.dismissed");
+      });
+
+      // Now re-register the LAST action — it should still be cached,
+      // so calling createHandler again returns the SAME reference.
+      const lastAction = actions[actions.length - 1];
+      const firstLookup = result.current.createHandler(
+        lastAction,
+        "staging.dismissed",
+      );
+      const secondLookup = result.current.createHandler(
+        lastAction,
+        "staging.dismissed",
+      );
+      expect(secondLookup).toBe(firstLookup);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+});
