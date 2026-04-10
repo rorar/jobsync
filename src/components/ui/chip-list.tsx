@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 export interface ChipItem {
   value: string;
@@ -83,11 +84,22 @@ export function ChipList({
           <Badge
             key={item.value}
             variant="secondary"
-            className="gap-1.5 pr-1"
+            // Allow long labels (e.g., ESCO occupation names in German:
+            // "Entwickler von Benutzeroberflächen/Entwicklerin von
+            // Benutzeroberflächen (2512.4)") to wrap instead of forcing
+            // the parent container to scroll horizontally. The Badge
+            // primitive has `whitespace-nowrap` by default; we override
+            // it here with `whitespace-normal` + `max-w-full` so the
+            // chip stays within the dialog width. The detail button
+            // (eye icon) provides access to the full untruncated label.
+            className="gap-1.5 pr-1 whitespace-normal max-w-full"
           >
             {item.icon}
             <span
-              className={itemEditable ? "cursor-pointer hover:underline" : undefined}
+              className={cn(
+                "break-words",
+                itemEditable && "cursor-pointer hover:underline",
+              )}
               onClick={() => startEdit(item)}
               role={itemEditable ? "button" : undefined}
               tabIndex={itemEditable ? 0 : undefined}
