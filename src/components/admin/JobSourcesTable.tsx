@@ -93,8 +93,8 @@ function JobSourcesTable({
                 <TableCell>
                   <Button
                     variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-destructive"
+                    size="icon-lg"
+                    className="text-destructive"
                     aria-label={t("common.delete")}
                     onClick={() => onDeleteJobSource(source)}
                   >

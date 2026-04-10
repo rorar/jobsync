@@ -306,6 +306,7 @@ function DeveloperSettings() {
                 }
               }}
             />
+            {/* Sprint 4 Stream F: size="icon" retained — must stay 40×40 to align with the adjacent h-10 Input; icon-lg (44×44) would introduce a 4px vertical offset in the flex row. */}
             <Button
               variant="outline"
               size="icon"
@@ -349,6 +350,7 @@ function DeveloperSettings() {
                 }
               }}
             />
+            {/* Sprint 4 Stream F: size="icon" retained — must stay 40×40 to align with the adjacent h-10 Input; icon-lg (44×44) would introduce a 4px vertical offset in the flex row. */}
             <Button
               variant="outline"
               size="icon"

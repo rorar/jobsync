@@ -25,16 +25,15 @@ export function NoteCard({ note, onEdit, onDelete }: NoteCardProps) {
         <div className="flex gap-1">
           <Button
             variant="ghost"
-            size="icon"
-            className="h-7 w-7"
+            size="icon-lg"
             onClick={() => onEdit(note)}
           >
             <Pencil className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-destructive"
+            size="icon-lg"
+            className="text-destructive"
             onClick={() => onDelete(note.id)}
           >
             <Trash className="h-3.5 w-3.5" />

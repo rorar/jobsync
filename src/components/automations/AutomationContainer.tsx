@@ -89,7 +89,7 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>{t("automations.jobDiscovery")}</CardTitle>
           <div className="flex gap-2">
-            <Button variant="outline" size="icon" onClick={loadAutomations}>
+            <Button variant="outline" size="icon-lg" onClick={loadAutomations}>
               <RefreshCw className="h-4 w-4" />
             </Button>
             <Button

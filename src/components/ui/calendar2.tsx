@@ -225,6 +225,9 @@ function CalendarDayButton({
   }, [modifiers.focused]);
 
   return (
+    // Sprint 4 Stream F: size="icon" retained — react-day-picker cells are constrained to
+    // [--cell-size:2rem] (32px) and the className below overrides to h-auto w-full min-w-[--cell-size].
+    // icon-lg (44×44) base classes would be silently overridden anyway; kept for semantic clarity.
     <Button
       ref={ref}
       variant="ghost"

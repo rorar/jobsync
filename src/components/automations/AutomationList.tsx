@@ -268,7 +268,7 @@ export function AutomationList({
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      size="icon"
+                      size="icon-lg"
                       disabled={isLoading}
                       aria-label={t("automations.actions")}
                       onClick={(e) => e.stopPropagation()}

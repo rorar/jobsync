@@ -54,8 +54,7 @@ export function QuestionCard({
           <div className="flex gap-1">
             <Button
               variant="ghost"
-              size="icon"
-              className="h-7 w-7"
+              size="icon-lg"
               aria-label={t("questions.edit")}
               onClick={() => onEdit(question)}
             >
@@ -64,8 +63,8 @@ export function QuestionCard({
             </Button>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-destructive"
+              size="icon-lg"
+              className="text-destructive"
               aria-label={t("questions.delete")}
               onClick={() => setShowDeleteDialog(true)}
             >

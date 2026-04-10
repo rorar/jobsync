@@ -118,7 +118,7 @@ function ResumeTable({ resumes, editResume, reloadResumes }: ResumeTableProps) {
                     <DropdownMenuTrigger asChild>
                       <Button
                         aria-haspopup="true"
-                        size="icon"
+                        size="icon-lg"
                         variant="ghost"
                         data-testid="resume-actions-menu-btn"
                       >

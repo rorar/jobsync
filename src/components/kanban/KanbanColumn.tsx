@@ -88,8 +88,7 @@ export const KanbanColumn = React.memo(function KanbanColumn({
         </div>
         <Button
           variant="ghost"
-          size="icon"
-          className="h-7 w-7"
+          size="icon-lg"
           onClick={() => onToggleCollapse(status.value)}
           aria-expanded={true}
           aria-label={t("jobs.kanbanCollapseColumn")}

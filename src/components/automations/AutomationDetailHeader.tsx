@@ -52,7 +52,7 @@ export function AutomationDetailHeader({
 
   return (
     <div className="flex items-center gap-4">
-      <Button variant="ghost" size="icon" asChild aria-label={t("automations.backToList")}>
+      <Button variant="ghost" size="icon-lg" asChild aria-label={t("automations.backToList")}>
         <Link href="/dashboard/automations">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </Link>
@@ -83,7 +83,7 @@ export function AutomationDetailHeader({
         </div>
       </div>
       <div className="flex gap-2">
-        <Button variant="outline" size="icon" onClick={onRefresh} aria-label={t("automations.refresh")}>
+        <Button variant="outline" size="icon-lg" onClick={onRefresh} aria-label={t("automations.refresh")}>
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
         </Button>
         <Button

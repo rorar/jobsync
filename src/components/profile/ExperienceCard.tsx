@@ -79,8 +79,7 @@ function ExperienceCard({
                   <div className="flex items-center gap-1 shrink-0">
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-11 w-11"
+                      size="icon-lg"
                       onClick={() => openDialogForEdit(id!)}
                     >
                       <Edit className="h-4 w-4" />
@@ -90,8 +89,8 @@ function ExperienceCard({
                     </Button>
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-11 w-11 text-destructive hover:text-destructive"
+                      size="icon-lg"
+                      className="text-destructive hover:text-destructive"
                       onClick={() => handleDeleteClick(id!)}
                     >
                       <Trash2 className="h-4 w-4" />

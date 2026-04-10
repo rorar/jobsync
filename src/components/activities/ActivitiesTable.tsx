@@ -120,7 +120,7 @@ function ActivitiesTable({
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button aria-haspopup="true" size="icon" variant="ghost">
+                      <Button aria-haspopup="true" size="icon-lg" variant="ghost">
                         <MoreHorizontal className="h-4 w-4" />
                         <span className="sr-only">Toggle menu</span>
                       </Button>
@@ -157,7 +157,7 @@ function ActivitiesTable({
                     <Button
                       title={t("activities.startActivity")}
                       aria-haspopup="true"
-                      size="icon"
+                      size="icon-lg"
                       variant="ghost"
                       onClick={() => onStartActivity(activity.id!)}
                       className="opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-300"

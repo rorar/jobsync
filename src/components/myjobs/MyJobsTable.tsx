@@ -155,7 +155,7 @@ function MyJobsTable({
                     <DropdownMenuTrigger asChild>
                       <Button
                         aria-haspopup="true"
-                        size="icon"
+                        size="icon-lg"
                         variant="ghost"
                         data-testid="job-actions-menu-btn"
                       >

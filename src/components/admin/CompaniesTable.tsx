@@ -109,8 +109,7 @@ function CompaniesTable({
                   <div className="flex gap-1">
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
+                      size="icon-lg"
                       aria-label={t("common.edit")}
                       onClick={() => editCompany(company.id)}
                     >
@@ -119,8 +118,8 @@ function CompaniesTable({
                     </Button>
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive"
+                      size="icon-lg"
+                      className="text-destructive"
                       aria-label={t("common.delete")}
                       onClick={() => onDeleteCompany(company)}
                     >

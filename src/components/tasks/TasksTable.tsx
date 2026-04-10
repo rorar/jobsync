@@ -282,6 +282,7 @@ function TasksTable({
       <TableCell className="hidden md:table-cell py-1 px-2 text-center">
         {task.percentComplete}%
       </TableCell>
+      {/* Sprint 4 Stream F: Button below retains size="icon" — TableRow is pinned to h-9 (36px) by design for dense task lists; icon-lg (44×44) would break row height. */}
       <TableCell className="py-1 px-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -351,6 +352,7 @@ function TasksTable({
       </TableCell>
       <TableCell className="py-1 px-1">
         {!task.activity && (
+          /* Sprint 4 Stream F: size="icon" retained — TableRow is pinned to h-9 (36px) by design for dense task lists; icon-lg (44×44) would break row height. */
           <Button
             title={t("tasks.startActivity")}
             aria-haspopup="true"
