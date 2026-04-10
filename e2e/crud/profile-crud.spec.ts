@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { expectToast, selectOrCreateComboboxOption } from "../helpers";
+import { expectToast, selectOrCreateComboboxOption, safeWait } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Locale
@@ -184,7 +184,8 @@ test("add work experience", async ({ page }) => {
   // Add Experience section
   await page.getByRole("button", { name: "Add Section" }).click();
   await page.getByRole("menuitem", { name: "Add Experience" }).click();
-  await page.waitForTimeout(500);
+  // M-T-04 follow-up: replaced waitForTimeout(500) — wait for the section form.
+  await page.getByPlaceholder("Ex: Experience").waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
 
   const sectionTitleField = page.getByPlaceholder("Ex: Experience");
   if (await sectionTitleField.isVisible()) {
@@ -219,7 +220,8 @@ test("add work experience", async ({ page }) => {
   await expect(page.getByLabel("Job Location")).toContainText(locationText);
 
   await page.getByLabel("Start Date").click();
-  await page.waitForTimeout(1000);
+  // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for date picker calendar.
+  await page.getByRole("gridcell").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
   const dateCell = page.getByRole("gridcell", { name: "15" }).first();
   await dateCell.waitFor({ state: "visible", timeout: 5000 });
   await dateCell.click();
@@ -247,7 +249,8 @@ test("edit experience dialog opens and cancels", async ({ page }) => {
   // Add Experience section first
   await page.getByRole("button", { name: "Add Section" }).click();
   await page.getByRole("menuitem", { name: "Add Experience" }).click();
-  await page.waitForTimeout(500);
+  // M-T-04 follow-up: replaced waitForTimeout(500) — wait for the section form.
+  await page.getByPlaceholder("Ex: Experience").waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
 
   const sectionTitleField = page.getByPlaceholder("Ex: Experience");
   if (await sectionTitleField.isVisible()) {
@@ -282,7 +285,8 @@ test("edit experience dialog opens and cancels", async ({ page }) => {
   await expect(page.getByLabel("Job Location")).toContainText(locationText);
 
   await page.getByLabel("Start Date").click();
-  await page.waitForTimeout(1000);
+  // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for date picker calendar.
+  await page.getByRole("gridcell").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
   const dateCell = page.getByRole("gridcell", { name: "15" }).first();
   await dateCell.waitFor({ state: "visible", timeout: 5000 });
   await dateCell.click();
@@ -357,7 +361,8 @@ test("multi-section integration: summary + experience + education", async ({
   // Step 4: Add Experience section
   await page.getByRole("button", { name: "Add Section" }).click();
   await page.getByRole("menuitem", { name: "Add Experience" }).click();
-  await page.waitForTimeout(500);
+  // M-T-04 follow-up: replaced waitForTimeout(500) — wait for the section form.
+  await page.getByPlaceholder("Ex: Experience").waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
 
   const experienceSectionTitle = page.getByPlaceholder("Ex: Experience");
   if (await experienceSectionTitle.isVisible()) {
@@ -391,7 +396,8 @@ test("multi-section integration: summary + experience + education", async ({
 
   // Set Start Date
   await page.getByLabel("Start Date").click();
-  await page.waitForTimeout(1000);
+  // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for date picker calendar.
+  await page.getByRole("gridcell").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
   const expStartDateCell = page
     .getByRole("gridcell", { name: "10" })
     .first();
@@ -412,7 +418,8 @@ test("multi-section integration: summary + experience + education", async ({
   // Step 5: Add Education section
   await page.getByRole("button", { name: "Add Section" }).click();
   await page.getByRole("menuitem", { name: "Add Education" }).click();
-  await page.waitForTimeout(500);
+  // M-T-04 follow-up: replaced waitForTimeout(500) — wait for the section form.
+  await page.getByPlaceholder("Ex: Education").waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
 
   const educationSectionTitle = page.getByPlaceholder("Ex: Education");
   if (await educationSectionTitle.isVisible()) {
@@ -438,7 +445,8 @@ test("multi-section integration: summary + experience + education", async ({
 
   // Set Start Date
   await page.getByLabel("Start Date").click();
-  await page.waitForTimeout(1000);
+  // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for date picker calendar.
+  await page.getByRole("gridcell").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
   const eduStartDateCell = page
     .getByRole("gridcell", { name: "15" })
     .first();
@@ -447,7 +455,8 @@ test("multi-section integration: summary + experience + education", async ({
 
   // Set End Date
   await page.getByLabel("End Date").click();
-  await page.waitForTimeout(1000);
+  // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for date picker calendar.
+  await page.getByRole("gridcell").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
   const eduEndDateCell = page
     .getByRole("gridcell", { name: "20" })
     .first();
@@ -493,7 +502,8 @@ test("add education and edit school name", async ({ page }) => {
   // Add Education section
   await page.getByRole("button", { name: "Add Section" }).click();
   await page.getByRole("menuitem", { name: "Add Education" }).click();
-  await page.waitForTimeout(500);
+  // M-T-04 follow-up: replaced waitForTimeout(500) — wait for the section form.
+  await page.getByPlaceholder("Ex: Education").waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
 
   const sectionTitleField = page.getByPlaceholder("Ex: Education");
   if (await sectionTitleField.isVisible()) {
@@ -515,12 +525,14 @@ test("add education and edit school name", async ({ page }) => {
 
   // Set Start Date
   await page.getByLabel("Start Date").click();
-  await page.waitForTimeout(1000);
+  // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for date picker calendar.
+  await page.getByRole("gridcell").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
   await page.getByRole("gridcell", { name: "15" }).first().click();
 
   // Set End Date
   await page.getByLabel("End Date").click();
-  await page.waitForTimeout(1000);
+  // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for date picker calendar.
+  await page.getByRole("gridcell").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
   await page.getByRole("gridcell", { name: "20" }).first().click();
 
   // Fill description

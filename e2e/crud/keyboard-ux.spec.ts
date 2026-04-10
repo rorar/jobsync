@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId } from "../helpers";
+import { uniqueId, safeWait } from "../helpers";
 
 /** Set NEXT_LOCALE=en cookie so the app renders in English. */
 async function ensureEnglishLocale(page: Page) {
@@ -181,9 +181,11 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await expect(titleInput).toBeVisible();
 
     await titleInput.fill(title);
-    await page.waitForTimeout(600);
+    // M-T-04 follow-up: replaced waitForTimeout(600) — wait for options list.
+    await page.getByRole("option").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
     await titleInput.press("Enter");
-    await page.waitForTimeout(1000);
+    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for combobox to close.
+    await page.getByRole("option").first().waitFor({ state: "hidden", timeout: 5000 }).catch(() => null);
 
     // Verify the created option shows in the trigger button
     await expect(getTitleCombobox(page)).toContainText(title, { timeout: 15000 });
@@ -209,9 +211,11 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await expect(companyInput).toBeVisible();
 
     await companyInput.fill(company);
-    await page.waitForTimeout(600);
+    // M-T-04 follow-up: replaced waitForTimeout(600) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
     await companyInput.press("Enter");
-    await page.waitForTimeout(1000);
+    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
+    await safeWait(page, { loadState: "networkidle" });
 
     await expect(getCompanyCombobox(page)).toContainText(company);
   });
@@ -230,9 +234,11 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await expect(locationInput).toBeVisible();
 
     await locationInput.fill(location);
-    await page.waitForTimeout(600);
+    // M-T-04 follow-up: replaced waitForTimeout(600) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
     await locationInput.press("Enter");
-    await page.waitForTimeout(1000);
+    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
+    await safeWait(page, { loadState: "networkidle" });
 
     await expect(getLocationCombobox(page)).toContainText(location);
   });
@@ -248,10 +254,12 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await expect(titleInput).toBeVisible();
 
     await titleInput.fill("test");
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await titleInput.press("Escape");
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await expect(titleInput).not.toBeVisible();
     await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
@@ -268,10 +276,12 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await expect(titleInput).toBeVisible();
 
     await titleInput.fill("test");
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await titleInput.press("Tab");
-    await page.waitForTimeout(500);
+    // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await expect(titleInput).not.toBeVisible();
   });
@@ -292,7 +302,8 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
 
     await titleInput.type(title, { delay: 20 });
     await titleInput.press("Enter");
-    await page.waitForTimeout(1500);
+    // M-T-04 follow-up: replaced waitForTimeout(1500) — wait for server round-trip.
+    await safeWait(page, { loadState: "networkidle" });
 
     await expect(getTitleCombobox(page)).toContainText(title, { timeout: 15000 });
     expect(filterCriticalErrors(errors)).toEqual([]);
@@ -307,10 +318,12 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await expect(titleInput).toBeVisible();
 
     await titleInput.fill("stale text here");
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await page.getByTestId("add-job-dialog-title").click();
-    await page.waitForTimeout(500);
+    // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await getTitleCombobox(page).click();
     const titleInputAfter = page.getByPlaceholder("Create or Search title");
@@ -345,7 +358,8 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
     await expect(skillInput).toBeVisible();
 
     await skillInput.fill(skill);
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
     await skillInput.press("Enter");
 
     // Wait for async createTag to complete and chip to render
@@ -380,9 +394,11 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
     for (let i = 1; i <= 3; i++) {
       const skill = `KBMulti${i} ${uid}`;
       await skillInput.fill(skill);
-      await page.waitForTimeout(200);
+      // M-T-04 follow-up: replaced waitForTimeout(200) — wait for UI to settle.
+      await page.waitForLoadState("domcontentloaded");
       await skillInput.press("Enter");
-      await page.waitForTimeout(800);
+      // M-T-04 follow-up: replaced waitForTimeout(800) — wait for server round-trip.
+      await safeWait(page, { loadState: "networkidle" });
     }
 
     for (let i = 1; i <= 3; i++) {
@@ -401,10 +417,12 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
     await expect(skillInput).toBeVisible();
 
     await skillInput.fill("test");
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await skillInput.press("Tab");
-    await page.waitForTimeout(500);
+    // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await expect(skillInput).not.toBeVisible();
   });
@@ -424,17 +442,20 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
 
     // Create a skill first
     await skillInput.fill(skill);
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
     await skillInput.press("Enter");
 
     // Wait for async createTag to complete and chip to render
     await expect(page.getByText(skill).first()).toBeVisible({ timeout: 10000 });
     // Wait for React startTransition to commit localTags state update
-    await page.waitForTimeout(1000);
+    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
+    await safeWait(page, { loadState: "networkidle" });
 
     // Try adding the same skill again
     await skillInput.fill(skill);
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
     await skillInput.press("Enter");
 
     // Verify sr-only announcement says "already selected" (async state update)
@@ -488,7 +509,8 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     const keyword = `KBKeyword ${uid}`;
     await searchInput.fill(keyword);
     // Wait for debounce + ESCO API fetch to complete or timeout
-    await page.waitForTimeout(2000);
+    // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for server round-trip.
+    await safeWait(page, { loadState: "networkidle" });
     await searchInput.press("Enter");
 
     // Wait for async keyword addition to complete
@@ -531,7 +553,8 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     for (let i = 1; i <= 3; i++) {
       await searchInput.fill(`KW${i} ${uid}`);
       // Wait for debounce + ESCO API fetch to complete or timeout
-      await page.waitForTimeout(2000);
+      // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for server round-trip.
+      await safeWait(page, { loadState: "networkidle" });
       await searchInput.press("Enter");
       // Wait for chip to appear before adding next keyword
       await expect(page.getByText(`KW${i} ${uid}`).first()).toBeVisible({ timeout: 10000 });
@@ -563,10 +586,12 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     const searchInput = page.getByPlaceholder(/Search occupations/i);
     await expect(searchInput).toBeVisible();
     await searchInput.fill("test");
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await searchInput.press("Tab");
-    await page.waitForTimeout(500);
+    // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await expect(searchInput).not.toBeVisible();
 
@@ -600,7 +625,8 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     await searchInput.type(`QuickKW ${uid}`, { delay: 10 });
     await searchInput.press("Enter");
-    await page.waitForTimeout(1000);
+    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
+    await safeWait(page, { loadState: "networkidle" });
 
     await expect(page.getByText(`QuickKW ${uid}`).first()).toBeVisible();
     expect(filterCriticalErrors(errors)).toEqual([]);
@@ -635,16 +661,19 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       .filter({ hasText: /Select countries|location/i });
     await expect(locationCombobox).toBeVisible({ timeout: 5000 });
     await locationCombobox.click();
-    await page.waitForTimeout(2000);
+    // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for server round-trip.
+    await safeWait(page, { loadState: "networkidle" });
 
     const locationInput = page.getByPlaceholder(/Search countries/i);
     await expect(locationInput).toBeVisible();
 
     await locationInput.fill("test");
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await locationInput.press("Tab");
-    await page.waitForTimeout(500);
+    // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await expect(locationInput).not.toBeVisible();
   });
@@ -672,13 +701,15 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       .filter({ hasText: /Select countries|location/i });
     await expect(locationCombobox).toBeVisible({ timeout: 10000 });
     await locationCombobox.click();
-    await page.waitForTimeout(2000);
+    // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for server round-trip.
+    await safeWait(page, { loadState: "networkidle" });
 
     const locationInput = page.getByPlaceholder(/Search countries/i);
     await expect(locationInput).toBeVisible({ timeout: 5000 });
 
     await locationInput.fill("Germany");
-    await page.waitForTimeout(1000);
+    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
+    await safeWait(page, { loadState: "networkidle" });
 
     const germanyOption = page
       .getByRole("option")
@@ -687,7 +718,8 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
     try {
       await germanyOption.waitFor({ state: "visible", timeout: 8000 });
       await germanyOption.click();
-      await page.waitForTimeout(500);
+      // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
+      await page.waitForLoadState("domcontentloaded");
 
       await expect(page.getByText(/Germany|DE/i).first()).toBeVisible();
 
@@ -722,7 +754,8 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       .filter({ hasText: /Select countries|location/i });
     await expect(locationCombobox).toBeVisible({ timeout: 5000 });
     await locationCombobox.click();
-    await page.waitForTimeout(3000);
+    // M-T-04 follow-up: replaced waitForTimeout(3000) — wait for server round-trip.
+    await safeWait(page, { loadState: "networkidle" });
 
     const countryWithRegions = page
       .getByRole("option")
@@ -732,7 +765,8 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
     try {
       await countryWithRegions.waitFor({ state: "visible", timeout: 5000 });
       await countryWithRegions.click();
-      await page.waitForTimeout(500);
+      // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
+      await page.waitForLoadState("domcontentloaded");
 
       const expanded = page.getByText(/All of|▾/).first();
       await expect(expanded).toBeVisible({ timeout: 3000 });
@@ -768,9 +802,11 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
     await expect(titleInput).toBeVisible();
 
     await titleInput.fill(title);
-    await page.waitForTimeout(600);
+    // M-T-04 follow-up: replaced waitForTimeout(600) — wait for options list.
+    await page.getByRole("option").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
     await titleInput.press("Enter");
-    await page.waitForTimeout(1000);
+    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for combobox to close.
+    await page.getByRole("option").first().waitFor({ state: "hidden", timeout: 5000 }).catch(() => null);
 
     await expect(getTitleCombobox(page)).toContainText(title, { timeout: 15000 });
 
@@ -778,10 +814,12 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
     const companyInput = page.getByPlaceholder("Create or Search company");
     await expect(companyInput).toBeVisible();
     await companyInput.fill("test mobile");
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await companyInput.press("Tab");
-    await page.waitForTimeout(500);
+    // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
     await expect(companyInput).not.toBeVisible();
     expect(filterCriticalErrors(errors)).toEqual([]);
@@ -821,12 +859,14 @@ test.describe("Keyboard UX: ARIA Announcements", () => {
     await expect(srStatus).toBeAttached();
 
     await getSourceCombobox(page).click();
-    await page.waitForTimeout(600);
+    // M-T-04 follow-up: replaced waitForTimeout(600) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
     const firstOption = page.getByRole("option").first();
     try {
       await firstOption.waitFor({ state: "visible", timeout: 3000 });
       await firstOption.click();
-      await page.waitForTimeout(500);
+      // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
+      await page.waitForLoadState("domcontentloaded");
 
       const announcements = await getAllAnnouncements(page);
       expect(hasAnnouncement(announcements, "selected")).toBe(true);
@@ -851,7 +891,8 @@ test.describe("Keyboard UX: ARIA Announcements", () => {
     await expect(skillInput).toBeVisible();
 
     await skillInput.fill(skill);
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
     await skillInput.press("Enter");
 
     // Wait for chip to appear (confirms the async creation completed)

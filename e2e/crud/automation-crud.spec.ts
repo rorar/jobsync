@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { safeWait } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -349,8 +350,9 @@ test.describe("Automation CRUD", () => {
       .filter({ has: page.locator(".lucide-pause") })
       .click();
 
-    // Wait briefly for the server action to complete, then reload to confirm
-    await page.waitForTimeout(1000);
+    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for networkidle
+    // so the server action has completed before we navigate away.
+    await safeWait(page, { loadState: "networkidle" });
     // Reload the list to confirm the status persisted
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
@@ -367,8 +369,9 @@ test.describe("Automation CRUD", () => {
       .filter({ has: page.locator(".lucide-play") })
       .click();
 
-    // Wait briefly for the server action to complete, then reload to confirm
-    await page.waitForTimeout(1000);
+    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for networkidle
+    // so the server action has completed before we navigate away.
+    await safeWait(page, { loadState: "networkidle" });
     // Reload the list to confirm the status persisted
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");

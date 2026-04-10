@@ -3,6 +3,13 @@ import { dashboard } from "@/i18n/dictionaries/dashboard";
 import { jobs } from "@/i18n/dictionaries/jobs";
 import { activities } from "@/i18n/dictionaries/activities";
 import { tasks } from "@/i18n/dictionaries/tasks";
+// Sprint 3 follow-up: include staging, automations, and settings in the
+// namespace cross-locale consistency check. These were previously omitted,
+// leaving a blind spot where missing or empty keys in those namespaces could
+// ship undetected.
+import { staging } from "@/i18n/dictionaries/staging";
+import { automations } from "@/i18n/dictionaries/automations";
+import { settings } from "@/i18n/dictionaries/settings";
 
 const LOCALES = ["en", "de", "fr", "es"] as const;
 
@@ -11,7 +18,26 @@ const namespaceDictionaries = {
   jobs,
   activities,
   tasks,
+  // Sprint 3 follow-up additions:
+  staging,
+  automations,
+  settings,
 } as const;
+
+// Most namespace files host a single key prefix (e.g. `dashboard.*`).
+// A few files — historically `settings.ts` — host multiple sibling
+// prefixes because they were merged from small sub-areas before we had
+// a dedicated file per bounded context. The cross-locale consistency
+// and no-empty-values checks still apply to every key; only the
+// prefix-equals-filename assertion needs this allowlist.
+//
+// Adding a new prefix to `settings.ts` (e.g. for a new sub-area) must
+// come with a corresponding entry here. Longer term, the Dev Tools and
+// SMTP keys should move into their own files (`developer.ts`,
+// `smtp.ts`) — see `docs/BUGS.md` Sprint 4 follow-ups.
+const EXTRA_ALLOWED_PREFIXES: Partial<Record<keyof typeof namespaceDictionaries, readonly string[]>> = {
+  settings: ["developer.", "smtp."],
+};
 
 describe("getDictionary", () => {
   it("returns a dictionary object for each supported locale", () => {
@@ -144,10 +170,15 @@ describe("namespace dictionaries", () => {
         }
       });
 
-      it(`all keys are prefixed with "${nsName}."`, () => {
+      it(`all keys are prefixed with "${nsName}." (or an allowlisted sibling prefix)`, () => {
+        const extras =
+          EXTRA_ALLOWED_PREFIXES[nsName as keyof typeof namespaceDictionaries] ??
+          [];
+        const allowedPrefixes = [`${nsName}.`, ...extras];
         for (const locale of LOCALES) {
           for (const key of Object.keys(nsDict[locale])) {
-            expect(key.startsWith(`${nsName}.`)).toBe(true);
+            const matches = allowedPrefixes.some((p) => key.startsWith(p));
+            expect(matches).toBe(true);
           }
         }
       });
@@ -177,6 +208,17 @@ describe("merged dictionary completeness", () => {
 
     // Check tasks keys are present
     for (const key of Object.keys(tasks.en)) {
+      expect(mergedKeys).toContain(key);
+    }
+
+    // Sprint 3 follow-up: check staging, automations, settings keys are present.
+    for (const key of Object.keys(staging.en)) {
+      expect(mergedKeys).toContain(key);
+    }
+    for (const key of Object.keys(automations.en)) {
+      expect(mergedKeys).toContain(key);
+    }
+    for (const key of Object.keys(settings.en)) {
       expect(mergedKeys).toContain(key);
     }
   });

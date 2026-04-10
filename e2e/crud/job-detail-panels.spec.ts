@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, selectOrCreateComboboxOption } from "../helpers";
+import { uniqueId, selectOrCreateComboboxOption, safeWait } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
@@ -17,7 +17,8 @@ async function navigateToJobsTable(page: Page) {
   await page.goto("/dashboard/myjobs");
   await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-job-btn").waitFor({ state: "visible" });
-  await page.waitForTimeout(1500);
+  // M-T-04 follow-up: replaced waitForTimeout(1500) — wait for networkidle.
+  await safeWait(page, { loadState: "networkidle" });
 
   // Always switch to Table view by clicking the Table radio button
   const tableRadio = page.getByRole("radio", { name: /table/i });
@@ -26,7 +27,8 @@ async function navigateToJobsTable(page: Page) {
 
   // Wait for the table element to appear
   await page.locator("table").first().waitFor({ state: "visible", timeout: 10000 });
-  await page.waitForTimeout(1500);
+  // M-T-04 follow-up: replaced waitForTimeout(1500) — wait for networkidle.
+  await safeWait(page, { loadState: "networkidle" });
 }
 
 /**
@@ -133,7 +135,8 @@ async function createJob(
       // Already selected or other issue — continue
     }
   }
-  await page.waitForTimeout(300);
+  // M-T-04 follow-up: replaced waitForTimeout(300) — wait for combobox to close.
+  await page.getByRole("option").first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => null);
 
   await page.locator(".tiptap").click();
   await page.locator(".tiptap").fill("E2E detail panel test description.");
@@ -355,8 +358,9 @@ test.describe("Job Detail Panels", () => {
     // Change the job status to "Applied"
     await changeJobStatus(page, jobTitle, "Applied");
 
-    // Wait a moment for the status change to be persisted
-    await page.waitForTimeout(2000);
+    // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for networkidle
+    // so the status change server action has completed before navigating.
+    await safeWait(page, { loadState: "networkidle" });
 
     // Navigate to job detail to see the timeline
     await navigateToJobDetail(page, jobTitle);

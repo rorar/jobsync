@@ -10,7 +10,7 @@ import type { Task } from "@/models/task.model";
 import type { Resume } from "@/models/profile.model";
 import type { Automation } from "@/models/automation.model";
 import type { Question } from "@/models/question.model";
-import type { StagedVacancy } from "@/models/stagedVacancy.model";
+import type { StagedVacancy, StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 
 // ─── User ──────────────────────────────────────────────────────────────────
 
@@ -1121,6 +1121,22 @@ export const mockStagedVacancyReady: StagedVacancy = {
   title: "Frontend Developer",
   status: "ready",
   matchScore: 92,
+};
+
+// ─── Staged Vacancy With Automation ──────────────────────────────────────
+//
+// L-T-04: mockStagedVacancy is typed as StagedVacancy, but many tests that
+// exercise deck/detail code need a StagedVacancyWithAutomation (which adds the
+// optional `automation` relation field). Instead of using inline spread
+// `{ ...mockStagedVacancy, automation: {...} }` everywhere, import this fixture
+// directly. The inline spread pattern is deprecated — new tests should use
+// mockStagedVacancyWithAutomation.
+export const mockStagedVacancyWithAutomation: StagedVacancyWithAutomation = {
+  ...mockStagedVacancy,
+  automation: {
+    id: mockAutomation.id,
+    name: mockAutomation.name,
+  },
 };
 
 // ─── Logo Asset ───────────────────────────────────────────────────────────

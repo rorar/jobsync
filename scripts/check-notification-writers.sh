@@ -33,8 +33,17 @@ ALLOWED_FILES=(
   # single writer for this event, fully satisfying LateBoundLocale.
 )
 
-# Grep for the offending patterns across src/
-violations=$(grep -rn -E "prisma\.notification\.(create|createMany)" src/ \
+# Grep for the offending patterns across src/.
+#
+# Two patterns are checked:
+#   1. prisma.notification.(create|createMany) — the most common direct-import
+#      pattern when `import prisma from "@/lib/db"` is aliased as `prisma`.
+#   2. db.notification.(create|createMany) — catches callers that import the
+#      Prisma singleton via `import db from "@/lib/db"` and use the `db` alias.
+#      An attacker or contributor bypassing the allowlist could exploit the `db`
+#      alias to write notifications outside the approved channel router path,
+#      which would violate the SingleNotificationWriter invariant (ADR-030).
+violations=$(grep -rn -E "(prisma|db)\.notification\.(create|createMany)" src/ \
   --include="*.ts" --include="*.tsx" 2>/dev/null || true)
 
 if [[ -z "$violations" ]]; then

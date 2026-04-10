@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, selectOrCreateComboboxOption } from "../helpers";
+import { uniqueId, selectOrCreateComboboxOption, safeWait } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific)
@@ -20,7 +20,9 @@ async function navigateToJobs(page: Page) {
   await page.goto("/dashboard/myjobs");
   await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-job-btn").waitFor({ state: "visible" });
-  await page.waitForTimeout(1000);
+  // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for the jobs table
+  // async loadJobs() call to complete rather than sleeping a fixed 1 000 ms.
+  await safeWait(page, { loadState: "networkidle" });
 }
 
 /**

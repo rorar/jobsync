@@ -155,7 +155,37 @@ describe("useSuperLikeCelebrations", () => {
       result.current.add({ jobId: "job-1", vacancyTitle: "First (re-added)" });
     });
 
+    // Queue length must be 1 — the re-add must not create a second entry.
     expect(result.current.items).toHaveLength(1);
+    // The updated title must be persisted — proves the OLD entry was replaced,
+    // not silently kept while the new one was dropped.
+    expect(result.current.items[0]?.vacancyTitle).toBe("First (re-added)");
     expect(result.current.current?.vacancyTitle).toBe("First (re-added)");
+  });
+
+  it("re-adding a middle item moves it to the back of the queue (FIFO position after dedup)", () => {
+    const { result } = renderHook(() => useSuperLikeCelebrations());
+
+    act(() => {
+      result.current.add({ jobId: "job-1", vacancyTitle: "First" });
+      result.current.add({ jobId: "job-2", vacancyTitle: "Second" });
+      result.current.add({ jobId: "job-3", vacancyTitle: "Third" });
+    });
+
+    // Dedup-re-add job-2: it should be removed from position 1 and appended
+    // to the END, so the FIFO order becomes [job-1, job-3, job-2-updated].
+    act(() => {
+      result.current.add({ jobId: "job-2", vacancyTitle: "Second (updated)" });
+    });
+
+    expect(result.current.items).toHaveLength(3);
+    // current is still the oldest entry (job-1) — the re-add of job-2 must
+    // NOT have changed which item is currently displayed.
+    expect(result.current.current?.jobId).toBe("job-1");
+    // job-2 (updated) is now at the back.
+    const ids = result.current.items.map((i) => i.jobId);
+    expect(ids).toEqual(["job-1", "job-3", "job-2"]);
+    // And the title was updated, not kept as "Second".
+    expect(result.current.items[2]?.vacancyTitle).toBe("Second (updated)");
   });
 });

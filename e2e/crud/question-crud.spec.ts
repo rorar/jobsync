@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { safeWait } from "../helpers";
 
 // storageState handles authentication — no per-test login needed
 
@@ -42,7 +43,8 @@ async function createQuestion(
     await page.getByText("Search or add a skill").click();
     // Type in the search input (placeholder from t("jobs.typeSkill") = "Type a skill...")
     await page.getByPlaceholder(/Type a skill/).fill(tagLabel);
-    await page.waitForTimeout(500);
+    // M-T-04 follow-up: replaced waitForTimeout(500) — wait for options list.
+    await page.getByRole("option").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
     // Check if the tag already exists as an option, otherwise create it
     // Create option shows as: Create "tagLabel"
     const existingOption = page.getByRole("option", {
@@ -59,7 +61,8 @@ async function createQuestion(
       await createOption.waitFor({ state: "visible", timeout: 3000 });
       await createOption.click();
     }
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for options list to close.
+    await page.getByRole("option").first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => null);
   }
 
   // Fill in the answer using Tiptap editor — interact via .tiptap CSS selector

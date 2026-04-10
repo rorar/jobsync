@@ -207,6 +207,48 @@ describe("UndoStore", () => {
   });
 });
 
+describe("globalThis HMR-survival semantics (L-T-06)", () => {
+  // The undoStore singleton is stored on `globalThis.__undoStore` so that it
+  // survives Hot Module Replacement: when Next.js re-evaluates the module
+  // during development, the new module execution finds the existing instance
+  // on globalThis and re-exports it rather than creating a fresh store.
+  //
+  // This test simulates that re-import path by:
+  //   1. Pushing a token via the original import.
+  //   2. Deleting the module from Jest's registry (jest.resetModules).
+  //   3. Re-importing the module.
+  //   4. Asserting that the re-imported store is the same instance as the one
+  //      on globalThis and still holds the token — proving HMR-survival.
+
+  it("re-imported module returns the same store instance (globalThis singleton)", async () => {
+    // Arrange: push a token before the simulated module reload.
+    const { undoStore: original, createUndoEntry: createEntry } = await import(
+      "@/lib/undo/undo-store"
+    );
+    original.reset();
+    const entry = createEntry("user-1", "pre-hmr-action", ["item-1"], async () => {});
+    original.push(entry);
+    expect(original.size).toBe(1);
+
+    // Act: simulate HMR by clearing Jest's module registry and re-importing.
+    jest.resetModules();
+    const { undoStore: reloaded } = await import("@/lib/undo/undo-store");
+
+    // Assert: the re-imported export must be the same object that sits on
+    // globalThis — not a brand-new UndoStore instance.
+    const g = globalThis as unknown as { __undoStore?: unknown };
+    expect(reloaded).toBe(g.__undoStore);
+
+    // The token pushed before the reload is still present, proving that the
+    // in-memory state was not wiped by the module re-evaluation.
+    expect(reloaded.size).toBe(1);
+    expect(reloaded.get(entry.id)).toBeDefined();
+
+    // Cleanup so subsequent tests start fresh.
+    reloaded.reset();
+  });
+});
+
 describe("createUndoEntry", () => {
   it("creates entry with default TTL", () => {
     const entry = createUndoEntry("user-1", "dismiss", ["item-1", "item-2"], async () => {});

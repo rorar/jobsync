@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, expectToast } from "../helpers";
+import { uniqueId, expectToast, safeWait } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
@@ -47,7 +47,9 @@ async function loadUntilCompanyVisible(page: Page, name: string) {
 
     // Click "Load More" and wait for the table to update
     await loadMoreBtn.click();
-    await page.waitForTimeout(1000);
+    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for the table to
+    // finish loading the next page rather than sleeping a fixed 1 000 ms.
+    await safeWait(page, { loadState: "networkidle" });
   }
 }
 

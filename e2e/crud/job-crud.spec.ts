@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { selectOrCreateComboboxOption } from "../helpers";
+import { selectOrCreateComboboxOption, safeWait } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -9,9 +9,9 @@ async function navigateToJobs(page: Page) {
   await page.goto("/dashboard/myjobs");
   await page.waitForLoadState("domcontentloaded");
   await page.getByTestId("add-job-btn").waitFor({ state: "visible" });
-  // Wait for the jobs table to finish its async loadJobs() call.
-  // Use a longer timeout to account for slow server responses.
-  await page.waitForTimeout(3000);
+  // M-T-04 follow-up: replaced waitForTimeout(3000) — wait for the jobs table
+  // async loadJobs() call to complete rather than sleeping a fixed 3 000 ms.
+  await safeWait(page, { loadState: "networkidle" });
 }
 
 /**

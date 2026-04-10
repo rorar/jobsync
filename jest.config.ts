@@ -38,6 +38,10 @@ const config: Config = {
   // the 8GB NixOS VM. Pass `--coverage` to scripts/test.sh (or set the Jest
   // `--coverage` flag directly) to opt IN. CI calls `bash scripts/test.sh
   // --coverage` explicitly. See H-P-03 and CLAUDE.md § Testing Requirements.
+  //
+  // L-S-01 CLOSE-OUT (Sprint 4 Stream C, 2026-04-10): verified collectCoverage
+  // remains false. Applied by Sprint 3 Stream F (commit 4f29f69). No further
+  // action required — L-S-01 is resolved.
   collectCoverage: false,
 
   // An array of glob patterns indicating a set of files for which coverage information should be collected
@@ -176,8 +180,11 @@ const config: Config = {
   // A list of paths to modules that run some code to configure or set up the testing framework before each test
   // setupFilesAfterEnv: [],
 
-  // The number of seconds after which a test is considered as slow and reported as such in the results.
-  // slowTestThreshold: 5,
+  // The number of seconds after which a test is considered as slow and reported
+  // as such in the results. This is a test-observability aid: tests that exceed
+  // this threshold are flagged in the console output so slow tests can be
+  // identified and investigated without requiring a separate performance report.
+  slowTestThreshold: 5,
 
   // A list of paths to snapshot serializer modules Jest should use for snapshot testing
   // snapshotSerializers: [],

@@ -80,8 +80,11 @@ describe("MatchScoreRing — content rendering", () => {
     const ring = screen.getByRole("img", { name: /match score 100 of 100/i });
     expect(ring).toBeInTheDocument();
     expect(ring.textContent).toBe("100");
+    // L-Y-05 (Sprint 4 Stream E) — the high-score stroke is bumped
+    // from emerald-500 (2.61:1 on white — FAIL) to emerald-600 (3.39:1
+    // on white — PASS) to satisfy WCAG 1.4.11 Non-text Contrast.
     const progressCircle = findSvg(container).querySelector(
-      "circle.stroke-emerald-500",
+      "circle.stroke-emerald-600",
     );
     expect(progressCircle).toBeInTheDocument();
   });
@@ -114,6 +117,59 @@ describe("MatchScoreRing — content rendering", () => {
     );
     const ring = screen.getByRole("img", { name: /match score 100 of 100/i });
     expect(ring.textContent).toBe("100");
+  });
+});
+
+describe("MatchScoreRing — edge case scores (L-T-05)", () => {
+  // These tests pin the actual production behaviour of MatchScoreRing for
+  // numeric edge cases. The component uses `Number.isFinite(score)` as its
+  // validity guard, so NaN and Infinity both fall into the "no score" path
+  // and render the em-dash placeholder. Negative scores pass the isFinite
+  // guard but are clamped to 0 by `Math.max(0, ...)`.
+
+  it("negative score is clamped to 0 and renders '0'", () => {
+    // hasScore=true (Number.isFinite(-5) === true), clamped = Math.max(0, -5) = 0
+    const { container } = render(
+      <MatchScoreRing score={-5} ariaLabel="Match score 0 of 100" />,
+    );
+    const ring = screen.getByRole("img", { name: /match score 0 of 100/i });
+    expect(ring).toBeInTheDocument();
+    // Displays the clamped value, not the raw negative number.
+    expect(ring.textContent).toBe("0");
+    // The progress ring for the red threshold must be present (clamped → 0 < 40).
+    const progressCircle = findSvg(container).querySelector(
+      "circle.stroke-red-500",
+    );
+    expect(progressCircle).toBeInTheDocument();
+  });
+
+  it("NaN score renders the em-dash placeholder (non-finite → no score path)", () => {
+    // Number.isFinite(NaN) === false → hasScore=false → em-dash
+    render(
+      <MatchScoreRing score={NaN} ariaLabel="Match score not available" />,
+    );
+    const ring = screen.getByRole("img", { name: /not available/i });
+    expect(ring).toBeInTheDocument();
+    expect(ring.textContent).toBe("—");
+  });
+
+  it("Infinity score renders the em-dash placeholder (non-finite → no score path)", () => {
+    // Number.isFinite(Infinity) === false → hasScore=false → em-dash
+    render(
+      <MatchScoreRing score={Infinity} ariaLabel="Match score not available" />,
+    );
+    const ring = screen.getByRole("img", { name: /not available/i });
+    expect(ring).toBeInTheDocument();
+    expect(ring.textContent).toBe("—");
+  });
+
+  it("-Infinity score renders the em-dash placeholder (non-finite → no score path)", () => {
+    render(
+      <MatchScoreRing score={-Infinity} ariaLabel="Match score not available" />,
+    );
+    const ring = screen.getByRole("img", { name: /not available/i });
+    expect(ring).toBeInTheDocument();
+    expect(ring.textContent).toBe("—");
   });
 });
 
@@ -167,5 +223,67 @@ describe("MatchScoreRing — accessibility contract (H-Y-01 / H-Y-02)", () => {
       const label = findSvg(c).getAttribute("aria-label");
       expect(label).toBeNull();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sprint 4 Stream E — L-Y-05: WCAG 1.4.11 Non-text contrast audit
+//
+// The stroke on the progress arc sits on top of the card's white
+// background (+ the muted track ring). WCAG 1.4.11 requires ≥ 3:1
+// contrast between the graphical object and its adjacent background.
+// This block locks in the post-audit color choices for each threshold
+// bucket so a future "let's lighten this a bit" refactor can't
+// silently regress the contrast ratio.
+// ---------------------------------------------------------------------------
+
+describe("MatchScoreRing — L-Y-05 contrast audit (WCAG 1.4.11)", () => {
+  it("high-score (>=80) uses stroke-emerald-600 (3.39:1 on white)", () => {
+    const { container } = render(
+      <MatchScoreRing score={90} ariaHidden />,
+    );
+    // Must be the bumped amber-700 equivalent; MUST NOT be emerald-500
+    // (the old failing value, 2.61:1).
+    expect(
+      findSvg(container).querySelector("circle.stroke-emerald-600"),
+    ).toBeInTheDocument();
+    expect(
+      findSvg(container).querySelector("circle.stroke-emerald-500"),
+    ).toBeNull();
+  });
+
+  it("mid-score (60-79) uses stroke-blue-500 (3.68:1 on white)", () => {
+    const { container } = render(
+      <MatchScoreRing score={70} ariaHidden />,
+    );
+    expect(
+      findSvg(container).querySelector("circle.stroke-blue-500"),
+    ).toBeInTheDocument();
+  });
+
+  it("mid-score (40-59) uses stroke-amber-700 (4.52:1 on white)", () => {
+    const { container } = render(
+      <MatchScoreRing score={50} ariaHidden />,
+    );
+    // Must be the bumped amber-700; MUST NOT be amber-500 (1.96:1 FAIL)
+    // or amber-600 (2.85:1 FAIL marginal).
+    expect(
+      findSvg(container).querySelector("circle.stroke-amber-700"),
+    ).toBeInTheDocument();
+    expect(
+      findSvg(container).querySelector("circle.stroke-amber-500"),
+    ).toBeNull();
+    expect(
+      findSvg(container).querySelector("circle.stroke-amber-600"),
+    ).toBeNull();
+  });
+
+  it("low-score (<40) uses stroke-red-500 (3.76:1 on white)", () => {
+    const { container } = render(
+      <MatchScoreRing score={20} ariaHidden />,
+    );
+    expect(
+      findSvg(container).querySelector("circle.stroke-red-500"),
+    ).toBeInTheDocument();
   });
 });

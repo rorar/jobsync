@@ -104,9 +104,16 @@ test.describe("Push Settings", () => {
     const isUnsupported = await notSupported.isVisible().catch(() => false);
 
     if (isUnsupported) {
-      // In unsupported browsers, skip the VAPID rotation test
-      test.skip(true, "Push not supported in this browser environment");
-      return;
+      // Sprint 3 follow-up (silent-skip audit): hard-fail instead of silently
+      // skipping so CI catches regressions in environments where push IS
+      // expected to work. Replace with test.skip only when the CI environment
+      // is confirmed to lack PushManager support project-wide.
+      throw new Error(
+        "Push notifications are not supported in this browser environment. " +
+        "If this is expected (e.g. headless Chromium without PushManager), " +
+        "confirm the CI environment and convert this throw to test.skip() " +
+        "with a tracked issue rather than silently suppressing coverage.",
+      );
     }
 
     // The VAPID rotation section should be visible
@@ -132,8 +139,14 @@ test.describe("Push Settings", () => {
     const isUnsupported = await notSupported.isVisible().catch(() => false);
 
     if (isUnsupported) {
-      test.skip(true, "Push not supported in this browser environment");
-      return;
+      // Sprint 3 follow-up (silent-skip audit): hard-fail instead of silently
+      // skipping — same rationale as the VAPID rotation section test above.
+      throw new Error(
+        "Push notifications are not supported in this browser environment. " +
+        "If this is expected (e.g. headless Chromium without PushManager), " +
+        "confirm the CI environment and convert this throw to test.skip() " +
+        "with a tracked issue rather than silently suppressing coverage.",
+      );
     }
 
     // Click the "Rotate Keys" button to open the confirmation dialog

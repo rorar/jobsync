@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, expectToast } from "../helpers";
+import { uniqueId, expectToast, safeWait } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
@@ -17,7 +17,14 @@ async function dismissToasts(page: Page) {
   const dismiss = page.getByRole("button", { name: /Dismiss/i });
   while (await dismiss.first().isVisible().catch(() => false)) {
     await dismiss.first().click().catch(() => {});
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for the dismiss
+    // button to disappear rather than sleeping a fixed 300 ms.
+    await safeWait(page, {
+      condition: async () => {
+        const visible = await dismiss.first().isVisible().catch(() => false);
+        if (visible) throw new Error("toast still visible");
+      },
+    }).catch(() => null); // acceptable if toast already gone
   }
 }
 

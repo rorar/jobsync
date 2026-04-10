@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { expectToast } from "../helpers";
+import { expectToast, safeWait } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -30,7 +30,8 @@ async function createTask(
     await page
       .getByPlaceholder("Create or Search activityType")
       .fill(options.activityType);
-    await page.waitForTimeout(500);
+    // M-T-04 follow-up: replaced waitForTimeout(500) — wait for options list.
+    await page.getByRole("option").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
     const existingOption = page.getByRole("option", {
       name: options.activityType,
       exact: true,
@@ -41,7 +42,8 @@ async function createTask(
     } else if (await createOption.isVisible()) {
       await createOption.click({ force: true });
     }
-    await page.waitForTimeout(300);
+    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for options list to close.
+    await page.getByRole("option").first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => null);
   }
 
   const saveBtn = page.getByTestId("save-task-btn");
@@ -292,8 +294,13 @@ test.describe("Task CRUD", () => {
       page.getByRole("row", { name: new RegExp(taskTitle, "i") }).first(),
     ).toBeVisible({ timeout: 10000 });
 
-    // Wait for creation toast to disappear so it doesn't overlay the row
-    await page.waitForTimeout(2000);
+    // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for the creation
+    // toast to disappear rather than sleeping a fixed 2 000 ms.
+    await safeWait(page, {
+      condition: async () => {
+        await expect(page.getByRole("status").first()).not.toBeVisible();
+      },
+    }).catch(() => null); // acceptable if toast already gone
 
     // Use the actions menu to start the activity instead of the hover button,
     // which has opacity-0 and may not be reliably clickable in all environments

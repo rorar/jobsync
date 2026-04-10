@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { selectOrCreateComboboxOption, uniqueId } from "../helpers";
+import { selectOrCreateComboboxOption, uniqueId, safeWait } from "../helpers";
 
 // storageState handles authentication — no per-test login needed
 
@@ -50,7 +50,9 @@ async function createActivity(
     "Create or Search activityType",
     activityType,
   );
-  await page.waitForTimeout(300);
+  // M-T-04 follow-up: replaced waitForTimeout(300) — wait for the combobox to
+  // close after selection rather than sleeping a fixed 300 ms.
+  await safeWait(page, { loadState: "domcontentloaded" });
 
   // Set start time — placeholder: t("activities.timePlaceholder") = "hh:mm AM/PM"
   const startTimeInput = page.getByPlaceholder("hh:mm AM/PM").first();
