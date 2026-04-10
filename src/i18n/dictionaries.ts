@@ -106,6 +106,8 @@ const core = {
     "common.minuteShort": "m",
     "common.secondShort": "s",
     "common.dismiss": "Dismiss",
+    "common.add": "Add",
+    "common.remove": "Remove",
 
     // Undo
     "undo.actionUndone": "Action undone",
@@ -269,6 +271,8 @@ const core = {
     "common.minuteShort": "m",
     "common.secondShort": "s",
     "common.dismiss": "Schließen",
+    "common.add": "Hinzufügen",
+    "common.remove": "Entfernen",
 
     // Rückgängig machen
     "undo.actionUndone": "Aktion rückgängig gemacht",
@@ -432,6 +436,8 @@ const core = {
     "common.minuteShort": "min",
     "common.secondShort": "s",
     "common.dismiss": "Fermer",
+    "common.add": "Ajouter",
+    "common.remove": "Supprimer",
 
     // Annuler
     "undo.actionUndone": "Action annulée",
@@ -595,6 +601,8 @@ const core = {
     "common.minuteShort": "min",
     "common.secondShort": "s",
     "common.dismiss": "Cerrar",
+    "common.add": "Añadir",
+    "common.remove": "Eliminar",
 
     // Deshacer
     "undo.actionUndone": "Acción deshecha",

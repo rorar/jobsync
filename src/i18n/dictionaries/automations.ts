@@ -369,6 +369,7 @@ export const automations = {
 
     // Connector Params — EURES: required languages
     "automations.params.requiredLanguages": "Required languages",
+    "automations.params.selectLanguage": "Select language...",
 
     // Connector Params — EURES: keyword search scope
     "automations.params.keywordSearchScope": "Keyword search scope",
@@ -835,6 +836,7 @@ export const automations = {
 
     // Connector Params — EURES: required languages
     "automations.params.requiredLanguages": "Erforderliche Sprachen",
+    "automations.params.selectLanguage": "Sprache auswählen...",
 
     // Connector Params — EURES: keyword search scope
     "automations.params.keywordSearchScope": "Suchbereich für Schlüsselwörter",
@@ -1301,6 +1303,7 @@ export const automations = {
 
     // Connector Params — EURES: required languages
     "automations.params.requiredLanguages": "Langues requises",
+    "automations.params.selectLanguage": "Sélectionner une langue...",
 
     // Connector Params — EURES: keyword search scope
     "automations.params.keywordSearchScope": "Portée de recherche",
@@ -1767,6 +1770,7 @@ export const automations = {
 
     // Connector Params — EURES: required languages
     "automations.params.requiredLanguages": "Idiomas requeridos",
+    "automations.params.selectLanguage": "Seleccionar idioma...",
 
     // Connector Params — EURES: keyword search scope
     "automations.params.keywordSearchScope": "Ámbito de búsqueda",

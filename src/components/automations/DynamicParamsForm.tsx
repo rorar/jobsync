@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import React, { useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -189,6 +189,17 @@ function DynamicField({ moduleId, field, value, onChange }: DynamicFieldProps) {
         />
       );
 
+    case "language-proficiency":
+      return (
+        <LanguageProficiencyField
+          field={field}
+          value={value}
+          onChange={onChange}
+          displayLabel={displayLabel}
+          t={t}
+        />
+      );
+
     default:
       return null;
   }
@@ -305,6 +316,167 @@ function MultiselectField({
           })}
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Internal: language + CEFR proficiency level selector
+// ---------------------------------------------------------------------------
+
+/** ISO 639-1 codes for common European languages. */
+const LANGUAGE_OPTIONS = [
+  "bg", "cs", "da", "de", "el", "en", "es", "et", "fi", "fr",
+  "ga", "hr", "hu", "it", "lt", "lv", "mt", "nl", "no", "pl",
+  "pt", "ro", "sk", "sl", "sv",
+] as const;
+
+/** CEFR proficiency levels. */
+const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
+
+/** Native language names for display in the selector. */
+const LANGUAGE_NAMES: Record<string, string> = {
+  bg: "Български (BG)", cs: "Čeština (CS)", da: "Dansk (DA)",
+  de: "Deutsch (DE)", el: "Ελληνικά (EL)", en: "English (EN)",
+  es: "Español (ES)", et: "Eesti (ET)", fi: "Suomi (FI)",
+  fr: "Français (FR)", ga: "Gaeilge (GA)", hr: "Hrvatski (HR)",
+  hu: "Magyar (HU)", it: "Italiano (IT)", lt: "Lietuvių (LT)",
+  lv: "Latviešu (LV)", mt: "Malti (MT)", nl: "Nederlands (NL)",
+  no: "Norsk (NO)", pl: "Polski (PL)", pt: "Português (PT)",
+  ro: "Română (RO)", sk: "Slovenčina (SK)", sl: "Slovenščina (SL)",
+  sv: "Svenska (SV)",
+};
+
+interface LanguageProficiencyFieldProps {
+  field: ConnectorParamField;
+  value: unknown;
+  onChange: (key: string, value: unknown) => void;
+  displayLabel: string;
+  t: (key: string) => string;
+}
+
+/**
+ * Structured language + CEFR level selector.
+ *
+ * Replaces the old free-text input ("de(B2), en(C1)") with two dropdowns
+ * + an add button + chip display. The serialized value is the same
+ * comma-separated format the EURES API expects: "de(B2), en(C1)".
+ */
+function LanguageProficiencyField({
+  field,
+  value,
+  onChange,
+  displayLabel,
+  t,
+}: LanguageProficiencyFieldProps) {
+  // Parse the serialized string into an array of { lang, level } pairs.
+  const entries: { lang: string; level: string }[] = (() => {
+    if (typeof value !== "string" || value.trim() === "") return [];
+    return value
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((entry) => {
+        const match = entry.match(/^([a-z]{2})\(([A-C][12])\)$/i);
+        if (!match) return null;
+        return { lang: match[1].toLowerCase(), level: match[2].toUpperCase() };
+      })
+      .filter((e): e is { lang: string; level: string } => e !== null);
+  })();
+
+  const serialize = (list: { lang: string; level: string }[]) =>
+    list.length > 0
+      ? list.map((e) => `${e.lang}(${e.level})`).join(", ")
+      : undefined;
+
+  const [pendingLang, setPendingLang] = React.useState("");
+  const [pendingLevel, setPendingLevel] = React.useState("B2");
+
+  const usedLanguages = new Set(entries.map((e) => e.lang));
+  const availableLanguages = LANGUAGE_OPTIONS.filter(
+    (l) => !usedLanguages.has(l),
+  );
+
+  const addEntry = () => {
+    if (!pendingLang || !pendingLevel) return;
+    const next = [...entries, { lang: pendingLang, level: pendingLevel }];
+    onChange(field.key, serialize(next));
+    setPendingLang("");
+  };
+
+  const removeEntry = (lang: string) => {
+    const next = entries.filter((e) => e.lang !== lang);
+    onChange(field.key, serialize(next));
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-sm">{displayLabel}</Label>
+
+      {/* Selected language chips */}
+      {entries.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {entries.map((entry) => (
+            <Badge
+              key={entry.lang}
+              variant="secondary"
+              className="gap-1.5 pr-1"
+            >
+              <span className="text-xs font-medium">
+                {LANGUAGE_NAMES[entry.lang] ?? entry.lang.toUpperCase()} — {entry.level}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeEntry(entry.lang)}
+                className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                aria-label={`${t("common.remove")} ${entry.lang.toUpperCase()} ${entry.level}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {/* Add row: language select + level select + add button */}
+      {availableLanguages.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Select value={pendingLang} onValueChange={setPendingLang}>
+            <SelectTrigger className="flex-1">
+              <SelectValue placeholder={t("automations.params.selectLanguage")} />
+            </SelectTrigger>
+            <SelectContent>
+              {availableLanguages.map((lang) => (
+                <SelectItem key={lang} value={lang}>
+                  {LANGUAGE_NAMES[lang] ?? lang.toUpperCase()}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={pendingLevel} onValueChange={setPendingLevel}>
+            <SelectTrigger className="w-[80px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CEFR_LEVELS.map((level) => (
+                <SelectItem key={level} value={level}>
+                  {level}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <button
+            type="button"
+            onClick={addEntry}
+            disabled={!pendingLang}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-3"
+          >
+            {t("common.add")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

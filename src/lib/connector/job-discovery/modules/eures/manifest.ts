@@ -97,10 +97,9 @@ export const euresManifest: JobDiscoveryManifest = {
       key: "euresFlagCodes", type: "multiselect", label: "automations.params.euresFlag",
       options: ["WITH", "WITHOUT"],
     },
-    // Required languages (format: "de(C2)", "en(B1)")
+    // Required languages — structured selector for language + CEFR level
     {
-      key: "requiredLanguages", type: "string", label: "automations.params.requiredLanguages",
-      placeholder: "de(B2), en(C1)",
+      key: "requiredLanguages", type: "language-proficiency", label: "automations.params.requiredLanguages",
     },
     // Keyword search scope
     {

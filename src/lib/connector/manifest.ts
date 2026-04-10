@@ -109,7 +109,7 @@ export interface ModelSelectionConfig {
 
 export interface ConnectorParamField {
   key: string;
-  type: "string" | "number" | "boolean" | "select" | "multiselect";
+  type: "string" | "number" | "boolean" | "select" | "multiselect" | "language-proficiency";
   label: string; // i18n key (e.g. "automations.params.umkreis")
   defaultValue?: string | number | boolean;
   options?: (string | number)[]; // for select/multiselect types
