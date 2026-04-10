@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useTranslations, formatNumber } from "@/i18n";
 import {
   getStatusDistribution,
@@ -159,7 +160,7 @@ export default function StatusFunnelWidget() {
         </div>
       </CardHeader>
       <CardContent>
-        {state.status === "loading" && <SkeletonBars />}
+        {state.status === "loading" && <SkeletonBars label={t("common.loading")} />}
         {state.status === "error" && (
           <ErrorState message={t(state.message)} onRetry={fetchData} />
         )}
@@ -247,20 +248,32 @@ export default function StatusFunnelWidget() {
   );
 }
 
-/** Skeleton loading state with animated bars */
-function SkeletonBars() {
+/**
+ * Skeleton loading state with animated bars.
+ *
+ * Sprint 4 Stream E — Sprint 3 Stream G (M-Y-08) follow-up: migrated
+ * from the ad-hoc `aria-busy="true" aria-label="Loading pipeline data"`
+ * wrapper (hardcoded English) to the shared `Skeleton` primitive. The
+ * label arrives from the parent's `useTranslations()` call
+ * (`t("common.loading")`) so DE/FR/ES users hear the loading state in
+ * their locale. The primitive also adds `role="status"` and
+ * `aria-live="polite"` which the old wrapper was missing, bringing the
+ * three funnel/history/enrichment skeletons to a consistent ARIA
+ * contract.
+ */
+function SkeletonBars({ label }: { label: string }) {
   return (
-    <div className="space-y-3" aria-busy="true" aria-label="Loading pipeline data">
+    <Skeleton className="space-y-3" label={label}>
       {Array.from({ length: 5 }).map((_, i) => (
         <div key={i} className="flex items-center gap-2">
-          <div className="w-20 h-4 bg-muted rounded animate-pulse" />
+          <div className="w-20 h-4 bg-muted rounded animate-pulse motion-reduce:animate-none" />
           <div
-            className="h-6 bg-muted rounded animate-pulse"
+            className="h-6 bg-muted rounded animate-pulse motion-reduce:animate-none"
             style={{ width: `${90 - i * 15}%` }}
           />
         </div>
       ))}
-    </div>
+    </Skeleton>
   );
 }
 

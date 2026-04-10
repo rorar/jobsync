@@ -39,6 +39,11 @@ export const dashboard = {
     // Sprint 2 follow-up: chart labels in WeeklyBarChartToggle.
     "dashboard.chartJobs": "Jobs",
     "dashboard.chartActivities": "Activities",
+    // Sprint 4 Stream E — axis-left legend labels for the two
+    // dashboard chart variants. Previously hardcoded English strings
+    // passed straight through to Nivo's `axisLeft.legend`.
+    "dashboard.chartJobsApplied": "JOBS APPLIED",
+    "dashboard.chartTimeSpent": "TIME SPENT (Hours)",
   },
   de: {
     "dashboard.title": "Dashboard",
@@ -77,6 +82,9 @@ export const dashboard = {
     // Sprint 2 follow-up: chart labels in WeeklyBarChartToggle.
     "dashboard.chartJobs": "Jobs",
     "dashboard.chartActivities": "Aktivitäten",
+    // Sprint 4 Stream E — axis-left legend labels.
+    "dashboard.chartJobsApplied": "BEWERBUNGEN",
+    "dashboard.chartTimeSpent": "ZEITAUFWAND (Std.)",
   },
   fr: {
     "dashboard.title": "Tableau de bord",
@@ -115,6 +123,9 @@ export const dashboard = {
     // Sprint 2 follow-up: chart labels in WeeklyBarChartToggle.
     "dashboard.chartJobs": "Emplois",
     "dashboard.chartActivities": "Activités",
+    // Sprint 4 Stream E — axis-left legend labels.
+    "dashboard.chartJobsApplied": "CANDIDATURES",
+    "dashboard.chartTimeSpent": "TEMPS PASSÉ (Heures)",
   },
   es: {
     "dashboard.title": "Panel",
@@ -153,5 +164,8 @@ export const dashboard = {
     // Sprint 2 follow-up: chart labels in WeeklyBarChartToggle.
     "dashboard.chartJobs": "Empleos",
     "dashboard.chartActivities": "Actividades",
+    // Sprint 4 Stream E — axis-left legend labels.
+    "dashboard.chartJobsApplied": "SOLICITUDES",
+    "dashboard.chartTimeSpent": "TIEMPO EMPLEADO (Horas)",
   },
 } as const;

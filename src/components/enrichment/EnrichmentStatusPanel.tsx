@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CompanyLogo } from "@/components/ui/company-logo";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/use-toast";
 import {
   getEnrichmentStatus,
@@ -85,9 +86,23 @@ function StatusIcon({ status }: { status: string }) {
   }
 }
 
-function EnrichmentStatusSkeleton() {
+/**
+ * Sprint 4 Stream E — Sprint 3 Stream G (M-Y-08) follow-up: migrated
+ * from an ad-hoc `role="status" aria-label="Loading"` wrapper (hardcoded
+ * English) to the shared `Skeleton` primitive. The accessible label is
+ * now passed via the `label` prop so DE/FR/ES users hear "Laden…",
+ * "Chargement…", "Cargando…" instead of "Loading" mid-sentence.
+ *
+ * The primitive is a pure presentation atom — it does NOT call
+ * `useTranslations()` itself (that would force every Skeleton consumer
+ * to re-render on locale change). Instead the caller passes a
+ * pre-translated string. We consume the already-imported `t` from the
+ * parent component via a prop rather than calling `useTranslations()`
+ * twice on the same render.
+ */
+function EnrichmentStatusSkeleton({ label }: { label: string }) {
   return (
-    <div className="space-y-3" role="status" aria-label="Loading">
+    <Skeleton className="space-y-3" label={label}>
       {[1, 2].map((i) => (
         <div key={i} className="flex items-center gap-3 p-3 rounded-md border">
           <div className="h-4 w-4 rounded-full bg-muted animate-pulse motion-reduce:animate-none" />
@@ -98,7 +113,7 @@ function EnrichmentStatusSkeleton() {
           <div className="h-5 w-16 bg-muted rounded animate-pulse motion-reduce:animate-none" />
         </div>
       ))}
-    </div>
+    </Skeleton>
   );
 }
 
@@ -207,7 +222,7 @@ export function EnrichmentStatusPanel({
       </CardHeader>
       <CardContent>
         {/* Loading state */}
-        {loading && <EnrichmentStatusSkeleton />}
+        {loading && <EnrichmentStatusSkeleton label={t("common.loading")} />}
 
         {/* Error state */}
         {!loading && error && (

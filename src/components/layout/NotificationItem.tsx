@@ -208,8 +208,18 @@ export function NotificationItem({
           </div>
           {!notification.read && (
             <>
-              {/* Non-visual cue so screen readers announce unread state */}
-              <span className="sr-only">•</span>
+              {/*
+                L-Y-03 (Sprint 4 Stream E) — previously the sr-only text
+                was a literal bullet glyph (`•`), which VoiceOver/NVDA
+                pronounce as "bullet" / "black circle" / nothing,
+                depending on punctuation-verbosity settings. That is
+                meaningless audio for a status indicator. Replace with a
+                translated word so AT users actually hear "Unread"
+                (EN) / "Ungelesen" (DE) / "Non lu" (FR) / "No leído" (ES).
+              */}
+              <span className="sr-only">
+                {t("notifications.unreadIndicator")}
+              </span>
               <span
                 className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1"
                 aria-hidden="true"

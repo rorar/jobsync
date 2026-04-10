@@ -35,6 +35,9 @@ jest.mock("@/i18n", () => ({
         "notifications.actor.automation": "Automation",
         "notifications.actor.user": "You",
         "notifications.title": "Notifications",
+        // L-Y-03 (Sprint 4 Stream E) — translated sr-only word for the
+        // unread-dot indicator. Used by the regression test below.
+        "notifications.unreadIndicator": "Unread",
       };
       return dict[key] ?? key;
     },
@@ -525,6 +528,53 @@ describe("NotificationItem", () => {
       fireEvent.click(screen.getByLabelText("Dismiss"));
       expect(mockDismiss).toHaveBeenCalledWith("notif-hitarea");
       expect(mockMarkAsRead).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 4 Stream E — L-Y-03: translated unread-dot sr-only indicator
+  // ---------------------------------------------------------------------------
+
+  describe("Sprint 4 Stream E — L-Y-03 translated unread indicator", () => {
+    it("renders the translated 'Unread' string for unread items (not a bullet glyph)", () => {
+      const { container } = render(
+        <NotificationItem
+          notification={makeNotification({ read: false })}
+          onMarkAsRead={mockMarkAsRead}
+          onDismiss={mockDismiss}
+        />,
+      );
+      // The sr-only span should contain the translated word, not the
+      // pre-fix `•` bullet character.
+      const srOnlySpans = Array.from(
+        container.querySelectorAll<HTMLElement>("span.sr-only"),
+      );
+      const unreadSpan = srOnlySpans.find(
+        (span) => span.textContent?.trim() === "Unread",
+      );
+      expect(unreadSpan).toBeDefined();
+      // L-Y-03 direct regression guard: the raw bullet glyph MUST NOT
+      // appear in any sr-only descendant.
+      for (const span of srOnlySpans) {
+        expect(span.textContent).not.toBe("•");
+      }
+    });
+
+    it("does NOT render the unread indicator when the notification is read", () => {
+      const { container } = render(
+        <NotificationItem
+          notification={makeNotification({ read: true })}
+          onMarkAsRead={mockMarkAsRead}
+          onDismiss={mockDismiss}
+        />,
+      );
+      const srOnlySpans = Array.from(
+        container.querySelectorAll<HTMLElement>("span.sr-only"),
+      );
+      const unreadSpan = srOnlySpans.find(
+        (span) => span.textContent?.trim() === "Unread",
+      );
+      expect(unreadSpan).toBeUndefined();
     });
   });
 

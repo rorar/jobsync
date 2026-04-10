@@ -612,8 +612,36 @@ export const DeckView = forwardRef<DeckViewHandle, DeckViewProps>(function DeckV
         )}
       </div>
 
-      {/* Screen reader live regions */}
+      {/*
+        L-NEW-01 (Sprint 4 Stream E) — consolidated screen reader live region.
+        Previously there were TWO adjacent live regions: a `polite` card
+        announcement and an `assertive` last-action announcement. They
+        updated simultaneously on every deck action, and the assertive
+        region interrupted the polite one in progress. Different AT
+        implementations handled the collision differently:
+        NVDA swallowed the polite announcement, JAWS truncated it,
+        VoiceOver read both at roughly the same time. None of those were
+        acceptable.
+
+        The consolidation keeps a SINGLE polite region and concatenates
+        the last action (when present) with the card announcement. Deck
+        actions are always user-initiated (swipe, click, keyboard) — they
+        never need `assertive` priority, which WAI-ARIA reserves for
+        error-level interruptions. Using a single polite region means:
+          - no interruption collisions across AT vendors,
+          - the action confirmation is queued naturally before the next
+            card's description,
+          - card changes without a preceding action (e.g. on initial
+            mount) still announce correctly.
+
+        Scope note: this edit is scoped to the two `<div aria-live=...>`
+        blocks ONLY. The Sprint 1.5 `forwardRef` / `DeckViewHandle` block,
+        the Sprint 2 Stream B `useSuperLikeCelebrationsContext` swap, and
+        the Sprint 3 Stream D keydown-effect fix are intentionally left
+        untouched.
+      */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {lastAction ? `${lastAction}. ` : ""}
         {currentVacancy && (
           currentVacancy.matchScore != null
             ? t("deck.cardAnnouncement")
@@ -630,9 +658,6 @@ export const DeckView = forwardRef<DeckViewHandle, DeckViewProps>(function DeckV
                 .replace("{employer}", currentVacancy.employerName ?? "")
                 .replace("{location}", currentVacancy.location ?? "")
         )}
-      </div>
-      <div aria-live="assertive" aria-atomic="true" className="sr-only">
-        {lastAction}
       </div>
 
       {/* Super-like celebration fly-in (Stream D / task 3). Mounted as a

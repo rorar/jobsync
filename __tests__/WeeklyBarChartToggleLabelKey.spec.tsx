@@ -17,12 +17,24 @@
  */
 import "@testing-library/jest-dom";
 import React from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, fireEvent } from "@testing-library/react";
 import WeeklyBarChartToggle from "@/components/dashboard/WeeklyBarChartToggle";
 
 // Stub Nivo: not worth mounting in jsdom.
+//
+// Sprint 4 Stream E L-NEW-* follow-up: the stub now captures the
+// `axisLeft.legend` prop so the test can assert the component resolves
+// `axisLeftLegendKey` through `t()` at render time. We stash the latest
+// props in a module-scoped ref so each test can read them without
+// wiring up a shared mock identifier on every render.
+const lastNivoProps: { current: Record<string, any> | null } = {
+  current: null,
+};
 jest.mock("@nivo/bar", () => ({
-  ResponsiveBar: () => <div data-testid="nivo-bar-stub" />,
+  ResponsiveBar: (props: Record<string, any>) => {
+    lastNivoProps.current = props;
+    return <div data-testid="nivo-bar-stub" />;
+  },
 }));
 
 // Locale-aware mock that the test swaps before each assertion block.
@@ -133,6 +145,137 @@ describe("WeeklyBarChartToggle — labelKey i18n", () => {
     expect(
       screen.getByRole("radio", { name: "Custom Category" }),
     ).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 4 Stream E — axisLeftLegendKey i18n (Sprint 3 follow-up)
+  //
+  // The `axisLeftLegend` field used to be a plain English string that
+  // was passed verbatim to Nivo's `axisLeft.legend` prop. Sprint 4
+  // Stream E adds an optional `axisLeftLegendKey` field that, when set,
+  // is resolved via `t(axisLeftLegendKey)` — so DE/FR/ES users see
+  // their locale's axis label. The raw string remains as a backward-
+  // compatible fallback for dynamic axis labels that don't live in a
+  // dictionary.
+  // ---------------------------------------------------------------------------
+  describe("axisLeftLegendKey i18n (Sprint 4 Stream E)", () => {
+    beforeEach(() => {
+      lastNivoProps.current = null;
+    });
+
+    const chartsWithAxisKey = () => [
+      {
+        label: "Jobs",
+        labelKey: "dashboard.chartJobs",
+        data: [{ day: "Mon", value: 1 }],
+        keys: ["value"],
+        axisLeftLegend: "JOBS APPLIED",
+        axisLeftLegendKey: "dashboard.chartJobsApplied",
+      },
+    ];
+
+    it("passes the translated `axisLeftLegendKey` to Nivo when set (EN)", () => {
+      activeDict = {
+        ...EN_DICT,
+        "dashboard.chartJobsApplied": "JOBS APPLIED",
+      };
+
+      render(<WeeklyBarChartToggle charts={chartsWithAxisKey()} />);
+
+      expect(lastNivoProps.current).not.toBeNull();
+      expect(lastNivoProps.current?.axisLeft?.legend).toBe("JOBS APPLIED");
+    });
+
+    it("passes the translated `axisLeftLegendKey` to Nivo when set (DE)", () => {
+      activeDict = {
+        ...DE_DICT,
+        "dashboard.chartJobsApplied": "BEWERBUNGEN",
+      };
+
+      render(<WeeklyBarChartToggle charts={chartsWithAxisKey()} />);
+
+      // Regression guard: without the fix, this would render the raw
+      // English `axisLeftLegend` string verbatim instead of the German
+      // translation.
+      expect(lastNivoProps.current?.axisLeft?.legend).toBe("BEWERBUNGEN");
+    });
+
+    it("passes the translated `axisLeftLegendKey` to Nivo when set (FR)", () => {
+      activeDict = {
+        ...FR_DICT,
+        "dashboard.chartJobsApplied": "CANDIDATURES",
+      };
+
+      render(<WeeklyBarChartToggle charts={chartsWithAxisKey()} />);
+
+      expect(lastNivoProps.current?.axisLeft?.legend).toBe("CANDIDATURES");
+    });
+
+    it("falls back to the raw `axisLeftLegend` when `axisLeftLegendKey` is not set", () => {
+      activeDict = EN_DICT; // no chartJobsApplied key in this dict
+
+      const legacyCharts = [
+        {
+          label: "Custom",
+          data: [{ day: "Mon", value: 1 }],
+          keys: ["value"],
+          axisLeftLegend: "CUSTOM AXIS",
+          // No axisLeftLegendKey — backward-compat fallback path.
+        },
+      ];
+
+      render(<WeeklyBarChartToggle charts={legacyCharts} />);
+
+      expect(lastNivoProps.current?.axisLeft?.legend).toBe("CUSTOM AXIS");
+    });
+
+    it("updates the axis legend when the user switches between charts", () => {
+      activeDict = {
+        ...EN_DICT,
+        "dashboard.chartJobsApplied": "JOBS APPLIED",
+        "dashboard.chartTimeSpent": "TIME SPENT (Hours)",
+      };
+
+      const twoCharts = [
+        {
+          label: "Jobs",
+          labelKey: "dashboard.chartJobs",
+          data: [{ day: "Mon", value: 1 }],
+          keys: ["value"],
+          axisLeftLegend: "JOBS APPLIED",
+          axisLeftLegendKey: "dashboard.chartJobsApplied",
+        },
+        {
+          label: "Activities",
+          labelKey: "dashboard.chartActivities",
+          data: [{ day: "Mon", value: 2 }],
+          keys: ["value"],
+          groupMode: "stacked" as const,
+          axisLeftLegend: "TIME SPENT (Hours)",
+          axisLeftLegendKey: "dashboard.chartTimeSpent",
+        },
+      ];
+
+      render(<WeeklyBarChartToggle charts={twoCharts} />);
+      expect(lastNivoProps.current?.axisLeft?.legend).toBe("JOBS APPLIED");
+
+      // Click the Activities radio to switch charts. Use fireEvent instead
+      // of the DOM's native `.click()` — testing-library wraps fireEvent in
+      // act() so React 18's concurrent updates flush synchronously before
+      // the assertion runs. Calling `.click()` directly leaves the setState
+      // update pending in a scheduler microtask, which is why the previous
+      // spec ran the assertion against stale Nivo props.
+      const activitiesRadio = screen.getByRole("radio", {
+        name: "Activities",
+      });
+      fireEvent.click(activitiesRadio);
+
+      // After the switch Nivo is re-rendered with the new chart's
+      // resolved axis legend.
+      expect(lastNivoProps.current?.axisLeft?.legend).toBe(
+        "TIME SPENT (Hours)",
+      );
+    });
   });
 
   it("keeps the Activities-total-hours computation gated on the stable `label` identifier", () => {

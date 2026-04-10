@@ -490,10 +490,12 @@ describe("DiscoveredJobDetail — accessibility", () => {
 
   it("dialog heading matches the job title", () => {
     render(<DiscoveredJobDetail {...baseProps} job={makeJob()} />);
-    // DialogTitle contains the job title AND a conditional external-link
-    // anchor with its own aria-label. Use a regex match against the title.
+    // L-NEW-02 (Sprint 4 Stream E): DialogTitle now contains ONLY the
+    // job title. The external-link anchor is a sibling inside
+    // DialogHeader but outside DialogTitle, so the dialog's accessible
+    // name is exactly the job title (no link role concatenation).
     expect(
-      screen.getByRole("heading", { name: /Backend Engineer/ }),
+      screen.getByRole("heading", { name: "Backend Engineer" }),
     ).toBeInTheDocument();
   });
 
@@ -502,6 +504,36 @@ describe("DiscoveredJobDetail — accessibility", () => {
       <DiscoveredJobDetail {...baseProps} job={makeJob()} open={false} />,
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 4 Stream E — L-NEW-02: external-link anchor is NOT nested in title
+  // ---------------------------------------------------------------------------
+  describe("L-NEW-02 — external-link anchor outside DialogTitle", () => {
+    it("the external-link anchor is not a descendant of the heading", () => {
+      render(<DiscoveredJobDetail {...baseProps} job={makeJob()} />);
+
+      const heading = screen.getByRole("heading", {
+        name: "Backend Engineer",
+      });
+      const link = screen.getByRole("link");
+
+      // Regression guard: the old DOM shape nested the <a> inside
+      // DialogTitle, which polluted the dialog's accessible name with
+      // the anonymous link role. The fix moves the anchor to a
+      // DialogHeader sibling row.
+      expect(heading.contains(link)).toBe(false);
+    });
+
+    it("the heading's accessible name is exactly the job title (no link role concat)", () => {
+      render(<DiscoveredJobDetail {...baseProps} job={makeJob()} />);
+      // Exact-match assertion (not a regex) — proves the DialogTitle's
+      // accessible name contains no trailing "link" / anchor text.
+      const heading = screen.getByRole("heading", {
+        name: "Backend Engineer",
+      });
+      expect(heading.textContent).toBe("Backend Engineer");
+    });
   });
 });
 

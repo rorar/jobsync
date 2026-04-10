@@ -182,4 +182,45 @@ describe("DeckView a11y", () => {
     const results = await axe(container);
     expect(results).toHaveNoViolations();
   });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 4 Stream E — L-NEW-01: single polite live region
+  //
+  // Before the fix, DeckView mounted TWO adjacent live regions: a
+  // `polite` card announcement and an `assertive` last-action region.
+  // They collided on every deck action (assertive interrupts polite).
+  // The fix consolidates them into ONE polite region, dropping the
+  // assertive region entirely. This test pins the single-region
+  // invariant so a future edit can't accidentally reintroduce an
+  // assertive sibling.
+  // ---------------------------------------------------------------------------
+  describe("L-NEW-01 — single live region (no assertive sibling)", () => {
+    it("renders exactly one aria-live region inside the deck, and it is polite", () => {
+      const vacancies = [makeVacancy("v1", "Job Alpha")];
+      const { container } = render(
+        <DeckView
+          vacancies={vacancies}
+          onAction={mockOnAction}
+          onBackToList={mockOnBackToList}
+        />,
+      );
+
+      const liveRegions = Array.from(
+        container.querySelectorAll<HTMLElement>("[aria-live]"),
+      );
+      // Exactly one aria-live region rendered directly under DeckView.
+      // (The SuperLikeCelebrationHost has its own `role="status"` which
+      // does NOT set aria-live on its root, so it is not counted here.)
+      expect(liveRegions).toHaveLength(1);
+
+      // The remaining live region MUST be polite.
+      expect(liveRegions[0]).toHaveAttribute("aria-live", "polite");
+
+      // And it MUST NOT be assertive — direct regression guard.
+      const assertiveRegions = container.querySelectorAll(
+        '[aria-live="assertive"]',
+      );
+      expect(assertiveRegions).toHaveLength(0);
+    });
+  });
 });

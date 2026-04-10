@@ -107,7 +107,11 @@ describe("StagingNewItemsBanner", () => {
       rerender(<StagingNewItemsBanner onRefresh={mockOnRefresh} />);
     });
 
-    expect(screen.getByText("New items available")).toBeInTheDocument();
+    // L-Y-02: the announcement text now lives BOTH in an aria-hidden
+    // visible span AND in an sr-only status live region (so the button
+    // can sit outside the region). Both render the same label, so
+    // `getAllByText` returns 2 matches.
+    expect(screen.getAllByText("New items available")).toHaveLength(2);
     expect(screen.getByText("Show new items")).toBeInTheDocument();
   });
 
@@ -127,7 +131,57 @@ describe("StagingNewItemsBanner", () => {
     fireEvent.click(screen.getByText("Show new items"));
 
     expect(mockOnRefresh).toHaveBeenCalledTimes(1);
-    // Banner should be dismissed after clicking
-    expect(screen.queryByText("New items available")).not.toBeInTheDocument();
+    // Banner should be dismissed after clicking — the visible label
+    // lives on an aria-hidden span + an sr-only status region, both
+    // of which unmount together.
+    expect(screen.queryAllByText("New items available")).toHaveLength(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Sprint 4 Stream E — L-Y-02: button outside role="status" live region
+  // ---------------------------------------------------------------------------
+
+  describe("Sprint 4 Stream E — L-Y-02 live-region split", () => {
+    function renderVisibleBanner() {
+      mockSchedulerState = { state: makeSnapshot("running") };
+      const utils = render(
+        <StagingNewItemsBanner onRefresh={mockOnRefresh} />,
+      );
+      act(() => {
+        mockSchedulerState = { state: makeSnapshot("idle") };
+        utils.rerender(<StagingNewItemsBanner onRefresh={mockOnRefresh} />);
+      });
+      return utils;
+    }
+
+    it("renders a role=status live region containing only the announcement text", () => {
+      const { container } = renderVisibleBanner();
+
+      const statusRegion = container.querySelector('[role="status"]');
+      expect(statusRegion).not.toBeNull();
+      // L-Y-02 regression guard: the live region must NOT contain an
+      // interactive button, otherwise screen readers re-announce the
+      // button label on every polite update.
+      expect(statusRegion?.querySelector("button")).toBeNull();
+      // Text content of the live region is only the announcement.
+      expect(statusRegion?.textContent?.trim()).toBe("New items available");
+    });
+
+    it("renders the Show-new-items button as a sibling OUTSIDE the live region", () => {
+      const { container } = renderVisibleBanner();
+
+      const button = screen.getByText("Show new items").closest("button");
+      expect(button).not.toBeNull();
+      // The button must not be a descendant of the role=status region.
+      const statusRegion = container.querySelector('[role="status"]');
+      expect(statusRegion?.contains(button!)).toBe(false);
+    });
+
+    it("live region uses polite + atomic announcements", () => {
+      const { container } = renderVisibleBanner();
+      const statusRegion = container.querySelector('[role="status"]');
+      expect(statusRegion).toHaveAttribute("aria-live", "polite");
+      expect(statusRegion).toHaveAttribute("aria-atomic", "true");
+    });
   });
 });

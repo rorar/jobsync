@@ -38,6 +38,10 @@ jest.mock("@/i18n", () => ({
         "enrichment.refreshFailed": "Failed to refresh enrichment",
         "enrichment.triggerFailed": "Enrichment failed",
         "enrichment.noLogo": "No logo available",
+        // Sprint 4 Stream E — Sprint 3 Stream G (M-Y-08) follow-up:
+        // the inline skeleton now passes `t("common.loading")` as the
+        // Skeleton label prop.
+        "common.loading": "Loading...",
       };
       return dict[key] ?? key;
     },
@@ -111,6 +115,20 @@ describe("EnrichmentStatusPanel", () => {
 
     expect(screen.getByRole("status")).toBeInTheDocument();
     expect(screen.getByText("Enrichment Status")).toBeInTheDocument();
+  });
+
+  it("L-Y-08 — skeleton uses the translated label via shared Skeleton primitive", () => {
+    mockGetEnrichmentStatus.mockReturnValue(new Promise(() => {}));
+    render(<EnrichmentStatusPanel {...defaultProps} />);
+
+    // Sprint 4 Stream E regression guard: the skeleton region MUST
+    // expose `role="status"` with the translated `common.loading`
+    // label (from the shared Skeleton primitive), not the old
+    // hardcoded English `aria-label="Loading"` on an ad-hoc div.
+    const region = screen.getByRole("status");
+    expect(region).toHaveAttribute("aria-label", "Loading...");
+    expect(region).toHaveAttribute("aria-live", "polite");
+    expect(region).toHaveAttribute("aria-busy", "true");
   });
 
   it("shows empty state when no enrichment data exists", async () => {

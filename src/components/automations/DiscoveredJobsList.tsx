@@ -203,6 +203,17 @@ export function DiscoveredJobsList({
                     )}
                   </TableCell>
                   <TableCell>
+                    {/*
+                     * L-Y-04 (Sprint 4 Stream E) — previously rendered the
+                     * raw enum string (`job.status`) which leaked English
+                     * tokens ("staged"/"dismissed"/"ready") into DE/FR/ES
+                     * UIs and was unreadable for non-technical users.
+                     * Translate via the same pattern Sprint 2 Stream G
+                     * introduced in `DiscoveredJobDetail` (see H-Y-03/H-Y-04
+                     * fix block). Falls back to the raw enum string when
+                     * the translation key is missing so future enum drift
+                     * never surfaces as an empty badge.
+                     */}
                     <Badge
                       variant={
                         job.status === "ready"
@@ -212,7 +223,12 @@ export function DiscoveredJobsList({
                             : "outline"
                       }
                     >
-                      {job.status}
+                      {(() => {
+                        if (!job.status) return "";
+                        const key = `automations.discoveredJob.status.${job.status}`;
+                        const translated = t(key);
+                        return translated === key ? job.status : translated;
+                      })()}
                     </Badge>
                   </TableCell>
                   <TableCell>

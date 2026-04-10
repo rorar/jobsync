@@ -5,6 +5,7 @@ import { useTranslations, formatDateShort } from "@/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getJobStatusHistory } from "@/actions/job.actions";
 import type { StatusHistoryEntry } from "@/actions/job.actions";
 import {
@@ -50,9 +51,16 @@ function getStatusColor(value: string | null): string {
   }
 }
 
-function TimelineSkeleton() {
+/**
+ * Sprint 4 Stream E — Sprint 3 Stream G (M-Y-08) follow-up: migrated
+ * from an ad-hoc `role="status" aria-label="Loading"` wrapper (hardcoded
+ * English) to the shared `Skeleton` primitive. The label arrives from
+ * the parent's `useTranslations()` call (`t("common.loading")`) so the
+ * loading region announces in the user's locale.
+ */
+function TimelineSkeleton({ label }: { label: string }) {
   return (
-    <div className="space-y-4" role="status" aria-label="Loading">
+    <Skeleton className="space-y-4" label={label}>
       {[1, 2, 3].map((i) => (
         <div key={i} className="flex gap-3">
           <div className="flex flex-col items-center">
@@ -67,7 +75,7 @@ function TimelineSkeleton() {
           </div>
         </div>
       ))}
-    </div>
+    </Skeleton>
   );
 }
 
@@ -126,7 +134,7 @@ export function StatusHistoryTimeline({ jobId }: StatusHistoryTimelineProps) {
       </CardHeader>
       <CardContent>
         {/* Loading state */}
-        {loading && <TimelineSkeleton />}
+        {loading && <TimelineSkeleton label={t("common.loading")} />}
 
         {/* Error state */}
         {!loading && error && (

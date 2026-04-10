@@ -52,7 +52,26 @@ export type ChartConfig = {
   data: any[];
   keys: string[];
   groupMode?: "grouped" | "stacked";
+  /**
+   * Legacy plain-string axis-left legend. Used as the Nivo
+   * `axisLeft.legend` prop when `axisLeftLegendKey` is not set.
+   * Historically frozen to whatever English text the server component
+   * passed ("JOBS APPLIED", "TIME SPENT (Hours)"), so DE/FR/ES users
+   * saw English axis labels in the chart.
+   */
   axisLeftLegend: string;
+  /**
+   * Sprint 4 Stream E — Sprint 3 Stream G follow-up: optional i18n
+   * key for the localized axis-left legend. When set, takes precedence
+   * over `axisLeftLegend` for the visible chart axis label. When
+   * unset, the legacy `axisLeftLegend` string is used verbatim — this
+   * keeps the type backward compatible so a future server component
+   * with a dynamic axis label can still pass a raw string.
+   *
+   * The current consumer (`src/app/dashboard/page.tsx`) passes
+   * `"dashboard.chartJobsApplied"` and `"dashboard.chartTimeSpent"`.
+   */
+  axisLeftLegendKey?: string;
 };
 
 type WeeklyBarChartToggleProps = {
@@ -83,6 +102,17 @@ export default function WeeklyBarChartToggle({
    */
   const resolveLabel = (chart: ChartConfig): string =>
     chart.labelKey ? t(chart.labelKey) : chart.label;
+
+  /**
+   * Sprint 4 Stream E — Sprint 3 Stream G follow-up: mirror
+   * `resolveLabel` for the Nivo `axisLeft.legend` prop. Prefers the
+   * translated `axisLeftLegendKey` when set; otherwise falls back to
+   * the raw `axisLeftLegend` string for backward compatibility.
+   */
+  const resolveAxisLeftLegend = (chart: ChartConfig): string =>
+    chart.axisLeftLegendKey
+      ? t(chart.axisLeftLegendKey)
+      : chart.axisLeftLegend;
 
   const roundedData = current.data.map((item) => {
     const newItem: any = { ...item };
@@ -199,7 +229,7 @@ export default function WeeklyBarChartToggle({
               tickSize: 5,
               tickPadding: 5,
               tickRotation: 0,
-              legend: current.axisLeftLegend,
+              legend: resolveAxisLeftLegend(current),
               legendPosition: "middle",
               legendOffset: -40,
               truncateTickAt: 0,

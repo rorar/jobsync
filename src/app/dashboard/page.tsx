@@ -90,10 +90,15 @@ export default async function Dashboard() {
           WeeklyBarChartToggle renders `labelKey` via `t()` for the
           visible toolbar + card title, and the Activities-total-hours
           gate still identifies the chart by `label === "Activities"`,
-          which stays stable across locales. The `axisLeftLegend` is
-          still English today — flagged as a follow-up because Nivo
-          accepts only a raw string and we'd need to reroute the axis
-          label through `t()` at call time.
+          which stays stable across locales.
+
+          Sprint 4 Stream E (L-NEW-* family): the Nivo `axisLeft.legend`
+          is now resolved from `axisLeftLegendKey` at render time, so
+          DE/FR/ES users see their locale's axis label ("BEWERBUNGEN",
+          "ZEIT VERBRACHT (Std.)", ...). The raw `axisLeftLegend`
+          strings are kept as the backward-compatible fallback used
+          when a future server component passes a dynamic axis label
+          that does not live in a dictionary.
         */}
         <WeeklyBarChartToggle
           charts={[
@@ -103,6 +108,7 @@ export default async function Dashboard() {
               data: weeklyData,
               keys: ["value"],
               axisLeftLegend: "JOBS APPLIED",
+              axisLeftLegendKey: "dashboard.chartJobsApplied",
             },
             {
               label: "Activities",
@@ -111,6 +117,7 @@ export default async function Dashboard() {
               keys: activitiesDataKeys(activitiesData),
               groupMode: "stacked",
               axisLeftLegend: "TIME SPENT (Hours)",
+              axisLeftLegendKey: "dashboard.chartTimeSpent",
             },
           ]}
         />

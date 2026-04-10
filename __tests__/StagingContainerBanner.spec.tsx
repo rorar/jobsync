@@ -274,7 +274,13 @@ describe("StagingContainer — new items banner", () => {
       rerender(<StagingContainer />);
     });
 
-    expect(screen.getByText("New items available")).toBeInTheDocument();
+    // Sprint 4 L-Y-02 split the banner into a visible aria-hidden label AND
+    // an sr-only role=status live region that carries the same text — so
+    // "New items available" appears twice in the DOM when the banner is up.
+    // `getByText` throws on multiple matches; use `getAllByText` + length
+    // assertion so the test reflects the dual-surface (visual + a11y) that
+    // the fix deliberately introduces.
+    expect(screen.getAllByText("New items available").length).toBeGreaterThanOrEqual(1);
   });
 
   it("does NOT show the banner on idle→running transition", async () => {
@@ -334,13 +340,16 @@ describe("StagingContainer — new items banner", () => {
       rerender(<StagingContainer />);
     });
 
-    expect(screen.getByText("New items available")).toBeInTheDocument();
+    // Sprint 4 L-Y-02: the banner now renders the label twice (visible + sr-only).
+    expect(screen.getAllByText("New items available").length).toBeGreaterThanOrEqual(1);
 
     await act(async () => {
       fireEvent.click(screen.getByText("Show new items"));
     });
 
-    expect(screen.queryByText("New items available")).not.toBeInTheDocument();
+    // After dismissal the whole banner unmounts — `queryAllByText` returns []
+    // which is the correct "absent" state for the dual-surface assertion.
+    expect(screen.queryAllByText("New items available")).toHaveLength(0);
   });
 
   it("banner reappears after a second running→idle cycle", async () => {
@@ -361,7 +370,8 @@ describe("StagingContainer — new items banner", () => {
       fireEvent.click(screen.getByText("Show new items"));
     });
 
-    expect(screen.queryByText("New items available")).not.toBeInTheDocument();
+    // Sprint 4 L-Y-02: dual-surface banner label — see above.
+    expect(screen.queryAllByText("New items available")).toHaveLength(0);
 
     // Second cycle
     await act(async () => {
@@ -374,6 +384,6 @@ describe("StagingContainer — new items banner", () => {
       rerender(<StagingContainer />);
     });
 
-    expect(screen.getByText("New items available")).toBeInTheDocument();
+    expect(screen.getAllByText("New items available").length).toBeGreaterThanOrEqual(1);
   });
 });

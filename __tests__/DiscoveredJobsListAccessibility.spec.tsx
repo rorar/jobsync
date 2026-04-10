@@ -43,6 +43,12 @@ jest.mock("@/i18n", () => ({
           "View details for job {job}",
         "automations.discoveredJob.externalLinkAria":
           "Open job {job} on the original site in a new tab",
+        // L-Y-04 (Sprint 4 Stream E) — status badge translations.
+        "automations.discoveredJob.status.staged": "Staged",
+        "automations.discoveredJob.status.ready": "Ready",
+        "automations.discoveredJob.status.dismissed": "Dismissed",
+        "automations.discoveredJob.status.promoted": "Promoted",
+        "automations.discoveredJob.status.processing": "Processing",
       };
       return dict[key] ?? key;
     },
@@ -169,5 +175,63 @@ describe("DiscoveredJobsList — H-Y-05 job title clickable element", () => {
     expect(titleButton.tagName).toBe("BUTTON");
     // Native <button> is tabbable by default. No tabIndex override.
     expect(titleButton).not.toHaveAttribute("tabindex", "-1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sprint 4 Stream E — L-Y-04: translated status badge (no raw enum leak)
+// ---------------------------------------------------------------------------
+
+describe("DiscoveredJobsList — L-Y-04 translated status badge", () => {
+  it("renders the translated status label instead of the raw enum string", () => {
+    const job = makeJob({ status: "staged" });
+
+    render(
+      <DiscoveredJobsList
+        jobs={[job]}
+        onRefresh={jest.fn()}
+        onViewDetails={jest.fn()}
+      />,
+    );
+
+    // The translated label "Staged" MUST be present.
+    expect(screen.getByText("Staged")).toBeInTheDocument();
+    // The raw lowercase enum "staged" MUST NOT appear anywhere —
+    // that was the pre-fix behaviour and the whole point of L-Y-04.
+    expect(screen.queryByText("staged")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the raw enum string when the translation key is missing", () => {
+    const { useTranslations } = jest.requireMock("@/i18n") as {
+      useTranslations: jest.MockedFunction<
+        () => { t: (k: string) => string; locale: string }
+      >;
+    };
+    // Pass-through t(): every key is unknown, so `translated === key`
+    // triggers the fallback to the raw enum value. This is the
+    // future-proof path for enum drift.
+    useTranslations.mockReturnValueOnce({
+      t: (key: string) => key,
+      locale: "en",
+    });
+
+    // Use an enum value whose key is intentionally absent from the
+    // mock dict above — the fallback path returns the raw status.
+    const job = makeJob({ status: "ready" });
+
+    render(
+      <DiscoveredJobsList
+        jobs={[job]}
+        onRefresh={jest.fn()}
+        onViewDetails={jest.fn()}
+      />,
+    );
+
+    // The key-shaped string MUST NOT leak into the DOM.
+    expect(
+      screen.queryByText("automations.discoveredJob.status.ready"),
+    ).not.toBeInTheDocument();
+    // The raw enum fallback IS rendered.
+    expect(screen.getByText("ready")).toBeInTheDocument();
   });
 });

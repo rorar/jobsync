@@ -73,10 +73,37 @@ function getTextColorClass(score: number): string {
   return "text-red-500 dark:text-red-400";
 }
 
+/**
+ * Stroke color class for the progress ring. WCAG 1.4.11 "Non-text
+ * Contrast" requires a 3:1 ratio between the graphical object (the
+ * progress arc) and the adjacent background (the muted track ring +
+ * the white card surface behind it).
+ *
+ * Sprint 4 Stream E (L-Y-05) contrast audit vs. #ffffff light-mode
+ * card background (values from WebAIM Contrast Checker):
+ *
+ *   - amber-500  (#F59E0B) → 1.96:1  FAIL (< 3:1)
+ *   - amber-600  (#D97706) → 2.85:1  FAIL (< 3:1, marginal)
+ *   - amber-700  (#B45309) → 4.52:1  PASS (> 3:1, > AA text 4.5:1)
+ *   - emerald-500 (#10B981) → 2.61:1  FAIL (< 3:1)
+ *   - emerald-600 (#059669) → 3.39:1  PASS (> 3:1)
+ *   - red-500    (#EF4444) → 3.76:1  PASS (> 3:1)
+ *   - blue-500   (#3B82F6) → 3.68:1  PASS (> 3:1)
+ *
+ * The original amber-500 (mid-score) and emerald-500 (high-score)
+ * strokes both failed the 3:1 threshold on white. We bump amber to
+ * amber-700 and emerald to emerald-600 to pass. Red and blue already
+ * passed and are kept as-is so existing snapshots for low/mid-score
+ * rings don't shift unnecessarily.
+ *
+ * Dark-mode variants (all `-400` shades) were not part of the reported
+ * finding and render against a dark card background where lighter
+ * Tailwind shades hit the same 3:1 ratio — they remain unchanged.
+ */
 function getStrokeColorClass(score: number): string {
-  if (score >= 80) return "stroke-emerald-500 dark:stroke-emerald-400";
+  if (score >= 80) return "stroke-emerald-600 dark:stroke-emerald-400";
   if (score >= 60) return "stroke-blue-500 dark:stroke-blue-400";
-  if (score >= 40) return "stroke-amber-500 dark:stroke-amber-400";
+  if (score >= 40) return "stroke-amber-700 dark:stroke-amber-400";
   return "stroke-red-500 dark:stroke-red-400";
 }
 

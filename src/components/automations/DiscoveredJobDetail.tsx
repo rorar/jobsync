@@ -114,8 +114,21 @@ export function DiscoveredJobDetail({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {job.title}
+          {/*
+            L-NEW-02 (Sprint 4 Stream E) — the external-link anchor used to
+            be nested INSIDE `DialogTitle`. Radix's `Dialog` derives the
+            dialog's accessible name from `DialogTitle` via
+            `aria-labelledby`, so embedding an interactive element inside
+            the title changes the accessible name computation: most AT
+            concatenate the title text plus the anonymous link role,
+            producing announcements like "Software Engineer link dialog"
+            on open. Moving the anchor to a sibling row inside
+            `DialogHeader` (but OUTSIDE `DialogTitle`) keeps the visual
+            layout (title + icon on the same baseline) while giving the
+            dialog a clean accessible name equal to the job title.
+          */}
+          <div className="flex items-center gap-2">
+            <DialogTitle>{job.title}</DialogTitle>
             {jobUrl && (
               <a
                 href={jobUrl}
@@ -127,7 +140,7 @@ export function DiscoveredJobDetail({
                 <ExternalLink className="h-4 w-4" aria-hidden="true" />
               </a>
             )}
-          </DialogTitle>
+          </div>
           <DialogDescription className="flex items-center gap-4">
             <span className="flex items-center gap-1">
               <Building2 className="h-4 w-4" />

@@ -28,6 +28,10 @@ jest.mock("@/i18n", () => ({
         "jobs.statusHistoryShowAll": "Show all ({count})",
         "jobs.statusHistoryShowLess": "Show less",
         "jobs.statusHistoryLoadMore": "Load more",
+        // Sprint 4 Stream E — Sprint 3 Stream G (M-Y-08) follow-up:
+        // the inline skeleton now uses the shared Skeleton primitive
+        // and passes `t("common.loading")` as the label prop.
+        "common.loading": "Loading...",
       };
       return dict[key] ?? key;
     },
@@ -115,6 +119,20 @@ describe("StatusHistoryTimeline", () => {
 
     expect(screen.getByRole("status")).toBeInTheDocument();
     expect(screen.getByText("Status History")).toBeInTheDocument();
+  });
+
+  it("Sprint 4 Stream E — skeleton uses the translated Skeleton primitive", () => {
+    mockGetJobStatusHistory.mockReturnValue(new Promise(() => {}));
+    render(<StatusHistoryTimeline jobId="job-1" />);
+
+    // M-Y-08 migration regression guard: the old inline skeleton had
+    // a hardcoded `aria-label="Loading"`. The migrated shared
+    // Skeleton primitive exposes the caller-supplied translated label
+    // and adds `aria-live="polite"` + `aria-busy="true"`.
+    const region = screen.getByRole("status");
+    expect(region).toHaveAttribute("aria-label", "Loading...");
+    expect(region).toHaveAttribute("aria-live", "polite");
+    expect(region).toHaveAttribute("aria-busy", "true");
   });
 
   it("shows empty state when no history exists", async () => {

@@ -30,6 +30,10 @@ const i18nDict: Record<string, string> = {
     "No jobs in the pipeline yet. Start by bookmarking a job!",
   "dashboard.retryButton": "Retry",
   "dashboard.fetchStatusDistributionError": "Failed to load status distribution",
+  // Sprint 4 Stream E — Sprint 3 Stream G (M-Y-08) follow-up: the
+  // inline `SkeletonBars` now uses the shared Skeleton primitive and
+  // passes `t("common.loading")` as the label prop.
+  "common.loading": "Loading...",
 };
 
 jest.mock("@/i18n", () => ({
@@ -102,9 +106,16 @@ describe("StatusFunnelWidget", () => {
       mockGetStatusDistribution.mockReturnValue(new Promise(() => {}));
 
       render(<StatusFunnelWidget />);
-      const skeleton = screen.getByLabelText("Loading pipeline data");
+      // Sprint 4 Stream E (M-Y-08 follow-up): migrated to the shared
+      // Skeleton primitive. The label is now the translated
+      // `common.loading` string, and the region exposes
+      // `role="status"` + `aria-live="polite"` + `aria-busy="true"`
+      // instead of the old `aria-busy` + hardcoded English label.
+      const skeleton = screen.getByRole("status");
       expect(skeleton).toBeInTheDocument();
       expect(skeleton).toHaveAttribute("aria-busy", "true");
+      expect(skeleton).toHaveAttribute("aria-live", "polite");
+      expect(skeleton).toHaveAttribute("aria-label", "Loading...");
     });
   });
 
