@@ -1,8 +1,144 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-09
 
-**Total: 442 bugs found, 440 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
+**Total: 488 bugs found, 486 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
+
+## Sprint 3 MEDIUM Fixes (2026-04-09)
+
+45+ findings resolved across 8 parallel streams, plus 9 Sprint 2 "Open follow-ups" closed and Sprint 1.5 `runHealthCheck` audit closed as confirmed-safe. Each stream's implementer agent invoked a dimension-specific skill via the Skill tool with combined (a)+(b) instrumentation.
+
+**Skills per stream**:
+- Stream A / B: `backend-development:architecture-patterns`
+- Stream C: `security-scanning:threat-mitigation-mapping`
+- Stream D: `developer-essentials:sql-optimization-patterns`
+- Stream E: `javascript-typescript:javascript-testing-patterns`
+- Stream F / G / H: `ui-design:accessibility-compliance`
+
+### Fixed — Stream A: Notification + event bus arch cleanup (commit `b1671d2`)
+| ID | Severity | Summary |
+|----|----------|---------|
+| M-A-01/08 | MEDIUM | `formatNotificationActor` in `deep-links.ts` had no case for `"module"` or `"enrichment"` actor types. Added exhaustive switch with `never` guard + new i18n keys `notifications.actor.module` / `notifications.actor.enrichment` in all 4 locales. |
+| M-A-02 | MEDIUM | `ModuleDeactivatedPayload` / `ModuleReactivatedPayload` carried slug (`moduleId`) but not display name. Extended with optional `moduleName`; emit sites in `module.actions.ts` populate it from `registered.manifest.name`. Dispatcher handlers prefer `payload.moduleName ?? payload.moduleId`. |
+| M-A-05 | MEDIUM | `channelRouter` registration was a module-import side-effect in `notification-dispatcher.ts` — race-prone under HMR + parallel test imports. Moved to explicit `registerChannels()` called from `registerNotificationDispatcher()` with `__channelRouterRegistered` globalThis guard. |
+| M-A-06 | MEDIUM | `enrichment-trigger.handleCompanyCreated` and `handleVacancyPromoted` had `await findFirst` BEFORE the fire-and-forget closure, blocking EventBus publish on DB round-trips. Moved all DB I/O INSIDE the closure — orchestrator's internal `cache-before-chain` guarantees dedup is preserved. |
+| M-P-01 + M-P-SPEC-02 | MEDIUM | `ChannelRouter.route` hit the DB per enabled channel on every dispatch via `isAvailable()`. Added `availabilityCache` with 30s TTL + `invalidateAvailability(userId?, channelName?)` hook for Settings UI (hook exposure is tracked as Sprint 3 open follow-up — Settings action files are in Stream C scope). |
+| M-T-09 | MEDIUM | The Sprint 0/1 dispatcher locale fix had no dedicated regression guard. Added 3 tests: German fallback message, late-binding column persistence, `t()` locale-arg propagation. |
+| event-bus.allium sync | Sprint 2 follow-up | `ErrorIsolation` invariant rewritten to describe `Promise.allSettled` parallel dispatch (H-P-06). Per-handler isolation preserved; intra-publish ordering no longer guaranteed; cross-publish ordering still holds. |
+
+### Fixed — Stream B: Deck + staging + celebration context (commit `300c666`)
+| ID | Severity | Summary |
+|----|----------|---------|
+| M-A-04 | MEDIUM | `StagingContainer.handleDeckAction` fired `reload()` mid-animation, racing with `useDeckStack.performAction`'s setTimeout. New `scheduleDeckReload()` defers reload by 500ms (covers 300ms animation + promise + commit flush). Unmount cleanup clears pending timer. |
+| M-A-07 | MEDIUM | `useSuperLikeCelebrations` was invoked INSIDE DeckView — when user navigated to `/dashboard/myjobs/:id` via the "Open job" CTA, DeckView unmounted and the queue was destroyed. Lifted to new `SuperLikeCelebrationsContext` provider at `src/app/dashboard/layout.tsx`. DeckView falls back to a component-local queue when no provider is mounted (keeps isolated component tests working). |
+| M-A-09 | MEDIUM (trimmed) | `useDeckStack.undoStack` (client) and `src/lib/undo/undo-store.ts` (server-truth via UndoToken rows) are not synchronized. Trimmed-scope fix: documented inline, added defensive `console.error` branch in `handleDeckUndo` for future non-reversible-action leaks, pinned allowlist via regression test. Full `ActionResult.data.undoTokenId` pipe-through deferred to dedicated follow-up stream. |
+| H-A-03 symmetric | Sprint 2 follow-up | `StagingContainer.handleDeckAction:296-301` had the same defensive branch as PromotionDialog but still silently forwarded `createdJobId:undefined`. Fixed symmetrically: destructive toast + `{success:false}` early return on contract drift. |
+| M-P-04 | MEDIUM | PromotionDialog + BlockConfirmationDialog mounted unconditionally every parent re-render. Now conditional (`{open && <Dialog ... />}`). |
+| M-P-SPEC-01 | MEDIUM | `handlePromote` not memoized — fresh function identity every render. Wrapped in `useCallback([])` (relies on stable React setters). |
+| M-T-07 | MEDIUM | `useDeckStack.spec.ts` existed but did not cover ADR-030 callback contract. Added 10+ tests: onSuperLikeSuccess invocation paths, keyboard shortcuts (d/p/s/b/n/z + 4 arrow keys), isDetailsOpen gate, enabled=false gate, input/textarea target guards, MAX_UNDO_STACK=5 enforcement. |
+| M-T-08 | MEDIUM | `SuperLikeCelebrationHost` router.push side effect was mocked but never asserted. Added explicit `router.push` called with correct URL pattern + exactly once + dismiss-before-push ordering. |
+| M-T-10 | MEDIUM | `DeckCard.onInfoClick` had no unit test. Added 3 tests pinning click handler invocation, button presence gating, and stopPropagation. |
+
+### Fixed — Stream C: Security hardening + runHealthCheck audit (commit `b250c95`)
+| ID | Severity | Summary |
+|----|----------|---------|
+| M-S-01 | MEDIUM | `markAsRead` / `dismissNotification` returned `{success:true, data:[]}` on zero-match (silent no-op on non-owned ids). Added explicit `findFirst` pre-flight — returns `{success:false}` with NOT_FOUND. |
+| M-S-02 | AUDIT | `checkConsecutiveRunFailures` — confirmed-safe per-automation scope (not cross-user). Inline invariant comment added documenting the carve-out. |
+| M-S-03 | MEDIUM | `GET /api/logos/[id]` — enumeration oracle via different 404 bodies for not-owned vs disk-miss. Normalized to uniform 404; disk-miss logged server-side only. |
+| M-S-04 | MEDIUM | `checkLogoUrl` — added global 200/min cap ON TOP of per-user 20/min to bound amplification by multi-session attackers. |
+| M-S-05 | LOW | `response.body?.cancel()` on manual redirects not awaited in `logo-asset-service.ts` + `meta-parser/index.ts`. Now awaited with `.catch(() => {})`. |
+| M-S-06 | MEDIUM | `undoStore` TOCTOU between get-ownership + use-compensate. New atomic `undoById(tokenId, userId?)` method removes from Map BEFORE compensate. |
+| M-S-07 | MEDIUM | `buildNotificationMessage` stringified objects as `[object Object]` in email bodies. Added `ALLOWED_DATA_FIELDS` allowlist + `safeStringValue()` primitive-only extractor. |
+| M-S-08 | MEDIUM | `resolveWikimediaUrl` no `response.ok` check + no Wikimedia domain validation. Both guards added. |
+| runHealthCheck | Sprint 1.5 follow-up closed | Full audit of `checkModuleHealth` call chain — writes only `healthStatus` (HEALTHY/DEGRADED/UNREACHABLE), never `status` (ACTIVE/INACTIVE). Zero automation-pause cascade. CONFIRMED SAFE without admin gate. Documented inline + in `specs/module-lifecycle.allium` + this file. |
+| M-T-02 | LOW | `enrichment-actions.spec.ts` mutated `globalThis.__enrichmentInflight` without cleanup. Added `afterEach` that `.clear()`s the Map (NOT `delete` — production code at `enrichment.actions.ts:31-33` caches a module-level REFERENCE that would be orphaned by delete). Orchestrator fixup after full-suite verification caught the reference-orphaning bug. |
+
+### Fixed — Stream D: Small perf (commit `e5c2b52`)
+| ID | Severity | Summary |
+|----|----------|---------|
+| M-P-02 | MEDIUM | `getStagedVacancies` used `include` → full scalar + JSON overfetch. Replaced with explicit `STAGED_VACANCY_LIST_SELECT` shape (new non-server module `stagedVacancy.select.ts`); omits `matchData` JSON blob. Regression guard spec locks the shape. |
+| M-P-06 | MEDIUM | `DeckView` keydown useEffect re-subscribed on every card advance (deps: onOpenDetails, isDetailsOpen, currentVacancy). Rewrote to subscribe once with `[]` deps, reading per-render state via `detailsKeyHandlerStateRef`. Sprint 1.5 forwardRef/DeckViewHandle block untouched. |
+| M-A-03 | MEDIUM | `getUserLocale` read `parsed.locale` but writers save to `parsed.display.locale` — silent bug, all locale lookups fell back to default. Fix prefers canonical path with legacy fallback. |
+
+### Fixed — Stream E: Testing infrastructure (commit `9ee6f8e`)
+| ID | Severity | Summary |
+|----|----------|---------|
+| M-T-01 | MEDIUM | `DeckView.spec.tsx` module-level `mockOnAction.mockResolvedValue(undefined)` hid the CRIT-A2 class-of-bug. Changed default to `{success:true}` to match the real ADR-030 contract. |
+| M-T-03 | MEDIUM | `e2e/crud/staging-details-sheet.spec.ts` used `test.skip` which accumulates into false positives. Replaced with hard-failure throw + clear error message on missing seed data. |
+| M-T-04 | MEDIUM | `e2e/helpers/index.ts:selectOrCreateComboboxOption` used `waitForTimeout` (flaky-by-design per Playwright docs). Replaced with deterministic `waitFor` conditions; added `safeWait` helper; documented policy in `e2e/CONVENTIONS.md`. |
+| M-T-05 | MEDIUM | `a11y-deck-view.spec.tsx` stubbed `DeckCard` entirely, so axe-core never ran against real card markup. Removed the stub; mocked only heavy dependencies (CompanyLogo, MatchScoreRing). |
+| M-T-06 | MEDIUM | `StagedVacancyDetailSheet.spec.tsx` mocked the entire Sheet primitive, hiding focus-trap and Escape behavior. Removed the Sheet mock; mocked only ScrollArea + CompanyLogo. Added regression tests for focus trap, close button, Escape dismissal. Orchestrator fixup: `aria-modal="true"` assertion swapped for `data-state="open"` (Radix focus-trap attribute is jsdom-unreliable). |
+
+### Fixed — Stream F: A11y target sizes + memoization (commit `4f29f69`)
+| ID | Severity | Summary |
+|----|----------|---------|
+| M-Y-01 | MEDIUM | `StagedVacancyCard` footer buttons 28×28 (fails WCAG 2.5.5 AAA). New `FooterActionButton` helper wraps each in a 44×44 outer button with aria-hidden inner pill. Every tab's footer (Details/Promote/Dismiss/Archive/Trash/Block/Restore) gets the hit-area wrapper. |
+| M-Y-04 | MEDIUM | `ApiStatusOverview` per-row health-check button 32×32. Migrated to new `size="icon-lg"` button variant. |
+| M-Y-05 | MEDIUM | `KanbanCard` drag handle ~20×20 — failed BOTH WCAG 2.5.5 AAA AND 2.5.8 AA (worst). Grown to 44×44 via hit-area wrapper. `{...attributes}{...listeners}` preserved on the native button for @dnd-kit behavior. |
+| M-Y-06 | MEDIUM (conservative) | `ui/button.tsx size="icon"` default 40×40. CONSERVATIVE: default preserved (26 call sites have layout constraints), new `size="icon-lg"` variant at 44×44 introduced for opt-in migration. |
+| M-NEW-03 + Sprint 2 follow-up | MEDIUM | `StagingLayoutToggle` buttons ~28×28 + primitive migration debt. Replaced 50-line hand-rolled radiogroup with 20-line `ToolbarRadioGroup<StagingLayoutSize>` call. Sprint 1 CRIT-Y2 regression suite stays green via preserved `activeIndicatorTestId`. Target-size AAA fix deferred to primitive-level refactor. |
+| M-P-03 | MEDIUM (paired) | `StagedVacancyCard` not memoized + `useStagingActions.createHandler` returned fresh closures. Paired fix: `useCallback([])` + ref-backed Map cache keyed by (action, successKey) + `React.memo(StagedVacancyCardImpl)`. Both land together — memo is useless without closure stability. |
+
+### Fixed — Stream G: A11y labels + live regions + Sprint 2 follow-ups (commit `b0fa89f`)
+| ID | Severity | Summary |
+|----|----------|---------|
+| M-Y-08 | MEDIUM | Skeleton loader hardcoded English `aria-label="Loading"`. Created shared `src/components/ui/skeleton.tsx` primitive with translatable `label` prop + `role="status"` + `aria-busy`. |
+| M-NEW-01 | MEDIUM | `NumberCardToggle` Progress bar aria-label hardcoded English "increase"/"decrease". Routed through new i18n keys `dashboard.progressIncrease` / `dashboard.progressDecrease` × 4 locales. |
+| M-NEW-02 | MEDIUM | `BulkActionBar` "Delete Permanently" — WCAG 3.3.4 violation (destructive data action with no confirmation). Wrapped in Radix AlertDialog with default focus on Cancel (WAI-ARIA APG guidance). 4 new i18n keys × 4 locales. |
+| global-error.tsx | Sprint 2 follow-up | Full rewrite mirroring Stream H Sprint 2's `dashboard/error.tsx` pattern: i18n via useTranslations + eager `<html lang>` capture (survives Next.js error-boundary html swap), `role="alert"` + focus management + scrubbed `error.message`. |
+| auth layout `<main>` | Sprint 2 follow-up | `(auth)/layout.tsx` didn't render `<main id="main-content">`, so the Stream H SkipLink was a no-op on /signin + /signup. Added `<main id="main-content" tabIndex={-1}>`. |
+| Sidebar demote | Sprint 2 follow-up | Secondary `<nav>` with single link → `<div>`. WAI-ARIA discourages landmarks with one meaningful child. Stream H aria-label removed (redundant after demote). Landmark count drops from 3 to 2 — intentional. |
+| NavLink startsWith typo | Sprint 2 follow-up | `pathname.startsWith(\`${route}/dashboard\`)` was a historical typo that never matched real routes. Replaced with `pathname === route \|\| pathname.startsWith(\`${route}/\`)` + root-`/dashboard` special case. 11-test regression suite. **Behavior change**: sub-routes now correctly highlight their parent nav entry — visible UX change, needs QA smoke. |
+| WeeklyBarChartToggle labelKey | Sprint 2 follow-up | Chart labels still English. Added optional `labelKey` to `ChartConfig`; component uses `t(labelKey)` with raw `label` fallback. Updated `dashboard/page.tsx` consumer. Total-hours gate still uses stable `label === "Activities"` (not translated text). Orchestrator fixup: regression test `getByText("Std.")` → `getByText(/5\s+Std\./)` regex to match full span content. |
+
+### Fixed — Stream H: Notification UI perf + a11y (commit `2084bae`)
+| ID | Severity | Summary |
+|----|----------|---------|
+| M-P-05 | MEDIUM | `NotificationItem.parseNotificationData` ran every render (JSON.parse + type coercion per render). Wrapped in `useMemo` keyed on notification id + data blob. |
+| M-P-SPEC-03 | MEDIUM | `NotificationDropdown.fetchNotifications` had no request dedup. Rapid open/close spammed the server action. Added `pendingFetchRef` + epoch counter + `isMountedRef` stale-result guard. Next.js RPC doesn't propagate AbortSignal, so cancellation is at the result level. |
+| M-Y-02 | MEDIUM | `NotificationItem` dismiss button 32×32. Hit-area wrapper to 44×44 (CRIT-Y1 flashlight completion). |
+| M-Y-03 | MEDIUM | `NotificationDropdown` mark-all-read button 32×32. Same hit-area wrapper pattern. |
+| M-Y-07 | MEDIUM | `NotificationBell` badge count changed silently — screen reader users never heard about new notifications. Added sibling `role="status" aria-live="polite" aria-atomic="true"` region with 500ms stability debounce on INCREASES only (decreases = user acted, no announcement). Badge is `aria-hidden="true"` to prevent double-announcement. |
+
+### Multi-stream honesty gate — open follow-ups surfaced
+
+Per `feedback_multi_stream_honesty_gate.md`, explicitly scanned each of the 8 stream agents' "Open questions" and "Risks / ripple-effects discovered" sections against this file. The following items are NOT tracked elsewhere, remain open, and are NOT planned for Sprint 4's LOW tier — adding them here so they're durable:
+
+**Architecture + event bus**:
+- **Settings UI invalidation hooks** (Stream A): `webhook.actions.ts`, `smtp.actions.ts`, `push.actions.ts` should call `channelRouter.invalidateAvailability(userId, channelName)` after their mutations so users see channel state changes within ms instead of waiting for the 30s TTL cache. One-line change per action site (~4-5 sites) but the action files were Stream C scope in Sprint 3 — best handled as a Sprint 3.1 follow-up.
+- **Channel-router circular import** (Stream A): `channel-router.ts` statically imports `webhook.channel.ts` which re-imports `prepareEnforcedNotification` from channel-router. Works under ES-module hoisting but brittle. Sprint 4+ should extract `prepareEnforcedNotification` + `EnforcedNotificationDraft` into `src/lib/notifications/enforced-writer.ts`.
+- **`NotificationActorType = "enrichment"` dead variant** (Stream A): the type union includes it, Stream A added a formatter case + i18n key for it, but no production writer populates `actorType: "enrichment"` today. Flagged for the sprint that introduces enrichment failure notifications.
+- **`M-A-09` full pipe-through** (Stream B): the undoStore split-brain architectural fix — pipe `ActionResult.data.undoTokenId` through `useDeckStack.onAction` → `UndoEntry` → `handleDeckUndo` → `undoStore.compensate(tokenId)`. Then `REVERSIBLE_DECK_ACTIONS` can grow to include promote/superlike/block. Stream B shipped the minimal trimmed scope; the full refactor is a dedicated follow-up.
+- **`scheduleDeckReload` magic number** (Stream B): the 500ms delay (ANIMATION_DURATION 300ms + 200ms buffer) is a hard-coded literal. Could be DRY-ed up by importing `ANIMATION_DURATION` from useDeckStack, but that leaks a hook-internal constant into the container.
+
+**Performance**:
+- **`getStagedVacancies` pagination** (Stream D): still uses `skip`/`offset`. Degrades at large offsets even with the new select shape. Cursor-based pagination is the proper fix but ripples into StagingContainer, RecordsPerPageSelector, BulkActionBar select-all flow, and StagingNewItemsBanner "new items since X" logic.
+- **Missing `discoveredAt DESC` index** (Stream D): existing `[userId, createdAt]` is close but not a perfect match for `ORDER BY discoveredAt DESC`. Today's M-P-02 fix reduces column read cost; the sort cost is unchanged. A follow-up migration `@@index([userId, discoveredAt])` would close the loop.
+- **`STAGED_VACANCY_LIST_SELECT` location** (Stream D): currently in `src/actions/stagedVacancy.select.ts` (non-server module). When ROADMAP 7.1 Phase 2 exposes staged vacancies via `/api/v1/staging`, move to `src/lib/api/helpers.ts` alongside `JOB_LIST_SELECT` and update both consumers.
+
+**Accessibility**:
+- **25 `size="icon"` call sites still at 40×40** (Stream F): documented candidates for a dedicated AAA target-size sweep sprint. Each needs individual layout verification before migration (26 files identified — 1 migrated in Sprint 3).
+- **3 inline skeleton sites NOT migrated** (Stream G): `EnrichmentStatusPanel.tsx`, `StatusHistoryTimeline.tsx`, `StatusFunnelWidget.tsx` still have hardcoded `aria-label="Loading"` / `"Loading pipeline data"`. ~5-minute follow-up to replace each with `<Skeleton label={t("common.loading")}>...</Skeleton>`.
+- **`WeeklyBarChartToggle.axisLeftLegend` still English** (Stream G): the Nivo `axisLeft.legend` prop accepts only a raw string. Stream G added `labelKey` for the toolbar + card title but deliberately left the axis legend for a `axisLeftLegendKey?: string` follow-up.
+- **`useStagingActions` cache never evicts** (Stream F): a `useRef<Map>` holds handler closures keyed by (action, successKey). Safe today (5 module-level action imports, stable identity) but a dynamic action factory could leak. Defensive guard: if a new caller passes dynamically-constructed actions, either memoize at caller or add TTL.
+- **`FooterActionButton` no focus-visible forwarding** (Stream F): hover feedback uses `group-hover` (mouse) but keyboard users see only the outer 44×44 focus ring, not the inner pill. WCAG-compliant but visually different from Sprint 1 CRIT-Y1 DeckCard Info button.
+
+**Testing**:
+- **Silent-skip accumulation in other E2E specs** (Stream E): the `test.skip(condition, "...")` anti-pattern exists in other specs (none in Stream E's owned files). The M-T-03 fix pattern (throw instead of skip) should be applied project-wide in a follow-up.
+- **`waitForTimeout` outside the fixed helper** (Stream E): other E2E specs have their own `waitForTimeout` calls OUTSIDE the `selectOrCreateComboboxOption` helper. Stream E's M-T-04 fix only covered the helper. A project-wide grep + audit is a follow-up testing sprint.
+- **Dictionary cross-locale check excludes `staging` namespace** (Stream G): the existing `__tests__/dictionaries.spec.ts` "consistent keys across all locales" check only covers dashboard/jobs/activities/tasks. Stream G added keys to `staging.ts` and verified manually but the test-level automated check would catch future drift. Follow-up: extend the dictionaries spec to include `staging` and the other namespaces.
+- **`notification-dispatcher.spec.ts` relies on rejection swallowing** (Stream A): Promise.allSettled swallows undefined-Prisma-mock rejections for webhook/email/push. Explicit mocks for `webhookEndpoint`/`smtpConfig`/`vapidConfig`/`webPushSubscription` would make the tests robust.
+
+**Notification UI**:
+- **Live-region "unread notifications" i18n key** (Stream H): current announcement reuses `notifications.title` which yields "3 Notifications" / "3 Benachrichtigungen" — the M-Y-07 finding suggested the stricter phrasing "3 unread notifications". Needs a new i18n key `notifications.unreadLiveRegion` with `{count}` placeholder in all 4 locales.
+- **Next.js server actions don't propagate AbortSignal** (Stream H): Stream H's request dedup is at the RESULT level (discard stale payloads) rather than the REQUEST level (cancel in-flight). True request cancellation would require refactoring `getNotifications` to a REST route — out of scope.
+
+**Skill invocation test result (Sprint 3)**:
+All 8 stream agents invoked their assigned skill via the Skill tool with the combined (a)+(b) instrumentation — verbatim quoted passage + rejected alternative with justification. Pattern continues to work across 3 sprints (1, 1.5, 2, 3).
+
+**Honesty gate caught (Sprint 3)**:
+1. During full-suite verification, 3 test failures surfaced — all test-side (mock shape, reference caching vs delete, exact-text match vs regex), zero production bugs. Fixed inline applying `javascript-typescript:javascript-testing-patterns` skill guidance (Best Practice 7 "test behavior not implementation"). Orchestrator fixups are folded into Streams C (M-T-02 cleanup reference bug), E (aria-modal → data-state), and G (regex match for `5 Std.`) per file ownership.
+2. LSP diagnostics shown during parallel agent spawn were transient mid-edit state (7 apparent "errors" in DeckView / StagingContainer / NotificationDropdown / StagedVacancyCard / stagedVacancy.actions all resolved before commit). `tsc --noEmit` against the final state is clean. Same pattern as Sprints 1 / 1.5 / 2.
 
 ## Sprint 2 HIGH Fixes (2026-04-09)
 
@@ -137,9 +273,9 @@ Sprint 1.5 continues the Sprint 1 experiment of delegating work to subagents wit
 
 ### Open follow-ups (out of scope for this hotfix)
 - ~~`.env.example` needs a new `ADMIN_USER_IDS` entry — the hotfix scope did not include `.env.example`, so the orchestrator should append this in the merge commit or a follow-up.~~ **CLOSED** by commit `5265a7a`: `.env.example` now has a documented `ADMIN_USER_IDS` block with the Tier A/B/C rule and example values.
-- `src/lib/connector/degradation.ts` still bypasses the admin gate for its internal signals (`handleAuthFailure`, `handleCircuitBreakerTrip`, `handleConsecutiveRunFailures`). This is **intentional** per the existing `AutomationDegradation` rules — module-level runtime signals affect the shared external service and are not user-initiated toggles — but deserves an explicit carve-out in `specs/module-lifecycle.allium` and an ADR cross-reference. Documented as a "known exception" so future security audits don't mistake it for an admin-gate bypass.
+- `src/lib/connector/degradation.ts` still bypasses the admin gate for its internal signals (`handleAuthFailure`, `handleCircuitBreakerTrip`, `checkConsecutiveRunFailures`). This is **intentional** per the existing `AutomationDegradation` rules — module-level runtime signals affect the shared external service and are not user-initiated toggles. Sprint 3 Stream C added explicit inline invariant comments to `degradation.ts:checkConsecutiveRunFailures` documenting the per-automation scope and the system-initiator carve-out. `handleAuthFailure` and `handleCircuitBreakerTrip` are intentionally cross-user (module-level failures affect ALL users running that module — by design per Allium spec and CLAUDE.md § Cross-User Degradation).
 - Promoting `[admin-audit]` from `console.warn` to a dedicated `AdminAuditLog` Prisma model is a follow-up sprint task — the hotfix pipeline cannot run migrations, so audit entries currently live only on stderr. The structured JSON format is stable enough to be ingested by a log aggregator in the interim, but a Prisma model would give query-ability + retention policy + admin UI review.
-- **`runHealthCheck` in `src/actions/module.actions.ts` is NOT admin-gated.** The CRIT-S-04 agent intentionally left it out of scope because it has its own per-user rate limit (`checkHealthCheckRateLimit`) and is expected to be read-mostly, but the agent could not fully audit `checkModuleHealth` internals in `src/lib/connector/health-monitor.ts` for cross-tenant write side-effects on the shared module registry. If `checkModuleHealth` writes to `moduleRegistry.setStatus` or `prisma.moduleRegistration` based on health probe results, then `runHealthCheck` is also a cross-tenant privilege escalation vector (same class as CRIT-S-04, lower severity because it's triggered by health probes not explicit toggles). **Open follow-up**: audit `checkModuleHealth` call chain; if it writes shared state based on probe results, gate `runHealthCheck` with `authorizeAdminAction()` too. Not in Sprint 2's current HIGH-finding scope — needs a dedicated mini-sprint or absorption into a later security pass.
+- ~~**`runHealthCheck` in `src/actions/module.actions.ts` is NOT admin-gated.**~~ **CLOSED by Sprint 3 Stream C audit (2026-04-09).** Full call-chain trace of `checkModuleHealth` in `src/lib/connector/health-monitor.ts` confirms: (a) it calls `moduleRegistry.updateHealth(moduleId, newHealthStatus, ...)` — writes ONLY health-status fields (HEALTHY/DEGRADED/UNREACHABLE), NOT activation status; (b) it calls `prisma.moduleRegistration.upsert({ update: { healthStatus, updatedAt } })` — NOT `status` (active/inactive). Neither write calls `moduleRegistry.setStatus()`. Health-status changes do NOT pause any user's automations and do NOT alter the activation state visible in the module toggle UI. Conclusion: `runHealthCheck` is **confirmed-safe** without an admin gate. The per-user rate limit (`checkHealthCheckRateLimit`) and the read-mostly nature of health checks are sufficient bounds. The distinction from CRIT-S-04 is: activation/deactivation toggling module.status → pauses N users' automations (cross-tenant write cascade); health checks write module.healthStatus → zero downstream cascade, informational only. Documented in `specs/module-lifecycle.allium` and `src/actions/module.actions.ts:runHealthCheck` inline comments (Sprint 3 Stream C).
 - **Multi-user upgrade UX (accepted regression)**: on any deployment with more than one user, leaving `ADMIN_USER_IDS` unset after this hotfix lands will cause the Settings UI module activate/deactivate toggles to return `UNAUTHORIZED`. This is the intended Tier C fail-closed behavior (documented in CLAUDE.md § Admin Authorization Tiered Rule, `.env.example`, and `specs/module-lifecycle.allium` invariant `AdminOnlyModuleLifecycle`) — NOT a bug to fix, but operators upgrading across this commit range MUST configure `ADMIN_USER_IDS` and restart before the Settings UI toggles will work. This should be called out in release notes when the next release ships.
 
 ## Sprint 1 CRITICAL Fixes (2026-04-09)
