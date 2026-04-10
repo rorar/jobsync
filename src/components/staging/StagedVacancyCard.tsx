@@ -117,66 +117,14 @@ function FooterActionButton({
 /**
  * L-P-SPEC-01 (Sprint 4 Stream B) — memoized Intl.NumberFormat per currency.
  *
- * `formatSalaryRange` was called per card, per render, which created up to
- * 2 `Intl.NumberFormat` instances on every render of every StagedVacancyCard
- * (one for the min, one for the max). `Intl.NumberFormat` construction is
- * surprisingly expensive on cold paths — the ICU locale data and the
- * currency-symbol lookup are non-trivial work, and V8 cannot optimize
- * away the allocation because the constructor is a native binding.
- *
- * Fix (skill: Value Objects): formatter instances are immutable and thread-
- * safe once constructed, so they can be hoisted to module scope and
- * memoized per currency in a `Map`. The static portion (locale, style,
- * maximumFractionDigits) lives in the builder; only the `currency` field
- * varies per call. The Map is bounded in practice by the (tiny) set of
- * currencies the user's automations return — typically just "EUR" plus
- * occasional "USD" / "GBP" — so no eviction is needed.
- *
- * Note: we intentionally do NOT cache at the component level via
- * `useMemo([])` — the Map lives on the module closure, which means the
- * cache is shared across every StagedVacancyCard instance on the page,
- * not re-allocated per mount. That's the whole point.
+ * The cache + formatter was originally hoisted here but lived in three
+ * byte-identical copies across `DeckCard.tsx`,
+ * `StagedVacancyDetailContent.tsx`, and this file. HIGH-P2B-01 (full-review
+ * resolution) extracted everything to the shared leaf module
+ * `src/lib/staging/format-salary-range.ts`. Import from there — this file
+ * is now a consumer, not an owner.
  */
-const SALARY_FORMATTER_CACHE = new Map<string, Intl.NumberFormat>();
-
-function getSalaryFormatter(currency: string): Intl.NumberFormat {
-  let formatter = SALARY_FORMATTER_CACHE.get(currency);
-  if (!formatter) {
-    formatter = new Intl.NumberFormat("de-DE", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: 0,
-    });
-    SALARY_FORMATTER_CACHE.set(currency, formatter);
-  }
-  return formatter;
-}
-
-function formatSalaryRange(
-  min: number | null | undefined,
-  max: number | null | undefined,
-  currency: string | null | undefined,
-  period: string | null | undefined,
-): string {
-  const cur = currency ?? "EUR";
-  // L-P-SPEC-01: pull the shared formatter from the module-level cache
-  // instead of constructing a fresh `Intl.NumberFormat` per call. See the
-  // `SALARY_FORMATTER_CACHE` docstring above for the full rationale.
-  const formatter = getSalaryFormatter(cur);
-  const fmt = (n: number) => formatter.format(n);
-  const parts: string[] = [];
-  if (min != null && max != null && min !== max) {
-    parts.push(`${fmt(min)} – ${fmt(max)}`);
-  } else if (min != null) {
-    parts.push(`ab ${fmt(min)}`);
-  } else if (max != null) {
-    parts.push(`bis ${fmt(max)}`);
-  }
-  if (period && period !== "NS") {
-    parts.push(`/${period}`);
-  }
-  return parts.join(" ") || "";
-}
+import { formatSalaryRange } from "@/lib/staging/format-salary-range";
 
 type ActiveTab = "new" | "dismissed" | "archive" | "trash";
 
@@ -339,7 +287,7 @@ function StagedVacancyCardImpl({
             {(vacancy.salaryMin != null || vacancy.salaryMax != null) && (
               <span className="inline-flex items-center gap-1">
                 <Banknote className="h-3 w-3 shrink-0" aria-hidden="true" />
-                {formatSalaryRange(vacancy.salaryMin, vacancy.salaryMax, vacancy.salaryCurrency, vacancy.salaryPeriod)}
+                {formatSalaryRange(vacancy.salaryMin, vacancy.salaryMax, vacancy.salaryCurrency, vacancy.salaryPeriod, locale, t)}
               </span>
             )}
             {vacancy.requiredEducationLevel && vacancy.requiredEducationLevel !== "NS" && (

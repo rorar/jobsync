@@ -26,6 +26,11 @@ export const staging = {
     "staging.archived": "Vacancy archived",
     "staging.trashed": "Vacancy moved to trash",
     "staging.restoredFromTrash": "Vacancy restored from trash",
+    // Sprint 4 full-review resolution (HIGH-P2B-01 + H-1): salary range
+    // prefixes for the single-bound cases, used by the shared
+    // `formatSalaryRange` helper in `src/lib/staging/format-salary-range.ts`.
+    "staging.salaryFrom": "from",
+    "staging.salaryTo": "to",
     "staging.source": "Source",
     "staging.discoveredAt": "Discovered",
     "staging.status": "Status",
@@ -116,6 +121,8 @@ export const staging = {
     "staging.archived": "Stelle archiviert",
     "staging.trashed": "Stelle in Papierkorb verschoben",
     "staging.restoredFromTrash": "Stelle aus Papierkorb wiederhergestellt",
+    "staging.salaryFrom": "ab",
+    "staging.salaryTo": "bis",
     "staging.source": "Quelle",
     "staging.discoveredAt": "Entdeckt",
     "staging.status": "Status",
@@ -203,6 +210,8 @@ export const staging = {
     "staging.archived": "Offre archivée",
     "staging.trashed": "Offre mise à la corbeille",
     "staging.restoredFromTrash": "Offre restaurée de la corbeille",
+    "staging.salaryFrom": "à partir de",
+    "staging.salaryTo": "jusqu'à",
     "staging.source": "Source",
     "staging.discoveredAt": "Découverte",
     "staging.status": "Statut",
@@ -290,6 +299,8 @@ export const staging = {
     "staging.archived": "Oferta archivada",
     "staging.trashed": "Oferta movida a papelera",
     "staging.restoredFromTrash": "Oferta restaurada de papelera",
+    "staging.salaryFrom": "desde",
+    "staging.salaryTo": "hasta",
     "staging.source": "Fuente",
     "staging.discoveredAt": "Descubierta",
     "staging.status": "Estado",

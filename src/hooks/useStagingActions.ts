@@ -121,51 +121,85 @@ export function useStagingActions(reload: () => Promise<void>) {
       const cached = bySuccessKey.get(successKey);
       if (cached) return cached;
 
-      // FIFO eviction guard (Sprint 4 Stream B follow-up): if the cache
-      // has already reached `HANDLER_CACHE_MAX_ENTRIES`, drop the oldest
-      // top-level action entry before inserting the new handler. Map
-      // iteration preserves insertion order, so `keys().next().value` IS
-      // the oldest. We drop the whole inner sub-map for the evicted
-      // action — if that action is still in use, the next
-      // `createHandler(oldAction, ...)` call will simply rebuild a fresh
-      // entry (correct, but logs a `[useStagingActions]` warning so the
-      // churn is observable).
+      // FIFO eviction guard (Sprint 4 Stream B follow-up + Sprint 4
+      // full-review H-2 fix): if the cache has already reached
+      // `HANDLER_CACHE_MAX_ENTRIES`, drop a SINGLE oldest handler (not
+      // the whole action entry). The original implementation deleted the
+      // outer-map entry for the oldest action, which silently dropped
+      // the inner-map reference but the caller's local `bySuccessKey`
+      // variable still held it — subsequent `byAction.set(action,
+      // bySuccessKey)` then re-inserted the same inner map with all its
+      // old entries, and the counter was decremented by the full inner
+      // map size. Result: counter stuck at 0 while the inner map
+      // continued to grow unbounded.
       //
-      // Note: evicting a top-level action may drop MULTIPLE inner
-      // handlers at once (if the same action was paired with several
-      // successKeys). The counter is updated by the exact `.size` of the
-      // dropped inner map so bookkeeping stays honest.
+      // The fix: walk the outer map in insertion order (Map iteration
+      // preserves insert order), find the first action with a non-empty
+      // inner map, delete the oldest successKey from that inner map. If
+      // the inner map becomes empty after the delete, remove the outer
+      // entry too. Decrement the counter by exactly 1. This keeps the
+      // bookkeeping honest AND avoids the reference-survival bug.
+      //
+      // Worst case: O(HANDLER_CACHE_MAX_ENTRIES) per eviction (walk all
+      // outer entries to find a non-empty inner map). With max=20 that's
+      // effectively constant time.
       if (handlerCacheCountRef.current >= HANDLER_CACHE_MAX_ENTRIES) {
-        const oldestKey = byAction.keys().next().value;
-        if (oldestKey !== undefined) {
-          const dropped = byAction.get(oldestKey);
-          const droppedSize = dropped ? dropped.size : 0;
-          byAction.delete(oldestKey);
-          handlerCacheCountRef.current = Math.max(
-            0,
-            handlerCacheCountRef.current - droppedSize,
-          );
-          // Fail-loud signal: if this branch ever fires in production
-          // it means a caller is leaking action identities (e.g. a
-          // dynamic factory in render). The warning is the trigger to
-          // investigate the caller, NOT to bump HANDLER_CACHE_MAX_ENTRIES.
-          console.warn(
-            "[useStagingActions] Handler cache reached max entries — evicting oldest action. " +
-              "This usually indicates a dynamic action factory leaking references across renders.",
-            { droppedSize, maxEntries: HANDLER_CACHE_MAX_ENTRIES },
-          );
-          // Re-seed `bySuccessKey` if the eviction dropped the entry we
-          // just allocated above. Because the new action was inserted
-          // BEFORE the eviction pass (when we called
-          // `byAction.set(action, bySuccessKey)` above in the "not in
-          // cache" branch), the eviction can NEVER target it — the
-          // newly-inserted action is the youngest key, and FIFO drops
-          // the oldest. The re-lookup is defensive: if that invariant
-          // ever changes, we notice via missing-handler bugs rather
-          // than silent memory growth.
-          if (!byAction.has(action)) {
-            byAction.set(action, bySuccessKey);
+        let evicted = false;
+        for (const [evictAction, evictInner] of byAction) {
+          if (evictInner.size === 0) continue;
+          // CRITICAL: skip the inner map for the action we're currently
+          // building an entry for — we've already attached `bySuccessKey`
+          // to it and adding a new key is imminent. Dropping the oldest
+          // successKey from the SAME inner map is fine for future calls
+          // but racy with the imminent insert on the same map.
+          if (evictAction === action) continue;
+          const oldestSuccessKey = evictInner.keys().next().value;
+          if (oldestSuccessKey !== undefined) {
+            evictInner.delete(oldestSuccessKey);
+            handlerCacheCountRef.current = Math.max(
+              0,
+              handlerCacheCountRef.current - 1,
+            );
+            // If the inner map is now empty, drop the outer entry too
+            // so the walk is self-healing on subsequent evictions.
+            if (evictInner.size === 0) {
+              byAction.delete(evictAction);
+            }
+            evicted = true;
+            break;
           }
+        }
+
+        // Edge case: every other inner map is either empty or belongs to
+        // the action we're currently serving. Fall back to evicting the
+        // oldest successKey from the CURRENT action's inner map — but
+        // only if it has existing entries. (If the current action's
+        // inner map is also empty, we simply proceed and let the counter
+        // temporarily exceed the max. It will self-correct on the next
+        // insertion once bookkeeping catches up.)
+        if (!evicted && bySuccessKey.size > 0) {
+          const oldestSuccessKey = bySuccessKey.keys().next().value;
+          if (oldestSuccessKey !== undefined) {
+            bySuccessKey.delete(oldestSuccessKey);
+            handlerCacheCountRef.current = Math.max(
+              0,
+              handlerCacheCountRef.current - 1,
+            );
+            evicted = true;
+          }
+        }
+
+        if (evicted) {
+          // Fail-loud signal: if this branch fires in production it
+          // means a caller is leaking references (either dynamic action
+          // factories OR a single action paired with an unbounded set
+          // of successKeys). Investigate the caller, do NOT bump the
+          // ceiling.
+          console.warn(
+            "[useStagingActions] Handler cache reached max entries — evicted one handler. " +
+              "This usually indicates a caller leaking action or successKey references.",
+            { maxEntries: HANDLER_CACHE_MAX_ENTRIES },
+          );
         }
       }
 

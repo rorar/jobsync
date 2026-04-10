@@ -19,37 +19,14 @@ import { CompanyLogo } from "@/components/ui/company-logo";
 import { MatchScoreRing } from "./MatchScoreRing";
 import { useTranslations, formatDateShort } from "@/i18n";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
+// HIGH-P2B-01 (Sprint 4 full-review): the local `formatSalaryRange` copy
+// was extracted to `src/lib/staging/format-salary-range.ts` as the single
+// source of truth. All three staging card/detail surfaces now share the
+// same locale-aware per-(locale, currency) formatter cache.
+import { formatSalaryRange } from "@/lib/staging/format-salary-range";
 
 interface StagedVacancyDetailContentProps {
   vacancy: StagedVacancyWithAutomation;
-}
-
-function formatSalaryRange(
-  min: number | null | undefined,
-  max: number | null | undefined,
-  currency: string | null | undefined,
-  period: string | null | undefined,
-): string {
-  if (min == null && max == null) return "";
-  const cur = currency ?? "EUR";
-  const fmt = (n: number) =>
-    new Intl.NumberFormat("de-DE", {
-      style: "currency",
-      currency: cur,
-      maximumFractionDigits: 0,
-    }).format(n);
-  const parts: string[] = [];
-  if (min != null && max != null && min !== max) {
-    parts.push(`${fmt(min)} – ${fmt(max)}`);
-  } else if (min != null) {
-    parts.push(`ab ${fmt(min)}`);
-  } else if (max != null) {
-    parts.push(`bis ${fmt(max)}`);
-  }
-  if (period && period !== "NS") {
-    parts.push(`/${period}`);
-  }
-  return parts.join(" ");
 }
 
 /**
@@ -191,6 +168,8 @@ export function StagedVacancyDetailContent({
                   vacancy.salaryMax,
                   vacancy.salaryCurrency,
                   vacancy.salaryPeriod,
+                  locale,
+                  t,
                 ) || vacancy.salary}
               </span>
             </div>

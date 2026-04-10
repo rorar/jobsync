@@ -8,33 +8,12 @@ import { MatchScoreRing } from "./MatchScoreRing";
 import { useTranslations, formatDateShort } from "@/i18n";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 import type { ExitDirection } from "@/hooks/useDeckStack";
-
-function formatSalaryRange(
-  min: number | null | undefined,
-  max: number | null | undefined,
-  currency: string | null | undefined,
-  period: string | null | undefined,
-): string {
-  const cur = currency ?? "EUR";
-  const fmt = (n: number) =>
-    new Intl.NumberFormat("de-DE", {
-      style: "currency",
-      currency: cur,
-      maximumFractionDigits: 0,
-    }).format(n);
-  const parts: string[] = [];
-  if (min != null && max != null && min !== max) {
-    parts.push(`${fmt(min)} – ${fmt(max)}`);
-  } else if (min != null) {
-    parts.push(`ab ${fmt(min)}`);
-  } else if (max != null) {
-    parts.push(`bis ${fmt(max)}`);
-  }
-  if (period && period !== "NS") {
-    parts.push(`/${period}`);
-  }
-  return parts.join(" ") || "";
-}
+// HIGH-P2B-01 (Sprint 4 full-review): the local `formatSalaryRange` copy
+// used to allocate a fresh `Intl.NumberFormat` per render. DeckCard is the
+// highest-render-rate consumer (3 mounted cards × 60fps drag). The
+// extraction to `src/lib/staging/format-salary-range.ts` gives every
+// card render access to the shared per-(locale, currency) formatter cache.
+import { formatSalaryRange } from "@/lib/staging/format-salary-range";
 
 interface DeckCardProps {
   vacancy: StagedVacancyWithAutomation;
@@ -185,7 +164,7 @@ function DeckCardInner({
           {(vacancy.salaryMin != null || vacancy.salaryMax != null) && (
             <span className="inline-flex items-center gap-1">
               <Banknote className="h-3 w-3 shrink-0" aria-hidden="true" />
-              {formatSalaryRange(vacancy.salaryMin, vacancy.salaryMax, vacancy.salaryCurrency, vacancy.salaryPeriod)}
+              {formatSalaryRange(vacancy.salaryMin, vacancy.salaryMax, vacancy.salaryCurrency, vacancy.salaryPeriod, locale, t)}
             </span>
           )}
           {vacancy.requiredEducationLevel && vacancy.requiredEducationLevel !== "NS" && (

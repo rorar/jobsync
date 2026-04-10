@@ -198,6 +198,30 @@ describe("DeckView", () => {
     expect(region).toHaveAttribute("aria-label", "Deck");
   });
 
+  // H-T-01 (Sprint 4 full-review): L-NEW-01 (Stream E) consolidated the
+  // two concurrent `aria-live` regions into ONE polite region so screen
+  // readers stop double-announcing card changes. Without this assertion,
+  // a future regression that re-introduces a second `aria-live` region
+  // would ship silently — jsdom does not run AT, so the only signal
+  // would be user-reported double-reads in production. This test pins
+  // the single-region contract at the DOM level.
+  it("L-NEW-01: renders exactly ONE aria-live region (consolidated announcements)", () => {
+    const { container } = render(
+      <DeckView
+        vacancies={testVacancies}
+        onAction={mockOnAction}
+        onBackToList={mockOnBackToList}
+      />,
+    );
+
+    const liveRegions = container.querySelectorAll("[aria-live]");
+    expect(liveRegions).toHaveLength(1);
+    // Also confirm it's polite, not assertive — L-NEW-01 explicitly
+    // chose polite so the announcement doesn't interrupt screen-reader
+    // speech mid-sentence on a deck swipe.
+    expect(liveRegions[0]).toHaveAttribute("aria-live", "polite");
+  });
+
   it("disables buttons when no current vacancy", () => {
     // Pass vacancies but simulate being past the end by using a custom hook state
     // For simplicity, test with empty vacancies

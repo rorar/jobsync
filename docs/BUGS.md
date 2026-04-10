@@ -1,6 +1,6 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-04-10
 
-**Total: 538 bugs found, 536 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
+**Total: 543 bugs found, 541 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
 
@@ -129,6 +129,21 @@ All 6 Sprint 4 stream agents invoked their assigned skill via the Skill tool wit
 **Honesty gate caught (Sprint 4)**:
 1. Post-sprint full-jest verification surfaced 8 test failures across 4 suites — all test-side (Promise executor race in queue-bound helper fixture, duplicate-DOM-text from L-Y-02's intentional dual-surface, settings dictionary multi-prefix reality, `.click()` vs `fireEvent.click()` React 18 flush timing, pre-existing `developer.*` / `smtp.*` prefixes in `settings.ts` surfaced by Stream D's cross-locale check). ZERO production bugs. All 4 suites fixed inline with javascript-testing-patterns skill guidance. Final run: 211 suites / 4031 passed / 2 todo / 0 failed.
 2. Multi-stream honesty-gate scan extracted each of the 6 raw agent return messages from the session transcript (not the orchestrator's consolidated summary) per `feedback_multi_stream_honesty_gate.md`. The scan caught the L-P-SPEC-02 inline comment that Stream B could not apply (out of scope) — applied during this pass.
+
+**Comprehensive review found (Sprint 4, `/comprehensive-review:full-review` per `feedback_full_review_after_sprints.md`)**:
+
+After the 7-commit stream series landed, the mandatory post-sprint comprehensive review ran across 5 dimensions (code quality, architecture, security, performance, testing, documentation, best practices). Found **0 Critical** and **5 High** findings. All 5 HIGH findings were FIXED INLINE before push per the rule "Fix all Critical and High findings before starting the next sprint":
+
+| ID | Dimension | Summary | Fix |
+|----|-----------|---------|-----|
+| HIGH-P2B-01 | Performance | `feedback_flashlight_effect.md` violation: Stream B hoisted `SALARY_FORMATTER_CACHE` in `StagedVacancyCard.tsx` only. `DeckCard.tsx` + `StagedVacancyDetailContent.tsx` still allocated `new Intl.NumberFormat(...)` per call — DeckCard is the highest-render-rate consumer (3 cards × 60fps drag). | Extracted `formatSalaryRange` + cache to new leaf module `src/lib/staging/format-salary-range.ts`. Updated all 3 consumers. Added `staging.salaryFrom` / `staging.salaryTo` i18n keys × 4 locales. New test: `__tests__/formatSalaryRange.spec.ts` (14 cases). |
+| H-1 | Code Quality | `SALARY_FORMATTER_CACHE` was keyed by currency alone + hard-coded `"de-DE"` locale. Latent today, but would cause cache poisoning on any locale-awareness fix. Cemented the pre-existing i18n violation. | Bundled with HIGH-P2B-01: the extracted shared module keys the cache by `${locale}:${currency}` and accepts `locale` + `translate` params. German "ab"/"bis" literals replaced with i18n keys. |
+| H-2 | Code Quality / Performance | `useStagingActions.ts` FIFO eviction logic had a counter-drift bug: dropping the oldest outer-map action entry decremented the counter by the inner map's full size, but the local `bySuccessKey` reference still held those entries, and `byAction.set(action, bySuccessKey)` re-inserted them. Scenario (1 stable action × 21+ distinct successKeys) → counter stuck at 0, inner map grew unbounded. Latent today. | Rewrote eviction to drop a single oldest `(action, successKey)` handler walking the outer map in insertion order (preferring inner maps other than the current action's). Regression test added covering the 1-action-25-successKeys scenario. |
+| H-T-01 | Testing | L-NEW-01 consolidated 2 `aria-live` regions to 1 but the spec had no assertion pinning the count. A regression re-introducing a second region would ship silently (jsdom can't run AT). | Added one test to `__tests__/DeckView.spec.tsx` asserting `querySelectorAll("[aria-live]").toHaveLength(1)` and the region is `polite`. |
+| HIGH-D-01 | Documentation | `CLAUDE.md` §Notification Late-Binding Pattern described `prepareEnforcedNotification` as coming from `channel-router.ts`. Stream A (L-A-07) moved it to `src/lib/notifications/enforced-writer.ts`. Contributors adding new direct writers would look in the wrong file. | Added a clarifying paragraph to CLAUDE.md identifying `enforced-writer.ts` as the correct import source + "MUST import from the leaf" directive. |
+| HIGH-D-02 | Documentation | `specs/data-enrichment.allium` `config {}` block documented other capacity constants but not the new `MAX_ENRICHMENT_QUEUE_LENGTH = 200` from Stream C. | Added `MAX_ENRICHMENT_QUEUE_LENGTH: Integer = 200` to the spec with full rationale + Sprint 4 Stream C attribution. |
+
+**Post-fix verification**: tsc 0 errors, Jest 212 suites / 4046 passed / 2 todo / 0 failed (+15 tests from the full-review resolution), production build exit 0, check-notification-writers.sh OK. Full review artifacts archived under `.full-review/` (scope, 4 phase reports, consolidated final report).
 
 ## Sprint 3 MEDIUM Fixes (2026-04-09)
 

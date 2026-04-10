@@ -1116,6 +1116,14 @@ describe("StagedVacancyCard — M-P-03 React.memo", () => {
 // ---------------------------------------------------------------------------
 
 describe("StagedVacancyCard — L-P-SPEC-01 salary formatter cache", () => {
+  // HIGH-P2B-01 (Sprint 4 full-review): the cache + formatter moved to
+  // `src/lib/staging/format-salary-range.ts` and the formatter is now
+  // locale-aware. These tests run under the suite's `locale: "en"` mock,
+  // so the expected output uses en-US number formatting (comma
+  // thousands separator, "$" / "€" symbol prefix) — NOT the old de-DE
+  // hardcode. The pass-through `t()` renders `staging.salaryFrom`
+  // verbatim for single-bound ranges.
+
   it("formats salary with EUR symbol for default currency", () => {
     render(
       <StagedVacancyCard
@@ -1129,10 +1137,8 @@ describe("StagedVacancyCard — L-P-SPEC-01 salary formatter cache", () => {
         activeTab="new"
       />,
     );
-    // de-DE locale renders "60.000 €" / "80.000 €" with a non-breaking
-    // space between number and currency symbol. Use a regex to match
-    // the numeric portion flexibly.
-    const text = screen.getByText(/60\.000|60\s?000/);
+    // en-US with EUR renders "€60,000" (symbol prefix, comma separator).
+    const text = screen.getByText(/60,000|60\s?000/);
     expect(text).toBeInTheDocument();
   });
 
@@ -1149,8 +1155,10 @@ describe("StagedVacancyCard — L-P-SPEC-01 salary formatter cache", () => {
         activeTab="new"
       />,
     );
-    // "ab 100.000 $" — ab prefix from the formatSalaryRange helper.
-    const text = screen.getByText(/ab.*100/);
+    // en-US + USD renders "$100,000". Pass-through t() renders the
+    // single-bound prefix as "staging.salaryFrom" verbatim because the
+    // test mock echoes keys. Real app produces "from $100,000".
+    const text = screen.getByText(/staging\.salaryFrom.*100,000/);
     expect(text).toBeInTheDocument();
   });
 
@@ -1170,7 +1178,7 @@ describe("StagedVacancyCard — L-P-SPEC-01 salary formatter cache", () => {
         activeTab="new"
       />,
     );
-    const first = screen.getByText(/50\.000|50\s?000/).textContent;
+    const first = screen.getByText(/50,000|50\s?000/).textContent;
 
     rerender(
       <StagedVacancyCard
@@ -1185,7 +1193,7 @@ describe("StagedVacancyCard — L-P-SPEC-01 salary formatter cache", () => {
         activeTab="new"
       />,
     );
-    const second = screen.getByText(/50\.000|50\s?000/).textContent;
+    const second = screen.getByText(/50,000|50\s?000/).textContent;
     expect(second).toBe(first);
   });
 });

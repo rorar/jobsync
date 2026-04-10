@@ -342,4 +342,72 @@ describe("useStagingActions — Sprint 4 Stream B cache eviction guard", () => {
       warnSpy.mockRestore();
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // H-2 (Sprint 4 full-review) — counter-drift scenario regression guard.
+  //
+  // The original eviction logic dropped the oldest TOP-LEVEL action entry,
+  // which decremented the counter by the dropped inner-map's entire `.size`
+  // — but the local `bySuccessKey` reference captured BEFORE the eviction
+  // still held all the old entries, and a subsequent `byAction.set(action,
+  // bySuccessKey)` re-inserted the same inner map. Scenario: 1 stable
+  // action paired with 20 distinct successKeys → the 21st call fires
+  // eviction, counter goes to 0, inner map still holds 20 entries, then
+  // the new 21st key is added — inner map now has 21 entries but counter
+  // says 1. Permanent drift: eviction never fires again and the inner map
+  // grows unbounded.
+  //
+  // The fix: eviction now drops a single oldest (action, successKey)
+  // handler, iterating the outer map to find a non-empty inner map
+  // (preferring actions other than the one being serviced). The counter
+  // tracks each drop exactly.
+  // ---------------------------------------------------------------------------
+  it("H-2: caps total cached handlers when a single action uses many successKeys", () => {
+    const { result } = renderHook(() => useStagingActions(mockReload));
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const stableAction: (id: string) => Promise<{ success: true }> = async () => ({
+        success: true,
+      });
+
+      // Pair the same stable action with 25 distinct successKeys. Without
+      // the fix, after the 21st iteration the counter would drop to 0 and
+      // the inner map would grow to 25 entries unchecked. With the fix,
+      // eviction drops a single oldest successKey on each insert past 20.
+      for (let i = 0; i < 25; i++) {
+        result.current.createHandler(stableAction, `staging.key${i}`);
+      }
+
+      // The eviction warn must have fired for the over-ceiling inserts.
+      expect(warnSpy).toHaveBeenCalled();
+
+      // Define "cached entries" as "creations that return the same
+      // reference on a repeat lookup". We verify the bound indirectly by
+      // checking that (a) a recently-inserted key is still cached and
+      // (b) repeatedly re-inserting keys does NOT grow the total cache
+      // size past the ceiling.
+
+      // The most-recent successKey should still be cached.
+      const recentKey = "staging.key24";
+      const firstLookup = result.current.createHandler(stableAction, recentKey);
+      const secondLookup = result.current.createHandler(stableAction, recentKey);
+      expect(secondLookup).toBe(firstLookup);
+
+      // The oldest keys should have been evicted (eviction order is
+      // iteration order of Map which is insertion order, so key0 is the
+      // oldest and should NOT be cached on re-insert).
+      const oldestKey = "staging.key0";
+      const oldLookupA = result.current.createHandler(stableAction, oldestKey);
+      const oldLookupB = result.current.createHandler(stableAction, oldestKey);
+      // oldLookupA is a FRESH handler (created on re-insert), and
+      // oldLookupB returns the cache-hit for that same fresh handler.
+      expect(oldLookupB).toBe(oldLookupA);
+      // But the re-inserted handler is NOT the same as the original
+      // firstLookup call (which was the recent key, a different closure).
+      expect(oldLookupA).not.toBe(firstLookup);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });

@@ -497,6 +497,10 @@ The contract is additive — callers that only destructure `{ success }` keep wo
 
 **Rule:** server-side notification creation MUST populate `data.titleKey + titleParams` (and optionally `reasonKey`, `reasonParams`, `actorType`, `actorId`, `severity`). The legacy `message` field is kept populated in English as a fallback for email/webhook/push channels and pre-migration clients. UI components use `formatNotificationTitle` at render time, so notifications correctly re-localize when the user switches locale.
 
+**Enforced-writer helpers live in a leaf module:** `src/lib/notifications/enforced-writer.ts` exports `prepareEnforcedNotification` / `prepareEnforcedNotifications` + the `EnforcedNotificationDraft` / `PreparedNotificationRow` types + the `resolvePreferencesForEnforcer` helper. Sprint 4 Stream A (L-A-07) extracted them from `channel-router.ts` into this leaf module to break the `channel-router.ts` ↔ `webhook.channel.ts` circular import. The leaf has zero upstream dependencies (imports only `server-only`, `@/lib/db`, `@/models/notification.model`, `@/models/userSettings.model`), and `channel-router.ts`, `webhook.channel.ts`, `degradation.ts`, and all action files re-import from the leaf.
+
+**New direct-writer sites MUST import `prepareEnforcedNotification[s]` from `@/lib/notifications/enforced-writer`, NOT from `@/lib/notifications/channel-router`.** The old re-exports are gone.
+
 **Current direct writers** (all patched to satisfy the late-binding invariant inline, pending a full event-emission refactor):
 - `src/lib/notifications/channels/in-app.channel.ts` — legitimate (the channel implementation)
 - `src/lib/connector/degradation.ts` — 3 sites

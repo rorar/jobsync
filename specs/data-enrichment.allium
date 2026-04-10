@@ -274,6 +274,20 @@ config {
     -- when many events arrive in a burst. Excess requests queue until
     -- a slot becomes available. This is separate from MAX_CONCURRENT_PER_USER,
     -- which limits manual/API-triggered requests per user.
+  MAX_ENRICHMENT_QUEUE_LENGTH: Integer = 200
+    -- Hard upper bound on the overflow queue behind the
+    -- MAX_CONCURRENT_EVENT_ENRICHMENTS semaphore. Under event storms
+    -- (e.g. a 100+ vacancy bulk import that emits many CompanyCreated
+    -- events) the queue grows while the 5 concurrent slots drain. Without
+    -- a cap, pathological bursts could push the queue into unbounded
+    -- memory growth. Excess incoming tasks are dropped with a
+    -- console.warn that includes the domain name. Dropping is acceptable
+    -- because enrichment is best-effort per the non-blocking rule above
+    -- — the next domain event for the same company will retry. The cap
+    -- is intentionally generous (200 = 40x the concurrent slot count)
+    -- to absorb realistic bursts while still protecting the process
+    -- from OOM.
+    -- Added Sprint 4 Stream C (L-S-04).
   PLACEHOLDER_LOGO_PATH: String = "/images/company-placeholder.svg"
     -- Fallback when no logo is found or enrichment fails.
 }
