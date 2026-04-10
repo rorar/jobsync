@@ -587,6 +587,13 @@ model StagedVacancy {
   // seeks emitted by the `exact` and `starts_with` match types; `contains`/`ends_with`
   // still scan but only over (userId, employerName) b-tree leaves instead of heap pages.
   @@index([userId, employerName])
+  // Sprint 5 Stream D — close Sprint 3 Stream D deferred item: getStagedVacancies
+  // sorts ORDER BY discoveredAt DESC and the existing (userId, createdAt) index
+  // does not match. A dedicated (userId, discoveredAt) composite lets the
+  // staging list query be served as an index range scan instead of a heap sort.
+  // discoveredAt and createdAt usually agree, but the spec uses discoveredAt as
+  // the ordering key (specs/staging-deck.allium) so the index must match.
+  @@index([userId, discoveredAt])
 }
 
 model DedupHash {
@@ -812,4 +819,56 @@ model LogoAsset {
 
   @@unique([userId, companyId])
   @@index([userId, status])
+}
+
+/// Sprint 5 Stream D — closes Sprint 1.5 CRIT-S-04 deferred item.
+///
+/// Append-only audit trail for admin-only actions (module activate/deactivate
+/// today, more system-toggle actions in the future). The hotfix that introduced
+/// `writeAdminAuditLog()` in src/lib/auth/admin.ts could only emit a JSON line
+/// to stderr because the hotfix pipeline could not run migrations. This model
+/// promotes the same schema to a Prisma table so audit entries become
+/// queryable for the admin review UI and for retention sweeps.
+///
+/// Design notes:
+/// - NO foreign key to User: an admin's actions must remain in the audit log
+///   even after the actor has been deleted (forensic durability). `actorId` is
+///   stored as a bare String. The matching `actorEmail` is denormalised so the
+///   audit row is self-contained when the User row is gone.
+/// - The structured stderr line in `writeAdminAuditLog()` is kept as the
+///   "always available" port (Hexagonal Architecture). This Prisma model is
+///   the convenience adapter for queries — if the DB write fails, the stderr
+///   line is still the source of truth, so we never lose a row.
+/// - SQLite has no jsonb. The optional `extra` column stores a JSON string;
+///   readers must `JSON.parse()` it. Same convention as `Notification.data`.
+/// - Spec: specs/module-lifecycle.allium invariant `AdminOnlyModuleLifecycle`.
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  /// Maps to the legacy `ts` field in the stderr JSON line.
+  timestamp   DateTime @default(now())
+  /// Action verb, e.g. "activateModule" / "deactivateModule".
+  action      String
+  /// Optional target identifier (module id, automation id, …).
+  targetId    String?
+  /// Required: id of the user who attempted the action. NOT a foreign key —
+  /// see model docstring for the reason.
+  actorId     String
+  /// Denormalised actor email for audit-readability after user deletion.
+  actorEmail  String?
+  /// Did the call succeed (true) or get denied (false).
+  allowed     Boolean
+  /// Which authorization tier matched: "explicit_list" / "single_user_implicit"
+  /// / "denied". Mirrors `AdminAuthorizationResult.tier`.
+  tier        String?
+  /// Generic deny-reason key when `allowed = false`, e.g. "errors.notAuthorized".
+  reason      String?
+  /// JSON-encoded blob for any additional structured context the caller
+  /// attached via `AdminAuditContext.extra`. SQLite has no jsonb so we store a
+  /// string and parse on read.
+  extra       String?
+
+  /// Per-user audit queries (admin review UI: "show all actions by user X").
+  @@index([actorId, timestamp])
+  /// Retention sweep ("delete entries older than N days").
+  @@index([timestamp])
 }

@@ -69,6 +69,31 @@ export let activeEnrichments = 0;
 export const enrichmentQueue: Array<() => void> = [];
 
 /**
+ * Sprint 5 Stream D — observability counter for the L-S-04 queue-drop signal.
+ *
+ * Sprint 4 Stream C added the queue-length cap with a `console.warn` only.
+ * That made drops invisible to log aggregators that filter by structured key
+ * (no JSON, no stable prefix, no count). This counter + the structured stderr
+ * line in `withEnrichmentLimit` give operators a queryable signal:
+ *
+ *   - The counter is the cumulative drop count for the current process. It
+ *     resets when the process restarts (acceptable for an HTTP-served
+ *     observability metric — operators scrape it via the test getter today
+ *     and via a `/metrics` endpoint in a future sprint).
+ *   - The structured `[enrichment-queue-drop]` line on stderr gives an
+ *     event-stream view that survives across restarts via log shipping.
+ *
+ * Counter is module-level (NOT on globalThis). Per-process is sufficient
+ * because:
+ *   1. The semaphore itself is module-level and only valid per-process.
+ *   2. HMR rehydrates the module, which resets the counter — but HMR is
+ *      dev-only and the metric is meant for production.
+ *   3. Multi-instance deployments would aggregate across instances at the
+ *      log-shipper level, not in-process.
+ */
+let enrichmentQueueDroppedCount = 0;
+
+/**
  * Test-only helper: reset the semaphore state to zero and drain the queue.
  * Needed because `export let activeEnrichments` is read-only from consumer
  * modules in ESM, so tests cannot assign `trigger.activeEnrichments = 0`
@@ -85,6 +110,25 @@ export function resetSemaphoreForTesting(): void {
  */
 export function getActiveEnrichmentsCountForTesting(): number {
   return activeEnrichments;
+}
+
+/**
+ * Test-only getter: returns the cumulative count of dropped enrichment tasks
+ * since the process started (or the last reset). Mirrors the
+ * `getActiveEnrichmentsCountForTesting` pattern — `let` bindings are
+ * read-only across module boundaries in ESM, so tests need a getter.
+ */
+export function getEnrichmentQueueDroppedCountForTesting(): number {
+  return enrichmentQueueDroppedCount;
+}
+
+/**
+ * Test-only helper: reset the drop counter to zero. Sprint 5 Stream D added
+ * this so the queue-bound regression suite can assert exact drop counts
+ * without depending on test-execution order. Do NOT call from production.
+ */
+export function resetEnrichmentQueueDroppedCountForTesting(): void {
+  enrichmentQueueDroppedCount = 0;
 }
 
 /**
@@ -110,6 +154,22 @@ export async function withEnrichmentLimit<T>(
     // Promise, which is caught by the .catch(() => {}) wrappers in
     // handleCompanyCreated and handleVacancyPromoted.
     if (enrichmentQueue.length >= MAX_ENRICHMENT_QUEUE_LENGTH) {
+      // Sprint 5 Stream D — observability for the L-S-04 drop signal.
+      // Increment the per-process counter and emit a structured stderr line
+      // (`[enrichment-queue-drop]`) that log shippers can parse without
+      // regex. The legacy console.warn below stays as the developer-facing
+      // human-readable line; the JSON line is the queryable signal.
+      enrichmentQueueDroppedCount++;
+      process.stderr.write(
+        JSON.stringify({
+          kind: "enrichment-queue-drop",
+          ts: new Date().toISOString(),
+          domain: domain ?? "unknown",
+          droppedCount: enrichmentQueueDroppedCount,
+          queueLength: enrichmentQueue.length,
+          maxQueue: MAX_ENRICHMENT_QUEUE_LENGTH,
+        }) + "\n",
+      );
       console.warn(
         `[EnrichmentTrigger] Queue full, dropping enrichment for ${domain ?? "unknown"}`,
       );

@@ -144,24 +144,54 @@ export async function authorizeAdminAction(
 }
 
 /**
- * Structured audit log for admin actions. Uses `console.warn` so that the
- * entry is picked up by any log aggregator watching stderr (same pattern as
- * the runner/scheduler debug lines). The log line is a single JSON object
- * so it can be parsed by log-shipping pipelines without regex.
+ * Structured audit log for admin actions — Hexagonal port/adapter design.
  *
- * Intentionally NOT a Prisma model in this hotfix — that would require a
- * migration which the hotfix pipeline cannot run. A follow-up sprint may
- * promote this to a DB-backed `AdminAuditLog` model; the signature stays
- * stable so callers never need to change.
+ * Sprint 5 Stream D promoted this from stderr-only to DB-backed (the Sprint 1.5
+ * CRIT-S-04 deferred follow-up). The function now writes to TWO sinks per call:
+ *
+ *   1. Primary adapter — `prisma.adminAuditLog.create`. Append-only DB row that
+ *      the admin review UI and retention sweeps can query. See
+ *      `prisma/schema.prisma::AdminAuditLog`.
+ *
+ *   2. Always-available port — single-line JSON on stderr, prefix `[admin-audit]`.
+ *      Picked up by log-shipping pipelines and survives every kind of DB outage
+ *      (migration not yet applied, Prisma client not regenerated, DB unreachable,
+ *      schema drift). The stderr line is the SOURCE OF TRUTH; the DB row is a
+ *      convenient query layer on top of it.
+ *
+ * Trade-off — the DB write is intentionally FIRE-AND-FORGET (no `await`):
+ *   - Pro: the function stays synchronous (`void` return), so the existing
+ *          callers in `authorizeAdminAction()` and elsewhere never become
+ *          async, avoiding a ripple through every "use server" file.
+ *   - Pro: an admin action is never blocked on a DB round-trip for the audit
+ *          write — the action's own DB writes already provide consistency.
+ *   - Con: if the process exits between the `.create()` call and Prisma's
+ *          flush, the DB row is lost. ACCEPTED because the stderr line is
+ *          synchronous and is the durable record.
+ *
+ * The DB write's `.catch` handler logs `[admin-audit-db-write-failed]` to
+ * stderr so the failure itself is observable. We never re-throw — fail-open is
+ * the right semantic for an audit sink that has a fallback port.
+ *
+ * Schema parity: every field on the JSON entry exists 1:1 on the Prisma model.
+ * `kind` is omitted from the DB row because the table name already conveys it.
+ * `ts` is stored as the `timestamp` column. `extra` (the spread of
+ * `context.extra`) is JSON-serialised into the `extra` column on the DB row
+ * (SQLite has no jsonb).
  */
 export function writeAdminAuditLog(
   user: CurrentUser | null,
   context: AdminAuditContext,
   result: AdminAuthorizationResult,
 ): void {
-  const entry = {
+  const ts = new Date();
+  const tsIso = ts.toISOString();
+
+  // Build the structured entry once and use it for BOTH sinks. Field names
+  // mirror the Sprint 1.5 schema so existing log-shipper rules still match.
+  const stderrEntry = {
     kind: "admin_audit",
-    ts: new Date().toISOString(),
+    ts: tsIso,
     action: context.action,
     targetId: context.targetId ?? null,
     actorId: user?.id ?? null,
@@ -171,7 +201,63 @@ export function writeAdminAuditLog(
     reason: result.reason ?? null,
     ...(context.extra ?? {}),
   };
-  // console.warn so the entry is on stderr and visible in production logs
-  // regardless of DEBUG_LOGGING. Use a stable prefix for log-shipper filters.
-  console.warn("[admin-audit]", JSON.stringify(entry));
+
+  // ---------------------------------------------------------------------
+  // Primary adapter — DB persistence (fire-and-forget).
+  // ---------------------------------------------------------------------
+  // We do NOT await this. See the function docstring for the trade-off
+  // rationale. The try/catch defends against TWO failure modes:
+  //   1. The Promise rejects asynchronously (most Prisma errors) — handled
+  //      by the `.catch()` chain.
+  //   2. `prisma.adminAuditLog.create(...)` THROWS synchronously before
+  //      returning a Promise (Prisma client not generated, schema drift,
+  //      runtime initialization error). The outer try/catch catches that
+  //      and routes it through the same `[admin-audit-db-write-failed]`
+  //      observability channel.
+  // Either way, the caller never sees the failure — the stderr line below
+  // is the source of truth for the audit trail.
+  if (user) {
+    const extraSerialized =
+      context.extra && Object.keys(context.extra).length > 0
+        ? JSON.stringify(context.extra)
+        : null;
+
+    try {
+      void prisma.adminAuditLog
+        .create({
+          data: {
+            timestamp: ts,
+            action: context.action,
+            targetId: context.targetId ?? null,
+            actorId: user.id,
+            actorEmail: user.email ?? null,
+            allowed: result.allowed,
+            tier: result.tier ?? null,
+            reason: result.reason ?? null,
+            extra: extraSerialized,
+          },
+        })
+        .catch((dbError: unknown) => {
+          // Fail-open: never lose an audit entry. The stderr line below is
+          // already the source of truth — this just makes the DB-write
+          // failure itself observable so an operator can notice schema drift
+          // or a missing migration.
+          console.error("[admin-audit-db-write-failed]", dbError);
+        });
+    } catch (syncError) {
+      // Synchronous throw — same observability channel as the async case.
+      console.error("[admin-audit-db-write-failed]", syncError);
+    }
+  }
+  // When `user` is null (the check failed BEFORE we knew who the actor was —
+  // unauthenticated request) we deliberately skip the DB write because
+  // `actorId` is NOT NULL on the schema. The stderr line still records the
+  // anonymous attempt with `actorId: null`.
+
+  // ---------------------------------------------------------------------
+  // Always-available port — structured stderr JSON line.
+  // ---------------------------------------------------------------------
+  // Use console.warn so the line lands on stderr regardless of DEBUG_LOGGING.
+  // The stable `[admin-audit]` prefix lets log-shippers grep without regex.
+  console.warn("[admin-audit]", JSON.stringify(stderrEntry));
 }
