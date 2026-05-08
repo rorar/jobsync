@@ -218,9 +218,16 @@ export function getLocationLabel(code: string): string {
   return code.toUpperCase();
 }
 
-/** Extract the country code from any location code (e.g., "de1" → "de") */
-export function getCountryCode(locationCode: string): string {
-  // Greece uses "el" in EURES but "gr" for flags
+/** NUTS code format: 2 letters + 0-3 alphanumeric chars, or xx-ns */
+const NUTS_CODE_RE = /^[a-z]{2}([0-9a-z]{0,3}|-ns)$/i;
+
+/** Extract the country code from a NUTS/EURES location code (e.g., "de1" → "de").
+ *  Returns undefined for free-text location names (e.g., "Berlin", "Germany")
+ *  that don't match the NUTS code format or a known EURES country prefix. */
+export function getCountryCode(locationCode: string): string | undefined {
+  if (!NUTS_CODE_RE.test(locationCode)) return undefined;
   const code = locationCode.slice(0, 2).toLowerCase();
-  return code === "el" ? "gr" : code;
+  // Greece uses "el" in EURES but "gr" for flags
+  if (code === "el") return "gr";
+  return EURES_COUNTRY_MAP.has(code) ? code : undefined;
 }
