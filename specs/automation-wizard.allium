@@ -58,6 +58,14 @@ enum ScheduleFrequency {
 -- ScheduleFrequency = "6h" | "12h" | "daily" | "2d" | "weekly"
 
 ------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    max_languages: Integer = 10                    -- per language-proficiency field
+}
+
+------------------------------------------------------------
 -- Core Concept: Generic Rendering Engine
 ------------------------------------------------------------
 
@@ -242,6 +250,8 @@ rule RenderLanguageProficiency {
         if all tokens match CEFR levels only (no language token):
             show all languages with all CEFR levels visible
             -- Pure level-only input does not filter — see Q4
+        if no token matches any language or CEFR level:
+            show empty result (no languages visible)
 
     -- This is a DynamicParamsForm type renderer, NOT a Widget Registry widget.
     -- The distinction matters: searchFieldOverrides replace shared wizard fields
@@ -377,6 +387,20 @@ invariant ModuleCredentialFeedback {
     -- - Module requires key AND key configured: no indicator
     -- - Module requires key AND key NOT configured: amber warning with link to settings
     -- - Module does not require key: green "no API key needed" indicator
+}
+
+invariant CefrLevelAllowlist {
+    -- CEFR level values written into the serialized output MUST be
+    -- within the set { A1, A2, B1, B2, C1, C2 }. Both addLanguage
+    -- and updateLevel reject values outside this set before mutating state.
+    for level in serialized_output_levels:
+        level in { "A1", "A2", "B1", "B2", "C1", "C2" }
+}
+
+invariant LanguageProficiencyMaxEntries {
+    -- A language-proficiency field accepts at most config.max_languages entries.
+    -- The combobox trigger is disabled when the limit is reached.
+    selected_language_count <= config.max_languages
 }
 
 invariant LazyWidgetLoading {
