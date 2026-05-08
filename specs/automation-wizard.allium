@@ -225,11 +225,23 @@ rule RenderLanguageProficiency {
     ensures: Language names displayed via Intl.DisplayNames in user's locale
     ensures: Each language shown as non-selectable group header with country flag
     ensures: CEFR levels (A1-C2) shown as selectable children with descriptive labels
-    ensures: User can search by language name (local filter, not remote)
     ensures: Multiple languages selectable with different CEFR levels
     ensures: Selected entries shown as chips below the combobox
     ensures: Each chip shows: flag + language name + inline CEFR level picker + remove
     ensures: Serialized value format unchanged: "de(B2), en(C1)"
+
+    -- Search filtering is token-based and cross-level:
+    ensures: Search input split on whitespace into tokens
+    ensures: Each token matched against language names (ISO code, native label,
+        locale-aware display name) OR CEFR level labels (code and descriptive text)
+    ensures:
+        if all tokens match languages only:
+            show matching languages with all CEFR levels visible
+        if at least one token matches a language AND another matches a CEFR level:
+            show matching languages with only matching CEFR levels visible
+        if all tokens match CEFR levels only (no language token):
+            show all languages with all CEFR levels visible
+            -- Pure level-only input does not filter — see Q4
 
     -- This is a DynamicParamsForm type renderer, NOT a Widget Registry widget.
     -- The distinction matters: searchFieldOverrides replace shared wizard fields
@@ -242,6 +254,10 @@ rule RenderLanguageProficiency {
         -- Follows the same Popover + Command + ChipList pattern as
         -- EuresLocationCombobox, but with CEFR levels as the leaf nodes
         -- instead of NUTS regions.
+        -- Token splitting uses String.split(/\s+/). Each token is matched
+        -- via case-insensitive substring (includes), not fuzzy/Levenshtein.
+        -- CEFR labels are i18n-resolved before matching, so "Fortgeschrittene"
+        -- matches C1 in the German locale.
 }
 
 rule RenderSearchFieldOverride {
@@ -381,3 +397,10 @@ invariant LazyWidgetLoading {
 
 -- Q3: Should the Widget Registry support server-side rendering for the review step?
 --     Currently review step shows raw values for widget-overridden fields.
+
+-- Q4: Should a pure CEFR-level-only search input (e.g., "B2" with no language token)
+--     filter to show only that level under all languages, or leave all levels visible?
+--     Current decision: no filtering (all levels visible). The "language-first" mental
+--     model means level tokens only narrow when paired with a language token.
+--     Alternative: show all 26 languages × 1 matching level. Needs user testing to
+--     determine whether this is useful or confusing.

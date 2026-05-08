@@ -191,19 +191,100 @@ export function EuresLanguageCombobox({ field, value, onChange }: EuresLanguageC
     [displayNameMap],
   );
 
-  // Filter languages by search input — O(1) lookup per language via displayNameMap
-  const filtered = useMemo(() => {
-    if (!inputValue) return allLanguages;
-    const q = inputValue.toLowerCase();
-    return allLanguages.filter((lang) => {
+  // Pre-compute i18n-resolved CEFR labels for token matching
+  const cefrLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const level of CEFR_LEVELS) {
+      const label = t(`automations.cefrLevel.${level}` as any);
+      map.set(level, label.toLowerCase());
+    }
+    return map;
+  }, [t]);
+
+  // Token-based cross-level filter (Allium spec: RenderLanguageProficiency)
+  type FilteredLanguage = { language: EuresLanguage; visibleLevels: readonly string[] | "all" };
+
+  const filtered: FilteredLanguage[] = useMemo(() => {
+    if (!inputValue) {
+      return allLanguages.map((lang) => ({ language: lang, visibleLevels: "all" as const }));
+    }
+
+    const tokens = inputValue.toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) {
+      return allLanguages.map((lang) => ({ language: lang, visibleLevels: "all" as const }));
+    }
+
+    // Classify each token: does it match any language? any CEFR level?
+    const langTokens: string[] = [];
+    const levelTokens: string[] = [];
+
+    for (const token of tokens) {
+      let matchesLang = false;
+      let matchesLevel = false;
+
+      // Check against languages
+      for (const lang of allLanguages) {
+        const displayName = displayNameMap.get(lang.isoCode)?.toLowerCase() ?? "";
+        if (
+          lang.isoCode.toLowerCase().includes(token) ||
+          lang.label.toLowerCase().includes(token) ||
+          displayName.includes(token)
+        ) {
+          matchesLang = true;
+          break;
+        }
+      }
+
+      // Check against CEFR levels (code + descriptive label)
+      for (const [code, label] of cefrLabelMap) {
+        if (code.toLowerCase().includes(token) || label.includes(token)) {
+          matchesLevel = true;
+          break;
+        }
+      }
+
+      if (matchesLang) langTokens.push(token);
+      if (matchesLevel) levelTokens.push(token);
+    }
+
+    const hasLangTokens = langTokens.length > 0;
+    const hasLevelTokens = levelTokens.length > 0;
+
+    // No token matched anything → empty result
+    if (!hasLangTokens && !hasLevelTokens) {
+      return [];
+    }
+
+    // Mode: level-only → no filtering (show all languages, all levels) per Q4
+    if (!hasLangTokens && hasLevelTokens) {
+      return allLanguages.map((lang) => ({ language: lang, visibleLevels: "all" as const }));
+    }
+
+    // Filter languages by language-matching tokens
+    const matchingLanguages = allLanguages.filter((lang) => {
       const displayName = displayNameMap.get(lang.isoCode)?.toLowerCase() ?? "";
-      return (
-        lang.isoCode.toLowerCase().includes(q) ||
-        lang.label.toLowerCase().includes(q) ||
-        displayName.includes(q)
+      const searchable = `${lang.isoCode.toLowerCase()} ${lang.label.toLowerCase()} ${displayName}`;
+      return langTokens.every((token) => searchable.includes(token));
+    });
+
+    // Mode: language-only → show matching languages with all levels
+    if (hasLangTokens && !hasLevelTokens) {
+      return matchingLanguages.map((lang) => ({ language: lang, visibleLevels: "all" as const }));
+    }
+
+    // Mode: mixed → show matching languages with only matching CEFR levels
+    const matchingLevels = CEFR_LEVELS.filter((level) => {
+      const label = cefrLabelMap.get(level) ?? "";
+      return levelTokens.some(
+        (token) => level.toLowerCase().includes(token) || label.includes(token),
       );
     });
-  }, [allLanguages, inputValue, displayNameMap]);
+
+    return matchingLanguages.map((lang) => ({
+      language: lang,
+      visibleLevels: matchingLevels.length > 0 ? matchingLevels : ("all" as const),
+    }));
+  }, [allLanguages, inputValue, displayNameMap, cefrLabelMap]);
 
   const addLanguage = useCallback(
     (isoCode: string, level: string) => {
@@ -296,8 +377,9 @@ export function EuresLanguageCombobox({ field, value, onChange }: EuresLanguageC
                 <CommandEmpty>{t("automations.noLanguagesFound" as any)}</CommandEmpty>
               )}
               {!isLoading &&
-                filtered.map((lang) => {
+                filtered.map(({ language: lang, visibleLevels }) => {
                   const isUsed = usedLanguages.has(lang.isoCode);
+                  const levels = visibleLevels === "all" ? CEFR_LEVELS : visibleLevels;
                   return (
                     <CommandGroup key={lang.isoCode}>
                       {/* Language group header (non-selectable) */}
@@ -311,15 +393,14 @@ export function EuresLanguageCombobox({ field, value, onChange }: EuresLanguageC
                         )}
                       </CommandItem>
 
-                      {/* CEFR level items */}
-                      {CEFR_LEVELS.map((level) => {
+                      {/* CEFR level items — filtered by cross-level token matching */}
+                      {levels.map((level) => {
                         const isSelected = isUsed && selectedLevelMap.get(lang.isoCode) === level;
                         return (
                           <CommandItem
                             key={`${lang.isoCode}-${level}`}
                             onSelect={() => {
                               if (isUsed) {
-                                // Language already added — update its level
                                 updateLevel(lang.isoCode, level);
                               } else {
                                 addLanguage(lang.isoCode, level);

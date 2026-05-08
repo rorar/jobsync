@@ -241,6 +241,93 @@ describe("EuresLanguageCombobox", () => {
     });
   });
 
+  describe("cross-level token filtering", () => {
+    it("language-only search shows matching language with all 6 CEFR levels", async () => {
+      render(<EuresLanguageCombobox {...defaultProps} />);
+      await screen.findByText("Select a CEFR level to add this language");
+
+      // Type "Deutsch" — should filter to just German
+      const input = screen.getByTestId("command-input");
+      fireEvent.change(input, { target: { value: "Deutsch" } });
+
+      // Should show 1 language group × 6 CEFR levels = 6 CEFR items
+      const cefrItems = screen.getAllByText(/^[ABC][12] —/);
+      expect(cefrItems.length).toBe(6);
+    });
+
+    it("mixed search narrows both language and CEFR level", async () => {
+      render(<EuresLanguageCombobox {...defaultProps} />);
+      await screen.findByText("Select a CEFR level to add this language");
+
+      // Type "Deutsch Beginner" — "Deutsch" matches language, "Beginner" matches A1
+      const input = screen.getByTestId("command-input");
+      fireEvent.change(input, { target: { value: "Deutsch Beginner" } });
+
+      // Should show 1 language group × 1 CEFR level = 1 CEFR item
+      const cefrItems = screen.getAllByText(/^[ABC][12] —/);
+      expect(cefrItems.length).toBe(1);
+      expect(cefrItems[0]).toHaveTextContent("A1 — Beginner");
+    });
+
+    it("mixed search with CEFR code narrows to that level", async () => {
+      render(<EuresLanguageCombobox {...defaultProps} />);
+      await screen.findByText("Select a CEFR level to add this language");
+
+      // Type "English B2" — "English" matches language, "B2" matches level code
+      const input = screen.getByTestId("command-input");
+      fireEvent.change(input, { target: { value: "English B2" } });
+
+      const cefrItems = screen.getAllByText(/^[ABC][12] —/);
+      expect(cefrItems.length).toBe(1);
+      expect(cefrItems[0]).toHaveTextContent("B2 — Upper intermediate");
+    });
+
+    it("level-only search shows all languages with all levels (Q4 decision)", async () => {
+      render(<EuresLanguageCombobox {...defaultProps} />);
+      await screen.findByText("Select a CEFR level to add this language");
+
+      // Type "B2" alone — no language token, only level token
+      const input = screen.getByTestId("command-input");
+      fireEvent.change(input, { target: { value: "B2" } });
+
+      // Q4: pure level-only does NOT filter — all 3 languages × 6 levels
+      const cefrItems = screen.getAllByText(/^[ABC][12] —/);
+      expect(cefrItems.length).toBe(3 * 6);
+    });
+
+    it("empty search shows all languages with all levels", async () => {
+      render(<EuresLanguageCombobox {...defaultProps} />);
+      await screen.findByText("Select a CEFR level to add this language");
+
+      // All 3 mock languages × 6 CEFR levels
+      const cefrItems = screen.getAllByText(/^[ABC][12] —/);
+      expect(cefrItems.length).toBe(18);
+    });
+
+    it("multiple level tokens narrow to multiple CEFR levels", async () => {
+      render(<EuresLanguageCombobox {...defaultProps} />);
+      await screen.findByText("Select a CEFR level to add this language");
+
+      // Type "fr Advanced Proficient" — "fr" matches French, "Advanced" matches C1, "Proficient" matches C2
+      const input = screen.getByTestId("command-input");
+      fireEvent.change(input, { target: { value: "fr Advanced Proficient" } });
+
+      const cefrItems = screen.getAllByText(/^[ABC][12] —/);
+      expect(cefrItems.length).toBe(2);
+    });
+
+    it("non-matching search shows empty state", async () => {
+      render(<EuresLanguageCombobox {...defaultProps} />);
+      await screen.findByText("Select a CEFR level to add this language");
+
+      const input = screen.getByTestId("command-input");
+      fireEvent.change(input, { target: { value: "Klingon" } });
+
+      // No language matches — should show empty state
+      expect(screen.getByTestId("command-empty")).toHaveTextContent("No languages found.");
+    });
+  });
+
   describe("max languages", () => {
     it("disables trigger when max languages reached", () => {
       // 10 languages at max
