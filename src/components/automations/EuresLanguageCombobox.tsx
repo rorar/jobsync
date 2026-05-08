@@ -383,7 +383,7 @@ export function EuresLanguageCombobox({ field, value, onChange }: EuresLanguageC
                   return (
                     <CommandGroup key={lang.isoCode}>
                       {/* Language group header (non-selectable) */}
-                      <CommandItem disabled className="flex items-center gap-2 opacity-70 cursor-default">
+                      <CommandItem value={`header-${lang.isoCode}`} disabled className="flex items-center gap-2 opacity-70 cursor-default">
                         <LanguageFlag langCode={lang.isoCode} className="h-4 w-4 rounded-sm" />
                         <span className="font-medium flex-1">
                           {getDisplayName(lang.isoCode)}
@@ -399,6 +399,7 @@ export function EuresLanguageCombobox({ field, value, onChange }: EuresLanguageC
                         return (
                           <CommandItem
                             key={`${lang.isoCode}-${level}`}
+                            value={`${lang.isoCode}-${level}`}
                             onSelect={() => {
                               if (isUsed) {
                                 updateLevel(lang.isoCode, level);
