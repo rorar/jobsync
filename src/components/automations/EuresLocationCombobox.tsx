@@ -63,7 +63,7 @@ function FlagIcon({ code, className }: { code: string; className?: string }) {
     return <HelpCircle className={cn("shrink-0 text-muted-foreground", className)} />;
   }
 
-  if (hasError) {
+  if (hasError || !flagCode) {
     return (
       <span
         className={cn("inline-block shrink-0 rounded-full bg-muted", className)}

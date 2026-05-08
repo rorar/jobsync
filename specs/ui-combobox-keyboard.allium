@@ -308,7 +308,7 @@ invariant ManualFilterRequired {
     -- Components with custom Enter handling must use shouldFilter={false}
     -- to prevent cmdk's native Enter→select from conflicting.
     -- BaseCombobox delegates via a `filter` prop — consumers are responsible.
-    for c in [Combobox, TagInput, EuresLocationCombobox, EuresOccupationCombobox]:
+    for c in [Combobox, TagInput, EuresLocationCombobox, EuresOccupationCombobox, EuresLanguageCombobox]:
         c.uses shouldFilter={false} on their Command component
 
     @guidance
@@ -352,8 +352,8 @@ surface ComboboxKeyboardSurface {
         KeyPress(combobox, event)
 
     @guarantee ConsistentAcrossVariants
-        -- All four combobox variants (BaseCombobox, EuresLocationCombobox,
-        -- EuresOccupationCombobox, TagInput) implement identical keyboard
+        -- All five combobox variants (BaseCombobox, EuresLocationCombobox,
+        -- EuresOccupationCombobox, EuresLanguageCombobox, TagInput) implement identical keyboard
         -- behaviour as defined by these rules. The only difference is
         -- single_select vs multi_select mode.
 

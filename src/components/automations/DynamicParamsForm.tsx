@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback } from "react";
+import { useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -13,9 +13,15 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
-import Image from "next/image";
+import dynamic from "next/dynamic";
 import { useTranslations } from "@/i18n";
 import type { ConnectorParamsSchema, ConnectorParamField } from "@/lib/connector/manifest";
+
+// P-2.1: Lazy-load EURES language combobox to avoid bundling when not needed
+const EuresLanguageCombobox = dynamic(
+  () => import("@/components/automations/EuresLanguageCombobox").then(m => ({ default: m.EuresLanguageCombobox })),
+  { loading: () => <div className="h-9 w-full animate-pulse rounded-md bg-muted" /> },
+);
 
 // ---------------------------------------------------------------------------
 // DynamicParamsForm — renders form fields from a ConnectorParamsSchema array
@@ -74,7 +80,7 @@ interface DynamicFieldProps {
 }
 
 function DynamicField({ moduleId, field, value, onChange }: DynamicFieldProps) {
-  const { t, locale } = useTranslations();
+  const { t } = useTranslations();
 
   /** Resolve an i18n key with raw-string fallback. */
   const resolveLabel = useCallback(
@@ -192,14 +198,14 @@ function DynamicField({ moduleId, field, value, onChange }: DynamicFieldProps) {
 
     case "language-proficiency":
       return (
-        <LanguageProficiencyField
-          field={field}
-          value={value}
-          onChange={onChange}
-          displayLabel={displayLabel}
-          t={t}
-          locale={locale}
-        />
+        <div className="space-y-2">
+          <Label className="text-sm">{displayLabel}</Label>
+          <EuresLanguageCombobox
+            field={field}
+            value={value}
+            onChange={onChange}
+          />
+        </div>
       );
 
     default:
@@ -322,293 +328,3 @@ function MultiselectField({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Internal: language + CEFR proficiency level selector
-// ---------------------------------------------------------------------------
-
-/** CEFR proficiency levels (standard — no API endpoint needed). */
-const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
-
-/**
- * Maps ISO 639-1 language codes to ISO 3166-1 alpha-2 country codes for flag
- * display. Flags represent countries, not languages — most map directly
- * (de→DE, fr→FR) but some don't. This table covers all 26 EURES portal languages.
- *
- * Uses the same `public/flags/` SVG collection as the EuresLocationCombobox.
- */
-const LANG_TO_COUNTRY_FLAG: Record<string, string> = {
-  bg: "bg", cs: "cz", da: "dk", de: "de", el: "gr", en: "gb", es: "es",
-  et: "ee", fi: "fi", fr: "fr", ga: "ie", hr: "hr", hu: "hu", is: "is",
-  it: "it", lt: "lt", lv: "lv", mt: "mt", nl: "nl", no: "no", pl: "pl",
-  pt: "pt", ro: "ro", sk: "sk", sl: "si", sv: "se",
-};
-
-/** Renders a country flag SVG for a given ISO 639-1 language code. */
-function LanguageFlag({ langCode, className }: { langCode: string; className?: string }) {
-  const countryCode = LANG_TO_COUNTRY_FLAG[langCode.toLowerCase()];
-  const [hasError, setHasError] = React.useState(false);
-
-  if (!countryCode || hasError) {
-    return (
-      <span
-        className={`inline-block shrink-0 rounded-full bg-muted ${className ?? ""}`}
-        style={{ width: 16, height: 16 }}
-      />
-    );
-  }
-
-  return (
-    <Image
-      src={`/flags/${countryCode}.svg`}
-      alt={countryCode.toUpperCase()}
-      className={`inline-block shrink-0 ${className ?? ""}`}
-      width={16}
-      height={16}
-      onError={() => setHasError(true)}
-    />
-  );
-}
-
-/** Language entry from the EURES reference API. */
-interface EuresLanguage {
-  id: number;
-  isoCode: string;
-  label: string; // native script (e.g., "Deutsch", "English", "français")
-}
-
-/**
- * Fetches the EURES portal's official language list via our proxy route.
- * The route caches for 24h (stale-while-revalidate: 7d), so repeated
- * calls within the same session are served from the browser/CDN cache.
- *
- * Falls back to an empty array on error — the user sees an empty dropdown
- * with no crash. This is the "best-effort non-blocking" enrichment pattern
- * from CLAUDE.md applied to reference data.
- */
-function useEuresLanguages(): EuresLanguage[] {
-  const [languages, setLanguages] = React.useState<EuresLanguage[]>([]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    fetch("/api/eures/languages")
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data: EuresLanguage[]) => {
-        if (!cancelled) setLanguages(data);
-      })
-      .catch(() => {
-        // Best-effort: empty list means no language dropdown, which is
-        // acceptable for a reference-data fetch failure.
-      });
-    return () => { cancelled = true; };
-  }, []);
-
-  return languages;
-}
-
-interface LanguageProficiencyFieldProps {
-  field: ConnectorParamField;
-  value: unknown;
-  onChange: (key: string, value: unknown) => void;
-  displayLabel: string;
-  t: (key: string) => string;
-  locale: string;
-}
-
-/**
- * Structured language + CEFR level selector.
- *
- * Languages are fetched from the EURES reference API
- * (`/api/eures/languages` → `shared-data-rest-api/public/reference/languages`)
- * so the list is authoritative and always up-to-date with the portal.
- * Labels are in the language's native script (matching the EURES advanced
- * search UI at europa.eu/eures/portal/jv-se/advanced-search).
- *
- * CEFR levels (A1-C2) are standardized and hardcoded.
- *
- * Serialized value: same "de(B2), en(C1)" format the EURES search API expects.
- */
-function LanguageProficiencyField({
-  field,
-  value,
-  onChange,
-  displayLabel,
-  t,
-  locale,
-}: LanguageProficiencyFieldProps) {
-  const allLanguages = useEuresLanguages();
-
-  // Parse the serialized string into an array of { lang, level } pairs.
-  const entries: { lang: string; level: string }[] = (() => {
-    if (typeof value !== "string" || value.trim() === "") return [];
-    return value
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .map((entry) => {
-        const match = entry.match(/^([a-z]{2})\(([A-C][12])\)$/i);
-        if (!match) return null;
-        return { lang: match[1].toLowerCase(), level: match[2].toUpperCase() };
-      })
-      .filter((e): e is { lang: string; level: string } => e !== null);
-  })();
-
-  const serialize = (list: { lang: string; level: string }[]) =>
-    list.length > 0
-      ? list.map((e) => `${e.lang}(${e.level})`).join(", ")
-      : undefined;
-
-  const [pendingLang, setPendingLang] = React.useState("");
-  const [pendingLevel, setPendingLevel] = React.useState("B2");
-
-  // Intl.DisplayNames translates ISO 639-1 codes into the user's locale
-  // natively — no hardcoded language name tables needed. This matches the
-  // EURES portal behavior where `lang=de` shows "Englisch" and `lang=es`
-  // shows "inglés" for the same `en` code.
-  const displayNames = React.useMemo(
-    () => {
-      try {
-        return new Intl.DisplayNames([locale], { type: "language" });
-      } catch {
-        return null; // Fallback if Intl.DisplayNames isn't supported
-      }
-    },
-    [locale],
-  );
-
-  const usedLanguages = new Set(entries.map((e) => e.lang));
-  const availableLanguages = allLanguages.filter(
-    (l) => !usedLanguages.has(l.isoCode),
-  );
-
-  const getDisplayName = (isoCode: string) => {
-    const localized = displayNames?.of(isoCode);
-    // Capitalize first letter for consistency across locales
-    const capitalized = localized
-      ? localized.charAt(0).toUpperCase() + localized.slice(1)
-      : null;
-    return capitalized
-      ? `${capitalized} (${isoCode.toUpperCase()})`
-      : isoCode.toUpperCase();
-  };
-
-  const addEntry = () => {
-    if (!pendingLang || !pendingLevel) return;
-    const next = [...entries, { lang: pendingLang, level: pendingLevel }];
-    onChange(field.key, serialize(next));
-    setPendingLang("");
-  };
-
-  const removeEntry = (lang: string) => {
-    const next = entries.filter((e) => e.lang !== lang);
-    onChange(field.key, serialize(next));
-  };
-
-  // Inline CEFR level change on an existing chip — mimics the EURES advanced
-  // search where each selected language shows a level dropdown directly on the
-  // chip, so the user can adjust without remove + re-add.
-  const updateLevel = (lang: string, newLevel: string) => {
-    const next = entries.map((e) =>
-      e.lang === lang ? { ...e, level: newLevel } : e,
-    );
-    onChange(field.key, serialize(next));
-  };
-
-  return (
-    <div className="space-y-2">
-      <Label className="text-sm">{displayLabel}</Label>
-
-      {/* Selected language entries — each with flag, name, inline CEFR selector, remove */}
-      {entries.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          {entries.map((entry) => (
-            <div
-              key={entry.lang}
-              className="flex items-center gap-2 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm animate-in fade-in-50 slide-in-from-left-2 duration-200"
-            >
-              <LanguageFlag langCode={entry.lang} className="h-4 w-4 rounded-sm shrink-0" />
-              <span className="font-medium flex-1 truncate">
-                {getDisplayName(entry.lang)}
-              </span>
-              {/* Inline CEFR level picker — the user can change level without remove + re-add.
-                  Descriptive labels match the EURES portal's advanced search
-                  (e.g., "B2 — Mittlere Fortgeschrittene" in German). */}
-              <Select
-                value={entry.level}
-                onValueChange={(val) => updateLevel(entry.lang, val)}
-              >
-                <SelectTrigger className="h-7 w-auto min-w-[68px] text-xs px-2 border-dashed">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CEFR_LEVELS.map((level) => (
-                    <SelectItem key={level} value={level} className="text-xs">
-                      {t(`automations.cefrLevel.${level}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <button
-                type="button"
-                onClick={() => removeEntry(entry.lang)}
-                className="shrink-0 rounded-full p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                aria-label={`${t("common.remove")} ${getDisplayName(entry.lang)}`}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Add language row */}
-      {(allLanguages.length === 0 || availableLanguages.length > 0) && (
-        <div className="flex items-center gap-2">
-          <Select value={pendingLang} onValueChange={(val) => {
-            setPendingLang(val);
-            // Auto-add on selection — no separate "Add" button needed.
-            // This mimics the EURES portal where clicking a language immediately
-            // adds it with the default CEFR level. The user can then adjust the
-            // level inline on the chip.
-            if (val) {
-              const next = [...entries, { lang: val, level: pendingLevel }];
-              onChange(field.key, serialize(next));
-              setPendingLang("");
-            }
-          }}>
-            <SelectTrigger className="flex-1">
-              <SelectValue
-                placeholder={
-                  allLanguages.length === 0
-                    ? t("common.loading")
-                    : entries.length === 0
-                      ? t("automations.params.selectLanguage")
-                      : t("automations.params.addAnotherLanguage")
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {availableLanguages.map((lang) => (
-                <SelectItem key={lang.isoCode} value={lang.isoCode}>
-                  <span className="inline-flex items-center gap-2">
-                    <LanguageFlag langCode={lang.isoCode} className="h-3.5 w-3.5 rounded-sm" />
-                    {getDisplayName(lang.isoCode)}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {/* Hint text when empty */}
-      {entries.length === 0 && allLanguages.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {t("automations.params.languageHint")}
-        </p>
-      )}
-    </div>
-  );
-}

@@ -100,7 +100,7 @@ entity WizardState {
 
 entity ConnectorParamField {
     key: String
-    type: string | number | boolean | select | multiselect
+    type: string | number | boolean | select | multiselect | language_proficiency
     label: String                              -- i18n key
     default_value: Any?
     options: List<Any>?                        -- for select/multiselect
@@ -205,12 +205,43 @@ rule RenderDynamicParams {
         - boolean: toggle switch
         - select: dropdown with options
         - multiselect: dropdown with badge chips for selected values
+        - language_proficiency: hierarchical combobox (see RenderLanguageProficiency)
     ensures: Field labels resolved via i18n (with raw-string fallback)
     ensures: Select option labels resolved via convention:
         automations.paramOption.{moduleId}.{fieldKey}.{value}
 
     -- DynamicParamsForm iterates the schema array in declared order.
     -- No conditional logic based on module identity.
+}
+
+rule RenderLanguageProficiency {
+    when: DynamicParamsForm encounters field.type = language_proficiency
+
+    -- The language-proficiency field type renders a hierarchical searchable
+    -- combobox (Popover + Command) where languages are parent nodes and
+    -- CEFR levels (A1-C2) are selectable children underneath each language.
+
+    ensures: Languages fetched from /api/eures/languages reference API
+    ensures: Language names displayed via Intl.DisplayNames in user's locale
+    ensures: Each language shown as non-selectable group header with country flag
+    ensures: CEFR levels (A1-C2) shown as selectable children with descriptive labels
+    ensures: User can search by language name (local filter, not remote)
+    ensures: Multiple languages selectable with different CEFR levels
+    ensures: Selected entries shown as chips below the combobox
+    ensures: Each chip shows: flag + language name + inline CEFR level picker + remove
+    ensures: Serialized value format unchanged: "de(B2), en(C1)"
+
+    -- This is a DynamicParamsForm type renderer, NOT a Widget Registry widget.
+    -- The distinction matters: searchFieldOverrides replace shared wizard fields
+    -- (keywords, location). language_proficiency is a connector parameter type
+    -- rendered by DynamicParamsForm's type-dispatch — no module identity check.
+
+    @guidance
+        -- Implementation: EuresLanguageCombobox.tsx component, lazy-loaded by
+        -- DynamicParamsForm when field.type = language_proficiency.
+        -- Follows the same Popover + Command + ChipList pattern as
+        -- EuresLocationCombobox, but with CEFR levels as the leaf nodes
+        -- instead of NUTS regions.
 }
 
 rule RenderSearchFieldOverride {

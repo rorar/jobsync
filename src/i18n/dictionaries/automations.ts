@@ -380,6 +380,13 @@ export const automations = {
     "automations.cefrLevel.C1": "C1 — Advanced",
     "automations.cefrLevel.C2": "C2 — Proficient",
 
+    // EuresLanguageCombobox
+    "automations.searchLanguages": "Search languages...",
+    "automations.languagesSelected": "{count} language(s) selected",
+    "automations.maxLanguages": "Maximum {max} languages",
+    "automations.noLanguagesFound": "No languages found.",
+    "automations.selectCefrLevel": "Select a CEFR level to add this language",
+
     // Connector Params — EURES: keyword search scope
     "automations.params.keywordSearchScope": "Keyword search scope",
     "automations.paramOption.eures.specificSearchCode.EVERYWHERE": "Everywhere",
@@ -822,6 +829,13 @@ export const automations = {
     "automations.cefrLevel.B2": "B2 — Mittlere Fortgeschrittene",
     "automations.cefrLevel.C1": "C1 — Fortgeschrittene",
     "automations.cefrLevel.C2": "C2 — Kompetent",
+
+    // EuresLanguageCombobox
+    "automations.searchLanguages": "Sprachen suchen...",
+    "automations.languagesSelected": "{count} Sprache(n) ausgewählt",
+    "automations.maxLanguages": "Maximal {max} Sprachen",
+    "automations.noLanguagesFound": "Keine Sprachen gefunden.",
+    "automations.selectCefrLevel": "CEFR-Stufe wählen, um diese Sprache hinzuzufügen",
 
     // Connector Params — EURES: sector (NACE Rev. 2)
     "automations.params.sector": "Branche",
@@ -1299,6 +1313,13 @@ export const automations = {
     "automations.cefrLevel.C1": "C1 — Avancé",
     "automations.cefrLevel.C2": "C2 — Maîtrise",
 
+    // EuresLanguageCombobox
+    "automations.searchLanguages": "Rechercher des langues...",
+    "automations.languagesSelected": "{count} langue(s) sélectionnée(s)",
+    "automations.maxLanguages": "Maximum {max} langues",
+    "automations.noLanguagesFound": "Aucune langue trouvée.",
+    "automations.selectCefrLevel": "Sélectionner un niveau CECR pour ajouter cette langue",
+
     // Connector Params — EURES: sector (NACE Rev. 2)
     "automations.params.sector": "Secteur d'activité",
     "automations.paramOption.eures.sectorCodes.a": "Agriculture, sylviculture et pêche",
@@ -1774,6 +1795,13 @@ export const automations = {
     "automations.cefrLevel.B2": "B2 — Intermedio alto",
     "automations.cefrLevel.C1": "C1 — Avanzado",
     "automations.cefrLevel.C2": "C2 — Competente",
+
+    // EuresLanguageCombobox
+    "automations.searchLanguages": "Buscar idiomas...",
+    "automations.languagesSelected": "{count} idioma(s) seleccionado(s)",
+    "automations.maxLanguages": "Máximo {max} idiomas",
+    "automations.noLanguagesFound": "No se encontraron idiomas.",
+    "automations.selectCefrLevel": "Seleccionar un nivel MCER para añadir este idioma",
 
     // Connector Params — EURES: sector (NACE Rev. 2)
     "automations.params.sector": "Sector industrial",
