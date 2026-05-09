@@ -1,0 +1,80 @@
+-- allium: 3
+-- reference-kommo-ui-kit.allium
+--
+-- REFERENCE SPEC: Distilled from kommo-crm/crm-react-ui-kit (2026-05-09)
+-- Purpose: UI-pattern inspiration catalogue for JobSync CRM (Roadmap Sektion 5)
+-- Source: /home/pascal/projekte/kommo-crm-ui-kit/
+-- NOT an implementation target — used as visual/interaction pattern reference only.
+--
+-- DISTILLATION RESULT: No domain-level entities, rules, or invariants found.
+-- This codebase is a pure UI primitive library (React components + CSS Modules).
+-- All content is implementation-level (component props, CSS custom properties,
+-- theme tokens). A product owner would not include any of it in requirements.
+--
+-- Scope: Full library examined
+-- Examined: src/components/ (27 components), src/lib/ (theme, keyboard, platform),
+--           src/hooks/, src/stylesheets/ (304-line CSS custom property theme)
+-- Finding: Zero behavioural domain concepts. Library is stateless UI primitives.
+--
+-- Includes: Component catalogue and theming model (for reference only)
+-- Excludes: Everything — no domain to specify
+--
+-- COMPONENT CATALOGUE (for UI-pattern inspiration, not Allium entities):
+--
+--   Form Controls:
+--     Button (themes: neutral, primary, secondary, danger-primary, danger-tertiary,
+--             icon-secondary, icon-ghost, icon-danger-ghost, icon-small-ghost,
+--             icon-small-danger-ghost, context, icon-context)
+--     Input (with invalid description placement: bottom | right)
+--     BaseInput (shared input foundation)
+--     InlineInput (inline editing)
+--     TextArea (auto-resize hook)
+--     Select (with nested Item, List, Button, Arrow, Icon sub-components)
+--     SelectButton (standalone select trigger)
+--     Checkbox (checked styles: mark | indeterminate)
+--     CheckboxGroup (with Checkbox, CheckboxSelectAll, ItemRoot sub-components)
+--     RadioGroup (with Radio, ItemRoot sub-components)
+--     Switcher (toggle switch)
+--     VisuallyHiddenInput (accessible hidden input)
+--
+--   Layout:
+--     Accordion (single | multiple mode, with Item sub-component)
+--     Separator (orientation: horizontal | vertical)
+--     List (generic list container)
+--     ContentBlock (content grouping)
+--     Portal (React portal wrapper)
+--
+--   Feedback:
+--     Badge (themes: neutral, promo, info, safety, warning, danger)
+--     CounterBadge (numeric badge)
+--     Spinner (loading indicator)
+--     Callout (alert/info banner)
+--     Label (form label)
+--
+--   Navigation:
+--     FilterTabs (orientation: horizontal | vertical)
+--     ContextMenu (wraps Radix DropdownMenu)
+--     Link (styled anchor)
+--
+--   Infrastructure:
+--     ConfigProvider (sets appearance theme on document root)
+--     Text (typography primitive)
+--
+-- THEMING MODEL:
+--   Appearance enum: default | alternative (dark mode)
+--   Applied via: data-crm-ui-kit-theme attribute on document.documentElement
+--   Token system: ~184 CSS custom properties (--crm-ui-kit-*)
+--   Per-component theme objects override base tokens
+--   Styling: CSS Modules (*.module.css per component)
+--
+-- VALUE FOR JOBSYNC:
+--   1. Component taxonomy — what primitives a CRM UI kit considers essential
+--   2. Theme token granularity — per-component CSS variable overrides
+--   3. Badge semantic categories — neutral/promo/info/safety/warning/danger
+--   4. Button variant spectrum — neutral through danger with icon/context variants
+--   5. Checkbox indeterminate pattern — useful for bulk-select in CRM lists
+--   6. FilterTabs orientation — horizontal for desktop, vertical for mobile
+--   7. Radix DropdownMenu wrapping — ContextMenu as compositional wrapper
+--
+-- Since there are no domain concepts to specify, this file serves as
+-- a structured reference catalogue only. No entities, rules, or invariants.

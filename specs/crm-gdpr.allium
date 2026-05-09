@@ -1,0 +1,529 @@
+-- allium: 3
+-- crm-gdpr.allium
+--
+-- GDPR / DSGVO data handling for JobSync CRM (Roadmap Sektion 5)
+-- Specifies data subject rights, retention, erasure cascades, and
+-- data minimization rules for CRM personal data processing.
+--
+-- Scope: GDPR compliance layer for CRM contact management
+-- Includes: Data subject requests (access, erasure, rectification, portability),
+--           retention policies, contact auto-creation constraints, participant
+--           anonymization, data classification
+-- Excludes:
+--   - CRM domain model (see reference-twenty-crm.allium)
+--   - Consent banner / cookie UI (not applicable — self-hosted, no tracking)
+--   - Breach notification procedures (operational, not domain logic)
+--   - Data Processing Agreements with vendors (legal, not code)
+--   - User account data (WorkspaceMember is the CRM operator, not a data subject)
+--
+-- Legal basis: Art. 6(1)(f) DSGVO — Berechtigtes Interesse (Legitimate Interest)
+-- JobSync is self-hosted, single-user/small-team. The CRM operator manages their
+-- own job search contacts. No SaaS data processing agreement needed.
+
+-- Dependencies: CRM entities from future crm.allium (currently documented
+-- in reference-twenty-crm.allium). Once crm.allium exists, replace external
+-- entities with: use "./crm.allium" as crm
+
+-- =============================================================================
+-- External Entities
+-- =============================================================================
+
+-- CRM entities defined in reference-twenty-crm.allium / future crm.allium.
+-- This spec adds GDPR-specific behaviour on top of them.
+
+external entity Person {
+    name: String?
+    emails: List<String>
+    phones: List<String>
+    job_title: String?
+    city: String?
+    created_at: Timestamp
+}
+
+external entity Note { title: String }
+external entity Task { title: String? }
+external entity NoteTarget { note: Note?, target_person: Person? }
+external entity TaskTarget { task: Task?, target_person: Person? }
+external entity TimelineActivity { target_person: Person?, happens_at: Timestamp }
+external entity MessageParticipant { handle: String?, person: Person?, display_name: String? }
+external entity CalendarEventParticipant { handle: String?, person: Person?, display_name: String? }
+external entity Blocklist { handle: String }
+external entity Attachment { target_person: Person? }
+
+-- =============================================================================
+-- Enumerations
+-- =============================================================================
+
+enum DataSource {
+    -- How a Person record entered the system
+    manual
+    auto_created
+    imported
+}
+
+enum ProcessingBasis {
+    -- DSGVO Art. 6(1) legal basis for processing this record
+    legitimate_interest    -- Art. 6(1)(f) — default for all CRM contacts
+    consent                -- Art. 6(1)(a) — if explicit consent obtained
+    contract               -- Art. 6(1)(b) — if contact is a contractual party
+}
+
+enum DataSubjectRequestType {
+    access         -- Art. 15: right to know what data we hold
+    erasure        -- Art. 17: right to be forgotten
+    rectification  -- Art. 16: right to correct inaccurate data
+    portability    -- Art. 20: right to receive data in machine-readable format
+}
+
+enum DataSubjectRequestStatus {
+    pending        -- received, not yet started
+    processing     -- actively being fulfilled
+    completed      -- fulfilled and response delivered
+    rejected       -- rejected with documented reason (e.g. legal retention obligation)
+}
+
+-- DSGVO Art. 4(1) classification of CRM entities:
+--   personal_data:           Person, MessageParticipant, CalendarEventParticipant
+--   potential_personal_data: Note.body_v2, Task.body_v2, Attachment content
+--   not_personal_data:       Company (juristische Person), Opportunity, View, Workflow
+
+-- =============================================================================
+-- Value Types
+-- =============================================================================
+
+value PersonDataExport {
+    -- Machine-readable export of all personal data held about a Person.
+    -- Produced by Art. 15 access requests and Art. 20 portability requests.
+    person_name: String?
+    person_emails: List<String>
+    person_phones: List<String>
+    person_job_title: String?
+    person_city: String?
+    person_created_at: Timestamp
+    data_source: DataSource
+    processing_basis: ProcessingBasis
+    linked_notes: List<String>
+    linked_tasks: List<String>
+    linked_timeline_events: Integer
+    message_threads_as_participant: Integer
+    calendar_events_as_participant: Integer
+    exported_at: Timestamp
+}
+
+value ErasureResult {
+    -- Documents what was deleted/anonymized during an Art. 17 erasure.
+    person_deleted: Boolean
+    note_targets_removed: Integer
+    task_targets_removed: Integer
+    timeline_activities_anonymized: Integer
+    message_participants_anonymized: Integer
+    calendar_participants_anonymized: Integer
+    attachments_removed: Integer
+    retained_reason: String?
+}
+
+-- =============================================================================
+-- Entities
+-- =============================================================================
+
+entity PersonGdprExtension {
+    -- GDPR-relevant metadata attached to each Person record.
+    -- In implementation: these fields are added directly to the Person
+    -- Prisma model. Modeled as a separate entity here because Person
+    -- is an external entity from the CRM reference spec.
+    person: Person
+    data_source: DataSource
+    processing_basis: ProcessingBasis
+    retention_expires_at: Timestamp?
+    erasure_requested_at: Timestamp?
+    is_anonymized: Boolean
+
+    is_retention_expired: retention_expires_at != null and retention_expires_at <= now
+    is_auto_created: data_source = auto_created
+}
+
+entity DataSubjectRequest {
+    -- Tracks DSGVO data subject rights requests.
+    -- Each request has a 30-day response deadline (Art. 12(3)).
+    type: DataSubjectRequestType
+    person: Person
+    status: DataSubjectRequestStatus
+    requested_at: Timestamp
+    deadline: Timestamp
+    completed_at: Timestamp?
+    response_data: String?
+    rejection_reason: String?
+    processed_by_user: String?
+
+    is_overdue: status != completed and status != rejected and deadline < now
+
+    transitions status {
+        pending -> processing
+        processing -> completed
+        processing -> rejected
+        terminal: completed, rejected
+    }
+}
+
+-- =============================================================================
+-- Config
+-- =============================================================================
+
+config {
+    -- Art. 12(3): response deadline for data subject requests
+    dsr_response_deadline: Duration = 30.days
+
+    -- Retention period for auto-created contacts (from email/calendar sync)
+    auto_created_contact_retention: Duration = 730.days
+
+    -- Retention period for timeline activities
+    timeline_retention: Duration = 1095.days
+
+    -- Data minimization: max fields captured during auto-creation
+    -- Only name + primary email, no phone, no address, no enrichment
+    auto_creation_allowed_fields: Set<String> = {"name", "email"}
+}
+
+-- =============================================================================
+-- Rules
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- Data Subject Request Lifecycle
+-- -----------------------------------------------------------------------------
+
+rule SubmitDataSubjectRequest {
+    -- A CRM user submits a DSR on behalf of a data subject (contact).
+    -- The 30-day response clock starts immediately.
+    when: SubmitRequest(person, request_type)
+
+    requires: person != null
+
+    ensures: DataSubjectRequest.created(
+        type: request_type,
+        person: person,
+        status: pending,
+        requested_at: now,
+        deadline: now + config.dsr_response_deadline
+    )
+}
+
+rule BeginProcessingRequest {
+    when: BeginProcessing(request)
+
+    requires: request.status = pending
+
+    ensures: request.status = processing
+}
+
+-- -----------------------------------------------------------------------------
+-- Art. 15: Right of Access
+-- -----------------------------------------------------------------------------
+
+rule FulfillAccessRequest {
+    -- Export all personal data held about the data subject.
+    -- Collects data from Person + all linked entities.
+    when: FulfillAccess(request)
+
+    requires: request.status = processing
+    requires: request.type = access
+
+    let person = request.person
+    let gdpr = person_gdpr_extension(person)
+
+    ensures: request.response_data = PersonDataExport(
+        person_name: person.name,
+        person_emails: person.emails,
+        person_phones: person.phones,
+        person_job_title: person.job_title,
+        person_city: person.city,
+        person_created_at: person.created_at,
+        data_source: gdpr.data_source,
+        processing_basis: gdpr.processing_basis,
+        linked_notes: collect_linked_notes(person),
+        linked_tasks: collect_linked_tasks(person),
+        linked_timeline_events: count_timeline_activities(person),
+        message_threads_as_participant: count_message_participations(person),
+        calendar_events_as_participant: count_calendar_participations(person),
+        exported_at: now
+    )
+    ensures: request.status = completed
+    ensures: request.completed_at = now
+}
+
+-- -----------------------------------------------------------------------------
+-- Art. 17: Right to Erasure
+-- -----------------------------------------------------------------------------
+
+rule FulfillErasureRequest {
+    -- Delete the Person record and cascade/anonymize linked data.
+    -- CRITICAL PATTERN: Anonymize participants, do NOT delete messages/events.
+    -- Other participants in the same message/event still have rights to it.
+    when: FulfillErasure(request)
+
+    requires: request.status = processing
+    requires: request.type = erasure
+
+    let person = request.person
+
+    -- Delete direct associations
+    ensures:
+        for nt in NoteTargets:
+            if nt.target_person = person:
+                not exists nt
+
+    ensures:
+        for tt in TaskTargets:
+            if tt.target_person = person:
+                not exists tt
+
+    ensures:
+        for a in Attachments:
+            if a.target_person = person:
+                not exists a
+
+    -- Anonymize message participants (preserve message, remove PII link)
+    ensures:
+        for mp in MessageParticipants:
+            if mp.person = person:
+                mp.handle = null
+                mp.display_name = null
+                mp.person = null
+
+    -- Anonymize calendar participants (same pattern)
+    ensures:
+        for cp in CalendarEventParticipants:
+            if cp.person = person:
+                cp.handle = null
+                cp.display_name = null
+                cp.person = null
+
+    -- Anonymize timeline references
+    ensures:
+        for ta in TimelineActivities:
+            if ta.target_person = person:
+                ta.target_person = null
+
+    -- Delete the Person record itself
+    ensures: not exists person
+
+    -- Record what was done for audit trail
+    ensures: request.response_data = ErasureResult(
+        person_deleted: true,
+        note_targets_removed: count(NoteTargets, nt => nt.target_person = person),
+        task_targets_removed: count(TaskTargets, tt => tt.target_person = person),
+        timeline_activities_anonymized: count(TimelineActivities, ta => ta.target_person = person),
+        message_participants_anonymized: count(MessageParticipants, mp => mp.person = person),
+        calendar_participants_anonymized: count(CalendarEventParticipants, cp => cp.person = person),
+        attachments_removed: count(Attachments, a => a.target_person = person),
+        retained_reason: null
+    )
+    ensures: request.status = completed
+    ensures: request.completed_at = now
+}
+
+rule RejectErasureForLegalRetention {
+    -- Erasure can be refused if there is a legal obligation to retain.
+    -- Art. 17(3)(b): compliance with a legal obligation.
+    -- Example: tax-relevant correspondence within retention period.
+    when: RejectErasure(request, reason)
+
+    requires: request.status = processing
+    requires: request.type = erasure
+
+    ensures: request.status = rejected
+    ensures: request.rejection_reason = reason
+    ensures: request.completed_at = now
+}
+
+-- -----------------------------------------------------------------------------
+-- Art. 16: Right to Rectification
+-- -----------------------------------------------------------------------------
+
+rule FulfillRectificationRequest {
+    -- Update Person fields with corrected data.
+    -- After rectification, re-run participant matching to update
+    -- any MessageParticipant/CalendarEventParticipant links.
+    when: FulfillRectification(request, corrected_fields)
+
+    requires: request.status = processing
+    requires: request.type = rectification
+
+    ensures: apply_corrections(request.person, corrected_fields)
+    ensures: rematch_participants(request.person)
+    ensures: request.status = completed
+    ensures: request.completed_at = now
+}
+
+-- -----------------------------------------------------------------------------
+-- Art. 20: Right to Data Portability
+-- -----------------------------------------------------------------------------
+
+rule FulfillPortabilityRequest {
+    -- Export personal data in a structured, machine-readable format (JSON).
+    -- Same data collection as access request, but formatted for transfer.
+    when: FulfillPortability(request)
+
+    requires: request.status = processing
+    requires: request.type = portability
+
+    let person = request.person
+    let gdpr = person_gdpr_extension(person)
+
+    ensures: request.response_data = PersonDataExport(
+        person_name: person.name,
+        person_emails: person.emails,
+        person_phones: person.phones,
+        person_job_title: person.job_title,
+        person_city: person.city,
+        person_created_at: person.created_at,
+        data_source: gdpr.data_source,
+        processing_basis: gdpr.processing_basis,
+        linked_notes: collect_linked_notes(person),
+        linked_tasks: collect_linked_tasks(person),
+        linked_timeline_events: count_timeline_activities(person),
+        message_threads_as_participant: count_message_participations(person),
+        calendar_events_as_participant: count_calendar_participations(person),
+        exported_at: now
+    )
+    ensures: request.status = completed
+    ensures: request.completed_at = now
+}
+
+-- -----------------------------------------------------------------------------
+-- Retention Enforcement
+-- -----------------------------------------------------------------------------
+
+rule ExpireAutoCreatedContacts {
+    -- Periodic cleanup: auto-created contacts whose retention has expired
+    -- are automatically erased. Uses the same anonymization cascade as
+    -- manual erasure requests.
+    when: RunRetentionCleanup()
+
+    ensures:
+        for gdpr in PersonGdprExtensions:
+            if gdpr.is_auto_created and gdpr.is_retention_expired and not gdpr.is_anonymized:
+                DataSubjectRequest.created(
+                    type: erasure,
+                    person: gdpr.person,
+                    status: pending,
+                    requested_at: now,
+                    deadline: now + config.dsr_response_deadline
+                )
+}
+
+rule ExpireOldTimelineActivities {
+    -- Periodic cleanup: timeline activities older than retention window
+    -- are anonymized (target references removed, properties cleared).
+    when: RunRetentionCleanup()
+
+    ensures:
+        for ta in TimelineActivities:
+            if ta.happens_at + config.timeline_retention < now:
+                ta.target_person = null
+}
+
+-- -----------------------------------------------------------------------------
+-- Data Minimization at Auto-Creation
+-- -----------------------------------------------------------------------------
+
+rule AutoCreatedContactMinimization {
+    -- When a Person is auto-created from an email/calendar participant,
+    -- only the minimum required fields are populated: name + primary email.
+    -- No phone, no city, no job_title, no enrichment.
+    when: AutoCreatePerson(participant)
+
+    ensures: PersonGdprExtension.created(
+        person: participant.created_person,
+        data_source: auto_created,
+        processing_basis: legitimate_interest,
+        retention_expires_at: now + config.auto_created_contact_retention,
+        is_anonymized: false
+    )
+}
+
+rule ManuallyCreatedContactMetadata {
+    -- When a Person is created manually by the CRM user.
+    -- No retention limit — user manages lifecycle.
+    when: ManuallyCreatePerson(person)
+
+    ensures: PersonGdprExtension.created(
+        person: person,
+        data_source: manual,
+        processing_basis: legitimate_interest,
+        retention_expires_at: null,
+        is_anonymized: false
+    )
+}
+
+rule ImportedContactMetadata {
+    -- When a Person is imported (CSV, API, etc.).
+    -- Same retention as auto-created by default.
+    when: ImportPerson(person)
+
+    ensures: PersonGdprExtension.created(
+        person: person,
+        data_source: imported,
+        processing_basis: legitimate_interest,
+        retention_expires_at: now + config.auto_created_contact_retention,
+        is_anonymized: false
+    )
+}
+
+-- =============================================================================
+-- Invariants
+-- =============================================================================
+
+invariant EveryPersonHasGdprExtension {
+    -- Every Person in the CRM must have GDPR metadata tracking
+    -- data source, processing basis, and retention.
+    for p in Persons:
+        exists gdpr in PersonGdprExtensions where gdpr.person = p
+}
+
+invariant DataSubjectRequestHasDeadline {
+    for r in DataSubjectRequests:
+        r.deadline != null
+}
+
+invariant DataSubjectRequestDeadlineWithin30Days {
+    -- Art. 12(3): response within one month of receipt
+    for r in DataSubjectRequests:
+        r.deadline <= r.requested_at + config.dsr_response_deadline
+}
+
+invariant ErasedPersonIsFullyAnonymized {
+    -- After erasure, no MessageParticipant or CalendarEventParticipant
+    -- should still reference the deleted Person.
+    for mp in MessageParticipants:
+        mp.person != null implies exists p in Persons where p = mp.person
+
+    for cp in CalendarEventParticipants:
+        cp.person != null implies exists p in Persons where p = cp.person
+}
+
+invariant AutoCreatedContactHasRetention {
+    -- Auto-created contacts MUST have a retention expiry date.
+    for gdpr in PersonGdprExtensions:
+        if gdpr.data_source = auto_created:
+            gdpr.retention_expires_at != null
+}
+
+invariant BlocklistSuppressesAutoCreation {
+    -- No Person should be auto-created for a handle that is blocklisted.
+    -- This is enforced at creation time, not as a retroactive check.
+    for gdpr in PersonGdprExtensions:
+        if gdpr.data_source = auto_created:
+            not exists b in Blocklists
+            where gdpr.person.emails.any(e => e = b.handle)
+}
+
+-- =============================================================================
+-- Open Questions
+-- =============================================================================
+
+open question "Should auto-created contacts receive a notification that their data is being processed? Art. 14 requires informing data subjects when data is obtained indirectly — but self-hosted single-user CRM may qualify for the household exemption (Art. 2(2)(c))."
+
+open question "Should the retention period for imported contacts differ from auto-created? Imports are deliberate user actions, auto-creation is automatic. Consider: imported = no auto-expiry (like manual), or same 2-year TTL?"
+
+open question "Should Note/Task body_v2 free-text fields be included in erasure cascades? They MAY contain personal data about the erased person but also contain the CRM user's own notes. Consider: flag-and-review vs automatic inclusion in export, exclude from deletion."

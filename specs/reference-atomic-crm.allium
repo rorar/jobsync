@@ -1,0 +1,304 @@
+-- allium: 3
+-- reference-atomic-crm.allium
+--
+-- REFERENCE SPEC: Distilled from marmelab/atomic-crm (2026-05-09)
+-- Purpose: Domain-model reference for JobSync CRM (Roadmap Sektion 5)
+-- Source: /home/pascal/projekte/atomic-crm/
+-- NOT an implementation target — used to inform entity design and business rules.
+--
+-- Scope: CRM domain model only
+-- Includes: Company, Contact, Deal, Note, Tag, Task, ActivityLog, ContactMerge
+-- Excludes:
+--   - Supabase auth, RLS policies, Edge Functions (infrastructure)
+--   - react-admin UI framework, Shadcn Admin Kit (UI framework)
+--   - File storage / attachment upload mechanics (infrastructure)
+--   - CSV import/export (data migration)
+--   - SSO / OAuth (auth infrastructure)
+
+-- =============================================================================
+-- Value Types
+-- =============================================================================
+
+value TypedEmail {
+    email: String
+    type: work | home | other
+}
+
+value TypedPhone {
+    number: String
+    type: work | home | other
+}
+
+-- =============================================================================
+-- Entities
+-- =============================================================================
+
+entity SalesRep {
+    -- A CRM user. Each entity is owned by a SalesRep.
+    -- In JobSync context: equivalent to User (userId).
+    first_name: String
+    last_name: String
+    email: String
+    is_admin: Boolean
+    is_disabled: Boolean
+}
+
+entity Company {
+    name: String
+    sector: String?
+    size: micro | small | medium | large | enterprise | null
+    website: String?
+    phone_number: String?
+    address: String?
+    zipcode: String?
+    city: String?
+    state_abbr: String?
+    country: String?
+    description: String?
+    revenue: String?
+    tax_identifier: String?
+    linkedin_url: String?
+    context_links: List<String>?
+    logo: String?
+    owner: SalesRep
+    created_at: Timestamp
+    nb_contacts: Integer
+    nb_deals: Integer
+}
+
+entity Contact {
+    first_name: String?
+    last_name: String?
+    gender: String?
+    title: String?
+    background: String?
+    avatar: String?
+    status: cold | warm | hot | in_contract | null
+    has_newsletter: Boolean?
+    linkedin_url: String?
+    emails: List<TypedEmail>
+    phones: List<TypedPhone>
+    tags: Set<Tag>
+    company: Company?
+    owner: SalesRep
+    first_seen: Timestamp?
+    last_seen: Timestamp?
+    nb_tasks: Integer
+}
+
+entity ContactNote {
+    contact: Contact
+    text: String?
+    date: Timestamp
+    status: cold | warm | hot | in_contract | null
+    attachments: List<String>?
+    author: SalesRep
+}
+
+entity Deal {
+    name: String
+    company: Company?
+    contacts: Set<Contact>
+    category: String?
+    stage: String
+    description: String?
+    amount: Integer?
+    expected_closing_date: Timestamp?
+    index: Integer?
+    owner: SalesRep
+    created_at: Timestamp
+    updated_at: Timestamp
+    archived_at: Timestamp?
+    is_archived: archived_at != null
+}
+
+entity DealNote {
+    deal: Deal
+    type: String?
+    text: String?
+    date: Timestamp
+    attachments: List<String>?
+    author: SalesRep
+}
+
+entity Tag {
+    name: String
+    color: String
+}
+
+entity Task {
+    contact: Contact
+    type: String?
+    text: String?
+    due_date: Timestamp?
+    done_date: Timestamp?
+    assignee: SalesRep?
+    is_done: done_date != null
+    is_overdue: due_date != null and due_date < now and not is_done
+}
+
+-- =============================================================================
+-- Invariants
+-- =============================================================================
+
+invariant DealRequiresStage {
+    -- NOT NULL constraint on deals.stage
+    for d in Deals:
+        d.stage != null
+}
+
+invariant CompanyRequiresName {
+    -- NOT NULL constraint on companies.name
+    for c in Companies:
+        c.name != null
+}
+
+invariant DealRequiresName {
+    -- NOT NULL constraint on deals.name
+    for d in Deals:
+        d.name != null
+}
+
+invariant SalesRepRequiresEmail {
+    -- NOT NULL constraint on sales.email
+    for s in SalesReps:
+        s.email != null
+}
+
+invariant ContactNoteRequiresContact {
+    -- NOT NULL + FK constraint on contact_notes.contact_id
+    for n in ContactNotes:
+        n.contact != null
+}
+
+invariant DealNoteRequiresDeal {
+    -- NOT NULL + FK constraint on deal_notes.deal_id
+    for n in DealNotes:
+        n.deal != null
+}
+
+invariant TaskRequiresContact {
+    -- NOT NULL + FK constraint on tasks.contact_id
+    for t in Tasks:
+        t.contact != null
+}
+
+invariant TagRequiresNameAndColor {
+    -- Both NOT NULL in schema
+    for t in Tags:
+        t.name != null and t.color != null
+}
+
+-- =============================================================================
+-- Actors
+-- =============================================================================
+
+actor CrmUser {
+    identified_by: SalesRep where is_disabled = false
+}
+
+actor CrmAdmin {
+    identified_by: SalesRep where is_admin = true and is_disabled = false
+}
+
+-- =============================================================================
+-- Surfaces
+-- =============================================================================
+
+surface Dashboard {
+    -- Welcome stepper, deals pipeline chart, hot contacts, latest notes,
+    -- tasks list, activity log.
+    facing: CrmUser
+}
+
+surface CompanyList {
+    -- Filterable list with aggregated counts (nb_contacts, nb_deals).
+    facing: CrmUser
+}
+
+surface ContactList {
+    -- Filterable list with aggregated task count and company name.
+    -- Supports CSV import/export and contact merge.
+    facing: CrmUser
+}
+
+surface DealKanban {
+    -- Kanban board with configurable stage columns.
+    -- Drag-and-drop reordering within and across columns.
+    -- Separate archived deals list accessible via dialog.
+    facing: CrmUser
+}
+
+surface ContactDetail {
+    -- Contact info, notes timeline, tasks, company link.
+    facing: CrmUser
+}
+
+surface CompanyDetail {
+    -- Company info, contacts list, deals list.
+    facing: CrmUser
+}
+
+surface DealDetail {
+    -- Deal info, linked contacts, notes, archive/unarchive actions.
+    facing: CrmUser
+}
+
+-- =============================================================================
+-- Documented Domain Rules
+-- =============================================================================
+-- The following rules capture observed domain behaviour in Atomic CRM.
+-- They are documented as comments because this is a reference spec for
+-- another project (JobSync), not an implementation target for Atomic CRM.
+-- The entity model and invariants above are the primary value.
+--
+-- OWNERSHIP
+--   AutoAssignOwner: All entities auto-assign current user as owner on creation.
+--     Trigger: set_sales_id_default() on Company, Contact, ContactNote, Deal, DealNote, Task.
+--   SalesRepCreatedFromAuth: When a user registers, a SalesRep is auto-created
+--     from auth metadata (first_name, last_name, email). First user gets is_admin = true.
+--   AuthProfileSync: When auth user profile changes, SalesRep fields sync (first_name, last_name, email).
+--
+-- ENRICHMENT (best-effort, non-blocking)
+--   AutoFetchCompanyLogo: Company saved + website present + no logo => fetch favicon.
+--   AutoFetchContactAvatar: Contact saved + emails present + no avatar => Gravatar or domain favicon.
+--   LowercaseEmails: Contact emails normalized to lowercase before save (runs before avatar fetch).
+--
+-- CONTACT LIFECYCLE
+--   UpdateContactLastSeen: ContactNote created => contact.last_seen = max(current, note.date).
+--   MergeContacts (winner-takes-precedence):
+--     Scalars: winner fields take precedence, loser fills gaps (coalesce).
+--     Multi-value: emails dedup by address, phones dedup by number, tags unioned.
+--     Timestamps: earliest first_seen, latest last_seen.
+--     Children: Tasks, ContactNotes, Deal.contacts reassigned from loser to winner.
+--     Loser deleted after merge.
+--
+-- DEAL LIFECYCLE
+--   ArchiveDeal: Sets archived_at = now. Archived deals hidden from Kanban, shown in archived list.
+--   UnarchiveDeal: Resets archived_at = null. Deal placed at index 0 (first position)
+--     in its stage column. All other deals in the same stage re-indexed starting from 1.
+--   DealKanbanReorder: Drag-drop updates deal.stage + deal.index + deal.updated_at.
+--   DealStageFallback: If deal.stage not in configured stages, display in first column.
+--
+-- INBOUND EMAIL (Postmark webhook integration)
+--   InboundEmailToNote: Postmark webhook receives inbound email and:
+--     1. Extracts sender info (email, first_name, last_name, domain).
+--     2. Finds or creates Company from email domain.
+--        - Mail provider exclusion: generic providers (gmail.com, outlook.com, etc.)
+--          are filtered out — no Company is created for contacts at these domains.
+--          This prevents database pollution with non-company entities.
+--        - Company matched by website, name, or domain. Created if no match found.
+--     3. Finds or creates Contact by email address.
+--        - New contacts get email typed as "Work", first_seen and last_seen set to now.
+--        - Contact linked to Company (if created in step 2).
+--     4. Creates ContactNote with email content as text + attachments.
+--     5. Updates contact.last_seen to now.
+--   Requires: sender must be an active (non-disabled) SalesRep. Returns 403 otherwise.
+--
+-- CLEANUP
+--   CleanupNoteAttachments: When note attachments change or note deleted, orphaned files cleaned up.
+--
+-- ACTIVITY LOG (read-only derived view)
+--   UNION ALL database view aggregating creation events from Company, Contact, ContactNote, Deal, DealNote.
+--   Types: company_created, contact_created, contact_note_created, deal_created, deal_note_created.
+--   Fields: type, date, company?, contact?, deal?, contact_note?, deal_note?, author?.

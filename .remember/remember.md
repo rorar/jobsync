@@ -1,24 +1,14 @@
 # Handoff
 
 ## State
-6 commits pushed to `origin main` (`35a5d55`). 218 test suites, 4163 tests passing. Dev server on port 3737.
-
-## Completed this session (2026-05-09)
-1. **EuresLanguageCombobox** — hierarchical Popover+Command ComboBox, DynamicParamsForm type-dispatch
-2. **Cross-level token filtering** — "Czech Interm" → Czech > B1 only, four filter modes
-3. **cmdk hover bugfix** — explicit `value` props on CommandItems
-4. **Allium spec alignment** — 3 spec gaps closed after allium:weed
-5. **FL-3 Auth rate-limiting** — IP-based sliding window: signin 5/15min, signup 3/60min
-6. **email.ts i18n split** — PrefixEqualsFilename invariant. Split email.ts (78 keys, 4 prefixes) → email.ts (16) + smtp.ts (31) + push.ts (15). Renamed errors.saveSmtp → smtp.errorSave (×4 SMTP, ×5 webhook). allium:weed: 0 divergences.
+I reviewed a Gemini CRM chat (mostly wrong — ignored our DDD/Connector architecture). Established 3 CRM reference repos cloned to `/home/pascal/projekte/`: `atomic-crm/`, `kommo-crm-ui-kit/`, `twenty/`. Created `project_crm_planning.md` memory with architecture decisions. Distilled + weeded `specs/reference-atomic-crm.allium` (0 errors, 12 divergences resolved). Distilled + weeded `specs/reference-kommo-ui-kit.allium` (pure UI primitives, no domain — serves as component catalogue).
 
 ## Next
-1. S2 (UX Journeys) / S3 (CRM Core) staged prompts
-2. PERF-2 (async pbkdf2) / PERF-3 (notification dispatch queries)
-3. Read `project_deferred_sprints_for_future_sessions.md` before cleanup sprints
+1. Distill Twenty CRM spec: `allium:distill` focused on `packages/twenty-server/src/modules/{timeline,workflow,messaging,calendar,person,company,opportunity,note,task}/`. Save to `specs/reference-twenty-crm.allium`. Then `allium:weed` against codebase.
+2. After all 3 reference specs done: create JobSync's own `specs/crm.allium` using `allium:elicit` — informed by the three reference specs + Roadmap Sektion 5.
+3. S2 (UX Journeys) / S3 (CRM Core) staged prompts still open — see `project_next_session_planning.md`.
 
 ## Context
-- PrefixEqualsFilename invariant in i18n-system.allium enforces 1 prefix per dictionary file
-- New channels (SMS, Slack) → create own namespace file, no cross-cutting errors.* prefix
-- cmdk: always set explicit `value` prop on CommandItems in hierarchical lists
-- Auth rate limiter follows `admin-rate-limit.ts` pattern (globalThis, server-only, sliding window)
-- Tests: nice -n 10, --maxWorkers=1 (VM resource constraint)
+- Twenty is 21K files / 479MB — focus ONLY on the server modules listed above, ignore frontend/infra/monorepo tooling.
+- CRM is NOT a Connector/Module in our architecture — it's Core Domain (Roadmap Sektion 5). Memory file `project_crm_planning.md` has the full decision record.
+- Use `/allium:distill` skill (not manual), then `/allium:weed` for verification, then `allium check` + `allium analyse` CLI.

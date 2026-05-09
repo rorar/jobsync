@@ -1,0 +1,1295 @@
+-- allium: 3
+-- reference-twenty-crm.allium
+--
+-- REFERENCE SPEC: Distilled from twentyhq/twenty (2026-05-09)
+-- Purpose: Advanced CRM pattern reference for JobSync CRM (Roadmap Sektion 5)
+-- Source: /home/pascal/projekte/twenty/packages/twenty-server/src/modules/
+-- NOT an implementation target — used to capture Timeline, Workflow, Email,
+-- Calendar patterns that go beyond what Atomic CRM covers.
+--
+-- Scope: Full CRM domain model + advanced patterns (whole codebase sweep)
+-- Includes: Person, Company, Opportunity, Note, Task, Timeline, Workflow,
+--           Messaging, Calendar, ConnectedAccount, Attachment, Blocklist,
+--           View, ContactCreation, ParticipantMatching
+-- Excludes:
+--   - NestJS/TypeORM/PostgreSQL infrastructure (framework)
+--   - GraphQL schema generation, query hooks (API layer)
+--   - Redis/BullMQ job queue mechanics (infrastructure)
+--   - Multi-tenant workspace engine, Custom Objects (platform)
+--   - OAuth token management internals (auth infrastructure)
+--   - Gmail/Microsoft/IMAP driver implementations (integration drivers)
+--   - CalDAV/Google Calendar/Microsoft Calendar drivers (integration drivers)
+--   - Search vector / full-text search mechanics (infrastructure)
+--   - Message/Calendar cleaner jobs (operational)
+--   - Metrics/monitoring instrumentation (observability)
+--   - Dashboard / Dashboard-Sync (BI/reporting, not CRM domain)
+--   - Spreadsheet import mechanics (operational)
+
+-- =============================================================================
+-- Value Types
+-- =============================================================================
+
+value FullName {
+    first_name: String?
+    last_name: String?
+}
+
+value TypedEmail {
+    email: String
+    is_primary: Boolean
+}
+
+value TypedPhone {
+    number: String
+    is_primary: Boolean
+}
+
+value Links {
+    -- A composite of labeled URLs (e.g. domain, LinkedIn, X)
+    primary_url: String?
+    secondary_urls: List<String>?
+}
+
+value Address {
+    street_1: String?
+    street_2: String?
+    city: String?
+    state: String?
+    postal_code: String?
+    country: String?
+}
+
+value Currency {
+    amount_micros: Integer?
+    currency_code: String?
+}
+
+value RichText {
+    -- Block-editor content (e.g. Tiptap/Lexical JSON)
+    content: String?
+}
+
+value ActorMetadata {
+    -- Tracks who created/updated a record and from what source
+    source: ActorSource
+    name: String?
+    workspace_member_id: String?
+}
+
+-- =============================================================================
+-- External Entities
+-- =============================================================================
+
+external entity WorkspaceMember {
+    -- A user within the CRM workspace.
+    -- Equivalent to JobSync's User (userId).
+    user_id: String
+}
+
+-- =============================================================================
+-- Enumerations
+-- =============================================================================
+
+enum MessageDirection {
+    incoming
+    outgoing
+}
+
+enum CalendarParticipantResponse {
+    needs_action
+    declined
+    tentative
+    accepted
+}
+
+enum WorkflowStatus {
+    draft
+    active
+    deactivated
+}
+
+enum WorkflowVersionStatus {
+    draft
+    active
+    deactivated
+    archived
+}
+
+enum WorkflowRunStatus {
+    not_started
+    enqueued
+    running
+    completed
+    failed
+    stopping
+    stopped
+}
+
+enum WorkflowActionType {
+    code
+    logic_function
+    send_email
+    draft_email
+    create_record
+    update_record
+    delete_record
+    upsert_record
+    find_records
+    form
+    filter
+    if_else
+    http_request
+    ai_agent
+    iterator
+    empty
+    delay
+}
+
+enum WorkflowTriggerType {
+    database_event
+    manual
+    cron
+    webhook
+}
+
+enum AutomatedTriggerType {
+    database_event
+    cron
+}
+
+enum StepStatus {
+    not_started
+    pending
+    running
+    success
+    stopped
+    skipped
+    failed_safely
+    failed
+}
+
+enum SyncStatus {
+    active
+    ongoing
+    failed_insufficient_permissions
+    failed_unknown
+    not_synced
+}
+
+enum SyncStage {
+    -- Initial
+    pending_configuration
+    -- Messaging stages
+    message_list_fetch_pending
+    message_list_fetch_scheduled
+    message_list_fetch_ongoing
+    messages_import_pending
+    messages_import_scheduled
+    messages_import_ongoing
+    -- Calendar stages
+    calendar_event_list_fetch_pending
+    calendar_event_list_fetch_scheduled
+    calendar_event_list_fetch_ongoing
+    calendar_events_import_pending
+    calendar_events_import_scheduled
+    calendar_events_import_ongoing
+    -- Shared
+    failed
+}
+
+enum MessageChannelVisibility {
+    -- Controls who in the workspace can see email content
+    metadata
+    subject
+    share_everything
+}
+
+enum CalendarChannelVisibility {
+    -- Controls who in the workspace can see calendar events
+    -- Note: no 'subject' option — calendar events use titles, not subjects
+    metadata
+    share_everything
+}
+
+enum MessageContactAutoCreationPolicy {
+    -- Auto-create Person records from email direction
+    sent_and_received
+    sent
+    none
+}
+
+enum CalendarContactAutoCreationPolicy {
+    -- Auto-create Person records from calendar role
+    as_participant_and_organizer
+    as_participant
+    as_organizer
+    none
+}
+
+enum ActorSource {
+    -- Tracks the origin of a record creation or update
+    manual
+    import
+    api
+    system
+    workflow
+    email
+    calendar
+    agent
+    webhook
+    application
+}
+
+enum ConnectedAccountProvider {
+    google
+    microsoft
+    imap_smtp_caldav
+    oidc
+    saml
+    email_group
+    app
+}
+
+enum MessageParticipantRole {
+    from
+    to
+    cc
+    bcc
+}
+
+enum ViewType {
+    -- How records are displayed in saved perspectives
+    table
+    kanban
+    calendar
+}
+
+enum ViewVisibility {
+    public
+    private
+}
+
+-- =============================================================================
+-- Entities
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- Core CRM Entities
+-- -----------------------------------------------------------------------------
+
+entity Person {
+    -- A contact/person in the CRM. Equivalent to Atomic CRM's Contact.
+    name: FullName?
+    emails: List<TypedEmail>
+    phones: List<TypedPhone>
+    linkedin_link: Links?
+    x_link: Links?
+    job_title: String?
+    city: String?
+    avatar_url: String?
+    position: Integer
+    created_by: ActorMetadata
+    updated_by: ActorMetadata
+    company: Company?
+    -- Polymorphic relations to CRM activities
+    task_targets: Set<TaskTarget>
+    note_targets: Set<NoteTarget>
+    message_participants: Set<MessageParticipant>
+    calendar_event_participants: Set<CalendarEventParticipant>
+    timeline_activities: Set<TimelineActivity>
+    opportunities_as_point_of_contact: Set<Opportunity>
+}
+
+entity Company {
+    -- An organisation in the CRM. Equivalent to Atomic CRM's Company.
+    name: String?
+    domain_name: Links
+    employees: Integer?
+    linkedin_link: Links?
+    x_link: Links?
+    annual_recurring_revenue: Currency?
+    address: Address
+    ideal_customer_profile: Boolean
+    position: Integer
+    created_by: ActorMetadata
+    updated_by: ActorMetadata
+    account_owner: WorkspaceMember?
+    -- Relations
+    people: Set<Person>
+    task_targets: Set<TaskTarget>
+    note_targets: Set<NoteTarget>
+    opportunities: Set<Opportunity>
+    timeline_activities: Set<TimelineActivity>
+}
+
+entity Opportunity {
+    -- A sales deal/pipeline opportunity. Equivalent to Atomic CRM's Deal.
+    name: String
+    amount: Currency?
+    close_date: Timestamp?
+    stage: String
+    position: Integer
+    created_by: ActorMetadata
+    updated_by: ActorMetadata
+    point_of_contact: Person?
+    company: Company?
+    owner: WorkspaceMember?
+    -- Relations
+    task_targets: Set<TaskTarget>
+    note_targets: Set<NoteTarget>
+    timeline_activities: Set<TimelineActivity>
+}
+
+-- -----------------------------------------------------------------------------
+-- Activities: Notes & Tasks (Polymorphic Targeting Pattern)
+-- -----------------------------------------------------------------------------
+
+entity Note {
+    -- A rich-text note. Attached to Person/Company/Opportunity via NoteTarget.
+    -- KEY PATTERN: Notes are not directly owned by a single entity.
+    -- Instead, NoteTarget join entities allow many-to-many attachment.
+    title: String
+    body_v2: RichText?
+    position: Integer
+    created_by: ActorMetadata
+    updated_by: ActorMetadata
+    note_targets: Set<NoteTarget>
+    timeline_activities: Set<TimelineActivity>
+}
+
+entity NoteTarget {
+    -- Polymorphic join entity: attaches a Note to one CRM object.
+    -- Uses nullable FKs instead of generic polymorphic associations.
+    -- PATTERN: Each target type gets its own nullable field.
+    note: Note?
+    target_person: Person?
+    target_company: Company?
+    target_opportunity: Opportunity?
+    -- Custom objects can also be targets (extensibility)
+}
+
+entity Task {
+    -- An actionable task with optional due date and assignee.
+    -- Attached to Person/Company/Opportunity via TaskTarget.
+    title: String?
+    body_v2: RichText?
+    due_at: Timestamp?
+    status: String?
+    position: Integer
+    created_by: ActorMetadata
+    updated_by: ActorMetadata
+    assignee: WorkspaceMember?
+    task_targets: Set<TaskTarget>
+    timeline_activities: Set<TimelineActivity>
+
+    is_overdue: due_at != null and due_at < now and status != "done"
+}
+
+entity TaskTarget {
+    -- Polymorphic join entity: attaches a Task to one CRM object.
+    -- Same pattern as NoteTarget.
+    task: Task?
+    target_person: Person?
+    target_company: Company?
+    target_opportunity: Opportunity?
+}
+
+-- -----------------------------------------------------------------------------
+-- Timeline (Unified Activity Feed Pattern)
+-- -----------------------------------------------------------------------------
+
+entity TimelineActivity {
+    -- Denormalized read model that aggregates all CRM events into a
+    -- unified activity feed per entity. Events are materialized from
+    -- database events via background jobs, not queried live.
+    --
+    -- PATTERN: Polymorphic target fields (same as NoteTarget/TaskTarget)
+    -- allow timeline entries to be associated with any CRM object.
+    -- The linked_record fields point to the entity that was changed
+    -- (which may differ from the target entity).
+    happens_at: Timestamp
+    name: String?
+    properties: String?
+    linked_record_cached_name: String?
+    linked_record_id: String?
+    linked_object_metadata_id: String?
+    workspace_member: WorkspaceMember?
+    -- Polymorphic targets
+    target_person: Person?
+    target_company: Company?
+    target_opportunity: Opportunity?
+    target_note: Note?
+    target_task: Task?
+    target_workflow: Workflow?
+    target_workflow_version: WorkflowVersion?
+    target_workflow_run: WorkflowRun?
+}
+
+-- -----------------------------------------------------------------------------
+-- Messaging (Email Integration Pattern)
+-- -----------------------------------------------------------------------------
+
+entity ConnectedAccount {
+    -- An external email/calendar account connected via OAuth or IMAP.
+    -- Serves as the bridge between WorkspaceMember and external services.
+    handle: String?
+    provider: ConnectedAccountProvider
+    auth_failed_at: Timestamp?
+    handle_aliases: List<String>?
+    scopes: List<String>?
+    account_owner: WorkspaceMember
+}
+
+entity MessageChannel {
+    -- A sync channel for one email account. Controls import behaviour
+    -- (visibility, auto-contact-creation, folder policy).
+    -- PATTERN: Sync state machine with stages tracking import progress.
+    visibility: MessageChannelVisibility
+    handle: String?
+    type: String
+    is_contact_auto_creation_enabled: Boolean
+    contact_auto_creation_policy: MessageContactAutoCreationPolicy
+    exclude_non_professional_emails: Boolean
+    exclude_group_emails: Boolean
+    is_sync_enabled: Boolean
+    sync_cursor: String?
+    synced_at: Timestamp?
+    sync_status: SyncStatus?
+    sync_stage: SyncStage
+    sync_stage_started_at: Timestamp?
+    throttle_failure_count: Integer
+    connected_account: ConnectedAccount
+    message_associations: Set<MessageChannelMessageAssociation>
+    message_folders: Set<MessageFolder>
+}
+
+entity MessageThread {
+    -- Groups related messages into a conversation thread.
+    subject: String?
+    messages: Set<Message>
+}
+
+entity Message {
+    -- A single email message within a thread.
+    header_message_id: String?
+    subject: String?
+    text: String?
+    received_at: Timestamp?
+    message_thread: MessageThread?
+    message_participants: Set<MessageParticipant>
+    channel_associations: Set<MessageChannelMessageAssociation>
+}
+
+entity MessageParticipant {
+    -- Links a message to a person/workspace-member who participated.
+    -- PATTERN: Participant matching — email handles are matched against
+    -- Person records to auto-link messages with CRM contacts.
+    role: MessageParticipantRole
+    handle: String?
+    display_name: String?
+    message: Message
+    person: Person?
+    workspace_member: WorkspaceMember?
+}
+
+entity MessageChannelMessageAssociation {
+    -- Junction between MessageChannel and Message with sync metadata.
+    message_external_id: String?
+    message_thread_external_id: String?
+    direction: MessageDirection
+    message_channel_id: String
+    message: Message?
+    message_folders: Set<MessageChannelMessageAssociationMessageFolder>
+}
+
+entity MessageFolder {
+    -- An email folder (Inbox, Sent, etc.) within a message channel.
+    name: String?
+    sync_cursor: String?
+    is_sent_folder: Boolean
+    is_synced: Boolean
+    parent_folder_id: String?
+    external_id: String?
+    message_channel_id: String
+}
+
+entity MessageChannelMessageAssociationMessageFolder {
+    -- Junction between message-channel-message-association and folder.
+    -- Tracks which folder(s) a message belongs to in a given channel.
+    message_channel_message_association: MessageChannelMessageAssociation
+    message_folder: MessageFolder
+}
+
+-- -----------------------------------------------------------------------------
+-- Calendar (Calendar Sync Pattern)
+-- -----------------------------------------------------------------------------
+
+entity CalendarChannel {
+    -- A sync channel for one calendar account. Mirrors MessageChannel pattern.
+    handle: String?
+    sync_status: SyncStatus?
+    sync_stage: SyncStage
+    visibility: CalendarChannelVisibility
+    is_contact_auto_creation_enabled: Boolean
+    contact_auto_creation_policy: CalendarContactAutoCreationPolicy
+    is_sync_enabled: Boolean
+    sync_cursor: String?
+    synced_at: Timestamp?
+    sync_stage_started_at: Timestamp?
+    throttle_failure_count: Integer
+    connected_account: ConnectedAccount
+    event_associations: Set<CalendarChannelEventAssociation>
+}
+
+entity CalendarEvent {
+    -- A single calendar event imported from an external calendar.
+    title: String?
+    is_canceled: Boolean
+    is_full_day: Boolean
+    starts_at: Timestamp?
+    ends_at: Timestamp?
+    external_created_at: Timestamp?
+    external_updated_at: Timestamp?
+    description: String?
+    location: String?
+    ical_uid: String?
+    conference_solution: String?
+    conference_link: Links
+    event_associations: Set<CalendarChannelEventAssociation>
+    participants: Set<CalendarEventParticipant>
+}
+
+entity CalendarEventParticipant {
+    -- Links a calendar event to a person/workspace-member who participates.
+    -- PATTERN: Same participant-matching pattern as MessageParticipant.
+    handle: String?
+    display_name: String?
+    is_organizer: Boolean
+    response_status: CalendarParticipantResponse
+    calendar_event: CalendarEvent
+    person: Person?
+    workspace_member: WorkspaceMember?
+}
+
+entity CalendarChannelEventAssociation {
+    -- Junction between CalendarChannel and CalendarEvent with sync metadata.
+    event_external_id: String?
+    recurring_event_external_id: String?
+    calendar_channel_id: String
+    calendar_event: CalendarEvent
+}
+
+-- -----------------------------------------------------------------------------
+-- Attachments (Cross-cutting File Attachment Pattern)
+-- -----------------------------------------------------------------------------
+
+entity Attachment {
+    -- Polymorphic file attachment: can be attached to any CRM object.
+    -- PATTERN: Same nullable-FK polymorphism as NoteTarget/TaskTarget,
+    -- but for files rather than activities.
+    file: String?
+    file_category: String
+    created_by: ActorMetadata
+    updated_by: ActorMetadata
+    -- Polymorphic targets (one set per entity type)
+    target_task: Task?
+    target_note: Note?
+    target_person: Person?
+    target_company: Company?
+    target_opportunity: Opportunity?
+    target_workflow: Workflow?
+}
+
+-- -----------------------------------------------------------------------------
+-- Blocklist (Email Suppression Pattern)
+-- -----------------------------------------------------------------------------
+
+entity Blocklist {
+    -- Per-user email/domain suppression list.
+    -- Entries can be exact emails (user@example.com) or domain patterns
+    -- (@example.com). Used by messaging and calendar import to filter
+    -- unwanted participants and prevent auto-contact creation.
+    handle: String
+    workspace_member: WorkspaceMember
+}
+
+-- -----------------------------------------------------------------------------
+-- View (Saved Query Perspective Pattern)
+-- -----------------------------------------------------------------------------
+
+entity View {
+    -- A saved perspective on a collection of records.
+    -- PATTERN: Views decouple display configuration from data.
+    -- Users can have multiple views (Table, Kanban, Calendar) per entity type.
+    name: String?
+    type: ViewType
+    icon: String?
+    is_compact: Boolean
+    position: Integer
+    visibility: ViewVisibility
+    -- Kanban-specific
+    kanban_field_metadata_id: String?
+    kanban_aggregate_operation: String?
+    -- Calendar-specific
+    calendar_field_metadata_id: String?
+    -- Composition
+    view_fields: List<ViewField>?
+    view_filters: List<ViewFilter>?
+    view_sorts: List<ViewSort>?
+    view_groups: List<ViewGroup>?
+}
+
+value ViewField {
+    field_metadata_id: String
+    position: Integer
+    size: Integer?
+    is_visible: Boolean
+}
+
+value ViewFilter {
+    field_metadata_id: String
+    operand: String
+    value: String?
+    display_value: String?
+}
+
+value ViewSort {
+    field_metadata_id: String
+    direction: asc | desc
+}
+
+value ViewGroup {
+    field_metadata_id: String
+    is_visible: Boolean
+}
+
+-- -----------------------------------------------------------------------------
+-- Workflow Engine (Versioned DAG Automation Pattern)
+-- -----------------------------------------------------------------------------
+
+entity Workflow {
+    -- A named automation container. Holds versions and tracks aggregate status.
+    -- PATTERN: Workflow status is derived from its versions' statuses.
+    -- A workflow can be simultaneously DRAFT (has draft version) and ACTIVE
+    -- (has active version).
+    name: String?
+    last_published_version_id: String?
+    statuses: List<WorkflowStatus>?
+    position: Integer
+    created_by: ActorMetadata
+    versions: Set<WorkflowVersion>
+    runs: Set<WorkflowRun>
+    automated_triggers: Set<WorkflowAutomatedTrigger>
+    timeline_activities: Set<TimelineActivity>
+}
+
+entity WorkflowVersion {
+    -- An immutable snapshot of a workflow's configuration.
+    -- PATTERN: Versioned DAG — a trigger + ordered steps array forms a
+    -- directed acyclic graph via nextStepIds references. Only DRAFT
+    -- versions can be edited. Activation freezes the version.
+    name: String?
+    trigger: WorkflowTrigger?
+    steps: List<WorkflowStep>?
+    status: WorkflowVersionStatus
+    position: Integer
+    workflow: Workflow
+    runs: Set<WorkflowRun>
+    timeline_activities: Set<TimelineActivity>
+}
+
+entity WorkflowRun {
+    -- A single execution of a workflow version.
+    -- Tracks state per step for resumability and debugging.
+    name: String?
+    enqueued_at: Timestamp?
+    started_at: Timestamp?
+    ended_at: Timestamp?
+    status: WorkflowRunStatus
+    state: WorkflowRunState
+    created_by: ActorMetadata
+    position: Integer
+    workflow_version: WorkflowVersion
+    workflow: Workflow
+    timeline_activities: Set<TimelineActivity>
+}
+
+entity WorkflowAutomatedTrigger {
+    -- A persistent trigger registration (DATABASE_EVENT or CRON).
+    -- Created when a workflow version with an automated trigger is activated.
+    -- Deleted when the version is deactivated.
+    type: AutomatedTriggerType
+    settings: String
+    workflow: Workflow
+}
+
+-- Workflow sub-types (value types for structured data within workflow entities)
+
+value WorkflowTrigger {
+    -- The entry point of a workflow: what starts execution.
+    name: String?
+    type: WorkflowTriggerType
+    settings: String
+    next_step_ids: List<String>?
+    position: Integer?
+}
+
+value WorkflowStep {
+    -- A single step in the workflow DAG.
+    id: String
+    name: String?
+    type: WorkflowActionType
+    settings: String
+    position: Integer?
+    valid: Boolean
+    next_step_ids: List<String>?
+}
+
+value WorkflowRunState {
+    -- The complete execution state of a workflow run.
+    -- Captures the flow definition (trigger + steps) plus per-step status.
+    flow_trigger: WorkflowTrigger
+    flow_steps: List<WorkflowStep>
+    step_infos: String
+    workflow_run_error: String?
+}
+
+value WorkflowActionOutput {
+    result: String?
+    error: String?
+    pending_event: Boolean?
+    should_end_workflow_run: Boolean?
+    should_remain_running: Boolean?
+    should_skip_step_execution: Boolean?
+    should_fail_safely: Boolean?
+}
+
+-- =============================================================================
+-- Config
+-- =============================================================================
+
+config {
+    -- Timeline: which system objects generate timeline activities
+    system_objects_with_timeline_activities: Set<String> = {"noteTarget", "taskTarget"}
+
+    -- Workflow: terminal step statuses (no further processing)
+    terminal_step_statuses: Set<StepStatus> = {success, stopped, skipped, failed_safely}
+}
+
+-- =============================================================================
+-- Rules
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- Timeline Materialization
+-- -----------------------------------------------------------------------------
+
+rule UpsertTimelineActivityFromEvent {
+    -- When a database event occurs on a tracked object, materialize it
+    -- into a TimelineActivity record linked to the affected entity.
+    -- This is the core of the unified timeline pattern.
+    when: DatabaseEvent(object, action, properties, workspace_member)
+
+    requires: object.is_tracked_for_timeline or
+              object.name_singular in config.system_objects_with_timeline_activities
+
+    ensures: TimelineActivity.created(
+        happens_at: now,
+        name: action,
+        properties: properties,
+        workspace_member: workspace_member,
+        linked_record_id: object.id,
+        linked_object_metadata_id: object.metadata_id,
+        linked_record_cached_name: object.display_name
+    )
+}
+
+rule TimelineForActivityTargets {
+    -- When a NoteTarget or TaskTarget is created/updated/deleted,
+    -- create timeline entries on the TARGET entity (Person/Company/
+    -- Opportunity) pointing to the Note/Task as the linked record.
+    -- This ensures the timeline of a Person shows "Note X was attached".
+    when: DatabaseEvent(activity_target, action, properties, workspace_member)
+
+    requires: activity_target.name_singular in config.system_objects_with_timeline_activities
+
+    ensures:
+        for target_field in activity_target.target_fields:
+            if target_field != null:
+                TimelineActivity.created(
+                    happens_at: now,
+                    name: action,
+                    workspace_member: workspace_member,
+                    linked_record_id: activity_target.activity.id,
+                    linked_record_cached_name: activity_target.activity.title,
+                    target: target_field
+                )
+}
+
+-- -----------------------------------------------------------------------------
+-- Workflow Lifecycle
+-- -----------------------------------------------------------------------------
+
+rule CreateWorkflowVersion {
+    -- New workflow versions must be DRAFT and only one DRAFT per workflow.
+    when: CreateWorkflowVersion(workflow, version_data)
+
+    requires: version_data.status = draft or version_data.status = null
+    requires: workflow.versions.all(v => v.status != draft)
+
+    ensures: WorkflowVersion.created(
+        workflow: workflow,
+        status: draft,
+        name: version_data.name,
+        trigger: version_data.trigger,
+        steps: version_data.steps
+    )
+}
+
+rule UpdateWorkflowVersion {
+    -- Only DRAFT versions can be structurally edited.
+    -- Non-DRAFT versions only allow name changes.
+    when: UpdateWorkflowVersion(version, changes)
+
+    requires: version.status = draft or changes.only_changes_name
+
+    ensures: version.updated(changes)
+}
+
+rule DeleteWorkflowVersion {
+    -- Only DRAFT versions can be deleted.
+    -- At least one version must remain on the workflow.
+    when: DeleteWorkflowVersion(version)
+
+    requires: version.status = draft
+    requires: version.workflow.versions.count > 1
+
+    ensures: version.deleted
+}
+
+rule ActivateWorkflowVersion {
+    -- Activating a version: DRAFT -> ACTIVE. Requires trigger and steps.
+    -- Any currently active version is deactivated (ACTIVE -> DEACTIVATED).
+    -- If trigger is automated (DATABASE_EVENT or CRON), register it.
+    when: ActivateWorkflowVersion(version)
+
+    requires: version.status = draft
+    requires: version.trigger != null
+    requires: version.steps != null and version.steps.count > 0
+
+    ensures: version.status = active
+    ensures:
+        for v in version.workflow.versions:
+            if v != version and v.status = active:
+                v.status = deactivated
+    ensures: version.workflow.last_published_version_id = version.id
+    ensures:
+        if version.trigger.type = database_event or version.trigger.type = cron:
+            WorkflowAutomatedTrigger.created(
+                type: version.trigger.type,
+                settings: version.trigger.settings,
+                workflow: version.workflow
+            )
+}
+
+rule DeactivateWorkflowVersion {
+    -- Deactivating a version: ACTIVE -> DEACTIVATED.
+    -- Removes automated trigger registration.
+    when: DeactivateWorkflowVersion(version)
+
+    requires: version.status = active
+
+    ensures: version.status = deactivated
+    ensures:
+        for trigger in version.workflow.automated_triggers:
+            trigger.deleted
+}
+
+rule WorkflowStatusDerivedFromVersions {
+    -- Workflow aggregate statuses are derived from its versions.
+    -- A workflow is DRAFT if any version is DRAFT.
+    -- A workflow is ACTIVE if any version is ACTIVE.
+    -- A workflow is DEACTIVATED if it has versions but none are DRAFT or ACTIVE.
+    when: UpdateWorkflowVersionStatus(version)
+
+    ensures: version.workflow.statuses = derive_workflow_statuses(version.workflow.versions)
+}
+
+-- -----------------------------------------------------------------------------
+-- Workflow Execution
+-- -----------------------------------------------------------------------------
+
+rule RunWorkflow {
+    -- Running a workflow creates a WorkflowRun and enqueues execution.
+    when: RunWorkflow(workflow_version, trigger_payload)
+
+    requires: workflow_version.status = active
+
+    ensures: WorkflowRun.created(
+        workflow_version: workflow_version,
+        workflow: workflow_version.workflow,
+        status: not_started,
+        state: WorkflowRunState(
+            flow_trigger: workflow_version.trigger,
+            flow_steps: workflow_version.steps
+        )
+    )
+}
+
+rule ExecuteWorkflowStep {
+    -- Execute a single step in the workflow DAG. On success, determine
+    -- next steps based on step type (linear, if-else branching, iterator).
+    when: ExecuteStep(run, step)
+
+    requires: run.status = running
+
+    ensures:
+        if step.type = if_else:
+            -- Branch: evaluate condition, follow matching branch
+            step_completed(run, step)
+        if step.type = iterator:
+            -- Loop: iterate over collection, execute child steps per item
+            step_completed(run, step)
+        if step.type = form:
+            -- Pause: wait for user input, set pending_event flag
+            step_paused(run, step)
+        else:
+            -- Standard step: execute and continue to next_step_ids
+            step_completed(run, step)
+}
+
+rule CompleteWorkflowRun {
+    -- When all steps are in terminal statuses, end the run.
+    when: AllStepsTerminal(run)
+
+    requires: run.status = running
+
+    ensures: run.status = completed
+    ensures: run.ended_at = now
+}
+
+rule FailWorkflowRun {
+    -- If a step fails and the workflow should not continue, fail the run.
+    when: StepFailed(run, step, error)
+
+    requires: run.status = running
+    requires: not step.should_fail_safely
+
+    ensures: run.status = failed
+    ensures: run.ended_at = now
+    ensures: run.state.workflow_run_error = error
+}
+
+rule StopWorkflowRun {
+    -- User-initiated stop of a running or enqueued workflow run.
+    when: StopWorkflowRun(run)
+
+    requires: run.status = running or run.status = enqueued
+
+    ensures: run.status = stopped
+    ensures: run.ended_at = now
+}
+
+rule HandleStaledWorkflowRuns {
+    -- Periodic cleanup: runs stuck in RUNNING for too long are marked FAILED.
+    when: CleanupStaledRuns()
+
+    ensures:
+        for run in WorkflowRuns:
+            if run.status = running and run.started_at + staled_threshold < now:
+                run.status = failed
+                run.ended_at = now
+}
+
+-- -----------------------------------------------------------------------------
+-- Workflow Trigger Patterns
+-- -----------------------------------------------------------------------------
+
+rule DatabaseEventTrigger {
+    -- When a tracked database event occurs, find all active workflow versions
+    -- with a DATABASE_EVENT trigger matching the event, and run them.
+    when: DatabaseEvent(object, action, properties)
+
+    ensures:
+        for trigger in WorkflowAutomatedTriggers:
+            if trigger.type = database_event and
+               trigger.settings.event_name = object.name + "." + action:
+                RunWorkflow(trigger.workflow.active_version, properties)
+}
+
+rule CronTrigger {
+    -- Periodic evaluation: for each CRON automated trigger, check if
+    -- the schedule matches, and if so, run the workflow.
+    when: EvaluateCronTriggers()
+
+    ensures:
+        for trigger in WorkflowAutomatedTriggers:
+            if trigger.type = cron and trigger.schedule_matches_now:
+                RunWorkflow(trigger.workflow.active_version, null)
+}
+
+-- -----------------------------------------------------------------------------
+-- Messaging Sync State Machine
+-- -----------------------------------------------------------------------------
+
+rule MessageChannelSyncCycle {
+    -- The messaging sync follows a staged pipeline:
+    -- 1. MESSAGE_LIST_FETCH_PENDING -> SCHEDULED -> ONGOING
+    --    (Fetch list of message IDs from provider)
+    -- 2. MESSAGES_IMPORT_PENDING -> SCHEDULED -> ONGOING
+    --    (Import full message content for discovered IDs)
+    -- 3. Back to MESSAGE_LIST_FETCH_PENDING (incremental sync)
+    --
+    -- On success: sync_status = ACTIVE, sync cursor advanced
+    -- On failure: sync_status = FAILED_*, retry with throttle
+    when: SyncCycleStart(channel)
+
+    requires: channel.is_sync_enabled
+    requires: channel.sync_stage = message_list_fetch_pending
+
+    ensures: channel.sync_stage = message_list_fetch_scheduled
+    ensures: channel.sync_status = ongoing
+}
+
+rule MessageSyncCompleted {
+    when: SyncCycleCompleted(channel)
+
+    ensures: channel.sync_status = active
+    ensures: channel.sync_stage = message_list_fetch_pending
+    ensures: channel.synced_at = now
+    ensures: channel.throttle_failure_count = 0
+}
+
+rule MessageSyncFailed {
+    when: SyncCycleFailed(channel, failure_type)
+
+    ensures: channel.sync_stage = failed
+    ensures: channel.sync_status = failure_type
+    ensures:
+        if failure_type = failed_insufficient_permissions:
+            channel.connected_account.auth_failed_at = now
+}
+
+-- -----------------------------------------------------------------------------
+-- Calendar Sync State Machine
+-- -----------------------------------------------------------------------------
+
+rule CalendarChannelSyncCycle {
+    -- Same staged pipeline as messaging:
+    -- 1. CALENDAR_EVENT_LIST_FETCH_PENDING -> ONGOING
+    -- 2. CALENDAR_EVENTS_IMPORT_PENDING -> ONGOING
+    -- 3. Back to CALENDAR_EVENT_LIST_FETCH_PENDING
+    when: SyncCycleStart(channel)
+
+    requires: channel.is_sync_enabled
+    requires: channel.sync_stage = calendar_event_list_fetch_pending
+
+    ensures: channel.sync_stage = calendar_event_list_fetch_ongoing
+    ensures: channel.sync_status = ongoing
+}
+
+rule CalendarSyncCompleted {
+    when: SyncCycleCompleted(channel)
+
+    ensures: channel.sync_status = active
+    ensures: channel.sync_stage = calendar_event_list_fetch_pending
+    ensures: channel.synced_at = now
+    ensures: channel.throttle_failure_count = 0
+}
+
+rule CalendarSyncFailed {
+    when: SyncCycleFailed(channel, failure_type)
+
+    ensures: channel.sync_stage = failed
+    ensures: channel.sync_status = failure_type
+    ensures:
+        if failure_type = failed_insufficient_permissions:
+            channel.connected_account.auth_failed_at = now
+}
+
+-- -----------------------------------------------------------------------------
+-- Participant Matching (Cross-cutting Messaging + Calendar)
+-- -----------------------------------------------------------------------------
+
+rule MatchMessageParticipantToPerson {
+    -- When a new MessageParticipant is created with an email handle,
+    -- attempt to match it against existing Person records by email.
+    -- Also match against WorkspaceMember records.
+    when: MessageParticipant.created(participant)
+
+    requires: participant.handle != null
+    requires: participant.person = null
+
+    ensures:
+        if exists person in Persons where person.emails.any(e => e.email = participant.handle):
+            participant.person = person
+}
+
+rule MatchCalendarParticipantToPerson {
+    -- Same matching pattern for calendar event participants.
+    when: CalendarEventParticipant.created(participant)
+
+    requires: participant.handle != null
+    requires: participant.person = null
+
+    ensures:
+        if exists person in Persons where person.emails.any(e => e.email = participant.handle):
+            participant.person = person
+}
+
+-- -----------------------------------------------------------------------------
+-- Contact Auto-Creation (from Email/Calendar events)
+-- -----------------------------------------------------------------------------
+
+rule AutoCreatePersonFromParticipant {
+    -- When a message or calendar event is imported and the channel has
+    -- auto-contact-creation enabled, create Person + Company records
+    -- from participant email handles.
+    -- PATTERN: Extract domain from email → find/create Company,
+    --          extract name from handle/displayName → create Person.
+    when: ParticipantImported(participant, channel)
+
+    requires: channel.is_contact_auto_creation_enabled
+    requires: participant.person = null
+    requires: participant.handle != null
+    requires: not exists blocklist_entry in Blocklists
+              where blocklist_entry.workspace_member = channel.connected_account.account_owner
+              and (blocklist_entry.handle = participant.handle
+                   or participant.handle.ends_with(blocklist_entry.handle))
+
+    ensures:
+        -- Extract company domain from email handle
+        let domain = extract_domain(participant.handle)
+        if domain != null and not exists company in Companies where company.domain_name.primary_url = domain:
+            Company.created(
+                domain_name: Links(primary_url: domain),
+                created_by: ActorMetadata(source: email)
+            )
+    ensures:
+        Person.created(
+            emails: {TypedEmail(email: participant.handle, is_primary: true)},
+            name: extract_name(participant.display_name),
+            company: find_company_by_domain(extract_domain(participant.handle)),
+            created_by: ActorMetadata(source: email)
+        )
+}
+
+rule BlocklistFiltersDuringSyncImport {
+    -- During message/calendar import, skip messages involving blocklisted handles.
+    -- Blocklist entries can be exact emails or domain patterns (@example.com).
+    when: ImportMessage(message, channel)
+
+    requires:
+        for participant in message.participants:
+            not exists entry in Blocklists
+            where entry.workspace_member = channel.connected_account.account_owner
+            and (entry.handle = participant.handle
+                 or participant.handle.ends_with(entry.handle))
+}
+
+-- =============================================================================
+-- Invariants
+-- =============================================================================
+
+invariant OpportunityRequiresName {
+    for o in Opportunities:
+        o.name != null
+}
+
+invariant WorkflowVersionBelongsToWorkflow {
+    for v in WorkflowVersions:
+        v.workflow != null
+}
+
+invariant WorkflowRunBelongsToVersion {
+    for r in WorkflowRuns:
+        r.workflow_version != null and r.workflow != null
+}
+
+invariant OnlyOneDraftVersionPerWorkflow {
+    -- A workflow can have at most one DRAFT version at any time.
+    for w in Workflows:
+        w.versions.count(v => v.status = draft) <= 1
+}
+
+invariant ActiveVersionRequiresTriggerAndSteps {
+    -- An ACTIVE workflow version must have a defined trigger and at least one step.
+    for v in WorkflowVersions:
+        if v.status = active:
+            v.trigger != null and v.steps != null and v.steps.count > 0
+}
+
+invariant MessageChannelRequiresConnectedAccount {
+    for c in MessageChannels:
+        c.connected_account != null
+}
+
+invariant CalendarChannelRequiresConnectedAccount {
+    for c in CalendarChannels:
+        c.connected_account != null
+}
+
+invariant NoteTargetHasAtMostOneTarget {
+    -- A NoteTarget should reference at most one CRM entity.
+    -- Nullable FKs pattern: at most one target field is non-null.
+    for nt in NoteTargets:
+        not (nt.target_person != null and nt.target_company != null) and
+        not (nt.target_person != null and nt.target_opportunity != null) and
+        not (nt.target_company != null and nt.target_opportunity != null)
+}
+
+invariant TaskTargetHasAtMostOneTarget {
+    -- Same constraint for TaskTarget.
+    for tt in TaskTargets:
+        not (tt.target_person != null and tt.target_company != null) and
+        not (tt.target_person != null and tt.target_opportunity != null) and
+        not (tt.target_company != null and tt.target_opportunity != null)
+}
+
+invariant BlocklistRequiresHandle {
+    for b in Blocklists:
+        b.handle != null
+}
+
+invariant BlocklistRequiresWorkspaceMember {
+    for b in Blocklists:
+        b.workspace_member != null
+}
+
+-- =============================================================================
+-- Open Questions
+-- =============================================================================
+
+-- Q1: Twenty's workflow engine supports FORM steps that pause execution
+--     and wait for user input. How should JobSync handle human-in-the-loop
+--     workflows? Is this needed for Roadmap 5.4?
+--
+-- Q2: Twenty materializes timeline activities via background jobs from
+--     database events. JobSync already has TypedEventBus — should we use
+--     EventBus consumers directly, or add a separate materialization layer?
+--
+-- Q3: Twenty's messaging/calendar sync uses a multi-stage state machine
+--     with throttling and retry. JobSync's connector resilience (Cockatiel)
+--     already handles retry/circuit-breaker. How much of the sync state
+--     machine is needed vs. handled by existing infrastructure?
+--
+-- Q4: Twenty supports multiple trigger types (DATABASE_EVENT, MANUAL, CRON,
+--     WEBHOOK). JobSync automations currently only support CRON. Which
+--     additional trigger types are needed for Roadmap 5.4?
+--
+-- Q5: Twenty's participant matching (email → Person) auto-links messages
+--     and calendar events to CRM contacts. Should JobSync do this, and if
+--     so, at what point in the pipeline?
+--
+-- Q6: Twenty's View entity provides saved query perspectives (Table/Kanban/
+--     Calendar) with filters, sorts, and grouping. JobSync already has
+--     KanbanBoard for jobs. Should Views be a first-class entity, or is the
+--     current per-component state sufficient?
+--
+-- Q7: Twenty's contact auto-creation extracts Company from email domain and
+--     Person from handle/displayName. At what pipeline stage should JobSync
+--     auto-create contacts from discovered vacancies (company from job posting
+--     vs from email communication)?
+
+-- GDPR / DSGVO data handling for the CRM is specified separately in
+-- specs/crm-gdpr.allium (JobSync-specific, not a Twenty pattern).
