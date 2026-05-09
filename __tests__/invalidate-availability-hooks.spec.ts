@@ -64,6 +64,7 @@ const mockWebPushSubscriptionCount = jest.fn();
 const mockWebPushSubscriptionFindFirst = jest.fn();
 const mockWebPushSubscriptionUpsert = jest.fn();
 const mockWebPushSubscriptionDelete = jest.fn();
+const mockWebPushSubscriptionFindMany = jest.fn();
 const mockVapidConfigFindUnique = jest.fn();
 const mockWebhookEndpointCount = jest.fn();
 const mockWebhookEndpointCreate = jest.fn();
@@ -83,6 +84,7 @@ jest.mock("@/lib/db", () => ({
       findFirst: (...args: unknown[]) => mockWebPushSubscriptionFindFirst(...args),
       upsert: (...args: unknown[]) => mockWebPushSubscriptionUpsert(...args),
       delete: (...args: unknown[]) => mockWebPushSubscriptionDelete(...args),
+      findMany: (...args: unknown[]) => mockWebPushSubscriptionFindMany(...args),
     },
     vapidConfig: {
       findUnique: (...args: unknown[]) => mockVapidConfigFindUnique(...args),
@@ -130,10 +132,38 @@ jest.mock("@/lib/push/vapid", () => ({
   resolveVapidSubject: jest.fn().mockResolvedValue("mailto:noreply@jobsync.local"),
 }));
 
+// ── web-push (PushChannel stale subscription cleanup tests) ──────────────────
+
+const mockSendNotification = jest.fn();
+
+jest.mock("web-push", () => {
+  // Defined inside factory — jest.mock is hoisted above class declarations
+  class WebPushError extends Error {
+    statusCode: number;
+    headers: Record<string, string>;
+    body: string;
+    constructor(message: string, statusCode: number) {
+      super(message);
+      this.statusCode = statusCode;
+      this.headers = {};
+      this.body = "";
+    }
+  }
+  return {
+    __esModule: true,
+    default: {
+      sendNotification: (...args: unknown[]) => mockSendNotification(...args),
+      generateVAPIDKeys: jest.fn(),
+    },
+    WebPushError,
+  };
+});
+
 // ── Push rate limit ───────────────────────────────────────────────────────────
 
 jest.mock("@/lib/push/rate-limit", () => ({
   checkTestPushRateLimit: jest.fn().mockReturnValue({ allowed: true }),
+  checkPushDispatchRateLimit: jest.fn().mockReturnValue({ allowed: true }),
 }));
 
 // ── SMTP validation ───────────────────────────────────────────────────────────
@@ -203,6 +233,7 @@ import {
 } from "@/actions/webhook.actions";
 import { saveSmtpConfig, deleteSmtpConfig } from "@/actions/smtp.actions";
 import { channelRouter } from "@/lib/notifications/channel-router";
+import { PushChannel } from "@/lib/notifications/channels/push.channel";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -668,6 +699,167 @@ describe("invalidateAvailability call-chain tests", () => {
 
       expect(result.success).toBe(false);
       expect(asSpy(channelRouter.invalidateAvailability)).not.toHaveBeenCalled();
+    });
+  });
+
+  // =========================================================================
+  // PushChannel — stale subscription cleanup (404/410) callback
+  // =========================================================================
+
+  describe("PushChannel — stale subscription cleanup triggers onSubscriptionPurged", () => {
+    const MOCK_VAPID = {
+      userId: TEST_USER.id,
+      publicKey: "BTestPublicKey",
+      privateKey: "enc-private",
+      iv: "vapid-iv",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const MOCK_SUBSCRIPTION = {
+      id: "sub-1",
+      userId: TEST_USER.id,
+      endpoint: "https://fcm.googleapis.com/fcm/send/test-sub",
+      p256dh: "enc-p256dh",
+      auth: "enc-auth",
+      iv: "p256dh-iv|auth-iv",
+    };
+
+    it("calls onSubscriptionPurged when a subscription returns 410 Gone", async () => {
+      const onPurged = jest.fn();
+      const channel = new PushChannel({ onSubscriptionPurged: onPurged });
+
+      // Arrange: one subscription that will 410
+      mockVapidConfigFindUnique.mockResolvedValue(MOCK_VAPID);
+      mockWebPushSubscriptionFindMany.mockResolvedValue([MOCK_SUBSCRIPTION]);
+      mockWebPushSubscriptionDelete.mockResolvedValue({});
+
+      // web-push throws 410 Gone
+      const { WebPushError } = jest.requireMock("web-push") as {
+        WebPushError: new (msg: string, code: number) => Error & { statusCode: number };
+      };
+      mockSendNotification.mockRejectedValue(new WebPushError("Gone", 410));
+
+      await channel.dispatch(
+        { userId: TEST_USER.id, type: "vacancy_promoted" as never, message: "Test" },
+        TEST_USER.id,
+      );
+
+      expect(onPurged).toHaveBeenCalledWith(TEST_USER.id);
+    });
+
+    it("calls onSubscriptionPurged when a subscription returns 404 Not Found", async () => {
+      const onPurged = jest.fn();
+      const channel = new PushChannel({ onSubscriptionPurged: onPurged });
+
+      mockVapidConfigFindUnique.mockResolvedValue(MOCK_VAPID);
+      mockWebPushSubscriptionFindMany.mockResolvedValue([MOCK_SUBSCRIPTION]);
+      mockWebPushSubscriptionDelete.mockResolvedValue({});
+
+      const { WebPushError } = jest.requireMock("web-push") as {
+        WebPushError: new (msg: string, code: number) => Error & { statusCode: number };
+      };
+      mockSendNotification.mockRejectedValue(new WebPushError("Not Found", 404));
+
+      await channel.dispatch(
+        { userId: TEST_USER.id, type: "vacancy_promoted" as never, message: "Test" },
+        TEST_USER.id,
+      );
+
+      expect(onPurged).toHaveBeenCalledWith(TEST_USER.id);
+    });
+
+    it("does NOT call onSubscriptionPurged for non-410/404 errors (e.g., 401)", async () => {
+      const onPurged = jest.fn();
+      const channel = new PushChannel({ onSubscriptionPurged: onPurged });
+
+      mockVapidConfigFindUnique.mockResolvedValue(MOCK_VAPID);
+      mockWebPushSubscriptionFindMany.mockResolvedValue([MOCK_SUBSCRIPTION]);
+
+      const { WebPushError } = jest.requireMock("web-push") as {
+        WebPushError: new (msg: string, code: number) => Error & { statusCode: number };
+      };
+      mockSendNotification.mockRejectedValue(new WebPushError("Unauthorized", 401));
+
+      await channel.dispatch(
+        { userId: TEST_USER.id, type: "vacancy_promoted" as never, message: "Test" },
+        TEST_USER.id,
+      );
+
+      expect(onPurged).not.toHaveBeenCalled();
+    });
+
+    it("works without callback (default PushChannel constructor)", async () => {
+      const channel = new PushChannel(); // no options
+
+      mockVapidConfigFindUnique.mockResolvedValue(MOCK_VAPID);
+      mockWebPushSubscriptionFindMany.mockResolvedValue([MOCK_SUBSCRIPTION]);
+      mockWebPushSubscriptionDelete.mockResolvedValue({});
+
+      const { WebPushError } = jest.requireMock("web-push") as {
+        WebPushError: new (msg: string, code: number) => Error & { statusCode: number };
+      };
+      mockSendNotification.mockRejectedValue(new WebPushError("Gone", 410));
+
+      // Should not throw — optional chaining handles missing callback
+      const result = await channel.dispatch(
+        { userId: TEST_USER.id, type: "vacancy_promoted" as never, message: "Test" },
+        TEST_USER.id,
+      );
+
+      // Dispatch completes gracefully (subscription expired, no callback)
+      expect(result.channel).toBe("push");
+    });
+  });
+
+  // =========================================================================
+  // ChannelRouter.invalidateAllChannels (GDPR Art. 17 preparation)
+  // =========================================================================
+
+  describe("ChannelRouter.invalidateAllChannels", () => {
+    it("delegates to invalidateAvailability for the given userId", () => {
+      // Use the real ChannelRouter class, not the mock
+      const { ChannelRouter } = jest.requireActual(
+        "@/lib/notifications/channel-router",
+      ) as { ChannelRouter: new () => { invalidateAllChannels: (id: string) => void; invalidateAvailability: (id?: string, ch?: string) => void } };
+
+      const router = new ChannelRouter();
+      const spy = jest.spyOn(router, "invalidateAvailability");
+
+      router.invalidateAllChannels("user-gdpr-delete-1");
+
+      expect(spy).toHaveBeenCalledWith("user-gdpr-delete-1");
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it("clears all channel caches for the user (not other users)", () => {
+      const { ChannelRouter } = jest.requireActual(
+        "@/lib/notifications/channel-router",
+      ) as { ChannelRouter: new () => {
+        invalidateAllChannels: (id: string) => void;
+        invalidateAvailability: (id?: string, ch?: string) => void;
+        // Access private cache for assertion — test-only
+        ["availabilityCache"]: Map<string, unknown>;
+      }};
+
+      const router = new ChannelRouter();
+      // Manually populate cache entries for two users
+      (router as unknown as { availabilityCache: Map<string, unknown> }).availabilityCache.set(
+        "user-a:push", { available: true, at: Date.now() },
+      );
+      (router as unknown as { availabilityCache: Map<string, unknown> }).availabilityCache.set(
+        "user-a:email", { available: true, at: Date.now() },
+      );
+      (router as unknown as { availabilityCache: Map<string, unknown> }).availabilityCache.set(
+        "user-b:push", { available: true, at: Date.now() },
+      );
+
+      router.invalidateAllChannels("user-a");
+
+      const cache = (router as unknown as { availabilityCache: Map<string, unknown> }).availabilityCache;
+      expect(cache.has("user-a:push")).toBe(false);
+      expect(cache.has("user-a:email")).toBe(false);
+      expect(cache.has("user-b:push")).toBe(true); // other user untouched
     });
   });
 });

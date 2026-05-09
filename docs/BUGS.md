@@ -54,7 +54,7 @@ Per `feedback_multi_stream_honesty_gate.md`, scanned each stream report's full O
 
 **Notification UI (Stream A deferred):**
 - ~~**`notifications.unreadLiveRegion` wiring**~~ — **RESOLVED.** Wired into NotificationBell.tsx with singular/plural support and tightened test assertions.
-- **`unsubscribeAllPush` / GDPR delete-account audit** — if a GDPR account-deletion flow exists or is added later, it would have the same flip-to-unavailable failure mode as `rotateVapidKeysAction` and need the same `invalidateAvailability` hook. 15-minute grep.
+- ~~**`unsubscribeAllPush` / GDPR delete-account audit**~~ — **RESOLVED.** PushChannel.dispatch() now calls `onSubscriptionPurged` callback after 404/410 stale subscription cleanup, wired to `channelRouter.invalidateAvailability(userId, "push")` via constructor DI in `registerChannels()`. Added `ChannelRouter.invalidateAllChannels(userId)` as GDPR Art. 17 preparation for future account deletion (Roadmap 6.1). 6 new tests in invalidate-availability-hooks.spec.ts. Allium spec AvailabilityCacheTtl invariant updated.
 - **Plural rules for i18n keys** — `"{count} unread notifications"` reads awkwardly when count=1. Systemic cross-cutting decision affecting every count-based key in the app. Needs LinguiJS ICU plural rules or a custom plural helper.
 
 **Admin audit UI consumer (Stream D setup for future feature):**

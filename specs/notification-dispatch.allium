@@ -253,6 +253,14 @@ contract NotificationDispatcher {
     -- Maps a domain event to a notification draft.
     -- Returns null if the event type has no notification mapping.
     -- Pure function — does not check preferences (that's dispatch's job).
+
+  invalidateAllChannels(userId: String): Void
+    -- GDPR Art. 17 preparation (Roadmap 6.1).
+    -- Drops ALL cached isAvailable results for a user across every channel.
+    -- Called when the user's entire channel infrastructure is torn down
+    -- (e.g., account deletion where onDelete: Cascade removes
+    -- WebPushSubscription, VapidConfig, SmtpConfig, WebhookEndpoint).
+    -- Delegates to invalidateAvailability(userId) without channelName.
 }
 
 -- =============================================================================
@@ -354,13 +362,30 @@ invariant AvailabilityCacheTtl {
   --
   -- Settings writes that mutate channel infrastructure (webhook CRUD,
   -- SMTP CRUD, push subscribe/unsubscribe, VAPID rotation) MUST call
-  -- `channelRouter.invalidateAvailability(userId)` after the mutation
-  -- so the next dispatch picks up the change instantly instead of
-  -- waiting for the TTL to expire.
+  -- `channelRouter.invalidateAvailability(userId, channelName)` after
+  -- the mutation so the next dispatch picks up the change instantly
+  -- instead of waiting for the TTL to expire.
+  --
+  -- Callers of invalidateAvailability:
+  --   A. Settings actions (push.actions, smtp.actions, webhook.actions)
+  --      — called after any CRUD that mutates channel infrastructure.
+  --   B. PushChannel.dispatch() stale subscription cleanup (404/410)
+  --      — when a push service returns 410 Gone or 404 Not Found, the
+  --        subscription is deleted. If it was the user's last subscription,
+  --        the cache must be invalidated so the next dispatch sees fresh
+  --        state. Delivered via constructor callback (`onSubscriptionPurged`)
+  --        to avoid a circular import (channel-router → PushChannel →
+  --        channel-router). Wired in `registerChannels()`.
+  --   C. Future: `invalidateAllChannels(userId)` for GDPR Art. 17 account
+  --      deletion (Roadmap 6.1) — drops ALL channel caches for a user in
+  --      one call when `onDelete: Cascade` removes all channel infra.
 
   ensures: ChannelRouter caches isAvailable results with TTL
-  ensures: ChannelRouter.invalidateAvailability(userId) exists as a hook
-           for Settings writes
+  ensures: ChannelRouter.invalidateAvailability(userId, channelName?) exists
+           as a hook for Settings writes and stale subscription cleanup
+  ensures: ChannelRouter.invalidateAllChannels(userId) exists as a hook
+           for GDPR Art. 17 account deletion (delegates to
+           invalidateAvailability without channelName)
   ensures: cache is per-router-instance (not a free global)
 
   note: "Default TTL is ISAVAILABLE_CACHE_TTL_MS = 30s. Short enough to
@@ -599,8 +624,12 @@ rule PushDelivery {
 
     if delivery returns 410 Gone or 404 Not Found:
       ensures: subscription deleted (stale)
+      ensures: availability cache invalidated for push channel
       -- Silent cleanup — not an error condition.
       -- Some push services return 404 instead of 410 for expired subscriptions.
+      -- Cache invalidation via onSubscriptionPurged callback (see AvailabilityCacheTtl
+      -- invariant, caller B). Without this, the 30s TTL cache keeps claiming
+      -- "push available" even when the last subscription was purged.
 
     if delivery returns 401 or 403:
       ensures: error logged as VAPID auth failure

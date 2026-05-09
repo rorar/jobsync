@@ -126,6 +126,21 @@ export class ChannelRouter {
   }
 
   /**
+   * Invalidate ALL cached `isAvailable` results for a user across every
+   * channel. Use when the user's entire channel infrastructure is being
+   * torn down (e.g., GDPR Art. 17 account deletion where `onDelete: Cascade`
+   * removes WebPushSubscription, VapidConfig, SmtpConfig, WebhookEndpoint).
+   *
+   * Delegates to `invalidateAvailability(userId)` without a channel name,
+   * which drops all entries for the user.
+   *
+   * @see Roadmap 6.1 — GDPR-Konformität / Löschkonzept
+   */
+  invalidateAllChannels(userId: string): void {
+    this.invalidateAvailability(userId);
+  }
+
+  /**
    * Invalidate cached `isAvailable` results. When called with no arguments,
    * the entire cache is dropped — use this sparingly (tests, admin tools).
    * When called with a `userId` + optional channel name, drops only the
@@ -134,6 +149,8 @@ export class ChannelRouter {
    *
    * Callers: `src/actions/webhook.actions.ts`, `src/actions/smtp.actions.ts`,
    * `src/actions/push.actions.ts` after any CRUD that mutates channel infra.
+   * Also called indirectly by PushChannel via `onSubscriptionPurged` callback
+   * when stale subscriptions are cleaned up on 404/410.
    */
   invalidateAvailability(userId?: string, channelName?: string): void {
     if (!userId) {
@@ -303,7 +320,10 @@ export function registerChannels(): void {
   channelRouter.register(new InAppChannel());
   channelRouter.register(new WebhookChannel());
   channelRouter.register(new EmailChannel());
-  channelRouter.register(new PushChannel());
+  channelRouter.register(new PushChannel({
+    onSubscriptionPurged: (userId) =>
+      channelRouter.invalidateAvailability(userId, "push"),
+  }));
 }
 
 /**

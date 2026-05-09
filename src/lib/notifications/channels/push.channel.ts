@@ -49,6 +49,21 @@ const PUSH_TITLE = "JobSync";
 export class PushChannel implements NotificationChannel {
   readonly name = "push";
 
+  /**
+   * Optional callback invoked after a stale subscription is deleted (404/410).
+   * Wired by `registerChannels()` in channel-router.ts to invalidate the
+   * availability cache — without this, the 30s TTL cache keeps claiming
+   * "push available" even when the last subscription was purged.
+   *
+   * Callback pattern avoids a circular import (channel-router → PushChannel
+   * → channel-router).
+   */
+  private onSubscriptionPurged?: (userId: string) => void;
+
+  constructor(options?: { onSubscriptionPurged?: (userId: string) => void }) {
+    this.onSubscriptionPurged = options?.onSubscriptionPurged;
+  }
+
   async dispatch(
     notification: NotificationDraft,
     userId: string,
@@ -169,6 +184,12 @@ export class PushChannel implements NotificationChannel {
                   .catch(() => {
                     // Already deleted or race condition — ignore
                   });
+
+                // GDPR Art. 25 (Privacy by Design): invalidate the cached
+                // availability verdict so the next dispatch sees fresh state.
+                // Without this, the 30s TTL cache keeps claiming "push
+                // available" even when this was the user's last subscription.
+                this.onSubscriptionPurged?.(userId);
 
                 return {
                   success: false,
