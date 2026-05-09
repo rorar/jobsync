@@ -22,6 +22,8 @@ import { deck } from "./dictionaries/deck";
 import { enrichment } from "./dictionaries/enrichment";
 import { webhook } from "./dictionaries/webhook";
 import { email } from "./dictionaries/email";
+import { smtp } from "./dictionaries/smtp";
+import { push } from "./dictionaries/push";
 import { logoAsset } from "./dictionaries/logoAsset";
 
 const core = {
@@ -709,7 +711,7 @@ function mergeDictionaries(...namespaces: Record<string, Record<string, string>>
   return merged;
 }
 
-const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, developer, staging, notifications, api, blacklist, deck, enrichment, webhook, email, logoAsset);
+const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, developer, staging, notifications, api, blacklist, deck, enrichment, webhook, email, smtp, push, logoAsset);
 
 export type TranslationKey = string;
 export type Dictionary = Record<string, string>;

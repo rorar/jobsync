@@ -229,7 +229,7 @@ export async function saveSmtpConfig(
       data: toDTO(config),
     };
   } catch (error) {
-    return handleError(error, "errors.saveSmtp");
+    return handleError(error, "smtp.errorSave");
   }
 }
 
@@ -252,7 +252,7 @@ export async function getSmtpConfig(): Promise<ActionResult<SmtpConfigDTO | null
 
     return { success: true, data: toDTO(config) };
   } catch (error) {
-    return handleError(error, "errors.fetchSmtp");
+    return handleError(error, "smtp.errorFetch");
   }
 }
 
@@ -324,7 +324,7 @@ export async function testSmtpConnection(): Promise<ActionResult> {
     return { success: true };
   } catch (error) {
     console.error("[smtp.actions] Test SMTP connection failed:", error);
-    return handleError(error, "errors.testSmtp");
+    return handleError(error, "smtp.errorTest");
   }
 }
 
@@ -357,6 +357,6 @@ export async function deleteSmtpConfig(): Promise<ActionResult> {
 
     return { success: true };
   } catch (error) {
-    return handleError(error, "errors.deleteSmtp");
+    return handleError(error, "smtp.errorDelete");
   }
 }

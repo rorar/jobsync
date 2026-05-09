@@ -66,7 +66,7 @@ entity Locale {
     native_name: String     -- "English", "Deutsch", etc.
     flag: String            -- ISO country code for flag icon ("gb", "de", "fr", "es")
 
-    @invariant
+    @invariant SupportedLocaleSet
         -- The SUPPORTED_LOCALES array defines exactly 4 locales.
         -- DEFAULT_LOCALE is "en".
         -- LOCALE_MAP provides O(1) lookup by code.
@@ -74,9 +74,9 @@ entity Locale {
 
 entity Dictionary {
     locale: SupportedLocale
-    keys: Map<String, String>       -- flat key-value map
+    keys: Set<String>               -- flat key set, values are locale-specific strings
 
-    @invariant
+    @invariant CrossLocaleKeyConsistency
         -- All keys that exist in the English dictionary MUST exist in all 4 locales.
         -- Missing translations fall back to the key itself (not to English).
         -- The fallback-to-key behavior makes missing translations immediately visible.
@@ -85,30 +85,64 @@ entity Dictionary {
 entity Namespace {
     -- Dictionaries are organized by domain namespace.
     -- Each namespace is a separate file in src/i18n/dictionaries/.
+    -- Namespaces are merged into a single flat dictionary per locale
+    -- at import time via mergeDictionaries().
+    --
+    -- Current namespaces (one file each in src/i18n/dictionaries/):
+    --   core           — nav, auth, common, undo, errors (generic), settings, profile (in dictionaries.ts)
+    --   dashboard      — dashboard widgets and stats
+    --   jobs           — job CRUD, filtering, status
+    --   activities     — activity tracking
+    --   tasks          — task management
+    --   automations    — automation wizard, scheduling, matching
+    --   profile        — profile and resume management
+    --   questions      — question bank
+    --   admin          — administration features
+    --   settings       — settings page (separate from core settings)
+    --   developer      — developer options page (extracted from settings.ts in Sprint 5)
+    --   staging        — staged vacancy pipeline
+    --   notifications  — notification messages and preferences
+    --   api            — public API key management
+    --   blacklist      — company blacklist
+    --   deck           — deck/card view
+    --   enrichment     — data enrichment UI
+    --   webhook        — webhook notification channel
+    --   email          — email template strings (subjects, greeting, footer)
+    --   smtp           — SMTP configuration UI and validation errors
+    --   push           — browser push notification UI and errors
+    --   logoAsset      — logo asset management UI
 
-    namespaces: [
-        core,           -- nav, auth, common, settings, profile (in dictionaries.ts)
-        dashboard,      -- dashboard widgets and stats
-        jobs,           -- job CRUD, filtering, status
-        activities,     -- activity tracking
-        tasks,          -- task management
-        automations,    -- automation wizard, scheduling, matching
-        profile,        -- profile and resume management
-        questions,      -- question bank
-        admin,          -- administration features
-        settings,       -- settings page (separate from core settings)
-        staging,        -- staged vacancy pipeline
-        notifications,  -- notification messages
-        api,            -- public API key management
-        blacklist,      -- company blacklist
-        deck            -- deck/card view
-    ]
+    name: String                    -- namespace identifier (equals dictionary filename without .ts)
 
-    @invariant
-        -- Namespaces are merged into a single flat dictionary per locale
-        -- at import time via mergeDictionaries().
+    @invariant PrefixEqualsFilename
+        -- Every key in a namespace dictionary file MUST be prefixed with
+        -- the namespace name (the filename without the .ts extension).
+        -- Example: smtp.ts may only contain smtp.* keys.
+        --
+        -- The sole exception is core (dictionaries.ts), which hosts
+        -- cross-cutting prefixes shared across all bounded contexts:
+        -- nav.*, auth.*, common.*, undo.*, errors.*, settings.*, profile.*
+        --
+        -- Domain-specific error keys belong to their domain namespace,
+        -- NOT to the cross-cutting errors.* prefix in core.
+        -- Example: smtp.errorSave (correct), NOT errors.saveSmtp (wrong).
+        -- This follows the Module self-containment principle from DDD:
+        -- each bounded context owns ALL its i18n keys, including errors.
+        --
+        -- Enforced by dictionaries.spec.ts namespaceDictionaries test:
+        -- "all keys are prefixed with ${nsName}."
+        --
+        -- Rationale (2026-05-09): email.ts originally hosted 4 prefixes
+        -- (email.*, smtp.*, push.*, errors.*) — violating bounded context
+        -- isolation. Split into email.ts + smtp.ts + push.ts with
+        -- errors.saveSmtp renamed to smtp.errorSave (and similar for
+        -- webhook error keys). Future notification channels (SMS, Slack)
+        -- follow the same pattern: one namespace file per channel.
+
+    @invariant KeyNamingConvention
         -- Key naming convention: namespace.camelCaseKey
         -- Example: "jobs.addNote", "automations.createAutomation"
+        -- Sub-keys allowed: "email.subject.module_deactivated"
 }
 
 ------------------------------------------------------------
@@ -215,57 +249,42 @@ rule AddTranslationKey {
 -- Invariants
 ------------------------------------------------------------
 
-invariant AllLocalesCovered {
-    -- Every translation key MUST exist in all 4 supported locales.
-    -- If a key exists in English, it must also exist in de, fr, and es.
-    -- Dictionary consistency is validated by automated tests.
-    for all keys in Dictionary("en"):
-        key exists in Dictionary("de")
-        key exists in Dictionary("fr")
-        key exists in Dictionary("es")
-}
-
-invariant AdapterEntryPointsOnly {
-    -- Consumer code MUST import from @/i18n or @/i18n/server.
-    -- NEVER import directly from:
-    --   @/i18n/dictionaries (internal dictionary module)
-    --   @/i18n/use-translations (internal hook implementation)
-    --   @/lib/formatters (internal formatter functions)
-    --   @/lib/locale (internal locale resolution)
-    -- The adapter entry points allow switching implementations without
-    -- changing consumer code (e.g., migrating to LinguiJS).
-}
-
-invariant ServerOnlyBarrier {
-    -- @/i18n/server.ts imports "server-only" package.
-    -- Importing it in a client component will cause a build error.
-    -- This prevents accidental use of server-only APIs in the browser.
-    import "@/i18n/server" in client component:
-        build_error
-}
-
-invariant LocaleAwareFormatting {
-    -- All user-visible dates and numbers MUST use locale-aware formatters.
-    -- Never use hardcoded format strings or locale-less formatting.
-    -- The locale comes from useTranslations() on client or getUserLocale() on server.
-    for all displayed dates and numbers:
-        formatter receives explicit locale parameter
-}
-
-invariant FallbackBehavior {
-    -- Missing translation keys return the key string itself (not an error).
-    -- Missing locale falls back to "en" (not null or empty).
-    -- This ensures the application never crashes due to missing translations
-    -- and makes untranslated strings immediately visible for fixing.
-    for t(key): if key not in dictionary: return key
-    for getDictionary(locale): if locale unknown: return english dictionary
-}
-
-invariant EuApiLocaleIntegration {
-    -- EURES, ESCO, and Eurostat API requests use the user's current locale.
-    -- The NEXT_LOCALE cookie is read by EU API proxy routes.
-    -- This ensures search results and metadata are in the user's language.
-}
+-- The following system properties describe code conventions and runtime
+-- behaviors, not entity state. They are enforced by automated tests,
+-- build-time checks, and the PrefixEqualsFilename / CrossLocaleKeyConsistency
+-- entity-level invariants above.
+--
+-- AllLocalesCovered:
+--   Every translation key MUST exist in all 4 supported locales.
+--   If a key exists in English, it must also exist in de, fr, and es.
+--   Enforced by dictionaries.spec.ts cross-locale consistency test.
+--
+-- AdapterEntryPointsOnly:
+--   Consumer code MUST import from @/i18n or @/i18n/server.
+--   NEVER import directly from:
+--     @/i18n/dictionaries, @/i18n/use-translations,
+--     @/lib/formatters, @/lib/locale
+--   The adapter entry points allow switching implementations without
+--   changing consumer code (e.g., migrating to LinguiJS).
+--
+-- ServerOnlyBarrier:
+--   @/i18n/server.ts imports "server-only" package.
+--   Importing it in a client component will cause a build error.
+--
+-- LocaleAwareFormatting:
+--   All user-visible dates and numbers MUST use locale-aware formatters.
+--   Never use hardcoded format strings or locale-less formatting.
+--   The locale comes from useTranslations() on client or getUserLocale() on server.
+--
+-- FallbackBehavior:
+--   Missing translation keys return the key string itself (not an error).
+--   Missing locale falls back to "en" (not null or empty).
+--   This ensures the app never crashes due to missing translations
+--   and makes untranslated strings immediately visible for fixing.
+--
+-- EuApiLocaleIntegration:
+--   EURES, ESCO, and Eurostat API requests use the user's current locale.
+--   The NEXT_LOCALE cookie is read by EU API proxy routes.
 
 ------------------------------------------------------------
 -- Open Questions

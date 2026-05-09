@@ -17,6 +17,12 @@ import { settings } from "@/i18n/dictionaries/settings";
 // check so future drift is caught automatically.
 import { developer } from "@/i18n/dictionaries/developer";
 import { notifications } from "@/i18n/dictionaries/notifications";
+// PrefixEqualsFilename invariant: email.ts split into email + smtp + push,
+// webhook error keys renamed from errors.* to webhook.error*
+import { email } from "@/i18n/dictionaries/email";
+import { smtp } from "@/i18n/dictionaries/smtp";
+import { push } from "@/i18n/dictionaries/push";
+import { webhook } from "@/i18n/dictionaries/webhook";
 
 const LOCALES = ["en", "de", "fr", "es"] as const;
 
@@ -32,6 +38,11 @@ const namespaceDictionaries = {
   // Sprint 5 Stream C additions:
   developer,
   notifications,
+  // PrefixEqualsFilename invariant additions:
+  email,
+  smtp,
+  push,
+  webhook,
 } as const;
 
 describe("getDictionary", () => {

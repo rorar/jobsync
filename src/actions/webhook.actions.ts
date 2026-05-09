@@ -153,7 +153,7 @@ export async function createWebhookEndpoint(
       },
     };
   } catch (error) {
-    return handleError(error, "errors.createWebhook");
+    return handleError(error, "webhook.errorCreate");
   }
 }
 
@@ -185,7 +185,7 @@ export async function listWebhookEndpoints(): Promise<ActionResult<WebhookEndpoi
       data: endpoints.map(toDTO),
     };
   } catch (error) {
-    return handleError(error, "errors.fetchWebhooks");
+    return handleError(error, "webhook.errorFetchList");
   }
 }
 
@@ -218,7 +218,7 @@ export async function getWebhookEndpoint(
 
     return { success: true, data: toDTO(endpoint) };
   } catch (error) {
-    return handleError(error, "errors.fetchWebhook");
+    return handleError(error, "webhook.errorFetch");
   }
 }
 
@@ -300,7 +300,7 @@ export async function updateWebhookEndpoint(
 
     return { success: true, data: toDTO(updated) };
   } catch (error) {
-    return handleError(error, "errors.updateWebhook");
+    return handleError(error, "webhook.errorUpdate");
   }
 }
 
@@ -335,6 +335,6 @@ export async function deleteWebhookEndpoint(
 
     return { success: true };
   } catch (error) {
-    return handleError(error, "errors.deleteWebhook");
+    return handleError(error, "webhook.errorDelete");
   }
 }
