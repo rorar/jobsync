@@ -692,7 +692,6 @@ The deferred items split into three categories:
 ### Latent items (NOT blocking, quick wins ready when needed)
 
 - **`DropdownMenuTrigger asChild` + JSX comment ESLint rule** — latent codebase-wide footgun. 2-3 hours for custom ESLint rule + integration test.
-- **`notifications.unreadLiveRegion` wiring** — Sprint 5 Stream A added the key × 4 locales but deferred the NotificationBell.tsx wiring. 30 minutes.
 - **`unsubscribeAllPush` / GDPR delete-account invalidateAvailability audit** — Stream A Sprint 5 Open Question. 15 minutes.
 - **Admin audit UI consumer** — Sprint 5 Stream D added the `AdminAuditLog` Prisma model + write path. Feature work to surface the DB rows in a review UI. 1-day feature sprint.
 - **Plural rules for i18n keys** — systemic cross-cutting decision. Affects all count-based keys. Needs user decision on LinguiJS ICU vs per-key singular variant.

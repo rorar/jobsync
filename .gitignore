@@ -3,11 +3,20 @@
 # parallel track worktrees
 .tracks/
 
-# session artifacts
-.full-review/
-.full-stack-feature/
-.remember/
+# agent artifacts
+.kilo/
+
+## documentation + session artifacts
+.full-review*
+.full-stack-feature*
+.team-feature*
+.tdd-cycle*
+.smart-fix*
+.ui-design*
+.remember/*
+.remember.md
 docs/.remember/
+DEADLOCK.md
 
 # dependencies
 /node_modules

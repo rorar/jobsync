@@ -171,7 +171,7 @@ describe("NotificationBell", () => {
     expect(screen.getByText("99+")).toBeInTheDocument();
   });
 
-  it("has accessible aria-label with count", async () => {
+  it("has accessible aria-label with count using unreadLiveRegion key", async () => {
     mockGetUnreadCount.mockResolvedValue({ success: true, data: 3 });
 
     await act(async () => {
@@ -181,7 +181,21 @@ describe("NotificationBell", () => {
     const button = screen.getByRole("button");
     expect(button).toHaveAttribute(
       "aria-label",
-      expect.stringContaining("3"),
+      "3 unread notifications",
+    );
+  });
+
+  it("uses singular aria-label when count is 1", async () => {
+    mockGetUnreadCount.mockResolvedValue({ success: true, data: 1 });
+
+    await act(async () => {
+      render(<NotificationBell />);
+    });
+
+    const button = screen.getByRole("button");
+    expect(button).toHaveAttribute(
+      "aria-label",
+      "1 unread notification",
     );
   });
 
@@ -259,9 +273,38 @@ describe("NotificationBell", () => {
           jest.advanceTimersByTime(600);
         });
 
-        // The live region should now contain the announcement.
+        // The live region should now contain the singular announcement.
         await waitFor(() => {
-          expect(liveRegion?.textContent ?? "").toContain("1");
+          expect(liveRegion?.textContent ?? "").toBe(
+            "1 unread notification",
+          );
+        });
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("uses plural form when count > 1", async () => {
+      jest.useFakeTimers();
+      try {
+        mockGetUnreadCount.mockResolvedValue({ success: true, data: 3 });
+
+        await act(async () => {
+          render(<NotificationBell />);
+        });
+
+        await act(async () => {
+          jest.advanceTimersByTime(600);
+        });
+
+        const liveRegion = document.querySelector(
+          '[role="status"][aria-live="polite"]',
+        ) as HTMLElement | null;
+
+        await waitFor(() => {
+          expect(liveRegion?.textContent ?? "").toBe(
+            "3 unread notifications",
+          );
         });
       } finally {
         jest.useRealTimers();
@@ -286,7 +329,9 @@ describe("NotificationBell", () => {
         const liveRegion = document.querySelector(
           '[role="status"][aria-live="polite"]',
         ) as HTMLElement | null;
-        expect(liveRegion?.textContent ?? "").toContain("3");
+        expect(liveRegion?.textContent ?? "").toBe(
+          "3 unread notifications",
+        );
 
         // Now simulate a decrease: 3 → 1. The mock returns 1 on the
         // next poll tick (30s interval).
@@ -299,12 +344,13 @@ describe("NotificationBell", () => {
           jest.advanceTimersByTime(1000);
         });
 
-        // The live region must NOT contain "1" — decreases don't
-        // announce (the user already knows they marked something as
-        // read). The baseline stays on the last announced value.
-        // We assert the region either still says "3" or is empty,
-        // but crucially does NOT say "1".
-        expect(liveRegion?.textContent ?? "").not.toContain("1 ");
+        // The live region must still show the last ANNOUNCED value
+        // ("3 unread notifications"), NOT the decreased count.
+        // Decreases don't announce — the user already knows they
+        // marked something as read.
+        expect(liveRegion?.textContent ?? "").toBe(
+          "3 unread notifications",
+        );
         // Keep the component mounted for jest's async cleanup.
         rerender(<NotificationBell />);
       } finally {

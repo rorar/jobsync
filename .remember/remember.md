@@ -1,30 +1,24 @@
 # Handoff
 
 ## State
-Session 2026-04-08 (Bugfix): UI/UX/Code/Architektur Bugfix Session complete.
+6 commits pushed to `origin main` (`35a5d55`). 218 test suites, 4163 tests passing. Dev server on port 3737.
 
-**Completed:**
-- **Test Fixes:** All 5 pre-existing test failures fixed (174/174 green, first time ever)
-- **Infrastructure:** .tracks/ cleanup (2.8GB freed), Jest duplicate mock warnings eliminated
-- **i18n:** Umlaut fix, 4 missing notification settings keys, hardcoded aria-label
-- **Notifications:** data Json field + migration, job link in vacancy_promoted, icon-only mark-all-read
-- **API Key Settings:** ENV badge showing .env-based API key status
-- **DeckView UX:** Block company (swipe-down + button + confirmation dialog), skip button, auto-approve toggle, button highlights during swipe, wider desktop layout, cancel-returns-to-deck (Promise-ref pattern), keyboard shortcuts (B=block, N=skip)
-- **VERIFY Phase:** 25 findings from design review + silent-failure-hunter, ALL fixed (3 critical, 5 high, 8 medium)
-- **Prisma migration:** 20260408141442_add_notification_data_field
-
-**Code state:** All on main, pushed to origin. Build: clean. Tests: 174/174 pass. tsc: 0 errors.
+## Completed this session (2026-05-09)
+1. **EuresLanguageCombobox** — hierarchical Popover+Command ComboBox, DynamicParamsForm type-dispatch
+2. **Cross-level token filtering** — "Czech Interm" → Czech > B1 only, four filter modes
+3. **cmdk hover bugfix** — explicit `value` props on CommandItems
+4. **Allium spec alignment** — 3 spec gaps closed after allium:weed
+5. **FL-3 Auth rate-limiting** — IP-based sliding window: signin 5/15min, signup 3/60min
+6. **email.ts i18n split** — PrefixEqualsFilename invariant. Split email.ts (78 keys, 4 prefixes) → email.ts (16) + smtp.ts (31) + push.ts (15). Renamed errors.saveSmtp → smtp.errorSave (×4 SMTP, ×5 webhook). allium:weed: 0 divergences.
 
 ## Next
-1. **Scoring Badge UX:** Replace "k.A." with "--" + scoring icon + hover tooltip explaining no LLM scoring occurred
-2. **Deferred from VERIFY:** Swipe-down zone overlaps scroll intent on mobile (minor), "N" key unintuitive (minor), ENV badge tooltip should show env var name
-3. **Phase 5 Stufe 2 not run:** allium:weed, comprehensive-review:full-review, pr-test-analyzer — deferred
-4. **ROADMAP items from user request:** Hotness/Mag-Ich Score (DB schema extension needed)
-5. **Remaining deferred items:** See `project_module_lifecycle_deferred.md`
+1. S2 (UX Journeys) / S3 (CRM Core) staged prompts
+2. PERF-2 (async pbkdf2) / PERF-3 (notification dispatch queries)
+3. Read `project_deferred_sprints_for_future_sessions.md` before cleanup sprints
 
 ## Context
-- User @rorar wants k.A./scoring badge KEPT but improved (scoring icon + "--" + hover tooltip)
-- Never push to `Gsync/jobsync` — only `rorar/jobsync` (origin)
-- Allium spec is single source of truth — always spec before code
-- Development flow in docs/superpowers/development-flow.md — follow ALL phases
-- 12 cores, 16GB RAM + 4GB swap — can use parallel workers
+- PrefixEqualsFilename invariant in i18n-system.allium enforces 1 prefix per dictionary file
+- New channels (SMS, Slack) → create own namespace file, no cross-cutting errors.* prefix
+- cmdk: always set explicit `value` prop on CommandItems in hierarchical lists
+- Auth rate limiter follows `admin-rate-limit.ts` pattern (globalThis, server-only, sliding window)
+- Tests: nice -n 10, --maxWorkers=1 (VM resource constraint)

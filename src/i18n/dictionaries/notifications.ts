@@ -77,14 +77,11 @@ export const notifications = {
 
     // Sprint 5 L-Y key-only follow-up to Sprint 3 M-Y-07: dedicated
     // phrasing for the NotificationBell sr-only live region. The
-    // current implementation reuses `notifications.title` which yields
-    // "3 Notifications" — disambiguating to "3 unread notifications"
-    // makes the polite announcement clearer when the dropdown title
-    // is also visible. KEY ONLY: NotificationBell.tsx still reads
-    // `notifications.title` for the live region. A future sprint
-    // wires the new key in alongside a regression test update.
-    // Singular form is intentionally not split — `{count} === 1` is
-    // a separate plural-rules concern, out of scope for this follow-up.
+    // M-Y-07 — live-region announcement for unread count changes.
+    // Singular/plural split follows the settings.errorCountOne pattern.
+    // Used by NotificationBell.tsx for both the aria-live region and
+    // the button aria-label when count > 0.
+    "notifications.unreadLiveRegionOne": "{count} unread notification",
     "notifications.unreadLiveRegion": "{count} unread notifications",
   },
   de: {
@@ -155,9 +152,8 @@ export const notifications = {
     // L-Y-03 — sr-only word for the unread-dot indicator.
     "notifications.unreadIndicator": "Ungelesen",
 
-    // Sprint 5 L-Y key-only follow-up to Sprint 3 M-Y-07 — see EN
-    // dictionary above for the full rationale. KEY ONLY: not yet
-    // wired into NotificationBell.tsx live region.
+    // M-Y-07 — see EN dictionary for rationale.
+    "notifications.unreadLiveRegionOne": "{count} ungelesene Benachrichtigung",
     "notifications.unreadLiveRegion": "{count} ungelesene Benachrichtigungen",
   },
   fr: {
@@ -228,9 +224,8 @@ export const notifications = {
     // L-Y-03 — sr-only word for the unread-dot indicator.
     "notifications.unreadIndicator": "Non lu",
 
-    // Sprint 5 L-Y key-only follow-up to Sprint 3 M-Y-07 — see EN
-    // dictionary above for the full rationale. KEY ONLY: not yet
-    // wired into NotificationBell.tsx live region.
+    // M-Y-07 — see EN dictionary for rationale.
+    "notifications.unreadLiveRegionOne": "{count} notification non lue",
     "notifications.unreadLiveRegion": "{count} notifications non lues",
   },
   es: {
@@ -301,9 +296,8 @@ export const notifications = {
     // L-Y-03 — sr-only word for the unread-dot indicator.
     "notifications.unreadIndicator": "No leído",
 
-    // Sprint 5 L-Y key-only follow-up to Sprint 3 M-Y-07 — see EN
-    // dictionary above for the full rationale. KEY ONLY: not yet
-    // wired into NotificationBell.tsx live region.
+    // M-Y-07 — see EN dictionary for rationale.
+    "notifications.unreadLiveRegionOne": "{count} notificación no leída",
     "notifications.unreadLiveRegion": "{count} notificaciones no leídas",
   },
 } as const;

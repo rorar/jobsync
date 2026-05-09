@@ -21,7 +21,7 @@ via the Skill tool with combined (a)+(b) instrumentation.
 | ID | Severity | Summary | Fix |
 |----|----------|---------|-----|
 | L-A-05 ext | LOW | `rotateVapidKeysAction` missing `channelRouter.invalidateAvailability(user.id, "push")` hook. Sprint 4 Stream A only wired subscribe/unsubscribe — rotating VAPID keys deletes ALL WebPushSubscription rows but the 30s TTL cache kept claiming "push available". | Added the hook after `rotateVapidKeys()` succeeds, mirroring the subscribe/unsubscribe call sites. Stream B added call-chain test. |
-| M-Y-07 ext | LOW | Sprint 3 Stream H suggested the stricter `notifications.unreadLiveRegion` phrasing "3 unread notifications" instead of re-using `notifications.title`. Key was deferred. | Added `notifications.unreadLiveRegion` with `{count}` placeholder in all 4 locales (en/de/fr/es). KEY-ONLY; `NotificationBell.tsx` wiring deferred to the sprint that can update the test in lockstep. |
+| M-Y-07 ext | LOW | Sprint 3 Stream H suggested the stricter `notifications.unreadLiveRegion` phrasing "3 unread notifications" instead of re-using `notifications.title`. Key was deferred. | **RESOLVED.** Wired `notifications.unreadLiveRegion` into NotificationBell.tsx live region + aria-label. Added singular variant `notifications.unreadLiveRegionOne`. Plural branch (`count === 1`). 2 new tests + 3 tightened assertions. |
 | H-P-06 ext | LOW | Sprint 3 Stream A (commit `b1671d2`) partially synced `specs/event-bus.allium` to describe `Promise.allSettled` parallel dispatch, but left TWO stale references: `rule ConsumerRegistration` `@guidance` and the Open Questions RESOLVED comment both still claimed "sequential execution". Flashlight-effect blind spot. | Updated both stale sites to describe the parallel dispatch with cross-references to the post-H-P-06 `ErrorIsolation` and `OrderGuarantee` rules. |
 
 ### Fixed — Stream B: Test coverage expansion (3 items, commit `84f9ea3`)
@@ -53,7 +53,7 @@ Per `feedback_multi_stream_honesty_gate.md`, scanned each stream report's full O
 - **`email.ts` multi-prefix split** — hosts FOUR prefixes (`email.*`, `errors.*`, `push.*`, `smtp.*`) across 78 keys × 4 locales. Same antipattern Sprint 5 Stream C just fixed for `settings.ts`. Requires upfront decision on `errors.*` cross-cutting (core + email.ts both host it): (a) keep as multi-prefix file with documented exception, (b) create dedicated `errors.ts` namespace and migrate project-wide, or (c) rename email.ts's `errors.smtpFoo` to `smtp.errorFoo`. Half-day dedicated split sprint. **Tracked in CLAUDE.md § Deferred Sprint Work + memory file `project_deferred_sprints_for_future_sessions.md`.**
 
 **Notification UI (Stream A deferred):**
-- **`notifications.unreadLiveRegion` wiring** — Stream A added the i18n key in all 4 locales but KEY-ONLY. `NotificationBell.tsx` consumer wiring + test update is a coordinated source-and-test change that belongs in its own small sprint.
+- ~~**`notifications.unreadLiveRegion` wiring**~~ — **RESOLVED.** Wired into NotificationBell.tsx with singular/plural support and tightened test assertions.
 - **`unsubscribeAllPush` / GDPR delete-account audit** — if a GDPR account-deletion flow exists or is added later, it would have the same flip-to-unavailable failure mode as `rotateVapidKeysAction` and need the same `invalidateAvailability` hook. 15-minute grep.
 - **Plural rules for i18n keys** — `"{count} unread notifications"` reads awkwardly when count=1. Systemic cross-cutting decision affecting every count-based key in the app. Needs LinguiJS ICU plural rules or a custom plural helper.
 
@@ -341,7 +341,7 @@ Per `feedback_multi_stream_honesty_gate.md`, explicitly scanned each of the 8 st
 - **`notification-dispatcher.spec.ts` relies on rejection swallowing** (Stream A): Promise.allSettled swallows undefined-Prisma-mock rejections for webhook/email/push. Explicit mocks for `webhookEndpoint`/`smtpConfig`/`vapidConfig`/`webPushSubscription` would make the tests robust.
 
 **Notification UI**:
-- **Live-region "unread notifications" i18n key** (Stream H): current announcement reuses `notifications.title` which yields "3 Notifications" / "3 Benachrichtigungen" — the M-Y-07 finding suggested the stricter phrasing "3 unread notifications". Needs a new i18n key `notifications.unreadLiveRegion` with `{count}` placeholder in all 4 locales.
+- ~~**Live-region "unread notifications" i18n key**~~ (Stream H): **RESOLVED.** `notifications.unreadLiveRegion` (plural) + `notifications.unreadLiveRegionOne` (singular) wired into NotificationBell.tsx live region + aria-label.
 - **Next.js server actions don't propagate AbortSignal** (Stream H): Stream H's request dedup is at the RESULT level (discard stale payloads) rather than the REQUEST level (cancel in-flight). True request cancellation would require refactoring `getNotifications` to a REST route — out of scope.
 
 **Skill invocation test result (Sprint 3)**:

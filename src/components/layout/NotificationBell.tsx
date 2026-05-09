@@ -167,7 +167,10 @@ export function NotificationBell() {
       // committed to the DOM before the real message overwrites it.
       setTimeout(() => {
         setLiveRegionMessage(
-          `${unreadCount} ${t("notifications.title")}`,
+          t(unreadCount === 1
+            ? "notifications.unreadLiveRegionOne"
+            : "notifications.unreadLiveRegion",
+          ).replace("{count}", String(unreadCount)),
         );
       }, 20);
       announceTimerRef.current = null;
@@ -191,7 +194,10 @@ export function NotificationBell() {
   const displayCount = unreadCount > 99 ? "99+" : String(unreadCount);
   const ariaLabel =
     unreadCount > 0
-      ? `${unreadCount} ${t("notifications.title")}`
+      ? t(unreadCount === 1
+          ? "notifications.unreadLiveRegionOne"
+          : "notifications.unreadLiveRegion",
+        ).replace("{count}", String(unreadCount))
       : t("notifications.title");
 
   const triggerButton = (
