@@ -220,9 +220,9 @@ entity WebPushSubscription {
   id: String                          -- UUID
   userId: String
   endpoint: String                    -- push service endpoint URL
-  p256dh: String                      -- AES-encrypted
-  auth: String                        -- AES-encrypted
-  iv: String                          -- AES initialization vector
+  p256dh: String                      -- AES-encrypted (own IV)
+  auth: String                        -- AES-encrypted (own IV)
+  iv: String                          -- pipe-separated: "ivP256dh|ivAuth"
   expirationTime: DateTime?
   createdAt: DateTime = now()
   updatedAt: DateTime
@@ -616,9 +616,12 @@ rule PushDelivery {
   requires: checkPushDispatchRateLimit(userId) = allowed
 
   for_each subscription in subscriptions:
-    -- Decrypt subscription keys
-    let p256dh = decrypt(subscription.p256dh, subscription.iv)
-    let auth = decrypt(subscription.auth, subscription.iv)
+    -- Decrypt subscription keys (each encrypted with its own IV)
+    -- The iv field stores both IVs as "ivP256dh|ivAuth" (pipe-separated)
+    let iv_p256dh = split(subscription.iv, "|").first
+    let iv_auth = split(subscription.iv, "|").last
+    let p256dh = decrypt(subscription.p256dh, iv_p256dh)
+    let auth = decrypt(subscription.auth, iv_auth)
 
     ensures: web-push sendNotification with VAPID signing
 
