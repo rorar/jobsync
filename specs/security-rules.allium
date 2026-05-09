@@ -314,10 +314,27 @@ rule PreAuthIpRateLimit {
 rule SigninRateLimit {
     when: User attempts to sign in
 
-    ensures: 1-second delay before processing credentials
+    ensures: IP-based sliding window rate limit:
+        5 attempts per 15 minutes per IP address
+    ensures: On rate limit exceeded:
+        reject with i18n error "auth.rateLimitExceeded" + retry-after seconds
+    ensures: 1-second delay before processing credentials (timing-oracle prevention)
 
-    -- Brute force mitigation. No account lockout currently.
-    -- See auth-session.allium for full details.
+    -- FL-3 fix: replaced fixed delay with proper rate limiting.
+    -- Delay preserved for timing-oracle prevention (CWE-208).
+    -- See auth-session.allium for full config values.
+}
+
+rule SignupRateLimit {
+    when: User attempts to sign up
+
+    ensures: IP-based sliding window rate limit:
+        3 attempts per 60 minutes per IP address
+    ensures: On rate limit exceeded:
+        reject with i18n error "auth.rateLimitExceeded" + retry-after seconds
+
+    -- FL-3 fix: signup previously had NO rate limiting at all.
+    -- Stricter than signin (3 vs 5) because account creation is a heavier operation.
 }
 
 rule PublicApiRateLimit {
@@ -544,8 +561,10 @@ invariant SecureSecretManagement {
 --   so the route handler's own getCurrentUser() call is the auth gate.
 --   This is consistent with ApiRouteSelfProtection (Rule 10).
 
--- GAP-4: No account lockout after repeated failed login attempts.
---   Only a 1-second delay. Severity: Low (self-hosted context).
+-- GAP-4: RESOLVED (FL-3). IP-based sliding window rate limiting added for
+--   both signin (5/15min) and signup (3/60min). Account lockout still not
+--   implemented (heavy UX impact for self-hosted), but brute force is now
+--   rate-limited beyond the original 1-second delay.
 
 -- GAP-5: Rate limiting for Public API is in-memory only.
 --   Does not persist across restarts or work in multi-instance deployments.

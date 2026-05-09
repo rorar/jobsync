@@ -61,6 +61,7 @@ const core = {
     "auth.login": "Login",
     "auth.createAnAccount": "Create an account",
     "auth.unableToCreateAccount": "Unable to create account. Please try a different email or sign in.",
+    "auth.rateLimitExceeded": "Too many attempts. Please try again in {seconds} seconds.",
 
     // Profile Dropdown
     "profile.myAccount": "My Account",
@@ -229,6 +230,7 @@ const core = {
     "auth.login": "Einloggen",
     "auth.createAnAccount": "Konto erstellen",
     "auth.unableToCreateAccount": "Konto konnte nicht erstellt werden. Bitte verwende eine andere E-Mail-Adresse oder melde dich an.",
+    "auth.rateLimitExceeded": "Zu viele Versuche. Bitte versuche es in {seconds} Sekunden erneut.",
 
     "profile.myAccount": "Mein Konto",
     "profile.settings": "Einstellungen",
@@ -394,6 +396,7 @@ const core = {
     "auth.login": "Connexion",
     "auth.createAnAccount": "Créer un compte",
     "auth.unableToCreateAccount": "Impossible de créer le compte. Veuillez essayer une autre adresse e-mail ou vous connecter.",
+    "auth.rateLimitExceeded": "Trop de tentatives. Veuillez réessayer dans {seconds} secondes.",
 
     "profile.myAccount": "Mon compte",
     "profile.settings": "Paramètres",
@@ -559,6 +562,7 @@ const core = {
     "auth.login": "Entrar",
     "auth.createAnAccount": "Crear una cuenta",
     "auth.unableToCreateAccount": "No se pudo crear la cuenta. Por favor, prueba con otro correo electrónico o inicia sesión.",
+    "auth.rateLimitExceeded": "Demasiados intentos. Por favor, inténtalo de nuevo en {seconds} segundos.",
 
     "profile.myAccount": "Mi cuenta",
     "profile.settings": "Configuración",

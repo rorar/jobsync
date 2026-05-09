@@ -61,7 +61,11 @@ entity Session {
 config AuthConfig {
     password_hash_rounds: 10         -- bcrypt salt rounds
     password_min_length: 6           -- enforced at Credentials provider
-    signin_delay_ms: 1000            -- rate limiting delay per attempt
+    signin_delay_ms: 1000            -- timing-oracle prevention (not rate limiting)
+    signin_max_attempts: 5           -- per IP, sliding window
+    signin_window_ms: 900000         -- 15 minutes
+    signup_max_attempts: 3           -- per IP, sliding window
+    signup_window_ms: 3600000        -- 60 minutes
     auth_secret: env("AUTH_SECRET")  -- MUST be pre-set, NEVER auto-generated
     custom_pages:
         sign_in: "/signin"
@@ -106,8 +110,14 @@ rule Signin {
     requires: email is valid email format
     requires: password is non-empty
 
-    ensures: delay(1000ms) before processing  -- brute force mitigation
-
+    ensures: IP-based rate limit checked:
+        config.signin_max_attempts per config.signin_window_ms per IP
+    ensures:
+        if rate limit exceeded:
+            return i18n error "auth.rateLimitExceeded" with retry-after seconds
+            -- No delay, no credential check — reject immediately
+    ensures: delay(config.signin_delay_ms) before processing
+        -- Timing-oracle prevention: same delay for valid and invalid emails
     ensures:
         if credentials valid (email exists AND bcrypt.compare matches):
             session created with user.id in JWT token
@@ -115,6 +125,17 @@ rule Signin {
         else:
             return "Invalid credentials."
             -- Generic error — does NOT distinguish "email not found" from "wrong password"
+}
+
+rule SignupRateLimit {
+    when: User submits signup form
+
+    ensures: IP-based rate limit checked:
+        config.signup_max_attempts per config.signup_window_ms per IP
+    ensures:
+        if rate limit exceeded:
+            return i18n error "auth.rateLimitExceeded" with retry-after seconds
+            -- Signup processing does NOT proceed
 }
 
 rule SigninFormSecurity {
@@ -219,8 +240,11 @@ invariant CredentialURLProtection {
 -- Open Questions
 ------------------------------------------------------------
 
--- Q1: Should we add exponential backoff for failed login attempts?
---     Currently: fixed 1-second delay. No account lockout.
+-- Q1: RESOLVED. IP-based sliding window rate limiting implemented (FL-3).
+--     Signin: 5 attempts / 15 min per IP. Signup: 3 attempts / 60 min per IP.
+--     Exponential backoff rejected — sliding window is simpler, sufficient for
+--     self-hosted context, and matches the existing rate limiting pattern.
+--     Account lockout rejected — too heavy for single-user self-hosted deployments.
 
 -- Q2: Should middleware matcher be expanded to include /api/* routes?
 --     Currently each API route self-protects. Some have been missed (export).

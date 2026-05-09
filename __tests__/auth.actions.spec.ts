@@ -1,3 +1,10 @@
+// Mock auth rate limiter — must be before auth.actions import
+jest.mock("@/lib/auth/auth-rate-limit", () => ({
+  checkAuthRateLimit: jest.fn().mockReturnValue({ allowed: true }),
+  getClientIp: jest.fn().mockResolvedValue("127.0.0.1"),
+  resetAuthRateLimitStore: jest.fn(),
+}));
+
 import { signup, authenticate } from "@/actions/auth.actions";
 import { signIn } from "@/auth";
 import prisma from "@/lib/db";
