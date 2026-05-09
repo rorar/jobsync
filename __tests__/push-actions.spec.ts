@@ -61,11 +61,11 @@ jest.mock("@/utils/user.utils", () => ({
 // Encryption mock
 // ---------------------------------------------------------------------------
 
-const mockEncrypt = jest.fn().mockReturnValue({
+const mockEncrypt = jest.fn().mockResolvedValue({
   encrypted: "encrypted-value",
   iv: "test-iv",
 });
-const mockDecrypt = jest.fn().mockReturnValue("decrypted-key-value");
+const mockDecrypt = jest.fn().mockResolvedValue("decrypted-key-value");
 
 jest.mock("@/lib/encryption", () => ({
   encrypt: (...args: unknown[]) => mockEncrypt(...args),
@@ -365,8 +365,8 @@ describe("Push Actions", () => {
 
     it("stores combined IVs with pipe separator", async () => {
       mockEncrypt
-        .mockReturnValueOnce({ encrypted: "enc-p256dh", iv: "iv-p256dh" })
-        .mockReturnValueOnce({ encrypted: "enc-auth", iv: "iv-auth" });
+        .mockResolvedValueOnce({ encrypted: "enc-p256dh", iv: "iv-p256dh" })
+        .mockResolvedValueOnce({ encrypted: "enc-auth", iv: "iv-auth" });
 
       await subscribePush(VALID_SUBSCRIPTION_INPUT);
 
@@ -525,7 +525,7 @@ describe("Push Actions", () => {
       mockVapidConfigFindUnique.mockResolvedValue(VAPID_CONFIG);
       mockWebPushSubscriptionFindMany.mockResolvedValue([SUBSCRIPTION_RECORD]);
       mockSendNotification.mockResolvedValue({});
-      mockDecrypt.mockReturnValue("decrypted-key-value");
+      mockDecrypt.mockResolvedValue("decrypted-key-value");
     });
 
     it("sends test notification to all subscriptions", async () => {
@@ -585,9 +585,7 @@ describe("Push Actions", () => {
     });
 
     it("returns failure when VAPID key decryption fails", async () => {
-      mockDecrypt.mockImplementationOnce(() => {
-        throw new Error("Decryption error");
-      });
+      mockDecrypt.mockRejectedValueOnce(new Error("Decryption error"));
 
       const result = await sendTestPush();
 

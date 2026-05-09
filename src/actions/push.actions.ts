@@ -120,8 +120,8 @@ export async function subscribePush(
     }
 
     // Encrypt subscription keys separately
-    const encP256dh = encrypt(input.keys.p256dh);
-    const encAuth = encrypt(input.keys.auth);
+    const encP256dh = await encrypt(input.keys.p256dh);
+    const encAuth = await encrypt(input.keys.auth);
 
     // Store both IVs concatenated with pipe separator
     const combinedIv = `${encP256dh.iv}|${encAuth.iv}`;
@@ -304,7 +304,7 @@ export async function sendTestPush(): Promise<ActionResult> {
     // Decrypt VAPID private key
     let vapidPrivateKey: string;
     try {
-      vapidPrivateKey = decrypt(vapidConfig.privateKey, vapidConfig.iv);
+      vapidPrivateKey = await decrypt(vapidConfig.privateKey, vapidConfig.iv);
     } catch {
       return { success: false, message: "push.testFailed" };
     }
@@ -332,8 +332,8 @@ export async function sendTestPush(): Promise<ActionResult> {
         const ivP256dh = ivParts[0];
         const ivAuth = ivParts[1] ?? ivParts[0];
 
-        const p256dh = decrypt(sub.p256dh, ivP256dh);
-        const auth = decrypt(sub.auth, ivAuth);
+        const p256dh = await decrypt(sub.p256dh, ivP256dh);
+        const auth = await decrypt(sub.auth, ivAuth);
 
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh, auth } },

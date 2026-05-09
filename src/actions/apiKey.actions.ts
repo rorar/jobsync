@@ -115,7 +115,7 @@ export async function saveApiKey(input: {
     let last4: string;
 
     if (isSensitive) {
-      const result = encrypt(parsed.key);
+      const result = await encrypt(parsed.key);
       encryptedKey = result.encrypted;
       iv = result.iv;
       last4 = getLast4(parsed.key);
@@ -206,7 +206,7 @@ export async function getOllamaBaseUrl(): Promise<string> {
         const url =
           apiKey.iv === ""
             ? apiKey.encryptedKey
-            : (await import("@/lib/encryption")).decrypt(
+            : await (await import("@/lib/encryption")).decrypt(
                 apiKey.encryptedKey,
                 apiKey.iv,
               );

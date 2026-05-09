@@ -116,7 +116,7 @@ function validateInput(data: SaveSmtpConfigInput, requirePassword: boolean): {
   return { valid: true };
 }
 
-function toDTO(config: {
+async function toDTO(config: {
   id: string;
   host: string;
   port: number;
@@ -128,11 +128,11 @@ function toDTO(config: {
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
-}): SmtpConfigDTO {
+}): Promise<SmtpConfigDTO> {
   // Decrypt password just to get last 4 chars for the mask, then discard
   let passwordMask = "****";
   try {
-    const decrypted = decrypt(config.password, config.iv);
+    const decrypted = await decrypt(config.password, config.iv);
     passwordMask = `****${getLast4(decrypted)}`;
   } catch {
     // If decryption fails, show generic mask
@@ -197,7 +197,7 @@ export async function saveSmtpConfig(
       // Update — only update password if provided
       const updateData: Record<string, unknown> = { ...baseData };
       if (input.password && input.password.trim() !== "") {
-        const { encrypted, iv } = encrypt(input.password);
+        const { encrypted, iv } = await encrypt(input.password);
         updateData.password = encrypted;
         updateData.iv = iv;
       }
@@ -207,7 +207,7 @@ export async function saveSmtpConfig(
       });
     } else {
       // Create — password is required (validated above)
-      const { encrypted, iv } = encrypt(input.password!);
+      const { encrypted, iv } = await encrypt(input.password!);
       config = await prisma.smtpConfig.create({
         data: {
           ...baseData,
@@ -226,7 +226,7 @@ export async function saveSmtpConfig(
 
     return {
       success: true,
-      data: toDTO(config),
+      data: await toDTO(config),
     };
   } catch (error) {
     return handleError(error, "smtp.errorSave");
@@ -250,7 +250,7 @@ export async function getSmtpConfig(): Promise<ActionResult<SmtpConfigDTO | null
       return { success: true, data: null };
     }
 
-    return { success: true, data: toDTO(config) };
+    return { success: true, data: await toDTO(config) };
   } catch (error) {
     return handleError(error, "smtp.errorFetch");
   }
@@ -282,7 +282,7 @@ export async function testSmtpConnection(): Promise<ActionResult> {
     // Decrypt password
     let decryptedPassword: string;
     try {
-      decryptedPassword = decrypt(config.password, config.iv);
+      decryptedPassword = await decrypt(config.password, config.iv);
     } catch {
       return { success: false, message: "smtp.connectionFailed" };
     }

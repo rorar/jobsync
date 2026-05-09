@@ -42,7 +42,7 @@ jest.mock("@/lib/db", () => ({
 // ---------------------------------------------------------------------------
 
 jest.mock("@/lib/encryption", () => ({
-  decrypt: jest.fn((_encrypted: string, _iv: string) => "test-secret-key"),
+  decrypt: jest.fn((_encrypted: string, _iv: string) => Promise.resolve("test-secret-key")),
 }));
 
 // ---------------------------------------------------------------------------

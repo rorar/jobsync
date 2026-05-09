@@ -116,8 +116,8 @@ jest.mock("@/utils/user.utils", () => ({
 // ── Encryption (push + webhook need it) ──────────────────────────────────────
 
 jest.mock("@/lib/encryption", () => ({
-  encrypt: jest.fn().mockReturnValue({ encrypted: "enc-value", iv: "test-iv" }),
-  decrypt: jest.fn().mockReturnValue("decrypted-value"),
+  encrypt: jest.fn().mockResolvedValue({ encrypted: "enc-value", iv: "test-iv" }),
+  decrypt: jest.fn().mockResolvedValue("decrypted-value"),
   getLast4: jest.fn().mockReturnValue("word"),
 }));
 

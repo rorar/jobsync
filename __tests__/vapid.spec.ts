@@ -38,11 +38,11 @@ jest.mock("@/lib/db", () => ({
 // Encryption mock
 // ---------------------------------------------------------------------------
 
-const mockEncrypt = jest.fn().mockReturnValue({
+const mockEncrypt = jest.fn().mockResolvedValue({
   encrypted: "encrypted-private-key",
   iv: "generated-iv",
 });
-const mockDecrypt = jest.fn().mockReturnValue("decrypted-private-key");
+const mockDecrypt = jest.fn().mockResolvedValue("decrypted-private-key");
 
 jest.mock("@/lib/encryption", () => ({
   encrypt: (...args: unknown[]) => mockEncrypt(...args),

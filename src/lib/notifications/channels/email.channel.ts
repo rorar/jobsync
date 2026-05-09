@@ -82,7 +82,7 @@ export class EmailChannel implements NotificationChannel {
       // 3. Decrypt password
       let decryptedPassword: string;
       try {
-        decryptedPassword = decrypt(config.password, config.iv);
+        decryptedPassword = await decrypt(config.password, config.iv);
       } catch (err) {
         console.error("[EmailChannel] Failed to decrypt SMTP password:", err);
         return { success: false, channel: this.name, error: "Decryption failed" };

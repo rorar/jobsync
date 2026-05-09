@@ -48,11 +48,11 @@ jest.mock("@/utils/user.utils", () => ({
 // Encryption mock
 // ---------------------------------------------------------------------------
 
-const mockEncrypt = jest.fn().mockReturnValue({
+const mockEncrypt = jest.fn().mockResolvedValue({
   encrypted: "encrypted-password",
   iv: "test-iv",
 });
-const mockDecrypt = jest.fn().mockReturnValue("plaintext-password");
+const mockDecrypt = jest.fn().mockResolvedValue("plaintext-password");
 const mockGetLast4 = jest.fn().mockReturnValue("word");
 
 jest.mock("@/lib/encryption", () => ({
@@ -439,7 +439,7 @@ describe("SMTP Actions", () => {
   describe("testSmtpConnection()", () => {
     beforeEach(() => {
       mockSmtpConfigFindFirst.mockResolvedValue(EXISTING_CONFIG);
-      mockDecrypt.mockReturnValue("decrypted-password");
+      mockDecrypt.mockResolvedValue("decrypted-password");
     });
 
     it("sends test email to fromAddress", async () => {

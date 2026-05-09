@@ -259,6 +259,14 @@ rule DecryptKey {
     ensures: AES-256-GCM decrypt with auth tag verification
     -- Legacy salt "jobsync-api-key-encryption" kept ONLY for reading old records.
     -- All new encryptions use random per-record salts.
+
+  @guidance
+    -- PBKDF2 at 100_000 iterations is computationally expensive (~10ms per call).
+    -- Implementations MAY cache derived keys in a bounded, process-scoped
+    -- in-memory cache keyed by salt to avoid redundant derivation on the same record.
+    -- The cache MUST be cleared on process restart (no persistent key cache).
+    -- Cache size MUST be bounded to prevent unbounded memory growth.
+    -- The encrypt/decrypt functions SHOULD be async to avoid blocking the event loop.
 }
 
 ------------------------------------------------------------

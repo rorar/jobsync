@@ -38,7 +38,7 @@ export async function resolveCredential(
 
       return apiKey.iv === ""
         ? apiKey.encryptedKey
-        : decrypt(apiKey.encryptedKey, apiKey.iv);
+        : await decrypt(apiKey.encryptedKey, apiKey.iv);
     }
   } catch {
     // Fall through to env var

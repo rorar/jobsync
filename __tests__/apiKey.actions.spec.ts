@@ -32,10 +32,10 @@ jest.mock("@/lib/utils", () => ({
 }));
 
 jest.mock("@/lib/encryption", () => ({
-  encrypt: jest.fn((key: string) => ({ encrypted: `enc-${key}`, iv: "iv-1" })),
+  encrypt: jest.fn((key: string) => Promise.resolve({ encrypted: `enc-${key}`, iv: "iv-1" })),
   getLast4: jest.fn((key: string) => key.slice(-4)),
   decrypt: jest.fn(
-    (encrypted: string) => `decrypted-${encrypted}`,
+    (encrypted: string) => Promise.resolve(`decrypted-${encrypted}`),
   ),
 }));
 

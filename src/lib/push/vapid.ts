@@ -62,13 +62,13 @@ export async function getOrCreateVapidKeys(
   if (existing) {
     return {
       publicKey: existing.publicKey,
-      privateKey: decrypt(existing.privateKey, existing.iv),
+      privateKey: await decrypt(existing.privateKey, existing.iv),
     };
   }
 
   // Generate new VAPID key pair
   const keys = webpush.generateVAPIDKeys();
-  const { encrypted, iv } = encrypt(keys.privateKey);
+  const { encrypted, iv } = await encrypt(keys.privateKey);
 
   await prisma.vapidConfig.create({
     data: {

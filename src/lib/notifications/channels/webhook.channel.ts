@@ -324,7 +324,7 @@ export class WebhookChannel implements NotificationChannel {
           }
 
           // Decrypt the HMAC secret
-          const decryptedSecret = decrypt(endpoint.secret, endpoint.iv);
+          const decryptedSecret = await decrypt(endpoint.secret, endpoint.iv);
 
           // Sign the payload
           const signature = computeHmacSignature(decryptedSecret, payloadJson);

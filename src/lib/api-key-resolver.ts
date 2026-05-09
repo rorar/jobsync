@@ -36,7 +36,7 @@ export async function resolveApiKey(
         if (apiKey.iv === "") {
           return apiKey.encryptedKey;
         }
-        return decrypt(apiKey.encryptedKey, apiKey.iv);
+        return await decrypt(apiKey.encryptedKey, apiKey.iv);
       }
     } catch {
       // Fall through to env var

@@ -123,7 +123,7 @@ export async function createWebhookEndpoint(
 
     // Generate and encrypt secret
     const plaintextSecret = generateSecret();
-    const { encrypted, iv } = encrypt(plaintextSecret);
+    const { encrypted, iv } = await encrypt(plaintextSecret);
 
     // Create endpoint
     const endpoint = await prisma.webhookEndpoint.create({

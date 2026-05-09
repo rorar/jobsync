@@ -671,7 +671,7 @@ Sprint 1 was an experiment in delegating work to subagents with explicit skill i
 ### Deferred to Next Session (documented, not S5b-resume bugs)
 | ID | Severity | Finding | Reason |
 |----|----------|---------|--------|
-| PERF-2 | HIGH(perf) | Sync PBKDF2 in encryption.ts blocks event loop | Shared module needs broader testing |
+| ~~PERF-2~~ | ~~HIGH(perf)~~ | ~~Sync PBKDF2 in encryption.ts blocks event loop~~ | **RESOLVED** (2026-05-09). Async pbkdf2 + LRU derived-key cache. 20 new tests. |
 | PERF-3 | HIGH(perf) | 15 redundant DB queries per notification | Architectural refactor (DispatchContext) |
 | PERF-4 | MED(perf) | No SMTP connection pooling | Enhancement, backlog |
 | FL-3 | MED | auth.actions.ts signup/authenticate no rate limiting | Pre-existing, not S5b-introduced |

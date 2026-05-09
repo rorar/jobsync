@@ -40,7 +40,7 @@ jest.mock("@/lib/db", () => ({
 // ---------------------------------------------------------------------------
 
 jest.mock("@/lib/encryption", () => ({
-  decrypt: jest.fn((_encrypted: string, _iv: string) => "decrypted-key-value"),
+  decrypt: jest.fn((_encrypted: string, _iv: string) => Promise.resolve("decrypted-key-value")),
 }));
 
 // ---------------------------------------------------------------------------
@@ -288,9 +288,7 @@ describe("PushChannel", () => {
 
     it("returns failure when VAPID private key decryption fails", async () => {
       const { decrypt } = jest.requireMock("@/lib/encryption");
-      decrypt.mockImplementationOnce(() => {
-        throw new Error("Decryption error");
-      });
+      decrypt.mockRejectedValueOnce(new Error("Decryption error"));
 
       const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
 

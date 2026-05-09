@@ -103,7 +103,7 @@ export class PushChannel implements NotificationChannel {
       // 4. Decrypt VAPID private key
       let vapidPrivateKey: string;
       try {
-        vapidPrivateKey = decrypt(vapidConfig.privateKey, vapidConfig.iv);
+        vapidPrivateKey = await decrypt(vapidConfig.privateKey, vapidConfig.iv);
       } catch (err) {
         console.error("[PushChannel] Failed to decrypt VAPID private key:", err);
         return {
@@ -137,8 +137,8 @@ export class PushChannel implements NotificationChannel {
           let p256dh: string;
           let auth: string;
           try {
-            p256dh = decrypt(sub.p256dh, ivP256dh);
-            auth = decrypt(sub.auth, ivAuth);
+            p256dh = await decrypt(sub.p256dh, ivP256dh);
+            auth = await decrypt(sub.auth, ivAuth);
           } catch (err) {
             console.error(
               `[PushChannel] Failed to decrypt subscription keys for ${sub.id}:`,

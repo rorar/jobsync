@@ -34,7 +34,7 @@ jest.mock("@/lib/db", () => ({
 // ---------------------------------------------------------------------------
 
 jest.mock("@/lib/encryption", () => ({
-  decrypt: jest.fn((_encrypted: string, _iv: string) => "decrypted-password"),
+  decrypt: jest.fn((_encrypted: string, _iv: string) => Promise.resolve("decrypted-password")),
 }));
 
 // ---------------------------------------------------------------------------
@@ -286,9 +286,7 @@ describe("EmailChannel", () => {
 
     it("returns failure when decryption fails", async () => {
       const { decrypt } = jest.requireMock("@/lib/encryption");
-      decrypt.mockImplementationOnce(() => {
-        throw new Error("Decryption failed");
-      });
+      decrypt.mockRejectedValueOnce(new Error("Decryption failed"));
 
       const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
 

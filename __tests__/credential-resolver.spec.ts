@@ -16,7 +16,7 @@ jest.mock("@/lib/db", () => ({
 }));
 
 jest.mock("@/lib/encryption", () => ({
-  decrypt: jest.fn(),
+  decrypt: jest.fn().mockResolvedValue("decrypted-value"),
 }));
 
 // Mock throttle to always allow writes (so lastUsedAt tests pass deterministically)
@@ -92,7 +92,7 @@ describe("resolveCredential", () => {
         userId,
         moduleId: "openai",
       });
-      mockDecrypt.mockReturnValue("sk-real-api-key");
+      mockDecrypt.mockResolvedValue("sk-real-api-key");
 
       const result = await resolveCredential(credential, userId);
 
@@ -140,7 +140,7 @@ describe("resolveCredential", () => {
         userId,
         moduleId: "deepseek",
       });
-      mockDecrypt.mockReturnValue("decrypted-key");
+      mockDecrypt.mockResolvedValue("decrypted-key");
       mockUpdate.mockResolvedValue({});
 
       await resolveCredential(credential, userId);
