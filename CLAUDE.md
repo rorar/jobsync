@@ -438,6 +438,15 @@ JobSync has NO role/RBAC model — admin status is derived from a tiered rule ev
 - **Error sanitization:** 500 errors return generic message, never raw Prisma errors
 - **ALL `/api/v1/*` routes** MUST use `withApiAuth()` wrapper
 
+### Encryption Module (`src/lib/encryption.ts`)
+- **Async API:** `encrypt()` and `decrypt()` are `async` — always `await` them
+- **AES-256-GCM** with PBKDF2 key derivation (100K iterations, per-record random salt)
+- **Derived-key LRU cache:** `globalThis` singleton (Symbol-keyed), max 128 entries. Same salt reuses the cached key without re-derivation. Cleared on process restart.
+- **Legacy salt:** Records encrypted before the per-record salt migration use the hardcoded `LEGACY_SALT`. Decrypt auto-detects the format (`"salt:<hex>:..."` = new, plain base64 = legacy). No new encryption uses the legacy salt.
+- **`import "server-only"`** — never import `encrypt`/`decrypt` in client components
+- **Test helpers:** `_clearDerivedKeyCache()` and `_getDerivedKeyCacheSize()` exported for tests only
+- **Allium Spec:** `specs/api-key-management.allium` — `DecryptKey` rule with `@guidance` for caching
+
 ### Credential Protection (ADR-016)
 - **Auth forms:** `method="POST"` + `action=""` on all `<form>` elements
 - **Client-side:** `useEffect` strips credential params from URL on mount

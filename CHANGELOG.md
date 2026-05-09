@@ -1,5 +1,25 @@
 # Changelog
 
+## [2026-05-09] Async Encryption + Spec Fixes
+
+### Performance — PERF-2: Async PBKDF2 + Derived Key Cache
+- **`src/lib/encryption.ts`**: `pbkdf2Sync` replaced with async `crypto.pbkdf2` via `promisify`. Eliminates ~200ms event-loop blocking during push notification dispatch (21 sync calls at 100K iterations).
+- **LRU derived-key cache**: bounded Map (128 entries) on `globalThis`. Same salt reuses cached key without re-derivation. Cleared on process restart.
+- **10 consumer files updated**: all `encrypt()`/`decrypt()` calls now `await`ed across channels (`push`, `email`, `webhook`), resolvers (`api-key-resolver`, `credential-resolver`, `vapid`), and server actions (`apiKey`, `smtp`, `webhook`, `push`).
+- **`smtp.actions.ts`**: `toDTO()` made async to support async decrypt for password mask.
+
+### Added — Tests (+20 tests)
+- `__tests__/encryption.spec.ts` — 20 tests: encrypt/decrypt roundtrip (including unicode, empty, long), legacy salt backward compat, error handling (missing key, corrupted data, wrong IV), derived-key cache (hit verification via pbkdf2 spy, LRU growth, clear helper), getLast4.
+- 10 consumer test files updated: `mockReturnValue` → `mockResolvedValue`, `mockImplementationOnce(throw)` → `mockRejectedValueOnce`.
+
+### Fixed — Specs
+- `specs/notification-dispatch.allium`: PushDelivery rule corrected to reflect pipe-separated IV split (`"ivP256dh|ivAuth"`). WebPushSubscription entity `iv` field comment updated.
+- `specs/api-key-management.allium`: `@guidance` added to DecryptKey rule documenting the caching optimization and async recommendation.
+
+### Updated — Docs
+- `CLAUDE.md`: new "Encryption Module" subsection in Security Rules
+- `docs/BUGS.md`: PERF-2 marked resolved
+
 ## [2026-04-06] Logo Asset Cache + Dev Environment Fixes
 
 ### Added — Logo Asset Cache (new feature)
