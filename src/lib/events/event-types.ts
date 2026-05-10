@@ -41,6 +41,16 @@ export const DomainEventType = {
   CompanyCreated: "CompanyCreated",
   EnrichmentCompleted: "EnrichmentCompleted",
   EnrichmentFailed: "EnrichmentFailed",
+  // CRM Core (spec: crm.allium)
+  ContactCreated: "ContactCreated",
+  ContactUpdated: "ContactUpdated",
+  ContactDeleted: "ContactDeleted",
+  InterviewScheduled: "InterviewScheduled",
+  InterviewCompleted: "InterviewCompleted",
+  ReminderTriggered: "ReminderTriggered",
+  CrmTaskCreated: "CrmTaskCreated",
+  CrmTaskCompleted: "CrmTaskCompleted",
+  CrmNoteCreated: "CrmNoteCreated",
 } as const;
 
 export type DomainEventType = (typeof DomainEventType)[keyof typeof DomainEventType];
@@ -199,6 +209,64 @@ export interface EnrichmentFailedPayload {
   domainKey: string;
 }
 
+// CRM Core payloads (spec: crm.allium)
+
+export interface ContactCreatedPayload {
+  personId: string;
+  userId: string;
+  source: "manual" | "auto_created" | "imported";
+}
+
+export interface ContactUpdatedPayload {
+  personId: string;
+  userId: string;
+}
+
+export interface ContactDeletedPayload {
+  personId: string;
+  userId: string;
+  reason: "anonymized" | "merged" | "deleted";
+}
+
+export interface InterviewScheduledPayload {
+  interviewId: string;
+  jobId: string;
+  userId: string;
+  personId?: string;
+  interviewDate: string;
+}
+
+export interface InterviewCompletedPayload {
+  interviewId: string;
+  jobId: string;
+  userId: string;
+  outcome: string;
+}
+
+export interface ReminderTriggeredPayload {
+  userId: string;
+  reason: "interview_upcoming" | "task_overdue" | "retention_expired" | "follow_up_due";
+  targetJobId?: string;
+  targetPersonId?: string;
+}
+
+export interface CrmTaskCreatedPayload {
+  taskId: string;
+  userId: string;
+  title: string;
+}
+
+export interface CrmTaskCompletedPayload {
+  taskId: string;
+  userId: string;
+  title: string;
+}
+
+export interface CrmNoteCreatedPayload {
+  noteId: string;
+  userId: string;
+}
+
 // ---------------------------------------------------------------------------
 // Payload Map (type → payload shape)
 // ---------------------------------------------------------------------------
@@ -224,6 +292,15 @@ export interface EventPayloadMap {
   CompanyCreated: CompanyCreatedPayload;
   EnrichmentCompleted: EnrichmentCompletedPayload;
   EnrichmentFailed: EnrichmentFailedPayload;
+  ContactCreated: ContactCreatedPayload;
+  ContactUpdated: ContactUpdatedPayload;
+  ContactDeleted: ContactDeletedPayload;
+  InterviewScheduled: InterviewScheduledPayload;
+  InterviewCompleted: InterviewCompletedPayload;
+  ReminderTriggered: ReminderTriggeredPayload;
+  CrmTaskCreated: CrmTaskCreatedPayload;
+  CrmTaskCompleted: CrmTaskCompletedPayload;
+  CrmNoteCreated: CrmNoteCreatedPayload;
 }
 
 // ---------------------------------------------------------------------------

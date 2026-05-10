@@ -31,6 +31,10 @@ export const email = {
     "email.subject.bulk_action_completed": "Bulk action completed",
     "email.subject.retention_completed": "Retention cleanup completed",
     "email.subject.job_status_changed": "Job status changed",
+    "email.subject.interview_scheduled": "Interview scheduled",
+    "email.subject.interview_reminder": "Interview reminder",
+    "email.subject.follow_up_due": "Follow-up due",
+    "email.subject.contact_from_job": "New contact from job",
   },
   de: {
     "email.header": "JobSync-Benachrichtigung",
@@ -50,6 +54,10 @@ export const email = {
     "email.subject.bulk_action_completed": "Massenaktion abgeschlossen",
     "email.subject.retention_completed": "Aufbewahrungsbereinigung abgeschlossen",
     "email.subject.job_status_changed": "Job-Status ge\u00e4ndert",
+    "email.subject.interview_scheduled": "Interview geplant",
+    "email.subject.interview_reminder": "Interview-Erinnerung",
+    "email.subject.follow_up_due": "Follow-up fällig",
+    "email.subject.contact_from_job": "Neuer Kontakt aus Job",
   },
   fr: {
     "email.header": "Notification JobSync",
@@ -69,6 +77,10 @@ export const email = {
     "email.subject.bulk_action_completed": "Action group\u00e9e termin\u00e9e",
     "email.subject.retention_completed": "Nettoyage de r\u00e9tention termin\u00e9",
     "email.subject.job_status_changed": "Statut de l'emploi modifi\u00e9",
+    "email.subject.interview_scheduled": "Entretien programmé",
+    "email.subject.interview_reminder": "Rappel d'entretien",
+    "email.subject.follow_up_due": "Suivi à effectuer",
+    "email.subject.contact_from_job": "Nouveau contact depuis l'emploi",
   },
   es: {
     "email.header": "Notificaci\u00f3n de JobSync",
@@ -88,5 +100,9 @@ export const email = {
     "email.subject.bulk_action_completed": "Acci\u00f3n masiva completada",
     "email.subject.retention_completed": "Limpieza de retenci\u00f3n completada",
     "email.subject.job_status_changed": "Estado del empleo cambiado",
+    "email.subject.interview_scheduled": "Entrevista programada",
+    "email.subject.interview_reminder": "Recordatorio de entrevista",
+    "email.subject.follow_up_due": "Seguimiento pendiente",
+    "email.subject.contact_from_job": "Nuevo contacto del empleo",
   },
 } as const;

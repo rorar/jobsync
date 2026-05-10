@@ -37,6 +37,10 @@ const SUBJECT_KEYS: Record<NotificationType, string> = {
   bulk_action_completed: "email.subject.bulk_action_completed",
   retention_completed: "email.subject.retention_completed",
   job_status_changed: "email.subject.job_status_changed",
+  interview_scheduled: "email.subject.interview_scheduled",
+  interview_reminder: "email.subject.interview_reminder",
+  follow_up_due: "email.subject.follow_up_due",
+  contact_from_job: "email.subject.contact_from_job",
 };
 
 // ---------------------------------------------------------------------------
@@ -253,6 +257,10 @@ function buildNotificationMessage(
     bulk_action_completed: "notifications.bulkActionCompleted",
     retention_completed: "notifications.retentionCompleted",
     job_status_changed: "notifications.jobStatusChanged",
+    interview_scheduled: "notifications.interviewScheduled",
+    interview_reminder: "notifications.interviewReminder",
+    follow_up_due: "notifications.followUpDue",
+    contact_from_job: "notifications.contactFromJob",
   };
 
   const key = messageKeyMap[type];

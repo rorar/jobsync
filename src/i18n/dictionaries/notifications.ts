@@ -53,6 +53,14 @@ export const notifications = {
     "notifications.action.openApiKeys": "Manage API keys",
     "notifications.action.viewSettings": "View settings",
     "notifications.action.dismiss": "Dismiss",
+    "notifications.action.openInterviews": "Open interviews",
+    "notifications.action.openTasks": "Open tasks",
+    "notifications.action.openContact": "Open contact",
+    "notifications.action.openContacts": "All contacts",
+    "notifications.interviewScheduled": "Interview scheduled for {jobTitle}",
+    "notifications.interviewReminder": "Interview reminder for {jobTitle}",
+    "notifications.followUpDue": "Follow-up due for {title}",
+    "notifications.contactFromJob": "New contact from {jobTitle}",
 
     // Group headers (time buckets)
     "notifications.group.today": "Today",
@@ -133,6 +141,14 @@ export const notifications = {
     "notifications.action.openApiKeys": "API-Schlüssel verwalten",
     "notifications.action.viewSettings": "Einstellungen anzeigen",
     "notifications.action.dismiss": "Verwerfen",
+    "notifications.action.openInterviews": "Interviews öffnen",
+    "notifications.action.openTasks": "Aufgaben öffnen",
+    "notifications.action.openContact": "Kontakt öffnen",
+    "notifications.action.openContacts": "Alle Kontakte",
+    "notifications.interviewScheduled": "Interview für {jobTitle} geplant",
+    "notifications.interviewReminder": "Erinnerung: Interview für {jobTitle}",
+    "notifications.followUpDue": "Follow-up fällig: {title}",
+    "notifications.contactFromJob": "Neuer Kontakt aus {jobTitle}",
 
     // Group headers
     "notifications.group.today": "Heute",
@@ -205,6 +221,14 @@ export const notifications = {
     "notifications.action.openApiKeys": "Gérer les clés API",
     "notifications.action.viewSettings": "Voir les paramètres",
     "notifications.action.dismiss": "Ignorer",
+    "notifications.action.openInterviews": "Ouvrir les entretiens",
+    "notifications.action.openTasks": "Ouvrir les tâches",
+    "notifications.action.openContact": "Ouvrir le contact",
+    "notifications.action.openContacts": "Tous les contacts",
+    "notifications.interviewScheduled": "Entretien programmé pour {jobTitle}",
+    "notifications.interviewReminder": "Rappel : entretien pour {jobTitle}",
+    "notifications.followUpDue": "Suivi à effectuer : {title}",
+    "notifications.contactFromJob": "Nouveau contact depuis {jobTitle}",
 
     // Group headers
     "notifications.group.today": "Aujourd'hui",
@@ -277,6 +301,14 @@ export const notifications = {
     "notifications.action.openApiKeys": "Gestionar claves API",
     "notifications.action.viewSettings": "Ver configuración",
     "notifications.action.dismiss": "Descartar",
+    "notifications.action.openInterviews": "Abrir entrevistas",
+    "notifications.action.openTasks": "Abrir tareas",
+    "notifications.action.openContact": "Abrir contacto",
+    "notifications.action.openContacts": "Todos los contactos",
+    "notifications.interviewScheduled": "Entrevista programada para {jobTitle}",
+    "notifications.interviewReminder": "Recordatorio: entrevista para {jobTitle}",
+    "notifications.followUpDue": "Seguimiento pendiente: {title}",
+    "notifications.contactFromJob": "Nuevo contacto de {jobTitle}",
 
     // Group headers
     "notifications.group.today": "Hoy",

@@ -10,7 +10,12 @@ export type NotificationType =
   | "vacancy_batch_staged"
   | "bulk_action_completed"
   | "retention_completed"
-  | "job_status_changed";
+  | "job_status_changed"
+  // CRM Core (spec: crm.allium)
+  | "interview_scheduled"
+  | "interview_reminder"
+  | "follow_up_due"
+  | "contact_from_job";
 
 /**
  * Severity of a notification — drives icon/color.
@@ -182,6 +187,10 @@ export const CONFIGURABLE_NOTIFICATION_TYPES: NotificationType[] = [
   "bulk_action_completed",
   "retention_completed",
   "job_status_changed",
+  "interview_scheduled",
+  "interview_reminder",
+  "follow_up_due",
+  "contact_from_job",
 ];
 
 /** Channel identifiers for shouldNotify checks */

@@ -71,6 +71,14 @@ model User {
   vapidConfig          VapidConfig?
   webPushSubscriptions WebPushSubscription[]
   LogoAsset            LogoAsset[]
+  // CRM Core (specs/crm.allium)
+  Person               Person[]
+  CrmInterview         CrmInterview[]
+  CrmTask              CrmTask[]
+  CrmNote              CrmNote[]
+  CrmActivityLog       CrmActivityLog[]
+  CrmBlocklist         CrmBlocklist[]
+  ConnectedAccount     ConnectedAccount[]
 }
 
 model ApiKey {
@@ -281,6 +289,10 @@ model Company {
   user            User             @relation(fields: [createdBy], references: [id])
   workExperiences WorkExperience[]
   enrichmentResults EnrichmentResult[]
+  // CRM back-relations
+  persons          Person[]
+  crmTaskTargets   CrmTaskTarget[]  @relation("CrmTaskTargetCompany")
+  crmNoteTargets   CrmNoteTarget[]  @relation("CrmNoteTargetCompany")
 
   @@unique([value, createdBy])
 }
@@ -347,6 +359,11 @@ model Job {
 
   // Back-relation from StagedVacancy promotion
   stagedVacancyPromotion StagedVacancy?
+
+  // CRM back-relations
+  crmInterviews  CrmInterview[]  @relation("CrmInterviewJob")
+  crmTaskTargets CrmTaskTarget[] @relation("CrmTaskTargetJob")
+  crmNoteTargets CrmNoteTarget[] @relation("CrmNoteTargetJob")
 
   @@index([userId, automationId])
   @@index([userId, discoveryStatus])
@@ -871,4 +888,233 @@ model AdminAuditLog {
   @@index([actorId, timestamp])
   /// Retention sweep ("delete entries older than N days").
   @@index([timestamp])
+}
+
+// =============================================================================
+// CRM Core Models (specs/crm.allium)
+// =============================================================================
+
+/// CRM contact entity — a recruiter, hiring manager, referral, or other
+/// person the user interacts with during their job search.
+/// Independent aggregate root, NOT part of the Job aggregate.
+/// Spec: specs/crm.allium entity Person
+model Person {
+  id                  String    @id @default(uuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id])
+
+  // FullName (value object, flattened — both nullable for anonymization)
+  firstName           String?
+  lastName            String?
+
+  // TypedEmail[] and TypedPhone[] stored as JSON strings (SQLite TEXT)
+  // Shape: [{ email: string, type: "work"|"home"|"other", isPrimary: boolean }]
+  emails              String    @default("[]")
+  // Shape: [{ number: string, type: "work"|"home"|"other", isPrimary: boolean }]
+  phones              String    @default("[]")
+
+  // Professional
+  jobTitle            String?
+  linkedinUrl         String?
+  avatarUrl           String?
+
+  // Address (value object, flattened)
+  addressStreet       String?
+  addressCity         String?
+  addressPostalCode   String?
+  addressCountry      String?
+
+  // Company relation (optional — Person can exist without Company)
+  companyId           String?
+  company             Company?  @relation(fields: [companyId], references: [id])
+
+  // Status state machine: active -> archived -> (active), active -> anonymized (terminal)
+  status              String    @default("active")
+
+  // GDPR fields (specs/crm-gdpr.allium)
+  dataSource          String    @default("manual")
+  processingBasis     String    @default("legitimate_interest")
+  retentionExpiresAt  DateTime?
+
+  // Actor metadata — who/what created this record
+  createdBySource     String    @default("manual")
+  createdByName       String?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  // CRM relations
+  crmInterviews       CrmInterview[]
+  crmTaskTargets      CrmTaskTarget[]
+  crmNoteTargets      CrmNoteTarget[]
+  activityLogs        CrmActivityLog[] @relation("ActivityLogPerson")
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, companyId])
+}
+
+/// A scheduled or completed interview linked to a Job and optionally to a Person.
+/// Status machine: scheduled -> completed|cancelled|rescheduled,
+///                 rescheduled -> completed|cancelled
+/// Spec: specs/crm.allium entity Interview
+model CrmInterview {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  jobId           String
+  job             Job       @relation("CrmInterviewJob", fields: [jobId], references: [id])
+  personId        String?
+  person          Person?   @relation(fields: [personId], references: [id])
+  interviewDate   DateTime
+  location        String?
+  notes           String?
+  status          String    @default("scheduled")
+  outcome         String?
+  outcomeNotes    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([userId, jobId])
+  @@index([userId, status])
+  @@index([userId, interviewDate])
+}
+
+/// A to-do item linked to CRM entities via polymorphic CrmTaskTarget.
+/// Status machine: pending -> in_progress|done|cancelled,
+///                 in_progress -> done|cancelled
+/// Spec: specs/crm.allium entity Task
+model CrmTask {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  title           String
+  description     String?
+  dueDate         DateTime?
+  status          String    @default("pending")
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  targets         CrmTaskTarget[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, dueDate])
+}
+
+/// Polymorphic join: exactly one of targetPersonId/targetCompanyId/targetJobId
+/// must be set (ExactlyOneTaskTarget invariant, enforced at app level).
+/// Spec: specs/crm.allium entity TaskTarget
+model CrmTaskTarget {
+  id              String    @id @default(uuid())
+  taskId          String
+  task            CrmTask   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  targetPersonId  String?
+  targetPerson    Person?   @relation(fields: [targetPersonId], references: [id])
+  targetCompanyId String?
+  targetCompany   Company?  @relation("CrmTaskTargetCompany", fields: [targetCompanyId], references: [id])
+  targetJobId     String?
+  targetJob       Job?      @relation("CrmTaskTargetJob", fields: [targetJobId], references: [id])
+
+  @@index([taskId])
+  @@index([targetPersonId])
+  @@index([targetJobId])
+}
+
+/// Free-text note linked to CRM entities via polymorphic CrmNoteTarget.
+/// Spec: specs/crm.allium entity Note
+model CrmNote {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  title           String?
+  body            String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  targets         CrmNoteTarget[]
+
+  @@index([userId])
+}
+
+/// Polymorphic join: exactly one of targetPersonId/targetCompanyId/targetJobId
+/// must be set (ExactlyOneNoteTarget invariant, enforced at app level).
+/// Spec: specs/crm.allium entity NoteTarget
+model CrmNoteTarget {
+  id              String    @id @default(uuid())
+  noteId          String
+  note            CrmNote   @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  targetPersonId  String?
+  targetPerson    Person?   @relation(fields: [targetPersonId], references: [id])
+  targetCompanyId String?
+  targetCompany   Company?  @relation("CrmNoteTargetCompany", fields: [targetCompanyId], references: [id])
+  targetJobId     String?
+  targetJob       Job?      @relation("CrmNoteTargetJob", fields: [targetJobId], references: [id])
+
+  @@index([noteId])
+  @@index([targetPersonId])
+  @@index([targetJobId])
+}
+
+/// Immutable timeline entry. Materialized read model projected from domain
+/// events, never updated after creation.
+/// Spec: specs/crm.allium entity ActivityLog + contract TimelineProjection
+model CrmActivityLog {
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  activityType      String
+  happenedAt        DateTime  @default(now())
+  actorId           String?
+  targetPersonId    String?
+  targetPerson      Person?   @relation("ActivityLogPerson", fields: [targetPersonId], references: [id])
+  targetCompanyId   String?
+  targetJobId       String?
+  details           String?
+  linkedRecordName  String?
+
+  @@index([userId, happenedAt])
+  @@index([targetPersonId, happenedAt])
+  @@index([targetJobId, happenedAt])
+  @@index([userId, activityType])
+}
+
+/// Suppresses Person auto-creation for specific handles during email/calendar sync.
+/// Spec: specs/crm.allium entity Blocklist
+model CrmBlocklist {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  handle          String
+  type            String
+  reason          String?
+  createdAt       DateTime  @default(now())
+
+  @@unique([userId, handle])
+  @@index([userId])
+  @@index([userId, type])
+}
+
+/// OAuth connection for future email/calendar sync (ROADMAP 1.7/1.12).
+/// Structural only — no rules govern this entity yet.
+/// Spec: specs/crm.allium entity ConnectedAccount
+model ConnectedAccount {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  provider        String
+  handle          String
+  accessToken     String
+  refreshToken    String?
+  iv              String
+  isSyncEnabled   Boolean   @default(false)
+  lastSyncedAt    DateTime?
+  authFailedAt    DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@unique([userId, provider, handle])
 }

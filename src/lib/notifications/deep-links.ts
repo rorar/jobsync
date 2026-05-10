@@ -293,6 +293,54 @@ export function buildNotificationActions(
         : [];
     }
 
+    case "interview_scheduled":
+    case "interview_reminder": {
+      const jobId = getStringId(data, "jobId");
+      return jobId
+        ? [
+            {
+              url: `/dashboard/myjobs/${encodeURIComponent(jobId)}`,
+              labelKey: "notifications.action.openJob",
+              variant: "primary",
+            },
+          ]
+        : [
+            {
+              url: "/dashboard/interviews",
+              labelKey: "notifications.action.openInterviews",
+              variant: "primary",
+            },
+          ];
+    }
+
+    case "follow_up_due":
+      return [
+        {
+          url: "/dashboard/crm-tasks",
+          labelKey: "notifications.action.openTasks",
+          variant: "primary",
+        },
+      ];
+
+    case "contact_from_job": {
+      const personId = getStringId(data, "personId");
+      return personId
+        ? [
+            {
+              url: `/dashboard/contacts/${encodeURIComponent(personId)}`,
+              labelKey: "notifications.action.openContact",
+              variant: "primary",
+            },
+          ]
+        : [
+            {
+              url: "/dashboard/contacts",
+              labelKey: "notifications.action.openContacts",
+              variant: "primary",
+            },
+          ];
+    }
+
     default:
       return [];
   }
@@ -499,6 +547,12 @@ export function resolveNotificationSeverity(
       return "success";
     case "vacancy_batch_staged":
     case "job_status_changed":
+    case "interview_scheduled":
+    case "contact_from_job":
+      return "info";
+    case "interview_reminder":
+    case "follow_up_due":
+      return "warning";
     default:
       return "info";
   }

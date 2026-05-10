@@ -10,6 +10,7 @@ import { registerNotificationDispatcher } from "./notification-dispatcher";
 import { registerDegradationCoordinator } from "./degradation-coordinator";
 import { registerEnrichmentTrigger } from "./enrichment-trigger";
 import { registerLogoAssetSubscriber } from "@/lib/assets/logo-asset-subscriber";
+import { registerCrmActivityLogConsumers } from "./crm-activity-logger";
 
 // Guard survives HMR via globalThis (same pattern as health-scheduler.ts, event-bus.ts)
 const g = globalThis as unknown as { __eventConsumersRegistered?: boolean };
@@ -32,6 +33,9 @@ export function registerEventConsumers(): void {
 
   // Logo Asset Cache (spec: logo-asset-cache.allium, rule DownloadOnEnrichment)
   registerLogoAssetSubscriber();
+
+  // CRM Activity Logger (spec: crm.allium, contract TimelineProjection)
+  registerCrmActivityLogConsumers();
 
   console.debug("[EventBus] All consumers registered");
 }
