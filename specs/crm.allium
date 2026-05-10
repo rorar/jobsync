@@ -87,6 +87,12 @@ value CompanyAssociation {
     end_date: Timestamp?
 }
 
+value SocialProfile {
+    -- A link to a social/professional network profile.
+    platform: SocialPlatform
+    url: String
+}
+
 value ActorMetadata {
     -- Tracks the origin of a record creation or modification.
     source: ActorSource
@@ -157,6 +163,10 @@ enum ActivityType {
     | follow_up_sent | application_submitted
 }
 
+enum SocialPlatform {
+    linkedin | xing | github | twitter | other
+}
+
 enum BlocklistType {
     email | phone | domain
 }
@@ -177,8 +187,8 @@ entity Person {
     name: FullName
     emails: List<TypedEmail>
     phones: List<TypedPhone>
-    job_title: String?
-    linkedin_url: String?
+    headline: String?
+    social_profiles: List<SocialProfile>
     avatar_url: String?
     address: Address?
 
@@ -385,7 +395,7 @@ config {
 
 rule CreatePerson {
     -- User manually creates a contact from the CRM directory.
-    when: CreatePerson(user, name, emails, phones, companies?, job_title?, linkedin_url?, address?)
+    when: CreatePerson(user, name, emails, phones, companies?, headline?, social_profiles?, address?)
 
     requires: emails.count > 0
     requires: Persons where user_id = user.id -> count < config.max_persons_per_user
@@ -396,8 +406,8 @@ rule CreatePerson {
         emails: emails,
         phones: phones,
         companies: companies,
-        job_title: job_title,
-        linkedin_url: linkedin_url,
+        headline: headline,
+        social_profiles: social_profiles,
         address: address,
         status: active,
         data_source: manual,
@@ -495,8 +505,8 @@ rule AnonymizePerson {
     ensures: person.emails = {}
     ensures: person.phones = {}
     ensures: person.companies = {}
-    ensures: person.job_title = null
-    ensures: person.linkedin_url = null
+    ensures: person.headline = null
+    ensures: person.social_profiles = {}
     ensures: person.avatar_url = null
     ensures: person.address = null
     ensures: person.updated_at = now
@@ -942,7 +952,7 @@ surface PersonDirectory {
             person.created_at
 
     provides:
-        CreatePerson(user, name, emails, phones, companies?, job_title?, linkedin_url?, address?)
+        CreatePerson(user, name, emails, phones, companies?, headline?, social_profiles?, address?)
         MergePersons(user, winner, loser)
 
     related:
@@ -961,8 +971,8 @@ surface PersonDetail {
         person.name
         person.emails
         person.phones
-        person.job_title
-        person.linkedin_url
+        person.headline
+        person.social_profiles
         person.avatar_url
         person.address
         person.companies
