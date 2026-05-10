@@ -44,6 +44,7 @@ external entity Company {
     -- Lookup entity from shared-entities.allium.
     label: String
     value: String
+    domain: String?
     created_by: User
 }
 
@@ -190,6 +191,7 @@ entity Person {
     retention_expires_at: Timestamp?
 
     created_by: ActorMetadata
+    updated_by: ActorMetadata
     created_at: Timestamp
     updated_at: Timestamp
 
@@ -401,6 +403,7 @@ rule CreatePerson {
         data_source: manual,
         processing_basis: legitimate_interest,
         created_by: ActorMetadata(source: manual, name: user.name),
+        updated_by: ActorMetadata(source: manual, name: user.name),
         created_at: now,
         updated_at: now
     )
@@ -413,7 +416,9 @@ rule AutoCreatePersonFromEmail {
     -- Suppressed if the handle appears in the user's Blocklist.
     when: AutoCreatePerson(user, email_handle, display_name?)
 
-    requires: not exists Blocklist{user_id: user.id, handle: email_handle}
+    requires: not exists Blocklist{user_id: user.id, handle: email_handle, type: email}
+    requires: not exists Blocklist{user_id: user.id, type: domain,
+        handle: extract_domain(email_handle)}
     requires: not exists Person{user_id: user.id, primary_email: email_handle}
 
     let domain = extract_domain(email_handle)
@@ -434,6 +439,7 @@ rule AutoCreatePersonFromEmail {
         processing_basis: legitimate_interest,
         retention_expires_at: now + config.auto_created_retention,
         created_by: ActorMetadata(source: email, name: null),
+        updated_by: ActorMetadata(source: email, name: null),
         created_at: now,
         updated_at: now
     )
@@ -447,8 +453,14 @@ rule UpdatePerson {
     requires: person.user_id = user.id
     requires: person.status = active
 
+    ensures: person.updated_by = ActorMetadata(source: manual, name: user.name)
     ensures: person.updated_at = now
     ensures: ContactUpdated(person: person)
+
+    @guidance
+        -- When the update originates from a sync connector (email/calendar),
+        -- the source should be email or calendar, not manual.
+        -- The caller determines the ActorMetadata based on context.
 }
 
 rule ArchivePerson {
@@ -873,10 +885,15 @@ invariant ExactlyOneNoteTarget {
 
 invariant BlocklistSuppressesAutoCreation {
     -- No active auto-created Person should exist for a blocklisted handle.
+    -- Matches both exact email handles (type = email) and domain patterns
+    -- (type = domain, where the email's domain matches the blocklist handle).
     for person in Persons:
         for bl in Blocklists:
             person.user_id = bl.user_id and person.is_auto_created
-                and person.primary_email = bl.handle
+                and (
+                    (bl.type = email and person.primary_email = bl.handle)
+                    or (bl.type = domain and extract_domain(person.primary_email) = bl.handle)
+                )
                 implies person.status = archived
 }
 
