@@ -1634,6 +1634,8 @@ Dynamische Dateipfade und Dateinamen:
 - Automatische Zuordnung zum CRM-Datensatz (Job → Unternehmen → Kontakt)
 - Dublettenprüfung: gleicher Kontakt bei verschiedenen Jobs erkennen
 - Anreicherung: LinkedIn-Profil, XING, Unternehmenswebsite verknüpfen
+- **Profil-URL Auto-Fill:** Im "Add Contact"-Modal eine Profil-URL (LinkedIn, XING, etc.) einfügen → Kontaktdaten automatisch ausfüllen (Name, Position, Unternehmen, Profilbild). Nutzt Web-Scraping/Meta-Parser oder Platform-APIs. UX: URL-Feld oben im Formular, "Auto-Fill" Button, progressive Enhancement (Felder manuell editierbar nach Auto-Fill).
+- **Multi-Social-Network auf Person:** Person-Entity um `socialProfiles: List<SocialProfile>` erweitern (value object: `{ platform: linkedin | xing | github | twitter | other, url: String }`). Aktuell nur `linkedinUrl: String?` — zu eng. PersonForm bekommt eine dynamische Social-Links-Liste (Platform-Dropdown + URL-Input, beliebig viele). Erlaubt auch späteres Matching: "Ist dieser LinkedIn-Kontakt derselbe wie der XING-Kontakt?"
 
 ### 5.8 Interview Tracking -- DONE (S3 CRM Core)
 **Implementiert (2026-05-10):**

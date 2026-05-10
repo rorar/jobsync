@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "@/i18n";
 import { useToast } from "@/components/ui/use-toast";
-import { getPerson, archivePerson, reactivatePerson, anonymizePerson } from "@/actions/person.actions";
+import { getPerson, updatePerson, archivePerson, reactivatePerson, anonymizePerson } from "@/actions/person.actions";
 import { getInterviews } from "@/actions/crmInterview.actions";
 import { getCrmTasks } from "@/actions/crmTask.actions";
 import { getCrmNotes } from "@/actions/crmNote.actions";
@@ -25,8 +25,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Archive, RefreshCw, ShieldOff, Mail, Phone, MapPin, Briefcase, ExternalLink } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ArrowLeft, Archive, RefreshCw, ShieldOff, Mail, Phone, MapPin, Briefcase, ExternalLink, Pencil } from "lucide-react";
 import { ActivityTimeline } from "@/components/crm/ActivityTimeline";
+import PersonForm from "@/components/crm/PersonForm";
 import type { TypedEmail, TypedPhone } from "@/models/person.model";
 
 interface PersonDetailClientProps {
@@ -51,6 +53,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
   const [tasks, setTasks] = useState<Record<string, unknown>[]>([]);
   const [notes, setNotes] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editOpen, setEditOpen] = useState(false);
 
   const loadPerson = useCallback(async () => {
     setLoading(true);
@@ -107,6 +110,17 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
     }
   };
 
+  const handleUpdate = async (input: Record<string, unknown>) => {
+    const result = await updatePerson(personId, input as unknown as Parameters<typeof updatePerson>[1]);
+    if (result.success) {
+      toast({ title: t("crm.contactUpdated") });
+      setEditOpen(false);
+      loadPerson();
+    } else {
+      toast({ title: t(result.message ?? ""), variant: "destructive" });
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4 p-4">
@@ -152,6 +166,12 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
           </div>
         </div>
         <div className="flex gap-2">
+          {status === "active" && (
+            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+              <Pencil className="mr-2 h-4 w-4" />
+              {t("crm.editContact")}
+            </Button>
+          )}
           {status === "active" && (
             <Button variant="outline" size="sm" onClick={handleArchive}>
               <Archive className="mr-2 h-4 w-4" />
@@ -351,6 +371,22 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
           <ActivityTimeline targetPersonId={personId} />
         </TabsContent>
       </Tabs>
+
+      {/* Edit Sheet */}
+      <Sheet open={editOpen} onOpenChange={setEditOpen}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>{t("crm.editContact")}</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            <PersonForm
+              person={person}
+              onSubmit={handleUpdate}
+              onCancel={() => setEditOpen(false)}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
