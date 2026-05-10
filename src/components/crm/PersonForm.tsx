@@ -100,7 +100,12 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
     );
 
   // --- Phone handlers ---
-  const addPhone = () => setPhones((prev) => [...prev, emptyPhone()]);
+  const addPhone = () =>
+    setPhones((prev) =>
+      prev.length === 0
+        ? [{ ...emptyPhone(), isPrimary: true }]
+        : [...prev, emptyPhone()],
+    );
 
   const removePhone = (idx: number) =>
     setPhones((prev) => {
