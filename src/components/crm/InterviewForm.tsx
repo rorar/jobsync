@@ -23,8 +23,13 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Check, ChevronsUpDown, Loader2, CalendarIcon, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDateShort } from "@/i18n";
+import { de, fr, es, enUS, type Locale } from "date-fns/locale";
+
+const DATE_FNS_LOCALES: Record<string, Locale> = { en: enUS, de, fr, es };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -128,7 +133,7 @@ export default function InterviewForm({
   defaultValues,
   hideJobField = false,
 }: InterviewFormProps) {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
 
   // --- Job selector state ---
   const [jobId, setJobId] = useState(defaultValues?.jobId ?? "");
@@ -148,8 +153,11 @@ export default function InterviewForm({
   const { date: initDate, time: initTime } = parseDateAndTime(
     defaultValues?.interviewDate ?? "",
   );
-  const [date, setDate] = useState(initDate);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
+    initDate ? new Date(initDate + "T12:00:00") : undefined,
+  );
   const [time, setTime] = useState(initTime);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   // --- Location state ---
   const parsedLoc = parseLocationMode(defaultValues?.location);
@@ -229,9 +237,12 @@ export default function InterviewForm({
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!jobId && !hideJobField) return;
-    if (!date || !time) return;
+    if (!selectedDate || !time) return;
 
-    const interviewDate = new Date(`${date}T${time}`).toISOString();
+    const yyyy = selectedDate.getFullYear();
+    const mm = String(selectedDate.getMonth() + 1).padStart(2, "0");
+    const dd = String(selectedDate.getDate()).padStart(2, "0");
+    const interviewDate = new Date(`${yyyy}-${mm}-${dd}T${time}`).toISOString();
     const location = buildLocationString(locationMode, videoLink, address, buildingRoom);
 
     onSubmit({
@@ -313,28 +324,53 @@ export default function InterviewForm({
       {/* ----------------------------------------------------------------- */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="if-date">
+          <Label>
             {t("crm.interviewDate")} <span className="text-destructive">*</span>
           </Label>
-          <Input
-            id="if-date"
-            type="date"
-            required
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
+          <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal",
+                  !selectedDate && "text-muted-foreground",
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {selectedDate
+                  ? formatDateShort(selectedDate, locale)
+                  : t("crm.interviewDate")}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                locale={DATE_FNS_LOCALES[locale] ?? enUS}
+                selected={selectedDate}
+                onSelect={(day) => {
+                  setSelectedDate(day);
+                  setDatePickerOpen(false);
+                }}
+                className="rounded-md border"
+              />
+            </PopoverContent>
+          </Popover>
         </div>
         <div className="space-y-2">
           <Label htmlFor="if-time">
             {t("crm.interviewTime")} <span className="text-destructive">*</span>
           </Label>
-          <Input
-            id="if-time"
-            type="time"
-            required
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-          />
+          <div className="relative">
+            <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="if-time"
+              type="time"
+              required
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="pl-9"
+            />
+          </div>
         </div>
       </div>
 
