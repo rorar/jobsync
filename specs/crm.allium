@@ -195,6 +195,7 @@ entity Person {
 
     -- Relationships
     interviews: Interview with person = this
+    job_contacts: JobContact with person = this
     task_targets: TaskTarget with target_person = this
     note_targets: NoteTarget with target_person = this
     timeline_activities: ActivityLog with target_person = this
@@ -296,6 +297,18 @@ entity NoteTarget {
     target_person: Person?
     target_company: Company?
     target_job: Job?
+}
+
+entity JobContact {
+    -- Links a Person to a Job as a contact/stakeholder.
+    -- N:M: one Job can have multiple contact persons (recruiter,
+    -- hiring manager, referral), and one Person can be the
+    -- contact for multiple Jobs.
+    -- Pattern: same join-entity pattern as TaskTarget/NoteTarget.
+    job: Job
+    person: Person
+    role: String?
+    created_at: Timestamp
 }
 
 entity ActivityLog {
@@ -484,6 +497,10 @@ rule AnonymizePerson {
         for tt in person.task_targets:
             not exists tt
 
+    ensures:
+        for jc in person.job_contacts:
+            not exists jc
+
     @guidance
         -- Implementation should also anonymize MessageParticipant
         -- and CalendarEventParticipant per crm-gdpr.allium.
@@ -510,6 +527,10 @@ rule MergePersons {
     ensures:
         for nt in loser.note_targets:
             nt.target_person = winner
+
+    ensures:
+        for jc in loser.job_contacts:
+            jc.person = winner
 
     ensures:
         for al in loser.timeline_activities:
@@ -946,6 +967,13 @@ surface PersonDetail {
             tt.task.status
             tt.task.due_date
 
+        for jc in person.job_contacts:
+            jc.job
+            jc.job.title
+            jc.job.company
+            jc.job.status
+            jc.role
+
     provides:
         UpdatePerson(user, person, changes)
             when person.status = active
@@ -957,10 +985,10 @@ surface PersonDetail {
             when person.status != anonymized
 
     related:
-        ActivityTimeline(person)
+        PersonTimeline(person)
 
     @guidance
-        -- Tabbed layout: Overview, Interviews, Tasks, Notes, Timeline.
+        -- Tabbed layout: Overview, Interviews, Tasks, Notes, Timeline, Related Jobs.
 }
 
 surface InterviewCalendar {
@@ -1027,7 +1055,8 @@ surface TaskBoard {
         -- Group by status. Highlight overdue tasks.
 }
 
-surface ActivityTimeline {
+surface PersonTimeline {
+    -- Activity feed scoped to a single Person.
     facing user: CrmUser
     context person: Person where user_id = user.id
 
@@ -1051,6 +1080,63 @@ surface ActivityTimeline {
     @guidance
         -- Vertical timeline with icons per activity_type.
         -- Filter by activity_type.
+}
+
+surface JobTimeline {
+    -- Activity feed scoped to a single Job.
+    -- Shows status changes, interviews, notes, tasks linked to this job.
+    facing user: CrmUser
+    context job: Job where user_id = user.id
+
+    let activities = ActivityLogs where target_job = job
+
+    exposes:
+        for activity in activities:
+            activity.activity_type
+            activity.happened_at
+            activity.actor_id
+            activity.target_person
+            activity.details
+            activity.linked_record_name
+
+    contracts:
+        fulfils TimelineProjection
+
+    @guarantee ChronologicalOrder
+        -- Activities are presented in reverse chronological order.
+
+    @guidance
+        -- Embeddable in JobDetail page.
+        -- Merges CRM activity with JobStatusHistory for a unified view.
+}
+
+surface CompanyTimeline {
+    -- Activity feed scoped to a single Company.
+    -- Aggregates activities across all Persons and Jobs at this company.
+    facing user: CrmUser
+    context company: Company
+
+    let activities = ActivityLogs where target_company = company
+
+    exposes:
+        for activity in activities:
+            activity.activity_type
+            activity.happened_at
+            activity.actor_id
+            activity.target_person
+            activity.target_job
+            activity.details
+            activity.linked_record_name
+
+    contracts:
+        fulfils TimelineProjection
+
+    @guarantee ChronologicalOrder
+        -- Activities are presented in reverse chronological order.
+
+    @guidance
+        -- Embeddable in a future CompanyDetail page.
+        -- Shows all CRM interactions with this company across all contacts and jobs.
 }
 
 surface BlocklistSettings {
