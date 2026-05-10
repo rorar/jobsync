@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ArrowLeft, Archive, RefreshCw, ShieldOff, Mail, Phone, MapPin, Briefcase, ExternalLink, Pencil } from "lucide-react";
+import { ArrowLeft, Archive, RefreshCw, ShieldOff, Mail, Phone, MapPin, Briefcase, ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { ActivityTimeline } from "@/components/crm/ActivityTimeline";
 import PersonForm from "@/components/crm/PersonForm";
 import type { TypedEmail, TypedPhone, CompanyAssociation, SocialProfile } from "@/models/person.model";
@@ -120,6 +120,16 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
       toast({ title: t("crm.contactUpdated") });
       setEditOpen(false);
       loadPerson();
+    } else {
+      toast({ title: t(result.message ?? ""), variant: "destructive" });
+    }
+  };
+
+  const handleUnlinkJob = async (jobContactId: string) => {
+    const result = await removeJobContact(jobContactId);
+    if (result.success) {
+      toast({ title: t("crm.jobUnlinked") });
+      loadRelated();
     } else {
       toast({ title: t(result.message ?? ""), variant: "destructive" });
     }
@@ -246,7 +256,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                   <div key={i} className="flex items-center gap-2 text-sm">
                     <ExternalLink className="h-4 w-4 text-muted-foreground" />
                     <a href={sp.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                      {sp.platform.charAt(0).toUpperCase() + sp.platform.slice(1)}
+                      {t(`crm.platform.${sp.platform}` as any)}
                     </a>
                   </div>
                 ))}
@@ -405,9 +415,20 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={() => router.push(`/dashboard/myjobs/${job?.id}`)}
+                          onClick={() => {
+                            const id = job?.id as string;
+                            if (id) router.push(`/dashboard/myjobs/${id}`);
+                          }}
                         >
                           <ExternalLink className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleUnlinkJob(jc.id as string)}
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </CardContent>

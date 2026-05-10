@@ -4,6 +4,14 @@ import "server-only";
 import prisma from "@/lib/db";
 import { getCurrentUser } from "@/utils/user.utils";
 import { ActionResult } from "@/models/actionResult";
+import { createEvent, DomainEventType } from "@/lib/events/event-types";
+import { eventBus } from "@/lib/events";
+
+function handleError(error: unknown): ActionResult<never> {
+  const message = error instanceof Error ? error.message : "Unknown error";
+  console.error("[jobContact.actions]", message);
+  return { success: false, message };
+}
 
 export async function addJobContact(
   jobId: string,
@@ -31,14 +39,14 @@ export async function addJobContact(
       },
     });
 
+    eventBus.publish(createEvent(DomainEventType.ContactUpdated, { personId, userId: user.id }));
+
     return { success: true, data: { id: contact.id } };
   } catch (error) {
     if ((error as any)?.code === "P2002") {
       return { success: false, message: "crm.errors.contactAlreadyLinked" };
     }
-    const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("[jobContact.actions]", message);
-    return { success: false, message };
+    return handleError(error);
   }
 }
 
@@ -56,11 +64,11 @@ export async function removeJobContact(
 
     await prisma.jobContact.delete({ where: { id: jobContactId } });
 
+    eventBus.publish(createEvent(DomainEventType.ContactUpdated, { personId: entry.personId, userId: user.id }));
+
     return { success: true, data: { id: jobContactId } };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("[jobContact.actions]", message);
-    return { success: false, message };
+    return handleError(error);
   }
 }
 
@@ -88,9 +96,7 @@ export async function getJobContactsForPerson(
 
     return { success: true, data: contacts };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("[jobContact.actions]", message);
-    return { success: false, message };
+    return handleError(error);
   }
 }
 
@@ -113,8 +119,6 @@ export async function getJobContactsForJob(
 
     return { success: true, data: contacts };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("[jobContact.actions]", message);
-    return { success: false, message };
+    return handleError(error);
   }
 }

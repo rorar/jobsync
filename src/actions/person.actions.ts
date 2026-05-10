@@ -93,6 +93,16 @@ export async function createPerson(input: PersonInput): Promise<ActionResult<{ i
       return { success: false, message: "crm.errors.multiplePrimaryCompanies" };
     }
 
+    const ALLOWED_URL_SCHEMES = /^https?:\/\//i;
+    if (input.socialProfiles?.some(sp => sp.url && !ALLOWED_URL_SCHEMES.test(sp.url))) {
+      return { success: false, message: "crm.errors.invalidSocialProfileUrl" };
+    }
+
+    const VALID_PLATFORMS = ["linkedin", "xing", "github", "twitter", "other"];
+    if (input.socialProfiles?.some(sp => !VALID_PLATFORMS.includes(sp.platform))) {
+      return { success: false, message: "crm.errors.invalidPlatform" };
+    }
+
     const person = await prisma.person.create({
       data: {
         userId: user.id,
@@ -240,7 +250,19 @@ export async function updatePerson(
       data.companies = JSON.stringify(input.companies);
     }
     if (input.headline !== undefined) data.headline = input.headline;
-    if (input.socialProfiles !== undefined) data.socialProfiles = JSON.stringify(input.socialProfiles);
+    if (input.socialProfiles !== undefined) {
+      const ALLOWED_URL_SCHEMES = /^https?:\/\//i;
+      if (input.socialProfiles.some(sp => sp.url && !ALLOWED_URL_SCHEMES.test(sp.url))) {
+        return { success: false, message: "crm.errors.invalidSocialProfileUrl" };
+      }
+
+      const VALID_PLATFORMS = ["linkedin", "xing", "github", "twitter", "other"];
+      if (input.socialProfiles.some(sp => !VALID_PLATFORMS.includes(sp.platform))) {
+        return { success: false, message: "crm.errors.invalidPlatform" };
+      }
+
+      data.socialProfiles = JSON.stringify(input.socialProfiles);
+    }
     // Kette A: updated_by tracking
     data.updatedBySource = "manual";
     data.updatedByName = user.name;
@@ -360,6 +382,8 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
           addressCity: null,
           addressPostalCode: null,
           addressCountry: null,
+          createdByName: null,
+          updatedByName: null,
         },
       }),
     ]);
@@ -412,6 +436,26 @@ export async function mergePersons(
     const winnerCompanies = parseCompanies(winner.companies);
     const loserCompanies = parseCompanies(loser.companies).map((c) => ({ ...c, isPrimary: false }));
     const mergedCompanies = [...winnerCompanies, ...loserCompanies];
+
+    // Dedup conflicting JobContacts: remove loser's entries where winner already has one
+    const conflictingJobIds = await prisma.jobContact.findMany({
+      where: { personId: loserId },
+      select: { jobId: true },
+    }).then(rows => rows.map(r => r.jobId));
+
+    const winnerJobIds = new Set(
+      await prisma.jobContact.findMany({
+        where: { personId: winnerId },
+        select: { jobId: true },
+      }).then(rows => rows.map(r => r.jobId))
+    );
+
+    const duplicateJobIds = conflictingJobIds.filter(id => winnerJobIds.has(id));
+    if (duplicateJobIds.length > 0) {
+      await prisma.jobContact.deleteMany({
+        where: { personId: loserId, jobId: { in: duplicateJobIds } },
+      });
+    }
 
     await prisma.$transaction([
       // Transfer interviews

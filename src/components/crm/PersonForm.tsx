@@ -368,7 +368,7 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
               <SelectContent>
                 {(["linkedin", "xing", "github", "twitter", "other"] as SocialPlatform[]).map((p) => (
                   <SelectItem key={p} value={p}>
-                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                    {t(`crm.platform.${p}` as any)}
                   </SelectItem>
                 ))}
               </SelectContent>
