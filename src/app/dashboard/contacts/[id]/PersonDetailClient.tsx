@@ -134,7 +134,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
   const company = person.company as Record<string, unknown> | null;
 
   return (
-    <div className="space-y-6 p-4">
+    <div className="col-span-3 space-y-6 p-4">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
