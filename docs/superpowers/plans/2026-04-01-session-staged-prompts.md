@@ -288,6 +288,7 @@ Fixe ALLE Findings — Critical, High, Medium UND Low. Keine Ausnahmen, kein "ac
 - Verwende orchestrated team execution, nicht plan-approval Zyklen
 
 ### Context-Exhaustion
+Du läufst im Claude Code MAX Abo mit 1M Token Window.
 Wenn du merkst dass der Context knapp wird:
 1. Committe sofort alle fertigen Änderungen
 2. Aktualisiere docs/BUGS.md mit verbleibenden Items als offene Issues
@@ -323,49 +324,47 @@ Agenten, Skills und Plugins dürfen jederzeit online suchen (WebSearch, WebFetch
 
 ### Task 3: Session S2 Prompt — User Journeys & UX Polish
 
+**Status:** UPDATED 2026-05-10. Expanded scope from original 8 features / 14 components to 14 features / 30+ components reflecting all work since Sprint A (2026-03-29).
+
 **Files:**
 - Output: Copy-paste into a new Claude Code session in `/home/pascal/projekte/jobsync/`
 
 - [ ] **Step 1: Copy the prompt below into a new Claude Code session**
 
 ````markdown
-Lies CLAUDE.md und die Memories (~/.claude/projects/-home-pascal-projekte-jobsync/memory/MEMORY.md).
-Lies danach docs/ROADMAP.md und den Masterplan: ~/.claude/plans/open-architecture-masterplan.md
-Lies die Design-Spec: docs/superpowers/specs/2026-04-01-session-staged-sprint-verification-design.md
-Lies docs/BUGS.md
+Hey Claude, sei mein Full-Stack Senior Software Engineer und unterstütze mich bei der Planung, Architektur und Implementierung von neuen Features, Bugfixes und Verbesserungen für JobSync, einer SaaS-Plattform für die Automatisierung von Job-Discovery und Bewerbungsprozessen. Die Plattform ist in TypeScript mit Shadcn/Tailwind, Next.js und Prisma gebaut.
 
-## Quick-Verify (S1b Handoff prüfen)
+[ ] @projekte/jobsync Lies zuerst CLAUDE.md, reminders und die Memories (~/.claude/projects/-home-pascal-projekte-jobsync/memory/MEMORY.md) ein.
+[ ] Bei Entscheidungen wählst du nicht den einfacheren Weg; Du wählst den Weg des Nachhaltigkeitsprinzip: Was ist die nachhaltigste, fundierteste und basierend auf DDD und auf der ROADMAP die beste Lösung? Macht es bei der Entscheidung Sinn /allium zu befragen?
+[ ] Beachte **Kritische Regeln**
+
+## Quick-Verify
 
 Führe aus:
 ```bash
-git log --oneline -10
+git log --oneline -15
 source scripts/env.sh && bun run build
-bash scripts/test.sh --no-coverage
-E2E_BASELINE=$(npx playwright test --list 2>/dev/null | grep -c "test")
-echo "E2E baseline: $E2E_BASELINE"
+bash scripts/test.sh --workers=1
 ```
 
-Prüfe:
-- Build grün? Tests grün?
-- `docs/BUGS.md` — offene Issues von S1b?
-- E2E Baseline notiert?
-
-Wenn rot: Erst fixen (max 15 Min), dann weiter.
+Prüfe: Build grün? Tests grün (220+ Suites, 4215+ Tests)?
 
 ## Kontext
 
-Session S1a hat alle 19 Allium Specs aligned und 3 Performance-Fixes implementiert. Session S1b hat einen 5-Dimensionen Comprehensive Review durchgeführt und alle Findings gefixt (Architecture, Security, Performance, Testing, Code Quality). Der Code ist jetzt foundation-solid.
+**Stand Mai 2026:** Die Codebase hat 5 Sprint-Serien (540+ Findings gefixt), PERF-2 (async PBKDF2), PERF-3 (DispatchContext), 27 Allium Specs, 4 Notification Channels, Data Enrichment Connector, Public API v1, JobDeck, Company Blacklist, EuresLanguageCombobox und vieles mehr durchlaufen. 220 Test Suites, 4215 Tests, Build clean.
 
-Dies ist **Session S2** — die dritte von 5 Sessions. Ziel: Systematische UX/UI-Qualitätsprüfung über alle Sprint A+B+C Features. S1b hat Arch/Sec/Perf/Test/Code geprüft — diese Session fokussiert AUSSCHLIESSLICH auf UX/UI.
+Dies ist **Session S2** — systematische UX/UI-Qualitätsprüfung über ALLE Features die seit Sprint A (2026-03-29) gebaut oder signifikant geändert wurden. Fokus AUSSCHLIESSLICH auf UX/UI — Architecture/Security/Performance wurden in S1b und nachfolgenden Sprints geprüft.
+
+**Bekannte design-gated Items (NICHT fixen — brauchen User-Entscheidung):**
+- 6 input-adjacent settings buttons at 40×40 (h-10 Input height alignment)
+- react-day-picker --cell-size 2rem → 44px (widens popover)
+- TasksTable density toggle (neue UX-Feature, braucht Design)
+- Dark-mode MatchScoreRing contrast audit (braucht full dark-mode WCAG sweep)
+Siehe `project_deferred_sprints_for_future_sessions.md` für Details.
 
 ## Dein Auftrag
 
-### Branch erstellen
-```bash
-git checkout -b session/s2-ux-journeys
-```
-
-### Schritt 1: User Journeys für 8 Features
+### Schritt 1: User Journeys für 14 Features
 
 Erstelle für JEDES Feature User Journeys mit Edge Cases. Dokumentiere in `docs/user-journey-audit.md`.
 
@@ -383,28 +382,51 @@ Erstelle für JEDES Feature User Journeys mit Edge Cases. Dokumentiere in `docs/
 4. Test prüfen — ist der Edge Case getestet (Unit oder E2E)?
 5. Fehlende Implementierung + Tests SOFORT fixen
 
-**Feature-Liste:**
+**Feature-Liste (aktualisiert Mai 2026):**
 
 | # | Feature | Tiefe | Schlüssel-Files |
 |---|---------|-------|-----------------|
-| 1 | SchedulerStatusBar (B1) | Medium | `SchedulerStatusBar.tsx`, `use-scheduler-status.ts` |
-| 2 | RunProgressPanel (B3) | Hoch | `RunProgressPanel.tsx`, SSE Route, `run-coordinator.ts` |
-| 3 | ConflictWarning (B2) | Niedrig | `[id]/page.tsx` |
-| 4 | Company Blacklist (C3) | Medium | `companyBlacklist.actions.ts`, `CompanyBlacklistSettings.tsx`, `runner.ts` |
-| 5 | Response Caching (C4) | Niedrig | `cache.ts`, ESCO/EURES Proxy Routes |
-| 6 | JobDeck (C1) | Hoch | `DeckCard.tsx`, `DeckView.tsx`, `useDeckStack.ts` |
-| 7 | Public API (C2) | Hoch | `src/lib/api/*`, `src/app/api/v1/*` |
-| 8 | API Key Management | Medium | `publicApiKey.actions.ts`, `PublicApiKeySettings.tsx` |
+| 1 | JobDeck Swipe UI | Hoch | `DeckCard.tsx`, `DeckView.tsx`, `useDeckStack.ts`, `StagedVacancyDetailSheet.tsx` |
+| 2 | SuperLike Celebration | Medium | `SuperLikeCelebration.tsx`, `SuperLikeCelebrationHost.tsx`, `useSuperLikeCelebrations.ts` |
+| 3 | Staging Container (List + Deck + Bulk) | Hoch | `StagingContainer.tsx`, `BulkActionBar.tsx`, `StagingNewItemsBanner.tsx` |
+| 4 | Kanban Board + Status Workflow | Hoch | `KanbanBoard.tsx`, `KanbanCard.tsx`, `StatusTransitionDialog.tsx`, `useKanbanState.ts` |
+| 5 | SchedulerStatusBar + RunProgress | Medium | `SchedulerStatusBar.tsx`, `RunProgressPanel.tsx`, `use-scheduler-status.ts` |
+| 6 | Automation Wizard (Manifest-Driven) | Hoch | `AutomationWizard.tsx`, `DynamicParamsForm.tsx`, `widget-registry.tsx` |
+| 7 | EURES Comboboxes (Language + Location + Occupation) | Hoch | `EuresLanguageCombobox.tsx`, `EuresLocationCombobox.tsx`, `EscoOccupationCombobox.tsx` |
+| 8 | Company Blacklist | Medium | `CompanyBlacklistSettings.tsx`, `companyBlacklist.actions.ts` |
+| 9 | Public API + API Key Management | Hoch | `PublicApiKeySettings.tsx`, `src/lib/api/*`, `src/app/api/v1/*` |
+| 10 | Notification Settings (4 Channels) | Hoch | `WebhookSettings.tsx`, `SmtpSettings.tsx`, `PushSettings.tsx`, `NotificationSettings.tsx` |
+| 11 | NotificationBell + Dropdown | Medium | `NotificationBell.tsx`, `NotificationDropdown.tsx` |
+| 12 | Data Enrichment + CompanyLogo | Medium | `EnrichmentModuleSettings.tsx`, `company-logo.tsx`, `LogoAssetSettings.tsx` |
+| 13 | My Jobs (Table + Detail + Notes/Tags) | Hoch | `JobsContainer.tsx`, `MyJobsTable.tsx`, `JobDetails.tsx`, `AddJob.tsx` |
+| 14 | Module Health + API Status | Medium | `ApiStatusOverview.tsx`, `ModuleBusyBanner.tsx` |
 
 ### Schritt 2: UX 10-Punkte-Checkliste pro Komponente
 
-Prüfe JEDE Komponente die in Sprint A+B+C neu erstellt oder signifikant geändert wurde:
+Prüfe JEDE Komponente aus der Liste unten:
 
-**Komponenten-Liste:**
-- SchedulerStatusBar, RunProgressPanel, ConflictWarningDialog
-- DeckCard, DeckView, ViewModeToggle, StagingContainer
-- PublicApiKeySettings, CompanyBlacklistSettings
-- RunStatusBadge, AutomationList, ModuleBusyBanner, RunHistoryList
+**Komponenten-Liste (30+ Komponenten, gruppiert):**
+
+**Staging/Deck (15):**
+DeckCard, DeckView, StagingContainer, ViewModeToggle, StagedVacancyCard, StagedVacancyDetailSheet, StagedVacancyDetailContent, SuperLikeCelebration, SuperLikeCelebrationHost, MatchScoreRing, PromotionDialog, BlockConfirmationDialog, BulkActionBar, StagingLayoutToggle, StagingNewItemsBanner
+
+**Scheduler/Automations (8):**
+SchedulerStatusBar, RunProgressPanel, AutomationList, AutomationWizard, ModuleBusyBanner, RunStatusBadge, RunHistoryList, ConflictWarningDialog
+
+**EURES/Comboboxes (3):**
+EuresLanguageCombobox, EuresLocationCombobox, EscoOccupationCombobox
+
+**Settings (8):**
+WebhookSettings, SmtpSettings, PushSettings, NotificationSettings, PublicApiKeySettings, CompanyBlacklistSettings, EnrichmentModuleSettings, LogoAssetSettings
+
+**Jobs/Kanban (6):**
+JobsContainer, MyJobsTable, KanbanBoard, KanbanCard, StatusTransitionDialog, JobDetails
+
+**Notifications (2):**
+NotificationBell, NotificationDropdown
+
+**Shared UI (4):**
+CompanyLogo, ChipList, ToolbarRadioGroup, BaseCombobox
 
 **10-Punkte-Checkliste pro Komponente:**
 
@@ -425,8 +447,9 @@ Fehlende Implementierungen SOFORT fixen. Committe nach jedem Fix-Block.
 
 ### Schritt 3: Spezialisierte UI-Reviews
 
-- Starte `/ui-design:design-review` für alle Sprint B+C UI-Komponenten
+- Starte `/ui-design:design-review` für alle Komponenten aus der Liste
 - Starte `/ui-design:accessibility-audit` für WCAG-Compliance
+- Starte `/ui-design:responsive-design` für Mobile-Audit (375px+)
 - Fixe ALLE Findings
 
 ### Schritt 4: Output dokumentieren
@@ -434,7 +457,7 @@ Fehlende Implementierungen SOFORT fixen. Committe nach jedem Fix-Block.
 Schreibe alles in `docs/user-journey-audit.md` mit dieser Struktur:
 
 ```markdown
-# User Journey & UX Audit — Sprint A+B+C
+# User Journey & UX Audit — Full Codebase (Sprint A through PERF-3)
 
 ## Feature: [Feature Name]
 ### Happy Path
@@ -455,10 +478,18 @@ Schreibe alles in `docs/user-journey-audit.md` mit dieser Struktur:
 ## Übergreifende Regeln
 
 ### Git
-- Branch: `session/s2-ux-journeys`
-- Committe häufig, konventionelle Commits mit `Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>`
-- Build + Tests VOR jedem Commit: `source scripts/env.sh && bun run build && bash scripts/test.sh --no-coverage`
-- **NIEMALS PRs gegen upstream Gsync/jobsync erstellen.**
+- Committe häufig mit logischer Gruppierung
+- Konventionelle Commits mit `Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>`
+- Build + Tests VOR jedem Commit: `source scripts/env.sh && bun run build && bash scripts/test.sh --workers=1`
+- **NIEMALS PRs gegen upstream Gsync/jobsync erstellen.** Nur in eigene Branches/main mergen.
+- **NIEMALS tests+builds parallel** — VM Resource Limits, single worker
+
+### Implementierung
+- Verwende IMMER `/full-stack-orchestration:full-stack-feature` für Fixes die mehr als 3 Dateien betreffen
+- ui-design Agent VOR UI-Änderungen konsultieren
+- `import "server-only"` auf allen Server-Dateien
+- Alle Prisma-Queries mit userId (ADR-015 IDOR)
+- encrypt()/decrypt() sind async — immer awaiten
 
 ### i18n-Pflicht
 Wenn du UI-Strings hinzufügst oder änderst, aktualisiere ALLE 4 Locales (EN, DE, FR, ES). Verwende `@/i18n` bzw. `@/i18n/server`.
@@ -468,41 +499,35 @@ Wenn du Code änderst für den ein Allium Spec existiert (prüfe `specs/`), füh
 
 ### Findings-Regel: ZERO TOLERANCE
 Fixe ALLE Findings — auch kosmetische. UX-Qualität ist nicht optional.
-
-### Team-Orchestrierung
-- Verwende `/agent-teams:team-spawn` für parallele Arbeit wo sinnvoll
-- `/agent-teams:team-review` für UI/UX Multi-Dimensionen-Reviews
-- Nicht mehr als 2-3 Agents auf denselben Files
+**Ausnahme:** Die 4 design-gated Items (siehe Kontext oben) — diese nur dokumentieren, nicht fixen.
 
 ### Context-Exhaustion
 Wenn du merkst dass der Context knapp wird:
 1. Committe sofort alle fertigen Änderungen
-2. Aktualisiere docs/BUGS.md mit verbleibenden Items als offene Issues
-3. Schreibe eine Handoff-Notiz in die letzte Commit-Message
+2. Aktualisiere docs/BUGS.md mit verbleibenden Items
+3. Schreibe eine Handoff-Notiz in .remember/remember.md
 4. Starte KEINE neuen Fix-Zyklen — schließe sauber ab
 
 ### Autonomie
 Arbeite VOLLSTÄNDIG autonom. Keine Rückfragen an den User. Maximale kognitive Anstrengung.
 
-### Online-Recherche
-Agenten, Skills und Plugins dürfen jederzeit online suchen (WebSearch, WebFetch, Context7, DeepWiki etc.) um Daten anzureichern — z.B. Library-Docs, API-Referenzen, Best Practices, aktuelle Framework-Versionen.
-
 ## Exit-Checkliste (MUSS vor Merge erfüllt sein)
 
-- [ ] User Journeys dokumentiert in `docs/user-journey-audit.md` für alle 8 Features
-- [ ] UX 10-Punkte-Checkliste bestanden für alle ~14 Komponenten
+- [ ] User Journeys dokumentiert in `docs/user-journey-audit.md` für alle 14 Features
+- [ ] UX 10-Punkte-Checkliste bestanden für alle ~46 Komponenten
 - [ ] Alle fehlenden Edge-Case-Implementierungen gefixt
 - [ ] Alle fehlenden Tests hinzugefügt
 - [ ] `/ui-design:design-review` durchgeführt, Findings gefixt
 - [ ] `/ui-design:accessibility-audit` durchgeführt, Findings gefixt
+- [ ] `/ui-design:responsive-design` durchgeführt, Findings gefixt
 - [ ] Blind Spot Check: "Woran haben wir bei UX nicht gedacht?"
 - [ ] i18n: Keine hardcoded Strings, alle 4 Locales komplett
+- [ ] Design-gated Items dokumentiert (nicht gefixt, auf User-Entscheidung wartend)
 - [ ] docs/BUGS.md aktualisiert
-- [ ] CHANGELOG.md Einträge: `## [YYYY-MM-DD] Session S2 — User Journeys & UX Polish`
-- [ ] E2E Count erhöht von Baseline ($E2E_BASELINE → neuer Count)
-- [ ] Build grün: `source scripts/env.sh && bun run build` → Exit Code 0
-- [ ] Tests grün: `bash scripts/test.sh --no-coverage` → Exit Code 0
-- [ ] Branch `session/s2-ux-journeys` nach main mergen
+- [ ] CLAUDE.md aktualisiert falls UX-relevante Patterns dokumentiert werden müssen
+- [ ] CHANGELOG.md Einträge
+- [ ] Build grün + Tests grün
+- [ ] Honesty Gate VOR Push durchgeführt
 ````
 
 ---
@@ -653,6 +678,7 @@ Committe nach jedem logischen Schritt. Build + Tests VOR jedem Commit.
 6. Prüfe docs/documentation-agents.md — starte relevante Doku-Agents
 
 ## Übergreifende Regeln
+- Hard Constraints: Beachte **Kritische Regeln**
 
 ### Git
 - Committe häufig mit logischer Gruppierung
