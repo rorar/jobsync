@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, FileText, Plus, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/i18n";
 import { getAutomationsList } from "@/actions/automation.actions";
@@ -112,9 +113,12 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
           {resumes.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <p>{t("automations.needResume")}</p>
-              <p className="text-sm mt-2">
-                {t("automations.goToProfile")}
-              </p>
+              <Button variant="outline" size="sm" asChild className="mt-2">
+                <Link href="/dashboard/profile">
+                  <FileText className="h-4 w-4 mr-2" />
+                  {t("automations.goToProfile")}
+                </Link>
+              </Button>
             </div>
           ) : loading ? (
             <Loading />
