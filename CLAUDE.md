@@ -559,7 +559,9 @@ Any new notification-creating code path MUST populate the structured fields.
 
 **Domain types:** `src/models/person.model.ts` — TypedEmail, TypedPhone, Address, FullName value objects + state machine validators + ExactlyOneTarget invariant validator + CRM_CONFIG constants.
 
-**JSON Value Objects:** Person stores `emails` and `phones` as JSON strings (SQLite TEXT columns). Use `parseEmails()`/`parsePhones()` from `person.model.ts` to deserialize.
+**JSON Value Objects:** Person stores `emails`, `phones`, `companies` (CompanyAssociation[]), and `socialProfiles` (SocialProfile[]) as JSON strings (SQLite TEXT columns). Use `parseEmails()`/`parsePhones()`/`parseCompanies()`/`parseSocialProfiles()` from `person.model.ts` to deserialize.
+
+**Person↔Job Contact Relationship:** `JobContact` is a join entity (Prisma model, NOT a value object) linking Person to Job with an optional `role` field. N:M: one Job can have multiple contact persons, one Person can be contact for multiple Jobs. Cascade rules: AnonymizePerson deletes, MergePersons transfers.
 
 **Polymorphic Targeting (Twenty CRM Pattern):** `CrmTaskTarget` and `CrmNoteTarget` use nullable FK columns: exactly one of `targetPersonId`/`targetCompanyId`/`targetJobId` must be set. Enforced at app level by `validateExactlyOneTarget()`.
 
@@ -572,7 +574,9 @@ Any new notification-creating code path MUST populate the structured fields.
 
 **CRM Activity Logger:** `src/lib/events/consumers/crm-activity-logger.ts` — subscribes to JobStatusChanged, ContactCreated, ContactUpdated and projects into CrmActivityLog (immutable, append-only read model per TimelineProjection contract).
 
-**GDPR on Person:** `dataSource` (manual|auto_created|imported), `processingBasis` (legitimate_interest|consent|contract), `retentionExpiresAt`. AnonymizePerson cascades to NoteTargets, TaskTargets, ActivityLog references.
+**GDPR on Person:** `dataSource` (manual|auto_created|imported), `processingBasis` (legitimate_interest|consent|contract), `retentionExpiresAt`. AnonymizePerson cascades to NoteTargets, TaskTargets, JobContacts, ActivityLog references, and clears `createdByName`/`updatedByName` (actor PII).
+
+**Person Fields (Kette B):** `headline` (free-form professional identity, replaces old `jobTitle`), `socialProfiles` (List of `{platform, url}`, replaces old `linkedinUrl`). Platforms: linkedin, xing, github, twitter, other. URLs validated server-side (https/http only, ADR-019 runtime membership check on platform enum).
 
 **Allium Spec:** `specs/crm.allium` — authoritative specification. `specs/crm-gdpr.allium` for GDPR rules.
 
@@ -604,6 +608,9 @@ Use consistent domain terms across code, UI, specs, and documentation:
 | `CrmNote` | Free-text note with polymorphic targets | "Note" (existing Job-only note) |
 | `CrmActivityLog` | Immutable timeline entry (materialized read model) | "Activity" (existing activity-tracking model) |
 | `CrmBlocklist` | Email/phone/domain suppression for auto-creation | "CompanyBlacklist" (existing company-level filter) |
+| `JobContact` | N:M join linking Person to Job with role | Not a value object — has own Prisma model |
+| `CompanyAssociation` | Value object linking Person to Company with role + temporal bounds | Stored as JSON on Person |
+| `SocialProfile` | Value object with platform + URL | Stored as JSON on Person |
 
 ### Bounded Contexts
 
@@ -640,7 +647,7 @@ When modifying data, respect aggregate boundaries:
 - **Job Aggregate:** Job + Notes + Tags + Status (modify together via `job.actions.ts`)
 - **Automation Aggregate:** Automation + Runs + Discovered Jobs (via `automation.actions.ts`)
 - **Profile Aggregate:** Profile + Resumes + Sections + Contact Info (via `profile.actions.ts`)
-- **Person Aggregate (CRM):** Person + CrmInterviews + CrmTaskTargets + CrmNoteTargets (via `person.actions.ts`, `crmInterview.actions.ts`, `crmTask.actions.ts`, `crmNote.actions.ts`)
+- **Person Aggregate (CRM):** Person + CrmInterviews + JobContacts + CrmTaskTargets + CrmNoteTargets (via `person.actions.ts`, `crmInterview.actions.ts`, `jobContact.actions.ts`, `crmTask.actions.ts`, `crmNote.actions.ts`)
 - Never modify an aggregate's children from outside its action file
 
 ### Repository Pattern
