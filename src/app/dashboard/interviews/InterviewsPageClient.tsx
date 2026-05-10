@@ -398,7 +398,7 @@ export default function InterviewsPageClient() {
               {t("crm.scheduleInterview")}
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl w-fit min-w-[min(90vw,32rem)]">
             <DialogHeader>
               <DialogTitle>{t("crm.scheduleInterview")}</DialogTitle>
             </DialogHeader>
@@ -459,7 +459,7 @@ export default function InterviewsPageClient() {
 
       {/* Reschedule Dialog */}
       <Dialog open={rescheduleDialogOpen} onOpenChange={setRescheduleDialogOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl w-fit min-w-[min(90vw,32rem)]">
           <DialogHeader>
             <DialogTitle>{t("crm.rescheduleInterview")}</DialogTitle>
           </DialogHeader>
