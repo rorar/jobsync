@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/sheet";
 import { Users, Plus, Search, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import PersonForm from "@/components/crm/PersonForm";
-import type { PersonStatus, DataSource, TypedEmail } from "@/models/person.model";
+import type { PersonStatus, DataSource, TypedEmail, CompanyAssociation } from "@/models/person.model";
 
 const PAGE_SIZE = 25;
 
@@ -156,8 +156,10 @@ export default function ContactsPageClient() {
   };
 
   const getCompanyLabel = (person: Record<string, unknown>): string => {
-    const company = person.company as Record<string, unknown> | null;
-    return (company?.label as string) ?? "";
+    const companies = person.companies as CompanyAssociation[] | undefined;
+    if (!companies || companies.length === 0) return "";
+    const primary = companies.find((c) => c.isPrimary) ?? companies[0];
+    return primary.companyLabel;
   };
 
   // Error state

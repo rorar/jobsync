@@ -17,6 +17,7 @@ import { Plus, Trash2, Loader2 } from "lucide-react";
 import type {
   TypedEmail,
   TypedPhone,
+  CompanyAssociation,
   ContactChannelType,
 } from "@/models/person.model";
 
@@ -48,9 +49,11 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
   const [lastName, setLastName] = useState((person?.lastName as string) ?? "");
   const [jobTitle, setJobTitle] = useState((person?.jobTitle as string) ?? "");
   const [linkedinUrl, setLinkedinUrl] = useState((person?.linkedinUrl as string) ?? "");
-  const [companyName, setCompanyName] = useState(
-    ((person?.company as Record<string, unknown>)?.label as string) ?? "",
-  );
+  const [companies, setCompanies] = useState<CompanyAssociation[]>(() => {
+    const parsed = person?.companies;
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed as CompanyAssociation[];
+    return [];
+  });
   const [addressStreet, setAddressStreet] = useState((person?.addressStreet as string) ?? "");
   const [addressCity, setAddressCity] = useState((person?.addressCity as string) ?? "");
   const [addressPostalCode, setAddressPostalCode] = useState(
@@ -127,23 +130,60 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
       }),
     );
 
+  // --- Company handlers ---
+  const emptyCompany = (): CompanyAssociation => ({
+    companyId: "",
+    companyLabel: "",
+    role: null,
+    isPrimary: false,
+    startDate: null,
+    endDate: null,
+  });
+
+  const addCompany = () =>
+    setCompanies((prev) =>
+      prev.length === 0
+        ? [{ ...emptyCompany(), isPrimary: true }]
+        : [...prev, emptyCompany()],
+    );
+
+  const removeCompany = (idx: number) =>
+    setCompanies((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      if (next.length > 0 && !next.some((c) => c.isPrimary)) {
+        next[0] = { ...next[0], isPrimary: true };
+      }
+      return next;
+    });
+
+  const updateCompany = (idx: number, field: keyof CompanyAssociation, value: unknown) =>
+    setCompanies((prev) =>
+      prev.map((c, i) => {
+        if (i !== idx) {
+          if (field === "isPrimary" && value === true) return { ...c, isPrimary: false };
+          return c;
+        }
+        return { ...c, [field]: value };
+      }),
+    );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
 
-    // Filter out empty emails/phones
+    // Filter out empty entries
     const validEmails = emails.filter((em) => em.email.trim() !== "");
     const validPhones = phones.filter((ph) => ph.number.trim() !== "");
+    const validCompanies = companies.filter((c) => c.companyLabel.trim() !== "");
 
     await onSubmit({
       firstName: firstName || null,
       lastName: lastName || null,
       emails: validEmails,
       phones: validPhones,
+      companies: validCompanies,
       jobTitle: jobTitle || null,
       linkedinUrl: linkedinUrl || null,
-      // companyId linking comes later; for now just pass null
-      companyId: (person?.companyId as string) ?? null,
       addressStreet: addressStreet || null,
       addressCity: addressCity || null,
       addressPostalCode: addressPostalCode || null,
@@ -306,16 +346,47 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
         />
       </div>
 
-      {/* Company (text input for now) */}
-      <div className="space-y-2">
-        <Label htmlFor="company">{t("crm.company")}</Label>
-        <Input
-          id="company"
-          value={companyName}
-          onChange={(e) => setCompanyName(e.target.value)}
-          disabled={isEdit}
-          placeholder={isEdit ? "" : t("crm.company")}
-        />
+      {/* Companies (multi-association) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label>{t("crm.company")}</Label>
+          <Button type="button" variant="ghost" size="sm" onClick={addCompany}>
+            <Plus className="mr-1 h-3 w-3" />
+            {t("crm.company")}
+          </Button>
+        </div>
+        {companies.map((c, idx) => (
+          <div key={idx} className="space-y-2 rounded-md border p-3">
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder={t("crm.company")}
+                value={c.companyLabel}
+                onChange={(e) => updateCompany(idx, "companyLabel", e.target.value)}
+                className="flex-1"
+              />
+              <div className="flex items-center gap-1" title={t("crm.primary")}>
+                <Switch
+                  checked={c.isPrimary}
+                  onCheckedChange={(checked) => updateCompany(idx, "isPrimary", checked)}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => removeCompany(idx)}
+              >
+                <Trash2 className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </div>
+            <Input
+              placeholder={t("crm.jobTitle")}
+              value={c.role ?? ""}
+              onChange={(e) => updateCompany(idx, "role", e.target.value || null)}
+              className="text-sm"
+            />
+          </div>
+        ))}
       </div>
 
       {/* Address */}

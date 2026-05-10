@@ -290,7 +290,6 @@ model Company {
   workExperiences WorkExperience[]
   enrichmentResults EnrichmentResult[]
   // CRM back-relations
-  persons          Person[]
   crmTaskTargets   CrmTaskTarget[]  @relation("CrmTaskTargetCompany")
   crmNoteTargets   CrmNoteTarget[]  @relation("CrmNoteTargetCompany")
 
@@ -924,9 +923,9 @@ model Person {
   addressPostalCode   String?
   addressCountry      String?
 
-  // Company relation (optional — Person can exist without Company)
-  companyId           String?
-  company             Company?  @relation(fields: [companyId], references: [id])
+  // Company associations (N:M via JSON value objects — specs/crm.allium CompanyAssociation)
+  // Shape: [{ companyId, companyLabel, role, isPrimary, startDate, endDate }]
+  companies           String    @default("[]")
 
   // Status state machine: active -> archived -> (active), active -> anonymized (terminal)
   status              String    @default("active")
@@ -951,7 +950,6 @@ model Person {
 
   @@index([userId])
   @@index([userId, status])
-  @@index([userId, companyId])
 }
 
 /// A scheduled or completed interview linked to a Job and optionally to a Person.

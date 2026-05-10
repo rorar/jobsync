@@ -29,7 +29,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ArrowLeft, Archive, RefreshCw, ShieldOff, Mail, Phone, MapPin, Briefcase, ExternalLink, Pencil } from "lucide-react";
 import { ActivityTimeline } from "@/components/crm/ActivityTimeline";
 import PersonForm from "@/components/crm/PersonForm";
-import type { TypedEmail, TypedPhone } from "@/models/person.model";
+import type { TypedEmail, TypedPhone, CompanyAssociation } from "@/models/person.model";
 
 interface PersonDetailClientProps {
   personId: string;
@@ -145,7 +145,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
   const emails = (person.emails as TypedEmail[]) ?? [];
   const phones = (person.phones as TypedPhone[]) ?? [];
   const status = person.status as string;
-  const company = person.company as Record<string, unknown> | null;
+  const companies = (person.companies as CompanyAssociation[]) ?? [];
 
   return (
     <div className="col-span-3 space-y-6 p-4">
@@ -229,12 +229,14 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                     <span>{String(person.jobTitle)}</span>
                   </div>
                 )}
-                {company && (
-                  <div className="flex items-center gap-2 text-sm">
+                {companies.map((c, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
                     <Briefcase className="h-4 w-4 text-muted-foreground" />
-                    <span>{String(company.label)}</span>
+                    <span>{c.companyLabel}</span>
+                    {c.role && <span className="text-muted-foreground">— {c.role}</span>}
+                    {c.isPrimary && <Badge className="text-xs">{t("crm.primary")}</Badge>}
                   </div>
-                )}
+                ))}
                 {String(person.linkedinUrl ?? "") && (
                   <div className="flex items-center gap-2 text-sm">
                     <ExternalLink className="h-4 w-4 text-muted-foreground" />

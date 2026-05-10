@@ -9,14 +9,17 @@ import { ActionResult } from "@/models/actionResult";
 import {
   type TypedEmail,
   type TypedPhone,
+  type CompanyAssociation,
   type PersonStatus,
   type DataSource,
   type ProcessingBasis,
   type ActorSource,
   isValidPersonTransition,
   validateExactlyOneTarget,
+  validateAtMostOnePrimaryCompany,
   parseEmails,
   parsePhones,
+  parseCompanies,
   CRM_CONFIG,
 } from "@/models/person.model";
 
@@ -29,7 +32,7 @@ interface PersonInput {
   lastName?: string | null;
   emails: TypedEmail[];
   phones?: TypedPhone[];
-  companyId?: string | null;
+  companies?: CompanyAssociation[];
   jobTitle?: string | null;
   linkedinUrl?: string | null;
   addressStreet?: string | null;
@@ -43,7 +46,7 @@ interface PersonUpdateInput {
   lastName?: string | null;
   emails?: TypedEmail[];
   phones?: TypedPhone[];
-  companyId?: string | null;
+  companies?: CompanyAssociation[];
   jobTitle?: string | null;
   linkedinUrl?: string | null;
   avatarUrl?: string | null;
@@ -83,6 +86,11 @@ export async function createPerson(input: PersonInput): Promise<ActionResult<{ i
       return { success: false, message: "crm.errors.personLimitReached" };
     }
 
+    const companies = input.companies ?? [];
+    if (!validateAtMostOnePrimaryCompany(companies)) {
+      return { success: false, message: "crm.errors.multiplePrimaryCompanies" };
+    }
+
     const person = await prisma.person.create({
       data: {
         userId: user.id,
@@ -90,7 +98,7 @@ export async function createPerson(input: PersonInput): Promise<ActionResult<{ i
         lastName: input.lastName ?? null,
         emails: JSON.stringify(input.emails),
         phones: JSON.stringify(input.phones ?? []),
-        companyId: input.companyId ?? null,
+        companies: JSON.stringify(companies),
         jobTitle: input.jobTitle ?? null,
         linkedinUrl: input.linkedinUrl ?? null,
         addressStreet: input.addressStreet ?? null,
@@ -126,9 +134,6 @@ export async function getPerson(personId: string): Promise<ActionResult<Record<s
 
     const person = await prisma.person.findFirst({
       where: { id: personId, userId: user.id },
-      include: {
-        company: { select: { id: true, label: true, value: true, logoUrl: true } },
-      },
     });
 
     if (!person) return { success: false, message: "crm.errors.personNotFound" };
@@ -139,6 +144,7 @@ export async function getPerson(personId: string): Promise<ActionResult<Record<s
         ...person,
         emails: parseEmails(person.emails),
         phones: parsePhones(person.phones),
+        companies: parseCompanies(person.companies),
       },
     };
   } catch (error) {
@@ -149,7 +155,6 @@ export async function getPerson(personId: string): Promise<ActionResult<Record<s
 export async function getPersons(filters?: {
   status?: PersonStatus;
   dataSource?: DataSource;
-  companyId?: string;
   search?: string;
   page?: number;
   pageSize?: number;
@@ -165,7 +170,6 @@ export async function getPersons(filters?: {
     const where: Record<string, unknown> = { userId: user.id };
     if (filters?.status) where.status = filters.status;
     if (filters?.dataSource) where.dataSource = filters.dataSource;
-    if (filters?.companyId) where.companyId = filters.companyId;
     if (filters?.search) {
       where.OR = [
         { firstName: { contains: filters.search } },
@@ -178,9 +182,6 @@ export async function getPersons(filters?: {
     const [persons, total] = await Promise.all([
       prisma.person.findMany({
         where,
-        include: {
-          company: { select: { id: true, label: true, value: true } },
-        },
         orderBy: { updatedAt: "desc" },
         skip,
         take: pageSize,
@@ -195,6 +196,7 @@ export async function getPersons(filters?: {
           ...p,
           emails: parseEmails(p.emails),
           phones: parsePhones(p.phones),
+          companies: parseCompanies(p.companies),
         })),
         total,
       },
@@ -225,7 +227,12 @@ export async function updatePerson(
     if (input.lastName !== undefined) data.lastName = input.lastName;
     if (input.emails !== undefined) data.emails = JSON.stringify(input.emails);
     if (input.phones !== undefined) data.phones = JSON.stringify(input.phones);
-    if (input.companyId !== undefined) data.companyId = input.companyId;
+    if (input.companies !== undefined) {
+      if (!validateAtMostOnePrimaryCompany(input.companies)) {
+        return { success: false, message: "crm.errors.multiplePrimaryCompanies" };
+      }
+      data.companies = JSON.stringify(input.companies);
+    }
     if (input.jobTitle !== undefined) data.jobTitle = input.jobTitle;
     if (input.linkedinUrl !== undefined) data.linkedinUrl = input.linkedinUrl;
     if (input.avatarUrl !== undefined) data.avatarUrl = input.avatarUrl;
@@ -334,6 +341,7 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
           lastName: null,
           emails: "[]",
           phones: "[]",
+          companies: "[]",
           jobTitle: null,
           linkedinUrl: null,
           avatarUrl: null,
@@ -381,7 +389,7 @@ export async function mergePersons(
       return { success: false, message: "crm.errors.mergeBothActive" };
     }
 
-    // Merge loser's emails/phones (append with isPrimary=false)
+    // Merge loser's emails/phones/companies (append with isPrimary=false)
     const winnerEmails = parseEmails(winner.emails);
     const loserEmails = parseEmails(loser.emails).map((e) => ({ ...e, isPrimary: false }));
     const mergedEmails = [...winnerEmails, ...loserEmails];
@@ -389,6 +397,10 @@ export async function mergePersons(
     const winnerPhones = parsePhones(winner.phones);
     const loserPhones = parsePhones(loser.phones).map((p) => ({ ...p, isPrimary: false }));
     const mergedPhones = [...winnerPhones, ...loserPhones];
+
+    const winnerCompanies = parseCompanies(winner.companies);
+    const loserCompanies = parseCompanies(loser.companies).map((c) => ({ ...c, isPrimary: false }));
+    const mergedCompanies = [...winnerCompanies, ...loserCompanies];
 
     await prisma.$transaction([
       // Transfer interviews
@@ -417,6 +429,7 @@ export async function mergePersons(
         data: {
           emails: JSON.stringify(mergedEmails),
           phones: JSON.stringify(mergedPhones),
+          companies: JSON.stringify(mergedCompanies),
         },
       }),
       // Delete loser

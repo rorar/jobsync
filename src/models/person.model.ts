@@ -26,6 +26,15 @@ export interface Address {
   country?: string | null;
 }
 
+export interface CompanyAssociation {
+  companyId: string;
+  companyLabel: string;
+  role?: string | null;
+  isPrimary: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
 export interface FullName {
   firstName: string | null;
   lastName: string | null;
@@ -152,6 +161,24 @@ export function parsePhones(raw: string | null | undefined): TypedPhone[] {
   } catch {
     return [];
   }
+}
+
+export function parseCompanies(raw: string | null | undefined): CompanyAssociation[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// AtMostOnePrimaryCompany invariant (specs/crm.allium)
+// ---------------------------------------------------------------------------
+
+export function validateAtMostOnePrimaryCompany(companies: CompanyAssociation[]): boolean {
+  return companies.filter((c) => c.isPrimary).length <= 1;
 }
 
 // ---------------------------------------------------------------------------
