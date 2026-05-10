@@ -79,6 +79,7 @@ model User {
   CrmActivityLog       CrmActivityLog[]
   CrmBlocklist         CrmBlocklist[]
   ConnectedAccount     ConnectedAccount[]
+  JobContact           JobContact[]
 }
 
 model ApiKey {
@@ -280,6 +281,7 @@ model Company {
   id              String           @id @default(uuid())
   label           String
   value           String
+  domain          String?          // Kette A: Email-Domain→Company Matching (e.g. "acme.com")
   jobsApplied     Job[]
   logoUrl         String? // field is optional
   logoAssetId     String?          @unique
@@ -361,6 +363,7 @@ model Job {
 
   // CRM back-relations
   crmInterviews  CrmInterview[]  @relation("CrmInterviewJob")
+  jobContacts    JobContact[]    @relation("JobContactJob")
   crmTaskTargets CrmTaskTarget[] @relation("CrmTaskTargetJob")
   crmNoteTargets CrmNoteTarget[] @relation("CrmNoteTargetJob")
 
@@ -912,9 +915,9 @@ model Person {
   // Shape: [{ number: string, type: "work"|"home"|"other", isPrimary: boolean }]
   phones              String    @default("[]")
 
-  // Professional
-  jobTitle            String?
-  linkedinUrl         String?
+  // Professional — Kette B: job_title→headline, linkedin_url→social_profiles
+  headline            String?
+  socialProfiles      String    @default("[]")  // JSON: SocialProfile[]
   avatarUrl           String?
 
   // Address (value object, flattened)
@@ -935,15 +938,18 @@ model Person {
   processingBasis     String    @default("legitimate_interest")
   retentionExpiresAt  DateTime?
 
-  // Actor metadata — who/what created this record
+  // Actor metadata — who/what created/updated this record (Kette A: updated_by)
   createdBySource     String    @default("manual")
   createdByName       String?
+  updatedBySource     String    @default("manual")
+  updatedByName       String?
 
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
   // CRM relations
   crmInterviews       CrmInterview[]
+  jobContacts         JobContact[]
   crmTaskTargets      CrmTaskTarget[]
   crmNoteTargets      CrmNoteTarget[]
   activityLogs        CrmActivityLog[] @relation("ActivityLogPerson")
@@ -977,6 +983,27 @@ model CrmInterview {
   @@index([userId, jobId])
   @@index([userId, status])
   @@index([userId, interviewDate])
+}
+
+/// Kette C: Links a Person to a Job as a contact/stakeholder (N:M).
+/// One Job can have multiple contact persons (recruiter, hiring manager, referral),
+/// and one Person can be the contact for multiple Jobs.
+/// Spec: specs/crm.allium entity JobContact
+model JobContact {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  jobId           String
+  job             Job       @relation("JobContactJob", fields: [jobId], references: [id])
+  personId        String
+  person          Person    @relation(fields: [personId], references: [id])
+  role            String?
+  createdAt       DateTime  @default(now())
+
+  @@unique([jobId, personId])
+  @@index([userId])
+  @@index([personId])
+  @@index([jobId])
 }
 
 /// A to-do item linked to CRM entities via polymorphic CrmTaskTarget.

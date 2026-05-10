@@ -10,6 +10,7 @@ import {
   type TypedEmail,
   type TypedPhone,
   type CompanyAssociation,
+  type SocialProfile,
   type PersonStatus,
   type DataSource,
   type ProcessingBasis,
@@ -20,6 +21,7 @@ import {
   parseEmails,
   parsePhones,
   parseCompanies,
+  parseSocialProfiles,
   CRM_CONFIG,
 } from "@/models/person.model";
 
@@ -33,8 +35,8 @@ interface PersonInput {
   emails: TypedEmail[];
   phones?: TypedPhone[];
   companies?: CompanyAssociation[];
-  jobTitle?: string | null;
-  linkedinUrl?: string | null;
+  headline?: string | null;
+  socialProfiles?: SocialProfile[];
   addressStreet?: string | null;
   addressCity?: string | null;
   addressPostalCode?: string | null;
@@ -47,8 +49,8 @@ interface PersonUpdateInput {
   emails?: TypedEmail[];
   phones?: TypedPhone[];
   companies?: CompanyAssociation[];
-  jobTitle?: string | null;
-  linkedinUrl?: string | null;
+  headline?: string | null;
+  socialProfiles?: SocialProfile[];
   avatarUrl?: string | null;
   addressStreet?: string | null;
   addressCity?: string | null;
@@ -99,8 +101,10 @@ export async function createPerson(input: PersonInput): Promise<ActionResult<{ i
         emails: JSON.stringify(input.emails),
         phones: JSON.stringify(input.phones ?? []),
         companies: JSON.stringify(companies),
-        jobTitle: input.jobTitle ?? null,
-        linkedinUrl: input.linkedinUrl ?? null,
+        headline: input.headline ?? null,
+        socialProfiles: JSON.stringify(input.socialProfiles ?? []),
+        updatedBySource: "manual",
+        updatedByName: user.name,
         addressStreet: input.addressStreet ?? null,
         addressCity: input.addressCity ?? null,
         addressPostalCode: input.addressPostalCode ?? null,
@@ -145,6 +149,7 @@ export async function getPerson(personId: string): Promise<ActionResult<Record<s
         emails: parseEmails(person.emails),
         phones: parsePhones(person.phones),
         companies: parseCompanies(person.companies),
+        socialProfiles: parseSocialProfiles(person.socialProfiles),
       },
     };
   } catch (error) {
@@ -175,7 +180,7 @@ export async function getPersons(filters?: {
         { firstName: { contains: filters.search } },
         { lastName: { contains: filters.search } },
         { emails: { contains: filters.search } },
-        { jobTitle: { contains: filters.search } },
+        { headline: { contains: filters.search } },
       ];
     }
 
@@ -197,6 +202,7 @@ export async function getPersons(filters?: {
           emails: parseEmails(p.emails),
           phones: parsePhones(p.phones),
           companies: parseCompanies(p.companies),
+          socialProfiles: parseSocialProfiles(p.socialProfiles),
         })),
         total,
       },
@@ -233,8 +239,11 @@ export async function updatePerson(
       }
       data.companies = JSON.stringify(input.companies);
     }
-    if (input.jobTitle !== undefined) data.jobTitle = input.jobTitle;
-    if (input.linkedinUrl !== undefined) data.linkedinUrl = input.linkedinUrl;
+    if (input.headline !== undefined) data.headline = input.headline;
+    if (input.socialProfiles !== undefined) data.socialProfiles = JSON.stringify(input.socialProfiles);
+    // Kette A: updated_by tracking
+    data.updatedBySource = "manual";
+    data.updatedByName = user.name;
     if (input.avatarUrl !== undefined) data.avatarUrl = input.avatarUrl;
     if (input.addressStreet !== undefined) data.addressStreet = input.addressStreet;
     if (input.addressCity !== undefined) data.addressCity = input.addressCity;
@@ -327,6 +336,8 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
       prisma.crmNoteTarget.deleteMany({ where: { targetPersonId: personId } }),
       // Remove task targets
       prisma.crmTaskTarget.deleteMany({ where: { targetPersonId: personId } }),
+      // Remove job contacts (Kette C)
+      prisma.jobContact.deleteMany({ where: { personId } }),
       // Anonymize activity log references
       prisma.crmActivityLog.updateMany({
         where: { targetPersonId: personId },
@@ -342,8 +353,8 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
           emails: "[]",
           phones: "[]",
           companies: "[]",
-          jobTitle: null,
-          linkedinUrl: null,
+          headline: null,
+          socialProfiles: "[]",
           avatarUrl: null,
           addressStreet: null,
           addressCity: null,
@@ -417,6 +428,11 @@ export async function mergePersons(
       prisma.crmNoteTarget.updateMany({
         where: { targetPersonId: loserId },
         data: { targetPersonId: winnerId },
+      }),
+      // Transfer job contacts (Kette C)
+      prisma.jobContact.updateMany({
+        where: { personId: loserId },
+        data: { personId: winnerId },
       }),
       // Transfer activity logs
       prisma.crmActivityLog.updateMany({

@@ -35,6 +35,11 @@ export interface CompanyAssociation {
   endDate?: string | null;
 }
 
+export interface SocialProfile {
+  platform: SocialPlatform;
+  url: string;
+}
+
 export interface FullName {
   firstName: string | null;
   lastName: string | null;
@@ -47,6 +52,8 @@ export interface FullName {
 export type ContactChannelType = "work" | "home" | "other";
 
 export type PersonStatus = "active" | "archived" | "anonymized";
+
+export type SocialPlatform = "linkedin" | "xing" | "github" | "twitter" | "other";
 
 export type DataSource = "manual" | "auto_created" | "imported";
 
@@ -164,6 +171,16 @@ export function parsePhones(raw: string | null | undefined): TypedPhone[] {
 }
 
 export function parseCompanies(raw: string | null | undefined): CompanyAssociation[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function parseSocialProfiles(raw: string | null | undefined): SocialProfile[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
