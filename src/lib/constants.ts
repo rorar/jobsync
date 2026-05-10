@@ -9,6 +9,9 @@ import {
   Zap,
   BookOpen,
   Inbox,
+  Users,
+  Calendar,
+  ListTodo,
 } from "lucide-react";
 import type { TranslationKey } from "@/i18n";
 
@@ -99,6 +102,25 @@ export const SIDEBAR_LINKS: {
     route: "/dashboard/myjobs",
     label: "My Jobs",
     labelKey: "nav.myJobs",
+  },
+  // CRM section — contacts, interviews, CRM tasks
+  {
+    icon: Users,
+    route: "/dashboard/contacts",
+    label: "Contacts",
+    labelKey: "nav.contacts",
+  },
+  {
+    icon: Calendar,
+    route: "/dashboard/interviews",
+    label: "Interviews",
+    labelKey: "nav.interviews",
+  },
+  {
+    icon: ListTodo,
+    route: "/dashboard/crm-tasks",
+    label: "CRM Tasks",
+    labelKey: "nav.crmTasks",
   },
   {
     icon: SquareCheckBig,

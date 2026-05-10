@@ -25,6 +25,7 @@ import { email } from "./dictionaries/email";
 import { smtp } from "./dictionaries/smtp";
 import { push } from "./dictionaries/push";
 import { logoAsset } from "./dictionaries/logoAsset";
+import { crm } from "./dictionaries/crm";
 
 const core = {
   en: {
@@ -39,6 +40,9 @@ const core = {
     "nav.administration": "Administration",
     "nav.developerOptions": "Developer Options",
     "nav.stagingQueue": "Staging Queue",
+    "nav.contacts": "Contacts",
+    "nav.interviews": "Interviews",
+    "nav.crmTasks": "CRM Tasks",
     "nav.settings": "Settings",
     "nav.toggleMenu": "Toggle Menu",
     "nav.appTitle": "JobSync - Job Search Assistant",
@@ -209,6 +213,9 @@ const core = {
     "nav.administration": "Verwaltung",
     "nav.developerOptions": "Entwickleroptionen",
     "nav.stagingQueue": "Staging-Warteschlange",
+    "nav.contacts": "Kontakte",
+    "nav.interviews": "Interviews",
+    "nav.crmTasks": "CRM-Aufgaben",
     "nav.settings": "Einstellungen",
     "nav.toggleMenu": "Menü umschalten",
     "nav.appTitle": "JobSync - Jobsuche-Assistent",
@@ -375,6 +382,9 @@ const core = {
     "nav.administration": "Administration",
     "nav.developerOptions": "Options développeur",
     "nav.stagingQueue": "File d'attente",
+    "nav.contacts": "Contacts",
+    "nav.interviews": "Entretiens",
+    "nav.crmTasks": "Tâches CRM",
     "nav.settings": "Paramètres",
     "nav.toggleMenu": "Basculer le menu",
     "nav.appTitle": "JobSync - Assistant de recherche d'emploi",
@@ -541,6 +551,9 @@ const core = {
     "nav.administration": "Administración",
     "nav.developerOptions": "Opciones de desarrollador",
     "nav.stagingQueue": "Cola de espera",
+    "nav.contacts": "Contactos",
+    "nav.interviews": "Entrevistas",
+    "nav.crmTasks": "Tareas CRM",
     "nav.settings": "Configuración",
     "nav.toggleMenu": "Alternar menú",
     "nav.appTitle": "JobSync - Asistente de búsqueda de empleo",
@@ -711,7 +724,7 @@ function mergeDictionaries(...namespaces: Record<string, Record<string, string>>
   return merged;
 }
 
-const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, developer, staging, notifications, api, blacklist, deck, enrichment, webhook, email, smtp, push, logoAsset);
+const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, developer, staging, notifications, api, blacklist, deck, enrichment, webhook, email, smtp, push, logoAsset, crm);
 
 export type TranslationKey = string;
 export type Dictionary = Record<string, string>;

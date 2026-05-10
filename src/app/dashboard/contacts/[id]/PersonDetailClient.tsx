@@ -1,0 +1,356 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "@/i18n";
+import { useToast } from "@/components/ui/use-toast";
+import { getPerson, archivePerson, reactivatePerson, anonymizePerson } from "@/actions/person.actions";
+import { getInterviews } from "@/actions/crmInterview.actions";
+import { getCrmTasks } from "@/actions/crmTask.actions";
+import { getCrmNotes } from "@/actions/crmNote.actions";
+import { getActivityTimeline } from "@/actions/crmActivityLog.actions";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ArrowLeft, Archive, RefreshCw, ShieldOff, Mail, Phone, MapPin, Briefcase, ExternalLink } from "lucide-react";
+import { ActivityTimeline } from "@/components/crm/ActivityTimeline";
+import type { TypedEmail, TypedPhone } from "@/models/person.model";
+
+interface PersonDetailClientProps {
+  personId: string;
+}
+
+const statusVariant = (status: string) => {
+  switch (status) {
+    case "active": return "default" as const;
+    case "archived": return "secondary" as const;
+    case "anonymized": return "destructive" as const;
+    default: return "outline" as const;
+  }
+};
+
+export default function PersonDetailClient({ personId }: PersonDetailClientProps) {
+  const { t } = useTranslations();
+  const { toast } = useToast();
+  const router = useRouter();
+  const [person, setPerson] = useState<Record<string, unknown> | null>(null);
+  const [interviews, setInterviews] = useState<Record<string, unknown>[]>([]);
+  const [tasks, setTasks] = useState<Record<string, unknown>[]>([]);
+  const [notes, setNotes] = useState<Record<string, unknown>[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadPerson = useCallback(async () => {
+    setLoading(true);
+    const result = await getPerson(personId);
+    if (result.success && result.data) {
+      setPerson(result.data as Record<string, unknown>);
+    }
+    setLoading(false);
+  }, [personId]);
+
+  const loadRelated = useCallback(async () => {
+    const [intResult, taskResult, noteResult] = await Promise.all([
+      getInterviews({ personId }),
+      getCrmTasks({ targetPersonId: personId }),
+      getCrmNotes({ targetPersonId: personId }),
+    ]);
+    if (intResult.success && intResult.data) setInterviews(intResult.data as Record<string, unknown>[]);
+    if (taskResult.success && taskResult.data) setTasks(taskResult.data as Record<string, unknown>[]);
+    if (noteResult.success && noteResult.data) setNotes(noteResult.data as Record<string, unknown>[]);
+  }, [personId]);
+
+  useEffect(() => {
+    loadPerson();
+    loadRelated();
+  }, [loadPerson, loadRelated]);
+
+  const handleArchive = async () => {
+    const result = await archivePerson(personId);
+    if (result.success) {
+      toast({ title: t("crm.contactArchived") });
+      loadPerson();
+    } else {
+      toast({ title: t(result.message ?? ""), variant: "destructive" });
+    }
+  };
+
+  const handleReactivate = async () => {
+    const result = await reactivatePerson(personId);
+    if (result.success) {
+      toast({ title: t("crm.contactReactivated") });
+      loadPerson();
+    } else {
+      toast({ title: t(result.message ?? ""), variant: "destructive" });
+    }
+  };
+
+  const handleAnonymize = async () => {
+    const result = await anonymizePerson(personId);
+    if (result.success) {
+      toast({ title: t("crm.contactAnonymized") });
+      loadPerson();
+    } else {
+      toast({ title: t(result.message ?? ""), variant: "destructive" });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-4 p-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  if (!person) {
+    return (
+      <div className="p-4">
+        <p>{t("crm.errors.personNotFound")}</p>
+        <Button variant="outline" onClick={() => router.push("/dashboard/contacts")} className="mt-4">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          {t("crm.contacts")}
+        </Button>
+      </div>
+    );
+  }
+
+  const emails = (person.emails as TypedEmail[]) ?? [];
+  const phones = (person.phones as TypedPhone[]) ?? [];
+  const status = person.status as string;
+  const company = person.company as Record<string, unknown> | null;
+
+  return (
+    <div className="space-y-6 p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => router.push("/dashboard/contacts")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">
+              {[person.firstName, person.lastName].filter(Boolean).join(" ") || t("crm.contactDetails")}
+            </h1>
+            <div className="flex items-center gap-2 mt-1">
+              <Badge variant={statusVariant(status)}>{t(`crm.status.${status}`)}</Badge>
+              <Badge variant="outline">{t(`crm.dataSource.${person.dataSource}`)}</Badge>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {status === "active" && (
+            <Button variant="outline" size="sm" onClick={handleArchive}>
+              <Archive className="mr-2 h-4 w-4" />
+              {t("crm.archive")}
+            </Button>
+          )}
+          {status === "archived" && (
+            <Button variant="outline" size="sm" onClick={handleReactivate}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              {t("crm.reactivate")}
+            </Button>
+          )}
+          {status !== "anonymized" && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  <ShieldOff className="mr-2 h-4 w-4" />
+                  {t("crm.anonymize")}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>{t("crm.anonymizeConfirmTitle")}</AlertDialogTitle>
+                  <AlertDialogDescription>{t("crm.anonymizeConfirmDescription")}</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>{t("crm.cancelInterview")}</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleAnonymize}>{t("crm.anonymize")}</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">{t("crm.tab.overview")}</TabsTrigger>
+          <TabsTrigger value="interviews">{t("crm.tab.interviews")} ({interviews.length})</TabsTrigger>
+          <TabsTrigger value="tasks">{t("crm.tab.tasks")} ({tasks.length})</TabsTrigger>
+          <TabsTrigger value="notes">{t("crm.tab.notes")} ({notes.length})</TabsTrigger>
+          <TabsTrigger value="timeline">{t("crm.tab.timeline")}</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Contact Info */}
+            <Card>
+              <CardHeader><CardTitle>{t("crm.contactDetails")}</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                {String(person.jobTitle ?? "") && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Briefcase className="h-4 w-4 text-muted-foreground" />
+                    <span>{String(person.jobTitle)}</span>
+                  </div>
+                )}
+                {company && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Briefcase className="h-4 w-4 text-muted-foreground" />
+                    <span>{String(company.label)}</span>
+                  </div>
+                )}
+                {String(person.linkedinUrl ?? "") && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                    <a href={String(person.linkedinUrl)} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      LinkedIn
+                    </a>
+                  </div>
+                )}
+                {(String(person.addressCity ?? "") || String(person.addressCountry ?? "")) && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <span>{[person.addressCity, person.addressCountry].filter(Boolean).map(String).join(", ")}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Emails & Phones */}
+            <Card>
+              <CardHeader><CardTitle>{t("crm.email")} & {t("crm.phone")}</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                {emails.map((e, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <span>{e.email}</span>
+                    <Badge variant="outline" className="text-xs">{t(`crm.channelType.${e.type}`)}</Badge>
+                    {e.isPrimary && <Badge className="text-xs">{t("crm.primaryEmail")}</Badge>}
+                  </div>
+                ))}
+                {phones.map((p, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <span>{p.number}</span>
+                    <Badge variant="outline" className="text-xs">{t(`crm.channelType.${p.type}`)}</Badge>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* GDPR Info */}
+            <Card>
+              <CardHeader><CardTitle>GDPR</CardTitle></CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t("crm.processingBasis")}</span>
+                  <span>{t(`crm.processingBasis.${person.processingBasis}`)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t("crm.dataSource.manual")}</span>
+                  <span>{t(`crm.dataSource.${person.dataSource}`)}</span>
+                </div>
+                {Boolean(person.retentionExpiresAt) && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{t("crm.retentionExpires")}</span>
+                    <span>{new Date(person.retentionExpiresAt as string).toLocaleDateString()}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="interviews">
+          {interviews.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">{t("crm.noInterviews")}</p>
+          ) : (
+            <div className="space-y-3">
+              {interviews.map((interview) => (
+                <Card key={interview.id as string}>
+                  <CardContent className="flex items-center justify-between p-4">
+                    <div>
+                      <p className="font-medium">{String(((interview.job as Record<string, unknown>)?.JobTitle as Record<string, unknown>)?.label ?? "")}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(interview.interviewDate as string).toLocaleDateString()} {String(interview.location ?? "") && `- ${String(interview.location)}`}
+                      </p>
+                    </div>
+                    <Badge variant={interview.status === "completed" ? "outline" : interview.status === "cancelled" ? "destructive" : "default"}>
+                      {t(`crm.interviewStatus.${interview.status}`)}
+                    </Badge>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="tasks">
+          {tasks.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">{t("crm.noTasks")}</p>
+          ) : (
+            <div className="space-y-3">
+              {tasks.map((task) => (
+                <Card key={task.id as string}>
+                  <CardContent className="flex items-center justify-between p-4">
+                    <div>
+                      <p className="font-medium">{task.title as string}</p>
+                      {Boolean(task.dueDate) && (
+                        <p className="text-sm text-muted-foreground">
+                          {t("crm.dueDate")}: {new Date(task.dueDate as string).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <Badge variant={task.status === "done" ? "outline" : task.status === "cancelled" ? "destructive" : "default"}>
+                      {t(`crm.taskStatus.${task.status}`)}
+                    </Badge>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="notes">
+          {notes.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">{t("crm.noNotes")}</p>
+          ) : (
+            <div className="space-y-3">
+              {notes.map((note) => (
+                <Card key={note.id as string}>
+                  <CardContent className="p-4">
+                    {String(note.title ?? "") && <p className="font-medium">{String(note.title)}</p>}
+                    <p className="text-sm text-muted-foreground">{note.body as string}</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {new Date(note.createdAt as string).toLocaleDateString()}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="timeline">
+          <ActivityTimeline targetPersonId={personId} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
