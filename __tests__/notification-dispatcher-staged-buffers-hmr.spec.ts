@@ -38,6 +38,12 @@ jest.mock("@/lib/db", () => ({
   default: {
     userSettings: { findUnique: jest.fn().mockResolvedValue(null) },
     automation: { findFirst: jest.fn().mockResolvedValue(null) },
+    // PERF-3: buildDispatchContext queries these 4 additional tables
+    user: { findUnique: jest.fn().mockResolvedValue(null) },
+    smtpConfig: { findFirst: jest.fn().mockResolvedValue(null) },
+    vapidConfig: { findUnique: jest.fn().mockResolvedValue(null) },
+    webPushSubscription: { findMany: jest.fn().mockResolvedValue([]) },
+    webhookEndpoint: { findMany: jest.fn().mockResolvedValue([]) },
   },
 }));
 

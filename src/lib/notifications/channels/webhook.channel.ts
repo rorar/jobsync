@@ -21,7 +21,6 @@ import prisma from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 import { validateWebhookUrl } from "@/lib/url-validation";
 import { t } from "@/i18n/server";
-import { resolveUserLocale } from "@/lib/locale-resolver";
 // Sprint 4 L-A (circular import extraction): import the enforced-writer
 // helper directly from the leaf module, NOT from `channel-router.ts`. The
 // old import path created a static import cycle because `channel-router.ts`
@@ -29,6 +28,8 @@ import { resolveUserLocale } from "@/lib/locale-resolver";
 // See `src/lib/notifications/enforced-writer.ts` for the history.
 import { prepareEnforcedNotification } from "@/lib/notifications/enforced-writer";
 import type { NotificationType } from "@/models/notification.model";
+import type { NotificationPreferences } from "@/models/notification.model";
+import type { DispatchContext } from "../dispatch-context";
 import type {
   NotificationChannel,
   NotificationDraft,
@@ -180,9 +181,10 @@ async function notifyDeliveryFailed(
   userId: string,
   endpointUrl: string,
   eventType: string,
+  locale: string,
+  prefs: NotificationPreferences,
 ): Promise<void> {
   try {
-    const locale = await resolveUserLocale(userId);
     // The sentence template still lives under the bare `webhook.*` key — it
     // powers the English `message` fallback stored on the row (used by
     // email/webhook/push channels and legacy readers). The late-bound title
@@ -209,7 +211,7 @@ async function notifyDeliveryFailed(
         eventType,
         actorNameKey: "notifications.actor.system",
       },
-    });
+    }, prefs);
     if (gated.suppressed) return;
     await prisma.notification.create({ data: gated.row });
   } catch (error) {
@@ -229,9 +231,10 @@ async function notifyDeliveryFailed(
 async function notifyEndpointDeactivated(
   userId: string,
   endpointUrl: string,
+  locale: string,
+  prefs: NotificationPreferences,
 ): Promise<void> {
   try {
-    const locale = await resolveUserLocale(userId);
     // Same split as `notifyDeliveryFailed`: bare sentence key powers the
     // English fallback `message`; the titleKey follows the project-wide
     // `notifications.*.title` convention.
@@ -252,7 +255,7 @@ async function notifyEndpointDeactivated(
         endpointUrl,
         actorNameKey: "notifications.actor.system",
       },
-    });
+    }, prefs);
     if (gated.suppressed) return;
     await prisma.notification.create({ data: gated.row });
   } catch (error) {
@@ -269,21 +272,11 @@ export class WebhookChannel implements NotificationChannel {
 
   async dispatch(
     notification: NotificationDraft,
-    userId: string,
+    ctx: DispatchContext,
   ): Promise<ChannelResult> {
     try {
-      // Query active endpoints for this user that subscribe to this event type
-      const endpoints = await prisma.webhookEndpoint.findMany({
-        where: { userId, active: true },
-        select: {
-          id: true,
-          url: true,
-          secret: true,
-          iv: true,
-          events: true,
-          failureCount: true,
-        },
-      });
+      // Read active endpoints from context snapshot
+      const endpoints = ctx.webhookEndpoints;
 
       if (endpoints.length === 0) {
         return { success: true, channel: this.name };
@@ -341,7 +334,7 @@ export class WebhookChannel implements NotificationChannel {
             // Reset failure count on success (H3: include userId in where clause)
             if (endpoint.failureCount > 0) {
               await prisma.webhookEndpoint.update({
-                where: { id: endpoint.id, userId },
+                where: { id: endpoint.id, userId: ctx.userId },
                 data: { failureCount: 0 },
               });
             }
@@ -350,21 +343,21 @@ export class WebhookChannel implements NotificationChannel {
 
           // Atomic increment failure count (M3: prevent read-then-write race)
           const updated = await prisma.webhookEndpoint.update({
-            where: { id: endpoint.id, userId },
+            where: { id: endpoint.id, userId: ctx.userId },
             data: { failureCount: { increment: 1 } },
             select: { failureCount: true },
           });
 
           // Notify about delivery failure
-          await notifyDeliveryFailed(userId, endpoint.url, notification.type);
+          await notifyDeliveryFailed(ctx.userId, endpoint.url, notification.type, ctx.locale, ctx.preferences);
 
           // Auto-deactivate after threshold (H3: include userId in where clause)
           if (updated.failureCount >= AUTO_DEACTIVATE_THRESHOLD) {
             await prisma.webhookEndpoint.update({
-              where: { id: endpoint.id, userId },
+              where: { id: endpoint.id, userId: ctx.userId },
               data: { active: false },
             });
-            await notifyEndpointDeactivated(userId, endpoint.url);
+            await notifyEndpointDeactivated(ctx.userId, endpoint.url, ctx.locale, ctx.preferences);
           }
 
           return { success: false, error: result.error ?? `Delivery failed to ${endpoint.url}` };
@@ -405,13 +398,6 @@ export class WebhookChannel implements NotificationChannel {
     }
   }
 
-  async isAvailable(userId: string): Promise<boolean> {
-    // Check if user has any active webhook endpoints
-    const count = await prisma.webhookEndpoint.count({
-      where: { userId, active: true },
-    });
-    return count > 0;
-  }
 }
 
 // ---------------------------------------------------------------------------

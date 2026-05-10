@@ -672,7 +672,7 @@ Sprint 1 was an experiment in delegating work to subagents with explicit skill i
 | ID | Severity | Finding | Reason |
 |----|----------|---------|--------|
 | ~~PERF-2~~ | ~~HIGH(perf)~~ | ~~Sync PBKDF2 in encryption.ts blocks event loop~~ | **RESOLVED** (2026-05-09). Async pbkdf2 + LRU derived-key cache. 20 new tests. |
-| PERF-3 | HIGH(perf) | 15 redundant DB queries per notification | Architectural refactor (DispatchContext) |
+| ~~PERF-3~~ | ~~HIGH(perf)~~ | ~~15 redundant DB queries per notification~~ | **RESOLVED** (2026-05-10). DispatchContext consolidates 11-13 queries into 6 parallel. `isAvailable()` removed from channel interface. |
 | PERF-4 | MED(perf) | No SMTP connection pooling | Enhancement, backlog |
 | FL-3 | MED | auth.actions.ts signup/authenticate no rate limiting | Pre-existing, not S5b-introduced |
 

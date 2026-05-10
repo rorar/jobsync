@@ -22,9 +22,9 @@ import "server-only";
 
 import { shouldNotify } from "@/models/notification.model";
 import type {
-  NotificationPreferences,
   NotificationChannelId,
 } from "@/models/notification.model";
+import type { DispatchContext } from "./dispatch-context";
 import type { NotificationChannel, NotificationDraft, ChannelResult } from "./types";
 
 export interface ChannelRouterResult {
@@ -35,64 +35,23 @@ export interface ChannelRouterResult {
 }
 
 // ---------------------------------------------------------------------------
-// isAvailable cache (Sprint 3 M-P-01 + M-P-SPEC-02)
+// Availability (PERF-3: moved to DispatchContext snapshot flags)
 // ---------------------------------------------------------------------------
 
 /**
- * Default TTL for the `isAvailable` cache. Channel availability is a "slow
- * signal" — a user who just enabled email dispatch keeps their SmtpConfig row
- * until they delete it. 30 seconds is short enough to pick up Settings
- * changes within one dispatch cycle of a burst, and long enough to amortize
- * the DB round-trip over ~30s of event storm (retention sweeps, bulk actions).
+ * Map from channel name to the DispatchContext boolean flag that indicates
+ * availability. Used by `route()` to synchronously check availability from
+ * the pre-built snapshot instead of calling `isAvailable()` + cache.
  */
-export const ISAVAILABLE_CACHE_TTL_MS = 30_000;
-
-interface AvailabilityCacheEntry {
-  /** Whether the channel was available at the time of the cached check */
-  available: boolean;
-  /** Monotonic timestamp (performance-independent, we use Date.now) */
-  at: number;
-}
-
-/**
- * Cache key is `${userId}:${channelName}` — one slot per user per channel.
- * Exported for `invalidateAvailability()` and tests.
- */
-export type AvailabilityCacheKey = string;
-
-function makeAvailabilityCacheKey(userId: string, channelName: string): AvailabilityCacheKey {
-  return `${userId}:${channelName}`;
-}
+const AVAILABILITY_FLAG: Record<string, keyof DispatchContext> = {
+  inApp: "inAppAvailable",
+  email: "emailAvailable",
+  push: "pushAvailable",
+  webhook: "webhookAvailable",
+};
 
 export class ChannelRouter {
   private channels: NotificationChannel[] = [];
-
-  /**
-   * Per-user per-channel cache for `isAvailable()` results.
-   *
-   * M-P-01 + M-P-SPEC-02 motivation: every notification dispatch iterates
-   * enabled channels and calls `channel.isAvailable(userId)`. Each channel
-   * implementation runs a separate Prisma query (`webhookEndpoint.count`,
-   * `smtpConfig.count`, `vapidConfig.findUnique` + `webPushSubscription.count`).
-   * A user who enabled webhook + email + push with no actual endpoints still
-   * pays 4 DB round-trips per notification forever. Under event-storm load
-   * (retention sweeps, bulk actions over 500 items) the round-trips compete
-   * for the shared SQLite writer lock.
-   *
-   * This cache is a best-effort per-instance layer — it deliberately does
-   * NOT cross process boundaries (no Redis, no globalThis sharing). The TTL
-   * is short enough that Settings updates propagate within one dispatch cycle
-   * of a burst, and `invalidateAvailability(userId)` gives the Settings UI a
-   * synchronous invalidation hook when the user changes channel config.
-   */
-  private availabilityCache = new Map<AvailabilityCacheKey, AvailabilityCacheEntry>();
-
-  /** TTL in ms — overridable for tests, defaults to ISAVAILABLE_CACHE_TTL_MS */
-  private readonly availabilityTtlMs: number;
-
-  constructor(options: { availabilityTtlMs?: number } = {}) {
-    this.availabilityTtlMs = options.availabilityTtlMs ?? ISAVAILABLE_CACHE_TTL_MS;
-  }
 
   /**
    * Register a notification channel. Channels are dispatched in registration order.
@@ -115,7 +74,6 @@ export class ChannelRouter {
    */
   clear(): void {
     this.channels.length = 0;
-    this.availabilityCache.clear();
   }
 
   /**
@@ -126,101 +84,54 @@ export class ChannelRouter {
   }
 
   /**
-   * Invalidate ALL cached `isAvailable` results for a user across every
-   * channel. Use when the user's entire channel infrastructure is being
-   * torn down (e.g., GDPR Art. 17 account deletion where `onDelete: Cascade`
-   * removes WebPushSubscription, VapidConfig, SmtpConfig, WebhookEndpoint).
-   *
-   * Delegates to `invalidateAvailability(userId)` without a channel name,
-   * which drops all entries for the user.
+   * No-op — PERF-3: availability is now derived from DispatchContext snapshot
+   * flags, so there is no cache to invalidate. Method signature kept for
+   * existing callers (Settings actions, GDPR delete) to avoid a breaking change.
    *
    * @see Roadmap 6.1 — GDPR-Konformität / Löschkonzept
    */
-  invalidateAllChannels(userId: string): void {
-    this.invalidateAvailability(userId);
+  invalidateAllChannels(_userId: string): void {
+    // no-op: availability is snapshot-based since PERF-3
   }
 
   /**
-   * Invalidate cached `isAvailable` results. When called with no arguments,
-   * the entire cache is dropped — use this sparingly (tests, admin tools).
-   * When called with a `userId` + optional channel name, drops only the
-   * matching entries — this is the hook the Settings UI calls after the user
-   * updates channel configuration so the next dispatch sees fresh state.
-   *
-   * Callers: `src/actions/webhook.actions.ts`, `src/actions/smtp.actions.ts`,
-   * `src/actions/push.actions.ts` after any CRUD that mutates channel infra.
-   * Also called indirectly by PushChannel via `onSubscriptionPurged` callback
-   * when stale subscriptions are cleaned up on 404/410.
+   * No-op — PERF-3: availability is now derived from DispatchContext snapshot
+   * flags built fresh per dispatch. The `isAvailable()` cache has been
+   * removed. Method signature kept for existing callers (Settings actions,
+   * PushChannel stale-subscription cleanup) to avoid a breaking change.
    */
-  invalidateAvailability(userId?: string, channelName?: string): void {
-    if (!userId) {
-      this.availabilityCache.clear();
-      return;
-    }
-    if (channelName) {
-      this.availabilityCache.delete(makeAvailabilityCacheKey(userId, channelName));
-      return;
-    }
-    // Invalidate all channels for the given user. O(n) over entries but the
-    // map is tiny (users_active × channels_registered ≤ a few hundred in
-    // practice).
-    const prefix = `${userId}:`;
-    for (const key of this.availabilityCache.keys()) {
-      if (key.startsWith(prefix)) {
-        this.availabilityCache.delete(key);
-      }
-    }
-  }
-
-  /**
-   * Check `isAvailable` with cache. Returns the cached value on hit and
-   * populates the cache on miss. The cache only records the boolean result —
-   * errors from the underlying `isAvailable()` call propagate so the router's
-   * per-channel error isolation can still surface them as `ChannelResult`.
-   */
-  private async checkAvailabilityCached(
-    channel: NotificationChannel,
-    userId: string,
-  ): Promise<boolean> {
-    const key = makeAvailabilityCacheKey(userId, channel.name);
-    const now = Date.now();
-    const cached = this.availabilityCache.get(key);
-    if (cached && now - cached.at < this.availabilityTtlMs) {
-      return cached.available;
-    }
-    // Cache miss — delegate to the channel and record the result. An error
-    // thrown here is not cached: we want the next dispatch to retry instead
-    // of sticking on a transient false (e.g. DB blip).
-    const available = await channel.isAvailable(userId);
-    this.availabilityCache.set(key, { available, at: now });
-    return available;
+  invalidateAvailability(_userId?: string, _channelName?: string): void {
+    // no-op: availability is snapshot-based since PERF-3
   }
 
   /**
    * Route a notification draft to all enabled channels for the given user.
    *
+   * PERF-3: receives the pre-built DispatchContext instead of bare
+   * NotificationPreferences. Availability is checked synchronously from
+   * the snapshot flags — no DB round-trips, no cache.
+   *
    * Phase 1: Synchronous preference gating (fast, no I/O)
-   * Phase 2: Concurrent availability check + dispatch (Promise.allSettled)
-   *          — cached per (userId, channel) with TTL so repeat dispatches
-   *            within the same cache window skip the DB round-trip entirely.
+   * Phase 2: Synchronous availability check + concurrent dispatch
    * Phase 3: Collect results from settled promises
    *
    * @param draft - The notification to dispatch
-   * @param prefs - Resolved user preferences (caller resolves once)
+   * @param ctx   - Pre-built DispatchContext with all per-user data
    */
-  async route(draft: NotificationDraft, prefs: NotificationPreferences): Promise<ChannelRouterResult> {
+  async route(draft: NotificationDraft, ctx: DispatchContext): Promise<ChannelRouterResult> {
     // Phase 1: Synchronous preference gating (fast, no I/O)
     const eligibleChannels = this.channels.filter((channel) => {
       const channelId = channel.name as NotificationChannelId;
-      return shouldNotify(prefs, draft.type, channelId);
+      return shouldNotify(ctx.preferences, draft.type, channelId);
     });
 
-    // Phase 2: Concurrent availability check (cached) + dispatch
+    // Phase 2: Synchronous availability check + concurrent dispatch
     const settled = await Promise.allSettled(
       eligibleChannels.map(async (channel) => {
-        const available = await this.checkAvailabilityCached(channel, draft.userId);
-        if (!available) return null;
-        return channel.dispatch(draft, draft.userId);
+        // Check availability from snapshot flag (synchronous, no DB)
+        const flagKey = AVAILABILITY_FLAG[channel.name];
+        if (flagKey && !ctx[flagKey]) return null;
+        return channel.dispatch(draft, ctx);
       }),
     );
 
@@ -320,10 +231,7 @@ export function registerChannels(): void {
   channelRouter.register(new InAppChannel());
   channelRouter.register(new WebhookChannel());
   channelRouter.register(new EmailChannel());
-  channelRouter.register(new PushChannel({
-    onSubscriptionPurged: (userId) =>
-      channelRouter.invalidateAvailability(userId, "push"),
-  }));
+  channelRouter.register(new PushChannel());
 }
 
 /**

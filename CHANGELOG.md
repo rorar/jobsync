@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026-05-10] Notification Dispatch Context
+
+### Performance — PERF-3: DispatchContext
+- **perf:** DispatchContext consolidates 11-13 notification dispatch DB queries into 6 parallel (PERF-3)
+
 ## [2026-05-09] Async Encryption + Spec Fixes
 
 ### Performance — PERF-2: Async PBKDF2 + Derived Key Cache

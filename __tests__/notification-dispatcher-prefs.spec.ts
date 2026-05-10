@@ -1,24 +1,24 @@
 /**
  * NotificationDispatcher — Preference-aware dispatching tests
  *
- * Verifies that the dispatcher checks user preferences before creating notifications.
+ * PERF-3: resolvePreferences replaced by buildDispatchContext. The context
+ * carries preferences, locale, and all channel data in a single snapshot.
+ * These tests verify that preferences are correctly resolved from UserSettings
+ * and that the staged buffer flush respects them.
  */
 
 // Mock "server-only" to prevent runtime error in test environment
 jest.mock("server-only", () => ({}));
 
-import { _testHelpers } from "@/lib/events/consumers/notification-dispatcher";
-import {
-  registerChannels,
-  _resetChannelRegistrationForTesting,
-  channelRouter,
-} from "@/lib/notifications/channel-router";
-import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
-
 // Mock Prisma
 const mockCreate = jest.fn().mockResolvedValue({});
 const mockFindUnique = jest.fn();
 const mockAutomationFindFirst = jest.fn().mockResolvedValue({ name: "Test Automation" });
+const mockUserFindUnique = jest.fn().mockResolvedValue({ email: "user@example.com" });
+const mockSmtpConfigFindFirst = jest.fn().mockResolvedValue(null);
+const mockVapidConfigFindUnique = jest.fn().mockResolvedValue(null);
+const mockWebPushSubscriptionFindMany = jest.fn().mockResolvedValue([]);
+const mockWebhookEndpointFindMany = jest.fn().mockResolvedValue([]);
 
 jest.mock("@/lib/db", () => ({
   __esModule: true,
@@ -31,6 +31,21 @@ jest.mock("@/lib/db", () => ({
     },
     automation: {
       findFirst: (...args: unknown[]) => mockAutomationFindFirst(...args),
+    },
+    user: {
+      findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
+    },
+    smtpConfig: {
+      findFirst: (...args: unknown[]) => mockSmtpConfigFindFirst(...args),
+    },
+    vapidConfig: {
+      findUnique: (...args: unknown[]) => mockVapidConfigFindUnique(...args),
+    },
+    webPushSubscription: {
+      findMany: (...args: unknown[]) => mockWebPushSubscriptionFindMany(...args),
+    },
+    webhookEndpoint: {
+      findMany: (...args: unknown[]) => mockWebhookEndpointFindMany(...args),
     },
   },
 }));
@@ -52,7 +67,15 @@ jest.mock("@/i18n/dictionaries", () => ({
   getDictionary: jest.fn(() => ({})),
 }));
 
-describe("NotificationDispatcher resolvePreferences", () => {
+import { _testHelpers } from "@/lib/events/consumers/notification-dispatcher";
+import {
+  registerChannels,
+  _resetChannelRegistrationForTesting,
+  channelRouter,
+} from "@/lib/notifications/channel-router";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
+
+describe("NotificationDispatcher buildDispatchContext", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -60,12 +83,9 @@ describe("NotificationDispatcher resolvePreferences", () => {
   it("returns DEFAULT_NOTIFICATION_PREFERENCES when no settings exist", async () => {
     mockFindUnique.mockResolvedValue(null);
 
-    const prefs = await _testHelpers.resolvePreferences("user-1");
+    const ctx = await _testHelpers.buildDispatchContext("user-1");
 
-    expect(prefs).toEqual(DEFAULT_NOTIFICATION_PREFERENCES);
-    expect(mockFindUnique).toHaveBeenCalledWith({
-      where: { userId: "user-1" },
-    });
+    expect(ctx.preferences).toEqual(DEFAULT_NOTIFICATION_PREFERENCES);
   });
 
   it("returns DEFAULT_NOTIFICATION_PREFERENCES when settings have no notifications key", async () => {
@@ -75,15 +95,15 @@ describe("NotificationDispatcher resolvePreferences", () => {
       settings: JSON.stringify({ ai: { moduleId: "ollama", model: "llama3" } }),
     });
 
-    const prefs = await _testHelpers.resolvePreferences("user-1");
+    const ctx = await _testHelpers.buildDispatchContext("user-1");
 
-    expect(prefs).toEqual(DEFAULT_NOTIFICATION_PREFERENCES);
+    expect(ctx.preferences).toEqual(DEFAULT_NOTIFICATION_PREFERENCES);
   });
 
   it("returns stored notification preferences when they exist", async () => {
     const storedPrefs = {
       enabled: false,
-      channels: { inApp: true },
+      channels: { inApp: true, webhook: false, email: false, push: false },
       perType: { vacancy_promoted: { enabled: false } },
     };
     mockFindUnique.mockResolvedValue({
@@ -92,17 +112,40 @@ describe("NotificationDispatcher resolvePreferences", () => {
       settings: JSON.stringify({ notifications: storedPrefs }),
     });
 
-    const prefs = await _testHelpers.resolvePreferences("user-1");
+    const ctx = await _testHelpers.buildDispatchContext("user-1");
 
-    expect(prefs).toEqual(storedPrefs);
+    expect(ctx.preferences).toEqual(storedPrefs);
   });
 
   it("returns defaults on DB error", async () => {
     mockFindUnique.mockRejectedValue(new Error("DB connection failed"));
 
-    const prefs = await _testHelpers.resolvePreferences("user-1");
+    const ctx = await _testHelpers.buildDispatchContext("user-1");
 
-    expect(prefs).toEqual(DEFAULT_NOTIFICATION_PREFERENCES);
+    expect(ctx.preferences).toEqual(DEFAULT_NOTIFICATION_PREFERENCES);
+  });
+
+  it("carries userId on the context", async () => {
+    mockFindUnique.mockResolvedValue(null);
+
+    const ctx = await _testHelpers.buildDispatchContext("user-1");
+
+    expect(ctx.userId).toBe("user-1");
+  });
+
+  it("resolves locale from UserSettings display.locale", async () => {
+    mockFindUnique.mockResolvedValue({
+      id: "settings-1",
+      userId: "user-1",
+      settings: JSON.stringify({
+        display: { locale: "de" },
+        notifications: DEFAULT_NOTIFICATION_PREFERENCES,
+      }),
+    });
+
+    const ctx = await _testHelpers.buildDispatchContext("user-1");
+
+    expect(ctx.locale).toBe("de");
   });
 });
 
@@ -110,8 +153,6 @@ describe("NotificationDispatcher flushStagedBuffer with preferences", () => {
   beforeAll(() => {
     // Sprint 3 M-A-05: channel registration is no longer a side effect of
     // importing notification-dispatcher.ts — it must be triggered explicitly.
-    // We reset the globalThis guard so the call below actually re-registers
-    // (idempotent, but we want a fresh state per test file).
     channelRouter.clear();
     _resetChannelRegistrationForTesting();
     registerChannels();

@@ -703,38 +703,54 @@ describe("invalidateAvailability call-chain tests", () => {
   });
 
   // =========================================================================
-  // PushChannel — stale subscription cleanup (404/410) callback
+  // PushChannel — stale subscription cleanup via DispatchContext
+  //
+  // PERF-3: PushChannel no longer has constructor options or
+  // onSubscriptionPurged callback. The channel reads all data from the
+  // DispatchContext snapshot. Stale subscription cleanup (410/404) still
+  // deletes the subscription row but no longer notifies via callback.
+  // The availability is snapshot-based per-dispatch.
   // =========================================================================
 
-  describe("PushChannel — stale subscription cleanup triggers onSubscriptionPurged", () => {
-    const MOCK_VAPID = {
-      userId: TEST_USER.id,
+  describe("PushChannel — stale subscription cleanup (PERF-3 DispatchContext)", () => {
+    const MOCK_VAPID_SNAPSHOT = {
       publicKey: "BTestPublicKey",
       privateKey: "enc-private",
       iv: "vapid-iv",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    } as const;
 
     const MOCK_SUBSCRIPTION = {
       id: "sub-1",
-      userId: TEST_USER.id,
       endpoint: "https://fcm.googleapis.com/fcm/send/test-sub",
       p256dh: "enc-p256dh",
       auth: "enc-auth",
       iv: "p256dh-iv|auth-iv",
     };
 
-    it("calls onSubscriptionPurged when a subscription returns 410 Gone", async () => {
-      const onPurged = jest.fn();
-      const channel = new PushChannel({ onSubscriptionPurged: onPurged });
+    function makePushTestContext(): import("@/lib/notifications/dispatch-context").DispatchContext {
+      return {
+        userId: TEST_USER.id,
+        preferences: { enabled: true, channels: { inApp: true, webhook: false, email: false, push: true }, perType: {} },
+        locale: "en",
+        userEmail: TEST_USER.email,
+        smtp: null,
+        vapid: MOCK_VAPID_SNAPSHOT,
+        pushSubscriptions: [MOCK_SUBSCRIPTION],
+        webhookEndpoints: [],
+        emailAvailable: false,
+        pushAvailable: true,
+        webhookAvailable: false,
+        inAppAvailable: true,
+        vapidSubject: "mailto:noreply@jobsync.local",
+      };
+    }
 
-      // Arrange: one subscription that will 410
-      mockVapidConfigFindUnique.mockResolvedValue(MOCK_VAPID);
-      mockWebPushSubscriptionFindMany.mockResolvedValue([MOCK_SUBSCRIPTION]);
+    it("deletes stale subscription when 410 Gone is returned", async () => {
+      const channel = new PushChannel();
+      const ctx = makePushTestContext();
+
       mockWebPushSubscriptionDelete.mockResolvedValue({});
 
-      // web-push throws 410 Gone
       const { WebPushError } = jest.requireMock("web-push") as {
         WebPushError: new (msg: string, code: number) => Error & { statusCode: number };
       };
@@ -742,18 +758,18 @@ describe("invalidateAvailability call-chain tests", () => {
 
       await channel.dispatch(
         { userId: TEST_USER.id, type: "vacancy_promoted" as never, message: "Test" },
-        TEST_USER.id,
+        ctx,
       );
 
-      expect(onPurged).toHaveBeenCalledWith(TEST_USER.id);
+      expect(mockWebPushSubscriptionDelete).toHaveBeenCalledWith({
+        where: { id: MOCK_SUBSCRIPTION.id, userId: TEST_USER.id },
+      });
     });
 
-    it("calls onSubscriptionPurged when a subscription returns 404 Not Found", async () => {
-      const onPurged = jest.fn();
-      const channel = new PushChannel({ onSubscriptionPurged: onPurged });
+    it("deletes stale subscription when 404 Not Found is returned", async () => {
+      const channel = new PushChannel();
+      const ctx = makePushTestContext();
 
-      mockVapidConfigFindUnique.mockResolvedValue(MOCK_VAPID);
-      mockWebPushSubscriptionFindMany.mockResolvedValue([MOCK_SUBSCRIPTION]);
       mockWebPushSubscriptionDelete.mockResolvedValue({});
 
       const { WebPushError } = jest.requireMock("web-push") as {
@@ -763,18 +779,17 @@ describe("invalidateAvailability call-chain tests", () => {
 
       await channel.dispatch(
         { userId: TEST_USER.id, type: "vacancy_promoted" as never, message: "Test" },
-        TEST_USER.id,
+        ctx,
       );
 
-      expect(onPurged).toHaveBeenCalledWith(TEST_USER.id);
+      expect(mockWebPushSubscriptionDelete).toHaveBeenCalledWith({
+        where: { id: MOCK_SUBSCRIPTION.id, userId: TEST_USER.id },
+      });
     });
 
-    it("does NOT call onSubscriptionPurged for non-410/404 errors (e.g., 401)", async () => {
-      const onPurged = jest.fn();
-      const channel = new PushChannel({ onSubscriptionPurged: onPurged });
-
-      mockVapidConfigFindUnique.mockResolvedValue(MOCK_VAPID);
-      mockWebPushSubscriptionFindMany.mockResolvedValue([MOCK_SUBSCRIPTION]);
+    it("does NOT delete subscription for non-410/404 errors (e.g., 401)", async () => {
+      const channel = new PushChannel();
+      const ctx = makePushTestContext();
 
       const { WebPushError } = jest.requireMock("web-push") as {
         WebPushError: new (msg: string, code: number) => Error & { statusCode: number };
@@ -783,17 +798,16 @@ describe("invalidateAvailability call-chain tests", () => {
 
       await channel.dispatch(
         { userId: TEST_USER.id, type: "vacancy_promoted" as never, message: "Test" },
-        TEST_USER.id,
+        ctx,
       );
 
-      expect(onPurged).not.toHaveBeenCalled();
+      expect(mockWebPushSubscriptionDelete).not.toHaveBeenCalled();
     });
 
-    it("works without callback (default PushChannel constructor)", async () => {
-      const channel = new PushChannel(); // no options
+    it("dispatch completes gracefully when subscription is expired (410)", async () => {
+      const channel = new PushChannel();
+      const ctx = makePushTestContext();
 
-      mockVapidConfigFindUnique.mockResolvedValue(MOCK_VAPID);
-      mockWebPushSubscriptionFindMany.mockResolvedValue([MOCK_SUBSCRIPTION]);
       mockWebPushSubscriptionDelete.mockResolvedValue({});
 
       const { WebPushError } = jest.requireMock("web-push") as {
@@ -801,65 +815,42 @@ describe("invalidateAvailability call-chain tests", () => {
       };
       mockSendNotification.mockRejectedValue(new WebPushError("Gone", 410));
 
-      // Should not throw — optional chaining handles missing callback
       const result = await channel.dispatch(
         { userId: TEST_USER.id, type: "vacancy_promoted" as never, message: "Test" },
-        TEST_USER.id,
+        ctx,
       );
 
-      // Dispatch completes gracefully (subscription expired, no callback)
       expect(result.channel).toBe("push");
     });
   });
 
   // =========================================================================
   // ChannelRouter.invalidateAllChannels (GDPR Art. 17 preparation)
+  //
+  // PERF-3: invalidateAvailability and invalidateAllChannels are now no-ops.
+  // The availability cache was removed. These tests verify backward compat:
+  // the methods still exist and do not throw.
   // =========================================================================
 
-  describe("ChannelRouter.invalidateAllChannels", () => {
-    it("delegates to invalidateAvailability for the given userId", () => {
-      // Use the real ChannelRouter class, not the mock
+  describe("ChannelRouter.invalidateAllChannels (PERF-3 no-op)", () => {
+    it("invalidateAllChannels is a no-op but does not throw", () => {
       const { ChannelRouter } = jest.requireActual(
         "@/lib/notifications/channel-router",
       ) as { ChannelRouter: new () => { invalidateAllChannels: (id: string) => void; invalidateAvailability: (id?: string, ch?: string) => void } };
 
       const router = new ChannelRouter();
-      const spy = jest.spyOn(router, "invalidateAvailability");
-
-      router.invalidateAllChannels("user-gdpr-delete-1");
-
-      expect(spy).toHaveBeenCalledWith("user-gdpr-delete-1");
-      expect(spy).toHaveBeenCalledTimes(1);
+      expect(() => router.invalidateAllChannels("user-gdpr-delete-1")).not.toThrow();
     });
 
-    it("clears all channel caches for the user (not other users)", () => {
+    it("invalidateAvailability is a no-op but does not throw", () => {
       const { ChannelRouter } = jest.requireActual(
         "@/lib/notifications/channel-router",
-      ) as { ChannelRouter: new () => {
-        invalidateAllChannels: (id: string) => void;
-        invalidateAvailability: (id?: string, ch?: string) => void;
-        // Access private cache for assertion — test-only
-        ["availabilityCache"]: Map<string, unknown>;
-      }};
+      ) as { ChannelRouter: new () => { invalidateAllChannels: (id: string) => void; invalidateAvailability: (id?: string, ch?: string) => void } };
 
       const router = new ChannelRouter();
-      // Manually populate cache entries for two users
-      (router as unknown as { availabilityCache: Map<string, unknown> }).availabilityCache.set(
-        "user-a:push", { available: true, at: Date.now() },
-      );
-      (router as unknown as { availabilityCache: Map<string, unknown> }).availabilityCache.set(
-        "user-a:email", { available: true, at: Date.now() },
-      );
-      (router as unknown as { availabilityCache: Map<string, unknown> }).availabilityCache.set(
-        "user-b:push", { available: true, at: Date.now() },
-      );
-
-      router.invalidateAllChannels("user-a");
-
-      const cache = (router as unknown as { availabilityCache: Map<string, unknown> }).availabilityCache;
-      expect(cache.has("user-a:push")).toBe(false);
-      expect(cache.has("user-a:email")).toBe(false);
-      expect(cache.has("user-b:push")).toBe(true); // other user untouched
+      expect(() => router.invalidateAvailability("user-a")).not.toThrow();
+      expect(() => router.invalidateAvailability("user-a", "push")).not.toThrow();
+      expect(() => router.invalidateAvailability()).not.toThrow();
     });
   });
 });

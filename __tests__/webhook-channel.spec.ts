@@ -4,6 +4,12 @@
  * Tests: HMAC signature, retry logic, backoff intervals, auto-deactivation,
  * SSRF re-validation, failure count reset, event filtering, timeout handling.
  *
+ * PERF-3: isAvailable() removed. Availability is now a boolean flag on
+ * DispatchContext (webhookAvailable), checked by the ChannelRouter before
+ * dispatch is called. dispatch() receives a DispatchContext snapshot
+ * instead of a bare userId string. Webhook endpoints are read from
+ * ctx.webhookEndpoints.
+ *
  * Spec: specs/notification-dispatch.allium
  */
 
@@ -14,9 +20,7 @@ jest.mock("server-only", () => ({}));
 // Prisma mock
 // ---------------------------------------------------------------------------
 
-const mockFindMany = jest.fn();
 const mockUpdate = jest.fn().mockResolvedValue({ failureCount: 1 });
-const mockCount = jest.fn();
 const mockNotificationCreate = jest.fn().mockResolvedValue({ id: "notif-1" });
 const mockUserSettingsFindUnique = jest.fn().mockResolvedValue(null);
 
@@ -24,9 +28,7 @@ jest.mock("@/lib/db", () => ({
   __esModule: true,
   default: {
     webhookEndpoint: {
-      findMany: (...args: unknown[]) => mockFindMany(...args),
       update: (...args: unknown[]) => mockUpdate(...args),
-      count: (...args: unknown[]) => mockCount(...args),
     },
     notification: {
       create: (...args: unknown[]) => mockNotificationCreate(...args),
@@ -60,14 +62,6 @@ jest.mock("@/i18n/dictionaries", () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Locale resolver mock
-// ---------------------------------------------------------------------------
-
-jest.mock("@/lib/locale-resolver", () => ({
-  resolveUserLocale: jest.fn().mockResolvedValue("en"),
-}));
-
-// ---------------------------------------------------------------------------
 // URL validation mock
 // ---------------------------------------------------------------------------
 
@@ -88,6 +82,8 @@ import {
 } from "@/lib/notifications/channels/webhook.channel";
 import { createHmac } from "crypto";
 import type { NotificationDraft } from "@/lib/notifications/types";
+import type { DispatchContext } from "@/lib/notifications/dispatch-context";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
 
 // ---------------------------------------------------------------------------
 // Fetch mock
@@ -138,17 +134,41 @@ function makeEndpoint(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 /**
+ * Factory for building a test DispatchContext for webhook tests.
+ */
+function makeTestContext(
+  overrides: Partial<DispatchContext> = {},
+): DispatchContext {
+  return {
+    userId: TEST_USER_ID,
+    preferences: DEFAULT_NOTIFICATION_PREFERENCES,
+    locale: "en",
+    userEmail: "user@example.com",
+    smtp: null,
+    vapid: null,
+    pushSubscriptions: [],
+    webhookEndpoints: [makeEndpoint()],
+    emailAvailable: false,
+    pushAvailable: false,
+    webhookAvailable: true,
+    inAppAvailable: true,
+    vapidSubject: "mailto:noreply@jobsync.local",
+    ...overrides,
+  };
+}
+
+/**
  * Helper to run a dispatch that involves retries with fake timers.
  * Uses jest fake timers to avoid real delays during retry backoff.
  */
 async function dispatchWithFakeTimers(
   channel: WebhookChannel,
   draft: NotificationDraft,
-  userId: string,
+  ctx: DispatchContext,
 ) {
   jest.useFakeTimers();
 
-  const dispatchPromise = channel.dispatch(draft, userId);
+  const dispatchPromise = channel.dispatch(draft, ctx);
 
   // Advance timers in a loop until the promise resolves.
   // Each iteration advances past one retry backoff period.
@@ -176,8 +196,6 @@ describe("WebhookChannel", () => {
     jest.clearAllMocks();
     channel = new WebhookChannel();
     mockValidateWebhookUrl.mockReturnValue({ valid: true });
-    mockFindMany.mockResolvedValue([]);
-    mockCount.mockResolvedValue(0);
   });
 
   describe("computeHmacSignature", () => {
@@ -217,11 +235,11 @@ describe("WebhookChannel", () => {
   describe("dispatch", () => {
     it("sends POST with correct headers and HMAC signature", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch().mockResolvedValue({ ok: true, status: 200 });
 
       const draft = makeDraft();
-      await channel.dispatch(draft, TEST_USER_ID);
+      await channel.dispatch(draft, ctx);
 
       expect(getMockFetch()).toHaveBeenCalledTimes(1);
       const [url, options] = getMockFetch().mock.calls[0];
@@ -245,11 +263,11 @@ describe("WebhookChannel", () => {
 
     it("builds correct WebhookPayload envelope", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch().mockResolvedValue({ ok: true, status: 200 });
 
       const draft = makeDraft({ data: { jobId: "j-1", title: "Engineer" } });
-      await channel.dispatch(draft, TEST_USER_ID);
+      await channel.dispatch(draft, ctx);
 
       const body = JSON.parse(getMockFetch().mock.calls[0][1].body);
       expect(body.event).toBe("vacancy_promoted");
@@ -267,11 +285,11 @@ describe("WebhookChannel", () => {
         url: "https://other.com/hook",
         events: JSON.stringify(["module_deactivated"]),
       });
-      mockFindMany.mockResolvedValue([ep1, ep2]);
+      const ctx = makeTestContext({ webhookEndpoints: [ep1, ep2] });
       getMockFetch().mockResolvedValue({ ok: true, status: 200 });
 
       const draft = makeDraft({ type: "vacancy_promoted" });
-      await channel.dispatch(draft, TEST_USER_ID);
+      await channel.dispatch(draft, ctx);
 
       // Only ep-1 should receive the call
       expect(getMockFetch()).toHaveBeenCalledTimes(1);
@@ -280,10 +298,10 @@ describe("WebhookChannel", () => {
       );
     });
 
-    it("returns success with no endpoints", async () => {
-      mockFindMany.mockResolvedValue([]);
+    it("returns success with no endpoints (empty array on ctx)", async () => {
+      const ctx = makeTestContext({ webhookEndpoints: [] });
 
-      const result = await channel.dispatch(makeDraft(), TEST_USER_ID);
+      const result = await channel.dispatch(makeDraft(), ctx);
       expect(result.success).toBe(true);
       expect(result.channel).toBe("webhook");
       expect(getMockFetch()).not.toHaveBeenCalled();
@@ -293,20 +311,20 @@ describe("WebhookChannel", () => {
       const ep = makeEndpoint({
         events: JSON.stringify(["module_deactivated"]),
       });
-      mockFindMany.mockResolvedValue([ep]);
+      const ctx = makeTestContext({ webhookEndpoints: [ep] });
 
       const draft = makeDraft({ type: "vacancy_promoted" });
-      const result = await channel.dispatch(draft, TEST_USER_ID);
+      const result = await channel.dispatch(draft, ctx);
       expect(result.success).toBe(true);
       expect(getMockFetch()).not.toHaveBeenCalled();
     });
 
     it("resets failureCount to 0 on successful delivery", async () => {
       const endpoint = makeEndpoint({ failureCount: 3 });
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch().mockResolvedValue({ ok: true, status: 200 });
 
-      await channel.dispatch(makeDraft(), TEST_USER_ID);
+      await channel.dispatch(makeDraft(), ctx);
 
       // H3: userId must be in where clause (IDOR protection)
       expect(mockUpdate).toHaveBeenCalledWith({
@@ -317,44 +335,26 @@ describe("WebhookChannel", () => {
 
     it("does not update failureCount if already 0 on success", async () => {
       const endpoint = makeEndpoint({ failureCount: 0 });
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch().mockResolvedValue({ ok: true, status: 200 });
 
-      await channel.dispatch(makeDraft(), TEST_USER_ID);
+      await channel.dispatch(makeDraft(), ctx);
 
       // Should not call update since failureCount is already 0
       expect(mockUpdate).not.toHaveBeenCalled();
-    });
-
-    it("queries endpoints with userId and active filter", async () => {
-      mockFindMany.mockResolvedValue([]);
-
-      await channel.dispatch(makeDraft(), TEST_USER_ID);
-
-      expect(mockFindMany).toHaveBeenCalledWith({
-        where: { userId: TEST_USER_ID, active: true },
-        select: {
-          id: true,
-          url: true,
-          secret: true,
-          iv: true,
-          events: true,
-          failureCount: true,
-        },
-      });
     });
   });
 
   describe("SSRF re-validation on dispatch", () => {
     it("blocks delivery when URL fails SSRF validation", async () => {
       const endpoint = makeEndpoint({ url: "http://169.254.169.254/metadata" });
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       mockValidateWebhookUrl.mockReturnValue({
         valid: false,
         error: "webhook.ssrfBlocked",
       });
 
-      const result = await channel.dispatch(makeDraft(), TEST_USER_ID);
+      const result = await channel.dispatch(makeDraft(), ctx);
 
       expect(getMockFetch()).not.toHaveBeenCalled();
       expect(result.success).toBe(false);
@@ -364,10 +364,10 @@ describe("WebhookChannel", () => {
     it("calls validateWebhookUrl for each endpoint on dispatch", async () => {
       const ep1 = makeEndpoint({ id: "ep-1", url: "https://a.com/hook" });
       const ep2 = makeEndpoint({ id: "ep-2", url: "https://b.com/hook" });
-      mockFindMany.mockResolvedValue([ep1, ep2]);
+      const ctx = makeTestContext({ webhookEndpoints: [ep1, ep2] });
       getMockFetch().mockResolvedValue({ ok: true, status: 200 });
 
-      await channel.dispatch(makeDraft(), TEST_USER_ID);
+      await channel.dispatch(makeDraft(), ctx);
 
       expect(mockValidateWebhookUrl).toHaveBeenCalledWith("https://a.com/hook");
       expect(mockValidateWebhookUrl).toHaveBeenCalledWith("https://b.com/hook");
@@ -377,35 +377,35 @@ describe("WebhookChannel", () => {
   describe("retry logic", () => {
     it("retries up to 3 times on failure", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch()
         .mockResolvedValueOnce({ ok: false, status: 500 })
         .mockResolvedValueOnce({ ok: false, status: 502 })
         .mockResolvedValueOnce({ ok: false, status: 503 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       expect(getMockFetch()).toHaveBeenCalledTimes(3);
     });
 
     it("stops retrying on first success", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch()
         .mockResolvedValueOnce({ ok: false, status: 500 })
         .mockResolvedValueOnce({ ok: true, status: 200 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       expect(getMockFetch()).toHaveBeenCalledTimes(2);
     });
 
     it("creates in-app notification after retry exhaustion", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       // Should create a failure notification
       expect(mockNotificationCreate).toHaveBeenCalledWith({
@@ -419,21 +419,15 @@ describe("WebhookChannel", () => {
 
     it("populates data.titleKey + 5W+H metadata for late-bound i18n on delivery failure", async () => {
       const endpoint = makeEndpoint({ url: "https://late-bind.example.com/hook" });
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
       await dispatchWithFakeTimers(
         channel,
         makeDraft({ type: "vacancy_promoted" }),
-        TEST_USER_ID,
+        ctx,
       );
 
-      // Sprint 4 L-A-03: titleKey now follows the project-wide
-      // `notifications.*.title` convention (`notifications.webhook.
-      // deliveryFailed.title`) so it sits alongside the other 5W+H
-      // writers (notifications.moduleDeactivated.title, etc.). The bare
-      // `webhook.deliveryFailed` key stays in place for the English
-      // fallback `message` column.
       const failureCall = mockNotificationCreate.mock.calls.find((c: unknown[]) => {
         const row = (c[0] as { data: { data?: { titleKey?: string } } }).data;
         return (
@@ -485,11 +479,11 @@ describe("WebhookChannel", () => {
 
     it("uses atomic increment for failureCount after all retries exhausted", async () => {
       const endpoint = makeEndpoint({ failureCount: 2 });
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       mockUpdate.mockResolvedValue({ failureCount: 3 });
       getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       // M3: atomic increment instead of read-then-write
       // H3: userId must be in where clause
@@ -509,12 +503,12 @@ describe("WebhookChannel", () => {
   describe("auto-deactivation", () => {
     it("deactivates endpoint after 5 consecutive failures", async () => {
       const endpoint = makeEndpoint({ failureCount: 4 }); // will become 5
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       // M3: atomic increment returns the updated failureCount
       mockUpdate.mockResolvedValueOnce({ failureCount: 5 }).mockResolvedValue({});
       getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       // First update: atomic increment (M3 + H3)
       expect(mockUpdate).toHaveBeenCalledWith({
@@ -532,12 +526,12 @@ describe("WebhookChannel", () => {
 
     it("creates deactivation notification when endpoint is deactivated", async () => {
       const endpoint = makeEndpoint({ failureCount: 4 });
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       // M3: atomic increment returns failureCount >= threshold
       mockUpdate.mockResolvedValueOnce({ failureCount: 5 }).mockResolvedValue({});
       getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       // Should create both failure and deactivation notifications (M6: i18n messages)
       const calls = mockNotificationCreate.mock.calls;
@@ -555,15 +549,12 @@ describe("WebhookChannel", () => {
         url: "https://late-bind-deact.example.com/hook",
         failureCount: 4,
       });
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       mockUpdate.mockResolvedValueOnce({ failureCount: 5 }).mockResolvedValue({});
       getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
-      // Sprint 4 L-A-03: same convention rename as notifyDeliveryFailed —
-      // `webhook.endpointDeactivated` → `notifications.webhook.endpoint
-      // Deactivated.title`.
       const deactivationCall = mockNotificationCreate.mock.calls.find(
         (c: unknown[]) => {
           const row = (
@@ -612,12 +603,12 @@ describe("WebhookChannel", () => {
 
     it("does not deactivate when failureCount is below threshold", async () => {
       const endpoint = makeEndpoint({ failureCount: 2 }); // will become 3, below 5
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       // M3: atomic increment returns failureCount below threshold
       mockUpdate.mockResolvedValue({ failureCount: 3 });
       getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       // Should use atomic increment (M3 + H3)
       expect(mockUpdate).toHaveBeenCalledWith({
@@ -642,7 +633,7 @@ describe("WebhookChannel", () => {
   describe("timeout handling", () => {
     it("aborts fetch after 10 seconds", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
 
       // Simulate AbortError on all attempts
       getMockFetch().mockRejectedValue(
@@ -652,7 +643,7 @@ describe("WebhookChannel", () => {
       const result = await dispatchWithFakeTimers(
         channel,
         makeDraft(),
-        TEST_USER_ID,
+        ctx,
       );
 
       // Should fail but not throw
@@ -664,33 +655,14 @@ describe("WebhookChannel", () => {
     });
   });
 
-  describe("isAvailable", () => {
-    it("returns true when user has active endpoints", async () => {
-      mockCount.mockResolvedValue(2);
-
-      const result = await channel.isAvailable(TEST_USER_ID);
-      expect(result).toBe(true);
-      expect(mockCount).toHaveBeenCalledWith({
-        where: { userId: TEST_USER_ID, active: true },
-      });
-    });
-
-    it("returns false when user has no active endpoints", async () => {
-      mockCount.mockResolvedValue(0);
-
-      const result = await channel.isAvailable(TEST_USER_ID);
-      expect(result).toBe(false);
-    });
-  });
-
   describe("multiple endpoints", () => {
     it("delivers to multiple matching endpoints independently", async () => {
       const ep1 = makeEndpoint({ id: "ep-1", url: "https://a.com/hook" });
       const ep2 = makeEndpoint({ id: "ep-2", url: "https://b.com/hook" });
-      mockFindMany.mockResolvedValue([ep1, ep2]);
+      const ctx = makeTestContext({ webhookEndpoints: [ep1, ep2] });
       getMockFetch().mockResolvedValue({ ok: true, status: 200 });
 
-      const result = await channel.dispatch(makeDraft(), TEST_USER_ID);
+      const result = await channel.dispatch(makeDraft(), ctx);
 
       expect(result.success).toBe(true);
       expect(getMockFetch()).toHaveBeenCalledTimes(2);
@@ -702,14 +674,14 @@ describe("WebhookChannel", () => {
         id: "ep-2",
         url: "https://public.com/hook",
       });
-      mockFindMany.mockResolvedValue([ep1, ep2]);
+      const ctx = makeTestContext({ webhookEndpoints: [ep1, ep2] });
 
       mockValidateWebhookUrl
         .mockReturnValueOnce({ valid: false, error: "webhook.ssrfBlocked" })
         .mockReturnValueOnce({ valid: true });
       getMockFetch().mockResolvedValue({ ok: true, status: 200 });
 
-      const result = await channel.dispatch(makeDraft(), TEST_USER_ID);
+      const result = await channel.dispatch(makeDraft(), ctx);
 
       expect(result.success).toBe(true);
       expect(getMockFetch()).toHaveBeenCalledTimes(1);
@@ -719,10 +691,10 @@ describe("WebhookChannel", () => {
   describe("SSRF redirect prevention (H1)", () => {
     it("passes redirect: 'manual' to fetch", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch().mockResolvedValue({ ok: true, status: 200 });
 
-      await channel.dispatch(makeDraft(), TEST_USER_ID);
+      await channel.dispatch(makeDraft(), ctx);
 
       const options = getMockFetch().mock.calls[0][1];
       expect(options.redirect).toBe("manual");
@@ -730,10 +702,10 @@ describe("WebhookChannel", () => {
 
     it("treats 301 redirect as failure", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch().mockResolvedValue({ ok: false, status: 301 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       // Should retry all 3 attempts since redirects are failures
       expect(getMockFetch()).toHaveBeenCalledTimes(3);
@@ -741,20 +713,20 @@ describe("WebhookChannel", () => {
 
     it("treats 302 redirect as failure", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch().mockResolvedValue({ ok: false, status: 302 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       expect(getMockFetch()).toHaveBeenCalledTimes(3);
     });
 
     it("treats 307 redirect as failure", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch().mockResolvedValue({ ok: false, status: 307 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       expect(getMockFetch()).toHaveBeenCalledTimes(3);
     });
@@ -765,14 +737,14 @@ describe("WebhookChannel", () => {
       const callOrder: string[] = [];
       const ep1 = makeEndpoint({ id: "ep-1", url: "https://a.com/hook" });
       const ep2 = makeEndpoint({ id: "ep-2", url: "https://b.com/hook" });
-      mockFindMany.mockResolvedValue([ep1, ep2]);
+      const ctx = makeTestContext({ webhookEndpoints: [ep1, ep2] });
 
       getMockFetch().mockImplementation((url: string) => {
         callOrder.push(url);
         return Promise.resolve({ ok: true, status: 200 });
       });
 
-      const result = await channel.dispatch(makeDraft(), TEST_USER_ID);
+      const result = await channel.dispatch(makeDraft(), ctx);
 
       expect(result.success).toBe(true);
       expect(getMockFetch()).toHaveBeenCalledTimes(2);
@@ -783,20 +755,11 @@ describe("WebhookChannel", () => {
   });
 
   describe("error isolation", () => {
-    it("returns error result without throwing on Prisma failure", async () => {
-      mockFindMany.mockRejectedValue(new Error("DB connection lost"));
-
-      const result = await channel.dispatch(makeDraft(), TEST_USER_ID);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe("DB connection lost");
-    });
-
     it("handles malformed events JSON gracefully", async () => {
       const endpoint = makeEndpoint({ events: "not-json" });
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
 
-      const result = await channel.dispatch(makeDraft(), TEST_USER_ID);
+      const result = await channel.dispatch(makeDraft(), ctx);
 
       // Endpoint with malformed JSON should be filtered out
       expect(result.success).toBe(true);
@@ -807,99 +770,79 @@ describe("WebhookChannel", () => {
   // -------------------------------------------------------------------------
   // Sprint 2 H-A-04 / H-A-07 — shouldNotify preference gating
   //
-  // The webhook channel creates in-app notifications in TWO places
-  // (notifyDeliveryFailed, notifyEndpointDeactivated). Before Sprint 2 both
-  // called `prisma.notification.create` directly, bypassing `shouldNotify()`.
-  // Quiet hours, per-type toggles, and the global kill switch were silently
-  // ignored — violating specs/notification-dispatch.allium invariant
-  // `QuietHoursRespected`.
-  //
-  // The fix routes both call sites through `prepareEnforcedNotification()`
-  // which resolves `UserSettings` and applies `shouldNotify()` BEFORE the
-  // physical Prisma write. These tests pin the three gate behaviours for
-  // each of the 2 call sites.
+  // PERF-3: the webhook channel now passes ctx.preferences directly to
+  // notifyDeliveryFailed / notifyEndpointDeactivated, which forward them
+  // to prepareEnforcedNotification(). Tests set preferences on the
+  // DispatchContext instead of mocking UserSettings.
   // -------------------------------------------------------------------------
   describe("shouldNotify preference gating (H-A-04 / H-A-07)", () => {
-    function makeSettings(notifications: unknown) {
-      return {
-        settings: JSON.stringify({
-          ai: { moduleId: "ollama" },
-          display: { theme: "system", locale: "en" },
-          notifications,
-        }),
-      };
-    }
-
     it("notifyDeliveryFailed — suppresses the in-app row when global kill switch is off", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
-      getMockFetch().mockResolvedValue({ ok: false, status: 500 });
-      mockUserSettingsFindUnique.mockResolvedValue(
-        makeSettings({
+      const ctx = makeTestContext({
+        webhookEndpoints: [endpoint],
+        preferences: {
           enabled: false,
           channels: { inApp: true, webhook: true, email: false, push: false },
           perType: {},
-        }),
-      );
+        },
+      });
+      getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
-      // No in-app failure notification should be written — the webhook
-      // delivery still happened (and failed), but the spec says global
-      // kill-switch suppresses ALL in-app writes regardless of source.
       expect(mockNotificationCreate).not.toHaveBeenCalled();
     });
 
     it("notifyDeliveryFailed — suppresses the in-app row when inApp channel is disabled", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
-      getMockFetch().mockResolvedValue({ ok: false, status: 500 });
-      mockUserSettingsFindUnique.mockResolvedValue(
-        makeSettings({
+      const ctx = makeTestContext({
+        webhookEndpoints: [endpoint],
+        preferences: {
           enabled: true,
           channels: { inApp: false, webhook: true, email: false, push: false },
           perType: {},
-        }),
-      );
+        },
+      });
+      getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       expect(mockNotificationCreate).not.toHaveBeenCalled();
     });
 
     it("notifyDeliveryFailed — suppresses the in-app row when perType.module_unreachable is disabled", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
-      getMockFetch().mockResolvedValue({ ok: false, status: 500 });
-      mockUserSettingsFindUnique.mockResolvedValue(
-        makeSettings({
+      const ctx = makeTestContext({
+        webhookEndpoints: [endpoint],
+        preferences: {
           enabled: true,
           channels: { inApp: true, webhook: true, email: false, push: false },
           perType: { module_unreachable: { enabled: false } },
-        }),
-      );
+        },
+      });
+      getMockFetch().mockResolvedValue({ ok: false, status: 500 });
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       expect(mockNotificationCreate).not.toHaveBeenCalled();
     });
 
     it("notifyEndpointDeactivated — suppresses the in-app row when inApp channel is disabled", async () => {
       const endpoint = makeEndpoint({ failureCount: 4 });
-      mockFindMany.mockResolvedValue([endpoint]);
+      const ctx = makeTestContext({
+        webhookEndpoints: [endpoint],
+        preferences: {
+          enabled: true,
+          channels: { inApp: false, webhook: true, email: false, push: false },
+          perType: {},
+        },
+      });
       mockUpdate
         .mockResolvedValueOnce({ failureCount: 5 })
         .mockResolvedValue({});
       getMockFetch().mockResolvedValue({ ok: false, status: 500 });
-      mockUserSettingsFindUnique.mockResolvedValue(
-        makeSettings({
-          enabled: true,
-          channels: { inApp: false, webhook: true, email: false, push: false },
-          perType: {},
-        }),
-      );
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       // Auto-deactivation still happens on the webhook endpoint itself —
       // only the in-app row that informs the user is gated out.
@@ -910,17 +853,13 @@ describe("WebhookChannel", () => {
       expect(mockNotificationCreate).not.toHaveBeenCalled();
     });
 
-    it("preserves legacy behaviour when UserSettings returns null (default preferences)", async () => {
-      // Regression guard: the default `null` settings path is what every
-      // pre-Sprint-2 test in this file relies on. It must keep producing
-      // a `prisma.notification.create` call so the existing suite passes
-      // unchanged.
+    it("preserves legacy behaviour when default preferences (notifications allowed)", async () => {
       const endpoint = makeEndpoint();
-      mockFindMany.mockResolvedValue([endpoint]);
+      // DEFAULT_NOTIFICATION_PREFERENCES has enabled=true, inApp=true
+      const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch().mockResolvedValue({ ok: false, status: 500 });
-      mockUserSettingsFindUnique.mockResolvedValue(null);
 
-      await dispatchWithFakeTimers(channel, makeDraft(), TEST_USER_ID);
+      await dispatchWithFakeTimers(channel, makeDraft(), ctx);
 
       expect(mockNotificationCreate).toHaveBeenCalled();
     });

@@ -11,12 +11,13 @@ import "server-only";
 
 import prisma from "@/lib/db";
 import type { NotificationType } from "@/models/notification.model";
+import type { DispatchContext } from "../dispatch-context";
 import type { NotificationChannel, NotificationDraft, ChannelResult } from "../types";
 
 export class InAppChannel implements NotificationChannel {
   readonly name = "inApp";
 
-  async dispatch(notification: NotificationDraft, userId: string): Promise<ChannelResult> {
+  async dispatch(notification: NotificationDraft, ctx: DispatchContext): Promise<ChannelResult> {
     try {
       // Dual-write the 5W+H structured fields (ADR-030): populate BOTH the
       // new top-level columns (severity/actorType/actorId/titleKey/...) and
@@ -25,7 +26,7 @@ export class InAppChannel implements NotificationChannel {
       // first-class nullable fields.
       await prisma.notification.create({
         data: {
-          userId,
+          userId: ctx.userId,
           type: notification.type satisfies NotificationType,
           message: notification.message,
           ...(notification.moduleId ? { moduleId: notification.moduleId } : {}),
@@ -47,10 +48,5 @@ export class InAppChannel implements NotificationChannel {
       console.error(`[InAppChannel] Failed to create notification:`, error);
       return { success: false, channel: this.name, error: errorMessage };
     }
-  }
-
-  async isAvailable(_userId: string): Promise<boolean> {
-    // In-app notifications are always available — they just need a DB.
-    return true;
   }
 }

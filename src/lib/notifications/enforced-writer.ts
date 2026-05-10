@@ -179,10 +179,18 @@ export type PrepareNotificationResult =
  *               userSettings.findUnique when the caller already has them
  *               — e.g., when writing multiple notifications in a loop per
  *               createMany batch).
+ * @param locale Optional pre-resolved locale string. When provided, callers
+ *               signal they already have the user's locale from a
+ *               DispatchContext snapshot — the function does not use it
+ *               internally today but the parameter is part of the
+ *               DispatchContext-aware API surface so that future extensions
+ *               (e.g. locale-aware enforcement messages) can use it without
+ *               another signature change. degradation.ts callers omit this.
  */
 export async function prepareEnforcedNotification(
   draft: EnforcedNotificationDraft,
   prefs?: NotificationPreferences,
+  _locale?: string,
 ): Promise<PrepareNotificationResult> {
   const resolvedPrefs =
     prefs ?? (await resolvePreferencesForEnforcer(draft.userId));

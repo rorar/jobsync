@@ -23,7 +23,7 @@ import webpush, { WebPushError } from "web-push";
 import prisma from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 import { checkPushDispatchRateLimit } from "@/lib/push/rate-limit";
-import { resolveVapidSubject } from "@/lib/push/vapid";
+import type { DispatchContext } from "../dispatch-context";
 import type {
   NotificationChannel,
   NotificationDraft,
@@ -49,52 +49,26 @@ const PUSH_TITLE = "JobSync";
 export class PushChannel implements NotificationChannel {
   readonly name = "push";
 
-  /**
-   * Optional callback invoked after a stale subscription is deleted (404/410).
-   * Wired by `registerChannels()` in channel-router.ts to invalidate the
-   * availability cache — without this, the 30s TTL cache keeps claiming
-   * "push available" even when the last subscription was purged.
-   *
-   * Callback pattern avoids a circular import (channel-router → PushChannel
-   * → channel-router).
-   */
-  private onSubscriptionPurged?: (userId: string) => void;
-
-  constructor(options?: { onSubscriptionPurged?: (userId: string) => void }) {
-    this.onSubscriptionPurged = options?.onSubscriptionPurged;
-  }
-
   async dispatch(
     notification: NotificationDraft,
-    userId: string,
+    ctx: DispatchContext,
   ): Promise<ChannelResult> {
     try {
       // 1. Rate limit check (20/min per user)
-      const rateCheck = checkPushDispatchRateLimit(userId);
+      const rateCheck = checkPushDispatchRateLimit(ctx.userId);
       if (!rateCheck.allowed) {
-        console.warn(`[PushChannel] Rate limited for user ${userId}`);
+        console.warn(`[PushChannel] Rate limited for user ${ctx.userId}`);
         return { success: false, channel: this.name, error: "Rate limited" };
       }
 
-      // 2. Load VAPID keys for user
-      const vapidConfig = await prisma.vapidConfig.findUnique({
-        where: { userId },
-      });
+      // 2. Read VAPID keys from context snapshot
+      const vapidConfig = ctx.vapid;
       if (!vapidConfig) {
         return { success: false, channel: this.name, error: "No VAPID keys configured" };
       }
 
-      // 3. Load all subscriptions for user
-      const subscriptions = await prisma.webPushSubscription.findMany({
-        where: { userId },
-        select: {
-          id: true,
-          endpoint: true,
-          p256dh: true,
-          auth: true,
-          iv: true,
-        },
-      });
+      // 3. Read subscriptions from context snapshot
+      const subscriptions = ctx.pushSubscriptions;
 
       if (subscriptions.length === 0) {
         return { success: false, channel: this.name, error: "No push subscriptions" };
@@ -113,8 +87,8 @@ export class PushChannel implements NotificationChannel {
         };
       }
 
-      // 5. Resolve VAPID subject
-      const vapidSubject = await resolveVapidSubject(userId);
+      // 5. VAPID subject from context snapshot
+      const vapidSubject = ctx.vapidSubject;
 
       // 6. Build push payload
       const payload = JSON.stringify({
@@ -179,17 +153,11 @@ export class PushChannel implements NotificationChannel {
               if (err.statusCode === 404 || err.statusCode === 410) {
                 await prisma.webPushSubscription
                   .delete({
-                    where: { id: sub.id, userId },
+                    where: { id: sub.id, userId: ctx.userId },
                   })
                   .catch(() => {
                     // Already deleted or race condition — ignore
                   });
-
-                // GDPR Art. 25 (Privacy by Design): invalidate the cached
-                // availability verdict so the next dispatch sees fresh state.
-                // Without this, the 30s TTL cache keeps claiming "push
-                // available" even when this was the user's last subscription.
-                this.onSubscriptionPurged?.(userId);
 
                 return {
                   success: false,
@@ -247,19 +215,6 @@ export class PushChannel implements NotificationChannel {
     }
   }
 
-  async isAvailable(userId: string): Promise<boolean> {
-    try {
-      // Has VAPID keys AND at least one subscription
-      const [vapid, subCount] = await Promise.all([
-        prisma.vapidConfig.findUnique({ where: { userId } }),
-        prisma.webPushSubscription.count({ where: { userId } }),
-      ]);
-      return !!vapid && subCount > 0;
-    } catch (error) {
-      console.error("[PushChannel] isAvailable check failed:", error);
-      return false;
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -267,6 +222,5 @@ export class PushChannel implements NotificationChannel {
 // ---------------------------------------------------------------------------
 
 export const _testHelpers = {
-  resolveVapidSubject,
   PUSH_TIMEOUT_MS,
 };

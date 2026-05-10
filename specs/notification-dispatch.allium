@@ -164,6 +164,39 @@ value QuietHoursConfig {
   timezone: String                    -- IANA timezone, e.g. "Europe/Berlin"
 }
 
+value DispatchContext {
+  -- Pre-fetched user context for a single dispatch cycle (PERF-3).
+  -- Built once by buildDispatchContext(), passed to ChannelRouter and all channels.
+  -- Replaces the previous pattern where each channel independently queried its
+  -- own infrastructure, which produced 11-13 DB queries per notification (5-6
+  -- redundant reads of userSettings, smtpConfig, vapidConfig).
+  --
+  -- Observable effect: identical notification delivery outcomes, but with all
+  -- channel infrastructure resolved in 6 parallel queries instead of 11-13
+  -- sequential ones. Channels no longer access the database for context data.
+  --
+  -- PERF-3: F-03 (redundant queries) + F-10 (isAvailable+dispatch double-query)
+  --         + F-11 (VAPID subject from SmtpConfig) from S5b performance review.
+  -- Roadmap: CRM (5.x) event consumers reuse this pattern.
+  --          GDPR (6.1) invalidateAllChannels() builds on this architecture.
+  --          F-04 SMTP pooling can key transporter cache off ctx.smtp_config.
+
+  user_id: String
+  locale: String                      -- resolved from UserSettings once
+  preferences: NotificationPreference -- resolved from UserSettings once
+  recipient_email: String?            -- user.email from NextAuth identity
+  smtp_config: SmtpConfig?            -- active SMTP config (null if unconfigured)
+  vapid_config: VapidConfig?          -- VAPID key pair (null if unconfigured)
+  webhook_endpoints: Set<WebhookEndpoint>   -- active endpoints for this user
+  subscriptions: Set<WebPushSubscription>   -- all push subscriptions for this user
+
+  -- Derived: channel availability (replaces isAvailable DB calls)
+  email_available: smtp_config != null
+  push_available: vapid_config != null and subscriptions.count > 0
+  webhook_available: webhook_endpoints.count > 0
+  -- inApp is always available (no infrastructure check needed)
+}
+
 entity WebhookEndpoint {
   -- A user-configured HTTP endpoint that receives notification payloads.
   -- Secret is AES-encrypted at rest; decrypted only at dispatch time for HMAC signing.
@@ -236,31 +269,58 @@ contract NotificationDispatcher {
   -- Application Service that consumes domain events and produces notifications.
   -- Registered as an EventBus consumer at application startup.
   -- Stateless — reads preferences from DB, writes notifications to DB.
+  --
+  -- PERF-3 architecture: dispatch() builds a DispatchContext once, then passes
+  -- it to ChannelRouter.route(draft, ctx). Channels receive pre-fetched data
+  -- and never access the database for context queries.
 
-  dispatch(event: DomainEvent): Void
+  dispatch: (event: DomainEvent) -> Void
     -- Main entry point. Called by EventBus for each subscribed event.
     -- 1. Determines the target userId from the event payload
-    -- 2. Loads user's NotificationPreference
+    -- 2. Calls buildDispatchContext(userId) — single point of DB access
     -- 3. Applies all rules (PreferenceCheck, QuietHours, Deduplication, BatchSummary)
-    -- 4. If notification passes all checks: routes to enabled channels
-    -- 5. For inApp channel: creates Notification record
+    -- 4. If notification passes all checks: routes to enabled channels via ctx
 
-  register(bus: EventBus): Void
+  build_dispatch_context: (user_id: String) -> DispatchContext
+    -- Resolves all channel infrastructure for a user in one batch.
+    -- 6 parallel queries: userSettings, user.email, smtpConfig,
+    -- vapidConfig, webPushSubscriptions, webhookEndpoints.
+    -- Returns a DispatchContext value passed to ChannelRouter.route().
+    -- Called once per dispatch — never cached across dispatches.
+
+  register: (bus: EventBus) -> Void
     -- Subscribes to all notification-relevant event types.
     -- Called once at application startup.
 
-  mapEventToNotification(event: DomainEvent, userId: String): Notification?
+  map_event_to_notification: (event: DomainEvent, user_id: String) -> Notification
     -- Maps a domain event to a notification draft.
     -- Returns null if the event type has no notification mapping.
     -- Pure function — does not check preferences (that's dispatch's job).
 
-  invalidateAllChannels(userId: String): Void
+  invalidate_all_channels: (user_id: String) -> Void
     -- GDPR Art. 17 preparation (Roadmap 6.1).
     -- Drops ALL cached isAvailable results for a user across every channel.
     -- Called when the user's entire channel infrastructure is torn down
     -- (e.g., account deletion where onDelete: Cascade removes
     -- WebPushSubscription, VapidConfig, SmtpConfig, WebhookEndpoint).
-    -- Delegates to invalidateAvailability(userId) without channelName.
+    -- Post-PERF-3: the isAvailable cache is largely obsolete (context is
+    -- built fresh per dispatch), but invalidation remains for Settings UI
+    -- writes that should take effect immediately within the same burst.
+
+  @invariant ContextPerDispatch
+    -- Each dispatch cycle builds a fresh DispatchContext. No cross-dispatch
+    -- caching of channel infrastructure data. This ensures that Settings
+    -- changes (SMTP config updates, webhook endpoint CRUD, push subscription
+    -- changes) take effect on the very next notification dispatch.
+
+  @invariant ChannelContextIsolation
+    -- Channels MUST NOT access the database for context data (user settings,
+    -- locale, SMTP config, VAPID keys, subscriptions, webhook endpoints).
+    -- All context is provided via the DispatchContext parameter. This is the
+    -- core architectural constraint of PERF-3: channels are pure consumers
+    -- of pre-fetched data, not independent data accessors.
+    -- Exception: channels may still write to the database (notification
+    -- creation, webhook failureCount updates, stale subscription deletion).
 }
 
 -- =============================================================================
@@ -348,55 +408,24 @@ rule Deduplication {
     -- for the same module within 5 minutes are both delivered.
 }
 
-invariant AvailabilityCacheTtl {
-  -- Sprint 3 M-P-01 + M-P-SPEC-02: `channel.isAvailable(userId)` performs
-  -- per-channel DB round-trips. Under event-storm load a user with all
-  -- channels enabled pays ~4 DB round-trips per notification even when
-  -- nothing is configured. The ChannelRouter MUST cache availability
-  -- results per (userId, channelName) with a short TTL so repeated
-  -- dispatches within the cache window skip the DB path entirely.
+@invariant AvailabilityCacheTtl
+  -- SUPERSEDED BY PERF-3 DispatchContext pattern.
   --
-  -- The cache lives inside the ChannelRouter instance (not a free
-  -- global) so tests constructing a fresh router get a fresh cache,
-  -- and the singleton router survives HMR via globalThis as before.
+  -- Pre-PERF-3 (Sprint 3 M-P-01): ChannelRouter cached isAvailable results
+  -- per (userId, channelName) with 30s TTL to avoid per-channel DB round-trips.
   --
-  -- Settings writes that mutate channel infrastructure (webhook CRUD,
-  -- SMTP CRUD, push subscribe/unsubscribe, VAPID rotation) MUST call
-  -- `channelRouter.invalidateAvailability(userId, channelName)` after
-  -- the mutation so the next dispatch picks up the change instantly
-  -- instead of waiting for the TTL to expire.
+  -- Post-PERF-3: channel availability is a derived field check on the
+  -- DispatchContext (e.g., ctx.email_available = ctx.smtp_config != null).
+  -- The isAvailable cache is REMOVED from ChannelRouter — context is built
+  -- fresh per dispatch (see ContextPerDispatch invariant on the contract).
   --
-  -- Callers of invalidateAvailability:
-  --   A. Settings actions (push.actions, smtp.actions, webhook.actions)
-  --      — called after any CRUD that mutates channel infrastructure.
-  --   B. PushChannel.dispatch() stale subscription cleanup (404/410)
-  --      — when a push service returns 410 Gone or 404 Not Found, the
-  --        subscription is deleted. If it was the user's last subscription,
-  --        the cache must be invalidated so the next dispatch sees fresh
-  --        state. Delivered via constructor callback (`onSubscriptionPurged`)
-  --        to avoid a circular import (channel-router → PushChannel →
-  --        channel-router). Wired in `registerChannels()`.
-  --   C. Future: `invalidateAllChannels(userId)` for GDPR Art. 17 account
-  --      deletion (Roadmap 6.1) — drops ALL channel caches for a user in
-  --      one call when `onDelete: Cascade` removes all channel infra.
-
-  ensures: ChannelRouter caches isAvailable results with TTL
-  ensures: ChannelRouter.invalidateAvailability(userId, channelName?) exists
-           as a hook for Settings writes and stale subscription cleanup
-  ensures: ChannelRouter.invalidateAllChannels(userId) exists as a hook
-           for GDPR Art. 17 account deletion (delegates to
-           invalidateAvailability without channelName)
-  ensures: cache is per-router-instance (not a free global)
-
-  note: "Default TTL is ISAVAILABLE_CACHE_TTL_MS = 30s. Short enough to
-         pick up Settings changes within one dispatch cycle of a burst
-         even without an explicit invalidate() call, long enough to
-         amortize away the per-dispatch round-trip for retention sweeps
-         and bulk actions."
-  note: "Errors thrown by channel.isAvailable() are NOT cached — the next
-         dispatch retries, so a transient DB blip does not stick as a
-         false 'unavailable' signal."
-}
+  -- Availability invalidation hooks (invalidateAvailability, invalidateAllChannels)
+  -- are RETAINED but simplified:
+  --   - Settings actions still call invalidateAvailability after CRUD mutations.
+  --   - PushChannel still calls onSubscriptionPurged on 404/410 stale cleanup.
+  --   - invalidateAllChannels(userId) remains for GDPR Art. 17 (Roadmap 6.1).
+  -- These hooks are now no-ops for the per-dispatch context (which is always
+  -- fresh), but serve as documentation points for future caching layers.
 
 invariant ExplicitChannelRegistration {
   -- Sprint 3 M-A-05: channels MUST be registered on the singleton
@@ -425,20 +454,26 @@ invariant ExplicitChannelRegistration {
 
 rule ChannelRouting {
   -- "Route notifications to all enabled channels via ChannelRouter."
-  -- The ChannelRouter iterates registered channels and dispatches in parallel.
-  -- Each channel is independently gated by shouldNotify(prefs, type, channel).
-  when: NotificationDispatcher.dispatch(event: DomainEvent) passes all previous checks
-  let prefs = NotificationPreference where userId = event.payload.userId
-  let draft = mapEventToNotification(event, userId)
+  -- The ChannelRouter receives a DispatchContext (PERF-3) and dispatches
+  -- to all eligible channels concurrently via Promise.allSettled.
+  -- Each channel is gated by shouldNotify(prefs, type, channel) then
+  -- availability (derived from pre-fetched context, not a DB query).
+  when: NotificationDispatcher.dispatch(event)
+  let user_id = event.payload.userId
+  let ctx = build_dispatch_context(user_id)
+  let draft = map_event_to_notification(event, user_id)
 
-  -- The ChannelRouter dispatches to each registered channel:
-  for_each channel in registered channels:
-    requires: shouldNotify(prefs, draft.type, channel.name) = true
-    requires: channel.isAvailable(userId) = true
+  -- Phase 1: Preference gating (synchronous, no I/O)
+  -- Phase 2: Availability check (derived field on ctx, no DB)
+  -- Phase 3: Dispatch to each eligible channel (concurrent, fire-and-forget)
 
-    if channel = inApp:
+  for channel in registered_channels:
+    requires: shouldNotify(ctx.preferences, draft.type, channel.name) = true
+
+    if channel.name = inApp:
+      -- Always available, no infrastructure check needed.
       ensures: Notification.created(
-        userId: event.payload.userId,
+        userId: user_id,
         type: event.notificationType,
         message: formatMessage(event),
         moduleId: event.payload.moduleId,
@@ -446,29 +481,42 @@ rule ChannelRouting {
         read: false
       )
 
-    if channel = webhook:
-      ensures: WebhookDelivery(draft, userId)
-      -- Delivers to all active WebhookEndpoints subscribed to this event type.
+    if channel.name = webhook:
+      requires: ctx.webhook_available = true
+      ensures: WebhookDelivery(draft, ctx)
+      -- Delivers to ctx.webhook_endpoints (pre-fetched, no DB query).
       -- See WebhookDelivery rule for retry, signing, and failure handling.
 
-    if channel = email:
-      ensures: EmailDelivery(draft, userId)
-      -- Delivers via SMTP using user's SmtpConfig.
+    if channel.name = email:
+      requires: ctx.email_available = true
+      ensures: EmailDelivery(draft, ctx)
+      -- Uses ctx.smtp_config + ctx.recipient_email + ctx.locale (pre-fetched).
       -- See EmailDelivery rule for TLS enforcement and rate limiting.
 
-    if channel = push:
-      ensures: PushDelivery(draft, userId)
-      -- Delivers to all user's WebPushSubscriptions via VAPID.
+    if channel.name = push:
+      requires: ctx.push_available = true
+      ensures: PushDelivery(draft, ctx)
+      -- Uses ctx.vapid_config + ctx.subscriptions + ctx.smtp_config (pre-fetched).
+      -- VAPID subject derived from ctx.smtp_config.fromAddress (F-11: no extra query).
       -- See PushDelivery rule for stale subscription handling.
 
   @guidance
+    -- PERF-3 key change: channels receive DispatchContext instead of userId.
+    -- No channel queries the database for user settings, locale, SMTP config,
+    -- VAPID keys, subscriptions, or webhook endpoints. All pre-fetched in ctx.
+    --
     -- Error isolation: one channel failure does not block others.
     -- The ChannelRouter catches errors per channel and continues.
+    --
     -- shouldNotify() accepts an optional channel parameter:
     --   - With channel: checks that specific channel is enabled in prefs.channels
     --   - Without channel: returns true if ANY channel is enabled (used by dispatcher
     --     to decide whether to build a NotificationDraft at all).
     -- This two-level gating avoids building drafts when all channels are disabled.
+    --
+    -- F-10 resolution: isAvailable + dispatch double-query pattern eliminated.
+    -- Previously each channel queried infrastructure twice (count in isAvailable,
+    -- findMany in dispatch). Now both checks use ctx fields — zero DB queries.
 }
 
 rule BatchSummary {
@@ -509,7 +557,8 @@ rule BatchSummary {
 rule WebhookDelivery {
   -- "Deliver notifications to active webhook endpoints."
   when: ChannelRouter routes notification to webhook channel
-  let endpoints = WebhookEndpoint where userId = userId and active = true
+  -- PERF-3: endpoints pre-fetched in ctx.webhook_endpoints (no DB query here)
+  let endpoints = ctx.webhook_endpoints
 
   for_each endpoint in endpoints:
     requires: endpoint.events contains notificationType
@@ -577,21 +626,22 @@ rule WebhookAutoDeactivation {
 rule EmailDelivery {
   -- "Deliver notifications via SMTP email."
   when: ChannelRouter routes notification to email channel
-  let config = SmtpConfig where userId = userId and active = true
+  -- PERF-3: config pre-fetched in ctx.smtp_config (no DB query here)
+  let config = ctx.smtp_config
 
-  requires: config exists
+  requires: config != null
   requires: checkEmailRateLimit(userId) = allowed
   requires: validateSmtpHost(config.host) = valid
 
   -- TLS enforcement
   requires: config.tlsRequired = true implies STARTTLS or implicit TLS (port 465)
 
-  -- Template rendering
-  let template = renderEmailTemplate(notificationType, data, userLocale)
+  -- Template rendering (locale from ctx, no DB query — F-06 resolved)
+  let template = renderEmailTemplate(notificationType, data, ctx.locale)
 
   ensures: email sent via nodemailer with:
     from: config.fromAddress
-    to: user.email                      -- the user's account email (from NextAuth identity)
+    to: ctx.recipient_email              -- pre-fetched from user.email (no DB query — PERF-3)
     subject: template.subject
     html: template.html
     text: template.text
@@ -608,11 +658,12 @@ rule EmailDelivery {
 rule PushDelivery {
   -- "Deliver notifications via browser push (VAPID)."
   when: ChannelRouter routes notification to push channel
-  let vapidKeys = VapidConfig where userId = userId
-  let subscriptions = WebPushSubscription[] where userId = userId
+  -- PERF-3: keys + subscriptions pre-fetched in ctx (no DB queries here)
+  let vapidKeys = ctx.vapid_config
+  let subscriptions = ctx.subscriptions
 
-  requires: vapidKeys exists
-  requires: subscriptions is not empty
+  requires: vapidKeys != null
+  requires: subscriptions.count > 0
   requires: checkPushDispatchRateLimit(userId) = allowed
 
   for_each subscription in subscriptions:
@@ -647,7 +698,9 @@ rule PushDelivery {
 
   @guidance
     -- Rate limit: 20 pushes per minute per user.
-    -- VAPID subject derived from user's SMTP fromAddress or 'mailto:noreply@jobsync.local'.
+    -- VAPID subject derived from ctx.smtp_config.fromAddress (F-11: resolved from
+    -- pre-fetched context, no separate SmtpConfig query). Falls back to
+    -- 'mailto:noreply@jobsync.local' when ctx.smtp_config is null.
     -- Subscription keys (p256dh, auth) are AES-encrypted at rest.
     -- Delivery to all subscriptions is concurrent (Promise.allSettled).
     -- 410 Gone or 404 Not Found indicates browser has unsubscribed — silently remove.

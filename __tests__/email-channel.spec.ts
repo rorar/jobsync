@@ -1,33 +1,17 @@
 /**
  * EmailChannel Tests
  *
- * Tests: dispatch success/failure scenarios, SMTP config handling,
- * rate limiting, SSRF validation, TLS enforcement, isAvailable checks.
+ * Tests: dispatch success/failure scenarios, SMTP config handling from
+ * DispatchContext, rate limiting, SSRF validation, TLS enforcement.
+ *
+ * PERF-3: isAvailable() removed. Availability is now a boolean flag on
+ * DispatchContext (emailAvailable), checked by the ChannelRouter before
+ * dispatch is called. dispatch() receives a DispatchContext snapshot
+ * instead of a bare userId string.
  */
 
 // Mock "server-only" to prevent runtime error in test environment
 jest.mock("server-only", () => ({}));
-
-// ---------------------------------------------------------------------------
-// Prisma mock
-// ---------------------------------------------------------------------------
-
-const mockSmtpConfigFindFirst = jest.fn();
-const mockSmtpConfigCount = jest.fn();
-const mockUserFindUnique = jest.fn();
-
-jest.mock("@/lib/db", () => ({
-  __esModule: true,
-  default: {
-    smtpConfig: {
-      findFirst: (...args: unknown[]) => mockSmtpConfigFindFirst(...args),
-      count: (...args: unknown[]) => mockSmtpConfigCount(...args),
-    },
-    user: {
-      findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
-    },
-  },
-}));
 
 // ---------------------------------------------------------------------------
 // Encryption mock
@@ -70,14 +54,6 @@ jest.mock("@/lib/email/templates", () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Locale resolver mock
-// ---------------------------------------------------------------------------
-
-jest.mock("@/lib/locale-resolver", () => ({
-  resolveUserLocale: jest.fn().mockResolvedValue("en"),
-}));
-
-// ---------------------------------------------------------------------------
 // Nodemailer mock
 // ---------------------------------------------------------------------------
 
@@ -109,6 +85,8 @@ jest.mock("@/lib/email/transport", () => ({
 
 import { EmailChannel } from "@/lib/notifications/channels/email.channel";
 import type { NotificationDraft } from "@/lib/notifications/types";
+import type { DispatchContext } from "@/lib/notifications/dispatch-context";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -116,20 +94,16 @@ import type { NotificationDraft } from "@/lib/notifications/types";
 
 const TEST_USER_ID = "user-email-test-1";
 
-const SMTP_CONFIG = {
+const SMTP_SNAPSHOT = {
   id: "smtp-1",
-  userId: TEST_USER_ID,
   host: "smtp.example.com",
   port: 587,
   username: "user@example.com",
   password: "encrypted-password",
   iv: "test-iv",
   fromAddress: "noreply@example.com",
-  active: true,
   tlsRequired: true,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
+} as const;
 
 const NOTIFICATION: NotificationDraft = {
   userId: TEST_USER_ID,
@@ -137,6 +111,30 @@ const NOTIFICATION: NotificationDraft = {
   message: "A vacancy was promoted",
   data: { jobTitle: "Developer" },
 };
+
+/**
+ * Factory for building a test DispatchContext for email tests.
+ */
+function makeTestContext(
+  overrides: Partial<DispatchContext> = {},
+): DispatchContext {
+  return {
+    userId: TEST_USER_ID,
+    preferences: DEFAULT_NOTIFICATION_PREFERENCES,
+    locale: "en",
+    userEmail: "user@example.com",
+    smtp: SMTP_SNAPSHOT,
+    vapid: null,
+    pushSubscriptions: [],
+    webhookEndpoints: [],
+    emailAvailable: true,
+    pushAvailable: false,
+    webhookAvailable: false,
+    inAppAvailable: true,
+    vapidSubject: "mailto:noreply@example.com",
+    ...overrides,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -151,9 +149,7 @@ describe("EmailChannel", () => {
 
     // Default happy-path mocks
     mockCheckEmailRateLimit.mockReturnValue({ allowed: true });
-    mockSmtpConfigFindFirst.mockResolvedValue(SMTP_CONFIG);
     mockValidateSmtpHost.mockReturnValue({ valid: true });
-    mockUserFindUnique.mockResolvedValue({ email: "user@example.com" });
     mockSendMail.mockResolvedValue({ messageId: "msg-1" });
   });
 
@@ -163,14 +159,15 @@ describe("EmailChannel", () => {
 
   describe("dispatch()", () => {
     it("returns success when SMTP config exists and email sends", async () => {
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext();
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result).toEqual({ success: true, channel: "email" });
       expect(mockCreateTransport).toHaveBeenCalledTimes(1);
       expect(mockSendMail).toHaveBeenCalledTimes(1);
       expect(mockSendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: SMTP_CONFIG.fromAddress,
+          from: SMTP_SNAPSHOT.fromAddress,
           to: "user@example.com",
           subject: expect.stringContaining("[JobSync]"),
           html: expect.any(String),
@@ -179,10 +176,9 @@ describe("EmailChannel", () => {
       );
     });
 
-    it("returns failure when no SMTP config", async () => {
-      mockSmtpConfigFindFirst.mockResolvedValue(null);
-
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+    it("returns failure when no SMTP config (smtp is null on ctx)", async () => {
+      const ctx = makeTestContext({ smtp: null });
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result).toEqual({ success: false, channel: "email", error: "No active SMTP configuration" });
       expect(mockCreateTransport).not.toHaveBeenCalled();
@@ -195,14 +191,14 @@ describe("EmailChannel", () => {
         retryAfterMs: 30000,
       });
 
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext();
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result).toEqual({
         success: false,
         channel: "email",
         error: "Rate limited",
       });
-      expect(mockSmtpConfigFindFirst).not.toHaveBeenCalled();
     });
 
     it("returns failure when SMTP host is blocked (SSRF)", async () => {
@@ -211,7 +207,8 @@ describe("EmailChannel", () => {
         error: "smtp.ssrfBlocked",
       });
 
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext();
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result).toEqual({
         success: false,
@@ -222,24 +219,25 @@ describe("EmailChannel", () => {
     });
 
     it("passes TLS config to shared transporter factory", async () => {
-      await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext();
+      await channel.dispatch(NOTIFICATION, ctx);
 
       expect(mockCreateTransport).toHaveBeenCalledWith(
         expect.objectContaining({
-          host: SMTP_CONFIG.host,
-          port: SMTP_CONFIG.port,
-          username: SMTP_CONFIG.username,
+          host: SMTP_SNAPSHOT.host,
+          port: SMTP_SNAPSHOT.port,
+          username: SMTP_SNAPSHOT.username,
           decryptedPassword: "decrypted-password",
-          tlsRequired: SMTP_CONFIG.tlsRequired,
+          tlsRequired: SMTP_SNAPSHOT.tlsRequired,
         }),
       );
     });
 
     it("passes port 465 config to shared transporter factory", async () => {
-      const config465 = { ...SMTP_CONFIG, port: 465 };
-      mockSmtpConfigFindFirst.mockResolvedValue(config465);
-
-      await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext({
+        smtp: { ...SMTP_SNAPSHOT, port: 465 },
+      });
+      await channel.dispatch(NOTIFICATION, ctx);
 
       expect(mockCreateTransport).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -250,7 +248,8 @@ describe("EmailChannel", () => {
 
     it("passes non-465 port config to shared transporter factory", async () => {
       // Default fixture uses port 587
-      await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext();
+      await channel.dispatch(NOTIFICATION, ctx);
 
       expect(mockCreateTransport).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -259,10 +258,9 @@ describe("EmailChannel", () => {
       );
     });
 
-    it("returns failure when no recipient email", async () => {
-      mockUserFindUnique.mockResolvedValue(null);
-
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+    it("returns failure when no recipient email (userEmail is null on ctx)", async () => {
+      const ctx = makeTestContext({ userEmail: null });
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result).toEqual({
         success: false,
@@ -275,7 +273,8 @@ describe("EmailChannel", () => {
     it("returns failure when sendMail throws", async () => {
       mockSendMail.mockRejectedValue(new Error("Connection refused"));
 
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext();
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result).toEqual({
         success: false,
@@ -288,7 +287,8 @@ describe("EmailChannel", () => {
       const { decrypt } = jest.requireMock("@/lib/encryption");
       decrypt.mockRejectedValueOnce(new Error("Decryption failed"));
 
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext();
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result).toEqual({
         success: false,
@@ -296,39 +296,24 @@ describe("EmailChannel", () => {
         error: "Decryption failed",
       });
     });
-  });
 
-  // -----------------------------------------------------------------------
-  // isAvailable()
-  // -----------------------------------------------------------------------
+    it("reads locale from DispatchContext for template rendering", async () => {
+      const { renderEmailTemplate } = jest.requireMock("@/lib/email/templates");
+      const ctx = makeTestContext({ locale: "de" });
+      await channel.dispatch(NOTIFICATION, ctx);
 
-  describe("isAvailable()", () => {
-    it("returns true when active SmtpConfig exists", async () => {
-      mockSmtpConfigCount.mockResolvedValue(1);
-
-      const available = await channel.isAvailable(TEST_USER_ID);
-
-      expect(available).toBe(true);
-      expect(mockSmtpConfigCount).toHaveBeenCalledWith({
-        where: { userId: TEST_USER_ID, active: true },
-      });
+      expect(renderEmailTemplate).toHaveBeenCalledWith(
+        NOTIFICATION.type,
+        NOTIFICATION.data,
+        "de",
+      );
     });
 
-    it("returns false when no SmtpConfig", async () => {
-      mockSmtpConfigCount.mockResolvedValue(0);
+    it("uses ctx.userId for rate limiting", async () => {
+      const ctx = makeTestContext();
+      await channel.dispatch(NOTIFICATION, ctx);
 
-      const available = await channel.isAvailable(TEST_USER_ID);
-
-      expect(available).toBe(false);
-    });
-
-    it("returns false when SmtpConfig is inactive", async () => {
-      // count with active: true returns 0 for inactive configs
-      mockSmtpConfigCount.mockResolvedValue(0);
-
-      const available = await channel.isAvailable(TEST_USER_ID);
-
-      expect(available).toBe(false);
+      expect(mockCheckEmailRateLimit).toHaveBeenCalledWith(TEST_USER_ID);
     });
   });
 });

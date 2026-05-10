@@ -20,37 +20,17 @@
 
 import "server-only";
 
-import prisma from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 import { validateSmtpHost } from "@/lib/smtp-validation";
 import { checkEmailRateLimit } from "@/lib/email-rate-limit";
 import { renderEmailTemplate } from "@/lib/email/templates";
 import { createSmtpTransporter } from "@/lib/email/transport";
-import { resolveUserLocale } from "@/lib/locale-resolver";
+import type { DispatchContext } from "../dispatch-context";
 import type {
   NotificationChannel,
   NotificationDraft,
   ChannelResult,
 } from "../types";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve the user's email address from SmtpConfig.fromAddress.
- */
-async function resolveRecipientEmail(userId: string): Promise<string | null> {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true },
-    });
-    return user?.email ?? null;
-  } catch {
-    return null;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // EmailChannel
@@ -61,20 +41,18 @@ export class EmailChannel implements NotificationChannel {
 
   async dispatch(
     notification: NotificationDraft,
-    userId: string,
+    ctx: DispatchContext,
   ): Promise<ChannelResult> {
     try {
       // 1. Rate limit check (10/min per user)
-      const rateCheck = checkEmailRateLimit(userId);
+      const rateCheck = checkEmailRateLimit(ctx.userId);
       if (!rateCheck.allowed) {
-        console.warn(`[EmailChannel] Rate limited for user ${userId}`);
+        console.warn(`[EmailChannel] Rate limited for user ${ctx.userId}`);
         return { success: false, channel: this.name, error: "Rate limited" };
       }
 
-      // 2. Load SmtpConfig for this user
-      const config = await prisma.smtpConfig.findFirst({
-        where: { userId, active: true },
-      });
+      // 2. Read SMTP config from context snapshot
+      const config = ctx.smtp;
       if (!config) {
         return { success: false, channel: this.name, error: "No active SMTP configuration" };
       }
@@ -97,11 +75,11 @@ export class EmailChannel implements NotificationChannel {
         return { success: false, channel: this.name, error: `SSRF blocked: ${hostCheck.error}` };
       }
 
-      // 5. Resolve user locale
-      const locale = await resolveUserLocale(userId);
+      // 5. Locale from context snapshot
+      const locale = ctx.locale;
 
-      // 6. Resolve recipient email (user's account email)
-      const recipientEmail = await resolveRecipientEmail(userId);
+      // 6. Recipient email from context snapshot
+      const recipientEmail = ctx.userEmail;
       if (!recipientEmail) {
         console.warn("[EmailChannel] No recipient email found for user");
         return { success: false, channel: this.name, error: "No recipient email" };
@@ -146,25 +124,10 @@ export class EmailChannel implements NotificationChannel {
       return { success: false, channel: this.name, error: errorMessage };
     }
   }
-
-  async isAvailable(userId: string): Promise<boolean> {
-    try {
-      // Check if user has an active SmtpConfig
-      const count = await prisma.smtpConfig.count({
-        where: { userId, active: true },
-      });
-      return count > 0;
-    } catch (error) {
-      console.error("[EmailChannel] isAvailable check failed:", error);
-      return false;
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
 // Test Helpers (exported for test access)
 // ---------------------------------------------------------------------------
 
-export const _testHelpers = {
-  resolveRecipientEmail,
-};
+export const _testHelpers = {};

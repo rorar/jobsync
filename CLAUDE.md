@@ -257,7 +257,7 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 ### Webhook Notification Channel (ROADMAP 0.6 Phase 2)
 
-**Multi-Channel Architecture:** Notification dispatcher refactored from hardcoded in-app to `ChannelRouter` pattern. Each channel implements `NotificationChannel` interface (`dispatch`, `isAvailable`, `isEnabled`).
+**Multi-Channel Architecture:** Notification dispatcher refactored from hardcoded in-app to `ChannelRouter` pattern. Each channel implements `NotificationChannel` interface (`dispatch`, `isEnabled`). Note: `isAvailable()` was removed from the interface in PERF-3 — availability is now derived from `DispatchContext` fields. `invalidateAvailability()` on `ChannelRouter` is retained as a **no-op** (method kept so existing callers in server actions do not break).
 
 **Current structure:** `src/lib/notifications/`:
 - **types.ts** — NotificationChannel, NotificationDraft, ChannelResult, WebhookPayload, WebhookDeliveryResult
@@ -506,7 +506,7 @@ The contract is additive — callers that only destructure `{ success }` keep wo
 
 **Rule:** server-side notification creation MUST populate `data.titleKey + titleParams` (and optionally `reasonKey`, `reasonParams`, `actorType`, `actorId`, `severity`). The legacy `message` field is kept populated in English as a fallback for email/webhook/push channels and pre-migration clients. UI components use `formatNotificationTitle` at render time, so notifications correctly re-localize when the user switches locale.
 
-**Enforced-writer helpers live in a leaf module:** `src/lib/notifications/enforced-writer.ts` exports `prepareEnforcedNotification` / `prepareEnforcedNotifications` + the `EnforcedNotificationDraft` / `PreparedNotificationRow` types + the `resolvePreferencesForEnforcer` helper. Sprint 4 Stream A (L-A-07) extracted them from `channel-router.ts` into this leaf module to break the `channel-router.ts` ↔ `webhook.channel.ts` circular import. The leaf has zero upstream dependencies (imports only `server-only`, `@/lib/db`, `@/models/notification.model`, `@/models/userSettings.model`), and `channel-router.ts`, `webhook.channel.ts`, `degradation.ts`, and all action files re-import from the leaf.
+**Enforced-writer helpers live in a leaf module:** `src/lib/notifications/enforced-writer.ts` exports `prepareEnforcedNotification` / `prepareEnforcedNotifications` + the `EnforcedNotificationDraft` / `PreparedNotificationRow` types + the `resolvePreferencesForEnforcer` helper. Sprint 4 Stream A (L-A-07) extracted them from `channel-router.ts` into this leaf module to break the `channel-router.ts` ↔ `webhook.channel.ts` circular import. The leaf has zero upstream dependencies (imports only `server-only`, `@/lib/db`, `@/models/notification.model`, `@/models/userSettings.model`), and `channel-router.ts`, `webhook.channel.ts`, `degradation.ts`, and all action files re-import from the leaf. The enforced-writer accepts an optional `locale` parameter so callers with an already-resolved locale (e.g. from `DispatchContext`) can skip the internal `resolveUserLocale()` DB query.
 
 **New direct-writer sites MUST import `prepareEnforcedNotification[s]` from `@/lib/notifications/enforced-writer`, NOT from `@/lib/notifications/channel-router`.** The old re-exports are gone.
 
@@ -520,6 +520,28 @@ The contract is additive — callers that only destructure `{ success }` keep wo
 **Enforcement:** `bash scripts/check-notification-writers.sh` (also `bun run check:notification-writers`) greps `src/` for `prisma.notification.(create|createMany)` and fails if any match lives outside the allowlist above. Run it before every commit that touches notification code.
 
 Any new notification-creating code path MUST populate the structured fields.
+
+### Notification Dispatch Context (PERF-3)
+
+**`buildDispatchContext(userId)`** in `src/lib/notifications/dispatch-context.ts` consolidates 11-13 per-dispatch DB queries into 6 parallel Prisma queries executed once at the start of each notification dispatch cycle. The result is a read-only `DispatchContext` object threaded through the `ChannelRouter` and all channel implementations.
+
+**DispatchContext interface** (`src/lib/notifications/types.ts`) contains:
+- `userId`, `preferences` (NotificationPreferences), `locale` (display locale)
+- `userEmail` (for email recipient)
+- `smtp` (SmtpConfigSnapshot | null), `vapid` (VapidConfigSnapshot | null)
+- `pushSubscriptions` (PushSubscriptionSnapshot[]), `webhookEndpoints` (WebhookEndpointSnapshot[])
+- Derived availability flags: `emailAvailable`, `pushAvailable`, `webhookAvailable`, `inAppAvailable`
+- `vapidSubject` (derived from SMTP fromAddress or default)
+
+**Key rules:**
+- **Channels MUST NOT query the DB for context data.** All user-scoped read data comes from `DispatchContext`. Channels may still perform writes (e.g., `notification.create`, `webhookEndpoint.update` for failure count).
+- **Context is built fresh per dispatch, never cached across dispatches.** Each call to `buildDispatchContext()` fetches current state. There is no cross-dispatch staleness.
+- **`isAvailable()` was removed from the `NotificationChannel` interface.** Availability is derived from context fields (e.g., `ctx.smtp !== null` for email). The router reads `ctx.[channel]Available` directly.
+- **`ChannelRouter.route()` accepts `DispatchContext`** instead of `NotificationPreferences`. Preferences are read from `ctx.preferences`.
+- **`invalidateAvailability()` is a no-op.** Retained on `ChannelRouter` for API compatibility with server action callers (`smtp.actions`, `webhook.actions`, `push.actions`). Each dispatch builds a fresh context, so invalidation is implicit.
+- **Degraded context on DB failure:** If `Promise.all` rejects, `buildDispatchContext` returns a degraded context with all-null channel data and defaults, preserving InAppChannel functionality.
+
+**Design document:** `docs/design/perf-3-dispatch-context.md` — full query inventory, interface definitions, edge cases, and migration strategy.
 
 ## Domain-Driven Design (DDD) Principles
 

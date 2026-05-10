@@ -1,36 +1,31 @@
 /**
  * PushChannel Tests
  *
- * Tests: dispatch to subscriptions, stale subscription cleanup (410 Gone),
- * VAPID key requirements, rate limiting, isAvailable checks.
+ * Tests: dispatch to subscriptions from DispatchContext snapshot, stale
+ * subscription cleanup (410 Gone), VAPID key handling, rate limiting,
+ * 401/403 VAPID auth failure preservation.
+ *
+ * PERF-3: isAvailable() removed. Availability is now a boolean flag on
+ * DispatchContext (pushAvailable), checked by the ChannelRouter before
+ * dispatch is called. dispatch() receives a DispatchContext snapshot
+ * instead of a bare userId string. VAPID keys, subscriptions, and
+ * vapidSubject are all read from the context.
  */
 
 // Mock "server-only" to prevent runtime error in test environment
 jest.mock("server-only", () => ({}));
 
 // ---------------------------------------------------------------------------
-// Prisma mock
+// Prisma mock (only for stale subscription delete — write operations)
 // ---------------------------------------------------------------------------
 
-const mockVapidConfigFindUnique = jest.fn();
-const mockWebPushSubscriptionFindMany = jest.fn();
-const mockWebPushSubscriptionCount = jest.fn();
 const mockWebPushSubscriptionDelete = jest.fn().mockResolvedValue({});
-const mockSmtpConfigFindFirst = jest.fn().mockResolvedValue(null);
 
 jest.mock("@/lib/db", () => ({
   __esModule: true,
   default: {
-    vapidConfig: {
-      findUnique: (...args: unknown[]) => mockVapidConfigFindUnique(...args),
-    },
     webPushSubscription: {
-      findMany: (...args: unknown[]) => mockWebPushSubscriptionFindMany(...args),
-      count: (...args: unknown[]) => mockWebPushSubscriptionCount(...args),
       delete: (...args: unknown[]) => mockWebPushSubscriptionDelete(...args),
-    },
-    smtpConfig: {
-      findFirst: (...args: unknown[]) => mockSmtpConfigFindFirst(...args),
     },
   },
 }));
@@ -85,6 +80,8 @@ jest.mock("web-push", () => {
 
 import { PushChannel } from "@/lib/notifications/channels/push.channel";
 import type { NotificationDraft } from "@/lib/notifications/types";
+import type { DispatchContext } from "@/lib/notifications/dispatch-context";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -92,12 +89,11 @@ import type { NotificationDraft } from "@/lib/notifications/types";
 
 const TEST_USER_ID = "user-push-test-1";
 
-const VAPID_CONFIG = {
-  userId: TEST_USER_ID,
+const VAPID_SNAPSHOT = {
   publicKey: "BPublicKeyBase64",
   privateKey: "encrypted-private-key",
   iv: "vapid-iv",
-};
+} as const;
 
 const SUBSCRIPTION_1 = {
   id: "sub-1",
@@ -122,6 +118,30 @@ const NOTIFICATION: NotificationDraft = {
   data: { jobTitle: "Developer" },
 };
 
+/**
+ * Factory for building a test DispatchContext for push tests.
+ */
+function makeTestContext(
+  overrides: Partial<DispatchContext> = {},
+): DispatchContext {
+  return {
+    userId: TEST_USER_ID,
+    preferences: DEFAULT_NOTIFICATION_PREFERENCES,
+    locale: "en",
+    userEmail: "user@example.com",
+    smtp: null,
+    vapid: VAPID_SNAPSHOT,
+    pushSubscriptions: [SUBSCRIPTION_1],
+    webhookEndpoints: [],
+    emailAvailable: false,
+    pushAvailable: true,
+    webhookAvailable: false,
+    inAppAvailable: true,
+    vapidSubject: "mailto:noreply@jobsync.local",
+    ...overrides,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -135,10 +155,7 @@ describe("PushChannel", () => {
 
     // Default happy-path mocks
     mockCheckPushDispatchRateLimit.mockReturnValue({ allowed: true });
-    mockVapidConfigFindUnique.mockResolvedValue(VAPID_CONFIG);
-    mockWebPushSubscriptionFindMany.mockResolvedValue([SUBSCRIPTION_1]);
     mockSendNotification.mockResolvedValue({});
-    mockSmtpConfigFindFirst.mockResolvedValue(null);
   });
 
   // -----------------------------------------------------------------------
@@ -146,13 +163,12 @@ describe("PushChannel", () => {
   // -----------------------------------------------------------------------
 
   describe("dispatch()", () => {
-    it("sends to all subscriptions", async () => {
-      mockWebPushSubscriptionFindMany.mockResolvedValue([
-        SUBSCRIPTION_1,
-        SUBSCRIPTION_2,
-      ]);
+    it("sends to all subscriptions from context snapshot", async () => {
+      const ctx = makeTestContext({
+        pushSubscriptions: [SUBSCRIPTION_1, SUBSCRIPTION_2],
+      });
 
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result).toEqual({ success: true, channel: "push" });
       expect(mockSendNotification).toHaveBeenCalledTimes(2);
@@ -172,14 +188,27 @@ describe("PushChannel", () => {
       expect(mockSendNotification.mock.calls[0][2]).toEqual(
         expect.objectContaining({
           vapidDetails: expect.objectContaining({
-            publicKey: VAPID_CONFIG.publicKey,
+            publicKey: VAPID_SNAPSHOT.publicKey,
+          }),
+        }),
+      );
+    });
+
+    it("uses vapidSubject from context snapshot", async () => {
+      const ctx = makeTestContext({ vapidSubject: "mailto:custom@example.com" });
+
+      await channel.dispatch(NOTIFICATION, ctx);
+
+      expect(mockSendNotification.mock.calls[0][2]).toEqual(
+        expect.objectContaining({
+          vapidDetails: expect.objectContaining({
+            subject: "mailto:custom@example.com",
           }),
         }),
       );
     });
 
     it("deletes stale subscription on 410 Gone", async () => {
-      // Use the mocked WebPushError class from the mock factory
       const { WebPushError: MockWebPushError } = jest.requireMock("web-push") as {
         WebPushError: new (message: string, statusCode: number) => Error & { statusCode: number };
       };
@@ -187,7 +216,8 @@ describe("PushChannel", () => {
 
       mockSendNotification.mockRejectedValue(goneError);
 
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext();
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       // With only one subscription failing with 410, no success — all errors
       expect(result.channel).toBe("push");
@@ -207,7 +237,8 @@ describe("PushChannel", () => {
 
       mockSendNotification.mockRejectedValue(authError);
 
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext();
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result.channel).toBe("push");
       expect(result.success).toBe(false);
@@ -224,7 +255,8 @@ describe("PushChannel", () => {
 
       mockSendNotification.mockRejectedValue(forbiddenError);
 
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext();
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result.channel).toBe("push");
       expect(result.success).toBe(false);
@@ -241,7 +273,8 @@ describe("PushChannel", () => {
 
       mockSendNotification.mockRejectedValue(notFoundError);
 
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext();
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result.channel).toBe("push");
       expect(result.success).toBe(false);
@@ -252,19 +285,17 @@ describe("PushChannel", () => {
       });
     });
 
-    it("returns failure when no VAPID keys", async () => {
-      mockVapidConfigFindUnique.mockResolvedValue(null);
-
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+    it("returns failure when no VAPID keys (vapid is null on ctx)", async () => {
+      const ctx = makeTestContext({ vapid: null });
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result).toEqual({ success: false, channel: "push", error: "No VAPID keys configured" });
       expect(mockSendNotification).not.toHaveBeenCalled();
     });
 
-    it("returns failure when no subscriptions", async () => {
-      mockWebPushSubscriptionFindMany.mockResolvedValue([]);
-
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+    it("returns failure when no subscriptions (empty array on ctx)", async () => {
+      const ctx = makeTestContext({ pushSubscriptions: [] });
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result).toEqual({ success: false, channel: "push", error: "No push subscriptions" });
       expect(mockSendNotification).not.toHaveBeenCalled();
@@ -276,21 +307,22 @@ describe("PushChannel", () => {
         retryAfterMs: 30000,
       });
 
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext();
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result).toEqual({
         success: false,
         channel: "push",
         error: "Rate limited",
       });
-      expect(mockVapidConfigFindUnique).not.toHaveBeenCalled();
     });
 
     it("returns failure when VAPID private key decryption fails", async () => {
       const { decrypt } = jest.requireMock("@/lib/encryption");
       decrypt.mockRejectedValueOnce(new Error("Decryption error"));
 
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const ctx = makeTestContext();
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result).toEqual({
         success: false,
@@ -300,70 +332,42 @@ describe("PushChannel", () => {
     });
 
     it("returns success if at least one subscription succeeds", async () => {
-      mockWebPushSubscriptionFindMany.mockResolvedValue([
-        SUBSCRIPTION_1,
-        SUBSCRIPTION_2,
-      ]);
+      const ctx = makeTestContext({
+        pushSubscriptions: [SUBSCRIPTION_1, SUBSCRIPTION_2],
+      });
 
       // First succeeds, second fails
       mockSendNotification
         .mockResolvedValueOnce({})
         .mockRejectedValueOnce(new Error("Push failed"));
 
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result).toEqual({ success: true, channel: "push" });
     });
 
     it("returns failure when all subscriptions fail", async () => {
-      mockWebPushSubscriptionFindMany.mockResolvedValue([
-        SUBSCRIPTION_1,
-        SUBSCRIPTION_2,
-      ]);
+      const ctx = makeTestContext({
+        pushSubscriptions: [SUBSCRIPTION_1, SUBSCRIPTION_2],
+      });
 
       mockSendNotification
         .mockRejectedValueOnce(new Error("Push failed 1"))
         .mockRejectedValueOnce(new Error("Push failed 2"));
 
-      const result = await channel.dispatch(NOTIFICATION, TEST_USER_ID);
+      const result = await channel.dispatch(NOTIFICATION, ctx);
 
       expect(result.success).toBe(false);
       expect(result.channel).toBe("push");
       expect(result.error).toContain("Push failed 1");
       expect(result.error).toContain("Push failed 2");
     });
-  });
 
-  // -----------------------------------------------------------------------
-  // isAvailable()
-  // -----------------------------------------------------------------------
+    it("uses ctx.userId for rate limiting", async () => {
+      const ctx = makeTestContext();
+      await channel.dispatch(NOTIFICATION, ctx);
 
-  describe("isAvailable()", () => {
-    it("returns true when VAPID keys AND subscriptions exist", async () => {
-      mockVapidConfigFindUnique.mockResolvedValue(VAPID_CONFIG);
-      mockWebPushSubscriptionCount.mockResolvedValue(2);
-
-      const available = await channel.isAvailable(TEST_USER_ID);
-
-      expect(available).toBe(true);
-    });
-
-    it("returns false when no VAPID keys", async () => {
-      mockVapidConfigFindUnique.mockResolvedValue(null);
-      mockWebPushSubscriptionCount.mockResolvedValue(2);
-
-      const available = await channel.isAvailable(TEST_USER_ID);
-
-      expect(available).toBe(false);
-    });
-
-    it("returns false when no subscriptions", async () => {
-      mockVapidConfigFindUnique.mockResolvedValue(VAPID_CONFIG);
-      mockWebPushSubscriptionCount.mockResolvedValue(0);
-
-      const available = await channel.isAvailable(TEST_USER_ID);
-
-      expect(available).toBe(false);
+      expect(mockCheckPushDispatchRateLimit).toHaveBeenCalledWith(TEST_USER_ID);
     });
   });
 });

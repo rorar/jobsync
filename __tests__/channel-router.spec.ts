@@ -2,8 +2,13 @@
  * ChannelRouter Tests
  *
  * Tests: per-channel shouldNotify gating, error isolation across channels,
- * basic routing, no channels registered, channel unavailability,
+ * basic routing, no channels registered, channel availability via DispatchContext,
  * duplicate registration prevention, results aggregation.
+ *
+ * PERF-3: isAvailable() cache tests replaced by DispatchContext availability
+ * flag tests. The router now reads availability synchronously from the
+ * ctx.emailAvailable / ctx.pushAvailable / ctx.webhookAvailable / ctx.inAppAvailable
+ * flags built by buildDispatchContext().
  *
  * Spec: specs/notification-dispatch.allium
  */
@@ -32,7 +37,9 @@ import type {
   NotificationDraft,
   ChannelResult,
 } from "@/lib/notifications/types";
+import type { DispatchContext } from "@/lib/notifications/dispatch-context";
 import type { NotificationPreferences } from "@/models/notification.model";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -45,6 +52,31 @@ const DEFAULT_PREFS: NotificationPreferences = {
   channels: { inApp: true, webhook: true, email: false, push: false },
   perType: {},
 };
+
+/**
+ * Factory function for building a test DispatchContext.
+ * All availability flags default to true; override as needed.
+ */
+function makeTestContext(
+  overrides: Partial<DispatchContext> = {},
+): DispatchContext {
+  return {
+    userId: TEST_USER_ID,
+    preferences: DEFAULT_PREFS,
+    locale: "en",
+    userEmail: "user@example.com",
+    smtp: null,
+    vapid: null,
+    pushSubscriptions: [],
+    webhookEndpoints: [],
+    emailAvailable: true,
+    pushAvailable: true,
+    webhookAvailable: true,
+    inAppAvailable: true,
+    vapidSubject: "mailto:noreply@jobsync.local",
+    ...overrides,
+  };
+}
 
 function makeDraft(
   overrides: Partial<NotificationDraft> = {},
@@ -62,20 +94,16 @@ function makeMockChannel(
   name: string,
   overrides: Partial<{
     dispatch: jest.Mock;
-    isAvailable: jest.Mock;
   }> = {},
-): NotificationChannel & { dispatch: jest.Mock; isAvailable: jest.Mock } {
+): NotificationChannel & { dispatch: jest.Mock } {
   return {
     name,
     dispatch:
       overrides.dispatch ??
-      jest.fn<Promise<ChannelResult>, [NotificationDraft, string]>().mockResolvedValue({
+      jest.fn<Promise<ChannelResult>, [NotificationDraft, DispatchContext]>().mockResolvedValue({
         success: true,
         channel: name,
       }),
-    isAvailable:
-      overrides.isAvailable ??
-      jest.fn<Promise<boolean>, [string]>().mockResolvedValue(true),
   };
 }
 
@@ -93,30 +121,37 @@ describe("ChannelRouter", () => {
   });
 
   describe("basic routing", () => {
-    it("routes a draft to all registered channels that pass shouldNotify + isAvailable", async () => {
+    it("routes a draft to all registered channels that pass shouldNotify + availability", async () => {
       const inApp = makeMockChannel("inApp");
       const webhook = makeMockChannel("webhook");
       router.register(inApp);
       router.register(webhook);
 
       const draft = makeDraft();
-      const result = await router.route(draft, DEFAULT_PREFS);
+      const ctx = makeTestContext();
+      const result = await router.route(draft, ctx);
 
-      expect(inApp.dispatch).toHaveBeenCalledWith(draft, TEST_USER_ID);
-      expect(webhook.dispatch).toHaveBeenCalledWith(draft, TEST_USER_ID);
+      expect(inApp.dispatch).toHaveBeenCalledWith(draft, ctx);
+      expect(webhook.dispatch).toHaveBeenCalledWith(draft, ctx);
       expect(result.anySuccess).toBe(true);
       expect(result.results).toHaveLength(2);
       expect(result.results[0]).toEqual({ success: true, channel: "inApp" });
       expect(result.results[1]).toEqual({ success: true, channel: "webhook" });
     });
 
-    it("passes userId from draft to isAvailable", async () => {
+    it("passes DispatchContext to dispatch instead of userId", async () => {
       const channel = makeMockChannel("inApp");
       router.register(channel);
 
-      await router.route(makeDraft(), DEFAULT_PREFS);
+      const ctx = makeTestContext();
+      await router.route(makeDraft(), ctx);
 
-      expect(channel.isAvailable).toHaveBeenCalledWith(TEST_USER_ID);
+      // dispatch receives the full DispatchContext, not a bare userId string
+      expect(channel.dispatch).toHaveBeenCalledWith(expect.any(Object), ctx);
+      const passedCtx = channel.dispatch.mock.calls[0][1];
+      expect(passedCtx.userId).toBe(TEST_USER_ID);
+      expect(passedCtx.preferences).toBeDefined();
+      expect(passedCtx.locale).toBe("en");
     });
   });
 
@@ -134,11 +169,11 @@ describe("ChannelRouter", () => {
         },
       );
 
-      const result = await router.route(makeDraft(), DEFAULT_PREFS);
+      const ctx = makeTestContext();
+      const result = await router.route(makeDraft(), ctx);
 
       expect(inApp.dispatch).toHaveBeenCalledTimes(1);
       expect(webhook.dispatch).not.toHaveBeenCalled();
-      expect(webhook.isAvailable).not.toHaveBeenCalled();
       expect(result.results).toHaveLength(1);
       expect(result.results[0].channel).toBe("inApp");
     });
@@ -151,7 +186,8 @@ describe("ChannelRouter", () => {
 
       mockShouldNotify.mockReturnValue(false);
 
-      const result = await router.route(makeDraft(), DEFAULT_PREFS);
+      const ctx = makeTestContext();
+      const result = await router.route(makeDraft(), ctx);
 
       expect(inApp.dispatch).not.toHaveBeenCalled();
       expect(webhook.dispatch).not.toHaveBeenCalled();
@@ -159,46 +195,112 @@ describe("ChannelRouter", () => {
       expect(result.results).toHaveLength(0);
     });
 
-    it("calls shouldNotify with correct arguments for each channel", async () => {
+    it("calls shouldNotify with ctx.preferences for each channel", async () => {
       const inApp = makeMockChannel("inApp");
       const webhook = makeMockChannel("webhook");
       router.register(inApp);
       router.register(webhook);
 
       const draft = makeDraft({ type: "module_deactivated" });
-      const prefs = { ...DEFAULT_PREFS };
-      await router.route(draft, prefs);
+      const ctx = makeTestContext();
+      await router.route(draft, ctx);
 
-      expect(mockShouldNotify).toHaveBeenCalledWith(prefs, "module_deactivated", "inApp");
-      expect(mockShouldNotify).toHaveBeenCalledWith(prefs, "module_deactivated", "webhook");
+      expect(mockShouldNotify).toHaveBeenCalledWith(ctx.preferences, "module_deactivated", "inApp");
+      expect(mockShouldNotify).toHaveBeenCalledWith(ctx.preferences, "module_deactivated", "webhook");
     });
   });
 
-  describe("channel availability", () => {
-    it("skips channel when isAvailable returns false", async () => {
-      const channel = makeMockChannel("webhook", {
-        isAvailable: jest.fn<Promise<boolean>, [string]>().mockResolvedValue(false),
-      });
-      router.register(channel);
+  describe("channel availability via DispatchContext flags", () => {
+    it("skips channel when its availability flag is false", async () => {
+      const webhook = makeMockChannel("webhook");
+      router.register(webhook);
 
-      const result = await router.route(makeDraft(), DEFAULT_PREFS);
+      const ctx = makeTestContext({ webhookAvailable: false });
+      const result = await router.route(makeDraft(), ctx);
 
-      expect(channel.isAvailable).toHaveBeenCalledWith(TEST_USER_ID);
-      expect(channel.dispatch).not.toHaveBeenCalled();
+      expect(webhook.dispatch).not.toHaveBeenCalled();
       expect(result.results).toHaveLength(0);
       expect(result.anySuccess).toBe(false);
     });
 
-    it("does not check isAvailable when shouldNotify returns false", async () => {
-      const channel = makeMockChannel("inApp");
-      router.register(channel);
+    it("dispatches to channel when its availability flag is true", async () => {
+      const webhook = makeMockChannel("webhook");
+      router.register(webhook);
+
+      const ctx = makeTestContext({ webhookAvailable: true });
+      const result = await router.route(makeDraft(), ctx);
+
+      expect(webhook.dispatch).toHaveBeenCalledTimes(1);
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0].success).toBe(true);
+    });
+
+    it("skips email channel when emailAvailable is false", async () => {
+      const email = makeMockChannel("email");
+      router.register(email);
+
+      const ctx = makeTestContext({ emailAvailable: false });
+      await router.route(makeDraft(), ctx);
+
+      expect(email.dispatch).not.toHaveBeenCalled();
+    });
+
+    it("skips push channel when pushAvailable is false", async () => {
+      const push = makeMockChannel("push");
+      router.register(push);
+
+      const ctx = makeTestContext({ pushAvailable: false });
+      await router.route(makeDraft(), ctx);
+
+      expect(push.dispatch).not.toHaveBeenCalled();
+    });
+
+    it("does not skip inApp channel (inAppAvailable is always true)", async () => {
+      const inApp = makeMockChannel("inApp");
+      router.register(inApp);
+
+      // inAppAvailable is always true on DispatchContext
+      const ctx = makeTestContext();
+      await router.route(makeDraft(), ctx);
+
+      expect(inApp.dispatch).toHaveBeenCalledTimes(1);
+    });
+
+    it("allows partial availability — dispatches only to available channels", async () => {
+      const inApp = makeMockChannel("inApp");
+      const webhook = makeMockChannel("webhook");
+      const email = makeMockChannel("email");
+      const push = makeMockChannel("push");
+      router.register(inApp);
+      router.register(webhook);
+      router.register(email);
+      router.register(push);
+
+      const ctx = makeTestContext({
+        webhookAvailable: true,
+        emailAvailable: false,
+        pushAvailable: false,
+      });
+      const result = await router.route(makeDraft(), ctx);
+
+      expect(inApp.dispatch).toHaveBeenCalledTimes(1);
+      expect(webhook.dispatch).toHaveBeenCalledTimes(1);
+      expect(email.dispatch).not.toHaveBeenCalled();
+      expect(push.dispatch).not.toHaveBeenCalled();
+      expect(result.results).toHaveLength(2);
+    });
+
+    it("does not check availability when shouldNotify returns false", async () => {
+      const email = makeMockChannel("email");
+      router.register(email);
 
       mockShouldNotify.mockReturnValue(false);
 
-      await router.route(makeDraft(), DEFAULT_PREFS);
+      const ctx = makeTestContext({ emailAvailable: true });
+      await router.route(makeDraft(), ctx);
 
-      expect(channel.isAvailable).not.toHaveBeenCalled();
-      expect(channel.dispatch).not.toHaveBeenCalled();
+      // shouldNotify filter comes first — email never reaches availability check
+      expect(email.dispatch).not.toHaveBeenCalled();
     });
   });
 
@@ -211,7 +313,8 @@ describe("ChannelRouter", () => {
       router.register(failing);
       router.register(healthy);
 
-      const result = await router.route(makeDraft(), DEFAULT_PREFS);
+      const ctx = makeTestContext();
+      const result = await router.route(makeDraft(), ctx);
 
       expect(failing.dispatch).toHaveBeenCalledTimes(1);
       expect(healthy.dispatch).toHaveBeenCalledTimes(1);
@@ -230,7 +333,8 @@ describe("ChannelRouter", () => {
       });
       router.register(failing);
 
-      const result = await router.route(makeDraft(), DEFAULT_PREFS);
+      const ctx = makeTestContext();
+      const result = await router.route(makeDraft(), ctx);
 
       expect(result.results).toHaveLength(1);
       expect(result.results[0]).toEqual({
@@ -239,31 +343,12 @@ describe("ChannelRouter", () => {
         error: "Unknown error",
       });
     });
-
-    it("handles isAvailable throwing without blocking other channels", async () => {
-      const failing = makeMockChannel("inApp", {
-        isAvailable: jest.fn().mockRejectedValue(new Error("Infra check failed")),
-      });
-      const healthy = makeMockChannel("webhook");
-      router.register(failing);
-      router.register(healthy);
-
-      const result = await router.route(makeDraft(), DEFAULT_PREFS);
-
-      expect(healthy.dispatch).toHaveBeenCalledTimes(1);
-      expect(result.results).toHaveLength(2);
-      expect(result.results[0]).toEqual({
-        success: false,
-        channel: "inApp",
-        error: "Infra check failed",
-      });
-      expect(result.results[1]).toEqual({ success: true, channel: "webhook" });
-    });
   });
 
   describe("no channels registered", () => {
     it("returns success with empty results when no channels exist", async () => {
-      const result = await router.route(makeDraft(), DEFAULT_PREFS);
+      const ctx = makeTestContext();
+      const result = await router.route(makeDraft(), ctx);
 
       expect(result.anySuccess).toBe(false);
       expect(result.results).toHaveLength(0);
@@ -285,7 +370,8 @@ describe("ChannelRouter", () => {
       );
 
       // Only the first channel's dispatch should be called
-      await router.route(makeDraft(), DEFAULT_PREFS);
+      const ctx = makeTestContext();
+      await router.route(makeDraft(), ctx);
       expect(channel1.dispatch).toHaveBeenCalledTimes(1);
       expect(channel2.dispatch).not.toHaveBeenCalled();
 
@@ -305,7 +391,7 @@ describe("ChannelRouter", () => {
   describe("results aggregation", () => {
     it("returns anySuccess true when at least one channel succeeds", async () => {
       const failing = makeMockChannel("inApp", {
-        dispatch: jest.fn<Promise<ChannelResult>, [NotificationDraft, string]>().mockResolvedValue({
+        dispatch: jest.fn<Promise<ChannelResult>, [NotificationDraft, DispatchContext]>().mockResolvedValue({
           success: false,
           channel: "inApp",
           error: "DB error",
@@ -315,21 +401,22 @@ describe("ChannelRouter", () => {
       router.register(failing);
       router.register(healthy);
 
-      const result = await router.route(makeDraft(), DEFAULT_PREFS);
+      const ctx = makeTestContext();
+      const result = await router.route(makeDraft(), ctx);
 
       expect(result.anySuccess).toBe(true);
     });
 
     it("returns anySuccess false when all channels fail", async () => {
       const failing1 = makeMockChannel("inApp", {
-        dispatch: jest.fn<Promise<ChannelResult>, [NotificationDraft, string]>().mockResolvedValue({
+        dispatch: jest.fn<Promise<ChannelResult>, [NotificationDraft, DispatchContext]>().mockResolvedValue({
           success: false,
           channel: "inApp",
           error: "DB error",
         }),
       });
       const failing2 = makeMockChannel("webhook", {
-        dispatch: jest.fn<Promise<ChannelResult>, [NotificationDraft, string]>().mockResolvedValue({
+        dispatch: jest.fn<Promise<ChannelResult>, [NotificationDraft, DispatchContext]>().mockResolvedValue({
           success: false,
           channel: "webhook",
           error: "Delivery failed",
@@ -338,7 +425,8 @@ describe("ChannelRouter", () => {
       router.register(failing1);
       router.register(failing2);
 
-      const result = await router.route(makeDraft(), DEFAULT_PREFS);
+      const ctx = makeTestContext();
+      const result = await router.route(makeDraft(), ctx);
 
       expect(result.anySuccess).toBe(false);
       expect(result.results).toHaveLength(2);
@@ -348,7 +436,8 @@ describe("ChannelRouter", () => {
       router.register(makeMockChannel("inApp"));
       mockShouldNotify.mockReturnValue(false);
 
-      const result = await router.route(makeDraft(), DEFAULT_PREFS);
+      const ctx = makeTestContext();
+      const result = await router.route(makeDraft(), ctx);
 
       expect(result.anySuccess).toBe(false);
       expect(result.results).toHaveLength(0);
@@ -356,13 +445,13 @@ describe("ChannelRouter", () => {
 
     it("collects results only from channels that were dispatched", async () => {
       const inApp = makeMockChannel("inApp");
-      const webhook = makeMockChannel("webhook", {
-        isAvailable: jest.fn<Promise<boolean>, [string]>().mockResolvedValue(false),
-      });
+      const webhook = makeMockChannel("webhook");
       router.register(inApp);
       router.register(webhook);
 
-      const result = await router.route(makeDraft(), DEFAULT_PREFS);
+      // webhook not available via DispatchContext flag
+      const ctx = makeTestContext({ webhookAvailable: false });
+      const result = await router.route(makeDraft(), ctx);
 
       // Only inApp was dispatched (webhook not available)
       expect(result.results).toHaveLength(1);
@@ -385,177 +474,28 @@ describe("ChannelRouter", () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // Sprint 3 M-P-01 + M-P-SPEC-02 — isAvailable cache
-  //
-  // The router must cache channel availability per (userId, channelName) with
-  // a short TTL so repeated dispatches within the cache window skip the
-  // per-channel DB round-trip. The cache lives on the router instance (not
-  // a free global) so a fresh `new ChannelRouter()` always starts cold.
-  // ---------------------------------------------------------------------------
-  describe("isAvailable cache (M-P-01 + M-P-SPEC-02)", () => {
-    it("caches isAvailable result across dispatches within the TTL window", async () => {
-      // Short TTL (1s) so the test does not have to wait 30 seconds.
-      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 1_000 });
-      const channel = makeMockChannel("webhook");
-      cachedRouter.register(channel);
-
-      await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
-      await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
-      await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
-
-      // isAvailable called exactly ONCE across 3 dispatches for the same user.
-      expect(channel.isAvailable).toHaveBeenCalledTimes(1);
-      expect(channel.dispatch).toHaveBeenCalledTimes(3);
+  describe("invalidateAvailability (no-op after PERF-3)", () => {
+    it("invalidateAvailability is a no-op but does not throw", () => {
+      expect(() => router.invalidateAvailability("user-A")).not.toThrow();
+      expect(() => router.invalidateAvailability("user-A", "webhook")).not.toThrow();
+      expect(() => router.invalidateAvailability()).not.toThrow();
     });
 
-    it("does not cache across distinct users", async () => {
-      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 1_000 });
-      const channel = makeMockChannel("webhook");
-      cachedRouter.register(channel);
-
-      await cachedRouter.route(makeDraft({ userId: "user-A" }), DEFAULT_PREFS);
-      await cachedRouter.route(makeDraft({ userId: "user-B" }), DEFAULT_PREFS);
-
-      // Two distinct users — two isAvailable calls.
-      expect(channel.isAvailable).toHaveBeenCalledTimes(2);
-      expect(channel.isAvailable).toHaveBeenNthCalledWith(1, "user-A");
-      expect(channel.isAvailable).toHaveBeenNthCalledWith(2, "user-B");
-    });
-
-    it("does not cache across distinct channels", async () => {
-      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 1_000 });
-      const webhook = makeMockChannel("webhook");
-      const email = makeMockChannel("email");
-      cachedRouter.register(webhook);
-      cachedRouter.register(email);
-
-      // Need to allow email via prefs too for this test.
-      const prefs: NotificationPreferences = {
-        enabled: true,
-        channels: { inApp: true, webhook: true, email: true, push: false },
-        perType: {},
-      };
-      await cachedRouter.route(makeDraft(), prefs);
-
-      // Both channels see exactly one isAvailable call (not shared).
-      expect(webhook.isAvailable).toHaveBeenCalledTimes(1);
-      expect(email.isAvailable).toHaveBeenCalledTimes(1);
-    });
-
-    it("re-queries after the TTL expires", async () => {
-      jest.useFakeTimers();
-      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 1_000 });
-      const channel = makeMockChannel("webhook");
-      cachedRouter.register(channel);
-
-      await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
-      expect(channel.isAvailable).toHaveBeenCalledTimes(1);
-
-      // Advance the monotonic clock beyond the TTL. Because the cache uses
-      // Date.now(), we fake the system clock forward.
-      jest.setSystemTime(Date.now() + 2_000);
-
-      await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
-      expect(channel.isAvailable).toHaveBeenCalledTimes(2);
-
-      jest.useRealTimers();
-    });
-
-    it("invalidateAvailability(userId) drops the cache entry for that user only", async () => {
-      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 10_000 });
-      const channel = makeMockChannel("webhook");
-      cachedRouter.register(channel);
-
-      await cachedRouter.route(makeDraft({ userId: "user-A" }), DEFAULT_PREFS);
-      await cachedRouter.route(makeDraft({ userId: "user-B" }), DEFAULT_PREFS);
-      expect(channel.isAvailable).toHaveBeenCalledTimes(2);
-
-      // Invalidate only user-A; user-B remains cached.
-      cachedRouter.invalidateAvailability("user-A");
-
-      await cachedRouter.route(makeDraft({ userId: "user-A" }), DEFAULT_PREFS);
-      await cachedRouter.route(makeDraft({ userId: "user-B" }), DEFAULT_PREFS);
-
-      expect(channel.isAvailable).toHaveBeenCalledTimes(3);
-      expect(channel.isAvailable).toHaveBeenNthCalledWith(3, "user-A");
-    });
-
-    it("invalidateAvailability() with no args drops the whole cache", async () => {
-      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 10_000 });
-      const channel = makeMockChannel("webhook");
-      cachedRouter.register(channel);
-
-      await cachedRouter.route(makeDraft({ userId: "user-A" }), DEFAULT_PREFS);
-      await cachedRouter.route(makeDraft({ userId: "user-B" }), DEFAULT_PREFS);
-      expect(channel.isAvailable).toHaveBeenCalledTimes(2);
-
-      cachedRouter.invalidateAvailability();
-
-      await cachedRouter.route(makeDraft({ userId: "user-A" }), DEFAULT_PREFS);
-      await cachedRouter.route(makeDraft({ userId: "user-B" }), DEFAULT_PREFS);
-
-      expect(channel.isAvailable).toHaveBeenCalledTimes(4);
-    });
-
-    it("invalidateAvailability(userId, channelName) drops a single slot", async () => {
-      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 10_000 });
-      const webhook = makeMockChannel("webhook");
-      const email = makeMockChannel("email");
-      cachedRouter.register(webhook);
-      cachedRouter.register(email);
-
-      const prefs: NotificationPreferences = {
-        enabled: true,
-        channels: { inApp: true, webhook: true, email: true, push: false },
-        perType: {},
-      };
-      await cachedRouter.route(makeDraft(), prefs);
-      expect(webhook.isAvailable).toHaveBeenCalledTimes(1);
-      expect(email.isAvailable).toHaveBeenCalledTimes(1);
-
-      // Invalidate only the webhook slot for this user.
-      cachedRouter.invalidateAvailability(TEST_USER_ID, "webhook");
-
-      await cachedRouter.route(makeDraft(), prefs);
-      expect(webhook.isAvailable).toHaveBeenCalledTimes(2);
-      // email cache still intact.
-      expect(email.isAvailable).toHaveBeenCalledTimes(1);
-    });
-
-    it("does not cache thrown errors (retries on next dispatch)", async () => {
-      const cachedRouter = new ChannelRouter({ availabilityTtlMs: 10_000 });
-      const isAvailable = jest
-        .fn<Promise<boolean>, [string]>()
-        .mockRejectedValueOnce(new Error("transient DB blip"))
-        .mockResolvedValueOnce(true);
-      const channel = makeMockChannel("webhook", { isAvailable });
-      cachedRouter.register(channel);
-
-      // First call: rejects (no cache written). The router catches it via
-      // Promise.allSettled and surfaces an error ChannelResult.
-      const first = await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
-      expect(first.results[0].success).toBe(false);
-
-      // Second call: retries (cache was NOT populated with false on reject).
-      const second = await cachedRouter.route(makeDraft(), DEFAULT_PREFS);
-      expect(channel.isAvailable).toHaveBeenCalledTimes(2);
-      expect(channel.dispatch).toHaveBeenCalledTimes(1);
-      expect(second.results[0].success).toBe(true);
+    it("invalidateAllChannels is a no-op but does not throw", () => {
+      expect(() => router.invalidateAllChannels("user-A")).not.toThrow();
     });
 
     it("has() and clear() test-helper hooks behave as expected", () => {
-      const cachedRouter = new ChannelRouter();
-      cachedRouter.register(makeMockChannel("inApp"));
-      cachedRouter.register(makeMockChannel("webhook"));
+      router.register(makeMockChannel("inApp"));
+      router.register(makeMockChannel("webhook"));
 
-      expect(cachedRouter.has("inApp")).toBe(true);
-      expect(cachedRouter.has("webhook")).toBe(true);
-      expect(cachedRouter.has("email")).toBe(false);
+      expect(router.has("inApp")).toBe(true);
+      expect(router.has("webhook")).toBe(true);
+      expect(router.has("email")).toBe(false);
 
-      cachedRouter.clear();
-      expect(cachedRouter.channelCount).toBe(0);
-      expect(cachedRouter.has("inApp")).toBe(false);
+      router.clear();
+      expect(router.channelCount).toBe(0);
+      expect(router.has("inApp")).toBe(false);
     });
   });
 });

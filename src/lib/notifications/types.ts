@@ -12,6 +12,7 @@ import type {
   NotificationSeverity,
   NotificationActorType,
 } from "@/models/notification.model";
+import type { DispatchContext } from "./dispatch-context";
 
 // ---------------------------------------------------------------------------
 // Channel Abstraction
@@ -64,16 +65,15 @@ export interface NotificationChannel {
   /**
    * Dispatch a notification through this channel.
    * Must not throw — returns ChannelResult with error details.
+   *
+   * PERF-3: channels receive the pre-built DispatchContext instead of a bare
+   * userId. All per-user data (SMTP config, VAPID keys, subscriptions,
+   * webhook endpoints, locale, preferences) is available on the snapshot —
+   * channels MUST NOT run their own DB reads for data already on `ctx`.
+   * Write operations (notification.create, webhookEndpoint.update,
+   * webPushSubscription.delete) still go to Prisma directly.
    */
-  dispatch(notification: NotificationDraft, userId: string): Promise<ChannelResult>;
-
-  /**
-   * Check if this channel has the infrastructure to dispatch
-   * (e.g., webhook has at least one active endpoint, email has SMTP configured).
-   * Preference-level gating (channels.inApp, channels.webhook) is handled
-   * by the ChannelRouter via shouldNotify() — this method checks infrastructure.
-   */
-  isAvailable(userId: string): Promise<boolean>;
+  dispatch(notification: NotificationDraft, ctx: DispatchContext): Promise<ChannelResult>;
 }
 
 // ---------------------------------------------------------------------------
