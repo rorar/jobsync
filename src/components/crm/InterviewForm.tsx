@@ -169,12 +169,19 @@ export default function InterviewForm({
       try {
         const result = await getJobsList(1, 200);
         if (!cancelled && result.success && result.data) {
-          setJobs(
-            result.data.map((j) => ({
-              id: j.id,
-              label: `${j.JobTitle.label} — ${j.Company.label}`,
-            })),
-          );
+          // Deduplicate by label — multiple Job records with the same
+          // title+company (e.g. from different automation runs) should
+          // appear as a single option. Keep the first job's ID.
+          const seen = new Map<string, JobOption>();
+          for (const j of result.data) {
+            const raw = `${j.JobTitle.label} — ${j.Company.label}`;
+            // Strip HTML entities (e.g. &nbsp;) that leak from job descriptions
+            const label = raw.replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+            if (!seen.has(label)) {
+              seen.set(label, { id: j.id, label });
+            }
+          }
+          setJobs(Array.from(seen.values()));
         }
       } finally {
         if (!cancelled) setJobsLoading(false);
