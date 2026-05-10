@@ -75,6 +75,17 @@ value Address {
     country: String?
 }
 
+value CompanyAssociation {
+    -- Links a Person to a Company with role and temporal context.
+    -- A Person may hold positions at multiple companies simultaneously
+    -- (e.g. recruiter at staffing agency + lecturer at university).
+    company: Company
+    role: String?
+    is_primary: Boolean
+    start_date: Timestamp?
+    end_date: Timestamp?
+}
+
 value ActorMetadata {
     -- Tracks the origin of a record creation or modification.
     source: ActorSource
@@ -170,7 +181,7 @@ entity Person {
     avatar_url: String?
     address: Address?
 
-    company: Company?
+    companies: List<CompanyAssociation>
     status: PersonStatus
 
     -- Data governance (GDPR — see crm-gdpr.allium for DSR handling)
@@ -190,6 +201,7 @@ entity Person {
 
     -- Derived
     primary_email: emails where is_primary = true -> email
+    primary_company: companies where is_primary = true -> company
     is_auto_created: data_source = auto_created
     is_retention_expired: retention_expires_at != null and retention_expires_at <= now
 
@@ -358,7 +370,7 @@ config {
 
 rule CreatePerson {
     -- User manually creates a contact from the CRM directory.
-    when: CreatePerson(user, name, emails, phones, company?, job_title?, linkedin_url?, address?)
+    when: CreatePerson(user, name, emails, phones, companies?, job_title?, linkedin_url?, address?)
 
     requires: emails.count > 0
     requires: Persons where user_id = user.id -> count < config.max_persons_per_user
@@ -368,7 +380,7 @@ rule CreatePerson {
         name: name,
         emails: emails,
         phones: phones,
-        company: company,
+        companies: companies,
         job_title: job_title,
         linkedin_url: linkedin_url,
         address: address,
@@ -393,13 +405,17 @@ rule AutoCreatePersonFromEmail {
 
     let domain = extract_domain(email_handle)
     let matching_company = find_company_by_domain(user.id, domain)
+    let initial_companies = if matching_company != null:
+        {CompanyAssociation(company: matching_company, role: null, is_primary: true, start_date: now, end_date: null)}
+    else:
+        {}
 
     ensures: Person.created(
         user_id: user.id,
         name: FullName(first_name: display_name, last_name: null),
         emails: {TypedEmail(email: email_handle, type: work, is_primary: true)},
         phones: {},
-        company: matching_company,
+        companies: initial_companies,
         status: active,
         data_source: auto_created,
         processing_basis: legitimate_interest,
@@ -453,6 +469,7 @@ rule AnonymizePerson {
     ensures: person.name = FullName(first_name: null, last_name: null)
     ensures: person.emails = {}
     ensures: person.phones = {}
+    ensures: person.companies = {}
     ensures: person.job_title = null
     ensures: person.linkedin_url = null
     ensures: person.avatar_url = null
@@ -503,6 +520,7 @@ rule MergePersons {
     @guidance
         -- Winner's field values take precedence.
         -- Loser's emails/phones are appended with is_primary = false.
+        -- Loser's company associations are appended with is_primary = false.
 }
 
 rule ExpireAutoCreatedPersons {
@@ -841,6 +859,12 @@ invariant BlocklistSuppressesAutoCreation {
                 implies person.status = archived
 }
 
+invariant AtMostOnePrimaryCompany {
+    -- A Person may have zero or one primary company association.
+    for person in Persons:
+        person.companies where is_primary = true -> count <= 1
+}
+
 invariant PersonOwnedByUser {
     -- ADR-015: all Person records must have an owner.
     for person in Persons:
@@ -873,13 +897,14 @@ surface PersonDirectory {
         for person in persons:
             person.name
             person.primary_email
-            person.company
+            person.primary_company
+            person.companies
             person.status
             person.data_source
             person.created_at
 
     provides:
-        CreatePerson(user, name, emails, phones, company?, job_title?, linkedin_url?, address?)
+        CreatePerson(user, name, emails, phones, companies?, job_title?, linkedin_url?, address?)
         MergePersons(user, winner, loser)
 
     related:
@@ -902,7 +927,7 @@ surface PersonDetail {
         person.linkedin_url
         person.avatar_url
         person.address
-        person.company
+        person.companies
         person.status
         person.data_source
         person.processing_basis
@@ -1061,7 +1086,7 @@ deferred ImportExport.bulkImport           -- CSV import/export (5.8)
 -- Open Questions
 ------------------------------------------------------------
 
-open question "Should Person and Company have independent lifecycle management, or should Company always be a lookup value like today?"
+open question "Company remains a lookup value. Person now references multiple companies via CompanyAssociation (role, isPrimary, temporal bounds). Should Company gain independent lifecycle management in the future, or does the current lookup + association model suffice?"
 
 open question "Should Tasks be standalone entities or always linked to a Job/Person? What about personal reminders?"
 
