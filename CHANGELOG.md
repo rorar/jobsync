@@ -1,5 +1,29 @@
 # Changelog
 
+## [2026-05-10] CRM Core Module (S3)
+
+### Added — CRM Core (Roadmap 5.4, 5.5, 5.8, 5.9)
+- **Person entity** (new aggregate): FullName, TypedEmail[], TypedPhone[], Address, Company relation, GDPR fields (data_source, processing_basis, retention_expires_at)
+- **CRM Interview** with status machine (scheduled/completed/cancelled/rescheduled), outcome tracking (pending/passed/rejected/waitlisted)
+- **CRM Task + TaskTarget** with polymorphic nullable FKs (Person/Company/Job), ExactlyOneTarget invariant
+- **CRM Note + NoteTarget** with polymorphic nullable FKs
+- **CRM ActivityLog** — immutable timeline entries, materialized read model from domain events (15 activity types)
+- **CRM Blocklist** — email/phone/domain suppression for future sync auto-creation
+- **ConnectedAccount** — structural model for future email/calendar OAuth sync
+- **9 domain events**: ContactCreated, ContactUpdated, ContactDeleted, InterviewScheduled, InterviewCompleted, ReminderTriggered, CrmTaskCreated, CrmTaskCompleted, CrmNoteCreated
+- **4 notification types**: interview_scheduled, interview_reminder, follow_up_due, contact_from_job
+- **CRM Activity Logger** consumer — projects domain events into CrmActivityLog
+- **6 server action files**: person, crmInterview, crmTask, crmNote, crmActivityLog, crmBlocklist
+- **4 UI pages**: /dashboard/contacts, /dashboard/contacts/[id], /dashboard/interviews, /dashboard/crm-tasks
+- **5 UI components**: PersonForm, InterviewForm, CrmTaskForm, ActivityTimeline, PersonDetail (5-tab layout)
+- **CRM i18n namespace** (crm.ts, ~160 keys x 4 locales: EN, DE, FR, ES)
+- **Navigation**: 3 CRM links in dashboard sidebar (Contacts, Interviews, CRM Tasks)
+- **Prisma migration**: `add_crm_core_models` (8 new models, 3 back-relation updates)
+
+### Spec Alignment
+- allium:weed — 0 spec bugs, 0 code bugs
+- 3 temporal rules aspirational (require scheduler integration): ExpireAutoCreatedPersons, InterviewReminder, TaskOverdueReminder
+
 ## [2026-05-10] Notification Dispatch Context
 
 ### Performance — PERF-3: DispatchContext

@@ -1568,7 +1568,17 @@ Dynamische Dateipfade und Dateinamen:
 
 - **Abgrenzung zu Vacancy Pipeline (→ 0.5):** Pipeline endet bei Promotion (StagedVacancy → Job). Der Job Status Workflow beginnt dort — er ist der **Tracking-Lifecycle** nach der Inbox. CRM erweitert diesen Workflow um Kontakt-Zuordnung, Follow-Up-Automatisierung und Kalender-Events.
 
-### 5.4 Automatisierung & Reminders (→ Notification-Rules in 0.6)
+### 5.4 Automatisierung & Reminders (→ Notification-Rules in 0.6) -- PARTIAL (S3 CRM Core)
+**Foundation implementiert (2026-05-10):**
+- CRM Task entity mit Status-Machine (pending/in_progress/done/cancelled)
+- Polymorphic TaskTarget (Job/Person/Company) mit ExactlyOneTarget-Invariant
+- 4 Server Actions: createCrmTask, startCrmTask, completeCrmTask, cancelCrmTask
+- TaskBoard UI (/dashboard/crm-tasks) mit Status-Gruppierung + Overdue-Badges
+- Domain Events: CrmTaskCreated, CrmTaskCompleted
+- Notification Types vorbereitet: follow_up_due
+- **Offen:** Temporal-Rules (TaskOverdueReminder, InterviewReminder) benötigen Scheduler-Integration
+
+### 5.4 Automatisierung & Reminders — ORIGINAL
 - CRM-Reminders werden als Notification-Rules im Unified Notification System (→ 0.6) implementiert
 - Automatisierte Follow-Ups (Erinnerungen, Nachfass-E-Mails)
 - Automatisierte Terminvereinbarungen
@@ -1576,6 +1586,21 @@ Dynamische Dateipfade und Dateinamen:
   - In-App Notifications (Bell-Icon, Dashboard-Widget)
   - Optional: Push (Browser), E-Mail (→ Communication Connector 1.12)
   - Cross-Ref: Job-Alerts (→ 1.5) für Job-Discovery-Notifications
+
+### 5.5 Kontaktmanagement -- DONE (S3 CRM Core)
+**Implementiert (2026-05-10):**
+- Allium Spec: `specs/crm.allium` (1074 Zeilen, 9 Entities, 18 Rules, 4 Invariants, 6 Surfaces)
+- Person Entity: Neues Aggregate (unabhängig von Job), FullName, TypedEmail[], TypedPhone[], Address
+- GDPR-Felder: data_source, processing_basis, retention_expires_at (Art. 6/17 DSGVO)
+- 7 Person Server Actions: Create, Read, Update, Archive, Reactivate, Anonymize, Merge
+- PersonDirectory UI (/dashboard/contacts) mit Suche, Filter, Paginierung
+- PersonDetail UI (/dashboard/contacts/[id]) mit 5 Tabs (Übersicht, Interviews, Aufgaben, Notizen, Timeline)
+- CRM Note Entity mit polymorphem NoteTarget (Job/Person/Company)
+- CRM Blocklist Entity (Email/Phone/Domain Suppression)
+- ActivityTimeline: Materialisiertes Read-Model aus Domain Events, 15 Activity-Types
+- 9 Domain Events, 4 Notification Types, CRM Activity Logger Consumer
+- i18n: crm.ts Namespace (~160 Keys × 4 Locales)
+- Navigation: 3 CRM-Links im Sidebar (Contacts, Interviews, CRM Tasks)
 
 ### 5.5 Dateiexplorer-Integration
 - CRM ist direkt mit dem Dateiexplorer (Sektion 2.8) verbunden
@@ -1610,12 +1635,23 @@ Dynamische Dateipfade und Dateinamen:
 - Dublettenprüfung: gleicher Kontakt bei verschiedenen Jobs erkennen
 - Anreicherung: LinkedIn-Profil, XING, Unternehmenswebsite verknüpfen
 
+### 5.8 Interview Tracking -- DONE (S3 CRM Core)
+**Implementiert (2026-05-10):**
+- CrmInterview Entity mit Status-Machine (scheduled/completed/cancelled/rescheduled)
+- Outcome Tracking (pending/passed/rejected/waitlisted)
+- Job + Person Verknüpfung
+- 5 Server Actions: scheduleInterview, completeInterview, cancelInterview, rescheduleInterview, getInterviews
+- InterviewCalendar UI (/dashboard/interviews) mit Upcoming/Past Gruppierung
+- Domain Events: InterviewScheduled, InterviewCompleted
+- Notification Types: interview_scheduled, interview_reminder
+- ActivityLog Einträge für scheduled/completed
+
 ### 5.8 Import/Export
 - **Import:** Kontakte aus LinkedIn, XING, vCard, CSV importieren — kritisch für CRM-Bootstrapping
 - **Export:** Jobs, Kontakte, Bewerbungsdaten als CSV/JSON für Reporting und Backup
 - Cross-Ref: DSGVO Datenportabilität Art. 20 (→ 6.1)
 
-### 5.9 Timeline / Activity Log
+### 5.9 Timeline / Activity Log -- DONE (S3 CRM Core)
 - Chronologische Timeline pro Kontakt und Unternehmen
 - Zeigt alle Interaktionen: E-Mails, Anrufe, Interviews, Notizen, Statusänderungen, Dokumente
 - Automatisch befüllt aus CRM-Aktionen und Domain Events

@@ -543,6 +543,43 @@ Any new notification-creating code path MUST populate the structured fields.
 
 **Design document:** `docs/design/perf-3-dispatch-context.md` — full query inventory, interface definitions, edge cases, and migration strategy.
 
+### CRM Core Module (ROADMAP 5.4, 5.5, 5.8, 5.9)
+
+**Person** is an independent aggregate root — NOT part of the Job aggregate. The Job aggregate remains unchanged; new CRM models create relations TO Job via polymorphic nullable FKs.
+
+**Naming:** Existing Task/Note/Interview models are untouched. CRM models use `Crm` prefix where names conflict: `CrmInterview`, `CrmTask`, `CrmNote`. The `Person` model is unique (no conflict with the old `Contact` model which remains for backward compatibility).
+
+**Current structure:** `src/actions/`:
+- **person.actions.ts** — Person CRUD + Merge + Anonymize (7 actions)
+- **crmInterview.actions.ts** — Interview lifecycle (5 actions)
+- **crmTask.actions.ts** — Task with polymorphic targets (6 actions)
+- **crmNote.actions.ts** — Note with polymorphic targets (4 actions)
+- **crmActivityLog.actions.ts** — Timeline read queries
+- **crmBlocklist.actions.ts** — Email/phone/domain suppression
+
+**Domain types:** `src/models/person.model.ts` — TypedEmail, TypedPhone, Address, FullName value objects + state machine validators + ExactlyOneTarget invariant validator + CRM_CONFIG constants.
+
+**JSON Value Objects:** Person stores `emails` and `phones` as JSON strings (SQLite TEXT columns). Use `parseEmails()`/`parsePhones()` from `person.model.ts` to deserialize.
+
+**Polymorphic Targeting (Twenty CRM Pattern):** `CrmTaskTarget` and `CrmNoteTarget` use nullable FK columns: exactly one of `targetPersonId`/`targetCompanyId`/`targetJobId` must be set. Enforced at app level by `validateExactlyOneTarget()`.
+
+**State Machines:**
+- Person: active → archived ↔ active, active → anonymized (terminal)
+- Interview: scheduled → completed|cancelled|rescheduled, rescheduled → completed|cancelled
+- Task: pending → in_progress|done|cancelled, in_progress → done|cancelled
+
+**CRM Domain Events (9):** ContactCreated, ContactUpdated, ContactDeleted, InterviewScheduled, InterviewCompleted, ReminderTriggered, CrmTaskCreated, CrmTaskCompleted, CrmNoteCreated — all published via TypedEventBus.
+
+**CRM Activity Logger:** `src/lib/events/consumers/crm-activity-logger.ts` — subscribes to JobStatusChanged, ContactCreated, ContactUpdated and projects into CrmActivityLog (immutable, append-only read model per TimelineProjection contract).
+
+**GDPR on Person:** `dataSource` (manual|auto_created|imported), `processingBasis` (legitimate_interest|consent|contract), `retentionExpiresAt`. AnonymizePerson cascades to NoteTargets, TaskTargets, ActivityLog references.
+
+**Allium Spec:** `specs/crm.allium` — authoritative specification. `specs/crm-gdpr.allium` for GDPR rules.
+
+**i18n:** `src/i18n/dictionaries/crm.ts` — own namespace (`crm.*`), ~160 keys × 4 locales.
+
+**UI Routes:** `/dashboard/contacts`, `/dashboard/contacts/[id]`, `/dashboard/interviews`, `/dashboard/crm-tasks`.
+
 ## Domain-Driven Design (DDD) Principles
 
 This project uses DDD idioms. All agents and contributors MUST follow these principles:
@@ -561,6 +598,12 @@ Use consistent domain terms across code, UI, specs, and documentation:
 | `AiModuleId` | Enum identifying an AI Module (ollama, openai, deepseek) | `AiProvider`, `ProviderType` |
 | `Automation` | A scheduled job search configuration | "cron job", "task" |
 | `ActionResult<T>` | Typed server action response | `Promise<any>` |
+| `Person` | CRM contact entity (recruiter, hiring manager, referral) | "Contact" (legacy model) |
+| `CrmInterview` | Scheduled/completed interview with status machine | "Interview" (legacy model) |
+| `CrmTask` | To-do with polymorphic targets (Job/Person/Company) | "Task" (existing activity-tracking model) |
+| `CrmNote` | Free-text note with polymorphic targets | "Note" (existing Job-only note) |
+| `CrmActivityLog` | Immutable timeline entry (materialized read model) | "Activity" (existing activity-tracking model) |
+| `CrmBlocklist` | Email/phone/domain suppression for auto-creation | "CompanyBlacklist" (existing company-level filter) |
 
 ### Bounded Contexts
 
@@ -597,6 +640,7 @@ When modifying data, respect aggregate boundaries:
 - **Job Aggregate:** Job + Notes + Tags + Status (modify together via `job.actions.ts`)
 - **Automation Aggregate:** Automation + Runs + Discovered Jobs (via `automation.actions.ts`)
 - **Profile Aggregate:** Profile + Resumes + Sections + Contact Info (via `profile.actions.ts`)
+- **Person Aggregate (CRM):** Person + CrmInterviews + CrmTaskTargets + CrmNoteTargets (via `person.actions.ts`, `crmInterview.actions.ts`, `crmTask.actions.ts`, `crmNote.actions.ts`)
 - Never modify an aggregate's children from outside its action file
 
 ### Repository Pattern
