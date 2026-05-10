@@ -293,8 +293,8 @@ export default function InterviewForm({
                       >
                         <Check
                           className={cn(
-                            "mr-2 h-4 w-4",
-                            jobId === job.id ? "opacity-100" : "opacity-0",
+                            "mr-2 h-4 w-4 shrink-0",
+                            jobId === job.id ? "opacity-100" : "hidden",
                           )}
                         />
                         {job.label}
@@ -447,7 +447,6 @@ export default function InterviewForm({
                       }}
                       className="text-muted-foreground"
                     >
-                      <Check className="mr-2 h-4 w-4 opacity-0" />
                       —
                     </CommandItem>
                   )}
@@ -463,8 +462,8 @@ export default function InterviewForm({
                     >
                       <Check
                         className={cn(
-                          "mr-2 h-4 w-4",
-                          personId === person.id ? "opacity-100" : "opacity-0",
+                          "mr-2 h-4 w-4 shrink-0",
+                          personId === person.id ? "opacity-100" : "hidden",
                         )}
                       />
                       {person.label}
