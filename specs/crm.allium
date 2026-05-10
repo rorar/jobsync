@@ -1,0 +1,1074 @@
+-- allium: 3
+-- crm.allium
+-- Scope: CRM domain model for JobSync — Person management,
+--        Interview tracking, Task/Reminder automation, Activity Timeline,
+--        Blocklist suppression, communication integration readiness
+-- Includes: Person, Interview, Task, ActivityLog, Blocklist,
+--           ConnectedAccount (deferred), domain events, GDPR fields on Person
+-- Extends: crm-workflow.allium (Job Status Workflow, Kanban, JobStatusHistory)
+-- Excludes:
+--   - Job Status state machine (covered by crm-workflow.allium)
+--   - GDPR Data Subject Requests (covered by crm-gdpr.allium)
+--   - Connector transport (covered by future communication/calendar connector specs)
+--   - UI layout (design agent responsibility)
+--   - Vacancy pipeline (covered by vacancy-pipeline.allium)
+-- Dependencies:
+--   - Job, Company from shared-entities.allium
+--   - JobStatusChanged from event-bus.allium
+--   - DataSubjectRequest from crm-gdpr.allium
+
+use "./crm-workflow.allium" as workflow
+use "./crm-gdpr.allium" as gdpr
+use "./event-bus.allium" as events
+use "./shared-entities.allium" as shared
+use "./notification-dispatch.allium" as notifications
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity User {
+    -- Authenticated user from session (auth-session.allium).
+    -- All CRM operations are scoped by user_id (ADR-015).
+}
+
+external entity Job {
+    -- Job entity from job-aggregate.allium.
+    user_id: String
+    title: String
+    company: Company
+    status: String
+}
+
+external entity Company {
+    -- Lookup entity from shared-entities.allium.
+    label: String
+    value: String
+    created_by: User
+}
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value FullName {
+    first_name: String?
+    last_name: String?
+}
+
+value TypedEmail {
+    email: String
+    type: ContactChannelType
+    is_primary: Boolean
+}
+
+value TypedPhone {
+    number: String
+    type: ContactChannelType
+    is_primary: Boolean
+}
+
+value Address {
+    street: String?
+    city: String?
+    postal_code: String?
+    country: String?
+}
+
+value ActorMetadata {
+    -- Tracks the origin of a record creation or modification.
+    source: ActorSource
+    name: String?
+}
+
+------------------------------------------------------------
+-- Contracts
+------------------------------------------------------------
+
+contract TimelineProjection {
+    -- The Activity Timeline is a materialised read model.
+    -- Consumers project domain events into ActivityLog entries.
+
+    project: (activity_type: ActivityType, target_person: Person?, target_job: Job?, details: String?) -> ActivityLog
+
+    @invariant AppendOnly
+        -- ActivityLog entries are never updated after creation.
+
+    @guidance
+        -- Implementations should batch-insert timeline entries
+        -- when processing event bursts (e.g. bulk status changes).
+}
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum ActorSource {
+    manual | import | api | system | workflow | email | calendar
+}
+
+enum ContactChannelType {
+    work | home | other
+}
+
+enum DataSource {
+    manual | auto_created | imported
+}
+
+enum ProcessingBasis {
+    -- DSGVO Art. 6(1) legal basis for processing personal data.
+    legitimate_interest | consent | contract
+}
+
+enum PersonStatus {
+    active | archived | anonymized
+}
+
+enum InterviewStatus {
+    scheduled | completed | cancelled | rescheduled
+}
+
+enum InterviewOutcome {
+    pending | passed | rejected | waitlisted
+}
+
+enum TaskStatus {
+    pending | in_progress | done | cancelled
+}
+
+enum ActivityType {
+    status_changed | note_added | task_created | task_completed
+    | interview_scheduled | interview_completed
+    | contact_created | contact_updated
+    | email_sent | email_received | call_logged
+    | document_attached | reminder_triggered
+    | follow_up_sent | application_submitted
+}
+
+enum BlocklistType {
+    email | phone | domain
+}
+
+enum ConnectedAccountProvider {
+    gmail | outlook | caldav | imap
+}
+
+------------------------------------------------------------
+-- Entities and Variants
+------------------------------------------------------------
+
+entity Person {
+    -- The core CRM entity: a contact the user interacts with
+    -- during their job search (recruiters, hiring managers, referrals).
+
+    user_id: String
+    name: FullName
+    emails: List<TypedEmail>
+    phones: List<TypedPhone>
+    job_title: String?
+    linkedin_url: String?
+    avatar_url: String?
+    address: Address?
+
+    company: Company?
+    status: PersonStatus
+
+    -- Data governance (GDPR — see crm-gdpr.allium for DSR handling)
+    data_source: DataSource
+    processing_basis: ProcessingBasis
+    retention_expires_at: Timestamp?
+
+    created_by: ActorMetadata
+    created_at: Timestamp
+    updated_at: Timestamp
+
+    -- Relationships
+    interviews: Interview with person = this
+    task_targets: TaskTarget with target_person = this
+    note_targets: NoteTarget with target_person = this
+    timeline_activities: ActivityLog with target_person = this
+
+    -- Derived
+    primary_email: emails where is_primary = true -> email
+    is_auto_created: data_source = auto_created
+    is_retention_expired: retention_expires_at != null and retention_expires_at <= now
+
+    transitions status {
+        active -> archived
+        active -> anonymized
+        archived -> active
+        terminal: anonymized
+    }
+
+    invariant AutoCreatedHasRetention {
+        data_source = auto_created implies retention_expires_at != null
+    }
+}
+
+entity Interview {
+    -- A scheduled or completed interview linked to a Job and optionally
+    -- to a Person (the interviewer contact at the company).
+
+    user_id: String
+    job: Job
+    person: Person?
+    interview_date: Timestamp
+    location: String?
+    notes: String?
+    status: InterviewStatus
+    outcome: InterviewOutcome?
+    outcome_notes: String?
+    created_at: Timestamp
+    updated_at: Timestamp
+
+    transitions status {
+        scheduled -> completed
+        scheduled -> cancelled
+        scheduled -> rescheduled
+        rescheduled -> completed
+        rescheduled -> cancelled
+        terminal: completed, cancelled
+    }
+}
+
+entity Task {
+    -- A to-do item linked to one or more CRM entities
+    -- via the polymorphic TaskTarget join entity.
+
+    user_id: String
+    title: String
+    description: String?
+    due_date: Timestamp?
+    status: TaskStatus
+    created_at: Timestamp
+    updated_at: Timestamp
+    completed_at: Timestamp?
+
+    targets: TaskTarget with task = this
+
+    is_overdue: due_date != null and due_date <= now and status != done and status != cancelled
+
+    transitions status {
+        pending -> in_progress
+        pending -> done
+        pending -> cancelled
+        in_progress -> done
+        in_progress -> cancelled
+        terminal: done, cancelled
+    }
+}
+
+entity TaskTarget {
+    -- Polymorphic join: exactly one target must be set
+    -- (ExactlyOneTaskTarget invariant).
+    task: Task
+    target_person: Person?
+    target_company: Company?
+    target_job: Job?
+}
+
+entity Note {
+    -- Free-text note linked to CRM entities via NoteTarget.
+    user_id: String
+    title: String?
+    body: String
+    created_at: Timestamp
+    updated_at: Timestamp
+    targets: NoteTarget with note = this
+}
+
+entity NoteTarget {
+    -- Polymorphic join: exactly one target must be set
+    -- (ExactlyOneNoteTarget invariant).
+    note: Note
+    target_person: Person?
+    target_company: Company?
+    target_job: Job?
+}
+
+entity ActivityLog {
+    -- Immutable timeline entry. Materialised read model projected
+    -- from domain events, never updated after creation.
+
+    user_id: String
+    activity_type: ActivityType
+    happened_at: Timestamp
+    actor_id: String?
+    target_person: Person?
+    target_company: Company?
+    target_job: Job?
+    details: String?
+    linked_record_name: String?
+}
+
+entity Blocklist {
+    -- Suppresses Person auto-creation for specific handles
+    -- during email/calendar sync.
+    user_id: String
+    handle: String
+    type: BlocklistType
+    reason: String?
+    created_at: Timestamp
+}
+
+entity ConnectedAccount {
+    -- OAuth connection for email/calendar sync (future 1.7/1.12).
+    -- No rules govern this entity yet; it is declared for
+    -- structural completeness. See deferred CommunicationConnector.sync.
+    user_id: String
+    provider: ConnectedAccountProvider
+    handle: String
+    access_token: String
+    refresh_token: String?
+    iv: String
+    is_sync_enabled: Boolean
+    last_synced_at: Timestamp?
+    auth_failed_at: Timestamp?
+    created_at: Timestamp
+    updated_at: Timestamp
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    -- GDPR retention
+    auto_created_retention: Duration = 730.days
+    timeline_retention: Duration = 1095.days
+
+    -- Reminders
+    interview_reminder_before: Duration = 24.hours
+    follow_up_default_delay: Duration = 7.days
+
+    -- Limits
+    max_persons_per_user: Integer = 10000
+    max_tasks_per_user: Integer = 5000
+    max_blocklist_entries: Integer = 1000
+    max_connected_accounts: Integer = 5
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- ==========================================================
+-- Person Lifecycle
+-- ==========================================================
+
+rule CreatePerson {
+    -- User manually creates a contact from the CRM directory.
+    when: CreatePerson(user, name, emails, phones, company?, job_title?, linkedin_url?, address?)
+
+    requires: emails.count > 0
+    requires: Persons where user_id = user.id -> count < config.max_persons_per_user
+
+    ensures: Person.created(
+        user_id: user.id,
+        name: name,
+        emails: emails,
+        phones: phones,
+        company: company,
+        job_title: job_title,
+        linkedin_url: linkedin_url,
+        address: address,
+        status: active,
+        data_source: manual,
+        processing_basis: legitimate_interest,
+        created_by: ActorMetadata(source: manual, name: user.name),
+        created_at: now,
+        updated_at: now
+    )
+
+    ensures: ContactCreated(person: person, source: manual)
+}
+
+rule AutoCreatePersonFromEmail {
+    -- Email sync creates a Person for a previously unseen participant.
+    -- Suppressed if the handle appears in the user's Blocklist.
+    when: AutoCreatePerson(user, email_handle, display_name?)
+
+    requires: not exists Blocklist{user_id: user.id, handle: email_handle}
+    requires: not exists Person{user_id: user.id, primary_email: email_handle}
+
+    let domain = extract_domain(email_handle)
+    let matching_company = find_company_by_domain(user.id, domain)
+
+    ensures: Person.created(
+        user_id: user.id,
+        name: FullName(first_name: display_name, last_name: null),
+        emails: {TypedEmail(email: email_handle, type: work, is_primary: true)},
+        phones: {},
+        company: matching_company,
+        status: active,
+        data_source: auto_created,
+        processing_basis: legitimate_interest,
+        retention_expires_at: now + config.auto_created_retention,
+        created_by: ActorMetadata(source: email, name: null),
+        created_at: now,
+        updated_at: now
+    )
+
+    ensures: ContactCreated(person: person, source: auto_created)
+}
+
+rule UpdatePerson {
+    when: UpdatePerson(user, person, changes)
+
+    requires: person.user_id = user.id
+    requires: person.status = active
+
+    ensures: person.updated_at = now
+    ensures: ContactUpdated(person: person)
+}
+
+rule ArchivePerson {
+    when: ArchivePerson(user, person)
+
+    requires: person.user_id = user.id
+    requires: person.status = active
+
+    ensures: person.status = archived
+    ensures: person.updated_at = now
+}
+
+rule ReactivatePerson {
+    when: ReactivatePerson(user, person)
+
+    requires: person.user_id = user.id
+    requires: person.status = archived
+
+    ensures: person.status = active
+    ensures: person.updated_at = now
+}
+
+rule AnonymizePerson {
+    -- GDPR erasure: irreversibly anonymize a Person and cascade.
+    when: AnonymizePerson(user, person)
+
+    requires: person.user_id = user.id
+    requires: person.status != anonymized
+
+    ensures: person.status = anonymized
+    ensures: person.name = FullName(first_name: null, last_name: null)
+    ensures: person.emails = {}
+    ensures: person.phones = {}
+    ensures: person.job_title = null
+    ensures: person.linkedin_url = null
+    ensures: person.avatar_url = null
+    ensures: person.address = null
+    ensures: person.updated_at = now
+
+    ensures:
+        for nt in person.note_targets:
+            not exists nt
+
+    ensures:
+        for tt in person.task_targets:
+            not exists tt
+
+    @guidance
+        -- Implementation should also anonymize MessageParticipant
+        -- and CalendarEventParticipant per crm-gdpr.allium.
+}
+
+rule MergePersons {
+    -- Merge two Person records. Winner absorbs loser's relationships.
+    when: MergePersons(user, winner, loser)
+
+    requires: winner.user_id = user.id
+    requires: loser.user_id = user.id
+    requires: winner.status = active
+    requires: loser.status = active
+    requires: winner != loser
+
+    ensures:
+        for interview in loser.interviews:
+            interview.person = winner
+
+    ensures:
+        for tt in loser.task_targets:
+            tt.target_person = winner
+
+    ensures:
+        for nt in loser.note_targets:
+            nt.target_person = winner
+
+    ensures:
+        for al in loser.timeline_activities:
+            al.target_person = winner
+
+    ensures: not exists loser
+
+    @guidance
+        -- Winner's field values take precedence.
+        -- Loser's emails/phones are appended with is_primary = false.
+}
+
+rule ExpireAutoCreatedPersons {
+    -- Temporal: auto-archive Persons whose retention has elapsed.
+    when: person: Person.retention_expires_at <= now
+
+    requires: person.status = active
+    requires: person.is_auto_created
+
+    ensures: person.status = archived
+    ensures: person.updated_at = now
+    ensures: ReminderTriggered(
+        user_id: person.user_id,
+        reason: retention_expired,
+        target_person: person
+    )
+}
+
+-- ==========================================================
+-- Interview Lifecycle
+-- ==========================================================
+
+rule ScheduleInterview {
+    when: ScheduleInterview(user, job, interview_date, person?, location?, notes?)
+
+    requires: job.user_id = user.id
+
+    ensures:
+        let interview = Interview.created(
+            user_id: user.id,
+            job: job,
+            person: person,
+            interview_date: interview_date,
+            location: location,
+            notes: notes,
+            status: scheduled,
+            created_at: now,
+            updated_at: now
+        )
+
+    ensures: InterviewScheduled(interview: interview, job: job)
+
+    ensures: ActivityLog.created(
+        user_id: user.id,
+        activity_type: interview_scheduled,
+        happened_at: now,
+        actor_id: user.id,
+        target_job: job,
+        target_person: person,
+        details: null,
+        linked_record_name: job.title
+    )
+}
+
+rule CompleteInterview {
+    when: CompleteInterview(user, interview, outcome, outcome_notes?)
+
+    requires: interview.user_id = user.id
+    requires: interview.status in {scheduled, rescheduled}
+
+    ensures: interview.status = completed
+    ensures: interview.outcome = outcome
+    ensures: interview.outcome_notes = outcome_notes
+    ensures: interview.updated_at = now
+
+    ensures: InterviewCompleted(interview: interview, outcome: outcome)
+
+    ensures: ActivityLog.created(
+        user_id: user.id,
+        activity_type: interview_completed,
+        happened_at: now,
+        actor_id: user.id,
+        target_job: interview.job,
+        target_person: interview.person,
+        details: null,
+        linked_record_name: interview.job.title
+    )
+}
+
+rule CancelInterview {
+    when: CancelInterview(user, interview)
+
+    requires: interview.user_id = user.id
+    requires: interview.status in {scheduled, rescheduled}
+
+    ensures: interview.status = cancelled
+    ensures: interview.updated_at = now
+}
+
+rule RescheduleInterview {
+    when: RescheduleInterview(user, interview, new_date, new_location?)
+
+    requires: interview.user_id = user.id
+    requires: interview.status in {scheduled, rescheduled}
+
+    ensures: interview.status = rescheduled
+    ensures: interview.interview_date = new_date
+    ensures: interview.location = new_location
+    ensures: interview.updated_at = now
+}
+
+rule InterviewReminder {
+    -- Temporal: notify the user before an upcoming interview.
+    when: interview: Interview.interview_date - config.interview_reminder_before <= now
+
+    requires: interview.status in {scheduled, rescheduled}
+
+    ensures: ReminderTriggered(
+        user_id: interview.user_id,
+        reason: interview_upcoming,
+        target_job: interview.job,
+        target_person: interview.person
+    )
+
+    ensures: ActivityLog.created(
+        user_id: interview.user_id,
+        activity_type: reminder_triggered,
+        happened_at: now,
+        target_job: interview.job,
+        target_person: interview.person,
+        details: null,
+        linked_record_name: interview.job.title
+    )
+}
+
+-- ==========================================================
+-- Task Lifecycle
+-- ==========================================================
+
+rule CreateTask {
+    when: CreateTask(user, title, description?, due_date?, targets)
+
+    requires: targets.count > 0
+    requires: Tasks where user_id = user.id -> count < config.max_tasks_per_user
+
+    ensures:
+        let task = Task.created(
+            user_id: user.id,
+            title: title,
+            description: description,
+            due_date: due_date,
+            status: pending,
+            created_at: now,
+            updated_at: now
+        )
+
+    ensures:
+        for target in targets:
+            TaskTarget.created(task: task, target_person: target.person, target_company: target.company, target_job: target.job)
+
+    ensures: ActivityLog.created(
+        user_id: user.id,
+        activity_type: task_created,
+        happened_at: now,
+        actor_id: user.id,
+        target_job: targets.first?.target_job,
+        target_person: targets.first?.target_person,
+        details: null,
+        linked_record_name: title
+    )
+}
+
+rule CompleteTask {
+    when: CompleteTask(user, task)
+
+    requires: task.user_id = user.id
+    requires: task.status in {pending, in_progress}
+
+    ensures: task.status = done
+    ensures: task.completed_at = now
+    ensures: task.updated_at = now
+
+    ensures: ActivityLog.created(
+        user_id: user.id,
+        activity_type: task_completed,
+        happened_at: now,
+        actor_id: user.id,
+        details: null,
+        linked_record_name: task.title
+    )
+}
+
+rule CancelTask {
+    when: CancelTask(user, task)
+
+    requires: task.user_id = user.id
+    requires: task.status in {pending, in_progress}
+
+    ensures: task.status = cancelled
+    ensures: task.updated_at = now
+}
+
+rule StartTask {
+    when: StartTask(user, task)
+
+    requires: task.user_id = user.id
+    requires: task.status = pending
+
+    ensures: task.status = in_progress
+    ensures: task.updated_at = now
+}
+
+rule TaskOverdueReminder {
+    -- Temporal: notify the user when a task passes its due date.
+    when: task: Task.due_date <= now
+
+    requires: task.status = pending
+
+    ensures: ReminderTriggered(
+        user_id: task.user_id,
+        reason: task_overdue,
+        target_job: null
+    )
+
+    ensures: ActivityLog.created(
+        user_id: task.user_id,
+        activity_type: reminder_triggered,
+        happened_at: now,
+        details: null,
+        linked_record_name: task.title
+    )
+}
+
+-- ==========================================================
+-- Note Lifecycle
+-- ==========================================================
+
+rule CreateNote {
+    when: CreateNote(user, title?, body, targets)
+
+    requires: targets.count > 0
+
+    ensures:
+        let note = Note.created(
+            user_id: user.id,
+            title: title,
+            body: body,
+            created_at: now,
+            updated_at: now
+        )
+
+    ensures:
+        for target in targets:
+            NoteTarget.created(note: note, target_person: target.person, target_company: target.company, target_job: target.job)
+
+    ensures: ActivityLog.created(
+        user_id: user.id,
+        activity_type: note_added,
+        happened_at: now,
+        actor_id: user.id,
+        target_person: targets.first?.target_person,
+        target_job: targets.first?.target_job,
+        details: null,
+        linked_record_name: title
+    )
+}
+
+-- ==========================================================
+-- Activity Timeline
+-- ==========================================================
+
+rule RecordStatusChange {
+    -- Chain from JobStatusChanged events published by crm-workflow.
+    when: JobStatusChanged(job_id, user_id, previous_status, new_status)
+
+    ensures: ActivityLog.created(
+        user_id: user_id,
+        activity_type: status_changed,
+        happened_at: now,
+        actor_id: user_id,
+        target_job: Job{id: job_id},
+        details: null,
+        linked_record_name: null
+    )
+
+    @guidance
+        -- The details field may carry a JSON object with
+        -- previous_status and new_status for rendering.
+}
+
+-- ==========================================================
+-- Blocklist
+-- ==========================================================
+
+rule AddToBlocklist {
+    when: AddToBlocklist(user, handle, type, reason?)
+
+    requires: not exists Blocklist{user_id: user.id, handle: handle}
+    requires: Blocklists where user_id = user.id -> count < config.max_blocklist_entries
+
+    ensures: Blocklist.created(
+        user_id: user.id,
+        handle: handle,
+        type: type,
+        reason: reason,
+        created_at: now
+    )
+
+    @guidance
+        -- After adding to blocklist, consider archiving any existing
+        -- auto-created Person whose primary_email matches the handle.
+}
+
+rule RemoveFromBlocklist {
+    when: RemoveFromBlocklist(user, entry)
+
+    requires: entry.user_id = user.id
+
+    ensures: not exists entry
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant ExactlyOneTaskTarget {
+    for tt in TaskTargets:
+        (tt.target_person != null and tt.target_company = null and tt.target_job = null)
+        or (tt.target_person = null and tt.target_company != null and tt.target_job = null)
+        or (tt.target_person = null and tt.target_company = null and tt.target_job != null)
+}
+
+invariant ExactlyOneNoteTarget {
+    for nt in NoteTargets:
+        (nt.target_person != null and nt.target_company = null and nt.target_job = null)
+        or (nt.target_person = null and nt.target_company != null and nt.target_job = null)
+        or (nt.target_person = null and nt.target_company = null and nt.target_job != null)
+}
+
+invariant BlocklistSuppressesAutoCreation {
+    -- No active auto-created Person should exist for a blocklisted handle.
+    for person in Persons:
+        for bl in Blocklists:
+            person.user_id = bl.user_id and person.is_auto_created
+                and person.primary_email = bl.handle
+                implies person.status = archived
+}
+
+invariant PersonOwnedByUser {
+    -- ADR-015: all Person records must have an owner.
+    for person in Persons:
+        person.user_id != null
+}
+
+------------------------------------------------------------
+-- Actor Declarations
+------------------------------------------------------------
+
+actor CrmUser {
+    identified_by: User
+}
+
+actor Scheduler {
+    -- System actor for temporal rules (reminders, retention).
+    identified_by: User where role = system
+}
+
+------------------------------------------------------------
+-- Surfaces
+------------------------------------------------------------
+
+surface PersonDirectory {
+    facing user: CrmUser
+
+    let persons = Persons where user_id = user.id
+
+    exposes:
+        for person in persons:
+            person.name
+            person.primary_email
+            person.company
+            person.status
+            person.data_source
+            person.created_at
+
+    provides:
+        CreatePerson(user, name, emails, phones, company?, job_title?, linkedin_url?, address?)
+        MergePersons(user, winner, loser)
+
+    related:
+        PersonDetail(person)
+
+    @guidance
+        -- Full-text search across name, email, company.
+        -- Filter by status, data_source, company.
+}
+
+surface PersonDetail {
+    facing user: CrmUser
+    context person: Person where user_id = user.id
+
+    exposes:
+        person.name
+        person.emails
+        person.phones
+        person.job_title
+        person.linkedin_url
+        person.avatar_url
+        person.address
+        person.company
+        person.status
+        person.data_source
+        person.processing_basis
+        person.retention_expires_at
+        person.created_at
+        person.updated_at
+
+        for interview in person.interviews:
+            interview.job
+            interview.interview_date
+            interview.status
+            interview.outcome
+
+        for tt in person.task_targets:
+            tt.task.title
+            tt.task.status
+            tt.task.due_date
+
+    provides:
+        UpdatePerson(user, person, changes)
+            when person.status = active
+        ArchivePerson(user, person)
+            when person.status = active
+        ReactivatePerson(user, person)
+            when person.status = archived
+        AnonymizePerson(user, person)
+            when person.status != anonymized
+
+    related:
+        ActivityTimeline(person)
+
+    @guidance
+        -- Tabbed layout: Overview, Interviews, Tasks, Notes, Timeline.
+}
+
+surface InterviewCalendar {
+    facing user: CrmUser
+
+    let interviews = Interviews where user_id = user.id
+
+    exposes:
+        for interview in interviews:
+            interview.job
+            interview.person
+            interview.interview_date
+            interview.location
+            interview.status
+            interview.outcome
+
+    provides:
+        ScheduleInterview(user, job, interview_date, person?, location?, notes?)
+        CompleteInterview(user, interview, outcome, outcome_notes?)
+            when interview.status in {scheduled, rescheduled}
+        CancelInterview(user, interview)
+            when interview.status in {scheduled, rescheduled}
+        RescheduleInterview(user, interview, new_date, new_location?)
+            when interview.status in {scheduled, rescheduled}
+
+    timeout:
+        InterviewReminder
+
+    @guidance
+        -- Calendar view with upcoming interviews highlighted.
+}
+
+surface TaskBoard {
+    facing user: CrmUser
+
+    let tasks = Tasks where user_id = user.id
+
+    exposes:
+        for task in tasks:
+            task.title
+            task.description
+            task.due_date
+            task.status
+            task.is_overdue
+            task.completed_at
+            for target in task.targets:
+                target.target_person
+                target.target_company
+                target.target_job
+
+    provides:
+        CreateTask(user, title, description?, due_date?, targets)
+        StartTask(user, task)
+            when task.status = pending
+        CompleteTask(user, task)
+            when task.status in {pending, in_progress}
+        CancelTask(user, task)
+            when task.status in {pending, in_progress}
+
+    timeout:
+        TaskOverdueReminder
+
+    @guidance
+        -- Group by status. Highlight overdue tasks.
+}
+
+surface ActivityTimeline {
+    facing user: CrmUser
+    context person: Person where user_id = user.id
+
+    let activities = person.timeline_activities
+
+    exposes:
+        for activity in activities:
+            activity.activity_type
+            activity.happened_at
+            activity.actor_id
+            activity.target_job
+            activity.details
+            activity.linked_record_name
+
+    contracts:
+        fulfils TimelineProjection
+
+    @guarantee ChronologicalOrder
+        -- Activities are presented in reverse chronological order.
+
+    @guidance
+        -- Vertical timeline with icons per activity_type.
+        -- Filter by activity_type.
+}
+
+surface BlocklistSettings {
+    facing user: CrmUser
+
+    let entries = Blocklists where user_id = user.id
+
+    exposes:
+        for entry in entries:
+            entry.handle
+            entry.type
+            entry.reason
+            entry.created_at
+
+    provides:
+        AddToBlocklist(user, handle, type, reason?)
+        RemoveFromBlocklist(user, entry)
+
+    @guidance
+        -- Simple table in Settings. Filter by type.
+}
+
+------------------------------------------------------------
+-- Deferred Specifications
+------------------------------------------------------------
+
+deferred CommunicationConnector.sync       -- see future specs/communication-connector.allium (1.12)
+deferred CalendarConnector.sync            -- see future specs/calendar-connector.allium (1.7)
+deferred ContactExtraction.extract         -- NLP extraction from job descriptions (5.7)
+deferred ImportExport.bulkImport           -- CSV import/export (5.8)
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Should Person and Company have independent lifecycle management, or should Company always be a lookup value like today?"
+
+open question "Should Tasks be standalone entities or always linked to a Job/Person? What about personal reminders?"
+
+open question "How should Person merge handle conflicting GDPR processing_basis? Winner's basis takes precedence?"
+
+open question "Should the Activity Timeline show ALL events or only 'important' ones? Is there a visibility filter?"
+
+open question "Should interview scheduling integrate with external calendar immediately (1.7) or start with manual-only?"
+
+open question "No surface provides AutoCreatePerson. This trigger depends on email/calendar sync (CommunicationConnector) which is deferred."
