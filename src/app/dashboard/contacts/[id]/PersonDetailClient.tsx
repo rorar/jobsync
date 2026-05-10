@@ -9,6 +9,7 @@ import { getInterviews } from "@/actions/crmInterview.actions";
 import { getCrmTasks } from "@/actions/crmTask.actions";
 import { getCrmNotes } from "@/actions/crmNote.actions";
 import { getActivityTimeline } from "@/actions/crmActivityLog.actions";
+import { getJobContactsForPerson, removeJobContact } from "@/actions/jobContact.actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +53,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
   const [interviews, setInterviews] = useState<Record<string, unknown>[]>([]);
   const [tasks, setTasks] = useState<Record<string, unknown>[]>([]);
   const [notes, setNotes] = useState<Record<string, unknown>[]>([]);
+  const [jobContacts, setJobContacts] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -65,14 +67,16 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
   }, [personId]);
 
   const loadRelated = useCallback(async () => {
-    const [intResult, taskResult, noteResult] = await Promise.all([
+    const [intResult, taskResult, noteResult, jcResult] = await Promise.all([
       getInterviews({ personId }),
       getCrmTasks({ targetPersonId: personId }),
       getCrmNotes({ targetPersonId: personId }),
+      getJobContactsForPerson(personId),
     ]);
     if (intResult.success && intResult.data) setInterviews(intResult.data as Record<string, unknown>[]);
     if (taskResult.success && taskResult.data) setTasks(taskResult.data as Record<string, unknown>[]);
     if (noteResult.success && noteResult.data) setNotes(noteResult.data as Record<string, unknown>[]);
+    if (jcResult.success && jcResult.data) setJobContacts(jcResult.data as Record<string, unknown>[]);
   }, [personId]);
 
   useEffect(() => {
@@ -214,6 +218,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
           <TabsTrigger value="interviews">{t("crm.tab.interviews")} ({interviews.length})</TabsTrigger>
           <TabsTrigger value="tasks">{t("crm.tab.tasks")} ({tasks.length})</TabsTrigger>
           <TabsTrigger value="notes">{t("crm.tab.notes")} ({notes.length})</TabsTrigger>
+          <TabsTrigger value="jobs">{t("crm.tab.relatedJobs")} ({jobContacts.length})</TabsTrigger>
           <TabsTrigger value="timeline">{t("crm.tab.timeline")}</TabsTrigger>
         </TabsList>
 
@@ -365,6 +370,50 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="jobs">
+          {jobContacts.length === 0 ? (
+            <div className="text-center py-8">
+              <Briefcase className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-30" />
+              <p className="text-muted-foreground">{t("crm.noRelatedJobs")}</p>
+              <p className="text-sm text-muted-foreground mt-1">{t("crm.noRelatedJobsDescription")}</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {jobContacts.map((jc) => {
+                const job = jc.job as Record<string, unknown>;
+                const jobTitle = (job?.JobTitle as Record<string, unknown>)?.label as string ?? "";
+                const company = (job?.Company as Record<string, unknown>)?.label as string ?? "";
+                const status = (job?.Status as Record<string, unknown>)?.value as string ?? "";
+                const statusLabel = (job?.Status as Record<string, unknown>)?.label as string ?? status;
+                return (
+                  <Card key={jc.id as string}>
+                    <CardContent className="flex items-center justify-between p-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{jobTitle}</p>
+                        <p className="text-sm text-muted-foreground truncate">{company}</p>
+                        {Boolean(jc.role) && (
+                          <p className="text-xs text-muted-foreground mt-1">{t("crm.contactRole")}: {String(jc.role)}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 ml-3">
+                        <Badge variant="outline">{statusLabel}</Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => router.push(`/dashboard/myjobs/${job?.id}`)}
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>
