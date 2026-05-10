@@ -18,6 +18,8 @@ import type {
   TypedEmail,
   TypedPhone,
   CompanyAssociation,
+  SocialProfile,
+  SocialPlatform,
   ContactChannelType,
 } from "@/models/person.model";
 
@@ -47,8 +49,12 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
 
   const [firstName, setFirstName] = useState((person?.firstName as string) ?? "");
   const [lastName, setLastName] = useState((person?.lastName as string) ?? "");
-  const [jobTitle, setJobTitle] = useState((person?.jobTitle as string) ?? "");
-  const [linkedinUrl, setLinkedinUrl] = useState((person?.linkedinUrl as string) ?? "");
+  const [headline, setHeadline] = useState((person?.headline as string) ?? "");
+  const [socialProfiles, setSocialProfiles] = useState<SocialProfile[]>(() => {
+    const parsed = person?.socialProfiles;
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed as SocialProfile[];
+    return [];
+  });
   const [companies, setCompanies] = useState<CompanyAssociation[]>(() => {
     const parsed = person?.companies;
     if (Array.isArray(parsed) && parsed.length > 0) return parsed as CompanyAssociation[];
@@ -182,8 +188,8 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
       emails: validEmails,
       phones: validPhones,
       companies: validCompanies,
-      jobTitle: jobTitle || null,
-      linkedinUrl: linkedinUrl || null,
+      headline: headline || null,
+      socialProfiles: socialProfiles.filter((sp) => sp.url.trim() !== ""),
       addressStreet: addressStreet || null,
       addressCity: addressCity || null,
       addressPostalCode: addressPostalCode || null,
@@ -324,26 +330,70 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
         )}
       </div>
 
-      {/* Job Title */}
+      {/* Headline (Kette B: replaces jobTitle) */}
       <div className="space-y-2">
-        <Label htmlFor="jobTitle">{t("crm.jobTitle")}</Label>
+        <Label htmlFor="headline">{t("crm.headline")}</Label>
         <Input
-          id="jobTitle"
-          value={jobTitle}
-          onChange={(e) => setJobTitle(e.target.value)}
+          id="headline"
+          placeholder={t("crm.headlinePlaceholder")}
+          value={headline}
+          onChange={(e) => setHeadline(e.target.value)}
         />
       </div>
 
-      {/* LinkedIn */}
-      <div className="space-y-2">
-        <Label htmlFor="linkedinUrl">{t("crm.linkedinUrl")}</Label>
-        <Input
-          id="linkedinUrl"
-          type="url"
-          placeholder="https://linkedin.com/in/..."
-          value={linkedinUrl}
-          onChange={(e) => setLinkedinUrl(e.target.value)}
-        />
+      {/* Social Profiles (Kette B: replaces linkedinUrl) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label>{t("crm.socialProfiles")}</Label>
+          <Button type="button" variant="ghost" size="sm" onClick={() =>
+            setSocialProfiles((prev) => [...prev, { platform: "linkedin" as SocialPlatform, url: "" }])
+          }>
+            <Plus className="mr-1 h-3 w-3" />
+            {t("crm.socialProfiles")}
+          </Button>
+        </div>
+        {socialProfiles.map((sp, idx) => (
+          <div key={idx} className="flex items-center gap-2">
+            <Select
+              value={sp.platform}
+              onValueChange={(v) =>
+                setSocialProfiles((prev) =>
+                  prev.map((s, i) => (i === idx ? { ...s, platform: v as SocialPlatform } : s)),
+                )
+              }
+            >
+              <SelectTrigger className="w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(["linkedin", "xing", "github", "twitter", "other"] as SocialPlatform[]).map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              type="url"
+              placeholder="https://..."
+              value={sp.url}
+              onChange={(e) =>
+                setSocialProfiles((prev) =>
+                  prev.map((s, i) => (i === idx ? { ...s, url: e.target.value } : s)),
+                )
+              }
+              className="flex-1"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setSocialProfiles((prev) => prev.filter((_, i) => i !== idx))}
+            >
+              <Trash2 className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          </div>
+        ))}
       </div>
 
       {/* Companies (multi-association) */}

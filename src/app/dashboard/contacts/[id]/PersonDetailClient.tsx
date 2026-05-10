@@ -29,7 +29,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ArrowLeft, Archive, RefreshCw, ShieldOff, Mail, Phone, MapPin, Briefcase, ExternalLink, Pencil } from "lucide-react";
 import { ActivityTimeline } from "@/components/crm/ActivityTimeline";
 import PersonForm from "@/components/crm/PersonForm";
-import type { TypedEmail, TypedPhone, CompanyAssociation } from "@/models/person.model";
+import type { TypedEmail, TypedPhone, CompanyAssociation, SocialProfile } from "@/models/person.model";
 
 interface PersonDetailClientProps {
   personId: string;
@@ -223,10 +223,10 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
             <Card>
               <CardHeader><CardTitle>{t("crm.contactDetails")}</CardTitle></CardHeader>
               <CardContent className="space-y-3">
-                {String(person.jobTitle ?? "") && (
+                {String(person.headline ?? "") && (
                   <div className="flex items-center gap-2 text-sm">
                     <Briefcase className="h-4 w-4 text-muted-foreground" />
-                    <span>{String(person.jobTitle)}</span>
+                    <span>{String(person.headline)}</span>
                   </div>
                 )}
                 {companies.map((c, i) => (
@@ -237,14 +237,14 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                     {c.isPrimary && <Badge className="text-xs">{t("crm.primary")}</Badge>}
                   </div>
                 ))}
-                {String(person.linkedinUrl ?? "") && (
-                  <div className="flex items-center gap-2 text-sm">
+                {Array.isArray(person.socialProfiles) && (person.socialProfiles as SocialProfile[]).map((sp, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
                     <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                    <a href={String(person.linkedinUrl)} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                      LinkedIn
+                    <a href={sp.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      {sp.platform.charAt(0).toUpperCase() + sp.platform.slice(1)}
                     </a>
                   </div>
-                )}
+                ))}
                 {(String(person.addressCity ?? "") || String(person.addressCountry ?? "")) && (
                   <div className="flex items-center gap-2 text-sm">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
