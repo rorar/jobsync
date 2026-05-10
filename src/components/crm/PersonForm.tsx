@@ -256,7 +256,7 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex items-center gap-1" title={t("crm.primaryEmail")}>
+            <div className="flex items-center gap-1" title={t("crm.primaryPhone")}>
               <Switch
                 checked={ph.isPrimary}
                 onCheckedChange={(checked) => updatePhone(idx, "isPrimary", checked)}
