@@ -248,6 +248,8 @@ export interface ReminderTriggeredPayload {
   reason: "interview_upcoming" | "task_overdue" | "retention_expired" | "follow_up_due";
   targetJobId?: string;
   targetPersonId?: string;
+  interviewId?: string;
+  taskId?: string;
 }
 
 export interface CrmTaskCreatedPayload {

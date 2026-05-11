@@ -284,7 +284,14 @@ describe("EnrichmentTrigger — CompanyCreated", () => {
     await handleCompanyCreated(event);
     await flushPromises();
 
-    expect(mockDb.company.updateMany).not.toHaveBeenCalled();
+    // Domain writeback is allowed (best-effort Company.domain auto-fill),
+    // but logo writeback should NOT happen for not_found results
+    const calls = (mockDb.company.updateMany as jest.Mock).mock.calls;
+    const logoWritebackCalls = calls.filter(
+      (c: any[]) => c[0]?.data?.logoUrl !== undefined,
+    );
+    expect(logoWritebackCalls).toHaveLength(0);
+    expect(mockDb.enrichmentResult.updateMany).not.toHaveBeenCalled();
   });
 
   it("does not write back when orchestrator returns null", async () => {
@@ -300,7 +307,12 @@ describe("EnrichmentTrigger — CompanyCreated", () => {
     await handleCompanyCreated(event);
     await flushPromises();
 
-    expect(mockDb.company.updateMany).not.toHaveBeenCalled();
+    // Domain writeback is allowed, but logo/enrichment writebacks should NOT happen
+    const calls = (mockDb.company.updateMany as jest.Mock).mock.calls;
+    const logoWritebackCalls = calls.filter(
+      (c: any[]) => c[0]?.data?.logoUrl !== undefined,
+    );
+    expect(logoWritebackCalls).toHaveLength(0);
     expect(mockDb.enrichmentResult.updateMany).not.toHaveBeenCalled();
   });
 });

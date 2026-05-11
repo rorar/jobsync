@@ -209,6 +209,16 @@ async function handleCompanyCreated(
     return;
   }
 
+  // Write back extracted domain to Company if not already set (fixes #9: Company.domain on manual creation)
+  try {
+    await db.company.updateMany({
+      where: { id: payload.companyId, domain: null },
+      data: { domain },
+    });
+  } catch {
+    // Best-effort — domain writeback failure is non-blocking
+  }
+
   const chain = getChainForDimension("logo");
   if (!chain) {
     console.debug("[EnrichmentTrigger] No fallback chain configured for logo dimension");

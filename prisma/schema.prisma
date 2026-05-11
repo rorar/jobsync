@@ -294,6 +294,7 @@ model Company {
   // CRM back-relations
   crmTaskTargets   CrmTaskTarget[]  @relation("CrmTaskTargetCompany")
   crmNoteTargets   CrmNoteTarget[]  @relation("CrmNoteTargetCompany")
+  crmActivityLogs  CrmActivityLog[] @relation("ActivityLogCompany")
 
   @@unique([value, createdBy])
 }
@@ -362,10 +363,11 @@ model Job {
   stagedVacancyPromotion StagedVacancy?
 
   // CRM back-relations
-  crmInterviews  CrmInterview[]  @relation("CrmInterviewJob")
-  jobContacts    JobContact[]    @relation("JobContactJob")
-  crmTaskTargets CrmTaskTarget[] @relation("CrmTaskTargetJob")
-  crmNoteTargets CrmNoteTarget[] @relation("CrmNoteTargetJob")
+  crmInterviews   CrmInterview[]  @relation("CrmInterviewJob")
+  jobContacts     JobContact[]    @relation("JobContactJob")
+  crmTaskTargets  CrmTaskTarget[] @relation("CrmTaskTargetJob")
+  crmNoteTargets  CrmNoteTarget[] @relation("CrmNoteTargetJob")
+  crmActivityLogs CrmActivityLog[] @relation("ActivityLogJob")
 
   @@index([userId, automationId])
   @@index([userId, discoveryStatus])
@@ -1096,7 +1098,9 @@ model CrmActivityLog {
   targetPersonId    String?
   targetPerson      Person?   @relation("ActivityLogPerson", fields: [targetPersonId], references: [id])
   targetCompanyId   String?
+  targetCompany     Company?  @relation("ActivityLogCompany", fields: [targetCompanyId], references: [id])
   targetJobId       String?
+  targetJob         Job?      @relation("ActivityLogJob", fields: [targetJobId], references: [id])
   details           String?
   linkedRecordName  String?
 

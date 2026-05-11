@@ -45,6 +45,8 @@ export async function getActivityTimeline(filters: {
         where,
         include: {
           targetPerson: { select: { id: true, firstName: true, lastName: true } },
+          targetCompany: { select: { id: true, label: true } },
+          targetJob: { select: { id: true, JobTitle: { select: { label: true } }, Company: { select: { label: true } } } },
         },
         orderBy: { happenedAt: "desc" },
         skip,

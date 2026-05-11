@@ -1,4 +1,4 @@
-export type DebugCategory = "scheduler" | "runner" | "automationLogger";
+export type DebugCategory = "scheduler" | "runner" | "automationLogger" | "crm-cron";
 
 /**
  * Gated debug logging. Checks DEBUG_LOGGING env variable.

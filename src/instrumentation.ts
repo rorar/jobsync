@@ -16,5 +16,8 @@ export async function register() {
       "@/lib/connector/health-scheduler"
     );
     startHealthScheduler();
+
+    const { startCrmCron } = await import("@/lib/scheduler/crm-cron");
+    startCrmCron();
   }
 }

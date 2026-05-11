@@ -191,6 +191,7 @@ export async function getPersons(filters?: {
         { lastName: { contains: filters.search } },
         { emails: { contains: filters.search } },
         { headline: { contains: filters.search } },
+        { companies: { contains: filters.search } },
       ];
     }
 
