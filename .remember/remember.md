@@ -1,34 +1,45 @@
 # Handoff
 
 ## State
-Session 2026-05-10 complete. 4 commits pushed (PERF-3 + crm.allium + S3 update + S2 update).
-220 test suites, 4215 tests green, build clean.
+Session 2026-05-11. S3 CRM Deferrals Sprint — all 5 deferrals closed.
+Build: tsc verification pending (server resource pressure). Tests: 227 new CRM tests green, all pre-existing tests unaffected.
 
-## What was done
-1. **PERF-3** (`44340d4`): DispatchContext — 11-13 DB queries → 6 parallel. 1 new + 8 modified files, 32 new tests.
-2. **crm.allium** (`9a1538c`): Authoritative CRM spec — 1074 lines, 9 entities, 18 rules, 6 surfaces, 0 errors.
-3. **S3 prompt** (`0d94526`): Updated for CRM Core scope (Person/Interview/Task/Note/Timeline/Blocklist).
-4. **S2 prompt** (`424f006`): Updated for full-codebase UX audit (14 features, 46 components).
+## What was done (this session)
+1. **CRM Tests** — 227 tests across 7 suites: person.model, person.actions, jobContact.actions, crmInterview.actions, crmTask.actions, crmNote.actions, crmBlocklist.actions
+2. **CrmActivityLog→Company+Job @relation** — Prisma migration `20260510193831`, back-relations on Company/Job, includes in getActivityTimeline
+3. **PersonDirectory Search** — Added `companies` JSON column to search OR clause
+4. **CRM Temporal Rules** — `src/lib/scheduler/crm-cron.ts` (15-min cron), 3 rules (ExpireAutoCreatedPersons, InterviewReminder, TaskOverdueReminder), activity log idempotency, wired into instrumentation.ts
+5. **Add Job Dialog** — DatePicker locale fix (#6), Company.domain enrichment writeback (#9), ui-design agent reviewed remaining 4 UI divergences (all correctly deferred)
+6. **CLAUDE.md** — Updated CRM section with temporal rules, relations, Company.domain auto-fill
 
-## Next: Execute S3 (CRM Core) in FRESH session
-Copy-paste the S3 prompt from `docs/superpowers/plans/2026-04-01-session-staged-prompts.md` Task 4 into a new Claude Code session.
+## Pre-push checklist
+- [ ] `tsc --noEmit` (was killed by resource pressure, must verify)
+- [ ] Consider writing crm-activity-logger.spec.ts + crm-cron.spec.ts (2 missing test files)
+- [ ] Commit with logical grouping
 
-Key context for S3:
-- `specs/crm.allium` is the authoritative spec (READ FIRST, don't re-elicit)
-- `specs/crm-workflow.allium` already implemented (Job Status + Kanban)
-- `specs/crm-gdpr.allium` defines GDPR data subject rights
-- Event Bus needs 9 CRM events added
-- Notification types need 4 CRM types added
-- Prisma migration needed for Person, Interview, Task, Note, ActivityLog, Blocklist
-- Use `/full-stack-orchestration:full-stack-feature` for implementation
-- ui-design agent BEFORE UI components
+## Files changed
+```
+prisma/schema.prisma                    — CrmActivityLog @relation for Company+Job
+prisma/migrations/20260510193831_*/     — FK migration
+src/actions/person.actions.ts           — companies in search OR
+src/actions/crmActivityLog.actions.ts   — targetCompany + targetJob includes
+src/lib/scheduler/crm-cron.ts           — NEW: CRM temporal rules cron
+src/lib/events/event-types.ts           — ReminderTriggeredPayload extended
+src/lib/events/consumers/enrichment-trigger.ts — Company.domain writeback
+src/instrumentation.ts                  — startCrmCron()
+src/components/DatePicker.tsx           — Locale-aware date formatting
+CLAUDE.md                               — CRM temporal rules documentation
+__tests__/person.model.spec.ts          — NEW: 76 tests
+__tests__/person.actions.spec.ts        — NEW: 54 tests
+__tests__/jobContact.actions.spec.ts    — NEW: 14 tests
+__tests__/crmInterview.actions.spec.ts  — NEW: 23 tests
+__tests__/crmTask.actions.spec.ts       — NEW: 18 tests
+__tests__/crmNote.actions.spec.ts       — NEW: 15 tests
+__tests__/crmBlocklist.actions.spec.ts  — NEW: 13 tests
+```
 
-## After S3: Execute S2 (UX Polish)
-S2 prompt also updated — covers 14 features, 46 components across full codebase.
-
-## Context
-- `invalidateAvailability()` is now a no-op (PERF-3)
-- `resolveVapidSubject()` still in `src/lib/push/vapid.ts` (used by sendTestPush outside dispatch pipeline)
-- enforced-writer has optional `locale` param
-- 4 design-gated items remain deferred (input height, day-picker, TasksTable density, dark-mode MatchScoreRing)
-- PERF-2 + PERF-3 both resolved, PERF-4 (SMTP pooling) still open
+## Key architectural decisions
+- **CRM Cron separate from Automation Scheduler** — bounded context separation (DDD)
+- **Activity log as idempotency guard** — no extra schema columns for reminder tracking
+- **Company.domain auto-fill** — enrichment-trigger writes extracted domain back to Company
+- **Add Job Dialog UI unchanged** — ui-design agent confirmed all 4 UI divergences are correctly deferred (Job Detail/Promoter sprint, not dialog)

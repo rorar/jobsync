@@ -41,6 +41,7 @@ jest.mock("@/i18n", () => ({
     },
     locale: "en",
   })),
+  formatDateShort: jest.fn((date: Date) => date.toLocaleDateString("en")),
   formatTime: jest.fn((date: Date) => {
     const hours = date.getHours();
     const minutes = date.getMinutes();

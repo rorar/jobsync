@@ -1,9 +1,10 @@
 "use client";
 
-import { addDays, format } from "date-fns";
+import { addDays } from "date-fns";
 import { Calendar as CalendarIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useTranslations, formatDateShort } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -36,6 +37,7 @@ export function DatePicker({
   isEnabled,
   captionLayout,
 }: DatePickerProps) {
+  const { locale } = useTranslations();
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
 
   return (
@@ -51,7 +53,7 @@ export function DatePicker({
             disabled={!isEnabled}
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
-            {field.value ? format(field.value, "PP") : <span>Pick a date</span>}
+            {field.value ? formatDateShort(field.value, locale) : <span>Pick a date</span>}
           </Button>
         </FormControl>
       </PopoverTrigger>

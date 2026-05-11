@@ -578,6 +578,17 @@ Any new notification-creating code path MUST populate the structured fields.
 
 **Person Fields (Kette B):** `headline` (free-form professional identity, replaces old `jobTitle`), `socialProfiles` (List of `{platform, url}`, replaces old `linkedinUrl`). Platforms: linkedin, xing, github, twitter, other. URLs validated server-side (https/http only, ADR-019 runtime membership check on platform enum).
 
+**CRM Temporal Rules (CRM Cron):** `src/lib/scheduler/crm-cron.ts` — separate cron job (every 15 min) for time-based CRM rules, independent from the automation scheduler (bounded context separation). Three rules:
+- `ExpireAutoCreatedPersons` — archives auto-created persons past `retentionExpiresAt`
+- `InterviewReminder` — fires `ReminderTriggered` event for interviews within 24h
+- `TaskOverdueReminder` — fires `ReminderTriggered` event for overdue tasks
+
+Idempotency via activity log check (no duplicate reminders within 24h window). Started in `src/instrumentation.ts` alongside the automation scheduler.
+
+**CrmActivityLog Relations:** `targetCompanyId` and `targetJobId` have proper Prisma `@relation` FKs to Company and Job (migration `20260510193831`). Timeline queries include `targetCompany` and `targetJob` for rich display.
+
+**Company.domain Auto-Fill:** When a company is created, the `CompanyCreated` event handler in `enrichment-trigger.ts` extracts a domain via `extractDomain()` and writes it back to `Company.domain` (best-effort, non-blocking). This populates the domain field for both manual and automation-created companies.
+
 **Allium Spec:** `specs/crm.allium` — authoritative specification. `specs/crm-gdpr.allium` for GDPR rules.
 
 **i18n:** `src/i18n/dictionaries/crm.ts` — own namespace (`crm.*`), ~160 keys × 4 locales.
