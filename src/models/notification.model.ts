@@ -15,7 +15,8 @@ export type NotificationType =
   | "interview_scheduled"
   | "interview_reminder"
   | "follow_up_due"
-  | "contact_from_job";
+  | "contact_from_job"
+  | "retention_expired";
 
 /**
  * Severity of a notification — drives icon/color.
@@ -191,6 +192,7 @@ export const CONFIGURABLE_NOTIFICATION_TYPES: NotificationType[] = [
   "interview_reminder",
   "follow_up_due",
   "contact_from_job",
+  "retention_expired",
 ];
 
 /** Channel identifiers for shouldNotify checks */

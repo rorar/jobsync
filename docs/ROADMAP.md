@@ -1568,15 +1568,15 @@ Dynamische Dateipfade und Dateinamen:
 
 - **Abgrenzung zu Vacancy Pipeline (→ 0.5):** Pipeline endet bei Promotion (StagedVacancy → Job). Der Job Status Workflow beginnt dort — er ist der **Tracking-Lifecycle** nach der Inbox. CRM erweitert diesen Workflow um Kontakt-Zuordnung, Follow-Up-Automatisierung und Kalender-Events.
 
-### 5.4 Automatisierung & Reminders (→ Notification-Rules in 0.6) -- PARTIAL (S3 CRM Core)
-**Foundation implementiert (2026-05-10):**
+### 5.4 Automatisierung & Reminders (→ Notification-Rules in 0.6) -- DONE (S3 CRM Core)
+**Implementiert (2026-05-10):**
 - CRM Task entity mit Status-Machine (pending/in_progress/done/cancelled)
 - Polymorphic TaskTarget (Job/Person/Company) mit ExactlyOneTarget-Invariant
 - 4 Server Actions: createCrmTask, startCrmTask, completeCrmTask, cancelCrmTask
 - TaskBoard UI (/dashboard/crm-tasks) mit Status-Gruppierung + Overdue-Badges
 - Domain Events: CrmTaskCreated, CrmTaskCompleted
 - Notification Types vorbereitet: follow_up_due
-- **Offen:** Temporal-Rules (TaskOverdueReminder, InterviewReminder) benötigen Scheduler-Integration
+- CRM Cron (`src/lib/scheduler/crm-cron.ts`): 3 Temporal-Rules implementiert (ExpireAutoCreatedPersons, InterviewReminder, TaskOverdueReminder) — idempotent via Activity-Log-Check, 15-Min-Intervall, gestartet in `instrumentation.ts`
 
 ### 5.4 Automatisierung & Reminders — ORIGINAL
 - CRM-Reminders werden als Notification-Rules im Unified Notification System (→ 0.6) implementiert
@@ -1653,16 +1653,20 @@ Dynamische Dateipfade und Dateinamen:
 - **Export:** Jobs, Kontakte, Bewerbungsdaten als CSV/JSON für Reporting und Backup
 - Cross-Ref: DSGVO Datenportabilität Art. 20 (→ 6.1)
 
-### 5.9 Timeline / Activity Log -- DONE (S3 CRM Core)
-- Chronologische Timeline pro Kontakt und Unternehmen
-- Zeigt alle Interaktionen: E-Mails, Anrufe, Interviews, Notizen, Statusänderungen, Dokumente
-- Automatisch befüllt aus CRM-Aktionen und Domain Events
-- Filterbar nach Typ, Datum, Kanal
-- **Discovery: Event Sourcing vs. Audit-Log**
-  - Aktuell: Domain Events (TypedEventBus) als Fire-and-Forget, Prisma-Entities sind Source of Truth
-  - 5.3 erstellt `JobStatusHistory` als Append-Only Audit-Log — reicht das für die Timeline?
-  - Event Sourcing ermöglicht temporale Queries ("Zustand am Tag X"), Replay, vollständige Audit-Trails — bringt aber erhebliche Komplexität (Event Store, Projections, Snapshots, Eventual Consistency)
-  - **Empfehlung:** Discovery mit `/backend-development:event-store-design` durchführen bevor Architektur-Entscheidung. Audit-Log als Default, Event Sourcing nur wenn temporale Queries oder Replay tatsächlich gebraucht werden
+### 5.9 Timeline / Activity Log -- PARTIAL (S3 CRM Core)
+**Backend implementiert (2026-05-10):**
+- CrmActivityLog: Immutable, append-only Read-Model (materialisierte Projektion aus Domain Events)
+- CRM Activity Logger Consumer (`src/lib/events/consumers/crm-activity-logger.ts`): abonniert JobStatusChanged, ContactCreated, ContactUpdated
+- 15 Activity-Types, filterbar nach Typ und Datum
+- CRM Cron Temporal-Rules projizieren ebenfalls in Activity Log (Retention-Expiry, Interview-Reminder, Task-Overdue)
+- Architektur-Entscheidung: Audit-Log statt Event Sourcing (kein Event Store, Prisma-Entities bleiben Source of Truth)
+
+**PersonTimeline UI implementiert:**
+- PersonDetail Tab "Timeline" (`/dashboard/contacts/[id]`) — zeigt alle Activities für eine Person
+
+**Offen:**
+- CompanyTimeline UI — Timeline-Surface pro Unternehmen (analog zu PersonTimeline)
+- JobTimeline UI — Timeline-Surface pro Job (analog zu PersonTimeline)
 
 ---
 

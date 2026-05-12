@@ -102,7 +102,7 @@ export default function CrmTasksPageClient() {
     if (result.success && result.data) {
       setTasks(result.data);
     } else {
-      setError(result.message ?? "Unknown error");
+      setError(result.message ? t(result.message) : t("crm.unknownError"));
     }
     setLoading(false);
   }, []);

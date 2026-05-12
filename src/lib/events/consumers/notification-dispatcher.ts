@@ -476,19 +476,19 @@ async function handleJobStatusChanged(
 const REMINDER_TYPE_MAP: Record<string, NotificationType> = {
   interview_upcoming: "interview_reminder",
   task_overdue: "follow_up_due",
-  retention_expired: "contact_from_job",
+  retention_expired: "retention_expired",
 };
 
 const REMINDER_TITLE_KEY_MAP: Record<string, string> = {
   interview_upcoming: "notifications.interviewReminder",
   task_overdue: "notifications.followUpDue",
-  retention_expired: "notifications.contactFromJob",
+  retention_expired: "notifications.retentionExpired",
 };
 
 const REMINDER_SEVERITY_MAP: Record<string, NotificationSeverity> = {
   interview_upcoming: "warning",
   task_overdue: "warning",
-  retention_expired: "info",
+  retention_expired: "warning",
 };
 
 async function handleReminderTriggered(

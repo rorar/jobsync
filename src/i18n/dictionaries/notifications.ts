@@ -61,6 +61,7 @@ export const notifications = {
     "notifications.interviewReminder": "Interview reminder for {jobTitle}",
     "notifications.followUpDue": "Follow-up due for {title}",
     "notifications.contactFromJob": "New contact from {jobTitle}",
+    "notifications.retentionExpired": "Contact archived — retention period expired",
 
     // Group headers (time buckets)
     "notifications.group.today": "Today",
@@ -149,6 +150,7 @@ export const notifications = {
     "notifications.interviewReminder": "Erinnerung: Interview für {jobTitle}",
     "notifications.followUpDue": "Follow-up fällig: {title}",
     "notifications.contactFromJob": "Neuer Kontakt aus {jobTitle}",
+    "notifications.retentionExpired": "Kontakt archiviert — Aufbewahrungsfrist abgelaufen",
 
     // Group headers
     "notifications.group.today": "Heute",
@@ -229,6 +231,7 @@ export const notifications = {
     "notifications.interviewReminder": "Rappel : entretien pour {jobTitle}",
     "notifications.followUpDue": "Suivi à effectuer : {title}",
     "notifications.contactFromJob": "Nouveau contact depuis {jobTitle}",
+    "notifications.retentionExpired": "Contact archivé — période de rétention expirée",
 
     // Group headers
     "notifications.group.today": "Aujourd'hui",
@@ -309,6 +312,7 @@ export const notifications = {
     "notifications.interviewReminder": "Recordatorio: entrevista para {jobTitle}",
     "notifications.followUpDue": "Seguimiento pendiente: {title}",
     "notifications.contactFromJob": "Nuevo contacto de {jobTitle}",
+    "notifications.retentionExpired": "Contacto archivado — periodo de retención expirado",
 
     // Group headers
     "notifications.group.today": "Hoy",

@@ -30,6 +30,7 @@ const VALID_NOTIFICATION_TYPES: NotificationType[] = [
   "vacancy_batch_staged",
   "bulk_action_completed",
   "retention_completed",
+  "retention_expired",
 ];
 
 // ---------------------------------------------------------------------------

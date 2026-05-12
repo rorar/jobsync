@@ -127,7 +127,7 @@ export default function InterviewsPageClient() {
         setPast(allRes.data.filter((i) => !upcomingIds.has(i.id as string)));
       }
     } catch {
-      setError("Failed to load interviews");
+      setError(t("crm.loadInterviewsError"));
     } finally {
       setLoading(false);
     }
@@ -157,7 +157,7 @@ export default function InterviewsPageClient() {
       setDialogOpen(false);
       loadInterviews();
     } else {
-      toast({ title: result.message ? t(result.message) : "Error", variant: "destructive" });
+      toast({ title: result.message ? t(result.message) : t("crm.error"), variant: "destructive" });
     }
   };
 
@@ -167,7 +167,7 @@ export default function InterviewsPageClient() {
       toast({ title: t("crm.interviewCancelled") });
       loadInterviews();
     } else {
-      toast({ title: result.message ? t(result.message) : "Error", variant: "destructive" });
+      toast({ title: result.message ? t(result.message) : t("crm.error"), variant: "destructive" });
     }
   };
 
@@ -189,7 +189,7 @@ export default function InterviewsPageClient() {
       setOutcomeNotes("");
       loadInterviews();
     } else {
-      toast({ title: result.message ? t(result.message) : "Error", variant: "destructive" });
+      toast({ title: result.message ? t(result.message) : t("crm.error"), variant: "destructive" });
     }
   };
 
@@ -209,7 +209,7 @@ export default function InterviewsPageClient() {
       setRescheduleTarget(null);
       loadInterviews();
     } else {
-      toast({ title: result.message ? t(result.message) : "Error", variant: "destructive" });
+      toast({ title: result.message ? t(result.message) : t("crm.error"), variant: "destructive" });
     }
   };
 
@@ -312,7 +312,7 @@ export default function InterviewsPageClient() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
                   <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t("crm.actions")}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -377,7 +377,7 @@ export default function InterviewsPageClient() {
       <p className="text-sm text-muted-foreground">{error}</p>
       <Button variant="outline" onClick={loadInterviews}>
         <RefreshCw className="mr-2 h-4 w-4" />
-        Retry
+        {t("crm.retry")}
       </Button>
     </div>
   );

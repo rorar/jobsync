@@ -41,6 +41,7 @@ const SUBJECT_KEYS: Record<NotificationType, string> = {
   interview_reminder: "email.subject.interview_reminder",
   follow_up_due: "email.subject.follow_up_due",
   contact_from_job: "email.subject.contact_from_job",
+  retention_expired: "email.subject.retention_expired",
 };
 
 // ---------------------------------------------------------------------------
@@ -261,6 +262,7 @@ function buildNotificationMessage(
     interview_reminder: "notifications.interviewReminder",
     follow_up_due: "notifications.followUpDue",
     contact_from_job: "notifications.contactFromJob",
+    retention_expired: "notifications.retentionExpired",
   };
 
   const key = messageKeyMap[type];

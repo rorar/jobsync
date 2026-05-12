@@ -35,6 +35,7 @@ export const email = {
     "email.subject.interview_reminder": "Interview reminder",
     "email.subject.follow_up_due": "Follow-up due",
     "email.subject.contact_from_job": "New contact from job",
+    "email.subject.retention_expired": "Contact archived — retention expired",
   },
   de: {
     "email.header": "JobSync-Benachrichtigung",
@@ -58,6 +59,7 @@ export const email = {
     "email.subject.interview_reminder": "Interview-Erinnerung",
     "email.subject.follow_up_due": "Follow-up fällig",
     "email.subject.contact_from_job": "Neuer Kontakt aus Job",
+    "email.subject.retention_expired": "Kontakt archiviert — Aufbewahrungsfrist abgelaufen",
   },
   fr: {
     "email.header": "Notification JobSync",
@@ -81,6 +83,7 @@ export const email = {
     "email.subject.interview_reminder": "Rappel d'entretien",
     "email.subject.follow_up_due": "Suivi à effectuer",
     "email.subject.contact_from_job": "Nouveau contact depuis l'emploi",
+    "email.subject.retention_expired": "Contact archivé — rétention expirée",
   },
   es: {
     "email.header": "Notificaci\u00f3n de JobSync",
@@ -104,5 +107,6 @@ export const email = {
     "email.subject.interview_reminder": "Recordatorio de entrevista",
     "email.subject.follow_up_due": "Seguimiento pendiente",
     "email.subject.contact_from_job": "Nuevo contacto del empleo",
+    "email.subject.retention_expired": "Contacto archivado — retención expirada",
   },
 } as const;

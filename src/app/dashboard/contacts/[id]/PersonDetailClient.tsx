@@ -8,7 +8,6 @@ import { getPerson, updatePerson, archivePerson, reactivatePerson, anonymizePers
 import { getInterviews } from "@/actions/crmInterview.actions";
 import { getCrmTasks } from "@/actions/crmTask.actions";
 import { getCrmNotes } from "@/actions/crmNote.actions";
-import { getActivityTimeline } from "@/actions/crmActivityLog.actions";
 import { getJobContactsForPerson, removeJobContact } from "@/actions/jobContact.actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -293,14 +292,14 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
 
             {/* GDPR Info */}
             <Card>
-              <CardHeader><CardTitle>GDPR</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t("crm.gdpr")}</CardTitle></CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("crm.processingBasis")}</span>
                   <span>{t(`crm.processingBasis.${person.processingBasis}`)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">{t("crm.dataSource.manual")}</span>
+                  <span className="text-muted-foreground">{t("crm.dataSourceLabel")}</span>
                   <span>{t(`crm.dataSource.${person.dataSource}`)}</span>
                 </div>
                 {Boolean(person.retentionExpiresAt) && (

@@ -322,6 +322,25 @@ export function buildNotificationActions(
         },
       ];
 
+    case "retention_expired": {
+      const personId = getStringId(data, "personId");
+      return personId
+        ? [
+            {
+              url: `/dashboard/contacts/${encodeURIComponent(personId)}`,
+              labelKey: "notifications.action.openContact",
+              variant: "primary",
+            },
+          ]
+        : [
+            {
+              url: "/dashboard/contacts",
+              labelKey: "notifications.action.openContacts",
+              variant: "primary",
+            },
+          ];
+    }
+
     case "contact_from_job": {
       const personId = getStringId(data, "personId");
       return personId
@@ -552,6 +571,7 @@ export function resolveNotificationSeverity(
       return "info";
     case "interview_reminder":
     case "follow_up_due":
+    case "retention_expired":
       return "warning";
     default:
       return "info";
