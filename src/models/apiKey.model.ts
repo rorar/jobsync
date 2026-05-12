@@ -1,4 +1,4 @@
-export type ApiKeyModuleId = "openai" | "deepseek" | "ollama" | "rapidapi";
+export type ApiKeyModuleId = "openai" | "deepseek" | "ollama" | "rapidapi" | "logo_dev";
 
 export interface ApiKeyRecord {
   id: string;

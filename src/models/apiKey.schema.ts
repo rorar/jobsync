@@ -3,7 +3,7 @@ import { validateOllamaUrl } from "@/lib/url-validation";
 
 export const apiKeySaveSchema = z
   .object({
-    moduleId: z.enum(["openai", "deepseek", "ollama", "rapidapi"]),
+    moduleId: z.enum(["openai", "deepseek", "ollama", "rapidapi", "logo_dev"]),
     key: z.string().min(1, "API key is required"),
     label: z.string().optional(),
     // `sensitive` is intentionally excluded: the server derives it from the

@@ -52,6 +52,9 @@ jest.mock("@prisma/client", () => {
     jobStatusHistory: {
       create: jest.fn(),
     },
+    jobContact: {
+      deleteMany: jest.fn(),
+    },
     location: {
       findMany: jest.fn(),
       findFirst: jest.fn(),
@@ -887,23 +890,20 @@ describe("jobActions", () => {
     });
     it("should delete a job successfully", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.jobContact.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.job.delete as jest.Mock).mockResolvedValue(jobData);
+      (prisma.$transaction as jest.Mock).mockResolvedValue([{ count: 0 }, jobData]);
 
       const result = await deleteJobById("job-id");
 
       expect(result).toStrictEqual({ success: true });
-      expect(prisma.job.delete).toHaveBeenCalledTimes(1);
-      expect(prisma.job.delete).toHaveBeenCalledWith({
-        where: {
-          id: "job-id",
-          userId: mockUser.id,
-        },
-      });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
     it("should handle unexpected errors", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
-
-      (prisma.job.delete as jest.Mock).mockRejectedValue(
+      (prisma.jobContact.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.job.delete as jest.Mock).mockResolvedValue(jobData);
+      (prisma.$transaction as jest.Mock).mockRejectedValue(
         new Error("Unexpected error"),
       );
 

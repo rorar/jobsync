@@ -18,6 +18,7 @@ import type {
   AutomationRun,
   DiscoveredJob,
 } from "@/models/automation.model";
+import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 import type { Resume } from "@/models/profile.model";
 import type { JobMatchResponse } from "@/models/ai.schemas";
 import { DiscoveredJobsList } from "@/components/automations/DiscoveredJobsList";
@@ -47,13 +48,13 @@ export default function AutomationDetailPage() {
   >(null);
   const [runs, setRuns] = useState<AutomationRun[]>([]);
   const [runsError, setRunsError] = useState(false);
-  const [jobs, setJobs] = useState<DiscoveredJob[]>([]);
+  const [jobs, setJobs] = useState<StagedVacancyWithAutomation[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [runNowLoading, setRunNowLoading] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [resumes, setResumes] = useState<{ id: string; title: string }[]>([]);
-  const [selectedJob, setSelectedJob] = useState<DiscoveredJob | null>(null);
+  const [selectedJob, setSelectedJob] = useState<StagedVacancyWithAutomation | null>(null);
   const [selectedJobMatchData, setSelectedJobMatchData] =
     useState<JobMatchResponse | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -92,8 +93,7 @@ export default function AutomationDetailPage() {
       }
 
       if (jobsResult.success && jobsResult.data) {
-        // StagedVacancyWithAutomation is structurally compatible with DiscoveredJob at runtime
-        setJobs(jobsResult.data as unknown as DiscoveredJob[]);
+        setJobs(jobsResult.data);
       }
 
       if (resumeResult.success && resumeResult.data) {
@@ -190,11 +190,10 @@ export default function AutomationDetailPage() {
     await executeRun();
   };
 
-  const handleViewJobDetails = async (job: DiscoveredJob) => {
+  const handleViewJobDetails = async (job: StagedVacancyWithAutomation) => {
     const result = await getDiscoveredJobById(job.id);
     if (result.success && result.data) {
-      // StagedVacancyWithAutomation is structurally compatible with DiscoveredJob at runtime
-      setSelectedJob(result.data as unknown as DiscoveredJob);
+      setSelectedJob(result.data);
       setSelectedJobMatchData(
         result.data.parsedMatchData as JobMatchResponse | null,
       );
@@ -219,7 +218,7 @@ export default function AutomationDetailPage() {
   }
 
   const resumeMissing = !automation.resume;
-  const newJobsCount = jobs.filter((j) => j.discoveryStatus === "new").length;
+  const newJobsCount = jobs.filter((j) => j.status === "staged").length;
 
   return (
     <div className="col-span-3 py-6 space-y-6">
@@ -263,9 +262,9 @@ export default function AutomationDetailPage() {
         </TabsContent>
         <TabsContent value="jobs" className="mt-4">
           <DiscoveredJobsList
-            jobs={jobs}
+            jobs={jobs as unknown as DiscoveredJob[]}
             onRefresh={loadData}
-            onViewDetails={handleViewJobDetails}
+            onViewDetails={(job) => handleViewJobDetails(job as unknown as StagedVacancyWithAutomation)}
           />
         </TabsContent>
         <TabsContent value="history" className="mt-4">
@@ -274,7 +273,7 @@ export default function AutomationDetailPage() {
       </Tabs>
 
       <DiscoveredJobDetail
-        job={selectedJob}
+        job={selectedJob as unknown as DiscoveredJob | null}
         matchData={selectedJobMatchData}
         open={detailOpen}
         onOpenChange={setDetailOpen}

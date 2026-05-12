@@ -24,6 +24,11 @@ export function extractDomain(input: string): string | null {
     .replace(/\b(AG|GmbH|Inc\.?|Ltd\.?|SE|SA|SAS|Corp\.?|LLC|PLC|NV|BV)\b/gi, "")
     .trim()
     .toLowerCase()
+    // NFD normalization: decompose diacritics, then strip combining marks
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    // German sharp s
+    .replace(/ß/g, "ss")
     .replace(/[^a-z0-9]/g, "");
 
   if (!cleaned || cleaned.length < 2) return null;
