@@ -60,6 +60,22 @@ export async function createCrmNote(
       }
     }
 
+    // IDOR: verify ownership of all referenced targets (ADR-015 CrossAggregateOwnership)
+    for (const target of input.targets) {
+      if (target.targetPersonId) {
+        const person = await prisma.person.findFirst({ where: { id: target.targetPersonId, userId: user.id } });
+        if (!person) return { success: false, message: "crm.errors.personNotFound" };
+      }
+      if (target.targetCompanyId) {
+        const company = await prisma.company.findFirst({ where: { id: target.targetCompanyId, createdBy: user.id } });
+        if (!company) return { success: false, message: "crm.errors.companyNotFound" };
+      }
+      if (target.targetJobId) {
+        const job = await prisma.job.findFirst({ where: { id: target.targetJobId, userId: user.id } });
+        if (!job) return { success: false, message: "crm.errors.jobNotFound" };
+      }
+    }
+
     const note = await prisma.crmNote.create({
       data: {
         userId: user.id,
@@ -75,19 +91,7 @@ export async function createCrmNote(
       },
     });
 
-    // Activity log
-    const firstTarget = input.targets[0];
-    await prisma.crmActivityLog.create({
-      data: {
-        userId: user.id,
-        activityType: "note_added",
-        actorId: user.id,
-        targetPersonId: firstTarget?.targetPersonId ?? null,
-        targetJobId: firstTarget?.targetJobId ?? null,
-        linkedRecordName: input.title ?? null,
-      },
-    });
-
+    // Activity log projected via crm-activity-logger consumer (TimelineProjection contract)
     eventBus.publish(
       createEvent(DomainEventType.CrmNoteCreated, {
         noteId: note.id,

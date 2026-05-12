@@ -83,18 +83,7 @@ export async function scheduleInterview(
       },
     });
 
-    // Create activity log entry
-    await prisma.crmActivityLog.create({
-      data: {
-        userId: user.id,
-        activityType: "interview_scheduled",
-        actorId: user.id,
-        targetJobId: input.jobId,
-        targetPersonId: input.personId ?? null,
-        linkedRecordName: job.JobTitle?.label ?? job.description,
-      },
-    });
-
+    // Activity log projected via crm-activity-logger consumer (TimelineProjection contract)
     eventBus.publish(
       createEvent(DomainEventType.InterviewScheduled, {
         interviewId: interview.id,
@@ -139,18 +128,7 @@ export async function completeInterview(
       },
     });
 
-    // Create activity log
-    await prisma.crmActivityLog.create({
-      data: {
-        userId: user.id,
-        activityType: "interview_completed",
-        actorId: user.id,
-        targetJobId: interview.jobId,
-        targetPersonId: interview.personId,
-        linkedRecordName: interview.job?.JobTitle?.label,
-      },
-    });
-
+    // Activity log projected via crm-activity-logger consumer (TimelineProjection contract)
     eventBus.publish(
       createEvent(DomainEventType.InterviewCompleted, {
         interviewId,

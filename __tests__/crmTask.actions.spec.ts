@@ -22,6 +22,9 @@ jest.mock("@prisma/client", () => {
       count: jest.fn(),
     },
     crmActivityLog: { create: jest.fn() },
+    person: { findFirst: jest.fn() },
+    company: { findFirst: jest.fn() },
+    job: { findFirst: jest.fn() },
   };
   return { PrismaClient: jest.fn(() => mPrismaClient) };
 });
@@ -102,6 +105,7 @@ describe("crmTask.actions", () => {
     it("rejects when task limit (5000) reached", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (validateExactlyOneTarget as jest.Mock).mockReturnValue(true);
+      (prisma.person.findFirst as jest.Mock).mockResolvedValue({ id: "p-1" });
       (prisma.crmTask.count as jest.Mock).mockResolvedValue(5000);
 
       const result = await createCrmTask({
@@ -113,12 +117,12 @@ describe("crmTask.actions", () => {
       expect(result.message).toBe("crm.errors.taskLimitReached");
     });
 
-    it("creates task with targets and activity log", async () => {
+    it("creates task with targets (activity log via consumer)", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (validateExactlyOneTarget as jest.Mock).mockReturnValue(true);
+      (prisma.person.findFirst as jest.Mock).mockResolvedValue({ id: "p-1" });
       (prisma.crmTask.count as jest.Mock).mockResolvedValue(0);
       (prisma.crmTask.create as jest.Mock).mockResolvedValue({ id: "task-1" });
-      (prisma.crmActivityLog.create as jest.Mock).mockResolvedValue({});
 
       const result = await createCrmTask({
         title: "Follow up",
@@ -136,22 +140,15 @@ describe("crmTask.actions", () => {
           }),
         }),
       );
-      expect(prisma.crmActivityLog.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            activityType: "task_created",
-            userId: mockUser.id,
-          }),
-        }),
-      );
+      expect(prisma.crmActivityLog.create).not.toHaveBeenCalled();
     });
 
     it("publishes CrmTaskCreated event", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (validateExactlyOneTarget as jest.Mock).mockReturnValue(true);
+      (prisma.person.findFirst as jest.Mock).mockResolvedValue({ id: "p-1" });
       (prisma.crmTask.count as jest.Mock).mockResolvedValue(0);
       (prisma.crmTask.create as jest.Mock).mockResolvedValue({ id: "task-42" });
-      (prisma.crmActivityLog.create as jest.Mock).mockResolvedValue({});
 
       await createCrmTask({
         title: "Event Task",
@@ -252,12 +249,11 @@ describe("crmTask.actions", () => {
       expect(result.message).toBe("crm.errors.invalidTransition");
     });
 
-    it("sets status=done, completedAt and creates activity log", async () => {
+    it("sets status=done and completedAt (activity log via consumer)", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (prisma.crmTask.findFirst as jest.Mock).mockResolvedValue({ id: "task-1", status: "in_progress", title: "Finish Me" });
       (isValidTaskTransition as jest.Mock).mockReturnValue(true);
       (prisma.crmTask.update as jest.Mock).mockResolvedValue({});
-      (prisma.crmActivityLog.create as jest.Mock).mockResolvedValue({});
 
       const result = await completeCrmTask("task-1");
 
@@ -268,11 +264,7 @@ describe("crmTask.actions", () => {
           data: expect.objectContaining({ status: "done", completedAt: expect.any(Date) }),
         }),
       );
-      expect(prisma.crmActivityLog.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ activityType: "task_completed" }),
-        }),
-      );
+      expect(prisma.crmActivityLog.create).not.toHaveBeenCalled();
     });
 
     it("publishes CrmTaskCompleted event", async () => {
@@ -280,7 +272,6 @@ describe("crmTask.actions", () => {
       (prisma.crmTask.findFirst as jest.Mock).mockResolvedValue({ id: "task-1", status: "in_progress", title: "Done Task" });
       (isValidTaskTransition as jest.Mock).mockReturnValue(true);
       (prisma.crmTask.update as jest.Mock).mockResolvedValue({});
-      (prisma.crmActivityLog.create as jest.Mock).mockResolvedValue({});
 
       await completeCrmTask("task-1");
 

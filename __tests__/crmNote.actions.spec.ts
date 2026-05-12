@@ -19,6 +19,9 @@ jest.mock("@prisma/client", () => {
       delete: jest.fn(),
     },
     crmActivityLog: { create: jest.fn() },
+    person: { findFirst: jest.fn() },
+    company: { findFirst: jest.fn() },
+    job: { findFirst: jest.fn() },
   };
   return { PrismaClient: jest.fn(() => mPrismaClient) };
 });
@@ -93,8 +96,8 @@ describe("crmNote.actions", () => {
     it("creates note with targets", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (validateExactlyOneTarget as jest.Mock).mockReturnValue(true);
+      (prisma.person.findFirst as jest.Mock).mockResolvedValue({ id: "p-1" });
       (prisma.crmNote.create as jest.Mock).mockResolvedValue({ id: "note-1" });
-      (prisma.crmActivityLog.create as jest.Mock).mockResolvedValue({});
 
       const result = await createCrmNote({
         title: "Meeting notes",
@@ -115,32 +118,26 @@ describe("crmNote.actions", () => {
       );
     });
 
-    it("creates activity log entry", async () => {
+    it("does not call crmActivityLog.create directly (activity log via consumer)", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (validateExactlyOneTarget as jest.Mock).mockReturnValue(true);
+      (prisma.person.findFirst as jest.Mock).mockResolvedValue({ id: "p-1" });
       (prisma.crmNote.create as jest.Mock).mockResolvedValue({ id: "note-2" });
-      (prisma.crmActivityLog.create as jest.Mock).mockResolvedValue({});
 
       await createCrmNote({
         body: "Some note.",
         targets: [{ targetPersonId: "p-1" }],
       });
 
-      expect(prisma.crmActivityLog.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            activityType: "note_added",
-            userId: mockUser.id,
-          }),
-        }),
-      );
+      expect(prisma.crmActivityLog.create).not.toHaveBeenCalled();
+      expect(eventBus.publish).toHaveBeenCalled();
     });
 
     it("publishes CrmNoteCreated event", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (validateExactlyOneTarget as jest.Mock).mockReturnValue(true);
+      (prisma.person.findFirst as jest.Mock).mockResolvedValue({ id: "p-1" });
       (prisma.crmNote.create as jest.Mock).mockResolvedValue({ id: "note-3" });
-      (prisma.crmActivityLog.create as jest.Mock).mockResolvedValue({});
 
       await createCrmNote({
         body: "Event note.",

@@ -129,7 +129,7 @@ describe("scheduleInterview", () => {
     );
   });
 
-  it("creates activity log entry after scheduling", async () => {
+  it("activity log projected via InterviewScheduled event (consumer handles write)", async () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
     (prisma.job.findFirst as jest.Mock).mockResolvedValue({
       id: "job-1",
@@ -137,20 +137,12 @@ describe("scheduleInterview", () => {
       JobTitle: { label: "Engineer" },
     });
     (prisma.crmInterview.create as jest.Mock).mockResolvedValue({ id: "interview-1" });
-    (prisma.crmActivityLog.create as jest.Mock).mockResolvedValue({});
 
     await scheduleInterview({ jobId: "job-1", interviewDate: FUTURE_DATE });
 
-    expect(prisma.crmActivityLog.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          userId: mockUser.id,
-          activityType: "interview_scheduled",
-          actorId: mockUser.id,
-          targetJobId: "job-1",
-        }),
-      }),
-    );
+    // Activity log is now written by crm-activity-logger consumer, not the action directly
+    expect(eventBus.publish).toHaveBeenCalled();
+    expect(prisma.crmActivityLog.create).not.toHaveBeenCalled();
   });
 
   it("publishes InterviewScheduled event", async () => {
@@ -255,20 +247,12 @@ describe("completeInterview", () => {
       job: { id: "job-1", JobTitle: { label: "Engineer" } },
     });
     (prisma.crmInterview.update as jest.Mock).mockResolvedValue({ id: "interview-1" });
-    (prisma.crmActivityLog.create as jest.Mock).mockResolvedValue({});
 
     await completeInterview("interview-1", "passed");
 
-    expect(prisma.crmActivityLog.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          userId: mockUser.id,
-          activityType: "interview_completed",
-          actorId: mockUser.id,
-          targetJobId: "job-1",
-        }),
-      }),
-    );
+    // Activity log is now written by crm-activity-logger consumer
+    expect(eventBus.publish).toHaveBeenCalled();
+    expect(prisma.crmActivityLog.create).not.toHaveBeenCalled();
   });
 
   it("publishes InterviewCompleted event", async () => {

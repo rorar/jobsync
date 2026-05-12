@@ -30,6 +30,7 @@ import type {
   ModuleReactivatedPayload,
   RetentionCompletedPayload,
   JobStatusChangedPayload,
+  ReminderTriggeredPayload,
 } from "../event-types";
 import prisma from "@/lib/db";
 import type {
@@ -469,6 +470,68 @@ async function handleJobStatusChanged(
 }
 
 // ---------------------------------------------------------------------------
+// CRM Reminder Handler (Strang 2: ReminderTriggered → Notification)
+// ---------------------------------------------------------------------------
+
+const REMINDER_TYPE_MAP: Record<string, NotificationType> = {
+  interview_upcoming: "interview_reminder",
+  task_overdue: "follow_up_due",
+  retention_expired: "contact_from_job",
+};
+
+const REMINDER_TITLE_KEY_MAP: Record<string, string> = {
+  interview_upcoming: "notifications.interviewReminder",
+  task_overdue: "notifications.followUpDue",
+  retention_expired: "notifications.contactFromJob",
+};
+
+const REMINDER_SEVERITY_MAP: Record<string, NotificationSeverity> = {
+  interview_upcoming: "warning",
+  task_overdue: "warning",
+  retention_expired: "info",
+};
+
+async function handleReminderTriggered(
+  event: DomainEvent<typeof DomainEventType.ReminderTriggered>,
+): Promise<void> {
+  const payload = event.payload as ReminderTriggeredPayload;
+  const ctx = await buildDispatchContext(payload.userId);
+
+  const notificationType = REMINDER_TYPE_MAP[payload.reason];
+  if (!notificationType) return;
+
+  const titleKey = REMINDER_TITLE_KEY_MAP[payload.reason];
+  const severity = REMINDER_SEVERITY_MAP[payload.reason] ?? "info";
+  const actorType: NotificationActorType = "system";
+
+  const extendedData: NotificationDataExtended = {
+    reason: payload.reason,
+    ...(payload.targetJobId ? { jobId: payload.targetJobId } : {}),
+    ...(payload.targetPersonId ? { personId: payload.targetPersonId } : {}),
+    ...(payload.interviewId ? { interviewId: payload.interviewId } : {}),
+    ...(payload.taskId ? { taskId: payload.taskId } : {}),
+    titleKey,
+    actorType,
+    severity,
+  };
+
+  const message = t(ctx.locale, titleKey);
+
+  await dispatchNotification(
+    {
+      userId: payload.userId,
+      type: notificationType,
+      message,
+      data: extendedData,
+      titleKey,
+      actorType,
+      severity,
+    },
+    ctx,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
@@ -489,6 +552,7 @@ export function registerNotificationDispatcher(): void {
   eventBus.subscribe(DomainEventType.ModuleReactivated, handleModuleReactivated);
   eventBus.subscribe(DomainEventType.RetentionCompleted, handleRetentionCompleted);
   eventBus.subscribe(DomainEventType.JobStatusChanged, handleJobStatusChanged);
+  eventBus.subscribe(DomainEventType.ReminderTriggered, handleReminderTriggered);
 }
 
 // ---------------------------------------------------------------------------
