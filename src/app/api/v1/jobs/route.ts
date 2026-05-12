@@ -3,6 +3,7 @@ import { withApiAuth } from "@/lib/api/with-api-auth";
 import { paginatedResponse, createdResponse, errorResponse } from "@/lib/api/response";
 import { JobsListQuerySchema, CreateJobSchema } from "@/lib/api/schemas";
 import { findOrCreate, resolveStatus, JOB_LIST_SELECT, JOB_API_SELECT } from "@/lib/api/helpers";
+import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 
 /** CORS preflight */
 export const OPTIONS = withApiAuth(async () => new Response(null));
@@ -83,6 +84,12 @@ export const POST = withApiAuth(async (req, { userId }) => {
     applied, resume, tags,
   } = parsed.data;
 
+  // Check if company already exists before find-or-create (for CompanyCreated event)
+  const existingCompany = await prisma.company.findFirst({
+    where: { value: company.trim().toLowerCase(), createdBy: userId },
+    select: { id: true },
+  });
+
   // Resolve all independent entities in parallel
   const [jobTitle, companyRecord, locationRecord, sourceRecord, statusRecord] =
     await Promise.all([
@@ -120,29 +127,66 @@ export const POST = withApiAuth(async (req, { userId }) => {
     }
   }
 
-  const job = await prisma.job.create({
-    data: {
-      userId,
-      jobTitleId: jobTitle.id,
-      companyId: companyRecord.id,
-      locationId: locationRecord?.id ?? null,
-      statusId: statusRecord.id,
-      jobSourceId: sourceRecord?.id ?? null,
-      salaryRange: salaryRange ?? null,
-      createdAt: new Date(),
-      dueDate: dueDate ? new Date(dueDate) : null,
-      appliedDate: dateApplied ? new Date(dateApplied) : null,
-      description: jobDescription,
-      jobType: type,
-      jobUrl: jobUrl || null,
-      applied,
-      resumeId: resume ?? null,
-      ...(tagIds.length > 0
-        ? { tags: { connect: tagIds.map((id) => ({ id })) } }
-        : {}),
-    },
-    select: JOB_API_SELECT,
+  // Create job + initial JobStatusHistory atomically
+  const [job, historyEntry] = await prisma.$transaction(async (tx) => {
+    const newJob = await tx.job.create({
+      data: {
+        userId,
+        jobTitleId: jobTitle.id,
+        companyId: companyRecord.id,
+        locationId: locationRecord?.id ?? null,
+        statusId: statusRecord.id,
+        jobSourceId: sourceRecord?.id ?? null,
+        salaryRange: salaryRange ?? null,
+        createdAt: new Date(),
+        dueDate: dueDate ? new Date(dueDate) : null,
+        appliedDate: dateApplied ? new Date(dateApplied) : null,
+        description: jobDescription,
+        jobType: type,
+        jobUrl: jobUrl || null,
+        applied,
+        resumeId: resume ?? null,
+        ...(tagIds.length > 0
+          ? { tags: { connect: tagIds.map((id) => ({ id })) } }
+          : {}),
+      },
+      select: JOB_API_SELECT,
+    });
+
+    const history = await tx.jobStatusHistory.create({
+      data: {
+        jobId: newJob.id,
+        userId,
+        previousStatusId: null,
+        newStatusId: statusRecord.id,
+        note: null,
+      },
+    });
+
+    return [newJob, history] as const;
   });
+
+  // Emit JobStatusChanged for the initial status assignment
+  emitEvent(
+    createEvent(DomainEventTypes.JobStatusChanged, {
+      jobId: job.id,
+      userId,
+      previousStatusValue: null,
+      newStatusValue: statusRecord.value ?? "draft",
+      historyEntryId: historyEntry.id,
+    }),
+  );
+
+  // Emit CompanyCreated only when the company was newly created
+  if (!existingCompany) {
+    emitEvent(
+      createEvent(DomainEventTypes.CompanyCreated, {
+        companyId: companyRecord.id,
+        companyName: company,
+        userId,
+      }),
+    );
+  }
 
   return createdResponse(job);
 });

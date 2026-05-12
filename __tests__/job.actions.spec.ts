@@ -756,17 +756,26 @@ describe("jobActions", () => {
       (prisma.job.findFirst as jest.Mock).mockResolvedValue(existingJob);
       (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(appliedStatus);
 
-      (prisma.job.update as jest.Mock).mockResolvedValue({
+      const updatedJob = {
         ...existingJob,
         statusId: appliedStatus.id,
         Status: appliedStatus,
+      };
+
+      // updateJob now wraps status changes in $transaction (G1 fix)
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) => {
+        const tx = {
+          job: { update: jest.fn().mockResolvedValue(updatedJob) },
+          jobStatusHistory: { create: jest.fn().mockResolvedValue({ id: "hist-1" }) },
+        };
+        return fn(tx);
       });
 
       const result = await updateJob(validUpdateData);
 
       // Valid transition should proceed
       expect(result.success).toBe(true);
-      expect(prisma.job.update).toHaveBeenCalledTimes(1);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
 
     it("should allow update without status change (same status)", async () => {

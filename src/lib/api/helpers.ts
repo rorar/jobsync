@@ -59,7 +59,7 @@ export async function findOrCreate(
 export async function resolveStatus(statusValue: string) {
   return prisma.jobStatus.findFirst({
     where: { value: statusValue },
-    select: { id: true },
+    select: { id: true, value: true },
   });
 }
 

@@ -1,7 +1,7 @@
 import "server-only";
 import db from "@/lib/db";
 import { normalizeForSearch, extractKeywords, extractCityName } from "./utils";
-import { emitEvent } from "@/lib/events";
+import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 import type { PromotionInput } from "@/models/stagedVacancy.model";
 
 export interface PromotionResult {
@@ -67,7 +67,7 @@ export async function promoteStagedVacancy(
   // All fuzzy OR-contains scans happen here against the non-transactional
   // `db` client. No write lock is held on any target table while these
   // scans run.
-  const [jobTitleId, companyId, locationId, jobSourceId, statusId] =
+  const [jobTitleId, companyId, locationId, jobSourceId, defaultStatus] =
     await Promise.all([
       findOrCreateJobTitle(input.jobTitleOverride ?? vacancy.title, userId),
       findOrCreateCompany(
@@ -81,6 +81,8 @@ export async function promoteStagedVacancy(
       getOrCreateJobSource(vacancy.sourceBoard, userId),
       getDefaultJobStatus(),
     ]);
+  const statusId = defaultStatus.id;
+  const statusValue = defaultStatus.value;
 
   // ── Phase 2 — short write transaction using pre-computed IDs ──────────
   //
@@ -132,7 +134,7 @@ export async function promoteStagedVacancy(
     });
 
     // Create initial JobStatusHistory entry (spec: InitialStatusOnPromotion)
-    await tx.jobStatusHistory.create({
+    const historyEntry = await tx.jobStatusHistory.create({
       data: {
         jobId: job.id,
         userId,
@@ -152,7 +154,7 @@ export async function promoteStagedVacancy(
       },
     });
 
-    return { jobId: job.id, stagedVacancyId: vacancy.id };
+    return { jobId: job.id, stagedVacancyId: vacancy.id, historyEntryId: historyEntry.id };
   });
 
   // Emit domain event (stub for 0.6 Event Bus)
@@ -165,6 +167,18 @@ export async function promoteStagedVacancy(
       userId,
     },
   });
+
+  // Emit JobStatusChanged so the CRM activity logger records the initial
+  // status assignment as a timeline entry (rule InitialStatusOnPromotion).
+  emitEvent(
+    createEvent(DomainEventTypes.JobStatusChanged, {
+      jobId: result.jobId,
+      userId,
+      previousStatusValue: null,
+      newStatusValue: statusValue,
+      historyEntryId: result.historyEntryId,
+    }),
+  );
 
   return result;
 }
@@ -336,7 +350,7 @@ async function getOrCreateJobSource(
   }
 }
 
-async function getDefaultJobStatus(): Promise<string> {
+async function getDefaultJobStatus(): Promise<{ id: string; value: string }> {
   // Prefer "bookmarked" (spec), fall back to "new" (backward compat)
   let status = await db.jobStatus.findFirst({ where: { value: "bookmarked" } });
 
@@ -356,5 +370,5 @@ async function getDefaultJobStatus(): Promise<string> {
     }
   }
 
-  return status.id;
+  return { id: status.id, value: status.value };
 }

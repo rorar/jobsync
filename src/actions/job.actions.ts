@@ -497,8 +497,11 @@ export const updateJob = async (
       return { success: false, message: "errors.staleState", errorCode: "STALE_STATE" };
     }
 
-    if (currentJob?.Status && status !== currentJob.statusId) {
-      const newStatus = await prisma.jobStatus.findFirst({
+    const statusChanged = currentJob?.Status && status !== currentJob.statusId;
+    let newStatus: Awaited<ReturnType<typeof prisma.jobStatus.findFirst>> | null = null;
+
+    if (statusChanged) {
+      newStatus = await prisma.jobStatus.findFirst({
         where: { id: status },
       });
 
@@ -511,38 +514,79 @@ export const updateJob = async (
       }
     }
 
+    const jobData = {
+      jobTitleId: title,
+      companyId: company,
+      locationId: location,
+      statusId: status,
+      jobSourceId: source,
+      salaryRange: salaryRange,
+      dueDate: dueDate,
+      appliedDate: dateApplied,
+      description: jobDescription,
+      jobType: type,
+      jobUrl,
+      applied,
+      resumeId: resume || null,
+      tags: { set: tagIds.map((id) => ({ id })) },
+      version: { increment: 1 },
+    };
+
+    const jobInclude = {
+      JobTitle: true,
+      Company: true,
+      Status: true,
+      Location: true,
+      JobSource: true,
+      tags: true,
+    };
+
+    if (statusChanged && newStatus) {
+      const sideEffects = computeTransitionSideEffects(newStatus.value, currentJob.appliedDate);
+      const previousStatusValue = currentJob.Status.value;
+
+      const [updatedJob, historyEntry] = await prisma.$transaction(async (tx) => {
+        const updated = await tx.job.update({
+          where: { id, userId: user.id },
+          data: { ...jobData, ...sideEffects },
+          include: jobInclude,
+        });
+
+        const history = await tx.jobStatusHistory.create({
+          data: {
+            jobId: id!,
+            userId: user.id,
+            previousStatusId: currentJob.statusId,
+            newStatusId: status!,
+            note: null,
+          },
+        });
+
+        return [updated, history] as const;
+      });
+
+      emitEvent(
+        createEvent(DomainEventTypes.JobStatusChanged, {
+          jobId: id!,
+          userId: user.id,
+          previousStatusValue,
+          newStatusValue: newStatus.value,
+          historyEntryId: historyEntry.id,
+        }),
+      );
+
+      revalidatePath("/dashboard/myjobs", "page");
+      revalidatePath("/dashboard", "page");
+
+      return { data: updatedJob, success: true };
+    }
+
     const job = await prisma.job.update({
-      where: {
-        id,
-        userId: user.id,
-      },
-      data: {
-        jobTitleId: title,
-        companyId: company,
-        locationId: location,
-        statusId: status,
-        jobSourceId: source,
-        salaryRange: salaryRange,
-        dueDate: dueDate,
-        appliedDate: dateApplied,
-        description: jobDescription,
-        jobType: type,
-        jobUrl,
-        applied,
-        resumeId: resume || null,
-        tags: { set: tagIds.map((id) => ({ id })) },
-        version: { increment: 1 },
-      },
-      include: {
-        JobTitle: true,
-        Company: true,
-        Status: true,
-        Location: true,
-        JobSource: true,
-        tags: true,
-      },
+      where: { id, userId: user.id },
+      data: jobData,
+      include: jobInclude,
     });
-    // revalidatePath("/dashboard/myjobs", "page");
+
     return { data: job, success: true };
   } catch (error) {
     return handleError(error, "errors.updateJob");

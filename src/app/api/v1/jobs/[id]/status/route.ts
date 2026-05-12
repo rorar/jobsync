@@ -4,6 +4,7 @@ import { actionToResponse, errorResponse } from "@/lib/api/response";
 import { ChangeJobStatusSchema, isValidUUID } from "@/lib/api/schemas";
 import { JOB_API_SELECT } from "@/lib/api/helpers";
 import { isValidTransition, computeTransitionSideEffects } from "@/lib/crm/status-machine";
+import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 
 /** CORS preflight */
 export const OPTIONS = withApiAuth(async () => new Response(null));
@@ -83,7 +84,7 @@ export const POST = withApiAuth(async (req, { userId, params }) => {
   );
 
   // Transaction: update job + create history entry
-  const [updatedJob] = await prisma.$transaction(async (tx) => {
+  const [updatedJob, historyEntry] = await prisma.$transaction(async (tx) => {
     const job = await tx.job.update({
       where: { id: jobId, userId },
       data: {
@@ -94,7 +95,7 @@ export const POST = withApiAuth(async (req, { userId, params }) => {
       select: JOB_API_SELECT,
     });
 
-    await tx.jobStatusHistory.create({
+    const history = await tx.jobStatusHistory.create({
       data: {
         jobId,
         userId,
@@ -104,8 +105,20 @@ export const POST = withApiAuth(async (req, { userId, params }) => {
       },
     });
 
-    return [job] as const;
+    return [job, history] as const;
   });
+
+  // Publish domain event AFTER transaction commits (eventual consistency)
+  emitEvent(
+    createEvent(DomainEventTypes.JobStatusChanged, {
+      jobId,
+      userId,
+      previousStatusValue: currentJob.Status.value,
+      newStatusValue: newStatus.value,
+      note: note ?? undefined,
+      historyEntryId: historyEntry.id,
+    }),
+  );
 
   return actionToResponse({ success: true, data: updatedJob });
 });

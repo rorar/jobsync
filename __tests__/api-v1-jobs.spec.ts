@@ -89,13 +89,25 @@ jest.mock("@/lib/db", () => ({
       deleteMany: jest.fn(),
     },
     jobTitle: { upsert: jest.fn() },
-    company: { upsert: jest.fn() },
+    company: { upsert: jest.fn(), findFirst: jest.fn() },
     location: { upsert: jest.fn() },
     jobSource: { upsert: jest.fn() },
     jobStatus: { findFirst: jest.fn() },
+    jobStatusHistory: { create: jest.fn() },
     resume: { findFirst: jest.fn() },
     tag: { count: jest.fn() },
+    $transaction: jest.fn(),
   },
+}));
+
+jest.mock("@/lib/events", () => ({
+  emitEvent: jest.fn(),
+  createEvent: jest.fn((type: string, payload: unknown) => ({
+    type,
+    timestamp: new Date(),
+    payload,
+  })),
+  DomainEventTypes: jest.requireActual("@/lib/events").DomainEventTypes,
 }));
 
 // ---------------------------------------------------------------------------
@@ -126,12 +138,14 @@ const mockPrisma = db as unknown as {
   note: { findMany: jest.Mock; count: jest.Mock; create: jest.Mock };
   interview: { deleteMany: jest.Mock };
   jobTitle: { upsert: jest.Mock };
-  company: { upsert: jest.Mock };
+  company: { upsert: jest.Mock; findFirst: jest.Mock };
   location: { upsert: jest.Mock };
   jobSource: { upsert: jest.Mock };
   jobStatus: { findFirst: jest.Mock };
+  jobStatusHistory: { create: jest.Mock };
   resume: { findFirst: jest.Mock };
   tag: { count: jest.Mock };
+  $transaction: jest.Mock;
 };
 
 // ---------------------------------------------------------------------------
@@ -205,7 +219,11 @@ beforeEach(() => {
   mockPrisma.company.upsert.mockResolvedValue({ id: "co-1" });
   mockPrisma.location.upsert.mockResolvedValue({ id: "loc-1" });
   mockPrisma.jobSource.upsert.mockResolvedValue({ id: "src-1" });
-  mockPrisma.jobStatus.findFirst.mockResolvedValue({ id: "st-draft" });
+  mockPrisma.jobStatus.findFirst.mockResolvedValue({ id: "st-draft", value: "draft" });
+  mockPrisma.jobStatusHistory.create.mockResolvedValue({ id: "hist-1" });
+  mockPrisma.company.findFirst.mockResolvedValue(null);
+  // $transaction passes the same mock client as tx so tx.job.create etc. work
+  mockPrisma.$transaction.mockImplementation(async (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma));
 });
 
 // =========================================================================

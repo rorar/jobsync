@@ -85,6 +85,12 @@ jest.mock("@/lib/db", () => ({
 
 jest.mock("@/lib/events", () => ({
   emitEvent: jest.fn(),
+  createEvent: jest.fn((type: string, payload: unknown) => ({
+    type,
+    timestamp: new Date(),
+    payload,
+  })),
+  DomainEventTypes: jest.requireActual("@/lib/events").DomainEventTypes,
 }));
 
 // Import after mocks
@@ -200,10 +206,13 @@ describe("promoteStagedVacancy — initial history entry (S3-D7)", () => {
       userId,
     );
 
-    expect(result).toEqual({
-      jobId,
-      stagedVacancyId: vacancyId,
-    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        jobId,
+        stagedVacancyId: vacancyId,
+      }),
+    );
+    expect(result).toHaveProperty("historyEntryId");
   });
 
   // ───────────────────────────────────────────────────────────────────────
