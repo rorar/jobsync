@@ -80,7 +80,7 @@ export const PATCH = withApiAuth(async (req, { userId, params }) => {
   result.data.version = { increment: 1 };
 
   const job = await prisma.job.update({
-    where: { id: jobId },
+    where: { id: jobId, userId },
     data: result.data,
     select: JOB_API_SELECT,
   });
