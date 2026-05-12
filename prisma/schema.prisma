@@ -1039,9 +1039,9 @@ model CrmTaskTarget {
   taskId          String
   task            CrmTask   @relation(fields: [taskId], references: [id], onDelete: Cascade)
   targetPersonId  String?
-  targetPerson    Person?   @relation(fields: [targetPersonId], references: [id])
+  targetPerson    Person?   @relation(fields: [targetPersonId], references: [id], onDelete: Cascade)
   targetCompanyId String?
-  targetCompany   Company?  @relation("CrmTaskTargetCompany", fields: [targetCompanyId], references: [id])
+  targetCompany   Company?  @relation("CrmTaskTargetCompany", fields: [targetCompanyId], references: [id], onDelete: Cascade)
   targetJobId     String?
   targetJob       Job?      @relation("CrmTaskTargetJob", fields: [targetJobId], references: [id], onDelete: Cascade)
 
@@ -1074,9 +1074,9 @@ model CrmNoteTarget {
   noteId          String
   note            CrmNote   @relation(fields: [noteId], references: [id], onDelete: Cascade)
   targetPersonId  String?
-  targetPerson    Person?   @relation(fields: [targetPersonId], references: [id])
+  targetPerson    Person?   @relation(fields: [targetPersonId], references: [id], onDelete: Cascade)
   targetCompanyId String?
-  targetCompany   Company?  @relation("CrmNoteTargetCompany", fields: [targetCompanyId], references: [id])
+  targetCompany   Company?  @relation("CrmNoteTargetCompany", fields: [targetCompanyId], references: [id], onDelete: Cascade)
   targetJobId     String?
   targetJob       Job?      @relation("CrmNoteTargetJob", fields: [targetJobId], references: [id], onDelete: Cascade)
 
