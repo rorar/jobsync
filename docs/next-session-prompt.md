@@ -1,6 +1,6 @@
-# Session Prompt — Domain Expert Schnittstellen-Analyse + P0 Critical Fixes
+# Session Prompt — Interface Fragility Fixes + Open Items
 
-Hey Claude, sei mein Full-Stack Senior Software Engineer und unterstütze mich bei der Planung, Architektur und Implementierung von neuen Features, Bugfixes und Verbesserungen fuer JobSync, einer SaaS-Plattform fuer die Automatisierung von Job-Discovery und Bewerbungsprozessen. Die Plattform ist in TypeScript mit Shadcn/Tailwind, Next.js und Prisma gebaut.
+Hey Claude, sei mein Full-Stack Senior Software Engineer und unterstuetze mich bei der Planung, Architektur und Implementierung von neuen Features, Bugfixes und Verbesserungen fuer JobSync, einer SaaS-Plattform fuer die Automatisierung von Job-Discovery und Bewerbungsprozessen. Die Plattform ist in TypeScript mit Shadcn/Tailwind, Next.js und Prisma gebaut.
 
 [ ] @projekte/jobsync Lies zuerst CLAUDE.md, reminders und die Memories ein.
 [ ] Bei Entscheidungen waehlst du nicht den einfacheren Weg; Du waehlst den Weg des Nachhaltigkeitsprinzip.
@@ -9,72 +9,75 @@ Hey Claude, sei mein Full-Stack Senior Software Engineer und unterstütze mich b
 
 ## Kontext
 
-Letzte Session war eine **reine Analyse-Session** mit 9 Domain-Expert-Agents (3 Runden Cross-Domain + GDPR-Audit). Keine Code-Aenderungen. Ergebnisse:
+Letzte Session (2026-05-12b) hat die **3 CRITICAL Findings (G1, G2/S5, G2b)** gefixt + 5 Quick Wins + CRM Cron Hardening. 7 Commits, 228 Test Suites, 4459 Tests gruen. Zusaetzlich: 9-Agent Interface-Fragility-Analyse mit 12 Fragility-Clustern (IF-1 bis IF-12). Reports:
 
-- **Cross-Domain Analysis:** 29 Findings (G1-G29), davon 3 CRITICAL, 7 HIGH. Report: `docs/session-2026-05-12-domain-expert-analysis.md`
-- **GDPR Audit:** 22 FAIL / 20 PARTIAL / 13 PASS ueber 60 Checks in 8 Domains. 6 systemische Kern-Probleme. Report: `docs/gdpr-audit-report.md`
-- **Domain Mapping:** `.domain-experts/domains.json` (wiederverwendbar mit Drift-Check)
-- **Handoff:** `.remember/remember.md` + Memory-Files aktualisiert
+- `docs/interface-fragility-analysis.md` — 12 Fragility-Cluster mit Konsens-Bewertung
+- `docs/session-2026-05-12-domain-expert-analysis.md` — Original Cross-Domain Findings (G1-G29)
+- `docs/gdpr-audit-report.md` — GDPR Audit (60 Checks, 8 Domains)
+- `.remember/remember.md` — Handoff mit allen Context-Details
+- `.domain-experts/domains.json` — Domain Mapping (841 Dateien, drift-checked)
 
-## Phase 1: Domain Experts respawnen + Schnittstellen-Analyse
+## Phase 1: IF-3 Full — CrmInterview FK Cascade (~2h)
 
-### 1.1 Respawne Domain Experts
+Nutze `/full-stack-orchestration:full-stack-feature` + `/superpowers:test-driven-development`.
 
-Rufe `/domain-experts` auf. Das domains.json existiert bereits — waehle Option 1 (Use this mapping) mit Drift-Check. Das spart ~10 Minuten gegenueber einem Neuaufbau.
+### 1.1 Prisma Migration
 
-### 1.2 Schnittstellen-Analyse (NICHT in der letzten Session gemacht)
+`CrmInterview.jobId` hat kein `onDelete: Cascade` (`prisma/schema.prisma:972`). Job-Delete crasht wenn Interviews existieren. 3/9 Agent-Konsens.
 
-Sende an ALLE 9 Agents (inkl. testing) die folgende Frage:
+1. Erstelle Migration: `onDelete: Cascade` auf `CrmInterview.jobId` FK
+2. Pruefe ob andere CRM-FKs auch betroffen sind: `CrmTaskTarget.targetJobId`, `CrmNoteTarget.targetJobId`, `CrmActivityLog.targetJobId`
+3. `npx prisma migrate dev --name add-crm-cascade-deletes`
 
-> "Hier sind die Reports aus der letzten Session: `docs/session-2026-05-12-domain-expert-analysis.md` und `docs/gdpr-audit-report.md`. Lies beide Reports. Dann beantworte: Welche Schnittstellen zwischen deiner Domain und den anderen Domains sind die fragilsten? Wo wuerde eine Aenderung in deiner Domain unbemerkt etwas in einer anderen Domain kaputtmachen? Nenne die 3 gefaehrlichsten Koppelungspunkte mit file:line Referenzen."
+### 1.2 deleteJobById + API v1 DELETE vereinheitlichen
 
-Synthese die Antworten aller 9 Agents und persistiere in `docs/interface-fragility-analysis.md`.
+Aktuell divergente Cascades (G23):
+- Internal `deleteJobById` (`job.actions.ts:573`): loescht `jobContact`, nicht `CrmInterview`
+- API v1 DELETE (`route.ts:108`): loescht legacy `Interview`, nicht `jobContact`
 
-## Phase 2: P0 Critical Fixes implementieren
+Fix: Beide Pfade muessen identische Cleanup-Logik haben. Mit `onDelete: Cascade` auf der Migration werden die meisten CRM-Entities automatisch geloescht. Pruefe was noch manuell benoetigt wird.
 
-Nutze `/full-stack-orchestration:full-stack-feature` fuer die Implementierung. Die Findings sind bereits exakt dokumentiert mit file:line Referenzen.
+### 1.3 E2E Cleanup
 
-### Sprint 1: Event Bus Bypass (G1) — ~1 Tag
+`e2e/cleanup-stale-data.ts` braucht 8 neue Steps VOR der Job-Deletion (exakte Reihenfolge aus remember.md):
+`ActivityLog → JobContact → CrmInterview → CrmNote → CrmTask → Person → CrmBlocklist → ConnectedAccount`
 
-4 Status-Change-Pfade fixen:
+## Phase 2: Open Quick Wins (~1h)
 
-| Pfad | Fix |
-|------|-----|
-| `updateJob` (job.actions.ts:429) | Detect status change at L500, delegate to `changeJobStatus` or inline History+Event+SideEffects |
-| API v1 `POST /jobs/:id/status` (status/route.ts) | Add `emitEvent(createEvent("JobStatusChanged", {...}))` after transaction |
-| API v1 `POST /jobs` (jobs/route.ts) | Add `JobStatusHistory` creation + `JobStatusChanged` + `CompanyCreated` events |
-| `promoter.ts` (L158) | Add second `emitEvent` for `JobStatusChanged` after `VacancyPromoted` |
+Nutze `/superpowers:dispatching-parallel-agents` fuer parallele Ausfuehrung.
 
-### Sprint 2: GDPR Critical (G2, S5) — ~2 Stunden
+| # | Item | Datei | Effort |
+|---|------|-------|--------|
+| 1 | `retention_expired` eigener NotificationType | 10 Dateien | 15 min |
+| 2 | 2 fehlende i18n Keys (`crm.errors.companyNotFound`, `crm.errors.multiplePrimaryCompanies`) | `crm.ts` | 5 min |
+| 3 | 7 hardcoded English strings in CRM UI | InterviewsPageClient 4x, CrmTasksPageClient 1x, PersonDetailClient 2x | 15 min |
+| 4 | ROADMAP 5.4+5.9 Text-Updates | `docs/ROADMAP.md` | 10 min |
+| 5 | 21 dead/pre-provisioned i18n keys in crm.ts aufraeumen | `crm.ts` | 10 min |
 
-Fix `anonymizePerson` Transaction in `person.actions.ts:353-386`:
-```
-+ prisma.crmInterview.updateMany({ where: { personId }, data: { personId: null, notes: null, outcomeNotes: null } }),
-+ prisma.crmBlocklist.deleteMany({ where: { userId: user.id, handle: { in: personEmails } } }),
-```
-Und in der bestehenden `crmActivityLog.updateMany` die data erweitern:
-```
-  data: { targetPersonId: null, details: null, linkedRecordName: null },
-```
+## Phase 3: IF-4 Degradation → ChannelRouter (~1h)
 
-### Sprint 3: AI Degradation Bypass (G2b) — ~1 Stunde
+Nutze `/full-stack-orchestration:full-stack-feature`.
 
-Wire `handleAuthFailure(moduleId, error)` in `openai/index.ts:35-40` und `deepseek/index.ts:35-40` bei 401/403 Errors.
+3 Sites in `degradation.ts` schreiben Notifications direkt in die DB und umgehen den ChannelRouter:
+- `degradation.ts:165` — `auth_failure` (createMany)
+- `degradation.ts:301` — `consecutive_failures` (create)
+- `degradation.ts:412` — `cb_escalation` (createMany)
 
-### Sprint 4: Quick Wins — ~1 Stunde
+Fix: Ersetze die direkten Prisma-Writes durch `channelRouter.route()`. Dafuer braucht jede Site:
+1. `buildDispatchContext(userId)` aufrufen
+2. `NotificationDraft` erstellen (gleiche Felder wie bisher)
+3. `channelRouter.route(draft, ctx)` statt `prisma.notification.create`
 
-- G5: `discoveryStatus` → `status === "staged"` in `[id]/page.tsx:222` + Cast zu `StagedVacancyWithAutomation[]`
-- G8: Add `logo_dev` zu `apiKey.model.ts` TypeScript Union + `apiKey.schema.ts` Zod enum
-- G26: Env-var Startup-Checks in `instrumentation.ts` (ENCRYPTION_KEY, AUTH_SECRET)
-- deleteJobById Test: Add `jobContact: { deleteMany: jest.fn() }` zu Mock
-- extractDomain: `.normalize("NFD").replace(/[\u0300-\u036f]/g, "")` + `ß→ss`
+Vorsicht: `webhook.channel.ts` hat 2 weitere Direct-Writer-Sites die BY DESIGN sind (Rekursionsschutz). Diese NICHT aendern.
 
-## Phase 3: Falls noch Context uebrig
+Nach dem Fix: `/allium:weed` gegen `specs/notification-dispatch.allium` laufen lassen.
 
-Waehle EINE dieser Optionen:
-- A) CRM Cron Hardening: globalThis guard + Promise.allSettled (~15 min)
-- B) retention_expired eigener NotificationType (~30 min, 10 Dateien)
-- C) Notification Retention Cron (~1 Stunde, Delete > 30 Tage)
+## Phase 4: Falls noch Context uebrig
+
+Waehle aus (Prioritaet absteigend):
+- A) IF-5: `inferErrorStatus` → `errorCode` (~30 min)
+- B) IF-7: `NotificationType` shared constant (~30 min)
+- C) IF-6: `CompanyCreated` vom Promoter emittieren (~30 min)
 
 ## Uebergreifende Regeln
 
@@ -83,14 +86,23 @@ Waehle EINE dieser Optionen:
 - **NIEMALS** tests+builds parallel — VM Resource Limits, single worker
 - **NIEMALS** PRs gegen upstream Gsync/jobsync
 - `/full-stack-orchestration:full-stack-feature` fuer ALLE Implementierung
+- `/comprehensive-review:full-review` nach JEDEM Sprint
 - Honesty Gate VOR Push
 - Server stoppen vor `tsc`
+- **Handoff/Memory-Dateien:** NUR gezielte Edits, NIE komplett ueberschreiben (Kritische Regel)
+
+## Post-Sprint Pflicht-Skills
+
+1. `/comprehensive-review:full-review` — Architecture+Security+Performance+Testing+Best Practices
+2. `/allium:weed` — Spec-Code-Alignment pruefen (besonders nach Migration)
+3. `/remember:remember` — Session-State sichern
 
 ## Referenz-Dokumente (lies diese ZUERST)
 
 1. `.remember/remember.md` — Handoff mit allen Context-Details
-2. `docs/session-2026-05-12-domain-expert-analysis.md` — Cross-Domain Findings (G1-G29)
-3. `docs/gdpr-audit-report.md` — GDPR Audit (60 Checks, 8 Domains)
-4. `docs/session-2026-05-12-open-items.md` — 23 Open Items aus Prior Session
-5. `project_deferred_sprints_for_future_sessions.md` — Alle Deferred Items konsolidiert
-6. `.domain-experts/domains.json` — Domain Mapping fuer Agent Respawn
+2. `docs/interface-fragility-analysis.md` — 12 Fragility-Cluster (IF-1 bis IF-12)
+3. `docs/session-2026-05-12-domain-expert-analysis.md` — Cross-Domain Findings (G1-G29)
+4. `docs/gdpr-audit-report.md` — GDPR Audit (60 Checks, 8 Domains)
+5. `docs/session-2026-05-12-open-items.md` — 23 Open Items aus Prior Session
+6. `project_deferred_sprints_for_future_sessions.md` — Alle Deferred Items konsolidiert
+7. `.domain-experts/domains.json` — Domain Mapping fuer Agent Respawn
