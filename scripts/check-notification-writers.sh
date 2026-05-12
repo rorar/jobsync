@@ -21,11 +21,10 @@ cd "$PROJECT_ROOT"
 ALLOWED_FILES=(
   # The in-app channel implementation itself is the legitimate writer.
   "src/lib/notifications/channels/in-app.channel.ts"
-  # Legacy legitimate exceptions patched to satisfy LateBoundLocale
-  # (ADR-030). A future sprint will refactor these to event emission,
-  # after which they should be removed from this list.
-  "src/lib/connector/degradation.ts"
+  # webhook.channel.ts has 2 direct-writer sites BY DESIGN (recursion guard).
   "src/lib/notifications/channels/webhook.channel.ts"
+  # NOTE: src/lib/connector/degradation.ts was removed in the IF-4 fix —
+  # all 3 sites now route through channelRouter.route() instead.
   # NOTE: src/actions/module.actions.ts was in this list between Stream 4
   # and Sprint 1 CRIT-A1. It was removed in the CRIT-A1 commit once the
   # direct createMany was replaced with an emitEvent(ModuleDeactivated)

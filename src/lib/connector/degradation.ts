@@ -3,11 +3,9 @@ import "server-only";
 import prisma from "@/lib/db";
 import { emitEvent, createEvent } from "@/lib/events";
 import { DomainEventType } from "@/lib/events/event-types";
-import {
-  prepareEnforcedNotification,
-  prepareEnforcedNotifications,
-  type EnforcedNotificationDraft,
-} from "@/lib/notifications/enforced-writer";
+import { channelRouter, registerChannels } from "@/lib/notifications/channel-router";
+import { buildDispatchContext } from "@/lib/notifications/dispatch-context";
+import type { NotificationDraft } from "@/lib/notifications/types";
 import { moduleRegistry } from "./registry";
 import { ModuleStatus, CircuitBreakerState } from "./manifest";
 
@@ -19,34 +17,18 @@ import { ModuleStatus, CircuitBreakerState } from "./manifest";
  * - ConsecutiveRunFailureEscalation: pause after N consecutive failed runs
  * - CircuitBreakerEscalation: pause after N consecutive CB opens
  *
- * Notification i18n — late-binding pattern (ADR-030)
- * --------------------------------------------------
- * Degradation notifications are written directly via prisma (not through the
- * notification-dispatcher), because they are produced inside module runtime
- * code paths that cannot easily round-trip through the event bus for
- * per-automation fan-out. The structured 5W+H fields are now first-class
- * Prisma columns (ADR-030, `add_notification_structured_fields` migration).
- * Writers here dual-write during rollout:
+ * Notification routing — ChannelRouter (IF-4 fix)
+ * ------------------------------------------------
+ * All 3 notification sites now route through `channelRouter.route()` instead
+ * of writing directly via Prisma. This means degradation alerts (auth failure,
+ * consecutive failures, circuit breaker) reach ALL enabled channels (InApp,
+ * Email, Push, Webhook) — not just InApp as before.
  *
- *   - `message`     — English fallback (backward compat for email/webhook
- *                     channels and older clients that don't read structured fields).
- *   - Top-level columns `titleKey`, `titleParams`, `actorType`, `actorId`,
- *                     `reasonKey`, `severity` — new typed fields resolved at
- *                     render time in the user's current locale via
- *                     formatNotificationTitle().
- *   - Legacy `data.*` blob — kept populated during rollout for pre-migration
- *                     clients and tests that still read `data.titleKey`.
+ * The ChannelRouter handles preference gating (shouldNotify), per-channel
+ * availability checks, and the 5W+H structured field writing via InAppChannel.
  *
- * Preference gating (Sprint 2 H-A-04 / H-A-07)
- * --------------------------------------------
- * Each direct write below is routed through `enforcedNotificationCreate*()`
- * (defined in `@/lib/notifications/channel-router`). The helper invokes
- * `shouldNotify()` before touching Prisma, so the global kill switch, the
- * per-type toggle, quiet hours, and the per-channel "inApp" gate are
- * uniformly respected — closing the QuietHoursRespected /
- * SingleNotificationWriter gap. The writer remains in this file for
- * physical locality (the `scripts/check-notification-writers.sh` allowlist
- * is intentionally unchanged), but the gate is now authoritative.
+ * `message` remains the English fallback; structured `titleKey`/`titleParams`
+ * are resolved at render time in the user's locale (ADR-030).
  *
  * Keys referenced here already exist in src/i18n/dictionaries/notifications.ts.
  */
@@ -119,53 +101,46 @@ export async function handleAuthFailure(
       },
     });
 
-    // Create persistent notifications using createMany (no N+1).
-    // Preference gating (Sprint 2 H-A-04 / H-A-07): drafts are routed
-    // through `prepareEnforcedNotifications()` which applies `shouldNotify()`
-    // per user BEFORE any Prisma write. Only rows that pass the gate
-    // (global kill switch + perType + quiet hours + inApp channel) make it
-    // into the createMany payload. The physical write stays here (this file
-    // is on `scripts/check-notification-writers.sh`'s allowlist) so the
-    // invariant is enforced by the gate helper, not by moving the call.
-    //
-    // i18n: `message` is the English fallback; authoritative title is carried
-    // in the top-level `titleKey + titleParams` columns (ADR-030) and resolved
-    // at render time in the user's current locale (see formatNotificationTitle()).
-    // We also dual-write the legacy `data.*` blob for backward compat.
+    // Route notifications through ChannelRouter (IF-4: was direct Prisma write).
+    // All 4 channels (InApp, Email, Push, Webhook) now receive degradation alerts.
+    // Preference gating and per-channel availability are handled by the router.
     try {
+      registerChannels();
       const safeModuleName = truncate(registered.manifest.name);
       const titleKey = "notifications.authFailure.title";
       const reasonKey = "notifications.reason.authExpired";
-      const drafts: EnforcedNotificationDraft[] = affectedAutomations.map(
-        (auto) => {
-          const safeAutomationName = truncate(auto.name);
-          return {
-            userId: auto.userId,
-            type: "auth_failure",
-            // English fallback — structured title is late-bound via top-level `titleKey`.
-            message: `Automation "${safeAutomationName}" paused: authentication failed for module "${safeModuleName}". Please check your credentials.`,
+      const drafts: NotificationDraft[] = affectedAutomations.map((auto) => {
+        const safeAutomationName = truncate(auto.name);
+        return {
+          userId: auto.userId,
+          type: "auth_failure" as const,
+          message: `Automation "${safeAutomationName}" paused: authentication failed for module "${safeModuleName}". Please check your credentials.`,
+          moduleId,
+          automationId: auto.id,
+          titleKey,
+          actorType: "module" as const,
+          actorId: moduleId,
+          reasonKey,
+          severity: "error" as const,
+          data: {
             moduleId,
+            moduleName: safeModuleName,
             automationId: auto.id,
-            titleKey,
-            actorType: "module",
-            actorId: moduleId,
-            reasonKey,
-            severity: "error",
-            extraData: {
-              moduleId,
-              moduleName: safeModuleName,
-              automationId: auto.id,
-              automationName: safeAutomationName,
-            },
-          };
-        },
+            automationName: safeAutomationName,
+          },
+        };
+      });
+      // Build one DispatchContext per unique userId, then route each draft
+      const userIds = [...new Set(drafts.map((d) => d.userId))];
+      const ctxMap = new Map<string, Awaited<ReturnType<typeof buildDispatchContext>>>();
+      await Promise.all(
+        userIds.map(async (uid) => ctxMap.set(uid, await buildDispatchContext(uid))),
       );
-      const { rows } = await prepareEnforcedNotifications(drafts);
-      if (rows.length > 0) {
-        await prisma.notification.createMany({ data: rows });
-      }
+      await Promise.allSettled(
+        drafts.map((draft) => channelRouter.route(draft, ctxMap.get(draft.userId)!)),
+      );
     } catch (err) {
-      console.warn("[Degradation] Failed to create auth_failure notifications:", err);
+      console.warn("[Degradation] Failed to route auth_failure notifications:", err);
     }
 
     // Emit AutomationDegraded events (A8: bridge to RunCoordinator)
@@ -266,42 +241,30 @@ export async function checkConsecutiveRunFailures(
     });
 
     // Create persistent notification for the automation owner.
-    // Preference gating (Sprint 2 H-A-04 / H-A-07): the draft is routed
-    // through `prepareEnforcedNotification()` which applies `shouldNotify()`
-    // BEFORE the Prisma write. If the user has in-app disabled / quiet
-    // hours / the per-type toggle off, the write is suppressed and the
-    // outer degradation flow (emitEvent, return paused=true) continues
-    // unchanged.
-    //
-    // i18n: `message` is the English fallback; authoritative title is carried
-    // in the top-level `titleKey + titleParams` columns (ADR-030) and resolved
-    // at render time in the user's current locale (see formatNotificationTitle()).
-    // We also dual-write the legacy `data.*` blob for backward compat.
+    // Route through ChannelRouter (IF-4: was direct Prisma write).
     try {
+      registerChannels();
       const safeAutomationName = truncate(automation.name);
-      const titleKey = "notifications.consecutiveFailures.title";
-      const titleParams = { count: CONSECUTIVE_RUN_FAILURE_THRESHOLD };
-      const gated = await prepareEnforcedNotification({
+      const draft: NotificationDraft = {
         userId: automation.userId,
         type: "consecutive_failures",
         message: `Automation "${safeAutomationName}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
         automationId,
-        titleKey,
-        titleParams,
+        titleKey: "notifications.consecutiveFailures.title",
+        titleParams: { count: CONSECUTIVE_RUN_FAILURE_THRESHOLD },
         actorType: "automation",
         actorId: automationId,
         severity: "warning",
-        extraData: {
+        data: {
           automationId,
           automationName: safeAutomationName,
           failureCount: CONSECUTIVE_RUN_FAILURE_THRESHOLD,
         },
-      });
-      if (!gated.suppressed) {
-        await prisma.notification.create({ data: gated.row });
-      }
+      };
+      const ctx = await buildDispatchContext(automation.userId);
+      await channelRouter.route(draft, ctx);
     } catch (err) {
-      console.warn("[Degradation] Failed to create consecutive_failures notification:", err);
+      console.warn("[Degradation] Failed to route consecutive_failures notification:", err);
     }
 
     // Emit AutomationDegraded event (A8: bridge to RunCoordinator)
@@ -369,50 +332,44 @@ export async function handleCircuitBreakerTrip(
       },
     });
 
-    // Create persistent notifications using createMany (no N+1).
-    // Preference gating (Sprint 2 H-A-04 / H-A-07): drafts are routed
-    // through `prepareEnforcedNotifications()` before the write — see
-    // `handleAuthFailure` for the full rationale.
-    //
-    // i18n: `message` is the English fallback; authoritative title is carried
-    // in the top-level `titleKey + titleParams` columns (ADR-030) and resolved
-    // at render time in the user's current locale (see formatNotificationTitle()).
-    // We also dual-write the legacy `data.*` blob for backward compat.
+    // Route through ChannelRouter (IF-4: was direct Prisma write).
     try {
+      registerChannels();
       const safeModuleName = truncate(registered.manifest.name);
       const titleKey = "notifications.cbEscalation.title";
       const reasonKey = "notifications.reason.circuitBreaker";
-      const drafts: EnforcedNotificationDraft[] = affectedAutomations.map(
-        (auto) => {
-          const safeAutomationName = truncate(auto.name);
-          return {
-            userId: auto.userId,
-            type: "cb_escalation",
-            // English fallback — structured title is late-bound via top-level `titleKey`.
-            message: `Automation "${safeAutomationName}" paused: module "${safeModuleName}" circuit breaker tripped ${newFailureCount} times.`,
+      const drafts: NotificationDraft[] = affectedAutomations.map((auto) => {
+        const safeAutomationName = truncate(auto.name);
+        return {
+          userId: auto.userId,
+          type: "cb_escalation" as const,
+          message: `Automation "${safeAutomationName}" paused: module "${safeModuleName}" circuit breaker tripped ${newFailureCount} times.`,
+          moduleId,
+          automationId: auto.id,
+          titleKey,
+          actorType: "module" as const,
+          actorId: moduleId,
+          reasonKey,
+          severity: "warning" as const,
+          data: {
             moduleId,
+            moduleName: safeModuleName,
             automationId: auto.id,
-            titleKey,
-            actorType: "module",
-            actorId: moduleId,
-            reasonKey,
-            severity: "warning",
-            extraData: {
-              moduleId,
-              moduleName: safeModuleName,
-              automationId: auto.id,
-              automationName: safeAutomationName,
-              failureCount: newFailureCount,
-            },
-          };
-        },
+            automationName: safeAutomationName,
+            failureCount: newFailureCount,
+          },
+        };
+      });
+      const userIds = [...new Set(drafts.map((d) => d.userId))];
+      const ctxMap = new Map<string, Awaited<ReturnType<typeof buildDispatchContext>>>();
+      await Promise.all(
+        userIds.map(async (uid) => ctxMap.set(uid, await buildDispatchContext(uid))),
       );
-      const { rows } = await prepareEnforcedNotifications(drafts);
-      if (rows.length > 0) {
-        await prisma.notification.createMany({ data: rows });
-      }
+      await Promise.allSettled(
+        drafts.map((draft) => channelRouter.route(draft, ctxMap.get(draft.userId)!)),
+      );
     } catch (err) {
-      console.warn("[Degradation] Failed to create cb_escalation notifications:", err);
+      console.warn("[Degradation] Failed to route cb_escalation notifications:", err);
     }
 
     // Emit AutomationDegraded events (A8: bridge to RunCoordinator)

@@ -16,22 +16,34 @@ jest.mock("@/lib/db", () => {
     automationRun: {
       findMany: jest.fn(),
     },
-    notification: {
-      create: jest.fn().mockResolvedValue({}),
-      createMany: jest.fn().mockResolvedValue({ count: 0 }),
-    },
-    // Sprint 2 H-A-04 / H-A-07: the preference-gate helper reads
-    // UserSettings before writing. Default mock returns `null` so the
-    // helper falls back to DEFAULT_NOTIFICATION_PREFERENCES (enabled,
-    // inApp=true, no perType override, no quiet hours) — which matches
-    // the historical unconditional-write behaviour the existing tests
-    // rely on.
-    userSettings: {
-      findUnique: jest.fn().mockResolvedValue(null),
-    },
+    // Note: prisma.notification is no longer used directly by degradation.ts.
+    // Notifications now route through channelRouter.route().
   };
   return { __esModule: true, default: mockPrisma };
 });
+
+jest.mock("@/lib/notifications/channel-router", () => ({
+  channelRouter: { route: jest.fn().mockResolvedValue({ anySuccess: true, results: [] }) },
+  registerChannels: jest.fn(),
+}));
+
+jest.mock("@/lib/notifications/dispatch-context", () => ({
+  buildDispatchContext: jest.fn().mockResolvedValue({
+    userId: "mock-user",
+    preferences: { enabled: true, quietHoursStart: null, quietHoursEnd: null, channels: { inApp: true, email: true, push: true, webhook: true }, perType: {} },
+    locale: "en",
+    userEmail: null,
+    smtp: null,
+    vapid: null,
+    pushSubscriptions: [],
+    webhookEndpoints: [],
+    emailAvailable: false,
+    pushAvailable: false,
+    webhookAvailable: false,
+    inAppAvailable: true,
+    vapidSubject: "mailto:noreply@jobsync.local",
+  }),
+}));
 
 jest.mock("@/lib/connector/registry", () => {
   const registryMap = new Map<string, any>();
@@ -61,15 +73,21 @@ import {
   handleCircuitBreakerRecovery,
 } from "@/lib/connector/degradation";
 import { ModuleStatus, ConnectorType, CircuitBreakerState } from "@/lib/connector/manifest";
+import { channelRouter } from "@/lib/notifications/channel-router";
+import { buildDispatchContext } from "@/lib/notifications/dispatch-context";
 
 const mockPrisma = prisma as jest.Mocked<typeof prisma>;
 const mockRegistry = moduleRegistry as jest.Mocked<typeof moduleRegistry> & {
   _testMap: Map<string, any>;
 };
+const mockRoute = channelRouter.route as jest.Mock;
+const mockBuildDispatchContext = buildDispatchContext as jest.Mock;
 
 describe("Degradation Rules", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRoute.mockClear();
+    mockBuildDispatchContext.mockClear();
     mockRegistry._testMap.clear();
     // Suppress console output in tests
     jest.spyOn(console, "error").mockImplementation(() => {});
@@ -162,24 +180,26 @@ describe("Degradation Rules", () => {
 
       await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      // Implementation uses createMany (batch) instead of individual create calls
-      expect(mockPrisma.notification.createMany).toHaveBeenCalledTimes(1);
-      expect(mockPrisma.notification.createMany).toHaveBeenCalledWith({
-        data: expect.arrayContaining([
-          expect.objectContaining({
-            userId: "user-1",
-            type: "auth_failure",
-            moduleId: "jsearch",
-            automationId: "auto-1",
-          }),
-          expect.objectContaining({
-            userId: "user-2",
-            type: "auth_failure",
-            moduleId: "jsearch",
-            automationId: "auto-2",
-          }),
-        ]),
-      });
+      // Notifications now route through channelRouter.route() — one call per draft
+      expect(mockRoute).toHaveBeenCalledTimes(2);
+      expect(mockRoute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "user-1",
+          type: "auth_failure",
+          moduleId: "jsearch",
+          automationId: "auto-1",
+        }),
+        expect.anything(),
+      );
+      expect(mockRoute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "user-2",
+          type: "auth_failure",
+          moduleId: "jsearch",
+          automationId: "auto-2",
+        }),
+        expect.anything(),
+      );
     });
 
     it("should populate data.titleKey + 5W+H metadata for late-bound i18n", async () => {
@@ -193,24 +213,20 @@ describe("Degradation Rules", () => {
 
       await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      const call = (mockPrisma.notification.createMany as jest.Mock).mock.calls[0][0];
-      const row = call.data[0];
-      // Legacy `data.*` blob — dual-written during rollout for backward compat
-      expect(row.data).toEqual(
+      // channelRouter.route() receives the NotificationDraft as first arg
+      expect(mockRoute).toHaveBeenCalledTimes(1);
+      const draft = mockRoute.mock.calls[0][0];
+      // `data` sub-object carries module/automation context
+      expect(draft.data).toEqual(
         expect.objectContaining({
-          titleKey: "notifications.authFailure.title",
-          actorType: "module",
-          actorId: "jsearch",
-          reasonKey: "notifications.reason.authExpired",
-          severity: "error",
           moduleId: "jsearch",
           moduleName: "JSearch",
           automationId: "auto-late-bind",
           automationName: "Late Bind Auto",
         }),
       );
-      // ADR-030: top-level 5W+H columns must also be populated (dual-write)
-      expect(row).toEqual(
+      // Top-level 5W+H fields on the draft (ADR-030 dual-write)
+      expect(draft).toEqual(
         expect.objectContaining({
           titleKey: "notifications.authFailure.title",
           actorType: "module",
@@ -220,8 +236,8 @@ describe("Degradation Rules", () => {
         }),
       );
       // Backward-compat English `message` must still be populated
-      expect(typeof row.message).toBe("string");
-      expect(row.message.length).toBeGreaterThan(0);
+      expect(typeof draft.message).toBe("string");
+      expect(draft.message.length).toBeGreaterThan(0);
     });
 
     it("should not create notifications when 0 automations are affected", async () => {
@@ -232,7 +248,7 @@ describe("Degradation Rules", () => {
 
       await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      expect(mockPrisma.notification.createMany).not.toHaveBeenCalled();
+      expect(mockRoute).not.toHaveBeenCalled();
       // updateMany is also not called when findMany returns empty
       expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
     });
@@ -245,9 +261,7 @@ describe("Degradation Rules", () => {
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
         { id: "auto-3", userId: "user-3", name: "Gamma Search" },
       ]);
-      (mockPrisma.notification.createMany as jest.Mock).mockRejectedValue(
-        new Error("DB constraint violation"),
-      );
+      mockRoute.mockRejectedValueOnce(new Error("DB constraint violation"));
 
       const result = await handleAuthFailure("jsearch", "403 Forbidden");
 
@@ -382,15 +396,14 @@ describe("Degradation Rules", () => {
 
       await checkConsecutiveRunFailures("auto-notif");
 
-      expect(mockPrisma.notification.create).toHaveBeenCalledTimes(1);
-      expect(mockPrisma.notification.create).toHaveBeenCalledWith(
+      expect(mockRoute).toHaveBeenCalledTimes(1);
+      expect(mockRoute).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            userId: "user-notif",
-            type: "consecutive_failures",
-            automationId: "auto-notif",
-          }),
+          userId: "user-notif",
+          type: "consecutive_failures",
+          automationId: "auto-notif",
         }),
+        expect.anything(),
       );
     });
 
@@ -412,27 +425,14 @@ describe("Degradation Rules", () => {
 
       await checkConsecutiveRunFailures("auto-late-bind");
 
-      const call = (mockPrisma.notification.create as jest.Mock).mock.calls[0][0];
-      expect(call.data).toEqual(
+      expect(mockRoute).toHaveBeenCalledTimes(1);
+      const draft = mockRoute.mock.calls[0][0];
+      // Top-level draft fields
+      expect(draft).toEqual(
         expect.objectContaining({
           userId: "user-late-bind",
           type: "consecutive_failures",
           automationId: "auto-late-bind",
-          data: expect.objectContaining({
-            titleKey: "notifications.consecutiveFailures.title",
-            titleParams: { count: 5 },
-            actorType: "automation",
-            actorId: "auto-late-bind",
-            severity: "warning",
-            automationId: "auto-late-bind",
-            automationName: "Late Bind Cons",
-            failureCount: 5,
-          }),
-        }),
-      );
-      // ADR-030: top-level 5W+H columns must also be populated (dual-write)
-      expect(call.data).toEqual(
-        expect.objectContaining({
           titleKey: "notifications.consecutiveFailures.title",
           titleParams: { count: 5 },
           actorType: "automation",
@@ -440,8 +440,16 @@ describe("Degradation Rules", () => {
           severity: "warning",
         }),
       );
-      expect(typeof call.data.message).toBe("string");
-      expect(call.data.message.length).toBeGreaterThan(0);
+      // `data` sub-object carries automation context
+      expect(draft.data).toEqual(
+        expect.objectContaining({
+          automationId: "auto-late-bind",
+          automationName: "Late Bind Cons",
+          failureCount: 5,
+        }),
+      );
+      expect(typeof draft.message).toBe("string");
+      expect(draft.message.length).toBeGreaterThan(0);
     });
   });
 
@@ -549,24 +557,26 @@ describe("Degradation Rules", () => {
 
       await handleCircuitBreakerTrip("mod-cb-notif");
 
-      // Implementation uses createMany (batch) instead of individual create calls
-      expect(mockPrisma.notification.createMany).toHaveBeenCalledTimes(1);
-      expect(mockPrisma.notification.createMany).toHaveBeenCalledWith({
-        data: expect.arrayContaining([
-          expect.objectContaining({
-            userId: "user-cb-1",
-            type: "cb_escalation",
-            moduleId: "mod-cb-notif",
-            automationId: "auto-cb-1",
-          }),
-          expect.objectContaining({
-            userId: "user-cb-2",
-            type: "cb_escalation",
-            moduleId: "mod-cb-notif",
-            automationId: "auto-cb-2",
-          }),
-        ]),
-      });
+      // Notifications now route through channelRouter.route() — one call per draft
+      expect(mockRoute).toHaveBeenCalledTimes(2);
+      expect(mockRoute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "user-cb-1",
+          type: "cb_escalation",
+          moduleId: "mod-cb-notif",
+          automationId: "auto-cb-1",
+        }),
+        expect.anything(),
+      );
+      expect(mockRoute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "user-cb-2",
+          type: "cb_escalation",
+          moduleId: "mod-cb-notif",
+          automationId: "auto-cb-2",
+        }),
+        expect.anything(),
+      );
     });
 
     it("should populate data.titleKey + 5W+H metadata for late-bound i18n", async () => {
@@ -578,15 +588,11 @@ describe("Degradation Rules", () => {
 
       await handleCircuitBreakerTrip("mod-cb-late-bind");
 
-      const call = (mockPrisma.notification.createMany as jest.Mock).mock.calls[0][0];
-      const row = call.data[0];
-      expect(row.data).toEqual(
+      expect(mockRoute).toHaveBeenCalledTimes(1);
+      const draft = mockRoute.mock.calls[0][0];
+      // `data` sub-object carries module/automation context
+      expect(draft.data).toEqual(
         expect.objectContaining({
-          titleKey: "notifications.cbEscalation.title",
-          actorType: "module",
-          actorId: "mod-cb-late-bind",
-          reasonKey: "notifications.reason.circuitBreaker",
-          severity: "warning",
           moduleId: "mod-cb-late-bind",
           moduleName: "mod-cb-late-bind",
           automationId: "auto-late-bind",
@@ -594,8 +600,8 @@ describe("Degradation Rules", () => {
           failureCount: 3,
         }),
       );
-      // ADR-030: top-level 5W+H columns must also be populated (dual-write)
-      expect(row).toEqual(
+      // Top-level 5W+H fields on the draft (ADR-030 dual-write)
+      expect(draft).toEqual(
         expect.objectContaining({
           titleKey: "notifications.cbEscalation.title",
           actorType: "module",
@@ -604,8 +610,8 @@ describe("Degradation Rules", () => {
           severity: "warning",
         }),
       );
-      expect(typeof row.message).toBe("string");
-      expect(row.message.length).toBeGreaterThan(0);
+      expect(typeof draft.message).toBe("string");
+      expect(draft.message.length).toBeGreaterThan(0);
     });
 
     it("should not create notifications below threshold", async () => {
@@ -613,7 +619,7 @@ describe("Degradation Rules", () => {
 
       await handleCircuitBreakerTrip("mod-cb-no-notif");
 
-      expect(mockPrisma.notification.createMany).not.toHaveBeenCalled();
+      expect(mockRoute).not.toHaveBeenCalled();
       expect(mockPrisma.automation.findMany).not.toHaveBeenCalled();
     });
   });
@@ -660,35 +666,20 @@ describe("Degradation Rules", () => {
   });
 
   // ===========================================================================
-  // Sprint 2 H-A-04 / H-A-07 — shouldNotify preference gating
+  // Preference gating — ChannelRouter (IF-4 refactor)
   //
-  // Before the Sprint 2 fix the 3 direct-writer sites in degradation.ts
-  // (handleAuthFailure, checkConsecutiveRunFailures, handleCircuitBreakerTrip)
-  // called `prisma.notification.create*` directly, bypassing `shouldNotify()`.
-  // Quiet hours, per-type toggles, and the global kill switch were silently
-  // ignored — violating specs/notification-dispatch.allium invariant
-  // `QuietHoursRespected`.
+  // After the IF-4 refactor, degradation.ts routes all notifications through
+  // `channelRouter.route()`. The ChannelRouter handles preference gating
+  // (shouldNotify, quiet hours, per-type toggles) internally. Degradation
+  // always calls route() — it is the router's responsibility to suppress
+  // delivery based on user preferences.
   //
-  // The fix routes every draft through `prepareEnforcedNotification*()`
-  // which resolves `UserSettings` and applies `shouldNotify()` BEFORE the
-  // physical Prisma write. These tests pin the three gate behaviours for
-  // each of the 3 sites.
+  // These tests verify that degradation correctly routes drafts to the
+  // channelRouter regardless of user preference state.
   // ===========================================================================
 
-  describe("shouldNotify preference gating (H-A-04 / H-A-07)", () => {
-    // Helper to make UserSettings row carry a JSON-serialized preferences
-    // blob that mirrors what the real settings store writes.
-    function makeSettings(notifications: unknown) {
-      return {
-        settings: JSON.stringify({
-          ai: { moduleId: "ollama" },
-          display: { theme: "system", locale: "en" },
-          notifications,
-        }),
-      };
-    }
-
-    it("handleAuthFailure — suppresses all rows when global kill switch is off", async () => {
+  describe("ChannelRouter integration (preference gating is router's concern)", () => {
+    it("handleAuthFailure — routes draft to channelRouter (router handles preferences)", async () => {
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: {
           name: "JSearch",
@@ -702,26 +693,23 @@ describe("Degradation Rules", () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({
         count: 1,
       });
-      // Global kill switch OFF for this user
-      (mockPrisma.userSettings.findUnique as jest.Mock).mockResolvedValue(
-        makeSettings({
-          enabled: false,
-          channels: { inApp: true, webhook: false, email: false, push: false },
-          perType: {},
-        }),
-      );
 
       const result = await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      // Degradation itself is NOT blocked by the gate — the automation still
-      // pauses and the outer flow reports the correct pausedCount.
+      // Degradation pauses and routes — the router handles suppression
       expect(result).toEqual({ pausedCount: 1 });
       expect(mockPrisma.automation.updateMany).toHaveBeenCalled();
-      // But the notification write MUST be suppressed.
-      expect(mockPrisma.notification.createMany).not.toHaveBeenCalled();
+      expect(mockRoute).toHaveBeenCalledTimes(1);
+      expect(mockRoute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "user-off",
+          type: "auth_failure",
+        }),
+        expect.anything(),
+      );
     });
 
-    it("handleAuthFailure — suppresses rows when inApp channel is disabled", async () => {
+    it("handleAuthFailure — builds dispatch context per unique userId", async () => {
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: {
           name: "JSearch",
@@ -730,56 +718,25 @@ describe("Degradation Rules", () => {
         },
       });
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
-        { id: "auto-1", userId: "user-noinapp", name: "NoInApp" },
+        { id: "auto-1", userId: "user-a", name: "Auto A" },
+        { id: "auto-2", userId: "user-b", name: "Auto B" },
+        { id: "auto-3", userId: "user-a", name: "Auto A2" },
       ]);
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({
-        count: 1,
+        count: 3,
       });
-      (mockPrisma.userSettings.findUnique as jest.Mock).mockResolvedValue(
-        makeSettings({
-          enabled: true,
-          channels: { inApp: false, webhook: true, email: false, push: false },
-          perType: {},
-        }),
-      );
 
       await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      expect(mockPrisma.notification.createMany).not.toHaveBeenCalled();
+      // 2 unique userIds → 2 context builds
+      expect(mockBuildDispatchContext).toHaveBeenCalledTimes(2);
+      expect(mockBuildDispatchContext).toHaveBeenCalledWith("user-a");
+      expect(mockBuildDispatchContext).toHaveBeenCalledWith("user-b");
+      // 3 drafts → 3 route calls
+      expect(mockRoute).toHaveBeenCalledTimes(3);
     });
 
-    it("handleAuthFailure — suppresses rows when perType.auth_failure is disabled", async () => {
-      (mockRegistry.get as jest.Mock).mockReturnValue({
-        manifest: {
-          name: "JSearch",
-          connectorType: ConnectorType.JOB_DISCOVERY,
-          credential: { required: true },
-        },
-      });
-      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
-        { id: "auto-1", userId: "user-nop", name: "NoPerType" },
-      ]);
-      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({
-        count: 1,
-      });
-      (mockPrisma.userSettings.findUnique as jest.Mock).mockResolvedValue(
-        makeSettings({
-          enabled: true,
-          channels: { inApp: true, webhook: false, email: false, push: false },
-          perType: { auth_failure: { enabled: false } },
-        }),
-      );
-
-      await handleAuthFailure("jsearch", "401 Unauthorized");
-
-      expect(mockPrisma.notification.createMany).not.toHaveBeenCalled();
-    });
-
-    it("handleAuthFailure — still writes a row when the user has defaults (null settings)", async () => {
-      // Regression guard: the default `null` settings path in the shared
-      // mock is what the legacy degradation tests rely on, and must keep
-      // producing a createMany call so that all pre-Sprint-2 assertions
-      // continue to pass.
+    it("handleAuthFailure — still routes draft when the user has defaults (null settings)", async () => {
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: {
           name: "JSearch",
@@ -793,14 +750,13 @@ describe("Degradation Rules", () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({
         count: 1,
       });
-      (mockPrisma.userSettings.findUnique as jest.Mock).mockResolvedValue(null);
 
       await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      expect(mockPrisma.notification.createMany).toHaveBeenCalledTimes(1);
+      expect(mockRoute).toHaveBeenCalledTimes(1);
     });
 
-    it("checkConsecutiveRunFailures — suppresses row when inApp channel is disabled", async () => {
+    it("checkConsecutiveRunFailures — routes draft to channelRouter", async () => {
       (mockPrisma.automationRun.findMany as jest.Mock).mockResolvedValue([
         { status: "failed" },
         { status: "failed" },
@@ -815,23 +771,23 @@ describe("Degradation Rules", () => {
         userId: "user-gated",
       });
       (mockPrisma.automation.update as jest.Mock).mockResolvedValue({});
-      (mockPrisma.userSettings.findUnique as jest.Mock).mockResolvedValue(
-        makeSettings({
-          enabled: true,
-          channels: { inApp: false, webhook: false, email: false, push: false },
-          perType: {},
-        }),
-      );
 
       const result = await checkConsecutiveRunFailures("auto-gated");
 
-      // Pausing still happens — only the notification write is gated.
+      // Pausing still happens — router handles preference gating
       expect(result).toEqual({ paused: true });
       expect(mockPrisma.automation.update).toHaveBeenCalled();
-      expect(mockPrisma.notification.create).not.toHaveBeenCalled();
+      expect(mockRoute).toHaveBeenCalledTimes(1);
+      expect(mockRoute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "user-gated",
+          type: "consecutive_failures",
+        }),
+        expect.anything(),
+      );
     });
 
-    it("handleCircuitBreakerTrip — suppresses all rows when perType.cb_escalation is disabled", async () => {
+    it("handleCircuitBreakerTrip — routes draft to channelRouter", async () => {
       mockRegistry._testMap.set("mod-cb-gate", {
         manifest: {
           id: "mod-cb-gate",
@@ -850,20 +806,20 @@ describe("Degradation Rules", () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({
         count: 1,
       });
-      (mockPrisma.userSettings.findUnique as jest.Mock).mockResolvedValue(
-        makeSettings({
-          enabled: true,
-          channels: { inApp: true, webhook: false, email: false, push: false },
-          perType: { cb_escalation: { enabled: false } },
-        }),
-      );
 
       const result = await handleCircuitBreakerTrip("mod-cb-gate");
 
-      // Pausing still happens — only the notification write is gated.
+      // Pausing still happens — router handles preference gating
       expect(result).toEqual({ pausedCount: 1 });
       expect(mockPrisma.automation.updateMany).toHaveBeenCalled();
-      expect(mockPrisma.notification.createMany).not.toHaveBeenCalled();
+      expect(mockRoute).toHaveBeenCalledTimes(1);
+      expect(mockRoute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "user-cb-gate",
+          type: "cb_escalation",
+        }),
+        expect.anything(),
+      );
     });
   });
 });
