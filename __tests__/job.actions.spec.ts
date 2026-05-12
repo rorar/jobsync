@@ -888,22 +888,22 @@ describe("jobActions", () => {
         message: "errors.deleteJob",
       });
     });
-    it("should delete a job successfully", async () => {
+    it("should delete a job successfully via cascade (no manual cleanup)", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
-      (prisma.jobContact.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.job.delete as jest.Mock).mockResolvedValue(jobData);
-      (prisma.$transaction as jest.Mock).mockResolvedValue([{ count: 0 }, jobData]);
 
       const result = await deleteJobById("job-id");
 
       expect(result).toStrictEqual({ success: true });
-      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      // Cascade handles CrmInterview, JobContact, etc. — no transaction needed
+      expect(prisma.job.delete).toHaveBeenCalledWith({
+        where: { id: "job-id", userId: mockUser.id },
+      });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
-    it("should handle unexpected errors", async () => {
+    it("should handle unexpected errors from job.delete", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
-      (prisma.jobContact.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
-      (prisma.job.delete as jest.Mock).mockResolvedValue(jobData);
-      (prisma.$transaction as jest.Mock).mockRejectedValue(
+      (prisma.job.delete as jest.Mock).mockRejectedValue(
         new Error("Unexpected error"),
       );
 

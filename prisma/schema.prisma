@@ -587,7 +587,7 @@ model StagedVacancy {
 
   // Promotion link
   promotedToJobId   String?     @unique
-  promotedJob       Job?        @relation(fields: [promotedToJobId], references: [id])
+  promotedJob       Job?        @relation(fields: [promotedToJobId], references: [id], onDelete: SetNull)
 
   // Archive / Trash
   archivedAt        DateTime?
@@ -969,7 +969,7 @@ model CrmInterview {
   userId          String
   user            User      @relation(fields: [userId], references: [id])
   jobId           String
-  job             Job       @relation("CrmInterviewJob", fields: [jobId], references: [id])
+  job             Job       @relation("CrmInterviewJob", fields: [jobId], references: [id], onDelete: Cascade)
   personId        String?
   person          Person?   @relation(fields: [personId], references: [id])
   interviewDate   DateTime
@@ -996,7 +996,7 @@ model JobContact {
   userId          String
   user            User      @relation(fields: [userId], references: [id])
   jobId           String
-  job             Job       @relation("JobContactJob", fields: [jobId], references: [id])
+  job             Job       @relation("JobContactJob", fields: [jobId], references: [id], onDelete: Cascade)
   personId        String
   person          Person    @relation(fields: [personId], references: [id])
   role            String?
@@ -1043,7 +1043,7 @@ model CrmTaskTarget {
   targetCompanyId String?
   targetCompany   Company?  @relation("CrmTaskTargetCompany", fields: [targetCompanyId], references: [id])
   targetJobId     String?
-  targetJob       Job?      @relation("CrmTaskTargetJob", fields: [targetJobId], references: [id])
+  targetJob       Job?      @relation("CrmTaskTargetJob", fields: [targetJobId], references: [id], onDelete: SetNull)
 
   @@index([taskId])
   @@index([targetPersonId])
@@ -1078,7 +1078,7 @@ model CrmNoteTarget {
   targetCompanyId String?
   targetCompany   Company?  @relation("CrmNoteTargetCompany", fields: [targetCompanyId], references: [id])
   targetJobId     String?
-  targetJob       Job?      @relation("CrmNoteTargetJob", fields: [targetJobId], references: [id])
+  targetJob       Job?      @relation("CrmNoteTargetJob", fields: [targetJobId], references: [id], onDelete: SetNull)
 
   @@index([noteId])
   @@index([targetPersonId])
@@ -1100,7 +1100,7 @@ model CrmActivityLog {
   targetCompanyId   String?
   targetCompany     Company?  @relation("ActivityLogCompany", fields: [targetCompanyId], references: [id])
   targetJobId       String?
-  targetJob         Job?      @relation("ActivityLogJob", fields: [targetJobId], references: [id])
+  targetJob         Job?      @relation("ActivityLogJob", fields: [targetJobId], references: [id], onDelete: SetNull)
   details           String?
   linkedRecordName  String?
 

@@ -592,12 +592,8 @@ describe("PATCH /api/v1/jobs/:id", () => {
 // =========================================================================
 
 describe("DELETE /api/v1/jobs/:id", () => {
-  it("deletes a job and returns 204 (happy path)", async () => {
-    mockPrisma.job.findFirst.mockResolvedValue({
-      id: VALID_UUID,
-      _count: { Interview: 0 },
-    });
-    mockPrisma.interview.deleteMany.mockResolvedValue({ count: 0 });
+  it("deletes a job and returns 204 (happy path, cascade handles children)", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue({ id: VALID_UUID });
     mockPrisma.job.delete.mockResolvedValue({});
 
     const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}`, {
@@ -607,6 +603,8 @@ describe("DELETE /api/v1/jobs/:id", () => {
 
     expect(res.status).toBe(204);
     expect(res.body).toBeNull();
+    // No manual interview.deleteMany — cascade handles Interview, CrmInterview, JobContact, etc.
+    expect(mockPrisma.interview.deleteMany).not.toHaveBeenCalled();
   });
 
   it("verifies ownership before delete (IDOR)", async () => {
@@ -635,12 +633,8 @@ describe("DELETE /api/v1/jobs/:id", () => {
     expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
   });
 
-  it("deletes related interviews before the job", async () => {
-    mockPrisma.job.findFirst.mockResolvedValue({
-      id: VALID_UUID,
-      _count: { Interview: 2 },
-    });
-    mockPrisma.interview.deleteMany.mockResolvedValue({ count: 2 });
+  it("relies on DB cascade — no manual interview.deleteMany", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue({ id: VALID_UUID });
     mockPrisma.job.delete.mockResolvedValue({});
 
     const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}`, {
@@ -648,15 +642,9 @@ describe("DELETE /api/v1/jobs/:id", () => {
     });
     await deleteJob(req, routeCtx(VALID_UUID));
 
-    // interview.deleteMany is called before job.delete
-    const deleteManyCalls = mockPrisma.interview.deleteMany.mock.invocationCallOrder[0];
-    const jobDeleteCalls = mockPrisma.job.delete.mock.invocationCallOrder[0];
-    expect(deleteManyCalls).toBeLessThan(jobDeleteCalls);
-
-    // interview deleteMany scoped by userId (defense-in-depth)
-    expect(mockPrisma.interview.deleteMany).toHaveBeenCalledWith({
-      where: { jobId: VALID_UUID, job: { userId: "test-user-id" } },
-    });
+    // Cascade handles Interview, CrmInterview, JobContact, CrmTaskTarget, CrmNoteTarget, CrmActivityLog
+    expect(mockPrisma.job.delete).toHaveBeenCalledWith({ where: { id: VALID_UUID } });
+    expect(mockPrisma.interview.deleteMany).not.toHaveBeenCalled();
   });
 });
 

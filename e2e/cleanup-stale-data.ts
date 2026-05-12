@@ -50,6 +50,46 @@ export async function cleanupStaleE2EData(): Promise<void> {
     where: { job: { userId, JobTitle: { label: { startsWith: "E2E " } } } },
   })).count;
 
+  // 5a. CRM ActivityLog linked to E2E jobs (CrmActivityLog.targetJobId → Job)
+  total += (await prisma.crmActivityLog.deleteMany({
+    where: { userId, targetJob: { JobTitle: { label: { startsWith: "E2E " } } } },
+  })).count;
+
+  // 5b. CRM NoteTargets linked to E2E jobs (CrmNoteTarget.targetJobId → Job)
+  total += (await prisma.crmNoteTarget.deleteMany({
+    where: { targetJob: { userId, JobTitle: { label: { startsWith: "E2E " } } } },
+  })).count;
+
+  // 5c. CRM TaskTargets linked to E2E jobs (CrmTaskTarget.targetJobId → Job)
+  total += (await prisma.crmTaskTarget.deleteMany({
+    where: { targetJob: { userId, JobTitle: { label: { startsWith: "E2E " } } } },
+  })).count;
+
+  // 5d. JobContacts linked to E2E jobs (JobContact.jobId → Job, onDelete: Cascade)
+  total += (await prisma.jobContact.deleteMany({
+    where: { userId, job: { JobTitle: { label: { startsWith: "E2E " } } } },
+  })).count;
+
+  // 5e. CRM Interviews linked to E2E jobs (CrmInterview.jobId → Job, onDelete: Cascade)
+  total += (await prisma.crmInterview.deleteMany({
+    where: { userId, job: { JobTitle: { label: { startsWith: "E2E " } } } },
+  })).count;
+
+  // 5f. CRM Notes created by E2E user (orphan cleanup)
+  total += (await prisma.crmNote.deleteMany({
+    where: { userId, title: { startsWith: "E2E " } },
+  })).count;
+
+  // 5g. CRM Tasks created by E2E user (orphan cleanup)
+  total += (await prisma.crmTask.deleteMany({
+    where: { userId, title: { startsWith: "E2E " } },
+  })).count;
+
+  // 5h. Persons created by E2E user (Person.userId)
+  total += (await prisma.person.deleteMany({
+    where: { userId, firstName: { startsWith: "E2E " } },
+  })).count;
+
   // 6. Jobs with E2E titles (Job → Resume, Job → JobTitle, etc.)
   total += (await prisma.job.deleteMany({
     where: { userId, JobTitle: { label: { startsWith: "E2E " } } },
@@ -125,6 +165,11 @@ export async function cleanupStaleE2EData(): Promise<void> {
   // 14. Company Blacklist entries (E2E test entries)
   total += (await prisma.companyBlacklist.deleteMany({
     where: { userId, pattern: { startsWith: "E2E " } },
+  })).count;
+
+  // 15. CRM Blocklist entries (E2E test entries)
+  total += (await prisma.crmBlocklist.deleteMany({
+    where: { userId, handle: { startsWith: "E2E " } },
   })).count;
 
   if (total > 0) {

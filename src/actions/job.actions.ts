@@ -614,15 +614,13 @@ export const deleteJobById = async (
       throw new Error("Not authenticated");
     }
 
-    await prisma.$transaction([
-      prisma.jobContact.deleteMany({ where: { jobId, userId: user.id } }),
-      prisma.job.delete({
-        where: {
-          id: jobId,
-          userId: user.id,
-        },
-      }),
-    ]);
+    // CrmInterview, JobContact, etc. cascade-delete via onDelete: Cascade in schema
+    await prisma.job.delete({
+      where: {
+        id: jobId,
+        userId: user.id,
+      },
+    });
     return { success: true };
   } catch (error) {
     return handleError(error, "errors.deleteJob");

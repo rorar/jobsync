@@ -99,14 +99,13 @@ export const DELETE = withApiAuth(async (_req, { userId, params }) => {
 
   const existing = await prisma.job.findFirst({
     where: { id: jobId, userId },
-    select: { id: true, _count: { select: { Interview: true } } },
+    select: { id: true },
   });
   if (!existing) {
     return errorResponse("NOT_FOUND", "Job not found", 404);
   }
 
-  // Delete related interviews first (no cascade in schema, ADR-015 defense-in-depth)
-  await prisma.interview.deleteMany({ where: { jobId, job: { userId } } });
+  // Interview, CrmInterview, JobContact, etc. cascade-delete via onDelete rules in schema
   await prisma.job.delete({ where: { id: jobId } });
 
   return noContentResponse();
