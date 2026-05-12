@@ -1043,7 +1043,7 @@ model CrmTaskTarget {
   targetCompanyId String?
   targetCompany   Company?  @relation("CrmTaskTargetCompany", fields: [targetCompanyId], references: [id])
   targetJobId     String?
-  targetJob       Job?      @relation("CrmTaskTargetJob", fields: [targetJobId], references: [id], onDelete: SetNull)
+  targetJob       Job?      @relation("CrmTaskTargetJob", fields: [targetJobId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
   @@index([targetPersonId])
@@ -1078,7 +1078,7 @@ model CrmNoteTarget {
   targetCompanyId String?
   targetCompany   Company?  @relation("CrmNoteTargetCompany", fields: [targetCompanyId], references: [id])
   targetJobId     String?
-  targetJob       Job?      @relation("CrmNoteTargetJob", fields: [targetJobId], references: [id], onDelete: SetNull)
+  targetJob       Job?      @relation("CrmNoteTargetJob", fields: [targetJobId], references: [id], onDelete: Cascade)
 
   @@index([noteId])
   @@index([targetPersonId])

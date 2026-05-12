@@ -781,7 +781,7 @@ invariant SingleNotificationWriter {
   ensures: for_each direct_call to prisma.notification.create in src:
     call_site is in src/lib/notifications/channels/in-app.channel.ts
     or call_site is tracked as a legacy exception in ADR-030
-  note: "Currently 5 legitimate legacy direct-writers are patched inline to satisfy LateBoundLocale: 3 in degradation.ts, 2 in webhook.channel.ts. Tracked in ADR-030 as deferred work — the full refactor to event emission is out of scope for the current sprint."
+  note: "Currently 3 legitimate direct-writers: 1 in in-app.channel.ts (the channel itself), 2 in webhook.channel.ts (recursion guard). degradation.ts was refactored (IF-4) to route through channelRouter.route() instead of direct writes."
   note: "Any NEW direct `prisma.notification.create()` call site is a spec violation."
 }
 
