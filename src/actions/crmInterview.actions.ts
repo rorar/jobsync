@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { createEvent, DomainEventType } from "@/lib/events/event-types";
 import { eventBus } from "@/lib/events";
 import { ActionResult } from "@/models/actionResult";
+import { handleError } from "@/lib/utils";
 import {
   type InterviewStatus,
   type InterviewOutcome,
@@ -22,16 +23,6 @@ interface ScheduleInterviewInput {
   interviewDate: string; // ISO 8601
   location?: string | null;
   notes?: string | null;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function handleError(error: unknown): ActionResult<never> {
-  const message = error instanceof Error ? error.message : "Unknown error";
-  console.error("[crmInterview.actions]", message);
-  return { success: false, message };
 }
 
 const INTERVIEW_SELECT = {

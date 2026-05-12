@@ -4,17 +4,8 @@ import "server-only";
 import prisma from "@/lib/db";
 import { getCurrentUser } from "@/utils/user.utils";
 import { ActionResult } from "@/models/actionResult";
+import { handleError } from "@/lib/utils";
 import type { ActivityType } from "@/models/person.model";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function handleError(error: unknown): ActionResult<never> {
-  const message = error instanceof Error ? error.message : "Unknown error";
-  console.error("[crmActivityLog.actions]", message);
-  return { success: false, message };
-}
 
 // ---------------------------------------------------------------------------
 // Read queries

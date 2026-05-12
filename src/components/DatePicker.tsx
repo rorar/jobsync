@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ControllerRenderProps } from "react-hook-form";
-import { JobForm } from "@/models/job.model";
 import { useState } from "react";
 import { FormControl } from "./ui/form";
 
@@ -37,7 +36,7 @@ export function DatePicker({
   isEnabled,
   captionLayout,
 }: DatePickerProps) {
-  const { locale } = useTranslations();
+  const { t, locale } = useTranslations();
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
 
   return (
@@ -53,7 +52,7 @@ export function DatePicker({
             disabled={!isEnabled}
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
-            {field.value ? formatDateShort(field.value, locale) : <span>Pick a date</span>}
+            {field.value ? formatDateShort(field.value, locale) : <span>{t("jobs.pickADate")}</span>}
           </Button>
         </FormControl>
       </PopoverTrigger>
@@ -66,13 +65,13 @@ export function DatePicker({
             }}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select Preset" />
+              <SelectValue placeholder={t("jobs.selectPreset")} />
             </SelectTrigger>
             <SelectContent position="popper">
-              <SelectItem value="0">Today</SelectItem>
-              <SelectItem value="1">Tomorrow</SelectItem>
-              <SelectItem value="3">In 3 days</SelectItem>
-              <SelectItem value="7">In a week</SelectItem>
+              <SelectItem value="0">{t("jobs.presetToday")}</SelectItem>
+              <SelectItem value="1">{t("jobs.presetTomorrow")}</SelectItem>
+              <SelectItem value="3">{t("jobs.presetIn3Days")}</SelectItem>
+              <SelectItem value="7">{t("jobs.presetInAWeek")}</SelectItem>
             </SelectContent>
           </Select>
         )}
@@ -87,10 +86,6 @@ export function DatePicker({
             setIsPopoverOpen(false);
           }}
           className="rounded-md border"
-          //   disabled={(date) =>
-          //     field.value > new Date() || field.value < new Date("1900-01-01")
-          //   }
-          // initialFocus // NOTE: Enabling this cause error in safari browser
         />
       </PopoverContent>
     </Popover>

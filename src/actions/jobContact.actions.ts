@@ -4,14 +4,9 @@ import "server-only";
 import prisma from "@/lib/db";
 import { getCurrentUser } from "@/utils/user.utils";
 import { ActionResult } from "@/models/actionResult";
+import { handleError } from "@/lib/utils";
 import { createEvent, DomainEventType } from "@/lib/events/event-types";
 import { eventBus } from "@/lib/events";
-
-function handleError(error: unknown): ActionResult<never> {
-  const message = error instanceof Error ? error.message : "Unknown error";
-  console.error("[jobContact.actions]", message);
-  return { success: false, message };
-}
 
 export async function addJobContact(
   jobId: string,

@@ -4,17 +4,8 @@ import "server-only";
 import prisma from "@/lib/db";
 import { getCurrentUser } from "@/utils/user.utils";
 import { ActionResult } from "@/models/actionResult";
+import { handleError } from "@/lib/utils";
 import { type BlocklistType, CRM_CONFIG } from "@/models/person.model";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function handleError(error: unknown): ActionResult<never> {
-  const message = error instanceof Error ? error.message : "Unknown error";
-  console.error("[crmBlocklist.actions]", message);
-  return { success: false, message };
-}
 
 const VALID_BLOCKLIST_TYPES: BlocklistType[] = ["email", "phone", "domain"];
 

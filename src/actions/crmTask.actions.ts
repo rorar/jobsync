@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { createEvent, DomainEventType } from "@/lib/events/event-types";
 import { eventBus } from "@/lib/events";
 import { ActionResult } from "@/models/actionResult";
+import { handleError } from "@/lib/utils";
 import {
   type CrmTaskStatus,
   type PolymorphicTarget,
@@ -23,16 +24,6 @@ interface CreateTaskInput {
   description?: string | null;
   dueDate?: string | null;
   targets: PolymorphicTarget[];
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function handleError(error: unknown): ActionResult<never> {
-  const message = error instanceof Error ? error.message : "Unknown error";
-  console.error("[crmTask.actions]", message);
-  return { success: false, message };
 }
 
 const TASK_SELECT = {

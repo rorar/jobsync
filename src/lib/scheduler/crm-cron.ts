@@ -6,6 +6,7 @@
  * - Separate cron from the automation scheduler (bounded context separation)
  * - Activity log as idempotency guard (no extra schema columns)
  * - 15-minute interval — frequent enough for 24h reminders, lightweight for SQLite
+ * - isRunning guard prevents overlapping cycles (same pattern as enrichment semaphore)
  */
 
 import "server-only";
@@ -17,6 +18,7 @@ import { CRM_CONFIG } from "@/models/person.model";
 import { debugLog, debugError } from "@/lib/debug";
 
 let crmTask: ScheduledTask | null = null;
+let isRunning = false;
 
 const CRM_CRON_EXPRESSION = "*/15 * * * *"; // Every 15 minutes
 
@@ -37,24 +39,28 @@ async function expireAutoCreatedPersons(): Promise<number> {
 
   if (expired.length === 0) return 0;
 
+  let archived = 0;
   for (const person of expired) {
     try {
-      await prisma.person.update({
-        where: { id: person.id },
-        data: { status: "archived" },
-      });
+      // Transaction: archive + audit log atomically (Finding 2 fix)
+      await prisma.$transaction([
+        prisma.person.update({
+          where: { id: person.id },
+          data: { status: "archived" },
+        }),
+        prisma.crmActivityLog.create({
+          data: {
+            userId: person.userId,
+            activityType: "reminder_triggered",
+            actorId: null,
+            targetPersonId: person.id,
+            details: JSON.stringify({ reason: "retention_expired" }),
+            linkedRecordName: [person.firstName, person.lastName].filter(Boolean).join(" ") || null,
+          },
+        }),
+      ]);
 
-      await prisma.crmActivityLog.create({
-        data: {
-          userId: person.userId,
-          activityType: "reminder_triggered",
-          actorId: null,
-          targetPersonId: person.id,
-          details: JSON.stringify({ reason: "retention_expired" }),
-          linkedRecordName: [person.firstName, person.lastName].filter(Boolean).join(" ") || null,
-        },
-      });
-
+      // Event publish outside transaction — best-effort
       eventBus.publish(
         createEvent(DomainEventType.ReminderTriggered, {
           userId: person.userId,
@@ -62,12 +68,14 @@ async function expireAutoCreatedPersons(): Promise<number> {
           targetPersonId: person.id,
         }),
       );
+
+      archived++;
     } catch (error) {
       debugError("crm-cron", `Failed to expire person ${person.id}:`, error);
     }
   }
 
-  return expired.length;
+  return archived;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +88,6 @@ async function checkInterviewReminders(): Promise<number> {
     now.getTime() + CRM_CONFIG.interviewReminderBeforeHours * 60 * 60 * 1000,
   );
 
-  // Find interviews happening within the reminder window that haven't been reminded
   const upcoming = await prisma.crmInterview.findMany({
     where: {
       status: { in: ["scheduled", "rescheduled"] },
@@ -101,14 +108,13 @@ async function checkInterviewReminders(): Promise<number> {
   let reminded = 0;
   for (const interview of upcoming) {
     try {
-      // Idempotency: check if reminder already sent (activity log within last 24h)
+      // Idempotency: check by interviewId in details (Finding 5 fix — scoped to specific interview)
       const existing = await prisma.crmActivityLog.findFirst({
         where: {
           userId: interview.userId,
           activityType: "reminder_triggered",
-          targetJobId: interview.jobId,
           happenedAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
-          details: { contains: "interview_upcoming" },
+          details: { contains: `"interviewId":"${interview.id}"` },
         },
       });
       if (existing) continue;
@@ -155,9 +161,10 @@ async function checkInterviewReminders(): Promise<number> {
 async function checkOverdueTasks(): Promise<number> {
   const now = new Date();
 
+  // Finding 8 fix: include in_progress tasks (consistent with getCrmTasks overdue filter)
   const overdue = await prisma.crmTask.findMany({
     where: {
-      status: "pending",
+      status: { in: ["pending", "in_progress"] },
       dueDate: { lte: now },
     },
     select: { id: true, userId: true, title: true },
@@ -168,7 +175,7 @@ async function checkOverdueTasks(): Promise<number> {
   let reminded = 0;
   for (const task of overdue) {
     try {
-      // Idempotency: check if overdue reminder already sent (within last 24h)
+      // Idempotency: check by taskId in details (within last 24h)
       const existing = await prisma.crmActivityLog.findFirst({
         where: {
           userId: task.userId,
@@ -214,9 +221,16 @@ async function checkOverdueTasks(): Promise<number> {
 // ---------------------------------------------------------------------------
 
 async function runCrmTemporalRules(): Promise<void> {
-  debugLog("crm-cron", "[CRM-Cron] Checking temporal rules...");
+  // Finding 1 fix: prevent overlapping cycles
+  if (isRunning) {
+    debugLog("crm-cron", "[CRM-Cron] Previous cycle still running, skipping.");
+    return;
+  }
+  isRunning = true;
 
   try {
+    debugLog("crm-cron", "[CRM-Cron] Checking temporal rules...");
+
     const [expired, interviews, tasks] = await Promise.all([
       expireAutoCreatedPersons(),
       checkInterviewReminders(),
@@ -231,6 +245,8 @@ async function runCrmTemporalRules(): Promise<void> {
     }
   } catch (error) {
     debugError("crm-cron", "[CRM-Cron] Error running temporal rules:", error);
+  } finally {
+    isRunning = false;
   }
 }
 

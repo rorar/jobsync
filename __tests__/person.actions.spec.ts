@@ -220,7 +220,7 @@ describe("createPerson", () => {
     const result = await createPerson({ emails: minimalEmail });
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe("DB error");
+    expect(result.message).toBe("Server Error.");
   });
 });
 

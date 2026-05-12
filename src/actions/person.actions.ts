@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { createEvent, DomainEventType } from "@/lib/events/event-types";
 import { eventBus } from "@/lib/events";
 import { ActionResult } from "@/models/actionResult";
+import { handleError } from "@/lib/utils";
 import {
   type TypedEmail,
   type TypedPhone,
@@ -57,16 +58,6 @@ interface PersonUpdateInput {
   addressPostalCode?: string | null;
   addressCountry?: string | null;
   processingBasis?: ProcessingBasis;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function handleError(error: unknown): ActionResult<never> {
-  const message = error instanceof Error ? error.message : "Unknown error";
-  console.error("[person.actions]", message);
-  return { success: false, message };
 }
 
 // ---------------------------------------------------------------------------
@@ -186,12 +177,17 @@ export async function getPersons(filters?: {
     if (filters?.status) where.status = filters.status;
     if (filters?.dataSource) where.dataSource = filters.dataSource;
     if (filters?.search) {
+      // Escape LIKE metacharacters for SQLite (Finding 6 fix)
+      const s = filters.search
+        .replace(/\\/g, "\\\\")
+        .replace(/%/g, "\\%")
+        .replace(/_/g, "\\_");
       where.OR = [
-        { firstName: { contains: filters.search } },
-        { lastName: { contains: filters.search } },
-        { emails: { contains: filters.search } },
-        { headline: { contains: filters.search } },
-        { companies: { contains: filters.search } },
+        { firstName: { contains: s } },
+        { lastName: { contains: s } },
+        { emails: { contains: s } },
+        { headline: { contains: s } },
+        { companies: { contains: s } },
       ];
     }
 
@@ -275,7 +271,7 @@ export async function updatePerson(
     if (input.processingBasis !== undefined) data.processingBasis = input.processingBasis;
 
     await prisma.person.update({
-      where: { id: personId },
+      where: { id: personId, userId: user.id },
       data,
     });
 
@@ -306,7 +302,7 @@ export async function archivePerson(personId: string): Promise<ActionResult<{ id
     }
 
     await prisma.person.update({
-      where: { id: personId },
+      where: { id: personId, userId: user.id },
       data: { status: "archived" },
     });
 
@@ -330,7 +326,7 @@ export async function reactivatePerson(personId: string): Promise<ActionResult<{
     }
 
     await prisma.person.update({
-      where: { id: personId },
+      where: { id: personId, userId: user.id },
       data: { status: "active" },
     });
 
@@ -368,7 +364,7 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
       }),
       // Anonymize the person record
       prisma.person.update({
-        where: { id: personId },
+        where: { id: personId, userId: user.id },
         data: {
           status: "anonymized",
           firstName: null,
@@ -438,7 +434,7 @@ export async function mergePersons(
     const loserCompanies = parseCompanies(loser.companies).map((c) => ({ ...c, isPrimary: false }));
     const mergedCompanies = [...winnerCompanies, ...loserCompanies];
 
-    // Dedup conflicting JobContacts: remove loser's entries where winner already has one
+    // Pre-read conflicting JobContacts (read-only, safe outside transaction)
     const conflictingJobIds = await prisma.jobContact.findMany({
       where: { personId: loserId },
       select: { jobId: true },
@@ -452,13 +448,13 @@ export async function mergePersons(
     );
 
     const duplicateJobIds = conflictingJobIds.filter(id => winnerJobIds.has(id));
-    if (duplicateJobIds.length > 0) {
-      await prisma.jobContact.deleteMany({
-        where: { personId: loserId, jobId: { in: duplicateJobIds } },
-      });
-    }
 
+    // Finding 9 fix: dedup delete inside transaction to prevent race condition
     await prisma.$transaction([
+      // Remove conflicting JobContacts BEFORE transfer (prevents P2002 on unique constraint)
+      ...(duplicateJobIds.length > 0
+        ? [prisma.jobContact.deleteMany({ where: { personId: loserId, jobId: { in: duplicateJobIds } } })]
+        : []),
       // Transfer interviews
       prisma.crmInterview.updateMany({
         where: { personId: loserId },
