@@ -643,7 +643,7 @@ describe("DELETE /api/v1/jobs/:id", () => {
     await deleteJob(req, routeCtx(VALID_UUID));
 
     // Cascade handles Interview, CrmInterview, JobContact, CrmTaskTarget, CrmNoteTarget, CrmActivityLog
-    expect(mockPrisma.job.delete).toHaveBeenCalledWith({ where: { id: VALID_UUID } });
+    expect(mockPrisma.job.delete).toHaveBeenCalledWith({ where: { id: VALID_UUID, userId: "test-user-id" } });
     expect(mockPrisma.interview.deleteMany).not.toHaveBeenCalled();
   });
 });

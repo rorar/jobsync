@@ -314,7 +314,7 @@ model Interview {
   id           String    @id @default(uuid())
   createdAt    DateTime
   jobId        String
-  job          Job?      @relation(fields: [jobId], references: [id])
+  job          Job?      @relation(fields: [jobId], references: [id], onDelete: Cascade)
   interviewers Contact[]
 }
 

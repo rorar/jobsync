@@ -106,7 +106,7 @@ export const DELETE = withApiAuth(async (_req, { userId, params }) => {
   }
 
   // Interview, CrmInterview, JobContact, etc. cascade-delete via onDelete rules in schema
-  await prisma.job.delete({ where: { id: jobId } });
+  await prisma.job.delete({ where: { id: jobId, userId } });
 
   return noContentResponse();
 });
