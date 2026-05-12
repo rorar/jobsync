@@ -316,6 +316,8 @@ model Interview {
   jobId        String
   job          Job?      @relation(fields: [jobId], references: [id], onDelete: Cascade)
   interviewers Contact[]
+
+  @@index([jobId])
 }
 
 model Job {
@@ -1047,6 +1049,7 @@ model CrmTaskTarget {
 
   @@index([taskId])
   @@index([targetPersonId])
+  @@index([targetCompanyId])
   @@index([targetJobId])
 }
 
@@ -1082,6 +1085,7 @@ model CrmNoteTarget {
 
   @@index([noteId])
   @@index([targetPersonId])
+  @@index([targetCompanyId])
   @@index([targetJobId])
 }
 
