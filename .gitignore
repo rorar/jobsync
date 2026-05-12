@@ -79,3 +79,4 @@ AGENTS.md
 .devenv.flake.nix
 devenv.lock
 logs/sessions/
+.domain-experts/
