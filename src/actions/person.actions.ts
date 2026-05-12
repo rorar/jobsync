@@ -349,7 +349,11 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
       return { success: false, message: "crm.errors.alreadyAnonymized" };
     }
 
-    // Transaction: anonymize person + cascade delete targets
+    // Collect person emails for blocklist cleanup (before anonymization clears them)
+    const personEmails = parseEmails(person.emails)
+      .map((e) => e.email.trim().toLowerCase());
+
+    // Transaction: anonymize person + cascade delete targets (GDPR Art. 17)
     await prisma.$transaction([
       // Remove note targets
       prisma.crmNoteTarget.deleteMany({ where: { targetPersonId: personId } }),
@@ -357,11 +361,22 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
       prisma.crmTaskTarget.deleteMany({ where: { targetPersonId: personId } }),
       // Remove job contacts (Kette C)
       prisma.jobContact.deleteMany({ where: { personId } }),
-      // Anonymize activity log references
+      // Detach interviews + scrub free-text fields (G2 fix)
+      prisma.crmInterview.updateMany({
+        where: { personId },
+        data: { personId: null, notes: null, outcomeNotes: null },
+      }),
+      // Anonymize activity log references + scrub PII text fields (S5 fix)
       prisma.crmActivityLog.updateMany({
         where: { targetPersonId: personId },
-        data: { targetPersonId: null },
+        data: { targetPersonId: null, details: null, linkedRecordName: null },
       }),
+      // Remove blocklist entries for this person's emails/phones (S5 fix)
+      ...(personEmails.length > 0
+        ? [prisma.crmBlocklist.deleteMany({
+            where: { userId: user.id, handle: { in: personEmails } },
+          })]
+        : []),
       // Anonymize the person record
       prisma.person.update({
         where: { id: personId, userId: user.id },

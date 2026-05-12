@@ -28,6 +28,7 @@ jest.mock("@prisma/client", () => {
     jobContact: { findMany: jest.fn(), deleteMany: jest.fn(), updateMany: jest.fn() },
     crmInterview: { updateMany: jest.fn() },
     crmActivityLog: { updateMany: jest.fn() },
+    crmBlocklist: { deleteMany: jest.fn() },
     $transaction: jest.fn(),
   };
   return { PrismaClient: jest.fn(() => mPrismaClient) };
@@ -633,12 +634,14 @@ describe("anonymizePerson", () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
     (prisma.person.findFirst as jest.Mock).mockResolvedValue(makePerson({ status: "active" }));
 
-    // Simulate array-syntax $transaction resolving all operations
+    // Simulate array-syntax $transaction resolving all operations (G2/S5 fix adds 3 new ops)
     (prisma.$transaction as jest.Mock).mockResolvedValue([
       undefined, // crmNoteTarget.deleteMany
       undefined, // crmTaskTarget.deleteMany
       undefined, // jobContact.deleteMany
-      undefined, // crmActivityLog.updateMany
+      undefined, // crmInterview.updateMany (G2 fix)
+      undefined, // crmActivityLog.updateMany (S5 fix: now clears details + linkedRecordName)
+      undefined, // crmBlocklist.deleteMany (S5 fix)
       { id: "person-id", status: "anonymized" }, // person.update
     ]);
 
@@ -653,7 +656,7 @@ describe("anonymizePerson", () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
     (prisma.person.findFirst as jest.Mock).mockResolvedValue(makePerson({ status: "active" }));
     (prisma.$transaction as jest.Mock).mockResolvedValue([
-      undefined, undefined, undefined, undefined, { id: "person-id" },
+      undefined, undefined, undefined, undefined, undefined, undefined, { id: "person-id" },
     ]);
 
     await anonymizePerson("person-id");
@@ -669,7 +672,7 @@ describe("anonymizePerson", () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
     (prisma.person.findFirst as jest.Mock).mockResolvedValue(makePerson({ status: "active" }));
     (prisma.$transaction as jest.Mock).mockResolvedValue([
-      undefined, undefined, undefined, undefined, { id: "person-id" },
+      undefined, undefined, undefined, undefined, undefined, undefined, { id: "person-id" },
     ]);
 
     await anonymizePerson("person-id");
