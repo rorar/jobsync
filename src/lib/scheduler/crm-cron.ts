@@ -17,8 +17,22 @@ import { createEvent, DomainEventType } from "@/lib/events/event-types";
 import { CRM_CONFIG } from "@/models/person.model";
 import { debugLog, debugError } from "@/lib/debug";
 
-let crmTask: ScheduledTask | null = null;
-let isRunning = false;
+// globalThis guard: survives Next.js HMR module reloads (same pattern as RunCoordinator)
+const CRM_CRON_KEY = "__crmCronTask";
+const CRM_CRON_RUNNING_KEY = "__crmCronRunning";
+
+function getCrmTask(): ScheduledTask | null {
+  return (globalThis as Record<string, unknown>)[CRM_CRON_KEY] as ScheduledTask | null ?? null;
+}
+function setCrmTask(task: ScheduledTask | null): void {
+  (globalThis as Record<string, unknown>)[CRM_CRON_KEY] = task;
+}
+function getIsRunning(): boolean {
+  return ((globalThis as Record<string, unknown>)[CRM_CRON_RUNNING_KEY] as boolean) ?? false;
+}
+function setIsRunning(v: boolean): void {
+  (globalThis as Record<string, unknown>)[CRM_CRON_RUNNING_KEY] = v;
+}
 
 const CRM_CRON_EXPRESSION = "*/15 * * * *"; // Every 15 minutes
 
@@ -221,21 +235,33 @@ async function checkOverdueTasks(): Promise<number> {
 // ---------------------------------------------------------------------------
 
 async function runCrmTemporalRules(): Promise<void> {
-  // Finding 1 fix: prevent overlapping cycles
-  if (isRunning) {
+  // Prevent overlapping cycles (globalThis-backed guard)
+  if (getIsRunning()) {
     debugLog("crm-cron", "[CRM-Cron] Previous cycle still running, skipping.");
     return;
   }
-  isRunning = true;
+  setIsRunning(true);
 
   try {
     debugLog("crm-cron", "[CRM-Cron] Checking temporal rules...");
 
-    const [expired, interviews, tasks] = await Promise.all([
+    // Promise.allSettled: one failing rule must not block the others
+    const results = await Promise.allSettled([
       expireAutoCreatedPersons(),
       checkInterviewReminders(),
       checkOverdueTasks(),
     ]);
+
+    const expired = results[0].status === "fulfilled" ? results[0].value : 0;
+    const interviews = results[1].status === "fulfilled" ? results[1].value : 0;
+    const tasks = results[2].status === "fulfilled" ? results[2].value : 0;
+
+    // Log individual rule failures
+    for (const [i, label] of ["expirePersons", "interviewReminders", "overdueTasks"].entries()) {
+      if (results[i].status === "rejected") {
+        debugError("crm-cron", `[CRM-Cron] Rule ${label} failed:`, (results[i] as PromiseRejectedResult).reason);
+      }
+    }
 
     if (expired > 0 || interviews > 0 || tasks > 0) {
       debugLog(
@@ -246,7 +272,7 @@ async function runCrmTemporalRules(): Promise<void> {
   } catch (error) {
     debugError("crm-cron", "[CRM-Cron] Error running temporal rules:", error);
   } finally {
-    isRunning = false;
+    setIsRunning(false);
   }
 }
 
@@ -255,7 +281,7 @@ async function runCrmTemporalRules(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export function startCrmCron(): void {
-  if (crmTask) {
+  if (getCrmTask()) {
     debugLog("crm-cron", "[CRM-Cron] Already running");
     return;
   }
@@ -267,17 +293,19 @@ export function startCrmCron(): void {
 
   debugLog("crm-cron", `[CRM-Cron] Starting with schedule: ${CRM_CRON_EXPRESSION}`);
 
-  crmTask = cron.schedule(CRM_CRON_EXPRESSION, runCrmTemporalRules, {
+  const task = cron.schedule(CRM_CRON_EXPRESSION, runCrmTemporalRules, {
     timezone: process.env.TZ || "UTC",
   });
+  setCrmTask(task);
 
   debugLog("crm-cron", "[CRM-Cron] Started successfully");
 }
 
 export function stopCrmCron(): void {
-  if (crmTask) {
-    crmTask.stop();
-    crmTask = null;
+  const task = getCrmTask();
+  if (task) {
+    task.stop();
+    setCrmTask(null);
     debugLog("crm-cron", "[CRM-Cron] Stopped");
   }
 }
