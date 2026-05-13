@@ -1,0 +1,468 @@
+-- allium: 3
+-- gdpr-data-rights.allium
+--
+-- GDPR data rights for the JobSync user/operator (Art. 15, 17, 20, 5(1)(c), 5(1)(e))
+--
+-- Scope:
+--   S2 — User data export / portability (full platform data, not just CRM Person)
+--   S3 — AI prompt PII minimization (strip contact PII before sending to cloud providers)
+--   S4 — System-wide retention policies (Notifications, EnrichmentResult/Log, StagedVacancy,
+--         AdminAuditLog, CrmActivityLog, orphaned LogoAsset files)
+--
+-- Excludes:
+--   - CRM Person-level GDPR (see crm-gdpr.allium — Person as data subject)
+--   - Account deletion (see auth-session.allium — S1 already implemented)
+--   - Consent management / cookie banner (self-hosted, no tracking)
+--   - Breach notification (operational, not domain logic)
+--   - Data Processing Agreements with AI vendors (legal, not code)
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity User {
+    id: String
+    email: String
+}
+
+external entity Job {
+    user: User
+    title: String?
+    created_at: Timestamp
+}
+
+external entity Person {
+    user: User
+    name: String?
+    emails: List<String>
+}
+
+external entity Resume {
+    title: String
+    contact_info: ContactInfo?
+}
+
+external entity ContactInfo {
+    first_name: String
+    last_name: String
+    email: String
+    phone: String
+    address: String?
+    headline: String
+}
+
+external entity AiManifest {
+    module_id: String
+    is_local: Boolean
+}
+
+external entity Notification {
+    user: User
+    created_at: Timestamp
+}
+
+external entity EnrichmentResult {
+    user: User
+    expires_at: Timestamp
+}
+
+external entity EnrichmentLog {
+    user: User
+    created_at: Timestamp
+}
+
+external entity StagedVacancy {
+    user: User
+    status: String
+    trashed_at: Timestamp?
+    updated_at: Timestamp
+}
+
+external entity AdminAuditLog {
+    timestamp: Timestamp
+    action: String
+}
+
+external entity CrmActivityLog {
+    user: User
+    happened_at: Timestamp
+}
+
+external entity LogoAsset {
+    user: User
+    company_id: String?
+    file_path: String
+    created_at: Timestamp
+}
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value UserDataExport {
+    -- Full user data export for Art. 15 access / Art. 20 portability.
+    -- Extends beyond CRM PersonDataExport to cover ALL platform data.
+    export_version: String
+    exported_at: Timestamp
+    data_subject_email: String
+    jobs: List<String>
+    persons: List<String>
+    interviews: List<String>
+    crm_tasks: List<String>
+    crm_notes: List<String>
+    crm_activity_log_count: Integer
+    profile_and_resumes: List<String>
+    questions: List<String>
+    activities: List<String>
+    notifications_count: Integer
+    user_settings: String
+    staged_vacancies_count: Integer
+    automations: List<String>
+    tags: List<String>
+    company_blacklist: List<String>
+    job_status_history_count: Integer
+}
+
+value ExportMetadata {
+    -- GDPR-mandated metadata accompanying every export.
+    -- Art. 15(1)(a-h): purposes, categories, recipients, retention, rights.
+    export_version: String
+    exported_at: Timestamp
+    data_subject_email: String
+    retention_policies: List<RetentionPolicyInfo>
+    processing_purposes: List<ProcessingPurposeInfo>
+    third_party_recipients: List<ThirdPartyRecipientInfo>
+    data_categories: List<String>
+}
+
+value RetentionPolicyInfo {
+    data_category: String
+    retention_period: String
+    basis: String
+}
+
+value ProcessingPurposeInfo {
+    purpose: String
+    legal_basis: String
+    description: String
+}
+
+value ThirdPartyRecipientInfo {
+    name: String
+    country: String
+    purpose: String
+    safeguard: String
+}
+
+value PiiStrippingResult {
+    -- Outcome of PII stripping on resume/job text before AI prompt.
+    original_length: Integer
+    stripped_length: Integer
+    placeholders_inserted: Integer
+    truncated: Boolean
+}
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum PiiPlaceholder {
+    -- Placeholder tokens replacing contact PII in AI prompts.
+    name_placeholder
+    email_placeholder
+    phone_placeholder
+    address_placeholder
+}
+
+enum RetentionRuleId {
+    notification_cleanup
+    enrichment_result_expiry
+    enrichment_log_cleanup
+    staged_vacancy_cleanup
+    admin_audit_log_archive
+    crm_activity_log_cleanup
+    logo_asset_orphan_cleanup
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    -- S2: Export rate limiting
+    export_rate_limit_window: Duration = 1.hours
+    export_max_per_window: Integer = 1
+
+    -- S3: Text limits for AI prompts
+    cloud_resume_char_limit: Integer = 4000
+    cloud_job_char_limit: Integer = 3500
+    local_resume_char_limit: Integer = 1500
+    local_job_char_limit: Integer = 1200
+
+    -- S4: Retention periods
+    notification_retention: Duration = 30.days
+    enrichment_log_retention: Duration = 90.days
+    staged_vacancy_retention: Duration = 30.days
+    admin_audit_log_retention: Duration = 365.days
+    crm_activity_log_retention: Duration = 1095.days
+    logo_asset_orphan_grace: Duration = 7.days
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- -----------------------------------------------------------------------------
+-- S2: User Data Export (Art. 15 Access + Art. 20 Portability)
+-- -----------------------------------------------------------------------------
+
+rule ExportUserData {
+    -- User requests a full export of their platform data.
+    -- Produces a ZIP containing JSON per aggregate + metadata.json.
+    -- Rate-limited to prevent abuse.
+    when: RequestUserDataExport(user)
+
+    requires: within_rate_limit(user, config.export_rate_limit_window, config.export_max_per_window)
+
+    ensures: UserDataExportCompleted(
+        user: user,
+        export: collect_user_data(user),
+        metadata: build_export_metadata(user)
+    )
+
+    @guidance
+        -- Implementation: server action exportUserData() aggregates all
+        -- userId-scoped Prisma models into JSON, bundles as ZIP with
+        -- metadata.json. Encrypted fields (ApiKey, SMTP password, VAPID,
+        -- WebhookEndpoint secret, ConnectedAccount tokens) are EXCLUDED.
+        -- JSON columns (Person.emails/phones/companies/socialProfiles,
+        -- Notification.data/titleParams/reasonParams,
+        -- StagedVacancy.industryCodes/occupationUris/workingLanguages)
+        -- are parsed with existing helpers before export.
+        -- File/LogoAsset: metadata only (fileName, fileType, sourceUrl),
+        -- no binary content.
+        -- Rate limit: sliding window pattern (globalThis Map, 1/hour).
+        -- ZIP streaming via archiver library (not buffered in memory).
+}
+
+rule IncludeExportMetadata {
+    -- Every export must include GDPR-mandated metadata.
+    -- Art. 15(1)(a-h): purposes, categories, recipients, retention.
+    when: UserDataExportCompleted(user, export, metadata)
+
+    ensures: metadata.retention_policies.count > 0
+    ensures: metadata.processing_purposes.count > 0
+    ensures: metadata.third_party_recipients.count > 0
+
+    @guidance
+        -- metadata.json includes:
+        -- - retention_policies: per data category (30d notifications,
+        --   90d enrichment logs, 365d admin audit, 1095d CRM timeline,
+        --   "until account deletion" for user content)
+        -- - processing_purposes: job tracking (contract), AI matching
+        --   (consent), enrichment (legitimate interest), CRM (legitimate interest)
+        -- - third_party_recipients: OpenAI (US, SCCs), DeepSeek (CN, SCCs),
+        --   Logo.dev (US, SCCs), EURES/ESCO (EU institution)
+        -- Recipients list notes that PII is stripped for AI providers (S3).
+}
+
+-- -----------------------------------------------------------------------------
+-- S3: AI Prompt PII Minimization (Art. 5(1)(c) Data Minimization)
+-- -----------------------------------------------------------------------------
+
+rule StripContactPiiForCloudProviders {
+    -- When building AI prompts for cloud providers (OpenAI, DeepSeek),
+    -- replace contact PII with placeholders. Local providers (Ollama)
+    -- keep full PII since data never leaves the user's machine.
+    when: BuildAiPrompt(resume, job, provider)
+
+    requires: not provider.is_local
+
+    ensures: strip_contact_pii(resume.contact_info)
+    ensures: strip_email_phone_patterns(job)
+    ensures: apply_text_limits(resume, config.cloud_resume_char_limit)
+    ensures: apply_text_limits(job, config.cloud_job_char_limit)
+
+    @guidance
+        -- Contact PII replacements in convertResumeToText():
+        --   firstName + lastName -> "[NAME]"
+        --   email -> "[EMAIL]"
+        --   phone -> "[PHONE]"
+        --   address -> "[ADDRESS]"
+        -- Headline is KEPT (professional identity, needed for matching).
+        -- Work experience (company, title, location, dates) is KEPT
+        -- (essential for AI job matching quality).
+        --
+        -- ACCEPTED TRADE-OFF: Work experience constitutes employment
+        -- history PII (Art. 4(1)) but stripping it would render AI
+        -- matching useless. Documented in DPA recommendations.
+        --
+        -- Job descriptions: apply regex-based email/phone pattern
+        -- stripping via strip_email_phone_patterns() since job text
+        -- is user-editable and may contain contact details pasted
+        -- from job postings.
+}
+
+rule KeepFullPiiForLocalProviders {
+    -- Local AI providers (Ollama) process data on the user's machine.
+    -- No PII stripping needed, but TEXT_LIMITS still apply for model context.
+    when: BuildAiPrompt(resume, job, provider)
+
+    requires: provider.is_local
+
+    ensures: apply_text_limits(resume, config.local_resume_char_limit)
+    ensures: apply_text_limits(job, config.local_job_char_limit)
+}
+
+-- -----------------------------------------------------------------------------
+-- S4: Retention Policies (Art. 5(1)(e) Storage Limitation)
+-- -----------------------------------------------------------------------------
+
+rule PurgeOldNotifications {
+    -- Delete read and unread notifications older than retention period.
+    -- No FK relations FROM Notification — safe to delete directly.
+    when: RunRetentionSweep()
+
+    ensures:
+        for n in Notifications:
+            if n.created_at + config.notification_retention < now:
+                not exists n
+
+    @guidance
+        -- Batched DELETE WHERE createdAt < cutoff.
+        -- Index (userId, createdAt) supports efficient range scan.
+        -- Log: { kind: "retention-sweep", rule: "purgeOldNotifications",
+        --         deletedCount, cutoffDate }
+}
+
+rule PurgeExpiredEnrichmentResults {
+    -- Delete enrichment cache entries past their TTL.
+    -- TTL is stored per-record in expiresAt field.
+    when: RunRetentionSweep()
+
+    ensures:
+        for er in EnrichmentResults:
+            if er.expires_at < now:
+                not exists er
+
+    @guidance
+        -- DELETE WHERE expiresAt < NOW().
+        -- Index (expiresAt) supports efficient range scan.
+}
+
+rule PurgeOldEnrichmentLogs {
+    -- Delete enrichment audit trail entries older than retention.
+    -- Append-only table, no FK dependencies.
+    when: RunRetentionSweep()
+
+    ensures:
+        for el in EnrichmentLogs:
+            if el.created_at + config.enrichment_log_retention < now:
+                not exists el
+}
+
+rule PurgeOldStagedVacancies {
+    -- Auto-run existing retention cleanup for trashed/dismissed vacancies.
+    -- CRITICAL: requires per-user iteration (runRetentionCleanup takes userId).
+    when: RunRetentionSweep()
+
+    ensures:
+        for sv in StagedVacancies:
+            if sv.trashed_at != null and sv.trashed_at + config.staged_vacancy_retention < now:
+                not exists sv
+            if sv.status = "dismissed" and sv.updated_at + config.staged_vacancy_retention < now:
+                not exists sv
+
+    @guidance
+        -- Implementation: query DISTINCT userId from StagedVacancy,
+        -- then call retentionService.cleanup(userId, 30) sequentially
+        -- per user (SQLite single-writer, no parallelism needed).
+        -- Existing retention.service.ts handles DedupHash preservation.
+}
+
+rule ArchiveAndPurgeOldAdminAuditLogs {
+    -- Archive admin audit logs to file before deleting from DB.
+    -- Archive-before-delete: compliance-relevant data.
+    when: RunRetentionSweep()
+
+    ensures:
+        for al in AdminAuditLogs:
+            if al.timestamp + config.admin_audit_log_retention < now:
+                archive_to_file(al)
+                not exists al
+
+    @guidance
+        -- 1. Query records WHERE timestamp < cutoff
+        -- 2. Append to /data/audit-archive/YYYY-MM.jsonl
+        -- 3. DELETE from DB
+        -- Log: { kind: "retention-sweep", rule: "archiveAndPurgeAdminAuditLogs",
+        --         archivedCount, cutoffDate }
+}
+
+rule PurgeOldCrmActivityLogs {
+    -- Delete CRM timeline entries older than retention window.
+    -- Config value from CRM_CONFIG.timelineRetentionDays = 1095.
+    when: RunRetentionSweep()
+
+    ensures:
+        for cal in CrmActivityLogs:
+            if cal.happened_at + config.crm_activity_log_retention < now:
+                not exists cal
+}
+
+rule CleanOrphanedLogoAssetFiles {
+    -- Remove logo files on disk that have no matching DB record.
+    -- Orphans occur when Company cascade-deletes LogoAsset row
+    -- but file on disk remains.
+    when: RunRetentionSweep()
+
+    ensures:
+        for la in LogoAssets:
+            if la.company_id = null and la.created_at + config.logo_asset_orphan_grace < now:
+                delete_file(la.file_path)
+                not exists la
+
+    @guidance
+        -- Also scan /data/logos/ filesystem for files without matching
+        -- LogoAsset DB record (reverse orphan check).
+        -- fs.readdir per userId dir, compare against DB query.
+        -- Fire-and-forget cleanup, non-blocking.
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant ExportContainsMetadata {
+    -- Every user data export must include GDPR metadata
+    -- (retention policies, processing purposes, third-party recipients).
+    for e in ExportMetadatas:
+        e.retention_policies.count > 0
+        and e.processing_purposes.count > 0
+        and e.third_party_recipients.count > 0
+}
+
+invariant CloudProvidersNeverReceiveContactPii {
+    -- AI prompts sent to non-local providers must not contain
+    -- raw contact PII (name, email, phone, address).
+    -- Headline and work experience are accepted trade-offs.
+    for m in AiManifests:
+        not m.is_local implies prompts_stripped_of_contact_pii(m)
+}
+
+invariant RetentionPeriodsMatchConfig {
+    -- Every retention rule uses config-driven periods, not hardcoded values.
+    -- Verified structurally by referencing config.* in all temporal comparisons.
+    for n in Notifications:
+        n.created_at + config.notification_retention < now implies not exists n
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Should the user data export include StagedVacancy records? They are transient pipeline data, not user-created content. Including them adds completeness but also bulk."
+
+open question "Should work experience fields (company, title, location, dates) be stripped for cloud AI providers? Currently kept because AI matching requires employment context. If stripped, matching quality degrades significantly. Document as accepted GDPR trade-off in DPA."
+
+open question "Should AdminAuditLog archive files on the Docker volume be included in the user data export ZIP? They contain admin action history but may reference other users in multi-user deployments."
