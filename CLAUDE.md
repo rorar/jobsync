@@ -512,8 +512,9 @@ The contract is additive — callers that only destructure `{ success }` keep wo
 
 **Current direct writers** (all patched to satisfy the late-binding invariant inline, pending a full event-emission refactor):
 - `src/lib/notifications/channels/in-app.channel.ts` — legitimate (the channel implementation)
-- `src/lib/connector/degradation.ts` — 3 sites
 - `src/lib/notifications/channels/webhook.channel.ts` — 2 sites
+
+Note: `degradation.ts` was a direct writer with 3 sites until Sprint C (2026-05-13). Now routes via `AutomationDegraded` domain events → `notification-dispatcher.ts` handles fan-out.
 
 **Removed in Sprint 1 CRIT-A1**: `src/actions/module.actions.ts:deactivateModule` used to call `prisma.notification.createMany` directly. It now emits `ModuleDeactivated` via the domain event bus, and `notification-dispatcher.handleModuleDeactivated` is the single writer. As a side-effect, users now receive one summary notification per module deactivation (instead of N notifications, one per paused automation), and the notification goes through all enabled channels (in-app + webhook + email + push) instead of only in-app.
 
