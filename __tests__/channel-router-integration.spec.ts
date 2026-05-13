@@ -30,7 +30,10 @@ import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
 
 const mockPrisma = prisma as jest.Mocked<typeof prisma>;
 
-function makeContext(prefsOverride?: Partial<NotificationPreferences>): DispatchContext {
+function makeContext(
+  prefsOverride?: Partial<NotificationPreferences>,
+  ctxOverride?: Record<string, unknown>,
+): DispatchContext {
   const preferences: NotificationPreferences = {
     ...DEFAULT_NOTIFICATION_PREFERENCES,
     ...prefsOverride,
@@ -53,6 +56,7 @@ function makeContext(prefsOverride?: Partial<NotificationPreferences>): Dispatch
     webhookAvailable: false,
     inAppAvailable: true,
     vapidSubject: "mailto:noreply@jobsync.local",
+    ...ctxOverride,
   } as DispatchContext;
 }
 
@@ -122,20 +126,8 @@ describe("ChannelRouter + InAppChannel integration (PreferenceSuppression invari
   });
 
   it("suppresses during quiet hours", async () => {
-    // Create a time that's definitely within quiet hours
-    const now = new Date("2026-05-13T03:00:00Z"); // 3 AM UTC
-    // Monkey-patch Date to return our fixed time for shouldNotify
-    const origDate = global.Date;
-    const fixedDate = class extends origDate {
-      constructor(...args: unknown[]) {
-        if (args.length === 0) return new origDate(now) as Date;
-        // @ts-expect-error — constructor spread
-        return new origDate(...args) as Date;
-      }
-    } as DateConstructor;
-    fixedDate.now = () => now.getTime();
-    global.Date = fixedDate;
-
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-05-13T03:00:00Z")); // 3 AM UTC — within 22:00-07:00
     try {
       const ctx = makeContext({
         quietHours: { enabled: true, start: "22:00", end: "07:00", timezone: "UTC" },
@@ -146,7 +138,7 @@ describe("ChannelRouter + InAppChannel integration (PreferenceSuppression invari
       expect(result.results).toHaveLength(0);
       expect(mockPrisma.notification.create).not.toHaveBeenCalled();
     } finally {
-      global.Date = origDate;
+      jest.useRealTimers();
     }
   });
 
@@ -177,6 +169,57 @@ describe("ChannelRouter + InAppChannel integration (PreferenceSuppression invari
         actorId: "jsearch",
         titleKey: "notifications.authFailure.title",
       }),
+    });
+  });
+
+  describe("multi-channel suppression (A-01: spec demands ALL channels)", () => {
+    let webhookDispatch: jest.Mock;
+    let emailDispatch: jest.Mock;
+
+    beforeEach(() => {
+      webhookDispatch = jest.fn().mockResolvedValue({ success: true, channel: "webhook" });
+      emailDispatch = jest.fn().mockResolvedValue({ success: true, channel: "email" });
+      // Add mock channels alongside real InAppChannel
+      router.register({ name: "webhook", dispatch: webhookDispatch } as Parameters<typeof router.register>[0]);
+      router.register({ name: "email", dispatch: emailDispatch } as Parameters<typeof router.register>[0]);
+    });
+
+    it("suppresses ALL channels when global kill switch is off", async () => {
+      const ctx = makeContext({ enabled: false });
+      const result = await router.route(draft, ctx);
+
+      expect(result.results).toHaveLength(0);
+      expect(mockPrisma.notification.create).not.toHaveBeenCalled();
+      expect(webhookDispatch).not.toHaveBeenCalled();
+      expect(emailDispatch).not.toHaveBeenCalled();
+    });
+
+    it("suppresses ALL channels when perType disables the notification type", async () => {
+      const ctx = makeContext(
+        { channels: { inApp: true, webhook: true, email: true, push: false }, perType: { auth_failure: { enabled: false } } },
+        { webhookAvailable: true, emailAvailable: true, webhookEndpoints: [{ id: "ep-1" }] },
+      );
+
+      const result = await router.route(draft, ctx);
+
+      expect(result.results).toHaveLength(0);
+      expect(mockPrisma.notification.create).not.toHaveBeenCalled();
+      expect(webhookDispatch).not.toHaveBeenCalled();
+      expect(emailDispatch).not.toHaveBeenCalled();
+    });
+
+    it("per-channel selectivity: disabling webhook still delivers to inApp (A-03)", async () => {
+      const ctx = makeContext(
+        { channels: { inApp: true, webhook: false, email: false, push: false } },
+        { webhookAvailable: true },
+      );
+
+      const result = await router.route(draft, ctx);
+
+      // InApp delivers, webhook suppressed by channel preference
+      expect(result.anySuccess).toBe(true);
+      expect(mockPrisma.notification.create).toHaveBeenCalledTimes(1);
+      expect(webhookDispatch).not.toHaveBeenCalled();
     });
   });
 });
