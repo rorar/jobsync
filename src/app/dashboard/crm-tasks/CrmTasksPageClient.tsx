@@ -105,7 +105,7 @@ export default function CrmTasksPageClient() {
       setError(result.message ? t(result.message) : t("crm.unknownError"));
     }
     setLoading(false);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadTasks();

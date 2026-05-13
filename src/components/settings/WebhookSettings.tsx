@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Card,
   CardContent,
@@ -102,11 +102,7 @@ export default function WebhookSettings() {
   // Expanded endpoint details
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    fetchEndpoints();
-  }, []);
-
-  const fetchEndpoints = async () => {
+  const fetchEndpoints = useCallback(async () => {
     setIsLoading(true);
     setError(false);
     try {
@@ -121,7 +117,11 @@ export default function WebhookSettings() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchEndpoints();
+  }, [fetchEndpoints]);
 
   /** Client-side URL validation (UX only, server still validates) */
   const validateUrl = (value: string): string | null => {

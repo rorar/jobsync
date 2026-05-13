@@ -79,6 +79,179 @@ const OUTCOME_CLASSES: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Sub-components (module-level to avoid re-creation on every render)
+// ---------------------------------------------------------------------------
+
+function StatusBadge({ status, t }: { status: string; t: (key: string) => string }) {
+  return (
+    <Badge variant={STATUS_VARIANT[status] ?? "outline"}>
+      {t(`crm.interviewStatus.${status}`)}
+    </Badge>
+  );
+}
+
+function OutcomeBadge({ outcome, t }: { outcome: string; t: (key: string) => string }) {
+  return (
+    <Badge className={OUTCOME_CLASSES[outcome] ?? ""} variant="outline">
+      {t(`crm.outcome.${outcome}`)}
+    </Badge>
+  );
+}
+
+function InterviewCard({
+  interview,
+  showActions,
+  t,
+  locale,
+  getJobTitle,
+  getCompany,
+  getPersonName,
+  onComplete,
+  onReschedule,
+  onCancel,
+}: {
+  interview: Interview;
+  showActions: boolean;
+  t: (key: string) => string;
+  locale: string;
+  getJobTitle: (interview: Interview) => string;
+  getCompany: (interview: Interview) => string;
+  getPersonName: (interview: Interview) => string;
+  onComplete: (interview: Interview) => void;
+  onReschedule: (interview: Interview) => void;
+  onCancel: (id: string) => void;
+}) {
+  const status = interview.status as string;
+  const outcome = interview.outcome as string | null;
+  const date = interview.interviewDate
+    ? formatDateShort(new Date(interview.interviewDate as string), locale)
+    : "\u2014";
+  const location = interview.location as string | null;
+  const personName = getPersonName(interview);
+
+  return (
+    <Card className="group">
+      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Left: info */}
+        <div className="flex-1 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Briefcase className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="font-medium">{getJobTitle(interview)}</span>
+            <StatusBadge status={status} t={t} />
+            {status === "completed" && outcome && <OutcomeBadge outcome={outcome} t={t} />}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            {getCompany(interview) && (
+              <span className="flex items-center gap-1">
+                <Building2 className="h-3.5 w-3.5" />
+                {getCompany(interview)}
+              </span>
+            )}
+            <span className="flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" />
+              {date}
+            </span>
+            {location && (
+              <span className="flex items-center gap-1">
+                <MapPin className="h-3.5 w-3.5" />
+                {location}
+              </span>
+            )}
+            {personName && (
+              <span className="flex items-center gap-1">
+                <User className="h-3.5 w-3.5" />
+                {personName}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Right: actions */}
+        {showActions && (status === "scheduled" || status === "rescheduled") && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">{t("crm.actions")}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => onComplete(interview)}
+              >
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                {t("crm.completeInterview")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onReschedule(interview)}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                {t("crm.rescheduleInterview")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => onCancel(interview.id as string)}
+              >
+                <XCircle className="mr-2 h-4 w-4" />
+                {t("crm.cancelInterview")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function EmptyState({ t, onSchedule }: { t: (key: string) => string; onSchedule: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+      <Calendar className="h-12 w-12 text-muted-foreground" />
+      <div className="space-y-1">
+        <p className="text-lg font-medium">{t("crm.noInterviews")}</p>
+        <p className="text-sm text-muted-foreground">{t("crm.noInterviewsDescription")}</p>
+      </div>
+      <Button onClick={onSchedule}>
+        <Plus className="mr-2 h-4 w-4" />
+        {t("crm.scheduleInterview")}
+      </Button>
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Skeleton key={i} className="h-20 w-full rounded-lg" />
+      ))}
+    </div>
+  );
+}
+
+function ErrorState({
+  t,
+  error,
+  onRetry,
+}: {
+  t: (key: string) => string;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+      <AlertTriangle className="h-12 w-12 text-destructive" />
+      <p className="text-sm text-muted-foreground">{error}</p>
+      <Button variant="outline" onClick={onRetry}>
+        <RefreshCw className="mr-2 h-4 w-4" />
+        {t("crm.retry")}
+      </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -131,7 +304,7 @@ export default function InterviewsPageClient() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadInterviews();
@@ -238,149 +411,20 @@ export default function InterviewsPageClient() {
   };
 
   // ---------------------------------------------------------------------------
-  // Sub-components
+  // Callbacks for extracted sub-components
   // ---------------------------------------------------------------------------
 
-  const StatusBadge = ({ status }: { status: string }) => (
-    <Badge variant={STATUS_VARIANT[status] ?? "outline"}>
-      {t(`crm.interviewStatus.${status}`)}
-    </Badge>
-  );
+  const handleCompleteClick = useCallback((interview: Interview) => {
+    setCompleteTarget(interview);
+    setCompleteDialogOpen(true);
+  }, []);
 
-  const OutcomeBadge = ({ outcome }: { outcome: string }) => (
-    <Badge className={OUTCOME_CLASSES[outcome] ?? ""} variant="outline">
-      {t(`crm.outcome.${outcome}`)}
-    </Badge>
-  );
+  const handleRescheduleClick = useCallback((interview: Interview) => {
+    setRescheduleTarget(interview);
+    setRescheduleDialogOpen(true);
+  }, []);
 
-  const InterviewCard = ({
-    interview,
-    showActions,
-  }: {
-    interview: Interview;
-    showActions: boolean;
-  }) => {
-    const status = interview.status as string;
-    const outcome = interview.outcome as string | null;
-    const date = interview.interviewDate
-      ? formatDateShort(new Date(interview.interviewDate as string), locale)
-      : "—";
-    const location = interview.location as string | null;
-    const personName = getPersonName(interview);
-
-    return (
-      <Card className="group">
-        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-          {/* Left: info */}
-          <div className="flex-1 space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <Briefcase className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="font-medium">{getJobTitle(interview)}</span>
-              <StatusBadge status={status} />
-              {status === "completed" && outcome && <OutcomeBadge outcome={outcome} />}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-              {getCompany(interview) && (
-                <span className="flex items-center gap-1">
-                  <Building2 className="h-3.5 w-3.5" />
-                  {getCompany(interview)}
-                </span>
-              )}
-              <span className="flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5" />
-                {date}
-              </span>
-              {location && (
-                <span className="flex items-center gap-1">
-                  <MapPin className="h-3.5 w-3.5" />
-                  {location}
-                </span>
-              )}
-              {personName && (
-                <span className="flex items-center gap-1">
-                  <User className="h-3.5 w-3.5" />
-                  {personName}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Right: actions */}
-          {showActions && (status === "scheduled" || status === "rescheduled") && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">{t("crm.actions")}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => {
-                    setCompleteTarget(interview);
-                    setCompleteDialogOpen(true);
-                  }}
-                >
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  {t("crm.completeInterview")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    setRescheduleTarget(interview);
-                    setRescheduleDialogOpen(true);
-                  }}
-                >
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  {t("crm.rescheduleInterview")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={() => handleCancel(interview.id as string)}
-                >
-                  <XCircle className="mr-2 h-4 w-4" />
-                  {t("crm.cancelInterview")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </CardContent>
-      </Card>
-    );
-  };
-
-  const EmptyState = () => (
-    <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-      <Calendar className="h-12 w-12 text-muted-foreground" />
-      <div className="space-y-1">
-        <p className="text-lg font-medium">{t("crm.noInterviews")}</p>
-        <p className="text-sm text-muted-foreground">{t("crm.noInterviewsDescription")}</p>
-      </div>
-      <Button onClick={() => setDialogOpen(true)}>
-        <Plus className="mr-2 h-4 w-4" />
-        {t("crm.scheduleInterview")}
-      </Button>
-    </div>
-  );
-
-  const LoadingSkeleton = () => (
-    <div className="space-y-3">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <Skeleton key={i} className="h-20 w-full rounded-lg" />
-      ))}
-    </div>
-  );
-
-  const ErrorState = () => (
-    <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-      <AlertTriangle className="h-12 w-12 text-destructive" />
-      <p className="text-sm text-muted-foreground">{error}</p>
-      <Button variant="outline" onClick={loadInterviews}>
-        <RefreshCw className="mr-2 h-4 w-4" />
-        {t("crm.retry")}
-      </Button>
-    </div>
-  );
+  const openScheduleDialog = useCallback(() => setDialogOpen(true), []);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -411,9 +455,9 @@ export default function InterviewsPageClient() {
       {loading ? (
         <LoadingSkeleton />
       ) : error ? (
-        <ErrorState />
+        <ErrorState t={t} error={error} onRetry={loadInterviews} />
       ) : upcoming.length === 0 && past.length === 0 ? (
-        <EmptyState />
+        <EmptyState t={t} onSchedule={openScheduleDialog} />
       ) : (
         <Tabs defaultValue="upcoming" className="w-full">
           <TabsList>
@@ -427,13 +471,21 @@ export default function InterviewsPageClient() {
 
           <TabsContent value="upcoming" className="space-y-3">
             {upcoming.length === 0 ? (
-              <EmptyState />
+              <EmptyState t={t} onSchedule={openScheduleDialog} />
             ) : (
               upcoming.map((interview) => (
                 <InterviewCard
                   key={interview.id as string}
                   interview={interview}
                   showActions
+                  t={t}
+                  locale={locale}
+                  getJobTitle={getJobTitle}
+                  getCompany={getCompany}
+                  getPersonName={getPersonName}
+                  onComplete={handleCompleteClick}
+                  onReschedule={handleRescheduleClick}
+                  onCancel={handleCancel}
                 />
               ))
             )}
@@ -450,6 +502,14 @@ export default function InterviewsPageClient() {
                   key={interview.id as string}
                   interview={interview}
                   showActions={false}
+                  t={t}
+                  locale={locale}
+                  getJobTitle={getJobTitle}
+                  getCompany={getCompany}
+                  getPersonName={getPersonName}
+                  onComplete={handleCompleteClick}
+                  onReschedule={handleRescheduleClick}
+                  onCancel={handleCancel}
                 />
               ))
             )}
@@ -492,8 +552,8 @@ export default function InterviewsPageClient() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t("crm.interviewOutcome")}</label>
-              <div className="flex flex-wrap gap-2">
+              <label id="outcome-label" className="text-sm font-medium">{t("crm.interviewOutcome")}</label>
+              <div className="flex flex-wrap gap-2" role="group" aria-labelledby="outcome-label">
                 {(["passed", "rejected", "waitlisted", "pending"] as InterviewOutcome[]).map(
                   (o) => (
                     <Button
@@ -509,8 +569,9 @@ export default function InterviewsPageClient() {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t("crm.outcomeNotes")}</label>
+              <label htmlFor="outcome-notes" className="text-sm font-medium">{t("crm.outcomeNotes")}</label>
               <textarea
+                id="outcome-notes"
                 className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 value={outcomeNotes}
                 onChange={(e) => setOutcomeNotes(e.target.value)}

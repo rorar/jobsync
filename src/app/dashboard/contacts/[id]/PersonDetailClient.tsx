@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "@/i18n";
+import { useTranslations, formatDateShort } from "@/i18n";
 import { useToast } from "@/components/ui/use-toast";
 import { getPerson, updatePerson, archivePerson, reactivatePerson, anonymizePerson } from "@/actions/person.actions";
 import { getInterviews } from "@/actions/crmInterview.actions";
@@ -45,7 +45,7 @@ const statusVariant = (status: string) => {
 };
 
 export default function PersonDetailClient({ personId }: PersonDetailClientProps) {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const { toast } = useToast();
   const router = useRouter();
   const [person, setPerson] = useState<Record<string, unknown> | null>(null);
@@ -165,7 +165,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.push("/dashboard/contacts")}>
+          <Button variant="ghost" size="icon" aria-label={t("crm.backToContacts")} onClick={() => router.push("/dashboard/contacts")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -243,16 +243,16 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                     <span>{String(person.headline)}</span>
                   </div>
                 )}
-                {companies.map((c, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm">
+                {companies.map((c) => (
+                  <div key={c.companyId ?? c.companyLabel} className="flex items-center gap-2 text-sm">
                     <Briefcase className="h-4 w-4 text-muted-foreground" />
                     <span>{c.companyLabel}</span>
                     {c.role && <span className="text-muted-foreground">— {c.role}</span>}
                     {c.isPrimary && <Badge className="text-xs">{t("crm.primary")}</Badge>}
                   </div>
                 ))}
-                {Array.isArray(person.socialProfiles) && (person.socialProfiles as SocialProfile[]).map((sp, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm">
+                {Array.isArray(person.socialProfiles) && (person.socialProfiles as SocialProfile[]).map((sp) => (
+                  <div key={`${sp.platform}-${sp.url}`} className="flex items-center gap-2 text-sm">
                     <ExternalLink className="h-4 w-4 text-muted-foreground" />
                     <a href={sp.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                       {t(`crm.platform.${sp.platform}` as any)}
@@ -272,16 +272,16 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
             <Card>
               <CardHeader><CardTitle>{t("crm.email")} & {t("crm.phone")}</CardTitle></CardHeader>
               <CardContent className="space-y-3">
-                {emails.map((e, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm">
+                {emails.map((e) => (
+                  <div key={e.email} className="flex items-center gap-2 text-sm">
                     <Mail className="h-4 w-4 text-muted-foreground" />
                     <span>{e.email}</span>
                     <Badge variant="outline" className="text-xs">{t(`crm.channelType.${e.type}`)}</Badge>
                     {e.isPrimary && <Badge className="text-xs">{t("crm.primaryEmail")}</Badge>}
                   </div>
                 ))}
-                {phones.map((p, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm">
+                {phones.map((p) => (
+                  <div key={p.number} className="flex items-center gap-2 text-sm">
                     <Phone className="h-4 w-4 text-muted-foreground" />
                     <span>{p.number}</span>
                     <Badge variant="outline" className="text-xs">{t(`crm.channelType.${p.type}`)}</Badge>
@@ -305,7 +305,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                 {Boolean(person.retentionExpiresAt) && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">{t("crm.retentionExpires")}</span>
-                    <span>{new Date(person.retentionExpiresAt as string).toLocaleDateString()}</span>
+                    <span>{formatDateShort(new Date(person.retentionExpiresAt as string), locale)}</span>
                   </div>
                 )}
               </CardContent>
@@ -324,7 +324,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                     <div>
                       <p className="font-medium">{String(((interview.job as Record<string, unknown>)?.JobTitle as Record<string, unknown>)?.label ?? "")}</p>
                       <p className="text-sm text-muted-foreground">
-                        {new Date(interview.interviewDate as string).toLocaleDateString()} {String(interview.location ?? "") && `- ${String(interview.location)}`}
+                        {formatDateShort(new Date(interview.interviewDate as string), locale)} {String(interview.location ?? "") && `- ${String(interview.location)}`}
                       </p>
                     </div>
                     <Badge variant={interview.status === "completed" ? "outline" : interview.status === "cancelled" ? "destructive" : "default"}>
@@ -349,7 +349,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                       <p className="font-medium">{task.title as string}</p>
                       {Boolean(task.dueDate) && (
                         <p className="text-sm text-muted-foreground">
-                          {t("crm.dueDate")}: {new Date(task.dueDate as string).toLocaleDateString()}
+                          {t("crm.dueDate")}: {formatDateShort(new Date(task.dueDate as string), locale)}
                         </p>
                       )}
                     </div>
@@ -374,7 +374,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                     {String(note.title ?? "") && <p className="font-medium">{String(note.title)}</p>}
                     <p className="text-sm text-muted-foreground">{note.body as string}</p>
                     <p className="text-xs text-muted-foreground mt-2">
-                      {new Date(note.createdAt as string).toLocaleDateString()}
+                      {formatDateShort(new Date(note.createdAt as string), locale)}
                     </p>
                   </CardContent>
                 </Card>
@@ -414,6 +414,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
+                          aria-label={t("crm.openJob")}
                           onClick={() => {
                             const id = job?.id as string;
                             if (id) router.push(`/dashboard/myjobs/${id}`);
@@ -425,6 +426,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
+                          aria-label={t("crm.unlinkJob")}
                           onClick={() => handleUnlinkJob(jc.id as string)}
                         >
                           <Trash2 className="h-4 w-4" />
