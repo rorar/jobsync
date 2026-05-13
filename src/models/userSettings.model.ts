@@ -48,6 +48,16 @@ export interface LogoAssetConfig {
   maxDimension: number;   // Default: 512px bounding box
 }
 
+/** GDPR Privacy & Security settings (F-1, F-2, F-4) */
+export interface PrivacySettings {
+  /** F-1: Write AdminAuditLog entry before account deletion */
+  auditAccountDeletion: boolean;
+  /** F-2: Require email confirmation before deletion proceeds */
+  emailConfirmationBeforeDeletion: boolean;
+  /** F-4: Days to wait before executing deletion (0 = immediate) */
+  coolingOffDays: 0 | 7 | 14 | 30;
+}
+
 export interface UserSettingsData {
   ai: AiSettings;
   display: DisplaySettings;
@@ -55,6 +65,7 @@ export interface UserSettingsData {
   automation?: AutomationSettings;
   notifications?: NotificationPreferences;
   logoAsset?: LogoAssetConfig;
+  privacy?: PrivacySettings;
 }
 
 export interface UserSettings {
@@ -65,6 +76,12 @@ export interface UserSettings {
 export const defaultLogoAssetConfig: LogoAssetConfig = {
   maxFileSize: 524288,   // 512KB
   maxDimension: 512,     // 512px bounding box
+};
+
+export const defaultPrivacySettings: PrivacySettings = {
+  auditAccountDeletion: true,
+  emailConfirmationBeforeDeletion: false,
+  coolingOffDays: 0,
 };
 
 export const defaultUserSettings: UserSettingsData = {

@@ -42,6 +42,7 @@ model User {
   email                String                @unique
   password             String
   createdAt            DateTime              @default(now())
+  deletionScheduledAt  DateTime? // F-4: GDPR cooling-off period target date
   jobsApplied          Job[]
   JobTitle             JobTitle[]
   Location             Location[]
@@ -1187,4 +1188,17 @@ model ConnectedAccount {
 
   @@unique([userId, provider, handle])
   @@index([userId])
+}
+
+/// F-2: Email confirmation token for account deletion.
+/// Single-use, 24h TTL. At most one active token per user.
+/// No FK to User (forensic durability pattern, same as AdminAuditLog).
+model DeletionConfirmationToken {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
 }
