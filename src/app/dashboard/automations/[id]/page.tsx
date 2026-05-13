@@ -218,7 +218,9 @@ export default function AutomationDetailPage() {
   }
 
   const resumeMissing = !automation.resume;
-  const newJobsCount = jobs.filter((j) => j.status === "staged").length;
+  const newJobsCount = jobs.filter((j) =>
+    ["staged", "processing", "ready"].includes(j.status) && !j.archivedAt
+  ).length;
 
   return (
     <div className="col-span-3 py-6 space-y-6">
