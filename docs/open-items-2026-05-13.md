@@ -25,8 +25,8 @@
 |----|---------|--------|
 | ~~G5~~ | ~~`newJobsCount` always 0 (`discoveryStatus` → `status === "staged"`)~~ | ~~5 min~~ | **RESOLVED** (filter changed to `["staged","processing","ready"]` matching staging page canonical definition) |
 | ~~G8~~ | ~~`ApiKeyModuleId` missing `logo_dev`~~ | — | **RESOLVED** (already in `apiKey.model.ts:1` + `apiKey.schema.ts:6`) |
-| G9 | `ContactDeleted` kein CrmActivityLogger consumer | 30 min |
-| G10 | 0 CRM fixtures in `testFixtures.ts` | ½ Tag |
+| ~~G9~~ | ~~`ContactDeleted` kein CrmActivityLogger consumer~~ | ~~30 min~~ | **RESOLVED** (session 2026-05-15: subscription added, activityType "contact_deleted" with reason in details) |
+| ~~G10~~ | ~~0 CRM fixtures in `testFixtures.ts`~~ | ~~½ Tag~~ | **RESOLVED** (session 2026-05-15: 33 fixtures for 9 CRM models, JSON fields, polymorphic targets) |
 | ~~S2~~ | ~~No Data Export/Portability (DSAR) — kein Export-Button, kein Handler~~ | ~~1-2 Tage~~ | **RESOLVED** (session 2026-05-15: ZIP export with metadata.json, 28+ models, rate limited, 4 locales) |
 | ~~S3~~ | ~~Resume PII unredacted to OpenAI/DeepSeek (Art. 5(1)(c))~~ | ~~1 Tag~~ | **RESOLVED** (session 2026-05-15: isLocal on AiManifest, PII placeholders, TEXT_LIMITS activated, job description regex strip) |
 | ~~S4~~ | ~~No retention policies auf Jobs/Notifications/EnrichmentLogs~~ | ~~1 Tag~~ | **RESOLVED** (session 2026-05-15: retention-cron.ts with 7 rules, daily 03:30, archive-before-delete for AdminAuditLog) |
@@ -39,7 +39,7 @@
 | ID | Finding | Effort |
 |----|---------|--------|
 | G6 | `NotificationCreated` dead event (wire or delete) | 15 min |
-| G7 | 8 hardcoded English strings in `ai.utils.ts` (Ollama errors) — domain expert overcounted, CRM UI files are clean | 30 min |
+| ~~G7~~ | ~~8 hardcoded English strings in `ai.utils.ts` (Ollama errors)~~ | ~~30 min~~ | **RESOLVED** (session 2026-05-15: 10 i18n keys × 4 locales, ai.utils.ts returns keys, UI calls t()) |
 | G11 | `validate-edit-transition.ts` missing `expired` | 15 min |
 | G14 | Push notifications hardcoded `/dashboard` (no deep links) | 30 min |
 | G15 | No notification retention cleanup (spec: 30 days) | 1 Std |
