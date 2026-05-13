@@ -12,6 +12,7 @@
 
 import { runAutomation } from "@/lib/connector/job-discovery"
 import { emitEvent, createEvent } from "@/lib/events"
+import { eventBus } from "@/lib/events/event-bus"
 import { DomainEventType } from "@/lib/events/event-types"
 import { SCHEDULER_CONSTANTS } from "@/lib/constants"
 import { debugLog, debugError } from "@/lib/debug"
@@ -391,6 +392,17 @@ class RunCoordinator {
         item.position--
       }
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Self-subscription (Sprint C: replaces degradation-coordinator.ts)
+  // ---------------------------------------------------------------------------
+
+  /** Subscribe to domain events. Called during registerEventConsumers() (Step 3 boot). */
+  subscribeToEvents(): void {
+    eventBus.subscribe(DomainEventType.AutomationDegraded, (event) => {
+      this.acknowledgeExternalStop(event.payload.automationId)
+    })
   }
 }
 

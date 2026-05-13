@@ -7,8 +7,8 @@
 
 import { registerAuditLogger } from "./audit-logger";
 import { registerNotificationDispatcher } from "./notification-dispatcher";
-import { registerDegradationCoordinator } from "./degradation-coordinator";
 import { registerEnrichmentTrigger } from "./enrichment-trigger";
+import { runCoordinator } from "@/lib/scheduler/run-coordinator";
 import { registerLogoAssetSubscriber } from "@/lib/assets/logo-asset-subscriber";
 import { registerCrmActivityLogConsumers } from "./crm-activity-logger";
 
@@ -25,8 +25,8 @@ export function registerEventConsumers(): void {
   // Phase 5: Notification Dispatcher (domain events -> in-app notifications)
   registerNotificationDispatcher();
 
-  // Degradation ↔ RunCoordinator bridge (A8: release locks on degradation)
-  registerDegradationCoordinator();
+  // Degradation ↔ RunCoordinator bridge (A8: self-subscription, Sprint C)
+  runCoordinator.subscribeToEvents();
 
   // Data Enrichment triggers (spec: data-enrichment.allium, rules TriggerEnrichmentOnCompanyCreated, TriggerEnrichmentOnJobImported)
   registerEnrichmentTrigger();
