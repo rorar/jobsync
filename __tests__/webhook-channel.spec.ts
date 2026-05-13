@@ -78,6 +78,7 @@ jest.mock("@/lib/url-validation", () => ({
 import {
   WebhookChannel,
   computeHmacSignature,
+  filterWebhookData,
   _testHelpers,
 } from "@/lib/notifications/channels/webhook.channel";
 import { createHmac } from "crypto";
@@ -232,6 +233,105 @@ describe("WebhookChannel", () => {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // IF-8: Webhook data minimization (GDPR Art. 5(1)(c))
+  // -------------------------------------------------------------------------
+  describe("filterWebhookData (IF-8 GDPR data minimization)", () => {
+    it("passes through allowlisted non-PII fields", () => {
+      const input = {
+        moduleId: "mod-1",
+        moduleName: "eures",
+        automationId: "auto-1",
+        titleKey: "notifications.test.title",
+        titleParams: { count: 3 },
+        reasonKey: "notifications.test.reason",
+        reasonParams: { detail: "x" },
+        actorType: "system",
+        actorId: "sys-1",
+        severity: "warning",
+        affectedAutomationCount: 5,
+        failureCount: 2,
+        stagedVacancyId: "sv-1",
+        jobId: "job-1",
+        count: 10,
+        actionType: "promote",
+        succeeded: 8,
+        failed: 2,
+      };
+
+      const result = filterWebhookData(input);
+      expect(result).toEqual(input);
+    });
+
+    it("strips PII fields: note, personName, interviewNotes, automationName", () => {
+      const input = {
+        moduleId: "mod-1",
+        automationId: "auto-1",
+        jobId: "job-1",
+        // PII fields that must NOT leak to external webhooks
+        note: "Recruiter said salary is negotiable",
+        personName: "Jane Doe",
+        interviewNotes: "Candidate seemed nervous but qualified",
+        automationName: "My secret job search Berlin",
+      };
+
+      const result = filterWebhookData(input);
+
+      // Safe fields pass through
+      expect(result).toHaveProperty("moduleId", "mod-1");
+      expect(result).toHaveProperty("automationId", "auto-1");
+      expect(result).toHaveProperty("jobId", "job-1");
+
+      // PII fields are stripped
+      expect(result).not.toHaveProperty("note");
+      expect(result).not.toHaveProperty("personName");
+      expect(result).not.toHaveProperty("interviewNotes");
+      expect(result).not.toHaveProperty("automationName");
+    });
+
+    it("returns empty object when all fields are PII", () => {
+      const input = {
+        note: "Private user note",
+        personName: "John Smith",
+        userEmail: "john@example.com",
+        interviewNotes: "Confidential feedback",
+      };
+
+      const result = filterWebhookData(input);
+      expect(result).toEqual({});
+    });
+
+    it("returns empty object for empty input", () => {
+      expect(filterWebhookData({})).toEqual({});
+    });
+
+    it("blocks unknown/future fields by default (allowlist safety)", () => {
+      const input = {
+        jobId: "job-1",
+        newFutureField: "some value",
+        anotherUnknown: 42,
+      };
+
+      const result = filterWebhookData(input);
+      expect(result).toEqual({ jobId: "job-1" });
+      expect(result).not.toHaveProperty("newFutureField");
+      expect(result).not.toHaveProperty("anotherUnknown");
+    });
+
+    it("exposes WEBHOOK_ALLOWED_DATA_FIELDS via _testHelpers for validation", () => {
+      // Verify the allowlist contains exactly the expected safe fields
+      const expected = new Set([
+        "moduleId", "moduleName", "automationId",
+        "titleKey", "titleParams", "reasonKey", "reasonParams",
+        "actorType", "actorId", "severity",
+        "affectedAutomationCount", "failureCount",
+        "stagedVacancyId", "jobId", "count",
+        "actionType", "succeeded", "failed",
+      ]);
+      expect(_testHelpers.WEBHOOK_ALLOWED_DATA_FIELDS).toEqual(expected);
+    });
+  });
+
   describe("dispatch", () => {
     it("sends POST with correct headers and HMAC signature", async () => {
       const endpoint = makeEndpoint();
@@ -261,18 +361,19 @@ describe("WebhookChannel", () => {
       );
     });
 
-    it("builds correct WebhookPayload envelope", async () => {
+    it("builds correct WebhookPayload envelope with filtered data", async () => {
       const endpoint = makeEndpoint();
       const ctx = makeTestContext({ webhookEndpoints: [endpoint] });
       getMockFetch().mockResolvedValue({ ok: true, status: 200 });
 
-      const draft = makeDraft({ data: { jobId: "j-1", title: "Engineer" } });
+      const draft = makeDraft({ data: { jobId: "j-1", moduleName: "eures" } });
       await channel.dispatch(draft, ctx);
 
       const body = JSON.parse(getMockFetch().mock.calls[0][1].body);
       expect(body.event).toBe("vacancy_promoted");
       expect(body.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-      expect(body.data).toEqual({ jobId: "j-1", title: "Engineer" });
+      // IF-8: only allowlisted fields pass through
+      expect(body.data).toEqual({ jobId: "j-1", moduleName: "eures" });
     });
 
     it("filters endpoints by subscribed event types", async () => {

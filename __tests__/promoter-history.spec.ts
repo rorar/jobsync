@@ -286,4 +286,79 @@ describe("promoteStagedVacancy — initial history entry (S3-D7)", () => {
       expect(mockTxHistoryCreate).not.toHaveBeenCalled();
     });
   });
+
+  // ───────────────────────────────────────────────────────────────────────
+  // IF-6: CompanyCreated event emission from promoter
+  // ───────────────────────────────────────────────────────────────────────
+
+  describe("IF-6: CompanyCreated event for pipeline-created companies", () => {
+    it("should emit CompanyCreated when findOrCreateCompany creates a new company", async () => {
+      const newCompanyId = "co-new";
+      const companyName = "Brand New Corp";
+
+      // Company does NOT exist — findFirst returns null, create returns new
+      mockCompanyFindFirst.mockResolvedValue(null);
+      mockCompanyCreate.mockResolvedValue({
+        id: newCompanyId,
+        label: companyName,
+        value: "brand new corp",
+      });
+
+      // Override vacancy to use the specific company name
+      mockDbFindFirst.mockResolvedValue({
+        id: vacancyId,
+        userId,
+        status: "staged",
+        title: "Frontend Developer",
+        employerName: companyName,
+        location: "Berlin",
+        sourceBoard: "eures",
+        description: "A job",
+        employmentType: "Full-time",
+        salary: null,
+        sourceUrl: "https://example.com/job/1",
+      });
+
+      const { emitEvent, createEvent } = jest.requireMock("@/lib/events");
+
+      await promoteStagedVacancy({ stagedVacancyId: vacancyId }, userId);
+
+      // CompanyCreated must have been emitted with correct payload
+      expect(createEvent).toHaveBeenCalledWith("CompanyCreated", {
+        companyId: newCompanyId,
+        companyName,
+        userId,
+      });
+
+      // Verify emitEvent was called with the created event object
+      const companyCreatedEvent = createEvent.mock.results.find(
+        (r: { type: string; value: { type: string } }) =>
+          r.type === "return" && r.value.type === "CompanyCreated",
+      );
+      expect(companyCreatedEvent).toBeDefined();
+      expect(emitEvent).toHaveBeenCalledWith(companyCreatedEvent!.value);
+    });
+
+    it("should NOT emit CompanyCreated when company already exists", async () => {
+      // Company already exists — findFirst returns it
+      mockCompanyFindFirst.mockResolvedValue({
+        id: "co-1",
+        label: "Acme Corp",
+        value: "acme corp",
+      });
+
+      const { createEvent } = jest.requireMock("@/lib/events");
+
+      await promoteStagedVacancy({ stagedVacancyId: vacancyId }, userId);
+
+      // CompanyCreated must NOT have been emitted
+      const companyCreatedCalls = createEvent.mock.calls.filter(
+        (call: [string, unknown]) => call[0] === "CompanyCreated",
+      );
+      expect(companyCreatedCalls).toHaveLength(0);
+
+      // company.create should not have been called
+      expect(mockCompanyCreate).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -269,6 +269,18 @@ async function findOrCreateCompany(
     const newCompany = await db.company.create({
       data: { label: company, value: normalized, createdBy: userId },
     });
+
+    // Emit CompanyCreated so enrichment-trigger fires logo enrichment
+    // (spec: TriggerEnrichmentOnCompanyCreated). ~90% of companies are
+    // created through the automation pipeline via this path.
+    emitEvent(
+      createEvent(DomainEventTypes.CompanyCreated, {
+        companyId: newCompany.id,
+        companyName: company,
+        userId,
+      }),
+    );
+
     return newCompany.id;
   } catch {
     const winner = await db.company.findFirst({

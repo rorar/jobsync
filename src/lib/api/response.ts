@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { ActionResult } from "@/models/actionResult";
+import type { ActionResult, ActionErrorCode } from "@/models/actionResult";
 
 /**
  * Standard JSON envelope for the Public API.
@@ -34,9 +34,11 @@ export function actionToResponse<T>(
     return NextResponse.json(body, { status: options?.status ?? 200 });
   }
 
-  // Map common error messages to HTTP status codes
+  // Map errorCode to HTTP status (preferred), fall back to message inference
   const rawMessage = result.message ?? "An error occurred";
-  const status = inferErrorStatus(rawMessage);
+  const status = result.errorCode
+    ? errorCodeToStatus(result.errorCode)
+    : inferErrorStatus(rawMessage);
 
   // Sanitize error message for external consumers (SEC-18).
   // Only forward known safe messages; replace internal errors with generic text.
@@ -115,6 +117,31 @@ export function noContentResponse(): NextResponse {
 
 // --- Internal helpers ---
 
+/**
+ * Map ActionErrorCode to HTTP status.
+ * Preferred over inferErrorStatus when errorCode is present (IF-5).
+ */
+function errorCodeToStatus(code: ActionErrorCode): number {
+  switch (code) {
+    case "NOT_FOUND":
+      return 404;
+    case "UNAUTHORIZED":
+      return 401;
+    case "VALIDATION_ERROR":
+      return 400;
+    case "DUPLICATE_ENTRY":
+      return 409;
+    case "STALE_STATE":
+      return 409;
+    case "REFERENCE_ERROR":
+      return 409;
+    case "INVALID_TRANSITION":
+      return 422;
+    case "INTERNAL_ERROR":
+      return 500;
+  }
+}
+
 function inferErrorStatus(message: string): number {
   const lower = message.toLowerCase();
 
@@ -161,6 +188,8 @@ function statusToCode(status: number): string {
       return "NOT_FOUND";
     case 409:
       return "CONFLICT";
+    case 422:
+      return "INVALID_TRANSITION";
     case 429:
       return "RATE_LIMITED";
     default:

@@ -49,6 +49,63 @@ const AUTO_DEACTIVATE_THRESHOLD = 5;
 const USER_AGENT = "JobSync-Webhook/1.0";
 
 // ---------------------------------------------------------------------------
+// IF-8: Webhook data minimization allowlist (GDPR Art. 5(1)(c))
+//
+// Webhooks send payloads to external, user-configured URLs. To prevent PII
+// leakage (user notes, person names, interview notes, etc.), only explicitly
+// allowed fields from `notification.data` are included. New fields are blocked
+// by default — add them here only after confirming they contain no PII.
+//
+// Top-level envelope fields (event, timestamp) are NOT filtered — only the
+// `data` blob inside the payload.
+// ---------------------------------------------------------------------------
+
+const WEBHOOK_ALLOWED_DATA_FIELDS = new Set<string>([
+  // Module-related
+  "moduleId",
+  "moduleName",
+  // Automation-related
+  "automationId",
+  // i18n late-binding keys (5W+H metadata — no PII, only translation keys)
+  "titleKey",
+  "titleParams",
+  "reasonKey",
+  "reasonParams",
+  // Actor metadata (system/automation identifiers, not person names)
+  "actorType",
+  "actorId",
+  // Severity
+  "severity",
+  // Counts and identifiers
+  "affectedAutomationCount",
+  "failureCount",
+  "stagedVacancyId",
+  "jobId",
+  "count",
+  // Action result metadata
+  "actionType",
+  "succeeded",
+  "failed",
+]);
+
+/**
+ * Filter notification data to include only allowlisted fields.
+ * Prevents PII leakage (user notes, person names, interview notes)
+ * to external webhook endpoints (GDPR Art. 5(1)(c) data minimization).
+ */
+export function filterWebhookData(
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  const filtered: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (WEBHOOK_ALLOWED_DATA_FIELDS.has(key)) {
+      filtered[key] = value;
+    }
+  }
+  return filtered;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -296,11 +353,11 @@ export class WebhookChannel implements NotificationChannel {
         return { success: true, channel: this.name };
       }
 
-      // Build the webhook payload
+      // Build the webhook payload (IF-8: filter data to prevent PII leakage)
       const payload: WebhookPayload = {
         event: notification.type,
         timestamp: new Date().toISOString(),
-        data: notification.data ?? {},
+        data: filterWebhookData(notification.data ?? {}),
       };
       const payloadJson = JSON.stringify(payload);
 
@@ -414,4 +471,5 @@ export const _testHelpers = {
   MAX_ATTEMPTS,
   FETCH_TIMEOUT_MS,
   AUTO_DEACTIVATE_THRESHOLD,
+  WEBHOOK_ALLOWED_DATA_FIELDS,
 };

@@ -129,6 +129,113 @@ describe("actionToResponse", () => {
     const res = actionToResponse(result, { status: 201 });
     expect(res.status).toBe(201);
   });
+
+  // IF-5: errorCode-based status mapping takes priority over message inference
+  describe("errorCode-based status mapping (IF-5)", () => {
+    it("maps NOT_FOUND errorCode to 404", async () => {
+      const res = actionToResponse({
+        success: false,
+        message: "some.arbitrary.key",
+        errorCode: "NOT_FOUND",
+      });
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error.code).toBe("NOT_FOUND");
+    });
+
+    it("maps UNAUTHORIZED errorCode to 401", async () => {
+      const res = actionToResponse({
+        success: false,
+        message: "some.arbitrary.key",
+        errorCode: "UNAUTHORIZED",
+      });
+      expect(res.status).toBe(401);
+      const body = await res.json();
+      expect(body.error.code).toBe("UNAUTHORIZED");
+    });
+
+    it("maps VALIDATION_ERROR errorCode to 400", async () => {
+      const res = actionToResponse({
+        success: false,
+        message: "some.arbitrary.key",
+        errorCode: "VALIDATION_ERROR",
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("maps DUPLICATE_ENTRY errorCode to 409", async () => {
+      const res = actionToResponse({
+        success: false,
+        message: "some.arbitrary.key",
+        errorCode: "DUPLICATE_ENTRY",
+      });
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error.code).toBe("CONFLICT");
+    });
+
+    it("maps INTERNAL_ERROR errorCode to 500 and sanitizes message", async () => {
+      const res = actionToResponse({
+        success: false,
+        message: "Prisma query failed: connection reset",
+        errorCode: "INTERNAL_ERROR",
+      });
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error.message).toBe("An unexpected error occurred.");
+    });
+
+    it("maps STALE_STATE errorCode to 409", async () => {
+      const res = actionToResponse({
+        success: false,
+        message: "errors.staleState",
+        errorCode: "STALE_STATE",
+      });
+      expect(res.status).toBe(409);
+    });
+
+    it("maps INVALID_TRANSITION errorCode to 422", async () => {
+      const res = actionToResponse({
+        success: false,
+        message: "errors.invalidTransition",
+        errorCode: "INVALID_TRANSITION",
+      });
+      expect(res.status).toBe(422);
+      const body = await res.json();
+      expect(body.error.code).toBe("INVALID_TRANSITION");
+    });
+
+    it("maps REFERENCE_ERROR errorCode to 409", async () => {
+      const res = actionToResponse({
+        success: false,
+        message: "errors.referenceError",
+        errorCode: "REFERENCE_ERROR",
+      });
+      expect(res.status).toBe(409);
+    });
+
+    it("errorCode takes priority over contradicting message", async () => {
+      // Message says "not found" (would infer 404),
+      // but errorCode says UNAUTHORIZED (should be 401)
+      const res = actionToResponse({
+        success: false,
+        message: "User not found",
+        errorCode: "UNAUTHORIZED",
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it("falls back to inferErrorStatus when errorCode is absent", async () => {
+      // No errorCode — must still work via message inference (backward compat)
+      const res = actionToResponse({
+        success: false,
+        message: "Job not found",
+      });
+      expect(res.status).toBe(404);
+    });
+  });
 });
 
 describe("paginatedResponse", () => {
