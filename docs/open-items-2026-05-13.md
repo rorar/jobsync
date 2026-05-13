@@ -27,9 +27,9 @@
 | ~~G8~~ | ~~`ApiKeyModuleId` missing `logo_dev`~~ | — | **RESOLVED** (already in `apiKey.model.ts:1` + `apiKey.schema.ts:6`) |
 | G9 | `ContactDeleted` kein CrmActivityLogger consumer | 30 min |
 | G10 | 0 CRM fixtures in `testFixtures.ts` | ½ Tag |
-| S2 | No Data Export/Portability (DSAR) — kein Export-Button, kein Handler | 1-2 Tage |
-| S3 | Resume PII unredacted to OpenAI/DeepSeek (Art. 5(1)(c)) | 1 Tag |
-| S4 | No retention policies auf Jobs/Notifications/EnrichmentLogs | 1 Tag |
+| ~~S2~~ | ~~No Data Export/Portability (DSAR) — kein Export-Button, kein Handler~~ | ~~1-2 Tage~~ | **RESOLVED** (session 2026-05-15: ZIP export with metadata.json, 28+ models, rate limited, 4 locales) |
+| ~~S3~~ | ~~Resume PII unredacted to OpenAI/DeepSeek (Art. 5(1)(c))~~ | ~~1 Tag~~ | **RESOLVED** (session 2026-05-15: isLocal on AiManifest, PII placeholders, TEXT_LIMITS activated, job description regex strip) |
+| ~~S4~~ | ~~No retention policies auf Jobs/Notifications/EnrichmentLogs~~ | ~~1 Tag~~ | **RESOLVED** (session 2026-05-15: retention-cron.ts with 7 rules, daily 03:30, archive-before-delete for AdminAuditLog) |
 | H-P-09 | Observability — zero OpenTelemetry / Prometheus / tracing | 2-3 Wochen |
 
 ---
