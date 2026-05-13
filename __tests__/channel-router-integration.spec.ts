@@ -23,8 +23,8 @@ jest.mock("@/lib/db", () => {
 import prisma from "@/lib/db";
 import { ChannelRouter } from "@/lib/notifications/channel-router";
 import { InAppChannel } from "@/lib/notifications/channels/in-app.channel";
-import type { NotificationDraft } from "@/lib/notifications/types";
 import type { DispatchContext } from "@/lib/notifications/dispatch-context";
+import type { NotificationChannel, NotificationDraft } from "@/lib/notifications/types";
 import type { NotificationPreferences } from "@/models/notification.model";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
 
@@ -57,15 +57,24 @@ function makeContext(
     inAppAvailable: true,
     vapidSubject: "mailto:noreply@jobsync.local",
     ...ctxOverride,
+    // Cast required: ctxOverride spread widens type beyond DispatchContext
   } as DispatchContext;
 }
 
-const draft: NotificationDraft = {
+const draft: NotificationDraft = Object.freeze({
   userId: "user-1",
   type: "auth_failure",
   message: "Test notification",
   severity: "error",
-};
+});
+
+function expectFullSuppression(
+  result: { anySuccess: boolean; results: unknown[] },
+): void {
+  expect(result.anySuccess).toBe(false);
+  expect(result.results).toHaveLength(0);
+  expect(mockPrisma.notification.create).not.toHaveBeenCalled();
+}
 
 describe("ChannelRouter + InAppChannel integration (PreferenceSuppression invariant)", () => {
   let router: ChannelRouter;
@@ -90,18 +99,14 @@ describe("ChannelRouter + InAppChannel integration (PreferenceSuppression invari
     const ctx = makeContext({ enabled: false });
     const result = await router.route(draft, ctx);
 
-    expect(result.anySuccess).toBe(false);
-    expect(result.results).toHaveLength(0);
-    expect(mockPrisma.notification.create).not.toHaveBeenCalled();
+    expectFullSuppression(result);
   });
 
   it("suppresses InApp when inApp channel is disabled in preferences", async () => {
     const ctx = makeContext({ channels: { inApp: false, webhook: false, email: false, push: false } });
     const result = await router.route(draft, ctx);
 
-    expect(result.anySuccess).toBe(false);
-    expect(result.results).toHaveLength(0);
-    expect(mockPrisma.notification.create).not.toHaveBeenCalled();
+    expectFullSuppression(result);
   });
 
   it("suppresses when perType disables the specific notification type", async () => {
@@ -110,9 +115,7 @@ describe("ChannelRouter + InAppChannel integration (PreferenceSuppression invari
     });
     const result = await router.route(draft, ctx);
 
-    expect(result.anySuccess).toBe(false);
-    expect(result.results).toHaveLength(0);
-    expect(mockPrisma.notification.create).not.toHaveBeenCalled();
+    expectFullSuppression(result);
   });
 
   it("delivers when perType disables a DIFFERENT type (not the draft type)", async () => {
@@ -125,21 +128,21 @@ describe("ChannelRouter + InAppChannel integration (PreferenceSuppression invari
     expect(mockPrisma.notification.create).toHaveBeenCalledTimes(1);
   });
 
-  it("suppresses during quiet hours", async () => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date("2026-05-13T03:00:00Z")); // 3 AM UTC — within 22:00-07:00
-    try {
+  describe("quiet hours", () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date("2026-05-13T03:00:00Z")); // 3 AM UTC
+    });
+    afterEach(() => jest.useRealTimers());
+
+    it("suppresses during quiet hours", async () => {
       const ctx = makeContext({
         quietHours: { enabled: true, start: "22:00", end: "07:00", timezone: "UTC" },
       });
       const result = await router.route(draft, ctx);
 
-      expect(result.anySuccess).toBe(false);
-      expect(result.results).toHaveLength(0);
-      expect(mockPrisma.notification.create).not.toHaveBeenCalled();
-    } finally {
-      jest.useRealTimers();
-    }
+      expectFullSuppression(result);
+    });
   });
 
   it("InAppChannel writes the correct notification fields to Prisma", async () => {
@@ -179,19 +182,21 @@ describe("ChannelRouter + InAppChannel integration (PreferenceSuppression invari
     beforeEach(() => {
       webhookDispatch = jest.fn().mockResolvedValue({ success: true, channel: "webhook" });
       emailDispatch = jest.fn().mockResolvedValue({ success: true, channel: "email" });
-      // Add mock channels alongside real InAppChannel
-      router.register({ name: "webhook", dispatch: webhookDispatch } as Parameters<typeof router.register>[0]);
-      router.register({ name: "email", dispatch: emailDispatch } as Parameters<typeof router.register>[0]);
+      router.register({ name: "webhook", dispatch: webhookDispatch } as NotificationChannel);
+      router.register({ name: "email", dispatch: emailDispatch } as NotificationChannel);
     });
+
+    function expectNoMockChannelDispatches(): void {
+      expect(webhookDispatch).not.toHaveBeenCalled();
+      expect(emailDispatch).not.toHaveBeenCalled();
+    }
 
     it("suppresses ALL channels when global kill switch is off", async () => {
       const ctx = makeContext({ enabled: false });
       const result = await router.route(draft, ctx);
 
-      expect(result.results).toHaveLength(0);
-      expect(mockPrisma.notification.create).not.toHaveBeenCalled();
-      expect(webhookDispatch).not.toHaveBeenCalled();
-      expect(emailDispatch).not.toHaveBeenCalled();
+      expectFullSuppression(result);
+      expectNoMockChannelDispatches();
     });
 
     it("suppresses ALL channels when perType disables the notification type", async () => {
@@ -202,10 +207,8 @@ describe("ChannelRouter + InAppChannel integration (PreferenceSuppression invari
 
       const result = await router.route(draft, ctx);
 
-      expect(result.results).toHaveLength(0);
-      expect(mockPrisma.notification.create).not.toHaveBeenCalled();
-      expect(webhookDispatch).not.toHaveBeenCalled();
-      expect(emailDispatch).not.toHaveBeenCalled();
+      expectFullSuppression(result);
+      expectNoMockChannelDispatches();
     });
 
     it("per-channel selectivity: disabling webhook still delivers to inApp (A-03)", async () => {
@@ -216,7 +219,6 @@ describe("ChannelRouter + InAppChannel integration (PreferenceSuppression invari
 
       const result = await router.route(draft, ctx);
 
-      // InApp delivers, webhook suppressed by channel preference
       expect(result.anySuccess).toBe(true);
       expect(mockPrisma.notification.create).toHaveBeenCalledTimes(1);
       expect(webhookDispatch).not.toHaveBeenCalled();
