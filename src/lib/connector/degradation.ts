@@ -45,6 +45,34 @@ function truncate(value: string, maxLength = NAME_TRUNCATION_LENGTH): string {
 }
 
 // =============================================================================
+// Shared notification fan-out helper (H-01: extracted from 3 duplicated sites)
+// =============================================================================
+
+/**
+ * Route notification drafts through the ChannelRouter with per-user
+ * DispatchContext. Errors in context building or routing are isolated
+ * per user via Promise.allSettled (3.2: error isolation).
+ */
+async function routeDrafts(drafts: NotificationDraft[]): Promise<void> {
+  registerChannels();
+  const userIds = [...new Set(drafts.map((d) => d.userId))];
+  const settled = await Promise.allSettled(
+    userIds.map(async (uid) => [uid, await buildDispatchContext(uid)] as const),
+  );
+  const ctxMap = new Map<string, Awaited<ReturnType<typeof buildDispatchContext>>>();
+  for (const result of settled) {
+    if (result.status === "fulfilled") {
+      ctxMap.set(result.value[0], result.value[1]);
+    }
+  }
+  await Promise.allSettled(
+    drafts
+      .filter((d) => ctxMap.has(d.userId))
+      .map((draft) => channelRouter.route(draft, ctxMap.get(draft.userId)!)),
+  );
+}
+
+// =============================================================================
 // AuthFailureEscalation (Allium spec rule)
 // =============================================================================
 
@@ -101,44 +129,23 @@ export async function handleAuthFailure(
       },
     });
 
-    // Route notifications through ChannelRouter (IF-4: was direct Prisma write).
-    // All 4 channels (InApp, Email, Push, Webhook) now receive degradation alerts.
-    // Preference gating and per-channel availability are handled by the router.
+    // Route notifications through ChannelRouter (IF-4).
     try {
-      registerChannels();
       const safeModuleName = truncate(registered.manifest.name);
-      const titleKey = "notifications.authFailure.title";
-      const reasonKey = "notifications.reason.authExpired";
-      const drafts: NotificationDraft[] = affectedAutomations.map((auto) => {
-        const safeAutomationName = truncate(auto.name);
-        return {
-          userId: auto.userId,
-          type: "auth_failure" as const,
-          message: `Automation "${safeAutomationName}" paused: authentication failed for module "${safeModuleName}". Please check your credentials.`,
-          moduleId,
-          automationId: auto.id,
-          titleKey,
-          actorType: "module" as const,
-          actorId: moduleId,
-          reasonKey,
-          severity: "error" as const,
-          data: {
-            moduleId,
-            moduleName: safeModuleName,
-            automationId: auto.id,
-            automationName: safeAutomationName,
-          },
-        };
-      });
-      // Build one DispatchContext per unique userId, then route each draft
-      const userIds = [...new Set(drafts.map((d) => d.userId))];
-      const ctxMap = new Map<string, Awaited<ReturnType<typeof buildDispatchContext>>>();
-      await Promise.all(
-        userIds.map(async (uid) => ctxMap.set(uid, await buildDispatchContext(uid))),
-      );
-      await Promise.allSettled(
-        drafts.map((draft) => channelRouter.route(draft, ctxMap.get(draft.userId)!)),
-      );
+      const drafts: NotificationDraft[] = affectedAutomations.map((auto) => ({
+        userId: auto.userId,
+        type: "auth_failure" as const,
+        message: `Automation "${truncate(auto.name)}" paused: authentication failed for module "${safeModuleName}". Please check your credentials.`,
+        moduleId,
+        automationId: auto.id,
+        titleKey: "notifications.authFailure.title",
+        actorType: "module" as const,
+        actorId: moduleId,
+        reasonKey: "notifications.reason.authExpired",
+        severity: "error" as const,
+        data: { moduleId, moduleName: safeModuleName, automationId: auto.id, automationName: truncate(auto.name) },
+      }));
+      await routeDrafts(drafts);
     } catch (err) {
       console.warn("[Degradation] Failed to route auth_failure notifications:", err);
     }
@@ -240,29 +247,20 @@ export async function checkConsecutiveRunFailures(
       },
     });
 
-    // Create persistent notification for the automation owner.
-    // Route through ChannelRouter (IF-4: was direct Prisma write).
+    // Route notification through ChannelRouter (IF-4).
     try {
-      registerChannels();
-      const safeAutomationName = truncate(automation.name);
-      const draft: NotificationDraft = {
+      await routeDrafts([{
         userId: automation.userId,
         type: "consecutive_failures",
-        message: `Automation "${safeAutomationName}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
+        message: `Automation "${truncate(automation.name)}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
         automationId,
         titleKey: "notifications.consecutiveFailures.title",
         titleParams: { count: CONSECUTIVE_RUN_FAILURE_THRESHOLD },
         actorType: "automation",
         actorId: automationId,
         severity: "warning",
-        data: {
-          automationId,
-          automationName: safeAutomationName,
-          failureCount: CONSECUTIVE_RUN_FAILURE_THRESHOLD,
-        },
-      };
-      const ctx = await buildDispatchContext(automation.userId);
-      await channelRouter.route(draft, ctx);
+        data: { automationId, automationName: truncate(automation.name), failureCount: CONSECUTIVE_RUN_FAILURE_THRESHOLD },
+      }]);
     } catch (err) {
       console.warn("[Degradation] Failed to route consecutive_failures notification:", err);
     }
@@ -332,42 +330,23 @@ export async function handleCircuitBreakerTrip(
       },
     });
 
-    // Route through ChannelRouter (IF-4: was direct Prisma write).
+    // Route notifications through ChannelRouter (IF-4).
     try {
-      registerChannels();
       const safeModuleName = truncate(registered.manifest.name);
-      const titleKey = "notifications.cbEscalation.title";
-      const reasonKey = "notifications.reason.circuitBreaker";
-      const drafts: NotificationDraft[] = affectedAutomations.map((auto) => {
-        const safeAutomationName = truncate(auto.name);
-        return {
-          userId: auto.userId,
-          type: "cb_escalation" as const,
-          message: `Automation "${safeAutomationName}" paused: module "${safeModuleName}" circuit breaker tripped ${newFailureCount} times.`,
-          moduleId,
-          automationId: auto.id,
-          titleKey,
-          actorType: "module" as const,
-          actorId: moduleId,
-          reasonKey,
-          severity: "warning" as const,
-          data: {
-            moduleId,
-            moduleName: safeModuleName,
-            automationId: auto.id,
-            automationName: safeAutomationName,
-            failureCount: newFailureCount,
-          },
-        };
-      });
-      const userIds = [...new Set(drafts.map((d) => d.userId))];
-      const ctxMap = new Map<string, Awaited<ReturnType<typeof buildDispatchContext>>>();
-      await Promise.all(
-        userIds.map(async (uid) => ctxMap.set(uid, await buildDispatchContext(uid))),
-      );
-      await Promise.allSettled(
-        drafts.map((draft) => channelRouter.route(draft, ctxMap.get(draft.userId)!)),
-      );
+      const drafts: NotificationDraft[] = affectedAutomations.map((auto) => ({
+        userId: auto.userId,
+        type: "cb_escalation" as const,
+        message: `Automation "${truncate(auto.name)}" paused: module "${safeModuleName}" circuit breaker tripped ${newFailureCount} times.`,
+        moduleId,
+        automationId: auto.id,
+        titleKey: "notifications.cbEscalation.title",
+        actorType: "module" as const,
+        actorId: moduleId,
+        reasonKey: "notifications.reason.circuitBreaker",
+        severity: "warning" as const,
+        data: { moduleId, moduleName: safeModuleName, automationId: auto.id, automationName: truncate(auto.name), failureCount: newFailureCount },
+      }));
+      await routeDrafts(drafts);
     } catch (err) {
       console.warn("[Degradation] Failed to route cb_escalation notifications:", err);
     }
