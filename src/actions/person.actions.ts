@@ -355,20 +355,20 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
 
     // Transaction: anonymize person + cascade delete targets (GDPR Art. 17)
     await prisma.$transaction([
-      // Remove note targets
-      prisma.crmNoteTarget.deleteMany({ where: { targetPersonId: personId } }),
-      // Remove task targets
-      prisma.crmTaskTarget.deleteMany({ where: { targetPersonId: personId } }),
-      // Remove job contacts (Kette C)
-      prisma.jobContact.deleteMany({ where: { personId } }),
-      // Detach interviews + scrub free-text fields (G2 fix)
+      // Remove note targets (ADR-015: scoped via note.userId — CrmNoteTarget has no userId column)
+      prisma.crmNoteTarget.deleteMany({ where: { targetPersonId: personId, note: { userId: user.id } } }),
+      // Remove task targets (ADR-015: scoped via task.userId — CrmTaskTarget has no userId column)
+      prisma.crmTaskTarget.deleteMany({ where: { targetPersonId: personId, task: { userId: user.id } } }),
+      // Remove job contacts (Kette C) (ADR-015: userId in where)
+      prisma.jobContact.deleteMany({ where: { personId, userId: user.id } }),
+      // Detach interviews + scrub free-text fields (G2 fix, ADR-015: userId in where)
       prisma.crmInterview.updateMany({
-        where: { personId },
+        where: { personId, userId: user.id },
         data: { personId: null, notes: null, outcomeNotes: null },
       }),
-      // Anonymize activity log references + scrub PII text fields (S5 fix)
+      // Anonymize activity log references + scrub PII text fields (S5 fix, ADR-015: userId in where)
       prisma.crmActivityLog.updateMany({
-        where: { targetPersonId: personId },
+        where: { targetPersonId: personId, userId: user.id },
         data: { targetPersonId: null, details: null, linkedRecordName: null },
       }),
       // Remove blocklist entries for this person's emails/phones (S5 fix)
@@ -449,15 +449,15 @@ export async function mergePersons(
     const loserCompanies = parseCompanies(loser.companies).map((c) => ({ ...c, isPrimary: false }));
     const mergedCompanies = [...winnerCompanies, ...loserCompanies];
 
-    // Pre-read conflicting JobContacts (read-only, safe outside transaction)
+    // Pre-read conflicting JobContacts (ADR-015: userId in where)
     const conflictingJobIds = await prisma.jobContact.findMany({
-      where: { personId: loserId },
+      where: { personId: loserId, userId: user.id },
       select: { jobId: true },
     }).then(rows => rows.map(r => r.jobId));
 
     const winnerJobIds = new Set(
       await prisma.jobContact.findMany({
-        where: { personId: winnerId },
+        where: { personId: winnerId, userId: user.id },
         select: { jobId: true },
       }).then(rows => rows.map(r => r.jobId))
     );
@@ -466,33 +466,33 @@ export async function mergePersons(
 
     // Finding 9 fix: dedup delete inside transaction to prevent race condition
     await prisma.$transaction([
-      // Remove conflicting JobContacts BEFORE transfer (prevents P2002 on unique constraint)
+      // Remove conflicting JobContacts BEFORE transfer (prevents P2002 on unique constraint, ADR-015: userId in where)
       ...(duplicateJobIds.length > 0
-        ? [prisma.jobContact.deleteMany({ where: { personId: loserId, jobId: { in: duplicateJobIds } } })]
+        ? [prisma.jobContact.deleteMany({ where: { personId: loserId, userId: user.id, jobId: { in: duplicateJobIds } } })]
         : []),
-      // Transfer interviews
+      // Transfer interviews (ADR-015: userId in where)
       prisma.crmInterview.updateMany({
-        where: { personId: loserId },
+        where: { personId: loserId, userId: user.id },
         data: { personId: winnerId },
       }),
-      // Transfer task targets
+      // Transfer task targets (ADR-015: scoped via task.userId — CrmTaskTarget has no userId column)
       prisma.crmTaskTarget.updateMany({
-        where: { targetPersonId: loserId },
+        where: { targetPersonId: loserId, task: { userId: user.id } },
         data: { targetPersonId: winnerId },
       }),
-      // Transfer note targets
+      // Transfer note targets (ADR-015: scoped via note.userId — CrmNoteTarget has no userId column)
       prisma.crmNoteTarget.updateMany({
-        where: { targetPersonId: loserId },
+        where: { targetPersonId: loserId, note: { userId: user.id } },
         data: { targetPersonId: winnerId },
       }),
-      // Transfer job contacts (Kette C)
+      // Transfer job contacts (Kette C, ADR-015: userId in where)
       prisma.jobContact.updateMany({
-        where: { personId: loserId },
+        where: { personId: loserId, userId: user.id },
         data: { personId: winnerId },
       }),
-      // Transfer activity logs
+      // Transfer activity logs (ADR-015: userId in where)
       prisma.crmActivityLog.updateMany({
-        where: { targetPersonId: loserId },
+        where: { targetPersonId: loserId, userId: user.id },
         data: { targetPersonId: winnerId },
       }),
       // Update winner with merged data

@@ -8,6 +8,7 @@ import {
   getStatusList,
   updateJob,
   updateJobStatus,
+  updateKanbanOrder,
 } from "@/actions/job.actions";
 import { getMockJobDetails, getMockJobsList } from "@/lib/mock.utils";
 import { JobResponse } from "@/models/job.model";
@@ -911,6 +912,67 @@ describe("jobActions", () => {
         success: false,
         message: "errors.deleteJob",
       });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // updateKanbanOrder — cross-column move must increment version (optimistic lock)
+  // ---------------------------------------------------------------------------
+
+  describe("updateKanbanOrder — version increment on cross-column move", () => {
+    const bookmarkedStatus = {
+      id: "status-bookmarked",
+      label: "Bookmarked",
+      value: "bookmarked",
+    };
+    const appliedStatus = {
+      id: "status-applied",
+      label: "Applied",
+      value: "applied",
+    };
+    const currentJob = {
+      id: "job-id",
+      userId: mockUser.id,
+      statusId: bookmarkedStatus.id,
+      Status: bookmarkedStatus,
+      appliedDate: null,
+      version: 1,
+    };
+
+    it("should include version increment when moving across columns (status change)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue(currentJob);
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(appliedStatus);
+
+      const txJobUpdate = jest.fn().mockResolvedValue({
+        ...currentJob,
+        statusId: appliedStatus.id,
+        Status: appliedStatus,
+        sortOrder: 1000,
+        version: 2,
+      });
+      const txHistoryCreate = jest.fn().mockResolvedValue({ id: "history-1" });
+
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) => {
+        return fn({
+          job: { update: txJobUpdate },
+          jobStatusHistory: { create: txHistoryCreate },
+        });
+      });
+
+      const result = await updateKanbanOrder("job-id", 1000, appliedStatus.id);
+
+      expect(result.success).toBe(true);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+
+      // The critical assertion: tx.job.update must include version: { increment: 1 }
+      expect(txJobUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            version: { increment: 1 },
+          }),
+        }),
+      );
     });
   });
 });

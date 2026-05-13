@@ -63,6 +63,9 @@ jest.mock("@/lib/db", () => ({
     findFirst: jest.fn(),
     delete: jest.fn(),
   },
+  automation: {
+    count: jest.fn().mockResolvedValue(0),
+  },
   workExperience: {
     findFirst: jest.fn(),
     delete: jest.fn(),

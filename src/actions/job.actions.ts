@@ -999,6 +999,7 @@ export const updateKanbanOrder = async (
           data: {
             sortOrder: newSortOrder,
             statusId: newStatusId,
+            version: { increment: 1 },
             ...sideEffects,
           },
           include: {

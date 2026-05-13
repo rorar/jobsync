@@ -12,6 +12,7 @@ export interface Resume {
   File?: File;
   _count?: {
     Job?: number;
+    Automation?: number;
   };
 }
 

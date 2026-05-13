@@ -52,11 +52,17 @@ function ResumeTable({ resumes, editResume, reloadResumes }: ResumeTableProps) {
 
   const deleteResume = async (resume: Resume) => {
     if (!resume.id) return;
-    if (resume._count?.Job! > 0)
+    if ((resume._count?.Job ?? 0) > 0)
       return toast({
         variant: "destructive",
         title: t("profile.error"),
         description: t("profile.jobsMustBeZero"),
+      });
+    if ((resume._count?.Automation ?? 0) > 0)
+      return toast({
+        variant: "destructive",
+        title: t("profile.error"),
+        description: t("profile.resumeHasAutomations"),
       });
     const { success, message } = await deleteResumeById(
       resume.id,

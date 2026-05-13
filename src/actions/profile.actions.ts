@@ -56,6 +56,7 @@ export const getResumeList = async (
           _count: {
             select: {
               Job: true,
+              Automation: true,
             },
           },
         },
@@ -384,6 +385,17 @@ export const deleteResumeById = async (
       throw new Error("Resume not found");
     }
 
+    // Guard: prevent deletion if Automations reference this resume
+    const automationCount = await prisma.automation.count({
+      where: { resumeId, userId: user.id },
+    });
+    if (automationCount > 0) {
+      return {
+        success: false,
+        message: "profile.resumeHasAutomations",
+      };
+    }
+
     if (fileId) {
       await deleteFile(fileId, user.id);
     }
@@ -412,6 +424,22 @@ export const deleteResumeById = async (
       });
 
       await prisma.education.deleteMany({
+        where: {
+          ResumeSection: {
+            resumeId: resumeId,
+          },
+        },
+      });
+
+      await prisma.licenseOrCertification.deleteMany({
+        where: {
+          ResumeSection: {
+            resumeId: resumeId,
+          },
+        },
+      });
+
+      await prisma.otherSection.deleteMany({
         where: {
           ResumeSection: {
             resumeId: resumeId,
