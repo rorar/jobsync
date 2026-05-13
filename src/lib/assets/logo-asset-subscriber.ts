@@ -12,10 +12,11 @@ import "server-only";
 
 import { eventBus } from "@/lib/events/event-bus";
 import { DomainEventType } from "@/lib/events/event-types";
-import type {
-  DomainEvent,
-  EnrichmentCompletedPayload,
-} from "@/lib/events/event-types";
+import type { DomainEvent } from "@/lib/events/event-types";
+import {
+  EnrichmentCompletedPayloadSchema,
+  safeParsePayload,
+} from "@/lib/events/event-schemas";
 import { logoAssetService } from "./logo-asset-service";
 import { validateWebhookUrl } from "@/lib/url-validation";
 import db from "@/lib/db";
@@ -48,7 +49,8 @@ function extractDomainBase(domainKey: string): string {
 async function handleEnrichmentCompleted(
   event: DomainEvent<typeof DomainEventType.EnrichmentCompleted>,
 ): Promise<void> {
-  const payload = event.payload as EnrichmentCompletedPayload;
+  const payload = safeParsePayload(EnrichmentCompletedPayloadSchema, event);
+  if (!payload) return;
 
   // Only handle logo dimension
   if (payload.dimension !== "logo") return;

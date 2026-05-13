@@ -13,11 +13,12 @@
 
 import { eventBus } from "../event-bus";
 import { DomainEventType } from "../event-types";
-import type {
-  DomainEvent,
-  CompanyCreatedPayload,
-  VacancyPromotedPayload,
-} from "../event-types";
+import type { DomainEvent } from "../event-types";
+import {
+  CompanyCreatedPayloadSchema,
+  VacancyPromotedPayloadSchema,
+  safeParsePayload,
+} from "../event-schemas";
 import {
   enrichmentOrchestrator,
   getChainForDimension,
@@ -199,7 +200,8 @@ export async function withEnrichmentLimit<T>(
 async function handleCompanyCreated(
   event: DomainEvent<typeof DomainEventType.CompanyCreated>,
 ): Promise<void> {
-  const payload = event.payload as CompanyCreatedPayload;
+  const payload = safeParsePayload(CompanyCreatedPayloadSchema, event);
+  if (!payload) return;
   const domain = extractDomain(payload.companyName);
 
   if (!domain) {
@@ -287,7 +289,8 @@ async function handleCompanyCreated(
 async function handleVacancyPromoted(
   event: DomainEvent<typeof DomainEventType.VacancyPromoted>,
 ): Promise<void> {
-  const payload = event.payload as VacancyPromotedPayload;
+  const payload = safeParsePayload(VacancyPromotedPayloadSchema, event);
+  if (!payload) return;
 
   // Sprint 3 M-A-06: the job lookup + the two `enrichmentResult.findFirst`
   // pre-flight cache checks used to run with `await` BEFORE the

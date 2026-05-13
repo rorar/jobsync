@@ -23,16 +23,19 @@ import { eventBus } from "../event-bus";
 import { DomainEventType } from "../event-types";
 import type {
   DomainEvent,
-  VacancyPromotedPayload,
-  VacancyStagedPayload,
-  BulkActionCompletedPayload,
-  ModuleDeactivatedPayload,
-  ModuleReactivatedPayload,
-  RetentionCompletedPayload,
-  JobStatusChangedPayload,
-  ReminderTriggeredPayload,
   AutomationDegradedPayload,
 } from "../event-types";
+import {
+  VacancyPromotedPayloadSchema,
+  VacancyStagedPayloadSchema,
+  BulkActionCompletedPayloadSchema,
+  ModuleDeactivatedPayloadSchema,
+  ModuleReactivatedPayloadSchema,
+  RetentionCompletedPayloadSchema,
+  JobStatusChangedPayloadSchema,
+  ReminderTriggeredPayloadSchema,
+  safeParsePayload,
+} from "../event-schemas";
 
 import prisma from "@/lib/db";
 import type {
@@ -209,7 +212,8 @@ async function flushStagedBuffer(automationId: string): Promise<void> {
 async function handleVacancyPromoted(
   event: DomainEvent<typeof DomainEventType.VacancyPromoted>,
 ): Promise<void> {
-  const payload = event.payload as VacancyPromotedPayload;
+  const payload = safeParsePayload(VacancyPromotedPayloadSchema, event);
+  if (!payload) return;
   // PERF-3: single buildDispatchContext replaces resolveUserSettings + channel reads
   const ctx = await buildDispatchContext(payload.userId);
 
@@ -244,7 +248,8 @@ async function handleVacancyPromoted(
 async function handleVacancyStaged(
   event: DomainEvent<typeof DomainEventType.VacancyStaged>,
 ): Promise<void> {
-  const payload = event.payload as VacancyStagedPayload;
+  const payload = safeParsePayload(VacancyStagedPayloadSchema, event);
+  if (!payload) return;
 
   // Only batch automation-sourced staging. Manual staging is individual.
   if (!payload.automationId) return;
@@ -270,7 +275,8 @@ async function handleVacancyStaged(
 async function handleBulkActionCompleted(
   event: DomainEvent<typeof DomainEventType.BulkActionCompleted>,
 ): Promise<void> {
-  const payload = event.payload as BulkActionCompletedPayload;
+  const payload = safeParsePayload(BulkActionCompletedPayloadSchema, event);
+  if (!payload) return;
   // PERF-3: single buildDispatchContext replaces resolveUserSettings + channel reads
   const ctx = await buildDispatchContext(payload.userId);
   const message = t(ctx.locale, "notifications.bulkActionCompleted")
@@ -311,7 +317,8 @@ async function handleBulkActionCompleted(
 async function handleModuleDeactivated(
   event: DomainEvent<typeof DomainEventType.ModuleDeactivated>,
 ): Promise<void> {
-  const payload = event.payload as ModuleDeactivatedPayload;
+  const payload = safeParsePayload(ModuleDeactivatedPayloadSchema, event);
+  if (!payload) return;
   // PERF-3: single buildDispatchContext replaces resolveUserSettings + channel reads
   const ctx = await buildDispatchContext(payload.userId);
   // Sprint 3 M-A-02: prefer the payload's `moduleName` (authoritative display
@@ -360,7 +367,8 @@ async function handleModuleDeactivated(
 async function handleModuleReactivated(
   event: DomainEvent<typeof DomainEventType.ModuleReactivated>,
 ): Promise<void> {
-  const payload = event.payload as ModuleReactivatedPayload;
+  const payload = safeParsePayload(ModuleReactivatedPayloadSchema, event);
+  if (!payload) return;
   // PERF-3: single buildDispatchContext replaces resolveUserSettings + channel reads
   const ctx = await buildDispatchContext(payload.userId);
   // Sprint 3 M-A-02: see handleModuleDeactivated.
@@ -404,7 +412,8 @@ async function handleModuleReactivated(
 async function handleRetentionCompleted(
   event: DomainEvent<typeof DomainEventType.RetentionCompleted>,
 ): Promise<void> {
-  const payload = event.payload as RetentionCompletedPayload;
+  const payload = safeParsePayload(RetentionCompletedPayloadSchema, event);
+  if (!payload) return;
   // PERF-3: single buildDispatchContext replaces resolveUserSettings + channel reads
   const ctx = await buildDispatchContext(payload.userId);
   const message = t(ctx.locale, "notifications.retentionCompleted")
@@ -442,7 +451,8 @@ async function handleRetentionCompleted(
 async function handleJobStatusChanged(
   event: DomainEvent<typeof DomainEventType.JobStatusChanged>,
 ): Promise<void> {
-  const payload = event.payload as JobStatusChangedPayload;
+  const payload = safeParsePayload(JobStatusChangedPayloadSchema, event);
+  if (!payload) return;
   // PERF-3: single buildDispatchContext replaces resolveUserSettings + channel reads
   const ctx = await buildDispatchContext(payload.userId);
   const message = t(ctx.locale, "notifications.jobStatusChanged")
@@ -506,7 +516,8 @@ const REMINDER_SEVERITY_MAP: Record<string, NotificationSeverity> = {
 async function handleReminderTriggered(
   event: DomainEvent<typeof DomainEventType.ReminderTriggered>,
 ): Promise<void> {
-  const payload = event.payload as ReminderTriggeredPayload;
+  const payload = safeParsePayload(ReminderTriggeredPayloadSchema, event);
+  if (!payload) return;
   const ctx = await buildDispatchContext(payload.userId);
 
   const notificationType = REMINDER_TYPE_MAP[payload.reason];

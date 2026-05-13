@@ -16,22 +16,24 @@ import "server-only";
 import prisma from "@/lib/db";
 import { eventBus } from "@/lib/events";
 import { DomainEventType } from "@/lib/events/event-types";
-import type {
-  JobStatusChangedPayload,
-  ContactCreatedPayload,
-  ContactUpdatedPayload,
-  InterviewScheduledPayload,
-  InterviewCompletedPayload,
-  CrmTaskCreatedPayload,
-  CrmTaskCompletedPayload,
-  CrmNoteCreatedPayload,
-  VacancyPromotedPayload,
-} from "@/lib/events/event-types";
+import {
+  JobStatusChangedPayloadSchema,
+  ContactCreatedPayloadSchema,
+  ContactUpdatedPayloadSchema,
+  InterviewScheduledPayloadSchema,
+  InterviewCompletedPayloadSchema,
+  CrmTaskCreatedPayloadSchema,
+  CrmTaskCompletedPayloadSchema,
+  CrmNoteCreatedPayloadSchema,
+  VacancyPromotedPayloadSchema,
+  safeParsePayload,
+} from "@/lib/events/event-schemas";
 
 export function registerCrmActivityLogConsumers(): void {
   // Project JobStatusChanged → status_changed activity
   eventBus.subscribe(DomainEventType.JobStatusChanged, async (event) => {
-    const payload = event.payload as JobStatusChangedPayload;
+    const payload = safeParsePayload(JobStatusChangedPayloadSchema, event);
+    if (!payload) return;
     try {
       await prisma.crmActivityLog.create({
         data: {
@@ -52,7 +54,8 @@ export function registerCrmActivityLogConsumers(): void {
 
   // Project ContactCreated → contact_created activity
   eventBus.subscribe(DomainEventType.ContactCreated, async (event) => {
-    const payload = event.payload as ContactCreatedPayload;
+    const payload = safeParsePayload(ContactCreatedPayloadSchema, event);
+    if (!payload) return;
     try {
       const person = await prisma.person.findUnique({
         where: { id: payload.personId },
@@ -74,7 +77,8 @@ export function registerCrmActivityLogConsumers(): void {
 
   // Project ContactUpdated → contact_updated activity
   eventBus.subscribe(DomainEventType.ContactUpdated, async (event) => {
-    const payload = event.payload as ContactUpdatedPayload;
+    const payload = safeParsePayload(ContactUpdatedPayloadSchema, event);
+    if (!payload) return;
     try {
       await prisma.crmActivityLog.create({
         data: {
@@ -91,7 +95,8 @@ export function registerCrmActivityLogConsumers(): void {
 
   // Project InterviewScheduled → interview_scheduled activity
   eventBus.subscribe(DomainEventType.InterviewScheduled, async (event) => {
-    const payload = event.payload as InterviewScheduledPayload;
+    const payload = safeParsePayload(InterviewScheduledPayloadSchema, event);
+    if (!payload) return;
     try {
       const job = await prisma.job.findUnique({
         where: { id: payload.jobId },
@@ -114,7 +119,8 @@ export function registerCrmActivityLogConsumers(): void {
 
   // Project InterviewCompleted → interview_completed activity
   eventBus.subscribe(DomainEventType.InterviewCompleted, async (event) => {
-    const payload = event.payload as InterviewCompletedPayload;
+    const payload = safeParsePayload(InterviewCompletedPayloadSchema, event);
+    if (!payload) return;
     try {
       const job = await prisma.job.findUnique({
         where: { id: payload.jobId },
@@ -136,7 +142,8 @@ export function registerCrmActivityLogConsumers(): void {
 
   // Project CrmTaskCreated → task_created activity
   eventBus.subscribe(DomainEventType.CrmTaskCreated, async (event) => {
-    const payload = event.payload as CrmTaskCreatedPayload;
+    const payload = safeParsePayload(CrmTaskCreatedPayloadSchema, event);
+    if (!payload) return;
     try {
       await prisma.crmActivityLog.create({
         data: {
@@ -153,7 +160,8 @@ export function registerCrmActivityLogConsumers(): void {
 
   // Project CrmTaskCompleted → task_completed activity
   eventBus.subscribe(DomainEventType.CrmTaskCompleted, async (event) => {
-    const payload = event.payload as CrmTaskCompletedPayload;
+    const payload = safeParsePayload(CrmTaskCompletedPayloadSchema, event);
+    if (!payload) return;
     try {
       await prisma.crmActivityLog.create({
         data: {
@@ -170,7 +178,8 @@ export function registerCrmActivityLogConsumers(): void {
 
   // Project CrmNoteCreated → note_added activity
   eventBus.subscribe(DomainEventType.CrmNoteCreated, async (event) => {
-    const payload = event.payload as CrmNoteCreatedPayload;
+    const payload = safeParsePayload(CrmNoteCreatedPayloadSchema, event);
+    if (!payload) return;
     try {
       const note = await prisma.crmNote.findUnique({
         where: { id: payload.noteId },
@@ -193,7 +202,8 @@ export function registerCrmActivityLogConsumers(): void {
 
   // Project VacancyPromoted → application_submitted activity (Pipeline→CRM bridge)
   eventBus.subscribe(DomainEventType.VacancyPromoted, async (event) => {
-    const payload = event.payload as VacancyPromotedPayload;
+    const payload = safeParsePayload(VacancyPromotedPayloadSchema, event);
+    if (!payload) return;
     try {
       const job = await prisma.job.findUnique({
         where: { id: payload.jobId },
