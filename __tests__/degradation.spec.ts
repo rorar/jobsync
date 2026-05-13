@@ -268,6 +268,25 @@ describe("Degradation Rules", () => {
       // Degradation response must not be blocked by notification failure
       expect(result).toEqual({ pausedCount: 1 });
     });
+
+    it("should continue when buildDispatchContext rejects", async () => {
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-ctx-fail", userId: "user-ctx-fail", name: "Ctx Fail Auto" },
+      ]);
+      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (mockRegistry.get as jest.Mock).mockReturnValue({
+        manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+      });
+      mockBuildDispatchContext.mockRejectedValueOnce(new Error("DB connection lost"));
+
+      const result = await handleAuthFailure("jsearch", "401 Unauthorized");
+
+      // Core degradation still works: automation paused
+      expect(result).toEqual({ pausedCount: 1 });
+      // AutomationDegraded event still emitted (lives outside the try/catch)
+      // channelRouter.route NOT called because context build failed
+      expect(mockRoute).not.toHaveBeenCalled();
+    });
   });
 
   describe("checkConsecutiveRunFailures", () => {
@@ -451,6 +470,35 @@ describe("Degradation Rules", () => {
       expect(typeof draft.message).toBe("string");
       expect(draft.message.length).toBeGreaterThan(0);
     });
+
+    it("should continue when buildDispatchContext rejects", async () => {
+      (mockPrisma.automationRun.findMany as jest.Mock).mockResolvedValue([
+        { status: "failed" },
+        { status: "failed" },
+        { status: "failed" },
+        { status: "failed" },
+        { status: "failed" },
+      ]);
+      (mockPrisma.automation.findFirst as jest.Mock).mockResolvedValue({
+        id: "auto-ctx-fail",
+        status: "active",
+        name: "Ctx Fail Auto",
+        userId: "user-ctx-fail",
+      });
+      (mockPrisma.automation.update as jest.Mock).mockResolvedValue({});
+      mockBuildDispatchContext.mockRejectedValueOnce(new Error("DB connection lost"));
+
+      const result = await checkConsecutiveRunFailures("auto-ctx-fail");
+
+      // Core degradation still works: automation paused
+      expect(result).toEqual({ paused: true });
+      expect(mockPrisma.automation.update).toHaveBeenCalledWith({
+        where: { id: "auto-ctx-fail" },
+        data: { status: "paused", pauseReason: "consecutive_failures" },
+      });
+      // channelRouter.route NOT called because context build failed
+      expect(mockRoute).not.toHaveBeenCalled();
+    });
   });
 
   describe("handleCircuitBreakerTrip", () => {
@@ -621,6 +669,26 @@ describe("Degradation Rules", () => {
 
       expect(mockRoute).not.toHaveBeenCalled();
       expect(mockPrisma.automation.findMany).not.toHaveBeenCalled();
+    });
+
+    it("should continue when buildDispatchContext rejects", async () => {
+      registerModule("mod-cb-ctx-fail", 2);
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-cb-ctx", userId: "user-cb-ctx", name: "CB Ctx Fail" },
+      ]);
+      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      mockBuildDispatchContext.mockRejectedValueOnce(new Error("DB connection lost"));
+
+      const result = await handleCircuitBreakerTrip("mod-cb-ctx-fail");
+
+      // Core degradation still works: automation paused
+      expect(result).toEqual({ pausedCount: 1 });
+      expect(mockPrisma.automation.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ["auto-cb-ctx"] } },
+        data: { status: "paused", pauseReason: "cb_escalation" },
+      });
+      // channelRouter.route NOT called because context build failed
+      expect(mockRoute).not.toHaveBeenCalled();
     });
   });
 

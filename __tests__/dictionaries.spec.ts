@@ -23,6 +23,7 @@ import { email } from "@/i18n/dictionaries/email";
 import { smtp } from "@/i18n/dictionaries/smtp";
 import { push } from "@/i18n/dictionaries/push";
 import { webhook } from "@/i18n/dictionaries/webhook";
+import { crm } from "@/i18n/dictionaries/crm";
 
 const LOCALES = ["en", "de", "fr", "es"] as const;
 
@@ -43,6 +44,8 @@ const namespaceDictionaries = {
   smtp,
   push,
   webhook,
+  // CRM namespace:
+  crm,
 } as const;
 
 describe("getDictionary", () => {

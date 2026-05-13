@@ -83,6 +83,7 @@ const DISPATCHER_MOCK_TRANSLATIONS = {
     "notifications.moduleReactivated": "Module {name} reactivated. {automationCount} automation(s) remain paused.",
     "notifications.batchStaged": "{count} new vacancies staged from automation",
     "notifications.jobStatusChanged": "Job status changed to {newStatus}",
+    "notifications.retentionExpired": "Contact archived — retention period expired",
   },
   de: {
     "notifications.vacancyPromoted": "Job aus bereitgestelltem Stellenangebot erstellt",
@@ -92,6 +93,7 @@ const DISPATCHER_MOCK_TRANSLATIONS = {
     "notifications.moduleReactivated": "Modul {name} reaktiviert. {automationCount} Automatisierung(en) bleiben pausiert.",
     "notifications.batchStaged": "{count} neue Stellenangebote aus der Automatisierung",
     "notifications.jobStatusChanged": "Job-Status geändert zu {newStatus}",
+    "notifications.retentionExpired": "Kontakt archiviert — Aufbewahrungsfrist abgelaufen",
   },
 } as const;
 
@@ -454,6 +456,61 @@ describe("NotificationDispatcher", () => {
       // No buffer entry created
       expect(_testHelpers.stagedBuffers.size).toBe(0);
       expect(mockCreate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("ReminderTriggered → retention_expired", () => {
+    it("creates a retention_expired notification via InAppChannel", async () => {
+      const event = createEvent(DomainEventType.ReminderTriggered, {
+        userId: "user-1",
+        reason: "retention_expired",
+        targetPersonId: "person-1",
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: "user-1",
+          type: "retention_expired",
+          message: "Contact archived — retention period expired",
+          severity: "warning",
+          data: expect.objectContaining({
+            reason: "retention_expired",
+            personId: "person-1",
+            severity: "warning",
+          }),
+        }),
+      });
+    });
+
+    it("dual-writes 5W+H fields to top-level columns and legacy data.* (ADR-030)", async () => {
+      const event = createEvent(DomainEventType.ReminderTriggered, {
+        userId: "user-1",
+        reason: "retention_expired",
+        targetPersonId: "person-1",
+      });
+
+      await eventBus.publish(event);
+
+      const call = mockCreate.mock.calls[0][0];
+      // Top-level 5W+H columns (ADR-030, new)
+      expect(call.data).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.retentionExpired",
+          actorType: "system",
+          severity: "warning",
+        }),
+      );
+      // Legacy `data.*` blob — dual-written for backward compat
+      expect(call.data.data).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.retentionExpired",
+          actorType: "system",
+          severity: "warning",
+          personId: "person-1",
+        }),
+      );
     });
   });
 

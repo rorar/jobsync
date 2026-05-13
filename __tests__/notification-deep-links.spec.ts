@@ -113,6 +113,31 @@ describe("buildNotificationActions", () => {
     });
   });
 
+  describe("retention_expired", () => {
+    it("deep-links to the person detail when personId is present", () => {
+      const data: NotificationDataExtended = { personId: "person-1" };
+      const actions = buildNotificationActions("retention_expired", data);
+      expect(actions).toHaveLength(1);
+      expect(actions[0].url).toBe("/dashboard/contacts/person-1");
+      expect(actions[0].labelKey).toBe("notifications.action.openContact");
+    });
+
+    it("falls back to the contacts list when personId is missing", () => {
+      const actions = buildNotificationActions("retention_expired", null);
+      expect(actions).toHaveLength(1);
+      expect(actions[0].url).toBe("/dashboard/contacts");
+      expect(actions[0].labelKey).toBe("notifications.action.openContacts");
+    });
+
+    it("url-encodes personId to prevent injection", () => {
+      const data: NotificationDataExtended = { personId: "person/1?x=2" };
+      const actions = buildNotificationActions("retention_expired", data);
+      expect(actions[0].url).toBe(
+        "/dashboard/contacts/person%2F1%3Fx%3D2",
+      );
+    });
+  });
+
   describe("job_status_changed", () => {
     it("deep-links to the job detail when jobId present", () => {
       const data: NotificationDataExtended = { jobId: "job-1" };
@@ -162,6 +187,9 @@ describe("resolveNotificationSeverity", () => {
     );
     expect(resolveNotificationSeverity("vacancy_batch_staged", null)).toBe(
       "info",
+    );
+    expect(resolveNotificationSeverity("retention_expired", null)).toBe(
+      "warning",
     );
   });
 
