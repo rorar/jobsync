@@ -143,11 +143,11 @@ function formatSalary(salary: {
   const parts: string[] = [];
   const cur = salary.currencyCode ?? "EUR";
   if (salary.minimumSalary != null && salary.maximumSalary != null && salary.minimumSalary !== salary.maximumSalary) {
-    parts.push(`${salary.minimumSalary.toLocaleString()} \u2013 ${salary.maximumSalary.toLocaleString()} ${cur}`);
+    parts.push(`${salary.minimumSalary.toLocaleString("en")} \u2013 ${salary.maximumSalary.toLocaleString("en")} ${cur}`);
   } else if (salary.minimumSalary != null) {
-    parts.push(`${salary.minimumSalary.toLocaleString()}+ ${cur}`);
+    parts.push(`${salary.minimumSalary.toLocaleString("en")}+ ${cur}`);
   } else if (salary.maximumSalary != null) {
-    parts.push(`\u2264${salary.maximumSalary.toLocaleString()} ${cur}`);
+    parts.push(`\u2264${salary.maximumSalary.toLocaleString("en")} ${cur}`);
   } else {
     return undefined;
   }

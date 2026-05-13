@@ -192,13 +192,13 @@ function formatSalary(job: JSearchJob): string | undefined {
   const period = job.job_salary_period || "year";
 
   if (min && max) {
-    return `$${min.toLocaleString()} - $${max.toLocaleString()} per ${period}`;
+    return `$${min.toLocaleString("en")} - $${max.toLocaleString("en")} per ${period}`;
   }
   if (min) {
-    return `From $${min.toLocaleString()} per ${period}`;
+    return `From $${min.toLocaleString("en")} per ${period}`;
   }
   if (max) {
-    return `Up to $${max.toLocaleString()} per ${period}`;
+    return `Up to $${max.toLocaleString("en")} per ${period}`;
   }
   return undefined;
 }

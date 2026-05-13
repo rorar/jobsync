@@ -231,7 +231,7 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
           </Button>
         </div>
         {emails.map((em, idx) => (
-          <div key={idx} className="flex items-center gap-2">
+          <div key={em.email || `email-${idx}`} className="flex items-center gap-2">
             <Input
               type="email"
               placeholder="email@example.com"
@@ -265,6 +265,7 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
                 type="button"
                 variant="ghost"
                 size="icon"
+                aria-label={t("crm.removeEmail")}
                 onClick={() => removeEmail(idx)}
               >
                 <Trash2 className="h-4 w-4 text-muted-foreground" />
@@ -284,7 +285,7 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
           </Button>
         </div>
         {phones.map((ph, idx) => (
-          <div key={idx} className="flex items-center gap-2">
+          <div key={ph.number || `phone-${idx}`} className="flex items-center gap-2">
             <Input
               type="tel"
               placeholder="+49 123 456 7890"
@@ -317,6 +318,7 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
               type="button"
               variant="ghost"
               size="icon"
+              aria-label={t("crm.removePhone")}
               onClick={() => removePhone(idx)}
             >
               <Trash2 className="h-4 w-4 text-muted-foreground" />
@@ -353,7 +355,7 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
           </Button>
         </div>
         {socialProfiles.map((sp, idx) => (
-          <div key={idx} className="flex items-center gap-2">
+          <div key={sp.url || `social-${idx}`} className="flex items-center gap-2">
             <Select
               value={sp.platform}
               onValueChange={(v) =>
@@ -388,6 +390,7 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
               type="button"
               variant="ghost"
               size="icon"
+              aria-label={t("crm.removeSocialProfile")}
               onClick={() => setSocialProfiles((prev) => prev.filter((_, i) => i !== idx))}
             >
               <Trash2 className="h-4 w-4 text-muted-foreground" />
@@ -406,7 +409,7 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
           </Button>
         </div>
         {companies.map((c, idx) => (
-          <div key={idx} className="space-y-2 rounded-md border p-3">
+          <div key={c.companyId || c.companyLabel || `company-${idx}`} className="space-y-2 rounded-md border p-3">
             <div className="flex items-center gap-2">
               <Input
                 placeholder={t("crm.company")}
@@ -424,6 +427,7 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
                 type="button"
                 variant="ghost"
                 size="icon"
+                aria-label={t("crm.removeCompany")}
                 onClick={() => removeCompany(idx)}
               >
                 <Trash2 className="h-4 w-4 text-muted-foreground" />

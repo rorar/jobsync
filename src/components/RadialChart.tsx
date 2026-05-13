@@ -48,7 +48,7 @@ export function RadialChartComponent({ score }: { score: number }) {
                       y={(viewBox.cy || 0) - 16}
                       className="fill-foreground text-2xl font-bold"
                     >
-                      {score.toLocaleString()}
+                      {score.toLocaleString("en")}
                     </tspan>
                     <tspan
                       x={viewBox.cx}
