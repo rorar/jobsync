@@ -121,9 +121,7 @@ function AiSettings() {
       const response = await fetch("/api/ai/ollama/tags");
       if (!response.ok) {
         if (selectedModel.moduleId === AiModuleId.OLLAMA) {
-          setFetchError(
-            "Failed to fetch Ollama models. Make sure Ollama is running.",
-          );
+          setFetchError("settings.aiFetchOllamaFailed");
         }
         return;
       }
@@ -135,9 +133,7 @@ function AiSettings() {
     } catch (error) {
       console.error("Error fetching Ollama models:", error);
       if (selectedModel.moduleId === AiModuleId.OLLAMA) {
-        setFetchError(
-          "Failed to fetch Ollama models. Make sure Ollama is running.",
-        );
+        setFetchError("settings.aiFetchOllamaFailed");
       }
     } finally {
       setIsLoadingModels(false);
@@ -168,9 +164,7 @@ function AiSettings() {
       const response = await fetch("/api/ai/ollama/ps");
       if (!response.ok) {
         if (selectedModel.moduleId === AiModuleId.OLLAMA) {
-          setRunningModelError(
-            "No model is currently running. Please start a model first.",
-          );
+          setRunningModelError("settings.aiNoModelRunningLocal");
         }
         return;
       }
@@ -193,17 +187,13 @@ function AiSettings() {
         }
       } else {
         if (selectedModel.moduleId === AiModuleId.OLLAMA) {
-          setRunningModelError(
-            "No model is currently running. Please run the ollama model first.",
-          );
+          setRunningModelError("settings.aiNoModelRunningLocalAlt");
         }
       }
     } catch (error) {
       console.error("Error fetching running model:", error);
       if (selectedModel.moduleId === AiModuleId.OLLAMA) {
-        setRunningModelError(
-          "No model is currently running. Please run the ollama model first.",
-        );
+        setRunningModelError("settings.aiNoModelRunningLocalAlt");
       }
     }
   };
@@ -367,7 +357,7 @@ function AiSettings() {
           {fetchError && (
             <div className="flex items-center gap-1 text-red-600 text-sm mt-2">
               <XCircle className="h-4 w-4 flex-shrink-0" />
-              <span>{fetchError}</span>
+              <span>{t(fetchError)}</span>
             </div>
           )}
         </div>
@@ -380,7 +370,7 @@ function AiSettings() {
         {runningModelError && (
           <div className="flex items-center gap-1 text-red-600 text-sm mt-2">
             <XCircle className="h-4 w-4 flex-shrink-0" />
-            <span>{runningModelError}</span>
+            <span>{t(runningModelError)}</span>
           </div>
         )}
       </div>

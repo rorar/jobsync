@@ -29,7 +29,7 @@ export const checkIfModelIsRunning = async (
   if (!modelName) {
     return {
       isRunning: false,
-      error: "No model selected. Please select an AI model in settings first.",
+      error: "settings.aiNoModelSelected",
     };
   }
 
@@ -41,8 +41,7 @@ export const checkIfModelIsRunning = async (
     if (!response.ok) {
       return {
         isRunning: false,
-        error:
-          "Ollama service is not responding. Please make sure Ollama is running.",
+        error: "settings.aiOllamaNotResponding",
       };
     }
 
@@ -51,7 +50,7 @@ export const checkIfModelIsRunning = async (
     if (!data.models || data.models.length === 0) {
       return {
         isRunning: false,
-        error: `No Ollama model is currently running. Please start ${modelName} using: ollama run ${modelName}`,
+        error: "settings.aiNoModelRunning",
       };
     }
 
@@ -60,18 +59,16 @@ export const checkIfModelIsRunning = async (
     if (!isRunning) {
       return {
         isRunning: false,
-        error: `${modelName} is not currently running. Please run the model first.`,
+        error: "settings.aiModelNotRunning",
       };
     }
 
     return { isRunning: true, runningModelName: modelName };
   } catch (error) {
     console.error("Error checking if model is running:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
     return {
       isRunning: false,
-      error: `Cannot connect to Ollama service. Please make sure Ollama is running. Error: ${errorMessage}`,
+      error: "settings.aiCannotConnectOllama",
     };
   }
 };
@@ -92,7 +89,7 @@ export const fetchRunningModels = async (): Promise<{
     if (!response.ok) {
       return {
         models: [],
-        error: "Failed to fetch running models. Make sure Ollama is running.",
+        error: "settings.aiFailedFetchModels",
       };
     }
 
@@ -103,7 +100,7 @@ export const fetchRunningModels = async (): Promise<{
     console.error("Error fetching running models:", error);
     return {
       models: [],
-      error: "Cannot connect to Ollama service.",
+      error: "settings.aiCannotConnectGeneric",
     };
   }
 };

@@ -211,7 +211,7 @@ const AiResumeReviewSection = ({ resume }: AiSectionProps) => {
               {runningModelError && (
                 <div className="flex items-center gap-1 text-red-600 text-sm mt-4">
                   <XCircle className="h-4 w-4 flex-shrink-0" />
-                  <span>{runningModelError}</span>
+                  <span>{t(runningModelError)}</span>
                 </div>
               )}
             </>
