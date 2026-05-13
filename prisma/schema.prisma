@@ -37,37 +37,37 @@ datasource db {
 }
 
 model User {
-  id           String         @id @default(uuid())
-  name         String
-  email        String         @unique
-  password     String
-  createdAt    DateTime       @default(now())
-  jobsApplied  Job[]
-  JobTitle     JobTitle[]
-  Location     Location[]
-  Company      Company[]
-  JobSource    JobSource[]
-  Contact      Contact[]
-  Profile      Profile[]
-  Activity     Activity[]
-  ActivityType ActivityType[]
-  Task         Task[]
-  Automation   Automation[]
-  Settings     UserSettings?
-  ApiKey       ApiKey[]
-  Note         Note[]
-  Tag          Tag[]
-  Question     Question[]
-  Notification Notification[]
-  StagedVacancy    StagedVacancy[]
-  DedupHash        DedupHash[]
-  PublicApiKey     PublicApiKey[]
-  CompanyBlacklist CompanyBlacklist[]
-  JobStatusHistory JobStatusHistory[]
-  EnrichmentResult  EnrichmentResult[]
-  EnrichmentLog     EnrichmentLog[]
-  WebhookEndpoint   WebhookEndpoint[]
-  smtpConfig        SmtpConfig?
+  id                   String                @id @default(uuid())
+  name                 String
+  email                String                @unique
+  password             String
+  createdAt            DateTime              @default(now())
+  jobsApplied          Job[]
+  JobTitle             JobTitle[]
+  Location             Location[]
+  Company              Company[]
+  JobSource            JobSource[]
+  Contact              Contact[]
+  Profile              Profile[]
+  Activity             Activity[]
+  ActivityType         ActivityType[]
+  Task                 Task[]
+  Automation           Automation[]
+  Settings             UserSettings?
+  ApiKey               ApiKey[]
+  Note                 Note[]
+  Tag                  Tag[]
+  Question             Question[]
+  Notification         Notification[]
+  StagedVacancy        StagedVacancy[]
+  DedupHash            DedupHash[]
+  PublicApiKey         PublicApiKey[]
+  CompanyBlacklist     CompanyBlacklist[]
+  JobStatusHistory     JobStatusHistory[]
+  EnrichmentResult     EnrichmentResult[]
+  EnrichmentLog        EnrichmentLog[]
+  WebhookEndpoint      WebhookEndpoint[]
+  smtpConfig           SmtpConfig?
   vapidConfig          VapidConfig?
   webPushSubscriptions WebPushSubscription[]
   LogoAsset            LogoAsset[]
@@ -85,7 +85,7 @@ model User {
 model ApiKey {
   id           String    @id @default(uuid())
   userId       String
-  user         User      @relation(fields: [userId], references: [id])
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   moduleId     String    @map("provider")
   encryptedKey String
   iv           String
@@ -102,7 +102,7 @@ model ApiKey {
 model UserSettings {
   id        String   @id @default(uuid())
   userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   settings  String   @default("{}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -111,7 +111,7 @@ model UserSettings {
 model Profile {
   id      String   @id @default(uuid())
   userId  String
-  user    User     @relation(fields: [userId], references: [id])
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   resumes Resume[]
 
   @@index([userId])
@@ -253,7 +253,7 @@ model Contact {
   email       String
   createdAt   DateTime
   createdBy   String // userId
-  user        User       @relation(fields: [createdBy], references: [id])
+  user        User       @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   Interview   Interview? @relation(fields: [interviewId], references: [id])
   interviewId String?
 
@@ -267,7 +267,7 @@ model JobTitle {
   value           String
   jobs            Job[]
   createdBy       String // userId
-  user            User             @relation(fields: [createdBy], references: [id])
+  user            User             @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   workExperiences WorkExperience[]
 
   @@unique([value, createdBy])
@@ -291,7 +291,7 @@ model Location {
   country        String?
   jobsApplied    Job[]
   createdBy      String // userId
-  user           User             @relation(fields: [createdBy], references: [id])
+  user           User             @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   educations     Education[]
   workExperience WorkExperience[]
 
@@ -299,23 +299,23 @@ model Location {
 }
 
 model Company {
-  id              String           @id @default(uuid())
-  label           String
-  value           String
-  domain          String?          // Kette A: Email-Domain→Company Matching (e.g. "acme.com")
-  jobsApplied     Job[]
-  logoUrl         String? // field is optional
-  logoAssetId     String?          @unique
-  logoAsset       LogoAsset?       @relation("CompanyActiveLogo", fields: [logoAssetId], references: [id], onDelete: SetNull)
-  logoAssets      LogoAsset[]      @relation("LogoAssetCompany")
-  createdBy       String // userId
-  user            User             @relation(fields: [createdBy], references: [id])
-  workExperiences WorkExperience[]
+  id                String             @id @default(uuid())
+  label             String
+  value             String
+  domain            String? // Kette A: Email-Domain→Company Matching (e.g. "acme.com")
+  jobsApplied       Job[]
+  logoUrl           String? // field is optional
+  logoAssetId       String?            @unique
+  logoAsset         LogoAsset?         @relation("CompanyActiveLogo", fields: [logoAssetId], references: [id], onDelete: SetNull)
+  logoAssets        LogoAsset[]        @relation("LogoAssetCompany")
+  createdBy         String // userId
+  user              User               @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  workExperiences   WorkExperience[]
   enrichmentResults EnrichmentResult[]
   // CRM back-relations
-  crmTaskTargets   CrmTaskTarget[]  @relation("CrmTaskTargetCompany")
-  crmNoteTargets   CrmNoteTarget[]  @relation("CrmNoteTargetCompany")
-  crmActivityLogs  CrmActivityLog[] @relation("ActivityLogCompany")
+  crmTaskTargets    CrmTaskTarget[]    @relation("CrmTaskTargetCompany")
+  crmNoteTargets    CrmNoteTarget[]    @relation("CrmNoteTargetCompany")
+  crmActivityLogs   CrmActivityLog[]   @relation("ActivityLogCompany")
 
   @@unique([value, createdBy])
 }
@@ -326,7 +326,7 @@ model JobSource {
   value       String
   jobsApplied Job[]
   createdBy   String // userId
-  user        User   @relation(fields: [createdBy], references: [id])
+  user        User   @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@unique([value, createdBy])
 }
@@ -344,7 +344,7 @@ model Interview {
 model Job {
   id          String      @id @default(uuid())
   userId      String
-  User        User        @relation(fields: [userId], references: [id])
+  User        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobUrl      String?
   description String
   jobType     String
@@ -370,9 +370,9 @@ model Job {
   tags        Tag[]
 
   // CRM fields
-  version        Int    @default(0)
-  sortOrder      Float  @default(0)
-  statusHistory  JobStatusHistory[]
+  version       Int                @default(0)
+  sortOrder     Float              @default(0)
+  statusHistory JobStatusHistory[]
 
   // Automation discovery fields
   automationId    String?
@@ -386,10 +386,10 @@ model Job {
   stagedVacancyPromotion StagedVacancy?
 
   // CRM back-relations
-  crmInterviews   CrmInterview[]  @relation("CrmInterviewJob")
-  jobContacts     JobContact[]    @relation("JobContactJob")
-  crmTaskTargets  CrmTaskTarget[] @relation("CrmTaskTargetJob")
-  crmNoteTargets  CrmNoteTarget[] @relation("CrmNoteTargetJob")
+  crmInterviews   CrmInterview[]   @relation("CrmInterviewJob")
+  jobContacts     JobContact[]     @relation("JobContactJob")
+  crmTaskTargets  CrmTaskTarget[]  @relation("CrmTaskTargetJob")
+  crmNoteTargets  CrmNoteTarget[]  @relation("CrmNoteTargetJob")
   crmActivityLogs CrmActivityLog[] @relation("ActivityLogJob")
 
   @@index([userId, automationId])
@@ -410,7 +410,7 @@ model ActivityType {
   value       String
   description String?
   createdBy   String // userId
-  user        User     @relation(fields: [createdBy], references: [id])
+  user        User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -423,7 +423,7 @@ model ActivityType {
 model Activity {
   id           String    @id @default(uuid())
   userId       String
-  User         User      @relation(fields: [userId], references: [id])
+  User         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   activityName String
   startTime    DateTime
   endTime      DateTime?
@@ -445,7 +445,7 @@ model Activity {
 model Task {
   id     String @id @default(uuid())
   userId String
-  user   User   @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   title           String
   description     String?
@@ -471,21 +471,21 @@ model Task {
 model Automation {
   id     String @id @default(uuid())
   userId String
-  user   User   @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  name           String
-  jobBoard       String
-  keywords       String
-  location       String
+  name            String
+  jobBoard        String
+  keywords        String
+  location        String
   connectorParams String?
-  resumeId       String
-  resume         Resume @relation(fields: [resumeId], references: [id], onDelete: Restrict)
-  matchThreshold Int    @default(80)
+  resumeId        String
+  resume          Resume  @relation(fields: [resumeId], references: [id], onDelete: Restrict)
+  matchThreshold  Int     @default(80)
 
   scheduleHour      Int
-  scheduleFrequency String  @default("daily")
+  scheduleFrequency String    @default("daily")
   nextRunAt         DateTime?
-  lastRunAt    DateTime?
+  lastRunAt         DateTime?
 
   status      String  @default("active")
   pauseReason String?
@@ -493,9 +493,9 @@ model Automation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  runs             AutomationRun[]
-  discoveredJobs   Job[]
-  stagedVacancies  StagedVacancy[]
+  runs            AutomationRun[]
+  discoveredJobs  Job[]
+  stagedVacancies StagedVacancy[]
 
   @@index([userId])
   @@index([status, nextRunAt])
@@ -543,7 +543,7 @@ model ModuleRegistration {
 model Notification {
   id           String   @id @default(uuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   type         String
   message      String
   moduleId     String?
@@ -552,13 +552,13 @@ model Notification {
   // 5W+H structured notification fields (ADR-030)
   // Promoted from Notification.data JSON during the Prisma migration sprint.
   // Legacy `data.*` writers continue to work during rollout via fallback.
-  severity     String?  // "info" | "success" | "warning" | "error"
-  actorType    String?  // "module" | "automation" | "system" | "user"
-  actorId      String?  // e.g. "eures", "arbeitsagentur", or a user id
-  titleKey     String?  // i18n key for the notification title (late-bound at render time)
-  titleParams  Json?    // { moduleName: "EURES", count: 5, ... }
-  reasonKey    String?  // optional i18n key for the reason/context line
-  reasonParams Json?    // params for reasonKey
+  severity     String? // "info" | "success" | "warning" | "error"
+  actorType    String? // "module" | "automation" | "system" | "user"
+  actorId      String? // e.g. "eures", "arbeitsagentur", or a user id
+  titleKey     String? // i18n key for the notification title (late-bound at render time)
+  titleParams  Json? // { moduleName: "EURES", count: 5, ... }
+  reasonKey    String? // optional i18n key for the reason/context line
+  reasonParams Json? // params for reasonKey
   read         Boolean  @default(false)
   createdAt    DateTime @default(now())
 
@@ -567,70 +567,70 @@ model Notification {
 }
 
 model StagedVacancy {
-  id                String      @id @default(uuid())
-  userId            String
-  user              User        @relation(fields: [userId], references: [id])
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Discovery identity (dedup key)
-  sourceBoard       String
-  externalId        String?
-  sourceUrl         String?
+  sourceBoard String
+  externalId  String?
+  sourceUrl   String?
 
   // Vacancy data
-  title             String
-  employerName      String?
-  location          String?
-  description       String?
-  salary            String?
-  employmentType    String?
-  postedAt          DateTime?
-  applicationDeadline String?
+  title                   String
+  employerName            String?
+  location                String?
+  description             String?
+  salary                  String?
+  employmentType          String?
+  postedAt                DateTime?
+  applicationDeadline     String?
   applicationInstructions String?
 
   // Extended vacancy data (ROADMAP 1.1b Phase 1)
   companyUrl              String?
   companyDescription      String?
-  industryCodes           Json?     // string[] — NACE sector codes
+  industryCodes           Json? // string[] — NACE sector codes
   companySize             String?
-  positionOfferingCode    String?   // apprenticeship, contract, directhire, internship, etc.
+  positionOfferingCode    String? // apprenticeship, contract, directhire, internship, etc.
   numberOfPosts           Int?
-  occupationUris          Json?     // string[] — ESCO Occupation URIs
-  requiredEducationLevel  String?   // basic, medium, bachelor, master, tertiary, doctoral
+  occupationUris          Json? // string[] — ESCO Occupation URIs
+  requiredEducationLevel  String? // basic, medium, bachelor, master, tertiary, doctoral
   requiredExperienceYears Int?
-  workingLanguages        Json?     // string[] — ISO 639-1 codes
+  workingLanguages        Json? // string[] — ISO 639-1 codes
   salaryMin               Float?
   salaryMax               Float?
-  salaryCurrency          String?   // ISO 4217 (EUR, USD, etc.)
-  salaryPeriod            String?   // monthly, yearly, hourly
+  salaryCurrency          String? // ISO 4217 (EUR, USD, etc.)
+  salaryPeriod            String? // monthly, yearly, hourly
   immediateStart          Boolean?
   contractStartDate       String?
   contractEndDate         String?
   euresFlag               Boolean?
 
   // Source tracking
-  source            String      @default("automation")  // "manual" | "automation"
-  automationId      String?
-  automation        Automation? @relation(fields: [automationId], references: [id], onDelete: SetNull)
+  source       String      @default("automation") // "manual" | "automation"
+  automationId String?
+  automation   Automation? @relation(fields: [automationId], references: [id], onDelete: SetNull)
 
   // Match data (optional)
-  matchScore        Int?
-  matchData         String?
+  matchScore Int?
+  matchData  String?
 
   // Pipeline state
-  status            String      @default("staged")
+  status String @default("staged")
 
   // Promotion link
-  promotedToJobId   String?     @unique
-  promotedJob       Job?        @relation(fields: [promotedToJobId], references: [id], onDelete: SetNull)
+  promotedToJobId String? @unique
+  promotedJob     Job?    @relation(fields: [promotedToJobId], references: [id], onDelete: SetNull)
 
   // Archive / Trash
-  archivedAt        DateTime?
-  trashedAt         DateTime?
+  archivedAt DateTime?
+  trashedAt  DateTime?
 
   // Timestamps
-  discoveredAt      DateTime    @default(now())
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  discoveredAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([userId, sourceBoard, externalId])
   @@index([userId, status])
@@ -652,12 +652,12 @@ model StagedVacancy {
 }
 
 model DedupHash {
-  id            String    @id @default(uuid())
-  userId        String
-  user          User      @relation(fields: [userId], references: [id])
-  hash          String
-  sourceBoard   String
-  createdAt     DateTime  @default(now())
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hash        String
+  sourceBoard String
+  createdAt   DateTime @default(now())
 
   @@unique([userId, hash])
   @@index([userId, sourceBoard])
@@ -668,7 +668,7 @@ model Note {
   jobId     String
   job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   content   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -680,7 +680,7 @@ model Note {
 model CompanyBlacklist {
   id        String   @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   pattern   String
   matchType String   @default("contains") // "exact" | "contains" | "starts_with" | "ends_with"
   reason    String?
@@ -692,11 +692,11 @@ model CompanyBlacklist {
 }
 
 model Tag {
-  id        String @id @default(uuid())
+  id        String     @id @default(uuid())
   label     String
   value     String
   createdBy String
-  user      User   @relation(fields: [createdBy], references: [id])
+  user      User       @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   jobs      Job[]
   questions Question[]
 
@@ -708,7 +708,7 @@ model Question {
   question  String
   answer    String?
   createdBy String
-  user      User     @relation(fields: [createdBy], references: [id])
+  user      User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   tags      Tag[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -719,7 +719,7 @@ model Question {
 model PublicApiKey {
   id          String    @id @default(uuid())
   userId      String
-  user        User      @relation(fields: [userId], references: [id])
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name        String
   keyHash     String    @unique
   keyPrefix   String
@@ -736,7 +736,7 @@ model JobStatusHistory {
   jobId            String
   job              Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
   userId           String
-  user             User       @relation(fields: [userId], references: [id])
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   previousStatusId String?
   previousStatus   JobStatus? @relation("PreviousStatus", fields: [previousStatusId], references: [id])
   newStatusId      String
@@ -752,20 +752,20 @@ model JobStatusHistory {
 }
 
 model EnrichmentResult {
-  id             String    @id @default(uuid())
+  id             String          @id @default(uuid())
   userId         String
-  user           User      @relation(fields: [userId], references: [id])
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   dimension      String
   domainKey      String
   companyId      String?
-  company        Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  company        Company?        @relation(fields: [companyId], references: [id], onDelete: SetNull)
   status         String
   data           String
   sourceModuleId String
   ttlSeconds     Int
   expiresAt      DateTime
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
   logs           EnrichmentLog[]
 
   @@unique([userId, dimension, domainKey])
@@ -777,7 +777,7 @@ model EnrichmentResult {
 model EnrichmentLog {
   id                 String            @id @default(cuid())
   userId             String
-  user               User              @relation(fields: [userId], references: [id])
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   enrichmentResultId String?
   enrichmentResult   EnrichmentResult? @relation(fields: [enrichmentResultId], references: [id], onDelete: SetNull)
   dimension          String
@@ -800,9 +800,9 @@ model WebhookEndpoint {
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   url          String
-  secret       String   // AES-encrypted HMAC secret
-  iv           String   // IV for AES decryption
-  events       String   // JSON array of NotificationType values
+  secret       String // AES-encrypted HMAC secret
+  iv           String // IV for AES decryption
+  events       String // JSON array of NotificationType values
   active       Boolean  @default(true)
   failureCount Int      @default(0) // consecutive failures for auto-deactivation
   createdAt    DateTime @default(now())
@@ -816,8 +816,8 @@ model VapidConfig {
   userId     String   @unique
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   publicKey  String
-  privateKey String   // AES-encrypted
-  iv         String   // IV for AES decryption
+  privateKey String // AES-encrypted
+  iv         String // IV for AES decryption
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
@@ -827,15 +827,15 @@ model WebPushSubscription {
   userId         String
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   endpoint       String
-  p256dh         String    // AES-encrypted
-  auth           String    // AES-encrypted
-  iv             String    // IV for AES decryption (shared for p256dh + auth)
+  p256dh         String // AES-encrypted
+  auth           String // AES-encrypted
+  iv             String // IV for AES decryption (shared for p256dh + auth)
   expirationTime DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  @@index([userId])
   @@unique([userId, endpoint])
+  @@index([userId])
 }
 
 model SmtpConfig {
@@ -845,8 +845,8 @@ model SmtpConfig {
   host        String
   port        Int      @default(587)
   username    String
-  password    String   // AES-encrypted via src/lib/encryption.ts
-  iv          String   // IV for AES decryption
+  password    String // AES-encrypted via src/lib/encryption.ts
+  iv          String // IV for AES decryption
   fromAddress String
   tlsRequired Boolean  @default(true)
   active      Boolean  @default(true)
@@ -859,7 +859,7 @@ model SmtpConfig {
 model LogoAsset {
   id           String   @id @default(uuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyId    String
   company      Company  @relation("LogoAssetCompany", fields: [companyId], references: [id], onDelete: Cascade)
   sourceUrl    String
@@ -868,7 +868,7 @@ model LogoAsset {
   fileSize     Int
   width        Int?
   height       Int?
-  status       String   @default("pending")  // "pending" | "ready" | "failed"
+  status       String   @default("pending") // "pending" | "ready" | "failed"
   errorMessage String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -902,29 +902,29 @@ model LogoAsset {
 ///   readers must `JSON.parse()` it. Same convention as `Notification.data`.
 /// - Spec: specs/module-lifecycle.allium invariant `AdminOnlyModuleLifecycle`.
 model AdminAuditLog {
-  id          String   @id @default(cuid())
+  id         String   @id @default(cuid())
   /// Maps to the legacy `ts` field in the stderr JSON line.
-  timestamp   DateTime @default(now())
+  timestamp  DateTime @default(now())
   /// Action verb, e.g. "activateModule" / "deactivateModule".
-  action      String
+  action     String
   /// Optional target identifier (module id, automation id, …).
-  targetId    String?
+  targetId   String?
   /// Required: id of the user who attempted the action. NOT a foreign key —
   /// see model docstring for the reason.
-  actorId     String
+  actorId    String
   /// Denormalised actor email for audit-readability after user deletion.
-  actorEmail  String?
+  actorEmail String?
   /// Did the call succeed (true) or get denied (false).
-  allowed     Boolean
+  allowed    Boolean
   /// Which authorization tier matched: "explicit_list" / "single_user_implicit"
   /// / "denied". Mirrors `AdminAuthorizationResult.tier`.
-  tier        String?
+  tier       String?
   /// Generic deny-reason key when `allowed = false`, e.g. "errors.notAuthorized".
-  reason      String?
+  reason     String?
   /// JSON-encoded blob for any additional structured context the caller
   /// attached via `AdminAuditContext.extra`. SQLite has no jsonb so we store a
   /// string and parse on read.
-  extra       String?
+  extra      String?
 
   /// Per-user audit queries (admin review UI: "show all actions by user X").
   @@index([actorId, timestamp])
@@ -941,58 +941,58 @@ model AdminAuditLog {
 /// Independent aggregate root, NOT part of the Job aggregate.
 /// Spec: specs/crm.allium entity Person
 model Person {
-  id                  String    @id @default(uuid())
-  userId              String
-  user                User      @relation(fields: [userId], references: [id])
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // FullName (value object, flattened — both nullable for anonymization)
-  firstName           String?
-  lastName            String?
+  firstName String?
+  lastName  String?
 
   // TypedEmail[] and TypedPhone[] stored as JSON strings (SQLite TEXT)
   // Shape: [{ email: string, type: "work"|"home"|"other", isPrimary: boolean }]
-  emails              String    @default("[]")
+  emails String @default("[]")
   // Shape: [{ number: string, type: "work"|"home"|"other", isPrimary: boolean }]
-  phones              String    @default("[]")
+  phones String @default("[]")
 
   // Professional — Kette B: job_title→headline, linkedin_url→social_profiles
-  headline            String?
-  socialProfiles      String    @default("[]")  // JSON: SocialProfile[]
-  avatarUrl           String?
+  headline       String?
+  socialProfiles String  @default("[]") // JSON: SocialProfile[]
+  avatarUrl      String?
 
   // Address (value object, flattened)
-  addressStreet       String?
-  addressCity         String?
-  addressPostalCode   String?
-  addressCountry      String?
+  addressStreet     String?
+  addressCity       String?
+  addressPostalCode String?
+  addressCountry    String?
 
   // Company associations (N:M via JSON value objects — specs/crm.allium CompanyAssociation)
   // Shape: [{ companyId, companyLabel, role, isPrimary, startDate, endDate }]
-  companies           String    @default("[]")
+  companies String @default("[]")
 
   // Status state machine: active -> archived -> (active), active -> anonymized (terminal)
-  status              String    @default("active")
+  status String @default("active")
 
   // GDPR fields (specs/crm-gdpr.allium)
-  dataSource          String    @default("manual")
-  processingBasis     String    @default("legitimate_interest")
-  retentionExpiresAt  DateTime?
+  dataSource         String    @default("manual")
+  processingBasis    String    @default("legitimate_interest")
+  retentionExpiresAt DateTime?
 
   // Actor metadata — who/what created/updated this record (Kette A: updated_by)
-  createdBySource     String    @default("manual")
-  createdByName       String?
-  updatedBySource     String    @default("manual")
-  updatedByName       String?
+  createdBySource String  @default("manual")
+  createdByName   String?
+  updatedBySource String  @default("manual")
+  updatedByName   String?
 
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // CRM relations
-  crmInterviews       CrmInterview[]
-  jobContacts         JobContact[]
-  crmTaskTargets      CrmTaskTarget[]
-  crmNoteTargets      CrmNoteTarget[]
-  activityLogs        CrmActivityLog[] @relation("ActivityLogPerson")
+  crmInterviews  CrmInterview[]
+  jobContacts    JobContact[]
+  crmTaskTargets CrmTaskTarget[]
+  crmNoteTargets CrmNoteTarget[]
+  activityLogs   CrmActivityLog[] @relation("ActivityLogPerson")
 
   @@index([userId])
   @@index([userId, status])
@@ -1003,21 +1003,21 @@ model Person {
 ///                 rescheduled -> completed|cancelled
 /// Spec: specs/crm.allium entity Interview
 model CrmInterview {
-  id              String    @id @default(uuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id])
-  jobId           String
-  job             Job       @relation("CrmInterviewJob", fields: [jobId], references: [id], onDelete: Cascade)
-  personId        String?
-  person          Person?   @relation(fields: [personId], references: [id], onDelete: SetNull)
-  interviewDate   DateTime
-  location        String?
-  notes           String?
-  status          String    @default("scheduled")
-  outcome         String?
-  outcomeNotes    String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId         String
+  job           Job      @relation("CrmInterviewJob", fields: [jobId], references: [id], onDelete: Cascade)
+  personId      String?
+  person        Person?  @relation(fields: [personId], references: [id], onDelete: SetNull)
+  interviewDate DateTime
+  location      String?
+  notes         String?
+  status        String   @default("scheduled")
+  outcome       String?
+  outcomeNotes  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([userId])
   @@index([userId, jobId])
@@ -1030,15 +1030,15 @@ model CrmInterview {
 /// and one Person can be the contact for multiple Jobs.
 /// Spec: specs/crm.allium entity JobContact
 model JobContact {
-  id              String    @id @default(uuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id])
-  jobId           String
-  job             Job       @relation("JobContactJob", fields: [jobId], references: [id], onDelete: Cascade)
-  personId        String
-  person          Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
-  role            String?
-  createdAt       DateTime  @default(now())
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId     String
+  job       Job      @relation("JobContactJob", fields: [jobId], references: [id], onDelete: Cascade)
+  personId  String
+  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  role      String?
+  createdAt DateTime @default(now())
 
   @@unique([jobId, personId])
   @@index([userId])
@@ -1051,18 +1051,18 @@ model JobContact {
 ///                 in_progress -> done|cancelled
 /// Spec: specs/crm.allium entity Task
 model CrmTask {
-  id              String    @id @default(uuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id])
-  title           String
-  description     String?
-  dueDate         DateTime?
-  status          String    @default("pending")
-  completedAt     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  dueDate     DateTime?
+  status      String    @default("pending")
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  targets         CrmTaskTarget[]
+  targets CrmTaskTarget[]
 
   @@index([userId])
   @@index([userId, status])
@@ -1073,15 +1073,15 @@ model CrmTask {
 /// must be set (ExactlyOneTaskTarget invariant, enforced at app level).
 /// Spec: specs/crm.allium entity TaskTarget
 model CrmTaskTarget {
-  id              String    @id @default(uuid())
+  id              String   @id @default(uuid())
   taskId          String
-  task            CrmTask   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task            CrmTask  @relation(fields: [taskId], references: [id], onDelete: Cascade)
   targetPersonId  String?
-  targetPerson    Person?   @relation(fields: [targetPersonId], references: [id], onDelete: Cascade)
+  targetPerson    Person?  @relation(fields: [targetPersonId], references: [id], onDelete: Cascade)
   targetCompanyId String?
-  targetCompany   Company?  @relation("CrmTaskTargetCompany", fields: [targetCompanyId], references: [id], onDelete: Cascade)
+  targetCompany   Company? @relation("CrmTaskTargetCompany", fields: [targetCompanyId], references: [id], onDelete: Cascade)
   targetJobId     String?
-  targetJob       Job?      @relation("CrmTaskTargetJob", fields: [targetJobId], references: [id], onDelete: Cascade)
+  targetJob       Job?     @relation("CrmTaskTargetJob", fields: [targetJobId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
   @@index([targetPersonId])
@@ -1092,15 +1092,15 @@ model CrmTaskTarget {
 /// Free-text note linked to CRM entities via polymorphic CrmNoteTarget.
 /// Spec: specs/crm.allium entity Note
 model CrmNote {
-  id              String    @id @default(uuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id])
-  title           String?
-  body            String
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String?
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  targets         CrmNoteTarget[]
+  targets CrmNoteTarget[]
 
   @@index([userId])
 }
@@ -1109,15 +1109,15 @@ model CrmNote {
 /// must be set (ExactlyOneNoteTarget invariant, enforced at app level).
 /// Spec: specs/crm.allium entity NoteTarget
 model CrmNoteTarget {
-  id              String    @id @default(uuid())
+  id              String   @id @default(uuid())
   noteId          String
-  note            CrmNote   @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  note            CrmNote  @relation(fields: [noteId], references: [id], onDelete: Cascade)
   targetPersonId  String?
-  targetPerson    Person?   @relation(fields: [targetPersonId], references: [id], onDelete: Cascade)
+  targetPerson    Person?  @relation(fields: [targetPersonId], references: [id], onDelete: Cascade)
   targetCompanyId String?
-  targetCompany   Company?  @relation("CrmNoteTargetCompany", fields: [targetCompanyId], references: [id], onDelete: Cascade)
+  targetCompany   Company? @relation("CrmNoteTargetCompany", fields: [targetCompanyId], references: [id], onDelete: Cascade)
   targetJobId     String?
-  targetJob       Job?      @relation("CrmNoteTargetJob", fields: [targetJobId], references: [id], onDelete: Cascade)
+  targetJob       Job?     @relation("CrmNoteTargetJob", fields: [targetJobId], references: [id], onDelete: Cascade)
 
   @@index([noteId])
   @@index([targetPersonId])
@@ -1129,20 +1129,20 @@ model CrmNoteTarget {
 /// events, never updated after creation.
 /// Spec: specs/crm.allium entity ActivityLog + contract TimelineProjection
 model CrmActivityLog {
-  id                String    @id @default(cuid())
-  userId            String
-  user              User      @relation(fields: [userId], references: [id])
-  activityType      String
-  happenedAt        DateTime  @default(now())
-  actorId           String?
-  targetPersonId    String?
-  targetPerson      Person?   @relation("ActivityLogPerson", fields: [targetPersonId], references: [id], onDelete: SetNull)
-  targetCompanyId   String?
-  targetCompany     Company?  @relation("ActivityLogCompany", fields: [targetCompanyId], references: [id], onDelete: SetNull)
-  targetJobId       String?
-  targetJob         Job?      @relation("ActivityLogJob", fields: [targetJobId], references: [id], onDelete: SetNull)
-  details           String?
-  linkedRecordName  String?
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activityType     String
+  happenedAt       DateTime @default(now())
+  actorId          String?
+  targetPersonId   String?
+  targetPerson     Person?  @relation("ActivityLogPerson", fields: [targetPersonId], references: [id], onDelete: SetNull)
+  targetCompanyId  String?
+  targetCompany    Company? @relation("ActivityLogCompany", fields: [targetCompanyId], references: [id], onDelete: SetNull)
+  targetJobId      String?
+  targetJob        Job?     @relation("ActivityLogJob", fields: [targetJobId], references: [id], onDelete: SetNull)
+  details          String?
+  linkedRecordName String?
 
   @@index([userId, happenedAt])
   @@index([targetPersonId, happenedAt])
@@ -1154,13 +1154,13 @@ model CrmActivityLog {
 /// Suppresses Person auto-creation for specific handles during email/calendar sync.
 /// Spec: specs/crm.allium entity Blocklist
 model CrmBlocklist {
-  id              String    @id @default(uuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id])
-  handle          String
-  type            String
-  reason          String?
-  createdAt       DateTime  @default(now())
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  handle    String
+  type      String
+  reason    String?
+  createdAt DateTime @default(now())
 
   @@unique([userId, handle])
   @@index([userId])
@@ -1171,20 +1171,20 @@ model CrmBlocklist {
 /// Structural only — no rules govern this entity yet.
 /// Spec: specs/crm.allium entity ConnectedAccount
 model ConnectedAccount {
-  id              String    @id @default(uuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id])
-  provider        String
-  handle          String
-  accessToken     String
-  refreshToken    String?
-  iv              String
-  isSyncEnabled   Boolean   @default(false)
-  lastSyncedAt    DateTime?
-  authFailedAt    DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider      String
+  handle        String
+  accessToken   String
+  refreshToken  String?
+  iv            String
+  isSyncEnabled Boolean   @default(false)
+  lastSyncedAt  DateTime?
+  authFailedAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  @@index([userId])
   @@unique([userId, provider, handle])
+  @@index([userId])
 }
