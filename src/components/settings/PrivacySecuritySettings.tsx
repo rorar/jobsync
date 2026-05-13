@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { toast } from "@/components/ui/use-toast";
 import { Loader2, ShieldCheck } from "lucide-react";
+import DataExportSettings from "@/components/settings/DataExportSettings";
 import {
   getPrivacySettings,
   updatePrivacySettings,
@@ -214,6 +215,9 @@ export default function PrivacySecuritySettings() {
           </SelectContent>
         </Select>
       </div>
+
+      {/* S2: Data Export (GDPR Art. 15, 20) */}
+      <DataExportSettings />
 
       {isSaving && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
