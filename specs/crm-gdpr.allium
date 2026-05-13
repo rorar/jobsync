@@ -14,7 +14,8 @@
 --   - Consent banner / cookie UI (not applicable — self-hosted, no tracking)
 --   - Breach notification procedures (operational, not domain logic)
 --   - Data Processing Agreements with vendors (legal, not code)
---   - User account data (WorkspaceMember is the CRM operator, not a data subject)
+--   - User account deletion (see auth-session.allium rule DeleteAccount —
+--     the User/operator is not a CRM data subject)
 --
 -- Legal basis: Art. 6(1)(f) DSGVO — Berechtigtes Interesse (Legitimate Interest)
 -- JobSync is self-hosted, single-user/small-team. The CRM operator manages their
