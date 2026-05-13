@@ -17,32 +17,16 @@ jest.mock("@/lib/db", () => {
       findMany: jest.fn(),
     },
     // Note: prisma.notification is no longer used directly by degradation.ts.
-    // Notifications now route through channelRouter.route().
+    // Notifications are dispatched via AutomationDegraded events.
   };
   return { __esModule: true, default: mockPrisma };
 });
 
-jest.mock("@/lib/notifications/channel-router", () => ({
-  channelRouter: { route: jest.fn().mockResolvedValue({ anySuccess: true, results: [] }) },
-  registerChannels: jest.fn(),
-}));
-
-jest.mock("@/lib/notifications/dispatch-context", () => ({
-  buildDispatchContext: jest.fn().mockResolvedValue({
-    userId: "mock-user",
-    preferences: { enabled: true, quietHoursStart: null, quietHoursEnd: null, channels: { inApp: true, email: true, push: true, webhook: true }, perType: {} },
-    locale: "en",
-    userEmail: null,
-    smtp: null,
-    vapid: null,
-    pushSubscriptions: [],
-    webhookEndpoints: [],
-    emailAvailable: false,
-    pushAvailable: false,
-    webhookAvailable: false,
-    inAppAvailable: true,
-    vapidSubject: "mailto:noreply@jobsync.local",
-  }),
+const mockEmitEvent = jest.fn();
+const mockCreateEvent = jest.fn((type: string, payload: any) => ({ type, payload, timestamp: new Date() }));
+jest.mock("@/lib/events", () => ({
+  emitEvent: (...args: any[]) => mockEmitEvent(...args),
+  createEvent: (...args: any[]) => mockCreateEvent(...args),
 }));
 
 jest.mock("@/lib/connector/registry", () => {
@@ -73,21 +57,16 @@ import {
   handleCircuitBreakerRecovery,
 } from "@/lib/connector/degradation";
 import { ModuleStatus, ConnectorType, CircuitBreakerState } from "@/lib/connector/manifest";
-import { channelRouter } from "@/lib/notifications/channel-router";
-import { buildDispatchContext } from "@/lib/notifications/dispatch-context";
-
 const mockPrisma = prisma as jest.Mocked<typeof prisma>;
 const mockRegistry = moduleRegistry as jest.Mocked<typeof moduleRegistry> & {
   _testMap: Map<string, any>;
 };
-const mockRoute = channelRouter.route as jest.Mock;
-const mockBuildDispatchContext = buildDispatchContext as jest.Mock;
 
 describe("Degradation Rules", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockRoute.mockClear();
-    mockBuildDispatchContext.mockClear();
+    mockEmitEvent.mockClear();
+    mockCreateEvent.mockClear();
     mockRegistry._testMap.clear();
     // Suppress console output in tests
     jest.spyOn(console, "error").mockImplementation(() => {});
@@ -168,7 +147,7 @@ describe("Degradation Rules", () => {
       expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
     });
 
-    it("should create a notification for each affected automation", async () => {
+    it("should emit an AutomationDegraded event for each affected automation", async () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 2 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
@@ -180,29 +159,30 @@ describe("Degradation Rules", () => {
 
       await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      // Notifications now route through channelRouter.route() — one call per draft
-      expect(mockRoute).toHaveBeenCalledTimes(2);
-      expect(mockRoute).toHaveBeenCalledWith(
+      // One emitEvent call per affected automation
+      expect(mockEmitEvent).toHaveBeenCalledTimes(2);
+      // Verify createEvent was called with enriched payloads
+      expect(mockCreateEvent).toHaveBeenCalledWith(
+        "AutomationDegraded",
         expect.objectContaining({
           userId: "user-1",
-          type: "auth_failure",
+          reason: "auth_failure",
           moduleId: "jsearch",
           automationId: "auto-1",
         }),
-        expect.anything(),
       );
-      expect(mockRoute).toHaveBeenCalledWith(
+      expect(mockCreateEvent).toHaveBeenCalledWith(
+        "AutomationDegraded",
         expect.objectContaining({
           userId: "user-2",
-          type: "auth_failure",
+          reason: "auth_failure",
           moduleId: "jsearch",
           automationId: "auto-2",
         }),
-        expect.anything(),
       );
     });
 
-    it("should populate data.titleKey + 5W+H metadata for late-bound i18n", async () => {
+    it("should populate titleKey + 5W+H metadata in enriched event payload", async () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
@@ -213,11 +193,10 @@ describe("Degradation Rules", () => {
 
       await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      // channelRouter.route() receives the NotificationDraft as first arg
-      expect(mockRoute).toHaveBeenCalledTimes(1);
-      const draft = mockRoute.mock.calls[0][0];
-      // `data` sub-object carries module/automation context
-      expect(draft.data).toEqual(
+      expect(mockCreateEvent).toHaveBeenCalledTimes(1);
+      const payload = mockCreateEvent.mock.calls[0][1];
+      // Enriched payload carries module/automation context directly
+      expect(payload).toEqual(
         expect.objectContaining({
           moduleId: "jsearch",
           moduleName: "JSearch",
@@ -225,8 +204,8 @@ describe("Degradation Rules", () => {
           automationName: "Late Bind Auto",
         }),
       );
-      // Top-level 5W+H fields on the draft (ADR-030 dual-write)
-      expect(draft).toEqual(
+      // 5W+H fields on the enriched payload
+      expect(payload).toEqual(
         expect.objectContaining({
           titleKey: "notifications.authFailure.title",
           actorType: "module",
@@ -236,11 +215,11 @@ describe("Degradation Rules", () => {
         }),
       );
       // Backward-compat English `message` must still be populated
-      expect(typeof draft.message).toBe("string");
-      expect(draft.message.length).toBeGreaterThan(0);
+      expect(typeof payload.message).toBe("string");
+      expect(payload.message.length).toBeGreaterThan(0);
     });
 
-    it("should not create notifications when 0 automations are affected", async () => {
+    it("should not emit events when 0 automations are affected", async () => {
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([]);
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
@@ -248,12 +227,12 @@ describe("Degradation Rules", () => {
 
       await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      expect(mockRoute).not.toHaveBeenCalled();
+      expect(mockEmitEvent).not.toHaveBeenCalled();
       // updateMany is also not called when findMany returns empty
       expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
     });
 
-    it("should still return pausedCount when notification creation fails", async () => {
+    it("should return pausedCount and emit event (fire-and-forget)", async () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
@@ -261,31 +240,12 @@ describe("Degradation Rules", () => {
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
         { id: "auto-3", userId: "user-3", name: "Gamma Search" },
       ]);
-      mockRoute.mockRejectedValueOnce(new Error("DB constraint violation"));
 
       const result = await handleAuthFailure("jsearch", "403 Forbidden");
 
-      // Degradation response must not be blocked by notification failure
+      // Degradation returns pausedCount; event emission is fire-and-forget
       expect(result).toEqual({ pausedCount: 1 });
-    });
-
-    it("should continue when buildDispatchContext rejects", async () => {
-      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
-        { id: "auto-ctx-fail", userId: "user-ctx-fail", name: "Ctx Fail Auto" },
-      ]);
-      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-      (mockRegistry.get as jest.Mock).mockReturnValue({
-        manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
-      });
-      mockBuildDispatchContext.mockRejectedValueOnce(new Error("DB connection lost"));
-
-      const result = await handleAuthFailure("jsearch", "401 Unauthorized");
-
-      // Core degradation still works: automation paused
-      expect(result).toEqual({ pausedCount: 1 });
-      // AutomationDegraded event still emitted (lives outside the try/catch)
-      // channelRouter.route NOT called because context build failed
-      expect(mockRoute).not.toHaveBeenCalled();
+      expect(mockEmitEvent).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -397,7 +357,7 @@ describe("Degradation Rules", () => {
       expect(result).toEqual({ paused: false });
     });
 
-    it("should create a notification for the automation owner after pausing", async () => {
+    it("should emit an AutomationDegraded event for the automation owner after pausing", async () => {
       (mockPrisma.automationRun.findMany as jest.Mock).mockResolvedValue([
         { status: "failed" },
         { status: "failed" },
@@ -415,18 +375,18 @@ describe("Degradation Rules", () => {
 
       await checkConsecutiveRunFailures("auto-notif");
 
-      expect(mockRoute).toHaveBeenCalledTimes(1);
-      expect(mockRoute).toHaveBeenCalledWith(
+      expect(mockEmitEvent).toHaveBeenCalledTimes(1);
+      expect(mockCreateEvent).toHaveBeenCalledWith(
+        "AutomationDegraded",
         expect.objectContaining({
           userId: "user-notif",
-          type: "consecutive_failures",
+          reason: "consecutive_failures",
           automationId: "auto-notif",
         }),
-        expect.anything(),
       );
     });
 
-    it("should populate data.titleKey + 5W+H metadata for late-bound i18n", async () => {
+    it("should populate titleKey + 5W+H metadata in enriched event payload", async () => {
       (mockPrisma.automationRun.findMany as jest.Mock).mockResolvedValue([
         { status: "failed" },
         { status: "failed" },
@@ -444,61 +404,28 @@ describe("Degradation Rules", () => {
 
       await checkConsecutiveRunFailures("auto-late-bind");
 
-      expect(mockRoute).toHaveBeenCalledTimes(1);
-      const draft = mockRoute.mock.calls[0][0];
-      // Top-level draft fields
-      expect(draft).toEqual(
+      expect(mockCreateEvent).toHaveBeenCalledTimes(1);
+      const payload = mockCreateEvent.mock.calls[0][1];
+      // Enriched event payload carries all notification-relevant fields
+      expect(payload).toEqual(
         expect.objectContaining({
           userId: "user-late-bind",
-          type: "consecutive_failures",
+          reason: "consecutive_failures",
           automationId: "auto-late-bind",
           titleKey: "notifications.consecutiveFailures.title",
           titleParams: { count: 5 },
           actorType: "automation",
           actorId: "auto-late-bind",
           severity: "warning",
-        }),
-      );
-      // `data` sub-object carries automation context
-      expect(draft.data).toEqual(
-        expect.objectContaining({
-          automationId: "auto-late-bind",
           automationName: "Late Bind Cons",
           failureCount: 5,
         }),
       );
-      expect(typeof draft.message).toBe("string");
-      expect(draft.message.length).toBeGreaterThan(0);
+      // Backward-compat English `message` must still be populated
+      expect(typeof payload.message).toBe("string");
+      expect(payload.message.length).toBeGreaterThan(0);
     });
 
-    it("should continue when buildDispatchContext rejects", async () => {
-      (mockPrisma.automationRun.findMany as jest.Mock).mockResolvedValue([
-        { status: "failed" },
-        { status: "failed" },
-        { status: "failed" },
-        { status: "failed" },
-        { status: "failed" },
-      ]);
-      (mockPrisma.automation.findFirst as jest.Mock).mockResolvedValue({
-        id: "auto-ctx-fail",
-        status: "active",
-        name: "Ctx Fail Auto",
-        userId: "user-ctx-fail",
-      });
-      (mockPrisma.automation.update as jest.Mock).mockResolvedValue({});
-      mockBuildDispatchContext.mockRejectedValueOnce(new Error("DB connection lost"));
-
-      const result = await checkConsecutiveRunFailures("auto-ctx-fail");
-
-      // Core degradation still works: automation paused
-      expect(result).toEqual({ paused: true });
-      expect(mockPrisma.automation.update).toHaveBeenCalledWith({
-        where: { id: "auto-ctx-fail" },
-        data: { status: "paused", pauseReason: "consecutive_failures" },
-      });
-      // channelRouter.route NOT called because context build failed
-      expect(mockRoute).not.toHaveBeenCalled();
-    });
   });
 
   describe("handleCircuitBreakerTrip", () => {
@@ -595,7 +522,7 @@ describe("Degradation Rules", () => {
       expect(registered.circuitBreakerState).toBe(CircuitBreakerState.OPEN);
     });
 
-    it("should create notifications for affected automations when threshold is reached", async () => {
+    it("should emit AutomationDegraded events for affected automations when threshold is reached", async () => {
       registerModule("mod-cb-notif", 2);
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 2 });
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
@@ -605,29 +532,29 @@ describe("Degradation Rules", () => {
 
       await handleCircuitBreakerTrip("mod-cb-notif");
 
-      // Notifications now route through channelRouter.route() — one call per draft
-      expect(mockRoute).toHaveBeenCalledTimes(2);
-      expect(mockRoute).toHaveBeenCalledWith(
+      // One emitEvent call per affected automation
+      expect(mockEmitEvent).toHaveBeenCalledTimes(2);
+      expect(mockCreateEvent).toHaveBeenCalledWith(
+        "AutomationDegraded",
         expect.objectContaining({
           userId: "user-cb-1",
-          type: "cb_escalation",
+          reason: "cb_escalation",
           moduleId: "mod-cb-notif",
           automationId: "auto-cb-1",
         }),
-        expect.anything(),
       );
-      expect(mockRoute).toHaveBeenCalledWith(
+      expect(mockCreateEvent).toHaveBeenCalledWith(
+        "AutomationDegraded",
         expect.objectContaining({
           userId: "user-cb-2",
-          type: "cb_escalation",
+          reason: "cb_escalation",
           moduleId: "mod-cb-notif",
           automationId: "auto-cb-2",
         }),
-        expect.anything(),
       );
     });
 
-    it("should populate data.titleKey + 5W+H metadata for late-bound i18n", async () => {
+    it("should populate titleKey + 5W+H metadata in enriched event payload", async () => {
       registerModule("mod-cb-late-bind", 2);
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
@@ -636,21 +563,16 @@ describe("Degradation Rules", () => {
 
       await handleCircuitBreakerTrip("mod-cb-late-bind");
 
-      expect(mockRoute).toHaveBeenCalledTimes(1);
-      const draft = mockRoute.mock.calls[0][0];
-      // `data` sub-object carries module/automation context
-      expect(draft.data).toEqual(
+      expect(mockCreateEvent).toHaveBeenCalledTimes(1);
+      const payload = mockCreateEvent.mock.calls[0][1];
+      // Enriched event payload carries all notification-relevant fields
+      expect(payload).toEqual(
         expect.objectContaining({
           moduleId: "mod-cb-late-bind",
           moduleName: "mod-cb-late-bind",
           automationId: "auto-late-bind",
           automationName: "CB Late Bind",
           failureCount: 3,
-        }),
-      );
-      // Top-level 5W+H fields on the draft (ADR-030 dual-write)
-      expect(draft).toEqual(
-        expect.objectContaining({
           titleKey: "notifications.cbEscalation.title",
           actorType: "module",
           actorId: "mod-cb-late-bind",
@@ -658,38 +580,20 @@ describe("Degradation Rules", () => {
           severity: "warning",
         }),
       );
-      expect(typeof draft.message).toBe("string");
-      expect(draft.message.length).toBeGreaterThan(0);
+      // Backward-compat English `message` must still be populated
+      expect(typeof payload.message).toBe("string");
+      expect(payload.message.length).toBeGreaterThan(0);
     });
 
-    it("should not create notifications below threshold", async () => {
+    it("should not emit events below threshold", async () => {
       registerModule("mod-cb-no-notif", 0);
 
       await handleCircuitBreakerTrip("mod-cb-no-notif");
 
-      expect(mockRoute).not.toHaveBeenCalled();
+      expect(mockEmitEvent).not.toHaveBeenCalled();
       expect(mockPrisma.automation.findMany).not.toHaveBeenCalled();
     });
 
-    it("should continue when buildDispatchContext rejects", async () => {
-      registerModule("mod-cb-ctx-fail", 2);
-      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
-        { id: "auto-cb-ctx", userId: "user-cb-ctx", name: "CB Ctx Fail" },
-      ]);
-      (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-      mockBuildDispatchContext.mockRejectedValueOnce(new Error("DB connection lost"));
-
-      const result = await handleCircuitBreakerTrip("mod-cb-ctx-fail");
-
-      // Core degradation still works: automation paused
-      expect(result).toEqual({ pausedCount: 1 });
-      expect(mockPrisma.automation.updateMany).toHaveBeenCalledWith({
-        where: { id: { in: ["auto-cb-ctx"] } },
-        data: { status: "paused", pauseReason: "cb_escalation" },
-      });
-      // channelRouter.route NOT called because context build failed
-      expect(mockRoute).not.toHaveBeenCalled();
-    });
   });
 
   describe("handleCircuitBreakerRecovery", () => {
@@ -734,20 +638,18 @@ describe("Degradation Rules", () => {
   });
 
   // ===========================================================================
-  // Preference gating — ChannelRouter (IF-4 refactor)
+  // Event emission integration
   //
-  // After the IF-4 refactor, degradation.ts routes all notifications through
-  // `channelRouter.route()`. The ChannelRouter handles preference gating
-  // (shouldNotify, quiet hours, per-type toggles) internally. Degradation
-  // always calls route() — it is the router's responsibility to suppress
-  // delivery based on user preferences.
+  // After the Sprint C architecture decoupling, degradation.ts emits
+  // AutomationDegraded events with enriched payloads. A notification-dispatcher
+  // consumer subscribes to these events and routes through ChannelRouter.
   //
-  // These tests verify that degradation correctly routes drafts to the
-  // channelRouter regardless of user preference state.
+  // These tests verify that degradation emits the correct events for each
+  // escalation rule, regardless of downstream notification routing.
   // ===========================================================================
 
-  describe("ChannelRouter integration (preference gating is router's concern)", () => {
-    it("handleAuthFailure — routes draft to channelRouter (router handles preferences)", async () => {
+  describe("Event emission integration", () => {
+    it("handleAuthFailure — emits AutomationDegraded event", async () => {
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: {
           name: "JSearch",
@@ -764,20 +666,20 @@ describe("Degradation Rules", () => {
 
       const result = await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      // Degradation pauses and routes — the router handles suppression
+      // Degradation pauses and emits — notification routing is downstream
       expect(result).toEqual({ pausedCount: 1 });
       expect(mockPrisma.automation.updateMany).toHaveBeenCalled();
-      expect(mockRoute).toHaveBeenCalledTimes(1);
-      expect(mockRoute).toHaveBeenCalledWith(
+      expect(mockEmitEvent).toHaveBeenCalledTimes(1);
+      expect(mockCreateEvent).toHaveBeenCalledWith(
+        "AutomationDegraded",
         expect.objectContaining({
           userId: "user-off",
-          type: "auth_failure",
+          reason: "auth_failure",
         }),
-        expect.anything(),
       );
     });
 
-    it("handleAuthFailure — builds dispatch context per unique userId", async () => {
+    it("handleAuthFailure — emits one event per affected automation", async () => {
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: {
           name: "JSearch",
@@ -796,15 +698,12 @@ describe("Degradation Rules", () => {
 
       await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      // 2 unique userIds → 2 context builds
-      expect(mockBuildDispatchContext).toHaveBeenCalledTimes(2);
-      expect(mockBuildDispatchContext).toHaveBeenCalledWith("user-a");
-      expect(mockBuildDispatchContext).toHaveBeenCalledWith("user-b");
-      // 3 drafts → 3 route calls
-      expect(mockRoute).toHaveBeenCalledTimes(3);
+      // 3 automations → 3 events (one per automation, not per unique userId)
+      expect(mockEmitEvent).toHaveBeenCalledTimes(3);
+      expect(mockCreateEvent).toHaveBeenCalledTimes(3);
     });
 
-    it("handleAuthFailure — still routes draft when the user has defaults (null settings)", async () => {
+    it("handleAuthFailure — emits event regardless of user preference state", async () => {
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: {
           name: "JSearch",
@@ -821,10 +720,10 @@ describe("Degradation Rules", () => {
 
       await handleAuthFailure("jsearch", "401 Unauthorized");
 
-      expect(mockRoute).toHaveBeenCalledTimes(1);
+      expect(mockEmitEvent).toHaveBeenCalledTimes(1);
     });
 
-    it("checkConsecutiveRunFailures — routes draft to channelRouter", async () => {
+    it("checkConsecutiveRunFailures — emits AutomationDegraded event", async () => {
       (mockPrisma.automationRun.findMany as jest.Mock).mockResolvedValue([
         { status: "failed" },
         { status: "failed" },
@@ -842,20 +741,20 @@ describe("Degradation Rules", () => {
 
       const result = await checkConsecutiveRunFailures("auto-gated");
 
-      // Pausing still happens — router handles preference gating
+      // Pausing still happens — notification routing is downstream
       expect(result).toEqual({ paused: true });
       expect(mockPrisma.automation.update).toHaveBeenCalled();
-      expect(mockRoute).toHaveBeenCalledTimes(1);
-      expect(mockRoute).toHaveBeenCalledWith(
+      expect(mockEmitEvent).toHaveBeenCalledTimes(1);
+      expect(mockCreateEvent).toHaveBeenCalledWith(
+        "AutomationDegraded",
         expect.objectContaining({
           userId: "user-gated",
-          type: "consecutive_failures",
+          reason: "consecutive_failures",
         }),
-        expect.anything(),
       );
     });
 
-    it("handleCircuitBreakerTrip — routes draft to channelRouter", async () => {
+    it("handleCircuitBreakerTrip — emits AutomationDegraded event", async () => {
       mockRegistry._testMap.set("mod-cb-gate", {
         manifest: {
           id: "mod-cb-gate",
@@ -877,16 +776,16 @@ describe("Degradation Rules", () => {
 
       const result = await handleCircuitBreakerTrip("mod-cb-gate");
 
-      // Pausing still happens — router handles preference gating
+      // Pausing still happens — notification routing is downstream
       expect(result).toEqual({ pausedCount: 1 });
       expect(mockPrisma.automation.updateMany).toHaveBeenCalled();
-      expect(mockRoute).toHaveBeenCalledTimes(1);
-      expect(mockRoute).toHaveBeenCalledWith(
+      expect(mockEmitEvent).toHaveBeenCalledTimes(1);
+      expect(mockCreateEvent).toHaveBeenCalledWith(
+        "AutomationDegraded",
         expect.objectContaining({
           userId: "user-cb-gate",
-          type: "cb_escalation",
+          reason: "cb_escalation",
         }),
-        expect.anything(),
       );
     });
   });

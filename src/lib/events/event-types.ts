@@ -173,6 +173,18 @@ export interface AutomationDegradedPayload {
   automationId: string;
   userId: string;
   reason: "auth_failure" | "cb_escalation" | "consecutive_failures";
+  // Notification-relevant fields (Sprint C: degradation → event-based notifications)
+  moduleId?: string;
+  automationName: string;
+  message: string;
+  titleKey: string;
+  titleParams?: Record<string, string | number>;
+  actorType: "module" | "automation";
+  actorId: string;
+  reasonKey?: string;
+  severity: "error" | "warning";
+  moduleName?: string;
+  failureCount?: number;
 }
 
 // CRM Core payloads (spec: crm-workflow.allium)

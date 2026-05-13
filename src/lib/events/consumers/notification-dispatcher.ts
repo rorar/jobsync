@@ -31,6 +31,7 @@ import type {
   RetentionCompletedPayload,
   JobStatusChangedPayload,
   ReminderTriggeredPayload,
+  AutomationDegradedPayload,
 } from "../event-types";
 import prisma from "@/lib/db";
 import type {
@@ -532,6 +533,40 @@ async function handleReminderTriggered(
 }
 
 // ---------------------------------------------------------------------------
+// AutomationDegraded (Sprint C: event-based degradation notifications)
+// ---------------------------------------------------------------------------
+
+async function handleAutomationDegraded(
+  event: DomainEvent<typeof DomainEventType.AutomationDegraded>,
+): Promise<void> {
+  const payload = event.payload as AutomationDegradedPayload;
+  const ctx = await buildDispatchContext(payload.userId);
+
+  const draft: NotificationDraft = {
+    userId: payload.userId,
+    type: payload.reason as NotificationType,
+    message: payload.message,
+    moduleId: payload.moduleId,
+    automationId: payload.automationId,
+    titleKey: payload.titleKey,
+    titleParams: payload.titleParams,
+    actorType: payload.actorType as NotificationActorType,
+    actorId: payload.actorId,
+    reasonKey: payload.reasonKey,
+    severity: payload.severity as NotificationSeverity,
+    data: {
+      moduleId: payload.moduleId,
+      moduleName: payload.moduleName,
+      automationId: payload.automationId,
+      automationName: payload.automationName,
+      ...(payload.failureCount != null ? { failureCount: payload.failureCount } : {}),
+    },
+  };
+
+  await dispatchNotification(draft, ctx);
+}
+
+// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
@@ -553,6 +588,7 @@ export function registerNotificationDispatcher(): void {
   eventBus.subscribe(DomainEventType.RetentionCompleted, handleRetentionCompleted);
   eventBus.subscribe(DomainEventType.JobStatusChanged, handleJobStatusChanged);
   eventBus.subscribe(DomainEventType.ReminderTriggered, handleReminderTriggered);
+  eventBus.subscribe(DomainEventType.AutomationDegraded, handleAutomationDegraded);
 }
 
 // ---------------------------------------------------------------------------

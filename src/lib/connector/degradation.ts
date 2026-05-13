@@ -3,9 +3,6 @@ import "server-only";
 import prisma from "@/lib/db";
 import { emitEvent, createEvent } from "@/lib/events";
 import { DomainEventType } from "@/lib/events/event-types";
-import { channelRouter, registerChannels } from "@/lib/notifications/channel-router";
-import { buildDispatchContext } from "@/lib/notifications/dispatch-context";
-import type { NotificationDraft } from "@/lib/notifications/types";
 import { moduleRegistry } from "./registry";
 import { ModuleStatus, CircuitBreakerState } from "./manifest";
 
@@ -17,59 +14,22 @@ import { ModuleStatus, CircuitBreakerState } from "./manifest";
  * - ConsecutiveRunFailureEscalation: pause after N consecutive failed runs
  * - CircuitBreakerEscalation: pause after N consecutive CB opens
  *
- * Notification routing — ChannelRouter (IF-4 fix)
- * ------------------------------------------------
- * All 3 notification sites now route through `channelRouter.route()` instead
- * of writing directly via Prisma. This means degradation alerts (auth failure,
- * consecutive failures, circuit breaker) reach ALL enabled channels (InApp,
- * Email, Push, Webhook) — not just InApp as before.
- *
- * The ChannelRouter handles preference gating (shouldNotify), per-channel
- * availability checks, and the 5W+H structured field writing via InAppChannel.
- *
- * `message` remains the English fallback; structured `titleKey`/`titleParams`
- * are resolved at render time in the user's locale (ADR-030).
- *
- * Keys referenced here already exist in src/i18n/dictionaries/notifications.ts.
+ * Sprint C Architecture Decoupling
+ * ---------------------------------
+ * Notifications are NO LONGER routed from here. Each escalation rule emits
+ * an `AutomationDegraded` event with enriched payload (notification fields).
+ * The notification-dispatcher consumer subscribes to `AutomationDegraded`
+ * and routes through ChannelRouter — one event per automation.
  */
 
 const CONSECUTIVE_RUN_FAILURE_THRESHOLD = 5;
 const CB_ESCALATION_THRESHOLD = 3;
 
 // Soft upper bound on free-text fragments stored inside notification data.
-// Matches the length guard used for the English `message` fallback.
 const NAME_TRUNCATION_LENGTH = 200;
 
 function truncate(value: string, maxLength = NAME_TRUNCATION_LENGTH): string {
   return value.length > maxLength ? value.slice(0, maxLength) : value;
-}
-
-// =============================================================================
-// Shared notification fan-out helper (H-01: extracted from 3 duplicated sites)
-// =============================================================================
-
-/**
- * Route notification drafts through the ChannelRouter with per-user
- * DispatchContext. Errors in context building or routing are isolated
- * per user via Promise.allSettled (3.2: error isolation).
- */
-async function routeDrafts(drafts: NotificationDraft[]): Promise<void> {
-  registerChannels();
-  const userIds = [...new Set(drafts.map((d) => d.userId))];
-  const settled = await Promise.allSettled(
-    userIds.map(async (uid) => [uid, await buildDispatchContext(uid)] as const),
-  );
-  const ctxMap = new Map<string, Awaited<ReturnType<typeof buildDispatchContext>>>();
-  for (const result of settled) {
-    if (result.status === "fulfilled") {
-      ctxMap.set(result.value[0], result.value[1]);
-    }
-  }
-  await Promise.allSettled(
-    drafts
-      .filter((d) => ctxMap.has(d.userId))
-      .map((draft) => channelRouter.route(draft, ctxMap.get(draft.userId)!)),
-  );
 }
 
 // =============================================================================
@@ -129,34 +89,23 @@ export async function handleAuthFailure(
       },
     });
 
-    // Route notifications through ChannelRouter (IF-4).
-    try {
-      const safeModuleName = truncate(registered.manifest.name);
-      const drafts: NotificationDraft[] = affectedAutomations.map((auto) => ({
-        userId: auto.userId,
-        type: "auth_failure" as const,
-        message: `Automation "${truncate(auto.name)}" paused: authentication failed for module "${safeModuleName}". Please check your credentials.`,
-        moduleId,
-        automationId: auto.id,
-        titleKey: "notifications.authFailure.title",
-        actorType: "module" as const,
-        actorId: moduleId,
-        reasonKey: "notifications.reason.authExpired",
-        severity: "error" as const,
-        data: { moduleId, moduleName: safeModuleName, automationId: auto.id, automationName: truncate(auto.name) },
-      }));
-      await routeDrafts(drafts);
-    } catch (err) {
-      console.warn("[Degradation] Failed to route auth_failure notifications:", err);
-    }
-
-    // Emit AutomationDegraded events (A8: bridge to RunCoordinator)
+    // Emit AutomationDegraded events with enriched payload for notification routing
+    const safeModuleName = truncate(registered.manifest.name);
     for (const auto of affectedAutomations) {
       emitEvent(
         createEvent(DomainEventType.AutomationDegraded, {
           automationId: auto.id,
           userId: auto.userId,
           reason: "auth_failure",
+          moduleId,
+          automationName: truncate(auto.name),
+          message: `Automation "${truncate(auto.name)}" paused: authentication failed for module "${safeModuleName}". Please check your credentials.`,
+          titleKey: "notifications.authFailure.title",
+          actorType: "module",
+          actorId: moduleId,
+          reasonKey: "notifications.reason.authExpired",
+          severity: "error",
+          moduleName: safeModuleName,
         }),
       );
     }
@@ -247,30 +196,20 @@ export async function checkConsecutiveRunFailures(
       },
     });
 
-    // Route notification through ChannelRouter (IF-4).
-    try {
-      await routeDrafts([{
-        userId: automation.userId,
-        type: "consecutive_failures",
-        message: `Automation "${truncate(automation.name)}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
-        automationId,
-        titleKey: "notifications.consecutiveFailures.title",
-        titleParams: { count: CONSECUTIVE_RUN_FAILURE_THRESHOLD },
-        actorType: "automation",
-        actorId: automationId,
-        severity: "warning",
-        data: { automationId, automationName: truncate(automation.name), failureCount: CONSECUTIVE_RUN_FAILURE_THRESHOLD },
-      }]);
-    } catch (err) {
-      console.warn("[Degradation] Failed to route consecutive_failures notification:", err);
-    }
-
-    // Emit AutomationDegraded event (A8: bridge to RunCoordinator)
+    // Emit AutomationDegraded event with enriched payload for notification routing
     emitEvent(
       createEvent(DomainEventType.AutomationDegraded, {
         automationId,
         userId: automation.userId,
         reason: "consecutive_failures",
+        automationName: truncate(automation.name),
+        message: `Automation "${truncate(automation.name)}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
+        titleKey: "notifications.consecutiveFailures.title",
+        titleParams: { count: CONSECUTIVE_RUN_FAILURE_THRESHOLD },
+        actorType: "automation",
+        actorId: automationId,
+        severity: "warning",
+        failureCount: CONSECUTIVE_RUN_FAILURE_THRESHOLD,
       }),
     );
 
@@ -330,34 +269,24 @@ export async function handleCircuitBreakerTrip(
       },
     });
 
-    // Route notifications through ChannelRouter (IF-4).
-    try {
-      const safeModuleName = truncate(registered.manifest.name);
-      const drafts: NotificationDraft[] = affectedAutomations.map((auto) => ({
-        userId: auto.userId,
-        type: "cb_escalation" as const,
-        message: `Automation "${truncate(auto.name)}" paused: module "${safeModuleName}" circuit breaker tripped ${newFailureCount} times.`,
-        moduleId,
-        automationId: auto.id,
-        titleKey: "notifications.cbEscalation.title",
-        actorType: "module" as const,
-        actorId: moduleId,
-        reasonKey: "notifications.reason.circuitBreaker",
-        severity: "warning" as const,
-        data: { moduleId, moduleName: safeModuleName, automationId: auto.id, automationName: truncate(auto.name), failureCount: newFailureCount },
-      }));
-      await routeDrafts(drafts);
-    } catch (err) {
-      console.warn("[Degradation] Failed to route cb_escalation notifications:", err);
-    }
-
-    // Emit AutomationDegraded events (A8: bridge to RunCoordinator)
+    // Emit AutomationDegraded events with enriched payload for notification routing
+    const safeModuleName = truncate(registered.manifest.name);
     for (const auto of affectedAutomations) {
       emitEvent(
         createEvent(DomainEventType.AutomationDegraded, {
           automationId: auto.id,
           userId: auto.userId,
           reason: "cb_escalation",
+          moduleId,
+          automationName: truncate(auto.name),
+          message: `Automation "${truncate(auto.name)}" paused: module "${safeModuleName}" circuit breaker tripped ${newFailureCount} times.`,
+          titleKey: "notifications.cbEscalation.title",
+          actorType: "module",
+          actorId: moduleId,
+          reasonKey: "notifications.reason.circuitBreaker",
+          severity: "warning",
+          moduleName: safeModuleName,
+          failureCount: newFailureCount,
         }),
       );
     }
