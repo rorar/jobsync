@@ -29,5 +29,8 @@ export async function register() {
 
     const { startCrmCron } = await import("@/lib/scheduler/crm-cron");
     startCrmCron();
+
+    const { startRetentionCron } = await import("@/lib/scheduler/retention-cron");
+    startRetentionCron();
   }
 }
