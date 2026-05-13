@@ -87,7 +87,12 @@ export async function deleteAccount(): Promise<ActionResult> {
     await tx.contact.deleteMany({ where: { createdBy: uid } });
     await tx.interview.deleteMany({ where: { job: { userId: uid } } });
 
-    // --- Delete User (cascades all 37 direct FK relations) ---
+    // --- Job (references JobTitle/Company via implicit Restrict FK) ---
+    // Must delete before User cascade attempts to delete JobTitle/Company,
+    // otherwise Restrict on Job.jobTitleId/companyId would block.
+    await tx.job.deleteMany({ where: { userId: uid } });
+
+    // --- Delete User (cascades all remaining direct FK relations) ---
     await tx.user.delete({ where: { id: uid } });
   });
 

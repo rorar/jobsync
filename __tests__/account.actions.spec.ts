@@ -31,6 +31,7 @@ const mockTransaction = jest.fn().mockImplementation(async (fn) => {
     crmNoteTarget: { deleteMany: mockDeleteMany },
     contact: { deleteMany: mockDeleteMany },
     interview: { deleteMany: mockDeleteMany },
+    job: { deleteMany: mockDeleteMany },
     user: { delete: mockDelete },
   };
   return fn(tx);
@@ -154,6 +155,7 @@ describe("deleteAccount", () => {
         crmNoteTarget: { deleteMany: trackedDeleteMany("crmNoteTarget") },
         contact: { deleteMany: trackedDeleteMany("contact") },
         interview: { deleteMany: trackedDeleteMany("interview") },
+        job: { deleteMany: trackedDeleteMany("job") },
         user: {
           delete: jest.fn().mockImplementation(async () => {
             callOrder.push("user");
@@ -168,9 +170,13 @@ describe("deleteAccount", () => {
 
     const automationIdx = callOrder.indexOf("automation");
     const resumeIdx = callOrder.indexOf("resume");
+    const jobIdx = callOrder.indexOf("job");
     expect(automationIdx).toBeGreaterThanOrEqual(0);
     expect(resumeIdx).toBeGreaterThanOrEqual(0);
+    expect(jobIdx).toBeGreaterThanOrEqual(0);
     expect(automationIdx).toBeLessThan(resumeIdx);
+    // Job must be deleted before user.delete (to avoid Restrict on Job→JobTitle/Company)
+    expect(jobIdx).toBeLessThan(callOrder.indexOf("user"));
   });
 
   it("handles summaries with null summaryId gracefully", async () => {
@@ -204,6 +210,7 @@ describe("deleteAccount", () => {
         crmNoteTarget: { deleteMany: mockDeleteMany },
         contact: { deleteMany: mockDeleteMany },
         interview: { deleteMany: mockDeleteMany },
+        job: { deleteMany: mockDeleteMany },
         user: { delete: mockDelete },
       };
       return fn(tx);
@@ -261,6 +268,7 @@ describe("deleteAccount", () => {
         crmNoteTarget: { deleteMany: trackedDeleteMany("crmNoteTarget") },
         contact: { deleteMany: trackedDeleteMany("contact") },
         interview: { deleteMany: trackedDeleteMany("interview") },
+        job: { deleteMany: trackedDeleteMany("job") },
         user: {
           delete: jest.fn().mockImplementation(async () => {
             callOrder.push("user.delete");
