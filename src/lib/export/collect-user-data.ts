@@ -52,6 +52,9 @@ export async function collectUserData(userId: string) {
     logoAssets,
     userSettings,
     connectedAccounts,
+    smtpConfig,
+    vapidConfig,
+    webPushSubscriptions,
     dedupHashes,
   ] = await Promise.all([
     // --- Pattern A: Direct userId ---
@@ -449,6 +452,41 @@ export async function collectUserData(userId: string) {
       },
     }),
 
+    // SmtpConfig: EXCLUDE encrypted password
+    db.smtpConfig.findFirst({
+      where: { userId },
+      select: {
+        id: true,
+        host: true,
+        port: true,
+        username: true,
+        fromAddress: true,
+        tlsRequired: true,
+        active: true,
+        createdAt: true,
+      },
+    }),
+
+    // VapidConfig: EXCLUDE encrypted privateKey
+    db.vapidConfig.findFirst({
+      where: { userId },
+      select: {
+        id: true,
+        publicKey: true,
+        createdAt: true,
+      },
+    }),
+
+    // WebPushSubscription: EXCLUDE encrypted p256dh/auth
+    db.webPushSubscription.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        endpoint: true,
+        createdAt: true,
+      },
+    }),
+
     // DedupHash (count only — potentially large)
     db.dedupHash.count({ where: { userId } }),
   ]);
@@ -491,6 +529,9 @@ export async function collectUserData(userId: string) {
     logoAssets,
     userSettings,
     connectedAccounts,
+    smtpConfig,
+    vapidConfig,
+    webPushSubscriptions,
     dedupHashCount: dedupHashes,
   };
 }
