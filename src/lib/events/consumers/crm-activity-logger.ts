@@ -20,6 +20,7 @@ import {
   JobStatusChangedPayloadSchema,
   ContactCreatedPayloadSchema,
   ContactUpdatedPayloadSchema,
+  ContactDeletedPayloadSchema,
   InterviewScheduledPayloadSchema,
   InterviewCompletedPayloadSchema,
   CrmTaskCreatedPayloadSchema,
@@ -90,6 +91,27 @@ export function registerCrmActivityLogConsumers(): void {
       });
     } catch (error) {
       console.error("[crm-activity-logger] Failed to log contact updated:", error);
+    }
+  });
+
+  // Project ContactDeleted → contact_deleted activity
+  eventBus.subscribe(DomainEventType.ContactDeleted, async (event) => {
+    const payload = safeParsePayload(ContactDeletedPayloadSchema, event);
+    if (!payload) return;
+    try {
+      await prisma.crmActivityLog.create({
+        data: {
+          userId: payload.userId,
+          activityType: "contact_deleted",
+          happenedAt: new Date(),
+          actorId: payload.userId,
+          targetPersonId: null, // Person already deleted/anonymized
+          details: JSON.stringify({ reason: payload.reason }),
+          linkedRecordName: null,
+        },
+      });
+    } catch (error) {
+      console.error("[crm-activity-logger] Failed to log contact deleted:", error);
     }
   });
 

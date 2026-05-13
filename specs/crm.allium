@@ -157,7 +157,7 @@ enum TaskStatus {
 enum ActivityType {
     status_changed | note_added | task_created | task_completed
     | interview_scheduled | interview_completed
-    | contact_created | contact_updated
+    | contact_created | contact_updated | contact_deleted
     | email_sent | email_received | call_logged
     | document_attached | reminder_triggered
     | follow_up_sent | application_submitted
@@ -842,6 +842,29 @@ rule RecordStatusChange {
     @guidance
         -- The details field may carry a JSON object with
         -- previous_status and new_status for rendering.
+}
+
+rule RecordContactDeletion {
+    -- Project ContactDeleted events into the Activity Timeline.
+    -- Fired by AnonymizePerson (reason: anonymized) and
+    -- MergePersons (reason: merged). G9 fix.
+    when: ContactDeleted(person_id, user_id, reason)
+
+    ensures: ActivityLog.created(
+        user_id: user_id,
+        activity_type: contact_deleted,
+        happened_at: now,
+        actor_id: user_id,
+        target_person: null,
+        details: reason,
+        linked_record_name: null
+    )
+
+    @guidance
+        -- target_person is null because the Person record has been
+        -- deleted/anonymized by the time this rule fires.
+        -- The reason field (anonymized/merged/deleted) is stored in
+        -- details as JSON for audit trail rendering.
 }
 
 -- ==========================================================
