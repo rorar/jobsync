@@ -33,6 +33,7 @@ import type {
   ReminderTriggeredPayload,
   AutomationDegradedPayload,
 } from "../event-types";
+
 import prisma from "@/lib/db";
 import type {
   NotificationType,
@@ -52,6 +53,16 @@ import {
 } from "@/lib/notifications/dispatch-context";
 import type { NotificationDraft } from "@/lib/notifications/types";
 import { t } from "@/i18n/server";
+
+// Compile-time exhaustive mapping from degradation reason to notification type.
+// Avoids an unsafe `as NotificationType` cast — if a new reason is added to
+// AutomationDegradedPayload["reason"], TypeScript will error here until the
+// mapping is updated.
+const DEGRADATION_REASON_TO_TYPE: Record<AutomationDegradedPayload["reason"], NotificationType> = {
+  auth_failure: "auth_failure",
+  cb_escalation: "cb_escalation",
+  consecutive_failures: "consecutive_failures",
+};
 
 // ---------------------------------------------------------------------------
 // Channel Registration (explicit, Sprint 3 M-A-05)
@@ -536,24 +547,28 @@ async function handleReminderTriggered(
 // AutomationDegraded (Sprint C: event-based degradation notifications)
 // ---------------------------------------------------------------------------
 
+// Scalability note (P-6): For batch degradation affecting N automations of K distinct
+// users, this executes N×6 DB queries where K×6 would suffice via context deduplication.
+// The old routeDrafts() deduped with new Set(userIds). Consider adding a per-userId
+// context cache with a short TTL window, or batching events per user.
 async function handleAutomationDegraded(
   event: DomainEvent<typeof DomainEventType.AutomationDegraded>,
 ): Promise<void> {
-  const payload = event.payload as AutomationDegradedPayload;
+  const payload = event.payload;
   const ctx = await buildDispatchContext(payload.userId);
 
   const draft: NotificationDraft = {
     userId: payload.userId,
-    type: payload.reason as NotificationType,
+    type: DEGRADATION_REASON_TO_TYPE[payload.reason],
     message: payload.message,
     moduleId: payload.moduleId,
     automationId: payload.automationId,
     titleKey: payload.titleKey,
     titleParams: payload.titleParams,
-    actorType: payload.actorType as NotificationActorType,
+    actorType: payload.actorType,
     actorId: payload.actorId,
     reasonKey: payload.reasonKey,
-    severity: payload.severity as NotificationSeverity,
+    severity: payload.severity,
     data: {
       moduleId: payload.moduleId,
       moduleName: payload.moduleName,

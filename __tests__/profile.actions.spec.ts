@@ -166,4 +166,13 @@ describe("deleteResumeById — Automation guard", () => {
     expect(result.success).toBe(true);
     expect(prisma.$transaction).toHaveBeenCalled();
   });
+
+  it("scopes automation.count query by both resumeId and userId", async () => {
+    (prisma.automation.count as jest.Mock).mockResolvedValue(0);
+    const { deleteResumeById } = require("@/actions/profile.actions");
+    await deleteResumeById(resumeId);
+    expect(prisma.automation.count).toHaveBeenCalledWith({
+      where: { resumeId, userId: mockUser.id },
+    });
+  });
 });

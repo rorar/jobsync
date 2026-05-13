@@ -339,6 +339,51 @@ describe("promoteStagedVacancy — initial history entry (S3-D7)", () => {
       expect(emitEvent).toHaveBeenCalledWith(companyCreatedEvent!.value);
     });
 
+    it("should NOT emit CompanyCreated and should return the race winner ID when mockCompanyCreate throws a unique constraint error", async () => {
+      const raceWinnerId = "co-race-winner";
+      const companyName = "Race Corp";
+
+      // findFirst returns null on first call (pre-create check), then returns the
+      // race-winning row on the second call (post-catch retry)
+      mockCompanyFindFirst
+        .mockResolvedValueOnce(null)         // first: not found → triggers create
+        .mockResolvedValueOnce({             // second: race winner found in catch
+          id: raceWinnerId,
+          label: companyName,
+          value: "race corp",
+        });
+
+      // create throws a unique constraint violation (P2002)
+      const uniqueConstraintError = Object.assign(new Error("Unique constraint failed"), {
+        code: "P2002",
+      });
+      mockCompanyCreate.mockRejectedValue(uniqueConstraintError);
+
+      mockDbFindFirst.mockResolvedValue({
+        id: vacancyId,
+        userId,
+        status: "staged",
+        title: "Frontend Developer",
+        employerName: companyName,
+        location: "Berlin",
+        sourceBoard: "eures",
+        description: "A job",
+        employmentType: "Full-time",
+        salary: null,
+        sourceUrl: "https://example.com/job/1",
+      });
+
+      const { createEvent } = jest.requireMock("@/lib/events");
+
+      await promoteStagedVacancy({ stagedVacancyId: vacancyId }, userId);
+
+      // CompanyCreated must NOT be emitted — no new company was actually created
+      const companyCreatedCalls = createEvent.mock.calls.filter(
+        (call: [string, unknown]) => call[0] === "CompanyCreated",
+      );
+      expect(companyCreatedCalls).toHaveLength(0);
+    });
+
     it("should NOT emit CompanyCreated when company already exists", async () => {
       // Company already exists — findFirst returns it
       mockCompanyFindFirst.mockResolvedValue({

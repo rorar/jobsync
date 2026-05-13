@@ -919,6 +919,60 @@ describe("jobActions", () => {
   // updateKanbanOrder — cross-column move must increment version (optimistic lock)
   // ---------------------------------------------------------------------------
 
+  describe("updateKanbanOrder — same-column reorder does NOT increment version", () => {
+    const bookmarkedStatus = {
+      id: "status-bookmarked",
+      label: "Bookmarked",
+      value: "bookmarked",
+    };
+    const currentJob = {
+      id: "job-id",
+      userId: mockUser.id,
+      statusId: bookmarkedStatus.id,
+      Status: bookmarkedStatus,
+      appliedDate: null,
+      version: 1,
+    };
+
+    it("should NOT include version increment when reordering within the same column", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      // Same status ID as current job — same-column reorder
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue(currentJob);
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(bookmarkedStatus);
+
+      const txJobUpdate = jest.fn().mockResolvedValue({
+        ...currentJob,
+        sortOrder: 2000,
+        version: 1, // unchanged
+      });
+
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) => {
+        return fn({
+          job: { update: txJobUpdate },
+          jobStatusHistory: { create: jest.fn().mockResolvedValue({ id: "history-1" }) },
+        });
+      });
+
+      // newStatusId === current statusId: same-column reorder
+      const result = await updateKanbanOrder("job-id", 2000, bookmarkedStatus.id);
+
+      expect(result.success).toBe(true);
+
+      // version: { increment: 1 } must NOT appear in the update data
+      if (txJobUpdate.mock.calls.length > 0) {
+        const updateArg = txJobUpdate.mock.calls[0][0];
+        expect(updateArg?.data?.version).not.toEqual({ increment: 1 });
+      } else {
+        // updateKanbanOrder may use prisma.job.update directly for same-column moves
+        expect(prisma.job.update).not.toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ version: { increment: 1 } }),
+          }),
+        );
+      }
+    });
+  });
+
   describe("updateKanbanOrder — version increment on cross-column move", () => {
     const bookmarkedStatus = {
       id: "status-bookmarked",

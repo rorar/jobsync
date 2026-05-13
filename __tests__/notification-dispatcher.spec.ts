@@ -514,6 +514,142 @@ describe("NotificationDispatcher", () => {
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // AutomationDegraded (Sprint C: event-based degradation notifications)
+  // ---------------------------------------------------------------------------
+  describe("AutomationDegraded", () => {
+    const basePayload = {
+      automationId: "auto-1",
+      userId: "user-1",
+      automationName: "My Automation",
+      message: "Automation paused due to auth failure",
+      titleKey: "notifications.automationDegraded.title",
+      titleParams: { automationName: "My Automation" },
+      actorType: "module" as const,
+      actorId: "eures",
+      reasonKey: "notifications.reason.authFailure",
+      severity: "error" as const,
+      moduleId: "eures",
+      moduleName: "EURES",
+    };
+
+    it("routes draft through channelRouter (InAppChannel) on auth_failure reason", async () => {
+      const event = createEvent(DomainEventType.AutomationDegraded, {
+        ...basePayload,
+        reason: "auth_failure",
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: "user-1",
+          type: "auth_failure",
+          message: "Automation paused due to auth failure",
+          automationId: "auto-1",
+          moduleId: "eures",
+          titleKey: "notifications.automationDegraded.title",
+          actorType: "module",
+          actorId: "eures",
+          reasonKey: "notifications.reason.authFailure",
+          severity: "error",
+        }),
+      });
+    });
+
+    it("routes draft through channelRouter (InAppChannel) on cb_escalation reason", async () => {
+      const event = createEvent(DomainEventType.AutomationDegraded, {
+        ...basePayload,
+        reason: "cb_escalation",
+        message: "Automation paused due to circuit breaker",
+        reasonKey: "notifications.reason.cbEscalation",
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: "user-1",
+          type: "cb_escalation",
+          message: "Automation paused due to circuit breaker",
+          automationId: "auto-1",
+          severity: "error",
+        }),
+      });
+    });
+
+    it("routes draft through channelRouter (InAppChannel) on consecutive_failures reason", async () => {
+      const event = createEvent(DomainEventType.AutomationDegraded, {
+        ...basePayload,
+        reason: "consecutive_failures",
+        message: "Automation paused after 5 consecutive failures",
+        reasonKey: "notifications.reason.consecutiveFailures",
+        severity: "warning",
+        failureCount: 5,
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: "user-1",
+          type: "consecutive_failures",
+          message: "Automation paused after 5 consecutive failures",
+          automationId: "auto-1",
+          severity: "warning",
+        }),
+      });
+    });
+
+    it("includes failureCount in draft.data when payload.failureCount is set", async () => {
+      const event = createEvent(DomainEventType.AutomationDegraded, {
+        ...basePayload,
+        reason: "consecutive_failures",
+        message: "Automation paused after 5 consecutive failures",
+        failureCount: 5,
+      });
+
+      await eventBus.publish(event);
+
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.data.data).toEqual(
+        expect.objectContaining({ failureCount: 5 }),
+      );
+    });
+
+    it("omits failureCount from draft.data when payload.failureCount is absent", async () => {
+      const event = createEvent(DomainEventType.AutomationDegraded, {
+        ...basePayload,
+        reason: "auth_failure",
+        // failureCount intentionally omitted
+      });
+
+      await eventBus.publish(event);
+
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.data.data).not.toHaveProperty("failureCount");
+    });
+
+    it("includes moduleId, moduleName, automationId, automationName in draft.data", async () => {
+      const event = createEvent(DomainEventType.AutomationDegraded, {
+        ...basePayload,
+        reason: "auth_failure",
+      });
+
+      await eventBus.publish(event);
+
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.data.data).toEqual(
+        expect.objectContaining({
+          moduleId: "eures",
+          moduleName: "EURES",
+          automationId: "auto-1",
+          automationName: "My Automation",
+        }),
+      );
+    });
+  });
+
   describe("Error isolation", () => {
     it("dispatcher does not crash when notification creation fails", async () => {
       mockCreate.mockRejectedValueOnce(new Error("DB error"));

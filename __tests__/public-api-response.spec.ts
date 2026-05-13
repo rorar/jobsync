@@ -194,6 +194,8 @@ describe("actionToResponse", () => {
         errorCode: "STALE_STATE",
       });
       expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error.code).toBe("CONFLICT");
     });
 
     it("maps INVALID_TRANSITION errorCode to 422", async () => {
@@ -214,6 +216,8 @@ describe("actionToResponse", () => {
         errorCode: "REFERENCE_ERROR",
       });
       expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error.code).toBe("CONFLICT");
     });
 
     it("errorCode takes priority over contradicting message", async () => {

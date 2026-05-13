@@ -25,9 +25,10 @@
  *   - NoEventLoss: every registered handler is still invoked; none are
  *     skipped, even if earlier handlers reject.
  * What changes: intra-publish ordering across DIFFERENT handlers is no
- * longer guaranteed. Reviewed all 5 consumers (audit-logger, notification-
- * dispatcher, degradation-coordinator, enrichment-trigger, logo-asset-
- * subscriber) — none depend on observing another consumer's side-effects
+ * longer guaranteed. Reviewed all 6 consumers (audit-logger, notification-
+ * dispatcher, RunCoordinator AutomationDegraded subscription, enrichment-
+ * trigger, logo-asset-subscriber, crm-activity-logger) — none depend on
+ * observing another consumer's side-effects
  * within the same event dispatch. See tests in __tests__/event-bus.spec.ts.
  */
 

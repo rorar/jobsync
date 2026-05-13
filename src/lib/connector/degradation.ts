@@ -3,6 +3,7 @@ import "server-only";
 import prisma from "@/lib/db";
 import { emitEvent, createEvent } from "@/lib/events";
 import { DomainEventType } from "@/lib/events/event-types";
+import type { AutomationDegradedPayload } from "@/lib/events/event-types";
 import { moduleRegistry } from "./registry";
 import { ModuleStatus, CircuitBreakerState } from "./manifest";
 
@@ -29,7 +30,35 @@ const CB_ESCALATION_THRESHOLD = 3;
 const NAME_TRUNCATION_LENGTH = 200;
 
 function truncate(value: string, maxLength = NAME_TRUNCATION_LENGTH): string {
-  return value.length > maxLength ? value.slice(0, maxLength) : value;
+  const sanitized = value.replace(/[\n\r\t]/g, " ");
+  return sanitized.length > maxLength ? sanitized.slice(0, maxLength) : sanitized;
+}
+
+/**
+ * Emit AutomationDegraded events for a set of affected automations.
+ * Shared by handleAuthFailure and handleCircuitBreakerTrip which have
+ * identical loop structures differing only in the event payload fields.
+ *
+ * `buildMessage` receives the truncated automation name so each event
+ * carries a human-readable per-automation message.
+ */
+function emitDegradationEvents(
+  automations: { id: string; userId: string; name: string }[],
+  base: Omit<AutomationDegradedPayload, "automationId" | "userId" | "automationName" | "message">,
+  buildMessage: (automationName: string) => string,
+): void {
+  for (const auto of automations) {
+    const safeName = truncate(auto.name);
+    emitEvent(
+      createEvent(DomainEventType.AutomationDegraded, {
+        ...base,
+        automationId: auto.id,
+        userId: auto.userId,
+        automationName: safeName,
+        message: buildMessage(safeName),
+      }),
+    );
+  }
 }
 
 // =============================================================================
@@ -89,26 +118,21 @@ export async function handleAuthFailure(
       },
     });
 
-    // Emit AutomationDegraded events with enriched payload for notification routing
     const safeModuleName = truncate(registered.manifest.name);
-    for (const auto of affectedAutomations) {
-      emitEvent(
-        createEvent(DomainEventType.AutomationDegraded, {
-          automationId: auto.id,
-          userId: auto.userId,
-          reason: "auth_failure",
-          moduleId,
-          automationName: truncate(auto.name),
-          message: `Automation "${truncate(auto.name)}" paused: authentication failed for module "${safeModuleName}". Please check your credentials.`,
-          titleKey: "notifications.authFailure.title",
-          actorType: "module",
-          actorId: moduleId,
-          reasonKey: "notifications.reason.authExpired",
-          severity: "error",
-          moduleName: safeModuleName,
-        }),
-      );
-    }
+    emitDegradationEvents(
+      affectedAutomations,
+      {
+        reason: "auth_failure",
+        moduleId,
+        titleKey: "notifications.authFailure.title",
+        actorType: "module",
+        actorId: moduleId,
+        reasonKey: "notifications.reason.authExpired",
+        severity: "error",
+        moduleName: safeModuleName,
+      },
+      (name) => `Automation "${name}" paused: authentication failed for module "${safeModuleName}". Please check your credentials.`,
+    );
   }
 
   console.error(
@@ -269,27 +293,22 @@ export async function handleCircuitBreakerTrip(
       },
     });
 
-    // Emit AutomationDegraded events with enriched payload for notification routing
     const safeModuleName = truncate(registered.manifest.name);
-    for (const auto of affectedAutomations) {
-      emitEvent(
-        createEvent(DomainEventType.AutomationDegraded, {
-          automationId: auto.id,
-          userId: auto.userId,
-          reason: "cb_escalation",
-          moduleId,
-          automationName: truncate(auto.name),
-          message: `Automation "${truncate(auto.name)}" paused: module "${safeModuleName}" circuit breaker tripped ${newFailureCount} times.`,
-          titleKey: "notifications.cbEscalation.title",
-          actorType: "module",
-          actorId: moduleId,
-          reasonKey: "notifications.reason.circuitBreaker",
-          severity: "warning",
-          moduleName: safeModuleName,
-          failureCount: newFailureCount,
-        }),
-      );
-    }
+    emitDegradationEvents(
+      affectedAutomations,
+      {
+        reason: "cb_escalation",
+        moduleId,
+        titleKey: "notifications.cbEscalation.title",
+        actorType: "module",
+        actorId: moduleId,
+        reasonKey: "notifications.reason.circuitBreaker",
+        severity: "warning",
+        moduleName: safeModuleName,
+        failureCount: newFailureCount,
+      },
+      (name) => `Automation "${name}" paused: module "${safeModuleName}" circuit breaker tripped ${newFailureCount} times.`,
+    );
   }
 
   console.warn(

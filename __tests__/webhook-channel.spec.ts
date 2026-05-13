@@ -263,30 +263,30 @@ describe("WebhookChannel", () => {
       expect(result).toEqual(input);
     });
 
-    it("strips PII fields: note, personName, interviewNotes, automationName", () => {
+    it("strips PII fields: note, personName, interviewNotes", () => {
       const input = {
         moduleId: "mod-1",
         automationId: "auto-1",
+        automationName: "My job search Berlin",
         jobId: "job-1",
         // PII fields that must NOT leak to external webhooks
         note: "Recruiter said salary is negotiable",
         personName: "Jane Doe",
         interviewNotes: "Candidate seemed nervous but qualified",
-        automationName: "My secret job search Berlin",
       };
 
       const result = filterWebhookData(input);
 
-      // Safe fields pass through
+      // Safe fields pass through (automationName is user-authored config, not 3rd-party PII)
       expect(result).toHaveProperty("moduleId", "mod-1");
       expect(result).toHaveProperty("automationId", "auto-1");
+      expect(result).toHaveProperty("automationName", "My job search Berlin");
       expect(result).toHaveProperty("jobId", "job-1");
 
       // PII fields are stripped
       expect(result).not.toHaveProperty("note");
       expect(result).not.toHaveProperty("personName");
       expect(result).not.toHaveProperty("interviewNotes");
-      expect(result).not.toHaveProperty("automationName");
     });
 
     it("returns empty object when all fields are PII", () => {
@@ -321,7 +321,7 @@ describe("WebhookChannel", () => {
     it("exposes WEBHOOK_ALLOWED_DATA_FIELDS via _testHelpers for validation", () => {
       // Verify the allowlist contains exactly the expected safe fields
       const expected = new Set([
-        "moduleId", "moduleName", "automationId",
+        "moduleId", "moduleName", "automationId", "automationName",
         "titleKey", "titleParams", "reasonKey", "reasonParams",
         "actorType", "actorId", "severity",
         "affectedAutomationCount", "failureCount",

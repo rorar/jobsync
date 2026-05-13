@@ -64,8 +64,9 @@ const WEBHOOK_ALLOWED_DATA_FIELDS = new Set<string>([
   // Module-related
   "moduleId",
   "moduleName",
-  // Automation-related
+  // Automation-related (automationName is user-authored config, not 3rd-party PII)
   "automationId",
+  "automationName",
   // i18n late-binding keys (5W+H metadata — no PII, only translation keys)
   "titleKey",
   "titleParams",

@@ -172,6 +172,23 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
         data: expect.any(Object),
       });
     });
+
+    it("includes userId in crmBlocklist.deleteMany WHERE clause when person has emails", async () => {
+      mockDb.person.findFirst.mockResolvedValue(
+        basePerson(PERSON_ID, {
+          emails: JSON.stringify([{ email: "alice@example.com", isPrimary: true, label: "work" }]),
+        }),
+      );
+
+      await anonymizePerson(PERSON_ID);
+
+      expect(mockDb.crmBlocklist.deleteMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          userId: USER.id,
+          handle: { in: ["alice@example.com"] },
+        }),
+      });
+    });
   });
 
   // =========================================================================

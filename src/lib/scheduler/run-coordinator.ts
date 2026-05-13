@@ -399,7 +399,10 @@ class RunCoordinator {
   // ---------------------------------------------------------------------------
 
   /** Subscribe to domain events. Called during registerEventConsumers() (Step 3 boot). */
+  private _eventsSubscribed = false
   subscribeToEvents(): void {
+    if (this._eventsSubscribed) return
+    this._eventsSubscribed = true
     eventBus.subscribe(DomainEventType.AutomationDegraded, (event) => {
       this.acknowledgeExternalStop(event.payload.automationId)
     })

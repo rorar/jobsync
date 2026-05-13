@@ -139,6 +139,10 @@ function errorCodeToStatus(code: ActionErrorCode): number {
       return 422;
     case "INTERNAL_ERROR":
       return 500;
+    default: {
+      const _exhaustive: never = code;
+      return 500;
+    }
   }
 }
 
