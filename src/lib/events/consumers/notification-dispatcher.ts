@@ -34,6 +34,7 @@ import {
   RetentionCompletedPayloadSchema,
   JobStatusChangedPayloadSchema,
   ReminderTriggeredPayloadSchema,
+  AutomationDegradedPayloadSchema,
   safeParsePayload,
 } from "../event-schemas";
 
@@ -565,7 +566,8 @@ async function handleReminderTriggered(
 async function handleAutomationDegraded(
   event: DomainEvent<typeof DomainEventType.AutomationDegraded>,
 ): Promise<void> {
-  const payload = event.payload;
+  const payload = safeParsePayload(AutomationDegradedPayloadSchema, event);
+  if (!payload) return;
   const ctx = await buildDispatchContext(payload.userId);
 
   const draft: NotificationDraft = {

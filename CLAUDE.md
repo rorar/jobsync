@@ -669,12 +669,18 @@ Server actions (`src/actions/*.ts`) serve as Repositories:
 - Pattern B functions (`getAllX`) may return raw arrays — see `specs/action-result.allium`
 - Dashboard functions (Pattern C) use custom return types
 
-### Domain Events (Future)
+### Domain Events
 
-Currently implicit in `AutomationRun` status transitions. When implementing CRM features (Roadmap Section 5), introduce an explicit Event Bus for:
-- `JobDiscovered` → trigger notifications, CRM updates
-- `ApplicationStatusChanged` → trigger follow-ups, calendar events
-- `ConnectorHealthChanged` → trigger alerts
+The TypedEventBus (`src/lib/events/event-bus.ts`) publishes 29 event types with typed payloads. All event consumers MUST validate payloads at runtime using `safeParsePayload()` from `src/lib/events/event-schemas.ts`:
+
+```typescript
+import { XPayloadSchema, safeParsePayload } from "@/lib/events/event-schemas";
+
+const payload = safeParsePayload(XPayloadSchema, event);
+if (!payload) return; // logs error, skips processing
+```
+
+All emit sites MUST use the `createEvent()` typed factory (never inline `{ type, timestamp, payload }` objects). Zod schemas in `event-schemas.ts` are linked to TypeScript interfaces in `event-types.ts` via `satisfies z.ZodType<XPayload>` — adding a field to one without the other produces a compile error.
 
 ### Specification Pattern (Allium)
 

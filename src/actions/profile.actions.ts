@@ -1,5 +1,6 @@
 "use server";
 import prisma from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { handleError } from "@/lib/utils";
 import { AddEducationFormSchema } from "@/models/AddEductionForm.schema";
 import { AddContactInfoFormSchema } from "@/models/addContactInfoForm.schema";
@@ -461,10 +462,8 @@ export const deleteResumeById = async (
   } catch (error) {
     // Catch Restrict FK violation (TOCTOU: Automation created between guard and delete)
     if (
-      error instanceof Error &&
-      (error.message?.includes("Foreign key constraint") ||
-        (error as any).code === "P2003" ||
-        (error as any).code === "P2014")
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === "P2003" || error.code === "P2014")
     ) {
       return { success: false, message: "profile.resumeHasAutomations" };
     }

@@ -220,21 +220,19 @@ export async function checkConsecutiveRunFailures(
       },
     });
 
-    // Emit AutomationDegraded event with enriched payload for notification routing
-    emitEvent(
-      createEvent(DomainEventType.AutomationDegraded, {
-        automationId,
-        userId: automation.userId,
+    // Emit via shared helper (same pattern as handleAuthFailure/handleCircuitBreakerTrip)
+    emitDegradationEvents(
+      [{ id: automationId, userId: automation.userId, name: automation.name }],
+      {
         reason: "consecutive_failures",
-        automationName: truncate(automation.name),
-        message: `Automation "${truncate(automation.name)}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
         titleKey: "notifications.consecutiveFailures.title",
         titleParams: { count: CONSECUTIVE_RUN_FAILURE_THRESHOLD },
         actorType: "automation",
         actorId: automationId,
         severity: "warning",
         failureCount: CONSECUTIVE_RUN_FAILURE_THRESHOLD,
-      }),
+      },
+      (name) => `Automation "${name}" paused after ${CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.`,
     );
 
     console.warn(
