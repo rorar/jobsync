@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Activity, AlertTriangle, Ban, Bell, BellRing, Bot, Bug, Database, Globe, HardDrive, Key, Mail, Palette, Webhook, Zap } from "lucide-react";
+import { Activity, AlertTriangle, Ban, Bell, BellRing, Bot, Bug, Database, Globe, HardDrive, Key, Mail, Palette, Trash2, Webhook, Zap } from "lucide-react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { cn } from "@/lib/utils";
@@ -24,7 +24,8 @@ export type SettingsSection =
   | "push"
   | "blacklist"
   | "developer"
-  | "error-log";
+  | "error-log"
+  | "danger-zone";
 
 const SETTINGS_SECTIONS: {
   id: SettingsSection;
@@ -46,6 +47,7 @@ const SETTINGS_SECTIONS: {
   { id: "blacklist", labelKey: "blacklist.sidebarBlacklist", icon: Ban },
   { id: "developer", labelKey: "settings.sidebarDeveloper", icon: Bug },
   { id: "error-log", labelKey: "settings.sidebarErrorLog", icon: AlertTriangle },
+  { id: "danger-zone", labelKey: "settings.sidebarDangerZone", icon: Trash2 },
 ];
 
 interface SettingsSidebarProps {

@@ -16,6 +16,7 @@ import CompanyBlacklistSettings from "@/components/settings/CompanyBlacklistSett
 import EnrichmentModuleSettings from "@/components/settings/EnrichmentModuleSettings";
 import ApiStatusOverview from "@/components/settings/ApiStatusOverview";
 import LogoAssetSettings from "@/components/settings/LogoAssetSettings";
+import AccountDeletionSettings from "@/components/settings/AccountDeletionSettings";
 import SettingsSidebar, { type SettingsSection } from "@/components/settings/SettingsSidebar";
 import { useTranslations } from "@/i18n";
 
@@ -49,6 +50,7 @@ function Settings() {
           {activeSection === "blacklist" && <CompanyBlacklistSettings />}
           {activeSection === "developer" && <DeveloperSettings />}
           {activeSection === "error-log" && <ErrorLogSettings />}
+          {activeSection === "danger-zone" && <AccountDeletionSettings />}
         </div>
       </div>
     </div>
