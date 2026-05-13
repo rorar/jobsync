@@ -1312,3 +1312,462 @@ export const mockEnrichmentLogSkipped: EnrichmentLogFixture = {
   latencyMs: 0,
   errorMessage: null,
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CRM FIXTURES — Person, Interview, Task, Note, Targets, Contacts, etc.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Person ───────────────────────────────────────────────────────────────
+
+export interface PersonFixture {
+  id: string;
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  emails: string;
+  phones: string;
+  headline: string | null;
+  socialProfiles: string;
+  avatarUrl: string | null;
+  addressStreet: string | null;
+  addressCity: string | null;
+  addressPostalCode: string | null;
+  addressCountry: string | null;
+  companies: string;
+  status: string;
+  dataSource: string;
+  processingBasis: string;
+  retentionExpiresAt: Date | null;
+  createdBySource: string;
+  createdByName: string | null;
+  updatedBySource: string;
+  updatedByName: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const mockPerson: PersonFixture = {
+  id: "person-fixture-id",
+  userId: mockUser.id,
+  firstName: "Jane",
+  lastName: "Recruiter",
+  emails: JSON.stringify([
+    { email: "jane@acme.com", type: "work", isPrimary: true },
+    { email: "jane.personal@example.com", type: "home", isPrimary: false },
+  ]),
+  phones: JSON.stringify([
+    { number: "+49 170 1234567", type: "work", isPrimary: true },
+  ]),
+  headline: "Senior Technical Recruiter",
+  socialProfiles: JSON.stringify([
+    { platform: "linkedin", url: "https://linkedin.com/in/jane-recruiter" },
+    { platform: "xing", url: "https://xing.com/profile/jane-recruiter" },
+  ]),
+  avatarUrl: "https://example.com/avatars/jane.jpg",
+  addressStreet: "Friedrichstr. 123",
+  addressCity: "Berlin",
+  addressPostalCode: "10117",
+  addressCountry: "DE",
+  companies: JSON.stringify([
+    {
+      companyId: "company-fixture-id",
+      companyLabel: "Acme Corp",
+      role: "Recruiter",
+      isPrimary: true,
+      startDate: "2023-01-15",
+      endDate: null,
+    },
+  ]),
+  status: "active",
+  dataSource: "manual",
+  processingBasis: "legitimate_interest",
+  retentionExpiresAt: null,
+  createdBySource: "manual",
+  createdByName: "Test User",
+  updatedBySource: "manual",
+  updatedByName: "Test User",
+  createdAt: new Date("2024-06-01T10:00:00.000Z"),
+  updatedAt: new Date("2024-06-01T10:00:00.000Z"),
+};
+
+export const mockPersonArchived: PersonFixture = {
+  ...mockPerson,
+  id: "person-archived-id",
+  firstName: "Max",
+  lastName: "Former",
+  status: "archived",
+  updatedAt: new Date("2024-06-10T10:00:00.000Z"),
+};
+
+export const mockPersonAnonymized: PersonFixture = {
+  ...mockPerson,
+  id: "person-anonymized-id",
+  firstName: null,
+  lastName: null,
+  status: "anonymized",
+  emails: "[]",
+  phones: "[]",
+  socialProfiles: "[]",
+  companies: "[]",
+  headline: null,
+  avatarUrl: null,
+  addressStreet: null,
+  addressCity: null,
+  addressPostalCode: null,
+  addressCountry: null,
+  createdByName: null,
+  updatedByName: null,
+  updatedAt: new Date("2024-06-15T10:00:00.000Z"),
+};
+
+export const mockPersonAutoCreated: PersonFixture = {
+  ...mockPerson,
+  id: "person-auto-created-id",
+  firstName: "Auto",
+  lastName: "Generated",
+  dataSource: "auto_created",
+  createdBySource: "auto_created",
+  retentionExpiresAt: new Date("2025-06-01T10:00:00.000Z"),
+  updatedAt: new Date("2024-06-01T10:00:00.000Z"),
+};
+
+export const mockPersons: PersonFixture[] = [
+  mockPerson,
+  mockPersonArchived,
+  mockPersonAnonymized,
+  mockPersonAutoCreated,
+];
+
+// ─── CrmInterview ─────────────────────────────────────────────────────────
+
+export interface CrmInterviewFixture {
+  id: string;
+  userId: string;
+  jobId: string;
+  personId: string | null;
+  interviewDate: Date;
+  location: string | null;
+  notes: string | null;
+  status: string;
+  outcome: string | null;
+  outcomeNotes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const mockCrmInterview: CrmInterviewFixture = {
+  id: "crm-interview-fixture-id",
+  userId: mockUser.id,
+  jobId: mockJob.id,
+  personId: mockPerson.id,
+  interviewDate: new Date("2024-06-20T14:00:00.000Z"),
+  location: "Video Call (Zoom)",
+  notes: "First round technical interview with the team lead.",
+  status: "scheduled",
+  outcome: null,
+  outcomeNotes: null,
+  createdAt: new Date("2024-06-15T10:00:00.000Z"),
+  updatedAt: new Date("2024-06-15T10:00:00.000Z"),
+};
+
+export const mockCrmInterviewCompleted: CrmInterviewFixture = {
+  ...mockCrmInterview,
+  id: "crm-interview-completed-id",
+  interviewDate: new Date("2024-06-10T14:00:00.000Z"),
+  status: "completed",
+  outcome: "passed",
+  outcomeNotes: "Strong performance on system design questions.",
+  updatedAt: new Date("2024-06-10T15:00:00.000Z"),
+};
+
+export const mockCrmInterviewCancelled: CrmInterviewFixture = {
+  ...mockCrmInterview,
+  id: "crm-interview-cancelled-id",
+  interviewDate: new Date("2024-06-18T10:00:00.000Z"),
+  status: "cancelled",
+  notes: "Company cancelled the position.",
+  updatedAt: new Date("2024-06-17T09:00:00.000Z"),
+};
+
+export const mockCrmInterviewRescheduled: CrmInterviewFixture = {
+  ...mockCrmInterview,
+  id: "crm-interview-rescheduled-id",
+  interviewDate: new Date("2024-06-25T14:00:00.000Z"),
+  status: "rescheduled",
+  notes: "Rescheduled from June 20 due to interviewer conflict.",
+  updatedAt: new Date("2024-06-19T08:00:00.000Z"),
+};
+
+export const mockCrmInterviews: CrmInterviewFixture[] = [
+  mockCrmInterview,
+  mockCrmInterviewCompleted,
+  mockCrmInterviewCancelled,
+  mockCrmInterviewRescheduled,
+];
+
+// ─── CrmTask ──────────────────────────────────────────────────────────────
+
+export interface CrmTaskFixture {
+  id: string;
+  userId: string;
+  title: string;
+  description: string | null;
+  dueDate: Date | null;
+  status: string;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const mockCrmTask: CrmTaskFixture = {
+  id: "crm-task-fixture-id",
+  userId: mockUser.id,
+  title: "Send follow-up email to recruiter",
+  description: "Thank them for the initial screening call.",
+  dueDate: new Date("2024-06-22T00:00:00.000Z"),
+  status: "pending",
+  completedAt: null,
+  createdAt: new Date("2024-06-15T10:00:00.000Z"),
+  updatedAt: new Date("2024-06-15T10:00:00.000Z"),
+};
+
+export const mockCrmTaskInProgress: CrmTaskFixture = {
+  ...mockCrmTask,
+  id: "crm-task-in-progress-id",
+  title: "Prepare portfolio for hiring manager review",
+  status: "in_progress",
+  updatedAt: new Date("2024-06-16T10:00:00.000Z"),
+};
+
+export const mockCrmTaskDone: CrmTaskFixture = {
+  ...mockCrmTask,
+  id: "crm-task-done-id",
+  title: "Submit reference contact details",
+  status: "done",
+  completedAt: new Date("2024-06-18T14:00:00.000Z"),
+  updatedAt: new Date("2024-06-18T14:00:00.000Z"),
+};
+
+export const mockCrmTaskCancelled: CrmTaskFixture = {
+  ...mockCrmTask,
+  id: "crm-task-cancelled-id",
+  title: "Schedule on-site visit",
+  description: "No longer needed — position filled internally.",
+  status: "cancelled",
+  updatedAt: new Date("2024-06-17T09:00:00.000Z"),
+};
+
+export const mockCrmTasks: CrmTaskFixture[] = [
+  mockCrmTask,
+  mockCrmTaskInProgress,
+  mockCrmTaskDone,
+  mockCrmTaskCancelled,
+];
+
+// ─── CrmNote ──────────────────────────────────────────────────────────────
+
+export interface CrmNoteFixture {
+  id: string;
+  userId: string;
+  title: string | null;
+  body: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const mockCrmNote: CrmNoteFixture = {
+  id: "crm-note-fixture-id",
+  userId: mockUser.id,
+  title: null,
+  body: "Had a great conversation about the team culture and growth opportunities.",
+  createdAt: new Date("2024-06-15T10:00:00.000Z"),
+  updatedAt: new Date("2024-06-15T10:00:00.000Z"),
+};
+
+export const mockCrmNoteWithTitle: CrmNoteFixture = {
+  ...mockCrmNote,
+  id: "crm-note-with-title-id",
+  title: "Post-Interview Debrief",
+  body: "Key takeaways: team uses React + TypeScript, monorepo with Turborepo, CI/CD via GitHub Actions.",
+  updatedAt: new Date("2024-06-16T10:00:00.000Z"),
+};
+
+export const mockCrmNotes: CrmNoteFixture[] = [
+  mockCrmNote,
+  mockCrmNoteWithTitle,
+];
+
+// ─── CrmTaskTarget (polymorphic) ──────────────────────────────────────────
+
+export interface CrmTaskTargetFixture {
+  id: string;
+  taskId: string;
+  targetPersonId: string | null;
+  targetCompanyId: string | null;
+  targetJobId: string | null;
+}
+
+export const mockCrmTaskTargetPerson: CrmTaskTargetFixture = {
+  id: "crm-task-target-person-id",
+  taskId: mockCrmTask.id,
+  targetPersonId: mockPerson.id,
+  targetCompanyId: null,
+  targetJobId: null,
+};
+
+export const mockCrmTaskTargetCompany: CrmTaskTargetFixture = {
+  id: "crm-task-target-company-id",
+  taskId: mockCrmTask.id,
+  targetPersonId: null,
+  targetCompanyId: mockCompany.id,
+  targetJobId: null,
+};
+
+export const mockCrmTaskTargetJob: CrmTaskTargetFixture = {
+  id: "crm-task-target-job-id",
+  taskId: mockCrmTask.id,
+  targetPersonId: null,
+  targetCompanyId: null,
+  targetJobId: mockJob.id,
+};
+
+// ─── CrmNoteTarget (polymorphic) ──────────────────────────────────────────
+
+export interface CrmNoteTargetFixture {
+  id: string;
+  noteId: string;
+  targetPersonId: string | null;
+  targetCompanyId: string | null;
+  targetJobId: string | null;
+}
+
+export const mockCrmNoteTargetPerson: CrmNoteTargetFixture = {
+  id: "crm-note-target-person-id",
+  noteId: mockCrmNote.id,
+  targetPersonId: mockPerson.id,
+  targetCompanyId: null,
+  targetJobId: null,
+};
+
+export const mockCrmNoteTargetCompany: CrmNoteTargetFixture = {
+  id: "crm-note-target-company-id",
+  noteId: mockCrmNote.id,
+  targetPersonId: null,
+  targetCompanyId: mockCompany.id,
+  targetJobId: null,
+};
+
+export const mockCrmNoteTargetJob: CrmNoteTargetFixture = {
+  id: "crm-note-target-job-id",
+  noteId: mockCrmNote.id,
+  targetPersonId: null,
+  targetCompanyId: null,
+  targetJobId: mockJob.id,
+};
+
+// ─── JobContact ───────────────────────────────────────────────────────────
+
+export interface JobContactFixture {
+  id: string;
+  userId: string;
+  jobId: string;
+  personId: string;
+  role: string | null;
+  createdAt: Date;
+}
+
+export const mockJobContact: JobContactFixture = {
+  id: "job-contact-fixture-id",
+  userId: mockUser.id,
+  jobId: mockJob.id,
+  personId: mockPerson.id,
+  role: null,
+  createdAt: new Date("2024-06-01T10:00:00.000Z"),
+};
+
+export const mockJobContactWithRole: JobContactFixture = {
+  ...mockJobContact,
+  id: "job-contact-with-role-id",
+  role: "recruiter",
+  createdAt: new Date("2024-06-02T10:00:00.000Z"),
+};
+
+// ─── CrmActivityLog ──────────────────────────────────────────────────────
+
+export interface CrmActivityLogFixture {
+  id: string;
+  userId: string;
+  activityType: string;
+  happenedAt: Date;
+  actorId: string | null;
+  targetPersonId: string | null;
+  targetCompanyId: string | null;
+  targetJobId: string | null;
+  details: string | null;
+  linkedRecordName: string | null;
+}
+
+export const mockCrmActivityLogContactCreated: CrmActivityLogFixture = {
+  id: "crm-activity-log-contact-created-id",
+  userId: mockUser.id,
+  activityType: "contact_created",
+  happenedAt: new Date("2024-06-01T10:00:00.000Z"),
+  actorId: mockUser.id,
+  targetPersonId: mockPerson.id,
+  targetCompanyId: null,
+  targetJobId: null,
+  details: JSON.stringify({ firstName: "Jane", lastName: "Recruiter" }),
+  linkedRecordName: "Jane Recruiter",
+};
+
+export const mockCrmActivityLogNoteAdded: CrmActivityLogFixture = {
+  id: "crm-activity-log-note-added-id",
+  userId: mockUser.id,
+  activityType: "note_added",
+  happenedAt: new Date("2024-06-15T10:00:00.000Z"),
+  actorId: mockUser.id,
+  targetPersonId: mockPerson.id,
+  targetCompanyId: null,
+  targetJobId: null,
+  details: JSON.stringify({ noteId: mockCrmNote.id }),
+  linkedRecordName: "Jane Recruiter",
+};
+
+export const mockCrmActivityLogs: CrmActivityLogFixture[] = [
+  mockCrmActivityLogContactCreated,
+  mockCrmActivityLogNoteAdded,
+];
+
+// ─── CrmBlocklist ─────────────────────────────────────────────────────────
+
+export interface CrmBlocklistFixture {
+  id: string;
+  userId: string;
+  handle: string;
+  type: string;
+  reason: string | null;
+  createdAt: Date;
+}
+
+export const mockCrmBlocklistEmail: CrmBlocklistFixture = {
+  id: "crm-blocklist-email-id",
+  userId: mockUser.id,
+  handle: "spam@example.com",
+  type: "email",
+  reason: "Known spam sender",
+  createdAt: new Date("2024-06-01T10:00:00.000Z"),
+};
+
+export const mockCrmBlocklistDomain: CrmBlocklistFixture = {
+  ...mockCrmBlocklistEmail,
+  id: "crm-blocklist-domain-id",
+  handle: "spammers.com",
+  type: "domain",
+  reason: "Entire domain blocked",
+  createdAt: new Date("2024-06-02T10:00:00.000Z"),
+};
+
+export const mockCrmBlocklists: CrmBlocklistFixture[] = [
+  mockCrmBlocklistEmail,
+  mockCrmBlocklistDomain,
+];
