@@ -26,7 +26,8 @@ import {
 } from "@/models/ai.model";
 import type { Resume as PrismaResume } from "@prisma/client";
 import { automationLogger } from "@/lib/automation-logger";
-import { emitEvent } from "@/lib/events";
+import { emitEvent, createEvent } from "@/lib/events";
+import { DomainEventType } from "@/lib/events/event-types";
 import {
   defaultUserSettings,
   type AiSettings,
@@ -546,16 +547,14 @@ export async function runAutomation(
         jobsSaved++;
         reportRunProgress(automation.id, run.id, "save", { searched: jobsSearched, deduped: jobsDeduplicated, processed: jobsProcessed, matched: jobsMatched, saved: jobsSaved });
 
-        emitEvent({
-          type: "VacancyStaged",
-          timestamp: new Date(),
-          payload: {
+        emitEvent(
+          createEvent(DomainEventType.VacancyStaged, {
             stagedVacancyId: savedVacancyId,
             userId: automation.userId,
             sourceBoard: automation.jobBoard,
             automationId: automation.id,
-          },
-        });
+          }),
+        );
 
         automationLogger.log(
           automation.id,

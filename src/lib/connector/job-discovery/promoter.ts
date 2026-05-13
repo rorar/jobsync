@@ -157,16 +157,13 @@ export async function promoteStagedVacancy(
     return { jobId: job.id, stagedVacancyId: vacancy.id, historyEntryId: historyEntry.id };
   });
 
-  // Emit domain event (stub for 0.6 Event Bus)
-  emitEvent({
-    type: "VacancyPromoted",
-    timestamp: new Date(),
-    payload: {
+  emitEvent(
+    createEvent(DomainEventTypes.VacancyPromoted, {
       stagedVacancyId: result.stagedVacancyId,
       jobId: result.jobId,
       userId,
-    },
-  });
+    }),
+  );
 
   // Emit JobStatusChanged so the CRM activity logger records the initial
   // status assignment as a timeline entry (rule InitialStatusOnPromotion).

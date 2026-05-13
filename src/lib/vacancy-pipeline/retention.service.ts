@@ -2,7 +2,8 @@ import "server-only";
 
 import db from "@/lib/db";
 import { computeDedupHash } from "@/lib/connector/job-discovery/utils";
-import { emitEvent } from "@/lib/events";
+import { emitEvent, createEvent } from "@/lib/events";
+import { DomainEventType } from "@/lib/events/event-types";
 
 // Batch tuning:
 //   BATCH_SIZE   — number of rows fetched per findMany page (bounds working set)
@@ -171,16 +172,13 @@ export async function runRetentionCleanup(
     if (batch.length < BATCH_SIZE) break;
   }
 
-  // Emit domain event
-  emitEvent({
-    type: "RetentionCompleted",
-    timestamp: new Date(),
-    payload: {
+  emitEvent(
+    createEvent(DomainEventType.RetentionCompleted, {
       userId,
       purgedCount,
       hashesCreated,
-    },
-  });
+    }),
+  );
 
   return { purgedCount, hashesCreated };
 }

@@ -13,7 +13,8 @@ import type {
   PromotionInput,
 } from "@/models/stagedVacancy.model";
 import { promoteStagedVacancy } from "@/lib/connector/job-discovery/promoter";
-import { emitEvent } from "@/lib/events";
+import { emitEvent, createEvent } from "@/lib/events";
+import { DomainEventType } from "@/lib/events/event-types";
 import { undoStore, createUndoEntry } from "@/lib/undo";
 import { APP_CONSTANTS } from "@/lib/constants";
 import type { RetentionResult } from "@/lib/vacancy-pipeline/retention.service";
@@ -202,7 +203,7 @@ export async function dismissStagedVacancy(
     );
     undoStore.push(undoEntry);
 
-    emitEvent({ type: "VacancyDismissed", timestamp: new Date(), payload: { stagedVacancyId: id, userId: user.id } });
+    emitEvent(createEvent(DomainEventType.VacancyDismissed, { stagedVacancyId: id, userId: user.id }));
     return { success: true, data: { ...toStagedVacancy(updated) as StagedVacancy, undoTokenId: undoEntry.id } };
   } catch (error) {
     return handleError(error, "errors.dismissStagedVacancy");
@@ -272,7 +273,7 @@ export async function archiveStagedVacancy(
     );
     undoStore.push(undoEntry);
 
-    emitEvent({ type: "VacancyArchived", timestamp: new Date(), payload: { stagedVacancyId: id, userId: user.id } });
+    emitEvent(createEvent(DomainEventType.VacancyArchived, { stagedVacancyId: id, userId: user.id }));
     return { success: true, data: { ...toStagedVacancy(updated) as StagedVacancy, undoTokenId: undoEntry.id } };
   } catch (error) {
     return handleError(error, "errors.archiveStagedVacancy");
@@ -314,7 +315,7 @@ export async function trashStagedVacancy(
     );
     undoStore.push(undoEntry);
 
-    emitEvent({ type: "VacancyTrashed", timestamp: new Date(), payload: { stagedVacancyId: id, userId: user.id } });
+    emitEvent(createEvent(DomainEventType.VacancyTrashed, { stagedVacancyId: id, userId: user.id }));
     return { success: true, data: { ...toStagedVacancy(updated) as StagedVacancy, undoTokenId: undoEntry.id } };
   } catch (error) {
     return handleError(error, "errors.trashStagedVacancy");
@@ -343,7 +344,7 @@ export async function restoreFromTrash(
       data: { trashedAt: null },
     });
 
-    emitEvent({ type: "VacancyRestoredFromTrash", timestamp: new Date(), payload: { stagedVacancyId: id, userId: user.id } });
+    emitEvent(createEvent(DomainEventType.VacancyRestoredFromTrash, { stagedVacancyId: id, userId: user.id }));
     return { success: true, data: toStagedVacancy(updated) as StagedVacancy };
   } catch (error) {
     return handleError(error, "errors.restoreFromTrash");

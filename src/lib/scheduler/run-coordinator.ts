@@ -14,6 +14,7 @@ import { runAutomation } from "@/lib/connector/job-discovery"
 import { emitEvent, createEvent } from "@/lib/events"
 import { eventBus } from "@/lib/events/event-bus"
 import { DomainEventType } from "@/lib/events/event-types"
+import { AutomationDegradedPayloadSchema, safeParsePayload } from "@/lib/events/event-schemas"
 import { SCHEDULER_CONSTANTS } from "@/lib/constants"
 import { debugLog, debugError } from "@/lib/debug"
 import type { Automation } from "@/models/automation.model"
@@ -404,7 +405,9 @@ class RunCoordinator {
     if (this._eventsSubscribed) return
     this._eventsSubscribed = true
     eventBus.subscribe(DomainEventType.AutomationDegraded, (event) => {
-      this.acknowledgeExternalStop(event.payload.automationId)
+      const payload = safeParsePayload(AutomationDegradedPayloadSchema, event)
+      if (!payload) return
+      this.acknowledgeExternalStop(payload.automationId)
     })
   }
 }
