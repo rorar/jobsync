@@ -181,9 +181,10 @@ async function archiveAndPurgeOldAdminAuditLogs(): Promise<number> {
     await appendFile(filePath, lines, "utf-8");
   }
 
-  // Delete archived records from DB
+  // Delete by fetched IDs (not time predicate) to prevent TOCTOU race
+  const ids = records.map((r) => r.id);
   const result = await prisma.adminAuditLog.deleteMany({
-    where: { timestamp: { lt: cutoff } },
+    where: { id: { in: ids } },
   });
 
   logRule("archiveAndPurgeOldAdminAuditLogs", result.count, cutoff);

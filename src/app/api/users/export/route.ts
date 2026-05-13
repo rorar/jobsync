@@ -51,7 +51,8 @@ export const GET = async () => {
     } catch (error) {
       console.error("[export] Error creating ZIP:", error);
       archive.abort();
-      passThrough.end();
+      // Destroy stream with error so client gets a broken download, not a corrupt ZIP
+      passThrough.destroy(error instanceof Error ? error : new Error(String(error)));
     }
   })();
 
