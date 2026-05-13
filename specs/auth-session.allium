@@ -1,13 +1,16 @@
 -- allium: 3
 -- auth-session.allium
 
--- Scope: Authentication and session management
+-- Scope: Authentication, session management, and account lifecycle
 -- Includes: Signup, Signin, Session (JWT), Password hashing,
---   Middleware authorization, Route protection, User model
+--   Middleware authorization, Route protection, User model,
+--   Account Deletion (GDPR Art. 17)
 -- Excludes:
 --   - API key authentication (see api-key-management.allium)
 --   - Module credentials (see module-lifecycle.allium)
 --   - OAuth providers (not implemented, Credentials only)
+--   - CRM contact erasure (see crm-gdpr.allium — Person is a data subject,
+--     User is the operator)
 
 ------------------------------------------------------------
 -- External Entities
@@ -195,6 +198,55 @@ rule RootPageRouting {
         else: redirect to /signin
 }
 
+-- === Account Deletion (GDPR Art. 17) ===
+
+rule DeleteAccount {
+    -- The authenticated user requests permanent deletion of their account.
+    -- All user-owned data is removed. This is irreversible.
+    -- GDPR Art. 17: right to erasure for the operator's own account.
+    -- Distinct from CRM Person erasure (crm-gdpr.allium FulfillErasureRequest),
+    -- which erases a data subject's record at the operator's request.
+
+    when: User requests account deletion
+
+    requires: User is authenticated
+    requires: User confirmed intent by typing "DELETE"
+
+    -- Phase 1: Collect disk file paths before DB deletion
+    -- (logo assets, resume files — paths become inaccessible after delete)
+
+    -- Phase 2: Atomic transaction deleting all user data
+    -- Dependency-safe order handles cross-model Restrict FKs:
+    --   1. Resume chain (WorkExperience, Education, etc. → Company/JobTitle Restrict)
+    --   2. Automations (→ Resume Restrict)
+    --   3. Activities (→ ActivityType Restrict)
+    --   4. CRM polymorphic targets (CrmTaskTarget, CrmNoteTarget)
+    --   5. Legacy models (Contact, Interview)
+    --   6. Jobs (→ JobTitle/Company Restrict)
+    --   7. User record (cascades remaining 37 FK relations)
+    ensures: not exists User
+    ensures: all user-owned entities are deleted
+
+    -- Phase 3: Best-effort disk cleanup (after DB commit)
+    -- Logo asset files, resume files, user logo directory
+    ensures: disk files are cleaned up (best-effort, non-blocking)
+
+    -- Phase 4: Session invalidation
+    ensures: user session is terminated via signOut
+    ensures: user is redirected to landing page
+
+    @guidance
+        -- The explicit delete order in the transaction is belt-and-suspenders
+        -- alongside the onDelete: Cascade on all 37 User FK relations.
+        -- SQLite cascade ordering is non-deterministic across FK declarations,
+        -- so cross-model Restrict FKs (Job→JobTitle, WorkExperience→Company,
+        -- Activity→ActivityType) must be resolved by explicit deleteMany
+        -- BEFORE tx.user.delete() triggers cascades.
+        --
+        -- AdminAuditLog is intentionally preserved after account deletion
+        -- (no FK to User, forensic durability by design).
+}
+
 ------------------------------------------------------------
 -- Invariants
 ------------------------------------------------------------
@@ -228,6 +280,13 @@ invariant SecurityHeadersOnAuthRoutes {
     --   Permissions-Policy: camera=(), microphone=(), geolocation=()
     --   Strict-Transport-Security: max-age=31536000; includeSubDomains (production only)
 }
+
+@invariant AccountDeletionCompleteness
+    -- After deleteAccount succeeds:
+    -- 1. No rows in ANY of the 37 User-FK tables reference the deleted user
+    -- 2. No orphaned File or Summary rows from the resume chain remain
+    -- 3. AdminAuditLog rows with actorId = deleted user are RETAINED (forensic)
+    -- 4. JobStatus rows are RETAINED (shared lookup, not user-owned)
 
 invariant CredentialURLProtection {
     -- Three-layer defense against credentials appearing in URLs:
