@@ -113,6 +113,8 @@ model Profile {
   userId  String
   user    User     @relation(fields: [userId], references: [id])
   resumes Resume[]
+
+  @@index([userId])
 }
 
 model Resume {
@@ -128,6 +130,8 @@ model Resume {
   FileId         String?         @unique
   Job            Job[]
   Automation     Automation[]
+
+  @@index([profileId])
 }
 
 model File {
@@ -151,6 +155,8 @@ model ResumeSection {
   licenseOrCertifications LicenseOrCertification[]
   others                  OtherSection[]
   Resume                  Resume                   @relation(fields: [resumeId], references: [id])
+
+  @@index([resumeId])
 }
 
 model ContactInfo {
@@ -190,6 +196,11 @@ model WorkExperience {
   location        Location       @relation(fields: [locationId], references: [id])
   resumeSectionId String?
   ResumeSection   ResumeSection? @relation(fields: [resumeSectionId], references: [id])
+
+  @@index([companyId])
+  @@index([jobTitleId])
+  @@index([locationId])
+  @@index([resumeSectionId])
 }
 
 model Education {
@@ -206,6 +217,9 @@ model Education {
   location        Location       @relation(fields: [locationId], references: [id])
   resumeSectionId String?
   ResumeSection   ResumeSection? @relation(fields: [resumeSectionId], references: [id])
+
+  @@index([locationId])
+  @@index([resumeSectionId])
 }
 
 model LicenseOrCertification {
@@ -217,6 +231,8 @@ model LicenseOrCertification {
   credentialUrl   String?
   ResumeSection   ResumeSection? @relation(fields: [resumeSectionId], references: [id])
   resumeSectionId String?
+
+  @@index([resumeSectionId])
 }
 
 model OtherSection {
@@ -227,6 +243,8 @@ model OtherSection {
   content         String
   ResumeSection   ResumeSection? @relation(fields: [resumeSectionId], references: [id])
   resumeSectionId String?
+
+  @@index([resumeSectionId])
 }
 
 model Contact {
@@ -238,6 +256,9 @@ model Contact {
   user        User       @relation(fields: [createdBy], references: [id])
   Interview   Interview? @relation(fields: [interviewId], references: [id])
   interviewId String?
+
+  @@index([createdBy])
+  @@index([interviewId])
 }
 
 model JobTitle {
@@ -374,6 +395,13 @@ model Job {
   @@index([userId, automationId])
   @@index([userId, discoveryStatus])
   @@index([userId, statusId, sortOrder])
+  @@index([jobTitleId])
+  @@index([companyId])
+  @@index([jobSourceId])
+  @@index([locationId])
+  @@index([resumeId])
+  @@index([automationId])
+  @@index([statusId])
 }
 
 model ActivityType {
@@ -409,6 +437,9 @@ model Activity {
 
   taskId String? @unique
   task   Task?   @relation(fields: [taskId], references: [id])
+
+  @@index([userId])
+  @@index([activityTypeId])
 }
 
 model Task {
@@ -448,7 +479,7 @@ model Automation {
   location       String
   connectorParams String?
   resumeId       String
-  resume         Resume @relation(fields: [resumeId], references: [id])
+  resume         Resume @relation(fields: [resumeId], references: [id], onDelete: Restrict)
   matchThreshold Int    @default(80)
 
   scheduleHour      Int
@@ -468,6 +499,7 @@ model Automation {
 
   @@index([userId])
   @@index([status, nextRunAt])
+  @@index([resumeId])
 }
 
 model AutomationRun {
@@ -604,7 +636,7 @@ model StagedVacancy {
   @@index([userId, status])
   @@index([userId, automationId])
   @@index([userId, createdAt])
-  @@index([trashedAt])
+  @@index([userId, trashedAt])
   // Accelerates CompanyBlacklist retroactive-trash updateMany (Sprint 2 Stream C H-P-02).
   // Satisfies the (userId = ? AND employerName = ?) and (userId = ? AND employerName LIKE 'x%')
   // seeks emitted by the `exact` and `starts_with` match types; `contains`/`ends_with`
@@ -715,6 +747,8 @@ model JobStatusHistory {
   @@index([jobId, changedAt])
   @@index([userId, changedAt])
   @@index([jobId, userId])
+  @@index([previousStatusId])
+  @@index([newStatusId])
 }
 
 model EnrichmentResult {
@@ -758,6 +792,7 @@ model EnrichmentLog {
   @@index([userId, dimension, domainKey])
   @@index([moduleId, outcome])
   @@index([createdAt])
+  @@index([enrichmentResultId])
 }
 
 model WebhookEndpoint {
@@ -842,6 +877,7 @@ model LogoAsset {
 
   @@unique([userId, companyId])
   @@index([userId, status])
+  @@index([companyId])
 }
 
 /// Sprint 5 Stream D — closes Sprint 1.5 CRIT-S-04 deferred item.
@@ -1112,6 +1148,7 @@ model CrmActivityLog {
   @@index([targetPersonId, happenedAt])
   @@index([targetJobId, happenedAt])
   @@index([userId, activityType])
+  @@index([targetCompanyId])
 }
 
 /// Suppresses Person auto-creation for specific handles during email/calendar sync.
