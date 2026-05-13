@@ -1,120 +1,242 @@
 "use server";
 
+/**
+ * Account Management Server Actions (GDPR Privacy & Security).
+ *
+ * Handles the full account deletion lifecycle:
+ * - requestAccountDeletion() — main entry (F-1 audit, F-2 email confirm, F-4 cooling-off)
+ * - deleteAccount() — backward-compatible wrapper
+ * - cancelAccountDeletion() — cancel a scheduled deletion
+ * - getDeletionStatus() — check if a deletion is scheduled
+ *
+ * All queries include userId (ADR-015 IDOR protection).
+ */
+
 import { getCurrentUser } from "@/utils/user.utils";
 import prisma from "@/lib/db";
+import { handleError } from "@/lib/utils";
 import type { ActionResult } from "@/models/actionResult";
-import { promises as fs } from "fs";
-import path from "path";
+import { getPrivacySettingsForUser } from "@/lib/account/privacy-helpers";
+import { generateDeletionToken } from "@/lib/account/deletion-token";
+import { executeAccountDeletion } from "@/lib/account/execute-deletion";
+import { writeAdminAuditLog } from "@/lib/auth/admin";
+import { decrypt } from "@/lib/encryption";
+import { validateSmtpHost } from "@/lib/smtp-validation";
+import { createSmtpTransporter } from "@/lib/email/transport";
+import { renderDeletionConfirmationEmail } from "@/lib/email/templates";
+import { resolveUserLocale } from "@/lib/locale-resolver";
 
-const LOGO_BASE_DIR = process.env.LOGO_STORAGE_PATH || "/data/logos";
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-export async function deleteAccount(): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) {
-    return { success: false, message: "errors.notAuthenticated" };
-  }
+export interface DeletionRequestResult {
+  pendingConfirmation?: boolean;
+  scheduledAt?: string; // ISO date string
+  deleted?: boolean;
+}
 
-  const uid = user.id;
+// ---------------------------------------------------------------------------
+// Server Actions
+// ---------------------------------------------------------------------------
 
-  // Phase 0: Collect file paths BEFORE deleting DB rows
-  const [logoAssets, resumeFiles] = await Promise.all([
-    prisma.logoAsset.findMany({
-      where: { userId: uid },
-      select: { filePath: true },
-    }),
-    prisma.file.findMany({
-      where: { Resume: { profile: { userId: uid } } },
-      select: { filePath: true },
-    }),
-  ]);
+/**
+ * Backward-compatible wrapper — delegates to requestAccountDeletion().
+ */
+export async function deleteAccount(): Promise<ActionResult<DeletionRequestResult>> {
+  return requestAccountDeletion();
+}
 
-  // Phase 1: Delete all user data in dependency-safe order
-  // Cross-model Restrict FKs require deleting dependents before parents.
-  await prisma.$transaction(async (tx) => {
-    // --- Resume deep chain (WorkExperience → Company/JobTitle/Location via implicit FK) ---
-    await tx.workExperience.deleteMany({
-      where: { ResumeSection: { Resume: { profile: { userId: uid } } } },
-    });
-    await tx.education.deleteMany({
-      where: { ResumeSection: { Resume: { profile: { userId: uid } } } },
-    });
-    await tx.licenseOrCertification.deleteMany({
-      where: { ResumeSection: { Resume: { profile: { userId: uid } } } },
-    });
-    await tx.otherSection.deleteMany({
-      where: { ResumeSection: { Resume: { profile: { userId: uid } } } },
-    });
-    await tx.contactInfo.deleteMany({
-      where: { resume: { profile: { userId: uid } } },
-    });
-
-    // Summary (orphan-prone — FK is ON ResumeSection side)
-    const sections = await tx.resumeSection.findMany({
-      where: { Resume: { profile: { userId: uid } } },
-      select: { summaryId: true },
-    });
-    const summaryIds = sections
-      .map((s) => s.summaryId)
-      .filter((id): id is string => id !== null);
-
-    await tx.resumeSection.deleteMany({
-      where: { Resume: { profile: { userId: uid } } },
-    });
-    if (summaryIds.length > 0) {
-      await tx.summary.deleteMany({ where: { id: { in: summaryIds } } });
+/**
+ * Request account deletion with GDPR privacy flow.
+ *
+ * Flow:
+ * 1. F-1: If auditAccountDeletion -> write audit log
+ * 2. F-2: If emailConfirmationBeforeDeletion AND SMTP configured ->
+ *          generate token, send email, return pendingConfirmation
+ * 3. F-4: If coolingOffDays > 0 -> set deletionScheduledAt, return scheduled
+ * 4. Else: executeAccountDeletion(), return deleted
+ */
+export async function requestAccountDeletion(): Promise<
+  ActionResult<DeletionRequestResult>
+> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, message: "errors.notAuthenticated" };
     }
 
-    // File records (orphan-prone — FK is ON Resume side)
-    await tx.file.deleteMany({
-      where: { Resume: { profile: { userId: uid } } },
-    });
+    const privacy = await getPrivacySettingsForUser(user.id);
 
-    // --- Automation → Resume (Restrict FK) — must delete BEFORE resumes ---
-    await tx.automation.deleteMany({ where: { userId: uid } });
+    // F-1: Audit trail
+    if (privacy.auditAccountDeletion) {
+      writeAdminAuditLog(
+        user,
+        {
+          action: "account_deletion_requested",
+          targetId: user.id,
+          extra: {
+            emailConfirmation: privacy.emailConfirmationBeforeDeletion,
+            coolingOffDays: privacy.coolingOffDays,
+          },
+        },
+        { allowed: true, tier: "explicit_list" },
+      );
+    }
 
-    await tx.resume.deleteMany({
-      where: { profile: { userId: uid } },
-    });
+    // F-2: Email confirmation
+    if (privacy.emailConfirmationBeforeDeletion) {
+      const smtpConfig = await prisma.smtpConfig.findUnique({
+        where: { userId: user.id },
+      });
 
-    // --- Activity → ActivityType (implicit FK) ---
-    await tx.activity.deleteMany({ where: { userId: uid } });
+      if (smtpConfig && smtpConfig.active) {
+        // Generate token
+        const { raw, hash, expiresAt } = generateDeletionToken();
 
-    // --- CRM targets (reference CrmTask/CrmNote + Person/Company/Job) ---
-    await tx.crmTaskTarget.deleteMany({ where: { task: { userId: uid } } });
-    await tx.crmNoteTarget.deleteMany({ where: { note: { userId: uid } } });
+        // Upsert token (one per user)
+        await prisma.deletionConfirmationToken.upsert({
+          where: { userId: user.id },
+          update: { tokenHash: hash, expiresAt },
+          create: { userId: user.id, tokenHash: hash, expiresAt },
+        });
 
-    // --- Legacy models without userId ---
-    await tx.contact.deleteMany({ where: { createdBy: uid } });
-    await tx.interview.deleteMany({ where: { job: { userId: uid } } });
+        // Send confirmation email
+        const confirmationUrl = `${process.env.NEXTAUTH_URL}/api/account/confirm-deletion?token=${raw}`;
 
-    // --- Job (references JobTitle/Company via implicit Restrict FK) ---
-    // Must delete before User cascade attempts to delete JobTitle/Company,
-    // otherwise Restrict on Job.jobTitleId/companyId would block.
-    await tx.job.deleteMany({ where: { userId: uid } });
+        let decryptedPassword: string;
+        try {
+          decryptedPassword = await decrypt(smtpConfig.password, smtpConfig.iv);
+        } catch {
+          return {
+            success: false,
+            message: "errors.smtpDecryptionFailed",
+          };
+        }
 
-    // --- Delete User (cascades all remaining direct FK relations) ---
-    await tx.user.delete({ where: { id: uid } });
-  });
+        // Validate SMTP host (SSRF re-validation)
+        const hostCheck = validateSmtpHost(smtpConfig.host);
+        if (!hostCheck.valid) {
+          return {
+            success: false,
+            message: hostCheck.error ?? "smtp.ssrfBlocked",
+          };
+        }
 
-  // Phase 2: Best-effort disk cleanup (after DB commit succeeds)
-  const allPaths = [
-    ...logoAssets.map((a) => a.filePath).filter(Boolean),
-    ...resumeFiles.map((f) => f.filePath),
-  ];
+        const locale = await resolveUserLocale(user.id);
+        const { subject, html, text } =
+          renderDeletionConfirmationEmail(locale, confirmationUrl);
 
-  await Promise.allSettled(
-    allPaths.map((p) => fs.unlink(p as string).catch(() => {})),
-  );
+        const transporter = createSmtpTransporter({
+          host: smtpConfig.host,
+          port: smtpConfig.port,
+          username: smtpConfig.username,
+          decryptedPassword,
+          tlsRequired: smtpConfig.tlsRequired,
+        });
 
-  // Clean up user's logo directory
-  try {
-    await fs.rm(path.join(LOGO_BASE_DIR, uid), {
-      recursive: true,
-      force: true,
-    });
-  } catch {
-    // Best-effort — never throw on file cleanup errors
+        try {
+          await transporter.sendMail({
+            from: smtpConfig.fromAddress,
+            to: user.email,
+            subject: `[JobSync] ${subject}`,
+            html,
+            text,
+          });
+        } finally {
+          transporter.close();
+        }
+
+        return { success: true, data: { pendingConfirmation: true } };
+      }
+    }
+
+    // F-4: Cooling-off period
+    if (privacy.coolingOffDays > 0) {
+      const scheduledAt = new Date(
+        Date.now() + privacy.coolingOffDays * 24 * 60 * 60 * 1000,
+      );
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { deletionScheduledAt: scheduledAt },
+      });
+
+      return {
+        success: true,
+        data: { scheduledAt: scheduledAt.toISOString() },
+      };
+    }
+
+    // Immediate deletion
+    await executeAccountDeletion(user.id);
+    return { success: true, data: { deleted: true } };
+  } catch (error) {
+    return handleError(error, "errors.accountDeletion");
   }
+}
 
-  return { success: true };
+/**
+ * Cancel a scheduled account deletion (during cooling-off period).
+ */
+export async function cancelAccountDeletion(): Promise<ActionResult> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, message: "errors.notAuthenticated" };
+    }
+
+    // Verify a deletion is actually scheduled
+    const dbUser = await prisma.user.findFirst({
+      where: { id: user.id },
+      select: { deletionScheduledAt: true },
+    });
+
+    if (!dbUser?.deletionScheduledAt) {
+      return { success: false, message: "errors.noDeletionScheduled" };
+    }
+
+    // Clear scheduled deletion and remove any pending tokens
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: user.id },
+        data: { deletionScheduledAt: null },
+      }),
+      prisma.deletionConfirmationToken.deleteMany({
+        where: { userId: user.id },
+      }),
+    ]);
+
+    return { success: true };
+  } catch (error) {
+    return handleError(error, "errors.cancelDeletion");
+  }
+}
+
+/**
+ * Get the current deletion status for the authenticated user.
+ */
+export async function getDeletionStatus(): Promise<
+  ActionResult<{ scheduledAt: string | null }>
+> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, message: "errors.notAuthenticated" };
+    }
+
+    const dbUser = await prisma.user.findFirst({
+      where: { id: user.id },
+      select: { deletionScheduledAt: true },
+    });
+
+    return {
+      success: true,
+      data: {
+        scheduledAt: dbUser?.deletionScheduledAt?.toISOString() ?? null,
+      },
+    };
+  } catch (error) {
+    return handleError(error, "errors.fetchDeletionStatus");
+  }
 }

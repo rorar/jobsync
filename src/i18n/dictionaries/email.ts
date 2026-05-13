@@ -36,6 +36,12 @@ export const email = {
     "email.subject.follow_up_due": "Follow-up due",
     "email.subject.contact_from_job": "New contact from job",
     "email.subject.retention_expired": "Contact archived — retention expired",
+
+    // Deletion confirmation (F-2)
+    "email.deletionConfirmSubject": "Confirm Account Deletion",
+    "email.deletionConfirmBody": "You have requested to delete your JobSync account. Click the button below to confirm this action.",
+    "email.deletionConfirmButton": "Confirm Deletion",
+    "email.deletionConfirmWarning": "This link expires in 24 hours. If you did not request this, you can safely ignore this email.",
   },
   de: {
     "email.header": "JobSync-Benachrichtigung",
@@ -60,6 +66,12 @@ export const email = {
     "email.subject.follow_up_due": "Follow-up fällig",
     "email.subject.contact_from_job": "Neuer Kontakt aus Job",
     "email.subject.retention_expired": "Kontakt archiviert — Aufbewahrungsfrist abgelaufen",
+
+    // Deletion confirmation (F-2)
+    "email.deletionConfirmSubject": "Kontol\u00f6schung best\u00e4tigen",
+    "email.deletionConfirmBody": "Du hast die L\u00f6schung deines JobSync-Kontos angefordert. Klicke auf die Schaltfl\u00e4che unten, um diese Aktion zu best\u00e4tigen.",
+    "email.deletionConfirmButton": "L\u00f6schung best\u00e4tigen",
+    "email.deletionConfirmWarning": "Dieser Link l\u00e4uft in 24 Stunden ab. Wenn du dies nicht angefordert hast, kannst du diese E-Mail ignorieren.",
   },
   fr: {
     "email.header": "Notification JobSync",
@@ -83,7 +95,13 @@ export const email = {
     "email.subject.interview_reminder": "Rappel d'entretien",
     "email.subject.follow_up_due": "Suivi à effectuer",
     "email.subject.contact_from_job": "Nouveau contact depuis l'emploi",
-    "email.subject.retention_expired": "Contact archivé — rétention expirée",
+    "email.subject.retention_expired": "Contact archiv\u00e9 \u2014 r\u00e9tention expir\u00e9e",
+
+    // Deletion confirmation (F-2)
+    "email.deletionConfirmSubject": "Confirmer la suppression du compte",
+    "email.deletionConfirmBody": "Vous avez demand\u00e9 la suppression de votre compte JobSync. Cliquez sur le bouton ci-dessous pour confirmer cette action.",
+    "email.deletionConfirmButton": "Confirmer la suppression",
+    "email.deletionConfirmWarning": "Ce lien expire dans 24 heures. Si vous n'avez pas demand\u00e9 cela, vous pouvez ignorer cet e-mail.",
   },
   es: {
     "email.header": "Notificaci\u00f3n de JobSync",
@@ -107,6 +125,12 @@ export const email = {
     "email.subject.interview_reminder": "Recordatorio de entrevista",
     "email.subject.follow_up_due": "Seguimiento pendiente",
     "email.subject.contact_from_job": "Nuevo contacto del empleo",
-    "email.subject.retention_expired": "Contacto archivado — retención expirada",
+    "email.subject.retention_expired": "Contacto archivado \u2014 retenci\u00f3n expirada",
+
+    // Deletion confirmation (F-2)
+    "email.deletionConfirmSubject": "Confirmar eliminaci\u00f3n de cuenta",
+    "email.deletionConfirmBody": "Has solicitado la eliminaci\u00f3n de tu cuenta de JobSync. Haz clic en el bot\u00f3n de abajo para confirmar esta acci\u00f3n.",
+    "email.deletionConfirmButton": "Confirmar eliminaci\u00f3n",
+    "email.deletionConfirmWarning": "Este enlace expira en 24 horas. Si no solicitaste esto, puedes ignorar este correo.",
   },
 } as const;

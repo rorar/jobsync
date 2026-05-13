@@ -164,6 +164,46 @@ export function renderTestEmail(locale: string): RenderedEmail {
   return { subject, html, text };
 }
 
+/**
+ * Render a deletion confirmation email (F-2).
+ * Contains a confirmation link the user must click to proceed with deletion.
+ */
+export function renderDeletionConfirmationEmail(
+  locale: string,
+  confirmationUrl: string,
+): RenderedEmail {
+  const header = t(locale, "email.header");
+  const footer = t(locale, "email.footer");
+  const greeting = t(locale, "email.greeting");
+  const subject = t(locale, "email.deletionConfirmSubject");
+  const body = t(locale, "email.deletionConfirmBody");
+  const buttonLabel = t(locale, "email.deletionConfirmButton");
+  const warning = t(locale, "email.deletionConfirmWarning");
+
+  // Sanitize the URL for safe embedding in HTML href attribute
+  const safeUrl = escapeHtml(confirmationUrl);
+
+  const htmlBody = `
+    <p style="margin:0 0 16px;color:#27272a;font-size:14px;line-height:1.6;">${escapeHtml(greeting)}</p>
+    <p style="margin:0 0 24px;color:#27272a;font-size:14px;line-height:1.6;">${escapeHtml(body)}</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">
+      <tr>
+        <td style="border-radius:6px;background-color:#dc2626;">
+          <a href="${safeUrl}" target="_blank" style="display:inline-block;padding:12px 24px;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:6px;">${escapeHtml(buttonLabel)}</a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 16px;color:#71717a;font-size:12px;line-height:1.5;">${escapeHtml(warning)}</p>
+  `;
+
+  const html = wrapHtml(header, htmlBody, footer, locale);
+  const sanitizedBody = sanitizePlainText(body);
+  const sanitizedWarning = sanitizePlainText(warning);
+  const text = `${greeting}\n\n${sanitizedBody}\n\n${confirmationUrl}\n\n${sanitizedWarning}\n\n---\n${footer}`;
+
+  return { subject, html, text };
+}
+
 // ---------------------------------------------------------------------------
 // Placeholder map — maps data field names to template placeholder names
 //

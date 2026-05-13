@@ -2,6 +2,10 @@
  * CRM Temporal Rules — Cron job for time-based CRM rules.
  * Spec: specs/crm.allium rules ExpireAutoCreatedPersons, InterviewReminder, TaskOverdueReminder
  *
+ * Also handles GDPR account deletion rules:
+ * - purgeExpiredDeletions: execute deletions past cooling-off period (F-4)
+ * - sweepExpiredDeletionTokens: clean up expired confirmation tokens (F-2)
+ *
  * Architecture:
  * - Separate cron from the automation scheduler (bounded context separation)
  * - Activity log as idempotency guard (no extra schema columns)
@@ -16,6 +20,9 @@ import { eventBus } from "@/lib/events";
 import { createEvent, DomainEventType } from "@/lib/events/event-types";
 import { CRM_CONFIG } from "@/models/person.model";
 import { debugLog, debugError } from "@/lib/debug";
+import { getPrivacySettingsForUser } from "@/lib/account/privacy-helpers";
+import { executeAccountDeletion } from "@/lib/account/execute-deletion";
+import { writeAdminAuditLog } from "@/lib/auth/admin";
 
 // globalThis guard: survives Next.js HMR module reloads (same pattern as RunCoordinator)
 const CRM_CRON_KEY = "__crmCronTask";
@@ -231,6 +238,58 @@ async function checkOverdueTasks(): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
+// Rule: PurgeExpiredDeletions (F-4 cooling-off)
+// ---------------------------------------------------------------------------
+
+async function purgeExpiredDeletions(): Promise<number> {
+  const now = new Date();
+  const users = await prisma.user.findMany({
+    where: { deletionScheduledAt: { lte: now } },
+    select: { id: true, email: true, name: true },
+  });
+
+  if (users.length === 0) return 0;
+
+  let purged = 0;
+  for (const user of users) {
+    try {
+      // Read privacy settings for audit log
+      const privacy = await getPrivacySettingsForUser(user.id);
+
+      if (privacy.auditAccountDeletion) {
+        writeAdminAuditLog(
+          { id: user.id, name: user.name ?? "", email: user.email ?? "" },
+          {
+            action: "account_deletion_executed",
+            targetId: user.id,
+            extra: { trigger: "cooling_off_expired" },
+          },
+          { allowed: true, tier: "explicit_list" },
+        );
+      }
+
+      await executeAccountDeletion(user.id);
+      purged++;
+    } catch (error) {
+      debugError("crm-cron", `Failed to purge user ${user.id}:`, error);
+    }
+  }
+
+  return purged;
+}
+
+// ---------------------------------------------------------------------------
+// Rule: SweepExpiredDeletionTokens (F-2 token cleanup)
+// ---------------------------------------------------------------------------
+
+async function sweepExpiredDeletionTokens(): Promise<number> {
+  const result = await prisma.deletionConfirmationToken.deleteMany({
+    where: { expiresAt: { lt: new Date() } },
+  });
+  return result.count;
+}
+
+// ---------------------------------------------------------------------------
 // Main cron loop
 // ---------------------------------------------------------------------------
 
@@ -250,23 +309,34 @@ async function runCrmTemporalRules(): Promise<void> {
       expireAutoCreatedPersons(),
       checkInterviewReminders(),
       checkOverdueTasks(),
+      purgeExpiredDeletions(),
+      sweepExpiredDeletionTokens(),
     ]);
 
     const expired = results[0].status === "fulfilled" ? results[0].value : 0;
     const interviews = results[1].status === "fulfilled" ? results[1].value : 0;
     const tasks = results[2].status === "fulfilled" ? results[2].value : 0;
+    const purged = results[3].status === "fulfilled" ? results[3].value : 0;
+    const swept = results[4].status === "fulfilled" ? results[4].value : 0;
 
     // Log individual rule failures
-    for (const [i, label] of ["expirePersons", "interviewReminders", "overdueTasks"].entries()) {
+    const ruleLabels = [
+      "expirePersons",
+      "interviewReminders",
+      "overdueTasks",
+      "purgeExpiredDeletions",
+      "sweepExpiredDeletionTokens",
+    ];
+    for (const [i, label] of ruleLabels.entries()) {
       if (results[i].status === "rejected") {
         debugError("crm-cron", `[CRM-Cron] Rule ${label} failed:`, (results[i] as PromiseRejectedResult).reason);
       }
     }
 
-    if (expired > 0 || interviews > 0 || tasks > 0) {
+    if (expired > 0 || interviews > 0 || tasks > 0 || purged > 0 || swept > 0) {
       debugLog(
         "crm-cron",
-        `[CRM-Cron] Processed: ${expired} expired persons, ${interviews} interview reminders, ${tasks} overdue tasks`,
+        `[CRM-Cron] Processed: ${expired} expired persons, ${interviews} interview reminders, ${tasks} overdue tasks, ${purged} purged accounts, ${swept} swept tokens`,
       );
     }
   } catch (error) {
@@ -311,4 +381,11 @@ export function stopCrmCron(): void {
 }
 
 // Exported for testing
-export { expireAutoCreatedPersons, checkInterviewReminders, checkOverdueTasks, runCrmTemporalRules };
+export {
+  expireAutoCreatedPersons,
+  checkInterviewReminders,
+  checkOverdueTasks,
+  purgeExpiredDeletions,
+  sweepExpiredDeletionTokens,
+  runCrmTemporalRules,
+};
