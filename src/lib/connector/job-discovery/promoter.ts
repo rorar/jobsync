@@ -273,13 +273,18 @@ async function findOrCreateCompany(
     // Emit CompanyCreated so enrichment-trigger fires logo enrichment
     // (spec: TriggerEnrichmentOnCompanyCreated). ~90% of companies are
     // created through the automation pipeline via this path.
-    emitEvent(
-      createEvent(DomainEventTypes.CompanyCreated, {
-        companyId: newCompany.id,
-        companyName: company,
-        userId,
-      }),
-    );
+    // Isolate event emission — must not fall through to the race-condition catch
+    try {
+      emitEvent(
+        createEvent(DomainEventTypes.CompanyCreated, {
+          companyId: newCompany.id,
+          companyName: company,
+          userId,
+        }),
+      );
+    } catch (eventErr) {
+      console.warn("[Promoter] Failed to emit CompanyCreated event:", eventErr);
+    }
 
     return newCompany.id;
   } catch {

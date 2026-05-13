@@ -175,4 +175,15 @@ describe("deleteResumeById — Automation guard", () => {
       where: { resumeId, userId: mockUser.id },
     });
   });
+
+  it("returns friendly error when Restrict constraint fires (TOCTOU race)", async () => {
+    (prisma.automation.count as jest.Mock).mockResolvedValue(0);
+    (prisma.$transaction as jest.Mock).mockRejectedValue(
+      Object.assign(new Error("Foreign key constraint failed"), { code: "P2003" }),
+    );
+    const { deleteResumeById } = require("@/actions/profile.actions");
+    const result = await deleteResumeById(resumeId);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("resumeHasAutomations");
+  });
 });

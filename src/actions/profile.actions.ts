@@ -459,8 +459,16 @@ export const deleteResumeById = async (
     });
     return { success: true };
   } catch (error) {
-    const msg = "Failed to delete resume.";
-    return handleError(error, msg);
+    // Catch Restrict FK violation (TOCTOU: Automation created between guard and delete)
+    if (
+      error instanceof Error &&
+      (error.message?.includes("Foreign key constraint") ||
+        (error as any).code === "P2003" ||
+        (error as any).code === "P2014")
+    ) {
+      return { success: false, message: "profile.resumeHasAutomations" };
+    }
+    return handleError(error, "profile.deleteError");
   }
 };
 
