@@ -170,11 +170,21 @@ describe("VacancyTrashedPayloadSchema", () => {
   it("accepts valid payload", () => {
     expect(VacancyTrashedPayloadSchema.safeParse({ stagedVacancyId: "sv-1", userId: "u" }).success).toBe(true);
   });
+
+  it("rejects empty object", () => {
+    const result = VacancyTrashedPayloadSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("VacancyRestoredFromTrashPayloadSchema", () => {
   it("accepts valid payload", () => {
     expect(VacancyRestoredFromTrashPayloadSchema.safeParse({ stagedVacancyId: "sv-1", userId: "u" }).success).toBe(true);
+  });
+
+  it("rejects empty object", () => {
+    const result = VacancyRestoredFromTrashPayloadSchema.safeParse({});
+    expect(result.success).toBe(false);
   });
 });
 
@@ -712,6 +722,11 @@ describe("ContactUpdatedPayloadSchema", () => {
     const result = ContactUpdatedPayloadSchema.safeParse({ userId: "user-1" });
     expect(result.success).toBe(false);
   });
+
+  it("rejects empty object", () => {
+    const result = ContactUpdatedPayloadSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("ContactDeletedPayloadSchema", () => {
@@ -883,6 +898,11 @@ describe("CrmTaskCompletedPayloadSchema", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it("rejects empty object", () => {
+    const result = CrmTaskCompletedPayloadSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("CrmNoteCreatedPayloadSchema", () => {
@@ -1040,6 +1060,25 @@ describe("safeParsePayload()", () => {
       },
     });
     expect(result).toBeNull();
+  });
+
+  // L-6: undefined payload
+  it("returns null when payload is undefined", () => {
+    const result = safeParsePayload(VacancyPromotedPayloadSchema, {
+      type: "test",
+      payload: undefined,
+    });
+    expect(result).toBeNull();
+  });
+
+  // L-4 / L-6: extra-field stripping (Zod strips unknown keys by default)
+  it("strips extra fields not in schema", () => {
+    const result = safeParsePayload(VacancyPromotedPayloadSchema, {
+      type: "test",
+      payload: { stagedVacancyId: "sv-1", jobId: "j-1", userId: "u-1", extraField: "noise" },
+    });
+    expect(result).not.toBeNull();
+    expect((result as any).extraField).toBeUndefined();
   });
 });
 

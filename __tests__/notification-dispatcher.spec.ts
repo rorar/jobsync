@@ -650,6 +650,38 @@ describe("NotificationDispatcher", () => {
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // M-3: Handler-level malformed-event skip tests
+  //
+  // When the event payload fails safeParsePayload() validation the handler
+  // MUST return immediately without forwarding to downstream services
+  // (channelRouter / InAppChannel / prisma.notification.create).
+  //
+  // AutomationDegraded is the regression vehicle because its payload schema
+  // requires many fields (reason, severity, actorType …). Emitting a bare
+  // `{ broken: true }` object exercises the "malformed event" fast-exit
+  // branch that every handler implements:
+  //   const payload = safeParsePayload(Schema, event);
+  //   if (!payload) return;   ← this branch
+  // ---------------------------------------------------------------------------
+  describe("M-3 — malformed event skip (handler returns without calling downstream)", () => {
+    it("skips processing AutomationDegraded with missing required fields (does not call prisma.notification.create)", async () => {
+      // Deliberately bypass createEvent's type-safety by casting so we can
+      // emit a structurally-invalid payload that reaches the handler.
+      const malformedEvent = {
+        type: DomainEventType.AutomationDegraded,
+        timestamp: new Date().toISOString(),
+        payload: { broken: true }, // missing all required schema fields
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await eventBus.publish(malformedEvent as any);
+
+      // The handler must have exited at the safeParsePayload guard — no DB write.
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+  });
+
   describe("Error isolation", () => {
     it("dispatcher does not crash when notification creation fails", async () => {
       mockCreate.mockRejectedValueOnce(new Error("DB error"));
