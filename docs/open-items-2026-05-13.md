@@ -12,7 +12,7 @@
 | ~~G1~~ | ~~Status-change Event Bus Bypass — 4 Pfade ohne `JobStatusChanged`~~ | ~~1 Tag~~ | **RESOLVED** (commit `4a5293a`, all 4 paths emit events correctly) |
 | ~~G2~~ | ~~`anonymizePerson` GDPR — `CrmInterview.personId` nicht detached~~ | ~~15 min~~ | **RESOLVED** (code: `person.actions.ts:364-378`, "G2 fix" comment) |
 | ~~G2b~~ | ~~AI Provider Degradation Bypass — OpenAI/DeepSeek 401 silently swallowed~~ | ~~1 Std~~ | **RESOLVED** (commit `3a81dd6`, handleAuthFailure wired in providers.ts) |
-| S1 | Account Deletion (Art. 17) — kein deleteUser, 31/35 FK ohne Cascade | 2-3 Tage | GDPR Audit |
+| ~~S1~~ | ~~Account Deletion (Art. 17) — kein deleteUser, 31/35 FK ohne Cascade~~ | ~~2-3 Tage~~ | **RESOLVED** (session 2026-05-14: 37 FK cascades, `deleteAccount()` + `requestAccountDeletion()` + Privacy Settings UI + F-1 audit + F-2 email confirm + F-4 cooling-off) |
 | ~~S5~~ | ~~`anonymizePerson` 6 Cascade-Gaps~~ | ~~2 Std~~ | **RESOLVED** (all 6 fields handled: personId, notes, outcomeNotes, details, linkedRecordName, blocklist) |
 
 **G1 Details:** All 4 paths fixed in `4a5293a`: updateJob wraps status changes in transaction with history + sideEffects + event; API v1 status route emits event; promoter emits JobStatusChanged; API v1 POST /jobs creates history + emits events. Ref: `docs/interface-fragility-analysis.md` IF-1.
@@ -80,7 +80,7 @@
 
 | Sprint | Scope | Effort |
 |--------|-------|--------|
-| **GDPR Sprint** | S1 Account Deletion + S2 DSAR + S3 AI PII Strip | 1 Woche |
+| **GDPR Sprint cont.** | ~~S1 Account Deletion~~ (DONE) + S2 DSAR + S3 AI PII Strip + S4 Retention | 3-5 Tage |
 | **S2 UX Polish** | 19 Features, 52+ Components, Add Job Dialog (7 Divergenzen) | 2-3 Tage |
 | **Observability** | OpenTelemetry + Prometheus + Grafana + Alert Rules | 2-3 Wochen |
 
@@ -102,3 +102,4 @@
 | G1 | All 4 status-change paths emit JobStatusChanged + history + sideEffects | `4a5293a` |
 | G2b | AI auth failures wired to degradation bridge | `3a81dd6` |
 | G5 | newJobsCount filter fixed to `["staged","processing","ready"]` | session 2026-05-14 |
+| S1 | Account Deletion: 37 FK cascades + deleteAccount + Privacy Settings (F-1/F-2/F-4) | session 2026-05-14 (`a1dc1b3`..`8f30f72`) |

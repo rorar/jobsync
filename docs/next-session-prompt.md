@@ -1,4 +1,4 @@
-# Session Prompt — Interface Fragility Fixes + Open Items
+# Session Prompt — CRITICAL Domain Expert Findings + GDPR Sprint
 
 Hey Claude, sei mein Full-Stack Senior Software Engineer und unterstuetze mich bei der Planung, Architektur und Implementierung von neuen Features, Bugfixes und Verbesserungen fuer JobSync, einer SaaS-Plattform fuer die Automatisierung von Job-Discovery und Bewerbungsprozessen. Die Plattform ist in TypeScript mit Shadcn/Tailwind, Next.js und Prisma gebaut.
 
@@ -9,75 +9,50 @@ Hey Claude, sei mein Full-Stack Senior Software Engineer und unterstuetze mich b
 
 ## Kontext
 
-Letzte Session (2026-05-12b) hat die **3 CRITICAL Findings (G1, G2/S5, G2b)** gefixt + 5 Quick Wins + CRM Cron Hardening. 7 Commits, 228 Test Suites, 4459 Tests gruen. Zusaetzlich: 9-Agent Interface-Fragility-Analyse mit 12 Fragility-Clustern (IF-1 bis IF-12). Reports:
+Letzte Session (2026-05-14) hat alle CRITICAL Domain Expert Findings + S1 GDPR Account Deletion abgeschlossen. 12 Commits, 232 Test Suites, 4580 Tests gruen, 51 Migrationen, 0 Review-Debt.
 
-- `docs/interface-fragility-analysis.md` — 12 Fragility-Cluster mit Konsens-Bewertung
-- `docs/session-2026-05-12-domain-expert-analysis.md` — Original Cross-Domain Findings (G1-G29)
-- `docs/gdpr-audit-report.md` — GDPR Audit (60 Checks, 8 Domains)
-- `.remember/remember.md` — Handoff mit allen Context-Details
-- `.domain-experts/domains.json` — Domain Mapping (841 Dateien, drift-checked)
+**G1, G2b, G5 waren bereits gefixt** (Commits `4a5293a`/`3a81dd6` vom 2026-05-12, Docs aktualisiert).
+**S1 Account Deletion vollstaendig implementiert:** 37 FK Cascades, `deleteAccount()` + `requestAccountDeletion()` mit Privacy Settings (F-1 Audit Trail, F-2 Email Confirmation, F-4 Cooling-off Period), UI in Settings, 13 Tests, Allium Spec.
 
-## Phase 1: IF-3 Full — CrmInterview FK Cascade (~2h)
+## Phase 1: GDPR Sprint Fortsetzung (S2, S3, S4)
 
 Nutze `/full-stack-orchestration:full-stack-feature` + `/superpowers:test-driven-development`.
 
-### 1.1 Prisma Migration
+**S1 Account Deletion ist DONE** (Session 2026-05-14). Naechste GDPR-Items:
 
-`CrmInterview.jobId` hat kein `onDelete: Cascade` (`prisma/schema.prisma:972`). Job-Delete crasht wenn Interviews existieren. 3/9 Agent-Konsens.
+### 1.1 S2 — Data Export/Portability (Art. 15, 20)
 
-1. Erstelle Migration: `onDelete: Cascade` auf `CrmInterview.jobId` FK
-2. Pruefe ob andere CRM-FKs auch betroffen sind: `CrmTaskTarget.targetJobId`, `CrmNoteTarget.targetJobId`, `CrmActivityLog.targetJobId`
-3. `npx prisma migrate dev --name add-crm-cascade-deletes`
+Kein DSAR Handler, kein "Export my data" Button, kein strukturierter Export. `PersonDataExport` in `specs/crm-gdpr.allium:94-111` spezifiziert aber nicht implementiert.
 
-### 1.2 deleteJobById + API v1 DELETE vereinheitlichen
+### 1.2 S3 — Resume PII an Cloud-APIs (Art. 5(1)(c), 28, 44)
 
-Aktuell divergente Cascades (G23):
-- Internal `deleteJobById` (`job.actions.ts:573`): loescht `jobContact`, nicht `CrmInterview`
-- API v1 DELETE (`route.ts:108`): loescht legacy `Interview`, nicht `jobContact`
+`convertResumeToText()` in `preprocessing.ts:96-194` sendet vollen Namen, Email, Telefon, Adresse an OpenAI/DeepSeek. `TEXT_LIMITS` config existiert aber wird nie importiert.
 
-Fix: Beide Pfade muessen identische Cleanup-Logik haben. Mit `onDelete: Cascade` auf der Migration werden die meisten CRM-Entities automatisch geloescht. Pruefe was noch manuell benoetigt wird.
+### 1.3 S4 — Retention Policies (Art. 5(1)(e))
 
-### 1.3 E2E Cleanup
+Jobs, Notes, Activities, Notifications, EnrichmentLog akkumulieren unbegrenzt. Spec sagt 30 Tage fuer Notifications.
 
-`e2e/cleanup-stale-data.ts` braucht 8 neue Steps VOR der Job-Deletion (exakte Reihenfolge aus remember.md):
-`ActivityLog → JobContact → CrmInterview → CrmNote → CrmTask → Person → CrmBlocklist → ConnectedAccount`
-
-## Phase 2: Open Quick Wins (~1h)
-
-Nutze `/superpowers:dispatching-parallel-agents` fuer parallele Ausfuehrung.
-
-| # | Item | Datei | Effort |
-|---|------|-------|--------|
-| 1 | `retention_expired` eigener NotificationType | 10 Dateien | 15 min |
-| 2 | 2 fehlende i18n Keys (`crm.errors.companyNotFound`, `crm.errors.multiplePrimaryCompanies`) | `crm.ts` | 5 min |
-| 3 | 7 hardcoded English strings in CRM UI | InterviewsPageClient 4x, CrmTasksPageClient 1x, PersonDetailClient 2x | 15 min |
-| 4 | ROADMAP 5.4+5.9 Text-Updates | `docs/ROADMAP.md` | 10 min |
-| 5 | 21 dead/pre-provisioned i18n keys in crm.ts aufraeumen | `crm.ts` | 10 min |
-
-## Phase 3: IF-4 Degradation → ChannelRouter (~1h)
-
-Nutze `/full-stack-orchestration:full-stack-feature`.
-
-3 Sites in `degradation.ts` schreiben Notifications direkt in die DB und umgehen den ChannelRouter:
-- `degradation.ts:165` — `auth_failure` (createMany)
-- `degradation.ts:301` — `consecutive_failures` (create)
-- `degradation.ts:412` — `cb_escalation` (createMany)
-
-Fix: Ersetze die direkten Prisma-Writes durch `channelRouter.route()`. Dafuer braucht jede Site:
-1. `buildDispatchContext(userId)` aufrufen
-2. `NotificationDraft` erstellen (gleiche Felder wie bisher)
-3. `channelRouter.route(draft, ctx)` statt `prisma.notification.create`
-
-Vorsicht: `webhook.channel.ts` hat 2 weitere Direct-Writer-Sites die BY DESIGN sind (Rekursionsschutz). Diese NICHT aendern.
-
-Nach dem Fix: `/allium:weed` gegen `specs/notification-dispatch.allium` laufen lassen.
-
-## Phase 4: Falls noch Context uebrig
+## Phase 2: HIGH Domain Expert Findings
 
 Waehle aus (Prioritaet absteigend):
-- A) IF-5: `inferErrorStatus` → `errorCode` (~30 min)
-- B) IF-7: `NotificationType` shared constant (~30 min)
-- C) IF-6: `CompanyCreated` vom Promoter emittieren (~30 min)
+- A) G9: `ContactDeleted` kein CrmActivityLogger consumer (30 min)
+- B) G10: 0 CRM fixtures in `testFixtures.ts` (½ Tag)
+- C) G7: 8 hardcoded English Strings in `ai.utils.ts` (30 min)
+
+## Weitere offene Sprints (Prioritaet nach Phase 1-3)
+
+- **S2 UX Polish:** Prompt at `~/s2-ux-polish-session.md` — 19 Features, 52+ Components, Add Job Dialog (7 Divergenzen). Siehe auch `docs/open-items-2026-05-13.md` § Design-Gated.
+- **Observability:** H-P-09 — OpenTelemetry + Prometheus + Grafana. 2-3 Wochen, braucht Stack-Entscheidung.
+- **Allium V3 Overhaul:** `notification-dispatch.allium` (160 errors), `scheduler-coordination.allium` (97 errors). 1-2 Std mit `/allium:tend`.
+- **G7 i18n:** 8 hardcoded English Strings in `src/utils/ai.utils.ts` (Ollama Fehlermeldungen). CRM UI Files sind sauber. 30 min.
+- **crm.ts:** 40 pre-provisioned i18n Keys (Activity Timeline, Merge UI, GDPR UI) — kein Bug, architekturelle Vorbereitung. NICHT loeschen.
+
+## Phase 4: Post-Sprint Pflicht-Skills
+
+1. `/superpowers:verification-before-completion` — Build + Tests + notification-writers check
+2. `/comprehensive-review:full-review` — Scoped auf Session-Commits
+3. Flashlight Analyse zu JEDEM Step
+4. `/remember:remember` — Session-State sichern (NUR Edit, NIE Write auf .remember!)
 
 ## Uebergreifende Regeln
 
@@ -85,24 +60,21 @@ Waehle aus (Prioritaet absteigend):
 - Build + Tests VOR jedem Commit: `source scripts/env.sh && bun run build && bash scripts/test.sh --workers=1`
 - **NIEMALS** tests+builds parallel — VM Resource Limits, single worker
 - **NIEMALS** PRs gegen upstream Gsync/jobsync
-- `/full-stack-orchestration:full-stack-feature` fuer ALLE Implementierung
+- `/full-stack-orchestration:full-stack-feature` fuer ALLE groesseren Implementierungen
 - `/comprehensive-review:full-review` nach JEDEM Sprint
 - Honesty Gate VOR Push
 - Server stoppen vor `tsc`
-- **Handoff/Memory-Dateien:** NUR gezielte Edits, NIE komplett ueberschreiben (Kritische Regel)
-
-## Post-Sprint Pflicht-Skills
-
-1. `/comprehensive-review:full-review` — Architecture+Security+Performance+Testing+Best Practices
-2. `/allium:weed` — Spec-Code-Alignment pruefen (besonders nach Migration)
-3. `/remember:remember` — Session-State sichern
+- **Handoff/Memory-Dateien:** NUR gezielte Edits (Edit tool), NIE komplett ueberschreiben (Write tool) — Kritische Regel, 2x verletzt, 3. Mal NICHT.
 
 ## Referenz-Dokumente (lies diese ZUERST)
 
-1. `.remember/remember.md` — Handoff mit allen Context-Details
-2. `docs/interface-fragility-analysis.md` — 12 Fragility-Cluster (IF-1 bis IF-12)
-3. `docs/session-2026-05-12-domain-expert-analysis.md` — Cross-Domain Findings (G1-G29)
-4. `docs/gdpr-audit-report.md` — GDPR Audit (60 Checks, 8 Domains)
-5. `docs/session-2026-05-12-open-items.md` — 23 Open Items aus Prior Session
-6. `project_deferred_sprints_for_future_sessions.md` — Alle Deferred Items konsolidiert
+1. `docs/open-items-2026-05-13.md` — **Vollstaendige offene Punkte (priorisiert)**
+2. `.remember/remember.md` — Handoff mit allen Context-Details
+3. `docs/interface-fragility-analysis.md` — 12 Fragility-Cluster (IF-1 bis IF-12)
+4. `docs/session-2026-05-12-domain-expert-analysis.md` — Cross-Domain Findings (G1-G29)
+5. `docs/gdpr-audit-report.md` — GDPR Audit (60 Checks, 8 Domains)
+6. `project_deferred_sprints_for_future_sessions.md` — Alle deferred Items konsolidiert
 7. `.domain-experts/domains.json` — Domain Mapping fuer Agent Respawn
+8. `docs/superpowers/plans/2026-05-13-if2-zod-event-validation.md` — IF-2 Plan (completed, Referenz)
+9. `docs/superpowers/plans/2026-05-14-s1-account-deletion.md` — S1 Plan (completed, Referenz)
+10. `.full-stack-feature/03-architecture.md` — Privacy Settings Architektur (completed, Referenz)
