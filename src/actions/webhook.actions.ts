@@ -8,7 +8,7 @@ import { encrypt } from "@/lib/encryption";
 import { ActionResult } from "@/models/actionResult";
 import { validateWebhookUrl } from "@/lib/url-validation";
 import { channelRouter } from "@/lib/notifications/channel-router";
-import type { NotificationType } from "@/models/notification.model";
+import { CONFIGURABLE_NOTIFICATION_TYPES, type NotificationType } from "@/models/notification.model";
 import type { WebhookEndpointDTO } from "@/lib/notifications/types";
 
 // ---------------------------------------------------------------------------
@@ -18,20 +18,8 @@ import type { WebhookEndpointDTO } from "@/lib/notifications/types";
 const MAX_ENDPOINTS_PER_USER = 10;
 const SECRET_LENGTH = 32; // 256-bit HMAC secret
 
-/** Valid notification types for webhook event filtering */
-const VALID_NOTIFICATION_TYPES: NotificationType[] = [
-  "module_deactivated",
-  "module_reactivated",
-  "module_unreachable",
-  "cb_escalation",
-  "consecutive_failures",
-  "auth_failure",
-  "vacancy_promoted",
-  "vacancy_batch_staged",
-  "bulk_action_completed",
-  "retention_completed",
-  "retention_expired",
-];
+/** Valid notification types for webhook event filtering (IF-7: shared constant) */
+const VALID_NOTIFICATION_TYPES = CONFIGURABLE_NOTIFICATION_TYPES;
 
 // ---------------------------------------------------------------------------
 // Helpers

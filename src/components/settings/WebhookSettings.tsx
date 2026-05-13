@@ -50,7 +50,7 @@ import {
   deleteWebhookEndpoint,
 } from "@/actions/webhook.actions";
 import type { WebhookEndpointDTO } from "@/lib/notifications/types";
-import type { NotificationType } from "@/models/notification.model";
+import { CONFIGURABLE_NOTIFICATION_TYPES, type NotificationType } from "@/models/notification.model";
 import { useTranslations, formatDateCompact } from "@/i18n";
 
 // ---------------------------------------------------------------------------
@@ -59,20 +59,8 @@ import { useTranslations, formatDateCompact } from "@/i18n";
 
 const MAX_ENDPOINTS = 10;
 
-/** All event types that can be subscribed to via webhooks */
-const WEBHOOK_EVENT_TYPES: NotificationType[] = [
-  "module_deactivated",
-  "module_reactivated",
-  "module_unreachable",
-  "cb_escalation",
-  "consecutive_failures",
-  "auth_failure",
-  "vacancy_promoted",
-  "vacancy_batch_staged",
-  "bulk_action_completed",
-  "retention_completed",
-  "retention_expired",
-];
+/** All event types that can be subscribed to via webhooks (IF-7: shared constant) */
+const WEBHOOK_EVENT_TYPES = CONFIGURABLE_NOTIFICATION_TYPES;
 
 // ---------------------------------------------------------------------------
 // Main Component
