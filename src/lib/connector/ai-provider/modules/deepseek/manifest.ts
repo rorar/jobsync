@@ -23,5 +23,6 @@ export const deepseekManifest: AiManifest = {
     defaultModel: "deepseek-chat",
     listEndpoint: "/models",
   },
+  isLocal: false,
   i18n: deepseekI18n,
 };

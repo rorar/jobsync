@@ -13,9 +13,12 @@ import {
   preprocessResume,
   preprocessJob,
 } from "@/lib/connector/ai-provider";
+import { TEXT_LIMITS } from "@/lib/connector/ai-provider/config";
+import { moduleRegistry } from "@/lib/connector/registry";
 import { getResumeById } from "@/actions/profile.actions";
 import { getJobDetails } from "@/actions/job.actions";
 import { AiModel } from "@/models/ai.model";
+import { AiManifest } from "@/lib/connector/manifest";
 import { Resume } from "@/models/profile.model";
 import { JobResponse } from "@/models/job.model";
 
@@ -63,10 +66,16 @@ export const POST = async (req: NextRequest) => {
       getJobDetails(jobId),
     ]);
 
+    // Resolve module's isLocal flag for PII stripping (fail-safe: strip by default)
+    const registeredModule = moduleRegistry.get(selectedModel.moduleId);
+    const isLocal = (registeredModule?.manifest as AiManifest | undefined)?.isLocal ?? false;
+    const stripPii = !isLocal;
+    const limits = isLocal ? TEXT_LIMITS.OLLAMA : TEXT_LIMITS.CLOUD;
+
     // Preprocess both resume and job description
     const [resumePreprocessResult, jobPreprocessResult] = await Promise.all([
-      preprocessResume(resume as Resume),
-      preprocessJob(job as JobResponse),
+      preprocessResume(resume as Resume, { stripPii, resumeCharLimit: limits.RESUME }),
+      preprocessJob(job as JobResponse, { stripPiiPatterns: stripPii, jobCharLimit: limits.JOB }),
     ]);
 
     if (!resumePreprocessResult.success) {

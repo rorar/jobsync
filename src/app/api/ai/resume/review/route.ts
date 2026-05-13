@@ -12,8 +12,11 @@ import {
   AIUnavailableError,
   preprocessResume,
 } from "@/lib/connector/ai-provider";
+import { TEXT_LIMITS } from "@/lib/connector/ai-provider/config";
+import { moduleRegistry } from "@/lib/connector/registry";
 import { Resume } from "@/models/profile.model";
 import { AiModel } from "@/models/ai.model";
+import { AiManifest } from "@/lib/connector/manifest";
 
 /**
  * Resume Review Endpoint
@@ -53,7 +56,13 @@ export const POST = async (req: NextRequest) => {
   }
 
   try {
-    const preprocessResult = await preprocessResume(resume);
+    // Resolve module's isLocal flag for PII stripping (fail-safe: strip by default)
+    const registeredModule = moduleRegistry.get(selectedModel.moduleId);
+    const isLocal = (registeredModule?.manifest as AiManifest | undefined)?.isLocal ?? false;
+    const stripPii = !isLocal;
+    const limits = isLocal ? TEXT_LIMITS.OLLAMA : TEXT_LIMITS.CLOUD;
+
+    const preprocessResult = await preprocessResume(resume, { stripPii, resumeCharLimit: limits.RESUME });
     if (!preprocessResult.success) {
       return NextResponse.json(
         {

@@ -23,5 +23,6 @@ export const openaiManifest: AiManifest = {
     defaultModel: "gpt-4o-mini",
     listEndpoint: "/models",
   },
+  isLocal: false,
   i18n: openaiI18n,
 };

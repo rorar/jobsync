@@ -192,6 +192,8 @@ export interface JobDiscoveryManifest extends ModuleManifest {
 export interface AiManifest extends ModuleManifest {
   connectorType: ConnectorType.AI_PROVIDER;
   modelSelection: ModelSelectionConfig;
+  /** Whether this module runs locally (e.g. Ollama) — used for PII stripping decisions */
+  isLocal?: boolean;
 }
 
 export interface DataEnrichmentManifest extends ModuleManifest {

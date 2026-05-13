@@ -32,6 +32,7 @@ export {
   type PreprocessingResult,
   type ResumeMetadata,
   type PreprocessedResume,
+  type ResumeTextOptions,
 } from "./preprocessing";
 
 // Job preprocessing
@@ -39,7 +40,9 @@ export {
   preprocessJob,
   convertJobToText,
   validateJob,
+  stripEmailPhonePatterns,
   type JobPreprocessingResult,
   type JobMetadata,
   type PreprocessedJob,
+  type JobTextOptions,
 } from "./preprocessing-job";

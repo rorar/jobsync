@@ -91,18 +91,27 @@ export const validateResume = (
   return { isValid: true };
 };
 
+// OPTIONS
+
+export interface ResumeTextOptions {
+  stripPii?: boolean;
+  resumeCharLimit?: number;
+}
+
 // RESUME TO TEXT CONVERSION (moved from ai.utils.ts)
 
-export const convertResumeToText = (resume: Resume): Promise<string> => {
+export const convertResumeToText = (resume: Resume, options?: ResumeTextOptions): Promise<string> => {
   return new Promise((resolve) => {
+    const strip = options?.stripPii ?? false;
+
     const formatContactInfo = (contactInfo?: ContactInfo) => {
       if (!contactInfo) return "";
       const parts = [
-        `Name: ${contactInfo.firstName} ${contactInfo.lastName}`,
+        `Name: ${strip ? "[NAME]" : `${contactInfo.firstName} ${contactInfo.lastName}`}`,
         contactInfo.headline ? `Headline: ${contactInfo.headline}` : "",
-        contactInfo.email ? `Email: ${contactInfo.email}` : "",
-        contactInfo.phone ? `Phone: ${contactInfo.phone}` : "",
-        contactInfo.address ? `Address: ${contactInfo.address}` : "",
+        contactInfo.email ? `Email: ${strip ? "[EMAIL]" : contactInfo.email}` : "",
+        contactInfo.phone ? `Phone: ${strip ? "[PHONE]" : contactInfo.phone}` : "",
+        contactInfo.address ? `Address: ${strip ? "[ADDRESS]" : contactInfo.address}` : "",
       ].filter(Boolean);
       return parts.join("\n");
     };
@@ -189,7 +198,13 @@ export const convertResumeToText = (resume: Resume): Promise<string> => {
       sections,
     ].filter(Boolean);
 
-    return resolve(parts.join("\n\n"));
+    let text = parts.join("\n\n");
+
+    if (options?.resumeCharLimit && text.length > options.resumeCharLimit) {
+      text = text.slice(0, options.resumeCharLimit);
+    }
+
+    return resolve(text);
   });
 };
 
@@ -197,10 +212,11 @@ export const convertResumeToText = (resume: Resume): Promise<string> => {
 
 export const preprocessResume = async (
   resume: Resume,
+  options?: ResumeTextOptions,
 ): Promise<PreprocessingResult> => {
   try {
     // Convert resume object to raw text
-    const rawText = await convertResumeToText(resume);
+    const rawText = await convertResumeToText(resume, options);
     // Quick validation - fail fast if obviously invalid
     if (!rawText || rawText.trim().length < MIN_CHAR_COUNT) {
       const charCount = rawText?.trim().length || 0;

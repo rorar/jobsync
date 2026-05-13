@@ -25,15 +25,18 @@ export {
   type PreprocessingResult,
   type ResumeMetadata,
   type PreprocessedResume,
+  type ResumeTextOptions,
 } from "./tools/preprocessing";
 
 // Job preprocessing
 export {
   preprocessJob,
   convertJobToText,
+  stripEmailPhonePatterns,
   type JobPreprocessingResult,
   type JobMetadata,
   type PreprocessedJob,
+  type JobTextOptions,
 } from "./tools/preprocessing-job";
 
 // Shared text processing utilities

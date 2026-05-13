@@ -24,5 +24,6 @@ export const ollamaManifest: AiManifest = {
     defaultModel: "llama3.2",
     listEndpoint: "/api/tags",
   },
+  isLocal: true,
   i18n: ollamaI18n,
 };
