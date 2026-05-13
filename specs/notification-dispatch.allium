@@ -19,6 +19,15 @@
 --   - User, UserSettings from jobsync.allium
 
 -- =============================================================================
+-- External Entities
+-- =============================================================================
+
+external entity Automation {
+  status: pending | active | paused
+  pauseReason: String?
+}
+
+-- =============================================================================
 -- Actors
 -- =============================================================================
 
@@ -50,6 +59,12 @@ enum NotificationType {
   | retention_completed
   -- Job lifecycle
   | job_status_changed                -- user's job application status changed
+  -- CRM (from crm.allium)
+  | interview_scheduled
+  | interview_reminder
+  | follow_up_due
+  | contact_from_job
+  | retention_expired
 }
 
 enum NotificationChannel {
@@ -313,6 +328,20 @@ contract NotificationDispatcher {
     -- changes (SMTP config updates, webhook endpoint CRUD, push subscription
     -- changes) take effect on the very next notification dispatch.
 
+  @invariant PreferenceSuppression
+    -- End-to-end guarantee: preference gating applies uniformly to ALL entry points.
+    -- Both event-bus-sourced (ChannelRouting) and direct-caller (DegradationDispatchParity)
+    -- paths flow through channelRouter.route() which calls shouldNotify() per channel.
+    --
+    -- 1. For each draft routed through channelRouter, for each channel: if
+    --    shouldNotify(ctx.preferences, draft.type, channel) = false, the channel
+    --    does NOT dispatch the draft.
+    -- 2. If ctx.preferences.enabled = false (global kill switch), no channel dispatches.
+    -- 3. If ctx.preferences.perType contains the draft type with enabled = false,
+    --    no channel dispatches.
+    --
+    -- T-04: requires integration test with real ChannelRouter + real channels (not mocked).
+
   @invariant ChannelContextIsolation
     -- Channels MUST NOT access the database for context data (user settings,
     -- locale, SMTP config, VAPID keys, subscriptions, webhook endpoints).
@@ -517,6 +546,41 @@ rule ChannelRouting {
     -- F-10 resolution: isAvailable + dispatch double-query pattern eliminated.
     -- Previously each channel queried infrastructure twice (count in isAvailable,
     -- findMany in dispatch). Now both checks use ctx fields — zero DB queries.
+}
+
+rule DegradationDispatchParity {
+  -- "Degradation alerts follow the same routing rules as event-bus-sourced notifications."
+  -- The degradation module (connector bounded context) calls routeDrafts() which
+  -- delegates to channelRouter.route(draft, ctx) — the same router that ChannelRouting
+  -- uses for event-bus-sourced notifications.
+  --
+  -- This is a secondary entry point: degradation builds NotificationDrafts directly
+  -- instead of emitting domain events, because per-automation fan-out cannot easily
+  -- round-trip through the event bus.
+  --
+  -- Behavioral guarantees:
+  --   1. Each affected automation gets one NotificationDraft
+  --   2. DispatchContext is built per unique userId (deduplication)
+  --   3. channelRouter.route(draft, ctx) is called per draft
+  --   4. Same ChannelRouting behaviour applies: shouldNotify gating,
+  --      availability checks, concurrent dispatch to all eligible channels
+  --   5. If buildDispatchContext(userId) fails for one user, drafts for
+  --      other users are still routed (error isolation via Promise.allSettled)
+  --   6. Automation pause and AutomationDegraded event emission proceed
+  --      regardless of notification routing success or failure
+
+  -- Triggered when: degradation handler pauses automations
+  -- (auth_failure, consecutive_failures, or cb_escalation)
+  -- The degradation module builds NotificationDrafts and calls routeDrafts()
+
+  @guidance
+    -- IF-4 fix (session 2026-05-12c): all 3 degradation sites were migrated from
+    -- direct prisma.notification.create to channelRouter.route(). The shared
+    -- routeDrafts() helper in degradation.ts builds DispatchContext per unique userId
+    -- and routes each draft through the same ChannelRouter singleton.
+    --
+    -- The key guarantee: users who configured Email/Push/Webhook for degradation
+    -- alert types now receive them. Before IF-4, only InApp was reached.
 }
 
 rule BatchSummary {
