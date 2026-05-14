@@ -1,0 +1,8 @@
+# NOT-PLANNED — Bewusst abgelehnte Verbesserungen
+
+Punkte, die evaluiert und begründet abgelehnt wurden. Kein Backlog — diese Items sollen NICHT in zukünftigen Reviews als "neue Findings" auftauchen.
+
+| # | Vorschlag | Begründung gegen Umsetzung | Wann es doch sinnvoll wäre |
+|---|-----------|---------------------------|---------------------------|
+| NP-1 | Projekt-weiter AbortController als shared Utility | Kein Boilerplate (Einzeiler `AbortSignal.timeout(ms)`), keine Duplikation, drei verschiedene Kontexte (Fetch-Timeout, Cockatiel-Policy, Promise.race). Shared Utility wäre Indirection ohne Gewinn. | Wenn 3+ Komponenten Cancel-Buttons mit identischem Abort+Cleanup-Pattern bekommen (z.B. langlebige Uploads mit Progress-Bar und "Abbrechen"-Button). |
+| NP-2 | pruneLevels=2 ableiten oder in Config zentralisieren | Wert ist korrekt für `logos/{userId}/{companyId}/logo.{ext}` (2 Ebenen: company + user). 4 Call-Sites alle konsistent. Domain-spezifischer Wert, kein Magic Number. Ableitung oder Config wäre Indirection ohne realen Gewinn. | Wenn die Logo-Verzeichnisstruktur sich ändert (z.B. 4. Ebene für Varianten/Thumbnails). |
