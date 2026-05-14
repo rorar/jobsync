@@ -16,6 +16,7 @@ import { mkdir, appendFile } from "fs/promises";
 import { join } from "path";
 import prisma from "@/lib/db";
 import { purgeOrphanedFiles } from "@/lib/assets/orphan-finder";
+import { LOGO_PRUNE_LEVELS } from "@/lib/assets/logo-asset-service";
 import { getAuditArchiveDir, getLogosDir } from "@/lib/storage";
 import { runRetentionCleanup } from "@/lib/vacancy-pipeline/retention.service";
 import { RETENTION_CONFIG } from "./retention-config";
@@ -220,6 +221,7 @@ async function cleanOrphanedLogoAssetFiles(): Promise<number> {
     getLogosDir(),
     (p) => knownPaths.has(p),
     RETENTION_CONFIG.logoAssetOrphanGraceDays,
+    LOGO_PRUNE_LEVELS,
   );
 
   logRule("cleanOrphanedLogoAssetFiles", deletedCount, daysAgo(RETENTION_CONFIG.logoAssetOrphanGraceDays));

@@ -10,7 +10,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 import { deleteFileAndPruneEmptyParents } from "@/lib/assets/file-cleanup";
-import { logoAssetService } from "@/lib/assets/logo-asset-service";
+import { logoAssetService, LOGO_PRUNE_LEVELS } from "@/lib/assets/logo-asset-service";
 
 export const getCompanyList = async (
   page: number = 1,
@@ -307,7 +307,7 @@ export const deleteCompanyById = async (
     });
     if (logoAsset?.filePath) {
       try {
-        await deleteFileAndPruneEmptyParents(logoAsset.filePath, 2);
+        await deleteFileAndPruneEmptyParents(logoAsset.filePath, LOGO_PRUNE_LEVELS);
       } catch {
         // File cleanup failed — proceed with company deletion
       }

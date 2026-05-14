@@ -53,6 +53,7 @@ describe("purgeOrphanedFiles", () => {
       baseDir,
       () => false, // nothing is known
       7, // 7 day grace
+      2, // prune 2 parent levels
     );
 
     expect(result.deletedCount).toBe(1);
@@ -64,7 +65,7 @@ describe("purgeOrphanedFiles", () => {
     createOldFile(join(baseDir, "u1", "c2", "logo.jpg"), 15);
     createOldFile(join(baseDir, "u2", "c3", "logo.svg"), 15);
 
-    const result = await purgeOrphanedFiles(baseDir, () => false, 7);
+    const result = await purgeOrphanedFiles(baseDir, () => false, 7, 2);
 
     expect(result.deletedCount).toBe(3);
   });
@@ -78,13 +79,14 @@ describe("purgeOrphanedFiles", () => {
       "/tmp/nonexistent-dir-xyz-12345",
       () => false,
       7,
+      2,
     );
 
     expect(result.deletedCount).toBe(0);
   });
 
   it("returns 0 for empty directory", async () => {
-    const result = await purgeOrphanedFiles(baseDir, () => false, 7);
+    const result = await purgeOrphanedFiles(baseDir, () => false, 7, 0);
 
     expect(result.deletedCount).toBe(0);
   });
@@ -97,7 +99,7 @@ describe("purgeOrphanedFiles", () => {
     const recentPath = join(baseDir, "user1", "company1", "logo.png");
     createRecentFile(recentPath);
 
-    const result = await purgeOrphanedFiles(baseDir, () => false, 7);
+    const result = await purgeOrphanedFiles(baseDir, () => false, 7, 2);
 
     expect(result.deletedCount).toBe(0);
     expect(existsSync(recentPath)).toBe(true);
@@ -109,7 +111,7 @@ describe("purgeOrphanedFiles", () => {
     createOldFile(oldPath, 10);
     createRecentFile(recentPath);
 
-    const result = await purgeOrphanedFiles(baseDir, () => false, 7);
+    const result = await purgeOrphanedFiles(baseDir, () => false, 7, 2);
 
     expect(result.deletedCount).toBe(1);
     expect(existsSync(oldPath)).toBe(false);
@@ -129,6 +131,7 @@ describe("purgeOrphanedFiles", () => {
       baseDir,
       (p) => knownSet.has(p),
       7,
+      2,
     );
 
     expect(result.deletedCount).toBe(0);
@@ -146,6 +149,7 @@ describe("purgeOrphanedFiles", () => {
       baseDir,
       (p) => knownSet.has(p),
       7,
+      2,
     );
 
     expect(result.deletedCount).toBe(1);
@@ -162,23 +166,23 @@ describe("purgeOrphanedFiles", () => {
     mkdirSync(join(baseDir, "user1", "company1"), { recursive: true });
     mkdirSync(join(baseDir, "user2"), { recursive: true });
 
-    const result = await purgeOrphanedFiles(baseDir, () => false, 0);
+    const result = await purgeOrphanedFiles(baseDir, () => false, 0, 0);
 
     expect(result.deletedCount).toBe(0);
   });
 
   // -----------------------------------------------------------------------
-  // Flat directory (depth = 1)
+  // Flat directory (pruneLevels = 0)
   // -----------------------------------------------------------------------
 
-  it("works with flat directory structure (no nesting)", async () => {
+  it("works with flat directory structure (no nesting, pruneLevels=0)", async () => {
     const filePath = join(baseDir, "orphan.txt");
     writeFileSync(filePath, "test");
     const pastDate = new Date();
     pastDate.setDate(pastDate.getDate() - 10);
     utimesSync(filePath, pastDate, pastDate);
 
-    const result = await purgeOrphanedFiles(baseDir, () => false, 7);
+    const result = await purgeOrphanedFiles(baseDir, () => false, 7, 0);
 
     expect(result.deletedCount).toBe(1);
     expect(existsSync(filePath)).toBe(false);

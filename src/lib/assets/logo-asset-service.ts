@@ -28,6 +28,13 @@ import path from "path";
 // Constants
 // ---------------------------------------------------------------------------
 
+/**
+ * Logo storage directory depth: logos/{userId}/{companyId}/logo.{ext}
+ * 2 parent directories to prune after file deletion (companyId + userId).
+ * Used by deleteAsset, company deletion, and orphan-finder retention rule.
+ */
+export const LOGO_PRUNE_LEVELS = 2;
+
 /** Hard ceiling for download body — prevents memory exhaustion */
 const MAX_DOWNLOAD_BYTES = 1_048_576; // 1MB
 
@@ -325,7 +332,7 @@ class LogoAssetService {
     // Delete file from disk + prune empty parent dirs (company, user)
     if (asset.filePath) {
       try {
-        await deleteFileAndPruneEmptyParents(asset.filePath, 2);
+        await deleteFileAndPruneEmptyParents(asset.filePath, LOGO_PRUNE_LEVELS);
       } catch {
         // File cleanup failed — proceed with DB cleanup
       }

@@ -17,14 +17,14 @@ import { deleteFileAndPruneEmptyParents } from "./file-cleanup";
  * @param baseDir      - Root directory to scan (e.g. getLogosDir())
  * @param isKnown      - Predicate: return true if the absolute file path is tracked (e.g. in DB)
  * @param graceDays    - Only delete files with mtime older than this many days ago
- * @param pruneLevels  - Parent directory levels to prune after each deletion (default: 2)
+ * @param pruneLevels  - Parent directory levels to prune after each deletion
  * @returns            - Count of files deleted
  */
 export async function purgeOrphanedFiles(
   baseDir: string,
   isKnown: (absolutePath: string) => boolean,
   graceDays: number,
-  pruneLevels: number = 2,
+  pruneLevels: number,
 ): Promise<{ deletedCount: number }> {
   // Gracefully handle missing base directory
   let entries: import("fs").Dirent[];

@@ -16,7 +16,7 @@ import path from "path";
  *
  * @example
  * // Delete logo file + clean company dir + user dir if empty
- * await deleteFileAndPruneEmptyParents("/data/logos/userId/companyId/logo.png", 2);
+ * await deleteFileAndPruneEmptyParents("/data/logos/userId/companyId/logo.png", LOGO_PRUNE_LEVELS);
  */
 export async function deleteFileAndPruneEmptyParents(
   filePath: string,
