@@ -3,37 +3,18 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import db from "@/lib/db";
+import { createSlidingWindowLimiter } from "@/lib/rate-limit";
 import { runCoordinator } from "@/lib/scheduler/run-coordinator";
 import type { RunRequestResult } from "@/lib/scheduler/types";
 import type { AutomationPauseReason, AutomationStatus, JobBoard } from "@/models/automation.model";
 
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const MAX_RUNS_PER_HOUR = 5;
 
-const recentRuns = new Map<string, number[]>();
-
-function checkRateLimit(userId: string): boolean {
-  const now = Date.now();
-  const userRuns = recentRuns.get(userId) || [];
-
-  const validRuns = userRuns.filter((timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS);
-
-  // Purge empty entries to prevent unbounded Map growth
-  if (validRuns.length === 0) {
-    recentRuns.delete(userId);
-    return true;
-  }
-
-  recentRuns.set(userId, validRuns);
-
-  if (validRuns.length >= MAX_RUNS_PER_HOUR) {
-    return false;
-  }
-
-  validRuns.push(now);
-  recentRuns.set(userId, validRuns);
-  return true;
-}
+const manualRunLimiter = createSlidingWindowLimiter({
+  storeKey: "manualRunRateLimit",
+  maxRequests: MAX_RUNS_PER_HOUR,
+  windowMs: 60 * 60 * 1000, // 1 hour
+});
 
 export async function POST(
   req: NextRequest,
@@ -48,7 +29,7 @@ export async function POST(
 
   const { id: automationId } = await params;
 
-  if (!checkRateLimit(userId)) {
+  if (!manualRunLimiter.check(userId).allowed) {
     return NextResponse.json(
       { message: `Rate limit exceeded. Maximum ${MAX_RUNS_PER_HOUR} manual runs per hour.` },
       { status: 429 }

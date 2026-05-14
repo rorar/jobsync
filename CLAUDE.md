@@ -382,6 +382,29 @@ REST API as "Open Host Service" (DDD) — manually designed surface over existin
 
 **HTTP Headers:** ESCO/EURES proxy routes set `Cache-Control` headers for browser caching.
 
+### Shared Rate-Limit Factory
+
+**Two complementary rate-limiting abstractions exist — do NOT conflate them:**
+
+| Concern | INBOUND Throttling | OUTBOUND Resilience |
+|---|---|---|
+| Purpose | Protect server from user overuse | Protect app from external API limits |
+| Algorithm | Sliding Window (accept/reject) | Token Bucket (backpressure/pacing) |
+| Location | `src/lib/rate-limit.ts` | `src/lib/connector/rate-limiter.ts` + Cockatiel |
+| Declaration | Per wrapper file | Per module manifest (`resilience.rateLimitTokens`) |
+| Enforcement | Server actions, API routes, channels | `resilientFetch()` in `buildResiliencePolicy()` |
+
+**INBOUND factory:** `src/lib/rate-limit.ts` provides `createSlidingWindowLimiter(config)` and `createRichSlidingWindowLimiter(config)`. Strategy pattern (`RateLimitStrategy<TResult>`) for future algorithm extensibility. globalThis stores with configurable storeKey, cleanup timer (`.unref()`), maxStoreSize.
+
+**Wrapper files** (thin delegates, preserve existing public APIs):
+- `src/lib/api/rate-limit.ts` — rich limiter (60/min per key, HTTP headers)
+- `src/lib/export-rate-limit.ts` — 1/hour per user
+- `src/lib/email-rate-limit.ts` — 10/min dispatch + 1/60s test
+- `src/lib/push/rate-limit.ts` — 20/min dispatch + 1/60s test
+- `src/lib/auth/admin-rate-limit.ts` — 10/min per user
+
+**For new rate limiters:** Import `createSlidingWindowLimiter` from `@/lib/rate-limit`, create a wrapper file with domain-specific exports. Do NOT copy-paste boilerplate.
+
 ### Connector & Module Lifecycle Rules
 
 Implemented in `module.actions.ts` and `degradation.ts`. Spec: `specs/module-lifecycle.allium`.

@@ -1,10 +1,10 @@
+import { createRichSlidingWindowLimiter } from "../rate-limit";
+
 /**
- * In-memory sliding window rate limiter for Public API keys.
- * 60 requests per minute per API key (configurable).
- * Also used for IP-based pre-auth rate limiting (120 req/min).
+ * Public API Rate Limiter — sliding window for API keys and IP-based pre-auth.
  *
- * Uses a Map of timestamp arrays per key hash.
- * Cleanup runs periodically to prevent memory leaks.
+ * 60 requests per minute per API key (configurable per call).
+ * 120 requests per minute per IP (pre-auth, configured at call site).
  *
  * LIMITATION (SEC-16): Single-process only. In multi-instance deployments
  * (Docker Compose, Kubernetes, PM2 cluster), each process maintains
@@ -12,16 +12,13 @@
  * For distributed deployments, replace with Redis-backed rate limiting
  * (e.g. @upstash/ratelimit or ioredis sliding window).
  * Accepted for self-hosted single-instance deployments.
+ *
+ * Thin wrapper over the shared sliding-window factory.
+ * See src/lib/rate-limit.ts for the INBOUND vs OUTBOUND boundary docs.
  */
 
-const DEFAULT_WINDOW_MS = 60_000; // 1 minute
 const DEFAULT_MAX_REQUESTS = 60;
-const CLEANUP_INTERVAL_MS = 5 * 60_000; // 5 minutes
-const MAX_STORE_SIZE = 10_000; // cap to prevent unbounded memory growth
-
-interface RateLimitEntry {
-  timestamps: number[];
-}
+const DEFAULT_WINDOW_MS = 60_000; // 1 minute
 
 interface RateLimitResult {
   allowed: boolean;
@@ -30,93 +27,22 @@ interface RateLimitResult {
   resetAt: number; // Unix timestamp in seconds
 }
 
-// Use globalThis to survive HMR in development (same pattern as RunCoordinator/EventBus)
-const store: Map<string, RateLimitEntry> =
-  (globalThis as any).__publicApiRateLimitStore ??= new Map<string, RateLimitEntry>();
-
-// Periodic cleanup of expired entries
-let cleanupTimer: ReturnType<typeof setInterval> | null = null;
-
-function ensureCleanup() {
-  if (cleanupTimer) return;
-  cleanupTimer = setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of store) {
-      entry.timestamps = entry.timestamps.filter(
-        (ts) => now - ts < DEFAULT_WINDOW_MS,
-      );
-      if (entry.timestamps.length === 0) {
-        store.delete(key);
-      }
-    }
-    if (store.size === 0 && cleanupTimer) {
-      clearInterval(cleanupTimer);
-      cleanupTimer = null;
-    }
-  }, CLEANUP_INTERVAL_MS);
-  // Allow Node.js to exit without waiting for this timer
-  if (cleanupTimer && typeof cleanupTimer === "object" && "unref" in cleanupTimer) {
-    cleanupTimer.unref();
-  }
-}
+const limiter = createRichSlidingWindowLimiter({
+  storeKey: "publicApiRateLimit",
+  maxRequests: DEFAULT_MAX_REQUESTS,
+  windowMs: DEFAULT_WINDOW_MS,
+  maxStoreSize: 10_000,
+});
 
 export function checkRateLimit(
   keyHash: string,
   maxRequests: number = DEFAULT_MAX_REQUESTS,
   windowMs: number = DEFAULT_WINDOW_MS,
 ): RateLimitResult {
-  ensureCleanup();
-
-  const now = Date.now();
-  const windowStart = now - windowMs;
-
-  let entry = store.get(keyHash);
-  if (!entry) {
-    // Evict oldest entry if at capacity (LRU approximation via Map insertion order)
-    if (store.size >= MAX_STORE_SIZE) {
-      const firstKey = store.keys().next().value;
-      if (firstKey !== undefined) {
-        store.delete(firstKey);
-      }
-    }
-    entry = { timestamps: [] };
-    store.set(keyHash, entry);
-  }
-
-  // Remove timestamps outside the window
-  entry.timestamps = entry.timestamps.filter((ts) => ts > windowStart);
-
-  const resetAt = Math.ceil(
-    (entry.timestamps.length > 0
-      ? entry.timestamps[0] + windowMs
-      : now + windowMs) / 1000,
-  );
-
-  if (entry.timestamps.length >= maxRequests) {
-    return {
-      allowed: false,
-      remaining: 0,
-      limit: maxRequests,
-      resetAt,
-    };
-  }
-
-  // Record this request
-  entry.timestamps.push(now);
-
-  return {
-    allowed: true,
-    remaining: maxRequests - entry.timestamps.length,
-    limit: maxRequests,
-    resetAt,
-  };
+  return limiter.check(keyHash, maxRequests, windowMs);
 }
 
 /** For testing: reset all rate limit state */
 export function resetRateLimitStore() {
-  store.clear();
-  if (cleanupTimer) {
-    clearInterval(cleanupTimer);
-    cleanupTimer = null;
-  }
+  limiter.reset();
 }
