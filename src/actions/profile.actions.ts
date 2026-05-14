@@ -13,6 +13,7 @@ import { ActionResult } from "@/models/actionResult";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { getDataDir } from "@/lib/storage";
 import path from "path";
 import fs from "fs";
 import { writeFile } from "fs/promises";
@@ -473,7 +474,7 @@ export const deleteResumeById = async (
 
 export const uploadFile = async (file: File, dir: string, filePath: string) => {
   // Validate path is within the expected directory to prevent path traversal
-  const dataDir = path.resolve(process.env.NODE_ENV !== "production" ? "data" : "/data");
+  const dataDir = getDataDir();
   const resolvedDir = path.resolve(dir);
   const resolvedPath = path.resolve(filePath);
   if (!resolvedDir.startsWith(dataDir) || !resolvedPath.startsWith(resolvedDir)) {

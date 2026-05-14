@@ -15,6 +15,7 @@ import cron, { type ScheduledTask } from "node-cron";
 import { mkdir, appendFile, readdir, unlink, stat } from "fs/promises";
 import { join } from "path";
 import prisma from "@/lib/db";
+import { getAuditArchiveDir, getLogosDir } from "@/lib/storage";
 import { runRetentionCleanup } from "@/lib/vacancy-pipeline/retention.service";
 import { RETENTION_CONFIG } from "./retention-config";
 
@@ -142,7 +143,7 @@ async function purgeOldStagedVacancies(): Promise<number> {
 // Rule 5: archiveAndPurgeOldAdminAuditLogs
 // ---------------------------------------------------------------------------
 
-const AUDIT_ARCHIVE_DIR = "/data/audit-archive";
+const AUDIT_ARCHIVE_DIR = getAuditArchiveDir();
 
 async function archiveAndPurgeOldAdminAuditLogs(): Promise<number> {
   const cutoff = daysAgo(RETENTION_CONFIG.adminAuditLogRetentionDays);
@@ -208,7 +209,7 @@ async function purgeOldCrmActivityLogs(): Promise<number> {
 // Rule 7: cleanOrphanedLogoAssetFiles
 // ---------------------------------------------------------------------------
 
-const LOGOS_DIR = "/data/logos";
+const LOGOS_DIR = getLogosDir();
 
 async function cleanOrphanedLogoAssetFiles(): Promise<number> {
   // Collect all filePaths currently tracked in DB

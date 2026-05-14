@@ -12,10 +12,11 @@ import "server-only";
  */
 
 import prisma from "@/lib/db";
+import { getLogosDir } from "@/lib/storage";
 import { promises as fs } from "fs";
 import path from "path";
 
-const LOGO_BASE_DIR = process.env.LOGO_STORAGE_PATH || "/data/logos";
+const LOGO_BASE_DIR = getLogosDir();
 
 /**
  * Delete all data for a given user. Transaction-safe with best-effort

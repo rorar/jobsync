@@ -13,6 +13,7 @@ import "server-only";
  */
 
 import { validateWebhookUrl } from "@/lib/url-validation";
+import { getDataDir } from "@/lib/storage";
 import { validateMagicBytes, ACCEPTED_MIME_TYPES } from "./magic-bytes";
 import { sanitizeSvg } from "./svg-sanitizer";
 import { getImageDimensions } from "./image-processor";
@@ -46,30 +47,6 @@ const MIME_TO_EXT: Record<string, string> = {
   "image/vnd.microsoft.icon": "ico",
 };
 
-// ---------------------------------------------------------------------------
-// Storage Base
-// ---------------------------------------------------------------------------
-
-/**
- * Determine storage base directory.
- * Docker: /data/ (persistent volume)
- * Dev: ./data/ (local)
- */
-const STORAGE_BASE = (() => {
-  try {
-    // Check if /data/ exists (Docker volume mount) — once at init time
-    const fss = require("fs");
-    if (fss.statSync("/data").isDirectory()) return "/data";
-  } catch {
-    // Not in Docker — use project-local data directory
-  }
-  return path.resolve("./data");
-})();
-
-function getStorageBase(): string {
-  return STORAGE_BASE;
-}
-
 /**
  * Build the file path for a logo asset.
  * Path is constructed from UUIDs only — never user input.
@@ -80,7 +57,7 @@ function buildFilePath(
   mimeType: string,
 ): string {
   const ext = MIME_TO_EXT[mimeType.toLowerCase()] ?? "bin";
-  const base = getStorageBase();
+  const base = getDataDir();
   return path.join(base, "logos", userId, companyId, `logo.${ext}`);
 }
 

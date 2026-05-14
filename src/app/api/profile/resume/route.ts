@@ -6,6 +6,7 @@ import {
   editResume,
   uploadFile,
 } from "@/actions/profile.actions";
+import { getResumesDir } from "@/lib/storage";
 import path from "path";
 import fs from "fs";
 import { getTimestampedFileName } from "@/lib/utils";
@@ -13,7 +14,6 @@ import { getTimestampedFileName } from "@/lib/utils";
 export const POST = async (req: NextRequest) => {
   const session = await auth();
   const userId = session?.user?.id;
-  const dataPath = process.env.NODE_ENV !== "production" ? "data" : "/data";
   let filePath;
 
   try {
@@ -34,7 +34,7 @@ export const POST = async (req: NextRequest) => {
     let fileId: string | undefined =
       (formData.get("fileId") as string) ?? undefined;
     if (file && file.name) {
-      const uploadDir = path.join(dataPath, "files", "resumes");
+      const uploadDir = getResumesDir();
       const timestampedFileName = getTimestampedFileName(file.name);
       filePath = path.join(uploadDir, timestampedFileName);
       await uploadFile(file, uploadDir, filePath);
@@ -104,7 +104,7 @@ export const GET = async (req: NextRequest) => {
       );
     }
 
-    const dataDir = path.resolve(process.env.NODE_ENV !== "production" ? "data" : "/data", "files/resumes");
+    const dataDir = getResumesDir();
     const resolvedPath = path.resolve(dataDir, path.basename(filePath));
     if (!resolvedPath.startsWith(dataDir)) {
       return NextResponse.json({ error: "Invalid file path" }, { status: 400 });

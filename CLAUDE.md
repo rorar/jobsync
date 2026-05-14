@@ -213,7 +213,7 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **Domain Area:** `src/lib/assets/` — asset management (download, store, serve). Separate from enrichment (which discovers URLs). File Explorer will later live alongside it.
 
-**LogoAssetService** (`src/lib/assets/logo-asset-service.ts`) — `globalThis` singleton. Downloads logo images from enriched URLs, validates (SSRF, content-type, magic bytes), sanitizes SVGs, stores on persistent Docker volume at `/data/logos/{userId}/{companyId}/logo.{ext}`.
+**LogoAssetService** (`src/lib/assets/logo-asset-service.ts`) — `globalThis` singleton. Downloads logo images from enriched URLs, validates (SSRF, content-type, magic bytes), sanitizes SVGs, stores at `{DATA_DIR}/logos/{userId}/{companyId}/logo.{ext}`. Path resolved via `getDataDir()` from `@/lib/storage`.
 
 **LogoAssetSubscriber** (`src/lib/assets/logo-asset-subscriber.ts`) — EventBus consumer for `EnrichmentCompleted` (logo dimension). Resolves companyId from domainKey, guards against duplicates, fires download as fire-and-forget.
 
@@ -404,6 +404,26 @@ REST API as "Open Host Service" (DDD) — manually designed surface over existin
 - `src/lib/auth/admin-rate-limit.ts` — 10/min per user
 
 **For new rate limiters:** Import `createSlidingWindowLimiter` from `@/lib/rate-limit`, create a wrapper file with domain-specific exports. Do NOT copy-paste boilerplate.
+
+### Centralized Storage Paths (`src/lib/storage.ts`)
+
+**Single source of truth** for all persistent filesystem paths. Replaces scattered hardcoded `/data/` references and `NODE_ENV` branching.
+
+**Fallback chain** (evaluated once at import time):
+1. `DATA_DIR` env var (explicit override, highest priority)
+2. `/data` (Docker volume mount convention, detected via `statSync`)
+3. `./data` (local development, resolved to absolute)
+
+**Exports:**
+- `getDataDir()` — base storage directory
+- `getStoragePath(...segments)` — extensible path builder (`path.join(dataDir, ...segments)`)
+- `getLogosDir()` — `{dataDir}/logos`
+- `getAuditArchiveDir()` — `{dataDir}/audit-archive`
+- `getResumesDir()` — `{dataDir}/files/resumes`
+
+**For new storage zones:** Call `getStoragePath("my-zone")` — no need to modify `storage.ts`. The function is a simple `path.join` over the resolved base.
+
+**NOT for:** Database paths (`DATABASE_URL` is managed by Prisma separately). Module-level storage (modules are stateless API translators per DDD ACL).
 
 ### Connector & Module Lifecycle Rules
 
