@@ -12,9 +12,10 @@
 
 import "server-only";
 import cron, { type ScheduledTask } from "node-cron";
-import { mkdir, appendFile, readdir, unlink, stat } from "fs/promises";
+import { mkdir, appendFile } from "fs/promises";
 import { join } from "path";
 import prisma from "@/lib/db";
+import { purgeOrphanedFiles } from "@/lib/assets/orphan-finder";
 import { getAuditArchiveDir, getLogosDir } from "@/lib/storage";
 import { runRetentionCleanup } from "@/lib/vacancy-pipeline/retention.service";
 import { RETENTION_CONFIG } from "./retention-config";
@@ -209,75 +210,19 @@ async function purgeOldCrmActivityLogs(): Promise<number> {
 // Rule 7: cleanOrphanedLogoAssetFiles
 // ---------------------------------------------------------------------------
 
-const LOGOS_DIR = getLogosDir();
-
 async function cleanOrphanedLogoAssetFiles(): Promise<number> {
-  // Collect all filePaths currently tracked in DB
   const dbAssets = await prisma.logoAsset.findMany({
     select: { filePath: true },
   });
   const knownPaths = new Set(dbAssets.map((a) => a.filePath));
 
-  let deletedCount = 0;
+  const { deletedCount } = await purgeOrphanedFiles(
+    getLogosDir(),
+    (p) => knownPaths.has(p),
+    RETENTION_CONFIG.logoAssetOrphanGraceDays,
+  );
 
-  // Gracefully handle missing logos directory
-  let userDirs: string[];
-  try {
-    userDirs = await readdir(LOGOS_DIR);
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      logRule("cleanOrphanedLogoAssetFiles", 0, daysAgo(RETENTION_CONFIG.logoAssetOrphanGraceDays));
-      return 0;
-    }
-    throw error;
-  }
-
-  const graceCutoff = daysAgo(RETENTION_CONFIG.logoAssetOrphanGraceDays);
-
-  for (const userDir of userDirs) {
-    const userPath = join(LOGOS_DIR, userDir);
-
-    let companyDirs: string[];
-    try {
-      companyDirs = await readdir(userPath);
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw error;
-    }
-
-    for (const companyDir of companyDirs) {
-      const companyPath = join(userPath, companyDir);
-
-      let files: string[];
-      try {
-        files = await readdir(companyPath);
-      } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-        throw error;
-      }
-
-      for (const file of files) {
-        const filePath = join(companyPath, file);
-
-        // Check if this file is tracked in the DB
-        if (knownPaths.has(filePath)) continue;
-
-        // Grace period: only delete files older than the grace days
-        try {
-          const fileStat = await stat(filePath);
-          if (fileStat.mtime > graceCutoff) continue;
-
-          await unlink(filePath);
-          deletedCount++;
-        } catch (error: unknown) {
-          if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-          throw error;
-        }
-      }
-    }
-  }
-
-  logRule("cleanOrphanedLogoAssetFiles", deletedCount, graceCutoff);
+  logRule("cleanOrphanedLogoAssetFiles", deletedCount, daysAgo(RETENTION_CONFIG.logoAssetOrphanGraceDays));
   return deletedCount;
 }
 
