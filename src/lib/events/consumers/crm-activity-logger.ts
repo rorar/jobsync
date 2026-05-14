@@ -10,12 +10,16 @@
  * CrmActivityLog. No direct prisma.crmActivityLog.create() in action files.
  * Exception: crm-cron.ts writes directly because its activity log entries
  * serve as idempotency guards within transactions.
+ *
+ * Pattern: Declarative event projections via registerProjection().
+ * Adding a new projection = 1 function call. No boilerplate.
  */
 
 import "server-only";
+import type { z } from "zod";
 import prisma from "@/lib/db";
 import { eventBus } from "@/lib/events";
-import { DomainEventType } from "@/lib/events/event-types";
+import type { DomainEvent, DomainEventType } from "@/lib/events/event-types";
 import {
   JobStatusChangedPayloadSchema,
   ContactCreatedPayloadSchema,
@@ -30,218 +34,225 @@ import {
   safeParsePayload,
 } from "@/lib/events/event-schemas";
 
-export function registerCrmActivityLogConsumers(): void {
-  // Project JobStatusChanged → status_changed activity
-  eventBus.subscribe(DomainEventType.JobStatusChanged, async (event) => {
-    const payload = safeParsePayload(JobStatusChangedPayloadSchema, event);
+// =============================================================================
+// Projection infrastructure
+// =============================================================================
+
+/**
+ * Data shape for CrmActivityLog.create (minus activityType — managed by
+ * registerProjection). Matches the Prisma model's nullable FK columns.
+ */
+interface ActivityData {
+  userId: string;
+  actorId: string;
+  targetPersonId?: string | null;
+  targetCompanyId?: string | null;
+  targetJobId?: string | null;
+  details?: string | null;
+  linkedRecordName?: string | null;
+}
+
+/**
+ * Register a domain event → CrmActivityLog projection.
+ *
+ * Centralizes the subscribe → parse → try/create → catch cycle.
+ * Each projection is a declarative call with a typed `mapToData` callback.
+ *
+ * Type-safe: `schema: z.ZodType<T>` infers `T`, so `mapToData` receives
+ * the correctly typed payload with full autocomplete — no `any`, no casts.
+ *
+ * @param eventType   - Domain event to subscribe to
+ * @param schema      - Zod schema for payload validation (infers T)
+ * @param activityType - Value written to CrmActivityLog.activityType
+ * @param mapToData   - Async-capable callback that transforms the typed payload
+ *                      into ActivityData fields (may include DB lookups)
+ */
+function registerProjection<T>(
+  eventType: DomainEventType,
+  schema: z.ZodType<T>,
+  activityType: string,
+  mapToData: (payload: T) => Promise<ActivityData> | ActivityData,
+): void {
+  eventBus.subscribe(eventType, async (event: DomainEvent) => {
+    const payload = safeParsePayload(schema, event);
     if (!payload) return;
     try {
+      const data = await mapToData(payload);
       await prisma.crmActivityLog.create({
-        data: {
-          userId: payload.userId,
-          activityType: "status_changed",
-          actorId: payload.userId,
-          targetJobId: payload.jobId,
-          details: JSON.stringify({
-            previousStatus: payload.previousStatusValue,
-            newStatus: payload.newStatusValue,
-          }),
-        },
+        data: { activityType, ...data },
       });
     } catch (error) {
-      console.error("[crm-activity-logger] Failed to log status change:", error);
+      console.error(`[crm-activity-logger] Failed to log ${activityType}:`, error);
     }
   });
+}
 
-  // Project ContactCreated → contact_created activity
-  eventBus.subscribe(DomainEventType.ContactCreated, async (event) => {
-    const payload = safeParsePayload(ContactCreatedPayloadSchema, event);
-    if (!payload) return;
-    try {
+// =============================================================================
+// Projections
+// =============================================================================
+
+export function registerCrmActivityLogConsumers(): void {
+  // JobStatusChanged → status_changed
+  registerProjection(
+    "JobStatusChanged" as DomainEventType,
+    JobStatusChangedPayloadSchema,
+    "status_changed",
+    (p) => ({
+      userId: p.userId,
+      actorId: p.userId,
+      targetJobId: p.jobId,
+      details: JSON.stringify({
+        previousStatus: p.previousStatusValue,
+        newStatus: p.newStatusValue,
+      }),
+    }),
+  );
+
+  // ContactCreated → contact_created (DB lookup: Person name)
+  registerProjection(
+    "ContactCreated" as DomainEventType,
+    ContactCreatedPayloadSchema,
+    "contact_created",
+    async (p) => {
       const person = await prisma.person.findUnique({
-        where: { id: payload.personId },
+        where: { id: p.personId },
         select: { firstName: true, lastName: true },
       });
-      await prisma.crmActivityLog.create({
-        data: {
-          userId: payload.userId,
-          activityType: "contact_created",
-          actorId: payload.userId,
-          targetPersonId: payload.personId,
-          linkedRecordName: [person?.firstName, person?.lastName].filter(Boolean).join(" ") || null,
-        },
-      });
-    } catch (error) {
-      console.error("[crm-activity-logger] Failed to log contact created:", error);
-    }
-  });
+      return {
+        userId: p.userId,
+        actorId: p.userId,
+        targetPersonId: p.personId,
+        linkedRecordName: [person?.firstName, person?.lastName].filter(Boolean).join(" ") || null,
+      };
+    },
+  );
 
-  // Project ContactUpdated → contact_updated activity
-  eventBus.subscribe(DomainEventType.ContactUpdated, async (event) => {
-    const payload = safeParsePayload(ContactUpdatedPayloadSchema, event);
-    if (!payload) return;
-    try {
-      await prisma.crmActivityLog.create({
-        data: {
-          userId: payload.userId,
-          activityType: "contact_updated",
-          actorId: payload.userId,
-          targetPersonId: payload.personId,
-        },
-      });
-    } catch (error) {
-      console.error("[crm-activity-logger] Failed to log contact updated:", error);
-    }
-  });
+  // ContactUpdated → contact_updated
+  registerProjection(
+    "ContactUpdated" as DomainEventType,
+    ContactUpdatedPayloadSchema,
+    "contact_updated",
+    (p) => ({
+      userId: p.userId,
+      actorId: p.userId,
+      targetPersonId: p.personId,
+    }),
+  );
 
-  // Project ContactDeleted → contact_deleted activity
-  eventBus.subscribe(DomainEventType.ContactDeleted, async (event) => {
-    const payload = safeParsePayload(ContactDeletedPayloadSchema, event);
-    if (!payload) return;
-    try {
-      await prisma.crmActivityLog.create({
-        data: {
-          userId: payload.userId,
-          activityType: "contact_deleted",
-          actorId: payload.userId,
-          targetPersonId: null, // Person already deleted/anonymized
-          details: JSON.stringify({ reason: payload.reason }),
-          linkedRecordName: null,
-        },
-      });
-    } catch (error) {
-      console.error("[crm-activity-logger] Failed to log contact deleted:", error);
-    }
-  });
+  // ContactDeleted → contact_deleted
+  registerProjection(
+    "ContactDeleted" as DomainEventType,
+    ContactDeletedPayloadSchema,
+    "contact_deleted",
+    (p) => ({
+      userId: p.userId,
+      actorId: p.userId,
+      targetPersonId: null,
+      details: JSON.stringify({ reason: p.reason }),
+      linkedRecordName: null,
+    }),
+  );
 
-  // Project InterviewScheduled → interview_scheduled activity
-  eventBus.subscribe(DomainEventType.InterviewScheduled, async (event) => {
-    const payload = safeParsePayload(InterviewScheduledPayloadSchema, event);
-    if (!payload) return;
-    try {
+  // InterviewScheduled → interview_scheduled (DB lookup: Job title)
+  registerProjection(
+    "InterviewScheduled" as DomainEventType,
+    InterviewScheduledPayloadSchema,
+    "interview_scheduled",
+    async (p) => {
       const job = await prisma.job.findUnique({
-        where: { id: payload.jobId },
+        where: { id: p.jobId },
         select: { JobTitle: { select: { label: true } } },
       });
-      await prisma.crmActivityLog.create({
-        data: {
-          userId: payload.userId,
-          activityType: "interview_scheduled",
-          actorId: payload.userId,
-          targetJobId: payload.jobId,
-          targetPersonId: payload.personId ?? null,
-          linkedRecordName: job?.JobTitle?.label ?? null,
-        },
-      });
-    } catch (error) {
-      console.error("[crm-activity-logger] Failed to log interview scheduled:", error);
-    }
-  });
+      return {
+        userId: p.userId,
+        actorId: p.userId,
+        targetJobId: p.jobId,
+        targetPersonId: p.personId ?? null,
+        linkedRecordName: job?.JobTitle?.label ?? null,
+      };
+    },
+  );
 
-  // Project InterviewCompleted → interview_completed activity
-  eventBus.subscribe(DomainEventType.InterviewCompleted, async (event) => {
-    const payload = safeParsePayload(InterviewCompletedPayloadSchema, event);
-    if (!payload) return;
-    try {
+  // InterviewCompleted → interview_completed (DB lookup: Job title)
+  registerProjection(
+    "InterviewCompleted" as DomainEventType,
+    InterviewCompletedPayloadSchema,
+    "interview_completed",
+    async (p) => {
       const job = await prisma.job.findUnique({
-        where: { id: payload.jobId },
+        where: { id: p.jobId },
         select: { JobTitle: { select: { label: true } } },
       });
-      await prisma.crmActivityLog.create({
-        data: {
-          userId: payload.userId,
-          activityType: "interview_completed",
-          actorId: payload.userId,
-          targetJobId: payload.jobId,
-          linkedRecordName: job?.JobTitle?.label ?? null,
-        },
-      });
-    } catch (error) {
-      console.error("[crm-activity-logger] Failed to log interview completed:", error);
-    }
-  });
+      return {
+        userId: p.userId,
+        actorId: p.userId,
+        targetJobId: p.jobId,
+        linkedRecordName: job?.JobTitle?.label ?? null,
+      };
+    },
+  );
 
-  // Project CrmTaskCreated → task_created activity
-  eventBus.subscribe(DomainEventType.CrmTaskCreated, async (event) => {
-    const payload = safeParsePayload(CrmTaskCreatedPayloadSchema, event);
-    if (!payload) return;
-    try {
-      await prisma.crmActivityLog.create({
-        data: {
-          userId: payload.userId,
-          activityType: "task_created",
-          actorId: payload.userId,
-          linkedRecordName: payload.title,
-        },
-      });
-    } catch (error) {
-      console.error("[crm-activity-logger] Failed to log task created:", error);
-    }
-  });
+  // CrmTaskCreated → task_created
+  registerProjection(
+    "CrmTaskCreated" as DomainEventType,
+    CrmTaskCreatedPayloadSchema,
+    "task_created",
+    (p) => ({
+      userId: p.userId,
+      actorId: p.userId,
+      linkedRecordName: p.title,
+    }),
+  );
 
-  // Project CrmTaskCompleted → task_completed activity
-  eventBus.subscribe(DomainEventType.CrmTaskCompleted, async (event) => {
-    const payload = safeParsePayload(CrmTaskCompletedPayloadSchema, event);
-    if (!payload) return;
-    try {
-      await prisma.crmActivityLog.create({
-        data: {
-          userId: payload.userId,
-          activityType: "task_completed",
-          actorId: payload.userId,
-          linkedRecordName: payload.title,
-        },
-      });
-    } catch (error) {
-      console.error("[crm-activity-logger] Failed to log task completed:", error);
-    }
-  });
+  // CrmTaskCompleted → task_completed
+  registerProjection(
+    "CrmTaskCompleted" as DomainEventType,
+    CrmTaskCompletedPayloadSchema,
+    "task_completed",
+    (p) => ({
+      userId: p.userId,
+      actorId: p.userId,
+      linkedRecordName: p.title,
+    }),
+  );
 
-  // Project CrmNoteCreated → note_added activity
-  eventBus.subscribe(DomainEventType.CrmNoteCreated, async (event) => {
-    const payload = safeParsePayload(CrmNoteCreatedPayloadSchema, event);
-    if (!payload) return;
-    try {
+  // CrmNoteCreated → note_added (DB lookup: Note targets)
+  registerProjection(
+    "CrmNoteCreated" as DomainEventType,
+    CrmNoteCreatedPayloadSchema,
+    "note_added",
+    async (p) => {
       const note = await prisma.crmNote.findUnique({
-        where: { id: payload.noteId },
+        where: { id: p.noteId },
         select: { title: true, targets: { select: { targetPersonId: true, targetJobId: true }, take: 1 } },
       });
-      await prisma.crmActivityLog.create({
-        data: {
-          userId: payload.userId,
-          activityType: "note_added",
-          actorId: payload.userId,
-          targetPersonId: note?.targets[0]?.targetPersonId ?? null,
-          targetJobId: note?.targets[0]?.targetJobId ?? null,
-          linkedRecordName: note?.title ?? null,
-        },
-      });
-    } catch (error) {
-      console.error("[crm-activity-logger] Failed to log note created:", error);
-    }
-  });
+      return {
+        userId: p.userId,
+        actorId: p.userId,
+        targetPersonId: note?.targets[0]?.targetPersonId ?? null,
+        targetJobId: note?.targets[0]?.targetJobId ?? null,
+        linkedRecordName: note?.title ?? null,
+      };
+    },
+  );
 
-  // Project VacancyPromoted → application_submitted activity (Pipeline→CRM bridge)
-  eventBus.subscribe(DomainEventType.VacancyPromoted, async (event) => {
-    const payload = safeParsePayload(VacancyPromotedPayloadSchema, event);
-    if (!payload) return;
-    try {
+  // VacancyPromoted → application_submitted (DB lookup: Job title + Company)
+  registerProjection(
+    "VacancyPromoted" as DomainEventType,
+    VacancyPromotedPayloadSchema,
+    "application_submitted",
+    async (p) => {
       const job = await prisma.job.findUnique({
-        where: { id: payload.jobId },
+        where: { id: p.jobId },
         select: { JobTitle: { select: { label: true } }, Company: { select: { label: true } } },
       });
-      await prisma.crmActivityLog.create({
-        data: {
-          userId: payload.userId,
-          activityType: "application_submitted",
-          actorId: payload.userId,
-          targetJobId: payload.jobId,
-          linkedRecordName: job?.JobTitle?.label ?? null,
-          details: JSON.stringify({ stagedVacancyId: payload.stagedVacancyId }),
-        },
-      });
-    } catch (error) {
-      console.error("[crm-activity-logger] Failed to log vacancy promoted:", error);
-    }
-  });
+      return {
+        userId: p.userId,
+        actorId: p.userId,
+        targetJobId: p.jobId,
+        linkedRecordName: job?.JobTitle?.label ?? null,
+        details: JSON.stringify({ stagedVacancyId: p.stagedVacancyId }),
+      };
+    },
+  );
 }
