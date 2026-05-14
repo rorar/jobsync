@@ -80,7 +80,7 @@
 
 | Sprint | Scope | Effort |
 |--------|-------|--------|
-| **GDPR Sprint cont.** | ~~S1 Account Deletion~~ (DONE) + S2 DSAR + S3 AI PII Strip + S4 Retention | 3-5 Tage |
+| ~~**GDPR Sprint cont.**~~ | ~~S1 Account Deletion (DONE) + S2 DSAR + S3 AI PII Strip + S4 Retention~~ | ~~3-5 Tage~~ | **DONE** (sessions 2026-05-14 + 2026-05-15) |
 | **S2 UX Polish** | 19 Features, 52+ Components, Add Job Dialog (7 Divergenzen) | 2-3 Tage |
 | **Observability** | OpenTelemetry + Prometheus + Grafana + Alert Rules | 2-3 Wochen |
 

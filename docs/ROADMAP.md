@@ -1602,6 +1602,9 @@ Dynamische Dateipfade und Dateinamen:
 - i18n: crm.ts Namespace (~160 Keys × 4 Locales)
 - Navigation: 3 CRM-Links im Sidebar (Contacts, Interviews, CRM Tasks)
 
+**Offen:**
+- **Rollen-Badges auf Person:** Visuelles Badge/Color-Coding für Kontaktperson-Rollen (Recruiter, HR, Hiring Manager, Referral, etc.). Darstellung als farbiges Badge auf dem Profilbild (LinkedIn-Stil). Datenmodell: `role` Feld auf `JobContact` existiert bereits — Badge wird aus der primären Rolle der Person abgeleitet. UI: Avatar-Overlay mit Rollenfarbe + Tooltip. Braucht: Design-Entscheidung für Farbpalette + Badge-Platzierung.
+
 ### 5.5 Dateiexplorer-Integration
 - CRM ist direkt mit dem Dateiexplorer (Sektion 2.8) verbunden
 - Bewerbungsunterlagen, E-Mails, Notizen und Anhänge pro Kontakt/Job sichtbar
@@ -1720,6 +1723,13 @@ Dynamische Dateipfade und Dateinamen:
   - Settings-UI: Retention-Konfiguration pro Kategorie (z.B. "AutomationRuns älter als 90 Tage löschen")
   - Automatischer Cleanup-Job in Administrative Queue (→ 8.4)
   - DSGVO Art. 5(1)(e): Speicherbegrenzung — Daten nur so lange wie nötig
+- **GDPR Self-Service für Kontaktpersonen (→ 9.5 Landingpage, → 5.5 CRM):**
+  - Vorbereitend auf personalisierte Bewerber-Landingpage (9.5): Kontaktpersonen (Recruiter, HR, Hiring Manager) deren Daten im CRM verarbeitet werden, bekommen einen sicheren Self-Service-Zugang
+  - **Datenauskunft (Art. 15):** Kontaktperson kann über einen authentifizierten Link einsehen, welche Daten über sie gespeichert sind (Name, Email, Rolle, Timeline-Einträge)
+  - **Löschung (Art. 17):** Kontaktperson kann Löschung ihrer Daten anfordern → löst `anonymizePerson()` Cascade aus
+  - **Absicherung:** Token-basierter Zugang (kein Account nötig), Rate-Limited, zeitlich begrenzt, Audit-geloggt
+  - **Voraussetzung:** Communication Connector (1.12) für E-Mail-Versand des Self-Service-Links
+  - **Cross-Ref:** crm-gdpr.allium DataSubjectRequest Entity (bereits spezifiziert, nicht implementiert)
 - **Consent-by-Referral für Drittdaten-Verarbeitung (→ 9.5 Landingpage):**
   - Wenn der Bewerber aktiv auf HRler/Recruiter zugeht und deren Daten (Name, Position, Firma) für personalisierte Ansprache verarbeiten will, ist je nach Land eine Einwilligung nötig (DSGVO Art. 6(1)(a))
   - **Mechanismus: Consent-Referral-Link**
