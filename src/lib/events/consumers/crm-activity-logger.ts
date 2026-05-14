@@ -19,7 +19,8 @@ import "server-only";
 import type { z } from "zod";
 import prisma from "@/lib/db";
 import { eventBus } from "@/lib/events";
-import type { DomainEvent, DomainEventType } from "@/lib/events/event-types";
+import type { DomainEvent } from "@/lib/events/event-types";
+import { DomainEventType } from "@/lib/events/event-types";
 import {
   JobStatusChangedPayloadSchema,
   ContactCreatedPayloadSchema,
@@ -94,7 +95,7 @@ function registerProjection<T>(
 export function registerCrmActivityLogConsumers(): void {
   // JobStatusChanged → status_changed
   registerProjection(
-    "JobStatusChanged" as DomainEventType,
+    DomainEventType.JobStatusChanged,
     JobStatusChangedPayloadSchema,
     "status_changed",
     (p) => ({
@@ -110,7 +111,7 @@ export function registerCrmActivityLogConsumers(): void {
 
   // ContactCreated → contact_created (DB lookup: Person name)
   registerProjection(
-    "ContactCreated" as DomainEventType,
+    DomainEventType.ContactCreated,
     ContactCreatedPayloadSchema,
     "contact_created",
     async (p) => {
@@ -129,7 +130,7 @@ export function registerCrmActivityLogConsumers(): void {
 
   // ContactUpdated → contact_updated
   registerProjection(
-    "ContactUpdated" as DomainEventType,
+    DomainEventType.ContactUpdated,
     ContactUpdatedPayloadSchema,
     "contact_updated",
     (p) => ({
@@ -141,7 +142,7 @@ export function registerCrmActivityLogConsumers(): void {
 
   // ContactDeleted → contact_deleted
   registerProjection(
-    "ContactDeleted" as DomainEventType,
+    DomainEventType.ContactDeleted,
     ContactDeletedPayloadSchema,
     "contact_deleted",
     (p) => ({
@@ -155,7 +156,7 @@ export function registerCrmActivityLogConsumers(): void {
 
   // InterviewScheduled → interview_scheduled (DB lookup: Job title)
   registerProjection(
-    "InterviewScheduled" as DomainEventType,
+    DomainEventType.InterviewScheduled,
     InterviewScheduledPayloadSchema,
     "interview_scheduled",
     async (p) => {
@@ -175,7 +176,7 @@ export function registerCrmActivityLogConsumers(): void {
 
   // InterviewCompleted → interview_completed (DB lookup: Job title)
   registerProjection(
-    "InterviewCompleted" as DomainEventType,
+    DomainEventType.InterviewCompleted,
     InterviewCompletedPayloadSchema,
     "interview_completed",
     async (p) => {
@@ -194,7 +195,7 @@ export function registerCrmActivityLogConsumers(): void {
 
   // CrmTaskCreated → task_created
   registerProjection(
-    "CrmTaskCreated" as DomainEventType,
+    DomainEventType.CrmTaskCreated,
     CrmTaskCreatedPayloadSchema,
     "task_created",
     (p) => ({
@@ -206,7 +207,7 @@ export function registerCrmActivityLogConsumers(): void {
 
   // CrmTaskCompleted → task_completed
   registerProjection(
-    "CrmTaskCompleted" as DomainEventType,
+    DomainEventType.CrmTaskCompleted,
     CrmTaskCompletedPayloadSchema,
     "task_completed",
     (p) => ({
@@ -218,7 +219,7 @@ export function registerCrmActivityLogConsumers(): void {
 
   // CrmNoteCreated → note_added (DB lookup: Note targets)
   registerProjection(
-    "CrmNoteCreated" as DomainEventType,
+    DomainEventType.CrmNoteCreated,
     CrmNoteCreatedPayloadSchema,
     "note_added",
     async (p) => {
@@ -238,7 +239,7 @@ export function registerCrmActivityLogConsumers(): void {
 
   // VacancyPromoted → application_submitted (DB lookup: Job title + Company)
   registerProjection(
-    "VacancyPromoted" as DomainEventType,
+    DomainEventType.VacancyPromoted,
     VacancyPromotedPayloadSchema,
     "application_submitted",
     async (p) => {
