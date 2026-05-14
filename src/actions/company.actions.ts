@@ -9,8 +9,8 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
+import { deleteFileAndPruneEmptyParents } from "@/lib/assets/file-cleanup";
 import { logoAssetService } from "@/lib/assets/logo-asset-service";
-import fs from "fs/promises";
 
 export const getCompanyList = async (
   page: number = 1,
@@ -307,19 +307,9 @@ export const deleteCompanyById = async (
     });
     if (logoAsset?.filePath) {
       try {
-        await fs.unlink(logoAsset.filePath);
-        // Try to remove empty directories (company-level, then user-level)
-        const path = await import("path");
-        const companyDir = path.dirname(logoAsset.filePath);
-        try {
-          await fs.rmdir(companyDir);
-          const userDir = path.dirname(companyDir);
-          await fs.rmdir(userDir);
-        } catch {
-          // Directory not empty — expected
-        }
+        await deleteFileAndPruneEmptyParents(logoAsset.filePath, 2);
       } catch {
-        // File already gone — proceed
+        // File cleanup failed — proceed with company deletion
       }
     }
 

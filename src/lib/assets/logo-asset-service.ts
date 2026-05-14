@@ -14,6 +14,7 @@ import "server-only";
 
 import { validateWebhookUrl } from "@/lib/url-validation";
 import { getDataDir } from "@/lib/storage";
+import { deleteFileAndPruneEmptyParents } from "./file-cleanup";
 import { validateMagicBytes, ACCEPTED_MIME_TYPES } from "./magic-bytes";
 import { sanitizeSvg } from "./svg-sanitizer";
 import { getImageDimensions } from "./image-processor";
@@ -321,21 +322,12 @@ class LogoAssetService {
       data: { logoAssetId: null },
     });
 
-    // Delete file from disk
+    // Delete file from disk + prune empty parent dirs (company, user)
     if (asset.filePath) {
       try {
-        await fs.unlink(asset.filePath);
-        // Try to remove empty directory (company-level, then user-level)
-        const companyDir = path.dirname(asset.filePath);
-        try {
-          await fs.rmdir(companyDir);
-          const userDir = path.dirname(companyDir);
-          await fs.rmdir(userDir);
-        } catch {
-          // Directory not empty or doesn't exist — expected
-        }
+        await deleteFileAndPruneEmptyParents(asset.filePath, 2);
       } catch {
-        // File already gone — proceed with DB cleanup
+        // File cleanup failed — proceed with DB cleanup
       }
     }
 

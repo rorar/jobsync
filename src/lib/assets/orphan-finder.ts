@@ -1,13 +1,15 @@
 import "server-only";
 
-import { readdir, stat, unlink } from "fs/promises";
+import { readdir, stat } from "fs/promises";
 import path from "path";
+import { deleteFileAndPruneEmptyParents } from "./file-cleanup";
 
 /**
  * Generic Orphan File Purger
  *
  * Recursively walks a directory, identifies files NOT in a known set,
  * and deletes those older than a grace period (by mtime).
+ * After deletion, prunes empty parent directories upward.
  *
  * Structure-agnostic: uses readdir({ recursive: true }), works with
  * any directory depth. No hardcoded path assumptions.
@@ -15,12 +17,14 @@ import path from "path";
  * @param baseDir      - Root directory to scan (e.g. getLogosDir())
  * @param isKnown      - Predicate: return true if the absolute file path is tracked (e.g. in DB)
  * @param graceDays    - Only delete files with mtime older than this many days ago
+ * @param pruneLevels  - Parent directory levels to prune after each deletion (default: 2)
  * @returns            - Count of files deleted
  */
 export async function purgeOrphanedFiles(
   baseDir: string,
   isKnown: (absolutePath: string) => boolean,
   graceDays: number,
+  pruneLevels: number = 2,
 ): Promise<{ deletedCount: number }> {
   // Gracefully handle missing base directory
   let entries: import("fs").Dirent[];
@@ -52,7 +56,7 @@ export async function purgeOrphanedFiles(
       const fileStat = await stat(absolutePath);
       if (fileStat.mtime > graceCutoff) continue;
 
-      await unlink(absolutePath);
+      await deleteFileAndPruneEmptyParents(absolutePath, pruneLevels);
       deletedCount++;
     } catch (error: unknown) {
       // File disappeared between readdir and stat/unlink — skip
