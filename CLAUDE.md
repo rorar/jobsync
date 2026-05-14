@@ -425,6 +425,18 @@ REST API as "Open Host Service" (DDD) — manually designed surface over existin
 
 **NOT for:** Database paths (`DATABASE_URL` is managed by Prisma separately). Module-level storage (modules are stateless API translators per DDD ACL).
 
+### Asset Utilities (`src/lib/assets/`)
+
+Three complementary utilities for file lifecycle management:
+
+- **`file-cleanup.ts`** — `deleteFileAndPruneEmptyParents(filePath, levels)`. Best-effort, idempotent (ENOENT = success). Prunes `levels` empty parent directories upward after deletion. Used by logo-asset-service and company.actions.
+- **`orphan-finder.ts`** — `purgeOrphanedFiles(baseDir, isKnown, graceDays, pruneLevels?)`. Recursive directory walk via `readdir({ recursive: true })`, deletes files NOT in `isKnown` set older than `graceDays`. Uses `file-cleanup.ts` internally. Called by retention-cron Rule 7.
+- **`logo-asset-service.ts`** — Domain service orchestrating download, validation, storage. Uses both utilities above.
+
+**For new file cleanup:** Use `deleteFileAndPruneEmptyParents()` — don't copy the unlink+rmdir pattern. For new orphan detection: use `purgeOrphanedFiles()` with a domain-specific `isKnown` predicate.
+
+**Analysis:** `docs/file-deletion-analysis.md` — all 6 file deletion sites documented.
+
 ### Connector & Module Lifecycle Rules
 
 Implemented in `module.actions.ts` and `degradation.ts`. Spec: `specs/module-lifecycle.allium`.
@@ -762,7 +774,11 @@ Formal specifications in `specs/*.allium` capture domain behaviour:
 
 - `scripts/test.sh` — runs Jest with system Node.js (not bun, due to compatibility)
 - `__tests__/*.spec.ts` — unit + component tests
-- `src/lib/data/testFixtures.ts` — reusable typed fixtures for all Prisma models
+- `src/lib/data/testFixtures.ts` — reusable typed fixtures for all Prisma models + DispatchContext/channel factories:
+  - `makeSmtpSnapshot()`, `makeVapidSnapshot()`, `makePushSubscription()`, `makeWebhookEndpoint()` — snapshot factories with `Partial<T>` overrides
+  - `makeTestDispatchContext(overrides?)` — composite factory, all channels unavailable by default
+  - `makeTestNotificationDraft(overrides?)`, `makeMockChannel(name, overrides?)` — notification test helpers
+  - **For new notification test fixtures:** Use these factories, do NOT duplicate DispatchContext construction inline. See `docs/test-fixture-analysis.md`.
 
 ### E2E Test Infrastructure (Playwright)
 
@@ -840,6 +856,10 @@ The deferred items split into three categories:
 - **Plural rules for i18n keys** — systemic cross-cutting decision. Affects all count-based keys. Needs user decision on LinguiJS ICU vs per-key singular variant.
 
 **Rule for future sessions:** if any team-review surfaces one of these items as a "new" finding, redirect the reviewer to this section. Re-surfacing a known deferral as a fresh finding wastes reviewer budget and misrepresents the project's deferral discipline. Team-reviews should focus on what's NEW since the last sprint, not rediscover the backlog.
+
+### NOT-PLANNED Items (`docs/NOT-PLANNED.md`)
+
+**Read `docs/NOT-PLANNED.md` before proposing improvements.** It contains items that were evaluated, discussed, and deliberately rejected with documented reasoning and trigger conditions for re-evaluation. Do NOT re-propose these as "new" ideas.
 
 ## Git Workflow
 
