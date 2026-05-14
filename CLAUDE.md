@@ -616,7 +616,7 @@ Any new notification-creating code path MUST populate the structured fields.
 
 **CRM Domain Events (9):** ContactCreated, ContactUpdated, ContactDeleted, InterviewScheduled, InterviewCompleted, ReminderTriggered, CrmTaskCreated, CrmTaskCompleted, CrmNoteCreated — all published via TypedEventBus.
 
-**CRM Activity Logger:** `src/lib/events/consumers/crm-activity-logger.ts` — subscribes to JobStatusChanged, ContactCreated, ContactUpdated and projects into CrmActivityLog (immutable, append-only read model per TimelineProjection contract).
+**CRM Activity Logger:** `src/lib/events/consumers/crm-activity-logger.ts` — declarative event projections via `registerProjection<T>()`. 10 domain events projected into CrmActivityLog (immutable, append-only read model per TimelineProjection contract). **For new CRM timeline entries:** Add a `registerProjection()` call (5-8 lines) — no boilerplate. See `docs/event-consumer-analysis.md` for the full consumer inventory and 10 unconsumed event types awaiting future projections.
 
 **GDPR on Person:** `dataSource` (manual|auto_created|imported), `processingBasis` (legitimate_interest|consent|contract), `retentionExpiresAt`. AnonymizePerson cascades to NoteTargets, TaskTargets, JobContacts, ActivityLog references, and clears `createdByName`/`updatedByName` (actor PII).
 
