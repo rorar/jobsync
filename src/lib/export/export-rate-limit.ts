@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createSlidingWindowLimiter } from "./rate-limit";
+import { createSlidingWindowLimiter } from "../rate-limit";
 
 /**
  * Export Rate Limiter — 1 export per hour per user.

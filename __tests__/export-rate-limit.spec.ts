@@ -11,7 +11,7 @@ jest.mock("server-only", () => ({}));
 import {
   checkExportRateLimit,
   resetExportRateLimitStore,
-} from "@/lib/export-rate-limit";
+} from "@/lib/export/export-rate-limit";
 
 describe("Export Rate Limit", () => {
   beforeEach(() => {

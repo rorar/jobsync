@@ -4,7 +4,7 @@ import { PassThrough, Readable } from "node:stream";
 import archiver from "archiver";
 import { collectUserData } from "@/lib/export/collect-user-data";
 import { buildExportMetadata } from "@/lib/export/export-metadata";
-import { checkExportRateLimit } from "@/lib/export-rate-limit";
+import { checkExportRateLimit } from "@/lib/export/export-rate-limit";
 import { formatISODate } from "@/i18n";
 
 export const GET = async () => {
