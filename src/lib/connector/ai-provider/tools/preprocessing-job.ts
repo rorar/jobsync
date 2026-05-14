@@ -99,7 +99,12 @@ Description: ${descriptionText}
 
 export const validateJob = (
   text: string,
-  metadata: JobMetadata,
+  // NP-3: metadata param is intentionally unused (dead code). Kept for API
+  // symmetry with validateResume(text, metadata) and as an extension point
+  // for future job-specific guards (e.g. MAX_JOB_WORDS). Currently unnecessary
+  // because EURES/Arbeitsagentur/JSearch strip HTML at import time and
+  // TEXT_LIMITS cap the text before LLM submission. See docs/NOT-PLANNED.md.
+  _metadata: JobMetadata,
 ): {
   isValid: boolean;
   error?: { code: string; message: string; details?: object };
@@ -115,7 +120,7 @@ export const validateJob = (
     return genericValidation;
   }
 
-  // Job-specific checks can be added here if needed
+  // Job-specific checks can be added here if needed (e.g. MAX_JOB_WORDS)
   // For now, the shared validation is sufficient
 
   return { isValid: true };
