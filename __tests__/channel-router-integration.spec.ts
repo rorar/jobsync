@@ -27,6 +27,7 @@ import type { DispatchContext } from "@/lib/notifications/dispatch-context";
 import type { NotificationChannel, NotificationDraft } from "@/lib/notifications/types";
 import type { NotificationPreferences } from "@/models/notification.model";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
+import { makeTestDispatchContext } from "@/lib/data/testFixtures";
 
 const mockPrisma = prisma as jest.Mocked<typeof prisma>;
 
@@ -42,23 +43,12 @@ function makeContext(
       ...prefsOverride?.channels,
     },
   };
-  return {
+  return makeTestDispatchContext({
     userId: "user-1",
     preferences,
-    locale: "en",
     userEmail: "user@test.com",
-    smtp: null,
-    vapid: null,
-    pushSubscriptions: [],
-    webhookEndpoints: [],
-    emailAvailable: false,
-    pushAvailable: false,
-    webhookAvailable: false,
-    inAppAvailable: true,
-    vapidSubject: "mailto:noreply@jobsync.local",
     ...ctxOverride,
-    // Cast required: ctxOverride spread widens type beyond DispatchContext
-  } as DispatchContext;
+  } as Partial<DispatchContext>);
 }
 
 const draft: NotificationDraft = Object.freeze({

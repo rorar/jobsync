@@ -39,7 +39,7 @@ import type {
 } from "@/lib/notifications/types";
 import type { DispatchContext } from "@/lib/notifications/dispatch-context";
 import type { NotificationPreferences } from "@/models/notification.model";
-import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
+import { makeTestDispatchContext, makeTestNotificationDraft, makeMockChannel } from "@/lib/data/testFixtures";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -47,64 +47,19 @@ import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
 
 const TEST_USER_ID = "user-42";
 
-const DEFAULT_PREFS: NotificationPreferences = {
-  enabled: true,
-  channels: { inApp: true, webhook: true, email: false, push: false },
-  perType: {},
-};
-
-/**
- * Factory function for building a test DispatchContext.
- * All availability flags default to true; override as needed.
- */
-function makeTestContext(
-  overrides: Partial<DispatchContext> = {},
-): DispatchContext {
-  return {
+function makeTestContext(overrides: Partial<DispatchContext> = {}) {
+  return makeTestDispatchContext({
     userId: TEST_USER_ID,
-    preferences: DEFAULT_PREFS,
-    locale: "en",
-    userEmail: "user@example.com",
-    smtp: null,
-    vapid: null,
-    pushSubscriptions: [],
-    webhookEndpoints: [],
+    preferences: { enabled: true, channels: { inApp: true, webhook: true, email: false, push: false }, perType: {} },
     emailAvailable: true,
     pushAvailable: true,
     webhookAvailable: true,
-    inAppAvailable: true,
-    vapidSubject: "mailto:noreply@jobsync.local",
     ...overrides,
-  };
+  });
 }
 
-function makeDraft(
-  overrides: Partial<NotificationDraft> = {},
-): NotificationDraft {
-  return {
-    userId: TEST_USER_ID,
-    type: "vacancy_promoted",
-    message: "Job created from staged vacancy",
-    data: { jobId: "job-1" },
-    ...overrides,
-  };
-}
-
-function makeMockChannel(
-  name: string,
-  overrides: Partial<{
-    dispatch: jest.Mock;
-  }> = {},
-): NotificationChannel & { dispatch: jest.Mock } {
-  return {
-    name,
-    dispatch:
-      overrides.dispatch ??
-      jest.fn<Promise<ChannelResult>, [NotificationDraft, DispatchContext]>().mockResolvedValue({
-        success: true,
-        channel: name,
-      }),
-  };
+function makeDraft(overrides: Partial<Parameters<typeof makeTestNotificationDraft>[0]> = {}) {
+  return makeTestNotificationDraft({ userId: TEST_USER_ID, message: "Job created from staged vacancy", ...overrides });
 }
 
 // ---------------------------------------------------------------------------

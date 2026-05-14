@@ -79,67 +79,32 @@ jest.mock("web-push", () => {
 // ---------------------------------------------------------------------------
 
 import { PushChannel } from "@/lib/notifications/channels/push.channel";
-import type { NotificationDraft } from "@/lib/notifications/types";
 import type { DispatchContext } from "@/lib/notifications/dispatch-context";
-import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
+import { makeTestDispatchContext, makeVapidSnapshot, makePushSubscription, makeTestNotificationDraft } from "@/lib/data/testFixtures";
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
 
 const TEST_USER_ID = "user-push-test-1";
+const VAPID_SNAPSHOT = makeVapidSnapshot();
+const SUBSCRIPTION_1 = makePushSubscription();
+const SUBSCRIPTION_2 = makePushSubscription({ id: "sub-2", endpoint: "https://push.example.com/sub2", p256dh: "encrypted-p256dh-2", auth: "encrypted-auth-2", iv: "iv-p256dh-2|iv-auth-2" });
 
-const VAPID_SNAPSHOT = {
-  publicKey: "BPublicKeyBase64",
-  privateKey: "encrypted-private-key",
-  iv: "vapid-iv",
-} as const;
-
-const SUBSCRIPTION_1 = {
-  id: "sub-1",
-  endpoint: "https://push.example.com/sub1",
-  p256dh: "encrypted-p256dh-1",
-  auth: "encrypted-auth-1",
-  iv: "iv-p256dh-1|iv-auth-1",
-};
-
-const SUBSCRIPTION_2 = {
-  id: "sub-2",
-  endpoint: "https://push.example.com/sub2",
-  p256dh: "encrypted-p256dh-2",
-  auth: "encrypted-auth-2",
-  iv: "iv-p256dh-2|iv-auth-2",
-};
-
-const NOTIFICATION: NotificationDraft = {
+const NOTIFICATION = makeTestNotificationDraft({
   userId: TEST_USER_ID,
-  type: "vacancy_promoted",
   message: "A vacancy was promoted",
   data: { jobTitle: "Developer" },
-};
+});
 
-/**
- * Factory for building a test DispatchContext for push tests.
- */
-function makeTestContext(
-  overrides: Partial<DispatchContext> = {},
-): DispatchContext {
-  return {
+function makeTestContext(overrides: Partial<DispatchContext> = {}) {
+  return makeTestDispatchContext({
     userId: TEST_USER_ID,
-    preferences: DEFAULT_NOTIFICATION_PREFERENCES,
-    locale: "en",
-    userEmail: "user@example.com",
-    smtp: null,
     vapid: VAPID_SNAPSHOT,
     pushSubscriptions: [SUBSCRIPTION_1],
-    webhookEndpoints: [],
-    emailAvailable: false,
     pushAvailable: true,
-    webhookAvailable: false,
-    inAppAvailable: true,
-    vapidSubject: "mailto:noreply@jobsync.local",
     ...overrides,
-  };
+  });
 }
 
 // ---------------------------------------------------------------------------

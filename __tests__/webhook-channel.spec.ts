@@ -84,7 +84,7 @@ import {
 import { createHmac } from "crypto";
 import type { NotificationDraft } from "@/lib/notifications/types";
 import type { DispatchContext } from "@/lib/notifications/dispatch-context";
-import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
+import { makeTestDispatchContext, makeWebhookEndpoint, makeTestNotificationDraft } from "@/lib/data/testFixtures";
 
 // ---------------------------------------------------------------------------
 // Fetch mock
@@ -110,52 +110,21 @@ function getMockFetch(): jest.Mock {
 
 const TEST_USER_ID = "user-42";
 
-function makeDraft(
-  overrides: Partial<NotificationDraft> = {},
-): NotificationDraft {
-  return {
-    userId: TEST_USER_ID,
-    type: "vacancy_promoted",
-    message: "Job created from staged vacancy",
-    data: { jobId: "job-1" },
-    ...overrides,
-  };
+function makeDraft(overrides: Partial<NotificationDraft> = {}) {
+  return makeTestNotificationDraft({ userId: TEST_USER_ID, message: "Job created from staged vacancy", ...overrides });
 }
 
 function makeEndpoint(overrides: Partial<Record<string, unknown>> = {}) {
-  return {
-    id: "ep-1",
-    url: "https://example.com/webhook",
-    secret: "encrypted-secret",
-    iv: "test-iv",
-    events: JSON.stringify(["vacancy_promoted", "module_deactivated"]),
-    failureCount: 0,
-    ...overrides,
-  };
+  return makeWebhookEndpoint(overrides as any);
 }
 
-/**
- * Factory for building a test DispatchContext for webhook tests.
- */
-function makeTestContext(
-  overrides: Partial<DispatchContext> = {},
-): DispatchContext {
-  return {
+function makeTestContext(overrides: Partial<DispatchContext> = {}) {
+  return makeTestDispatchContext({
     userId: TEST_USER_ID,
-    preferences: DEFAULT_NOTIFICATION_PREFERENCES,
-    locale: "en",
-    userEmail: "user@example.com",
-    smtp: null,
-    vapid: null,
-    pushSubscriptions: [],
     webhookEndpoints: [makeEndpoint()],
-    emailAvailable: false,
-    pushAvailable: false,
     webhookAvailable: true,
-    inAppAvailable: true,
-    vapidSubject: "mailto:noreply@jobsync.local",
     ...overrides,
-  };
+  });
 }
 
 /**

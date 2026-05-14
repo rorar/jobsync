@@ -84,56 +84,30 @@ jest.mock("@/lib/email/transport", () => ({
 // ---------------------------------------------------------------------------
 
 import { EmailChannel } from "@/lib/notifications/channels/email.channel";
-import type { NotificationDraft } from "@/lib/notifications/types";
 import type { DispatchContext } from "@/lib/notifications/dispatch-context";
-import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
+import { makeTestDispatchContext, makeSmtpSnapshot, makeTestNotificationDraft } from "@/lib/data/testFixtures";
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
 
 const TEST_USER_ID = "user-email-test-1";
+const SMTP_SNAPSHOT = makeSmtpSnapshot();
 
-const SMTP_SNAPSHOT = {
-  id: "smtp-1",
-  host: "smtp.example.com",
-  port: 587,
-  username: "user@example.com",
-  password: "encrypted-password",
-  iv: "test-iv",
-  fromAddress: "noreply@example.com",
-  tlsRequired: true,
-} as const;
-
-const NOTIFICATION: NotificationDraft = {
+const NOTIFICATION = makeTestNotificationDraft({
   userId: TEST_USER_ID,
-  type: "vacancy_promoted",
   message: "A vacancy was promoted",
   data: { jobTitle: "Developer" },
-};
+});
 
-/**
- * Factory for building a test DispatchContext for email tests.
- */
-function makeTestContext(
-  overrides: Partial<DispatchContext> = {},
-): DispatchContext {
-  return {
+function makeTestContext(overrides: Partial<DispatchContext> = {}) {
+  return makeTestDispatchContext({
     userId: TEST_USER_ID,
-    preferences: DEFAULT_NOTIFICATION_PREFERENCES,
-    locale: "en",
-    userEmail: "user@example.com",
     smtp: SMTP_SNAPSHOT,
-    vapid: null,
-    pushSubscriptions: [],
-    webhookEndpoints: [],
     emailAvailable: true,
-    pushAvailable: false,
-    webhookAvailable: false,
-    inAppAvailable: true,
     vapidSubject: "mailto:noreply@example.com",
     ...overrides,
-  };
+  });
 }
 
 // ---------------------------------------------------------------------------

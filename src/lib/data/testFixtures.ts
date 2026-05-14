@@ -8,6 +8,15 @@ import type { JobResponse, Company, JobTitle, JobStatus, JobLocation, JobSource,
 import type { Activity, ActivityType } from "@/models/activity.model";
 import type { Task } from "@/models/task.model";
 import type { Resume } from "@/models/profile.model";
+import type {
+  DispatchContext,
+  SmtpConfigSnapshot,
+  VapidConfigSnapshot,
+  PushSubscriptionSnapshot,
+  WebhookEndpointSnapshot,
+} from "@/lib/notifications/dispatch-context";
+import type { NotificationChannel, NotificationDraft, ChannelResult } from "@/lib/notifications/types";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
 import type { Automation } from "@/models/automation.model";
 import type { Question } from "@/models/question.model";
 import type { StagedVacancy, StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
@@ -1771,3 +1780,141 @@ export const mockCrmBlocklists: CrmBlocklistFixture[] = [
   mockCrmBlocklistEmail,
   mockCrmBlocklistDomain,
 ];
+
+// =============================================================================
+// Notification / DispatchContext Factories
+// =============================================================================
+
+/**
+ * Factory for SmtpConfigSnapshot test data.
+ * Override any field via Partial spread.
+ */
+export function makeSmtpSnapshot(
+  overrides: Partial<SmtpConfigSnapshot> = {},
+): SmtpConfigSnapshot {
+  return {
+    id: "smtp-test-1",
+    host: "smtp.example.com",
+    port: 587,
+    username: "user@example.com",
+    password: "encrypted-password",
+    iv: "test-iv",
+    fromAddress: "noreply@example.com",
+    tlsRequired: true,
+    ...overrides,
+  };
+}
+
+/**
+ * Factory for VapidConfigSnapshot test data.
+ */
+export function makeVapidSnapshot(
+  overrides: Partial<VapidConfigSnapshot> = {},
+): VapidConfigSnapshot {
+  return {
+    publicKey: "BPublicKeyBase64",
+    privateKey: "encrypted-private-key",
+    iv: "vapid-iv",
+    ...overrides,
+  };
+}
+
+/**
+ * Factory for PushSubscriptionSnapshot test data.
+ * Call with different overrides for multiple subscriptions.
+ */
+export function makePushSubscription(
+  overrides: Partial<PushSubscriptionSnapshot> = {},
+): PushSubscriptionSnapshot {
+  return {
+    id: "sub-1",
+    endpoint: "https://push.example.com/sub1",
+    p256dh: "encrypted-p256dh-1",
+    auth: "encrypted-auth-1",
+    iv: "iv-p256dh-1|iv-auth-1",
+    ...overrides,
+  };
+}
+
+/**
+ * Factory for WebhookEndpointSnapshot test data.
+ */
+export function makeWebhookEndpoint(
+  overrides: Partial<WebhookEndpointSnapshot> = {},
+): WebhookEndpointSnapshot {
+  return {
+    id: "ep-1",
+    url: "https://example.com/webhook",
+    secret: "encrypted-secret",
+    iv: "test-iv",
+    events: JSON.stringify(["vacancy_promoted", "module_deactivated"]),
+    failureCount: 0,
+    ...overrides,
+  };
+}
+
+/**
+ * Factory for DispatchContext test data.
+ *
+ * Defaults: all channels unavailable (null/empty), inApp always true.
+ * Override to enable specific channels for channel-specific tests.
+ *
+ * @example
+ * // Email channel test:
+ * makeTestDispatchContext({ smtp: makeSmtpSnapshot(), emailAvailable: true })
+ * // Push channel test:
+ * makeTestDispatchContext({ vapid: makeVapidSnapshot(), pushSubscriptions: [makePushSubscription()], pushAvailable: true })
+ */
+export function makeTestDispatchContext(
+  overrides: Partial<DispatchContext> = {},
+): DispatchContext {
+  return {
+    userId: "test-user-id",
+    preferences: DEFAULT_NOTIFICATION_PREFERENCES,
+    locale: "en",
+    userEmail: "user@example.com",
+    smtp: null,
+    vapid: null,
+    pushSubscriptions: [],
+    webhookEndpoints: [],
+    emailAvailable: false,
+    pushAvailable: false,
+    webhookAvailable: false,
+    inAppAvailable: true,
+    vapidSubject: "mailto:noreply@jobsync.local",
+    ...overrides,
+  };
+}
+
+/**
+ * Factory for NotificationDraft test data.
+ */
+export function makeTestNotificationDraft(
+  overrides: Partial<NotificationDraft> = {},
+): NotificationDraft {
+  return {
+    userId: "test-user-id",
+    type: "vacancy_promoted",
+    message: "Test notification",
+    data: { jobId: "job-1" },
+    ...overrides,
+  };
+}
+
+/**
+ * Factory for mock NotificationChannel (jest.fn-based).
+ * Extracted from channel-router.spec.ts reference implementation.
+ */
+export function makeMockChannel(
+  name: string,
+  overrides: Partial<{ dispatch: jest.Mock }> = {},
+): NotificationChannel & { dispatch: jest.Mock } {
+  return {
+    name,
+    dispatch:
+      overrides.dispatch ??
+      jest
+        .fn<Promise<ChannelResult>, [NotificationDraft, DispatchContext]>()
+        .mockResolvedValue({ success: true, channel: name }),
+  };
+}

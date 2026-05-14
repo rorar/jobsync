@@ -234,6 +234,7 @@ import {
 import { saveSmtpConfig, deleteSmtpConfig } from "@/actions/smtp.actions";
 import { channelRouter } from "@/lib/notifications/channel-router";
 import { PushChannel } from "@/lib/notifications/channels/push.channel";
+import { makeTestDispatchContext, makeVapidSnapshot, makePushSubscription } from "@/lib/data/testFixtures";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -713,36 +714,18 @@ describe("invalidateAvailability call-chain tests", () => {
   // =========================================================================
 
   describe("PushChannel — stale subscription cleanup (PERF-3 DispatchContext)", () => {
-    const MOCK_VAPID_SNAPSHOT = {
-      publicKey: "BTestPublicKey",
-      privateKey: "enc-private",
-      iv: "vapid-iv",
-    } as const;
+    const MOCK_VAPID_SNAPSHOT = makeVapidSnapshot({ publicKey: "BTestPublicKey", privateKey: "enc-private", iv: "vapid-iv" });
+    const MOCK_SUBSCRIPTION = makePushSubscription({ endpoint: "https://fcm.googleapis.com/fcm/send/test-sub", p256dh: "enc-p256dh", auth: "enc-auth", iv: "p256dh-iv|auth-iv" });
 
-    const MOCK_SUBSCRIPTION = {
-      id: "sub-1",
-      endpoint: "https://fcm.googleapis.com/fcm/send/test-sub",
-      p256dh: "enc-p256dh",
-      auth: "enc-auth",
-      iv: "p256dh-iv|auth-iv",
-    };
-
-    function makePushTestContext(): import("@/lib/notifications/dispatch-context").DispatchContext {
-      return {
+    function makePushTestContext() {
+      return makeTestDispatchContext({
         userId: TEST_USER.id,
         preferences: { enabled: true, channels: { inApp: true, webhook: false, email: false, push: true }, perType: {} },
-        locale: "en",
         userEmail: TEST_USER.email,
-        smtp: null,
         vapid: MOCK_VAPID_SNAPSHOT,
         pushSubscriptions: [MOCK_SUBSCRIPTION],
-        webhookEndpoints: [],
-        emailAvailable: false,
         pushAvailable: true,
-        webhookAvailable: false,
-        inAppAvailable: true,
-        vapidSubject: "mailto:noreply@jobsync.local",
-      };
+      });
     }
 
     it("deletes stale subscription when 410 Gone is returned", async () => {
