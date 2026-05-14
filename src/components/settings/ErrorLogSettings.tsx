@@ -50,8 +50,8 @@ function ErrorLogSettings() {
       setIsLoading(true);
       try {
         const result = await getUserSettings();
-        if (result.success && (result.data as any)?.settings?.developer) {
-          const developer = (result.data as any).settings.developer;
+        if (result.success && result.data?.settings?.developer) {
+          const developer = result.data.settings.developer;
           setErrorReporting(
             developer.errorReporting ??
               (process.env.NODE_ENV === "development")
@@ -79,13 +79,13 @@ function ErrorLogSettings() {
     try {
       const currentResult = await getUserSettings();
       let currentDeveloper = defaultDeveloper;
-      if (currentResult.success && (currentResult.data as any)?.settings?.developer) {
+      if (currentResult.success && currentResult.data?.settings?.developer) {
         currentDeveloper = {
           ...defaultDeveloper,
-          ...(currentResult.data as any).settings.developer,
+          ...currentResult.data.settings.developer,
           logCategories: {
             ...defaultDeveloper.logCategories,
-            ...(currentResult.data as any).settings.developer.logCategories,
+            ...currentResult.data.settings.developer.logCategories,
           },
         };
       }

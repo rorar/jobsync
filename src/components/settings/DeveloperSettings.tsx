@@ -68,8 +68,8 @@ function DeveloperSettings() {
       setIsLoading(true);
       try {
         const result = await getUserSettings();
-        if (result.success && (result.data as any)?.settings?.developer) {
-          const developer = (result.data as any).settings.developer;
+        if (result.success && result.data?.settings?.developer) {
+          const developer = result.data.settings.developer;
           setSettings({
             ...defaultDeveloper,
             ...developer,

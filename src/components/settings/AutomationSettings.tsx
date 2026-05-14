@@ -27,8 +27,8 @@ function AutomationSettings() {
       setIsLoading(true);
       try {
         const result = await getUserSettings();
-        if (result.success && (result.data as any)?.settings?.automation) {
-          const automation = (result.data as any).settings.automation;
+        if (result.success && result.data?.settings?.automation) {
+          const automation = result.data.settings.automation;
           const merged = { ...defaultAutomation, ...automation };
           setSettings(merged);
           setThresholdInput(String(merged.performanceWarningThreshold));

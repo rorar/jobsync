@@ -87,10 +87,10 @@ function AiSettings() {
       try {
         const settingsResult = await getUserSettings();
 
-        if (settingsResult.success && (settingsResult.data as any)?.settings?.ai) {
-          const aiSettings = (settingsResult.data as any).settings.ai;
+        if (settingsResult.success && settingsResult.data?.settings?.ai) {
+          const aiSettings = settingsResult.data.settings.ai;
           setSelectedModel({
-            moduleId: aiSettings.moduleId || aiSettings.provider || defaultModel.moduleId,
+            moduleId: aiSettings.moduleId || defaultModel.moduleId,
             model: aiSettings.model,
           });
         }
