@@ -1,3 +1,5 @@
+import "server-only";
+
 export const RETENTION_CONFIG = {
   notificationRetentionDays: 30,
   enrichmentLogRetentionDays: 90,

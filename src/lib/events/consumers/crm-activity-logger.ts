@@ -103,7 +103,6 @@ export function registerCrmActivityLogConsumers(): void {
         data: {
           userId: payload.userId,
           activityType: "contact_deleted",
-          happenedAt: new Date(),
           actorId: payload.userId,
           targetPersonId: null, // Person already deleted/anonymized
           details: JSON.stringify({ reason: payload.reason }),
