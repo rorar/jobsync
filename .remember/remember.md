@@ -1,11 +1,10 @@
 # Handoff
 
 ## State
-Session 2026-05-14 done. 12 commits on `main` (`2b6b638`..`a74a7b8`). 237 suites, 4626 tests, 51 migrations. Build green. Code Quality refactoring: CQ-8/9/14/15 fixed, file-cleanup + test fixtures extracted, DomainEventType casts fixed.
+Session 2026-05-14 done. 17 commits on `main` (`2b6b638`..`8ed4e4c`). 237 suites, 4626 tests, 51 migrations. Build green. Code Quality refactoring: all 12 F/CQ closed (8 FIXED, 2 INVALID, 2 NOT-PLANNED). DomainEventType casts fixed. LOGO_PRUNE_LEVELS extracted. CQ-16 `as any` removed (13 casts, exposed hidden legacy bug). F-3 export-rate-limit colocated.
 
 ## Next
-1. **Offene F/CQ**: CQ-7 (unused param), CQ-16 (`as any`), F-3 (file placement) — @rorar decides NOT-PLANNED or fix
-2. **Full review** not yet run (`/comprehensive-review:full-review`) — required per `feedback_full_review_after_sprints.md`
+1. **Full review** not yet run (`/comprehensive-review:full-review`) — required per `feedback_full_review_after_sprints.md`
 3. **P0 CRITICAL**: G1 (status-change bypass, 4 sites), G2b (AI degradation bypass) — see `project_next_session_planning.md`
 4. **HIGH Domain Expert:** G9 (ContactDeleted no CRM logger, 30min), G10 (0 CRM fixtures, ½ day). See `docs/open-items-2026-05-13.md`.
 5. **Remaining IF findings:** IF-5 (errorCode in actionToResponse), IF-6 (CompanyCreated from Promoter), IF-7 (shared NotificationType constant), IF-8 (webhook GDPR allowlist)
@@ -14,7 +13,7 @@ Session 2026-05-14 done. 12 commits on `main` (`2b6b638`..`a74a7b8`). 237 suites
 8. **Allium spec gaps from weed:** crm.allium needs Job-deletion cascade rules for Interview, JobContact, TaskTarget, NoteTarget. job-aggregate.allium DeleteJob rule needs CRM cascade targets.
 
 ## Context
-- Session 2026-05-14: `docs/NOT-PLANNED.md` now tracked in CLAUDE.md. 10 unconsumed event types in `docs/event-consumer-analysis.md`. `project_deferred_sprints_for_future_sessions.md` § "makeTestDispatchContext" is now RESOLVED.
+- Session 2026-05-14: All 12 F/CQ closed. 17 commits. New utilities: `src/lib/rate-limit.ts` (factory), `src/lib/storage.ts` (DATA_DIR), `src/lib/assets/orphan-finder.ts`, `src/lib/assets/file-cleanup.ts`, `registerProjection()` in crm-activity-logger, shared test fixtures in testFixtures.ts. `docs/NOT-PLANNED.md` tracked in CLAUDE.md. NP-2 resolved (LOGO_PRUNE_LEVELS). CQ-16 fix exposed hidden `aiSettings.provider` legacy bug. 10 unconsumed event types in `docs/event-consumer-analysis.md`. `project_deferred_sprints_for_future_sessions.md` § "makeTestDispatchContext" is RESOLVED.
 - Session 2026-05-15: GDPR Sprint Phase 1 (S2/S3/S4) fully implemented. 5 commits (`494079a`..`2b6b638`). 235 suites, 4608 tests.
 - S1 (2026-05-15): Migration `20260513170926_s1_account_deletion_cascades` adds Cascade to all 37 User FKs. `deleteAccount()` in `src/actions/account.actions.ts`. UI in `AccountDeletionSettings.tsx`.
 - Flashlight found Job→Company/JobTitle Restrict ordering risk — fixed by explicit `tx.job.deleteMany()` before `tx.user.delete()`.
