@@ -1117,8 +1117,8 @@ No formatter/linter exists in the project (no Prettier, no git hooks, no lint-st
 | C1 | EuresLocationCombobox: 6+ hardcoded English strings | `EuresLocationCombobox.tsx` |
 | C2 | EuresOccupationCombobox: 10+ hardcoded English strings | `EuresOccupationCombobox.tsx` |
 | C3 | Admin containers (3) use hardcoded Loading/Load More | `CompaniesContainer` etc. |
-| C4 | "Error!" hardcoded in 12+ toast calls | Multiple components |
-| C5 | Hardcoded English success messages in 9+ toasts | Multiple components |
+| C4 | "Error!" hardcoded in 12+ toast calls | Multiple components | Partially fixed (`0e5afe7`): ActivityContext (2×), DisplaySettings (1×). Remaining: see C1/C2/C6 |
+| C5 | Hardcoded English success messages in 9+ toasts | Multiple components | Partially fixed (`0e5afe7`): ActivityContext (2×), NotesSection (1×), NotesCollapsibleSection (1×), admin tables (6×), profile (4×), DeveloperSettings (1×). Remaining: see C1/C2/C6 |
 | C6 | SupportDialog entirely untranslated | `SupportDialog.tsx` |
 | C9 | `.replace("Last ", "")` English-specific manipulation | `TopActivitiesCard.tsx`, `NumberCardToggle.tsx` |
 | C13 | useMemo missing locale dependency | `ActivityForm.tsx:53` |

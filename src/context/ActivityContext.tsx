@@ -155,7 +155,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    []
+    [t]
   );
 
   const refreshCurrentActivity = useCallback(async () => {
