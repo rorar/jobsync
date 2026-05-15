@@ -29,7 +29,7 @@ const CRM_CRON_KEY = "__crmCronTask";
 const CRM_CRON_RUNNING_KEY = "__crmCronRunning";
 
 function getCrmTask(): ScheduledTask | null {
-  return (globalThis as Record<string, unknown>)[CRM_CRON_KEY] as ScheduledTask | null ?? null;
+  return ((globalThis as Record<string, unknown>)[CRM_CRON_KEY] as ScheduledTask | null) ?? null;
 }
 function setCrmTask(task: ScheduledTask | null): void {
   (globalThis as Record<string, unknown>)[CRM_CRON_KEY] = task;
