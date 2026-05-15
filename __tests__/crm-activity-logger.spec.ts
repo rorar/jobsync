@@ -54,7 +54,7 @@ describe("crm-activity-logger", () => {
     jest.clearAllMocks();
   });
 
-  it("subscribes to 10 event types", () => {
+  it("subscribes to 11 event types", () => {
     const expectedTypes = [
       DomainEventType.JobStatusChanged,
       DomainEventType.ContactCreated,
@@ -66,6 +66,7 @@ describe("crm-activity-logger", () => {
       DomainEventType.CrmTaskCompleted,
       DomainEventType.CrmNoteCreated,
       DomainEventType.VacancyPromoted,
+      DomainEventType.AutomationDegraded,
     ];
 
     for (const type of expectedTypes) {
@@ -206,6 +207,58 @@ describe("crm-activity-logger", () => {
     expect(mockCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         linkedRecordName: null,
+      }),
+    });
+  });
+
+  // R5-2: AutomationDegraded projection tests
+  it("creates activity log for AutomationDegraded with moduleId as actorId", async () => {
+    await emit(DomainEventType.AutomationDegraded, {
+      automationId: "auto-1",
+      userId: "user-1",
+      reason: "consecutive_failures",
+      moduleId: "eures",
+      automationName: "EURES Daily",
+      message: "5 consecutive failures",
+      titleKey: "notifications.degraded.title",
+      actorType: "module",
+      actorId: "eures",
+      severity: "warning",
+      moduleName: "EURES",
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "automation_degraded",
+        userId: "user-1",
+        actorId: "eures",
+        linkedRecordName: "EURES Daily",
+      }),
+    });
+    const details = JSON.parse(mockCreate.mock.calls[0][0].data.details);
+    expect(details.reason).toBe("consecutive_failures");
+    expect(details.moduleName).toBe("EURES");
+    expect(details.automationId).toBe("auto-1");
+  });
+
+  it("falls back to userId as actorId when moduleId is absent (AutomationDegraded)", async () => {
+    await emit(DomainEventType.AutomationDegraded, {
+      automationId: "auto-2",
+      userId: "user-1",
+      reason: "auth_failure",
+      automationName: "JSearch Weekly",
+      message: "Auth failed",
+      titleKey: "notifications.degraded.title",
+      actorType: "automation",
+      actorId: "auto-2",
+      severity: "error",
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "automation_degraded",
+        actorId: "user-1",
+        linkedRecordName: "JSearch Weekly",
       }),
     });
   });

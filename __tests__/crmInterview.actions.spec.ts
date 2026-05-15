@@ -38,10 +38,10 @@ jest.mock("@/lib/events/event-types", () => ({
 
 // isValidInterviewTransition is a pure function — let it run from the real module
 // so state-machine tests reflect actual domain rules:
-//   scheduled  → completed | cancelled | rescheduled
-//   rescheduled → completed | cancelled
-//   completed  → (terminal)
-//   cancelled  → (terminal)
+//   scheduled   → completed | cancelled | rescheduled
+//   rescheduled → completed | cancelled | rescheduled (G17 self-transition)
+//   completed   → (terminal)
+//   cancelled   → (terminal)
 jest.mock("@/models/person.model", () => {
   const actual = jest.requireActual("@/models/person.model");
   return actual;

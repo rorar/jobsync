@@ -89,7 +89,9 @@ export type ActivityType =
   | "document_attached"
   | "reminder_triggered"
   | "follow_up_sent"
-  | "application_submitted";
+  | "application_submitted"
+  | "contact_deleted"
+  | "automation_degraded";
 
 export type BlocklistType = "email" | "phone" | "domain";
 
