@@ -51,7 +51,7 @@ function JobTitlesTable({ jobTitles, reloadJobTitles }: JobTitlesTableProps) {
       if (success) {
         toast({
           variant: "success",
-          description: `Job title has been deleted successfully`,
+          description: t("admin.jobTitleDeleted"),
         });
         reloadJobTitles();
       } else {

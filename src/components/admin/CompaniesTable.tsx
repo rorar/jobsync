@@ -58,7 +58,7 @@ function CompaniesTable({
       if (success) {
         toast({
           variant: "success",
-          description: `Company has been deleted successfully`,
+          description: t("admin.companyDeleted"),
         });
         reloadCompanies();
       } else {

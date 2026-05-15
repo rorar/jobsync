@@ -53,7 +53,7 @@ function JobLocationsTable({
       if (success) {
         toast({
           variant: "success",
-          description: `Job location has been deleted successfully`,
+          description: t("admin.locationDeleted"),
         });
         reloadJobLocations();
       } else {

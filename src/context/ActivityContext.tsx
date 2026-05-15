@@ -111,7 +111,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
         toast({
           variant: "success",
           description: autoStop
-            ? t("activities.autoStopped").replace("{hours}", String(maxDurationMinutes / 60))
+            ? t("activities.autoStopped").replace("{hours}", String(Math.round(maxDurationMinutes / 60)))
             : t("activities.stoppedSuccess"),
         });
         return true;
