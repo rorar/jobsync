@@ -46,7 +46,7 @@ enum DomainEventType {
   | ModuleDeactivated
   | ModuleReactivated
   | RetentionCompleted
-  | NotificationCreated
+  -- NotificationCreated removed — never published/subscribed (G6)
   -- Scheduler Coordination (spec: scheduler-coordination.allium)
   | SchedulerCycleStarted
   | SchedulerCycleCompleted
@@ -135,11 +135,7 @@ value RetentionCompletedPayload {
   hashesCreated: Integer                -- number of DedupHash records created
 }
 
-value NotificationCreatedPayload {
-  notificationId: String
-  userId: String
-  notificationType: String              -- NotificationType from module-lifecycle
-}
+-- NotificationCreatedPayload removed — never published/subscribed (G6)
 
 value VacancyRestoredFromTrashPayload {
   stagedVacancyId: String
@@ -375,7 +371,6 @@ rule TypeSafety {
   ensures: EventHandler<ModuleDeactivated> receives ModuleDeactivatedPayload
   ensures: EventHandler<ModuleReactivated> receives ModuleReactivatedPayload
   ensures: EventHandler<RetentionCompleted> receives RetentionCompletedPayload
-  ensures: EventHandler<NotificationCreated> receives NotificationCreatedPayload
   ensures: EventHandler<SchedulerCycleStarted> receives SchedulerCycleStartedPayload
   ensures: EventHandler<SchedulerCycleCompleted> receives SchedulerCycleCompletedPayload
   ensures: EventHandler<AutomationRunStarted> receives AutomationRunStartedPayload

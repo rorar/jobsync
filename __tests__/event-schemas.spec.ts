@@ -22,8 +22,6 @@ import {
   ModuleReactivatedPayloadSchema,
   // Retention
   RetentionCompletedPayloadSchema,
-  // Notification
-  NotificationCreatedPayloadSchema,
   // Scheduler coordination
   SchedulerCycleStartedPayloadSchema,
   SchedulerCycleCompletedPayloadSchema,
@@ -324,27 +322,6 @@ describe("RetentionCompletedPayloadSchema", () => {
 
 // ---------------------------------------------------------------------------
 // Notification Schema
-// ---------------------------------------------------------------------------
-
-describe("NotificationCreatedPayloadSchema", () => {
-  it("accepts valid payload", () => {
-    const result = NotificationCreatedPayloadSchema.safeParse({
-      notificationId: "notif-1",
-      userId: "user-1",
-      notificationType: "module_deactivated",
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("rejects missing notificationType", () => {
-    const result = NotificationCreatedPayloadSchema.safeParse({
-      notificationId: "notif-1",
-      userId: "user-1",
-    });
-    expect(result.success).toBe(false);
-  });
-});
-
 // ---------------------------------------------------------------------------
 // Scheduler Coordination Schemas
 // ---------------------------------------------------------------------------
@@ -1099,7 +1076,6 @@ describe("EventPayloadSchemas registry", () => {
       "ModuleDeactivated",
       "ModuleReactivated",
       "RetentionCompleted",
-      "NotificationCreated",
       "SchedulerCycleStarted",
       "SchedulerCycleCompleted",
       "AutomationRunStarted",
@@ -1120,7 +1096,7 @@ describe("EventPayloadSchemas registry", () => {
       "CrmNoteCreated",
     ];
 
-    expect(Object.keys(EventPayloadSchemas)).toHaveLength(29);
+    expect(Object.keys(EventPayloadSchemas)).toHaveLength(28);
 
     for (const key of expectedKeys) {
       expect(EventPayloadSchemas).toHaveProperty(key);

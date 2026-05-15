@@ -24,7 +24,6 @@ export type {
   ModuleDeactivatedPayload,
   ModuleReactivatedPayload,
   RetentionCompletedPayload,
-  NotificationCreatedPayload,
   SchedulerCycleStartedPayload,
   SchedulerCycleCompletedPayload,
   AutomationRunStartedPayload,

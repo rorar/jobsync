@@ -27,7 +27,7 @@ export const DomainEventType = {
   ModuleDeactivated: "ModuleDeactivated",
   ModuleReactivated: "ModuleReactivated",
   RetentionCompleted: "RetentionCompleted",
-  NotificationCreated: "NotificationCreated",
+  // NotificationCreated removed — never published/subscribed (G6, see commit history)
   // Scheduler Coordination (spec: scheduler-coordination.allium)
   SchedulerCycleStarted: "SchedulerCycleStarted",
   SchedulerCycleCompleted: "SchedulerCycleCompleted",
@@ -130,12 +130,6 @@ export interface RetentionCompletedPayload {
   userId: string;
   purgedCount: number;
   hashesCreated: number;
-}
-
-export interface NotificationCreatedPayload {
-  notificationId: string;
-  userId: string;
-  notificationType: string;
 }
 
 // Scheduler Coordination payloads (spec: scheduler-coordination.allium)
@@ -296,7 +290,6 @@ export interface EventPayloadMap {
   ModuleDeactivated: ModuleDeactivatedPayload;
   ModuleReactivated: ModuleReactivatedPayload;
   RetentionCompleted: RetentionCompletedPayload;
-  NotificationCreated: NotificationCreatedPayload;
   SchedulerCycleStarted: SchedulerCycleStartedPayload;
   SchedulerCycleCompleted: SchedulerCycleCompletedPayload;
   AutomationRunStarted: AutomationRunStartedPayload;

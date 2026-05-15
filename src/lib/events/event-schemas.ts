@@ -24,7 +24,6 @@ import type {
   ModuleDeactivatedPayload,
   ModuleReactivatedPayload,
   RetentionCompletedPayload,
-  NotificationCreatedPayload,
   SchedulerCycleStartedPayload,
   SchedulerCycleCompletedPayload,
   AutomationRunStartedPayload,
@@ -121,16 +120,6 @@ export const RetentionCompletedPayloadSchema = z.object({
   purgedCount: z.number(),
   hashesCreated: z.number(),
 }) satisfies z.ZodType<RetentionCompletedPayload>;
-
-// ---------------------------------------------------------------------------
-// Notification Schema
-// ---------------------------------------------------------------------------
-
-export const NotificationCreatedPayloadSchema = z.object({
-  notificationId: z.string(),
-  userId: z.string(),
-  notificationType: z.string(),
-}) satisfies z.ZodType<NotificationCreatedPayload>;
 
 // ---------------------------------------------------------------------------
 // Scheduler Coordination Schemas
@@ -308,7 +297,6 @@ export const EventPayloadSchemas = {
   ModuleDeactivated: ModuleDeactivatedPayloadSchema,
   ModuleReactivated: ModuleReactivatedPayloadSchema,
   RetentionCompleted: RetentionCompletedPayloadSchema,
-  NotificationCreated: NotificationCreatedPayloadSchema,
   SchedulerCycleStarted: SchedulerCycleStartedPayloadSchema,
   SchedulerCycleCompleted: SchedulerCycleCompletedPayloadSchema,
   AutomationRunStarted: AutomationRunStartedPayloadSchema,
