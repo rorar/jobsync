@@ -16,6 +16,7 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   accepted: ["archived"],
   rejected: ["bookmarked", "archived"],
   archived: ["bookmarked"],
+  expired: ["bookmarked", "archived"],
   saved: ["applied", "archived", "rejected"],
   draft: ["applied", "archived", "rejected"],
 };

@@ -11,6 +11,7 @@ import {
   type HealthCheckConfig,
   type DependencyHealthCheck,
 } from "./manifest";
+import { handleAuthFailure } from "./degradation";
 
 const MAX_FAILURES_BEFORE_UNREACHABLE = 3;
 
@@ -150,6 +151,17 @@ export async function checkModuleHealth(
   const probeResult = await probeEndpoint(resolvedHealthConfig, registered);
   const responseTimeMs = Date.now() - start;
 
+  // Auth failure escalation: immediately trigger degradation bridge
+  // (spec: AuthFailureEscalation — 401/403 = immediate pause)
+  if (!probeResult.success && probeResult.isAuthFailure) {
+    void handleAuthFailure(
+      moduleId,
+      probeResult.error ?? "Auth failure detected by health check",
+    ).catch((err) => {
+      console.error(`[checkModuleHealth] handleAuthFailure failed for "${moduleId}":`, err);
+    });
+  }
+
   // Determine new health status based on probe result and consecutive failures
   let newHealthStatus: HealthStatus;
   let consecutiveFailures = 0;
@@ -253,7 +265,7 @@ export async function checkAllModuleHealth(): Promise<HealthCheckResult[]> {
 async function probeEndpoint(
   config: HealthCheckConfig,
   registered: RegisteredModule,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; isAuthFailure?: boolean }> {
   if (!config.endpoint) {
     return { success: true }; // No endpoint = assume healthy
   }
@@ -276,6 +288,14 @@ async function probeEndpoint(
       method: "GET",
       signal: AbortSignal.timeout(config.timeoutMs),
     });
+
+    if (response.status === 401 || response.status === 403) {
+      return {
+        success: false,
+        error: `HTTP ${response.status} ${response.statusText}`,
+        isAuthFailure: true,
+      };
+    }
 
     if (!response.ok) {
       return {

@@ -85,6 +85,15 @@ export function createDeepSeekConnector(): AIProviderConnector {
           headers: { Authorization: `Bearer ${apiKey}` },
           signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
         });
+        if (response.status === 401 || response.status === 403) {
+          return {
+            success: false,
+            error: {
+              type: "auth_failed",
+              message: "DeepSeek API key is invalid or expired",
+            },
+          };
+        }
         if (!response.ok) {
           return {
             success: false,
