@@ -318,6 +318,7 @@ entity JobContact {
     -- hiring manager, referral), and one Person can be the
     -- contact for multiple Jobs.
     -- Pattern: same join-entity pattern as TaskTarget/NoteTarget.
+    user_id: String
     job: Job
     person: Person
     role: String?
@@ -565,6 +566,34 @@ rule MergePersons {
         -- Winner's field values take precedence.
         -- Loser's emails/phones are appended with is_primary = false.
         -- Loser's company associations are appended with is_primary = false.
+}
+
+rule AddJobContact {
+    -- Link a Person to a Job as a contact/stakeholder.
+    when: AddJobContact(user, job, person, role?)
+
+    requires: job.user_id = user.id
+    requires: person.user_id = user.id
+    requires: not exists JobContact{job, person}
+
+    ensures: JobContact.created(
+        user_id: user.id,
+        job: job,
+        person: person,
+        role: role,
+        created_at: now
+    )
+    ensures: ContactUpdated(person_id: person.id, user_id: user.id)
+}
+
+rule RemoveJobContact {
+    -- Unlink a Person from a Job.
+    when: RemoveJobContact(user, job_contact)
+
+    requires: job_contact.user_id = user.id
+
+    ensures: not exists job_contact
+    ensures: ContactUpdated(person_id: job_contact.person.id, user_id: user.id)
 }
 
 rule ExpireAutoCreatedPersons {
