@@ -60,6 +60,56 @@ describe("isEditTransitionValid", () => {
     expect(isEditTransitionValid("archived", "bookmarked")).toBe(true);
   });
 
+  // --- ET-2: offer + accepted coverage ---
+
+  it("allows offer → accepted", () => {
+    expect(isEditTransitionValid("offer", "accepted")).toBe(true);
+  });
+
+  it("allows offer → rejected", () => {
+    expect(isEditTransitionValid("offer", "rejected")).toBe(true);
+  });
+
+  it("allows offer → archived", () => {
+    expect(isEditTransitionValid("offer", "archived")).toBe(true);
+  });
+
+  it("rejects offer → interview (backward skip)", () => {
+    expect(isEditTransitionValid("offer", "interview")).toBe(false);
+  });
+
+  it("allows accepted → archived (only valid target)", () => {
+    expect(isEditTransitionValid("accepted", "archived")).toBe(true);
+  });
+
+  it("rejects accepted → bookmarked", () => {
+    expect(isEditTransitionValid("accepted", "bookmarked")).toBe(false);
+  });
+
+  // --- ET-3: interview forward path ---
+
+  it("allows interview → offer", () => {
+    expect(isEditTransitionValid("interview", "offer")).toBe(true);
+  });
+
+  // --- ET-4: expired exhaustive rejections ---
+
+  it("rejects expired → interview", () => {
+    expect(isEditTransitionValid("expired", "interview")).toBe(false);
+  });
+
+  it("rejects expired → offer", () => {
+    expect(isEditTransitionValid("expired", "offer")).toBe(false);
+  });
+
+  it("rejects expired → accepted", () => {
+    expect(isEditTransitionValid("expired", "accepted")).toBe(false);
+  });
+
+  it("rejects expired → rejected", () => {
+    expect(isEditTransitionValid("expired", "rejected")).toBe(false);
+  });
+
   // --- Legacy statuses ---
 
   it("allows draft → applied", () => {

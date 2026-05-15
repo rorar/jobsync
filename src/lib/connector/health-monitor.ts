@@ -11,7 +11,6 @@ import {
   type HealthCheckConfig,
   type DependencyHealthCheck,
 } from "./manifest";
-import { handleAuthFailure } from "./degradation";
 
 const MAX_FAILURES_BEFORE_UNREACHABLE = 3;
 
@@ -40,30 +39,36 @@ export async function checkDependencyHealth(
     return { status: HealthStatus.HEALTHY, results: [] };
   }
 
-  const results: DependencyCheckResult[] = [];
-
-  for (const dep of dependencies) {
-    try {
+  // Probe all dependencies concurrently (BP-4: was sequential for..of)
+  const settled = await Promise.allSettled(
+    dependencies.map(async (dep) => {
       const response = await fetch(dep.endpoint, {
         method: "GET",
         signal: AbortSignal.timeout(dep.timeoutMs),
       });
+      return { dep, response };
+    }),
+  );
 
-      results.push({
+  const results: DependencyCheckResult[] = settled.map((outcome, i) => {
+    const dep = dependencies[i];
+    if (outcome.status === "fulfilled") {
+      const { response } = outcome.value;
+      return {
         id: dep.id,
         name: dep.name,
         success: response.ok,
         error: response.ok ? undefined : `HTTP ${response.status} ${response.statusText}`,
-      });
-    } catch (error) {
-      results.push({
-        id: dep.id,
-        name: dep.name,
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
+      };
     }
-  }
+    const error = outcome.reason;
+    return {
+      id: dep.id,
+      name: dep.name,
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  });
 
   const anyFailed = results.some((r) => !r.success);
   return {
@@ -151,16 +156,9 @@ export async function checkModuleHealth(
   const probeResult = await probeEndpoint(resolvedHealthConfig, registered);
   const responseTimeMs = Date.now() - start;
 
-  // Auth failure escalation: immediately trigger degradation bridge
-  // (spec: AuthFailureEscalation — 401/403 = immediate pause)
-  if (!probeResult.success && probeResult.isAuthFailure) {
-    void handleAuthFailure(
-      moduleId,
-      probeResult.error ?? "Auth failure detected by health check",
-    ).catch((err) => {
-      console.error(`[checkModuleHealth] handleAuthFailure failed for "${moduleId}":`, err);
-    });
-  }
+  // Note: isAuthFailure is diagnostic only — health probes do NOT trigger
+  // handleAuthFailure (spec: HealthStatusEscalation is notification-only,
+  // AuthFailureEscalation fires on actual operations via providers.ts).
 
   // Determine new health status based on probe result and consecutive failures
   let newHealthStatus: HealthStatus;

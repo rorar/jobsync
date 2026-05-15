@@ -1,25 +1,14 @@
 /**
- * Standalone transition validation for the edit form path (updateJob).
+ * Edit-form transition validation for updateJob.
  *
- * This duplicates the VALID_TRANSITIONS map from status-machine.ts intentionally
- * so that the edit form has its own enforcement boundary. Any future changes to
- * the canonical state machine MUST be mirrored here.
+ * Imports the canonical VALID_TRANSITIONS from status-machine.ts (single
+ * source of truth). The previous copy diverged once (missing `expired`) —
+ * importing eliminates the sync-discipline requirement entirely.
  *
  * Spec: specs/crm-workflow.allium (state_machine JobStatusTransitions)
  */
 
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  bookmarked: ["applied", "archived", "rejected"],
-  applied: ["interview", "rejected", "archived"],
-  interview: ["offer", "rejected", "archived", "interview"],
-  offer: ["accepted", "rejected", "archived"],
-  accepted: ["archived"],
-  rejected: ["bookmarked", "archived"],
-  archived: ["bookmarked"],
-  expired: ["bookmarked", "archived"],
-  saved: ["applied", "archived", "rejected"],
-  draft: ["applied", "archived", "rejected"],
-};
+import { VALID_TRANSITIONS } from "./status-machine";
 
 /**
  * Check whether a status transition is valid according to the state machine.

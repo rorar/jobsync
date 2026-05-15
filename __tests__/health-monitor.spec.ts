@@ -1,6 +1,6 @@
 // Polyfill AbortSignal.timeout for jsdom test environment
 if (typeof AbortSignal.timeout !== "function") {
-  (AbortSignal as any).timeout = (ms: number) => {
+  (AbortSignal as unknown as Record<string, unknown>).timeout = (ms: number) => {
     const controller = new AbortController();
     setTimeout(() => controller.abort(), ms);
     return controller.signal;
@@ -18,6 +18,15 @@ jest.mock("@/lib/db", () => {
   };
   return { __esModule: true, default: mockPrisma };
 });
+
+// BP-1: Mock degradation + url-validation to prevent live imports
+jest.mock("@/lib/connector/degradation", () => ({
+  handleAuthFailure: jest.fn().mockResolvedValue({ pausedCount: 0 }),
+}));
+
+jest.mock("@/lib/url-validation", () => ({
+  isBlockedHealthCheckUrl: jest.fn(() => false),
+}));
 
 jest.mock("@/lib/connector/registry", () => {
   const registryStore = new Map<string, any>();

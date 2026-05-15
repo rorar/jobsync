@@ -57,6 +57,13 @@ jest.mock("@/lib/url-validation", () => ({
   }),
 }));
 
+// BP-2: Mock moduleRegistry to prevent real self-registration side effects
+jest.mock("@/lib/connector/registry", () => ({
+  moduleRegistry: {
+    register: jest.fn(),
+  },
+}));
+
 import { createOllamaConnector } from "@/lib/connector/ai-provider/modules/ollama";
 import { createDeepSeekConnector } from "@/lib/connector/ai-provider/modules/deepseek";
 import { createOpenAIConnector } from "@/lib/connector/ai-provider/modules/openai";

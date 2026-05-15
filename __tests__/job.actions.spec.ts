@@ -91,6 +91,19 @@ jest.mock("@/lib/crm/status-machine", () => ({
   getValidTargets: jest.fn().mockReturnValue([]),
   STATUS_ORDER: ["bookmarked", "applied", "interview", "offer", "rejected", "ghosted", "withdrawn"],
   COLLAPSED_BY_DEFAULT: [],
+  // CR-2: validate-edit-transition.ts now imports VALID_TRANSITIONS from status-machine.ts
+  VALID_TRANSITIONS: {
+    bookmarked: ["applied", "archived", "rejected"],
+    applied: ["interview", "rejected", "archived"],
+    interview: ["offer", "rejected", "archived", "interview"],
+    offer: ["accepted", "rejected", "archived"],
+    accepted: ["archived"],
+    rejected: ["bookmarked", "archived"],
+    archived: ["bookmarked"],
+    expired: ["bookmarked", "archived"],
+    saved: ["applied", "archived", "rejected"],
+    draft: ["applied", "archived", "rejected"],
+  },
 }));
 
 describe("jobActions", () => {
