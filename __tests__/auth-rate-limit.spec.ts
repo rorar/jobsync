@@ -20,7 +20,6 @@ import {
   checkAuthRateLimit,
   getClientIp,
   resetAuthRateLimitStore,
-  type AuthRateLimitResult,
 } from "@/lib/auth/auth-rate-limit";
 
 describe("checkAuthRateLimit", () => {
@@ -156,10 +155,10 @@ describe("getClientIp", () => {
     mockHeaders.clear();
   });
 
-  it("extracts IP from X-Forwarded-For (first entry)", async () => {
+  it("extracts IP from X-Forwarded-For (rightmost = trusted proxy)", async () => {
     mockHeaders.set("x-forwarded-for", "1.2.3.4, 10.0.0.1, 172.16.0.1");
     const ip = await getClientIp();
-    expect(ip).toBe("1.2.3.4");
+    expect(ip).toBe("172.16.0.1");
   });
 
   it("falls back to X-Real-IP", async () => {
@@ -181,8 +180,8 @@ describe("getClientIp", () => {
   });
 
   it("trims whitespace from X-Forwarded-For entries", async () => {
-    mockHeaders.set("x-forwarded-for", "  1.2.3.4  , 10.0.0.1");
+    mockHeaders.set("x-forwarded-for", "  1.2.3.4  , 10.0.0.1  ");
     const ip = await getClientIp();
-    expect(ip).toBe("1.2.3.4");
+    expect(ip).toBe("10.0.0.1");
   });
 });
