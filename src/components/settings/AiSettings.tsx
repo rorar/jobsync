@@ -59,7 +59,10 @@ function AiSettings() {
   const [runningModelError, setRunningModelError] = useState<string>("");
   const [runningModelName, setRunningModelName] = useState<string>("");
 
-  const setSelectedModule = (moduleId: AiModuleId) => {
+  const AI_MODULE_IDS = Object.values(AiModuleId) as string[];
+  const setSelectedModule = (value: string) => {
+    if (!AI_MODULE_IDS.includes(value)) return;
+    const moduleId = value as AiModuleId;
     setSelectedModel({ moduleId, model: undefined });
     setFetchError("");
     setRunningModelError("");
@@ -70,14 +73,18 @@ function AiSettings() {
     setRunningModelName("");
     setRunningModelError("");
 
-    if (selectedModel.moduleId === AiModuleId.OLLAMA) {
-      const result = await checkIfModelIsRunning(model, selectedModel.moduleId);
-      if (result.isRunning && result.runningModelName) {
-        setRunningModelName(result.runningModelName);
-        await keepModelAlive(result.runningModelName);
-      } else if (result.error) {
-        setRunningModelError(result.error);
+    try {
+      if (selectedModel.moduleId === AiModuleId.OLLAMA) {
+        const result = await checkIfModelIsRunning(model, selectedModel.moduleId);
+        if (result.isRunning && result.runningModelName) {
+          setRunningModelName(result.runningModelName);
+          await keepModelAlive(result.runningModelName);
+        } else if (result.error) {
+          setRunningModelError(result.error);
+        }
       }
+    } catch (error) {
+      console.error("Error checking model status:", error);
     }
   };
 

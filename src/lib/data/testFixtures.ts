@@ -15,7 +15,7 @@ import type {
   PushSubscriptionSnapshot,
   WebhookEndpointSnapshot,
 } from "@/lib/notifications/dispatch-context";
-import type { NotificationChannel, NotificationDraft, ChannelResult } from "@/lib/notifications/types";
+import type { NotificationDraft } from "@/lib/notifications/types";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
 import type { Automation } from "@/models/automation.model";
 import type { Question } from "@/models/question.model";
@@ -1901,20 +1901,4 @@ export function makeTestNotificationDraft(
   };
 }
 
-/**
- * Factory for mock NotificationChannel (jest.fn-based).
- * Extracted from channel-router.spec.ts reference implementation.
- */
-export function makeMockChannel(
-  name: string,
-  overrides: Partial<{ dispatch: jest.Mock }> = {},
-): NotificationChannel & { dispatch: jest.Mock } {
-  return {
-    name,
-    dispatch:
-      overrides.dispatch ??
-      jest
-        .fn<Promise<ChannelResult>, [NotificationDraft, DispatchContext]>()
-        .mockResolvedValue({ success: true, channel: name }),
-  };
-}
+// makeMockChannel moved to __tests__/helpers/mock-channel.ts (BP-3: jest.fn not in production tree)

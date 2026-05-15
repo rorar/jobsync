@@ -33,13 +33,13 @@ jest.mock("@/models/notification.model", () => ({
 
 import { ChannelRouter } from "@/lib/notifications/channel-router";
 import type {
-  NotificationChannel,
   NotificationDraft,
   ChannelResult,
 } from "@/lib/notifications/types";
 import type { DispatchContext } from "@/lib/notifications/dispatch-context";
 import type { NotificationPreferences } from "@/models/notification.model";
-import { makeTestDispatchContext, makeTestNotificationDraft, makeMockChannel } from "@/lib/data/testFixtures";
+import { makeTestDispatchContext, makeTestNotificationDraft } from "@/lib/data/testFixtures";
+import { makeMockChannel } from "./helpers/mock-channel";
 
 // ---------------------------------------------------------------------------
 // Helpers

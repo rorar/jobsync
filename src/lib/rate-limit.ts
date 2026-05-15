@@ -268,7 +268,7 @@ export function createRichSlidingWindowLimiter(
       maxRequests: number = defaultMaxRequests,
       windowMs: number = defaultWindowMs,
     ): RichRateLimitResult {
-      ensureCleanup(state, defaultWindowMs, cleanupIntervalMs);
+      ensureCleanup(state, Math.max(defaultWindowMs, windowMs), cleanupIntervalMs);
 
       const result = slidingWindowCheck(
         state,
