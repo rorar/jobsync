@@ -75,7 +75,7 @@ const AiResumeReviewSection = ({ resume }: AiSectionProps) => {
       toast({
         variant: "destructive",
         title: t("common.error"),
-        description: err.message || "Failed to get AI review",
+        description: err.message || t("profile.aiReviewFailed"),
       });
     },
   });
@@ -85,7 +85,7 @@ const AiResumeReviewSection = ({ resume }: AiSectionProps) => {
       toast({
         variant: "destructive",
         title: t("common.error"),
-        description: "Resume content is required",
+        description: t("profile.resumeRequired"),
       });
       return;
     }

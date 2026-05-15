@@ -97,7 +97,7 @@ function DeveloperSettings() {
       toast({
         variant: "destructive",
         title: t("settings.error"),
-        description: "URL must be http:// or https:// with no credentials",
+        description: t("settings.invalidBaseUrl"),
       });
       return;
     }

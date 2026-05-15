@@ -16,6 +16,7 @@ import {
 } from "@/actions/activity.actions";
 import { Activity, ActivityType } from "@/models/activity.model";
 import { toast } from "@/components/ui/use-toast";
+import { useTranslations } from "@/i18n";
 import { APP_CONSTANTS } from "@/lib/constants";
 
 interface ActivityContextType {
@@ -32,6 +33,7 @@ const ActivityContext = createContext<ActivityContextType | undefined>(
 );
 
 export function ActivityProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslations();
   const [currentActivity, setCurrentActivity] = useState<Activity>();
   const [timeElapsed, setTimeElapsed] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -109,20 +111,20 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
         toast({
           variant: "success",
           description: autoStop
-            ? `Activity auto-stopped after reaching maximum duration of ${maxDurationMinutes / 60} hours`
-            : "Activity stopped successfully",
+            ? t("activities.autoStopped").replace("{hours}", String(maxDurationMinutes / 60))
+            : t("activities.stoppedSuccess"),
         });
         return true;
       } else {
         toast({
           variant: "destructive",
-          title: "Error!",
+          title: t("activities.error"),
           description: message,
         });
         return false;
       }
     },
-    [currentActivity, stopTimer]
+    [currentActivity, stopTimer, t]
   );
 
   const startActivity = useCallback(
@@ -139,14 +141,14 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
         setCurrentActivity(newActivity as Activity);
         toast({
           variant: "success",
-          description: "Activity started successfully",
+          description: t("activities.startedSuccess"),
         });
         setIsLoading(false);
         return true;
       } else {
         toast({
           variant: "destructive",
-          title: "Error!",
+          title: t("activities.error"),
           description: message,
         });
         setIsLoading(false);

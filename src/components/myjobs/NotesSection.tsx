@@ -56,7 +56,7 @@ export function NotesSection({ jobId }: NotesSectionProps) {
     if (result.success) {
       toast({
         variant: "success",
-        description: "Note deleted successfully",
+        description: t("jobs.noteDeleted"),
       });
       loadNotes();
     } else {

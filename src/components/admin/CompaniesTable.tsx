@@ -39,9 +39,8 @@ function CompaniesTable({
     if (company._count?.jobsApplied! > 0) {
       setAlert({
         openState: true,
-        title: "Applied jobs exist!",
-        description:
-          "Associated jobs applied must be 0 to be able to delete this company",
+        title: t("admin.appliedJobsExist"),
+        description: t("admin.appliedJobsExistDeleteDesc"),
         deleteAction: false,
       });
     } else {

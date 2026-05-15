@@ -108,7 +108,7 @@ export function NotesCollapsibleSection({
       if (result.success) {
         toast({
           variant: "success",
-          description: "Note deleted successfully",
+          description: t("jobs.noteDeleted"),
         });
         setDeleteConfirmId(null);
         loadNotes();

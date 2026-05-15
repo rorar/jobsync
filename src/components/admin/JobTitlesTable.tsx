@@ -33,9 +33,8 @@ function JobTitlesTable({ jobTitles, reloadJobTitles }: JobTitlesTableProps) {
     if (title._count?.jobs! > 0) {
       setAlert({
         openState: true,
-        title: "Applied jobs exist!",
-        description:
-          "Associated jobs applied must be 0 to be able to delete this job title",
+        title: t("admin.appliedJobsExist"),
+        description: t("admin.deleteJobTitleBlocked"),
         deleteAction: false,
       });
     } else {

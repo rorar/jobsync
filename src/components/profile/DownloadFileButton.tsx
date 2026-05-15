@@ -2,6 +2,7 @@
 
 import { Paperclip } from "lucide-react";
 import { toast } from "../ui/use-toast";
+import { useTranslations } from "@/i18n";
 
 interface DownloadFileButtonProps {
   fileName: string;
@@ -12,6 +13,7 @@ export function DownloadFileButton({
   fileName,
   fileTitle,
 }: DownloadFileButtonProps) {
+  const { t } = useTranslations();
   const handleDownload = async () => {
     try {
       // Use fileName (not filePath) to prevent server path leakage (SEC-11)
@@ -37,14 +39,14 @@ export function DownloadFileButton({
       } else {
         toast({
           variant: "destructive",
-          description: "Failed to download file",
+          description: t("profile.downloadFailed"),
         });
       }
     } catch (error) {
       console.error("Download error:", error);
       toast({
         variant: "destructive",
-        description: "Failed to download file",
+        description: t("profile.downloadFailed"),
       });
     }
   };

@@ -107,7 +107,7 @@ function DisplaySettings() {
       console.error("Error saving display settings:", error);
       toast({
         variant: "destructive",
-        title: "Error",
+        title: t("settings.error"),
         description: t("settings.saveFailed"),
       });
     } finally {

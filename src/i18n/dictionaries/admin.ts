@@ -49,6 +49,8 @@ export const admin = {
     "admin.companyLogo": "Company Logo",
     "admin.companyDeleted": "Company has been deleted successfully",
     "admin.appliedJobsExistDeleteDesc": "Associated jobs applied must be 0 to be able to delete this company",
+    "admin.deleteLocationBlocked": "Associated jobs applied must be 0 to be able to delete this location",
+    "admin.deleteJobTitleBlocked": "Associated jobs applied must be 0 to be able to delete this job title",
   },
   de: {
     "admin.companies": "Unternehmen",
@@ -100,6 +102,8 @@ export const admin = {
     "admin.companyLogo": "Unternehmenslogo",
     "admin.companyDeleted": "Unternehmen wurde erfolgreich gelöscht",
     "admin.appliedJobsExistDeleteDesc": "Die zugehörigen Bewerbungen müssen 0 sein, um dieses Unternehmen löschen zu können",
+    "admin.deleteLocationBlocked": "Die zugehörigen Bewerbungen müssen 0 sein, um diesen Standort löschen zu können",
+    "admin.deleteJobTitleBlocked": "Die zugehörigen Bewerbungen müssen 0 sein, um diesen Jobtitel löschen zu können",
   },
   fr: {
     "admin.companies": "Entreprises",
@@ -151,6 +155,8 @@ export const admin = {
     "admin.companyLogo": "Logo de l'entreprise",
     "admin.companyDeleted": "Entreprise supprimée avec succès",
     "admin.appliedJobsExistDeleteDesc": "Les candidatures associées doivent être à 0 pour pouvoir supprimer cette entreprise",
+    "admin.deleteLocationBlocked": "Les candidatures associées doivent être à 0 pour pouvoir supprimer ce lieu",
+    "admin.deleteJobTitleBlocked": "Les candidatures associées doivent être à 0 pour pouvoir supprimer cet intitulé de poste",
   },
   es: {
     "admin.companies": "Empresas",
@@ -202,5 +208,7 @@ export const admin = {
     "admin.companyLogo": "Logo de la empresa",
     "admin.companyDeleted": "Empresa eliminada con éxito",
     "admin.appliedJobsExistDeleteDesc": "Las solicitudes asociadas deben ser 0 para poder eliminar esta empresa",
+    "admin.deleteLocationBlocked": "Las solicitudes asociadas deben ser 0 para poder eliminar esta ubicación",
+    "admin.deleteJobTitleBlocked": "Las solicitudes asociadas deben ser 0 para poder eliminar este título de empleo",
   },
 } as const;

@@ -94,6 +94,9 @@ export const profile = {
     "profile.resumeCreated": "Resume created successfully",
     "profile.resumeUpdated": "Resume updated successfully",
     "profile.saveAndOpen": "Save & Open",
+    "profile.aiReviewFailed": "Failed to get AI review",
+    "profile.resumeRequired": "Resume content is required",
+    "profile.downloadFailed": "Failed to download file",
   },
   de: {
     "profile.title": "Profil",
@@ -190,6 +193,9 @@ export const profile = {
     "profile.resumeCreated": "Lebenslauf erfolgreich erstellt",
     "profile.resumeUpdated": "Lebenslauf erfolgreich aktualisiert",
     "profile.saveAndOpen": "Speichern & Öffnen",
+    "profile.aiReviewFailed": "KI-Bewertung konnte nicht abgerufen werden",
+    "profile.resumeRequired": "Lebenslaufinhalt ist erforderlich",
+    "profile.downloadFailed": "Datei konnte nicht heruntergeladen werden",
   },
   fr: {
     "profile.title": "Profil",
@@ -286,6 +292,9 @@ export const profile = {
     "profile.resumeCreated": "CV créé avec succès",
     "profile.resumeUpdated": "CV mis à jour avec succès",
     "profile.saveAndOpen": "Enregistrer et ouvrir",
+    "profile.aiReviewFailed": "Échec de l'obtention de l'évaluation IA",
+    "profile.resumeRequired": "Le contenu du CV est requis",
+    "profile.downloadFailed": "Échec du téléchargement du fichier",
   },
   es: {
     "profile.title": "Perfil",
@@ -382,5 +391,8 @@ export const profile = {
     "profile.resumeCreated": "Currículum creado correctamente",
     "profile.resumeUpdated": "Currículum actualizado correctamente",
     "profile.saveAndOpen": "Guardar y abrir",
+    "profile.aiReviewFailed": "Error al obtener la evaluación de IA",
+    "profile.resumeRequired": "El contenido del currículum es obligatorio",
+    "profile.downloadFailed": "Error al descargar el archivo",
   },
 } as const;
