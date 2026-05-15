@@ -4,8 +4,8 @@ import {
   createResumeProfile,
   deleteFile,
   editResume,
-  uploadFile,
 } from "@/actions/profile.actions";
+import { uploadFile } from "@/lib/upload";
 import { getResumesDir } from "@/lib/storage";
 import path from "path";
 import fs from "fs";

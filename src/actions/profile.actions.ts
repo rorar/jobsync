@@ -13,10 +13,8 @@ import { ActionResult } from "@/models/actionResult";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getDataDir } from "@/lib/storage";
 import path from "path";
 import fs from "fs";
-import { writeFile } from "fs/promises";
 
 // Narrow Prisma string to domain enum
 function toResumeSection<T extends { sectionType: string }>(
@@ -472,24 +470,7 @@ export const deleteResumeById = async (
   }
 };
 
-export const uploadFile = async (file: File, dir: string, filePath: string) => {
-  // Validate path is within the expected directory to prevent path traversal
-  const dataDir = getDataDir();
-  const resolvedDir = path.resolve(dir);
-  const resolvedPath = path.resolve(filePath);
-  if (!resolvedDir.startsWith(dataDir) || !resolvedPath.startsWith(resolvedDir)) {
-    throw new Error("Invalid upload path");
-  }
-
-  const bytes = await file.arrayBuffer();
-  const buffer = new Uint8Array(bytes);
-
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  await writeFile(filePath, buffer);
-};
+// uploadFile moved to src/lib/upload.ts (server-only, ADR-019 — not a Server Action)
 
 export const deleteFile = async (fileId: string, callerUserId?: string) => {
   try {
