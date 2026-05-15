@@ -257,6 +257,8 @@ const ALLOWED_DATA_FIELDS = new Set<string>([
   "reason",
   // Batch
   "batchSize",
+  // CRM-related
+  "personName",
 ]);
 
 // ---------------------------------------------------------------------------

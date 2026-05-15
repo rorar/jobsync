@@ -527,6 +527,7 @@ async function handleReminderTriggered(
   if (!notificationType) return;
 
   const titleKey = REMINDER_TITLE_KEY_MAP[payload.reason];
+  if (!titleKey) return;
   const severity = REMINDER_SEVERITY_MAP[payload.reason] ?? "info";
   const actorType: NotificationActorType = "system";
 
@@ -583,6 +584,7 @@ async function handleInterviewScheduled(
   const extendedData: NotificationDataExtended = {
     interviewId: payload.interviewId,
     jobId: payload.jobId,
+    jobTitle,
     ...(payload.personId ? { personId: payload.personId } : {}),
     titleKey,
     titleParams,
@@ -614,9 +616,9 @@ async function handleContactCreated(
   const payload = safeParsePayload(ContactCreatedPayloadSchema, event);
   if (!payload) return;
 
-  // Only notify for manually created contacts — auto_created/imported would
-  // flood notifications during automation runs. Users already receive
-  // vacancy_batch_staged for automation-sourced data.
+  // Source guard BEFORE buildDispatchContext: auto_created/imported events are
+  // filtered here to avoid 6 unnecessary DB queries per event. Manual contacts
+  // only — auto_created/imported would flood during automation runs.
   if (payload.source !== "manual") return;
 
   const ctx = await buildDispatchContext(payload.userId);
@@ -633,10 +635,12 @@ async function handleContactCreated(
   const titleKey = "notifications.contactFromJob.title";
   const titleParams = { personName };
   const severity: NotificationSeverity = "info";
-  const actorType: NotificationActorType = "system";
+  // "user" because this handler only fires for source === "manual" (user action)
+  const actorType: NotificationActorType = "user";
 
   const extendedData: NotificationDataExtended = {
     personId: payload.personId,
+    personName,
     titleKey,
     titleParams,
     actorType,
@@ -644,7 +648,7 @@ async function handleContactCreated(
   };
 
   const message = t(ctx.locale, "notifications.contactFromJob")
-    .replace("{jobTitle}", personName);
+    .replace("{personName}", personName);
 
   await dispatchNotification(
     {

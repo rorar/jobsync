@@ -93,7 +93,7 @@ const DISPATCHER_MOCK_TRANSLATIONS = {
     "notifications.jobStatusChanged": "Job status changed to {newStatus}",
     "notifications.retentionExpired": "Contact archived — retention period expired",
     "notifications.interviewScheduled": "Interview scheduled for {jobTitle}",
-    "notifications.contactFromJob": "New contact from {jobTitle}",
+    "notifications.contactFromJob": "New contact: {personName}",
     "notifications.interviewReminder.title": "Interview reminder: {jobTitle}",
     "notifications.followUpDue.title": "Follow-up due: {title}",
     "notifications.retentionExpired.title": "Contact archived — retention expired",
@@ -110,7 +110,7 @@ const DISPATCHER_MOCK_TRANSLATIONS = {
     "notifications.jobStatusChanged": "Job-Status geändert zu {newStatus}",
     "notifications.retentionExpired": "Kontakt archiviert — Aufbewahrungsfrist abgelaufen",
     "notifications.interviewScheduled": "Interview für {jobTitle} geplant",
-    "notifications.contactFromJob": "Neuer Kontakt aus {jobTitle}",
+    "notifications.contactFromJob": "Neuer Kontakt: {personName}",
     "notifications.interviewReminder.title": "Interview-Erinnerung: {jobTitle}",
     "notifications.followUpDue.title": "Follow-up fällig: {title}",
     "notifications.retentionExpired.title": "Kontakt archiviert — Aufbewahrungsfrist abgelaufen",
@@ -647,7 +647,7 @@ describe("NotificationDispatcher", () => {
           userId: "user-1",
           type: "contact_from_job",
           titleKey: "notifications.contactFromJob.title",
-          actorType: "system",
+          actorType: "user",
           severity: "info",
         }),
       });
@@ -691,13 +691,14 @@ describe("NotificationDispatcher", () => {
         expect.objectContaining({
           titleKey: "notifications.contactFromJob.title",
           titleParams: { personName: "Jane Doe" },
-          actorType: "system",
+          actorType: "user",
           severity: "info",
         }),
       );
       expect(call.data.data).toEqual(
         expect.objectContaining({
           personId: "person-1",
+          personName: "Jane Doe",
           titleKey: "notifications.contactFromJob.title",
         }),
       );

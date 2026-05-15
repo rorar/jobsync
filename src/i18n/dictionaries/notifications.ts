@@ -66,7 +66,7 @@ export const notifications = {
     "notifications.interviewScheduled": "Interview scheduled for {jobTitle}",
     "notifications.interviewReminder": "Interview reminder for {jobTitle}",
     "notifications.followUpDue": "Follow-up due for {title}",
-    "notifications.contactFromJob": "New contact from {jobTitle}",
+    "notifications.contactFromJob": "New contact: {personName}",
     "notifications.retentionExpired": "Contact archived — retention period expired",
 
     // Group headers (time buckets)
@@ -161,7 +161,7 @@ export const notifications = {
     "notifications.interviewScheduled": "Interview für {jobTitle} geplant",
     "notifications.interviewReminder": "Erinnerung: Interview für {jobTitle}",
     "notifications.followUpDue": "Follow-up fällig: {title}",
-    "notifications.contactFromJob": "Neuer Kontakt aus {jobTitle}",
+    "notifications.contactFromJob": "Neuer Kontakt: {personName}",
     "notifications.retentionExpired": "Kontakt archiviert — Aufbewahrungsfrist abgelaufen",
 
     // Group headers
@@ -248,7 +248,7 @@ export const notifications = {
     "notifications.interviewScheduled": "Entretien programmé pour {jobTitle}",
     "notifications.interviewReminder": "Rappel : entretien pour {jobTitle}",
     "notifications.followUpDue": "Suivi à effectuer : {title}",
-    "notifications.contactFromJob": "Nouveau contact depuis {jobTitle}",
+    "notifications.contactFromJob": "Nouveau contact : {personName}",
     "notifications.retentionExpired": "Contact archivé — période de rétention expirée",
 
     // Group headers
@@ -335,7 +335,7 @@ export const notifications = {
     "notifications.interviewScheduled": "Entrevista programada para {jobTitle}",
     "notifications.interviewReminder": "Recordatorio: entrevista para {jobTitle}",
     "notifications.followUpDue": "Seguimiento pendiente: {title}",
-    "notifications.contactFromJob": "Nuevo contacto de {jobTitle}",
+    "notifications.contactFromJob": "Nuevo contacto: {personName}",
     "notifications.retentionExpired": "Contacto archivado — periodo de retención expirado",
 
     // Group headers
