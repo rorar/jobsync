@@ -38,16 +38,16 @@
 
 | ID | Finding | Effort |
 |----|---------|--------|
-| G6 | `NotificationCreated` dead event (wire or delete) | 15 min |
+| ~~G6~~ | ~~`NotificationCreated` dead event~~ | ~~15 min~~ | **RESOLVED** (`1cc7a42`, 2026-05-15: removed from event-types, schemas, spec, tests) |
 | ~~G7~~ | ~~8 hardcoded English strings in `ai.utils.ts` (Ollama errors)~~ | ~~30 min~~ | **RESOLVED** (session 2026-05-15: 10 i18n keys × 4 locales, ai.utils.ts returns keys, UI calls t()) |
-| G11 | `validate-edit-transition.ts` missing `expired` | 15 min |
-| G14 | Push notifications hardcoded `/dashboard` (no deep links) | 30 min |
-| G15 | No notification retention cleanup (spec: 30 days) | 1 Std |
-| G17 | `rescheduled→rescheduled` transition missing in code (spec allows it) | 15 min |
+| ~~G11~~ | ~~`validate-edit-transition.ts` missing `expired`~~ | ~~15 min~~ | **RESOLVED** (`ccdfcc2`, 2026-05-15: added expired, then CR-2 eliminated duplication via import) |
+| ~~G14~~ | ~~Push notifications hardcoded `/dashboard`~~ | ~~30 min~~ | **RESOLVED** (`76733dc`, 2026-05-15: central URL resolution in ChannelRouter via buildNotificationActions) |
+| G15 | No notification retention cleanup (spec: 30 days) | 1 Std | **RESOLVED** (retention-cron.ts rule purgeOldNotifications, verified 2026-05-15) |
+| ~~G17~~ | ~~`rescheduled→rescheduled` transition missing~~ | ~~15 min~~ | **RESOLVED** (`76733dc`, 2026-05-15: added to person.model.ts + crm.allium) |
 | ~~G23~~ | ~~API v1 DELETE divergent cascades~~ | — | **Likely RESOLVED** — both paths now use "cascade via onDelete rules" (IF-3 migration added Cascade to all CRM FKs) |
 | ~~#5~~ | ~~`extractDomain` Unicode bug~~ | — | **RESOLVED** — `normalize("NFD")` correctly produces "mullergmbh.com" not "mller.com" |
 | #16 | `retention_expired` maps to `contact_from_job` (semantic mismatch) + missing `.title` i18n keys | 30 min |
-| #18 | `AutomationDegraded` → CRM Timeline (moduleId now in payload, consumer subscription missing) | 30 min |
+| ~~#18~~ | ~~`AutomationDegraded` → CRM Timeline~~ | ~~30 min~~ | **RESOLVED** (`76733dc`, 2026-05-15: registerProjection added, activityType automation_degraded) |
 | #1-3 | Cleanup: `feature-map-and-gaps.md` untracked, `.full-review/` + `.full-stack-feature/` → `.gitignore` | 5 min |
 
 ---
@@ -103,3 +103,11 @@
 | G2b | AI auth failures wired to degradation bridge | `3a81dd6` |
 | G5 | newJobsCount filter fixed to `["staged","processing","ready"]` | session 2026-05-14 |
 | S1 | Account Deletion: 37 FK cascades + deleteAccount + Privacy Settings (F-1/F-2/F-4) | session 2026-05-14 (`a1dc1b3`..`8f30f72`) |
+| G6 | NotificationCreated dead event removed | `1cc7a42` |
+| G11 | expired status in validate-edit-transition (then CR-2: import delegation) | `ccdfcc2` + `6e17d27` |
+| G14 | Push deep links via central URL resolution in ChannelRouter | `76733dc` |
+| G17 | rescheduled→rescheduled self-transition (code + spec) | `76733dc` |
+| #18 | AutomationDegraded → CRM Activity Logger projection | `76733dc` |
+| G7 ext | 3 missing success toasts + activities.createdSuccess key + ES typo | `5f926d4` |
+| CR-1 | handleAuthFailure removed from health monitor (Allium spec violation) | `6e17d27` |
+| CR-2 | validate-edit-transition.ts imports from status-machine.ts (single source of truth) | `6e17d27` |
