@@ -90,11 +90,11 @@ export class PushChannel implements NotificationChannel {
       // 5. VAPID subject from context snapshot
       const vapidSubject = ctx.vapidSubject;
 
-      // 6. Build push payload
+      // 6. Build push payload (G14: use resolved deep-link URL from ChannelRouter)
       const payload = JSON.stringify({
         title: PUSH_TITLE,
         body: notification.message,
-        url: "/dashboard",
+        url: notification.url ?? "/dashboard",
         tag: notification.type,
       });
 

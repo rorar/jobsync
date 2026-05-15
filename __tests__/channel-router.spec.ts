@@ -86,8 +86,9 @@ describe("ChannelRouter", () => {
       const ctx = makeTestContext();
       const result = await router.route(draft, ctx);
 
-      expect(inApp.dispatch).toHaveBeenCalledWith(draft, ctx);
-      expect(webhook.dispatch).toHaveBeenCalledWith(draft, ctx);
+      // G14: router may enrich draft with resolved url (shallow copy), so use objectContaining
+      expect(inApp.dispatch).toHaveBeenCalledWith(expect.objectContaining(draft), ctx);
+      expect(webhook.dispatch).toHaveBeenCalledWith(expect.objectContaining(draft), ctx);
       expect(result.anySuccess).toBe(true);
       expect(result.results).toHaveLength(2);
       expect(result.results[0]).toEqual({ success: true, channel: "inApp" });

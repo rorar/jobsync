@@ -105,7 +105,7 @@ const VALID_PERSON_TRANSITIONS: Record<PersonStatus, PersonStatus[]> = {
 
 const VALID_INTERVIEW_TRANSITIONS: Record<InterviewStatus, InterviewStatus[]> = {
   scheduled: ["completed", "cancelled", "rescheduled"],
-  rescheduled: ["completed", "cancelled"],
+  rescheduled: ["completed", "cancelled", "rescheduled"],
   completed: [],
   cancelled: [],
 };

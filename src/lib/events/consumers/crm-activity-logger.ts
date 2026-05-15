@@ -32,6 +32,7 @@ import {
   CrmTaskCompletedPayloadSchema,
   CrmNoteCreatedPayloadSchema,
   VacancyPromotedPayloadSchema,
+  AutomationDegradedPayloadSchema,
   safeParsePayload,
 } from "@/lib/events/event-schemas";
 
@@ -255,5 +256,22 @@ export function registerCrmActivityLogConsumers(): void {
         details: JSON.stringify({ stagedVacancyId: p.stagedVacancyId }),
       };
     },
+  );
+
+  // AutomationDegraded → automation_degraded (module-level, no person/job target)
+  registerProjection(
+    DomainEventType.AutomationDegraded,
+    AutomationDegradedPayloadSchema,
+    "automation_degraded",
+    (p) => ({
+      userId: p.userId,
+      actorId: p.moduleId ?? p.userId,
+      linkedRecordName: p.automationName,
+      details: JSON.stringify({
+        reason: p.reason,
+        moduleName: p.moduleName ?? p.moduleId,
+        automationId: p.automationId,
+      }),
+    }),
   );
 }

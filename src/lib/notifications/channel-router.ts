@@ -26,6 +26,8 @@ import type {
 } from "@/models/notification.model";
 import type { DispatchContext } from "./dispatch-context";
 import type { NotificationChannel, NotificationDraft, ChannelResult } from "./types";
+import { buildNotificationActions } from "./deep-links";
+import type { NotificationDataExtended } from "@/models/notification.model";
 
 export interface ChannelRouterResult {
   /** At least one channel dispatched successfully */
@@ -118,7 +120,22 @@ export class ChannelRouter {
    * @param draft - The notification to dispatch
    * @param ctx   - Pre-built DispatchContext with all per-user data
    */
-  async route(draft: NotificationDraft, ctx: DispatchContext): Promise<ChannelRouterResult> {
+  async route(inputDraft: NotificationDraft, ctx: DispatchContext): Promise<ChannelRouterResult> {
+    // Phase 0: Resolve deep-link URL if not already set (G14)
+    // Central resolution ensures all channels (Push, Email, Webhook) benefit.
+    // buildNotificationActions is a pure function — no I/O, no DB.
+    // Shallow copy to avoid mutating frozen/sealed draft objects (tests use Object.freeze).
+    let draft = inputDraft;
+    if (!draft.url) {
+      const actions = buildNotificationActions(
+        draft.type,
+        (draft.data as NotificationDataExtended | null) ?? null,
+      );
+      if (actions.length > 0 && actions[0].url) {
+        draft = { ...draft, url: actions[0].url };
+      }
+    }
+
     // Phase 1: Synchronous preference gating (fast, no I/O)
     const eligibleChannels = this.channels.filter((channel) => {
       const channelId = channel.name as NotificationChannelId;

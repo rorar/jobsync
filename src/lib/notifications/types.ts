@@ -43,6 +43,10 @@ export interface NotificationDraft {
   titleParams?: Record<string, string | number>;
   reasonKey?: string;
   reasonParams?: Record<string, string | number>;
+  /** Deep-link URL resolved by ChannelRouter from buildNotificationActions().
+   *  Channels use this for CTA links (Push click target, Email button href).
+   *  Fallback: "/dashboard" if no action URL matches the notification type. */
+  url?: string;
 }
 
 /**

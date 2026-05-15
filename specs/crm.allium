@@ -252,6 +252,7 @@ entity Interview {
         scheduled -> rescheduled
         rescheduled -> completed
         rescheduled -> cancelled
+        rescheduled -> rescheduled
         terminal: completed, cancelled
     }
 }

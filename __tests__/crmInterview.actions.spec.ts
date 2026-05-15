@@ -363,20 +363,22 @@ describe("rescheduleInterview", () => {
     expect(result.message).toBe("crm.errors.interviewNotFound");
   });
 
-  it("rejects invalid transition (rescheduled → rescheduled)", async () => {
-    // rescheduled is NOT in VALID_INTERVIEW_TRANSITIONS["rescheduled"]
+  it("allows rescheduled → rescheduled self-transition (G17)", async () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
     (prisma.crmInterview.findFirst as jest.Mock).mockResolvedValue({
       id: "interview-1",
       status: "rescheduled",
       location: "Berlin HQ",
     });
+    (prisma.crmInterview.update as jest.Mock).mockResolvedValue({
+      id: "interview-1",
+      status: "rescheduled",
+    });
 
     const result = await rescheduleInterview("interview-1", FUTURE_DATE);
 
-    expect(result.success).toBe(false);
-    expect(result.message).toBe("crm.errors.invalidTransition");
-    expect(prisma.crmInterview.update).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(prisma.crmInterview.update).toHaveBeenCalled();
   });
 
   it("updates date and location, sets status to rescheduled", async () => {

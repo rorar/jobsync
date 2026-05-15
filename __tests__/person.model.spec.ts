@@ -74,6 +74,7 @@ describe("isValidInterviewTransition", () => {
     ["scheduled", "rescheduled"],
     ["rescheduled", "completed"],
     ["rescheduled", "cancelled"],
+    ["rescheduled", "rescheduled"],
   ];
 
   it.each(validTransitions)(
@@ -93,7 +94,6 @@ describe("isValidInterviewTransition", () => {
     ["cancelled", "rescheduled"],
     ["cancelled", "cancelled"],
     ["rescheduled", "scheduled"],
-    ["rescheduled", "rescheduled"],
     ["scheduled", "scheduled"],
   ];
 
