@@ -18,7 +18,6 @@ import type { DeveloperSettings } from "@/models/userSettings.model";
 import {
   getErrors,
   clearErrors,
-  getErrorCount,
   type ErrorEntry,
 } from "@/lib/error-reporter";
 

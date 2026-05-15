@@ -61,7 +61,7 @@ export async function purgeOrphanedFiles(
     } catch (error: unknown) {
       // File disappeared between readdir and stat/unlink — skip
       if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw error;
+      throw new Error(`Failed to process orphan file ${absolutePath}: ${(error as Error).message}`, { cause: error });
     }
   }
 

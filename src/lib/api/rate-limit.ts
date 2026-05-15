@@ -1,4 +1,9 @@
-import { createRichSlidingWindowLimiter } from "../rate-limit";
+import "server-only";
+
+import {
+  createRichSlidingWindowLimiter,
+  type RichRateLimitResult,
+} from "../rate-limit";
 
 /**
  * Public API Rate Limiter — sliding window for API keys and IP-based pre-auth.
@@ -20,12 +25,8 @@ import { createRichSlidingWindowLimiter } from "../rate-limit";
 const DEFAULT_MAX_REQUESTS = 60;
 const DEFAULT_WINDOW_MS = 60_000; // 1 minute
 
-interface RateLimitResult {
-  allowed: boolean;
-  remaining: number;
-  limit: number;
-  resetAt: number; // Unix timestamp in seconds
-}
+type RateLimitResult = RichRateLimitResult;
+export type { RateLimitResult };
 
 const limiter = createRichSlidingWindowLimiter({
   storeKey: "publicApiRateLimit",

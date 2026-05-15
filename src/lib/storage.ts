@@ -1,5 +1,6 @@
 import "server-only";
 
+import { statSync } from "fs";
 import path from "path";
 
 /**
@@ -33,8 +34,7 @@ const DATA_DIR: string = (() => {
 
   // 2. Docker volume mount convention
   try {
-    const fs = require("fs");
-    if (fs.statSync("/data").isDirectory()) return "/data";
+    if (statSync("/data").isDirectory()) return "/data";
   } catch {
     // Not in Docker or /data doesn't exist
   }

@@ -16,7 +16,7 @@
  */
 
 import "server-only";
-import type { z } from "zod";
+import type { ZodType } from "zod";
 import prisma from "@/lib/db";
 import { eventBus } from "@/lib/events";
 import type { DomainEvent } from "@/lib/events/event-types";
@@ -70,7 +70,7 @@ interface ActivityData {
  */
 function registerProjection<T>(
   eventType: DomainEventType,
-  schema: z.ZodType<T>,
+  schema: ZodType<T>,
   activityType: string,
   mapToData: (payload: T) => Promise<ActivityData> | ActivityData,
 ): void {

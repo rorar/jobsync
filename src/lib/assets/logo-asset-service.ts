@@ -150,16 +150,6 @@ export function stripCredentialsFromUrl(
   }
 }
 
-/**
- * @deprecated Use stripCredentialsFromUrl instead — it covers the full set of
- * common credential parameter names, not just "token".
- * Kept as an internal alias so existing call sites in this file compile without
- * a mass rename.
- */
-function stripTokenFromUrl(url: string): string {
-  return stripCredentialsFromUrl(url);
-}
-
 // ---------------------------------------------------------------------------
 // Download Pipeline
 // ---------------------------------------------------------------------------
@@ -282,7 +272,7 @@ class LogoAssetService {
       // but any embedded API tokens (e.g. Logo.dev pk_ key) are stripped for security.
       await db.company.updateMany({
         where: { id: companyId, createdBy: userId },
-        data: { logoAssetId: updatedAsset.id, logoUrl: stripTokenFromUrl(sourceUrl) },
+        data: { logoAssetId: updatedAsset.id, logoUrl: stripCredentialsFromUrl(sourceUrl) },
       });
 
       console.debug(

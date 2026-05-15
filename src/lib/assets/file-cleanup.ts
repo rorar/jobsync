@@ -39,8 +39,13 @@ export async function deleteFileAndPruneEmptyParents(
     currentDir = path.dirname(currentDir);
     try {
       await rmdir(currentDir);
-    } catch {
-      // Directory not empty, doesn't exist, or permission error — stop pruning
+    } catch (error: unknown) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "ENOTEMPTY") {
+        break; // Expected: dir has contents or already gone
+      }
+      // Unexpected error (EACCES, EPERM) — log and stop pruning
+      console.error(`[file-cleanup] Failed to prune ${currentDir}: ${code}`);
       break;
     }
   }

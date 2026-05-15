@@ -26,7 +26,7 @@ const RETENTION_CRON_KEY = "__retentionCronTask";
 const RETENTION_CRON_RUNNING_KEY = "__retentionCronRunning";
 
 function getRetentionTask(): ScheduledTask | null {
-  return (globalThis as Record<string, unknown>)[RETENTION_CRON_KEY] as ScheduledTask | null ?? null;
+  return ((globalThis as Record<string, unknown>)[RETENTION_CRON_KEY] as ScheduledTask | null) ?? null;
 }
 function setRetentionTask(task: ScheduledTask | null): void {
   (globalThis as Record<string, unknown>)[RETENTION_CRON_KEY] = task;
