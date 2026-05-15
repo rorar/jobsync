@@ -1,16 +1,16 @@
 # Handoff
 
 ## State
-Session 2026-05-14 done. 17 commits on `main` (`2b6b638`..`8ed4e4c`). 237 suites, 4626 tests, 51 migrations. Build green. Code Quality refactoring: all 12 F/CQ closed (8 FIXED, 2 INVALID, 2 NOT-PLANNED). DomainEventType casts fixed. LOGO_PRUNE_LEVELS extracted. CQ-16 `as any` removed (13 casts, exposed hidden legacy bug). F-3 export-rate-limit colocated.
+Session 2026-05-15 Review Fix-All done. 7 commits on `main` (`3c0543f`..`1248d00`). 241 suites, 4666 tests (+40 new). Build green (0 new tsc errors). 25 findings from 6-agent comprehensive review fixed across 6 work packages. 1 blind spot found and fixed (crm-cron.ts F-07). 1 new finding documented (BS-01: deleteFile ADR-019).
 
 ## Next
-1. **Full review** not yet run (`/comprehensive-review:full-review`) — required per `feedback_full_review_after_sprints.md`
-3. **P0 CRITICAL**: G1 (status-change bypass, 4 sites), G2b (AI degradation bypass) — see `project_next_session_planning.md`
-4. **HIGH Domain Expert:** G9 (ContactDeleted no CRM logger, 30min), G10 (0 CRM fixtures, ½ day). See `docs/open-items-2026-05-13.md`.
-5. **Remaining IF findings:** IF-5 (errorCode in actionToResponse), IF-6 (CompanyCreated from Promoter), IF-7 (shared NotificationType constant), IF-8 (webhook GDPR allowlist)
-6. **S2 UX Polish:** `~/s2-ux-polish-session.md` — 19 features, 52+ components.
-7. **Allium V3 Overhaul:** `notification-dispatch.allium` (160 errors), `scheduler-coordination.allium` (97 errors). 1-2h with `/allium:tend`.
-8. **Allium spec gaps from weed:** crm.allium needs Job-deletion cascade rules for Interview, JobContact, TaskTarget, NoteTarget. job-aggregate.allium DeleteJob rule needs CRM cascade targets.
+1. **P0 CRITICAL**: G1 (status-change bypass, 4 sites), G2b (AI degradation bypass) — see `project_next_session_planning.md`
+2. **BS-01 NEW**: `deleteFile` in profile.actions.ts — same ADR-019 pattern as SEC-05. Accepts optional `callerUserId?`, skips ownership when omitted. MEDIUM.
+3. **HIGH Domain Expert:** G9 (ContactDeleted no CRM logger, 30min), G10 (0 CRM fixtures, ½ day). See `docs/open-items-2026-05-13.md`.
+4. **Remaining IF findings:** IF-5 (errorCode in actionToResponse), IF-6 (CompanyCreated from Promoter), IF-7 (shared NotificationType constant), IF-8 (webhook GDPR allowlist)
+5. **S2 UX Polish:** `~/s2-ux-polish-session.md` — 19 features, 52+ components.
+6. **Allium V3 Overhaul:** `notification-dispatch.allium` (160 errors), `scheduler-coordination.allium` (97 errors). 1-2h with `/allium:tend`.
+7. **Allium spec gaps from weed:** crm.allium needs Job-deletion cascade rules for Interview, JobContact, TaskTarget, NoteTarget. job-aggregate.allium DeleteJob rule needs CRM cascade targets.
 
 ## Context
 - Session 2026-05-14: All 12 F/CQ closed. 17 commits. New utilities: `src/lib/rate-limit.ts` (factory), `src/lib/storage.ts` (DATA_DIR), `src/lib/assets/orphan-finder.ts`, `src/lib/assets/file-cleanup.ts`, `registerProjection()` in crm-activity-logger, shared test fixtures in testFixtures.ts. `docs/NOT-PLANNED.md` tracked in CLAUDE.md. NP-2 resolved (LOGO_PRUNE_LEVELS). CQ-16 fix exposed hidden `aiSettings.provider` legacy bug. 10 unconsumed event types in `docs/event-consumer-analysis.md`. `project_deferred_sprints_for_future_sessions.md` § "makeTestDispatchContext" is RESOLVED.
@@ -30,3 +30,4 @@ Session 2026-05-14 done. 17 commits on `main` (`2b6b638`..`8ed4e4c`). 237 suites
 - deleteJobById + API v1 DELETE unified: both rely on DB cascades, no manual cleanup.
 - E2E cleanup has 9 CRM steps added (defense-in-depth).
 - Pre-existing: merge creates duplicate CrmTaskTarget/CrmNoteTarget rows, `e2e/CONVENTIONS.md` doesn't exist on disk.
+- Session 2026-05-15 Review Fix-All: 7 commits. SEC-05 (uploadFile→server-only), rate-limiter migration (factory+SEC-09 rightmost IP), 40 new tests (rate-limit, storage, upload, crm-activity-logger), 9 batch LOW fixes, 4 moderate LOW fixes. Blind spot: crm-cron.ts F-07 parentheses, BS-01 deleteFile ADR-019 (documented, not fixed — needs same treatment as uploadFile).

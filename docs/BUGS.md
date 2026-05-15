@@ -1,8 +1,8 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-04-10
+# Bug Tracker — Collected 2026-03-24, Updated 2026-05-15
 
-**Total: 558 bugs found, 556 fixed, 2 open (accepted risk), 2 deferred (Allium weed)**
+**Total: 584 bugs found, 583 fixed, 2 open (accepted risk), 1 new (blind spot)**
 
-### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
+### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability) + 1 new blind spot (BS-01)
 
 ## Sprint 5 Deferred-Items Cleanup (2026-04-10)
 
@@ -1192,3 +1192,38 @@ No formatter/linter exists in the project (no Prettier, no git hooks, no lint-st
 | E3 | No max-length validation on job title and company name fields — accepts >255 chars without error | `addJobForm.schema.ts`, `addCompanyForm.schema.ts` | Low | ✅ Fixed |
 | E4 | TagInput trigger button has no programmatic label association — `role="combobox"` not connected to FormLabel via htmlFor/id | `TagInput.tsx:109` | Low | ✅ Fixed |
 | E5 | Job Source combobox missing FormControl wrapper — breaks label-to-control association unlike Title/Company/Location comboboxes | `AddJob.tsx:415` | Low | ✅ Fixed |
+
+## Comprehensive Review Fix-All (2026-05-15)
+
+25 findings from 6-agent review fixed in 7 commits across 6 work packages. +40 tests.
+
+### Fixed
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| SEC-05 | HIGH | `uploadFile` exported from `"use server"` file (ADR-019 violation). Accepts raw dir/filePath params, callable from browser. | Moved to `src/lib/upload.ts` with `import "server-only"`. 7 path traversal regression tests. |
+| T-1 | HIGH | Rate-limit factory (`rate-limit.ts`) had zero dedicated tests despite 6 wrappers. | 15 new tests covering sliding window, eviction, cleanup, rich results, per-call overrides. |
+| T-4 | HIGH | `uploadFile` path traversal guard had zero test coverage. | 7 tests in `__tests__/upload.spec.ts`. |
+| F-02/SEC-01/P-01 | MEDIUM | `auth-rate-limit.ts` + `health-rate-limit.ts` not migrated to factory. Unbounded memory, no cleanup. | Migrated both to `createSlidingWindowLimiter`. Bounded store, cleanup timers, proper globalThis keys. |
+| SEC-09 | MEDIUM | `getClientIp()` trusts leftmost X-Forwarded-For (spoofable). | Uses rightmost entry (added by trusted proxy). |
+| T-2 | MEDIUM | `storage.ts` had zero tests for DATA_DIR fallback chain. | 9 tests using `jest.isolateModules`. |
+| T-3 | MEDIUM | `crm-activity-logger.ts` had zero tests for registerProjection infrastructure. | 9 tests covering subscriptions, projections, validation, error handling. |
+| SEC-10/BP-4 | LOW | `api/rate-limit.ts` missing `import "server-only"` guard. | Added 1-line import. |
+| F-01 | LOW | Redundant local `RateLimitResult` in api/rate-limit.ts shadows shared type. | Replaced with type alias re-exporting `RichRateLimitResult`. |
+| F-03 | LOW | Deprecated `stripTokenFromUrl` still called in logo-asset-service.ts. | Replaced with `stripCredentialsFromUrl`, removed dead function. |
+| F-04/SEC-02 | LOW | Silent catch in file-cleanup.ts swallows EACCES/EPERM during dir pruning. | Discriminates ENOENT/ENOTEMPTY (expected) from other errors (logged). |
+| F-05/BP-1 | LOW | `require("fs")` in ESM module (storage.ts). | Replaced with `import { statSync }`. |
+| F-06/P-02 | LOW | Rich limiter cleanup uses `defaultWindowMs` even when per-call override is larger. | Uses `Math.max(defaultWindowMs, windowMs)`. |
+| F-07 | LOW | Operator precedence ambiguity in retention-cron.ts and crm-cron.ts globalThis cast. | Added explicit parentheses. |
+| F-08 | LOW | Unused import `getErrorCount` in ErrorLogSettings.tsx. | Removed. |
+| F-09 | LOW | AiSettings enum narrowing without runtime guard. | Added `Object.values(AiModuleId).includes()` check. |
+| F-10/SEC-03 | LOW | Async `onValueChange` handler in AiSettings.tsx: unhandled promise rejection. | Wrapped with try/catch. |
+| F-11/BP-3 | LOW | `makeMockChannel` (jest.fn) in production-tree testFixtures.ts. | Moved to `__tests__/helpers/mock-channel.ts`. |
+| BP-2 | LOW | `import type { z }` → `import type { ZodType }` in crm-activity-logger.ts. | Direct named import. |
+| A-1 | LOW | orphan-finder.ts re-throws error without file path context. | Wraps in `new Error(msg, { cause })`. |
+
+### New — Blind Spot Findings
+
+| ID | Severity | Summary | File | Status |
+|----|----------|---------|------|--------|
+| BS-01 | MEDIUM | `deleteFile` in profile.actions.ts exported from `"use server"` file. Accepts optional `callerUserId?` — when omitted, queries by `fileId` alone (no ownership check). Same ADR-019 pattern as SEC-05. | `profile.actions.ts:475` | Open |
