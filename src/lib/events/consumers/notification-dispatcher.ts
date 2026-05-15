@@ -58,7 +58,7 @@ import {
   type DispatchContext,
 } from "@/lib/notifications/dispatch-context";
 import type { NotificationDraft } from "@/lib/notifications/types";
-import { t } from "@/i18n/server";
+import { t, formatDateShort } from "@/i18n/server";
 
 // Compile-time exhaustive mapping from degradation reason to notification type.
 // Avoids an unsafe `as NotificationType` cast — if a new reason is added to
@@ -575,9 +575,10 @@ async function handleInterviewScheduled(
     select: { JobTitle: { select: { label: true } } },
   });
   const jobTitle = job?.JobTitle?.label ?? payload.jobId;
+  const interviewDate = formatDateShort(payload.interviewDate, ctx.locale);
 
   const titleKey = "notifications.interviewScheduled.title";
-  const titleParams = { jobTitle };
+  const titleParams = { jobTitle, interviewDate };
   const severity: NotificationSeverity = "info";
   const actorType: NotificationActorType = "system";
 
@@ -585,6 +586,7 @@ async function handleInterviewScheduled(
     interviewId: payload.interviewId,
     jobId: payload.jobId,
     jobTitle,
+    interviewDate,
     ...(payload.personId ? { personId: payload.personId } : {}),
     titleKey,
     titleParams,

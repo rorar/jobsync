@@ -38,7 +38,7 @@ export const notifications = {
     "notifications.webhook.deliveryFailed.title": "Webhook delivery failed",
     "notifications.webhook.endpointDeactivated.title": "Webhook endpoint deactivated",
     // CRM notification titles (#16)
-    "notifications.interviewScheduled.title": "Interview scheduled: {jobTitle}",
+    "notifications.interviewScheduled.title": "Interview scheduled: {jobTitle} — {interviewDate}",
     "notifications.interviewReminder.title": "Interview reminder: {jobTitle}",
     "notifications.followUpDue.title": "Follow-up due: {title}",
     "notifications.contactFromJob.title": "New contact: {personName}",
@@ -133,7 +133,7 @@ export const notifications = {
     "notifications.webhook.deliveryFailed.title": "Webhook-Zustellung fehlgeschlagen",
     "notifications.webhook.endpointDeactivated.title": "Webhook-Endpunkt deaktiviert",
     // CRM notification titles (#16)
-    "notifications.interviewScheduled.title": "Interview geplant: {jobTitle}",
+    "notifications.interviewScheduled.title": "Interview geplant: {jobTitle} — {interviewDate}",
     "notifications.interviewReminder.title": "Interview-Erinnerung: {jobTitle}",
     "notifications.followUpDue.title": "Follow-up fällig: {title}",
     "notifications.contactFromJob.title": "Neuer Kontakt: {personName}",
@@ -220,7 +220,7 @@ export const notifications = {
     "notifications.webhook.deliveryFailed.title": "Échec de la livraison du webhook",
     "notifications.webhook.endpointDeactivated.title": "Point de terminaison webhook désactivé",
     // CRM notification titles (#16)
-    "notifications.interviewScheduled.title": "Entretien programmé : {jobTitle}",
+    "notifications.interviewScheduled.title": "Entretien programmé : {jobTitle} — {interviewDate}",
     "notifications.interviewReminder.title": "Rappel d'entretien : {jobTitle}",
     "notifications.followUpDue.title": "Suivi à effectuer : {title}",
     "notifications.contactFromJob.title": "Nouveau contact : {personName}",
@@ -307,7 +307,7 @@ export const notifications = {
     "notifications.webhook.deliveryFailed.title": "Fallo en la entrega del webhook",
     "notifications.webhook.endpointDeactivated.title": "Punto de conexión webhook desactivado",
     // CRM notification titles (#16)
-    "notifications.interviewScheduled.title": "Entrevista programada: {jobTitle}",
+    "notifications.interviewScheduled.title": "Entrevista programada: {jobTitle} — {interviewDate}",
     "notifications.interviewReminder.title": "Recordatorio de entrevista: {jobTitle}",
     "notifications.followUpDue.title": "Seguimiento pendiente: {title}",
     "notifications.contactFromJob.title": "Nuevo contacto: {personName}",

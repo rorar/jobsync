@@ -97,7 +97,7 @@ const DISPATCHER_MOCK_TRANSLATIONS = {
     "notifications.interviewReminder.title": "Interview reminder: {jobTitle}",
     "notifications.followUpDue.title": "Follow-up due: {title}",
     "notifications.retentionExpired.title": "Contact archived — retention expired",
-    "notifications.interviewScheduled.title": "Interview scheduled: {jobTitle}",
+    "notifications.interviewScheduled.title": "Interview scheduled: {jobTitle} — {interviewDate}",
     "notifications.contactFromJob.title": "New contact: {personName}",
   },
   de: {
@@ -114,7 +114,7 @@ const DISPATCHER_MOCK_TRANSLATIONS = {
     "notifications.interviewReminder.title": "Interview-Erinnerung: {jobTitle}",
     "notifications.followUpDue.title": "Follow-up fällig: {title}",
     "notifications.retentionExpired.title": "Kontakt archiviert — Aufbewahrungsfrist abgelaufen",
-    "notifications.interviewScheduled.title": "Interview geplant: {jobTitle}",
+    "notifications.interviewScheduled.title": "Interview geplant: {jobTitle} — {interviewDate}",
     "notifications.contactFromJob.title": "Neuer Kontakt: {personName}",
   },
 } as const;
@@ -578,11 +578,13 @@ describe("NotificationDispatcher", () => {
       expect(call.data).toEqual(
         expect.objectContaining({
           titleKey: "notifications.interviewScheduled.title",
-          titleParams: { jobTitle: "Software Engineer" },
+          titleParams: expect.objectContaining({ jobTitle: "Software Engineer" }),
           actorType: "system",
           severity: "info",
         }),
       );
+      // AR-3: interviewDate surfaced in titleParams and extendedData
+      expect(call.data.titleParams).toHaveProperty("interviewDate");
       expect(call.data.data).toEqual(
         expect.objectContaining({
           interviewId: "int-1",
@@ -591,6 +593,7 @@ describe("NotificationDispatcher", () => {
           titleKey: "notifications.interviewScheduled.title",
         }),
       );
+      expect(call.data.data).toHaveProperty("interviewDate");
     });
 
     it("falls back to jobId when Job is not found", async () => {
