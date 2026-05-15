@@ -37,6 +37,12 @@ export const notifications = {
     // `message` column stored on the row.
     "notifications.webhook.deliveryFailed.title": "Webhook delivery failed",
     "notifications.webhook.endpointDeactivated.title": "Webhook endpoint deactivated",
+    // CRM notification titles (#16)
+    "notifications.interviewScheduled.title": "Interview scheduled: {jobTitle}",
+    "notifications.interviewReminder.title": "Interview reminder: {jobTitle}",
+    "notifications.followUpDue.title": "Follow-up due: {title}",
+    "notifications.contactFromJob.title": "New contact: {personName}",
+    "notifications.retentionExpired.title": "Contact archived — retention expired",
 
     // Reason / context strings (shared vocabulary)
     "notifications.reason.moduleTimeout": "Module did not respond within the configured timeout",
@@ -126,6 +132,12 @@ export const notifications = {
     "notifications.jobStatusChanged.title": "Job-Status: {status}",
     "notifications.webhook.deliveryFailed.title": "Webhook-Zustellung fehlgeschlagen",
     "notifications.webhook.endpointDeactivated.title": "Webhook-Endpunkt deaktiviert",
+    // CRM notification titles (#16)
+    "notifications.interviewScheduled.title": "Interview geplant: {jobTitle}",
+    "notifications.interviewReminder.title": "Interview-Erinnerung: {jobTitle}",
+    "notifications.followUpDue.title": "Follow-up fällig: {title}",
+    "notifications.contactFromJob.title": "Neuer Kontakt: {personName}",
+    "notifications.retentionExpired.title": "Kontakt archiviert — Aufbewahrungsfrist abgelaufen",
 
     // Reason / context strings
     "notifications.reason.moduleTimeout": "Modul hat nicht innerhalb des konfigurierten Zeitlimits geantwortet",
@@ -207,6 +219,12 @@ export const notifications = {
     "notifications.jobStatusChanged.title": "Statut de l'emploi : {status}",
     "notifications.webhook.deliveryFailed.title": "Échec de la livraison du webhook",
     "notifications.webhook.endpointDeactivated.title": "Point de terminaison webhook désactivé",
+    // CRM notification titles (#16)
+    "notifications.interviewScheduled.title": "Entretien programmé : {jobTitle}",
+    "notifications.interviewReminder.title": "Rappel d'entretien : {jobTitle}",
+    "notifications.followUpDue.title": "Suivi à effectuer : {title}",
+    "notifications.contactFromJob.title": "Nouveau contact : {personName}",
+    "notifications.retentionExpired.title": "Contact archivé — rétention expirée",
 
     // Reason / context strings
     "notifications.reason.moduleTimeout": "Le module n'a pas répondu dans le délai configuré",
@@ -288,6 +306,12 @@ export const notifications = {
     "notifications.jobStatusChanged.title": "Estado del empleo: {status}",
     "notifications.webhook.deliveryFailed.title": "Fallo en la entrega del webhook",
     "notifications.webhook.endpointDeactivated.title": "Punto de conexión webhook desactivado",
+    // CRM notification titles (#16)
+    "notifications.interviewScheduled.title": "Entrevista programada: {jobTitle}",
+    "notifications.interviewReminder.title": "Recordatorio de entrevista: {jobTitle}",
+    "notifications.followUpDue.title": "Seguimiento pendiente: {title}",
+    "notifications.contactFromJob.title": "Nuevo contacto: {personName}",
+    "notifications.retentionExpired.title": "Contacto archivado — retención expirada",
 
     // Reason / context strings
     "notifications.reason.moduleTimeout": "El módulo no respondió dentro del tiempo configurado",

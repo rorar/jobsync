@@ -46,7 +46,7 @@
 | ~~G17~~ | ~~`rescheduled→rescheduled` transition missing~~ | ~~15 min~~ | **RESOLVED** (`76733dc`, 2026-05-15: added to person.model.ts + crm.allium) |
 | ~~G23~~ | ~~API v1 DELETE divergent cascades~~ | — | **Likely RESOLVED** — both paths now use "cascade via onDelete rules" (IF-3 migration added Cascade to all CRM FKs) |
 | ~~#5~~ | ~~`extractDomain` Unicode bug~~ | — | **RESOLVED** — `normalize("NFD")` correctly produces "mullergmbh.com" not "mller.com" |
-| #16 | `retention_expired` maps to `contact_from_job` (semantic mismatch) + missing `.title` i18n keys | 30 min |
+| ~~#16~~ | ~~`retention_expired` semantic mismatch + missing `.title` i18n keys~~ | ~~30 min~~ | **RESOLVED** (2026-05-15: titleKey convention fix + InterviewScheduled/ContactCreated handlers + G13 webhook labels) |
 | ~~#18~~ | ~~`AutomationDegraded` → CRM Timeline~~ | ~~30 min~~ | **RESOLVED** (`76733dc`, 2026-05-15: registerProjection added, activityType automation_degraded) |
 | #1-3 | Cleanup: `feature-map-and-gaps.md` untracked, `.full-review/` + `.full-stack-feature/` → `.gitignore` | 5 min |
 

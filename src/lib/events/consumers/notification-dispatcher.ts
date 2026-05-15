@@ -35,6 +35,8 @@ import {
   JobStatusChangedPayloadSchema,
   ReminderTriggeredPayloadSchema,
   AutomationDegradedPayloadSchema,
+  InterviewScheduledPayloadSchema,
+  ContactCreatedPayloadSchema,
   safeParsePayload,
 } from "../event-schemas";
 
@@ -503,9 +505,9 @@ const REMINDER_TYPE_MAP: Record<string, NotificationType> = {
 };
 
 const REMINDER_TITLE_KEY_MAP: Record<string, string> = {
-  interview_upcoming: "notifications.interviewReminder",
-  task_overdue: "notifications.followUpDue",
-  retention_expired: "notifications.retentionExpired",
+  interview_upcoming: "notifications.interviewReminder.title",
+  task_overdue: "notifications.followUpDue.title",
+  retention_expired: "notifications.retentionExpired.title",
 };
 
 const REMINDER_SEVERITY_MAP: Record<string, NotificationSeverity> = {
@@ -548,6 +550,110 @@ async function handleReminderTriggered(
       message,
       data: extendedData,
       titleKey,
+      actorType,
+      severity,
+    },
+    ctx,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CRM Event Handlers (InterviewScheduled, ContactCreated → Notification)
+// ---------------------------------------------------------------------------
+
+async function handleInterviewScheduled(
+  event: DomainEvent<typeof DomainEventType.InterviewScheduled>,
+): Promise<void> {
+  const payload = safeParsePayload(InterviewScheduledPayloadSchema, event);
+  if (!payload) return;
+  const ctx = await buildDispatchContext(payload.userId);
+
+  // DB lookup: Job title for the notification message (with IDOR guard)
+  const job = await prisma.job.findFirst({
+    where: { id: payload.jobId, userId: payload.userId },
+    select: { JobTitle: { select: { label: true } } },
+  });
+  const jobTitle = job?.JobTitle?.label ?? payload.jobId;
+
+  const titleKey = "notifications.interviewScheduled.title";
+  const titleParams = { jobTitle };
+  const severity: NotificationSeverity = "info";
+  const actorType: NotificationActorType = "system";
+
+  const extendedData: NotificationDataExtended = {
+    interviewId: payload.interviewId,
+    jobId: payload.jobId,
+    ...(payload.personId ? { personId: payload.personId } : {}),
+    titleKey,
+    titleParams,
+    actorType,
+    severity,
+  };
+
+  const message = t(ctx.locale, "notifications.interviewScheduled")
+    .replace("{jobTitle}", jobTitle);
+
+  await dispatchNotification(
+    {
+      userId: payload.userId,
+      type: "interview_scheduled" satisfies NotificationType,
+      message,
+      data: extendedData,
+      titleKey,
+      titleParams,
+      actorType,
+      severity,
+    },
+    ctx,
+  );
+}
+
+async function handleContactCreated(
+  event: DomainEvent<typeof DomainEventType.ContactCreated>,
+): Promise<void> {
+  const payload = safeParsePayload(ContactCreatedPayloadSchema, event);
+  if (!payload) return;
+
+  // Only notify for manually created contacts — auto_created/imported would
+  // flood notifications during automation runs. Users already receive
+  // vacancy_batch_staged for automation-sourced data.
+  if (payload.source !== "manual") return;
+
+  const ctx = await buildDispatchContext(payload.userId);
+
+  // DB lookup: Person name for the notification message (with IDOR guard)
+  const person = await prisma.person.findFirst({
+    where: { id: payload.personId, userId: payload.userId },
+    select: { firstName: true, lastName: true },
+  });
+  const personName = person
+    ? [person.firstName, person.lastName].filter(Boolean).join(" ") || payload.personId
+    : payload.personId;
+
+  const titleKey = "notifications.contactFromJob.title";
+  const titleParams = { personName };
+  const severity: NotificationSeverity = "info";
+  const actorType: NotificationActorType = "system";
+
+  const extendedData: NotificationDataExtended = {
+    personId: payload.personId,
+    titleKey,
+    titleParams,
+    actorType,
+    severity,
+  };
+
+  const message = t(ctx.locale, "notifications.contactFromJob")
+    .replace("{jobTitle}", personName);
+
+  await dispatchNotification(
+    {
+      userId: payload.userId,
+      type: "contact_from_job" satisfies NotificationType,
+      message,
+      data: extendedData,
+      titleKey,
+      titleParams,
       actorType,
       severity,
     },
@@ -616,6 +722,8 @@ export function registerNotificationDispatcher(): void {
   eventBus.subscribe(DomainEventType.RetentionCompleted, handleRetentionCompleted);
   eventBus.subscribe(DomainEventType.JobStatusChanged, handleJobStatusChanged);
   eventBus.subscribe(DomainEventType.ReminderTriggered, handleReminderTriggered);
+  eventBus.subscribe(DomainEventType.InterviewScheduled, handleInterviewScheduled);
+  eventBus.subscribe(DomainEventType.ContactCreated, handleContactCreated);
   eventBus.subscribe(DomainEventType.AutomationDegraded, handleAutomationDegraded);
 }
 

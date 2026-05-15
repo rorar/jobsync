@@ -20,6 +20,8 @@ jest.mock("server-only", () => ({}));
 const mockCreate = jest.fn().mockResolvedValue({ id: "notif-1" });
 const mockFindUnique = jest.fn().mockResolvedValue(null); // default: no settings
 const mockAutomationFindFirst = jest.fn().mockResolvedValue({ name: "Test Automation" });
+const mockJobFindFirst = jest.fn().mockResolvedValue({ JobTitle: { label: "Software Engineer" } });
+const mockPersonFindFirst = jest.fn().mockResolvedValue({ firstName: "Jane", lastName: "Doe" });
 
 // PERF-3: buildDispatchContext runs 6 parallel Prisma queries. All 6 must
 // be mocked so the dispatcher's channel iteration logic is exercised.
@@ -47,6 +49,12 @@ jest.mock("@/lib/db", () => ({
     },
     automation: {
       findFirst: (...args: unknown[]) => mockAutomationFindFirst(...args),
+    },
+    job: {
+      findFirst: (...args: unknown[]) => mockJobFindFirst(...args),
+    },
+    person: {
+      findFirst: (...args: unknown[]) => mockPersonFindFirst(...args),
     },
     user: {
       findUnique: (...args: unknown[]) => mockUserFindUnique(...args),
@@ -84,6 +92,13 @@ const DISPATCHER_MOCK_TRANSLATIONS = {
     "notifications.batchStaged": "{count} new vacancies staged from automation",
     "notifications.jobStatusChanged": "Job status changed to {newStatus}",
     "notifications.retentionExpired": "Contact archived — retention period expired",
+    "notifications.interviewScheduled": "Interview scheduled for {jobTitle}",
+    "notifications.contactFromJob": "New contact from {jobTitle}",
+    "notifications.interviewReminder.title": "Interview reminder: {jobTitle}",
+    "notifications.followUpDue.title": "Follow-up due: {title}",
+    "notifications.retentionExpired.title": "Contact archived — retention expired",
+    "notifications.interviewScheduled.title": "Interview scheduled: {jobTitle}",
+    "notifications.contactFromJob.title": "New contact: {personName}",
   },
   de: {
     "notifications.vacancyPromoted": "Job aus bereitgestelltem Stellenangebot erstellt",
@@ -94,6 +109,13 @@ const DISPATCHER_MOCK_TRANSLATIONS = {
     "notifications.batchStaged": "{count} neue Stellenangebote aus der Automatisierung",
     "notifications.jobStatusChanged": "Job-Status geändert zu {newStatus}",
     "notifications.retentionExpired": "Kontakt archiviert — Aufbewahrungsfrist abgelaufen",
+    "notifications.interviewScheduled": "Interview für {jobTitle} geplant",
+    "notifications.contactFromJob": "Neuer Kontakt aus {jobTitle}",
+    "notifications.interviewReminder.title": "Interview-Erinnerung: {jobTitle}",
+    "notifications.followUpDue.title": "Follow-up fällig: {title}",
+    "notifications.retentionExpired.title": "Kontakt archiviert — Aufbewahrungsfrist abgelaufen",
+    "notifications.interviewScheduled.title": "Interview geplant: {jobTitle}",
+    "notifications.contactFromJob.title": "Neuer Kontakt: {personName}",
   },
 } as const;
 
@@ -473,7 +495,8 @@ describe("NotificationDispatcher", () => {
         data: expect.objectContaining({
           userId: "user-1",
           type: "retention_expired",
-          message: "Contact archived — retention period expired",
+          // #16: message now derived from .title key via REMINDER_TITLE_KEY_MAP
+          message: "Contact archived — retention expired",
           severity: "warning",
           data: expect.objectContaining({
             reason: "retention_expired",
@@ -494,10 +517,10 @@ describe("NotificationDispatcher", () => {
       await eventBus.publish(event);
 
       const call = mockCreate.mock.calls[0][0];
-      // Top-level 5W+H columns (ADR-030, new)
+      // Top-level 5W+H columns (ADR-030, new) — #16: .title convention
       expect(call.data).toEqual(
         expect.objectContaining({
-          titleKey: "notifications.retentionExpired",
+          titleKey: "notifications.retentionExpired.title",
           actorType: "system",
           severity: "warning",
         }),
@@ -505,12 +528,212 @@ describe("NotificationDispatcher", () => {
       // Legacy `data.*` blob — dual-written for backward compat
       expect(call.data.data).toEqual(
         expect.objectContaining({
-          titleKey: "notifications.retentionExpired",
+          titleKey: "notifications.retentionExpired.title",
           actorType: "system",
           severity: "warning",
           personId: "person-1",
         }),
       );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // InterviewScheduled (#16: CRM notification handler)
+  // ---------------------------------------------------------------------------
+  describe("InterviewScheduled", () => {
+    it("creates an interview_scheduled notification via InAppChannel", async () => {
+      const event = createEvent(DomainEventType.InterviewScheduled, {
+        interviewId: "int-1",
+        jobId: "job-1",
+        userId: "user-1",
+        interviewDate: "2026-06-01T10:00:00Z",
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: "user-1",
+          type: "interview_scheduled",
+          message: "Interview scheduled for Software Engineer",
+          titleKey: "notifications.interviewScheduled.title",
+          actorType: "system",
+          severity: "info",
+        }),
+      });
+    });
+
+    it("dual-writes 5W+H fields to top-level columns and legacy data.* (ADR-030)", async () => {
+      const event = createEvent(DomainEventType.InterviewScheduled, {
+        interviewId: "int-1",
+        jobId: "job-1",
+        userId: "user-1",
+        personId: "person-1",
+        interviewDate: "2026-06-01T10:00:00Z",
+      });
+
+      await eventBus.publish(event);
+
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.data).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.interviewScheduled.title",
+          titleParams: { jobTitle: "Software Engineer" },
+          actorType: "system",
+          severity: "info",
+        }),
+      );
+      expect(call.data.data).toEqual(
+        expect.objectContaining({
+          interviewId: "int-1",
+          jobId: "job-1",
+          personId: "person-1",
+          titleKey: "notifications.interviewScheduled.title",
+        }),
+      );
+    });
+
+    it("falls back to jobId when Job is not found", async () => {
+      mockJobFindFirst.mockResolvedValueOnce(null);
+
+      const event = createEvent(DomainEventType.InterviewScheduled, {
+        interviewId: "int-1",
+        jobId: "job-unknown",
+        userId: "user-1",
+        interviewDate: "2026-06-01T10:00:00Z",
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          message: "Interview scheduled for job-unknown",
+        }),
+      });
+    });
+
+    it("queries job with userId IDOR guard", async () => {
+      const event = createEvent(DomainEventType.InterviewScheduled, {
+        interviewId: "int-1",
+        jobId: "job-1",
+        userId: "user-1",
+        interviewDate: "2026-06-01T10:00:00Z",
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockJobFindFirst).toHaveBeenCalledWith({
+        where: { id: "job-1", userId: "user-1" },
+        select: { JobTitle: { select: { label: true } } },
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // ContactCreated (#16: CRM notification handler)
+  // ---------------------------------------------------------------------------
+  describe("ContactCreated", () => {
+    it("creates a contact_from_job notification for manual contacts", async () => {
+      const event = createEvent(DomainEventType.ContactCreated, {
+        personId: "person-1",
+        userId: "user-1",
+        source: "manual",
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: "user-1",
+          type: "contact_from_job",
+          titleKey: "notifications.contactFromJob.title",
+          actorType: "system",
+          severity: "info",
+        }),
+      });
+    });
+
+    it("does NOT dispatch for auto_created contacts (volume guard)", async () => {
+      const event = createEvent(DomainEventType.ContactCreated, {
+        personId: "person-1",
+        userId: "user-1",
+        source: "auto_created",
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it("does NOT dispatch for imported contacts (volume guard)", async () => {
+      const event = createEvent(DomainEventType.ContactCreated, {
+        personId: "person-1",
+        userId: "user-1",
+        source: "imported",
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it("dual-writes 5W+H fields to top-level columns and legacy data.* (ADR-030)", async () => {
+      const event = createEvent(DomainEventType.ContactCreated, {
+        personId: "person-1",
+        userId: "user-1",
+        source: "manual",
+      });
+
+      await eventBus.publish(event);
+
+      const call = mockCreate.mock.calls[0][0];
+      expect(call.data).toEqual(
+        expect.objectContaining({
+          titleKey: "notifications.contactFromJob.title",
+          titleParams: { personName: "Jane Doe" },
+          actorType: "system",
+          severity: "info",
+        }),
+      );
+      expect(call.data.data).toEqual(
+        expect.objectContaining({
+          personId: "person-1",
+          titleKey: "notifications.contactFromJob.title",
+        }),
+      );
+    });
+
+    it("falls back to personId when Person is not found", async () => {
+      mockPersonFindFirst.mockResolvedValueOnce(null);
+
+      const event = createEvent(DomainEventType.ContactCreated, {
+        personId: "person-unknown",
+        userId: "user-1",
+        source: "manual",
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          titleParams: { personName: "person-unknown" },
+        }),
+      });
+    });
+
+    it("queries person with userId IDOR guard", async () => {
+      const event = createEvent(DomainEventType.ContactCreated, {
+        personId: "person-1",
+        userId: "user-1",
+        source: "manual",
+      });
+
+      await eventBus.publish(event);
+
+      expect(mockPersonFindFirst).toHaveBeenCalledWith({
+        where: { id: "person-1", userId: "user-1" },
+        select: { firstName: true, lastName: true },
+      });
     });
   });
 
