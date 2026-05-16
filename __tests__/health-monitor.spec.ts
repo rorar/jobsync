@@ -15,9 +15,21 @@ jest.mock("@/lib/db", () => {
     moduleRegistration: {
       upsert: jest.fn().mockResolvedValue({}),
     },
+    automation: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   };
   return { __esModule: true, default: mockPrisma };
 });
+
+jest.mock("@/lib/events", () => ({
+  emitEvent: jest.fn(),
+  createEvent: jest.fn((_type: string, payload: any) => ({
+    type: _type,
+    timestamp: new Date(),
+    payload,
+  })),
+}));
 
 // BP-1: Mock degradation + url-validation to prevent live imports
 jest.mock("@/lib/connector/degradation", () => ({
@@ -54,6 +66,8 @@ global.fetch = mockFetch;
 
 import { checkModuleHealth } from "@/lib/connector/health-monitor";
 import { moduleRegistry } from "@/lib/connector/registry";
+import { emitEvent, createEvent } from "@/lib/events";
+import prisma from "@/lib/db";
 import {
   HealthStatus,
   ModuleStatus,
@@ -61,6 +75,10 @@ import {
   ConnectorType,
   CredentialType,
 } from "@/lib/connector/manifest";
+
+const mockEmitEvent = emitEvent as jest.MockedFunction<typeof emitEvent>;
+const mockCreateEvent = createEvent as jest.MockedFunction<typeof createEvent>;
+const mockPrisma = prisma as jest.Mocked<typeof prisma>;
 
 const mockRegistry = moduleRegistry as jest.Mocked<typeof moduleRegistry> & {
   _testStore: Map<string, any>;
@@ -408,6 +426,127 @@ describe("Health Monitor", () => {
       const result = await checkModuleHealth("no-base-mod");
 
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe("HealthStatusEscalation (CB-2)", () => {
+    it("emits AutomationDegraded event when module transitions to UNREACHABLE", async () => {
+      registerActiveModule(
+        "escalation-mod",
+        {
+          endpoint: "https://api.example.com/health",
+          timeoutMs: 5000,
+          intervalMs: 300000,
+        },
+        { healthStatus: HealthStatus.DEGRADED, consecutiveFailures: 2 },
+      );
+
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-1", userId: "user-1", name: "My Automation" },
+      ]);
+
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+      });
+
+      await checkModuleHealth("escalation-mod");
+
+      expect(mockCreateEvent).toHaveBeenCalledWith(
+        "AutomationDegraded",
+        expect.objectContaining({
+          automationId: "auto-1",
+          userId: "user-1",
+          reason: "health_unreachable",
+          moduleId: "escalation-mod",
+        }),
+      );
+      expect(mockEmitEvent).toHaveBeenCalled();
+    });
+
+    it("does NOT emit when module is already UNREACHABLE (no re-fire)", async () => {
+      registerActiveModule(
+        "already-unreachable-mod",
+        {
+          endpoint: "https://api.example.com/health",
+          timeoutMs: 5000,
+          intervalMs: 300000,
+        },
+        { healthStatus: HealthStatus.UNREACHABLE, consecutiveFailures: 5 },
+      );
+
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+      });
+
+      await checkModuleHealth("already-unreachable-mod");
+
+      expect(mockEmitEvent).not.toHaveBeenCalled();
+    });
+
+    it("does NOT emit when module recovers to HEALTHY", async () => {
+      registerActiveModule(
+        "recovering-mod",
+        {
+          endpoint: "https://api.example.com/health",
+          timeoutMs: 5000,
+          intervalMs: 300000,
+        },
+        { healthStatus: HealthStatus.DEGRADED, consecutiveFailures: 2 },
+      );
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+      });
+
+      await checkModuleHealth("recovering-mod");
+
+      expect(mockEmitEvent).not.toHaveBeenCalled();
+    });
+
+    it("emits one event per affected automation", async () => {
+      registerActiveModule(
+        "multi-auto-mod",
+        {
+          endpoint: "https://api.example.com/health",
+          timeoutMs: 5000,
+          intervalMs: 300000,
+        },
+        { healthStatus: HealthStatus.DEGRADED, consecutiveFailures: 2 },
+      );
+
+      (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
+        { id: "auto-a", userId: "user-a", name: "Automation A" },
+        { id: "auto-b", userId: "user-b", name: "Automation B" },
+        { id: "auto-c", userId: "user-a", name: "Automation C" },
+      ]);
+
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+      });
+
+      await checkModuleHealth("multi-auto-mod");
+
+      expect(mockEmitEvent).toHaveBeenCalledTimes(3);
+      expect(mockCreateEvent).toHaveBeenCalledWith(
+        "AutomationDegraded",
+        expect.objectContaining({ automationId: "auto-a", userId: "user-a" }),
+      );
+      expect(mockCreateEvent).toHaveBeenCalledWith(
+        "AutomationDegraded",
+        expect.objectContaining({ automationId: "auto-b", userId: "user-b" }),
+      );
+      expect(mockCreateEvent).toHaveBeenCalledWith(
+        "AutomationDegraded",
+        expect.objectContaining({ automationId: "auto-c", userId: "user-a" }),
+      );
     });
   });
 });

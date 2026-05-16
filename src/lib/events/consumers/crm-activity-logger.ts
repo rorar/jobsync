@@ -222,22 +222,42 @@ export function registerCrmActivityLogConsumers(): void {
     }),
   );
 
-  // CrmNoteCreated → note_added (DB lookup: Note targets)
+  // CrmNoteCreated → note_added (payload-first, DB fallback for old events)
   registerProjection(
     DomainEventType.CrmNoteCreated,
     CrmNoteCreatedPayloadSchema,
     "note_added",
     async (p) => {
-      const note = await prisma.crmNote.findUnique({
-        where: { id: p.noteId },
-        select: { title: true, targets: { select: { targetPersonId: true, targetJobId: true }, take: 1 } },
-      });
+      // Prefer payload fields (CB-5 pattern); fall back to DB for backward compat
+      const hasTargetInPayload = p.targetPersonId || p.targetJobId;
+      let targetPersonId: string | null = p.targetPersonId ?? null;
+      let targetJobId: string | null = p.targetJobId ?? null;
+      let linkedRecordName: string | null = null;
+
+      if (!hasTargetInPayload) {
+        // Backward compat: old events without target IDs — look up from DB
+        const note = await prisma.crmNote.findUnique({
+          where: { id: p.noteId },
+          select: { title: true, targets: { select: { targetPersonId: true, targetJobId: true }, take: 1 } },
+        });
+        targetPersonId = note?.targets[0]?.targetPersonId ?? null;
+        targetJobId = note?.targets[0]?.targetJobId ?? null;
+        linkedRecordName = note?.title ?? null;
+      } else {
+        // Fetch title only (targets already known)
+        const note = await prisma.crmNote.findUnique({
+          where: { id: p.noteId },
+          select: { title: true },
+        });
+        linkedRecordName = note?.title ?? null;
+      }
+
       return {
         userId: p.userId,
         actorId: p.userId,
-        targetPersonId: note?.targets[0]?.targetPersonId ?? null,
-        targetJobId: note?.targets[0]?.targetJobId ?? null,
-        linkedRecordName: note?.title ?? null,
+        targetPersonId,
+        targetJobId,
+        linkedRecordName,
       };
     },
   );

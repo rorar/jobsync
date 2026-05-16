@@ -249,7 +249,6 @@ entity RegisteredModule {
         active -> error
         inactive -> active
         error -> active
-        terminal: error
     }
 }
 

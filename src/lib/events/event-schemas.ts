@@ -284,6 +284,8 @@ export const CrmTaskCompletedPayloadSchema = z.object({
 export const CrmNoteCreatedPayloadSchema = z.object({
   noteId: z.string(),
   userId: z.string(),
+  targetPersonId: z.string().optional(),
+  targetJobId: z.string().optional(),
 }) satisfies z.ZodType<CrmNoteCreatedPayload>;
 
 // ---------------------------------------------------------------------------

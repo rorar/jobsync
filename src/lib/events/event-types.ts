@@ -277,6 +277,8 @@ export interface CrmTaskCompletedPayload {
 export interface CrmNoteCreatedPayload {
   noteId: string;
   userId: string;
+  targetPersonId?: string;
+  targetJobId?: string;
 }
 
 // ---------------------------------------------------------------------------

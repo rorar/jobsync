@@ -92,10 +92,13 @@ export async function createCrmNote(
     });
 
     // Activity log projected via crm-activity-logger consumer (TimelineProjection contract)
+    const firstTarget = input.targets[0];
     eventBus.publish(
       createEvent(DomainEventType.CrmNoteCreated, {
         noteId: note.id,
         userId: user.id,
+        targetPersonId: firstTarget?.targetPersonId ?? undefined,
+        targetJobId: firstTarget?.targetJobId ?? undefined,
       }),
     );
 
