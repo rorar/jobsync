@@ -202,6 +202,8 @@ export function registerCrmActivityLogConsumers(): void {
     (p) => ({
       userId: p.userId,
       actorId: p.userId,
+      targetPersonId: p.targetPersonId ?? null,
+      targetJobId: p.targetJobId ?? null,
       linkedRecordName: p.title,
     }),
   );
@@ -214,6 +216,8 @@ export function registerCrmActivityLogConsumers(): void {
     (p) => ({
       userId: p.userId,
       actorId: p.userId,
+      targetPersonId: p.targetPersonId ?? null,
+      targetJobId: p.targetJobId ?? null,
       linkedRecordName: p.title,
     }),
   );

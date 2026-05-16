@@ -76,6 +76,10 @@ export async function handleAuthFailure(
   const registered = moduleRegistry.get(moduleId);
   if (!registered) return { pausedCount: 0 };
 
+  // Guard: only escalate for currently active modules (CB-7)
+  // Prevents spurious escalation on already-errored or inactive modules
+  if (registered.status !== ModuleStatus.ACTIVE) return { pausedCount: 0 };
+
   // Spec precondition: only escalate for modules that require credentials
   // See specs/module-lifecycle.allium, rule AuthFailureEscalation (line 548):
   //   requires: module.manifest.credential.required = true
@@ -259,6 +263,10 @@ export async function handleCircuitBreakerTrip(
 ): Promise<{ pausedCount: number }> {
   const registered = moduleRegistry.get(moduleId);
   if (!registered) return { pausedCount: 0 };
+
+  // Guard: only escalate for currently active modules (CB-7)
+  // Prevents spurious escalation on already-errored or inactive modules
+  if (registered.status !== ModuleStatus.ACTIVE) return { pausedCount: 0 };
 
   // Increment consecutive failures + set CB state to OPEN (spec rule CircuitBreakerStateTransition)
   const newFailureCount = registered.consecutiveFailures + 1;

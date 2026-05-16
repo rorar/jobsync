@@ -23,7 +23,7 @@ jest.mock("@/lib/db", () => {
 });
 
 const mockEmitEvent = jest.fn();
-const mockCreateEvent = jest.fn((type: string, payload: any) => ({ type, payload, timestamp: new Date() }));
+const mockCreateEvent = jest.fn((...args: any[]) => ({ type: args[0], payload: args[1], timestamp: new Date() }));
 jest.mock("@/lib/events", () => ({
   emitEvent: (...args: any[]) => mockEmitEvent(...args),
   createEvent: (...args: any[]) => mockCreateEvent(...args),
@@ -83,6 +83,7 @@ describe("Degradation Rules", () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        status: ModuleStatus.ACTIVE,
       });
 
       await handleAuthFailure("eures", "401 Unauthorized");
@@ -99,6 +100,7 @@ describe("Degradation Rules", () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 3 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        status: ModuleStatus.ACTIVE,
       });
 
       await handleAuthFailure("openai", "403 Forbidden");
@@ -128,6 +130,7 @@ describe("Degradation Rules", () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 5 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        status: ModuleStatus.ACTIVE,
       });
 
       const result = await handleAuthFailure("jsearch", "Invalid API key");
@@ -138,9 +141,36 @@ describe("Degradation Rules", () => {
     it("should skip escalation when credential.required is false", async () => {
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: false } },
+        status: ModuleStatus.ACTIVE,
       });
 
       const result = await handleAuthFailure("eures", "401 Unauthorized");
+
+      expect(result).toEqual({ pausedCount: 0 });
+      expect(mockRegistry.setStatus).not.toHaveBeenCalled();
+      expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("should skip escalation when module status is not ACTIVE (CB-7)", async () => {
+      (mockRegistry.get as jest.Mock).mockReturnValue({
+        manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        status: ModuleStatus.ERROR,
+      });
+
+      const result = await handleAuthFailure("jsearch", "401 Unauthorized");
+
+      expect(result).toEqual({ pausedCount: 0 });
+      expect(mockRegistry.setStatus).not.toHaveBeenCalled();
+      expect(mockPrisma.automation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("should skip escalation when module is INACTIVE (CB-7)", async () => {
+      (mockRegistry.get as jest.Mock).mockReturnValue({
+        manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        status: ModuleStatus.INACTIVE,
+      });
+
+      const result = await handleAuthFailure("jsearch", "401 Unauthorized");
 
       expect(result).toEqual({ pausedCount: 0 });
       expect(mockRegistry.setStatus).not.toHaveBeenCalled();
@@ -151,6 +181,7 @@ describe("Degradation Rules", () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 2 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        status: ModuleStatus.ACTIVE,
       });
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
         { id: "auto-1", userId: "user-1", name: "Alpha Search" },
@@ -186,6 +217,7 @@ describe("Degradation Rules", () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        status: ModuleStatus.ACTIVE,
       });
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
         { id: "auto-late-bind", userId: "user-late-bind", name: "Late Bind Auto" },
@@ -223,6 +255,7 @@ describe("Degradation Rules", () => {
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([]);
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        status: ModuleStatus.ACTIVE,
       });
 
       await handleAuthFailure("jsearch", "401 Unauthorized");
@@ -236,6 +269,7 @@ describe("Degradation Rules", () => {
       (mockPrisma.automation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
       (mockRegistry.get as jest.Mock).mockReturnValue({
         manifest: { name: "JSearch", connectorType: ConnectorType.JOB_DISCOVERY, credential: { required: true } },
+        status: ModuleStatus.ACTIVE,
       });
       (mockPrisma.automation.findMany as jest.Mock).mockResolvedValue([
         { id: "auto-3", userId: "user-3", name: "Gamma Search" },
@@ -594,6 +628,45 @@ describe("Degradation Rules", () => {
       expect(mockPrisma.automation.findMany).not.toHaveBeenCalled();
     });
 
+    it("should skip escalation when module status is not ACTIVE (CB-7)", async () => {
+      // Register module with INACTIVE status — should early-return
+      const registered = {
+        manifest: { id: "mod-cb-inactive", name: "mod-cb-inactive", connectorType: ConnectorType.JOB_DISCOVERY },
+        status: ModuleStatus.INACTIVE,
+        consecutiveFailures: 5,
+        circuitBreakerOpenSince: undefined as Date | undefined,
+      };
+      mockRegistry._testMap.set("mod-cb-inactive", registered);
+      (mockRegistry.get as jest.Mock).mockImplementation(
+        (moduleId: string) => mockRegistry._testMap.get(moduleId),
+      );
+
+      const result = await handleCircuitBreakerTrip("mod-cb-inactive");
+
+      expect(result).toEqual({ pausedCount: 0 });
+      expect(mockRegistry.updateCircuitBreaker).not.toHaveBeenCalled();
+      expect(mockPrisma.automation.findMany).not.toHaveBeenCalled();
+    });
+
+    it("should skip escalation when module status is ERROR (CB-7)", async () => {
+      const registered = {
+        manifest: { id: "mod-cb-error", name: "mod-cb-error", connectorType: ConnectorType.JOB_DISCOVERY },
+        status: ModuleStatus.ERROR,
+        consecutiveFailures: 10,
+        circuitBreakerOpenSince: undefined as Date | undefined,
+      };
+      mockRegistry._testMap.set("mod-cb-error", registered);
+      (mockRegistry.get as jest.Mock).mockImplementation(
+        (moduleId: string) => mockRegistry._testMap.get(moduleId),
+      );
+
+      const result = await handleCircuitBreakerTrip("mod-cb-error");
+
+      expect(result).toEqual({ pausedCount: 0 });
+      expect(mockRegistry.updateCircuitBreaker).not.toHaveBeenCalled();
+      expect(mockPrisma.automation.findMany).not.toHaveBeenCalled();
+    });
+
   });
 
   describe("handleCircuitBreakerRecovery", () => {
@@ -649,8 +722,9 @@ describe("Degradation Rules", () => {
   // ===========================================================================
 
   describe("Event emission integration", () => {
-    it("handleAuthFailure — emits AutomationDegraded event", async () => {
+    it("handleAuthFailure �� emits AutomationDegraded event", async () => {
       (mockRegistry.get as jest.Mock).mockReturnValue({
+        status: ModuleStatus.ACTIVE,
         manifest: {
           name: "JSearch",
           connectorType: ConnectorType.JOB_DISCOVERY,
@@ -681,6 +755,7 @@ describe("Degradation Rules", () => {
 
     it("handleAuthFailure — emits one event per affected automation", async () => {
       (mockRegistry.get as jest.Mock).mockReturnValue({
+        status: ModuleStatus.ACTIVE,
         manifest: {
           name: "JSearch",
           connectorType: ConnectorType.JOB_DISCOVERY,
@@ -705,6 +780,7 @@ describe("Degradation Rules", () => {
 
     it("handleAuthFailure — emits event regardless of user preference state", async () => {
       (mockRegistry.get as jest.Mock).mockReturnValue({
+        status: ModuleStatus.ACTIVE,
         manifest: {
           name: "JSearch",
           connectorType: ConnectorType.JOB_DISCOVERY,

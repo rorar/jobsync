@@ -32,6 +32,7 @@ jest.mock("@/lib/db", () => ({
     moduleRegistration: { findMany: jest.fn(), upsert: jest.fn() },
     automation: { findMany: jest.fn(), updateMany: jest.fn() },
     user: { count: jest.fn(), findFirst: jest.fn() },
+    apiKey: { findFirst: jest.fn() },
   },
 }));
 
@@ -708,6 +709,147 @@ describe("module.actions", () => {
         expect(emitEvent).not.toHaveBeenCalled();
 
         consoleSpy.mockRestore();
+      });
+    });
+
+    describe("is_configured guard (CB-1)", () => {
+      it("rejects activation when credential.required=true and no credential is configured", async () => {
+        // Module with required credential, no env fallback, no default, no DB key
+        delete process.env.ADMIN_USER_IDS;
+        (getCurrentUser as jest.Mock).mockResolvedValue({
+          id: "user-1",
+          name: "Test User",
+          email: "test@example.com",
+        });
+        (prisma.user.count as jest.Mock).mockResolvedValue(1);
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: "user-1" });
+        (moduleRegistry.get as jest.Mock).mockReturnValue({
+          ...makeRegisteredModule({
+            id: "jsearch",
+            credential: {
+              type: CredentialType.API_KEY,
+              moduleId: "rapidapi",
+              required: true,
+              sensitive: true,
+              envFallback: "RAPIDAPI_KEY",
+            },
+          }),
+          status: ModuleStatus.INACTIVE,
+        });
+        // No env var
+        delete process.env.RAPIDAPI_KEY;
+        // No DB key
+        (prisma.apiKey.findFirst as jest.Mock).mockResolvedValue(null);
+
+        const result = await activateModule("jsearch");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("settings.moduleActivationRequiresCredential");
+        // No side effects on shared state
+        expect(moduleRegistry.setStatus).not.toHaveBeenCalled();
+        expect(prisma.moduleRegistration.upsert).not.toHaveBeenCalled();
+      });
+
+      it("allows activation when credential.required=true and env fallback is set", async () => {
+        delete process.env.ADMIN_USER_IDS;
+        (getCurrentUser as jest.Mock).mockResolvedValue({
+          id: "user-1",
+          name: "Test User",
+          email: "test@example.com",
+        });
+        (prisma.user.count as jest.Mock).mockResolvedValue(1);
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: "user-1" });
+        (moduleRegistry.get as jest.Mock).mockReturnValue({
+          ...makeRegisteredModule({
+            id: "jsearch",
+            credential: {
+              type: CredentialType.API_KEY,
+              moduleId: "rapidapi",
+              required: true,
+              sensitive: true,
+              envFallback: "RAPIDAPI_KEY",
+            },
+          }),
+          status: ModuleStatus.INACTIVE,
+        });
+        // Env var IS set
+        process.env.RAPIDAPI_KEY = "test-key-123";
+        (prisma.moduleRegistration.upsert as jest.Mock).mockResolvedValue({});
+        (prisma.automation.findMany as jest.Mock).mockResolvedValue([]);
+
+        const result = await activateModule("jsearch");
+
+        expect(result.success).toBe(true);
+        expect(result.data?.status).toBe(ModuleStatus.ACTIVE);
+
+        // Cleanup
+        delete process.env.RAPIDAPI_KEY;
+      });
+
+      it("allows activation when credential.required=true and DB key exists", async () => {
+        delete process.env.ADMIN_USER_IDS;
+        (getCurrentUser as jest.Mock).mockResolvedValue({
+          id: "user-1",
+          name: "Test User",
+          email: "test@example.com",
+        });
+        (prisma.user.count as jest.Mock).mockResolvedValue(1);
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: "user-1" });
+        (moduleRegistry.get as jest.Mock).mockReturnValue({
+          ...makeRegisteredModule({
+            id: "jsearch",
+            credential: {
+              type: CredentialType.API_KEY,
+              moduleId: "rapidapi",
+              required: true,
+              sensitive: true,
+              envFallback: "RAPIDAPI_KEY",
+            },
+          }),
+          status: ModuleStatus.INACTIVE,
+        });
+        // No env var
+        delete process.env.RAPIDAPI_KEY;
+        // DB key EXISTS
+        (prisma.apiKey.findFirst as jest.Mock).mockResolvedValue({ id: "key-1" });
+        (prisma.moduleRegistration.upsert as jest.Mock).mockResolvedValue({});
+        (prisma.automation.findMany as jest.Mock).mockResolvedValue([]);
+
+        const result = await activateModule("jsearch");
+
+        expect(result.success).toBe(true);
+        expect(result.data?.status).toBe(ModuleStatus.ACTIVE);
+      });
+
+      it("skips is_configured check when credential.required=false", async () => {
+        delete process.env.ADMIN_USER_IDS;
+        (getCurrentUser as jest.Mock).mockResolvedValue({
+          id: "user-1",
+          name: "Test User",
+          email: "test@example.com",
+        });
+        (prisma.user.count as jest.Mock).mockResolvedValue(1);
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: "user-1" });
+        (moduleRegistry.get as jest.Mock).mockReturnValue({
+          ...makeRegisteredModule({
+            id: "eures",
+            credential: {
+              type: CredentialType.NONE,
+              moduleId: "eures",
+              required: false,
+              sensitive: false,
+            },
+          }),
+          status: ModuleStatus.INACTIVE,
+        });
+        (prisma.moduleRegistration.upsert as jest.Mock).mockResolvedValue({});
+        (prisma.automation.findMany as jest.Mock).mockResolvedValue([]);
+
+        const result = await activateModule("eures");
+
+        expect(result.success).toBe(true);
+        // apiKey.findFirst should NOT have been called
+        expect(prisma.apiKey.findFirst).not.toHaveBeenCalled();
       });
     });
 

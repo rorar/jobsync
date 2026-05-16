@@ -251,7 +251,7 @@ describe("crmTask.actions", () => {
 
     it("sets status=done and completedAt (activity log via consumer)", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
-      (prisma.crmTask.findFirst as jest.Mock).mockResolvedValue({ id: "task-1", status: "in_progress", title: "Finish Me" });
+      (prisma.crmTask.findFirst as jest.Mock).mockResolvedValue({ id: "task-1", status: "in_progress", title: "Finish Me", targets: [] });
       (isValidTaskTransition as jest.Mock).mockReturnValue(true);
       (prisma.crmTask.update as jest.Mock).mockResolvedValue({});
 
@@ -269,7 +269,7 @@ describe("crmTask.actions", () => {
 
     it("publishes CrmTaskCompleted event", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
-      (prisma.crmTask.findFirst as jest.Mock).mockResolvedValue({ id: "task-1", status: "in_progress", title: "Done Task" });
+      (prisma.crmTask.findFirst as jest.Mock).mockResolvedValue({ id: "task-1", status: "in_progress", title: "Done Task", targets: [{ targetPersonId: "p-1", targetJobId: null }] });
       (isValidTaskTransition as jest.Mock).mockReturnValue(true);
       (prisma.crmTask.update as jest.Mock).mockResolvedValue({});
 

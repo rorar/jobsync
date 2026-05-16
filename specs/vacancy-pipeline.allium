@@ -175,10 +175,12 @@ enum VacancySource { manual | automation }
 -- manual:     User created via Add Job or Quick-Add
 -- automation: Discovered by an Automation run
 
-enum BulkActionType { dismiss | archive | trash | restore | restore_from_trash }
+enum BulkActionType { dismiss | archive | trash | restore | restore_from_trash | block | delete }
 -- promote removed: bulk promotion is not yet implemented.
 -- delete renamed to trash: matches code's BulkActionType = "trash".
 -- restore_from_trash added: distinct from restore (which restores dismissed vacancies).
+-- block: blacklist the company and trash the vacancy (compound operation).
+-- delete: permanent hard-delete (only from trash, bypasses retention).
 
 enum BlacklistMatchType { exact | contains | starts_with | ends_with }
 -- exact:       Case-insensitive full match (e.g. "Acme Corp" matches "acme corp")
@@ -272,6 +274,7 @@ entity StagedVacancy {
         processing -> dismissed
         ready -> promoted
         ready -> dismissed
+        dismissed -> staged
         terminal: promoted
     }
 }
@@ -324,6 +327,9 @@ config {
     dedup_lookback_days: Integer = 90
         -- DedupHash records older than this are not checked during dedup.
         -- A vacancy purged more than this many days ago can be rediscovered.
+    max_jobs_per_run: Integer = 10
+        -- Maximum vacancies staged per automation run.
+        -- Limits intake to prevent flooding the staging queue.
 }
 
 ------------------------------------------------------------
@@ -382,27 +388,34 @@ rule AutomatedVacancyIntake {
         -- Also check DedupHash table for purged records.
         requires: not exists DedupHash{user_id: automation.userId, hash: hash(dedup_key)}
 
-        ensures: StagedVacancy.created(
-            user_id: automation.userId,
-            source_board: vacancy.source_board,
-            external_id: vacancy.external_id,
-            source_url: vacancy.source_url,
-            title: vacancy.title,
-            employer_name: vacancy.employer_name,
-            location: vacancy.location,
-            description: vacancy.description,
-            salary: vacancy.salary,
-            employment_type: vacancy.employment_type,
-            posted_at: vacancy.posted_at,
-            application_deadline: vacancy.application_deadline,
-            application_instructions: vacancy.application_instructions,
-            source: automation,
-            automation_id: automation.id,
-            match_score: vacancy.match_score,
-            match_data: vacancy.match_data,
-            status: staged,
-            discovered_at: now
-        )
+        ensures:
+            let staged = StagedVacancy.created(
+                user_id: automation.userId,
+                source_board: vacancy.source_board,
+                external_id: vacancy.external_id,
+                source_url: vacancy.source_url,
+                title: vacancy.title,
+                employer_name: vacancy.employer_name,
+                location: vacancy.location,
+                description: vacancy.description,
+                salary: vacancy.salary,
+                employment_type: vacancy.employment_type,
+                posted_at: vacancy.posted_at,
+                application_deadline: vacancy.application_deadline,
+                application_instructions: vacancy.application_instructions,
+                source: automation,
+                automation_id: automation.id,
+                match_score: vacancy.match_score,
+                match_data: vacancy.match_data,
+                status: staged,
+                discovered_at: now
+            )
+            VacancyStaged(
+                staged_vacancy_id: staged.id,
+                user_id: automation.userId,
+                source_board: vacancy.source_board,
+                automation_id: automation.id
+            )
 
     @guidance
         -- If externalId is null (connector doesn't provide it), fall back to
@@ -415,6 +428,9 @@ rule AutomatedVacancyIntake {
         -- are updated (upsert semantics). This refreshes AI match data when automations
         -- re-run with overlapping results. No new StagedVacancy is created.
         -- Dismissed vacancies are NOT deduped -- rediscovery creates a new staged entry.
+        -- When matchThreshold > 0 but the user has no active resume text, the
+        -- automation is skipped entirely and produces a failed AutomationRun record
+        -- with reason "resume_missing". No vacancies are staged in this case.
 }
 
 rule ManualVacancyBypass {
@@ -537,7 +553,7 @@ rule UndoAction {
     ensures:
         for item_id in token.item_ids:
             let vacancy = StagedVacancy{id: item_id}
-            vacancy.status = staged
+            vacancy.status = restore_previous_status(token, item_id)
 
     @guidance
         -- Implementation: optimistic UI updates immediately on the client.
@@ -545,7 +561,9 @@ rule UndoAction {
         -- If undo window expires without undo, the action is permanent.
         -- For bulk actions, one UndoToken covers the entire batch.
         -- Each UndoToken can only be used once.
-        -- The compensation function restores each item to its pre-action status.
+        -- The compensation function restores each item to its per-item
+        -- previous status (not always "staged"). The token captures previous
+        -- statuses at action time via a closure or stored mapping.
         -- Calling undo twice on the same token has no additional effect (idempotent).
 }
 
@@ -566,26 +584,26 @@ rule UndoExpiry {
         -- This is acceptable for a 10-second window.
 }
 
-rule CtrlZBinding {
-    -- Ctrl+Z keyboard shortcut pops the most recent unexpired token from the undo stack.
+rule UndoKeyBinding {
+    -- Bare Z key (no modifier) pops the most recent unexpired token from the undo stack.
     -- The undo system maintains a stack (LIFO) of active UndoTokens.
-    -- Ctrl+Z pops and executes the most recent one.
-    when: CtrlZPressed(by)
+    -- Z pops and executes the most recent one.
+    when: UndoKeyPressed(by)
 
     requires: exists UndoToken{user_id: by.id}
 
     ensures: Undo(token: UndoToken{user_id: by.id}, by: by)
 
     @guidance
-        -- Current implementation: Ctrl+Z is only active within the JobDeck (swipe)
-        -- view, not as a global listener across all pages. The global keydown
-        -- listener described here is aspirational -- the deck-scoped version is
-        -- the initial implementation.
+        -- Current implementation: bare Z key (no modifier) is only active within
+        -- the JobDeck (swipe) view, not as a global listener across all pages.
+        -- The global keydown listener described here is aspirational -- the
+        -- deck-scoped version is the initial implementation.
         -- The hook checks document.activeElement to avoid capturing undo in form inputs.
         -- After popping, the toast for that token is dismissed.
-        -- If the stack is empty or all tokens are expired, Ctrl+Z is a no-op
+        -- If the stack is empty or all tokens are expired, the key press is a no-op
         -- (does not preventDefault -- allows browser undo to work in inputs).
-        -- keyboard focus must NOT be in a text input, textarea, or contenteditable element
+        -- Keyboard focus must NOT be in a text input, textarea, or contenteditable element
         -- to prevent conflict with browser/editor undo in form fields.
 }
 
@@ -649,6 +667,12 @@ rule ArchiveVacancy {
     ensures:
         vacancy.archived_at = now
         VacancyArchived(staged_vacancy_id: vacancy.id, user_id: by.id)
+        UndoToken.created(
+            action_type: archive,
+            item_ids: { vacancy.id },
+            previous_statuses: { vacancy.status },
+            expires_at: now + config.undo_window_seconds.seconds
+        )
 }
 
 rule TrashVacancy {
@@ -772,6 +796,14 @@ rule DedupCheck {
             DedupResult(result: new_vacancy)
 
     @guidance
+        -- Dedup strategies (priority order):
+        -- 1. ExternalId match: primary key from the source board (most reliable).
+        -- 2. Normalized URL match: when externalId is absent, hash(sourceUrl) is used.
+        --    URL normalization strips query params, trailing slashes, and protocol
+        --    before hashing to catch trivial URL variants pointing to the same listing.
+        -- 3. Cross-aggregate URL match: check Job.jobUrl for already-promoted vacancies
+        --    to prevent re-staging a vacancy that already exists as a tracked Job.
+        --
         -- Dual-key dedup: checks both externalId (primary) and normalized sourceUrl (fallback).
         -- A vacancy with a different externalId but the same URL is treated as a duplicate.
         -- The 90-day bound on DedupHash queries is a performance safeguard.
@@ -1120,6 +1152,8 @@ surface DeckView {
     provides:
         DismissVacancy(vacancy_id, viewer)
         PromoteVacancy(input, viewer)
+        UserBlocksCompany(company_name, viewer)
+        SkipVacancy(vacancy_id, viewer)
         Undo(token, viewer)
 
     @guarantee FocusManagement
@@ -1148,6 +1182,14 @@ surface DeckView {
     @guarantee MotionReduce
         -- The current card's drag transition and exit animation respect
         -- prefers-reduced-motion via motion-reduce.
+
+    @guidance
+        -- UserBlocksCompany is a compound operation: adds the company to
+        -- the blacklist AND trashes the current vacancy. The deck advances
+        -- after the block action completes.
+        -- SkipVacancy is a pure navigation action: advances the deck to the
+        -- next card without changing any server state. The skipped card remains
+        -- in the staging queue and will reappear on next load.
 }
 
 ------------------------------------------------------------

@@ -52,6 +52,11 @@ external entity WorkExperience {
     -- Work experience entry on a resume. References Company and Location.
 }
 
+external entity Education {
+    -- Education entry on a resume. References Location.
+    location: Location?
+}
+
 ------------------------------------------------------------
 -- Entities
 ------------------------------------------------------------
@@ -60,6 +65,7 @@ entity Company {
     label: String               -- display name as entered by user
     value: String               -- label.trim().toLowerCase()
     logo_url: String?           -- optional company logo URL
+    domain: String?             -- extracted domain (e.g. "github.com"), populated by enrichment
     created_by: User
 
     @invariant UserScopedUniqueness
@@ -80,6 +86,10 @@ entity Location {
     @invariant UserScopedUniqueness
         -- (value, created_by) is unique.
         -- Referenced by Job, WorkExperience, and Education.
+
+    @invariant ReferentialIntegrity
+        -- A Location CANNOT be deleted if linked to any Job, WorkExperience, or Education.
+        -- Implicitly protected by foreign key constraints.
 }
 
 entity JobTitle {
@@ -90,6 +100,10 @@ entity JobTitle {
     @invariant UserScopedUniqueness
         -- (value, created_by) is unique.
         -- Referenced by Job and WorkExperience.
+
+    @invariant ReferentialIntegrity
+        -- A JobTitle CANNOT be deleted if linked to any Job or WorkExperience.
+        -- Implicitly protected by foreign key constraints.
 }
 
 entity JobSource {
@@ -101,11 +115,15 @@ entity JobSource {
         -- (value, created_by) is unique.
         -- Seeded at signup from JOB_SOURCES constant.
         -- Users can create additional sources via combobox.
+
+    @invariant ReferentialIntegrity
+        -- A JobSource CANNOT be deleted if linked to any Job.
+        -- Implicitly protected by foreign key constraints.
 }
 
 entity JobStatus {
-    label: String               -- display name (e.g. "Saved", "Applied", "Interview")
-    value: String               -- unique globally (e.g. "saved", "applied", "interview")
+    label: String               -- display name (e.g. "Draft", "Applied", "Interview")
+    value: String               -- unique globally (e.g. "draft", "applied", "interview")
 
     @invariant GlobalUniqueness
         -- GLOBAL (not user-scoped). value is unique across all users.
@@ -165,12 +183,13 @@ rule CreateCompany {
     requires: label != ""
 
     ensures:
-        Company.created(
+        let company = Company.created(
             label: label,
             value: normalize(label),
             logo_url: logo_url,
             created_by: user
         )
+        CompanyCreated(company_id: company.id, user_id: user.id)
 
     @guidance
         -- value = label.trim().toLowerCase()
@@ -253,14 +272,12 @@ rule CreateTag {
     requires: label != ""
 
     ensures:
-        Tag.created(
-            label: label,
-            value: normalize(label),
-            created_by: user
-        )
+        SharedEntityResolved(user: user, entity_type: "tag", label: label)
 
     @guidance
         -- Upsert semantics: returns existing tag if (value, created_by) matches.
+        -- If not exists: creates Tag(label, normalize(label), user).
+        -- If exists: returns existing tag unchanged.
         -- Idempotent — safe for combobox "create" option.
 }
 
@@ -276,6 +293,17 @@ rule DeleteTag {
 
     @guidance
         -- Referential integrity: cannot delete a tag in use.
+}
+
+rule GetTagList {
+    when: GetTagList(user)
+
+    ensures:
+        TagListReturned(user: user)
+
+    @guidance
+        -- Returns tags where created_by = user.
+        -- Ordered by label ascending.
 }
 
 -- === JobStatus Resolution ===

@@ -168,7 +168,7 @@ export const AutomationRunCompletedPayloadSchema = z.object({
 export const AutomationDegradedPayloadSchema = z.object({
   automationId: z.string(),
   userId: z.string(),
-  reason: z.enum(["auth_failure", "cb_escalation", "consecutive_failures"]),
+  reason: z.enum(["auth_failure", "cb_escalation", "consecutive_failures", "health_unreachable"]),
   moduleId: z.string().optional(),
   automationName: z.string(),
   message: z.string(),
@@ -269,12 +269,16 @@ export const CrmTaskCreatedPayloadSchema = z.object({
   taskId: z.string(),
   userId: z.string(),
   title: z.string(),
+  targetPersonId: z.string().optional(),
+  targetJobId: z.string().optional(),
 }) satisfies z.ZodType<CrmTaskCreatedPayload>;
 
 export const CrmTaskCompletedPayloadSchema = z.object({
   taskId: z.string(),
   userId: z.string(),
   title: z.string(),
+  targetPersonId: z.string().optional(),
+  targetJobId: z.string().optional(),
 }) satisfies z.ZodType<CrmTaskCompletedPayload>;
 
 export const CrmNoteCreatedPayloadSchema = z.object({

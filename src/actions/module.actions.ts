@@ -193,6 +193,25 @@ export async function activateModule(
       return { success: true, data: { moduleId, status: ModuleStatus.ACTIVE } };
     }
 
+    // Guard: reject activation if credential is required but not configured
+    // Spec rule ModuleActivation requires: module.is_configured
+    // is_configured = credential.type = none OR defaultValue != null OR env fallback set OR DB row exists
+    if (registered.manifest.credential.required) {
+      const cred = registered.manifest.credential;
+      const hasDefault = !!cred.defaultValue;
+      const hasEnv = !!cred.envFallback && !!process.env[cred.envFallback];
+      const hasDbKey = await prisma.apiKey.findFirst({
+        where: { moduleId: cred.moduleId },
+        select: { id: true },
+      });
+      if (!hasDefault && !hasEnv && !hasDbKey) {
+        return {
+          success: false,
+          message: "settings.moduleActivationRequiresCredential",
+        };
+      }
+    }
+
     // Update in-memory registry
     moduleRegistry.setStatus(moduleId, ModuleStatus.ACTIVE);
 

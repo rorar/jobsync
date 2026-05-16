@@ -68,6 +68,7 @@ const DEGRADATION_REASON_TO_TYPE: Record<AutomationDegradedPayload["reason"], No
   auth_failure: "auth_failure",
   cb_escalation: "cb_escalation",
   consecutive_failures: "consecutive_failures",
+  health_unreachable: "module_unreachable",
 };
 
 // ---------------------------------------------------------------------------

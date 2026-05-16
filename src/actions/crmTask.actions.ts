@@ -111,11 +111,14 @@ export async function createCrmTask(
     });
 
     // Activity log projected via crm-activity-logger consumer (TimelineProjection contract)
+    const firstTarget = input.targets[0];
     eventBus.publish(
       createEvent(DomainEventType.CrmTaskCreated, {
         taskId: task.id,
         userId: user.id,
         title: input.title,
+        targetPersonId: firstTarget?.targetPersonId ?? undefined,
+        targetJobId: firstTarget?.targetJobId ?? undefined,
       }),
     );
 
@@ -157,6 +160,7 @@ export async function completeCrmTask(taskId: string): Promise<ActionResult<{ id
 
     const task = await prisma.crmTask.findFirst({
       where: { id: taskId, userId: user.id },
+      include: { targets: { select: { targetPersonId: true, targetJobId: true }, take: 1 } },
     });
     if (!task) return { success: false, message: "crm.errors.taskNotFound" };
 
@@ -170,11 +174,14 @@ export async function completeCrmTask(taskId: string): Promise<ActionResult<{ id
     });
 
     // Activity log projected via crm-activity-logger consumer (TimelineProjection contract)
+    const firstTarget = task.targets[0];
     eventBus.publish(
       createEvent(DomainEventType.CrmTaskCompleted, {
         taskId,
         userId: user.id,
         title: task.title,
+        targetPersonId: firstTarget?.targetPersonId ?? undefined,
+        targetJobId: firstTarget?.targetJobId ?? undefined,
       }),
     );
 

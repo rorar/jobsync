@@ -50,11 +50,12 @@ contract ActionResultContract {
     -- The contract is parameterised by the payload type at the
     -- TypeScript level (ActionResult<T>); Allium uses Any here.
 
-    handle_error: (error: Any) -> ActionResult
+    handle_error: (error: Any, message: String?) -> ActionResult
     -- Shared error handler in src/lib/utils.ts.
     -- All Pattern A and Pattern B functions delegate to handleError()
-    -- in their catch block. Receives the caught error, returns
-    -- { success: false, message: "..." } with data always absent.
+    -- in their catch block. Receives the caught error and an optional
+    -- context message, returns { success: false, message: "..." }
+    -- with data always absent.
 
     @invariant SuccessImpliesNoError
         -- When success is true, error_code is absent.
@@ -91,6 +92,16 @@ contract ActionResultContract {
         --   rewritten to { data, success }. Callers referencing
         --   result.totalQuestions or result.totalTasks updated to result.total.
         -- All 748 existing tests continue to pass with new ActionResult shapes.
+        --
+        -- Early-return guard pattern: many actions return failure directly
+        -- (e.g. { success: false, message: "Not found" }) for auth/validation
+        -- guards BEFORE reaching the try/catch block. These guards do not call
+        -- handleError — they return ActionResult literals inline. This is
+        -- intentional: guards are deterministic and need no error wrapping.
+        --
+        -- Catalog note: the function classification below is a point-in-time
+        -- snapshot. The codebase has 218+ action functions across 40 action files
+        -- as of 2026-05. New actions follow Pattern A by default.
 }
 
 ------------------------------------------------------------
@@ -105,7 +116,7 @@ contract ActionResultContract {
 --   createActivityType
 -- company: getCompanyList, addCompany, updateCompany, getCompanyById, deleteCompanyById
 -- job: getJobsList, getJobDetails, addJob, updateJob, updateJobStatus, deleteJobById,
---   createLocation, createJobSource
+--   createLocation, createJobSource, getStatusList, getJobSourceList
 -- jobLocation: getJobLocationsList, deleteJobLocationById
 -- jobSource: getJobSourceList, deleteJobSourceById
 -- jobtitle: getJobTitleList, createJobTitle, deleteJobTitleById
@@ -142,15 +153,13 @@ contract ActionResultContract {
 -- contactInfo: getLatestContactInfo
 -- job: addJobToQueue
 --
--- PATTERN B (MIGRATED to ActionResult<T[]>): 7 functions
+-- PATTERN B (MIGRATED to ActionResult<T[]>): 5 functions
 -- company: getAllCompanies -> ActionResult<Company[]>
 -- jobtitle: getAllJobTitles -> ActionResult<JobTitle[]>
 -- jobLocation: getAllJobLocations -> ActionResult<JobLocation[]>
 -- tag: getAllTags -> ActionResult<Tag[]>
 -- activity: getAllActivityTypes -> ActionResult<ActivityType[]>
--- job: getStatusList -> ActionResult<JobStatus[]>
--- job: getJobSourceList -> ActionResult<JobSource[]>
--- NOTE: createActivityType was reclassified to Pattern A (returns ActionResult shape)
+-- NOTE: createActivityType, getStatusList, getJobSourceList reclassified to Pattern A
 --
 -- PATTERN C (custom return): 7 functions
 -- dashboard: getJobsAppliedForPeriod, getRecentJobs, getActivityDataForPeriod,

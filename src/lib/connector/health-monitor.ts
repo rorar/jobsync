@@ -1,6 +1,9 @@
 import "server-only";
 
 import prisma from "@/lib/db";
+import { emitEvent, createEvent } from "@/lib/events";
+import { DomainEventType } from "@/lib/events/event-types";
+import type { AutomationDegradedPayload } from "@/lib/events/event-types";
 import { moduleRegistry } from "./registry";
 import { isBlockedHealthCheckUrl } from "@/lib/url-validation";
 import {
@@ -160,6 +163,9 @@ export async function checkModuleHealth(
   // handleAuthFailure (spec: HealthStatusEscalation is notification-only,
   // AuthFailureEscalation fires on actual operations via providers.ts).
 
+  // Capture previous health status for transition detection (HealthStatusEscalation)
+  const previousHealthStatus = registered.healthStatus;
+
   // Determine new health status based on probe result and consecutive failures
   let newHealthStatus: HealthStatus;
   let consecutiveFailures = 0;
@@ -225,6 +231,16 @@ export async function checkModuleHealth(
     console.error(`[checkModuleHealth] Failed to persist health status for "${moduleId}" to DB:`, dbError);
   }
 
+  // HealthStatusEscalation: notify users when module TRANSITIONS to UNREACHABLE.
+  // Guard: only fire on the transition (previous !== UNREACHABLE, new === UNREACHABLE)
+  // to avoid spamming on every subsequent health check while already unreachable.
+  if (
+    newHealthStatus === HealthStatus.UNREACHABLE &&
+    previousHealthStatus !== HealthStatus.UNREACHABLE
+  ) {
+    await emitHealthUnreachableNotifications(moduleId, registered.manifest.name);
+  }
+
   return {
     moduleId,
     success: probeResult.success,
@@ -254,6 +270,71 @@ export async function checkAllModuleHealth(): Promise<HealthCheckResult[]> {
   }
 
   return results;
+}
+
+// ---------------------------------------------------------------------------
+// HealthStatusEscalation — notify users when a module becomes unreachable
+// ---------------------------------------------------------------------------
+
+/**
+ * Query all active automations using this module, group by userId,
+ * and emit an AutomationDegraded event per affected automation.
+ * Follows the same pattern as handleAuthFailure in degradation.ts.
+ *
+ * Spec: module-lifecycle.allium, rule HealthStatusEscalation
+ * Note: this is notification-only — automations are NOT paused.
+ * (HealthStatusEscalation is informational; AuthFailureEscalation and
+ * CircuitBreakerEscalation handle actual pausing on operational failures.)
+ */
+async function emitHealthUnreachableNotifications(
+  moduleId: string,
+  moduleName: string,
+): Promise<void> {
+  try {
+    const affectedAutomations = await prisma.automation.findMany({
+      where: {
+        jobBoard: moduleId,
+        status: "active",
+      },
+      select: { id: true, userId: true, name: true },
+    });
+
+    if (affectedAutomations.length === 0) return;
+
+    const safeModuleName = moduleName.length > 200
+      ? moduleName.slice(0, 200)
+      : moduleName;
+
+    for (const auto of affectedAutomations) {
+      const safeName = auto.name.length > 200
+        ? auto.name.slice(0, 200)
+        : auto.name;
+
+      const payload: AutomationDegradedPayload = {
+        automationId: auto.id,
+        userId: auto.userId,
+        automationName: safeName,
+        reason: "health_unreachable",
+        moduleId,
+        titleKey: "notifications.moduleUnreachable.title",
+        titleParams: { moduleName: safeModuleName },
+        actorType: "module",
+        actorId: moduleId,
+        reasonKey: "notifications.reason.healthUnreachable",
+        severity: "error",
+        moduleName: safeModuleName,
+        message: `Module "${safeModuleName}" is unreachable. Automation "${safeName}" may be affected.`,
+      };
+
+      emitEvent(createEvent(DomainEventType.AutomationDegraded, payload));
+    }
+
+    console.warn(
+      `[HealthMonitor] Module "${moduleId}" transitioned to UNREACHABLE. Notified ${affectedAutomations.length} automation(s).`,
+    );
+  } catch (error) {
+    console.error("[HealthMonitor] Failed to emit health unreachable notifications:", error);
+  }
 }
 
 /**

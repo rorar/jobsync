@@ -166,7 +166,7 @@ export interface AutomationRunCompletedPayload {
 export interface AutomationDegradedPayload {
   automationId: string;
   userId: string;
-  reason: "auth_failure" | "cb_escalation" | "consecutive_failures";
+  reason: "auth_failure" | "cb_escalation" | "consecutive_failures" | "health_unreachable";
   // Notification-relevant fields (Sprint C: degradation → event-based notifications)
   moduleId?: string;
   automationName: string;
@@ -262,12 +262,16 @@ export interface CrmTaskCreatedPayload {
   taskId: string;
   userId: string;
   title: string;
+  targetPersonId?: string;
+  targetJobId?: string;
 }
 
 export interface CrmTaskCompletedPayload {
   taskId: string;
   userId: string;
   title: string;
+  targetPersonId?: string;
+  targetJobId?: string;
 }
 
 export interface CrmNoteCreatedPayload {

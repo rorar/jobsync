@@ -54,6 +54,16 @@ enum DomainEventType {
     | automation_degraded
     -- CRM Core (spec: crm-workflow.allium)
     | job_status_changed
+    -- CRM Contacts & Activities (spec: crm.allium)
+    | contact_created
+    | contact_updated
+    | contact_deleted
+    | interview_scheduled
+    | interview_completed
+    | reminder_triggered
+    | crm_task_created
+    | crm_task_completed
+    | crm_note_created
     -- Data Enrichment (spec: data-enrichment.allium)
     | company_created
     | enrichment_completed
@@ -184,6 +194,17 @@ value AutomationDegradedPayload {
     automation_id: String
     user_id: String
     reason: String                       -- "auth_failure" | "cb_escalation" | "consecutive_failures"
+    module_id: String?
+    automation_name: String
+    message: String
+    title_key: String
+    title_params: String?
+    actor_type: String
+    actor_id: String
+    reason_key: String?
+    severity: String
+    module_name: String?
+    failure_count: Integer?
 }
 
 -- CRM Core payload (spec: crm-workflow.allium)
@@ -225,6 +246,7 @@ value EnrichmentFailedPayload {
 value ContactCreatedPayload {
     person_id: String
     user_id: String
+    source: String                       -- "manual" | "auto_created" | "imported"
 }
 
 value ContactUpdatedPayload {
@@ -235,33 +257,46 @@ value ContactUpdatedPayload {
 value ContactDeletedPayload {
     person_id: String
     user_id: String
+    reason: String                       -- "anonymized" | "merged" | "deleted"
 }
 
 value InterviewScheduledPayload {
     interview_id: String
-    person_id: String
+    person_id: String?
+    job_id: String
+    interview_date: String
     user_id: String
 }
 
 value InterviewCompletedPayload {
     interview_id: String
-    person_id: String
+    job_id: String
+    outcome: String
     user_id: String
 }
 
 value ReminderTriggeredPayload {
-    target_type: String                  -- "interview" | "task"
-    target_id: String
+    reason: String                       -- "interview_upcoming" | "task_overdue" | "retention_expired" | "follow_up_due"
+    target_job_id: String?
+    target_person_id: String?
+    interview_id: String?
+    task_id: String?
     user_id: String
 }
 
 value CrmTaskCreatedPayload {
     task_id: String
+    title: String
+    target_person_id: String?
+    target_job_id: String?
     user_id: String
 }
 
 value CrmTaskCompletedPayload {
     task_id: String
+    title: String
+    target_person_id: String?
+    target_job_id: String?
     user_id: String
 }
 
@@ -288,6 +323,8 @@ contract TypedEventBus {
         -- not the MAX. Each handler is still wrapped in error isolation per
         -- the ErrorIsolation invariant; parallelism does NOT relax that invariant.
         -- Returns after all handlers have settled (fulfilled or rejected).
+        -- NOTE: Code returns void/Promise<void>. Boolean here follows Allium
+        -- convention for success/failure indication at the spec level.
 
     subscribe: (event_type: DomainEventType, handler: String) -> Boolean
         -- Registers a handler for a specific event type or "*" for all events.
@@ -301,6 +338,9 @@ contract TypedEventBus {
 
     reset: (confirmation: String) -> Boolean
         -- Removes all subscriptions. Used in tests only.
+        -- NOTE: The confirmation parameter was aspirational and never
+        -- implemented. The actual code signature takes no arguments;
+        -- the parameter is retained here for spec grammar validity.
 
     handler_count: (event_type: DomainEventType) -> Integer
         -- Returns the number of registered handlers for a given event type,
@@ -337,10 +377,10 @@ contract TypedEventBus {
         -- Cross-publish ordering: preserved by the publish()-level allSettled
         -- barrier. Each publish() does not return until every handler for that
         -- event has settled, so the next publish() sees a stable state.
-        -- All 5 production consumers (audit-logger, notification-dispatcher,
-        -- degradation-coordinator, enrichment-trigger, logo-asset-subscriber)
-        -- were audited and none depends on observing another consumer's
-        -- side-effects within the same dispatch.
+        -- All 6 production consumers (audit-logger, notification-dispatcher,
+        -- degradation-coordinator, enrichment-trigger, logo-asset-subscriber,
+        -- crm-activity-logger) were audited and none depends on observing
+        -- another consumer's side-effects within the same dispatch.
         -- Cross-type ordering is NOT guaranteed and NOT required.
         -- If the bus is ever replaced with an async transport, this invariant
         -- must be preserved per-type (e.g., per-type FIFO queue).
@@ -371,6 +411,15 @@ contract TypedEventBus {
         --   automation_run_completed -> AutomationRunCompletedPayload
         --   automation_degraded -> AutomationDegradedPayload
         --   job_status_changed -> JobStatusChangedPayload
+        --   contact_created -> ContactCreatedPayload
+        --   contact_updated -> ContactUpdatedPayload
+        --   contact_deleted -> ContactDeletedPayload
+        --   interview_scheduled -> InterviewScheduledPayload
+        --   interview_completed -> InterviewCompletedPayload
+        --   reminder_triggered -> ReminderTriggeredPayload
+        --   crm_task_created -> CrmTaskCreatedPayload
+        --   crm_task_completed -> CrmTaskCompletedPayload
+        --   crm_note_created -> CrmNoteCreatedPayload
         --   company_created -> CompanyCreatedPayload
         --   enrichment_completed -> EnrichmentCompletedPayload
         --   enrichment_failed -> EnrichmentFailedPayload

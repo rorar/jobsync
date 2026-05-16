@@ -161,6 +161,7 @@ enum ActivityType {
     | email_sent | email_received | call_logged
     | document_attached | reminder_triggered
     | follow_up_sent | application_submitted
+    | vacancy_promoted | automation_degraded
 }
 
 enum SocialPlatform {
@@ -222,6 +223,7 @@ entity Person {
         active -> archived
         active -> anonymized
         archived -> active
+        archived -> anonymized
         terminal: anonymized
     }
 
@@ -511,7 +513,21 @@ rule AnonymizePerson {
     ensures: person.social_profiles = {}
     ensures: person.avatar_url = null
     ensures: person.address = null
+    ensures: person.created_by = ActorMetadata(source: person.created_by.source, name: null)
+    ensures: person.updated_by = ActorMetadata(source: system, name: null)
     ensures: person.updated_at = now
+
+    ensures:
+        for interview in person.interviews:
+            interview.person = null
+            interview.notes = null
+            interview.outcome_notes = null
+
+    ensures:
+        for al in person.timeline_activities:
+            al.target_person = null
+            al.details = null
+            al.linked_record_name = null
 
     ensures:
         for nt in person.note_targets:
@@ -524,6 +540,13 @@ rule AnonymizePerson {
     ensures:
         for jc in person.job_contacts:
             not exists jc
+
+    ensures:
+        for bl in Blocklists where user_id = person.user_id:
+            if person.emails.any(e => e.email = bl.handle) or person.emails.any(e => extract_domain(e.email) = bl.handle):
+                not exists bl
+
+    ensures: ContactDeleted(person_id: person.id, user_id: person.user_id, reason: anonymized)
 
     @guidance
         -- Implementation should also anonymize MessageParticipant
@@ -796,11 +819,26 @@ rule StartTask {
     ensures: task.updated_at = now
 }
 
+rule DeleteTask {
+    when: DeleteTask(user, task)
+
+    requires: task.user_id = user.id
+    requires: task.status in {done, cancelled}
+
+    ensures: not exists task
+
+    @guidance
+        -- Hard delete beyond terminal status transitions.
+        -- Only tasks that have reached a terminal state (done, cancelled) may be
+        -- permanently removed. Active tasks must be cancelled first.
+        -- TaskTargets cascade via the database FK constraint.
+}
+
 rule TaskOverdueReminder {
     -- Temporal: notify the user when a task passes its due date.
     when: task: Task.due_date <= now
 
-    requires: task.status = pending
+    requires: task.status = pending or task.status = in_progress
 
     ensures: ReminderTriggered(
         user_id: task.user_id,
@@ -851,6 +889,31 @@ rule CreateNote {
     )
 }
 
+rule UpdateNote {
+    when: UpdateNote(user, note, title?, body?)
+
+    requires: note.user_id = user.id
+
+    ensures:
+        if title != null:
+            note.title = title
+        if body != null:
+            note.body = body
+    ensures: note.updated_at = now
+}
+
+rule DeleteNote {
+    when: DeleteNote(user, note)
+
+    requires: note.user_id = user.id
+
+    ensures: not exists note
+
+    @guidance
+        -- Hard delete: removes the Note and its NoteTarget join entities.
+        -- NoteTargets cascade via the database FK constraint.
+}
+
 -- ==========================================================
 -- Activity Timeline
 -- ==========================================================
@@ -895,6 +958,40 @@ rule RecordContactDeletion {
         -- deleted/anonymized by the time this rule fires.
         -- The reason field (anonymized/merged/deleted) is stored in
         -- details as JSON for audit trail rendering.
+}
+
+rule RecordVacancyPromotion {
+    -- Project VacancyPromoted events into the Activity Timeline.
+    when: VacancyPromoted(staged_vacancy_id, job_id, user_id)
+
+    ensures: ActivityLog.created(
+        user_id: user_id,
+        activity_type: vacancy_promoted,
+        happened_at: now,
+        actor_id: user_id,
+        target_job: Job{id: job_id},
+        details: null,
+        linked_record_name: null
+    )
+}
+
+rule RecordAutomationDegradation {
+    -- Project AutomationDegraded events into the Activity Timeline.
+    when: AutomationDegraded(automation_id, user_id, reason)
+
+    ensures: ActivityLog.created(
+        user_id: user_id,
+        activity_type: automation_degraded,
+        happened_at: now,
+        actor_id: null,
+        target_job: null,
+        details: reason,
+        linked_record_name: null
+    )
+
+    @guidance
+        -- The actor_id is null because degradation is a system event
+        -- (circuit breaker trip, auth failure, consecutive run failures).
 }
 
 -- ==========================================================
@@ -1063,6 +1160,16 @@ surface PersonDetail {
             when person.status = archived
         AnonymizePerson(user, person)
             when person.status != anonymized
+        AddJobContact(user, job, person, role?)
+            when person.status = active
+        RemoveJobContact(user, job_contact)
+            when person.status = active
+        CreateNote(user, title?, body, targets)
+            when person.status = active
+        UpdateNote(user, note, title?, body?)
+            when person.status = active
+        DeleteNote(user, note)
+            when person.status = active
 
     related:
         PersonTimeline(person)

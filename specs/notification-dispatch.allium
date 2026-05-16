@@ -28,6 +28,7 @@ external entity Automation {
 }
 
 external entity User {
+    id: String
     email: String
 }
 
@@ -157,16 +158,18 @@ value DispatchContext {
 
     user_id: String
     locale: String
+    in_app_available: Boolean
     preferences: NotificationPreference
-    recipient_email: String?
-    smtp_config: SmtpConfig?
-    vapid_config: VapidConfig?
+    user_email: String?
+    smtp: SmtpConfig?
+    vapid: VapidConfig?
+    vapid_subject: String
     webhook_endpoints: Set<WebhookEndpoint>
-    subscriptions: Set<WebPushSubscription>
+    push_subscriptions: Set<WebPushSubscription>
 
     -- Derived: channel availability (replaces isAvailable DB calls)
-    email_available: smtp_config != null
-    push_available: vapid_config != null and subscriptions.count > 0
+    email_available: smtp != null
+    push_available: vapid != null and push_subscriptions.count > 0
     webhook_available: webhook_endpoints.count > 0
     -- inApp is always available (no infrastructure check needed)
 }
@@ -186,6 +189,14 @@ entity Notification {
     automation_id: String?
     read: Boolean
     created_at: Timestamp
+    data: String?
+    severity: String?
+    actor_type: String?
+    actor_id: String?
+    title_key: String?
+    title_params: String?
+    reason_key: String?
+    reason_params: String?
 }
 
 entity NotificationPreference {
@@ -354,6 +365,12 @@ contract NotificationDispatcher {
 
     @invariant PushSubscriptionKeysEncrypted
         -- WebPushSubscription.p256dh and auth are always AES-encrypted at rest.
+
+    @invariant WebhookDataMinimization
+        -- Webhook payloads are filtered through a strict allowlist before delivery.
+        -- Only fields explicitly declared safe for external transmission are included.
+        -- Internal fields (user_id, module_id, automation internals) are excluded
+        -- unless the endpoint explicitly subscribes to them. GDPR Art. 5(1)(c).
 }
 
 -- =============================================================================
@@ -464,6 +481,10 @@ rule ChannelRouting {
         -- shouldNotify() accepts an optional channel parameter:
         --   - With channel: checks that specific channel is enabled in prefs.channels
         --   - Without channel: returns true if ANY channel is enabled
+        --
+        -- Webhooks additionally filter by event subscription: each endpoint
+        -- declares which event types it subscribes to (endpoint.events field).
+        -- Only matching events are delivered to that endpoint.
 }
 
 rule DegradationDispatchParity {
@@ -482,6 +503,11 @@ rule DegradationDispatchParity {
         -- direct prisma.notification.create to channelRouter.route(). The shared
         -- routeDrafts() helper in degradation.ts builds DispatchContext per unique userId
         -- and routes each draft through the same ChannelRouter singleton.
+        --
+        -- Degradation notifications bypass deduplication and quiet hours.
+        -- They enter the pipeline at ChannelRoutingReady, skipping PreferenceCheck,
+        -- QuietHours, and Deduplication rules. This ensures critical operational
+        -- alerts (auth failure, circuit breaker trip) are always delivered.
 }
 
 rule BatchSummary {
@@ -581,25 +607,28 @@ rule WebhookAutoDeactivation {
 rule EmailDelivery {
     -- Deliver notifications via SMTP email.
     when: EmailDeliveryRequested(draft, ctx)
-    let smtp = ctx.smtp_config
+    let smtp = ctx.smtp
 
     requires: smtp != null
     requires: check_email_rate_limit(ctx.user_id) = true
     requires: validate_smtp_host(smtp.host) = true
-    requires: smtp.tls_required = true
 
     let template = render_email_template(draft.type, draft, ctx.locale)
 
     ensures: EmailSent(
         from: smtp.from_address,
-        to: ctx.recipient_email,
+        to: ctx.user_email,
         subject: template,
         draft: draft
     )
 
     @guidance
         -- Rate limit: 10 emails per minute per user.
-        -- TLS: rejectUnauthorized=true, minVersion='TLSv1.2'.
+        -- TLS enforcement is handled at the transport layer via the smtp.tls_required
+        -- config flag, which is passed to nodemailer's transporter options. When true:
+        -- rejectUnauthorized=true, minVersion='TLSv1.2'. Dispatch is NOT rejected when
+        -- tls_required=false — this supports legitimate configurations (e.g., internal
+        -- SMTP on localhost that does not require TLS).
         -- Port 465 uses implicit TLS (secure: true).
         -- Other ports use STARTTLS (requireTLS from config).
         -- SMTP host validated against SSRF rules on every dispatch.
@@ -609,8 +638,8 @@ rule EmailDelivery {
 rule PushDelivery {
     -- Deliver notifications via browser push (VAPID).
     when: PushDeliveryRequested(draft, ctx)
-    let vapid_keys = ctx.vapid_config
-    let push_subscriptions = ctx.subscriptions
+    let vapid_keys = ctx.vapid
+    let push_subscriptions = ctx.push_subscriptions
 
     requires: vapid_keys != null
     requires: push_subscriptions.count > 0
@@ -645,6 +674,57 @@ rule StaleSubscriptionCleanup {
         -- Some push services return 404 instead of 410 for expired subscriptions.
 }
 
+rule HandleModuleReactivated {
+    -- When a module is reactivated, notify the user.
+    when: ModuleReactivatedEvent(event)
+
+    ensures: DispatchNotification(event: event)
+}
+
+rule HandleRetentionCompleted {
+    -- When retention cleanup finishes, notify the user of purged counts.
+    when: RetentionCompletedEvent(event)
+
+    ensures: DispatchNotification(event: event)
+}
+
+rule HandleJobStatusChanged {
+    -- When a job's status changes, notify the user.
+    when: JobStatusChangedEvent(event)
+
+    ensures: DispatchNotification(event: event)
+}
+
+rule HandleReminderTriggered {
+    -- When a CRM reminder fires (interview_reminder, follow_up_due, etc.), notify.
+    when: ReminderTriggeredEvent(event)
+
+    ensures: DispatchNotification(event: event)
+
+    @guidance
+        -- Maps to interview_reminder, follow_up_due, or retention_expired
+        -- depending on the reminder source and target type.
+}
+
+rule HandleInterviewScheduled {
+    -- When a CRM interview is scheduled, notify the user.
+    when: InterviewScheduledEvent(event)
+
+    ensures: DispatchNotification(event: event)
+}
+
+rule HandleContactCreated {
+    -- When a contact is manually created, notify the user.
+    when: ContactCreatedEvent(event)
+    requires: event.source = "manual"
+
+    ensures: DispatchNotification(event: event)
+
+    @guidance
+        -- Only manual contact creation triggers a notification.
+        -- Auto-created contacts (from job imports) are silent.
+}
+
 -- =============================================================================
 -- Invariants
 -- =============================================================================
@@ -654,7 +734,7 @@ rule StaleSubscriptionCleanup {
 invariant NotificationsOwnedByUser {
     -- Every notification references a valid user.
     for n in Notifications:
-        exists User{email: n.user_id}
+        exists User{id: n.user_id}
 }
 
 invariant NoDuplicateWithinWindow {

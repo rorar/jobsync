@@ -41,7 +41,7 @@ enum AutomationType { discovery | maintenance }
 
 enum SearchField { keywords | location }
 
-enum ConnectorParamType { string | number | boolean | select | multiselect }
+enum ConnectorParamType { string | number | boolean | select | multiselect | language_proficiency }
 
 enum SettingsFieldType { string | number | boolean | select }
 

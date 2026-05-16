@@ -168,7 +168,7 @@ export class EnrichmentOrchestrator {
             userId, input.dimension, domainKey, entry.moduleId, result,
           );
 
-          this.logAttempt(userId, enrichmentResult?.id ?? null, input.dimension, domainKey, entry.moduleId, i + 1, "success", latencyMs);
+          this.logAttempt(userId, enrichmentResult?.id ?? null, input.dimension, domainKey, entry.moduleId, i + 1, enrichmentResult ? "success" : "persist_failed", latencyMs, enrichmentResult ? undefined : "DB persist returned null");
 
           // Cache the result
           const ttl = result.ttl || getTtlForDimension(input.dimension);
@@ -178,16 +178,20 @@ export class EnrichmentOrchestrator {
             ttl,
           );
 
-          // Emit success event
-          emitEvent(
-            createEvent(DomainEventTypes.EnrichmentCompleted, {
-              requestId,
-              dimension: input.dimension,
-              moduleId: entry.moduleId,
-              userId,
-              domainKey,
-            }),
-          );
+          // Only emit EnrichmentCompleted if persist succeeded
+          if (enrichmentResult) {
+            emitEvent(
+              createEvent(DomainEventTypes.EnrichmentCompleted, {
+                requestId,
+                dimension: input.dimension,
+                moduleId: entry.moduleId,
+                userId,
+                domainKey,
+              }),
+            );
+          } else {
+            console.warn("[EnrichmentOrchestrator] Persist failed for %s/%s — skipping EnrichmentCompleted event", input.dimension, domainKey);
+          }
 
           return result;
         }

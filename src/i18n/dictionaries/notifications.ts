@@ -49,6 +49,7 @@ export const notifications = {
     "notifications.reason.authExpired": "API key invalid or expired",
     "notifications.reason.circuitBreaker": "Too many failures, circuit breaker opened",
     "notifications.reason.manualDeactivation": "Deactivated by user",
+    "notifications.reason.healthUnreachable": "Health check failed repeatedly — module is unreachable",
 
     // Action button labels (shared vocabulary)
     "notifications.action.viewStaged": "View staged",
@@ -144,6 +145,7 @@ export const notifications = {
     "notifications.reason.authExpired": "API-Schlüssel ungültig oder abgelaufen",
     "notifications.reason.circuitBreaker": "Zu viele Fehler, Circuit-Breaker geöffnet",
     "notifications.reason.manualDeactivation": "Vom Benutzer deaktiviert",
+    "notifications.reason.healthUnreachable": "Gesundheitscheck wiederholt fehlgeschlagen — Modul nicht erreichbar",
 
     // Action button labels
     "notifications.action.viewStaged": "Vorbereitete anzeigen",
@@ -231,6 +233,7 @@ export const notifications = {
     "notifications.reason.authExpired": "Clé API invalide ou expirée",
     "notifications.reason.circuitBreaker": "Trop d'échecs, disjoncteur ouvert",
     "notifications.reason.manualDeactivation": "Désactivé par l'utilisateur",
+    "notifications.reason.healthUnreachable": "Le bilan de santé a échoué à plusieurs reprises — module injoignable",
 
     // Action button labels
     "notifications.action.viewStaged": "Voir la file d'attente",
@@ -318,6 +321,7 @@ export const notifications = {
     "notifications.reason.authExpired": "Clave API inválida o expirada",
     "notifications.reason.circuitBreaker": "Demasiados fallos, disyuntor abierto",
     "notifications.reason.manualDeactivation": "Desactivado por el usuario",
+    "notifications.reason.healthUnreachable": "El chequeo de salud falló repetidamente — módulo inalcanzable",
 
     // Action button labels
     "notifications.action.viewStaged": "Ver preparadas",

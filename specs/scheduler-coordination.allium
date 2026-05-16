@@ -93,6 +93,7 @@ value SchedulerSnapshot {
     last_cycle_failed_count: Integer
     running_progress: Set<RunProgress>
     -- Live progress per running automation.
+    -- Keyed by automation_id for O(1) lookup.
 }
 
 value RunQueuePosition {
@@ -167,8 +168,7 @@ value AutomationRunCompletedPayload {
     user_id: String
     module_id: String
     run_source: RunSource
-    status: String
-    -- AutomationRun.status value
+    status: String                       -- AutomationRunStatus enum value (completed | completed_with_errors | failed | blocked | rate_limited)
     jobs_saved: Integer
     duration_ms: Integer
 }
@@ -249,10 +249,11 @@ external entity RunnerResult {}
 
 config {
     max_concurrent_runs_per_automation: Integer = 1
-    max_run_duration_ms: Integer = 300000
-    -- 5 minutes. If a run exceeds this, the watchdog forcibly releases its lock.
+    max_run_duration_ms: Integer = 600000
+    -- 10 minutes. If a run exceeds this, the watchdog forcibly releases its lock.
     sse_poll_interval_ms: Integer = 2000
     sse_max_duration_ms: Integer = 600000
+    max_sse_connections_per_user: Integer = 5
     -- SCHEDULER_CYCLE_COOLDOWN_MS removed: no cooldown phase in implementation.
     -- MANUAL_RUN_RATE_LIMIT_PER_HOUR removed: rate limiting handled at HTTP layer (Cockatiel).
 }
@@ -357,6 +358,7 @@ rule SchedulerQueueing {
             let position = RunQueuePosition.created(
                 automation_id: automation.id,
                 automation_name: automation.name,
+                user_id: automation.user_id,
                 position: due_automations.count,
                 total: due_automations.count
             )
@@ -364,12 +366,13 @@ rule SchedulerQueueing {
 
     @guidance
         -- Order by next_run_at ascending (most overdue first).
-        -- Queue positions start at 1 for the first automation.
+        -- Positions are 1-indexed sequential per automation
+        -- (position 1 = next to run, position N = last).
         -- As automations complete, their RunQueuePosition is removed
         -- and remaining positions are decremented.
-        -- The position field is initialised to total and adjusted by
-        -- the runner as automations complete. Exact indices are an
-        -- implementation concern.
+        -- The position field in the ensures clause uses due_automations.count
+        -- as a placeholder; the implementation assigns sequential 1-based
+        -- indices based on next_run_at ordering.
 }
 
 rule QueuePositionUpdate {
@@ -438,6 +441,8 @@ rule ProgressReporting {
         -- Each call updates the RunProgress value with new counters.
         -- The UI polls via SSE and reads the latest RunProgress.
         -- Progress data is ephemeral (in-memory only, not persisted).
+        -- NOTE: Code returns void. The ensures clause uses the Allium
+        -- convention of asserting the resulting state change.
 }
 
 -- == Scheduler Phase Lifecycle ==
@@ -508,9 +513,11 @@ rule WatchdogTimeout {
 
     @guidance
         -- Implementation: forceReleaseLock() in run-coordinator.ts.
-        -- The watchdog is invoked at the start of each scheduler cycle
-        -- (inside the cron tick handler), not on its own timer.
-        -- max_run_duration_ms defaults to 300000 (5 minutes).
+        -- The watchdog uses a per-run setTimeout timer that fires after
+        -- max_run_duration_ms. Each run registers its own timer on
+        -- acquisition; the timer calls forceReleaseLock() if the run
+        -- has not completed by then.
+        -- max_run_duration_ms defaults to 600000 (10 minutes).
         -- This is a safety net, not a normal control flow path.
         -- The comparison uses started_at + config value as an Integer
         -- milliseconds comparison in the implementation.
@@ -854,18 +861,11 @@ surface ConflictWarning {
     facing viewer: SchedulerUser
     context state: SchedulerState
 
-    let same_automation_lock = state.active_runs where automation_id = state.id
-    let same_module_locks = state.active_runs
-        where module_id = state.id
-        and automation_id != state.id
-
     exposes:
-        same_automation_lock.count
-        same_module_locks.count
+        state.active_runs.count
 
     provides:
-        ProceedAnyway(viewer) when same_automation_lock.count = 0
-        -- Only available when the conflict is contention (same module), not blocked (same automation).
+        ProceedAnyway(viewer)
         CancelRun(viewer)
 
     @guarantee OnlyWhenRelevant
@@ -873,11 +873,16 @@ surface ConflictWarning {
         -- when the user clicks "Run Now" and a conflict is detected.
 
     @guidance
-        -- Blocked state (same automation running): show "This automation is already
-        -- running (started at X, source: Y). Please wait." with only Cancel.
-        -- Contention state (same module busy): show "Another automation is using
-        -- the same job board. You can proceed, but results may be rate-limited."
-        -- with ProceedAnyway and Cancel.
+        -- The automation ID is passed as a parameter to the component, not derived
+        -- from SchedulerState. The UI filters active_runs by the target automation's
+        -- ID to determine blocked state (same automation running) vs contention state
+        -- (same module, different automation).
+        -- Blocked state: show "This automation is already running (started at X,
+        -- source: Y). Please wait." with only Cancel.
+        -- Contention state: show "Another automation is using the same job board.
+        -- You can proceed, but results may be rate-limited." with ProceedAnyway
+        -- and Cancel. ProceedAnyway is only available when the conflict is
+        -- contention (same module), not blocked (same automation).
 }
 
 surface RunStatusBadge {

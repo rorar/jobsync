@@ -335,6 +335,9 @@ rule TriggerEnrichmentOnCompanyCreated {
     -- The DB freshness check (existing result with status = found and
     -- expiresAt > now) prevents redundant chain executions when the same
     -- company domain is created multiple times in quick succession.
+    -- The handler also extracts the domain and writes it to Company.domain
+    -- when null (best-effort, non-blocking). This populates the domain field
+    -- for both manual and automation-created companies.
 }
 
 rule TriggerEnrichmentOnJobImported {
@@ -433,6 +436,9 @@ rule TriggerDeepLinkOnPaste {
       )
 
   @guidance
+    -- DEFERRED: This rule is aspirational (Roadmap 3.6). The LinkPasted
+    -- trigger is not yet emitted by any surface. Implementation requires
+    -- a paste event listener on URL form fields and debounced dispatch.
     -- The UI should display a loading skeleton while the deep link
     -- enrichment is in progress. If a cached result exists, show it
     -- immediately and refresh in the background if stale.
@@ -920,3 +926,5 @@ open question "What is the maximum number of concurrent enrichment requests per 
 open question "Should fallback chains be user-configurable (e.g., user disables Logo.dev and only uses Google Favicon)? Currently chains are system-level configuration."
 
 open question "How should enrichment results be purged? Unlike StagedVacancy which has DSGVO retention rules, enrichment results are derived data. A simple TTL-based expiry with no privacy-preserving hash retention may suffice."
+
+open question "Should not_found and error results be persisted as negative cache entries? Currently they are never persisted — each retry re-executes the full chain. Negative caching would reduce external calls but requires a separate TTL strategy for failed lookups."
