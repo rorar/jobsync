@@ -1,9 +1,7 @@
 import "server-only";
 
 import prisma from "@/lib/db";
-import { emitEvent, createEvent } from "@/lib/events";
-import { DomainEventType } from "@/lib/events/event-types";
-import type { AutomationDegradedPayload } from "@/lib/events/event-types";
+import { emitDegradationEvents, truncate } from "./degradation";
 import { moduleRegistry } from "./registry";
 import { isBlockedHealthCheckUrl } from "@/lib/url-validation";
 import {
@@ -292,28 +290,17 @@ async function emitHealthUnreachableNotifications(
 ): Promise<void> {
   try {
     const affectedAutomations = await prisma.automation.findMany({
-      where: {
-        jobBoard: moduleId,
-        status: "active",
-      },
+      where: { jobBoard: moduleId, status: "active" },
       select: { id: true, userId: true, name: true },
     });
 
     if (affectedAutomations.length === 0) return;
 
-    const safeModuleName = moduleName.length > 200
-      ? moduleName.slice(0, 200)
-      : moduleName;
+    const safeModuleName = truncate(moduleName);
 
-    for (const auto of affectedAutomations) {
-      const safeName = auto.name.length > 200
-        ? auto.name.slice(0, 200)
-        : auto.name;
-
-      const payload: AutomationDegradedPayload = {
-        automationId: auto.id,
-        userId: auto.userId,
-        automationName: safeName,
+    emitDegradationEvents(
+      affectedAutomations,
+      {
         reason: "health_unreachable",
         moduleId,
         titleKey: "notifications.moduleUnreachable.title",
@@ -323,11 +310,9 @@ async function emitHealthUnreachableNotifications(
         reasonKey: "notifications.reason.healthUnreachable",
         severity: "error",
         moduleName: safeModuleName,
-        message: `Module "${safeModuleName}" is unreachable. Automation "${safeName}" may be affected.`,
-      };
-
-      emitEvent(createEvent(DomainEventType.AutomationDegraded, payload));
-    }
+      },
+      (name) => `Module "${safeModuleName}" is unreachable. Automation "${name}" may be affected.`,
+    );
 
     console.warn(
       `[HealthMonitor] Module "${moduleId}" transitioned to UNREACHABLE. Notified ${affectedAutomations.length} automation(s).`,

@@ -34,6 +34,8 @@ jest.mock("@/lib/events", () => ({
 // BP-1: Mock degradation + url-validation to prevent live imports
 jest.mock("@/lib/connector/degradation", () => ({
   handleAuthFailure: jest.fn().mockResolvedValue({ pausedCount: 0 }),
+  truncate: jest.fn((v: string) => v.length > 200 ? v.slice(0, 200) : v),
+  emitDegradationEvents: jest.fn(),
 }));
 
 jest.mock("@/lib/url-validation", () => ({
@@ -67,6 +69,7 @@ global.fetch = mockFetch;
 import { checkModuleHealth } from "@/lib/connector/health-monitor";
 import { moduleRegistry } from "@/lib/connector/registry";
 import { emitEvent, createEvent } from "@/lib/events";
+import { emitDegradationEvents } from "@/lib/connector/degradation";
 import prisma from "@/lib/db";
 import {
   HealthStatus,
@@ -78,6 +81,7 @@ import {
 
 const mockEmitEvent = emitEvent as jest.MockedFunction<typeof emitEvent>;
 const mockCreateEvent = createEvent as jest.MockedFunction<typeof createEvent>;
+const mockEmitDegradationEvents = emitDegradationEvents as jest.MockedFunction<typeof emitDegradationEvents>;
 const mockPrisma = prisma as jest.Mocked<typeof prisma>;
 
 const mockRegistry = moduleRegistry as jest.Mocked<typeof moduleRegistry> & {
@@ -453,16 +457,14 @@ describe("Health Monitor", () => {
 
       await checkModuleHealth("escalation-mod");
 
-      expect(mockCreateEvent).toHaveBeenCalledWith(
-        "AutomationDegraded",
+      expect(mockEmitDegradationEvents).toHaveBeenCalledWith(
+        [{ id: "auto-1", userId: "user-1", name: "My Automation" }],
         expect.objectContaining({
-          automationId: "auto-1",
-          userId: "user-1",
           reason: "health_unreachable",
           moduleId: "escalation-mod",
         }),
+        expect.any(Function),
       );
-      expect(mockEmitEvent).toHaveBeenCalled();
     });
 
     it("does NOT emit when module is already UNREACHABLE (no re-fire)", async () => {
@@ -484,7 +486,7 @@ describe("Health Monitor", () => {
 
       await checkModuleHealth("already-unreachable-mod");
 
-      expect(mockEmitEvent).not.toHaveBeenCalled();
+      expect(mockEmitDegradationEvents).not.toHaveBeenCalled();
     });
 
     it("does NOT emit when module recovers to HEALTHY", async () => {
@@ -506,7 +508,7 @@ describe("Health Monitor", () => {
 
       await checkModuleHealth("recovering-mod");
 
-      expect(mockEmitEvent).not.toHaveBeenCalled();
+      expect(mockEmitDegradationEvents).not.toHaveBeenCalled();
     });
 
     it("emits one event per affected automation", async () => {
@@ -534,18 +536,14 @@ describe("Health Monitor", () => {
 
       await checkModuleHealth("multi-auto-mod");
 
-      expect(mockEmitEvent).toHaveBeenCalledTimes(3);
-      expect(mockCreateEvent).toHaveBeenCalledWith(
-        "AutomationDegraded",
-        expect.objectContaining({ automationId: "auto-a", userId: "user-a" }),
-      );
-      expect(mockCreateEvent).toHaveBeenCalledWith(
-        "AutomationDegraded",
-        expect.objectContaining({ automationId: "auto-b", userId: "user-b" }),
-      );
-      expect(mockCreateEvent).toHaveBeenCalledWith(
-        "AutomationDegraded",
-        expect.objectContaining({ automationId: "auto-c", userId: "user-a" }),
+      expect(mockEmitDegradationEvents).toHaveBeenCalledWith(
+        [
+          { id: "auto-a", userId: "user-a", name: "Automation A" },
+          { id: "auto-b", userId: "user-b", name: "Automation B" },
+          { id: "auto-c", userId: "user-a", name: "Automation C" },
+        ],
+        expect.objectContaining({ reason: "health_unreachable", moduleId: "multi-auto-mod" }),
+        expect.any(Function),
       );
     });
   });

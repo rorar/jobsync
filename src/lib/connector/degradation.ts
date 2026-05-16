@@ -29,7 +29,7 @@ const CB_ESCALATION_THRESHOLD = 3;
 // Soft upper bound on free-text fragments stored inside notification data.
 const NAME_TRUNCATION_LENGTH = 200;
 
-function truncate(value: string, maxLength = NAME_TRUNCATION_LENGTH): string {
+export function truncate(value: string, maxLength = NAME_TRUNCATION_LENGTH): string {
   const sanitized = value.replace(/[\n\r\t]/g, " ");
   return sanitized.length > maxLength ? sanitized.slice(0, maxLength) : sanitized;
 }
@@ -42,7 +42,7 @@ function truncate(value: string, maxLength = NAME_TRUNCATION_LENGTH): string {
  * `buildMessage` receives the truncated automation name so each event
  * carries a human-readable per-automation message.
  */
-function emitDegradationEvents(
+export function emitDegradationEvents(
   automations: { id: string; userId: string; name: string }[],
   base: Omit<AutomationDegradedPayload, "automationId" | "userId" | "automationName" | "message">,
   buildMessage: (automationName: string) => string,

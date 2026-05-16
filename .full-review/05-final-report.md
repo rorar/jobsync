@@ -1,45 +1,51 @@
-# Review Report — Commit 31d4eec (#16 Notification Semantics Cleanup)
+# Comprehensive Code Review Report — Session 2026-05-16
+
+## Review Target
+
+4 commits (`392219e`..`83c6f93`): Allium v3 spec migration, 12 code bug fixes, 90 spec↔code divergence resolutions, blind spot fixes, ADR-031.
 
 ## Executive Summary
 
-Solid implementation of 3 notification improvements. Two reviewers (Code Quality + Architecture) found 1 critical bug (placeholder mismatch), 3 medium issues, and 3 low items. All actionable findings fixed in-session. Architecture validated as sound.
+Code quality is high. No Critical or High severity issues. Architecture decisions are sound (ADR-031 well-reasoned, event-driven patterns consistent, guards correctly placed). Two Medium findings identified and fixed in-session (M-1: duplicated emission loop → refactored to shared helper; M-2: long line → broken up).
 
 ## Findings by Priority
 
-### Fixed in Review (5)
+### Critical (P0): None
 
-| ID | Severity | Finding | Fix |
-|---|---|---|---|
-| CR-1 | Critical | `contactFromJob` legacy message used `{jobTitle}` placeholder for person name | Template → `{personName}` x4 locales, handler `.replace()` updated |
-| AR-1 | Medium | Email `ALLOWED_DATA_FIELDS` missing `personName` | Added to allowlist + `personName`/`jobTitle` in extendedData |
-| CR-2 | Medium | `REMINDER_TITLE_KEY_MAP` undefined guard missing | Added `if (!titleKey) return;` |
-| AR-2 | Low | `actorType: "system"` for user-initiated manual contact | Changed to `"user"` |
-| CR-4 | Low | Source guard ordering inconsistency undocumented | Added explanatory comment |
+### High (P1): None
 
-### Accepted / Deferred (3)
+### Medium (P2): 2 — Both Fixed
 
-| ID | Severity | Finding | Rationale |
-|---|---|---|---|
-| CR-3 | Medium | Two handlers share similar 7-step structure (DRY) | Only 2 instances, CLAUDE.md: "three similar lines better than premature abstraction" |
-| CR-5 | Low | Missing M-T-09 locale regression tests for new handlers | Same `t(ctx.locale, ...)` pattern, covered by existing M-T-09 tests |
-| AR-3 | Low | `interviewDate` not surfaced in notification | Enhancement for future sprint |
+- **M-1** (Fixed): `emitHealthUnreachableNotifications` duplicated loop pattern without sanitization → refactored to reuse `emitDegradationEvents` + `truncate` from degradation.ts
+- **M-2** (Fixed): orchestrator.ts:171 logAttempt 200-char line → multi-line format
 
-## Findings by Category
+### Low (P3): 4 — Accepted
 
-- **Code Quality**: 5 findings (1 critical, 2 medium, 2 low) — all fixed or accepted
-- **Architecture**: 3 findings (2 medium, 1 low) — all fixed or accepted
-- **Security**: 0 new findings (IDOR guards verified by both reviewers)
-- **Performance**: 0 new findings (2 small DB lookups per event, fire-and-forget)
+- L-2: `?? undefined` in crmTask/crmNote — intentional null→undefined conversion
+- L-3: `await` on escalation notification blocks health check — rare edge case, acceptable
+- L-4: Test mock lost explicit signature — readability trade-off
+- F-2: CRM payload only propagates first target — acceptable for timeline summary
 
-## Verification
+## Architecture Assessment
 
-- 245 suites, 4739 tests, 0 failures
-- `tsc --noEmit`: 0 new errors
-- Dictionary consistency: 75/75 tests pass
+All 6 architectural changes rated APPROPRIATE or CORRECT:
+1. ADR-031: Health escalation via AutomationDegraded event reuse — compile-time safe
+2. Payload enrichment: backward-compatible with DB fallback
+3. Enrichment guards: write-through consistency model
+4. CB-7 early returns: defensive, prevents cascading
+5. Person transition: GDPR compliance
+6. Credential guard: UX hardening
+
+## Metrics
+
+- 0 Critical, 0 High, 2 Medium (fixed), 4 Low (accepted)
+- 245 suites, 4751 tests, 0 failures
+- 0 TypeScript errors, 0 Allium errors
+- Build passes
 
 ## Review Metadata
 
-- Review date: 2026-05-15
-- Phases completed: 1A (Code Quality), 1B (Architecture)
-- Phases skipped: 2-4 (small scope, no new security surface, no frontend, no infra changes)
-- Reviewers: feature-dev:code-reviewer, comprehensive-review:architect-review
+- Review date: 2026-05-16
+- Phases completed: Phase 1 (Code Quality + Architecture)
+- Phases skipped: 2-4 (no Critical/High findings to investigate further)
+- Flags: none

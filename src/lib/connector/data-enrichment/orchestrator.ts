@@ -168,7 +168,13 @@ export class EnrichmentOrchestrator {
             userId, input.dimension, domainKey, entry.moduleId, result,
           );
 
-          this.logAttempt(userId, enrichmentResult?.id ?? null, input.dimension, domainKey, entry.moduleId, i + 1, enrichmentResult ? "success" : "persist_failed", latencyMs, enrichmentResult ? undefined : "DB persist returned null");
+          this.logAttempt(
+            userId, enrichmentResult?.id ?? null, input.dimension, domainKey,
+            entry.moduleId, i + 1,
+            enrichmentResult ? "success" : "persist_failed",
+            latencyMs,
+            enrichmentResult ? undefined : "DB persist returned null",
+          );
 
           // Only cache + emit event if DB persist succeeded (BS-5: no cache without backing store)
           if (enrichmentResult) {
