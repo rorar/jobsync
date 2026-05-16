@@ -170,16 +170,15 @@ export class EnrichmentOrchestrator {
 
           this.logAttempt(userId, enrichmentResult?.id ?? null, input.dimension, domainKey, entry.moduleId, i + 1, enrichmentResult ? "success" : "persist_failed", latencyMs, enrichmentResult ? undefined : "DB persist returned null");
 
-          // Cache the result
-          const ttl = result.ttl || getTtlForDimension(input.dimension);
-          connectorCache.set(
-            buildEnrichmentCacheKey(userId, input.dimension, domainKey),
-            result,
-            ttl,
-          );
-
-          // Only emit EnrichmentCompleted if persist succeeded
+          // Only cache + emit event if DB persist succeeded (BS-5: no cache without backing store)
           if (enrichmentResult) {
+            const ttl = result.ttl || getTtlForDimension(input.dimension);
+            connectorCache.set(
+              buildEnrichmentCacheKey(userId, input.dimension, domainKey),
+              result,
+              ttl,
+            );
+
             emitEvent(
               createEvent(DomainEventTypes.EnrichmentCompleted, {
                 requestId,

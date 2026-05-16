@@ -33,6 +33,7 @@ describe("isValidPersonTransition", () => {
     ["active", "archived"],
     ["active", "anonymized"],
     ["archived", "active"],
+    ["archived", "anonymized"],
   ];
 
   it.each(validTransitions)(
@@ -44,7 +45,6 @@ describe("isValidPersonTransition", () => {
 
   const invalidTransitions: [PersonStatus, PersonStatus][] = [
     ["archived", "archived"],
-    ["archived", "anonymized"],
     ["anonymized", "active"],
     ["anonymized", "archived"],
     ["anonymized", "anonymized"],

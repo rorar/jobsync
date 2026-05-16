@@ -101,7 +101,7 @@ export type BlocklistType = "email" | "phone" | "domain";
 
 const VALID_PERSON_TRANSITIONS: Record<PersonStatus, PersonStatus[]> = {
   active: ["archived", "anonymized"],
-  archived: ["active"],
+  archived: ["active", "anonymized"],
   anonymized: [],
 };
 
