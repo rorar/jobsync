@@ -56,7 +56,10 @@ enum SectionType {
 entity Profile {
     user: User
 
-    @invariant
+    -- Relationships
+    resumes: Resume with profile = this
+
+    @invariant SingleProfilePerUser
         -- A User has at most one Profile (created lazily on first resume).
         -- The Profile is the root of the Resume aggregate tree.
 }
@@ -64,25 +67,28 @@ entity Profile {
 entity Resume {
     profile: Profile
     title: String
-    contact_info: ContactInfo?
-    sections: Set<ResumeSection>
-    file: File?
     created_at: Timestamp
     updated_at: Timestamp
 
-    @invariant
+    -- Relationships
+    contact_info: ContactInfo with resume = this
+    sections: ResumeSection with resume = this
+    file: File with resume = this
+
+    @invariant UniqueTitlePerUser
         -- Resume titles must be unique per-user (scoped to user's profile).
         -- A Resume belongs to a Profile which belongs to a User.
         -- Ownership chain: Resume -> Profile -> User.
 }
 
 entity File {
+    resume: Resume
     file_name: String
     file_path: String              -- server filesystem path; required in DB, excluded from API responses
     file_type: String              -- always "resume" for resume uploads
     uploaded_at: Timestamp
 
-    @invariant
+    @invariant OneFilePerResume
         -- A File is linked 1:1 with a Resume (unique foreign key).
         -- Files are stored on the server filesystem.
         -- file_path is NEVER included in server responses to prevent
@@ -101,7 +107,7 @@ entity ContactInfo {
     created_at: Timestamp
     updated_at: Timestamp
 
-    @invariant
+    @invariant OneContactInfoPerResume
         -- Each Resume has at most one ContactInfo.
         -- ContactInfo is cascade-deleted when the Resume is deleted.
 }
@@ -110,13 +116,15 @@ entity ResumeSection {
     resume: Resume
     section_title: String
     section_type: SectionType
-    summary: Summary?                   -- only when type = summary
-    work_experiences: Set<WorkExperience>  -- only when type = experience
-    educations: Set<Education>           -- only when type = education
-    license_or_certifications: Set<LicenseOrCertification>  -- only when type = certification
-    others: Set<OtherSection>            -- only when type = other
 
-    @invariant
+    -- Relationships
+    summary: Summary with section = this
+    work_experiences: WorkExperience with section = this
+    educations: Education with section = this
+    license_or_certifications: LicenseOrCertification with section = this
+    others: OtherSection with section = this
+
+    @invariant SectionTypeDiscrimination
         -- The section_type determines which child collection is populated.
         -- A summary section has exactly one Summary child.
         -- An experience section has zero or more WorkExperience children.
@@ -126,12 +134,14 @@ entity ResumeSection {
 }
 
 entity Summary {
+    section: ResumeSection
     content: String
     created_at: Timestamp
     updated_at: Timestamp
 }
 
 entity WorkExperience {
+    section: ResumeSection
     company: Company
     job_title: JobTitle
     location: Location
@@ -143,6 +153,7 @@ entity WorkExperience {
 }
 
 entity Education {
+    section: ResumeSection
     institution: String
     degree: String
     field_of_study: String
@@ -150,6 +161,20 @@ entity Education {
     start_date: Timestamp
     end_date: Timestamp?           -- null means currently enrolled
     description: String?
+    created_at: Timestamp
+    updated_at: Timestamp
+}
+
+entity LicenseOrCertification {
+    section: ResumeSection
+    name: String
+    created_at: Timestamp
+    updated_at: Timestamp
+}
+
+entity OtherSection {
+    section: ResumeSection
+    content: String
     created_at: Timestamp
     updated_at: Timestamp
 }
@@ -178,285 +203,364 @@ entity Education {
 -- === Resume CRUD ===
 
 rule CreateResume {
-    when: User creates a new resume
+    when: CreateResume(user, title, file_name?, file_path?)
 
-    requires: User is authenticated
-    requires: title is non-empty
-    requires: no existing resume for this user has the same title (per-user uniqueness)
+    requires: exists user
+    requires: title != null
+    requires: not exists Resume{profile: Profile{user: user}, title: title}
 
     ensures:
-        if User has an existing Profile:
-            Resume.created(profile: existing_profile, title: title)
+        if not exists Profile{user: user}:
+            let new_profile = Profile.created(user: user)
+            Resume.created(profile: new_profile, title: title, created_at: now, updated_at: now)
         else:
-            Profile.created(user: User)
-            Resume.created(profile: new_profile, title: title)
+            let existing_profile = Profile{user: user}
+            Resume.created(profile: existing_profile, title: title, created_at: now, updated_at: now)
 
     ensures:
-        if file provided (fileName + filePath):
-            File.created(fileName, filePath, fileType: "resume")
-            Resume.file = new_file
+        if file_name != null and file_path != null:
+            File.created(
+                resume: resume,
+                file_name: file_name,
+                file_path: file_path,
+                file_type: resume,
+                uploaded_at: now
+            )
 
-    -- The Profile is created lazily on first resume creation.
-    -- This avoids an explicit "create profile" step.
+    @guidance
+        -- The Profile is created lazily on first resume creation.
+        -- This avoids an explicit "create profile" step.
 }
 
 rule GetResumeList {
-    when: User requests paginated list of resumes
+    when: GetResumeList(user)
 
-    requires: User is authenticated
+    requires: exists user
 
-    ensures: Resumes returned where profile.userId = User.id
-    ensures: Paginated by (page, limit)
-    ensures: Each resume includes job count (for UI badge)
-    ensures: Ordered by created_at descending
+    @guidance
+        -- Returns paginated list of resumes where profile.user = user.
+        -- Each resume includes job count (for UI badge).
+        -- Ordered by created_at descending.
 }
 
 rule GetResumeById {
-    when: User requests a specific resume with all details
+    when: GetResumeById(user, resume)
 
-    requires: User is authenticated
-    requires: Resume.profile.userId = User.id  -- ownership via chain traversal
+    requires: exists user
+    requires: resume.profile.user = user
 
-    ensures: Resume returned with:
-        - ContactInfo (if present)
-        - File (if attached, with id, fileName, fileType only — filePath excluded)
-        - All ResumeSections with their children:
-            - Summary sections with content
-            - Experience sections with WorkExperiences (including company, jobTitle, location)
-            - Education sections with Educations (including location)
+    @guidance
+        -- Returns resume with:
+        -- ContactInfo (if present), File (if attached, with id, file_name, file_type
+        -- only — file_path excluded), all ResumeSections with their children:
+        -- Summary sections with content, Experience sections with WorkExperiences
+        -- (including company, job_title, location), Education sections with
+        -- Educations (including location).
 }
 
 rule EditResume {
-    when: User updates a resume title or file
+    when: EditResume(user, resume, new_title, file_name?, file_path?, file_id?)
 
-    requires: User is authenticated
-    requires: Resume.profile.userId = User.id  -- ownership verified before mutation
+    requires: exists user
+    requires: resume.profile.user = user
 
-    ensures: Resume.title = new_title
+    ensures: resume.title = new_title
+    ensures: resume.updated_at = now
     ensures:
-        if new file provided (fileName + filePath):
-            File.created and linked to Resume
-        if existing fileId provided:
-            File must exist (validated)
-            Resume.file = existing_file
-        if no file:
-            Resume.file = null
+        if file_name != null and file_path != null:
+            File.created(
+                resume: resume,
+                file_name: file_name,
+                file_path: file_path,
+                file_type: resume,
+                uploaded_at: now
+            )
+
+    @guidance
+        -- If an existing file_id is provided, validates the file exists and
+        -- links it to the resume. If no file info is provided, resume.file
+        -- is cleared.
 }
 
 rule DeleteResume {
-    when: User deletes a resume
+    when: DeleteResume(user, resume)
 
-    requires: User is authenticated
-    requires: Resume.profile.userId = User.id  -- ownership verified before cascade delete
+    requires: exists user
+    requires: resume.profile.user = user
 
-    ensures: If file attached, file deleted from filesystem AND database BEFORE transaction
-    ensures: File deletion uses callerUserId for ownership verification:
-        File → Resume → Profile → User chain traversal
-    ensures: Transaction deletes in order:
-        1. ContactInfo (where resumeId)
-        2. Summary (where ResumeSection.resumeId)
-        3. WorkExperience (where ResumeSection.resumeId)
-        4. Education (where ResumeSection.resumeId)
-        5. ResumeSection (where resumeId)
-        6. Resume
+    ensures: not exists resume
 
-    -- File deletion happens outside the transaction (before it) because filesystem
-    -- operations cannot be rolled back. If file deletion fails, resume is preserved.
-    -- If transaction fails after file deletion, the file is orphaned (acceptable tradeoff).
-    -- The deletion order within the transaction respects referential integrity.
+    @guidance
+        -- If file attached, file is deleted from filesystem AND database
+        -- BEFORE the transaction. File deletion uses callerUserId for
+        -- ownership verification: File -> Resume -> Profile -> User chain
+        -- traversal.
+        -- Transaction deletes in order:
+        --   1. ContactInfo (where resumeId)
+        --   2. Summary (where ResumeSection.resumeId)
+        --   3. WorkExperience (where ResumeSection.resumeId)
+        --   4. Education (where ResumeSection.resumeId)
+        --   5. ResumeSection (where resumeId)
+        --   6. Resume
+        -- File deletion happens outside the transaction (before it) because
+        -- filesystem operations cannot be rolled back. If file deletion fails,
+        -- resume is preserved. If transaction fails after file deletion, the
+        -- file is orphaned (acceptable tradeoff). The deletion order within
+        -- the transaction respects referential integrity.
 }
 
 -- === Contact Info ===
 
 rule AddContactInfo {
-    when: User adds contact information to a resume
+    when: AddContactInfo(user, resume, first_name, last_name, headline, email, phone, address?)
 
-    requires: User is authenticated
-    requires: Resume.profile.userId = User.id  -- ownership verified before mutation
+    requires: exists user
+    requires: resume.profile.user = user
 
-    ensures: ContactInfo.connectOrCreate(
-        firstName, lastName, headline, email, phone, address?
+    ensures: ContactInfo.created(
+        resume: resume,
+        first_name: first_name,
+        last_name: last_name,
+        headline: headline,
+        email: email,
+        phone: phone,
+        address: address,
+        created_at: now,
+        updated_at: now
     )
 
-    -- Uses connectOrCreate: if ContactInfo already exists for this resume,
-    -- connects to it; otherwise creates new. This is idempotent.
+    @guidance
+        -- Uses connectOrCreate semantics: if ContactInfo already exists for
+        -- this resume, connects to it; otherwise creates new. This is idempotent.
 }
 
 rule UpdateContactInfo {
-    when: User updates existing contact information
+    when: UpdateContactInfo(user, contact_info, first_name, last_name, headline, email, phone, address?)
 
-    requires: User is authenticated
-    requires: ContactInfo.resume.profile.userId = User.id  -- 4-level chain traversal
+    requires: exists user
+    requires: contact_info.resume.profile.user = user
 
-    ensures: ContactInfo.updated(
-        firstName, lastName, headline, email, phone, address?
-    )
+    ensures: contact_info.first_name = first_name
+    ensures: contact_info.last_name = last_name
+    ensures: contact_info.headline = headline
+    ensures: contact_info.email = email
+    ensures: contact_info.phone = phone
+    ensures: contact_info.address = address
+    ensures: contact_info.updated_at = now
 }
 
 -- === Summary Section ===
 
 rule AddResumeSummary {
-    when: User adds a summary section to a resume
+    when: AddResumeSummary(user, resume, section_title, content)
 
-    requires: User is authenticated
-    requires: Resume.profile.userId = User.id  -- ownership verified before create
+    requires: exists user
+    requires: resume.profile.user = user
 
-    ensures: ResumeSection.created(
-        resumeId: resumeId,
-        sectionTitle: sectionTitle,
-        sectionType: "summary"
-    )
-    ensures: Summary.created(content: content)
-    ensures: ResumeSection.summary = new_summary
+    ensures:
+        let section = ResumeSection.created(
+            resume: resume,
+            section_title: section_title,
+            section_type: summary
+        )
+        Summary.created(section: section, content: content, created_at: now, updated_at: now)
 }
 
 rule UpdateResumeSummary {
-    when: User updates a summary section
+    when: UpdateResumeSummary(user, section, new_title, new_content)
 
-    requires: User is authenticated
-    requires: ResumeSection.Resume.profile.userId = User.id  -- chain traversal
+    requires: exists user
+    requires: section.resume.profile.user = user
 
-    ensures: ResumeSection.sectionTitle = new_title
-    ensures: Summary.content = new_content
+    ensures: section.section_title = new_title
+    ensures: section.summary.content = new_content
+    ensures: section.summary.updated_at = now
 }
 
 -- === Work Experience ===
 
 rule AddExperience {
-    when: User adds a work experience entry
+    when: AddExperience(user, resume, section_id?, section_title?, job_title, company, location, start_date, end_date?, description)
 
-    requires: User is authenticated
-    requires: Resume.profile.userId = User.id  -- ownership verified before create
-    requires: either sectionId provided OR sectionTitle provided
+    requires: exists user
+    requires: resume.profile.user = user
 
     ensures:
-        if no sectionId:
-            ResumeSection.created(type: "experience", title: sectionTitle)
-        WorkExperience.created(
-            jobTitle: title_id,
-            company: company_id,
-            location: location_id,
-            startDate, endDate?, description
-        )
+        if section_id = null:
+            let section = ResumeSection.created(
+                resume: resume,
+                section_type: experience,
+                section_title: section_title
+            )
+            WorkExperience.created(
+                section: section,
+                job_title: job_title,
+                company: company,
+                location: location,
+                start_date: start_date,
+                end_date: end_date,
+                description: description,
+                created_at: now,
+                updated_at: now
+            )
+        else:
+            WorkExperience.created(
+                section: section_id,
+                job_title: job_title,
+                company: company,
+                location: location,
+                start_date: start_date,
+                end_date: end_date,
+                description: description,
+                created_at: now,
+                updated_at: now
+            )
 
-    -- The section is created on-demand if it does not yet exist.
-    -- This supports the first experience entry creating its parent section.
+    @guidance
+        -- The section is created on-demand if it does not yet exist.
+        -- This supports the first experience entry creating its parent section.
 }
 
 rule UpdateExperience {
-    when: User updates a work experience entry
+    when: UpdateExperience(user, experience, job_title, company, location, start_date, end_date?, description)
 
-    requires: User is authenticated
-    requires: WorkExperience.ResumeSection.Resume.profile.userId = User.id
-        -- 5-level chain traversal for ownership
+    requires: exists user
+    requires: experience.section.resume.profile.user = user
 
-    ensures: WorkExperience.updated(
-        jobTitle, company, location, startDate, endDate?, description
-    )
+    ensures: experience.job_title = job_title
+    ensures: experience.company = company
+    ensures: experience.location = location
+    ensures: experience.start_date = start_date
+    ensures: experience.end_date = end_date
+    ensures: experience.description = description
+    ensures: experience.updated_at = now
 }
 
 rule DeleteWorkExperience {
-    when: User deletes a work experience entry
+    when: DeleteWorkExperience(user, experience)
 
-    requires: User is authenticated
-    requires: WorkExperience.ResumeSection.Resume.profile.userId = User.id
-        -- 5-level chain traversal for ownership (same as UpdateExperience)
+    requires: exists user
+    requires: experience.section.resume.profile.user = user
 
-    ensures: WorkExperience.deleted
+    ensures: not exists experience
 }
 
 -- === Education ===
 
 rule AddEducation {
-    when: User adds an education entry
+    when: AddEducation(user, resume, section_id?, section_title?, institution, degree, field_of_study, location, start_date, end_date?, description?)
 
-    requires: User is authenticated
-    requires: Resume.profile.userId = User.id  -- ownership verified before create
-    requires: either sectionId provided OR sectionTitle provided
+    requires: exists user
+    requires: resume.profile.user = user
 
     ensures:
-        if no sectionId:
-            ResumeSection.created(type: "education", title: sectionTitle)
-        Education.created(
-            institution, degree, fieldOfStudy,
-            location: location_id, startDate, endDate?, description?
-        )
+        if section_id = null:
+            let section = ResumeSection.created(
+                resume: resume,
+                section_type: education,
+                section_title: section_title
+            )
+            Education.created(
+                section: section,
+                institution: institution,
+                degree: degree,
+                field_of_study: field_of_study,
+                location: location,
+                start_date: start_date,
+                end_date: end_date,
+                description: description,
+                created_at: now,
+                updated_at: now
+            )
+        else:
+            Education.created(
+                section: section_id,
+                institution: institution,
+                degree: degree,
+                field_of_study: field_of_study,
+                location: location,
+                start_date: start_date,
+                end_date: end_date,
+                description: description,
+                created_at: now,
+                updated_at: now
+            )
+
+    @guidance
+        -- The section is created on-demand if it does not yet exist.
+        -- This supports the first education entry creating its parent section.
 }
 
 rule UpdateEducation {
-    when: User updates an education entry
+    when: UpdateEducation(user, education, institution, degree, field_of_study, location, start_date, end_date?, description?)
 
-    requires: User is authenticated
-    requires: Education.ResumeSection.Resume.profile.userId = User.id
-        -- 5-level chain traversal for ownership
+    requires: exists user
+    requires: education.section.resume.profile.user = user
 
-    ensures: Education.updated(
-        institution, degree, fieldOfStudy,
-        location, startDate, endDate?, description?
-    )
+    ensures: education.institution = institution
+    ensures: education.degree = degree
+    ensures: education.field_of_study = field_of_study
+    ensures: education.location = location
+    ensures: education.start_date = start_date
+    ensures: education.end_date = end_date
+    ensures: education.description = description
+    ensures: education.updated_at = now
 }
 
 rule DeleteEducation {
-    when: User deletes an education entry
+    when: DeleteEducation(user, education)
 
-    requires: User is authenticated
-    requires: Education.ResumeSection.Resume.profile.userId = User.id
-        -- 5-level chain traversal for ownership (same as UpdateEducation)
+    requires: exists user
+    requires: education.section.resume.profile.user = user
 
-    ensures: Education.deleted
+    ensures: not exists education
 }
 
 -- === File Upload ===
 
 rule UploadFile {
-    when: User uploads a file for a resume
+    when: UploadFile(file_bytes, file_path)
 
-    requires: file bytes are readable
-    requires: filePath passes path validation (no traversal, within upload directory)
+    requires: file_bytes != null
+    requires: validate_path(file_path)
 
-    ensures: Upload directory created if it does not exist
-    ensures: File bytes written to server filesystem
-
-    -- File upload writes bytes to disk only. No File record is created here.
-    -- The File entity is created and linked to a Resume by createResumeProfile or editResume,
-    -- which receive the returned filePath.
+    @guidance
+        -- File upload writes bytes to disk only. No File record is created here.
+        -- The File entity is created and linked to a Resume by CreateResume
+        -- or EditResume, which receive the returned file_path.
+        -- Upload directory is created if it does not exist.
+        -- file_path passes path validation (no traversal, within upload directory).
 }
 
 ------------------------------------------------------------
 -- Invariants
 ------------------------------------------------------------
 
-invariant OwnershipChainTraversal {
-    -- All mutations on Resume aggregate entities MUST verify ownership
-    -- by traversing the relation chain up to User.id.
-    -- Pattern: findFirst({ where: { id, [chain]: { userId: user.id } } })
-    -- before performing update/delete.
-    for all mutations on Resume, ContactInfo, ResumeSection, WorkExperience, Education:
-        verify_ownership_via_chain_to_user_id
-}
+-- OwnershipChainTraversal:
+-- All mutations on Resume aggregate entities MUST verify ownership
+-- by traversing the relation chain up to User.
+-- Pattern: findFirst({ where: { id, [chain]: { userId: user.id } } })
+-- before performing update/delete.
+-- Applies to: Resume, ContactInfo, ResumeSection, WorkExperience, Education.
 
-invariant LazyProfileCreation {
-    -- A Profile is created automatically when the user creates their first Resume.
-    -- There is no standalone "create profile" action.
-    -- If a Profile already exists, it is reused.
-}
+-- LazyProfileCreation:
+-- A Profile is created automatically when the user creates their first Resume.
+-- There is no standalone "create profile" action.
+-- If a Profile already exists, it is reused.
 
-invariant ResumeTitleUniqueness {
-    -- Resume titles are checked for per-user uniqueness (scoped to user's profile).
-    -- Two different users may have resumes with the same title.
-}
+-- ResumeTitleUniqueness:
+-- Resume titles are checked for per-user uniqueness (scoped to user's profile).
+-- Two different users may have resumes with the same title.
 
-invariant TransactionalDeletion {
-    -- Resume deletion uses a database transaction to ensure atomicity.
-    -- All child entities (ContactInfo, Summary, WorkExperience, Education,
-    -- ResumeSection) are deleted in dependency order within a single transaction.
-}
+-- TransactionalDeletion:
+-- Resume deletion uses a database transaction to ensure atomicity.
+-- All child entities (ContactInfo, Summary, WorkExperience, Education,
+-- ResumeSection) are deleted in dependency order within a single transaction.
 
-invariant SectionOnDemandCreation {
-    -- When adding the first Experience or Education entry,
-    -- the ResumeSection parent is created automatically if no sectionId is provided.
-    -- The sectionTitle must be provided in this case.
-}
+-- SectionOnDemandCreation:
+-- When adding the first Experience or Education entry,
+-- the ResumeSection parent is created automatically if no sectionId is provided.
+-- The sectionTitle must be provided in this case.
 
 ------------------------------------------------------------
 -- Open Questions
@@ -469,10 +573,8 @@ invariant SectionOnDemandCreation {
 --     via chain traversal before deletion. See DeleteWorkExperience and
 --     DeleteEducation rules above.
 
--- Q3: RESOLVED. deleteResumeById now verifies ownership via resume → profile
---     → userId before cascade delete. deleteFile accepts callerUserId for
---     File → Resume → Profile → User chain verification.
+-- Q3: RESOLVED. deleteResumeById now verifies ownership via resume -> profile
+--     -> userId before cascade delete. deleteFile accepts callerUserId for
+--     File -> Resume -> Profile -> User chain verification.
 
--- Q4: Should File cleanup be handled more robustly? Currently if the DB
---     delete succeeds but the filesystem delete fails (or vice versa),
---     there is no rollback mechanism for the orphaned resource.
+open question "Should File cleanup be handled more robustly? Currently if the DB delete succeeds but the filesystem delete fails (or vice versa), there is no rollback mechanism for the orphaned resource."

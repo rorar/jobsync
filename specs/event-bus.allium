@@ -2,7 +2,7 @@
 -- event-bus.allium
 
 -- Scope: In-process Event Bus infrastructure for domain event publishing and consumption
--- Includes: DomainEvent discriminated union, all event types, EventBus contract,
+-- Includes: DomainEvent value type, all 29 event type payloads, EventBus contract,
 --           consumer registration, error isolation, ordering guarantees, type safety
 -- Excludes:
 --   - Event persistence / event sourcing (not needed for in-process bus)
@@ -16,60 +16,65 @@
 --   - Job, StatusHistory from crm-workflow.allium
 --   - Company, EnrichmentResult from data-enrichment.allium
 
--- =============================================================================
--- Actors
--- =============================================================================
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
 
-actor Publisher {
-  -- Any domain service or action that produces events.
-  -- Publishers call EventBus.publish() after completing domain operations.
-}
+-- DomainService and EventConsumer are type placeholders for actors.
+-- Any domain service or server action that produces events.
+external entity DomainService {}
 
-actor Consumer {
-  -- Any service that subscribes to domain events.
-  -- Consumers register handlers at application startup.
-  -- Examples: NotificationDispatcher, AuditLogger, future CRM/Enrichment services.
-}
+-- Any service that subscribes to domain events.
+-- Examples: NotificationDispatcher, AuditLogger, CRM Activity Logger,
+-- enrichment-trigger, logo-asset-subscriber.
+external entity EventConsumer {}
 
--- =============================================================================
--- Enums
--- =============================================================================
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
 
 enum DomainEventType {
-  VacancyPromoted
-  | VacancyDismissed
-  | VacancyStaged
-  | VacancyArchived
-  | VacancyTrashed
-  | VacancyRestoredFromTrash
-  | BulkActionCompleted
-  | ModuleDeactivated
-  | ModuleReactivated
-  | RetentionCompleted
-  -- NotificationCreated removed — never published/subscribed (G6)
-  -- Scheduler Coordination (spec: scheduler-coordination.allium)
-  | SchedulerCycleStarted
-  | SchedulerCycleCompleted
-  | AutomationRunStarted
-  | AutomationRunCompleted
-  -- Degradation bridge (spec: module-lifecycle.allium)
-  | AutomationDegraded
-  -- CRM Core (spec: crm-workflow.allium)
-  | JobStatusChanged
-  -- Data Enrichment (spec: data-enrichment.allium)
-  | CompanyCreated
-  | EnrichmentCompleted
-  | EnrichmentFailed
+    vacancy_promoted
+    | vacancy_dismissed
+    | vacancy_staged
+    | vacancy_archived
+    | vacancy_trashed
+    | vacancy_restored_from_trash
+    | bulk_action_completed
+    | module_deactivated
+    | module_reactivated
+    | retention_completed
+    -- NotificationCreated removed — never published/subscribed (G6)
+    -- Scheduler Coordination (spec: scheduler-coordination.allium)
+    | scheduler_cycle_started
+    | scheduler_cycle_completed
+    | automation_run_started
+    | automation_run_completed
+    -- Degradation bridge (spec: module-lifecycle.allium)
+    | automation_degraded
+    -- CRM Core (spec: crm-workflow.allium)
+    | job_status_changed
+    -- Data Enrichment (spec: data-enrichment.allium)
+    | company_created
+    | enrichment_completed
+    | enrichment_failed
 }
 
--- =============================================================================
+------------------------------------------------------------
 -- Value Types
--- =============================================================================
+------------------------------------------------------------
 
-value DomainEvent<T: DomainEventType> {
-  type: T                               -- discriminant field for the union
-  timestamp: DateTime                   -- when the event was published
-  payload: EventPayload<T>              -- typed payload, shape depends on T
+-- DomainEvent is a typed envelope carrying an event type discriminant,
+-- timestamp and a payload. The type field is a DomainEventType enum value
+-- that determines the shape of the payload.
+-- In the TypeScript implementation, DomainEvent<T> is a generic interface
+-- with a mapped payload type; Allium does not support generics, so we
+-- model the envelope as a plain value with a DomainEventType discriminant.
+value DomainEvent {
+    type: DomainEventType
+    timestamp: Timestamp
+    -- payload shape depends on the type discriminant.
+    -- See the per-type payload value types below.
 }
 
 -- Typed payloads per event type.
@@ -77,390 +82,428 @@ value DomainEvent<T: DomainEventType> {
 -- No entity references — only IDs and scalar values (events are immutable snapshots).
 
 value VacancyPromotedPayload {
-  stagedVacancyId: String
-  jobId: String                         -- the newly created Job
-  userId: String
+    staged_vacancy_id: String
+    job_id: String                         -- the newly created Job
+    user_id: String
 }
 
 value VacancyDismissedPayload {
-  stagedVacancyId: String
-  userId: String
+    staged_vacancy_id: String
+    user_id: String
 }
 
 value VacancyStagedPayload {
-  stagedVacancyId: String
-  userId: String
-  sourceBoard: String                   -- module ID (e.g. "eures", "jsearch")
-  automationId: String?                 -- null for manual staging
+    staged_vacancy_id: String
+    user_id: String
+    source_board: String                   -- module ID (e.g. "eures", "jsearch")
+    automation_id: String?                 -- null for manual staging
 }
 
 value VacancyArchivedPayload {
-  stagedVacancyId: String
-  userId: String
+    staged_vacancy_id: String
+    user_id: String
 }
 
 value VacancyTrashedPayload {
-  stagedVacancyId: String
-  userId: String
+    staged_vacancy_id: String
+    user_id: String
 }
 
 value BulkActionCompletedPayload {
-  actionType: String                    -- BulkActionType from vacancy-pipeline
-  itemIds: String[]                     -- IDs of successfully processed items
-  userId: String
-  succeeded: Integer
-  failed: Integer
+    action_type: String                    -- BulkActionType from vacancy-pipeline
+    item_ids: List<String>                 -- IDs of successfully processed items
+    user_id: String
+    succeeded: Integer
+    failed: Integer
 }
 
 value ModuleDeactivatedPayload {
-  moduleId: String
-  moduleName: String?                   -- Sprint 3 M-A-02: human-readable display name
-                                        -- resolved from the manifest at publish time.
-                                        -- Optional for backward compat; consumers MUST
-                                        -- fall back to moduleId when null.
-  userId: String                        -- user who deactivated
-  affectedAutomationIds: String[]       -- automations that were paused
+    module_id: String
+    module_name: String?                   -- Sprint 3 M-A-02: human-readable display name
+                                           -- resolved from the manifest at publish time.
+                                           -- Optional for backward compat; consumers MUST
+                                           -- fall back to module_id when null.
+    user_id: String                        -- user who deactivated
+    affected_automation_ids: List<String>  -- automations that were paused
 }
 
 value ModuleReactivatedPayload {
-  moduleId: String
-  moduleName: String?                   -- Sprint 3 M-A-02: see ModuleDeactivatedPayload.moduleName
-  userId: String                        -- user who reactivated
-  pausedAutomationCount: Integer        -- how many automations remain paused
+    module_id: String
+    module_name: String?                   -- Sprint 3 M-A-02: see ModuleDeactivatedPayload.module_name
+    user_id: String                        -- user who reactivated
+    paused_automation_count: Integer       -- how many automations remain paused
 }
 
 value RetentionCompletedPayload {
-  userId: String
-  purgedCount: Integer                  -- number of StagedVacancy records deleted
-  hashesCreated: Integer                -- number of DedupHash records created
+    user_id: String
+    purged_count: Integer                  -- number of StagedVacancy records deleted
+    hashes_created: Integer                -- number of DedupHash records created
 }
 
 -- NotificationCreatedPayload removed — never published/subscribed (G6)
 
 value VacancyRestoredFromTrashPayload {
-  stagedVacancyId: String
-  userId: String
+    staged_vacancy_id: String
+    user_id: String
 }
 
 -- Scheduler Coordination payloads (spec: scheduler-coordination.allium)
 
 value SchedulerCycleStartedPayload {
-  queueDepth: Integer
-  automationIds: String[]
+    queue_depth: Integer
+    automation_ids: List<String>
 }
 
 value SchedulerCycleCompletedPayload {
-  processedCount: Integer
-  failedCount: Integer
-  skippedCount: Integer
-  durationMs: Integer
+    processed_count: Integer
+    failed_count: Integer
+    skipped_count: Integer
+    duration_ms: Integer
 }
 
 value AutomationRunStartedPayload {
-  automationId: String
-  userId: String
-  moduleId: String
-  runSource: String                   -- RunSource from scheduler-coordination
+    automation_id: String
+    user_id: String
+    module_id: String
+    run_source: String                   -- RunSource from scheduler-coordination
 }
 
 value AutomationRunCompletedPayload {
-  automationId: String
-  userId: String
-  moduleId: String
-  runSource: String                   -- RunSource from scheduler-coordination
-  status: String                      -- AutomationRun.status value
-  jobsSaved: Integer
-  durationMs: Integer
+    automation_id: String
+    user_id: String
+    module_id: String
+    run_source: String                   -- RunSource from scheduler-coordination
+    status: String                       -- AutomationRun.status value
+    jobs_saved: Integer
+    duration_ms: Integer
 }
 
 -- Degradation bridge payload (spec: module-lifecycle.allium)
 
 value AutomationDegradedPayload {
-  automationId: String
-  userId: String
-  reason: String                      -- "auth_failure" | "cb_escalation" | "consecutive_failures"
+    automation_id: String
+    user_id: String
+    reason: String                       -- "auth_failure" | "cb_escalation" | "consecutive_failures"
 }
 
 -- CRM Core payload (spec: crm-workflow.allium)
 
 value JobStatusChangedPayload {
-  jobId: String
-  userId: String
-  previousStatusValue: String?        -- null for initial status assignment
-  newStatusValue: String
-  note: String?                       -- optional note attached to the status change
-  historyEntryId: String              -- ID of the StatusHistory entry
+    job_id: String
+    user_id: String
+    previous_status_value: String?       -- null for initial status assignment
+    new_status_value: String
+    note: String?                        -- optional note attached to the status change
+    history_entry_id: String             -- ID of the StatusHistory entry
 }
 
 -- Data Enrichment payloads (spec: data-enrichment.allium)
 
 value CompanyCreatedPayload {
-  companyId: String
-  companyName: String
-  userId: String
+    company_id: String
+    company_name: String
+    user_id: String
 }
 
 value EnrichmentCompletedPayload {
-  requestId: String                   -- enrichment request ID
-  dimension: String                   -- "logo" | "deepLink"
-  moduleId: String                    -- which module provided the result
-  userId: String
-  domainKey: String                   -- domain used as enrichment cache key
+    request_id: String                   -- enrichment request ID
+    dimension: String                    -- "logo" | "deepLink"
+    module_id: String                    -- which module provided the result
+    user_id: String
+    domain_key: String                   -- domain used as enrichment cache key
 }
 
 value EnrichmentFailedPayload {
-  requestId: String                   -- enrichment request ID
-  dimension: String                   -- "logo" | "deepLink"
-  userId: String
-  domainKey: String                   -- domain used as enrichment cache key
+    request_id: String                   -- enrichment request ID
+    dimension: String                    -- "logo" | "deepLink"
+    user_id: String
+    domain_key: String                   -- domain used as enrichment cache key
 }
 
--- Handler function type for event consumers.
-value EventHandler<T: DomainEventType> {
-  -- A function that receives a typed DomainEvent and processes it.
-  -- Handlers may be sync or async (returning Promise<void>).
-  -- Errors are caught by the bus (ErrorIsolation rule).
-  handle: (event: DomainEvent<T>) -> Void | Promise<Void>
+-- CRM Core event payloads (spec: crm.allium)
+
+value ContactCreatedPayload {
+    person_id: String
+    user_id: String
 }
 
--- Unsubscribe token returned by subscribe().
-value Unsubscribe {
-  -- Calling this function removes the handler from the subscription list.
-  invoke: () -> Void
+value ContactUpdatedPayload {
+    person_id: String
+    user_id: String
 }
 
--- =============================================================================
--- Contract: EventBus
--- =============================================================================
-
-contract EventBus {
-  -- The single in-process event bus for the entire application.
-  -- Singleton — one instance shared across all domain services.
-  -- Survives HMR via globalThis pattern.
-
-  publish<T: DomainEventType>(event: DomainEvent<T>): Promise<Void>
-    -- Publishes an event to all registered handlers for this event type
-    -- AND to wildcard ("*") handlers.
-    -- Async dispatch: handlers execute in PARALLEL via Promise.allSettled
-    -- (Sprint 2 H-P-06). The prior sequential await-loop was a performance
-    -- footgun — publish() latency was the SUM of every consumer's work,
-    -- not the MAX. Each handler is still wrapped in error isolation per
-    -- the ErrorIsolation rule; parallelism does NOT relax that invariant.
-    -- Returns after all handlers have settled (fulfilled or rejected).
-
-  subscribe<T: DomainEventType>(
-    eventType: T | "*",
-    handler: EventHandler<T>
-  ): Unsubscribe
-    -- Registers a handler for a specific event type or "*" for all events.
-    -- Returns an Unsubscribe function to remove the handler.
-    -- Multiple handlers per event type are supported.
-    -- Wildcard handlers receive ALL events regardless of type.
-
-  unsubscribe<T: DomainEventType>(
-    eventType: T | "*",
-    handler: EventHandler<T>
-  ): Void
-    -- Removes a previously registered handler.
-    -- No-op if the handler was not registered.
-
-  reset(): Void
-    -- Removes all subscriptions. Used in tests only.
-
-  handlerCount(eventType?: DomainEventType | "*"): Integer
-    -- Returns the number of registered handlers for a given event type,
-    -- or total across all types if no argument is provided.
-    -- Useful for testing.
+value ContactDeletedPayload {
+    person_id: String
+    user_id: String
 }
 
--- =============================================================================
+value InterviewScheduledPayload {
+    interview_id: String
+    person_id: String
+    user_id: String
+}
+
+value InterviewCompletedPayload {
+    interview_id: String
+    person_id: String
+    user_id: String
+}
+
+value ReminderTriggeredPayload {
+    target_type: String                  -- "interview" | "task"
+    target_id: String
+    user_id: String
+}
+
+value CrmTaskCreatedPayload {
+    task_id: String
+    user_id: String
+}
+
+value CrmTaskCompletedPayload {
+    task_id: String
+    user_id: String
+}
+
+value CrmNoteCreatedPayload {
+    note_id: String
+    user_id: String
+}
+
+------------------------------------------------------------
+-- Contracts
+------------------------------------------------------------
+
+contract TypedEventBus {
+    -- The single in-process event bus for the entire application.
+    -- Singleton — one instance shared across all domain services.
+    -- Survives HMR via globalThis pattern.
+
+    publish: (event: DomainEvent) -> Boolean
+        -- Publishes an event to all registered handlers for this event type
+        -- AND to wildcard ("*") handlers.
+        -- Async dispatch: handlers execute in PARALLEL via Promise.allSettled
+        -- (Sprint 2 H-P-06). The prior sequential await-loop was a performance
+        -- footgun — publish() latency was the SUM of every consumer's work,
+        -- not the MAX. Each handler is still wrapped in error isolation per
+        -- the ErrorIsolation invariant; parallelism does NOT relax that invariant.
+        -- Returns after all handlers have settled (fulfilled or rejected).
+
+    subscribe: (event_type: DomainEventType, handler: String) -> Boolean
+        -- Registers a handler for a specific event type or "*" for all events.
+        -- Returns a success indicator; the handler token can be used to unsubscribe.
+        -- Multiple handlers per event type are supported.
+        -- Wildcard handlers receive ALL events regardless of type.
+
+    unsubscribe: (event_type: DomainEventType, handler: String) -> Boolean
+        -- Removes a previously registered handler.
+        -- No-op if the handler was not registered.
+
+    reset: (confirmation: String) -> Boolean
+        -- Removes all subscriptions. Used in tests only.
+
+    handler_count: (event_type: DomainEventType) -> Integer
+        -- Returns the number of registered handlers for a given event type,
+        -- or total across all types if no argument is provided.
+        -- Useful for testing.
+
+    @invariant ErrorIsolation
+        -- One consumer failure must not affect other consumers.
+        -- When a handler throws (sync or rejects a Promise), the bus catches
+        -- the error, logs it, and lets sibling handlers run to completion.
+        -- Sprint 2 H-P-06 update: handlers no longer execute sequentially —
+        -- they run concurrently via Promise.allSettled. The per-handler
+        -- isolation invariant still holds: allSettled guarantees a rejected
+        -- promise does not prevent sibling fulfilment, and the bus wraps each
+        -- invocation in its own async closure so even synchronous throws during
+        -- handler evaluation are caught instead of bubbling up to publish().
+        -- Implementation: Promise.allSettled(allHandlers.map(h => (async () => h(event))()))
+        -- — the outer allSettled catches async rejections, the inner async IIFE
+        -- catches sync throws during handler evaluation.
+        -- Wildcard and type-specific handlers are both placed into the same
+        -- allSettled bag; there is no longer a strict "type handlers first"
+        -- ordering (see OrderGuarantee for what IS preserved).
+
+    @invariant OrderGuarantee
+        -- Events are delivered to consumers in publish order per event type.
+        -- When multiple events of the same type are published sequentially,
+        -- consumers receive them in the same order.
+        -- Sprint 2 H-P-06 update: intra-publish handler ordering across
+        -- DIFFERENT consumers is NO LONGER GUARANTEED — the parallel
+        -- allSettled dispatch schedules handlers concurrently. The cross-
+        -- publish ordering guarantee still holds because publish() awaits
+        -- its own allSettled barrier before returning, so await publish(A)
+        -- then await publish(B) delivers A before B to every handler.
+        -- Cross-publish ordering: preserved by the publish()-level allSettled
+        -- barrier. Each publish() does not return until every handler for that
+        -- event has settled, so the next publish() sees a stable state.
+        -- All 5 production consumers (audit-logger, notification-dispatcher,
+        -- degradation-coordinator, enrichment-trigger, logo-asset-subscriber)
+        -- were audited and none depends on observing another consumer's
+        -- side-effects within the same dispatch.
+        -- Cross-type ordering is NOT guaranteed and NOT required.
+        -- If the bus is ever replaced with an async transport, this invariant
+        -- must be preserved per-type (e.g., per-type FIFO queue).
+
+    @invariant TypeSafety
+        -- Events form a discriminated union. Consumers receive typed payloads.
+        -- The event's type field determines the shape of payload.
+        -- Consumers subscribe to a specific DomainEventType and receive
+        -- a narrowed payload type, not a generic Record.
+        -- Implementation: TypeScript discriminated union with type narrowing.
+        -- The generic DomainEvent<T> interface + mapped payload types
+        -- give compile-time safety. Runtime validation uses safeParsePayload()
+        -- with Zod schemas from event-schemas.ts.
+        -- The mapping from DomainEventType to payload type is:
+        --   vacancy_promoted -> VacancyPromotedPayload
+        --   vacancy_dismissed -> VacancyDismissedPayload
+        --   vacancy_staged -> VacancyStagedPayload
+        --   vacancy_archived -> VacancyArchivedPayload
+        --   vacancy_trashed -> VacancyTrashedPayload
+        --   vacancy_restored_from_trash -> VacancyRestoredFromTrashPayload
+        --   bulk_action_completed -> BulkActionCompletedPayload
+        --   module_deactivated -> ModuleDeactivatedPayload
+        --   module_reactivated -> ModuleReactivatedPayload
+        --   retention_completed -> RetentionCompletedPayload
+        --   scheduler_cycle_started -> SchedulerCycleStartedPayload
+        --   scheduler_cycle_completed -> SchedulerCycleCompletedPayload
+        --   automation_run_started -> AutomationRunStartedPayload
+        --   automation_run_completed -> AutomationRunCompletedPayload
+        --   automation_degraded -> AutomationDegradedPayload
+        --   job_status_changed -> JobStatusChangedPayload
+        --   company_created -> CompanyCreatedPayload
+        --   enrichment_completed -> EnrichmentCompletedPayload
+        --   enrichment_failed -> EnrichmentFailedPayload
+
+    @invariant SingletonBus
+        -- Exactly one TypedEventBus instance exists in the application.
+        -- The bus is a Shared Kernel — used by all bounded contexts.
+        -- Singleton via globalThis to survive HMR (same pattern as RunCoordinator).
+
+    @invariant NoEventLoss
+        -- Every published event is delivered to all registered handlers.
+        -- Handler errors do not constitute event loss (ErrorIsolation catches them).
+        -- Events published before any handler is registered ARE lost — see
+        -- RegisterConsumer rule. This is by design: startup registration
+        -- is the consumer's responsibility.
+
+    @invariant ImmutableEvents
+        -- DomainEvent instances are not mutated after creation.
+        -- Events are snapshots. Consumers must not modify the event object.
+        -- Implementation: Object.freeze() or readonly TypeScript types.
+
+    @guidance
+        -- This is the contract for the TypedEventBus singleton.
+        -- Consumers subscribe via handler functions that receive typed
+        -- DomainEvent instances. Handlers may be sync or async.
+        -- Errors are caught by the bus per the ErrorIsolation invariant.
+        -- The Unsubscribe pattern: subscribe() returns an unsubscribe
+        -- function token; calling it removes the handler.
+}
+
+------------------------------------------------------------
 -- Rules
--- =============================================================================
+------------------------------------------------------------
 
-rule ErrorIsolation {
-  -- "One consumer failure must not affect other consumers."
-  -- When a handler throws (sync or rejects a Promise), the bus catches
-  -- the error, logs it, and lets sibling handlers run to completion.
-  --
-  -- Sprint 2 H-P-06 update: handlers no longer execute sequentially —
-  -- they run concurrently via Promise.allSettled. The per-handler
-  -- isolation invariant still holds: allSettled guarantees a rejected
-  -- promise does not prevent sibling fulfilment, and the bus wraps each
-  -- invocation in its own async closure so even synchronous throws during
-  -- handler evaluation are caught instead of bubbling up to publish().
-  when: EventBus.publish(event: DomainEvent)
-  let typeHandlers = registered handlers for event.type
-  let wildcardHandlers = registered handlers for "*"
-  let allHandlers = typeHandlers + wildcardHandlers
+-- PublishEvent: when a domain operation emits an event, the bus delivers
+-- it to all registered handlers for that event type and to wildcard handlers.
+rule PublishEvent {
+    when: PublishEvent(publisher, event)
+    ensures:
+        EventDelivered(event: event)
 
-  ensures: allHandlers are invoked concurrently via Promise.allSettled
-  ensures: for_each handler in allHandlers:
-    -- The implementation wraps each handler call in an async closure
-    -- (`async (handler) => handler(event)`) so synchronous throws are
-    -- surfaced as rejected promises inside allSettled — they never
-    -- bubble out of publish().
-    try via allSettled:
-      await handler.handle(event)
-    on reject:
-      log.error("[EventBus] Consumer failed for {event.type}", error)
-      -- Sibling handlers continue unaffected; rejection is not rethrown.
-
-  ensures: all handlers are invoked regardless of individual failures
-  ensures: publish() does not throw even if all handlers fail
-  ensures: publish() resolves only after every handler settles (tests
-           and callers can observe side-effects after `await publish(...)`)
-
-  @guidance
-    -- This is critical for system stability. A bug in the NotificationDispatcher
-    -- must never prevent the AuditLogger from recording the event.
-    -- Implementation: `Promise.allSettled(allHandlers.map(h => (async () => h(event))()))`
-    -- — the outer allSettled catches async rejections, the inner async IIFE
-    -- catches sync throws during handler evaluation.
-    -- Wildcard and type-specific handlers are both placed into the same
-    -- allSettled bag; there is no longer a strict "type handlers first"
-    -- ordering (see OrderGuarantee for what IS preserved).
+    @guidance
+        -- publish() dispatches handlers concurrently via Promise.allSettled.
+        -- Each handler is wrapped in an async closure so synchronous throws
+        -- are surfaced as rejected promises inside allSettled — they never
+        -- bubble out of publish(). A bug in the NotificationDispatcher
+        -- must never prevent the AuditLogger from recording the event.
 }
 
-rule OrderGuarantee {
-  -- "Events are delivered to consumers in publish order per event type."
-  -- When multiple events of the same type are published sequentially,
-  -- consumers receive them in the same order.
-  --
-  -- Sprint 2 H-P-06 update: intra-publish handler ordering across
-  -- DIFFERENT consumers is NO LONGER GUARANTEED — the parallel
-  -- allSettled dispatch schedules handlers concurrently. The cross-
-  -- publish ordering guarantee still holds because publish() awaits
-  -- its own allSettled barrier before returning, so `await publish(A)
-  -- then await publish(B)` delivers A before B to every handler.
-  when: EventBus.publish(event1: DomainEvent<T>) then EventBus.publish(event2: DomainEvent<T>)
+-- ConsumerRegistration: consumers register at application startup.
+-- All event handlers must be registered before the first event is published.
+-- This prevents missed events during early application lifecycle.
+rule RegisterConsumer {
+    when: RegisterConsumer(consumer, event_type)
+    ensures:
+        ConsumerRegistered(consumer: consumer, event_type: event_type)
 
-  ensures: for_each handler subscribed to T:
-    handler receives event1 before event2
-  -- Explicitly NOT ensured: "handler A observes handler B's side effects
-  -- within a single publish() call." Publishers that need causal ordering
-  -- across consumers must publish separate events and await them in order.
-
-  @guidance
-    -- Cross-publish ordering: preserved by the publish()-level allSettled
-    -- barrier. Each publish() does not return until every handler for that
-    -- event has settled, so the next publish() sees a stable state.
-    -- Intra-publish ordering across consumers: dropped by design (H-P-06).
-    -- All 5 production consumers (audit-logger, notification-dispatcher,
-    -- degradation-coordinator, enrichment-trigger, logo-asset-subscriber)
-    -- were audited and none depends on observing another consumer's
-    -- side-effects within the same dispatch.
-    -- Cross-type ordering is NOT guaranteed and NOT required.
-    -- If the bus is ever replaced with an async transport, this invariant
-    -- must be preserved per-type (e.g., per-type FIFO queue).
+    @guidance
+        -- Registration happens in a startup module (e.g., src/lib/events/consumers/index.ts).
+        -- Each consumer exports a register(bus) function.
+        -- The startup module calls all register functions.
+        -- Sprint 2 H-P-06 update: registration order does NOT determine
+        -- handler execution order anymore. The parallel allSettled dispatch
+        -- in publish() schedules all handlers concurrently, so consumers
+        -- MUST NOT depend on observing another consumer's side-effects
+        -- within the same publish() call.
 }
 
-rule TypeSafety {
-  -- "Events form a discriminated union. Consumers receive typed payloads."
-  -- The event's `type` field determines the shape of `payload`.
-  -- Consumers subscribe to a specific DomainEventType and receive
-  -- a narrowed payload type, not a generic Record<string, unknown>.
+------------------------------------------------------------
+-- Actor Declarations
+------------------------------------------------------------
 
-  ensures: DomainEvent.type discriminates DomainEvent.payload
-  ensures: EventHandler<VacancyPromoted> receives VacancyPromotedPayload
-  ensures: EventHandler<VacancyDismissed> receives VacancyDismissedPayload
-  ensures: EventHandler<VacancyStaged> receives VacancyStagedPayload
-  ensures: EventHandler<VacancyArchived> receives VacancyArchivedPayload
-  ensures: EventHandler<VacancyTrashed> receives VacancyTrashedPayload
-  ensures: EventHandler<VacancyRestoredFromTrash> receives VacancyRestoredFromTrashPayload
-  ensures: EventHandler<BulkActionCompleted> receives BulkActionCompletedPayload
-  ensures: EventHandler<ModuleDeactivated> receives ModuleDeactivatedPayload
-  ensures: EventHandler<ModuleReactivated> receives ModuleReactivatedPayload
-  ensures: EventHandler<RetentionCompleted> receives RetentionCompletedPayload
-  ensures: EventHandler<SchedulerCycleStarted> receives SchedulerCycleStartedPayload
-  ensures: EventHandler<SchedulerCycleCompleted> receives SchedulerCycleCompletedPayload
-  ensures: EventHandler<AutomationRunStarted> receives AutomationRunStartedPayload
-  ensures: EventHandler<AutomationRunCompleted> receives AutomationRunCompletedPayload
-  ensures: EventHandler<AutomationDegraded> receives AutomationDegradedPayload
-  ensures: EventHandler<JobStatusChanged> receives JobStatusChangedPayload
-  ensures: EventHandler<CompanyCreated> receives CompanyCreatedPayload
-  ensures: EventHandler<EnrichmentCompleted> receives EnrichmentCompletedPayload
-  ensures: EventHandler<EnrichmentFailed> receives EnrichmentFailedPayload
-
-  @guidance
-    -- Implementation: TypeScript discriminated union with type narrowing.
-    -- The generic DomainEvent<T> interface + mapped payload types
-    -- give compile-time safety. No runtime type checking needed.
-    -- The existing `DomainEvent<T extends string>` in events/index.ts
-    -- is the starting point — expand with concrete event interfaces.
+actor Publisher {
+    identified_by: DomainService
 }
 
-rule ConsumerRegistration {
-  -- "Consumers register at application startup, not lazily."
-  -- All event handlers must be registered before the first event is published.
-  -- This prevents missed events during early application lifecycle.
-  when: ApplicationStartup
-
-  ensures: NotificationDispatcher.registered(EventBus)
-  ensures: AuditLogger.registered(EventBus) -- optional, may be disabled in production
-
-  @guidance
-    -- Registration happens in a startup module (e.g., src/lib/events/consumers/index.ts).
-    -- Each consumer exports a `register(bus: EventBus)` function.
-    -- The startup module calls all register functions.
-    -- Sprint 2 H-P-06 update: registration order does NOT determine
-    -- handler execution order anymore. The parallel allSettled dispatch
-    -- in publish() schedules all handlers concurrently, so consumers
-    -- MUST NOT depend on observing another consumer's side-effects
-    -- within the same publish() call. See OrderGuarantee for the
-    -- ordering guarantees that ARE preserved (cross-publish FIFO per
-    -- event type) and ErrorIsolation for the parallel dispatch shape.
+actor Consumer {
+    identified_by: EventConsumer
 }
 
-rule StubMigration {
-  -- "All existing emitEvent() calls must be migrated to EventBus.publish()."
-  -- The current stub in src/lib/events/index.ts logs to console only.
-  -- After the bus is built, emitEvent() becomes a thin wrapper around bus.publish().
-  when: EventBusReady
+------------------------------------------------------------
+-- Surfaces
+------------------------------------------------------------
 
-  ensures: emitEvent(event) delegates to EventBus.publish(event)
-  ensures: no direct console.debug calls for domain events remain
-  ensures: all existing event emissions (VacancyPromoted, VacancyDismissed,
-           VacancyStaged, BulkActionCompleted) route through the bus
+surface EventPublishing {
+    facing publisher: Publisher
 
-  @guidance
-    -- Migration strategy: keep the emitEvent() function signature for backward compat.
-    -- Internally, it calls the singleton EventBus instance.
-    -- This is a non-breaking change — callers don't need to update.
-    -- New code should use EventBus.publish() directly.
+    provides:
+        PublishEvent(publisher, event)
+
+    contracts:
+        demands TypedEventBus
+
+    @guarantee ConcurrentDelivery
+        -- All handlers for a published event are dispatched concurrently
+        -- via Promise.allSettled. publish() resolves only after every
+        -- handler settles (fulfilled or rejected). Tests and callers
+        -- can observe side-effects after await publish().
+
+    @guidance
+        -- Publishers call publish() after completing domain operations.
+        -- The bus handles fan-out to all registered consumers.
 }
 
--- =============================================================================
--- Invariants
--- =============================================================================
+surface EventConsumption {
+    facing consumer: Consumer
 
-invariant SingletonBus {
-  ensures: exactly one EventBus instance exists in the application
-  note: "The bus is a Shared Kernel — used by all bounded contexts."
-  note: "Singleton via globalThis to survive HMR (same pattern as RunCoordinator)."
+    provides:
+        RegisterConsumer(consumer, event_type)
+
+    contracts:
+        demands TypedEventBus
+
+    @guarantee StableSubscription
+        -- Once registered, a handler receives all events of its subscribed
+        -- type until explicitly unsubscribed or the bus is reset.
+
+    @guidance
+        -- Consumers register handlers at application startup.
+        -- Examples: NotificationDispatcher, AuditLogger, CRM Activity Logger,
+        -- enrichment-trigger, logo-asset-subscriber.
 }
 
-invariant NoEventLoss {
-  ensures: every published event is delivered to all registered handlers
-  note: "Handler errors do not constitute event loss (ErrorIsolation catches them)."
-  note: "Events published before any handler is registered ARE lost — see ConsumerRegistration."
-}
-
-invariant ImmutableEvents {
-  ensures: DomainEvent instances are not mutated after creation
-  note: "Events are snapshots. Consumers must not modify the event object."
-  note: "Implementation: Object.freeze() or readonly TypeScript types."
-}
-
--- =============================================================================
+------------------------------------------------------------
 -- Open Questions
--- =============================================================================
+------------------------------------------------------------
 
 -- RESOLVED: "Should the bus support async handlers?"
 -- Yes. publish() is async (returns Promise<void>), handlers may return void | Promise<void>.
 -- Sprint 2 H-P-06: handlers are dispatched CONCURRENTLY via Promise.allSettled
 -- (no longer awaited sequentially). Per-handler error isolation is preserved
--- inside the allSettled wrapper — see rule ErrorIsolation for the contract and
--- rule OrderGuarantee for the ordering guarantees that survived parallelisation.
+-- inside the allSettled wrapper — see TypedEventBus contract ErrorIsolation invariant
+-- and OrderGuarantee invariant for the ordering guarantees that survived parallelisation.
 
 open question "Should events be persisted to an EventLog table for audit/replay? Not needed now, but valuable for debugging and future event sourcing."
 

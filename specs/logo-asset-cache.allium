@@ -21,20 +21,28 @@
 --   - validateWebhookUrl from security-rules.allium (SSRF protection)
 
 -- =============================================================================
--- Actors
+-- External Entities
 -- =============================================================================
 
-actor User {
-  -- Configures logo asset limits (max size, max dimension).
-  -- Deletes logo assets from company edit UI.
-  -- Views locally-served logos in all company-displaying surfaces.
+external entity Company {
+    -- From shared-entities.allium.
+    id: String
+    user_id: String
+    logo_url: String?
+    logo_asset_id: String?
 }
 
-actor System {
-  -- Downloads logo images on enrichment events.
-  -- Sanitizes SVGs. Resizes raster images to fit bounding box.
-  -- Stores on persistent volume. Re-downloads when source URL changes.
-  -- Cleans up on company deletion.
+external entity EnrichmentResult {
+    -- From data-enrichment.allium.
+    dimension: String
+    data: String
+    user_id: String
+    company_id: String
+}
+
+external entity EventBus {
+    -- From event-bus.allium.
+    -- LogoAssetSubscriber subscribes to EnrichmentCompleted.
 }
 
 -- =============================================================================
@@ -42,64 +50,12 @@ actor System {
 -- =============================================================================
 
 enum LogoAssetStatus {
-  pending             -- Download initiated, not yet complete
-  | ready             -- Image downloaded, processed, stored on disk
-  | failed            -- Download failed after validation/processing
-  -- Note: there is no "stale" status. Freshness is determined by
-  -- comparing sourceUrl against the latest enrichment result URL.
-  -- If they differ, a re-download is triggered.
-}
-
--- =============================================================================
--- External Entities
--- =============================================================================
-
-external entity Company {
-  -- From shared-entities.allium.
-  -- Fields referenced: id, userId, logoUrl, logoAssetId
-  -- logoUrl: external URL from enrichment (existing field)
-  -- logoAssetId: FK to LogoAsset (new field, nullable)
-}
-
-external entity EnrichmentResult {
-  -- From data-enrichment.allium.
-  -- Fields referenced: dimension, data (JSON with logoUrl), userId, companyId
-}
-
-external entity EventBus {
-  -- From event-bus.allium.
-  -- LogoAssetSubscriber subscribes to EnrichmentCompleted.
-}
-
--- =============================================================================
--- Config
--- =============================================================================
-
-config {
-  MAX_FILE_SIZE_BYTES: Integer = 524288
-    -- 512 KB. Maximum stored file size after resize and compression.
-    -- Configurable per user via UserSettings.logoAsset.maxFileSize.
-  MAX_DOWNLOAD_BYTES: Integer = 1048576
-    -- 1 MB. Abort download if response body exceeds this before processing.
-    -- Safety margin above MAX_FILE_SIZE_BYTES to allow for resize headroom.
-    -- Prevents memory exhaustion from malicious/misconfigured servers.
-  MAX_DIMENSION_PX: Integer = 512
-    -- Bounding box: neither width nor height exceeds this value.
-    -- Aspect ratio preserved — wide logos stay wide.
-    -- Configurable per user via UserSettings.logoAsset.maxDimension.
-  DOWNLOAD_TIMEOUT_MS: Integer = 10000
-    -- Maximum time to download a single logo image.
-  STORAGE_BASE_PATH: String = "/data/logos"
-    -- Root directory for logo assets on disk.
-    -- Same Docker volume as the database (survives rebuilds).
-    -- Directory-per-company layout for EP-1 compatibility:
-    -- {STORAGE_BASE_PATH}/{userId}/{companyId}/logo.{ext}
-  ACCEPTED_MIME_TYPES: Set<String> = {
-    "image/png", "image/jpeg", "image/gif",
-    "image/webp", "image/svg+xml",
-    "image/x-icon", "image/vnd.microsoft.icon"
-  }
-    -- Only these content types are downloaded. Others are rejected.
+    pending             -- Download initiated, not yet complete
+    | ready             -- Image downloaded, processed, stored on disk
+    | failed            -- Download failed after validation/processing
+    -- Note: there is no "stale" status. Freshness is determined by
+    -- comparing source_url against the latest enrichment result URL.
+    -- If they differ, a re-download is triggered.
 }
 
 -- =============================================================================
@@ -107,267 +63,354 @@ config {
 -- =============================================================================
 
 entity LogoAsset {
-  -- A locally-cached copy of a company logo image.
-  -- One per (userId, companyId) combination.
-  -- The master asset from which future derived formats (folder icons,
-  -- File Explorer thumbnails) will be generated.
+    -- A locally-cached copy of a company logo image.
+    -- One per (user_id, company_id) combination.
+    -- The master asset from which future derived formats (folder icons,
+    -- File Explorer thumbnails) will be generated.
 
-  id: String                              -- UUID
-  userId: String                          -- Owner (IDOR: all queries scoped by userId)
-  companyId: String                       -- FK to Company
-  sourceUrl: String                       -- The external URL that was downloaded.
-                                          -- Used to detect URL changes on re-enrichment.
-  filePath: String                        -- Absolute path on disk.
-                                          -- Constructed server-side: never from user input.
-                                          -- Pattern: {STORAGE_BASE_PATH}/{userId}/{companyId}/logo.{ext}
-  mimeType: String                        -- MIME type of the stored file (e.g., "image/png")
-  fileSize: Integer                       -- Bytes on disk after processing
-  width: Integer?                         -- Pixels after resize. Null for SVG (vector).
-  height: Integer?                        -- Pixels after resize. Null for SVG (vector).
-  status: LogoAssetStatus
-  errorMessage: String?                   -- Error detail when status = failed. Null on success.
-                                          -- Aids debugging; not shown to end users.
+    id: String                              -- UUID
+    user_id: String                         -- Owner (IDOR: all queries scoped by user_id)
+    company_id: String                      -- FK to Company
+    source_url: String                      -- The external URL that was downloaded.
+                                            -- Used to detect URL changes on re-enrichment.
+    file_path: String                       -- Absolute path on disk.
+                                            -- Constructed server-side: never from user input.
+                                            -- Pattern: {storage_base_path}/{user_id}/{company_id}/logo.{ext}
+    mime_type: String                       -- MIME type of the stored file (e.g., "image/png")
+    file_size: Integer                      -- Bytes on disk after processing
+    width: Integer?                         -- Pixels after resize. Null for SVG (vector).
+    height: Integer?                        -- Pixels after resize. Null for SVG (vector).
+    status: LogoAssetStatus
+    error_message: String?                  -- Error detail when status = failed. Null on success.
+                                            -- Aids debugging; not shown to end users.
 
-  createdAt: DateTime = now()
-  updatedAt: DateTime                     -- Auto-updated on any change
+    created_at: Timestamp
+    updated_at: Timestamp                   -- Auto-updated on any change
 
-  @@unique(userId, companyId)
-  @@index(userId, status)
+    -- Unique constraint: (user_id, company_id)
+    -- Index: (user_id, status)
+
+    company: Company with id = this.company_id
+
+    transitions status {
+        pending -> ready
+        pending -> failed
+        failed -> pending
+        terminal: ready
+    }
 }
 
 -- =============================================================================
--- Invariants
+-- Config
 -- =============================================================================
 
-invariant LogoAssetOwnership {
-  -- Every LogoAsset query (read or write) MUST include userId in the
-  -- where clause. Never query by id alone. (ADR-015)
-  forall asset: LogoAsset =>
-    asset.query.where contains userId
-}
-
-invariant BoundingBoxPreservesAspectRatio {
-  -- When a raster image is resized, both dimensions fit within
-  -- config.MAX_DIMENSION_PX. The aspect ratio is preserved:
-  -- a 1200x400 logo at max 512px becomes 512x171, not 512x512.
-  forall asset: LogoAsset where asset.width != null =>
-    asset.width <= config.MAX_DIMENSION_PX
-    and asset.height <= config.MAX_DIMENSION_PX
-}
-
-invariant SvgSanitized {
-  -- SVG files are sanitized before storage to prevent stored XSS.
-  -- Removed: <script>, event handlers (onload, onclick, etc.),
-  -- javascript: URIs, xlink:href to external resources, <foreignObject>.
-  -- SVGs have no pixel dimensions (width/height = null).
-  forall asset: LogoAsset where asset.mimeType = "image/svg+xml" =>
-    asset.width = null and asset.height = null
-}
-
-invariant FilePathNeverFromUserInput {
-  -- filePath is always constructed server-side from userId + companyId.
-  -- User-supplied strings never influence the path (prevents traversal).
-  forall asset: LogoAsset =>
-    asset.filePath starts_with config.STORAGE_BASE_PATH
-}
-
-invariant DownloadUrlValidation {
-  -- The sourceUrl MUST pass SSRF validation before any fetch is performed.
-  -- Uses validateWebhookUrl() or equivalent: blocks private IPs (RFC 1918),
-  -- IMDS (169.254.*), localhost (127.*, ::1), non-http(s) schemes,
-  -- embedded credentials, and IPv6 private ranges.
-  -- Applies to both enrichment-sourced and user-supplied URLs.
-  forall asset: LogoAsset =>
-    asset.sourceUrl passes validateWebhookUrl()
-}
-
-invariant MagicByteValidation {
-  -- Content-Type header alone is not trusted. After download, the first
-  -- bytes of the file are checked against known magic byte signatures
-  -- to confirm the actual format matches the declared MIME type.
-  -- Mismatches are rejected (status = failed).
+config {
+    max_file_size_bytes: Integer = 524288
+        -- 512 KB. Maximum stored file size after resize and compression.
+        -- Configurable per user via UserSettings.logoAsset.maxFileSize.
+    max_download_bytes: Integer = 1048576
+        -- 1 MB. Abort download if response body exceeds this before processing.
+        -- Safety margin above max_file_size_bytes to allow for resize headroom.
+        -- Prevents memory exhaustion from malicious/misconfigured servers.
+    max_dimension_px: Integer = 512
+        -- Bounding box: neither width nor height exceeds this value.
+        -- Aspect ratio preserved — wide logos stay wide.
+        -- Configurable per user via UserSettings.logoAsset.maxDimension.
+    download_timeout_ms: Integer = 10000
+        -- Maximum time to download a single logo image.
+    storage_base_path: String = "/data/logos"
+        -- Root directory for logo assets on disk.
+        -- Same Docker volume as the database (survives rebuilds).
+        -- Directory-per-company layout for EP-1 compatibility:
+        -- {storage_base_path}/{user_id}/{company_id}/logo.{ext}
+    accepted_mime_types: Set<String> = {
+        "image/png", "image/jpeg", "image/gif",
+        "image/webp", "image/svg+xml",
+        "image/x-icon", "image/vnd.microsoft.icon"
+    }
+        -- Only these content types are downloaded. Others are rejected.
 }
 
 -- =============================================================================
 -- Rules
 -- =============================================================================
 
+-- downloadAndProcess is a black box function representing the download
+-- and processing pipeline. It validates the URL (SSRF), fetches the image,
+-- checks content type and magic bytes, sanitizes SVGs, resizes rasters to
+-- fit the bounding box, and writes to disk. See the "Black Boxes" section
+-- at the bottom of this file for the full contract.
+
 rule DownloadOnEnrichment {
-  -- "When enrichment discovers a logo URL, download and store it locally."
-  when: event: EnrichmentCompleted
-    where event.dimension = logo
+    -- When enrichment discovers a logo URL, download and store it locally.
+    when: EnrichmentCompleted(event)
 
-  let enrichedUrl = parseLogoUrl(event.data)
-    -- Extract logoUrl from the JSON data payload.
+    let enriched_url = parseLogoUrl(event.data)
+    let company = resolveCompany(event.user_id, event.domain_key)
 
-  -- EnrichmentCompleted carries domainKey (not companyId directly).
-  -- Resolve companyId from the EnrichmentResult linked to this event,
-  -- or look up Company by domainKey + userId.
-  let company = resolveCompany(event.userId, event.domainKey)
+    requires: enriched_url != null
+    requires: company != null
 
-  requires: enrichedUrl != null and company != null
+    let existing_asset = LogoAsset{user_id: event.user_id, company_id: company.id}
 
-  let existingAsset = LogoAsset.find(userId: event.userId, companyId: company.id)
+    -- Skip if we already have this exact URL cached and ready,
+    -- or if a download is already in progress (prevents concurrent downloads).
+    requires:
+        not exists existing_asset
+        or (existing_asset.source_url != enriched_url and existing_asset.status != pending)
+        or existing_asset.status = failed
 
-  -- Skip if we already have this exact URL cached and ready,
-  -- or if a download is already in progress (prevents concurrent downloads).
-  guard: existingAsset = null
-    or (existingAsset.sourceUrl != enrichedUrl and existingAsset.status != pending)
-    or existingAsset.status = failed
+    ensures:
+        if exists existing_asset:
+            existing_asset.status = pending
+            existing_asset.source_url = enriched_url
+            existing_asset.error_message = null
+        else:
+            LogoAsset.created(
+                user_id: event.user_id,
+                company_id: company.id,
+                source_url: enriched_url,
+                status: pending,
+                error_message: null
+            )
+        downloadAndProcess(enriched_url, event.user_id, company.id)
 
-  ensures:
-    1. LogoAsset.upserted(
-         userId: event.userId,
-         companyId: company.id,
-         sourceUrl: enrichedUrl,
-         status: pending,
-         errorMessage: null
-       )
-    2. downloadAndProcess(enrichedUrl, event.userId, company.id)
-    3. if download succeeds:
-         LogoAsset.updated(status: ready, filePath: ..., mimeType: ..., fileSize: ..., width: ..., height: ...)
-         Company.updated(
-           logoAssetId: asset.id,
-           logoUrl: stripTokenFromUrl(enrichedUrl)
-         )
-         -- Company.logoUrl is preserved as external fallback with embedded
-         -- API tokens stripped (e.g. Logo.dev pk_ keys removed from query
-         -- string). The URL structure is preserved so it can still serve
-         -- as a usable external fallback when the local asset is unavailable.
-       else:
-         LogoAsset.updated(status: failed, errorMessage: ...)
-         -- Company.logoUrl is unchanged. No user-visible error.
-
-  @guidance
-    -- Download is fire-and-forget from the event handler's perspective.
-    -- Failure is silent to the user — the CompanyLogo component falls
-    -- back to the external URL or initials.
-    -- The resolveCompany step uses EnrichmentResult.companyId if available,
-    -- otherwise looks up Company by domain matching on userId.
+    @guidance
+        -- Download is fire-and-forget from the event handler's perspective.
+        -- Failure is silent to the user — the CompanyLogo component falls
+        -- back to the external URL or initials.
+        -- The resolveCompany step uses EnrichmentResult.companyId if available,
+        -- otherwise looks up Company by domain matching on userId.
+        -- Re-download on URL change: DownloadOnEnrichment's guard condition
+        -- (existing_asset.source_url != enriched_url) triggers re-processing.
+        -- The old file is deleted from disk before the new one is written.
+        -- If download fails, the old file is gone but Company.logo_url
+        -- still provides the external fallback (with tokens stripped).
 }
 
-rule ReDownloadOnUrlChange {
-  -- "When enrichment returns a different URL than what's cached, re-download."
-  -- This is handled by DownloadOnEnrichment's guard condition:
-  -- existingAsset.sourceUrl != enrichedUrl triggers re-processing.
-  -- The old file is deleted from disk before the new one is written.
-  -- No separate rule needed — DownloadOnEnrichment covers this case.
+rule DownloadSucceeded {
+    -- When download and processing completes successfully, mark the asset ready.
+    when: DownloadCompleted(asset, file_path, mime_type, file_size, width, height)
 
-  @guidance
-    -- On re-download: delete old file first, then download new.
-    -- If download fails, the old file is gone but Company.logoUrl
-    -- still provides the external fallback (with tokens stripped).
+    requires: asset.status = pending
+
+    let enriched_url = asset.source_url
+
+    ensures:
+        asset.status = ready
+        asset.file_path = file_path
+        asset.mime_type = mime_type
+        asset.file_size = file_size
+        asset.width = width
+        asset.height = height
+        asset.company.logo_asset_id = asset.id
+        asset.company.logo_url = stripTokenFromUrl(enriched_url)
+        -- Company.logo_url is preserved as external fallback with embedded
+        -- API tokens stripped (e.g. Logo.dev pk_ keys removed from query
+        -- string). The URL structure is preserved so it can still serve
+        -- as a usable external fallback when the local asset is unavailable.
+}
+
+rule DownloadFailed {
+    -- When download or processing fails, mark the asset as failed.
+    when: DownloadFailed(asset, error_message)
+
+    requires: asset.status = pending
+
+    ensures:
+        asset.status = failed
+        asset.error_message = error_message
+        -- Company.logo_url is unchanged. No user-visible error.
 }
 
 rule ManualUrlSync {
-  -- "When user saves a company with a changed logo URL, trigger download."
-  when: company: Company.logoUrl.changed
-    where change triggered by user action (not by enrichment writeback)
+    -- When user saves a company with a changed logo URL, trigger download.
+    when: ManualLogoUrlChanged(company)
 
-  ensures: downloadAndProcess(company.logoUrl, company.userId, company.id)
-    -- Same download flow as DownloadOnEnrichment.
-    -- Creates or updates LogoAsset for this company.
+    ensures:
+        downloadAndProcess(company.logo_url, company.user_id, company.id)
 
-  @guidance
-    -- This covers: manual URL entry, Wikipedia URL resolution,
-    -- and any other UI-driven logo URL change.
-    -- The AddCompany form already triggers updateCompany() on save.
-    -- The download can be initiated as a side effect of the save action.
+    @guidance
+        -- This covers: manual URL entry, Wikipedia URL resolution,
+        -- and any other UI-driven logo URL change.
+        -- The AddCompany form already triggers updateCompany() on save.
+        -- The download can be initiated as a side effect of the save action.
 }
 
 rule DeletionFromUI {
-  -- "User can delete a cached logo from the company edit dialog."
-  when: user: User requests logo asset deletion for company
+    -- User can delete a cached logo from the company edit dialog.
+    when: DeleteLogoAsset(user, company)
 
-  requires: LogoAsset.exists(userId: user.id, companyId: company.id)
+    let asset = LogoAsset{user_id: user.id, company_id: company.id}
 
-  ensures:
-    1. File deleted from disk at LogoAsset.filePath
-    2. LogoAsset record deleted from database
-    3. Company.logoAssetId set to null
-    -- Company.logoUrl is NOT cleared — it remains as the external fallback
-    -- (token-stripped URL from the download step). UI falls back to the
-    -- external URL or initials.
+    requires: exists asset
+
+    ensures:
+        not exists asset
+        company.logo_asset_id = null
+        -- Company.logo_url is NOT cleared — it remains as the external fallback
+        -- (token-stripped URL from the download step). UI falls back to the
+        -- external URL or initials.
+
+    @guidance
+        -- The file on disk at asset.file_path is deleted alongside the entity.
+        -- The company directory is pruned if empty (EP-1 compat).
 }
 
 rule CleanupOnCompanyDeletion {
-  -- "When a company is deleted, clean up its logo asset."
-  when: company: Company.deleted
+    -- When a company is deleted, clean up its logo asset.
+    when: CompanyDeleted(company)
 
-  let asset = LogoAsset.find(userId: company.userId, companyId: company.id)
+    let asset = LogoAsset{user_id: company.user_id, company_id: company.id}
 
-  guard: asset != null
+    requires: exists asset
 
-  ensures:
-    1. File deleted from disk at asset.filePath
-       -- Also delete the company directory if empty (EP-1 compat).
-    2. LogoAsset record deleted from database
-       -- Prisma onDelete cascade handles the DB record if configured,
-       -- but the disk file requires explicit cleanup.
+    ensures:
+        not exists asset
+
+    @guidance
+        -- The file on disk at asset.file_path is deleted alongside the entity.
+        -- Also delete the company directory if empty (EP-1 compat).
+        -- Prisma onDelete cascade handles the DB record if configured,
+        -- but the disk file requires explicit cleanup.
 }
 
 -- =============================================================================
--- Black Boxes
+-- Invariants
 -- =============================================================================
 
--- Download and processing pipeline.
--- Details are implementation-level but the contract is specified.
-ensures: downloadAndProcess(
-  considering: {
-    sourceUrl,                          -- URL to download from
-    config.DOWNLOAD_TIMEOUT_MS,         -- Abort after this duration
-    config.MAX_DOWNLOAD_BYTES,          -- Abort if body exceeds this during streaming
-    config.ACCEPTED_MIME_TYPES,         -- Reject non-image responses
-    config.MAX_DIMENSION_PX,            -- Bounding box for resize
-    config.MAX_FILE_SIZE_BYTES,         -- Max stored size
-    mimeType                            -- SVGs get sanitized, not resized
-  }
-)
-  -- 1. SSRF validation: sourceUrl passes validateWebhookUrl() before fetch.
-  -- 2. Fetch with redirect: "manual" — reject redirects to prevent SSRF
-  --    via open redirect. If 3xx received, follow only if Location also
-  --    passes validateWebhookUrl(). Max 3 redirects.
-  -- 3. Content-Type header check: must be in ACCEPTED_MIME_TYPES.
-  -- 4. Streaming body read with abort at MAX_DOWNLOAD_BYTES.
-  -- 5. Magic byte validation: first bytes match declared MIME type.
-  -- 6. SVG: sanitize (strip <script>, event handlers, javascript: URIs,
-  --    xlink:href external refs, <foreignObject>). Store sanitized SVG.
-  --    Width/height set to null.
-  -- 7. Raster: resize to fit bounding box, preserving aspect ratio.
-  --    PNG with transparency: NOT converted to JPEG (preserves alpha).
-  --    If fileSize > MAX_FILE_SIZE_BYTES after resize, increase compression.
-  -- 8. Write to disk at {STORAGE_BASE_PATH}/{userId}/{companyId}/logo.{ext}
-  -- 9. Set Company.logoAssetId and Company.logoUrl. The logoUrl is set to
-  --    stripTokenFromUrl(sourceUrl): embedded API tokens (e.g. ?token=pk_...)
-  --    are stripped from the query string before persisting. The URL structure
-  --    is preserved as a usable external fallback.
-  -- 10. On failure: return error with message, caller sets status = failed.
+-- LogoAssetOwnership: Every LogoAsset query (read or write) MUST include
+-- user_id in the where clause. Never query by id alone. (ADR-015)
+
+invariant BoundingBoxPreservesAspectRatio {
+    for asset in LogoAssets:
+        asset.width = null or (asset.width <= config.max_dimension_px and asset.height <= config.max_dimension_px)
+}
+
+invariant SvgSanitized {
+    for asset in LogoAssets:
+        asset.mime_type = "image/svg+xml" implies (asset.width = null and asset.height = null)
+}
+
+-- FilePathNeverFromUserInput: file_path is always constructed server-side
+-- from user_id + company_id. User-supplied strings never influence the path
+-- (prevents traversal).
+
+-- DownloadUrlValidation: The source_url MUST pass SSRF validation before any
+-- fetch is performed. Uses validateWebhookUrl() or equivalent: blocks private
+-- IPs (RFC 1918), IMDS (169.254.*), localhost (127.*, ::1), non-http(s)
+-- schemes, embedded credentials, and IPv6 private ranges. Applies to both
+-- enrichment-sourced and user-supplied URLs.
+
+-- MagicByteValidation: Content-Type header alone is not trusted. After
+-- download, the first bytes of the file are checked against known magic byte
+-- signatures to confirm the actual format matches the declared MIME type.
+-- Mismatches are rejected (status = failed).
 
 -- =============================================================================
--- Surface: CompanyLogo Component
+-- Actor Declarations
+-- =============================================================================
+
+actor LogoUser {
+    -- Configures logo asset limits (max size, max dimension).
+    -- Deletes logo assets from company edit UI.
+    -- Views locally-served logos in all company-displaying surfaces.
+    identified_by: Company where user_id != null
+}
+
+-- System actor (enrichment download, SVG sanitization, raster resize,
+-- disk storage, re-download on URL change, cleanup on company deletion)
+-- operates through domain events, not through surfaces.
+
+-- =============================================================================
+-- Surfaces
 -- =============================================================================
 
 surface CompanyLogo {
-  -- Rendering priority for company logos across all UI surfaces.
-  -- This surface is already implemented; this spec adds the local-first check.
+    -- Rendering priority for company logos across all UI surfaces.
+    -- This surface is already implemented; this spec adds the local-first check.
 
-  priority:
-    1. Company.logoAssetId is set AND LogoAsset.status = ready
-       -> serve from local: /api/logos/{logoAssetId}
-    2. Company.logoUrl is set
-       -> serve from external URL (existing behavior)
-    3. Neither
-       -> show initials avatar (existing behavior)
+    facing viewer: LogoUser
+    context company: Company
 
-  @guidance
-    -- The /api/logos/{id} route serves the file with:
-    -- - Auth check: userId must match LogoAsset.userId
-    -- - Cache-Control: public, max-age=86400, immutable
-    -- - Correct Content-Type from LogoAsset.mimeType
-    -- - SVGs served with Content-Security-Policy: sandbox (defense-in-depth
-    --   alongside sanitization — belt and suspenders)
-    -- - Content-Disposition: inline
+    let asset = LogoAsset{user_id: company.user_id, company_id: company.id}
+
+    exposes:
+        company.logo_asset_id
+        company.logo_url
+
+    provides:
+        DeleteLogoAsset(viewer, company)
+
+    @guarantee LocalFirst
+        -- Serving priority:
+        -- 1. company.logo_asset_id is set AND LogoAsset.status = ready
+        --    -> serve from local: /api/logos/{logo_asset_id}
+        -- 2. company.logo_url is set
+        --    -> serve from external URL (existing behavior)
+        -- 3. Neither
+        --    -> show initials avatar (existing behavior)
+
+    @guidance
+        -- The /api/logos/{id} route serves the file with:
+        -- - Auth check: user_id must match LogoAsset.user_id
+        -- - Cache-Control: public, max-age=86400, immutable
+        -- - Correct Content-Type from LogoAsset.mime_type
+        -- - SVGs served with Content-Security-Policy: sandbox (defense-in-depth
+        --   alongside sanitization — belt and suspenders)
+        -- - Content-Disposition: inline
 }
+
+-- =============================================================================
+-- Deferred Specifications
+-- =============================================================================
+
+deferred downloadAndProcess    -- see: Black Boxes section below
+
+-- =============================================================================
+-- Open Questions
+-- =============================================================================
+
+open question "Re-download on URL change: should the old file be deleted before the new download starts, or only after the new download succeeds?"
+
+-- =============================================================================
+-- Black Boxes (documentation only — not Allium constructs)
+-- =============================================================================
+
+-- downloadAndProcess(source_url, user_id, company_id)
+--
+-- Download and processing pipeline. Details are implementation-level but the
+-- contract is specified:
+--
+-- Inputs considered:
+--   source_url                        -- URL to download from
+--   config.download_timeout_ms        -- Abort after this duration
+--   config.max_download_bytes         -- Abort if body exceeds this during streaming
+--   config.accepted_mime_types        -- Reject non-image responses
+--   config.max_dimension_px           -- Bounding box for resize
+--   config.max_file_size_bytes        -- Max stored size
+--   mime_type                         -- SVGs get sanitized, not resized
+--
+-- Steps:
+--  1. SSRF validation: source_url passes validateWebhookUrl() before fetch.
+--  2. Fetch with redirect: "manual" — reject redirects to prevent SSRF
+--     via open redirect. If 3xx received, follow only if Location also
+--     passes validateWebhookUrl(). Max 3 redirects.
+--  3. Content-Type header check: must be in accepted_mime_types.
+--  4. Streaming body read with abort at max_download_bytes.
+--  5. Magic byte validation: first bytes match declared MIME type.
+--  6. SVG: sanitize (strip <script>, event handlers, javascript: URIs,
+--     xlink:href external refs, <foreignObject>). Store sanitized SVG.
+--     Width/height set to null.
+--  7. Raster: resize to fit bounding box, preserving aspect ratio.
+--     PNG with transparency: NOT converted to JPEG (preserves alpha).
+--     If file_size > max_file_size_bytes after resize, increase compression.
+--  8. Write to disk at {storage_base_path}/{user_id}/{company_id}/logo.{ext}
+--  9. Set Company.logo_asset_id and Company.logo_url. The logo_url is set to
+--     stripTokenFromUrl(source_url): embedded API tokens (e.g. ?token=pk_...)
+--     are stripped from the query string before persisting. The URL structure
+--     is preserved as a usable external fallback.
+-- 10. On failure: return error with message, caller sets status = failed.
 
 -- =============================================================================
 -- Extension Points (future — declared for forward compatibility)
@@ -377,7 +420,7 @@ surface CompanyLogo {
 -- Derive OS-specific folder icons from a ready LogoAsset.
 -- Formats: .ico (Windows, multi-size: 16/32/48/256), .icns (macOS).
 -- Trigger: LogoAsset transitions to ready -> generate derived formats.
--- Storage: same company directory: {companyId}/folder.ico, folder.icns
+-- Storage: same company directory: {company_id}/folder.ico, folder.icns
 --          (directory-per-company layout adopted in this spec for compatibility).
 -- Use case: network-mounted company folders display the company logo.
 -- desktop.ini / Icon\r file generation for automatic OS icon display.

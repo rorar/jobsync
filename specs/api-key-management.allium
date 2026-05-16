@@ -14,9 +14,57 @@
 -- External Entities
 ------------------------------------------------------------
 
+external entity User {
+    -- Authenticated user. Governed by auth spec.
+    public_api_keys: PublicApiKey with user = this
+}
+
 external entity ModuleRegistry {
     -- Unified registry of all modules. Used to derive sensitive flag from manifest.
     -- See module-lifecycle.allium.
+}
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value EncryptionResult {
+    encrypted: String       -- format: "salt:<hex>:<base64-payload>"
+    iv: String              -- base64-encoded IV
+}
+
+------------------------------------------------------------
+-- Contracts
+------------------------------------------------------------
+
+contract KeyManagementSecurity {
+    encrypt: (plaintext: String) -> EncryptionResult
+    decrypt: (encrypted_data: String) -> String
+
+    @invariant EncryptionKeyRequired
+        -- ENCRYPTION_KEY environment variable MUST be set.
+        -- Missing key causes immediate error on encrypt/decrypt, not silent failure.
+
+    @invariant SensitiveFlagFromManifest
+        -- The sensitive flag for a ModuleApiKey is derived from the module manifest
+        -- at save time, NEVER from client input. Unknown modules default to sensitive=true.
+
+    @invariant LegacySaltReadOnly
+        -- The hardcoded LEGACY_SALT is used ONLY for decrypting records that were
+        -- encrypted before the per-record salt migration. No new encryption uses it.
+
+    @invariant OllamaUrlValidation
+        -- The Ollama base URL is validated both at storage (saveApiKey) and
+        -- at retrieval (getOllamaBaseUrl). Invalid URLs fall back to the default.
+        -- This prevents SSRF even if the database is compromised.
+
+    @guidance
+        -- PBKDF2 at 100_000 iterations is computationally expensive (~10ms per call).
+        -- Implementations MAY cache derived keys in a bounded, process-scoped
+        -- in-memory cache keyed by salt to avoid redundant derivation on the same record.
+        -- The cache MUST be cleared on process restart (no persistent key cache).
+        -- Cache size MUST be bounded to prevent unbounded memory growth.
+        -- The encrypt/decrypt functions SHOULD be async to avoid blocking the event loop.
 }
 
 ------------------------------------------------------------
@@ -33,20 +81,12 @@ enum ApiKeyModuleId {
 }
 
 ------------------------------------------------------------
--- Value Types
-------------------------------------------------------------
-
-value EncryptionResult {
-    encrypted: String       -- format: "salt:<hex>:<base64-payload>"
-    iv: String              -- base64-encoded IV
-}
-
-------------------------------------------------------------
 -- Entities and Variants
 ------------------------------------------------------------
 
 entity ModuleApiKey {
     -- API key for an external module (AI provider, job board, etc.)
+    user: User
     module_id: ApiKeyModuleId
     encrypted_key: String   -- AES-256-GCM encrypted (or plaintext for non-sensitive)
     iv: String              -- empty string for non-sensitive keys
@@ -56,13 +96,14 @@ entity ModuleApiKey {
 
     is_sensitive: iv != ""
 
-    @invariant
+    @invariant UniquePerUserModule
         -- (userId, moduleId) is unique. One key per module per user.
         -- Sensitive flag derived from module manifest, NEVER from client input.
 }
 
 entity PublicApiKey {
     -- API key for the Public REST API v1.
+    user: User
     name: String            -- max 100 chars
     key_hash: String        -- SHA-256 hash (one-way)
     key_prefix: String      -- "pk_live_..." prefix for display
@@ -72,7 +113,7 @@ entity PublicApiKey {
 
     is_active: revoked_at = null
 
-    @invariant
+    @invariant ShowOncePolicy
         -- The full plaintext key is returned ONCE at creation, then lost.
         -- Only the hash is stored. Verification is hash-based.
         -- Max 10 active keys per user.
@@ -82,29 +123,23 @@ entity PublicApiKey {
 -- Config
 ------------------------------------------------------------
 
-config EncryptionConfig {
-    algorithm: "aes-256-gcm"
-    iv_length: 12                   -- bytes
-    auth_tag_length: 16             -- bytes
-    key_length: 32                  -- bytes
-    pbkdf2_iterations: 100_000
-    salt_length: 16                 -- bytes, random per encryption
-    encryption_key: env("ENCRYPTION_KEY")
-}
+config {
+    -- Encryption parameters
+    pbkdf2_iterations: Integer = 100_000
+    salt_length: Integer = 16               -- bytes, random per encryption
+    iv_length: Integer = 12                 -- bytes
+    key_length: Integer = 32                -- bytes
+    auth_tag_length: Integer = 16           -- bytes
 
-config OllamaConfig {
-    default_base_url: env("OLLAMA_BASE_URL") or "http://127.0.0.1:11434"
+    -- Public API key limits
+    max_active_keys_per_user: Integer = 10
 
+    -- Ollama defaults
+    default_ollama_base_url: String = "http://127.0.0.1:11434"
     -- URL validation rules (see security-rules.allium for details):
     -- Only http/https protocols allowed
     -- No embedded credentials in URL
     -- Malformed URLs rejected
-}
-
-config PublicApiKeyConfig {
-    max_active_keys_per_user: 10
-    key_format: "pk_live_<random>"
-    hash_algorithm: "sha-256"
 }
 
 ------------------------------------------------------------
@@ -114,203 +149,192 @@ config PublicApiKeyConfig {
 -- === Module API Keys ===
 
 rule SaveModuleApiKey {
-    when: User saves an API key for a module
+    when: SaveModuleApiKey(user, module_id, key, label?)
 
-    requires: User is authenticated
-    requires: key is non-empty string
+    requires: length(key) > 0
+
+    let is_sensitive = is_module_sensitive(module_id)
 
     ensures:
-        let registered = ModuleRegistry.getByCredentialModuleId(module_id)
-        let is_sensitive = registered?.manifest.credential.sensitive ?? true  -- fail-safe
-
         if is_sensitive:
-            let salt = random_bytes(16)
-            let derived_key = pbkdf2(ENCRYPTION_KEY, salt, 100000)
-            encrypted_key = aes_256_gcm_encrypt(key, derived_key)
-            iv = random_iv
-            last4 = key.slice(-4)
+            let result = encrypt(key)
+            ModuleApiKey.created(
+                user: user,
+                module_id: module_id,
+                encrypted_key: result.encrypted,
+                iv: result.iv,
+                last4: last4(key),
+                label: label
+            )
         else:
             -- Non-sensitive: stored as plaintext (e.g. Ollama base URL)
-            encrypted_key = key
-            iv = ""
-            last4 = key
+            ModuleApiKey.created(
+                user: user,
+                module_id: module_id,
+                encrypted_key: key,
+                iv: "",
+                last4: key,
+                label: label
+            )
 
-    ensures: ModuleApiKey.upserted(
-        module_id: module_id,
-        encrypted_key: encrypted_key,
-        iv: iv,
-        last4: last4,
-        label: label?
-    )
+    @guidance
+        -- If a key already exists for (user, module_id), it is replaced (upsert).
+        -- The sensitive flag is derived from the module manifest via
+        -- ModuleRegistry, NEVER from client input. Unknown modules default
+        -- to sensitive=true as a fail-safe.
 }
 
 rule GetUserApiKeys {
-    when: User requests their API keys
+    when: GetUserApiKeys(user)
 
-    requires: User is authenticated
+    ensures: UserApiKeysReturned(
+        user: user,
+        keys: user_module_keys
+    )
 
-    ensures: All keys for User returned
-    ensures: Sensitive keys show only last4, NEVER the encrypted value
-    ensures: Non-sensitive keys include displayValue (the plaintext)
+    @guidance
+        -- Sensitive keys show only last4, NEVER the encrypted value.
+        -- Non-sensitive keys include the plaintext as displayValue.
+        -- All keys for the requesting user are returned.
 }
 
 rule DeleteModuleApiKey {
-    when: User deletes a module API key
+    when: DeleteModuleApiKey(user, module_id)
 
-    requires: User is authenticated
+    let target = ModuleApiKey{user: user, module_id: module_id}
+    requires: exists target
 
-    ensures: ModuleApiKey.deleted where (userId, moduleId) matches
+    ensures: not exists target
 }
 
 rule ResolveOllamaBaseUrl {
-    when: System needs the Ollama base URL for API calls
+    when: ResolveOllamaBaseUrl(user)
+
+    let stored_key = ModuleApiKey{user: user, module_id: ollama}
 
     ensures:
-        if user has stored Ollama key:
-            let url = decrypt or read plaintext (based on iv)
-            if url passes validation:
-                return url
+        if exists stored_key:
+            let url = decrypt_or_read(stored_key)
+            if validate_url(url):
+                OllamaBaseUrlResolved(user: user, url: url)
             else:
-                log security warning
-                return fallback
+                OllamaBaseUrlResolved(user: user, url: config.default_ollama_base_url)
         else:
-            return env("OLLAMA_BASE_URL") or "http://127.0.0.1:11434"
+            OllamaBaseUrlResolved(user: user, url: config.default_ollama_base_url)
 
-    -- SSRF protection: URL validated before every use, not just at storage.
-    -- See security-rules.allium for validation rules.
+    @guidance
+        -- SSRF protection: URL validated before every use, not just at storage.
+        -- See security-rules.allium for validation rules.
+        -- Invalid URLs fall back to the configured default.
 }
 
 -- === Public API Keys ===
 
 rule CreatePublicApiKey {
-    when: User creates a new Public API key
+    when: CreatePublicApiKey(user, name)
 
-    requires: User is authenticated
-    requires: name is non-empty, max 100 chars
-    requires: active key count < 10
+    requires: length(name) > 0
+    requires: length(name) <= 100
 
-    ensures: plaintext key generated (cryptographically random)
+    let active_keys = user.public_api_keys where revoked_at = null
+    requires: active_keys.count < config.max_active_keys_per_user
+
+    let plaintext = generate_api_key()
+
     ensures: PublicApiKey.created(
+        user: user,
         name: name,
         key_hash: sha256(plaintext),
-        key_prefix: first_chars(plaintext),
-        permissions: "[]"
+        key_prefix: key_prefix(plaintext),
+        permissions: {}
     )
-    ensures: plaintext returned ONCE in response
+    ensures: PublicApiKeyCreated(
+        user: user,
+        plaintext: plaintext
+    )
     -- After this response, the plaintext is irrecoverable.
+
+    @guidance
+        -- The full plaintext key is returned exactly once in the response.
+        -- Subsequent reads show only the prefix. There is no "reveal"
+        -- or "regenerate" operation.
 }
 
 rule ListPublicApiKeys {
-    when: User lists their API keys
+    when: ListPublicApiKeys(user)
 
-    requires: User is authenticated
+    ensures: PublicApiKeysListed(
+        user: user,
+        keys: user_public_keys
+    )
 
-    ensures: Keys returned with id, name, prefix, permissions, timestamps
-    ensures: key_hash is NEVER exposed
+    @guidance
+        -- Keys returned with id, name, prefix, permissions, timestamps.
+        -- key_hash is NEVER exposed in the response.
 }
 
 rule RevokePublicApiKey {
-    when: User revokes an API key
+    when: RevokePublicApiKey(user, key)
 
-    requires: User is authenticated
-    requires: Key belongs to User (ownership check via findFirst)
-    requires: Key is not already revoked
+    requires: key.user = user
+    requires: key.is_active
 
-    ensures: PublicApiKey.revoked_at = now
-    -- Soft delete — key remains for audit trail but is no longer valid.
+    ensures: key.revoked_at = now
+    -- Soft delete -- key remains for audit trail but is no longer valid.
 }
 
 rule DeletePublicApiKey {
-    when: User permanently deletes a Public API key
+    when: DeletePublicApiKey(user, key)
 
-    requires: User is authenticated
-    requires: Key belongs to User
-    requires: Key is already revoked
+    requires: key.user = user
+    requires: not key.is_active
 
-    ensures: PublicApiKey.deleted (hard delete)
+    ensures: not exists key
     -- Only revoked keys can be permanently deleted.
-    -- This enforces a two-step process: revoke → delete.
+    -- This enforces a two-step process: revoke then delete.
 }
 
 -- === Encryption ===
 
 rule EncryptKey {
-    when: A sensitive API key needs to be stored
+    when: EncryptKey(plaintext)
 
-    ensures: random salt generated (16 bytes)
-    ensures: key derived via PBKDF2(secret, salt, 100000, 32, sha256)
-    ensures: plaintext encrypted with AES-256-GCM (random IV, auth tag appended)
-    ensures: output format: "salt:<hex>:<base64-payload>"
-    -- Per-record random salt prevents pre-computation attacks.
+    ensures:
+        let result = encrypt(plaintext)
+        KeyEncrypted(encrypted: result.encrypted, iv: result.iv)
+
+    @guidance
+        -- Random salt generated (16 bytes per record).
+        -- Key derived via PBKDF2(secret, salt, 100000, 32, sha256).
+        -- Plaintext encrypted with AES-256-GCM (random IV, auth tag appended).
+        -- Output format: "salt:<hex>:<base64-payload>".
+        -- Per-record random salt prevents pre-computation attacks.
 }
 
 rule DecryptKey {
-    when: An encrypted API key needs to be used
+    when: DecryptKey(encrypted_data)
 
     ensures:
-        if encrypted_data starts with "salt:":
-            -- New format: extract salt, derive key, decrypt
-            salt = parse hex from encrypted_data
-            key = pbkdf2(secret, salt, ...)
-        else:
-            -- Legacy format: use hardcoded salt for backwards compatibility
-            key = pbkdf2(secret, LEGACY_SALT, ...)
+        let plaintext = decrypt(encrypted_data)
+        KeyDecrypted(plaintext: plaintext)
 
-    ensures: AES-256-GCM decrypt with auth tag verification
-    -- Legacy salt "jobsync-api-key-encryption" kept ONLY for reading old records.
-    -- All new encryptions use random per-record salts.
-
-  @guidance
-    -- PBKDF2 at 100_000 iterations is computationally expensive (~10ms per call).
-    -- Implementations MAY cache derived keys in a bounded, process-scoped
-    -- in-memory cache keyed by salt to avoid redundant derivation on the same record.
-    -- The cache MUST be cleared on process restart (no persistent key cache).
-    -- Cache size MUST be bounded to prevent unbounded memory growth.
-    -- The encrypt/decrypt functions SHOULD be async to avoid blocking the event loop.
+    @guidance
+        -- If encrypted_data starts with "salt:", extract salt, derive key, decrypt.
+        -- Otherwise, legacy format: use hardcoded LEGACY_SALT for backwards compatibility.
+        -- Legacy salt "jobsync-api-key-encryption" kept ONLY for reading old records.
+        -- All new encryptions use random per-record salts.
+        -- AES-256-GCM decrypt with auth tag verification.
+        --
+        -- PBKDF2 at 100_000 iterations is computationally expensive (~10ms per call).
+        -- Implementations MAY cache derived keys in a bounded, process-scoped
+        -- in-memory cache keyed by salt to avoid redundant derivation on the same record.
+        -- The cache MUST be cleared on process restart (no persistent key cache).
+        -- Cache size MUST be bounded to prevent unbounded memory growth.
+        -- The encrypt/decrypt functions SHOULD be async to avoid blocking the event loop.
 }
 
 ------------------------------------------------------------
--- Invariants
+-- Open Questions
 ------------------------------------------------------------
 
-invariant EncryptionKeyRequired {
-    -- ENCRYPTION_KEY environment variable MUST be set.
-    -- Missing key causes immediate error on encrypt/decrypt, not silent failure.
-}
-
-invariant SensitiveFlagFromManifest {
-    -- The sensitive flag for a ModuleApiKey is derived from the module manifest
-    -- at save time, NEVER from client input. Unknown modules default to sensitive=true.
-}
-
-invariant PublicKeyShowOnce {
-    -- The full plaintext of a PublicApiKey is returned exactly once (at creation).
-    -- Subsequent reads show only the prefix. The hash is never exposed.
-    -- There is no "reveal" or "regenerate" operation.
-}
-
-invariant OllamaUrlValidation {
-    -- The Ollama base URL is validated both at storage (saveApiKey) and
-    -- at retrieval (getOllamaBaseUrl). Invalid URLs fall back to the default.
-    -- This prevents SSRF even if the database is compromised.
-}
-
-invariant LegacySaltReadOnly {
-    -- The hardcoded LEGACY_SALT is used ONLY for decrypting records that were
-    -- encrypted before the per-record salt migration. No new encryption uses it.
-}
-
-invariant UseServerExportBoundary {
-    -- Functions accepting raw userId MUST NOT reside in "use server" files.
-    -- "use server" exports are callable from the browser — a function taking
-    -- raw userId would allow any authenticated user to query another's data.
-    --
-    -- Example: getBlacklistEntriesForUser was moved from
-    -- companyBlacklist.actions.ts ("use server") to src/lib/blacklist-query.ts
-    -- (import "server-only") to prevent client-side IDOR (SEC-13).
-    -- The Runner pipeline calls it with a trusted userId from automation context.
-    --
-    -- Functions that remain in "use server" files and accept userId
-    -- (e.g. getAutomationSettingsForUser) MUST verify caller === userId
-    -- via getCurrentUser() before returning data.
-}
+open question "Should UseServerExportBoundary be enforced via a lint rule or remain a prose constraint? Functions accepting raw userId MUST NOT reside in 'use server' files -- they are callable from the browser. Functions that remain in 'use server' files and accept userId MUST verify caller === userId via getCurrentUser() before returning data."

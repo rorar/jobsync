@@ -1,895 +1,184 @@
 -- allium: 3
 -- vacancy-pipeline.allium
 
--- Scope: Vacancy Pipeline — Staging, Processing, Promotion, Archive, Trash
+-- Scope: Vacancy Pipeline -- Staging, Processing, Promotion, Archive, Trash
 -- Includes: StagedVacancy lifecycle, Promotion to Job, Dedup (hash-based),
 --           Bulk actions (partial-success), Undo pattern, DSGVO retention,
 --           Domain events (VacancyPromoted, etc.), Company Blacklist (2.15)
 -- Excludes:
---   - Job tracking lifecycle (status workflow, interviews, CRM — separate aggregate)
+--   - Job tracking lifecycle (status workflow, interviews, CRM -- separate aggregate)
 --   - Connector/Module internals (covered by module-lifecycle.allium)
 --   - UI rendering (Staging page layout, JobDeck swipe mechanics)
 --   - LLM match scoring implementation (AI Connector concern)
 --   - Notification dispatch (covered by notification-dispatch.allium, future 0.6)
 -- Dependencies:
---   - Job entity (tracking aggregate — target of promotion)
+--   - Job entity (tracking aggregate -- target of promotion)
 --   - Automation entity (source of automated intake)
 --   - DiscoveredVacancy value type (connector output)
 --   - User entity (owner of all staged vacancies)
 
--- =============================================================================
--- Actors
--- =============================================================================
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
 
-actor User {
-  -- Reviews staged vacancies, promotes to Job, dismisses, archives, restores.
-  -- Creates manual vacancies that bypass staging (direct to Job).
+-- Reference to existing entities (defined in jobsync domain)
+external entity Job {
+    -- Tracking aggregate. Target of promotion.
+    -- Created by promoteStagedVacancyToJob with clean tracking fields.
+    id: String
+    userId: String
+    jobUrl: String?
 }
 
-actor Automation {
-  -- Discovers vacancies via Job Discovery Connectors and stages them.
-  -- Runs on a schedule, produces batches of StagedVacancy records.
+external entity Automation {
+    -- Produces StagedVacancy records via the runner.
+    id: String
+    userId: String
+    jobBoard: String
+    matchThreshold: Integer
 }
 
--- =============================================================================
--- Enums
--- =============================================================================
+external entity User {
+    id: String
+}
+
+external entity JobTitle {
+    id: String
+}
+
+external entity Company {
+    id: String
+}
+
+external entity Location {
+    id: String
+}
+
+external entity JobSource {
+    id: String
+}
+
+external entity JobStatus {
+    id: String
+    value: String
+}
+
+external entity UserSettings {
+    userId: String
+    retentionDays: Integer?
+}
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value DedupKey {
+    userId: String
+    source_board: String
+    external_id: String
+    -- Together these form the composite unique key for dedup.
+    -- When externalId is absent, sourceUrl hash is used as fallback.
+}
+
+value PromotionInput {
+    staged_vacancy_id: String
+    -- Optional overrides (user can adjust before promotion):
+    job_title_override: String?
+    company_override: String?
+    location_override: String?
+    tags_to_apply: Set<String>?
+}
+
+value BulkActionResult {
+    total_requested: Integer
+    succeeded: Integer
+    failed: Integer
+    errors: Set<BulkItemError>
+}
+
+value BulkItemError {
+    item_id: String
+    reason: String
+}
+
+value UndoToken {
+    id: String
+    action_type: BulkActionType
+    item_ids: Set<String>
+    previous_statuses: Set<String>
+    -- Note: In the implementation, previousStatuses are not stored as an explicit
+    -- field. The compensation function is a closure that captures the previous
+    -- state at action time. This is implementation-flexible -- the spec declares
+    -- the data that must be recoverable, not how it is stored.
+    expires_at: Timestamp
+    batch_id: String?
+
+    @guidance
+        -- The compensation function that reverses the action is captured at
+        -- action time and must be idempotent -- calling it multiple times has
+        -- the same effect as calling once. This is an implementation concern
+        -- not modelled in the spec.
+}
+
+value DiscoveredVacancy {
+    -- Core fields
+    title: String
+    employer_name: String
+    location: String
+    description: String
+    source_url: String
+    source_board: String
+    posted_at: Timestamp?
+    salary: String?
+    employment_type: String?
+    external_id: String?
+    application_deadline: String?
+    application_instructions: String?
+
+    -- Extended fields (ROADMAP 1.1b)
+    company_url: String?
+    company_description: String?
+    industry_codes: List<String>?
+    company_size: String?
+    position_offering_code: String?
+    number_of_posts: Integer?
+    occupation_uris: List<String>?
+    required_education_level: String?
+    required_experience_years: Integer?
+    working_languages: List<String>?
+    salary_min: Decimal?
+    salary_max: Decimal?
+    salary_currency: String?
+    salary_period: String?
+    immediate_start: Boolean?
+    contract_start_date: String?
+    contract_end_date: String?
+    eures_flag: Boolean?
+
+    -- Match data (populated by AI connector when available)
+    match_score: Integer?
+    match_data: String?
+}
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
 
 enum StagedVacancyStatus { staged | processing | ready | promoted | dismissed }
 -- staged:     Raw intake, not yet reviewed
 -- processing: Currently being evaluated (LLM match in progress, or user is reviewing)
 -- ready:      Reviewed and approved, awaiting promotion
--- promoted:   Promoted to Job (terminal — immutable after this)
+-- promoted:   Promoted to Job (terminal -- immutable after this)
 -- dismissed:  User decided not to pursue (reversible via restore)
 
 enum VacancySource { manual | automation }
 -- manual:     User created via Add Job or Quick-Add
 -- automation: Discovered by an Automation run
 
-enum BulkActionType { dismiss | archive | trash | restore | restoreFromTrash }
+enum BulkActionType { dismiss | archive | trash | restore | restore_from_trash }
 -- promote removed: bulk promotion is not yet implemented.
 -- delete renamed to trash: matches code's BulkActionType = "trash".
--- restoreFromTrash added: distinct from restore (which restores dismissed vacancies).
-
--- =============================================================================
--- Config
--- =============================================================================
-
-config {
-  RETENTION_DAYS: Integer = 30
-    -- Days before trashed StagedVacancy data is purged. Hash is retained.
-  UNDO_WINDOW_SECONDS: Integer = 10
-    -- Seconds after a destructive action during which undo is available.
-  DEDUP_HASH_ALGORITHM: String = "sha256"
-    -- One-way hash algorithm for dedup keys after retention purge.
-  MAX_BULK_SIZE: Integer = 100
-    -- Maximum items per bulk action.
-  DISMISSED_RETENTION_DAYS: Integer = 30
-    -- Days before dismissed vacancies are purged.
-    -- In practice, the code uses a single RETENTION_DAYS threshold for both
-    -- trashed and dismissed vacancies (both default to 30 days). The separate
-    -- config parameter exists for future differentiation but currently both
-    -- resolve to the same value.
-}
-
--- =============================================================================
--- Value Types
--- =============================================================================
-
-value DedupKey {
-  userId: String
-  sourceBoard: String               -- connector module ID (e.g. "eures", "jsearch")
-  externalId: String                -- source system's native job ID
-  -- Together these form the composite unique key for dedup.
-  -- When externalId is absent, sourceUrl hash is used as fallback.
-}
-
-value PromotionInput {
-  stagedVacancyId: String
-  -- Optional overrides (user can adjust before promotion):
-  jobTitleOverride: String?         -- override extracted title
-  companyOverride: String?          -- override extracted employer
-  locationOverride: String?         -- override extracted location
-  tagsToApply: String[]?            -- tags to attach to the promoted Job
-}
-
-value BulkActionResult {
-  totalRequested: Integer
-  succeeded: Integer
-  failed: Integer
-  errors: BulkItemError[]           -- per-item errors for failed items
-}
-
-value BulkItemError {
-  itemId: String
-  reason: String
-}
-
-value UndoToken {
-  id: String                        -- UUID, used to reference the token for undo/expiry
-  actionType: BulkActionType
-  compensationFn: CompensationFunction
-    -- The function that reverses the action. Captured at action time.
-    -- Must be idempotent — calling it multiple times has the same effect as calling once.
-  itemIds: String[]                 -- IDs of affected StagedVacancy records
-  previousStatuses: String[]        -- status before the action (for rollback)
-    -- Note: In the implementation, previousStatuses are not stored as an explicit
-    -- field. The compensation function is a closure that captures the previous
-    -- state at action time. This is implementation-flexible — the spec declares
-    -- the data that must be recoverable, not how it is stored.
-  expiresAt: DateTime               -- now() + config.UNDO_WINDOW_SECONDS
-  batchId: String?                  -- Links items from the same bulk operation.
-                                    -- null for single-item actions.
-                                    -- All items in a batch share one UndoToken.
-}
-
-value DiscoveredVacancy {
-  -- Core fields
-  title: String
-  employerName: String
-  location: String
-  description: String
-  sourceUrl: String
-  sourceBoard: String
-  postedAt: DateTime?
-  salary: String?
-  employmentType: String?
-  externalId: String?
-  applicationDeadline: String?
-  applicationInstructions: String?
-
-  -- Extended fields (ROADMAP 1.1b)
-  companyUrl: String?
-  companyDescription: String?
-  industryCodes: List<String>?
-  companySize: String?
-  positionOfferingCode: String?
-  numberOfPosts: Integer?
-  occupationUris: List<String>?
-  requiredEducationLevel: String?
-  requiredExperienceYears: Integer?
-  workingLanguages: List<String>?
-  salaryMin: Decimal?
-  salaryMax: Decimal?
-  salaryCurrency: String?
-  salaryPeriod: String?
-  immediateStart: Boolean?
-  contractStartDate: String?
-  contractEndDate: String?
-  euresFlag: Boolean?
-}
-
-value CompensationFunction {
-  -- A closure that reverses a domain action.
-  -- Captured at the time the action is performed (holds the previous state).
-  -- Must be idempotent: calling compensate() N times = calling it once.
-  compensate: (itemIds: String[], previousStatuses: String[]) -> Void
-}
-
--- =============================================================================
--- Entities
--- =============================================================================
-
-entity StagedVacancy {
-  -- Discovery Context aggregate root.
-  -- Raw vacancy intake — no Company FK, no JobStatus, no Resume.
-  -- Those belong to the Job (Tracking) aggregate and are created at promotion time.
-
-  id: String                        -- UUID
-  userId: String                    -- owner
-
-  -- Discovery identity (dedup key)
-  sourceBoard: String               -- module ID: "eures", "arbeitsagentur", "jsearch", "manual"
-  externalId: String?               -- source system's native ID (null for manual)
-  sourceUrl: String?                -- original job posting URL
-
-  -- Vacancy data (raw from connector or manual entry)
-  title: String                     -- REQUIRED: only mandatory field for fast queue intake
-  employerName: String?
-  location: String?                 -- free-text location label
-  description: String?
-  salary: String?
-  employmentType: String?           -- "full_time" | "part_time" | "contract"
-  postedAt: DateTime?
-  applicationDeadline: String?
-  applicationInstructions: String?
-
-  -- Extended vacancy data (ROADMAP 1.1b Phase 1)
-  companyUrl: String?
-  companyDescription: String?
-  industryCodes: List<String>?
-  companySize: String?
-  positionOfferingCode: String?
-  numberOfPosts: Integer?
-  occupationUris: List<String>?
-  requiredEducationLevel: String?
-  requiredExperienceYears: Integer?
-  workingLanguages: List<String>?
-  salaryMin: Decimal?
-  salaryMax: Decimal?
-  salaryCurrency: String?
-  salaryPeriod: String?
-  immediateStart: Boolean?
-  contractStartDate: String?
-  contractEndDate: String?
-  euresFlag: Boolean?
-
-  -- Source tracking
-  source: VacancySource             -- manual or automation
-  automationId: String?             -- FK to Automation (null for manual)
-
-  -- Match data (optional — only populated when LLM is available)
-  matchScore: Integer?              -- 0-100, from AI Connector
-  matchData: String?                -- JSON blob with match reasoning
-
-  -- Pipeline state
-  status: StagedVacancyStatus = staged
-
-  -- Promotion link (set once, immutable after)
-  promotedToJobId: String?          -- FK to Job, set on promotion
-
-  -- Archive / Trash lifecycle
-  archivedAt: DateTime?
-  trashedAt: DateTime?
-
-  -- Timestamps
-  discoveredAt: DateTime = now()    -- when the vacancy entered the system
-  createdAt: DateTime = now()
-  updatedAt: DateTime               -- auto-updated on any change
-}
-
-entity DedupHash {
-  -- Privacy-preserving dedup record.
-  -- Retained after StagedVacancy data is purged (DSGVO Art. 25 Privacy by Design).
-  -- One-way hash — original data is not reconstructable.
-
-  id: String
-  userId: String
-  hash: String                      -- sha256(sourceBoard + ":" + externalId)
-  sourceBoard: String               -- retained for partitioned dedup queries
-  createdAt: DateTime = now()
-}
-
--- Reference to existing entities (defined in jobsync domain)
-external entity Job {
-  -- Tracking aggregate. Target of promotion.
-  -- Created by promoteStagedVacancyToJob with clean tracking fields.
-  id: String
-  userId: String
-}
-
-external entity Automation {
-  -- Produces StagedVacancy records via the runner.
-  id: String
-  userId: String
-  jobBoard: String                  -- module ID used for search
-}
-
--- =============================================================================
--- Rules: Intake
--- =============================================================================
-
-rule CollectOnlyMode {
-  -- "When AI scoring is disabled, all discovered vacancies go directly to
-  --  staging without match scores. No AI provider is contacted."
-  -- The runner checks matchThreshold before loading the AI model.
-  -- matchThreshold = 0 signals "collect only" mode (set by ToggleAiScoring
-  -- in automation-wizard.allium).
-  when: AutomationRunCompleted(automationId: String, vacancies: DiscoveredVacancy[])
-  let automation = Automation where id = automationId
-
-  requires: automation.matchThreshold = 0
-
-  for_each vacancy in vacancies:
-    ensures: StagedVacancy.created(
-      ...vacancy fields...,
-      matchScore: null,
-      matchData: null,
-      status: staged,
-      discoveredAt: now()
-    )
-
-  @guidance
-    -- This rule takes priority over AI-scored intake when matchThreshold = 0.
-    -- No model is loaded, no resume text is prepared, no LLM calls are made.
-    -- The user reviews all vacancies manually in the staging queue.
-    -- Dedup still applies (same as AutomatedVacancyIntake).
-}
-
-rule AutomatedVacancyIntake {
-  -- "When an automation discovers a vacancy, it is staged for review."
-  -- Called by the runner after connector.search() + AI matching.
-  -- Only applies when AI scoring is enabled (matchThreshold > 0).
-  when: AutomationRunCompleted(automationId: String, vacancies: DiscoveredVacancy[])
-  let automation = Automation where id = automationId
-  requires: automation.matchThreshold > 0
-
-  for_each vacancy in vacancies:
-    let dedupKey = DedupKey(userId: automation.userId, sourceBoard: vacancy.sourceBoard, externalId: vacancy.externalId)
-
-    -- Dedup check: skip if already staged or promoted
-    requires: not exists StagedVacancy where userId = automation.userId
-      and sourceBoard = vacancy.sourceBoard
-      and externalId = vacancy.externalId
-      and status != dismissed
-    -- Dismissed vacancies are NOT deduped — rediscovery creates a new staged entry.
-    -- Also check DedupHash table for purged records.
-    requires: not exists DedupHash where userId = automation.userId
-      and hash = hash(dedupKey)
-
-    ensures: StagedVacancy.created(
-      userId: automation.userId,
-      sourceBoard: vacancy.sourceBoard,
-      externalId: vacancy.externalId,
-      sourceUrl: vacancy.sourceUrl,
-      title: vacancy.title,
-      employerName: vacancy.employerName,
-      location: vacancy.location,
-      description: vacancy.description,
-      salary: vacancy.salary,
-      employmentType: vacancy.employmentType,
-      postedAt: vacancy.postedAt,
-      applicationDeadline: vacancy.applicationDeadline,
-      applicationInstructions: vacancy.applicationInstructions,
-      source: automation,
-      automationId: automation.id,
-      matchScore: vacancy.matchScore,
-      matchData: vacancy.matchData,
-      -- Extended fields mapped 1:1 from DiscoveredVacancy when present
-      ...extended vacancy fields from DiscoveredVacancy...,
-      status: staged,
-      discoveredAt: now()
-    )
-
-  @guidance
-    -- If externalId is null (connector doesn't provide it), fall back to
-    -- hash(sourceUrl) as the dedup key. This is less reliable (URLs change)
-    -- but better than no dedup.
-    -- Upsert semantics: if a dismissed vacancy is rediscovered, it creates
-    -- a new staged entry (not upsert). The user explicitly dismissed it,
-    -- so rediscovery is a new signal.
-    -- On rediscovery of an existing non-dismissed vacancy, matchScore and matchData
-    -- are updated (upsert semantics). This refreshes AI match data when automations
-    -- re-run with overlapping results. No new StagedVacancy is created.
-}
-
-rule ManualVacancyBypass {
-  -- "Manually created jobs bypass staging entirely."
-  -- The existing addJob() flow creates a Job directly.
-  -- This rule documents the design decision, not a new behavior.
-  when: UserCreatesManualJob(data: JobFormData)
-
-  ensures: Job.created(data)
-  -- No StagedVacancy is created. Manual jobs are already "reviewed" by the user.
-
-  @guidance
-    -- Future option (ROADMAP): User can choose "Add to Queue" for manual jobs
-    -- if they want to batch-review later. This would create a StagedVacancy
-    -- with source = manual instead of a Job.
-}
-
--- =============================================================================
--- Rules: Pipeline Transitions
--- =============================================================================
-
-rule VacancyPromotion {
-  -- "When a user promotes a staged vacancy, a Job is created in the Tracking aggregate."
-  -- This is the explicit boundary crossing between Discovery and Tracking contexts.
-  when: PromoteVacancy(input: PromotionInput, by: User)
-  let vacancy = StagedVacancy where id = input.stagedVacancyId
-
-  requires: vacancy.userId = by.id
-    -- Only the owner can promote their own vacancies
-  requires: vacancy.status = staged or vacancy.status = ready
-    -- Cannot promote dismissed, archived, or already-promoted vacancies
-  requires: vacancy.promotedToJobId = null
-    -- Cannot promote twice
-
-  -- Transition to processing during the operation
-  ensures: vacancy.status = processing
-
-  -- Find-or-create reference data (Tracking context concerns)
-  let jobTitle = JobTitle.findOrCreate(
-    title: input.jobTitleOverride or vacancy.title,
-    userId: by.id
-  )
-  let company = Company.findOrCreate(
-    name: input.companyOverride or vacancy.employerName or "Unknown",
-    userId: by.id
-  )
-  let location = Location.findOrCreate(
-    label: input.locationOverride or vacancy.location,
-    userId: by.id
-  )
-  let jobSource = JobSource.findOrCreate(
-    name: vacancy.sourceBoard,
-    userId: by.id
-  )
-  let defaultStatus = JobStatus where value = "bookmarked"
-
-  -- Create clean Job (no discovery fields)
-  ensures: Job.created(
-    userId: by.id,
-    jobUrl: vacancy.sourceUrl,
-    description: vacancy.description,
-    jobType: vacancy.employmentType or "Full-time",
-    applied: false,
-    statusId: defaultStatus.id,
-    jobTitleId: jobTitle.id,
-    companyId: company.id,
-    locationId: location.id,
-    jobSourceId: jobSource.id,
-    salaryRange: vacancy.salary,
-    tags: input.tagsToApply
-  )
-
-  -- Link back (immutable reference for audit)
-  ensures: vacancy.promotedToJobId = Job.id
-  ensures: vacancy.status = promoted
-
-  -- Domain event
-  ensures: VacancyPromoted.emitted(
-    stagedVacancyId: vacancy.id,
-    jobId: Job.id,
-    userId: by.id
-  )
-
-  @guidance
-    -- The entire promotion (find-or-create + Job.create + vacancy update)
-    -- runs in a single database transaction for atomicity.
-    -- If any step fails, the vacancy remains in its previous status.
-    --
-    -- VacancyPromoted is the key domain event that downstream consumers
-    -- (0.6 Event Bus) will subscribe to for:
-    --   - CompanyNeeded → Data Enrichment (1.13)
-    --   - DocumentsAvailable → Document Generators (4.2)
-    --   - CrmChanceCreated → CRM (5)
-}
-
-rule VacancyDismissal {
-  -- "User decides not to pursue this vacancy."
-  when: DismissVacancy(vacancyId: String, by: User)
-  let vacancy = StagedVacancy where id = vacancyId
-
-  requires: vacancy.userId = by.id
-  requires: vacancy.status = staged or vacancy.status = ready
-    -- Cannot dismiss promoted or already-dismissed vacancies
-
-  ensures: vacancy.status = dismissed
-  ensures: VacancyDismissed.emitted(stagedVacancyId: vacancy.id, userId: by.id)
-  ensures: UndoToken.created(
-    actionType: dismiss,
-    itemIds: [vacancy.id],
-    previousStatuses: [vacancy.status],
-    expiresAt: now() + config.UNDO_WINDOW_SECONDS.seconds
-  )
-}
-
-rule VacancyRestore {
-  -- "User restores a previously dismissed vacancy."
-  when: RestoreVacancy(vacancyId: String, by: User)
-  let vacancy = StagedVacancy where id = vacancyId
-
-  requires: vacancy.userId = by.id
-  requires: vacancy.status = dismissed
-    -- Can only restore dismissed vacancies
-
-  ensures: vacancy.status = staged
-  -- Restored vacancies return to the beginning of the pipeline.
-}
-
--- =============================================================================
--- Rules: Undo
--- =============================================================================
-
-rule UndoAction {
-  -- "User undoes a recent destructive action within the undo window."
-  when: Undo(token: UndoToken, by: User)
-
-  requires: token.expiresAt > now()
-    -- Undo window has not expired
-  requires: by owns all StagedVacancy in token.itemIds
-
-  ensures: for_each (itemId, previousStatus) in zip(token.itemIds, token.previousStatuses):
-    let vacancy = StagedVacancy where id = itemId
-    vacancy.status = previousStatus
-
-  ensures: token is invalidated
-    -- Each UndoToken can only be used once
-
-  @guidance
-    -- Implementation: optimistic UI updates immediately on the client.
-    -- If undo is triggered, server reverts the status.
-    -- If undo window expires without undo, the action is permanent.
-    -- For bulk actions, one UndoToken covers the entire batch.
-}
-
-rule UndoExpiry {
-  -- "An UndoToken becomes invalid after its TTL (default 10 seconds, configurable)."
-  -- After expiry, the undo window closes and the action becomes permanent.
-  -- The token is removed from the in-memory UndoStore.
-  when: now() >= token.expiresAt
-  let token = UndoToken where expiresAt <= now()
-
-  ensures: token is removed from UndoStore
-  ensures: token.compensationFn can no longer be invoked
-  ensures: the original action is permanent (no rollback possible)
-
-  @guidance
-    -- The default TTL is config.UNDO_WINDOW_SECONDS (10 seconds).
-    -- This is configurable per user in UserSettings (future: per-action TTL).
-    -- Implementation: setTimeout or periodic sweep of expired tokens.
-    -- The UndoStore is in-memory — tokens are lost on server restart.
-    -- This is acceptable for a 10-second window.
-}
-
-rule UndoExecution {
-  -- "The compensation function is idempotent and restores previous state."
-  -- Calling undo twice on the same token has no additional effect.
-  -- The compensation function restores each item to its pre-action status.
-  when: Undo(token: UndoToken, by: User)
-
-  requires: token.expiresAt > now()
-  requires: by owns all StagedVacancy in token.itemIds
-
-  ensures: token.compensationFn.compensate(token.itemIds, token.previousStatuses)
-    -- Each item's status is reverted to its previousStatus.
-    -- For archive: archivedAt is set back to null.
-    -- For trash: trashedAt is set back to null.
-    -- For dismiss: status reverts from dismissed to the previous status.
-
-  ensures: token is invalidated after first successful invocation
-    -- Prevents double-undo. The token is removed from UndoStore.
-
-  ensures: if token was already invalidated: no-op (idempotent)
-
-  @guidance
-    -- Idempotency is critical because the user might double-click the Undo button,
-    -- or Ctrl+Z might fire while the first undo is still processing.
-    -- Implementation: check token existence in UndoStore before executing.
-    -- If already removed (expired or previously undone), return silently.
-}
-
-rule CtrlZBinding {
-  -- "Ctrl+Z keyboard shortcut pops the most recent unexpired token from the undo stack."
-  -- The undo system maintains a stack (LIFO) of active UndoTokens.
-  -- Ctrl+Z pops and executes the most recent one.
-  when: User presses Ctrl+Z (or Cmd+Z on macOS)
-
-  requires: UndoStore has at least one unexpired token for the current user
-  requires: keyboard focus is NOT in a text input, textarea, or contenteditable element
-    -- Prevents conflict with browser/editor undo in form fields.
-
-  let token = UndoStore.popMostRecent(userId: currentUser.id)
-  requires: token != null and token.expiresAt > now()
-
-  ensures: UndoExecution(token, currentUser)
-
-  @guidance
-    -- Current implementation: Ctrl+Z is only active within the JobDeck (swipe)
-    -- view, not as a global listener across all pages. The global keydown
-    -- listener described here is aspirational — the deck-scoped version is
-    -- the initial implementation.
-    -- The hook checks document.activeElement to avoid capturing undo in form inputs.
-    -- After popping, the toast for that token is dismissed.
-    -- If the stack is empty or all tokens are expired, Ctrl+Z is a no-op
-    -- (does not preventDefault — allows browser undo to work in inputs).
-}
-
--- =============================================================================
--- Rules: Bulk Actions
--- =============================================================================
-
-rule BulkAction {
-  -- "User performs the same action on multiple vacancies at once."
-  when: ExecuteBulkAction(actionType: BulkActionType, vacancyIds: String[], by: User)
-
-  requires: vacancyIds | count > 0
-  requires: vacancyIds | count <= config.MAX_BULK_SIZE
-
-  -- Partial-success semantics: each item is validated individually.
-  -- Invalid items are skipped, not the whole batch.
-  ensures: for_each vacancyId in vacancyIds:
-    try:
-      if actionType = dismiss: DismissVacancy(vacancyId, by)
-      if actionType = archive: ArchiveVacancy(vacancyId, by)
-      if actionType = trash:   TrashVacancy(vacancyId, by)
-      if actionType = restore: RestoreVacancy(vacancyId, by)
-      if actionType = restoreFromTrash: RestoreFromTrash(vacancyId, by)
-    catch: record BulkItemError(itemId: vacancyId, reason: error.message)
-
-  ensures: BulkActionResult.returned(
-    totalRequested: vacancyIds | count,
-    succeeded: count of successful items,
-    failed: count of failed items,
-    errors: collected BulkItemError[]
-  )
-
-  -- One UndoToken per batch (not per item)
-  ensures: UndoToken.created(
-    actionType: actionType,
-    itemIds: successfully processed vacancyIds,
-    previousStatuses: statuses before the action,
-    expiresAt: now() + config.UNDO_WINDOW_SECONDS.seconds
-  )
-
-  -- One domain event per batch (not N individual events)
-  ensures: BulkActionCompleted.emitted(
-    actionType: actionType,
-    itemIds: successfully processed vacancyIds,
-    userId: by.id,
-    result: BulkActionResult
-  )
-}
-
-rule BulkPartialSuccess {
-  -- "Each item is validated individually; invalid items are skipped; the batch continues."
-  -- A bulk action does NOT use a single database transaction for all items.
-  -- Each item is processed independently. Failure of item N does not rollback items 1..N-1.
-  when: ExecuteBulkAction(actionType, vacancyIds, by)
-
-  ensures: for_each vacancyId in vacancyIds:
-    -- Item-level validation (ownership, status preconditions) happens per item.
-    -- If validation fails for one item, it is recorded as a BulkItemError
-    -- and processing continues with the next item.
-    vacancyId is processed independently of other items in the batch
-
-  ensures: BulkActionResult.failed >= 0
-    -- Zero failures is the happy path. Partial failure is not an error state.
-
-  ensures: BulkActionResult.succeeded + BulkActionResult.failed = BulkActionResult.totalRequested
-
-  @guidance
-    -- Why not a single transaction? A 100-item bulk dismiss where 1 item is
-    -- already promoted should not fail the other 99. Partial success is the
-    -- expected behavior for bulk operations.
-    -- The UI shows a summary: "95 dismissed, 5 skipped (already promoted)".
-    -- Each BulkItemError includes the reason so the user can investigate.
-}
-
-rule BatchUndoGranularity {
-  -- "One UndoToken per batch. Ctrl+Z reverses the entire batch."
-  -- When a bulk action succeeds (partially or fully), a single UndoToken
-  -- is created covering ALL successfully processed items.
-  -- Undoing the batch reverts ALL items in the batch, not individual ones.
-  when: ExecuteBulkAction completes with succeeded > 0
-
-  ensures: exactly one UndoToken is created per batch
-  ensures: UndoToken.batchId is set to a unique batch identifier
-  ensures: UndoToken.itemIds contains only the successfully processed IDs
-    -- Failed items are not included (nothing to undo for them)
-
-  ensures: Undo(token) reverts ALL items in the batch atomically
-    -- Either all items are restored or none (undo itself is transactional)
-
-  @guidance
-    -- This means a user who bulk-dismisses 50 items and presses Ctrl+Z
-    -- gets all 50 items restored, not just one.
-    -- Individual item undo is not supported for bulk actions.
-    -- The toast shows: "50 vacancies dismissed. Undo" — one undo for the batch.
-}
-
-rule BulkActionEvent {
-  -- "One BulkActionCompleted event per batch with the full item ID list."
-  -- The event bus receives a single event summarizing the entire batch,
-  -- not N individual VacancyDismissed/VacancyArchived events.
-  when: ExecuteBulkAction completes
-
-  ensures: exactly one BulkActionCompleted event is published per batch
-  ensures: event.itemIds contains all successfully processed item IDs
-  ensures: no individual per-item events (VacancyDismissed, etc.) are emitted for bulk items
-    -- This prevents N notifications for a single bulk action.
-    -- The NotificationDispatcher handles BulkActionCompleted as a single summary.
-
-  @guidance
-    -- Consumers that need per-item granularity can iterate event.itemIds.
-    -- The actionType field tells consumers what happened (dismiss, archive, etc.).
-    -- This is a deliberate trade-off: simpler event stream at the cost of
-    -- consumers needing to understand BulkActionCompleted semantics.
-}
-
--- =============================================================================
--- Rules: Archive & Trash
--- =============================================================================
-
-rule ArchiveVacancy {
-  -- "User archives a vacancy for later reference."
-  when: Archive(vacancyId: String, by: User)
-  let vacancy = StagedVacancy where id = vacancyId
-
-  requires: vacancy.userId = by.id
-  requires: vacancy.status != promoted
-    -- Promoted vacancies live in the Job aggregate, not in staging archive
-
-  ensures: vacancy.archivedAt = now()
-  ensures: VacancyArchived.emitted(stagedVacancyId: vacancy.id, userId: by.id)
-}
-
-rule TrashVacancy {
-  -- "User moves a vacancy to trash."
-  when: Trash(vacancyId: String, by: User)
-  let vacancy = StagedVacancy where id = vacancyId
-
-  requires: vacancy.userId = by.id
-  requires: vacancy.status != promoted
-
-  ensures: vacancy.trashedAt = now()
-  ensures: VacancyTrashed.emitted(stagedVacancyId: vacancy.id, userId: by.id)
-  ensures: UndoToken.created(
-    actionType: delete,
-    itemIds: [vacancy.id],
-    previousStatuses: [vacancy.status],
-    expiresAt: now() + config.UNDO_WINDOW_SECONDS.seconds
-  )
-}
-
-rule RestoreFromTrash {
-  -- "User restores a vacancy from trash."
-  when: RestoreFromTrash(vacancyId: String, by: User)
-  let vacancy = StagedVacancy where id = vacancyId
-
-  requires: vacancy.userId = by.id
-  requires: vacancy.trashedAt != null
-
-  ensures: vacancy.trashedAt = null
-  ensures: VacancyRestoredFromTrash.emitted(stagedVacancyId: vacancy.id, userId: by.id)
-}
-
--- =============================================================================
--- Rules: DSGVO Retention & Dedup
--- =============================================================================
-
-rule RetentionConfig {
-  -- "Retention period is configurable per user (default 30 days)."
-  -- Users can adjust how long trashed and dismissed vacancies are kept
-  -- before automatic purge. The default is config.RETENTION_DAYS (30 days).
-  when: UserUpdatesRetentionSettings(userId: String, retentionDays: Integer)
-
-  requires: retentionDays >= 7
-    -- Minimum 7 days to prevent accidental immediate purge.
-  requires: retentionDays <= 365
-    -- Maximum 1 year. Beyond that, consider archiving.
-
-  ensures: UserSettings where userId = userId:
-    retentionDays = retentionDays
-
-  @guidance
-    -- Stored in UserSettings JSON blob alongside notification preferences.
-    -- If user has no custom setting, config.RETENTION_DAYS (30) applies.
-    -- The retention service reads the user's custom setting when running cleanup.
-    -- In the current implementation, both trashed and dismissed vacancies use
-    -- the same RETENTION_DAYS threshold (30 days). The separate
-    -- DISMISSED_RETENTION_DAYS config exists for future differentiation.
-}
-
-rule RetentionCleanup {
-  -- "After retention period: delete StagedVacancy data, preserve hash in DedupHash."
-  -- This is the main retention rule combining purge + hash preservation.
-  -- Runs as a scheduled background job (piggybacking on automation scheduler).
-  -- DSGVO Art. 25 (Privacy by Design) + Art. 5(1)(c) (Datenminimierung)
-  when: RetentionCheckDue
-  let expired = StagedVacancy
-    where trashedAt != null
-    and trashedAt + config.RETENTION_DAYS.days <= now()
-
-  ensures: for_each vacancy in expired:
-    -- Step 1: Retain dedup hash before deletion
-    if vacancy.externalId != null:
-      DedupHash.created(
-        userId: vacancy.userId,
-        hash: hash(config.DEDUP_HASH_ALGORITHM, vacancy.sourceBoard + ":" + vacancy.externalId),
-        sourceBoard: vacancy.sourceBoard
-      )
-    -- Step 2: Delete the vacancy data (all PII removed)
-    vacancy.deleted()
-
-  -- Step 3: Emit domain event summarizing the cleanup
-  ensures: RetentionCompleted.emitted(
-    userId: aggregated per user,
-    purgedCount: count of deleted vacancies,
-    hashesCreated: count of new DedupHash records
-  )
-
-  @guidance
-    -- The hash is one-way (SHA-256, not reconstructable) — no personal data retained.
-    -- Process in batches of 100 to avoid long-running DB transactions on large datasets.
-    -- Yield between batches (setTimeout/setImmediate) to avoid blocking the event loop.
-    -- This runs as a scheduled job (piggyback on existing automation scheduler
-    -- or as a standalone cron route triggered by external cron).
-}
-
-rule DismissedRetentionPurge {
-  -- "Dismissed vacancies are purged after a shorter retention period."
-  when: RetentionCheckDue
-  let expired = StagedVacancy
-    where status = dismissed
-    and updatedAt + config.DISMISSED_RETENTION_DAYS.days <= now()
-
-  ensures: for_each vacancy in expired:
-    if vacancy.externalId != null:
-      DedupHash.created(
-        userId: vacancy.userId,
-        hash: hash(config.DEDUP_HASH_ALGORITHM, vacancy.sourceBoard + ":" + vacancy.externalId),
-        sourceBoard: vacancy.sourceBoard
-      )
-    vacancy.deleted()
-}
-
-rule DedupCheck {
-  -- "Before staging a vacancy, check if it was already seen (even after purge)."
-  -- This is a precondition of AutomatedVacancyIntake, extracted for clarity.
-  when: CheckDedup(userId: String, sourceBoard: String, externalId: String, sourceUrl: String?)
-
-  let hashValue = hash(config.DEDUP_HASH_ALGORITHM, sourceBoard + ":" + externalId)
-
-  -- Cross-aggregate dedup: check if a promoted Job already exists with this URL.
-  -- This prevents re-staging vacancies that were already promoted to the Job aggregate.
-  let existingJobByUrl = Job where userId = userId and jobUrl = sourceUrl and sourceUrl != null
-
-  -- Time-bounded: dedup queries are bounded to the last 90 days to prevent
-  -- unbounded table scans. DedupHash records older than 90 days are not checked.
-  -- This means a vacancy purged more than 90 days ago can be rediscovered.
-
-  ensures:
-    if existingJobByUrl.count > 0:
-      result = duplicate
-    else if exists DedupHash where userId = userId and hash = hashValue
-      and createdAt >= now() - 90.days:
-      result = duplicate
-    else if exists StagedVacancy where userId = userId and sourceBoard = sourceBoard
-      and externalId = externalId and status != dismissed:
-      result = duplicate
-    else:
-      result = new
-
-  @guidance
-    -- Dual-key dedup: checks both externalId (primary) and normalized sourceUrl (fallback).
-    -- A vacancy with a different externalId but the same URL is treated as a duplicate.
-    -- The 90-day bound on DedupHash queries is a performance safeguard.
-    -- In practice, the DedupHash table is bounded because retention purge only
-    -- creates hashes for vacancies being deleted, and old hashes become irrelevant
-    -- as external job postings expire.
-}
-
-rule DedupHashCheck {
-  -- "Runner checks DedupHash before inserting a new StagedVacancy."
-  -- After retention purge deletes old StagedVacancy records, the DedupHash table
-  -- retains the one-way hash. The runner must check this table to avoid
-  -- re-staging vacancies that were already processed and purged.
-  when: AutomatedVacancyIntake attempts to stage vacancy with (userId, sourceBoard, externalId)
-
-  let hashValue = hash(config.DEDUP_HASH_ALGORITHM, sourceBoard + ":" + externalId)
-
-  if exists DedupHash where userId = userId and hash = hashValue:
-    ensures: vacancy is NOT staged (silently skipped)
-    ensures: runner increments jobsDeduplicated counter
-
-  @guidance
-    -- This check runs BEFORE the StagedVacancy existence check.
-    -- DedupHash lookup is an indexed query (hash + userId composite index).
-    -- The sourceBoard field on DedupHash enables partitioned queries
-    -- (only check hashes from the same source board for performance).
-    -- If externalId is null, the runner falls back to hashing sourceUrl.
-    -- DedupHash records have no expiry — they persist indefinitely
-    -- because they contain no PII (one-way hash only).
-}
-
--- =============================================================================
--- Company Blacklist (ROADMAP 2.15)
--- =============================================================================
-
-entity CompanyBlacklist {
-  id: String @id
-  userId: String @fk(User)
-  pattern: String
-  matchType: BlacklistMatchType
-  reason: String?
-  createdAt: DateTime
-  updatedAt: DateTime
-
-  @@unique(userId, pattern, matchType)
-  @@index(userId)
-}
+-- restore_from_trash added: distinct from restore (which restores dismissed vacancies).
 
 enum BlacklistMatchType { exact | contains | starts_with | ends_with }
 -- exact:       Case-insensitive full match (e.g. "Acme Corp" matches "acme corp")
@@ -900,496 +189,977 @@ enum BlacklistMatchType { exact | contains | starts_with | ends_with }
 -- The UI currently exposes exact and contains; starts_with and ends_with
 -- are available via the API and settings form.
 
+enum DedupResult { duplicate | new_vacancy }
+
+------------------------------------------------------------
+-- Entities and Variants
+------------------------------------------------------------
+
+entity StagedVacancy {
+    -- Discovery Context aggregate root.
+    -- Raw vacancy intake -- no Company FK, no JobStatus, no Resume.
+    -- Those belong to the Job (Tracking) aggregate and are created at promotion time.
+
+    id: String
+    user_id: String
+
+    -- Discovery identity (dedup key)
+    source_board: String
+    external_id: String?
+    source_url: String?
+
+    -- Vacancy data (raw from connector or manual entry)
+    title: String
+    employer_name: String?
+    location: String?
+    description: String?
+    salary: String?
+    employment_type: String?
+    posted_at: Timestamp?
+    application_deadline: String?
+    application_instructions: String?
+
+    -- Extended vacancy data (ROADMAP 1.1b Phase 1)
+    company_url: String?
+    company_description: String?
+    industry_codes: List<String>?
+    company_size: String?
+    position_offering_code: String?
+    number_of_posts: Integer?
+    occupation_uris: List<String>?
+    required_education_level: String?
+    required_experience_years: Integer?
+    working_languages: List<String>?
+    salary_min: Decimal?
+    salary_max: Decimal?
+    salary_currency: String?
+    salary_period: String?
+    immediate_start: Boolean?
+    contract_start_date: String?
+    contract_end_date: String?
+    eures_flag: Boolean?
+
+    -- Source tracking
+    source: VacancySource
+    automation_id: String?
+
+    -- Match data (optional -- only populated when LLM is available)
+    match_score: Integer?
+    match_data: String?
+
+    -- Pipeline state
+    status: StagedVacancyStatus
+
+    -- Promotion link (set once, immutable after)
+    promoted_to_job_id: String?
+
+    -- Archive / Trash lifecycle
+    archived_at: Timestamp?
+    trashed_at: Timestamp?
+
+    -- Timestamps
+    discovered_at: Timestamp
+    created_at: Timestamp
+    updated_at: Timestamp
+
+    transitions status {
+        staged -> processing
+        staged -> ready
+        staged -> promoted
+        staged -> dismissed
+        processing -> ready
+        processing -> promoted
+        processing -> dismissed
+        ready -> promoted
+        ready -> dismissed
+        terminal: promoted
+    }
+}
+
+entity DedupHash {
+    -- Privacy-preserving dedup record.
+    -- Retained after StagedVacancy data is purged (DSGVO Art. 25 Privacy by Design).
+    -- One-way hash -- original data is not reconstructable.
+
+    id: String
+    user_id: String
+    hash: String
+    source_board: String
+    created_at: Timestamp
+}
+
+entity CompanyBlacklist {
+    id: String
+    user_id: String
+    pattern: String
+    match_type: BlacklistMatchType
+    reason: String?
+    created_at: Timestamp
+    updated_at: Timestamp
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    retention_days: Integer = 30
+        -- Days before trashed StagedVacancy data is purged. Hash is retained.
+    undo_window_seconds: Integer = 10
+        -- Seconds after a destructive action during which undo is available.
+    dedup_hash_algorithm: String = "sha256"
+        -- One-way hash algorithm for dedup keys after retention purge.
+    max_bulk_size: Integer = 100
+        -- Maximum items per bulk action.
+    dismissed_retention_days: Integer = 30
+        -- Days before dismissed vacancies are purged.
+        -- In practice, the code uses a single retention_days threshold for both
+        -- trashed and dismissed vacancies (both default to 30 days). The separate
+        -- config parameter exists for future differentiation but currently both
+        -- resolve to the same value.
+    min_retention_days: Integer = 7
+        -- Minimum retention days to prevent accidental immediate purge.
+    max_retention_days: Integer = 365
+        -- Maximum retention days. Beyond that, consider archiving.
+    dedup_lookback_days: Integer = 90
+        -- DedupHash records older than this are not checked during dedup.
+        -- A vacancy purged more than this many days ago can be rediscovered.
+}
+
+------------------------------------------------------------
+-- Rules: Intake
+------------------------------------------------------------
+
+rule CollectOnlyMode {
+    -- When AI scoring is disabled, all discovered vacancies go directly to
+    -- staging without match scores. No AI provider is contacted.
+    -- The runner checks matchThreshold before loading the AI model.
+    -- matchThreshold = 0 signals "collect only" mode (set by ToggleAiScoring
+    -- in automation-wizard.allium).
+    when: AutomationRunCompleted(automation_id, vacancies)
+    let automation = Automation{id: automation_id}
+
+    requires: automation.matchThreshold = 0
+
+    for vacancy in vacancies:
+        ensures: StagedVacancy.created(
+            user_id: automation.userId,
+            source_board: vacancy.source_board,
+            external_id: vacancy.external_id,
+            source_url: vacancy.source_url,
+            title: vacancy.title,
+            employer_name: vacancy.employer_name,
+            location: vacancy.location,
+            description: vacancy.description,
+            match_score: null,
+            match_data: null,
+            source: automation,
+            automation_id: automation.id,
+            status: staged,
+            discovered_at: now
+        )
+
+    @guidance
+        -- This rule takes priority over AI-scored intake when matchThreshold = 0.
+        -- No model is loaded, no resume text is prepared, no LLM calls are made.
+        -- The user reviews all vacancies manually in the staging queue.
+        -- Dedup still applies (same as AutomatedVacancyIntake).
+}
+
+rule AutomatedVacancyIntake {
+    -- When an automation discovers a vacancy, it is staged for review.
+    -- Called by the runner after connector.search() + AI matching.
+    -- Only applies when AI scoring is enabled (matchThreshold > 0).
+    when: AutomationRunCompleted(automation_id, vacancies)
+    let automation = Automation{id: automation_id}
+    requires: automation.matchThreshold > 0
+
+    for vacancy in vacancies:
+        let dedup_key = DedupKey{userId: automation.userId, source_board: vacancy.source_board, external_id: vacancy.external_id}
+
+        -- Dedup check: skip if already staged or promoted
+        requires: not exists StagedVacancy{user_id: automation.userId, source_board: vacancy.source_board, external_id: vacancy.external_id}
+        -- Also check DedupHash table for purged records.
+        requires: not exists DedupHash{user_id: automation.userId, hash: hash(dedup_key)}
+
+        ensures: StagedVacancy.created(
+            user_id: automation.userId,
+            source_board: vacancy.source_board,
+            external_id: vacancy.external_id,
+            source_url: vacancy.source_url,
+            title: vacancy.title,
+            employer_name: vacancy.employer_name,
+            location: vacancy.location,
+            description: vacancy.description,
+            salary: vacancy.salary,
+            employment_type: vacancy.employment_type,
+            posted_at: vacancy.posted_at,
+            application_deadline: vacancy.application_deadline,
+            application_instructions: vacancy.application_instructions,
+            source: automation,
+            automation_id: automation.id,
+            match_score: vacancy.match_score,
+            match_data: vacancy.match_data,
+            status: staged,
+            discovered_at: now
+        )
+
+    @guidance
+        -- If externalId is null (connector doesn't provide it), fall back to
+        -- hash(sourceUrl) as the dedup key. This is less reliable (URLs change)
+        -- but better than no dedup.
+        -- Upsert semantics: if a dismissed vacancy is rediscovered, it creates
+        -- a new staged entry (not upsert). The user explicitly dismissed it,
+        -- so rediscovery is a new signal.
+        -- On rediscovery of an existing non-dismissed vacancy, matchScore and matchData
+        -- are updated (upsert semantics). This refreshes AI match data when automations
+        -- re-run with overlapping results. No new StagedVacancy is created.
+        -- Dismissed vacancies are NOT deduped -- rediscovery creates a new staged entry.
+}
+
+rule ManualVacancyBypass {
+    -- Manually created jobs bypass staging entirely.
+    -- The existing addJob() flow creates a Job directly.
+    -- This rule documents the design decision, not a new behavior.
+    when: UserCreatesManualJob(data)
+
+    ensures: Job.created(data: data)
+    -- No StagedVacancy is created. Manual jobs are already "reviewed" by the user.
+
+    @guidance
+        -- Future option (ROADMAP): User can choose "Add to Queue" for manual jobs
+        -- if they want to batch-review later. This would create a StagedVacancy
+        -- with source = manual instead of a Job.
+}
+
+------------------------------------------------------------
+-- Rules: Pipeline Transitions
+------------------------------------------------------------
+
+rule VacancyPromotion {
+    -- When a user promotes a staged vacancy, a Job is created in the Tracking aggregate.
+    -- This is the explicit boundary crossing between Discovery and Tracking contexts.
+    when: PromoteVacancy(input, by)
+    let vacancy = StagedVacancy{id: input.staged_vacancy_id}
+
+    requires: vacancy.user_id = by.id
+    requires: vacancy.status = staged or vacancy.status = ready
+    requires: vacancy.promoted_to_job_id = null
+
+    -- Find-or-create reference data (Tracking context concerns)
+    let job_title = find_or_create_job_title(input.job_title_override ?? vacancy.title, by.id)
+    let company = find_or_create_company(input.company_override ?? vacancy.employer_name ?? "Unknown", by.id)
+    let job_location = find_or_create_location(input.location_override ?? vacancy.location, by.id)
+    let job_source = find_or_create_job_source(vacancy.source_board, by.id)
+    let default_status = JobStatus{value: "bookmarked"}
+
+    ensures:
+        -- Create clean Job (no discovery fields)
+        let job = Job.created(
+            userId: by.id,
+            jobUrl: vacancy.source_url,
+            description: vacancy.description,
+            jobType: vacancy.employment_type ?? "Full-time",
+            applied: false,
+            statusId: default_status.id,
+            jobTitleId: job_title.id,
+            companyId: company.id,
+            locationId: job_location.id,
+            jobSourceId: job_source.id,
+            salaryRange: vacancy.salary,
+            tags: input.tags_to_apply
+        )
+
+        -- Link back (immutable reference for audit)
+        vacancy.promoted_to_job_id = job.id
+        vacancy.status = promoted
+
+        -- Domain event
+        VacancyPromoted(
+            staged_vacancy_id: vacancy.id,
+            job_id: job.id,
+            user_id: by.id
+        )
+
+    @guidance
+        -- The entire promotion (find-or-create + Job.create + vacancy update)
+        -- runs in a single database transaction for atomicity.
+        -- If any step fails, the vacancy remains in its previous status.
+        --
+        -- VacancyPromoted is the key domain event that downstream consumers
+        -- (0.6 Event Bus) will subscribe to for:
+        --   - CompanyNeeded -> Data Enrichment (1.13)
+        --   - DocumentsAvailable -> Document Generators (4.2)
+        --   - CrmChanceCreated -> CRM (5)
+}
+
+rule VacancyDismissal {
+    -- User decides not to pursue this vacancy.
+    when: DismissVacancy(vacancy_id, by)
+    let vacancy = StagedVacancy{id: vacancy_id}
+
+    requires: vacancy.user_id = by.id
+    requires: vacancy.status = staged or vacancy.status = ready
+
+    ensures:
+        vacancy.status = dismissed
+        VacancyDismissed(staged_vacancy_id: vacancy.id, user_id: by.id)
+        UndoToken.created(
+            action_type: dismiss,
+            item_ids: { vacancy.id },
+            previous_statuses: { vacancy.status },
+            expires_at: now + config.undo_window_seconds.seconds
+        )
+}
+
+rule VacancyRestore {
+    -- User restores a previously dismissed vacancy.
+    when: RestoreVacancy(vacancy_id, by)
+    let vacancy = StagedVacancy{id: vacancy_id}
+
+    requires: vacancy.user_id = by.id
+    requires: vacancy.status = dismissed
+
+    ensures: vacancy.status = staged
+    -- Restored vacancies return to the beginning of the pipeline.
+}
+
+------------------------------------------------------------
+-- Rules: Undo
+------------------------------------------------------------
+
+rule UndoAction {
+    -- User undoes a recent destructive action within the undo window.
+    when: Undo(token, by)
+
+    requires: token.expires_at > now
+
+    ensures:
+        for item_id in token.item_ids:
+            let vacancy = StagedVacancy{id: item_id}
+            vacancy.status = staged
+
+    @guidance
+        -- Implementation: optimistic UI updates immediately on the client.
+        -- If undo is triggered, server reverts the status.
+        -- If undo window expires without undo, the action is permanent.
+        -- For bulk actions, one UndoToken covers the entire batch.
+        -- Each UndoToken can only be used once.
+        -- The compensation function restores each item to its pre-action status.
+        -- Calling undo twice on the same token has no additional effect (idempotent).
+}
+
+rule UndoExpiry {
+    -- An UndoToken becomes invalid after its TTL (default 10 seconds, configurable).
+    -- After expiry, the undo window closes and the action becomes permanent.
+    -- The token is removed from the in-memory UndoStore.
+    when: token: UndoToken.expires_at <= now
+    requires: token.expires_at <= now
+
+    ensures: not exists token
+
+    @guidance
+        -- The default TTL is config.undo_window_seconds (10 seconds).
+        -- This is configurable per user in UserSettings (future: per-action TTL).
+        -- Implementation: setTimeout or periodic sweep of expired tokens.
+        -- The UndoStore is in-memory -- tokens are lost on server restart.
+        -- This is acceptable for a 10-second window.
+}
+
+rule CtrlZBinding {
+    -- Ctrl+Z keyboard shortcut pops the most recent unexpired token from the undo stack.
+    -- The undo system maintains a stack (LIFO) of active UndoTokens.
+    -- Ctrl+Z pops and executes the most recent one.
+    when: CtrlZPressed(by)
+
+    requires: exists UndoToken{user_id: by.id}
+
+    ensures: Undo(token: UndoToken{user_id: by.id}, by: by)
+
+    @guidance
+        -- Current implementation: Ctrl+Z is only active within the JobDeck (swipe)
+        -- view, not as a global listener across all pages. The global keydown
+        -- listener described here is aspirational -- the deck-scoped version is
+        -- the initial implementation.
+        -- The hook checks document.activeElement to avoid capturing undo in form inputs.
+        -- After popping, the toast for that token is dismissed.
+        -- If the stack is empty or all tokens are expired, Ctrl+Z is a no-op
+        -- (does not preventDefault -- allows browser undo to work in inputs).
+        -- keyboard focus must NOT be in a text input, textarea, or contenteditable element
+        -- to prevent conflict with browser/editor undo in form fields.
+}
+
+------------------------------------------------------------
+-- Rules: Bulk Actions
+------------------------------------------------------------
+
+rule BulkAction {
+    -- User performs the same action on multiple vacancies at once.
+    when: ExecuteBulkAction(action_type, vacancy_ids, by)
+
+    requires: vacancy_ids.count > 0
+    requires: vacancy_ids.count <= config.max_bulk_size
+
+    -- Partial-success semantics: each item is validated individually.
+    -- Invalid items are skipped, not the whole batch.
+    ensures:
+        for vacancy_id in vacancy_ids:
+            if action_type = dismiss:
+                DismissVacancy(vacancy_id: vacancy_id, by: by)
+            if action_type = archive:
+                ArchiveVacancy(vacancy_id: vacancy_id, by: by)
+            if action_type = trash:
+                TrashVacancy(vacancy_id: vacancy_id, by: by)
+            if action_type = restore:
+                RestoreVacancy(vacancy_id: vacancy_id, by: by)
+            if action_type = restore_from_trash:
+                RestoreFromTrash(vacancy_id: vacancy_id, by: by)
+
+    ensures: BulkActionCompleted(
+        action_type: action_type,
+        item_ids: vacancy_ids,
+        user_id: by.id
+    )
+
+    @guidance
+        -- Each item is processed independently of other items in the batch.
+        -- Failure of item N does not rollback items 1..N-1 (partial success).
+        -- A 100-item bulk dismiss where 1 item is already promoted should not
+        -- fail the other 99. Partial success is the expected behavior.
+        -- The UI shows a summary: "95 dismissed, 5 skipped (already promoted)".
+        -- One UndoToken per batch (not per item). Ctrl+Z reverses the entire batch.
+        -- One BulkActionCompleted event per batch with the full item ID list.
+        -- No individual per-item events (VacancyDismissed, etc.) are emitted for bulk items.
+        -- This prevents N notifications for a single bulk action.
+        -- Consumers that need per-item granularity can iterate event.itemIds.
+}
+
+------------------------------------------------------------
+-- Rules: Archive and Trash
+------------------------------------------------------------
+
+rule ArchiveVacancy {
+    -- User archives a vacancy for later reference.
+    when: ArchiveVacancy(vacancy_id, by)
+    let vacancy = StagedVacancy{id: vacancy_id}
+
+    requires: vacancy.user_id = by.id
+    requires: vacancy.status != promoted
+
+    ensures:
+        vacancy.archived_at = now
+        VacancyArchived(staged_vacancy_id: vacancy.id, user_id: by.id)
+}
+
+rule TrashVacancy {
+    -- User moves a vacancy to trash.
+    when: TrashVacancy(vacancy_id, by)
+    let vacancy = StagedVacancy{id: vacancy_id}
+
+    requires: vacancy.user_id = by.id
+    requires: vacancy.status != promoted
+
+    ensures:
+        vacancy.trashed_at = now
+        VacancyTrashed(staged_vacancy_id: vacancy.id, user_id: by.id)
+        UndoToken.created(
+            action_type: trash,
+            item_ids: { vacancy.id },
+            previous_statuses: { vacancy.status },
+            expires_at: now + config.undo_window_seconds.seconds
+        )
+}
+
+rule RestoreFromTrash {
+    -- User restores a vacancy from trash.
+    when: RestoreFromTrash(vacancy_id, by)
+    let vacancy = StagedVacancy{id: vacancy_id}
+
+    requires: vacancy.user_id = by.id
+    requires: vacancy.trashed_at != null
+
+    ensures:
+        vacancy.trashed_at = null
+        VacancyRestoredFromTrash(staged_vacancy_id: vacancy.id, user_id: by.id)
+}
+
+------------------------------------------------------------
+-- Rules: DSGVO Retention and Dedup
+------------------------------------------------------------
+
+rule RetentionConfig {
+    -- Retention period is configurable per user (default 30 days).
+    -- Users can adjust how long trashed and dismissed vacancies are kept
+    -- before automatic purge. The default is config.retention_days (30 days).
+    when: UserUpdatesRetentionSettings(user_id, retention_days)
+
+    requires: retention_days >= config.min_retention_days
+    requires: retention_days <= config.max_retention_days
+
+    ensures: UserSettings{userId: user_id}.retentionDays = retention_days
+
+    @guidance
+        -- Stored in UserSettings JSON blob alongside notification preferences.
+        -- If user has no custom setting, config.retention_days (30) applies.
+        -- The retention service reads the user's custom setting when running cleanup.
+        -- In the current implementation, both trashed and dismissed vacancies use
+        -- the same retention_days threshold (30 days). The separate
+        -- dismissed_retention_days config exists for future differentiation.
+}
+
+rule RetentionCleanup {
+    -- After retention period: delete StagedVacancy data, preserve hash in DedupHash.
+    -- This is the main retention rule combining purge + hash preservation.
+    -- Runs as a scheduled background job (piggybacking on automation scheduler).
+    -- DSGVO Art. 25 (Privacy by Design) + Art. 5(1)(c) (Datenminimierung)
+    when: RetentionCheckDue()
+
+    ensures:
+        for vacancy in StagedVacancies where trashed_at != null and trashed_at + config.retention_days.days <= now:
+            -- Retain dedup hash before deletion
+            if vacancy.external_id != null:
+                DedupHash.created(
+                    user_id: vacancy.user_id,
+                    hash: hash(config.dedup_hash_algorithm, vacancy.source_board, vacancy.external_id),
+                    source_board: vacancy.source_board
+                )
+            -- Delete the vacancy data (all PII removed)
+            not exists vacancy
+
+    @guidance
+        -- The hash is one-way (SHA-256, not reconstructable) -- no personal data retained.
+        -- Process in batches of 100 to avoid long-running DB transactions on large datasets.
+        -- Yield between batches (setTimeout/setImmediate) to avoid blocking the event loop.
+        -- This runs as a scheduled job (piggyback on existing automation scheduler
+        -- or as a standalone cron route triggered by external cron).
+}
+
+rule DismissedRetentionPurge {
+    -- Dismissed vacancies are purged after a shorter retention period.
+    when: RetentionCheckDue()
+
+    ensures:
+        for vacancy in StagedVacancies where status = dismissed and updated_at + config.dismissed_retention_days.days <= now:
+            if vacancy.external_id != null:
+                DedupHash.created(
+                    user_id: vacancy.user_id,
+                    hash: hash(config.dedup_hash_algorithm, vacancy.source_board, vacancy.external_id),
+                    source_board: vacancy.source_board
+                )
+            not exists vacancy
+}
+
+rule DedupCheck {
+    -- Before staging a vacancy, check if it was already seen (even after purge).
+    -- This is a precondition of AutomatedVacancyIntake, extracted for clarity.
+    when: CheckDedup(user_id, source_board, external_id, source_url)
+
+    let hash_value = hash(config.dedup_hash_algorithm, source_board, external_id)
+
+    -- Cross-aggregate dedup: check if a promoted Job already exists with this URL.
+    -- This prevents re-staging vacancies that were already promoted to the Job aggregate.
+
+    -- Time-bounded: dedup queries are bounded to the last 90 days to prevent
+    -- unbounded table scans. DedupHash records older than 90 days are not checked.
+    -- This means a vacancy purged more than 90 days ago can be rediscovered.
+
+    ensures:
+        if exists DedupHash{user_id: user_id, hash: hash_value}:
+            DedupResult(result: duplicate)
+        else if exists StagedVacancy{user_id: user_id, source_board: source_board, external_id: external_id}:
+            DedupResult(result: duplicate)
+        else:
+            DedupResult(result: new_vacancy)
+
+    @guidance
+        -- Dual-key dedup: checks both externalId (primary) and normalized sourceUrl (fallback).
+        -- A vacancy with a different externalId but the same URL is treated as a duplicate.
+        -- The 90-day bound on DedupHash queries is a performance safeguard.
+        -- In practice, the DedupHash table is bounded because retention purge only
+        -- creates hashes for vacancies being deleted, and old hashes become irrelevant
+        -- as external job postings expire.
+        -- DedupHash lookup is an indexed query (hash + userId composite index).
+        -- The sourceBoard field on DedupHash enables partitioned queries
+        -- (only check hashes from the same source board for performance).
+        -- If externalId is null, the runner falls back to hashing sourceUrl.
+        -- DedupHash records have no expiry -- they persist indefinitely
+        -- because they contain no PII (one-way hash only).
+}
+
+------------------------------------------------------------
+-- Rules: Company Blacklist (ROADMAP 2.15)
+------------------------------------------------------------
+
 rule BlacklistFilter {
-  -- "Blacklisted companies are filtered BEFORE AI matching to save LLM calls."
-  -- Pipeline position: after dedup, before matchThreshold check.
-  when: AutomatedVacancyIntake processes deduplicated vacancies
+    -- Blacklisted companies are filtered BEFORE AI matching to save LLM calls.
+    -- Pipeline position: after dedup, before matchThreshold check.
+    when: BlacklistFilterCheck(vacancy, user_id)
+    let blacklist_entries = CompanyBlacklists where user_id = user_id
 
-  let blacklist = CompanyBlacklist[] where userId = automation.userId
+    requires: vacancy.employer_name != null
 
-  for_each vacancy in deduplicatedVacancies:
-    if blacklist.any(entry => matchesBlacklistEntry(vacancy.employerName, entry)):
-      ensures: vacancy is NOT staged (silently skipped)
-      ensures: runner logs "Filtered {count} blacklisted companies"
+    ensures:
+        if blacklist_entries.any(entry => matches_blacklist_entry(vacancy.employer_name, entry)):
+            BlacklistFiltered(vacancy_id: vacancy.id, user_id: user_id)
 
-  @guidance
-    -- Vacancies without employerName (null) are NEVER blacklisted.
-    -- This prevents false positives on incomplete job data.
-    -- The blacklist check runs on the domain model (pure function),
-    -- not as a SQL query, for testability and consistency.
+    @guidance
+        -- Vacancies without employerName (null) are NEVER blacklisted.
+        -- This prevents false positives on incomplete job data.
+        -- The blacklist check runs on the domain model (pure function),
+        -- not as a SQL query, for testability and consistency.
 }
 
 rule BlacklistQuickAdd {
-  -- "User can add a company to the blacklist directly from a StagedVacancyCard."
-  when: UserBlocksCompany(companyName: String)
+    -- User can add a company to the blacklist directly from a StagedVacancyCard.
+    when: UserBlocksCompany(company_name, by)
 
-  ensures: CompanyBlacklist.created(
-    userId: currentUser.id,
-    pattern: companyName,
-    matchType: contains,
-    reason: null
-  )
-  -- Default match type is "contains" for quick-add (catches variants).
-  -- User can refine match type in Settings → Company Blacklist.
+    ensures: CompanyBlacklist.created(
+        user_id: by.id,
+        pattern: company_name,
+        match_type: contains,
+        reason: null
+    )
+    -- Default match type is "contains" for quick-add (catches variants).
+    -- User can refine match type in Settings -> Company Blacklist.
 
-  @guidance
-    -- Quick-add uses "contains" because employer names from different
-    -- sources vary (e.g. "Acme Corp" vs "Acme Corporation" vs "ACME").
-    -- Exact match is available in Settings for precision blocking.
+    @guidance
+        -- Quick-add uses "contains" because employer names from different
+        -- sources vary (e.g. "Acme Corp" vs "Acme Corporation" vs "ACME").
+        -- Exact match is available in Settings for precision blocking.
 }
 
 rule BlacklistManagement {
-  -- "Blacklist is managed in Settings → Company Blacklist."
-  -- CRUD operations: add (with match type + optional reason), remove, list.
-  -- No edit — remove and re-add with different settings.
-  when: UserManagesBlacklist
-  surface: Settings → Company Blacklist section
+    -- Blacklist is managed in Settings -> Company Blacklist.
+    -- CRUD operations: add (with match type + optional reason), remove, list.
+    -- No edit -- remove and re-add with different settings.
+    when: ManageBlacklist(action, by)
+
+    ensures: BlacklistManaged(action: action, user_id: by.id)
+
+    @guidance
+        -- The surface for this rule is the Settings -> Company Blacklist section.
 }
 
 rule BlacklistRetroactiveTrash {
-  -- "Adding a blacklist entry retroactively trashes any already-staged
-  --  vacancies whose employerName matches the new pattern."
-  -- Introduced in Sprint 2 after commit 70b9f44 shipped the behaviour
-  -- without a domain-event seam (review finding H-A-05). This rule
-  -- documents the seam explicitly so consumers (audit log, CRM sync,
-  -- analytics, retention accounting) can observe the bulk trashing.
-  when: AddBlacklistEntry(userId, pattern, matchType) succeeds
+    -- Adding a blacklist entry retroactively trashes any already-staged
+    -- vacancies whose employerName matches the new pattern.
+    -- Introduced in Sprint 2 after commit 70b9f44 shipped the behaviour
+    -- without a domain-event seam (review finding H-A-05). This rule
+    -- documents the seam explicitly so consumers (audit log, CRM sync,
+    -- analytics, retention accounting) can observe the bulk trashing.
+    when: AddBlacklistEntry(user_id, pattern, match_type)
 
-  let matched = StagedVacancy[]
-    where userId = userId
-      and matchesBlacklistEntry(employerName, { pattern, matchType })
-      and trashedAt = null
-      and archivedAt = null
-      and promotedToJobId = null
+    ensures:
+        for vacancy in StagedVacancies where user_id = user_id and trashed_at = null and archived_at = null and promoted_to_job_id = null:
+            if matches_blacklist_entry(vacancy.employer_name, pattern, match_type):
+                vacancy.trashed_at = now
+                VacancyTrashed(staged_vacancy_id: vacancy.id, user_id: user_id)
 
-  ensures: for_each vacancy in matched:
-    vacancy.trashedAt = now()
-    VacancyTrashed.emitted(stagedVacancyId: vacancy.id, userId: userId)
-  -- One VacancyTrashed event per matched row — the same shape emitted by
-  -- the single-row TrashVacancy rule. Every existing consumer works
-  -- without any changes: audit-logger, notification-dispatcher, future
-  -- analytics, and CRM sync see the bulk trashing as a series of per-row
-  -- transitions.
-  ensures: if matched.length > 0:
-    BulkActionCompleted.emitted(
-      actionType: "blacklist_trash",
-      itemIds: matched.map(v => v.id),
-      userId: userId,
-      succeeded: matched.length,
-      failed: 0
+    ensures: BlacklistRetroactiveTrashCompleted(
+        user_id: user_id,
+        pattern: pattern,
+        match_type: match_type
     )
-  -- A BulkActionCompleted envelope is ALSO emitted so batch-aware
-  -- consumers keep the per-batch shape (single notification, aggregate
-  -- analytics row). The actionType "blacklist_trash" is a dedicated
-  -- discriminator distinct from the interactive BulkActionType enum
-  -- (dismiss | archive | trash | restore | restoreFromTrash) because
-  -- the origin is a blacklist write, not an interactive bulk action.
 
-  @guidance
-    -- Implementation: src/actions/companyBlacklist.actions.ts runs
-    -- a pre-flight findMany inside the transaction to capture the
-    -- matching id set (Prisma/SQLite does not support RETURNING on
-    -- updateMany), then emits events AFTER the transaction commits so
-    -- consumers never observe a trashed vacancy before the blacklist
-    -- row itself is visible. Events are fire-and-forget per the
-    -- event-bus ErrorIsolation rule.
-    -- Performance: the (userId, employerName) composite index covers
-    -- the pre-flight findMany for the exact + starts_with match types;
-    -- contains + ends_with still scan the user's partition but only
-    -- over the index's b-tree leaves.
-    -- The updateMany is rewritten as a (userId, id IN ids) PK lookup
-    -- after the findMany so the write lock window is short.
+    @guidance
+        -- Implementation: src/actions/companyBlacklist.actions.ts runs
+        -- a pre-flight findMany inside the transaction to capture the
+        -- matching id set (Prisma/SQLite does not support RETURNING on
+        -- updateMany), then emits events AFTER the transaction commits so
+        -- consumers never observe a trashed vacancy before the blacklist
+        -- row itself is visible. Events are fire-and-forget per the
+        -- event-bus ErrorIsolation rule.
+        -- Performance: the (userId, employerName) composite index covers
+        -- the pre-flight findMany for the exact + starts_with match types;
+        -- contains + ends_with still scan the user's partition but only
+        -- over the index's b-tree leaves.
+        -- The updateMany is rewritten as a (userId, id IN ids) PK lookup
+        -- after the findMany so the write lock window is short.
+        -- One VacancyTrashed event per matched row -- the same shape emitted by
+        -- the single-row TrashVacancy rule. Every existing consumer works
+        -- without any changes.
+        -- A BulkActionCompleted envelope is ALSO emitted so batch-aware
+        -- consumers keep the per-batch shape. The actionType "blacklist_trash"
+        -- is a dedicated discriminator distinct from the interactive BulkActionType.
 }
 
--- =============================================================================
--- Domain Events
--- =============================================================================
-
--- Events are published for downstream consumers (0.6 Event Bus).
--- In Phase 1, they are stubs (console.debug). 0.6 replaces with real bus.
-
-event VacancyStaged {
-  stagedVacancyId: String
-  userId: String
-  sourceBoard: String
-  automationId: String?
-}
-
-event VacancyPromoted {
-  stagedVacancyId: String
-  jobId: String
-  userId: String
-  -- Downstream consumers:
-  --   CompanyNeeded → Data Enrichment (1.13)
-  --   DocumentsAvailable → Document Generators (4.2)
-  --   CrmChanceCreated → CRM (5)
-}
-
-event VacancyDismissed {
-  stagedVacancyId: String
-  userId: String
-}
-
-event VacancyArchived {
-  stagedVacancyId: String
-  userId: String
-}
-
-event VacancyTrashed {
-  stagedVacancyId: String
-  userId: String
-}
-
-event VacancyRestoredFromTrash {
-  stagedVacancyId: String
-  userId: String
-}
-
-event BulkActionCompleted {
-  actionType: BulkActionType
-  itemIds: String[]
-  userId: String
-  succeeded: Integer
-  failed: Integer
-}
-
-event RetentionCompleted {
-  userId: String
-  purgedCount: Integer
-  hashesCreated: Integer
-}
-
--- =============================================================================
+------------------------------------------------------------
 -- Invariants
--- =============================================================================
+------------------------------------------------------------
 
 invariant UniqueDedup {
-  ensures: no two StagedVacancy have the same (userId, sourceBoard, externalId)
-    where externalId != null and status != dismissed
-  note: "Composite unique constraint. Dismissed vacancies are excluded — rediscovery creates new entries."
-  note: "Enforced by database unique index with partial filter."
-}
-
-invariant PromotedVacancyImmutable {
-  ensures: for_each vacancy in StagedVacancy where status = promoted:
-    vacancy.status cannot change
-    vacancy.promotedToJobId cannot change
-  note: "Once promoted, a StagedVacancy is frozen. The Job aggregate owns the lifecycle from here."
+    -- Composite unique constraint. Dismissed vacancies are excluded --
+    -- rediscovery creates new entries. Enforced by database unique index
+    -- with partial filter.
+    for a in StagedVacancies:
+        for b in StagedVacancies:
+            a != b and a.external_id != null and b.external_id != null
+                and a.status != dismissed and b.status != dismissed
+                implies not (a.user_id = b.user_id and a.source_board = b.source_board and a.external_id = b.external_id)
 }
 
 invariant NoDuplicatePromotion {
-  ensures: for_each vacancy in StagedVacancy:
-    vacancy.promotedToJobId is unique or null
-  note: "Each StagedVacancy maps to at most one Job. One-to-one relationship."
+    -- Each StagedVacancy maps to at most one Job. One-to-one relationship.
+    for a in StagedVacancies:
+        for b in StagedVacancies:
+            a != b and a.promoted_to_job_id != null and b.promoted_to_job_id != null
+                implies a.promoted_to_job_id != b.promoted_to_job_id
 }
 
-invariant ManualJobsBypassStaging {
-  ensures: User can create Job directly without StagedVacancy
-  note: "The addJob() flow is independent. Manual jobs are already reviewed by the user."
-  note: "This invariant documents the design boundary between Discovery and Tracking."
+-- Prose invariant: PromotedVacancyImmutable
+-- Once promoted, a StagedVacancy is frozen. The Job aggregate owns the
+-- lifecycle from here. The status and promoted_to_job_id fields cannot
+-- change after promotion. Enforced by the transition graph terminal state.
+
+-- Prose invariant: ManualJobsBypassStaging
+-- User can create Job directly without StagedVacancy. The addJob() flow
+-- is independent. Manual jobs are already reviewed by the user. This
+-- invariant documents the design boundary between Discovery and Tracking.
+
+-- Prose invariant: TrashRetentionCompliance
+-- DSGVO Art. 5(1)(e): storage limitation. Enforced by RetentionCleanup rule.
+-- No StagedVacancy should exist where trashed_at + config.retention_days
+-- is older than the current time. DedupHash records are not personal data
+-- (one-way hash) and are retained indefinitely.
+
+-- Prose invariant: DeckActionRoutingInvariant
+-- The staging deck maintains its own state machine (currentIndex, stats,
+-- undo stack, optimistic card-exit animations) in useDeckStack.performAction.
+-- Every action taken against a deck card MUST flow through this state machine
+-- regardless of the entry point: swipe, action-rail button, details sheet,
+-- keyboard shortcut, future bulk actions, future context menus.
+--
+-- Bypassing performAction and calling the underlying server action directly
+-- silently breaks ALL of the following:
+--   - deck stats (stats.promoted, stats.dismissed, stats.superLiked)
+--   - the undo stack (the action cannot be undone)
+--   - the optimistic card-exit animation
+--   - super-like celebration fly-in (onSuperLikeSuccess callback)
+--   - card advancement (the deck index does not move, user sees the same card)
+--
+-- CRITICAL DISTINCTION (Sprint 1.5 / CRIT-A-06): useDeckStack.performAction
+-- is NOT the same as StagingContainer.handleDeckAction. The two abstractions
+-- are layered but distinct:
+--   - performAction is the STATE MACHINE (animation, index, stats, undo,
+--     celebration). It lives inside the hook and is exposed to callers via
+--     the hook's public imperatives (dismiss, promote, superLike, block, skip).
+--   - handleDeckAction is the SERVER-ACTION DISPATCHER supplied to the
+--     hook via the onAction prop. performAction calls it internally to
+--     mutate server state, then drives the state machine based on the result.
+--
+-- Enforcement: src/components/staging/DeckView.tsx exposes a forwardRef +
+-- useImperativeHandle surface (DeckViewHandle). In deck mode, the sheet
+-- adapters call deckViewRef.current.dismiss() etc. -- the SAME imperatives
+-- the swipe handlers and action-rail buttons invoke.
+-- See ADR-030 (Decision C) including the Sprint 1.5 correction note.
+-- Any new deck entry point MUST satisfy this invariant.
+
+------------------------------------------------------------
+-- Actor Declarations
+------------------------------------------------------------
+
+actor PipelineUser {
+    -- Reviews staged vacancies, promotes to Job, dismisses, archives, restores.
+    -- Creates manual vacancies that bypass staging (direct to Job).
+    identified_by: User
 }
 
-invariant TrashRetentionCompliance {
-  ensures: no StagedVacancy exists where trashedAt + config.RETENTION_DAYS.days < now()
-  note: "DSGVO Art. 5(1)(e): storage limitation. Enforced by RetentionPurge rule."
-  note: "DedupHash records are not personal data (one-way hash) and are retained indefinitely."
+actor AutomationActor {
+    -- Discovers vacancies via Job Discovery Connectors and stages them.
+    -- Runs on a schedule, produces batches of StagedVacancy records.
+    identified_by: Automation
 }
 
-invariant DeckActionRoutingInvariant {
-  -- The staging deck maintains its own state machine (currentIndex, stats,
-  -- undo stack, optimistic card-exit animations) in `useDeckStack.performAction`.
-  -- Every action taken against a deck card MUST flow through this state machine
-  -- regardless of the entry point: swipe, action-rail button, details sheet,
-  -- keyboard shortcut, future bulk actions, future context menus.
-  --
-  -- Bypassing `performAction` and calling the underlying server action directly
-  -- silently breaks ALL of the following:
-  --   - deck stats (stats.promoted, stats.dismissed, stats.superLiked)
-  --   - the undo stack (the action cannot be undone)
-  --   - the optimistic card-exit animation
-  --   - super-like celebration fly-in (onSuperLikeSuccess callback)
-  --   - card advancement (the deck index does not move, user sees the same card)
-  --
-  -- CRITICAL DISTINCTION (Sprint 1.5 / CRIT-A-06): `useDeckStack.performAction`
-  -- is NOT the same as `StagingContainer.handleDeckAction`. The two abstractions
-  -- are layered but distinct:
-  --   - `performAction` is the STATE MACHINE (animation, index, stats, undo,
-  --     celebration). It lives inside the hook and is exposed to callers via
-  --     the hook's public imperatives (`dismiss`, `promote`, `superLike`,
-  --     `block`, `skip`).
-  --   - `handleDeckAction` is the SERVER-ACTION DISPATCHER supplied to the
-  --     hook via the `onAction` prop. `performAction` calls it internally to
-  --     mutate server state, then drives the state machine based on the
-  --     result.
-  -- Calling `handleDeckAction` directly from an external entry point (like
-  -- the details sheet in deck mode) fires the server action but leaves the
-  -- state machine stale — this is exactly the bug CRIT-A-06 caught. The
-  -- original hotfix (`2caab7e`) for Decision C made this mistake: it routed
-  -- the sheet adapters to `handleDeckAction`, believing that was "the single
-  -- source of truth for deck state". It was not. The fix is to invoke the
-  -- hook's public imperatives, NOT `handleDeckAction`.
-  --
-  -- Enforcement: `src/components/staging/DeckView.tsx` exposes a
-  -- `forwardRef` + `useImperativeHandle` surface (`DeckViewHandle` — see
-  -- the hook wiring comment in StagingContainer.tsx). In deck mode, the
-  -- sheet adapters call `deckViewRef.current.dismiss()` etc. — the SAME
-  -- imperatives the swipe handlers and action-rail buttons invoke. In list
-  -- mode they still use the direct CRUD handlers. Regression test:
-  -- `__tests__/StagingContainerDeckSheetRouting.spec.tsx` (mounts the real
-  -- container + view + hook + sheet and asserts the deck counter advances
-  -- after a sheet-originated dismiss).
-
-  ensures: for_each action in { dismiss, promote, superlike, block, skip }:
-    for_each entry_point in { swipe, action_rail_button, details_sheet, keyboard_shortcut }:
-      when a deck card is the subject:
-        the action flows through useDeckStack.performAction
-        (via one of the hook's public imperatives: dismiss, promote,
-         superLike, block, skip — NEVER via `handleDeckAction` directly,
-         because `handleDeckAction` is the `onAction` dispatcher and only
-         performs the server mutation, not the state-machine updates)
-        and NOT through the list-mode handlers.
-
-  ensures: when an external entry point (e.g. the details sheet) needs to
-    drive the deck state machine, it MUST do so through a ref to the hook's
-    public imperatives (DeckViewHandle in src/components/staging/DeckView.tsx),
-    never by calling the `onAction` prop payload directly.
-
-  note: "See ADR-030 (Decision C) including the Sprint 1.5 correction note. The honesty gate caught the original Phase 3 wiring — the StagedVacancyDetailSheet went straight to the list handlers. The first hotfix attempt (`2caab7e`) routed through `handleDeckAction`, which was semantically wrong because `handleDeckAction` is the server-action dispatcher, not the state machine. Sprint 1.5 CRIT-A-06 completed the fix by exposing `DeckView` as `forwardRef` + `useImperativeHandle` and making the sheet adapters invoke the hook's public imperatives."
-  note: "Any new deck entry point (context menu, bulk action, mobile long-press, URL deep-link) MUST satisfy this invariant. Reviewer checklist: does the new call site invoke a DeckView imperative (via ref) or a wrapper that calls `useDeckStack.performAction` indirectly? If it calls a server action (dismissStagedVacancy, promoteStagedVacancyToJob, etc.) directly OR calls `StagingContainer.handleDeckAction` directly, it is a violation."
-}
-
--- =============================================================================
+------------------------------------------------------------
 -- Surfaces
--- =============================================================================
+------------------------------------------------------------
 
 surface StagingQueue {
-  facing actor: User
-  context entity: StagedVacancy[]
+    facing viewer: PipelineUser
 
-  exposes:
-    -- Tabs:
-    tab "Neu": StagedVacancy where status in (staged, processing, ready) and archivedAt = null and trashedAt = null
-    tab "Abgelehnt": StagedVacancy where status = dismissed and archivedAt = null and trashedAt = null
-    tab "Archiv": StagedVacancy where archivedAt != null
-    tab "Papierkorb": StagedVacancy where trashedAt != null
+    -- Tabs expose filtered subsets of StagedVacancy
 
-    -- Per vacancy: title, employerName, location, matchScore, sourceBoard, discoveredAt, status,
-    --   positionOfferingCode, salaryMin, salaryMax, salaryCurrency, salaryPeriod,
-    --   requiredEducationLevel, immediateStart, numberOfPosts, occupationUris, euresFlag
+    exposes:
+        -- Per vacancy: title, employer_name, location, match_score, source_board,
+        -- discovered_at, status, position_offering_code, salary_min, salary_max,
+        -- salary_currency, salary_period, required_education_level, immediate_start,
+        -- number_of_posts, occupation_uris, eures_flag
+        -- Filters: status, source_board, date range, match_score range
+        -- Sort: discovered_at desc (default), match_score desc, title asc
 
-    -- Filters: status, sourceBoard, date range, matchScore range
-    -- Sort: discoveredAt desc (default), matchScore desc, title asc
+    provides:
+        DismissVacancy(vacancy_id, viewer)
+        RestoreVacancy(vacancy_id, viewer)
+        ArchiveVacancy(vacancy_id, viewer)
+        TrashVacancy(vacancy_id, viewer)
+        RestoreFromTrash(vacancy_id, viewer)
+        PromoteVacancy(input, viewer)
+        ExecuteBulkAction(action_type, vacancy_ids, viewer)
+        Undo(token, viewer)
 
-  provides:
-    DismissVacancy(vacancyId),
-    RestoreVacancy(vacancyId),
-    ArchiveVacancy(vacancyId),
-    TrashVacancy(vacancyId),
-    RestoreFromTrash(vacancyId),
-    PromoteVacancy(vacancyId) -> opens PromotionDialog,
-    ExecuteBulkAction(actionType, vacancyIds),
-    Undo(token)
+    @guarantee MultiSelect
+        -- User can select multiple vacancies via checkboxes for bulk actions.
+        -- A floating BulkActionBar appears when 1+ items are selected.
 
-  @guarantee MultiSelect
-    -- User can select multiple vacancies via checkboxes for bulk actions.
-    -- A floating BulkActionBar appears when 1+ items are selected.
+    @guarantee UndoFeedback
+        -- After every destructive action, a toast with "Undo" button appears.
+        -- Countdown shows remaining seconds. Click reverts the action.
 
-  @guarantee UndoFeedback
-    -- After every destructive action, a toast with "Undo" button appears.
-    -- Countdown shows remaining seconds. Click reverts the action.
+    @guarantee NewItemsBanner
+        -- When the scheduler completes a cycle (running -> idle phase transition),
+        -- a banner with role="status" appears offering to refresh the vacancy list.
+        -- The banner detects the transition via its own scheduler status subscription
+        -- and phase-change ref tracking. Dismisses on refresh.
 
-  @guarantee NewItemsBanner
-    -- When the scheduler completes a cycle (running -> idle phase transition),
-    -- a banner with role="status" appears offering to refresh the vacancy list.
-    -- The banner detects the transition via its own scheduler status subscription
-    -- and phase-change ref tracking. Dismisses on refresh.
-
-  @guarantee AccessibleSearch
-    -- The search input includes an aria-label (distinct from the placeholder)
-    -- for assistive technology. The search is debounced (300ms).
+    @guarantee AccessibleSearch
+        -- The search input includes an aria-label (distinct from the placeholder)
+        -- for assistive technology. The search is debounced (300ms).
 }
 
 surface PromotionDialog {
-  facing actor: User
-  context entity: StagedVacancy (single)
+    facing viewer: PipelineUser
+    context vacancy: StagedVacancy
 
-  exposes:
-    -- Pre-filled from StagedVacancy:
-    title, employerName, location, description, matchScore, sourceUrl
+    exposes:
+        -- Pre-filled from StagedVacancy:
+        vacancy.title
+        vacancy.employer_name
+        vacancy.location
+        vacancy.description
+        vacancy.match_score
+        vacancy.source_url
 
-    -- Editable overrides:
-    jobTitleOverride (text input, pre-filled from title),
-    companyOverride (text input, pre-filled from employerName),
-    locationOverride (text input, pre-filled from location),
-    tagsToApply (tag multi-select)
+    provides:
+        PromoteVacancy(input, viewer)
+        CancelPromotion(viewer)
 
-  provides:
-    ConfirmPromotion(input: PromotionInput),
-    Cancel()
-
-  @guarantee PreviewBeforeCommit
-    -- User sees what will be created before confirming.
-    -- No Job is created until the user clicks "Promote".
+    @guarantee PreviewBeforeCommit
+        -- User sees what will be created before confirming.
+        -- No Job is created until the user clicks "Promote".
 }
 
 surface BulkActionBar {
-  -- Floating action bar that appears when one or more vacancies are selected.
-  facing actor: User
-  context entity: StagedVacancy[] (selected subset)
+    -- Floating action bar that appears when one or more vacancies are selected.
+    facing viewer: PipelineUser
 
-  exposes:
-    -- Selection state:
-    selectedCount: Integer,           -- number of currently selected items
-    selectedIds: String[],            -- IDs of selected StagedVacancy records
-    allSelected: Boolean              -- whether "select all" is active (current page or all pages)
+    provides:
+        ExecuteBulkAction(action_type, vacancy_ids, viewer)
 
-  provides:
-    -- Bulk operations (available buttons depend on current tab):
-    BulkDismiss(vacancyIds)           -- dismiss all selected (Neu tab)
-    BulkPromote(vacancyIds)           -- promote all selected (opens batch PromotionDialog)
-      -- Note: BulkPromote is not yet implemented. Currently promotion is single-item only.
-    BulkArchive(vacancyIds)           -- archive all selected
-    BulkTrash(vacancyIds)             -- move all selected to trash
-    BulkRestore(vacancyIds)           -- restore selected (Abgelehnt/Papierkorb tabs)
-    SelectAll()                       -- select all items on current page
-    DeselectAll()                     -- clear selection
+    @guarantee ContextualButtons
+        -- Only show operations valid for the current tab:
+        -- Neu tab: Dismiss, Promote, Archive, Trash
+        -- Abgelehnt tab: Restore, Trash
+        -- Archiv tab: Restore (from archive), Trash
+        -- Papierkorb tab: Restore (from trash), Permanent Delete (future)
+        -- Buttons for invalid operations are hidden, not disabled.
 
-  @guarantee ContextualButtons
-    -- Only show operations valid for the current tab:
-    -- Neu tab: Dismiss, Promote, Archive, Trash
-    -- Abgelehnt tab: Restore, Trash
-    -- Archiv tab: Restore (from archive), Trash
-    -- Papierkorb tab: Restore (from trash), Permanent Delete (future)
-    -- Buttons for invalid operations are hidden, not disabled.
+    @guarantee FloatingPosition
+        -- The bar floats at the bottom of the viewport (sticky bottom).
+        -- Appears with a slide-up animation when first item is selected.
+        -- Disappears when selection is cleared.
+        -- Does not overlap with the UndoToast.
+        -- Note: Floating/sticky positioning is an open UX item for S2.
+        -- Current implementation renders the bar inline, not floating.
 
-  @guarantee FloatingPosition
-    -- The bar floats at the bottom of the viewport (sticky bottom).
-    -- Appears with a slide-up animation when first item is selected.
-    -- Disappears when selection is cleared.
-    -- Does not overlap with the UndoToast.
-    -- Note: Floating/sticky positioning is an open UX item for S2.
-    -- Current implementation renders the bar inline, not floating.
+    @guarantee SelectionPersistence
+        -- Selection persists across tab pagination (scrolling/page changes).
+        -- Selection is cleared when switching tabs (different data set).
+        -- Checkbox state is synced with selectedIds.
 
-  @guarantee SelectionPersistence
-    -- Selection persists across tab pagination (scrolling/page changes).
-    -- Selection is cleared when switching tabs (different data set).
-    -- Checkbox state is synced with selectedIds.
-
-  @guarantee AccessibleSelection
-    -- Each vacancy card has a checkbox with aria-label: "Select {title}"
-    -- BulkActionBar has role="toolbar" with aria-label: "{count} items selected"
-    -- All buttons have descriptive aria-labels
-    -- Note: Full ARIA compliance is an open UX item for S2.
-    -- Current implementation has basic keyboard support but not all
-    -- aria-labels and role attributes described here.
+    @guarantee AccessibleSelection
+        -- Each vacancy card has a checkbox with aria-label.
+        -- BulkActionBar has role="toolbar" with aria-label.
+        -- All buttons have descriptive aria-labels.
+        -- Note: Full ARIA compliance is an open UX item for S2.
 }
 
 surface UndoToast {
-  -- Toast notification with countdown timer and Undo button.
-  -- Appears after every destructive action (dismiss, trash, archive, bulk action).
-  facing actor: User
-  context entity: UndoToken
+    -- Toast notification with countdown timer and Undo button.
+    -- Appears after every destructive action (dismiss, trash, archive, bulk action).
+    facing viewer: PipelineUser
+    context token: UndoToken
 
-  exposes:
-    -- Toast content:
-    message: String,                  -- e.g. "3 vacancies dismissed" or "Moved to trash"
-    countdown: Integer,               -- remaining seconds (ticks down in real time)
-    progress: Float,                  -- 0.0 to 1.0 for visual countdown bar
+    exposes:
+        token.action_type
+        token.expires_at
 
-  provides:
-    Undo()                            -- triggers UndoExecution for the associated token
-    Dismiss()                         -- manually close the toast (token remains valid until expiry)
+    provides:
+        Undo(token, viewer)
 
-  @guarantee CountdownVisual
-    -- A visual countdown (progress bar or circular timer) shows remaining time.
-    -- Countdown ticks every second. When it reaches 0, the toast auto-dismisses.
-    -- The countdown is synchronized with the UndoToken.expiresAt.
-    -- Note: Current implementation uses a simple toast with Undo button
-    -- but does not yet display a countdown timer or progress bar.
-    -- The countdown and progress fields in the surface are aspirational (S2).
+    @guarantee CountdownVisual
+        -- A visual countdown (progress bar or circular timer) shows remaining time.
+        -- Countdown ticks every second. When it reaches 0, the toast auto-dismisses.
+        -- Note: Current implementation uses a simple toast with Undo button
+        -- but does not yet display a countdown timer or progress bar (S2).
 
-  @guarantee StackBehavior
-    -- Multiple toasts can be visible simultaneously (stacked vertically).
-    -- Newest toast appears at the bottom of the stack.
-    -- Each toast has its own independent countdown.
-    -- Ctrl+Z undoes the most recent (bottommost) toast.
-    -- Note: Current implementation shows a single toast (no stacking).
-    -- Stack behavior is aspirational (S2).
+    @guarantee StackBehavior
+        -- Multiple toasts can be visible simultaneously (stacked vertically).
+        -- Newest toast appears at the bottom of the stack.
+        -- Each toast has its own independent countdown.
+        -- Ctrl+Z undoes the most recent (bottommost) toast.
+        -- Note: Current implementation shows a single toast (no stacking, S2).
 
-  @guarantee AnimatedTransitions
-    -- Toast enters with a slide-up animation.
-    -- Toast exits with a fade-out animation when:
-    --   a) countdown expires (auto-dismiss)
-    --   b) user clicks Undo (action reverted)
-    --   c) user clicks Dismiss (manual close)
+    @guarantee AnimatedTransitions
+        -- Toast enters with a slide-up animation.
+        -- Toast exits with a fade-out animation on countdown/undo/dismiss.
 
-  @guarantee AccessibleToast
-    -- role="alert" for screen readers
-    -- aria-live="polite" (does not interrupt current reading)
-    -- Undo button is keyboard-focusable
-    -- Toast does not block interaction with the page below
+    @guarantee AccessibleToast
+        -- role="alert" for screen readers.
+        -- aria-live="polite" (does not interrupt current reading).
+        -- Undo button is keyboard-focusable.
+        -- Toast does not block interaction with the page below.
 }
 
 surface DeckView {
-  -- Card-stack swipe interface for rapid vacancy triage.
-  -- Available only on the "Neu" tab as an alternative to the list view.
-  -- Scope note: This surface covers interaction behaviour and accessibility,
-  -- not visual layout or swipe animation mechanics.
-  facing actor: User
-  context entity: StagedVacancy[] (ordered subset from "Neu" tab)
+    -- Card-stack swipe interface for rapid vacancy triage.
+    -- Available only on the "Neu" tab as an alternative to the list view.
+    -- Scope note: This surface covers interaction behaviour and accessibility,
+    -- not visual layout or swipe animation mechanics.
+    facing viewer: PipelineUser
 
-  exposes:
-    current_vacancy: StagedVacancy,
-    current_index: Integer,
-    total_count: Integer,
-    stats: { promoted: Integer, dismissed: Integer, super_liked: Integer },
-    can_undo: Boolean
+    provides:
+        DismissVacancy(vacancy_id, viewer)
+        PromoteVacancy(input, viewer)
+        Undo(token, viewer)
 
-  provides:
-    Dismiss(vacancy) -> swipe left or press D,
-    Promote(vacancy) -> swipe right or press P -> opens PromotionDialog,
-    SuperLike(vacancy) -> swipe up or press S -> opens PromotionDialog,
-    Undo() -> press Z (restores last dismissed vacancy)
+    @guarantee FocusManagement
+        -- The deck container is focusable (tabIndex=0) with focus-visible ring styling.
+        -- Keyboard interaction requires the container to be focused.
 
-  @guarantee FocusManagement
-    -- The deck container is focusable (tabIndex=0) with focus-visible ring styling.
-    -- Keyboard interaction requires the container to be focused.
+    @guarantee AccessiblePreviewCards
+        -- Preview cards (next and third in the stack) are marked aria-hidden="true"
+        -- so screen readers only announce the current (top) card.
 
-  @guarantee AccessiblePreviewCards
-    -- Preview cards (next and third in the stack) are marked aria-hidden="true"
-    -- so screen readers only announce the current (top) card.
+    @guarantee ScreenReaderAnnouncements
+        -- An aria-live="polite" aria-atomic="true" sr-only region announces the
+        -- current card details on each card change: position, title, employer,
+        -- location, and match score (when available).
 
-  @guarantee ScreenReaderAnnouncements
-    -- An aria-live="polite" aria-atomic="true" sr-only region announces the
-    -- current card details on each card change: position, title, employer,
-    -- location, and match score (when available). A separate announcement
-    -- template is used when no match score is present.
+    @guarantee SwipeHint
+        -- On the first card only and on mobile (sm:hidden), a pulsing text hint
+        -- shows swipe directions. The pulse animation respects motion-reduce.
+        -- The hint auto-dismisses after the first swipe action.
 
-  @guarantee SwipeHint
-    -- On the first card only and on mobile (sm:hidden), a pulsing text hint
-    -- shows swipe directions. The pulse animation respects motion-reduce:animate-none.
-    -- The hint auto-dismisses after the first swipe action.
+    @guarantee KeyboardHintsDecoration
+        -- Desktop-only (hidden sm:flex) keyboard shortcut hints (D, P, S, Z) are
+        -- displayed below the action buttons. Marked aria-hidden="true" as they
+        -- are visual decoration for sighted keyboard users.
 
-  @guarantee KeyboardHintsDecoration
-    -- Desktop-only (hidden sm:flex) keyboard shortcut hints (D, P, S, Z) are
-    -- displayed below the action buttons. Marked aria-hidden="true" as they
-    -- are visual decoration for sighted keyboard users, not semantic content.
-
-  @guarantee MotionReduce
-    -- The current card's drag transition and exit animation respect
-    -- prefers-reduced-motion via motion-reduce:!transition-none.
+    @guarantee MotionReduce
+        -- The current card's drag transition and exit animation respect
+        -- prefers-reduced-motion via motion-reduce.
 }
 
--- =============================================================================
+------------------------------------------------------------
 -- Open Questions
--- =============================================================================
+------------------------------------------------------------
 
 -- Resolved: "Undo implementation: Command Pattern or timer-based soft-revert?"
 -- Answer: Timer-based soft-revert with compensation functions (AD-2 from design spec).
--- UndoToken with configurable TTL (default 10s). See UndoExpiry, UndoExecution rules.
+-- UndoToken with configurable TTL (default 10s). See UndoExpiry, UndoAction rules.
 
 open question "Should dismissed vacancies that are rediscovered create a notification? ('A vacancy you dismissed was found again on a different board.')"
 
-open question "Super-Like in JobDeck Queue mode (→ 2.7): should it trigger immediate promotion without the PromotionDialog, or always show the dialog?"
+open question "Super-Like in JobDeck Queue mode (-> 2.7): should it trigger immediate promotion without the PromotionDialog, or always show the dialog?"
 
 open question "Should StagedVacancy support tags for pre-promotion categorization, or only apply tags during promotion?"

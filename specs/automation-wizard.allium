@@ -34,6 +34,68 @@ external entity Automation {
     -- The created/updated automation entity. See job-aggregate.allium, scheduler-coordination.allium.
 }
 
+external entity User {
+    -- The authenticated user operating the wizard.
+}
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value ConnectorParamsSchema {
+    -- Typed schema array from the selected module manifest.
+    -- Defines the dynamic fields rendered by DynamicParamsForm.
+    fields: List<ConnectorParamField>
+}
+
+------------------------------------------------------------
+-- Contracts
+------------------------------------------------------------
+
+contract WizardRendering {
+    -- Obligations the wizard implementation must satisfy.
+
+    @invariant NoHardcodedModuleChecks
+        -- The AutomationWizard, WizardShell, DynamicParamsForm, and widget resolution
+        -- MUST NEVER contain "if (moduleId === 'x')" or equivalent conditional logic.
+        -- All per-module behavior flows through:
+        --   1. connectorParamsSchema (manifest-declared fields)
+        --   2. searchFieldOverrides (manifest-declared widget IDs)
+        --   3. Widget Registry (widgetId -> component map)
+        -- New modules work without any wizard code changes.
+
+    @invariant WidgetRegistryLookup
+        -- Widget resolution is by widgetId string, never by module name.
+        -- resolveWidgetOverrides(overrides) returns { field -> component } map.
+        -- Unknown widgetIds fall back gracefully to the default input.
+
+    @invariant ConnectorParamsValidation
+        -- Server-side: connectorParams JSON is validated against the module's
+        -- connectorParamsSchema via validateConnectorParams().
+        -- Invalid params are rejected with descriptive error messages.
+        -- Empty string params are normalized to null/undefined.
+
+    @invariant ModuleCredentialFeedback
+        -- The wizard shows credential status for each module in the selector:
+        -- - Module requires key AND key configured: no indicator
+        -- - Module requires key AND key NOT configured: amber warning with link to settings
+        -- - Module does not require key: green "no API key needed" indicator
+
+    @invariant CefrLevelAllowlist
+        -- CEFR level values written into the serialized output MUST be
+        -- within the set { A1, A2, B1, B2, C1, C2 }. Both addLanguage
+        -- and updateLevel reject values outside this set before mutating state.
+
+    @invariant LanguageProficiencyMaxEntries
+        -- A language-proficiency field accepts at most config.max_languages entries.
+        -- The combobox trigger is disabled when the limit is reached.
+
+    @invariant LazyWidgetLoading
+        -- EURES widgets (EuresOccupationCombobox, EuresLocationCombobox) are
+        -- loaded via next/dynamic to avoid bundling 20-40KB when not needed.
+        -- Widgets only load when their module is selected.
+}
+
 ------------------------------------------------------------
 -- Enumerations
 ------------------------------------------------------------
@@ -57,16 +119,19 @@ enum ScheduleFrequency {
 -- Values use backtick-quoted literals to match the code strings exactly:
 -- ScheduleFrequency = "6h" | "12h" | "daily" | "2d" | "weekly"
 
-------------------------------------------------------------
--- Config
-------------------------------------------------------------
+enum OverridableField { keywords | location }
 
-config {
-    max_languages: Integer = 10                    -- per language-proficiency field
+enum ParamFieldType {
+    string
+    number
+    boolean
+    select
+    multiselect
+    language_proficiency
 }
 
 ------------------------------------------------------------
--- Core Concept: Generic Rendering Engine
+-- Entities
 ------------------------------------------------------------
 
 -- The AutomationWizard is a GENERIC rendering engine that consumes module
@@ -88,49 +153,58 @@ config {
 --    The wizard resolves widgets by ID, never by module name.
 --    New widgets are registered once, used by any module that references them.
 
-------------------------------------------------------------
--- Entities (UI State)
-------------------------------------------------------------
-
 entity WizardState {
-    step: WizardStep = basics
+    step: WizardStep
     available_modules: Set<ModuleManifest>
     configured_key_module_ids: Set<String>      -- modules with API keys configured
     selected_module: ModuleManifest?
     params_schema: ConnectorParamsSchema?        -- from selected module manifest
     search_field_overrides: Set<SearchFieldOverride>
-    connector_params_values: Map<String, Any>   -- user-entered dynamic param values
-    ai_scoring_enabled: Boolean = true
-    schedule_frequency: ScheduleFrequency = daily
-    is_submitting: Boolean = false
-    is_edit_mode: Boolean = false
+    name: String
+    keywords: String?
+    location: String?
+    resume_id: String?
+    ai_scoring_enabled: Boolean
+    match_threshold: Integer
+    schedule_frequency: ScheduleFrequency
+    is_submitting: Boolean
+    is_edit_mode: Boolean
+    automation_count: Integer
 }
 
 entity ConnectorParamField {
     key: String
-    type: string | number | boolean | select | multiselect | language_proficiency
+    type: ParamFieldType
     label: String                              -- i18n key
-    default_value: Any?
-    options: List<Any>?                        -- for select/multiselect
+    default_value: String?
+    options: List<String>                      -- for select/multiselect
     required: Boolean?
-    min: Number?                               -- for number type
-    max: Number?                               -- for number type
+    min: Integer?                              -- for number type
+    max: Integer?                              -- for number type
     placeholder: String?
 }
 
 entity SearchFieldOverride {
-    field: keywords | location
+    field: OverridableField
     widget_id: String                          -- lookup key into Widget Registry
 }
 
 entity WidgetRegistryEntry {
     widget_id: String                          -- e.g. "eures-occupation"
-    field: keywords | location
-    component: ReactComponent                  -- lazy-loaded
+    field: OverridableField
 
-    @invariant
+    @invariant LazyLoaded
         -- Widgets are lazy-loaded to avoid bundling 20-40KB when not needed.
         -- Example: EURES widgets are loaded only when EURES module is selected.
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    max_languages: Integer = 10                    -- per language-proficiency field
+    default_match_threshold: Integer = 80          -- default AI scoring threshold
 }
 
 ------------------------------------------------------------
@@ -140,125 +214,140 @@ entity WidgetRegistryEntry {
 -- === Wizard Lifecycle ===
 
 rule OpenWizard {
-    when: User opens the automation wizard (create or edit mode)
+    when: OpenWizard(wizard, user, edit_automation?)
 
-    ensures: Load active job discovery modules from ModuleRegistry
-    ensures: Load user's configured API keys
-    ensures: Reset form to defaults (or populate from editAutomation)
-    ensures: step = basics
+    ensures:
+        wizard.step = basics
+        wizard.is_submitting = false
 
-    -- In edit mode, existing automation values are restored:
-    -- connectorParams are parsed from JSON, AI scoring state from matchThreshold,
-    -- schedule frequency from the scheduleFrequency field.
+    @guidance
+        -- Load active job discovery modules from ModuleRegistry.
+        -- Load user's configured API keys.
+        -- Reset form to defaults (or populate from edit_automation if present).
+        -- In edit mode, existing automation values are restored:
+        -- connectorParams are parsed from JSON, AI scoring state from matchThreshold,
+        -- schedule frequency from the scheduleFrequency field.
 }
 
 rule SelectModule {
-    when: User selects a job board module in Step 0
+    when: SelectModule(wizard, module)
 
-    ensures: selected_module = module matching selected ID
-    ensures: params_schema = selected_module.connectorParamsSchema
-    ensures: search_field_overrides = selected_module.searchFieldOverrides
-    ensures: Apply default values from params_schema to connector_params_values
-    ensures: Widget overrides resolved via Widget Registry
+    ensures:
+        wizard.selected_module = module
 
-    -- When module changes, default values from the new schema are applied.
-    -- In edit mode, saved values are preserved instead of applying defaults.
+    @guidance
+        -- Set params_schema from module's connectorParamsSchema.
+        -- Set search_field_overrides from module's searchFieldOverrides.
+        -- Apply default values from params_schema to connector param values.
+        -- Resolve widget overrides via Widget Registry.
+        -- When module changes, default values from the new schema are applied.
+        -- In edit mode, saved values are preserved instead of applying defaults.
 }
 
 rule AutoCorrectDefaultModule {
-    when: Wizard opens in create mode AND default module requires unconfigured key
+    when: AutoCorrectDefaultModule(wizard)
 
-    ensures: jobBoard auto-corrected to first module that either:
-        - does not require a credential, OR
-        - has its credential already configured
+    requires: not wizard.is_edit_mode
 
-    -- This prevents users from starting with a module they cannot use.
-    -- Only applies in create mode, not edit mode.
+    ensures:
+        wizard.selected_module = find_usable_module(wizard.available_modules, wizard.configured_key_module_ids)
+
+    @guidance
+        -- Selects the first module that either does not require a credential
+        -- or has its credential already configured.
+        -- This prevents users from starting with a module they cannot use.
+        -- Only applies in create mode, not edit mode.
 }
 
 -- === Step Navigation ===
 
 rule NavigateNext {
-    when: User clicks "Next"
+    when: NavigateNext(wizard)
 
-    requires: step < review
+    requires: wizard.step != review
 
-    requires:
-        if step = basics: name is non-empty
-        if step = search: keywords AND location are non-empty
-        if step = resume: resumeId is selected
-        if step = matching: always allowed
-        if step = schedule: always allowed
+    ensures:
+        wizard.step = next_step(wizard.step)
 
-    ensures: step = step + 1
+    @guidance
+        -- Per-step validation before advancing:
+        -- basics: name must be non-empty
+        -- search: keywords AND location must be non-empty
+        -- resume: resume_id must be selected
+        -- matching: always allowed
+        -- schedule: always allowed
 }
 
 rule NavigateBack {
-    when: User clicks "Back"
+    when: NavigateBack(wizard)
 
-    requires: step > basics
+    requires: wizard.step != basics
 
-    ensures: step = step - 1
+    ensures:
+        wizard.step = previous_step(wizard.step)
 }
 
 -- === Dynamic Params Rendering ===
 
 rule RenderDynamicParams {
-    when: Step 1 (search) is active AND selected module has connectorParamsSchema
+    when: RenderDynamicParams(wizard)
 
-    ensures: DynamicParamsForm renders fields from params_schema
-    ensures: Each field type maps to a specific UI control:
-        - string: text input
-        - number: number input (with min/max constraints)
-        - boolean: toggle switch
-        - select: dropdown with options
-        - multiselect: dropdown with badge chips for selected values
-        - language_proficiency: hierarchical combobox (see RenderLanguageProficiency)
-    ensures: Field labels resolved via i18n (with raw-string fallback)
-    ensures: Select option labels resolved via convention:
-        automations.paramOption.{moduleId}.{fieldKey}.{value}
+    requires: wizard.step = search
+    requires: wizard.params_schema != null
 
-    -- DynamicParamsForm iterates the schema array in declared order.
-    -- No conditional logic based on module identity.
+    @guidance
+        -- DynamicParamsForm renders fields from params_schema.
+        -- Each field type maps to a specific UI control:
+        --   string: text input
+        --   number: number input (with min/max constraints)
+        --   boolean: toggle switch
+        --   select: dropdown with options
+        --   multiselect: dropdown with badge chips for selected values
+        --   language_proficiency: hierarchical combobox (see RenderLanguageProficiency)
+        -- Field labels resolved via i18n (with raw-string fallback).
+        -- Select option labels resolved via convention:
+        --   automations.paramOption.{moduleId}.{fieldKey}.{value}
+        -- DynamicParamsForm iterates the schema array in declared order.
+        -- No conditional logic based on module identity.
 }
 
 rule RenderLanguageProficiency {
-    when: DynamicParamsForm encounters field.type = language_proficiency
+    when: RenderLanguageProficiency(wizard, field)
 
-    -- The language-proficiency field type renders a hierarchical searchable
-    -- combobox (Popover + Command) where languages are parent nodes and
-    -- CEFR levels (A1-C2) are selectable children underneath each language.
-
-    ensures: Languages fetched from /api/eures/languages reference API
-    ensures: Language names displayed via Intl.DisplayNames in user's locale
-    ensures: Each language shown as non-selectable group header with country flag
-    ensures: CEFR levels (A1-C2) shown as selectable children with descriptive labels
-    ensures: Multiple languages selectable with different CEFR levels
-    ensures: Selected entries shown as chips below the combobox
-    ensures: Each chip shows: flag + language name + inline CEFR level picker + remove
-    ensures: Serialized value format unchanged: "de(B2), en(C1)"
-
-    -- Search filtering is token-based and cross-level:
-    ensures: Search input split on whitespace into tokens
-    ensures: Each token matched against language names (ISO code, native label,
-        locale-aware display name) OR CEFR level labels (code and descriptive text)
-    ensures:
-        if all tokens match languages only:
-            show matching languages with all CEFR levels visible
-        if at least one token matches a language AND another matches a CEFR level:
-            show matching languages with only matching CEFR levels visible
-        if all tokens match CEFR levels only (no language token):
-            show all languages with all CEFR levels visible
-            -- Pure level-only input does not filter — see Q4
-        if no token matches any language or CEFR level:
-            show empty result (no languages visible)
-
-    -- This is a DynamicParamsForm type renderer, NOT a Widget Registry widget.
-    -- The distinction matters: searchFieldOverrides replace shared wizard fields
-    -- (keywords, location). language_proficiency is a connector parameter type
-    -- rendered by DynamicParamsForm's type-dispatch — no module identity check.
+    requires: field.type = language_proficiency
 
     @guidance
+        -- The language-proficiency field type renders a hierarchical searchable
+        -- combobox (Popover + Command) where languages are parent nodes and
+        -- CEFR levels (A1-C2) are selectable children underneath each language.
+        --
+        -- Languages fetched from /api/eures/languages reference API.
+        -- Language names displayed via Intl.DisplayNames in user's locale.
+        -- Each language shown as non-selectable group header with country flag.
+        -- CEFR levels (A1-C2) shown as selectable children with descriptive labels.
+        -- Multiple languages selectable with different CEFR levels.
+        -- Selected entries shown as chips below the combobox.
+        -- Each chip shows: flag + language name + inline CEFR level picker + remove.
+        -- Serialized value format unchanged: "de(B2), en(C1)".
+        --
+        -- Search filtering is token-based and cross-level:
+        -- Search input split on whitespace into tokens.
+        -- Each token matched against language names (ISO code, native label,
+        --   locale-aware display name) OR CEFR level labels (code and descriptive text).
+        -- If all tokens match languages only:
+        --   show matching languages with all CEFR levels visible.
+        -- If at least one token matches a language AND another matches a CEFR level:
+        --   show matching languages with only matching CEFR levels visible.
+        -- If all tokens match CEFR levels only (no language token):
+        --   show all languages with all CEFR levels visible (see Q4).
+        -- If no token matches any language or CEFR level:
+        --   show empty result (no languages visible).
+        --
+        -- This is a DynamicParamsForm type renderer, NOT a Widget Registry widget.
+        -- The distinction matters: searchFieldOverrides replace shared wizard fields
+        -- (keywords, location). language_proficiency is a connector parameter type
+        -- rendered by DynamicParamsForm's type-dispatch — no module identity check.
+        --
         -- Implementation: EuresLanguageCombobox.tsx component, lazy-loaded by
         -- DynamicParamsForm when field.type = language_proficiency.
         -- Follows the same Popover + Command + ChipList pattern as
@@ -271,160 +360,112 @@ rule RenderLanguageProficiency {
 }
 
 rule RenderSearchFieldOverride {
-    when: Step 1 (search) is active AND selected module has searchFieldOverrides
+    when: RenderSearchFieldOverride(wizard, override)
 
-    ensures: For each override { field, widgetId }:
-        widget = WidgetRegistry.lookup(widgetId)
-        if widget found:
-            Replace default input for "field" with the widget component
-        else:
-            Fall back to default text input
+    requires: wizard.step = search
 
-    -- Example: EURES module declares { field: "keywords", widgetId: "eures-occupation" }
-    -- The wizard replaces the plain keywords input with EuresOccupationCombobox.
-    -- The wizard never checks "if module === eures" — it only checks the override.
+    @guidance
+        -- For each override { field, widgetId }:
+        --   widget = WidgetRegistry.lookup(widgetId)
+        --   If widget found: replace default input for field with the widget component.
+        --   Else: fall back to default text input.
+        -- Example: EURES module declares { field: "keywords", widgetId: "eures-occupation" }
+        -- The wizard replaces the plain keywords input with EuresOccupationCombobox.
+        -- The wizard never checks "if module === eures" — it only checks the override.
 }
 
 -- === AI Scoring ===
 
 rule ToggleAiScoring {
-    when: User toggles AI scoring in Step 3
+    when: ToggleAiScoring(wizard, enabled)
 
     ensures:
+        wizard.ai_scoring_enabled = enabled
         if enabled:
-            matchThreshold = 80 (default)
-            threshold slider becomes interactive
-        if disabled:
-            matchThreshold = 0
-            threshold slider becomes disabled
-            -- "Collect only" mode: all discovered jobs are saved without scoring
+            wizard.match_threshold = config.default_match_threshold
+        else:
+            wizard.match_threshold = 0
+
+    @guidance
+        -- When enabled: threshold slider becomes interactive.
+        -- When disabled: threshold slider becomes disabled.
+        -- Disabled mode is "Collect only": all discovered jobs are saved without scoring.
 }
 
 -- === EURES Language Auto-Injection ===
 
 rule InjectLanguageForEures {
-    when: selected module is "eures" AND wizard is open
+    when: InjectLanguageForEures(wizard, locale)
 
-    ensures: connector_params_values.language = document.documentElement.lang || "en"
-    ensures: Language synced to form's connectorParams JSON
+    ensures:
+        wizard.selected_module != null
 
-    -- This ensures EURES API requests use the user's current locale.
-    -- The language param is NOT shown in the dynamic params form.
-    -- It is a system-managed value injected automatically.
+    @guidance
+        -- Injects the user's current locale as the language connector param.
+        -- connector_params_values.language = locale (defaults to "en").
+        -- This ensures EURES API requests use the user's current locale.
+        -- The language param is NOT shown in the dynamic params form.
+        -- It is a system-managed value injected automatically.
 }
 
 -- === Submission ===
 
 rule SubmitAutomation {
-    when: User clicks "Create" or "Update" in Step 5
+    when: SubmitAutomation(wizard, user)
 
-    requires: Form validation passes (Zod schema)
+    requires: wizard.step = review
+    requires: not wizard.is_submitting
 
-    ensures: scheduleFrequency set as first-class field on submission data
-    ensures: connectorParams serialized as JSON from connector_params_values
     ensures:
-        if create mode: createAutomation() called
-        if edit mode: updateAutomation() called
-    ensures: On success: wizard closed, form reset, onSuccess callback invoked
+        wizard.is_submitting = true
 
-    -- Server-side validation (in automation.actions.ts):
-    -- 1. jobBoard validated against ModuleRegistry
-    -- 2. resumeId validated for ownership (Resume -> Profile -> User)
-    -- 3. connectorParams validated against module's declared schema
+    @guidance
+        -- scheduleFrequency set as first-class field on submission data.
+        -- connectorParams serialized as JSON from connector param values.
+        -- If create mode: createAutomation() called.
+        -- If edit mode: updateAutomation() called.
+        -- On success: wizard closed, form reset, onSuccess callback invoked.
+        --
+        -- Server-side validation (in automation.actions.ts):
+        -- 1. jobBoard validated against ModuleRegistry
+        -- 2. resumeId validated for ownership (Resume -> Profile -> User)
+        -- 3. connectorParams validated against module's declared schema
 }
 
 rule CreateAndRunNow {
-    when: User clicks "Create & Run" in Step 5
+    when: CreateAndRunNow(wizard, user)
 
-    ensures: Automation created via createAutomation()
-    ensures: POST /api/automations/{id}/run triggered immediately after
-    ensures: Run trigger is non-blocking (fire-and-forget)
+    requires: wizard.step = review
+    requires: not wizard.is_edit_mode
 
-    -- Only available in create mode, not edit mode.
+    ensures:
+        wizard.is_submitting = true
+
+    @guidance
+        -- Automation created via createAutomation().
+        -- POST /api/automations/{id}/run triggered immediately after.
+        -- Run trigger is non-blocking (fire-and-forget).
+        -- Only available in create mode, not edit mode.
 }
 
 rule PerformanceWarning {
-    when: Automation count exceeds user's configured threshold
+    when: PerformanceWarning(wizard, automation_count)
 
-    ensures: Warning toast shown with automation count
-    ensures: Warning is non-blocking — automation is still created
-
-    -- The "performanceWarning:<count>" prefix convention encodes
-    -- the warning in ActionResult.message to avoid a dedicated warnings field.
-}
-
-------------------------------------------------------------
--- Invariants
-------------------------------------------------------------
-
-invariant NoHardcodedModuleChecks {
-    -- The AutomationWizard, WizardShell, DynamicParamsForm, and widget resolution
-    -- MUST NEVER contain "if (moduleId === 'x')" or equivalent conditional logic.
-    -- All per-module behavior flows through:
-    --   1. connectorParamsSchema (manifest-declared fields)
-    --   2. searchFieldOverrides (manifest-declared widget IDs)
-    --   3. Widget Registry (widgetId -> component map)
-    -- New modules work without any wizard code changes.
-    for all code in AutomationWizard components:
-        no conditional on module identity
-}
-
-invariant WidgetRegistryLookup {
-    -- Widget resolution is by widgetId string, never by module name.
-    -- resolveWidgetOverrides(overrides) returns { field -> component } map.
-    -- Unknown widgetIds fall back gracefully to the default input.
-}
-
-invariant ConnectorParamsValidation {
-    -- Server-side: connectorParams JSON is validated against the module's
-    -- connectorParamsSchema via validateConnectorParams().
-    -- Invalid params are rejected with descriptive error messages.
-    -- Empty string params are normalized to null/undefined.
-}
-
-invariant ModuleCredentialFeedback {
-    -- The wizard shows credential status for each module in the selector:
-    -- - Module requires key AND key configured: no indicator
-    -- - Module requires key AND key NOT configured: amber warning with link to settings
-    -- - Module does not require key: green "no API key needed" indicator
-}
-
-invariant CefrLevelAllowlist {
-    -- CEFR level values written into the serialized output MUST be
-    -- within the set { A1, A2, B1, B2, C1, C2 }. Both addLanguage
-    -- and updateLevel reject values outside this set before mutating state.
-    for level in serialized_output_levels:
-        level in { "A1", "A2", "B1", "B2", "C1", "C2" }
-}
-
-invariant LanguageProficiencyMaxEntries {
-    -- A language-proficiency field accepts at most config.max_languages entries.
-    -- The combobox trigger is disabled when the limit is reached.
-    selected_language_count <= config.max_languages
-}
-
-invariant LazyWidgetLoading {
-    -- EURES widgets (EuresOccupationCombobox, EuresLocationCombobox) are
-    -- loaded via next/dynamic to avoid bundling 20-40KB when not needed.
-    -- Widgets only load when their module is selected.
+    @guidance
+        -- Warning toast shown with automation count.
+        -- Warning is non-blocking — automation is still created.
+        -- The "performanceWarning:<count>" prefix convention encodes
+        -- the warning in ActionResult.message to avoid a dedicated warnings field.
 }
 
 ------------------------------------------------------------
 -- Open Questions
 ------------------------------------------------------------
 
--- Q1: Should the wizard support a "preview" step that shows sample search results
---     before creating the automation? Currently the user must create and run.
+open question "Q1: Should the wizard support a 'preview' step that shows sample search results before creating the automation? Currently the user must create and run."
 
--- Q2: Should connectorParams validation happen client-side as well as server-side?
---     Currently only server-side via validateConnectorParams().
+open question "Q2: Should connectorParams validation happen client-side as well as server-side? Currently only server-side via validateConnectorParams()."
 
--- Q3: Should the Widget Registry support server-side rendering for the review step?
---     Currently review step shows raw values for widget-overridden fields.
+open question "Q3: Should the Widget Registry support server-side rendering for the review step? Currently review step shows raw values for widget-overridden fields."
 
--- Q4: Should a pure CEFR-level-only search input (e.g., "B2" with no language token)
---     filter to show only that level under all languages, or leave all levels visible?
---     Current decision: no filtering (all levels visible). The "language-first" mental
---     model means level tokens only narrow when paired with a language token.
---     Alternative: show all 26 languages × 1 matching level. Needs user testing to
---     determine whether this is useful or confusing.
+open question "Q4: Should a pure CEFR-level-only search input (e.g., 'B2' with no language token) filter to show only that level under all languages, or leave all levels visible? Current decision: no filtering (all levels visible). The language-first mental model means level tokens only narrow when paired with a language token."

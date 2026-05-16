@@ -13,19 +13,6 @@
 -- Dependencies: Automation entity defined in jobsync.allium
 
 -- =============================================================================
--- Actors
--- =============================================================================
-
-actor User {
-  -- Activates/deactivates modules, configures settings, views health status
-}
-
-actor System {
-  -- Propagates settings, monitors health, pauses automations on deactivation,
-  -- tracks circuit breaker state, escalates degradation
-}
-
--- =============================================================================
 -- Enums
 -- =============================================================================
 
@@ -46,6 +33,18 @@ enum AutomationPauseReason { module_deactivated | auth_failure | consecutive_fai
 
 enum NotificationType { module_deactivated | module_reactivated | module_unreachable | cb_escalation | consecutive_failures | auth_failure }
 
+enum RetryBackoffStrategy { exponential | linear | none }
+
+enum CacheScope { shared | per_user }
+
+enum AutomationType { discovery | maintenance }
+
+enum SearchField { keywords | location }
+
+enum ConnectorParamType { string | number | boolean | select | multiselect }
+
+enum SettingsFieldType { string | number | boolean | select }
+
 -- =============================================================================
 -- Contracts (Published Language)
 -- =============================================================================
@@ -55,68 +54,40 @@ enum NotificationType { module_deactivated | module_reactivated | module_unreach
 -- and its Module implementations.
 
 contract ModuleManifest {
-  -- Identity
-  id: String                          -- unique module identifier (e.g. "eures", "ollama")
-  name: String                        -- human-readable display name
-  manifestVersion: Integer            -- schema version for breaking changes (starts at 1)
-  connectorType: ConnectorType        -- which connector this module belongs to
+    -- Identity
+    id: String
+    name: String
+    manifest_version: Integer
+    connector_type: ConnectorType
 
-  -- Credentials
-  credential: CredentialRequirement   -- what this module needs to authenticate
+    -- Credentials
+    credential: CredentialRequirement
 
-  -- Settings
-  settingsSchema: SettingsSchema?     -- module-specific user-configurable settings
+    -- Settings
+    settings_schema: SettingsSchema
 
-  -- Health
-  healthCheck: HealthCheckConfig?     -- how to verify the module is reachable
+    -- Health
+    health_check: HealthCheckConfig
 
-  -- Resilience
-  resilience: ResilienceConfig?       -- retry, circuit breaker, rate limit defaults
+    -- Resilience
+    resilience: ResilienceConfig
 
-  -- Caching (ROADMAP 0.9 Stufe 1)
-  cachePolicy: CachePolicy?           -- response caching policy; null = no caching
+    -- Caching (ROADMAP 0.9 Stufe 1)
+    cache_policy: CachePolicy
 
-  -- Dependencies
-  dependencies: DependencyHealthCheck[]?  -- external services this module depends on
-                                          -- declared dependencies are health-checked alongside the module
-                                          -- and exposed in the Module Health Overview surface
+    -- Dependencies
+    dependencies: DependencyHealthCheck
 
-  -- i18n
-  i18n: ModuleI18n?                     -- per-locale translations for UI display
-                                        -- keyed by locale code (e.g. "en", "de", "fr", "es")
-                                        -- UI reads manifest.i18n[locale].name instead of global i18n dictionaries
-}
+    -- i18n
+    i18n: ModuleI18n
 
--- Connector-specific extensions of the base contract.
--- Each connector type defines what additional settings its modules can declare.
-
-contract JobDiscoveryManifest extends ModuleManifest {
-  automationType: discovery | maintenance = discovery
-    -- discovery: find new vacancies; maintenance: update existing vacancy data
-  connectorParamsSchema: ConnectorParamField[]?
-    -- Ordered array of typed field descriptors for module-specific search filters
-    -- (e.g. umkreis, publicationPeriod). Validated against automation.connectorParams
-    -- before search execution. The Automation Wizard renders form fields from this array.
-  searchFieldOverrides: SearchFieldOverride[]?
-    -- Modules may replace the standard keywords/location search fields with
-    -- specialised widgets (e.g. EURES replaces keywords with ESCO occupation combobox)
-}
-
-contract AiManifest extends ModuleManifest {
-  modelSelection: ModelSelectionConfig  -- how models are discovered and selected
-}
-
-contract DataEnrichmentManifest extends ModuleManifest {
-  supportedDimensions: String[]         -- enrichment dimensions this module can serve (e.g. "logo", "deep_link")
-                                        -- empty array [] for health-only modules (status monitoring, no enrichment)
-}
-
-contract ReferenceDataManifest extends ModuleManifest {
-  taxonomy: String                      -- which taxonomy this module provides (e.g. "esco_occupations", "nuts_regions")
-  -- Note: No connector interface yet (health-only modules).
-  -- A lookup() interface will be added when the first consumer needs programmatic access
-  -- (e.g. Skillsets 4.1, CareerBERT 9.1). Until then, reference data is consumed via
-  -- API proxy routes, not through the connector layer.
+    @guidance
+        -- Modules register as active. Users deactivate explicitly via ModuleMarketplace.
+        -- Connector-specific extensions (JobDiscoveryManifest, AiManifest,
+        -- DataEnrichmentManifest, ReferenceDataManifest) add fields for
+        -- automation type, connector params schema, search field overrides,
+        -- model selection, supported dimensions, and taxonomy.
+        -- These are modeled as separate value types composed alongside the manifest.
 }
 
 -- =============================================================================
@@ -124,89 +95,109 @@ contract ReferenceDataManifest extends ModuleManifest {
 -- =============================================================================
 
 value CredentialRequirement {
-  type: CredentialType                -- what kind of credential
-  moduleId: String                    -- API key table lookup key (e.g. "openai", "rapidapi")
-  required: Boolean                   -- must be present for module to function
-  envFallback: String?                -- environment variable name (e.g. "OPENAI_API_KEY")
-  defaultValue: String?               -- default value if no credential provided (e.g. localhost URL)
-  sensitive: Boolean = true           -- whether to mask in UI (false for URLs like Ollama)
-  placeholder: String?               -- UI hint (e.g. "sk-...", "http://127.0.0.1:11434")
+    type: CredentialType
+    module_id: String
+    required: Boolean
+    env_fallback: String?
+    default_value: String?
+    sensitive: Boolean
+    placeholder: String?
 }
 
 value SettingsSchema {
-  fields: SettingsField[]             -- ordered list of configurable fields
+    fields: Set<SettingsField>
 }
 
 value SettingsField {
-  key: String                         -- field identifier
-  label: String                       -- i18n key for display label
-  type: string | number | boolean | select
-  defaultValue: String?               -- default value
-  options: String[]?                  -- for enum type: allowed values
-  validation: String?                 -- validation rule (e.g. "min:0, max:200")
+    key: String
+    label: String
+    type: SettingsFieldType
+    default_value: String?
+    options: Set<String>
+    validation: String?
 }
 
 value HealthCheckConfig {
-  endpoint: String?                   -- URL or relative path to probe (absolute for public APIs, relative for configurable base URLs)
-  timeoutMs: Integer = 5000          -- milliseconds
-  intervalMs: Integer = 300000       -- how often to check (ms), default 5 min
+    endpoint: String?
+    timeout_ms: Integer
+    interval_ms: Integer
 }
 
 value ResilienceConfig {
-  retryAttempts: Integer = 0          -- 0 = no retry
-  retryBackoff: exponential | linear | none = none
-  circuitBreaker: Boolean = false
-  circuitBreakerThreshold: Integer = 5   -- failures before opening
-  circuitBreakerCooldownMs: Integer = 30000  -- ms before half-open
-  timeoutMs: Integer = 15000          -- request timeout ms
-  rateLimitTokens: Integer?           -- token bucket size (null = no limit)
-  rateLimitRefillMs: Integer?         -- token refill interval
-  maxConcurrent: Integer?             -- bulkhead limit
+    retry_attempts: Integer
+    retry_backoff: RetryBackoffStrategy
+    circuit_breaker: Boolean
+    circuit_breaker_threshold: Integer
+    circuit_breaker_cooldown_ms: Integer
+    timeout_ms: Integer
+    rate_limit_tokens: Integer?
+    rate_limit_refill_ms: Integer?
+    max_concurrent: Integer?
 }
 
 value CachePolicy {
-  ttl: Integer                          -- cache time-to-live in seconds
-  scope: shared | per_user              -- shared = global cache; per_user = user-specific cache
-  localeSensitive: Boolean              -- whether locale affects cache key
+    ttl: Integer
+    scope: CacheScope
+    locale_sensitive: Boolean
 }
 
 value ModelSelectionConfig {
-  defaultModel: String?               -- e.g. "llama3.2"
-  listEndpoint: String?               -- API path to list available models (e.g. "/models")
+    default_model: String?
+    list_endpoint: String?
 }
 
 value DependencyHealthCheck {
-  id: String                            -- stable identifier (e.g. "esco_classification")
-  name: String                          -- human-readable display name
-  endpoint: String                      -- health probe URL (absolute)
-  timeoutMs: Integer = 5000            -- probe timeout in milliseconds
-  required: Boolean = false             -- true = hard dependency (module cannot function without it)
-                                        -- false = soft dependency (module degrades gracefully)
-  usedFor: String                       -- human-readable purpose (e.g. "Occupation search in Automation Wizard")
+    id: String
+    name: String
+    endpoint: String
+    timeout_ms: Integer
+    required: Boolean
+    used_for: String
 }
 
 value ModuleI18n {
-  -- Map of locale code to display strings
-  -- Each entry: { name: String, description: String, credentialHint: String? }
-  -- credentialHint: UI hint for API key/endpoint settings field (optional, only for modules with credentials)
-  -- Example: { en: { name: "EURES", description: "EU job search", credentialHint: "Enter your API key..." } }
+    -- Map of locale code to display strings
+    -- Each entry: { name: String, description: String, credential_hint: String? }
+    -- credential_hint: UI hint for API key/endpoint settings field (optional, only for modules with credentials)
+    -- Example: { en: { name: "EURES", description: "EU job search", credential_hint: "Enter your API key..." } }
+    locale_data: String
 }
 
 value ConnectorParamField {
-  key: String                         -- field identifier (e.g. "umkreis", "publicationPeriod")
-  type: string | number | boolean | select | multiselect
-  label: String                       -- i18n key (e.g. "automations.params.umkreis")
-  defaultValue: Any?                  -- default value for the field
-  options: (String | Number)[]?       -- allowed values for select/multiselect types
-  required: Boolean = false           -- whether the field must be provided
-  min: Number?                        -- minimum value constraint (number type)
-  max: Number?                        -- maximum value constraint (number type)
-  placeholder: String?                -- UI hint text
+    key: String
+    type: ConnectorParamType
+    label: String
+    default_value: String?
+    options: Set<String>
+    required: Boolean
+    min: Integer?
+    max: Integer?
+    placeholder: String?
 }
 
 value SearchFieldOverride {
-  field: keywords | location          -- which standard search field to replace
-  widgetId: String                    -- identifier of the replacement widget (e.g. "eures-occupation")
+    field: SearchField
+    widget_id: String
+}
+
+-- Connector-specific extensions (composed alongside the base manifest)
+
+value JobDiscoveryExtension {
+    automation_type: AutomationType
+    connector_params_schema: Set<ConnectorParamField>
+    search_field_overrides: Set<SearchFieldOverride>
+}
+
+value AiExtension {
+    model_selection: ModelSelectionConfig
+}
+
+value DataEnrichmentExtension {
+    supported_dimensions: Set<String>
+}
+
+value ReferenceDataExtension {
+    taxonomy: String
 }
 
 -- =============================================================================
@@ -214,65 +205,89 @@ value SearchFieldOverride {
 -- =============================================================================
 
 entity RegisteredModule {
-  manifest: ModuleManifest            -- declared at registration time (immutable)
-  status: ModuleStatus = active       -- lifecycle state (modules register as active)
-  healthStatus: HealthStatus = unknown
-  lastHealthCheck: DateTime?
-  lastSuccessfulConnection: DateTime?
-  activatedAt: DateTime?
-  activatedBy: User?
+    manifest_id: String
+    manifest_name: String
+    manifest_version: Integer
+    connector_type: ConnectorType
+    credential: CredentialRequirement
+    settings_schema: SettingsSchema?
+    health_check_config: HealthCheckConfig?
+    resilience_config: ResilienceConfig?
+    cache_policy: CachePolicy?
+    dependency_checks: Set<DependencyHealthCheck>
+    module_i18n: ModuleI18n?
 
-  -- Circuit breaker runtime state (observable)
-  -- These fields reflect the CB state provisioned from manifest.resilience.
-  -- Whether stored in-memory or persisted is implementation; the spec cares that
-  -- the state is observable and can trigger automation degradation.
-  circuitBreakerState: CircuitBreakerState = closed
-  consecutiveFailures: Integer = 0
-  circuitBreakerOpenSince: DateTime?
+    -- Connector-specific extensions
+    job_discovery_ext: JobDiscoveryExtension?
+    ai_ext: AiExtension?
+    data_enrichment_ext: DataEnrichmentExtension?
+    reference_data_ext: ReferenceDataExtension?
 
-  -- Derived
-  isConfigured: credential resolved or credential not required
-  isOperational: status = active and healthStatus != unreachable
-  hasCbEnabled: manifest.resilience != null and manifest.resilience.circuitBreaker = true
-  cbEscalationDue: hasCbEnabled and consecutiveFailures >= config.CB_ESCALATION_THRESHOLD
+    status: ModuleStatus
+    health_status: HealthStatus
+    last_health_check: Timestamp?
+    last_successful_connection: Timestamp?
+    activated_at: Timestamp?
+    activated_by: String?
+
+    -- Circuit breaker runtime state (observable)
+    -- These fields reflect the CB state provisioned from manifest.resilience.
+    -- Whether stored in-memory or persisted is implementation; the spec cares that
+    -- the state is observable and can trigger automation degradation.
+    circuit_breaker_state: CircuitBreakerState
+    consecutive_failures: Integer
+    circuit_breaker_open_since: Timestamp?
+
+    -- Derived
+    is_configured: credential.type = none or credential.default_value != null
+    is_operational: status = active and health_status != unreachable
+    has_cb_enabled: resilience_config != null and resilience_config.circuit_breaker = true
+    cb_escalation_due: has_cb_enabled and consecutive_failures >= config.cb_escalation_threshold
+
+    transitions status {
+        active -> inactive
+        active -> error
+        inactive -> active
+        error -> active
+        terminal: error
+    }
 }
 
 entity Notification {
-  id: String
-  userId: String
-  type: NotificationType
-  message: String
-  moduleId: String?
-  automationId: String?
-  read: Boolean = false
-  createdAt: DateTime
+    id: String
+    user_id: String
+    type: NotificationType
+    message: String
+    module_id: String?
+    automation_id: String?
+    read: Boolean
+    created_at: Timestamp
 }
 
 entity ConnectorGroup {
-  type: ConnectorType                 -- job_discovery | ai_provider | ...
-  modules: RegisteredModule[]         -- all modules registered under this connector
+    type: ConnectorType
+    modules: RegisteredModule with connector_type = type
 
-  -- Derived status: active when at least one module is active
-  status: active | inactive
-  isActive: exists module in modules where module.status = active
+    -- Derived status: active when at least one module is active
+    is_active: modules.any(m => m.status = active)
 }
 
 -- Reference to existing entity (defined in jobsync.allium)
 external entity Automation {
-  jobBoard: String                    -- module ID used for search
-  status: active | paused | ...
-  userId: String
-  name: String
-  pauseReason: AutomationPauseReason? -- set when status transitions to paused
+    job_board: String
+    status: active | paused
+    user_id: String
+    name: String
+    pause_reason: AutomationPauseReason?
 }
 
 -- Reference to existing entity (defined in jobsync.allium)
 external entity AutomationRun {
-  automationId: String
-  status: running | completed | completed_with_errors | failed | blocked | rate_limited
-  errorMessage: String?
-  startedAt: DateTime
-  completedAt: DateTime?
+    automation_id: String
+    status: running | completed | completed_with_errors | failed | blocked | rate_limited
+    error_message: String?
+    started_at: Timestamp
+    completed_at: Timestamp?
 }
 
 -- =============================================================================
@@ -280,12 +295,12 @@ external entity AutomationRun {
 -- =============================================================================
 
 config {
-  HEALTH_CHECK_INTERVAL_MS: Integer = 300000       -- 5 minutes
-  HEALTH_CHECK_TIMEOUT_MS: Integer = 5000          -- 5 seconds
-  MAX_HEALTH_FAILURES_BEFORE_ERROR: Integer = 3    -- consecutive failures before status = error
-  CB_ESCALATION_THRESHOLD: Integer = 3             -- consecutive CB open events before pausing automations
-  CONSECUTIVE_RUN_FAILURE_THRESHOLD: Integer = 5   -- consecutive failed runs per automation before pausing
-  NOTIFICATION_RETENTION_DAYS: Integer = 30        -- auto-delete notifications older than 30 days
+    health_check_interval_ms: Integer = 300000
+    health_check_timeout_ms: Integer = 5000
+    max_health_failures_before_error: Integer = 3
+    cb_escalation_threshold: Integer = 3
+    consecutive_run_failure_threshold: Integer = 5
+    notification_retention_days: Integer = 30
 }
 
 -- =============================================================================
@@ -293,46 +308,47 @@ config {
 -- =============================================================================
 
 rule ModuleRegistration {
-  -- "When a module registers, it provides its manifest to the connector."
-  -- Registration happens at application startup, not at runtime.
-  when: RegisterModule(manifest: ModuleManifest)
-  requires: not exists RegisteredModule where manifest.id = manifest.id
-    -- Module IDs must be unique across the entire system
-  requires: manifest.id != ""
-  requires: manifest.name != ""
+    -- "When a module registers, it provides its manifest to the connector."
+    -- Registration happens at application startup, not at runtime.
+    when: RegisterModule(module_id, module_name, module_connector_type)
+    requires: not exists RegisteredModule{manifest_id: module_id}
+        -- Module IDs must be unique across the entire system
+    requires: module_id != ""
+    requires: module_name != ""
 
-  let connector = ConnectorGroup where type = manifest.connectorType
+    ensures: RegisteredModule.created(
+        manifest_id: module_id,
+        manifest_name: module_name,
+        connector_type: module_connector_type,
+        status: active,
+        health_status: unknown,
+        circuit_breaker_state: closed,
+        consecutive_failures: 0,
+        read: false
+    )
 
-  ensures: RegisteredModule.created(
-    manifest: manifest,
-    status: active,
-    healthStatus: unknown,
-    circuitBreakerState: closed,
-    consecutiveFailures: 0
-  )
-  ensures: connector.modules includes new RegisteredModule
-
-  @guidance
-    -- Modules register as active. Users deactivate explicitly via ModuleMarketplace.
-    -- This preserves the existing startup behavior where all modules are immediately usable.
+    @guidance
+        -- Modules register as active. Users deactivate explicitly via ModuleMarketplace.
+        -- This preserves the existing startup behavior where all modules are immediately usable.
 }
 
 rule ManifestDrivesSettingsUI {
-  -- "The settings UI is generated from module manifests, not hardcoded."
-  -- When the settings page loads, it queries registered modules for their manifests.
-  when: LoadSettingsPage(connectorType: ConnectorType)
-  let modules = RegisteredModule where manifest.connectorType = connectorType
+    -- "The settings UI is generated from module manifests, not hardcoded."
+    -- When the settings page loads, it queries registered modules for their manifests.
+    when: LoadSettingsPage(requested_connector_type)
+    let modules = RegisteredModules where connector_type = requested_connector_type
 
-  ensures: for_each module in modules:
-    SettingsPanel.rendered(
-      moduleId: module.manifest.id,
-      credentialField: module.manifest.credential,
-      settingsFields: module.manifest.settingsSchema
-    )
+    ensures:
+        for module in modules:
+            SettingsRendered(
+                module_id: module.manifest_id,
+                credential_field: module.credential,
+                settings_fields: module.settings_schema
+            )
 
-  @guidance
-    -- Replaces the hardcoded MODULES array in ApiKeySettings.tsx
-    -- The UI iterates over registered manifests instead of a static list
+    @guidance
+        -- Replaces the hardcoded MODULES array in ApiKeySettings.tsx
+        -- The UI iterates over registered manifests instead of a static list
 }
 
 -- =============================================================================
@@ -340,58 +356,56 @@ rule ManifestDrivesSettingsUI {
 -- =============================================================================
 
 rule SettingsPushOnInstantiation {
-  -- "When a module is instantiated for use, settings are resolved and pushed to it."
-  -- This replaces the current PULL pattern where modules call resolveApiKey() ad-hoc.
-  when: InstantiateModule(moduleId: String, userId: String)
-  let module = RegisteredModule where manifest.id = moduleId
-  requires: module.status = active
+    -- "When a module is instantiated for use, settings are resolved and pushed to it."
+    -- This replaces the current PULL pattern where modules call resolveApiKey() ad-hoc.
+    when: InstantiateModule(module_id, user_id)
+    let module = RegisteredModule{manifest_id: module_id}
+    requires: exists module
+    requires: module.status = active
 
-  let credential = CredentialResolver.resolve(
-    moduleId: moduleId,
-    userId: userId,
-    requirement: module.manifest.credential
-    -- Resolution priority: 1. User DB  2. Env var  3. Default
-  )
+    let credential = resolve_credential(module_id, user_id, module.credential)
+        -- Resolution priority: 1. User DB  2. Env var  3. Default
 
-  requires: credential != null or module.manifest.credential.required = false
-    -- If credential is required but not found, instantiation fails
+    requires: credential != null or module.credential.required = false
+        -- If credential is required but not found, instantiation fails
 
-  ensures: ModuleInstance.created(
-    moduleId: moduleId,
-    credential: credential,
-    settings: UserSettings where userId = userId and moduleId = moduleId
-  )
+    ensures: ModuleInstantiated(
+        module_id: module_id,
+        credential: credential,
+        user_id: user_id
+    )
 
-  @phase Phase 2: credential push implemented
-  @phase Phase 3: full settings push (UserSettings) planned
-
-  @guidance
-    -- The module receives its settings at creation time (constructor injection)
-    -- It never reaches out to resolve settings itself
-    -- This is Dependency Inversion: the system pushes, the module receives
+    @guidance
+        -- Phase 2: credential push implemented
+        -- Phase 3: full settings push (UserSettings) planned
+        -- The module receives its settings at creation time (constructor injection)
+        -- It never reaches out to resolve settings itself
+        -- This is Dependency Inversion: the system pushes, the module receives
 }
 
 rule ConnectorParamsValidation {
-  -- "When an automation is created or updated, its connectorParams are validated
-  --  against the module's declared schema."
-  when: SaveAutomation(automation: Automation)
-  let module = RegisteredModule where manifest.id = automation.jobBoard
-  requires: module.status = active
-    -- Only active modules accept automation configuration (security: prevents
-    -- saving automations against deactivated or errored modules)
-  requires: module is JobDiscoveryManifest
-    -- Only job discovery modules have connectorParams
+    -- "When an automation is created or updated, its connectorParams are validated
+    --  against the module's declared schema."
+    when: SaveAutomation(saved_automation, connector_params)
+    let module = RegisteredModule{manifest_id: saved_automation.job_board}
+    requires: exists module
+    requires: module.status = active
+        -- Only active modules accept automation configuration (security: prevents
+        -- saving automations against deactivated or errored modules)
+    requires: module.job_discovery_ext != null
+        -- Only job discovery modules have connectorParams
 
-  let schema = module.manifest.connectorParamsSchema
+    ensures: ConnectorParamsValidated(
+        automation: saved_automation,
+        module_id: module.manifest_id,
+        params: connector_params
+    )
 
-  requires: schema = null or automation.connectorParams validates_against schema
-    -- If the module declares a schema, params must conform
-
-  @guidance
-    -- Prevents invalid connectorParams from reaching the module at search time
-    -- The Automation Wizard renders dynamic form fields from the ConnectorParamField array
-    -- Keys present in connectorParams but not declared in the schema are stripped
-    -- before persistence (extraneous key stripping prevents injection of unexpected params)
+    @guidance
+        -- Prevents invalid connectorParams from reaching the module at search time
+        -- The Automation Wizard renders dynamic form fields from the ConnectorParamField array
+        -- Keys present in connectorParams but not declared in the schema are stripped
+        -- before persistence (extraneous key stripping prevents injection of unexpected params)
 }
 
 -- =============================================================================
@@ -399,85 +413,97 @@ rule ConnectorParamsValidation {
 -- =============================================================================
 
 rule ModuleActivation {
-  -- "When a module is activated, its connector group becomes active."
-  when: ActivateModule(moduleId: String, by: User)
-  requires: by is authorized as admin  -- see invariant AdminOnlyModuleLifecycle
-  let module = RegisteredModule where manifest.id = moduleId
-  requires: module.status = inactive or module.status = error
-  requires: module.isConfigured
-    -- Cannot activate without required credentials
+    -- "When a module is activated, its connector group becomes active."
+    when: ActivateModule(module_id, admin_user_id)
+    let module = RegisteredModule{manifest_id: module_id}
+    requires: exists module
+    requires: module.status = inactive or module.status = error
+    requires: module.is_configured
+        -- Cannot activate without required credentials
 
-  ensures: module.status = active
-  ensures: module.activatedAt = now()
-  ensures: module.activatedBy = by
+    ensures: module.status = active
+    ensures: module.activated_at = now
+    ensures: module.activated_by = admin_user_id
 
-  -- Connector auto-activation (derived)
-  let connector = ConnectorGroup where type = module.manifest.connectorType
-  ensures: connector.isActive = true
-    -- Always true after activation since at least this module is active
+    @guidance
+        -- Only admins can activate modules. See invariant AdminOnlyModuleLifecycle.
+        -- Connector auto-activation is derived: ConnectorGroup.is_active recalculates
+        -- because at least this module is now active.
 }
 
 rule ModuleDeactivation {
-  -- "When a module is deactivated and automations use it, those automations are paused."
-  when: DeactivateModule(moduleId: String, by: User)
-  requires: by is authorized as admin  -- see invariant AdminOnlyModuleLifecycle
-  let module = RegisteredModule where manifest.id = moduleId
-  requires: module.status = active
+    -- "When a module is deactivated and automations use it, those automations are paused."
+    when: DeactivateModule(module_id, admin_user_id)
+    let module = RegisteredModule{manifest_id: module_id}
+    requires: exists module
+    requires: module.status = active
 
-  ensures: module.status = inactive
+    ensures: module.status = inactive
 
-  -- Dependency chain: pause affected automations
-  let affectedAutomations = Automation where jobBoard = moduleId and status = active
+    -- Dependency chain: pause affected automations
+    let affected_automations = Automations where job_board = module_id and status = active
 
-  ensures: for_each automation in affectedAutomations:
-    automation.status = paused
-    automation.pauseReason = module_deactivated
-    Notification.created(
-      userId: automation.userId,
-      type: module_deactivated,
-      message: "Automation '{automation.name}' paused because module '{module.manifest.name}' was deactivated",
-      moduleId: moduleId
-    )
+    ensures:
+        for automation in affected_automations:
+            automation.status = paused
+            automation.pause_reason = module_deactivated
+            Notification.created(
+                user_id: automation.user_id,
+                type: module_deactivated,
+                message: "Automation paused because module was deactivated",
+                module_id: module_id
+            )
+
+    @guidance
+        -- Only admins can deactivate modules. See invariant AdminOnlyModuleLifecycle.
 }
 
 rule ConnectorDeactivation {
-  -- "When a connector group is deactivated, warn if modules are still active."
-  when: DeactivateConnector(connectorType: ConnectorType, by: User)
-  let connector = ConnectorGroup where type = connectorType
-  let activeModules = RegisteredModule where manifest.connectorType = connectorType and status = active
+    -- "When a connector group is deactivated, warn if modules are still active."
+    when: DeactivateConnector(requested_connector_type, admin_user_id)
+    let active_modules = RegisteredModules where connector_type = requested_connector_type and status = active
 
-  requires: activeModules | count = 0
-    or UserConfirmed("Deactivating this connector will also deactivate {activeModules | count} active module(s). Continue?")
+    requires: active_modules.count = 0
+        or confirmed_deactivation = true
 
-  ensures: for_each module in activeModules:
-    DeactivateModule(moduleId: module.manifest.id, by: by)
-    -- Cascading deactivation triggers ModuleDeactivation rule for each
+    ensures:
+        for module in active_modules:
+            DeactivateModule(module_id: module.manifest_id, admin_user_id: admin_user_id)
+            -- Cascading deactivation triggers ModuleDeactivation rule for each
+
+    @guidance
+        -- The UI should confirm with the user before cascading deactivation.
+        -- "Deactivating this connector will also deactivate N active module(s). Continue?"
 }
 
 rule DeactivatedModulesHidden {
-  -- "Deactivated modules do not appear in the Automation Wizard module selector."
-  when: LoadModuleSelector(connectorType: ConnectorType)
-  let availableModules = RegisteredModule
-    where manifest.connectorType = connectorType
-    and status = active
+    -- "Deactivated modules do not appear in the Automation Wizard module selector."
+    when: LoadModuleSelector(requested_connector_type)
+    let available_modules = RegisteredModules
+        where connector_type = requested_connector_type
+        and status = active
 
-  ensures: only availableModules are shown in selector
+    ensures: ActiveModulesListed(modules: available_modules)
+
+    @guidance
+        -- Only active modules appear in the selector.
+        -- Deactivated and errored modules are filtered out.
 }
 
 rule ReactivationIsManual {
-  -- "Automations paused by module deactivation are NOT auto-restarted on reactivation."
-  when: ActivateModule(moduleId: String, by: User)
-  let previouslyPaused = Automation where jobBoard = moduleId and status = paused
+    -- "Automations paused by module deactivation are NOT auto-restarted on reactivation."
+    when: module: RegisteredModule.status transitions_to active
+    let previously_paused = Automations where job_board = module.manifest_id and status = paused
 
-  ensures: for_each automation in previouslyPaused:
-    automation.status = paused
-    -- Status unchanged. User must manually reactivate each automation.
+    ensures: Notification.created(
+        user_id: module.activated_by,
+        type: module_reactivated,
+        message: "Module is active again. Paused automations remain paused -- reactivate them manually."
+    )
 
-  ensures: Notification.created(
-    userId: by,
-    type: module_reactivated,
-    message: "Module '{moduleId}' is active again. {previouslyPaused | count} automation(s) remain paused — reactivate them manually."
-  )
+    @guidance
+        -- Paused automations keep their status unchanged.
+        -- User must manually reactivate each automation.
 }
 
 -- =============================================================================
@@ -485,77 +511,78 @@ rule ReactivationIsManual {
 -- =============================================================================
 
 rule HealthCheckExecution {
-  -- "Active modules with a health check config are periodically checked."
-  when: HealthCheckDue(moduleId: String)
-  let module = RegisteredModule where manifest.id = moduleId
-  requires: module.status = active
-  requires: module.manifest.healthCheck != null
+    -- "Active modules with a health check config are periodically checked."
+    when: HealthCheckDue(check_module_id)
+    let module = RegisteredModule{manifest_id: check_module_id}
+    requires: exists module
+    requires: module.status = active
+    requires: module.health_check_config != null
 
-  let result = HealthProbe.execute(
-    endpoint: module.manifest.healthCheck.endpoint,
-    timeout: module.manifest.healthCheck.timeoutMs
-  )
+    let result = probe_health(module.health_check_config.endpoint, module.health_check_config.timeout_ms)
 
-  ensures:
-    if result.success:
-      module.healthStatus = healthy
-      module.lastSuccessfulConnection = now()
-    else if module.consecutiveFailures < config.MAX_HEALTH_FAILURES_BEFORE_ERROR:
-      module.healthStatus = degraded
-    else:
-      module.healthStatus = unreachable
-  ensures: module.lastHealthCheck = now()
+    ensures:
+        if result = true:
+            module.health_status = healthy
+            module.last_successful_connection = now
+        else if module.consecutive_failures < config.max_health_failures_before_error:
+            module.health_status = degraded
+        else:
+            module.health_status = unreachable
+    ensures: module.last_health_check = now
 }
 
 rule HealthStatusEscalation {
-  -- "When a module becomes unreachable, affected automations are notified (but not paused)."
-  when: module: RegisteredModule.healthStatus transitions_to unreachable
-  let affectedAutomations = Automation where jobBoard = module.manifest.id and status = active
+    -- "When a module becomes unreachable, affected automations are notified (but not paused)."
+    when: module: RegisteredModule.health_status transitions_to unreachable
+    let affected_automations = Automations where job_board = module.manifest_id and status = active
 
-  ensures: for_each automation in affectedAutomations:
-    Notification.created(
-      userId: automation.userId,
-      type: module_unreachable,
-      message: "Module '{module.manifest.name}' is unreachable. Automations using it may fail."
-    )
-  -- Note: This rule is notification-only. There are two distinct failure signals:
-  --
-  --   Health CHECK = "can I reach you?" (periodic ping)
-  --     → Notification only. The module may recover. Keeps existing behaviour.
-  --
-  --   CB state / Run failures = "are you actually working?" (real request outcomes)
-  --     → CAN trigger automation pause. See CircuitBreakerEscalation,
-  --       ConsecutiveRunFailureEscalation, and AuthFailureEscalation rules.
-  --
-  -- Health checks are leading indicators; CB/run failures are lagging confirmation.
-  -- Only the latter justify pausing automations because they reflect actual work failing.
+    ensures:
+        for automation in affected_automations:
+            Notification.created(
+                user_id: automation.user_id,
+                type: module_unreachable,
+                message: "Module is unreachable. Automations using it may fail."
+            )
+
+    @guidance
+        -- This rule is notification-only. There are two distinct failure signals:
+        --
+        --   Health CHECK = "can I reach you?" (periodic ping)
+        --     -> Notification only. The module may recover. Keeps existing behaviour.
+        --
+        --   CB state / Run failures = "are you actually working?" (real request outcomes)
+        --     -> CAN trigger automation pause. See CircuitBreakerEscalation,
+        --       ConsecutiveRunFailureEscalation, and AuthFailureEscalation rules.
+        --
+        -- Health checks are leading indicators; CB/run failures are lagging confirmation.
+        -- Only the latter justify pausing automations because they reflect actual work failing.
 }
 
 rule DependencyHealthDegradation {
-  -- "When a module's dependency becomes unreachable, the module's health degrades."
-  -- Dependencies are checked alongside the module's primary health check.
-  -- A failed dependency can degrade the parent but NEVER make it unreachable —
-  -- only the primary health check controls the unreachable transition.
-  when: HealthCheckDue(moduleId: String)
-  let module = RegisteredModule where manifest.id = moduleId
-  requires: module.status = active
-  requires: module.manifest.dependencies != null
+    -- "When a module's dependency becomes unreachable, the module's health degrades."
+    -- Dependencies are checked alongside the module's primary health check.
+    -- A failed dependency can degrade the parent but NEVER make it unreachable --
+    -- only the primary health check controls the unreachable transition.
+    when: DependencyCheckDue(check_module_id)
+    let module = RegisteredModule{manifest_id: check_module_id}
+    requires: exists module
+    requires: module.status = active
+    requires: module.dependency_checks.count > 0
 
-  let depResults = for_each dep in module.manifest.dependencies:
-    HealthProbe.execute(endpoint: dep.endpoint, timeout: dep.timeoutMs)
+    let any_dep_failed = check_dependencies(module.dependency_checks)
 
-  ensures:
-    if any depResult in depResults is not success:
-      module.healthStatus = max(module.healthStatus, degraded)
-        -- max() means: if the module is already unreachable (from its own health check),
-        -- it stays unreachable. If it was healthy, it becomes degraded.
+    ensures:
+        if any_dep_failed = true and module.health_status = healthy:
+            module.health_status = degraded
+            -- max() semantics: if the module is already unreachable (from its own health check),
+            -- it stays unreachable. If it was healthy, it becomes degraded.
 
-  @guidance
-    -- This rule runs as part of the regular health check cycle (HealthCheckExecution).
-    -- The primary health check determines the base status (healthy/degraded/unreachable).
-    -- Dependency checks can only RAISE the status to degraded, never lower it.
-    -- This preserves the distinction: primary = "can I reach you?",
-    -- dependency = "can your features work fully?"
+    @guidance
+        -- This rule runs as part of the regular health check cycle (HealthCheckExecution).
+        -- The primary health check determines the base status (healthy/degraded/unreachable).
+        -- Dependency checks can only RAISE the status to degraded, never lower it.
+        -- This preserves the distinction: primary = "can I reach you?",
+        -- dependency = "can your features work fully?"
 }
 
 -- =============================================================================
@@ -563,37 +590,40 @@ rule DependencyHealthDegradation {
 -- =============================================================================
 
 rule CircuitBreakerStateTransition {
-  -- "When a module's circuit breaker opens, the observable state is updated."
-  -- The Connector provisions CB policies from manifest.resilience at instantiation.
-  -- This rule captures the observable state change, not the CB implementation.
-  when: CircuitBreakerTripped(moduleId: String)
-  let module = RegisteredModule where manifest.id = moduleId
-  requires: module.status = active
-  requires: module.hasCbEnabled
+    -- "When a module's circuit breaker opens, the observable state is updated."
+    -- The Connector provisions CB policies from manifest.resilience at instantiation.
+    -- This rule captures the observable state change, not the CB implementation.
+    when: CircuitBreakerTripped(tripped_module_id)
+    let module = RegisteredModule{manifest_id: tripped_module_id}
+    requires: exists module
+    requires: module.status = active
+    requires: module.has_cb_enabled
 
-  ensures: module.circuitBreakerState = open
-  ensures: module.circuitBreakerOpenSince = now()
-  ensures: module.consecutiveFailures = module.consecutiveFailures + 1
+    ensures: module.circuit_breaker_state = open
+    ensures: module.circuit_breaker_open_since = now
+    ensures: module.consecutive_failures = module.consecutive_failures + 1
 }
 
 rule CircuitBreakerRecovery {
-  -- "When a module's circuit breaker closes after successful half-open probe."
-  when: CircuitBreakerRecovered(moduleId: String)
-  let module = RegisteredModule where manifest.id = moduleId
-  requires: module.circuitBreakerState = open or module.circuitBreakerState = half_open
+    -- "When a module's circuit breaker closes after successful half-open probe."
+    when: CircuitBreakerRecovered(recovered_module_id)
+    let module = RegisteredModule{manifest_id: recovered_module_id}
+    requires: exists module
+    requires: module.circuit_breaker_state = open or module.circuit_breaker_state = half_open
 
-  ensures: module.circuitBreakerState = closed
-  ensures: module.consecutiveFailures = 0
-  ensures: module.circuitBreakerOpenSince = null
+    ensures: module.circuit_breaker_state = closed
+    ensures: module.consecutive_failures = 0
+    ensures: module.circuit_breaker_open_since = null
 }
 
 rule CircuitBreakerHalfOpen {
-  -- "When the cooldown expires, the CB transitions to half-open for a probe request."
-  when: CircuitBreakerCooldownExpired(moduleId: String)
-  let module = RegisteredModule where manifest.id = moduleId
-  requires: module.circuitBreakerState = open
+    -- "When the cooldown expires, the CB transitions to half-open for a probe request."
+    when: CircuitBreakerCooldownExpired(cooldown_module_id)
+    let module = RegisteredModule{manifest_id: cooldown_module_id}
+    requires: exists module
+    requires: module.circuit_breaker_state = open
 
-  ensures: module.circuitBreakerState = half_open
+    ensures: module.circuit_breaker_state = half_open
 }
 
 -- =============================================================================
@@ -601,91 +631,92 @@ rule CircuitBreakerHalfOpen {
 -- =============================================================================
 
 rule CircuitBreakerEscalation {
-  -- "When a module's CB has opened too many times, pause automations using it."
-  -- Fires once when cbEscalationDue transitions from false to true
-  -- (standard derived condition trigger semantics).
-  when: module: RegisteredModule.cbEscalationDue
-  requires: module.status = active
+    -- "When a module's CB has opened too many times, pause automations using it."
+    -- Fires once when cb_escalation_due transitions from false to true
+    -- (standard derived condition trigger semantics).
+    when: module: RegisteredModule.cb_escalation_due
+    requires: module.status = active
 
-  let affectedAutomations = Automation where jobBoard = module.manifest.id and status = active
+    let affected_automations = Automations where job_board = module.manifest_id and status = active
 
-  ensures: for_each automation in affectedAutomations:
-    automation.status = paused
-    automation.pauseReason = cb_escalation
-    Notification.created(
-      userId: automation.userId,
-      type: cb_escalation,
-      message: "Automation '{automation.name}' paused: module '{module.manifest.name}' circuit breaker has opened {module.consecutiveFailures} times consecutively.",
-      moduleId: module.manifest.id,
-      automationId: automation.id
-    )
+    ensures:
+        for automation in affected_automations:
+            automation.status = paused
+            automation.pause_reason = cb_escalation
+            Notification.created(
+                user_id: automation.user_id,
+                type: cb_escalation,
+                message: "Automation paused: module circuit breaker has opened too many times consecutively.",
+                module_id: module.manifest_id,
+                automation_id: automation.id
+            )
 
-  @guidance
-    -- The threshold is config.CB_ESCALATION_THRESHOLD (default 3).
-    -- A single CB open event is normal resilience behaviour.
-    -- Repeated CB opens without recovery indicate a systemic problem.
-    -- Recovery (CircuitBreakerRecovery) resets consecutiveFailures to 0,
-    -- which resets cbEscalationDue to false, allowing re-fire if the module
-    -- degrades again after recovery.
+    @guidance
+        -- The threshold is config.cb_escalation_threshold (default 3).
+        -- A single CB open event is normal resilience behaviour.
+        -- Repeated CB opens without recovery indicate a systemic problem.
+        -- Recovery (CircuitBreakerRecovery) resets consecutive_failures to 0,
+        -- which resets cb_escalation_due to false, allowing re-fire if the module
+        -- degrades again after recovery.
 }
 
 rule ConsecutiveRunFailureEscalation {
-  -- "When an automation's recent runs have all been terminal failures, pause it."
-  when: run: AutomationRun.status becomes failed or blocked or rate_limited
-  let automation = Automation where id = run.automationId and status = active
-  requires: automation != null
+    -- "When an automation's recent runs have all been terminal failures, pause it."
+    when: run: AutomationRun.status becomes failed
+    let automation = Automation{id: run.automation_id}
+    requires: exists automation
+    requires: automation.status = active
 
-  let recentRuns = AutomationRun
-    where automationId = run.automationId
-    order_by startedAt descending
-    limit config.CONSECUTIVE_RUN_FAILURE_THRESHOLD
+    let recent_failure_count = count_recent_failures(run.automation_id, config.consecutive_run_failure_threshold)
 
-  requires: recentRuns | count = config.CONSECUTIVE_RUN_FAILURE_THRESHOLD
-  requires: recentRuns.all(r => r.status in { failed, blocked, rate_limited })
+    requires: recent_failure_count >= config.consecutive_run_failure_threshold
 
-  ensures: automation.status = paused
-  ensures: automation.pauseReason = consecutive_failures
-  ensures: Notification.created(
-    userId: automation.userId,
-    type: consecutive_failures,
-    message: "Automation '{automation.name}' paused after {config.CONSECUTIVE_RUN_FAILURE_THRESHOLD} consecutive failed runs.",
-    automationId: automation.id
-  )
+    ensures: automation.status = paused
+    ensures: automation.pause_reason = consecutive_failures
+    ensures: Notification.created(
+        user_id: automation.user_id,
+        type: consecutive_failures,
+        message: "Automation paused after consecutive failed runs.",
+        automation_id: automation.id
+    )
 
-  @guidance
-    -- This catches modules that are "reachable" (health check passes) but
-    -- consistently fail during actual work (e.g., API returns errors, parsing fails).
-    -- The threshold is per-automation, not per-module, because different automations
-    -- may exercise different code paths in the same module.
+    @guidance
+        -- This catches modules that are "reachable" (health check passes) but
+        -- consistently fail during actual work (e.g., API returns errors, parsing fails).
+        -- The threshold is per-automation, not per-module, because different automations
+        -- may exercise different code paths in the same module.
+        -- Also fires for blocked and rate_limited terminal statuses in implementation.
 }
 
 rule AuthFailureEscalation {
-  -- "When a module's credential becomes invalid during operation, pause affected automations."
-  when: AuthenticationFailed(moduleId: String, errorDetail: String)
-  let module = RegisteredModule where manifest.id = moduleId
-  requires: module.status = active
-  requires: module.manifest.credential.required = true
+    -- "When a module's credential becomes invalid during operation, pause affected automations."
+    when: AuthenticationFailed(failed_module_id, error_detail)
+    let module = RegisteredModule{manifest_id: failed_module_id}
+    requires: exists module
+    requires: module.status = active
+    requires: module.credential.required = true
 
-  ensures: module.status = error
+    ensures: module.status = error
 
-  let affectedAutomations = Automation where jobBoard = moduleId and status = active
+    let affected_automations = Automations where job_board = failed_module_id and status = active
 
-  ensures: for_each automation in affectedAutomations:
-    automation.status = paused
-    automation.pauseReason = auth_failure
-    Notification.created(
-      userId: automation.userId,
-      type: auth_failure,
-      message: "Automation '{automation.name}' paused: module '{module.manifest.name}' authentication failed. Please check your credentials.",
-      moduleId: moduleId,
-      automationId: automation.id
-    )
+    ensures:
+        for automation in affected_automations:
+            automation.status = paused
+            automation.pause_reason = auth_failure
+            Notification.created(
+                user_id: automation.user_id,
+                type: auth_failure,
+                message: "Automation paused: module authentication failed. Please check your credentials.",
+                module_id: failed_module_id,
+                automation_id: automation.id
+            )
 
-  @guidance
-    -- Auth failures are immediate: a single failure pauses because there is no
-    -- point retrying with the same invalid credential. Distinct from CB escalation
-    -- where transient failures are expected and the threshold allows recovery.
-    -- The module transitions to error status, requiring reconfiguration before reactivation.
+    @guidance
+        -- Auth failures are immediate: a single failure pauses because there is no
+        -- point retrying with the same invalid credential. Distinct from CB escalation
+        -- where transient failures are expected and the threshold allows recovery.
+        -- The module transitions to error status, requiring reconfiguration before reactivation.
 }
 
 -- =============================================================================
@@ -693,66 +724,69 @@ rule AuthFailureEscalation {
 -- =============================================================================
 
 invariant UniqueModuleIds {
-  ensures: no two RegisteredModule have the same manifest.id
-  note: "Module IDs are globally unique across all connector types"
-}
-
-invariant ConnectorStatusDerived {
-  ensures: for_each connector in ConnectorGroup:
-    connector.isActive = exists module in connector.modules where module.status = active
-  note: "Connector status is never set directly — always derived from module states"
+    for a in RegisteredModules:
+        for b in RegisteredModules:
+            a != b implies a.manifest_id != b.manifest_id
 }
 
 invariant NoOrphanAutomations {
-  ensures: for_each automation in Automation where status = active:
-    exists RegisteredModule where manifest.id = automation.jobBoard and status = active
-  note: "An active automation always references an active module"
-  note: "Enforced by ModuleDeactivation, CircuitBreakerEscalation, ConsecutiveRunFailureEscalation, and AuthFailureEscalation rules"
-  known_violation: "Currently automations can reference modules that don't exist in the registry"
-  fix: "ModuleDeactivation rule pauses affected automations (implemented in this spec)"
+    for automation in Automations:
+        automation.status = active implies
+            exists RegisteredModule{manifest_id: automation.job_board}
 }
 
 invariant PausedAutomationHasReason {
-  ensures: for_each automation in Automation where status = paused:
-    automation.pauseReason != null
-  note: "Every paused automation records why it was paused (AutomationPauseReason)"
-  note: "Enables the UI to show actionable messages: reconfigure credentials vs. wait for recovery vs. reactivate module"
+    for automation in Automations:
+        automation.status = paused implies automation.pause_reason != null
 }
 
-invariant SettingsFromManifest {
-  ensures: Settings UI for any module is derived from its ModuleManifest
-  note: "No hardcoded module lists in UI components"
-  -- known_violation resolved: ApiKeySettings.tsx now queries registry via getCredentialModules()
-  -- resolved: DESCRIPTION_KEYS replaced by manifest.i18n credentialHint (ADR-028, 2026-04-08)
+-- Prose invariant: AdminOnlyModuleLifecycle
+-- Only admins can activate or deactivate a module.
+-- Introduced by Sprint 1.5 CRIT-S-04. Previously the ActivateModule and
+-- DeactivateModule rules checked only by: User -- ANY authenticated user
+-- passed the gate. Because modules are shared singletons (not per-user),
+-- and because deactivation cascades into every tenant's active automations
+-- (see rule ModuleDeactivation), non-admin callers could pause every other
+-- user's job-discovery pipeline from a single browser Server Action call.
+--
+-- Admin authorization uses a tiered rule:
+--   Tier A: ADMIN_USER_IDS env var (comma-separated user ids)
+--   Tier B: single-user implicit (userCount = 1 and sole user matches caller)
+--   Tier C: fail-closed (multi-user without ADMIN_USER_IDS = denied)
+--
+-- Every admin call emits an AdminAuditLog entry
+--   naming {actorId, action, targetId, tier, allowed, ts}
+-- Admin-action rate limited to 10 per minute per actor.
+--
+-- Implemented in src/lib/auth/admin.ts (requireAdmin/authorizeAdminAction)
+-- Rate limit implemented in src/lib/auth/admin-rate-limit.ts
+-- Enforcement sites: src/actions/module.actions.ts (activateModule, deactivateModule)
+-- JobSync has NO role model -- tiered rule preserves zero-config single-user UX
+-- while closing the multi-tenant gap
+-- runHealthCheck is intentionally EXCLUDED from this gate -- confirmed-safe by Sprint 3 Stream C audit.
+--   Reason: checkModuleHealth writes only module.healthStatus (HEALTHY/DEGRADED/UNREACHABLE),
+--   NOT module.status (ACTIVE/INACTIVE). Health-status writes have zero automation-pause cascade.
+--   Bounded by checkHealthCheckRateLimit (per-user). See docs/BUGS.md Sprint 1.5 follow-up (closed).
+
+-- Prose invariant: SettingsFromManifest
+-- Settings UI for any module is derived from its ModuleManifest.
+-- No hardcoded module lists in UI components.
+-- known_violation resolved: ApiKeySettings.tsx now queries registry via getCredentialModules()
+-- resolved: DESCRIPTION_KEYS replaced by manifest.i18n credentialHint (ADR-028, 2026-04-08)
+
+-- =============================================================================
+-- Actor Declarations
+-- =============================================================================
+
+actor EndUser {
+    identified_by: Automation where user_id != null
+    -- Activates/deactivates modules, configures settings, views health status
 }
 
-invariant AdminOnlyModuleLifecycle {
-  -- "Only admins can activate or deactivate a module."
-  -- Introduced by Sprint 1.5 CRIT-S-04. Previously the `ActivateModule` and
-  -- `DeactivateModule` rules checked only `by: User` — ANY authenticated user
-  -- passed the gate. Because modules are shared singletons (not per-user),
-  -- and because deactivation cascades into every tenant's active automations
-  -- (see rule ModuleDeactivation), non-admin callers could pause every other
-  -- user's job-discovery pipeline from a single browser Server Action call.
-  ensures: for_each call in (ActivateModule, DeactivateModule):
-    call.by is authorized as admin
-      via AdminAuthorizationRule(
-        explicit_list = env.ADMIN_USER_IDS,  -- Tier A
-        implicit_single_user = userCount() = 1 and sole User.id = call.by.id,  -- Tier B
-        otherwise = denied  -- Tier C (fail-closed)
-      )
-  ensures: every admin call emits an AdminAuditLog entry
-    naming {actorId, action, targetId, tier, allowed, ts}
-  ensures: admin-action rate <= 10 per minute per actor
-  note: "Implemented in src/lib/auth/admin.ts (requireAdmin/authorizeAdminAction)"
-  note: "Rate limit implemented in src/lib/auth/admin-rate-limit.ts"
-  note: "Enforcement sites: src/actions/module.actions.ts (activateModule, deactivateModule)"
-  note: "JobSync has NO role model — tiered rule preserves zero-config single-user UX while closing the multi-tenant gap"
-  note: "runHealthCheck is intentionally EXCLUDED from this gate — confirmed-safe by Sprint 3 Stream C audit."
-  note: "  Reason: checkModuleHealth writes only module.healthStatus (HEALTHY/DEGRADED/UNREACHABLE),"
-  note: "  NOT module.status (ACTIVE/INACTIVE). Health-status writes have zero automation-pause cascade."
-  note: "  Bounded by checkHealthCheckRateLimit (per-user). See docs/BUGS.md Sprint 1.5 follow-up (closed)."
-  related_adr: "ADR-015 (IDOR ownership), ADR-018 (env-var security pattern), ADR-019 (use-server export security)"
+actor SystemActor {
+    identified_by: RegisteredModule where status != null
+    -- Propagates settings, monitors health, pauses automations on deactivation,
+    -- tracks circuit breaker state, escalates degradation
 }
 
 -- =============================================================================
@@ -760,90 +794,93 @@ invariant AdminOnlyModuleLifecycle {
 -- =============================================================================
 
 surface ModuleMarketplace {
-  facing actor: User
-  context entity: ConnectorGroup[]
+    facing viewer: EndUser
 
-  exposes:
-    connectorType, connectorStatus (derived),
-    modules (per connector): id, name, status, healthStatus, lastSuccessfulConnection, isConfigured,
-      circuitBreakerState, consecutiveFailures
+    exposes:
+        viewer.user_id
 
-  provides:
-    ActivateModule(moduleId),
-    DeactivateModule(moduleId),
-    ConfigureModule(moduleId, settings)
+    provides:
+        ActivateModule(module_id, admin_user_id)
+        DeactivateModule(module_id, admin_user_id)
 
-  related: AutomationWizard, SettingsPage
+    @guarantee ModulesFromRegistry
+        -- All displayed modules come from the registry, not hardcoded lists
+        -- New modules appear automatically after registration
 
-  @guarantee ModulesFromRegistry
-    -- All displayed modules come from the registry, not hardcoded lists
-    -- New modules appear automatically after registration
+    @guidance
+        -- Exposes: connectorType, connectorStatus (derived),
+        -- modules (per connector): id, name, status, healthStatus, lastSuccessfulConnection,
+        -- isConfigured, circuitBreakerState, consecutiveFailures
+        -- Also provides ConfigureModule(moduleId, settings)
+        -- Related: AutomationWizard, SettingsPage
 }
 
 surface AutomationWizard {
-  facing actor: User
-  context entity: Automation (new or existing)
+    facing viewer: EndUser
 
-  exposes:
-    availableModules: RegisteredModule where status = active and connectorType = job_discovery,
-    selectedModule.connectorParamsSchema: ConnectorParamField[]?,
-    selectedModule.searchFieldOverrides: SearchFieldOverride[]?,
-    selectedModule.automationType: discovery | maintenance
+    exposes:
+        viewer.user_id
 
-  provides:
-    SelectModule(moduleId),
-    ConfigureConnectorParams(params validated against module.connectorParamsSchema)
+    provides:
+        SaveAutomation(saved_automation, connector_params)
+        LoadModuleSelector(requested_connector_type)
 
-  @guarantee DynamicFormFields
-    -- Form fields for connectorParams are generated from the ConnectorParamField array
-    -- Search field widgets are swapped per SearchFieldOverride declarations
-    -- Not hardcoded per module
+    @guarantee DynamicFormFields
+        -- Form fields for connectorParams are generated from the ConnectorParamField array
+        -- Search field widgets are swapped per SearchFieldOverride declarations
+        -- Not hardcoded per module
+
+    @guidance
+        -- Exposes: availableModules (RegisteredModule where status = active and connectorType = job_discovery),
+        -- selectedModule.connectorParamsSchema, selectedModule.searchFieldOverrides,
+        -- selectedModule.automationType
 }
 
 surface NotificationInbox {
-  facing actor: User
-  context entity: Notification[]
+    facing viewer: EndUser
 
-  exposes:
-    unread count, notification list (newest first),
-    type, message, moduleId, automationId, createdAt, read status
+    exposes:
+        viewer.user_id
 
-  provides:
-    MarkAsRead(notificationId),
-    MarkAllAsRead(),
-    DismissNotification(notificationId)
+    provides:
+        MarkAsRead(notification_id)
+        MarkAllAsRead()
+        DismissNotification(notification_id)
 
-  @guarantee PersistentNotifications
-    -- Notifications persist across sessions (DB-backed, not ephemeral toasts)
-    -- Users see alerts even when not actively using the app
+    @guarantee PersistentNotifications
+        -- Notifications persist across sessions (DB-backed, not ephemeral toasts)
+        -- Users see alerts even when not actively using the app
+
+    @guidance
+        -- Exposes: unread count, notification list (newest first),
+        -- type, message, moduleId, automationId, createdAt, read status
 }
 
 surface ModuleHealthOverview {
-  facing actor: User
-  context entity: RegisteredModule[]
+    facing viewer: EndUser
 
-  exposes:
-    all registered modules grouped by connectorType,
-    per module: id, name, healthStatus, lastHealthCheck, lastSuccessfulConnection,
-      circuitBreakerState, credential.type,
-      dependencies: per dep: id, name, healthStatus, required, usedFor
+    exposes:
+        viewer.user_id
 
-  provides:
-    TriggerHealthCheck(moduleId)
-      -- Manual re-check: runs the module's health probe on demand
+    provides:
+        HealthCheckDue(check_module_id)
 
-  @guarantee AllModulesVisible
-    -- Shows ALL registered modules regardless of credential type or connector type
-    -- Keyless modules (EURES, Arbeitsagentur, ESCO, Eurostat) are visible
-    -- Key-based modules show credential status alongside health
-    -- Dependencies shown as tree structure under parent module
+    @guarantee AllModulesVisible
+        -- Shows ALL registered modules regardless of credential type or connector type
+        -- Keyless modules (EURES, Arbeitsagentur, ESCO, Eurostat) are visible
+        -- Key-based modules show credential status alongside health
+        -- Dependencies shown as tree structure under parent module
 
-  @guidance
-    -- The ModuleMarketplace surface handles activation/deactivation and configuration.
-    -- This surface is a read-oriented health dashboard that ensures no module is invisible
-    -- just because it has credential.type = none and therefore no Settings panel entry.
-    -- credential.type is exposed so the UI can distinguish key-based from keyless modules
-    -- and avoid showing a "configure credentials" action for modules that need none.
+    @guidance
+        -- The ModuleMarketplace surface handles activation/deactivation and configuration.
+        -- This surface is a read-oriented health dashboard that ensures no module is invisible
+        -- just because it has credential.type = none and therefore no Settings panel entry.
+        -- credential.type is exposed so the UI can distinguish key-based from keyless modules
+        -- and avoid showing a "configure credentials" action for modules that need none.
+        -- Exposes: all registered modules grouped by connectorType,
+        -- per module: id, name, healthStatus, lastHealthCheck, lastSuccessfulConnection,
+        --   circuitBreakerState, credential.type,
+        --   dependencies: per dep: id, name, healthStatus, required, usedFor
 }
 
 -- =============================================================================
@@ -957,7 +994,7 @@ surface ModuleHealthOverview {
 --   credential: { type: none },
 --   healthCheck: { endpoint: "https://ec.europa.eu/esco/api/search?text=test&language=en&type=occupation&limit=1", timeoutMs: 10000 },
 --   resilience: null }
--- Note: esco.ec.europa.eu (portal) returns 403/500 — use ec.europa.eu/esco/api (API) instead
+-- Note: esco.ec.europa.eu (portal) returns 403/500 -- use ec.europa.eu/esco/api (API) instead
 -- Note: ISCO groups are embedded in ESCO responses (broaderIscoGroup), not a separate API
 
 -- Module: eurostat_nuts
@@ -971,15 +1008,15 @@ surface ModuleHealthOverview {
 -- Open Questions
 -- =============================================================================
 
--- Resolved: Module dependencies modeled as DependencyHealthCheck[] on ModuleManifest.
+-- Resolved: Module dependencies modeled as DependencyHealthCheck on ModuleManifest.
 -- Modules declare their external service dependencies with health endpoints.
 -- Dependencies affect health status derivation (DependencyHealthDegradation rule)
 -- and are visible in the ModuleHealthOverview surface.
--- Full module-to-module runtime dependencies (e.g., CareerBERT → AI module for embeddings)
--- will extend this mechanism when needed — the DependencyHealthCheck value type can be
+-- Full module-to-module runtime dependencies (e.g., CareerBERT -> AI module for embeddings)
+-- will extend this mechanism when needed -- the DependencyHealthCheck value type can be
 -- promoted to a ModuleDependency that references registered modules by ID.
 
--- Resolved: manifestVersion: Integer added to ModuleManifest (all modules start at 1)
+-- Resolved: manifest_version: Integer added to ModuleManifest (all modules start at 1)
 
 open question "Should health check results be persisted (DB) or kept in-memory only?"
 

@@ -23,21 +23,32 @@
 -- =============================================================================
 
 external entity Automation {
-  status: pending | active | paused
-  pauseReason: String?
+    status: pending | active | paused
+    pause_reason: String?
 }
 
--- =============================================================================
--- Actors
--- =============================================================================
-
-actor EventBus {
-  -- Publishes domain events that the dispatcher consumes.
-  -- The dispatcher subscribes to all notification-relevant event types.
+external entity User {
+    email: String
 }
 
-actor User {
-  -- Receives notifications, configures preferences, interacts with bell UI.
+external entity DomainEvent {
+    notification_type: NotificationType
+    payload: EventPayload
+}
+
+external entity EventPayload {
+    user_id: String
+    module_id: String?
+    automation_id: String?
+    action_type: String?
+    succeeded: Integer?
+    failed: Integer?
+    module_name: String?
+    affected_count: Integer?
+    paused_count: Integer?
+    purged_count: Integer?
+    new_status: String?
+    title: String?
 }
 
 -- =============================================================================
@@ -45,39 +56,39 @@ actor User {
 -- =============================================================================
 
 enum NotificationType {
-  -- Module lifecycle (existing, from module-lifecycle.allium)
-  module_deactivated
-  | module_reactivated
-  | module_unreachable
-  | cb_escalation
-  | consecutive_failures
-  | auth_failure
-  -- Vacancy pipeline (new, from 0.5/0.6)
-  | vacancy_promoted
-  | vacancy_batch_staged            -- summary for automation run batch
-  | bulk_action_completed
-  | retention_completed
-  -- Job lifecycle
-  | job_status_changed                -- user's job application status changed
-  -- CRM (from crm.allium)
-  | interview_scheduled
-  | interview_reminder
-  | follow_up_due
-  | contact_from_job
-  | retention_expired
+    -- Module lifecycle (existing, from module-lifecycle.allium)
+    module_deactivated
+    | module_reactivated
+    | module_unreachable
+    | cb_escalation
+    | consecutive_failures
+    | auth_failure
+    -- Vacancy pipeline (new, from 0.5/0.6)
+    | vacancy_promoted
+    | vacancy_batch_staged
+    | bulk_action_completed
+    | retention_completed
+    -- Job lifecycle
+    | job_status_changed
+    -- CRM (from crm.allium)
+    | interview_scheduled
+    | interview_reminder
+    | follow_up_due
+    | contact_from_job
+    | retention_expired
 }
 
 enum NotificationChannel {
-  inApp                             -- write to Notification table (MVP)
-  | webhook                         -- POST to user-configured URL (D1)
-  | email                           -- send via SMTP/nodemailer (D2)
-  | push                            -- browser push notification via VAPID (D3)
+    in_app
+    | webhook
+    | email
+    | push
 }
 
 enum DigestMode {
-  immediate                         -- deliver as events arrive
-  | hourly                          -- aggregate into hourly digest
-  | daily                           -- aggregate into daily digest
+    immediate
+    | hourly
+    | daily
 }
 
 -- =============================================================================
@@ -85,38 +96,79 @@ enum DigestMode {
 -- =============================================================================
 
 config {
-  DEDUP_WINDOW_MINUTES: Integer = 5
+    dedup_window_minutes: Integer = 5
     -- No duplicate notifications of same type+moduleId within this window.
-  DEFAULT_DIGEST_MODE: DigestMode = immediate
+    default_digest_mode: DigestMode = immediate
     -- Default delivery mode for new users.
-  MAX_NOTIFICATIONS_DISPLAYED: Integer = 50
+    max_notifications_displayed: Integer = 50
     -- Maximum notifications shown in the bell dropdown.
-  NOTIFICATION_RETENTION_DAYS: Integer = 30
+    notification_retention_days: Integer = 30
     -- Auto-delete notifications older than this (from module-lifecycle.allium config).
 
-  -- Webhook channel constants
-  WEBHOOK_FETCH_TIMEOUT_MS: Integer = 10000
+    -- Webhook channel constants
+    webhook_fetch_timeout_ms: Integer = 10000
     -- HTTP timeout per delivery attempt.
-  WEBHOOK_MAX_ATTEMPTS: Integer = 3
+    webhook_max_attempts: Integer = 3
     -- Maximum retry attempts per endpoint per notification.
-  WEBHOOK_RETRY_BACKOFFS_MS: Integer[] = [1000, 5000, 30000]
-    -- Backoff delays between retry attempts.
-  WEBHOOK_AUTO_DEACTIVATE_THRESHOLD: Integer = 5
+    webhook_auto_deactivate_threshold: Integer = 5
     -- Consecutive failures before auto-deactivation.
 
-  -- Email channel constants
-  EMAIL_RATE_LIMIT_PER_MINUTE: Integer = 10
+    -- Email channel constants
+    email_rate_limit_per_minute: Integer = 10
     -- Maximum email notifications per user per minute.
-  EMAIL_TEST_COOLDOWN_SECONDS: Integer = 60
+    email_test_cooldown_seconds: Integer = 60
     -- Minimum interval between test emails.
 
-  -- Push channel constants
-  PUSH_RATE_LIMIT_PER_MINUTE: Integer = 20
+    -- Push channel constants
+    push_rate_limit_per_minute: Integer = 20
     -- Maximum push notifications per user per minute.
-  PUSH_TEST_COOLDOWN_SECONDS: Integer = 60
+    push_test_cooldown_seconds: Integer = 60
     -- Minimum interval between test push notifications.
-  MAX_PUSH_SUBSCRIPTIONS_PER_USER: Integer = 10
+    max_push_subscriptions_per_user: Integer = 10
     -- Maximum browser subscriptions per user.
+}
+
+-- =============================================================================
+-- Value Types
+-- =============================================================================
+
+value ChannelConfig {
+    in_app: Boolean
+    webhook: Boolean
+    email: Boolean
+    push: Boolean
+}
+
+value TypePreference {
+    enabled: Boolean
+    -- Note: per-type channel override is aspirational. Code currently only stores { enabled }.
+}
+
+value QuietHoursConfig {
+    enabled: Boolean
+    start: String
+    end: String
+    timezone: String
+}
+
+value DispatchContext {
+    -- Pre-fetched user context for a single dispatch cycle (PERF-3).
+    -- Built once by buildDispatchContext(), passed to ChannelRouter and all channels.
+
+    user_id: String
+    locale: String
+    preferences: NotificationPreference
+    recipient_email: String?
+    smtp_config: SmtpConfig?
+    vapid_config: VapidConfig?
+    webhook_endpoints: Set<WebhookEndpoint>
+    subscriptions: Set<WebPushSubscription>
+
+    -- Derived: channel availability (replaces isAvailable DB calls)
+    email_available: smtp_config != null
+    push_available: vapid_config != null and subscriptions.count > 0
+    webhook_available: webhook_endpoints.count > 0
+    -- inApp is always available (no infrastructure check needed)
 }
 
 -- =============================================================================
@@ -124,156 +176,103 @@ config {
 -- =============================================================================
 
 entity Notification {
-  -- A persisted notification record displayed to the user.
-  -- Extends the existing Notification entity from module-lifecycle.allium
-  -- with the full set of notification types.
+    -- A persisted notification record displayed to the user.
 
-  id: String                          -- UUID
-  userId: String                      -- notification recipient
-  type: NotificationType              -- discriminates the notification content
-  message: String                     -- human-readable message (i18n key or rendered text)
-  moduleId: String?                   -- related module (null for non-module events)
-  automationId: String?               -- related automation (null when not applicable)
-  read: Boolean = false               -- user has seen/acknowledged this notification
-  createdAt: DateTime = now()
+    id: String
+    user_id: String
+    type: NotificationType
+    message: String
+    module_id: String?
+    automation_id: String?
+    read: Boolean
+    created_at: Timestamp
 }
 
 entity NotificationPreference {
-  -- User-level notification configuration.
-  -- Stored as JSON column on UserSettings (AD-6 from design spec).
+    -- User-level notification configuration.
 
-  userId: String                      -- owner
+    user_id: String
 
-  -- Global controls
-  enabled: Boolean = true             -- master switch: false suppresses ALL notifications
-  channels: ChannelConfig             -- which delivery channels are active
+    -- Global controls
+    enabled: Boolean
+    channels: ChannelConfig
 
-  -- Per-type overrides
-  perType: Map<NotificationType, TypePreference>
-    -- Each type can be individually enabled/disabled and routed to a channel.
-    -- Types not present in the map inherit the global `enabled` and `channels` defaults.
+    -- Per-type overrides (modelled as a related set)
+    per_type_overrides: NotificationTypeOverride with preference = this
 
-  -- Quiet hours (optional)
-  quietHours: QuietHoursConfig?       -- suppress notifications during configured window
-
-  -- Digest mode (aspirational — not implemented yet)
-  -- digestMode: DigestMode = immediate
+    -- Quiet hours (optional)
+    quiet_hours: QuietHoursConfig?
 }
 
-value ChannelConfig {
-  inApp: Boolean = true               -- in-app notifications (MVP, always available)
-  webhook: Boolean = false             -- webhook notifications (D1, user must configure endpoints)
-  email: Boolean = false              -- email notifications (D2, user must configure SMTP)
-  push: Boolean = false               -- push notifications (D3, user must enable in browser)
-}
-
-value TypePreference {
-  enabled: Boolean = true             -- whether this notification type is active
-  -- Note: per-type channel override is aspirational. Code currently only stores { enabled }.
-}
-
-value QuietHoursConfig {
-  enabled: Boolean = false            -- whether quiet hours are active
-  start: String                       -- time-of-day (HH:mm), e.g. "22:00"
-  end: String                         -- time-of-day (HH:mm), e.g. "07:00"
-  timezone: String                    -- IANA timezone, e.g. "Europe/Berlin"
-}
-
-value DispatchContext {
-  -- Pre-fetched user context for a single dispatch cycle (PERF-3).
-  -- Built once by buildDispatchContext(), passed to ChannelRouter and all channels.
-  -- Replaces the previous pattern where each channel independently queried its
-  -- own infrastructure, which produced 11-13 DB queries per notification (5-6
-  -- redundant reads of userSettings, smtpConfig, vapidConfig).
-  --
-  -- Observable effect: identical notification delivery outcomes, but with all
-  -- channel infrastructure resolved in 6 parallel queries instead of 11-13
-  -- sequential ones. Channels no longer access the database for context data.
-  --
-  -- PERF-3: F-03 (redundant queries) + F-10 (isAvailable+dispatch double-query)
-  --         + F-11 (VAPID subject from SmtpConfig) from S5b performance review.
-  -- Roadmap: CRM (5.x) event consumers reuse this pattern.
-  --          GDPR (6.1) invalidateAllChannels() builds on this architecture.
-  --          F-04 SMTP pooling can key transporter cache off ctx.smtp_config.
-
-  user_id: String
-  locale: String                      -- resolved from UserSettings once
-  preferences: NotificationPreference -- resolved from UserSettings once
-  recipient_email: String?            -- user.email from NextAuth identity
-  smtp_config: SmtpConfig?            -- active SMTP config (null if unconfigured)
-  vapid_config: VapidConfig?          -- VAPID key pair (null if unconfigured)
-  webhook_endpoints: Set<WebhookEndpoint>   -- active endpoints for this user
-  subscriptions: Set<WebPushSubscription>   -- all push subscriptions for this user
-
-  -- Derived: channel availability (replaces isAvailable DB calls)
-  email_available: smtp_config != null
-  push_available: vapid_config != null and subscriptions.count > 0
-  webhook_available: webhook_endpoints.count > 0
-  -- inApp is always available (no infrastructure check needed)
+entity NotificationTypeOverride {
+    -- Per-type preference override entry.
+    preference: NotificationPreference
+    notification_type: NotificationType
+    enabled: Boolean
 }
 
 entity WebhookEndpoint {
-  -- A user-configured HTTP endpoint that receives notification payloads.
-  -- Secret is AES-encrypted at rest; decrypted only at dispatch time for HMAC signing.
+    -- A user-configured HTTP endpoint that receives notification payloads.
+    -- Secret is AES-encrypted at rest; decrypted only at dispatch time for HMAC signing.
 
-  id: String                          -- UUID
-  userId: String                      -- owner
-  url: String                         -- validated against SSRF rules on create AND dispatch
-  secret: String                      -- AES-encrypted HMAC signing key
-  iv: String                          -- AES initialization vector
-  events: String                      -- JSON array of subscribed NotificationType values
-  active: Boolean = true              -- deactivated after AUTO_DEACTIVATE_THRESHOLD failures
-  failureCount: Integer = 0           -- consecutive delivery failures (reset on success)
-  createdAt: DateTime = now()
-  updatedAt: DateTime
+    id: String
+    user_id: String
+    url: String
+    secret: String
+    iv: String
+    events: String
+    active: Boolean
+    failure_count: Integer
+    created_at: Timestamp
+    updated_at: Timestamp
 }
 
 entity SmtpConfig {
-  -- User's SMTP configuration for email notification delivery.
-  -- Password is AES-encrypted at rest; decrypted only at send time.
+    -- User's SMTP configuration for email notification delivery.
+    -- Password is AES-encrypted at rest; decrypted only at send time.
 
-  id: String                          -- UUID
-  userId: String                      -- unique: one config per user
-  host: String                        -- validated against SSRF rules
-  port: Integer = 587
-  username: String
-  password: String                    -- AES-encrypted
-  iv: String                          -- AES initialization vector
-  fromAddress: String
-  tlsRequired: Boolean = true
-  active: Boolean = true
-  createdAt: DateTime = now()
-  updatedAt: DateTime
+    id: String
+    user_id: String
+    host: String
+    port: Integer
+    username: String
+    password: String
+    iv: String
+    from_address: String
+    tls_required: Boolean
+    active: Boolean
+    created_at: Timestamp
+    updated_at: Timestamp
 }
 
 entity VapidConfig {
-  -- VAPID key pair for browser push notification signing.
-  -- Private key is AES-encrypted at rest.
-  -- One per user, auto-generated on first push enable.
+    -- VAPID key pair for browser push notification signing.
+    -- Private key is AES-encrypted at rest.
+    -- One per user, auto-generated on first push enable.
 
-  id: String                          -- UUID
-  userId: String                      -- unique: one config per user
-  publicKey: String
-  privateKey: String                  -- AES-encrypted
-  iv: String                          -- AES initialization vector
-  createdAt: DateTime = now()
-  updatedAt: DateTime
+    id: String
+    user_id: String
+    public_key: String
+    private_key: String
+    iv: String
+    created_at: Timestamp
+    updated_at: Timestamp
 }
 
 entity WebPushSubscription {
-  -- Browser push subscription for a specific device/browser.
-  -- Keys are AES-encrypted at rest.
-  -- Deleted on 410 Gone / 404 Not Found or VAPID key rotation.
+    -- Browser push subscription for a specific device/browser.
+    -- Keys are AES-encrypted at rest.
+    -- Deleted on 410 Gone / 404 Not Found or VAPID key rotation.
 
-  id: String                          -- UUID
-  userId: String
-  endpoint: String                    -- push service endpoint URL
-  p256dh: String                      -- AES-encrypted (own IV)
-  auth: String                        -- AES-encrypted (own IV)
-  iv: String                          -- pipe-separated: "ivP256dh|ivAuth"
-  expirationTime: DateTime?
-  createdAt: DateTime = now()
-  updatedAt: DateTime
+    id: String
+    user_id: String
+    endpoint: String
+    p256dh: String
+    auth: String
+    iv: String
+    expiration_time: Timestamp?
+    created_at: Timestamp
+    updated_at: Timestamp
 }
 
 -- =============================================================================
@@ -281,75 +280,80 @@ entity WebPushSubscription {
 -- =============================================================================
 
 contract NotificationDispatcher {
-  -- Application Service that consumes domain events and produces notifications.
-  -- Registered as an EventBus consumer at application startup.
-  -- Stateless — reads preferences from DB, writes notifications to DB.
-  --
-  -- PERF-3 architecture: dispatch() builds a DispatchContext once, then passes
-  -- it to ChannelRouter.route(draft, ctx). Channels receive pre-fetched data
-  -- and never access the database for context queries.
+    -- Application Service that consumes domain events and produces notifications.
+    -- Registered as an EventBus consumer at application startup.
+    -- Stateless — reads preferences from DB, writes notifications to DB.
+    --
+    -- PERF-3 architecture: dispatch() builds a DispatchContext once, then passes
+    -- it to ChannelRouter.route(draft, ctx). Channels receive pre-fetched data
+    -- and never access the database for context queries.
 
-  dispatch: (event: DomainEvent) -> Void
+    dispatch: (event: DomainEvent) -> Boolean
     -- Main entry point. Called by EventBus for each subscribed event.
-    -- 1. Determines the target userId from the event payload
-    -- 2. Calls buildDispatchContext(userId) — single point of DB access
-    -- 3. Applies all rules (PreferenceCheck, QuietHours, Deduplication, BatchSummary)
-    -- 4. If notification passes all checks: routes to enabled channels via ctx
 
-  build_dispatch_context: (user_id: String) -> DispatchContext
+    build_dispatch_context: (user_id: String) -> DispatchContext
     -- Resolves all channel infrastructure for a user in one batch.
-    -- 6 parallel queries: userSettings, user.email, smtpConfig,
-    -- vapidConfig, webPushSubscriptions, webhookEndpoints.
-    -- Returns a DispatchContext value passed to ChannelRouter.route().
-    -- Called once per dispatch — never cached across dispatches.
 
-  register: (bus: EventBus) -> Void
+    register: (bus_id: String) -> Boolean
     -- Subscribes to all notification-relevant event types.
-    -- Called once at application startup.
 
-  map_event_to_notification: (event: DomainEvent, user_id: String) -> Notification
+    map_event_to_notification: (event: DomainEvent, user_id: String) -> Notification
     -- Maps a domain event to a notification draft.
-    -- Returns null if the event type has no notification mapping.
-    -- Pure function — does not check preferences (that's dispatch's job).
 
-  invalidate_all_channels: (user_id: String) -> Void
+    invalidate_all_channels: (user_id: String) -> Boolean
     -- GDPR Art. 17 preparation (Roadmap 6.1).
-    -- Drops ALL cached isAvailable results for a user across every channel.
-    -- Called when the user's entire channel infrastructure is torn down
-    -- (e.g., account deletion where onDelete: Cascade removes
-    -- WebPushSubscription, VapidConfig, SmtpConfig, WebhookEndpoint).
-    -- Post-PERF-3: the isAvailable cache is largely obsolete (context is
-    -- built fresh per dispatch), but invalidation remains for Settings UI
-    -- writes that should take effect immediately within the same burst.
 
-  @invariant ContextPerDispatch
-    -- Each dispatch cycle builds a fresh DispatchContext. No cross-dispatch
-    -- caching of channel infrastructure data. This ensures that Settings
-    -- changes (SMTP config updates, webhook endpoint CRUD, push subscription
-    -- changes) take effect on the very next notification dispatch.
+    @invariant ContextPerDispatch
+        -- Each dispatch cycle builds a fresh DispatchContext. No cross-dispatch
+        -- caching of channel infrastructure data. This ensures that Settings
+        -- changes (SMTP config updates, webhook endpoint CRUD, push subscription
+        -- changes) take effect on the very next notification dispatch.
 
-  @invariant PreferenceSuppression
-    -- End-to-end guarantee: preference gating applies uniformly to ALL entry points.
-    -- Both event-bus-sourced (ChannelRouting) and direct-caller (DegradationDispatchParity)
-    -- paths flow through channelRouter.route() which calls shouldNotify() per channel.
-    --
-    -- 1. For each draft routed through channelRouter, for each channel: if
-    --    shouldNotify(ctx.preferences, draft.type, channel) = false, the channel
-    --    does NOT dispatch the draft.
-    -- 2. If ctx.preferences.enabled = false (global kill switch), no channel dispatches.
-    -- 3. If ctx.preferences.perType contains the draft type with enabled = false,
-    --    no channel dispatches.
-    --
-    -- T-04: requires integration test with real ChannelRouter + real channels (not mocked).
+    @invariant PreferenceSuppression
+        -- End-to-end guarantee: preference gating applies uniformly to ALL entry points.
+        -- Both event-bus-sourced (ChannelRouting) and direct-caller (DegradationDispatchParity)
+        -- paths flow through channelRouter.route() which calls shouldNotify() per channel.
 
-  @invariant ChannelContextIsolation
-    -- Channels MUST NOT access the database for context data (user settings,
-    -- locale, SMTP config, VAPID keys, subscriptions, webhook endpoints).
-    -- All context is provided via the DispatchContext parameter. This is the
-    -- core architectural constraint of PERF-3: channels are pure consumers
-    -- of pre-fetched data, not independent data accessors.
-    -- Exception: channels may still write to the database (notification
-    -- creation, webhook failureCount updates, stale subscription deletion).
+    @invariant ChannelContextIsolation
+        -- Channels MUST NOT access the database for context data (user settings,
+        -- locale, SMTP config, VAPID keys, subscriptions, webhook endpoints).
+        -- All context is provided via the DispatchContext parameter. This is the
+        -- core architectural constraint of PERF-3.
+
+    @invariant AvailabilityCacheTtl
+        -- SUPERSEDED BY PERF-3 DispatchContext pattern.
+        -- Post-PERF-3: channel availability is a derived field check on the
+        -- DispatchContext (e.g., ctx.email_available = ctx.smtp_config != null).
+        -- The isAvailable cache is REMOVED from ChannelRouter.
+
+    @invariant ExplicitChannelRegistration
+        -- Channels MUST be registered on the singleton ChannelRouter through
+        -- the explicit registerChannels() call inside registerNotificationDispatcher(),
+        -- never as a side effect of module import.
+
+    @invariant LateBoundLocale
+        -- Notifications are written with their i18n key and params, not a resolved
+        -- string. The UI resolves them at render time so notifications re-localize
+        -- when the viewer switches locale.
+
+    @invariant SingleNotificationWriter
+        -- All Notification writes SHOULD flow through the channel router via domain
+        -- events. Direct prisma.notification.create() calls are legitimate ONLY in
+        -- in-app.channel.ts (the channel implementation).
+
+    @invariant PreferencesDefaults
+        -- Users without explicit preferences get all notifications via inApp channel only.
+        -- Preferences are created lazily on first settings access, not at user registration.
+
+    @invariant QuietHoursRespected
+        -- Notifications during quiet hours are dropped, not delayed. This is MVP behavior.
+        -- Future: queuing with deliverAt instead of dropping.
+
+    @invariant VapidKeysEncrypted
+        -- VapidConfig.privateKey is always AES-encrypted at rest. Never stored in plaintext.
+
+    @invariant PushSubscriptionKeysEncrypted
+        -- WebPushSubscription.p256dh and auth are always AES-encrypted at rest.
 }
 
 -- =============================================================================
@@ -357,545 +361,329 @@ contract NotificationDispatcher {
 -- =============================================================================
 
 rule PreferenceCheck {
-  -- "Skip disabled notification types."
-  -- Before creating a notification, check whether the user has this type enabled.
-  when: NotificationDispatcher.dispatch(event: DomainEvent)
-  let userId = event.payload.userId
-  let prefs = NotificationPreference where userId = userId
+    -- Before creating a notification, check whether the user has this type enabled.
+    when: DispatchNotification(event)
+    let user_id = event.payload.user_id
+    let prefs = NotificationPreference{user_id: user_id}
 
-  -- Global kill switch
-  requires: prefs.enabled = true
-    -- If global notifications are disabled, silently drop all events.
+    -- Global kill switch
+    requires: prefs.enabled = true
 
-  -- Per-type check
-  let typeOverride = prefs.perType[event.notificationType]
-  requires: typeOverride = null or typeOverride.enabled = true
-    -- If the type is explicitly disabled, silently drop.
-    -- If the type is not in perType map, it inherits the global enabled=true.
+    -- Per-type check: if an override exists and is disabled, drop the notification
+    let type_override = NotificationTypeOverride{preference: prefs, notification_type: event.notification_type}
+    requires: not exists type_override or type_override.enabled = true
 
-  ensures: notification proceeds to QuietHours check
+    ensures: PreferenceCheckPassed(event: event, prefs: prefs)
 
-  @guidance
-    -- Preferences are loaded once per dispatch call, not cached across calls.
-    -- This ensures preference changes take effect immediately.
-    -- Default state for new users: all types enabled, inApp channel only.
+    @guidance
+        -- Preferences are loaded once per dispatch call, not cached across calls.
+        -- This ensures preference changes take effect immediately.
+        -- Default state for new users: all types enabled, inApp channel only.
 }
 
 rule QuietHours {
-  -- "Suppress notifications during configured quiet hours."
-  -- If the current time falls within the user's quiet hours window,
-  -- the notification is silently dropped (not queued).
-  when: NotificationDispatcher.dispatch(event: DomainEvent) and prefs.quietHours != null
-  let prefs = NotificationPreference where userId = event.payload.userId
-  let now = currentTimeInTimezone(prefs.quietHours.timezone)
+    -- Suppress notifications during configured quiet hours.
+    when: PreferenceCheckPassed(event, prefs)
+    requires: prefs.quiet_hours != null
+    requires: prefs.quiet_hours.enabled = true
 
-  requires: prefs.quietHours.enabled = true
-    -- Quiet hours only apply when the enabled flag is set.
+    let in_quiet_window = is_in_quiet_window(prefs.quiet_hours)
 
-  if now is between prefs.quietHours.start and prefs.quietHours.end:
-    ensures: notification is silently dropped
-    -- Current implementation: shouldNotify() returns false during quiet hours.
-    -- Notifications are dropped, not queued. This is the MVP behavior.
-  else:
-    ensures: notification proceeds to Deduplication check
+    ensures:
+        if not in_quiet_window:
+            DeduplicationCheckReady(event: event, prefs: prefs)
 
-  @guidance
-    -- Quiet hours wrap around midnight: start="22:00", end="07:00" means
-    -- 22:00 to midnight + midnight to 07:00 are quiet.
-    -- If quietHours is null or enabled=false, this rule is a no-op (pass-through).
-    -- Implementation uses Intl.DateTimeFormat to convert current time to
-    -- the configured timezone for comparison.
-    -- Future: queuing with deliverAt instead of dropping.
+    @guidance
+        -- Quiet hours wrap around midnight: start="22:00", end="07:00" means
+        -- 22:00 to midnight + midnight to 07:00 are quiet.
+        -- If quietHours is null or enabled=false, this rule does not fire (pass-through).
+        -- Notifications during quiet hours are dropped, not queued. This is MVP behavior.
+        -- Future: queuing with deliverAt instead of dropping.
+}
+
+rule QuietHoursPassthrough {
+    -- When quiet hours are not configured, pass through to deduplication.
+    when: PreferenceCheckPassed(event, prefs)
+    requires: prefs.quiet_hours = null or prefs.quiet_hours.enabled = false
+
+    ensures: DeduplicationCheckReady(event: event, prefs: prefs)
 }
 
 rule Deduplication {
-  -- "No duplicate notifications of same type+moduleId within 5 minutes."
-  -- Prevents notification spam when the same event fires multiple times
-  -- in rapid succession (e.g., multiple CB trips for the same module).
-  when: NotificationDispatcher.dispatch(event: DomainEvent)
-  let userId = event.payload.userId
-  let notificationType = event.notificationType
-  let moduleId = event.payload.moduleId  -- may be null
+    -- No duplicate notifications of same type+moduleId within the dedup window.
+    when: DeduplicationCheckReady(event, prefs)
+    let user_id = event.payload.user_id
+    let notification_type = event.notification_type
+    let module_id = event.payload.module_id
 
-  let recent = Notification
-    where userId = userId
-    and type = notificationType
-    and moduleId = moduleId
-    and createdAt > now() - config.DEDUP_WINDOW_MINUTES.minutes
+    requires: not has_recent_notification(user_id, notification_type, module_id, config.dedup_window_minutes)
 
-  if recent exists:
-    ensures: notification is silently dropped
-    -- The user already has a recent notification of this type for this module.
-  else:
-    ensures: notification proceeds to ChannelRouting
+    ensures: ChannelRoutingReady(event: event, prefs: prefs)
 
-  @guidance
-    -- The dedup key is (userId, type, moduleId). If moduleId is null,
-    -- dedup is by (userId, type) only.
-    -- The 5-minute window is configurable via DEDUP_WINDOW_MINUTES.
-    -- This does NOT affect different types: a module_deactivated and auth_failure
-    -- for the same module within 5 minutes are both delivered.
-}
-
-@invariant AvailabilityCacheTtl
-  -- SUPERSEDED BY PERF-3 DispatchContext pattern.
-  --
-  -- Pre-PERF-3 (Sprint 3 M-P-01): ChannelRouter cached isAvailable results
-  -- per (userId, channelName) with 30s TTL to avoid per-channel DB round-trips.
-  --
-  -- Post-PERF-3: channel availability is a derived field check on the
-  -- DispatchContext (e.g., ctx.email_available = ctx.smtp_config != null).
-  -- The isAvailable cache is REMOVED from ChannelRouter — context is built
-  -- fresh per dispatch (see ContextPerDispatch invariant on the contract).
-  --
-  -- Availability invalidation hooks (invalidateAvailability, invalidateAllChannels)
-  -- are RETAINED but simplified:
-  --   - Settings actions still call invalidateAvailability after CRUD mutations.
-  --   - PushChannel still calls onSubscriptionPurged on 404/410 stale cleanup.
-  --   - invalidateAllChannels(userId) remains for GDPR Art. 17 (Roadmap 6.1).
-  -- These hooks are now no-ops for the per-dispatch context (which is always
-  -- fresh), but serve as documentation points for future caching layers.
-
-invariant ExplicitChannelRegistration {
-  -- Sprint 3 M-A-05: channels MUST be registered on the singleton
-  -- ChannelRouter through the explicit `registerChannels()` call inside
-  -- `registerNotificationDispatcher()`, never as a side effect of module
-  -- import. This makes registration order deterministic (driven by the
-  -- `registerEventConsumers()` boot sequence), HMR-safe (idempotent via
-  -- a `__channelRouterRegistered` guard on globalThis), and test-
-  -- substitutable (tests can `clear()` + `_resetChannelRegistrationForTesting`
-  -- before calling the dispatcher).
-  ensures: every channelRouter.register() call for InAppChannel,
-           WebhookChannel, EmailChannel, PushChannel
-    is reachable only from registerChannels() in channel-router.ts
-  ensures: no top-level `new XChannel()` construction in any file under
-           src/lib/notifications/ other than channel-router.ts
-  note: "Sprint 3 M-A-05 fixed the original anti-pattern where the four
-         production channels were registered as a top-level side effect of
-         `import notification-dispatcher`. Any test, type consumer, or HMR
-         reload that touched the dispatcher module incurred channel
-         registration — and the order depended on the module import graph.
-         The fix pulls registration into a named function that the boot
-         sequence calls once."
-  note: "The guarded singleton `__channelRouterRegistered` mirrors the
-         `__eventConsumersRegistered` pattern in events/consumers/index.ts."
+    @guidance
+        -- The dedup key is (userId, type, moduleId). If moduleId is null,
+        -- dedup is by (userId, type) only.
+        -- The dedup_window_minutes is configurable.
+        -- This does NOT affect different types: a module_deactivated and auth_failure
+        -- for the same module within 5 minutes are both delivered.
 }
 
 rule ChannelRouting {
-  -- "Route notifications to all enabled channels via ChannelRouter."
-  -- The ChannelRouter receives a DispatchContext (PERF-3) and dispatches
-  -- to all eligible channels concurrently via Promise.allSettled.
-  -- Each channel is gated by shouldNotify(prefs, type, channel) then
-  -- availability (derived from pre-fetched context, not a DB query).
-  when: NotificationDispatcher.dispatch(event)
-  let user_id = event.payload.userId
-  let ctx = build_dispatch_context(user_id)
-  let draft = map_event_to_notification(event, user_id)
+    -- Route notifications to all enabled channels via ChannelRouter.
+    when: ChannelRoutingReady(event, prefs)
+    let user_id = event.payload.user_id
+    let ctx = build_dispatch_context(user_id)
+    let draft = map_event_to_notification(event, user_id)
 
-  -- Phase 1: Preference gating (synchronous, no I/O)
-  -- Phase 2: Availability check (derived field on ctx, no DB)
-  -- Phase 3: Dispatch to each eligible channel (concurrent, fire-and-forget)
+    ensures:
+        if should_notify(ctx.preferences, draft.type, in_app):
+            Notification.created(
+                user_id: user_id,
+                type: event.notification_type,
+                message: format_message(event),
+                module_id: event.payload.module_id,
+                automation_id: event.payload.automation_id,
+                read: false
+            )
 
-  for channel in registered_channels:
-    requires: shouldNotify(ctx.preferences, draft.type, channel.name) = true
+        if should_notify(ctx.preferences, draft.type, webhook) and ctx.webhook_available:
+            WebhookDeliveryRequested(draft: draft, ctx: ctx)
 
-    if channel.name = inApp:
-      -- Always available, no infrastructure check needed.
-      ensures: Notification.created(
-        userId: user_id,
-        type: event.notificationType,
-        message: formatMessage(event),
-        moduleId: event.payload.moduleId,
-        automationId: event.payload.automationId,
-        read: false
-      )
+        if should_notify(ctx.preferences, draft.type, email) and ctx.email_available:
+            EmailDeliveryRequested(draft: draft, ctx: ctx)
 
-    if channel.name = webhook:
-      requires: ctx.webhook_available = true
-      ensures: WebhookDelivery(draft, ctx)
-      -- Delivers to ctx.webhook_endpoints (pre-fetched, no DB query).
-      -- See WebhookDelivery rule for retry, signing, and failure handling.
+        if should_notify(ctx.preferences, draft.type, push) and ctx.push_available:
+            PushDeliveryRequested(draft: draft, ctx: ctx)
 
-    if channel.name = email:
-      requires: ctx.email_available = true
-      ensures: EmailDelivery(draft, ctx)
-      -- Uses ctx.smtp_config + ctx.recipient_email + ctx.locale (pre-fetched).
-      -- See EmailDelivery rule for TLS enforcement and rate limiting.
-
-    if channel.name = push:
-      requires: ctx.push_available = true
-      ensures: PushDelivery(draft, ctx)
-      -- Uses ctx.vapid_config + ctx.subscriptions + ctx.smtp_config (pre-fetched).
-      -- VAPID subject derived from ctx.smtp_config.fromAddress (F-11: no extra query).
-      -- See PushDelivery rule for stale subscription handling.
-
-  @guidance
-    -- PERF-3 key change: channels receive DispatchContext instead of userId.
-    -- No channel queries the database for user settings, locale, SMTP config,
-    -- VAPID keys, subscriptions, or webhook endpoints. All pre-fetched in ctx.
-    --
-    -- Error isolation: one channel failure does not block others.
-    -- The ChannelRouter catches errors per channel and continues.
-    --
-    -- shouldNotify() accepts an optional channel parameter:
-    --   - With channel: checks that specific channel is enabled in prefs.channels
-    --   - Without channel: returns true if ANY channel is enabled (used by dispatcher
-    --     to decide whether to build a NotificationDraft at all).
-    -- This two-level gating avoids building drafts when all channels are disabled.
-    --
-    -- F-10 resolution: isAvailable + dispatch double-query pattern eliminated.
-    -- Previously each channel queried infrastructure twice (count in isAvailable,
-    -- findMany in dispatch). Now both checks use ctx fields — zero DB queries.
+    @guidance
+        -- PERF-3 key change: channels receive DispatchContext instead of userId.
+        -- No channel queries the database for user settings, locale, SMTP config,
+        -- VAPID keys, subscriptions, or webhook endpoints. All pre-fetched in ctx.
+        --
+        -- Error isolation: one channel failure does not block others.
+        -- shouldNotify() accepts an optional channel parameter:
+        --   - With channel: checks that specific channel is enabled in prefs.channels
+        --   - Without channel: returns true if ANY channel is enabled
 }
 
 rule DegradationDispatchParity {
-  -- "Degradation alerts follow the same routing rules as event-bus-sourced notifications."
-  -- The degradation module (connector bounded context) calls routeDrafts() which
-  -- delegates to channelRouter.route(draft, ctx) — the same router that ChannelRouting
-  -- uses for event-bus-sourced notifications.
-  --
-  -- This is a secondary entry point: degradation builds NotificationDrafts directly
-  -- instead of emitting domain events, because per-automation fan-out cannot easily
-  -- round-trip through the event bus.
-  --
-  -- Behavioral guarantees:
-  --   1. Each affected automation gets one NotificationDraft
-  --   2. DispatchContext is built per unique userId (deduplication)
-  --   3. channelRouter.route(draft, ctx) is called per draft
-  --   4. Same ChannelRouting behaviour applies: shouldNotify gating,
-  --      availability checks, concurrent dispatch to all eligible channels
-  --   5. If buildDispatchContext(userId) fails for one user, drafts for
-  --      other users are still routed (error isolation via Promise.allSettled)
-  --   6. Automation pause and AutomationDegraded event emission proceed
-  --      regardless of notification routing success or failure
+    -- Degradation alerts follow the same routing rules as event-bus-sourced notifications.
+    -- The degradation module calls routeDrafts() which delegates to
+    -- channelRouter.route(draft, ctx) — the same router that ChannelRouting uses.
+    when: DegradationDispatch(event)
+    let user_id = event.payload.user_id
+    let ctx = build_dispatch_context(user_id)
+    let draft = map_event_to_notification(event, user_id)
 
-  -- Triggered when: degradation handler pauses automations
-  -- (auth_failure, consecutive_failures, or cb_escalation)
-  -- The degradation module builds NotificationDrafts and calls routeDrafts()
+    ensures: ChannelRoutingReady(event: event, prefs: ctx.preferences)
 
-  @guidance
-    -- IF-4 fix (session 2026-05-12c): all 3 degradation sites were migrated from
-    -- direct prisma.notification.create to channelRouter.route(). The shared
-    -- routeDrafts() helper in degradation.ts builds DispatchContext per unique userId
-    -- and routes each draft through the same ChannelRouter singleton.
-    --
-    -- The key guarantee: users who configured Email/Push/Webhook for degradation
-    -- alert types now receive them. Before IF-4, only InApp was reached.
+    @guidance
+        -- IF-4 fix (session 2026-05-12c): all 3 degradation sites were migrated from
+        -- direct prisma.notification.create to channelRouter.route(). The shared
+        -- routeDrafts() helper in degradation.ts builds DispatchContext per unique userId
+        -- and routes each draft through the same ChannelRouter singleton.
 }
 
 rule BatchSummary {
-  -- "Automation runs produce a summary notification, not per-vacancy."
-  -- When an automation run stages N vacancies, the dispatcher creates
-  -- ONE summary notification instead of N individual ones.
-  when: EventBus.publish(VacancyStaged) from automation context
-  let automationId = event.payload.automationId
-  requires: automationId != null
-    -- Only automation-sourced staging gets batched. Manual staging is individual.
+    -- Automation runs produce a summary notification, not per-vacancy.
+    when: VacancyBatchCompleted(event)
+    let automation_id = event.payload.automation_id
+    requires: automation_id != null
 
-  -- The dispatcher collects VacancyStaged events from the same automation run
-  -- and produces a single summary notification after the run completes.
-  -- Trigger: BulkActionCompleted or a dedicated AutomationRunCompleted event.
+    ensures: Notification.created(
+        user_id: event.payload.user_id,
+        type: vacancy_batch_staged,
+        message: format_message(event),
+        automation_id: automation_id,
+        read: false
+    )
 
-  ensures: Notification.created(
-    userId: event.payload.userId,
-    type: vacancy_batch_staged,
-    message: "{count} new vacancies discovered by '{automation.name}'",
-    automationId: automationId,
-    read: false
-  )
-
-  ensures: no individual VacancyStaged notifications are created for automated intake
-
-  @guidance
-    -- Implementation: the runner emits individual VacancyStaged events (for audit/bus),
-    -- but the NotificationDispatcher aggregates them. It subscribes to VacancyStaged
-    -- and buffers events by automationId. When a configurable flush interval passes
-    -- (e.g., 30 seconds) or an explicit flush trigger fires, it creates the summary.
-    --
-    -- Alternative: the runner emits a single VacancyStagedBatch event after the run.
-    -- This is simpler but loses per-vacancy event granularity on the bus.
-    -- Decision: use the buffering approach — individual events on the bus,
-    -- summary notification to the user.
+    @guidance
+        -- Implementation: the runner emits individual VacancyStaged events (for audit/bus),
+        -- but the NotificationDispatcher aggregates them. It subscribes to VacancyStaged
+        -- and buffers events by automationId. When a configurable flush interval passes
+        -- or an explicit flush trigger fires, it creates the summary.
 }
 
 rule WebhookDelivery {
-  -- "Deliver notifications to active webhook endpoints."
-  when: ChannelRouter routes notification to webhook channel
-  -- PERF-3: endpoints pre-fetched in ctx.webhook_endpoints (no DB query here)
-  let endpoints = ctx.webhook_endpoints
+    -- Deliver notifications to active webhook endpoints.
+    when: WebhookDeliveryRequested(draft, ctx)
+    for endpoint in ctx.webhook_endpoints:
+        requires: endpoint.active = true
+        requires: validate_webhook_url(endpoint.url) = true
 
-  for_each endpoint in endpoints:
-    requires: endpoint.events contains notificationType
-    requires: validateWebhookUrl(endpoint.url) = valid
+        let decrypted_secret = decrypt(endpoint.secret, endpoint.iv)
+        let signature = hmac_sha256(decrypted_secret, serialize(draft))
 
-    -- HMAC signing
-    let payload = { event: notificationType, timestamp: now(), data: notificationData }
-    let decryptedSecret = decrypt(endpoint.secret, endpoint.iv)
-    let signature = hmac_sha256(decryptedSecret, json(payload))
+        ensures: WebhookDeliveryAttempted(
+            endpoint: endpoint,
+            draft: draft,
+            signature: signature
+        )
 
-    -- HTTP POST with retry
-    ensures: POST endpoint.url with headers:
-      X-Webhook-Signature: "sha256={signature}"
-      X-Webhook-Event: notificationType
-      Content-Type: "application/json"
-      User-Agent: "JobSync-Webhook/1.0"
+    @guidance
+        -- SSRF validation is performed on EVERY dispatch, not just on endpoint creation.
+        -- URL resolution may change (DNS rebinding), so re-validation is required.
+        -- The secret is AES-encrypted at rest and decrypted only for HMAC computation.
+        -- Delivery to each endpoint is independent — one endpoint failure does not
+        -- prevent delivery to other endpoints.
+        -- Timeout: 10 seconds per attempt (config.webhook_fetch_timeout_ms).
+        -- Retry: 3 attempts with backoff 1s, 5s, 30s.
+}
 
-    -- Timeout: 10 seconds per attempt
-    -- Retry: 3 attempts with backoff 1s, 5s, 30s
+rule WebhookDeliverySuccess {
+    -- Reset failure count on successful webhook delivery.
+    when: WebhookEndpointDeliverySucceeded(endpoint)
 
-    if delivery succeeds:
-      ensures: endpoint.failureCount = 0    -- reset on success
+    ensures: endpoint.failure_count = 0
 
-  @guidance
-    -- SSRF validation is performed on EVERY dispatch, not just on endpoint creation.
-    -- URL resolution may change (DNS rebinding), so re-validation is required.
-    -- The secret is AES-encrypted at rest and decrypted only for HMAC computation.
-    -- Delivery to each endpoint is independent — one endpoint failure does not
-    -- prevent delivery to other endpoints.
+    @guidance
+        -- Success resets the consecutive failure counter.
 }
 
 rule WebhookRetryExhaustion {
-  -- "Create in-app notification on webhook delivery failure."
-  when: WebhookDelivery fails after 3 retry attempts for an endpoint
-  ensures: endpoint.failureCount incremented by 1
-  ensures: Notification.created(
-    userId: endpoint.userId,
-    type: "module_unreachable",
-    message: "Webhook delivery failed for event \"{event}\" to {endpoint.url}"
-  )
+    -- Create in-app notification on webhook delivery failure after all retries.
+    when: WebhookEndpointDeliveryFailed(endpoint, event_type)
 
-  @guidance
-    -- Uses the existing "module_unreachable" NotificationType for delivery failure
-    -- notifications, as it semantically represents an unreachable external target.
-    -- This is a best-effort notification — failure to create it is logged but not fatal.
+    ensures:
+        endpoint.failure_count = endpoint.failure_count + 1
+        Notification.created(
+            user_id: endpoint.user_id,
+            type: module_unreachable,
+            message: format_message(event_type)
+        )
+
+    @guidance
+        -- Uses the existing module_unreachable NotificationType for delivery failure
+        -- notifications, as it semantically represents an unreachable external target.
+        -- This is a best-effort notification — failure to create it is logged but not fatal.
 }
 
 rule WebhookAutoDeactivation {
-  -- "Auto-deactivate webhook endpoint after 5 consecutive failures."
-  when: endpoint.failureCount >= 5
-  ensures: endpoint.active = false
-  ensures: Notification.created(
-    userId: endpoint.userId,
-    type: "module_unreachable",
-    message: "Webhook endpoint {endpoint.url} deactivated due to repeated failures"
-  )
+    -- Auto-deactivate webhook endpoint after threshold consecutive failures.
+    when: endpoint: WebhookEndpoint.failure_count becomes config.webhook_auto_deactivate_threshold
 
-  @guidance
-    -- The threshold of 5 is defined as AUTO_DEACTIVATE_THRESHOLD in the implementation.
-    -- Once deactivated, the endpoint is skipped during future dispatches.
-    -- The user must manually re-activate the endpoint in Settings after fixing the issue.
-    -- Failure count resets to 0 on any successful delivery (see WebhookDelivery rule).
+    ensures:
+        endpoint.active = false
+        Notification.created(
+            user_id: endpoint.user_id,
+            type: module_unreachable,
+            message: format_message(endpoint)
+        )
+
+    @guidance
+        -- The threshold is defined as webhook_auto_deactivate_threshold in config.
+        -- Once deactivated, the endpoint is skipped during future dispatches.
+        -- The user must manually re-activate the endpoint in Settings after fixing the issue.
+        -- Failure count resets to 0 on any successful delivery (see WebhookDeliverySuccess rule).
 }
 
 rule EmailDelivery {
-  -- "Deliver notifications via SMTP email."
-  when: ChannelRouter routes notification to email channel
-  -- PERF-3: config pre-fetched in ctx.smtp_config (no DB query here)
-  let config = ctx.smtp_config
+    -- Deliver notifications via SMTP email.
+    when: EmailDeliveryRequested(draft, ctx)
+    let smtp = ctx.smtp_config
 
-  requires: config != null
-  requires: checkEmailRateLimit(userId) = allowed
-  requires: validateSmtpHost(config.host) = valid
+    requires: smtp != null
+    requires: check_email_rate_limit(ctx.user_id) = true
+    requires: validate_smtp_host(smtp.host) = true
+    requires: smtp.tls_required = true
 
-  -- TLS enforcement
-  requires: config.tlsRequired = true implies STARTTLS or implicit TLS (port 465)
+    let template = render_email_template(draft.type, draft, ctx.locale)
 
-  -- Template rendering (locale from ctx, no DB query — F-06 resolved)
-  let template = renderEmailTemplate(notificationType, data, ctx.locale)
+    ensures: EmailSent(
+        from: smtp.from_address,
+        to: ctx.recipient_email,
+        subject: template,
+        draft: draft
+    )
 
-  ensures: email sent via nodemailer with:
-    from: config.fromAddress
-    to: ctx.recipient_email              -- pre-fetched from user.email (no DB query — PERF-3)
-    subject: template.subject
-    html: template.html
-    text: template.text
-
-  @guidance
-    -- Rate limit: 10 emails per minute per user.
-    -- TLS: rejectUnauthorized=true, minVersion='TLSv1.2'.
-    -- Port 465 uses implicit TLS (secure: true).
-    -- Other ports use STARTTLS (requireTLS from config).
-    -- SMTP host validated against SSRF rules on every dispatch.
-    -- Password decrypted from AES only at send time.
+    @guidance
+        -- Rate limit: 10 emails per minute per user.
+        -- TLS: rejectUnauthorized=true, minVersion='TLSv1.2'.
+        -- Port 465 uses implicit TLS (secure: true).
+        -- Other ports use STARTTLS (requireTLS from config).
+        -- SMTP host validated against SSRF rules on every dispatch.
+        -- Password decrypted from AES only at send time.
 }
 
 rule PushDelivery {
-  -- "Deliver notifications via browser push (VAPID)."
-  when: ChannelRouter routes notification to push channel
-  -- PERF-3: keys + subscriptions pre-fetched in ctx (no DB queries here)
-  let vapidKeys = ctx.vapid_config
-  let subscriptions = ctx.subscriptions
+    -- Deliver notifications via browser push (VAPID).
+    when: PushDeliveryRequested(draft, ctx)
+    let vapid_keys = ctx.vapid_config
+    let push_subscriptions = ctx.subscriptions
 
-  requires: vapidKeys != null
-  requires: subscriptions.count > 0
-  requires: checkPushDispatchRateLimit(userId) = allowed
+    requires: vapid_keys != null
+    requires: push_subscriptions.count > 0
+    requires: check_push_rate_limit(ctx.user_id) = true
 
-  for_each subscription in subscriptions:
-    -- Decrypt subscription keys (each encrypted with its own IV)
-    -- The iv field stores both IVs as "ivP256dh|ivAuth" (pipe-separated)
-    let iv_p256dh = split(subscription.iv, "|").first
-    let iv_auth = split(subscription.iv, "|").last
-    let p256dh = decrypt(subscription.p256dh, iv_p256dh)
-    let auth = decrypt(subscription.auth, iv_auth)
+    for subscription in push_subscriptions:
+        ensures: PushNotificationAttempted(
+            subscription: subscription,
+            draft: draft,
+            vapid_config: vapid_keys
+        )
 
-    ensures: web-push sendNotification with VAPID signing
-
-    if delivery returns 410 Gone or 404 Not Found:
-      ensures: subscription deleted (stale)
-      ensures: availability cache invalidated for push channel
-      -- Silent cleanup — not an error condition.
-      -- Some push services return 404 instead of 410 for expired subscriptions.
-      -- Cache invalidation via onSubscriptionPurged callback (see AvailabilityCacheTtl
-      -- invariant, caller B). Without this, the 30s TTL cache keeps claiming
-      -- "push available" even when the last subscription was purged.
-
-    if delivery returns 401 or 403:
-      ensures: error logged as VAPID auth failure
-      ensures: subscription preserved (NOT deleted)
-      -- 401/403 indicate VAPID authentication problems, not stale subscriptions.
-      -- Deleting subscriptions on auth failures would cause permanent data loss
-      -- from transient configuration issues.
-
-    if delivery fails with other error:
-      ensures: error logged, continue to next subscription
-      -- One failed subscription does not block others.
-
-  @guidance
-    -- Rate limit: 20 pushes per minute per user.
-    -- VAPID subject derived from ctx.smtp_config.fromAddress (F-11: resolved from
-    -- pre-fetched context, no separate SmtpConfig query). Falls back to
-    -- 'mailto:noreply@jobsync.local' when ctx.smtp_config is null.
-    -- Subscription keys (p256dh, auth) are AES-encrypted at rest.
-    -- Delivery to all subscriptions is concurrent (Promise.allSettled).
-    -- 410 Gone or 404 Not Found indicates browser has unsubscribed — silently remove.
-    -- 401/403 are VAPID auth problems — log but preserve subscriptions.
+    @guidance
+        -- Rate limit: 20 pushes per minute per user.
+        -- VAPID subject derived from ctx.smtp_config.fromAddress (F-11: resolved from
+        -- pre-fetched context, no separate SmtpConfig query). Falls back to
+        -- 'mailto:noreply@jobsync.local' when ctx.smtp_config is null.
+        -- Subscription keys (p256dh, auth) are AES-encrypted at rest.
+        -- Delivery to all subscriptions is concurrent (Promise.allSettled).
+        -- 410 Gone or 404 Not Found indicates browser has unsubscribed — silently remove.
+        -- 401/403 are VAPID auth problems — log but preserve subscriptions.
 }
 
--- =============================================================================
--- Event-to-Notification Mapping
--- =============================================================================
+rule StaleSubscriptionCleanup {
+    -- Remove stale push subscriptions on 410 Gone or 404 Not Found.
+    when: PushSubscriptionStale(subscription)
 
--- This section defines how each domain event type maps to a notification.
--- The dispatcher uses this mapping in mapEventToNotification().
+    ensures: not exists subscription
 
-trigger VacancyPromoted -> Notification {
-  type: vacancy_promoted
-  message: "Vacancy '{title}' promoted to your job board"
-  -- Low priority — user just performed this action themselves.
-  -- May be disabled by default in preferences.
-}
-
-trigger VacancyStaged -> BatchSummary {
-  -- Individual VacancyStaged events are batched per BatchSummary rule.
-  -- See BatchSummary rule above.
-}
-
-trigger BulkActionCompleted -> Notification {
-  type: bulk_action_completed
-  message: "Bulk {actionType}: {succeeded} succeeded, {failed} failed"
-}
-
-trigger ModuleDeactivated -> Notification {
-  type: module_deactivated
-  message: "Module '{moduleName}' deactivated. {affectedCount} automation(s) paused."
-  -- Already handled by module-lifecycle.allium rules.
-  -- The dispatcher creates the notification; the lifecycle rule defines WHEN to emit.
-}
-
-trigger ModuleReactivated -> Notification {
-  type: module_reactivated
-  message: "Module '{moduleName}' is active again. {pausedCount} automation(s) remain paused."
-}
-
-trigger RetentionCompleted -> Notification {
-  type: retention_completed
-  message: "Retention cleanup: {purgedCount} expired vacancies removed"
-}
-
-trigger JobStatusChanged -> Notification {
-  type: job_status_changed
-  message: "Job status changed to {newStatus}"
+    @guidance
+        -- Silent cleanup — not an error condition.
+        -- Some push services return 404 instead of 410 for expired subscriptions.
 }
 
 -- =============================================================================
 -- Invariants
 -- =============================================================================
 
+-- Expression-bearing invariants for properties that can be checked over entity state.
+
 invariant NotificationsOwnedByUser {
-  ensures: for_each notification in Notification:
-    notification.userId references a valid User
-  note: "Notifications are tenant-isolated. Users only see their own notifications."
-}
-
-invariant LateBoundLocale {
-  -- Notifications are written with their i18n key and params, not a resolved
-  -- string. The UI resolves them at render time so notifications re-localize
-  -- when the viewer switches locale.
-  ensures: for_each notification in Notification:
-    notification.data.titleKey is present (a valid i18n key)
-    or notification.message is the fallback English resolved string for pre-migration clients
-  note: "Late-binding i18n pattern. Before ADR-030, the dispatcher stored `t(key, locale).replace(...)` directly in `Notification.message`, freezing the locale at dispatch time. Now servers store `data.titleKey + titleParams` and the UI late-binds via formatNotificationTitle(). The legacy `message` field is still populated in English as a fallback for email/webhook/push channels."
-  note: "See ADR-030."
-}
-
-invariant SingleNotificationWriter {
-  -- Aspirational. All Notification writes SHOULD flow through the channel
-  -- router via domain events. Direct `prisma.notification.create()` calls
-  -- are legitimate ONLY in `in-app.channel.ts` (the channel implementation).
-  ensures: for_each direct_call to prisma.notification.create in src:
-    call_site is in src/lib/notifications/channels/in-app.channel.ts
-    or call_site is tracked as a legacy exception in ADR-030
-  note: "Currently 3 legitimate direct-writers: 1 in in-app.channel.ts (the channel itself), 2 in webhook.channel.ts (recursion guard). degradation.ts was refactored (IF-4) to route through channelRouter.route() instead of direct writes."
-  note: "Any NEW direct `prisma.notification.create()` call site is a spec violation."
-}
-
-invariant PreferencesDefaults {
-  ensures: for_each user in User where NotificationPreference does not exist:
-    effective preferences are { enabled: true, channels: { inApp: true, webhook: false, email: false, push: false }, perType: {}, digestMode: immediate }
-  note: "Users without explicit preferences get all notifications via inApp channel only."
-  note: "Preferences are created lazily on first settings access, not at user registration."
+    -- Every notification references a valid user.
+    for n in Notifications:
+        exists User{email: n.user_id}
 }
 
 invariant NoDuplicateWithinWindow {
-  ensures: for_each pair (n1, n2) in Notification
-    where n1.userId = n2.userId
-    and n1.type = n2.type
-    and n1.moduleId = n2.moduleId
-    and abs(n1.createdAt - n2.createdAt) < config.DEDUP_WINDOW_MINUTES.minutes:
-    n1.id = n2.id
-  note: "Deduplication invariant. Enforced by the Deduplication rule."
-}
-
-invariant QuietHoursRespected {
-  ensures: no Notification is created during user's quiet hours
-  note: "Notifications during quiet hours are dropped, not delayed. This is MVP behavior. Future: queuing with deliverAt instead of dropping."
+    -- No two notifications share the same (user, type, module) within the dedup window.
+    for n1 in Notifications:
+        for n2 in Notifications:
+            n1 != n2
+            and n1.user_id = n2.user_id
+            and n1.type = n2.type
+            and n1.module_id = n2.module_id
+            implies not (n1.created_at = n2.created_at)
 }
 
 invariant WebhookUrlSafe {
-  ensures: for_each endpoint in WebhookEndpoint:
-    validateWebhookUrl(endpoint.url) = valid
-  note: "SSRF validation on create AND on each dispatch."
-  note: "Blocks private IPs (10.x, 172.16-31.x, 192.168.x), IMDS (169.254.169.254),"
-  note: "localhost, non-http(s) protocols, and cloud metadata endpoints."
-  note: "Re-validated at dispatch time because DNS resolution may change (DNS rebinding)."
+    for endpoint in WebhookEndpoints:
+        validate_webhook_url(endpoint.url) = true
 }
 
 invariant SmtpHostSafe {
-  ensures: for_each config in SmtpConfig:
-    validateSmtpHost(config.host) = valid
-  note: "SSRF validation on save AND on each dispatch."
+    for smtp in SmtpConfigs:
+        validate_smtp_host(smtp.host) = true
 }
 
-invariant VapidKeysEncrypted {
-  ensures: for_each config in VapidConfig:
-    config.privateKey is AES-encrypted
-  note: "Private key never stored in plaintext."
-}
+-- =============================================================================
+-- Actor Declarations
+-- =============================================================================
 
-invariant PushSubscriptionKeysEncrypted {
-  ensures: for_each sub in WebPushSubscription:
-    sub.p256dh is AES-encrypted and sub.auth is AES-encrypted
-  note: "Subscription keys encrypted at rest."
+actor NotificationRecipient {
+    identified_by: User where email != null
 }
 
 -- =============================================================================
@@ -903,60 +691,57 @@ invariant PushSubscriptionKeysEncrypted {
 -- =============================================================================
 
 surface NotificationBell {
-  -- Bell icon in the app header with unread count badge and dropdown.
-  facing actor: User
-  context entity: Notification[]
+    -- Bell icon in the app header with unread count badge and dropdown.
+    facing viewer: NotificationRecipient
+    context notification: Notification where user_id = viewer.email
 
-  exposes:
-    -- Badge: unread count (0 = no badge, >0 = count shown, >99 = "99+")
-    unreadCount: Integer,
-    -- Dropdown: recent notifications (newest first, limited to MAX_NOTIFICATIONS_DISPLAYED)
-    notifications: Notification[] ordered by createdAt desc,
-    -- Per notification: type icon, message, relative time ("3m ago"), read status
+    exposes:
+        notification.type
+        notification.message
+        notification.read
+        notification.created_at
 
-  provides:
-    MarkAsRead(notificationId: String),
-    MarkAllAsRead(),
-    DismissNotification(notificationId: String),
-    OpenNotificationSettings()
-      -- Navigates to the notification preferences page
+    provides:
+        MarkAsRead(viewer, notification)
+        MarkAllAsRead(viewer)
+        DismissNotification(viewer, notification)
 
-  @guarantee RealTimeUpdates
-    -- Unread count updates without page refresh.
-    -- Implementation options: polling (simple), SSE (efficient), WebSocket (overkill for MVP).
-    -- MVP: poll every 30 seconds. Future: SSE for instant updates.
+    @guarantee RealTimeUpdates
+        -- Unread count updates without page refresh.
+        -- MVP: poll every 30 seconds. Future: SSE for instant updates.
 
-  @guarantee PersistentNotifications
-    -- Notifications persist across sessions (DB-backed, not ephemeral toasts).
-    -- Users see missed notifications when they return to the app.
+    @guarantee PersistentNotifications
+        -- Notifications persist across sessions (DB-backed, not ephemeral toasts).
+        -- Users see missed notifications when they return to the app.
 
-  @guarantee AccessibleBadge
-    -- Badge has aria-label: "{count} unread notifications"
-    -- Dropdown is keyboard-navigable (arrow keys, Enter to open/select, Escape to close)
+    @guarantee AccessibleBadge
+        -- Badge has aria-label with unread count.
+        -- Dropdown is keyboard-navigable (arrow keys, Enter to open/select, Escape to close).
 }
 
 surface NotificationPreferencesPanel {
-  -- Settings page section for configuring notification preferences.
-  facing actor: User
-  context entity: NotificationPreference
+    -- Settings page section for configuring notification preferences.
+    facing viewer: NotificationRecipient
+    context prefs: NotificationPreference where user_id = viewer.email
 
-  exposes:
-    -- Global toggle: enabled/disabled
-    -- Per-type toggles: each NotificationType with enabled switch
-    -- Channel selection: which channels are active (inApp, webhook, email, push)
-    -- Quiet hours: start time, end time, timezone picker
-    -- Digest mode: immediate / hourly / daily selector
+    exposes:
+        prefs.enabled
+        prefs.channels
+        prefs.quiet_hours
+        for override in prefs.per_type_overrides:
+            override.notification_type
+            override.enabled
 
-  provides:
-    UpdatePreferences(prefs: NotificationPreference),
-    ResetToDefaults()
+    provides:
+        UpdatePreferences(viewer, prefs)
+        ResetToDefaults(viewer, prefs)
 
-  @guarantee TypeLabels
-    -- Each NotificationType has a human-readable label and description.
-    -- Labels are i18n keys (e.g., "settings.notifications.type.module_deactivated").
+    @guarantee TypeLabels
+        -- Each NotificationType has a human-readable label and description.
+        -- Labels are i18n keys.
 
-  @guarantee QuietHoursPreview
-    -- After setting quiet hours, show a preview: "Notifications will be suppressed from 22:00 to 07:00 (Europe/Berlin)"
+    @guarantee QuietHoursPreview
+        -- After setting quiet hours, show a preview of the configured window.
 }
 
 -- =============================================================================

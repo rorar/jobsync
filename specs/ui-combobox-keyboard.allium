@@ -304,34 +304,22 @@ invariant MaxLimitRespected {
             c.current_count <= c.max_items
 }
 
-invariant ManualFilterRequired {
-    -- Components with custom Enter handling must use shouldFilter={false}
-    -- to prevent cmdk's native Enter→select from conflicting.
-    -- BaseCombobox delegates via a `filter` prop — consumers are responsible.
-    for c in [Combobox, TagInput, EuresLocationCombobox, EuresOccupationCombobox, EuresLanguageCombobox]:
-        c.uses shouldFilter={false} on their Command component
+-- ManualFilterRequired (not expressible as entity-state assertion):
+-- Components with custom Enter handling must use shouldFilter={false}
+-- to prevent cmdk's native Enter→select from conflicting.
+-- BaseCombobox delegates via a `filter` prop — consumers are responsible.
+-- Set shouldFilter={false} on the Command component and implement
+-- filtering via useMemo or useState. BaseCombobox accepts an optional
+-- `filter` prop, but all its consumers set shouldFilter={false}.
+-- EURES comboboxes use onSelect (via CommandItem) instead of custom
+-- onKeyDown Enter handlers — this is functionally equivalent because
+-- cmdk's native Enter triggers onSelect on the highlighted item.
 
-    @guidance
-        -- Set shouldFilter={false} on the Command component and implement
-        -- filtering via useMemo or useState. BaseCombobox accepts an optional
-        -- `filter` prop, but all its consumers set shouldFilter={false}.
-        -- EURES comboboxes use onSelect (via CommandItem) instead of custom
-        -- onKeyDown Enter handlers — this is functionally equivalent because
-        -- cmdk's native Enter triggers onSelect on the highlighted item.
-}
-
-invariant TabNeverPrevented {
-    -- Tab key default behaviour is never suppressed
-    -- The browser always moves focus to the next focusable element
-    for c in Comboboxes:
-        true
-
-    @guidance
-        -- This invariant is not expressible as a data condition.
-        -- It is a behavioural constraint: no onKeyDown handler may
-        -- call e.preventDefault() when e.key === "Tab".
-        -- Enforce via code review and E2E testing.
-}
+-- TabNeverPrevented (not expressible as entity-state assertion):
+-- Tab key default behaviour is never suppressed.
+-- The browser always moves focus to the next focusable element.
+-- No onKeyDown handler may call e.preventDefault() when e.key === "Tab".
+-- Enforce via code review and E2E testing.
 
 ------------------------------------------------------------
 -- Surfaces

@@ -35,109 +35,195 @@ external entity ApiKey {
     -- Resolved via resolveApiKey(userId, moduleId).
 }
 
+external entity User {
+    -- Authenticated user requesting AI operations.
+}
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value LanguageModel {
+    -- Opaque handle to an AI model instance for inference.
+    -- Used with Vercel AI SDK (streamText, generateText).
+    provider: AiModuleId
+    model_name: String
+}
+
+value AIConnectorResult {
+    -- All AI module operations return this typed result.
+    --   success: { success: true, data: T }
+    --   failure: { success: false, error: { type: AIErrorType, message: String } }
+    success: Boolean
+}
+
+value MatchResult {
+    -- Structured output from job-resume matching.
+    score: Decimal
+    analysis: String
+    recommendations: String
+}
+
+------------------------------------------------------------
+-- Contracts
+------------------------------------------------------------
+
+-- The AIProviderConnector is the Published Language for all AI modules.
+-- Every AI module implements this exact interface.
+
+contract AIProviderConnector {
+    health_check: (user_id: String?) -> AIConnectorResult
+    list_models: (user_id: String?) -> AIConnectorResult
+    create_model: (model_name: String, user_id: String?) -> AIConnectorResult
+
+    @invariant TypedResults
+        -- All operations return AIConnectorResult:
+        --   success: { success: true, data: T }
+        --   failure: { success: false, error: { type: AIErrorType, message: String } }
+
+    @guidance
+        -- Each AI module (Ollama, OpenAI, DeepSeek) implements this contract.
+        -- The connector type is ai_provider in the ModuleManifest.
+}
+
+-- Safety and security constraints that all AI provider operations must uphold.
+
+contract AIProviderSafety {
+    validate_url: (url: String) -> Boolean
+    filter_allowlist: (body: Any) -> Any
+    resolve_credential: (user_id: String, module_id: String) -> Any
+
+    @invariant OllamaFieldAllowlist
+        -- The Ollama proxy endpoint MUST use a field allowlist for body forwarding.
+        -- Only explicitly listed fields (model, prompt, stream, system, template, context)
+        -- may be forwarded to the Ollama API.
+        -- Raw client body MUST NEVER be forwarded without filtering.
+        -- This prevents parameter injection attacks (CWE-20).
+
+    @invariant OllamaUrlSafety
+        -- Ollama URLs MUST be validated before use:
+        -- 1. Protocol must be http or https
+        -- 2. No embedded credentials (username:password@host)
+        -- 3. Cloud metadata endpoints are blocked (169.254.169.254, etc.)
+        -- 4. If validation fails, fall back to localhost default
+
+    @invariant CredentialResolution
+        -- API keys/URLs are resolved per-user using the credential resolution chain:
+        -- 1. User's encrypted key from DB (ApiKey table, decrypted at runtime)
+        -- 2. Environment variable fallback (e.g. OPENAI_API_KEY)
+        -- 3. Default value from manifest (only Ollama has a default URL)
+        -- Cloud providers FAIL if no key is found (no silent fallback).
+
+    @invariant AuthenticatedAIRoutes
+        -- ALL /api/ai/* routes MUST check auth() before processing.
+        -- Unauthenticated requests receive 401.
+
+    @invariant AIErrorClassification
+        -- All AI module operations return typed errors via AIConnectorResult.
+        -- Error types map to specific HTTP status codes when surfaced via API:
+        --   auth_failed -> 401/403
+        --   rate_limited -> 429
+        --   unavailable -> 503
+        --   network -> 502
+
+    @guidance
+        -- These constraints are cross-cutting security properties.
+        -- See security-rules.allium for the full URL validation spec.
+}
+
 ------------------------------------------------------------
 -- Enumerations
 ------------------------------------------------------------
 
 enum AiModuleId {
     ollama          -- Local LLM via Ollama
-    openai          -- OpenAI cloud API
-    deepseek        -- DeepSeek cloud API
+    | openai        -- OpenAI cloud API
+    | deepseek      -- DeepSeek cloud API
 }
 
 enum CredentialType {
     endpoint_url    -- Ollama: URL to local/remote instance (default: localhost:11434)
-    api_key         -- OpenAI, DeepSeek: bearer token
-    none            -- Module requires no credentials
+    | api_key       -- OpenAI, DeepSeek: bearer token
+    | none          -- Module requires no credentials
 }
 -- Code uses CredentialType (from manifest.ts), not CredentialMode.
 
 enum AIErrorType {
     unavailable     -- Service is down or returned error status (has message)
-    auth_failed     -- API key invalid, expired, or missing (has message)
-    rate_limited    -- Too many requests (has retryAfter?: number, NO message field)
-    network         -- Cannot connect (DNS failure, timeout, ECONNREFUSED) (has message)
+    | auth_failed   -- API key invalid, expired, or missing (has message)
+    | rate_limited  -- Too many requests (has retryAfter?: number, NO message field)
+    | network       -- Cannot connect (DNS failure, timeout, ECONNREFUSED) (has message)
 }
 -- Note: rate_limited variant intentionally omits message. Callers use a default
 -- string: "Module rate limited". See providers.ts fallback pattern.
 
 ------------------------------------------------------------
--- Core Interface
-------------------------------------------------------------
-
--- The AIProviderConnector is the Published Language for all AI modules.
--- Every AI module implements this exact interface.
-
-interface AIProviderConnector {
-    id: AiModuleId
-    name: String
-    requires_api_key: Boolean
-
-    -- Check if the provider is reachable and credentials are valid.
-    health_check(user_id?: String): AIConnectorResult<Boolean>
-
-    -- List available models from the provider.
-    list_models(user_id?: String): AIConnectorResult<List<String>>
-
-    -- Create a language model instance for inference.
-    create_model(model_name: String, user_id?: String): AIConnectorResult<LanguageModel>
-}
-
--- All operations return AIConnectorResult:
---   success: { success: true, data: T }
---   failure: { success: false, error: { type: AIErrorType, message: String } }
-
-------------------------------------------------------------
--- Modules
+-- Entities and Variants
 ------------------------------------------------------------
 
 -- === Ollama ===
 
-entity OllamaModule implements AIProviderConnector {
-    id: "ollama"
-    name: "Ollama"
-    requires_api_key: false
+entity OllamaModule {
+    module_id: AiModuleId
+    name: String
+    requires_api_key: Boolean
+    credential_mode: CredentialType
+    default_base_url: String
+    default_model: String
+    health_check_timeout: Duration
 
-    credential_mode: endpoint_url
-    default_base_url: "http://127.0.0.1:11434"
-    default_model: "llama3.2"
-    health_check_timeout: 5000ms
-
-    @invariant
+    @guidance
         -- Ollama does NOT require an API key.
         -- The "credential" is the base URL to the Ollama instance.
         -- If no URL is configured, falls back to localhost.
         -- URL is resolved via: user DB key -> env OLLAMA_BASE_URL -> default.
 }
 
-entity OpenAIModule implements AIProviderConnector {
-    id: "openai"
-    name: "OpenAI"
-    requires_api_key: true
+-- === OpenAI ===
 
-    credential_mode: api_key
-    api_base: "https://api.openai.com/v1"
-    default_model: "gpt-4o-mini"
-    health_check_timeout: 10000ms
+entity OpenAIModule {
+    module_id: AiModuleId
+    name: String
+    requires_api_key: Boolean
+    credential_mode: CredentialType
+    api_base: String
+    default_model: String
+    health_check_timeout: Duration
 
-    @invariant
+    @guidance
         -- OpenAI REQUIRES an API key. All operations fail with auth_failed if missing.
         -- API key resolved via: user DB key -> env OPENAI_API_KEY.
 }
 
-entity DeepSeekModule implements AIProviderConnector {
-    id: "deepseek"
-    name: "DeepSeek"
-    requires_api_key: true
+-- === DeepSeek ===
 
-    credential_mode: api_key
-    api_base: "https://api.deepseek.com"
-    default_model: "deepseek-chat"
-    health_check_timeout: 10000ms
+entity DeepSeekModule {
+    module_id: AiModuleId
+    name: String
+    requires_api_key: Boolean
+    credential_mode: CredentialType
+    api_base: String
+    default_model: String
+    health_check_timeout: Duration
 
-    @invariant
+    @guidance
         -- DeepSeek REQUIRES an API key. Same pattern as OpenAI.
         -- API key resolved via: user DB key -> env DEEPSEEK_API_KEY.
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    ollama_default_base_url: String = "http://127.0.0.1:11434"
+    ollama_default_model: String = "llama3.2"
+    openai_default_model: String = "gpt-4o-mini"
+    deepseek_default_model: String = "deepseek-chat"
+    health_check_timeout_ollama: Duration = 5.seconds
+    health_check_timeout_cloud: Duration = 10.seconds
+    proxy_request_timeout: Duration = 10.seconds
+    match_temperature: Decimal = 0.3
 }
 
 ------------------------------------------------------------
@@ -147,192 +233,179 @@ entity DeepSeekModule implements AIProviderConnector {
 -- === Module Registration ===
 
 rule RegisterAIModules {
-    when: Application starts (import-time side effect)
+    when: ApplicationStarted(registry)
 
-    ensures: moduleRegistry.register(ollamaManifest, createOllamaConnector)
-    ensures: moduleRegistry.register(openaiManifest, createOpenAIConnector)
-    ensures: moduleRegistry.register(deepseekManifest, createDeepSeekConnector)
+    ensures:
+        ModuleRegistered(registry: registry, module_id: ollama)
+        ModuleRegistered(registry: registry, module_id: openai)
+        ModuleRegistered(registry: registry, module_id: deepseek)
 
-    -- Registration happens at import time via self-registration in each module's index.ts (triggered by register-all.ts).
-    -- The unified ModuleRegistry manages both Job Discovery and AI Provider modules.
-    -- AIProviderRegistry is a thin facade over ModuleRegistry filtered by ConnectorType.
+    @guidance
+        -- Registration happens at import time via self-registration in each
+        -- module's index.ts (triggered by register-all.ts).
+        -- The unified ModuleRegistry manages both Job Discovery and AI Provider modules.
+        -- AIProviderRegistry is a thin facade over ModuleRegistry filtered by ConnectorType.
 }
 
 -- === Health Check ===
 
-rule HealthCheck {
-    when: Health check is requested for an AI module
+rule HealthCheckOllama {
+    when: HealthCheckRequested(user, module)
 
-    requires: Module is registered
+    requires: module.module_id = ollama
 
     ensures:
-        for Ollama:
-            fetch GET {baseUrl}/api/tags with timeout
-            if response ok: return success
-            if network error: return { type: network }
-        for OpenAI:
-            resolve API key for user
-            if no key: return { type: auth_failed }
-            fetch GET api.openai.com/v1/models with Bearer token
-            if 401/403: return { type: auth_failed }
-            if 429: return { type: rate_limited }
-        for DeepSeek:
-            same pattern as OpenAI with api.deepseek.com
+        HealthCheckResult(module: module, user: user, outcome: health_check_complete)
+
+    @guidance
+        -- Fetch GET {baseUrl}/api/tags with timeout.
+        -- If response ok: return success.
+        -- If network error: return { type: network }.
+}
+
+rule HealthCheckCloud {
+    when: HealthCheckRequested(user, module)
+
+    requires: module.module_id in {openai, deepseek}
+
+    let credential = resolveApiKey(user, module)
+
+    ensures:
+        if credential = null:
+            HealthCheckResult(module: module, user: user, outcome: auth_failed)
+        else:
+            HealthCheckResult(module: module, user: user, outcome: health_check_complete)
+
+    @guidance
+        -- Resolve API key for user.
+        -- If no key: return { type: auth_failed }.
+        -- Fetch GET /v1/models with Bearer token.
+        -- If 401/403: return { type: auth_failed }.
+        -- If 429: return { type: rate_limited }.
 }
 
 -- === Model Listing ===
 
-rule ListModels {
-    when: User requests available models from a provider
+rule ListModelsOllama {
+    when: ListModelsRequested(user, module)
 
-    requires: Module is registered
-    requires: For cloud providers (OpenAI, DeepSeek): API key must be configured
+    requires: module.module_id = ollama
 
     ensures:
-        for Ollama:
-            parse response.models[].name from /api/tags
-        for OpenAI:
-            parse response.data[].id from /models
-        for DeepSeek:
-            parse response.data[].id from /models
+        ModelListResult(module: module, user: user, outcome: models_listed)
+
+    @guidance
+        -- Parse response.models[].name from /api/tags.
+}
+
+rule ListModelsCloud {
+    when: ListModelsRequested(user, module)
+
+    requires: module.module_id in {openai, deepseek}
+
+    let credential = resolveApiKey(user, module)
+
+    ensures:
+        if credential = null:
+            ModelListResult(module: module, user: user, outcome: auth_failed)
+        else:
+            ModelListResult(module: module, user: user, outcome: models_listed)
+
+    @guidance
+        -- For cloud providers (OpenAI, DeepSeek): API key must be configured.
+        -- Parse response.data[].id from /models.
 }
 
 -- === Model Creation ===
 
 rule CreateModel {
-    when: System needs a language model instance for inference
+    when: CreateModelRequested(user, module, model_name)
 
-    requires: Module is registered
-    requires: For cloud providers: API key must be configured
+    ensures:
+        ModelCreated(module: module, user: user, model_name: model_name)
 
-    ensures: LanguageModel instance created using the provider's SDK
-    ensures: Model can be used with Vercel AI SDK (streamText, generateText)
+    @guidance
+        -- Module must be registered.
+        -- For cloud providers: API key must be configured.
+        -- LanguageModel instance created using the provider's SDK.
+        -- Model can be used with Vercel AI SDK (streamText, generateText).
 }
 
 -- === Ollama Proxy (Server-Side) ===
 
 rule OllamaProxyGenerate {
-    when: Client sends POST /api/ai/ollama/generate
+    when: OllamaProxyRequest(user, request_body)
 
-    requires: User is authenticated (session check)
+    requires: user != null
 
-    ensures: Request body filtered through field ALLOWLIST
-    ensures: Only these fields forwarded to Ollama:
-        - model (required)
-        - prompt (required)
-        - stream (forced to false)
-        - system (optional)
-        - template (optional)
-        - context (optional)
-    ensures: ALL other fields from client body are DROPPED
-    ensures: Request proxied to {ollamaBaseUrl}/api/generate with 10s timeout
+    ensures:
+        OllamaProxyForwarded(user: user, filtered_body: filter_allowlist(request_body))
 
-    -- This is a SECURITY-CRITICAL rule. The allowlist prevents parameter injection
-    -- (CWE-20). Without it, a malicious client could inject arbitrary Ollama API
-    -- parameters (e.g. raw_prompt, keep_alive, num_predict) to manipulate model behavior.
+    @guidance
+        -- Request body filtered through field ALLOWLIST.
+        -- Only these fields forwarded to Ollama:
+        --   model (required), prompt (required), stream (forced to false),
+        --   system (optional), template (optional), context (optional).
+        -- ALL other fields from client body are DROPPED.
+        -- Request proxied to {ollamaBaseUrl}/api/generate with config.proxy_request_timeout.
+        -- This is a SECURITY-CRITICAL rule. The allowlist prevents parameter injection
+        -- (CWE-20). Without it, a malicious client could inject arbitrary Ollama API
+        -- parameters (e.g. raw_prompt, keep_alive, num_predict) to manipulate model behavior.
 }
 
 -- === Ollama URL Validation ===
 
 rule ValidateOllamaUrl {
-    when: Ollama base URL is resolved for any operation
-
-    requires: URL is non-empty
+    when: OllamaUrlResolved(url)
 
     ensures:
-        if URL protocol is not http or https: rejected
-        if URL contains credentials (username/password): rejected
-        if URL is valid: used as-is
-        if URL fails validation: fall back to default (127.0.0.1:11434)
+        if validate_url(url):
+            OllamaUrlAccepted(url: url)
+        else:
+            OllamaUrlAccepted(url: config.ollama_default_base_url)
 
-    -- Defense against SSRF. See security-rules.allium for full URL validation spec.
+    @guidance
+        -- URL protocol must be http or https.
+        -- URL must not contain credentials (username/password).
+        -- If URL fails validation: fall back to default (127.0.0.1:11434).
+        -- Defense against SSRF. See security-rules.allium for full URL validation spec.
 }
 
 -- === Job-Resume Matching ===
 
 rule JobResumeMatch {
-    when: User requests AI match score for a resume-job pair
+    when: JobResumeMatchRequested(user, resume, job, selected_model)
 
-    requires: User is authenticated
-    requires: resumeId, jobId, and selectedModel provided
-    requires: User passes rate limit check
+    requires: user != null
 
-    ensures: Resume and Job loaded in parallel
-    ensures: Both preprocessed (text normalization)
-    ensures: LLM called with:
-        - system prompt: JOB_MATCH_SYSTEM_PROMPT
-        - user prompt: buildJobMatchPrompt(resumeText, jobText)
-        - temperature: 0.3
-        - output schema: JobMatchSchema (structured output)
-    ensures: Streamed response returned to client
+    ensures:
+        MatchResult.created(
+            score: compute_match(resume, job, selected_model),
+            analysis: compute_match(resume, job, selected_model),
+            recommendations: compute_match(resume, job, selected_model)
+        )
 
-    -- The match endpoint uses Vercel AI SDK's streamText with structured output.
-    -- The LLM produces a typed match result (score, analysis, recommendations).
-}
-
-------------------------------------------------------------
--- Invariants
-------------------------------------------------------------
-
-invariant OllamaFieldAllowlist {
-    -- The Ollama proxy endpoint MUST use a field allowlist for body forwarding.
-    -- Only explicitly listed fields (model, prompt, stream, system, template, context)
-    -- may be forwarded to the Ollama API.
-    -- Raw client body MUST NEVER be forwarded without filtering.
-    -- This prevents parameter injection attacks (CWE-20).
-    for POST /api/ai/ollama/generate:
-        forwarded_body = allowlist_filter(client_body)
-}
-
-invariant OllamaUrlSafety {
-    -- Ollama URLs MUST be validated before use:
-    -- 1. Protocol must be http or https
-    -- 2. No embedded credentials (username:password@host)
-    -- 3. Cloud metadata endpoints are blocked (169.254.169.254, etc.)
-    -- 4. If validation fails, fall back to localhost default
-    for all Ollama operations:
-        url = validateOllamaUrl(resolved_url) || default_url
-}
-
-invariant CredentialResolution {
-    -- API keys/URLs are resolved per-user using the credential resolution chain:
-    -- 1. User's encrypted key from DB (ApiKey table, decrypted at runtime)
-    -- 2. Environment variable fallback (e.g. OPENAI_API_KEY)
-    -- 3. Default value from manifest (only Ollama has a default URL)
-    -- Cloud providers FAIL if no key is found (no silent fallback).
-    for all AI operations:
-        credential = resolveApiKey(userId, moduleId)
-}
-
-invariant AuthenticatedAIRoutes {
-    -- ALL /api/ai/* routes MUST check auth() before processing.
-    -- Unauthenticated requests receive 401.
-    for all routes /api/ai/*:
-        session = auth()
-        if not session: reject(401)
-}
-
-invariant AIErrorClassification {
-    -- All AI module operations return typed errors via AIConnectorResult.
-    -- Error types map to specific HTTP status codes when surfaced via API:
-    --   auth_failed -> 401/403
-    --   rate_limited -> 429
-    --   unavailable -> 503
-    --   network -> 502
+    @guidance
+        -- Resume and Job loaded in parallel.
+        -- Both preprocessed (text normalization).
+        -- LLM called with:
+        --   system prompt: JOB_MATCH_SYSTEM_PROMPT
+        --   user prompt: buildJobMatchPrompt(resumeText, jobText)
+        --   temperature: config.match_temperature
+        --   output schema: JobMatchSchema (structured output)
+        -- Streamed response returned to client.
+        -- The match endpoint uses Vercel AI SDK's streamText with structured output.
+        -- The LLM produces a typed match result (score, analysis, recommendations).
 }
 
 ------------------------------------------------------------
 -- Open Questions
 ------------------------------------------------------------
 
--- Q1: Should the Ollama proxy support streaming? Currently stream is forced
---     to false. The match endpoint uses streamText separately.
+open question "Should the Ollama proxy support streaming? Currently stream is forced to false. The match endpoint uses streamText separately."
 
--- Q2: Should there be a unified "AI match" action that works through the
---     AIProviderConnector interface instead of the direct API route?
+open question "Should there be a unified AI match action that works through the AIProviderConnector interface instead of the direct API route?"
 
--- Q3: Should model listing results be cached? Currently every model list
---     request hits the upstream API.
+open question "Should model listing results be cached? Currently every model list request hits the upstream API."
 
--- Q4: Should the Ollama field allowlist be configurable rather than hardcoded?
---     Adding new Ollama features would require code changes.
+open question "Should the Ollama field allowlist be configurable rather than hardcoded? Adding new Ollama features would require code changes."
