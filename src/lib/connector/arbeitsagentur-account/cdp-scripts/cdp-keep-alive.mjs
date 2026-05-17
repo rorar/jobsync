@@ -232,11 +232,15 @@ const LOGOUT_EVENTS = [
       if (window.__keepAliveV5Protection) return 'already';
       window.__keepAliveV5Protection = { navBlocked: 0 };
 
-      // --- Navigation Block ---
-      // Patch location.assign and location.replace to block logout redirects.
-      // The WC calls: window.self.location["assign"](logoutUrl)
-      // We block URLs containing "openid-connect/logout" or navigating to
-      // the bare arbeitsagentur.de startpage (post-logout redirect).
+      // --- Navigation Block (v7) ---
+      // The oidc-client-ts RedirectNavigator.prepare() does:
+      //   const n = i.location[t].bind(i.location)  // t = "assign"
+      //   return { navigate: async url => { n(url.url) } }
+      //
+      // We must patch Location.prototype.assign/replace so that even
+      // .bind() copies get our patched version. The key insight:
+      // location["assign"] resolves via prototype chain to Location.prototype.assign.
+      // If we replace it there, ALL access paths see our version.
 
       function isLogoutNavigation(url) {
         if (!url) return false;
@@ -246,35 +250,35 @@ const LOGOUT_EVENTS = [
                (s === 'https://www.arbeitsagentur.de/' || s === 'https://www.arbeitsagentur.de');
       }
 
-      const origAssign = location.assign.bind(location);
-      const origReplace = location.replace.bind(location);
-
-      location.assign = function(url) {
+      // Patch Location.prototype.assign
+      const origAssign = Location.prototype.assign;
+      Location.prototype.assign = function(url) {
         if (isLogoutNavigation(url)) {
           window.__keepAliveV5Protection.navBlocked++;
-          console.log('[keep-alive] BLOCKED location.assign: ' + String(url).substring(0, 80));
+          console.log('[keep-alive] BLOCKED Location.prototype.assign: ' + String(url).substring(0, 80));
           return;
         }
-        return origAssign(url);
+        return origAssign.call(this, url);
       };
 
-      location.replace = function(url) {
+      // Patch Location.prototype.replace
+      const origReplace = Location.prototype.replace;
+      Location.prototype.replace = function(url) {
         if (isLogoutNavigation(url)) {
           window.__keepAliveV5Protection.navBlocked++;
-          console.log('[keep-alive] BLOCKED location.replace: ' + String(url).substring(0, 80));
+          console.log('[keep-alive] BLOCKED Location.prototype.replace: ' + String(url).substring(0, 80));
           return;
         }
-        return origReplace(url);
+        return origReplace.call(this, url);
       };
 
-      // Also patch window.location setter for direct assignments
-      // (window.location = "url" or window.location.href = "url")
+      // Patch Location.prototype.href setter
       try {
-        const origHrefDesc = Object.getOwnPropertyDescriptor(Location.prototype, 'href');
-        if (origHrefDesc?.set) {
-          const origHrefSet = origHrefDesc.set;
-          Object.defineProperty(location, 'href', {
-            get: origHrefDesc.get,
+        const hrefDesc = Object.getOwnPropertyDescriptor(Location.prototype, 'href');
+        if (hrefDesc?.set) {
+          const origHrefSet = hrefDesc.set;
+          Object.defineProperty(Location.prototype, 'href', {
+            get: hrefDesc.get,
             set: function(url) {
               if (isLogoutNavigation(url)) {
                 window.__keepAliveV5Protection.navBlocked++;
@@ -283,10 +287,19 @@ const LOGOUT_EVENTS = [
               }
               return origHrefSet.call(this, url);
             },
-            configurable: true
+            configurable: true,
+            enumerable: true
           });
         }
-      } catch(e) { /* location.href override may not work in all browsers */ }
+      } catch(e) { console.log('[keep-alive] location.href patch failed: ' + e.message); }
+
+      // Also listen for oiamBeforeNavigationEvent (fired 20ms before doSignout)
+      window.addEventListener('oiamBeforeNavigationEvent', function(e) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        window.__keepAliveV5Protection.navBlocked++;
+        console.log('[keep-alive] BLOCKED oiamBeforeNavigationEvent');
+      }, true);
 
       // --- SessionStorage Protection ---
       const origRemove = sessionStorage.removeItem.bind(sessionStorage);
@@ -313,13 +326,15 @@ const LOGOUT_EVENTS = [
       return 'installed';
     })()`;
 
-    // CRITICAL: Inject BEFORE page scripts load (catches WC initialization)
+    // CRITICAL: Inject BEFORE page scripts load via addScriptToEvaluateOnNewDocument
+    // This runs before ANY script on the page, including the oiam-oauth-wc ESM module.
+    // When the WC later calls location["assign"], it gets our patched version.
     await send('Page.addScriptToEvaluateOnNewDocument', { source: PROTECTION_CODE });
 
-    // Also inject into current page (already loaded)
+    // Also inject into current page (already loaded — patches for remaining session)
     await evaluate(PROTECTION_CODE);
 
-    log('Layer 5: Navigation block (assign/replace/href) + sessionStorage protection active');
+    log('Layer 5: Location.prototype patches + oiamBeforeNavigationEvent block + sessionStorage protection');
   }
 
   // --- Setup ---
