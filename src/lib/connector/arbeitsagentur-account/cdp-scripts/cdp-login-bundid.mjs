@@ -98,33 +98,101 @@ function createCDP(wsUrl) {
   }
   log('BundID erreicht: ' + bundIdUrl.substring(0, 60));
 
-  // --- Phase 3: BundID eID Selection ---
+  // --- Phase 3: BundID → eID Selection ---
+  // BundID has TWO possible starting pages:
+  //   a) Welcome page (/de/welcome) — has "Anmelden" button (data-test-id="Tml88")
+  //   b) Method selection (/de/welcome/auth/1/eID) — has grid cards + "Anmelden" (9XNNb)
+  // All buttons need CDP trusted click (Vue 3 — .click() is unreliable)
   log('Phase 3: BundID → eID Auswahl');
 
-  // Click "Anmelden" on BundID welcome
-  await cdp.evaluate(`
-    const els = [...document.querySelectorAll('a, button')];
-    const btn = els.find(e => e.textContent?.trim() === 'Anmelden' || e.textContent?.trim() === 'ANMELDEN');
-    if (btn) btn.click();
-  `);
-  await new Promise(r => setTimeout(r, 3000));
+  const currentUrl = await cdp.evaluate('document.location.href');
+
+  if (currentUrl?.includes('/eID')) {
+    log('eID bereits vorausgewählt (URL endet auf /eID)');
+  } else {
+    // Phase 3a: Click "Anmelden" on welcome page (data-test-id="Tml88")
+    const anmeldenWelcome = await cdp.evaluate(`(function() {
+      const btn = document.querySelector('button[data-test-id="Tml88"]');
+      if (btn) { btn.scrollIntoView({block:'center'}); const r=btn.getBoundingClientRect(); return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}); }
+      return '{}';
+    })()`);
+    const wc = JSON.parse(anmeldenWelcome || '{}');
+    if (wc.x) {
+      await cdp.trustedClick(wc.x, wc.y);
+      log('Welcome "Anmelden" geklickt (Tml88)');
+    } else {
+      log('WARNING: Welcome "Anmelden" button nicht gefunden');
+    }
+    await new Promise(r => setTimeout(r, 4000));
+
+    // Phase 3b: Now on method selection — click "Online-Ausweis" card if needed
+    const methodUrl = await cdp.evaluate('document.location.href');
+    if (!methodUrl?.includes('/eID')) {
+      const cardCoords = await cdp.evaluate(`(function() {
+        const btn = document.querySelector('button[data-test-id="sjqET"]');
+        if (btn) { btn.scrollIntoView({block:'center'}); const r=btn.getBoundingClientRect(); return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}); }
+        return '{}';
+      })()`);
+      const cc = JSON.parse(cardCoords || '{}');
+      if (cc.x) {
+        await cdp.trustedClick(cc.x, cc.y);
+        log('Online-Ausweis Karte geklickt (sjqET)');
+      }
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
 
   // --- Phase 4: Click Anmelden (eID action) via CDP trusted click ---
   log('Phase 4: eID Anmelden → AusweisApp Modal');
 
-  // Get button coords and trusted-click
-  const anmeldenCoords = await cdp.evaluate(`(function() {
-    const btn = document.querySelector('button[data-test-id="9XNNb"]');
-    if (btn) { btn.scrollIntoView({block:'center'}); const r=btn.getBoundingClientRect(); return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}); }
-    return '{}';
-  })()`);
-  const c1 = JSON.parse(anmeldenCoords || '{}');
+  // The "Anmelden" button (data-test-id="9XNNb") is at the bottom of the expanded
+  // Online-Ausweis section, often below the grid cards. We must:
+  // 1. Scroll it fully into view
+  // 2. Wait for layout to settle
+  // 3. Verify nothing overlaps it before clicking
+  let anmeldenClicked = false;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    // Small delay after scroll for layout to settle
+    await new Promise(r => setTimeout(r, 500));
+    const anmeldenInfo = await cdp.evaluate(`(function() {
+      const btn = document.querySelector('button[data-test-id="9XNNb"]');
+      if (!btn) return JSON.stringify({ found: false });
+      btn.scrollIntoView({ block: 'center' });
+      const r = btn.getBoundingClientRect();
+      const cx = Math.round(r.x + r.width / 2);
+      const cy = Math.round(r.y + r.height / 2);
+      const topEl = document.elementFromPoint(cx, cy);
+      const isOnTop = topEl === btn || btn.contains(topEl);
+      return JSON.stringify({
+        found: true, x: cx, y: cy, w: Math.round(r.width), h: Math.round(r.height),
+        isOnTop, topElTag: topEl?.tagName, topElText: topEl?.textContent?.substring(0, 30)
+      });
+    })()`);
+    const info = JSON.parse(anmeldenInfo || '{}');
 
-  if (c1.x) {
-    await cdp.trustedClick(c1.x, c1.y);
-    log('Anmelden geklickt (CDP trusted)');
-  } else {
-    log('WARNING: Anmelden button nicht gefunden');
+    if (!info.found) {
+      log(`Attempt ${attempt + 1}: Anmelden button nicht im DOM`);
+      await new Promise(r => setTimeout(r, 2000));
+      continue;
+    }
+
+    if (info.isOnTop && info.w > 20) {
+      await cdp.trustedClick(info.x, info.y);
+      log(`Anmelden geklickt (${info.x},${info.y}) ${info.w}x${info.h}`);
+      anmeldenClicked = true;
+      break;
+    }
+
+    // Button is covered — scroll additional pixels down
+    log(`Attempt ${attempt + 1}: Button verdeckt von <${info.topElTag}> "${info.topElText}". Scrolle...`);
+    await cdp.evaluate('window.scrollBy(0, 200)');
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  if (!anmeldenClicked) {
+    // Last resort: use DOM.performSearch + .click() (less reliable but works sometimes)
+    log('WARNING: Trusted click fehlgeschlagen — versuche .click() Fallback');
+    await cdp.evaluate(`document.querySelector('button[data-test-id="9XNNb"]')?.click()`);
   }
 
   await new Promise(r => setTimeout(r, 2000));
