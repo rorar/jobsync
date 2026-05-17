@@ -78,6 +78,85 @@ logoutUrl.searchParams.set('post_logout_redirect_uri', 'https://www.arbeitsagent
 // Navigate to logoutUrl → Session beendet
 ```
 
+## oiam-oauth-wc Timer-Architektur (Reverse-Engineered 2026-05-17)
+
+Source: `p-Bn5gH4YR.js` (142KB, Stencil.js compiled)
+
+### 1-Sekunden-Tick-Loop
+
+```
+initTimer() → setTimeout(1s) → check(now) → initTimer()
+```
+
+`check(t)` wird jede Sekunde aufgerufen und prueft:
+
+```
+check(t):
+  1. cookie = getOiamSessionCookie()
+  2. if (!cookie) return
+  3. idleStart = getEffectiveIdleStart(cookie)
+  4. if (document.visibilityState !== 'visible'):
+       if (hasSessionBeenTerminated()) → DOLOGOUT(reason: 'logged-out-external')
+  5. idleTimeout = idleStart + authnLevelTimes.sessionTime.idletimeout
+     if (t >= idleTimeout) → DOLOGOUT(reason: 'idle-session-timed-out')
+  6. maxSessionEnd = calculated from cookie
+     if (document.visibilityState === 'visible'):
+       checkMaxSessionTimeoutWarn(maxEnd, t)
+  7. if (t >= maxSessionEnd) → DOLOGOUT(reason: 'max-session-timed-out')
+  8. if (shouldRefreshToken(t, idleStart)) → token refresh
+```
+
+### Logout-Dispatch
+
+ALL logout paths go through the same mechanism:
+```javascript
+window.self.dispatchEvent(new CustomEvent('oiamLogoutEvent', {
+  detail: { reason: '<reason>' }
+}))
+```
+
+Reasons:
+- `idle-session-timed-out` — Idle-Timer abgelaufen (~2-3 Min ohne UI-Events)
+- `max-session-timed-out` — 30-Min Hard-Limit erreicht
+- `logged-out-external` — Session extern beendet (anderer Tab/Server)
+- `logout-requested` — Manueller Logout durch User
+
+### Max-Session Warnung (5-Min-Popup)
+
+```
+checkMaxSessionTimeoutWarn(maxEnd, now):
+  remaining = maxEnd - now
+  if (remaining <= 300000ms / 5 Min):
+    maxSessionExpireWarn5(remaining)        → popupHL erscheint
+  else if (authnLevel !== 'STORK-QAA-Level-4' && remaining <= 1800000ms):
+    maxSessionExpireWarn30(remaining)       → 30-Min-Warnung (nur Level < 4)
+```
+
+Note: Bei Level-4 (eID) gibt es KEINE 30-Min-Warnung, nur die 5-Min-Warnung.
+
+### Idle-Detection
+
+Activity-Events: `addEventListener("keypress")` + `addEventListener("mouseup")` auf `document`.
+Does NOT check `isTrusted` — synthetic events via `document.dispatchEvent()` work.
+
+When activity detected: `handleUserAction()` → updates `idlestart` in oiamSessionCookie.
+
+### oiamSessionCookie
+
+State wird in einem Cookie (nicht sessionStorage!) gespeichert:
+- `idlestart` — Timestamp des letzten User-Events
+- `additionalinfo` — Session-Metadaten
+- Gelesen via `Re.getOiamSessionCookie()`, geschrieben via `Re.updateOiamSessionCookie()`
+
+### Keep-Alive Strategy (verified)
+
+Blocking `oiamLogoutEvent` with `stopImmediatePropagation()` in capture phase prevents
+ALL automatic logouts. Combined with:
+- Synthetic keypress every ~30s (resets idle timer)
+- Manual token refresh every ~200s (keeps server session alive)
+
+This allows the session to survive indefinitely beyond the 30-min limit.
+
 ## Implikationen für JobSync-Modul
 
 ### API-Nutzung
