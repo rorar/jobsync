@@ -92,9 +92,10 @@ const CDP_ENDPOINT = process.env.CDP_ENDPOINT || 'http://127.0.0.1:9223';
     await new Promise(r => setTimeout(r, 10000));
 
     try {
-      // Method 1: DOM.performSearch (pierces ALL shadow DOMs)
-      const doc = await send('DOM.getDocument', { depth: 0 });
-      const search = await send('DOM.performSearch', { query: 'Angemeldet bleiben' });
+      // Detect popup via "inactivity-countdown" span (only exists when popup is VISIBLE)
+      // The entire #popupIdle modal is injected/removed from Shadow DOM on show/hide
+      await send('DOM.getDocument', { depth: 0 });
+      const search = await send('DOM.performSearch', { query: 'inactivity-countdown' });
 
       if (search.result?.resultCount > 0) {
         log('Inaktivitäts-Popup erkannt! Klicke "Angemeldet bleiben"...');

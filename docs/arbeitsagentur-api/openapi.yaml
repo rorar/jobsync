@@ -9,19 +9,28 @@ info:
     All `/pd/` endpoints require OAuth2 Bearer Token.
     All `/pc/` endpoints are public (no auth needed).
 
-    ## API Gateway Key (CRITICAL)
-    Some endpoints require an **additional `x-api-key` header** alongside the Bearer token.
-    Without it, the request returns **403 Forbidden** even with a valid Bearer token.
+    ## API Gateway: Cookies Required (CRITICAL)
+    All authenticated endpoints require **`credentials: 'include'`** (i.e., browser cookies
+    must be sent with the request). Without cookies, even valid Bearer tokens return **403**.
 
-    | Service | x-api-key value | Confirmed |
-    |---------|-----------------|-----------|
-    | kokos (Postfach) | `kokos` | Yes (live verified: attachment download) |
-    | profil-online | unknown | Not tested (works without for most endpoints) |
-    | ota-online | unknown | Not tested |
+    **Verified (2026-05-17):**
+    | Configuration | Result |
+    |---------------|--------|
+    | Bearer only (no cookies) | 403 |
+    | Bearer + cookies (`credentials: 'include'`) | **200** |
+    | Bearer + x-api-key (no cookies) | 403 |
+    | Bearer + x-api-key + cookies | 200 (cookies are the factor, not x-api-key) |
 
-    **Rule for module implementation:** ALWAYS send `x-api-key: {client_id}` with every
-    authenticated request. The header matches the OAuth2 client_id. This is an API gateway
-    enforcement — not documented anywhere, only discoverable via live traffic analysis.
+    **Required cookies** (set automatically by browser after login):
+    - `ISTIOSESSIONID` — Istio service mesh sticky-session
+    - `AVI_SITE` — Load-balancer affinity
+
+    **Rule for module implementation:** All fetch() calls to `rest.arbeitsagentur.de` MUST
+    include `credentials: 'include'`. The x-api-key header is sent by the Angular app
+    but is NOT the access-control mechanism — it's the cookies that matter.
+
+    **Note:** The `x-api-key: kokos` header observed in the Angular app's XHR requests is
+    cosmetic/legacy — the gateway does not enforce it. Confirmed via A/B test.
 
     ## OAuth2 Clients
     | Client | App | Secret | x-api-key |

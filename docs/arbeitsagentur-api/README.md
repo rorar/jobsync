@@ -14,16 +14,23 @@
 - **Inaktivitäts-Timeout:** ~2-3 Min (nur UI-Events resetten, API-Calls zählen NICHT)
 - **Rate-Limit:** 1000 req (auf vamio-jsonapi bestätigt)
 
-### x-api-key Gateway Header (KRITISCH)
+### Cookies erforderlich (KRITISCH)
 
-Manche Endpoints erfordern zusätzlich zum Bearer Token einen **`x-api-key` Header**. Ohne den Header: **403 Forbidden** trotz gültigem Token.
+Alle authentifizierten Requests an `rest.arbeitsagentur.de` benötigen **Cookies** (`credentials: 'include'`). Ohne Cookies: **403 Forbidden** trotz gültigem Bearer Token.
 
+```javascript
+// KORREKT:
+fetch(url, { headers: { 'Authorization': 'Bearer ' + token }, credentials: 'include' });
+
+// FALSCH (403):
+fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
 ```
-Authorization: Bearer {access_token}
-x-api-key: kokos
-```
 
-**Regel:** IMMER `x-api-key: {client_id}` mitsenden. Der Wert entspricht der OAuth2 `client_id` des jeweiligen Services. Bestätigt für `kokos` (Postfach Anhang-Download). Nicht dokumentiert — nur über Live-Traffic-Analyse entdeckbar.
+**Erforderliche Cookies** (werden automatisch bei Login gesetzt):
+- `ISTIOSESSIONID` — Istio Service Mesh Sticky-Session
+- `AVI_SITE` — Load-Balancer-Affinity
+
+**x-api-key:** Die Angular-App sendet `x-api-key: {client_id}` mit, aber das ist NICHT der Access-Control-Mechanismus. Verifiziert: x-api-key macht keinen Unterschied (403→403 ohne Cookies, 200→200 mit Cookies unabhängig von x-api-key).
 
 ## Dateien
 
