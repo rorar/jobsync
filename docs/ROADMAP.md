@@ -611,39 +611,304 @@ Siehe 1.13 für die vollständige Modul-Liste und API-Recherche.
 ### 1.9 arbeitsagentur.de Account-Modul
 Anbindung an den eigenen arbeitsagentur.de Account — unabhängig vom Jobsuche-Modul (1.1), aber mit Shared Kernel für Job-Import und Status-Propagation.
 
-**Phase 1 — Machbarkeitsprüfung Authentifizierung (Prio):**
-- Programmatische Anmeldung bei arbeitsagentur.de über JobSync
-- **Anmeldemethoden:** Online-Ausweis (eID), PassKey, Benutzername+Passwort, ELSTER-Zertifikat
-- **OIDC-Details:** Keycloak-basiert (Realm `OCP`, Client `profil-online`), PKCE-Flow (S256)
-- **eID-Integration (Recherche nötig):**
+**Phase 1 — Live-Browser-Session & Authentifizierung (Entwickler-Intervention nötig):**
+
+Die Authentifizierung bei arbeitsagentur.de erfordert zwingend manuelle Entwickler-Intervention, da der Login über Keycloak SSO (`sso.arbeitsagentur.de`, Realm `OCP`, Client `profil-online`, PKCE S256) mit interaktiven Methoden geschützt ist:
+- **Option a)** BA-Konto: Benutzername oder Passkey
+- **Option b)** BundID: Online-Ausweis (eID) oder ELSTER-Zertifikat
+
+**Workflow (Agent + Entwickler kollaborativ):**
+1. **Agent:** Startet eine Playwright-Browser-Session, navigiert zu `https://web.arbeitsagentur.de/profil/profil-ui/pd/` (→ Redirect zum SSO-Login)
+2. **Entwickler-Aktion:** Meldet sich manuell über die gewählte Login-Methode an (Agent wartet + beobachtet)
+3. **Agent:** Loggt den gesamten Netzwerkverkehr mit (Request/Response Headers, Cookies, Tokens, Redirects)
+4. **Agent:** Exploration aller Funktionen mit Rückfragen an den Benutzer
+5. **SICHERHEITSREGEL:** Kein Löschen von Accounts, Daten oder Einstellungen — ausschließlich Read-Operationen und explizit freigegebene Aktionen!
+
+**Was aus der Live-Session erfasst wird:**
+- Gesamter Netzwerkverkehr analysieren (Requests, Responses, Headers, Redirects, WebSockets — offen für unerwartete Entdeckungen)
+- Login-Prozess vollständig (OIDC-Flow, Token-Handling, Cookie-Struktur)
+- Versteckte API-Endpunkte hinter der authentifizierten Session (XHR/Fetch-Requests)
+- Code-Strukturen und Patterns für die programmatische Umsetzung
+- Session-Timeout-Verhalten (arbeitsagentur.de: Hard-Timeout nach 30 Min UND Inaktivitäts-Timeout nach 5 Min)
+
+**Anmeldemethoden (Referenz):**
+- **BA-Konto:** Benutzername+Passwort oder Passkey — einfachste Methode für PoC
+- **BundID:** Online-Ausweis (eID via AusweisApp) oder ELSTER-Zertifikat — höheres Trust-Level
+- **eID-Integration (spätere Phase):**
   - AusweisApp: https://github.com/Governikus/AusweisApp/ / https://www.ausweisapp.bund.de/open-source
   - Open eCard: https://github.com/ecsec/open-ecard
   - Klären: Headless-Auth SDK? Token-Persistierung? PassKey als Ersatzmethode?
-- **Ergebnis Phase 1:** PoC der Anmeldung mit mindestens einer Methode
 
-**Phase 2 — Seiten-Discovery & API-Analyse:**
-- Nach erfolgreicher Anmeldung: Seiten discovern, Netzwerkverkehr analysieren
-- Prüfen ob (in)offizielle API-Anbindungen existieren
-- **Bot-Detection:** Maßnahmen prüfen (Playwright-Flagging, Rate Limits, CAPTCHAs)
+**Ergebnis Phase 1:** Vollständig dokumentierter Auth-Flow + erfasste API-Endpunkte + Session-Token-Management-Strategie
+
+**Phase 2 — API-Analyse & Reverse Engineering (aus Live-Session-Daten):**
+
+> **Hinweis:** Der aktuelle Stand ist ein erstes "Reinschnuppern" aus statischem HTML. Die vollständige API-Discovery und Vervollständigung erfolgt durch Agenten in dedizierten Live-Browser-Sessions. Alle unten aufgeführten Endpunkte müssen in der Live-Session verifiziert, erweitert und auf Vollständigkeit geprüft werden.
+
+- Aus dem mitgeschnittenen Netzwerkverkehr: API-Endpunkte identifizieren und dokumentieren
+- Prüfen ob (in)offizielle REST/GraphQL-APIs hinter der Session existieren
+- Request/Response-Schemas ableiten und als OpenAPI-Spec dokumentieren
+- **Bot-Detection:** Maßnahmen prüfen (Playwright-Flagging, Rate Limits, CAPTCHAs, WAF-Header)
+  - *Vorläufiger Befund aus statischer HTML-Analyse — NICHT als "erledigt" betrachten, Agent muss hinterfragen:*
+  - **Im HTML NICHT gefunden:**
+    - Kein CAPTCHA (kein reCAPTCHA, kein hCaptcha, kein Cloudflare Turnstile)
+    - Kein JavaScript-Challenge (kein Cloudflare, kein Akamai Bot Manager, kein DataDome, kein PerimeterX/HUMAN, kein Shape Security)
+    - Kein Fingerprinting (kein FingerprintJS, keine Canvas/WebGL-Fingerprints)
+    - Kein `navigator.webdriver`-Check in den Scripts
+    - Kein Proof-of-Work-Challenge
+    - Keine WAF-Indikatoren (`__cf_bm`, `_abck`, `bm_sz` fehlen alle)
+    - Kein Rate-Limiting-Hinweis im HTML
+  - **Vorhanden, aber KEINE Bot-Detection (Security-Mechanismen die Automation beeinflussen):**
+
+    | Mechanismus | Zweck | Auswirkung auf Automation |
+    |---|---|---|
+    | CSRF-Token (`CSRFToken` in vamJB-Formularen) | Anti-CSRF | Token muss aus HTML extrahiert und mitgesendet werden |
+    | CSP-Nonces (`csp-nonce` Meta-Tag) | XSS-Schutz | Irrelevant für Playwright (wir injizieren kein JS) |
+    | `encs=` verschlüsselte Entity-Referenzen | Anti-Parameter-Tampering (IDOR-Schutz) | URLs können nicht konstruiert werden, nur aus Navigation extrahiert |
+    | Spring Web Flow State (`execution=e{n}s{n}`) | Session-State-Integrität | Flow muss Schritt für Schritt traversiert werden |
+    | `<meta name="referrer" content="same-origin">` | Referrer-Leakage verhindern | Irrelevant |
+    | `<meta name="robots" content="follow,index">` | SEO | Lädt Crawler sogar **ein** (!) |
+    | Matomo Tag Manager | Analytics | Nur Tracking, kein Blocking |
+    | OAuth PKCE (S256) | Auth-Security | Standard OIDC, kein Bot-Hindernis |
+    | Session-Timeouts | Inaktivitäts-Schutz | Keep-Alive löst das |
+
+  - **ACHTUNG — Agent MUSS in Live-Session aktiv hinterfragen:**
+    - Serverseitige Rate-Limits (`X-RateLimit-*`, `Retry-After` Response-Header?)
+    - WAF-Regeln die erst bei bestimmten Patterns triggern (z.B. schnelle Requests, unübliche User-Agents)
+    - IP-basierte Throttling oder Blocking
+    - Anomaly Detection auf API-Ebene (unübliche Request-Patterns)
+    - Honeypot-Endpoints (Links die nur Bots folgen)
+    - Unterschiedliche Schutzlevel pro Subsystem (vamJB vs. moderne Apps vs. REST-API)
+    - **Befund "nichts erkannt" aus statischem HTML ist KEIN Freifahrtschein!**
 - **Falls keine offizielle API:** OpenAPI-Spezifikation in separatem Repository erstellen (wie `rorar/EURES-API-Documentation`), damit andere Entwickler profitieren
-- Sitzungs-Management (Timeout nach 30 Min Inaktivität)
 
-**Phase 3 — Account-Verwaltung:**
-- **Nachrichten:** Empfangen und senden mit Anhang
-- **Tracking:**
-  - Termine (Arbeitsvermittler Video-Call / vor Ort) + Kalender Connector (→ 1.7)
-  - Fristen (aus Dokumenten extrahieren)
-  - Eingelegte Widersprüche
-  - Bewerbungsvorschläge vom Arbeitsvermittler → Import in JobSync (Shared Kernel mit 1.1)
+**Bereits identifizierte API-Endpunkte & Services (zur Verifikation durch Agenten):**
+
+| Endpunkt / Service | Quelle | Vermuteter Zweck |
+|---|---|---|
+| `rest.arbeitsagentur.de/portal/ota-service/pd/v1` | Termine-App Config (`window.appConfig`) | REST-API für Termine (CRUD, Liste, Details) |
+| `miso-glocke` / `miso-webcomponents` | Profil-Shell Script-Tags | Notification-API (Glocke/Bell — polling für neue Events) |
+| `miso-einstellungen-benachrichtigungen` | Profil-Shell WC-Registry | Benachrichtigungs-Präferenzen (Kanäle: Online, SMS, etc.) |
+| `web.arbeitsagentur.de/verlauf/verlauf-ui/pd/` | Profil-Shell Link | History/Audit-Trail (filterbar per Leistungsart) |
+| `web.arbeitsagentur.de/kokos/kokos-ui/pd/` | Kontakt-Sektion | Leistungspostfach (Nachrichten bzgl. Geldleistungen) |
+| `web.arbeitsagentur.de/post/post-kpf-ui/pd/` | Geldleistungen-Kontakt | Allgemeines Kommunikationspostfach |
+| `jobboerse.arbeitsagentur.de/vamJB/postfachUebersichtAnzeigen.html` | Kontakt-Sektion | Vermittlungspostfach (Nachrichten an Betreuer) |
+| `web.arbeitsagentur.de/besch/ui/pd/` | Kontakt-Sektion | Bescheide und Nachweise (Dokument-Abruf) |
+| `web.arbeitsagentur.de/vermittlung/nks-ui/pd` | Arbeitsmarktprofil-Sektion | "Nächste Schritte" — geführter Prozess mit Status |
+| `jobboerse.arbeitsagentur.de/vamJB/betreuerAnzeigen.html` | Stellensuche-Sektion | Betreuer-Liste + Kontaktdetails + Nachricht verfassen |
+| `jobboerse.arbeitsagentur.de/vamJB/bewerbungenAnzeigen.html` | Stellensuche-Sektion | Plattform-eigener Bewerbungstracker |
+| `jobboerse.arbeitsagentur.de/vamJB/stellengesucheVerwalten.html` | Stellensuche-Sektion | Stellengesuche (Profil-Daten für Vermittlung) |
+| `web.arbeitsagentur.de/sgb2vaem/vaem-ui/pd/` | Veränderung-Sektion | Veränderungsmitteilung (Jobcenter SGB II) |
+| `web.arbeitsagentur.de/sgb2wba/wba-ui/pd/` | Geldleistungen-Aktionen | Weiterbewilligungsantrag |
+| `web.arbeitsagentur.de/aue/antragsuebersicht/pd/` | Geldleistungen-Aktionen | Antrags-/Vorgangsübersicht (filterbar: `?la=BUERGELD`) |
+| `vk.arbeitsagentur.de/vkid/{id}?d={dienststelle}` | Termin-Detail | Video-Termin-Links (Direkt-Join) |
+| `web.arbeitsagentur.de/chatbot/web-component/` | Profil-Shell Script-Tags | Chatbot-API (automatisierte Anfragen?) |
+| `epayment-offene-forderungen` (WC) | Profil-Shell WC-Registry | Offene Zahlungsforderungen |
+| `web.arbeitsagentur.de/guo/guo-webcomponents/` | Profil-Shell Script-Tags | Dokument-Upload (getrennt: SGB II + SGB III) |
+| `web.arbeitsagentur.de/kusos/` | Profil-Shell WC-Registry | Persönliche Daten + Kommunikations-Einstellungen |
+| `web.arbeitsagentur.de/kusos/einstelloptionen-wcs/` | Profil-Shell WC-Registry | Kanal-Settings: Online-Bereitstellung, Online-Zustellung, Video-Komm., SMS-Benachrichtigung, Online-Kommunikation |
+| `web.arbeitsagentur.de/kostaf/person/` | Profil-Shell Script-Tags | Persönliche Angaben (Adressen, Kontakte, Steuer-ID, Zahlungsverbindung) |
+| `web.arbeitsagentur.de/kostaf/online-kommunikation/` | Profil-Shell Script-Tags | Online-Kommunikation Einstellungen |
+| `web.arbeitsagentur.de/ubvo/ubvo-webcomponents/` | Profil-Shell Script-Tags | Bevollmächtigte, Rollenverwaltung, Persönliche Angaben, Anschriften, Kommunikation |
+| `web.arbeitsagentur.de/portal/ota-upcoming-appointment-ui/` | Profil-Shell Script-Tags | Nächster Termin Widget (Dashboard-Kachel) |
+| `web.arbeitsagentur.de/portal/otv-agencies-ui/` | Termine-App Script-Tags | Dienststellen-/Agentur-Suche (Termin vereinbaren) |
+| `jobboerse.arbeitsagentur.de/vamJB/faehigkeitenVerwalten.html` | Stellensuche-Sektion | Fähigkeiten/Skills-Verwaltung |
+| `jobboerse.arbeitsagentur.de/vamJB/dokumenteUndAnlagenVerwalten.html` | Stellensuche-Sektion | Anlagen hochladen/verwalten (Bewerbungsdokumente) |
+| `web.arbeitsagentur.de/profil/profil-ui/pd/einstellungen/` | Veränderung-Sektion | Profil-Einstellungen + Persönliche Daten ändern |
+| `web.arbeitsagentur.de/portal/termine/pd` | Kontakt-Sektion | Termin-Verwaltung (Angular 21 App, nutzt `ota-service` API) |
+| `geois.arbeitsagentur.de/arcgis_js_api/` | vamJB Script-Tags | ArcGIS Kartendienste (Standort-Anzeige Dienststellen) |
+| `web.arbeitsagentur.de/oiambk/oiam-oauth-wc/v1/` | Profil-Shell + Termine | OAuth Web Component (Token-Management, Session-Refresh) |
+
+**Session-Verhalten (verifiziert aus HTML-Analyse):**
+
+- **Dual-Timeout-System** (bestätigt durch Web Components im DOM):
+  - `session-expiration-30m-warn-popup` → Hard-Timeout nach 30 Minuten (Session-Ende unabhängig von Aktivität)
+  - `session-expiration-5m-warn-popup` → Warnung 5 Min vor Session-Ende
+  - `session-expiration-inactivity-warn-popup` → Inaktivitäts-Timeout (Warnung + Logout nach ~5 Min ohne Interaktion)
+  - `session-timer` / `session-timer-mock-header` → Countdown-Anzeige im Header
+- **Legacy-System (vamJB) eigene Session:** `var sessiontimeout = 1800` (30 Min, in Sekunden) — separates Session-Cookie
+- **OAuth-Komponente:** `oiam-oauth-component` managt Tokens zentral für `web.arbeitsagentur.de`-Apps
+- **Konsequenz:** Zwei Session-Domänen:
+  - `web.arbeitsagentur.de` → OAuth-Token-basiert (alle modernen Apps teilen SSO)
+  - `jobboerse.arbeitsagentur.de` → Eigene Session-Cookies (Spring Web Flow State), SSO-gekoppelt aber separate Timeout-Verwaltung
+- **Keep-Alive muss beide ansprechen:** Ein Keep-Alive nur auf einer Domain reicht nicht — beide Session-Typen müssen erhalten werden
+
+**Architektonische Constraints (für Agenten-Exploration wichtig):**
+
+- **Spring Web Flow (vamJB):** Kein Deep-Linking möglich! Navigation nur über Flow-Traversal (`execution=e{flow}s{step}` + `_eventId_*`). Jede Aktion ändert den serverseitigen State.
+- **Verschlüsselte Entity-Referenzen (`encs=`):** Links zu Betreuer-Details/-Nachrichten enthalten Base64-verschlüsselte Parameter. URLs können NICHT selbst konstruiert werden — müssen aus der vorherigen Seite extrahiert werden.
+- **CSRF-Token:** Alle POST-Formulare in vamJB enthalten `CSRFToken` — muss bei jedem Submit mitgesendet werden.
+- **Multi-App-Architektur:** Die Profil-Shell lädt >20 Web Components aus verschiedenen Microservices. Jedes Sub-System kann eigene Auth-Patterns, API-Formate und Session-Cookies haben.
+- **Multi-Client OAuth:** Jede App hat einen eigenen OAuth-Client (`profil-online`, `ota-online`, `kokos`). SSO funktioniert über shared Keycloak Session, aber jeder Client tauscht seinen eigenen Auth-Code gegen ein Token. Token-Lifetime: Access 240s, Refresh 3600s.
+- **BundID Transient-Fehler ("Datenverarbeitung-Fehler"):** BundID wirft gelegentlich `id.bund.de/de/datenverarbeitung-fehler` obwohl die Authentifizierung erfolgreich war. Die Weiterleitung funktioniert trotzdem — das "WEITER"-Modal erscheint danach. **Lösung: Guardian-Pattern** — ein Watcher-Loop der auf URL-Änderungen und Modal-Erscheinen reagiert statt auf lineare Navigation zu vertrauen. Muss resilient gegen Zwischen-Fehlerseiten sein (Retry-on-Error-Page + Modal-Detection als Erfolgs-Signal).
+
+**Verifiziertes Auth-Pattern (aus Live-Session 2026-05-17):**
+
+- **Token-Refresh automatisch alle 4 Min** (Access Token expires_in: 240s)
+- **Public Client:** `client_secret=profil-online` ist im Request sichtbar — kein echtes Secret!
+- **PKCE:** Alle Clients nutzen PKCE (code_verifier/code_challenge mit S256)
+- **Scope:** `openid baportal` auf allen Clients
+- **Session-Timer vs. Token-Lifetime (VERIFIZIERT 2026-05-17):**
+  - **Browser-Session:** 30 Min Hard-Limit. Der OAuth-Client selbst triggert `GET /openid-connect/logout?id_token_hint=...` → Server invalidiert Session sofort.
+  - **OAuth Access Token:** 240s (4 Min) — muss via Refresh erneuert werden
+  - **OAuth Refresh Token:** 3600s (1 Std) technische Lifetime laut Token-Response — **ABER NUTZLOS nach Session-Ende!**
+  - **VERIFIZIERT:** Refresh Token nach 30 Min → `{"error":"invalid_grant","error_description":"Session not active"}`. Server invalidiert serverseitig.
+  - **API-Fenster = exakt 30 Minuten, NICHT 1 Stunde.**
+  - **Logout wird CLIENT-seitig ausgelöst** (nicht Server-Push). Der `session-timer` WC in `profil-ui` zählt runter und triggert den Logout-Endpoint. Kokos-App hat KEINEN eigenen Timer — nutzt aber dieselbe SSO-Session.
+  - **Keep-Alive-Strategie:** Muss den Logout-Request abfangen/verhindern BEVOR er gesendet wird, ODER die Session vor Ablauf refreshen via User-Interaktion simulieren.
+- **Rate-Limit:** `X-RateLimit-Limit: 1000` bestätigt auf vamio-jsonapi
+- **REST-API-Pattern:** `rest.arbeitsagentur.de/{service}/{api-name}/pd/v{n}/{resource}` (pd = persönlich, pc = public)
+- **API-Formate Mix:** Standard JSON, JSON:API 1.0 (Vermittlung), GraphQL (Vorgänge/Leistungen), HATEOAS (Dienststellen)
+
+**Agents-Discovery-Aufgaben (in Live-Session zu klären):**
+
+- [ ] `rest.arbeitsagentur.de` — Welche weiteren `/portal/*/pd/v1` Endpunkte existieren?
+- [ ] `miso-glocke` — Welche API steckt dahinter? Polling-Endpoint? WebSocket?
+- [ ] Verlauf-API — Gibt es eine JSON-API hinter `/verlauf/verlauf-ui/`?
+- [ ] Postfach-APIs — Sind die 3 Postfächer (kokos, post-kpf, vamJB) jeweils REST oder nur HTML?
+- [ ] OAuth-Token-Struktur — Scope, Expiry, Refresh-Token vorhanden?
+- [ ] vamJB Session-Kopplung — Reicht OAuth-Token-Refresh oder braucht vamJB eigenen Keep-Alive?
+- [ ] `kusos` — Welche Einstellungen sind per API änderbar? (SMS, Online-Zustellung, etc.)
+- [ ] Chatbot-API — Authentifiziert? Rate-Limited? Für automatisierte Anfragen nutzbar?
+- [ ] Bewerbungen-API — Gibt es hinter `/vamJB/bewerbungenAnzeigen.html` einen XHR/Fetch-Call?
+- [ ] NKS "Nächste Schritte" — Sind Schritte+Status per API abrufbar?
+
+**Separates Begleitprojekt — Session Keep-Alive Tool (unabhängig von JobSync):**
+
+> Eigenständiges UserScript oder Browser-Extension (Firefox + Chrome), das das aggressive Session-Timeout-Problem (~5 Min Inaktivität) von arbeitsagentur.de löst. Betrifft nicht nur JobSync-Nutzer — viele Nutzer kämpfen mit diesem Problem.
+
+- **Format:** Greasemonkey/Tampermonkey UserScript ODER WebExtension (Manifest V3)
+- **Mechanismus:** Periodischer Keep-Alive-Request (z.B. alle 2-3 Min) gegen einen Session-erhaltenden Endpunkt (löst Inaktivitäts-Timeout; Hard-Timeout nach 30 Min bleibt bestehen → Re-Auth nötig)
+- **Scope:** Nur aktiv auf `*.arbeitsagentur.de` Domains
+- **Unabhängigkeit:** Eigenes Repository, keine JobSync-Abhängigkeit, eigenständig nutzbar
+- **Veröffentlichung:** Öffentlich (GitHub + ggf. Addon-Stores), hilft der Community
+
+**Phase 3 — CRM-Integration & Ansprechpartner:**
+- **Ansprechpartner → CRM Person Propagation (Shared Kernel mit 5.4):**
+  - Betreuer/Berater als `Person` im CRM anlegen (Rolle: `advisor` / `caseworker`)
+  - Kontaktdaten: Name, Dienststelle, Adresse, Zimmernummer, Telefon, E-Mail, Öffnungszeiten
+  - Zuordnung zu Institution (Arbeitsagentur vs. Jobcenter → `CompanyAssociation` auf Person)
+  - **Mehrere Betreuer pro Sachbereich:** Vermittlung, Leistung, Familienkasse — jeweils eigene Ansprechpartner
+  - Automatische Aktualisierung bei Betreuerwechsel (Datum der Zuordnung tracken)
+- **Termine → Kalender Connector (→ 1.7) + CRM Interview:**
+  - Termine importieren: Datum, Uhrzeit, Art (Video / vor Ort / Telefon), Ansprechpartner
+  - Video-Termin-Links extrahieren und speichern (Format: `https://vk.arbeitsagentur.de/vkid/...`)
+  - Termin-Badges: "In Kürze", "Bestätigt", etc.
+  - Als `CrmInterview` mit Typ `institutional_appointment` anlegen
+  - Erinnerungen synchronisieren (CRM Cron → ReminderTriggered)
+- **Nachrichten (Multi-Postfach-Architektur):**
+  - **Vermittlungspostfach** (`jobboerse.arbeitsagentur.de/vamJB/postfachUebersichtAnzeigen.html`): Nachrichten an/vom Arbeitsvermittler, Bewerberprofil als Anhang
+  - **Leistungspostfach** (`web.arbeitsagentur.de/kokos/kokos-ui/pd/`): Nachrichten bzgl. Geldleistungen (Bürgergeld, ALG)
+  - **Post/KPF** (`web.arbeitsagentur.de/post/post-kpf-ui/pd/`): Allgemeines Kommunikationspostfach
+  - Nachrichten empfangen und senden mit Anhang
+  - Konversations-Thread in CRM Activity Timeline projizieren
+- **Vorgänge (Cases) → CRM Timeline:**
+  - Vorgänge mit Status tracken (gesendet, in Bearbeitung, abgeschlossen, abgelaufen)
+  - Vorgangstypen: Weiterbewilligung, Veränderungsmitteilung, Erstantrag, Widerspruch
+  - Status-Änderungen als `CrmActivityLog` Einträge
+  - Fristen aus Vorgängen extrahieren → `CrmTask` mit Deadline
+- **Vermittlungsvorschläge & Bewerbungsvorschläge (Shared Kernel mit 1.1 — Kern-Feature!):**
+  - Vom Arbeitsvermittler aktiv vorgeschlagene Stellen importieren (`jobboerse-vv-se` WC)
+  - Import als `DiscoveredVacancy` mit Quelle `arbeitsagentur_vermittlung`
+  - Höhere Gewichtung als eigene Jobsuche — Vermittler kennt Anforderungen und Arbeitsmarkt
+  - Bidirektional: Bewerbungsstatus in JobSync (→ beworben/abgelehnt) zurück nach arbeitsagentur.de propagieren
+  - Plattform-eigene Bewerbungen (`/vamJB/bewerbungenAnzeigen.html`) mit JobSync synchronisieren
 - **Status-Propagation:** Job-Status in JobSync (→ beworben) wird nach arbeitsagentur.de propagiert
 
 **Phase 4 — Dokumentenverwaltung & Formulare:**
+- **Bescheide und Nachweise** (`web.arbeitsagentur.de/besch/ui/pd/`): Abrufen, verwalten → Paperless-ngx (→ 1.6)
 - Dokumente abrufen, verwalten, teilen/weiterleiten → Paperless-ngx (→ 1.6)
 - **Formulare ausfüllen:**
   - PDF Formulare und Online Formulare
   - "Lokale Bewerbungsbemühungen" automatisch ausfüllen
   - Tag für "Bewerbung Online" / "Bewerbung Persönlich"
   - Übersetzungen der Formulare anbieten
+- **Dokumente einreichen** (Upload an Jobcenter/Agentur, verschiedene Sachbereiche)
+
+**Systemarchitektur-Erkenntnisse (aus Live-Session-Analyse):**
+
+> arbeitsagentur.de ist KEIN monolithisches System — es besteht aus vielen unabhängigen Web-Components und Microservices, die über verschiedene Subdomains/Pfade zusammengeschaltet werden.
+
+- **Haupt-Shell:** `web.arbeitsagentur.de/profil/profil-ui/` (Angular/Stencil-basiert, lädt WCs dynamisch)
+- **Jobboerse (Legacy):** `jobboerse.arbeitsagentur.de/vamJB/` (Server-rendered JSP, eigene Session `var sessiontimeout = 1800`, Spring Web Flow mit `execution=e{n}s{n}` State)
+- **Termine:** `web.arbeitsagentur.de/portal/termine/` (Angular 21, eigene App)
+- **Geldleistungen:** `web.arbeitsagentur.de/aue/` (Web Components: `aue-lip-pp`, `lip-tile-geldleistung`)
+- **Nachrichten:** Mindestens 3 separate Systeme (kokos-ui, post-kpf-ui, vamJB/postfach)
+- **Bescheide:** `web.arbeitsagentur.de/besch/ui/` (eigene WC: `besch-webcomponent`)
+- **Session-Warnung:** Web Components `session-expiration-30m-warn-popup`, `session-expiration-5m-warn-popup`, `session-expiration-inactivity-warn-popup` — bestätigt Dual-Timeout
+- **OAuth:** `oiam-oauth-component` (eigene WC für Token-Management)
+- **Konsequenz für Modul:** Jedes Sub-System kann eigene Session-Cookies/Tokens haben → Keep-Alive muss ggf. mehrere Endpoints ansprechen
+
+**Offene Architektur-Fragen (müssen vor/während Implementierung beantwortet werden):**
+
+1. **Nutzungsbedingungen / Rechtliches:**
+   - Ist automatisierter Zugriff laut den Nutzungsbedingungen (`arbeitsagentur.de/nutzungsbedingungen`) erlaubt?
+   - DSGVO Art. 20 (Recht auf Datenportabilität) — gilt das hier als Rechtsgrundlage?
+   - Grauzone: Eigene Daten abrufen vs. automatisierte Interaktion (Nachrichten senden, Status ändern)
+   - **UX-Pattern (wie bei EURES-Modul):** Bei Modul-Aktivierung muss der Benutzer einen Risikohinweis akzeptieren + Link zu den Nutzungsbedingungen angezeigt bekommen. Keine stillschweigende Nutzung — informierte Zustimmung durch den User.
+
+2. **"Profil wechseln" — Multi-Profil-Support:**
+   - Im HTML: `<a id="profileProfilWechseln">Profil wechseln</a>` — Nutzer können mehrere Profile haben!
+   - Welche Profile gibt es? (Privatperson, Unternehmen, Partner — aus Login-Seite bekannt)
+   - Modul muss wissen welches Profil aktiv ist und ggf. explizit auswählen
+   - Kann ein Nutzer mehrere Privatperson-Profile haben? (z.B. verschiedene Kundennummern?)
+
+3. **Session-Window-Scheduling — fundamental anderes Pattern als stateless APIs:**
+   - Max. 30 Min Session → Automationen können NICHT 24/7 laufen wie bei EURES/JSearch
+   - Pattern: Login → alle Operationen gebatcht innerhalb 30 Min → Session endet
+   - Wie interagiert das mit dem JobSync RunCoordinator? Braucht einen speziellen "session-windowed" Runner
+   - Was passiert wenn eine Operation länger als 30 Min dauert? (z.B. viele Nachrichten abrufen)
+   - Re-Auth-Strategie: Automatisch (wenn Credentials gespeichert) oder manuell (Notification an User)?
+
+4. **Credential Storage & Autonomie-Level:**
+   - **Szenario A:** BA-Konto (Username+Password) in JobSync gespeichert → programmatischer Login möglich → Modul kann autonom laufen (wie ein Cron-Job)
+   - **Szenario B:** Passkey/eID → Login IMMER manuell → Modul ist rein reaktiv (nur während manueller Session aktiv)
+   - **Szenario C:** Hybrid → manueller Login, aber Session-Token wird persistiert und refreshed solange gültig
+   - Welches Szenario wird unterstützt? Bestimmt die gesamte Architektur (Scheduler vs. Event-driven)
+   - Wenn Credentials gespeichert: AES-verschlüsselt wie andere Modul-Credentials (ADR-016)?
+
+5. **Vermittlungsvorschläge — Kern des Shared Kernel mit 1.1:**
+   - `jobboerse-vv-se` Web Component zeigt Vermittlungsvorschläge und Suchaufträge
+   - Das sind Jobs die der Arbeitsvermittler **aktiv vorschlägt** — höchste Relevanz für den Nutzer!
+   - Import als `DiscoveredVacancy` mit Quelle `arbeitsagentur_vermittlung` (nicht `arbeitsagentur_jobsuche`)
+   - Unterschied zu 1.1: Dort sucht der USER, hier schlägt der VERMITTLER vor → andere Gewichtung im Matching
+
+6. **Sync-Richtung & Frequenz:**
+   - **Pull (arbeitsagentur → JobSync):** Termine, Nachrichten, Betreuer, Vorgänge, Vermittlungsvorschläge
+   - **Push (JobSync → arbeitsagentur):** Bewerbungsstatus propagieren, Nachrichten senden, Bewerbungsbemühungen melden
+   - Wie oft pollen? Innerhalb einer 30-Min-Session alles einmal durchlaufen, oder gezielt nur Deltas?
+   - Aggressives Polling (jede Minute) vs. seltene Sync-Sessions (1x täglich, manuell ausgelöst)?
+   - Kein Webhook/Push von arbeitsagentur.de → Polling ist die einzige Option (es sei denn miso-glocke hat WebSocket)
+
+7. **Test-Strategie — kein Sandbox-Environment:**
+   - arbeitsagentur.de bietet KEINE Sandbox/Staging-Umgebung
+   - Wie entwickelt man weiter ohne produktive Daten zu gefährden?
+   - Option A: Recorded Sessions (HAR-Files) als Mock-Basis → Playwright Replay
+   - Option B: Dedizierter Test-Account (falls erlaubt/möglich)
+   - Option C: Snapshot-Tests gegen gespeicherte HTML-Strukturen
+   - Jedes UI-Update von arbeitsagentur.de kann das Modul brechen → braucht Health-Check-Strategie
+
+8. **Notification-Forwarding (miso-glocke → JobSync Channels):**
+   - Neue Nachrichten, Termin-Erinnerungen, Fristablauf → in JobSync's Notification-System weiterleiten
+   - Über welchen Channel? Webhook, Push, Email, In-App — alle 4 möglich
+   - Echtzeit vs. verzögert (abhängig von Sync-Frequenz, siehe Punkt 6)
+   - Deduplizierung: Wenn miso-glocke und eigenes Polling dieselbe Info liefern
+
+9. **Mehrere Rechtskreise — verschiedene Institutionen, verschiedene Prozesse:**
+   - **SGB III** (Arbeitsagentur): ALG I, Vermittlung, Stellensuche, Bewerbungen
+   - **SGB II** (Jobcenter): Bürgergeld, Eingliederungsvereinbarung, Veränderungsmitteilungen
+   - **Familienkasse**: Kindergeld, Kinderzuschlag (eigene Kachel im eServices-Bereich)
+   - Verschiedene Ansprechpartner pro Rechtskreis (nicht derselbe Betreuer!)
+   - Verschiedene Postfächer pro Rechtskreis (Vermittlungspostfach ≠ Leistungspostfach)
+   - Modul muss kontextbewusst operieren: "Wer ist zuständig für was?"
+
+10. **Fragile Selektoren — Resilience bei fehlender stabiler API:**
+    - Kein stabiles REST-API (außer ota-service für Termine) = HTML-Scraping/DOM-Navigation
+    - Jedes Redesign/Update/A-B-Test von arbeitsagentur.de kann das Modul brechen
+    - Braucht: Feature-Detection statt feste CSS-Selektoren wo möglich
+    - Braucht: Health-Check der DOM-Struktur vor jeder Operation ("Finde ich die erwarteten Elemente?")
+    - Braucht: Graceful Degradation — wenn ein Sub-Feature bricht, soll der Rest weiterlaufen
+    - Monitoring: Automatische Alerts wenn Selektoren nicht mehr greifen (→ Degradation-Event)
 
 **Weitere Länder:** Modulare Architektur für Arbeitsagenturen anderer EU-Länder (eigene Module pro Land)
 
@@ -1491,7 +1756,7 @@ Dynamische Dateipfade und Dateinamen:
   - Public API (→ 7.1) für öffentliche Video-URLs / Streaming-Endpoint
   - DSGVO (→ 6.1) — Video enthält biometrische Daten (Gesicht, Stimme) → stärkere Consent-Anforderungen als Text. Passwortschutz + Expiring Links erforderlich.
 - **Consumer (4.6 fließt in):**
-  - Bewerber-Landingpage (→ 9.5) — Video als Hook-Element ("Hallo, ich bin Pascal" + Video)
+  - Bewerber-Landingpage (→ 9.5) — Video als Hook-Element ("Hallo, ich bin {Name}" + Video)
   - Landingpage für Unternehmen (→ 4.7) — Video eingebettet (bereits referenziert)
   - Social Proof (→ 4.10) — Video-Testimonials, Empfehlungen als Video-Format
   - Portfolio / Arbeitsproben (→ 4.11) — Video als Portfolio-Item-Typ (Design-Walkthroughs, Code-Demos, Präsentationen)
@@ -2371,7 +2636,7 @@ Generierte persönliche Landingpage die den Bewerbungs-Funnel invertiert: Statt 
 - **CTA:** "Jetzt Gespräch vereinbaren" — Cal.com/Calendly Embed für direkte Terminbuchung
 - **Zwei Modi — Graceful Degradation:**
   - **Personalisiert (Consent-Referral-Link geklickt, → 6.1):** "Hallo Frau Müller, Sie suchen einen Senior Developer mit React bei Siemens — hier ist warum ich matche." Ref-Link triggert Automation, lädt HR-Daten, personalisiert Ansprache + Skill-Matching.
-  - **Generisch (Default, kein Consent nötig):** "Hallo, ich bin Pascal. Hier ist mein Profil und meine Projekte." Gleiche Seite, gleiche Inhalte — nur ohne Personalisierung. Zero Drittdaten-Verarbeitung, DSGVO-sauber by Default.
+  - **Generisch (Default, kein Consent nötig):** "Hallo, ich bin {Name}. Hier ist mein Profil und meine Projekte." Gleiche Seite, gleiche Inhalte — nur ohne Personalisierung. Zero Drittdaten-Verarbeitung, DSGVO-sauber by Default.
 - **Social Proof:** Testimonials (→ 4.10), Portfolio/Arbeitsproben (→ 4.11), GitHub-Stats
 - **Datenquelle:** JobSync-Profil, Skillsets (→ 4.1), generierte Dokumente (→ 4.2), Match-Scores, Portfolio (→ 4.11)
 - **Cross-Ref:** Public API (7.1) als Daten-Backend, Data Enrichment (1.13) für Logo/Company-Context, DSGVO Consent-by-Referral (6.1)
