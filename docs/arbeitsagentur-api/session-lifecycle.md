@@ -16,15 +16,25 @@
 | Session-Timer Location | NUR in `profil-ui` (NICHT in kokos-ui, termine) | DOM-Inspection |
 | SSO Cross-App | Funktioniert (stille Code-Exchange, ~2s) | Navigation beobachtet |
 
-## Session-Ende Sequenz (beobachtet)
+## Session-Ende Sequenz (beobachtet + verifiziert 2026-05-17)
 
 ```
 T+29:59  oiam-oauth-wc: letzter Token-Refresh (erfolgreich)
 T+30:00  session-timer: Countdown = 0
 T+30:00  oiam-oauth-wc: GET /openid-connect/logout?id_token_hint={TOKEN}
-T+30:01  Browser: Redirect zu www.arbeitsagentur.de
+T+30:01  oiam-oauth-wc: sessionStorage['oidc.user:...:profil-online'] gelöscht
+T+30:01  oiam-oauth-wc: sessionStorage['oiam-oauth-wc-state'] → null
+T+30:01  Browser: Redirect zu www.arbeitsagentur.de (Startseite)
 T+30:01  Server: Session invalidiert → alle Refresh Tokens ungültig
 ```
+
+**Verifizierter Zustand nach Ablauf:**
+- URL: `https://www.arbeitsagentur.de/` (unauthentifizierte Startseite)
+- `sessionStorage['oidc.user:...:profil-online']` → gelöscht (Key nicht mehr vorhanden)
+- `sessionStorage['oiam-oauth-wc-state']` → `null`
+- Seite zeigt Willkommensseite ohne Login-Kontext
+
+**Erkennung im Modul:** SessionStorage leer = Session beendet → Re-Login-Flow initiieren.
 
 ## Implikationen für JobSync-Modul
 
