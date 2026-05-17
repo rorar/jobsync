@@ -80,6 +80,58 @@ Der Logout wird **CLIENT-seitig** ausgelöst. Mögliche Interventionspunkte:
 
 **Noch zu klären:** Ist der 30-Min-Timer ein ABSOLUTES Limit (auth_time + 30min) oder ein INAKTIVITÄTS-Timer der durch Activity resetbar ist?
 
+## Session-Timer auslesen (für Modul-Integration)
+
+### Methode 1: JWT `auth_time` (programmatisch, empfohlen)
+
+```javascript
+// SessionStorage key:
+const key = 'oidc.user:https://sso.arbeitsagentur.de/auth/realms/OCP:profil-online';
+const oidcUser = JSON.parse(sessionStorage.getItem(key));
+
+// JWT Payload dekodieren (Mittelteil, base64url)
+const payload = JSON.parse(atob(oidcUser.access_token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+
+// Session-Berechnung
+const authTime = payload.auth_time;              // Unix timestamp des Logins
+const sessionMaxSec = 1800;                      // 30 Min Hard-Limit
+const now = Math.floor(Date.now() / 1000);
+const sessionRemainingMin = Math.round((authTime + sessionMaxSec - now) / 60);
+const tokenRemainingSec = payload.exp - now;     // Nächster auto-refresh nötig
+```
+
+### Methode 2: DOM-Timer (nur in profil-ui, Shadow DOM)
+
+```javascript
+// Nur sichtbar in profil-ui — NICHT in kokos-ui, termine, etc.
+// Erreichbar via CDP DOM.performSearch (pierces shadow DOM)
+// Oder: bahf-header shadowRoot → #session-timer-button → span text "XX Min"
+```
+
+### SessionStorage Schema
+
+| Key | Inhalt | Nutzung |
+|---|---|---|
+| `oidc.user:...:profil-online` | `{access_token, refresh_token, id_token, expires_at, session_state, profile, scope}` | Token-Management |
+| `oiam-oauth-wc-state` | `{"profil-online": "logged-in"}` | Login-Status-Flag |
+| `oiam-oauth-wc-instance` | `{"instance": {"id": "<uuid>", "type": "wc", "version": "<hash>"}}` | WC Instance ID |
+| `oiam-channels` | BroadcastChannel State | Cross-Tab Koordination |
+
+### JWT Access-Token Claims (PII-relevante redacted)
+
+| Claim | Wert | Beschreibung |
+|---|---|---|
+| `auth_time` | Unix timestamp | **Session-Start** (Basis für 30-Min-Timer) |
+| `exp` | Unix timestamp | Token-Ablauf (4 Min nach Issue) |
+| `iat` | Unix timestamp | Token-Issue (letzter Refresh) |
+| `authn-level` | `STORK-QAA-Level-4` | Trust-Level (4 = eID) |
+| `acting-type` | `privatperson` | Profil-Typ |
+| `groups` | `["profil-online.level-300", "type.privatperson", ...]` | Berechtigungen |
+| `azp` | `profil-online` | Authorized Party (Client) |
+| `scope` | `openid baportal` | OAuth Scopes |
+| `sid` | UUID | Session ID (korreliert mit `session_state`) |
+| `benutzertyp` | `onlineuser` | User-Typ |
+
 ## Token-Refresh Sequenz (normal, innerhalb 30 Min)
 
 ```http
