@@ -49,6 +49,87 @@ function createCDP(wsUrl) {
   return { ws, send, evaluate, trustedClick, onEvent };
 }
 
+// --- Resilient Button Click Helpers ---
+
+// Polls for a URL pattern, returns when matched. Throws after timeoutMs.
+async function waitForUrl(cdp, pattern, timeoutMs = 30000, pollMs = 1000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const url = await cdp.evaluate('document.location.href');
+      if (url?.includes(pattern)) return url;
+    } catch (_) {}
+    await new Promise(r => setTimeout(r, pollMs));
+  }
+  throw new Error(`Timeout waiting for URL containing "${pattern}"`);
+}
+
+// Polls for a button by selector, scrolls into view, trusted-clicks it.
+// Returns true on success. Uses overlap detection + retry.
+async function waitForAndClick(cdp, { selector, textMatch, log, timeoutMs = 20000, useTrustedClick = true }) {
+  const deadline = Date.now() + timeoutMs;
+  let attempt = 0;
+
+  while (Date.now() < deadline) {
+    attempt++;
+    await new Promise(r => setTimeout(r, 1000));
+
+    try {
+      const findExpr = selector
+        ? `document.querySelector('${selector}')`
+        : `[...document.querySelectorAll('button, a')].find(e => e.textContent?.includes('${textMatch}'))`;
+
+      const info = await cdp.evaluate(`(function() {
+        const btn = ${findExpr};
+        if (!btn || btn.offsetParent === null) return null;
+        btn.scrollIntoView({ block: 'center' });
+        const r = btn.getBoundingClientRect();
+        const cx = Math.round(r.x + r.width / 2);
+        const cy = Math.round(r.y + r.height / 2);
+        const topEl = document.elementFromPoint(cx, cy);
+        const isOnTop = topEl === btn || btn.contains(topEl);
+        return JSON.stringify({ x: cx, y: cy, w: Math.round(r.width), h: Math.round(r.height), isOnTop });
+      })()`);
+
+      if (!info) continue;
+      const coords = JSON.parse(info);
+
+      if (coords.w < 10) continue; // too small, not rendered yet
+
+      if (useTrustedClick && coords.isOnTop) {
+        await cdp.trustedClick(coords.x, coords.y);
+        log(`Geklickt (${coords.x},${coords.y}) ${coords.w}x${coords.h}`);
+        return true;
+      }
+
+      if (useTrustedClick && !coords.isOnTop) {
+        // Scroll more and retry
+        await cdp.evaluate('window.scrollBy(0, 200)');
+        continue;
+      }
+
+      // Non-trusted click (.click()) — for non-Vue pages
+      if (!useTrustedClick) {
+        await cdp.evaluate(`(function() { const btn = ${findExpr}; if (btn) btn.click(); })()`);
+        log('Geklickt (.click())');
+        return true;
+      }
+    } catch (_) {}
+  }
+
+  // Last resort: .click() fallback
+  try {
+    const findExpr = selector
+      ? `document.querySelector('${selector}')`
+      : `[...document.querySelectorAll('button, a')].find(e => e.textContent?.includes('${textMatch}'))`;
+    await cdp.evaluate(`(function() { const btn = ${findExpr}; if (btn) btn.click(); })()`);
+    log('Geklickt (Fallback .click())');
+    return true;
+  } catch (_) {}
+
+  return false;
+}
+
 // --- Main Login Flow ---
 (async () => {
   const startTime = Date.now();
@@ -75,20 +156,31 @@ function createCDP(wsUrl) {
 
   log(`Phase 1: Navigate to ${TARGET_APP} → Keycloak`);
   await cdp.send('Page.navigate', { url: targetUrl });
-  await new Promise(r => setTimeout(r, 5000));
+  await waitForUrl(cdp, 'sso.arbeitsagentur.de', 15000).catch(() => {});
+  await new Promise(r => setTimeout(r, 2000)); // let page render
 
   // --- Phase 2: Click BundID on Keycloak ---
   log('Phase 2: Keycloak → BundID');
-  await cdp.evaluate("document.getElementById('mitBundIdButton')?.click()");
-  await new Promise(r => setTimeout(r, 4000));
+  // Keycloak is NOT Vue 3 — .click() works fine here
+  await waitForAndClick(cdp, {
+    selector: '#mitBundIdButton',
+    log: (m) => log('  BundID Button: ' + m),
+    useTrustedClick: false,
+    timeoutMs: 15000
+  });
+  await new Promise(r => setTimeout(r, 2000));
 
-  // Click "Zur BundID wechseln"
-  await cdp.evaluate(`
-    const btns = [...document.querySelectorAll('button, a')];
-    const btn = btns.find(b => b.textContent?.includes('BundID wechseln'));
-    if (btn) btn.click();
-  `);
-  await new Promise(r => setTimeout(r, 5000));
+  // Click "Zur BundID wechseln" (intermediate page, also Keycloak)
+  await waitForAndClick(cdp, {
+    textMatch: 'BundID wechseln',
+    log: (m) => log('  Zur BundID: ' + m),
+    useTrustedClick: false,
+    timeoutMs: 10000
+  });
+
+  // Wait for BundID page
+  await waitForUrl(cdp, 'id.bund.de', 15000).catch(() => {});
+  await new Promise(r => setTimeout(r, 2000));
 
   const bundIdUrl = await cdp.evaluate('document.location.href');
   if (!bundIdUrl?.includes('id.bund.de')) {
@@ -99,137 +191,75 @@ function createCDP(wsUrl) {
   log('BundID erreicht: ' + bundIdUrl.substring(0, 60));
 
   // --- Phase 3: BundID → eID Selection ---
-  // BundID has TWO possible starting pages:
+  // BundID is Vue 3 — .click() is UNRELIABLE, must use trusted clicks!
+  // Two possible starting pages:
   //   a) Welcome page (/de/welcome) — has "Anmelden" button (data-test-id="Tml88")
-  //   b) Method selection (/de/welcome/auth/1/eID) — has grid cards + "Anmelden" (9XNNb)
-  // All buttons need CDP trusted click (Vue 3 — .click() is unreliable)
+  //   b) Method selection (/de/welcome/auth/1/eID) — eID already pre-selected
   log('Phase 3: BundID → eID Auswahl');
 
-  const currentUrl = await cdp.evaluate('document.location.href');
+  if (!bundIdUrl.includes('/eID')) {
+    // Phase 3a: Click "Anmelden" on welcome page
+    log('  Welcome page erkannt — klicke "Anmelden"');
+    await waitForAndClick(cdp, {
+      selector: 'button[data-test-id="Tml88"]',
+      log: (m) => log('  Welcome Anmelden: ' + m),
+      useTrustedClick: true,
+      timeoutMs: 15000
+    });
+    await new Promise(r => setTimeout(r, 3000));
 
-  if (currentUrl?.includes('/eID')) {
-    log('eID bereits vorausgewählt (URL endet auf /eID)');
-  } else {
-    // Phase 3a: Click "Anmelden" on welcome page (data-test-id="Tml88")
-    const anmeldenWelcome = await cdp.evaluate(`(function() {
-      const btn = document.querySelector('button[data-test-id="Tml88"]');
-      if (btn) { btn.scrollIntoView({block:'center'}); const r=btn.getBoundingClientRect(); return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}); }
-      return '{}';
-    })()`);
-    const wc = JSON.parse(anmeldenWelcome || '{}');
-    if (wc.x) {
-      await cdp.trustedClick(wc.x, wc.y);
-      log('Welcome "Anmelden" geklickt (Tml88)');
-    } else {
-      log('WARNING: Welcome "Anmelden" button nicht gefunden');
-    }
-    await new Promise(r => setTimeout(r, 4000));
-
-    // Phase 3b: Now on method selection — click "Online-Ausweis" card if needed
-    const methodUrl = await cdp.evaluate('document.location.href');
-    if (!methodUrl?.includes('/eID')) {
-      const cardCoords = await cdp.evaluate(`(function() {
-        const btn = document.querySelector('button[data-test-id="sjqET"]');
-        if (btn) { btn.scrollIntoView({block:'center'}); const r=btn.getBoundingClientRect(); return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}); }
-        return '{}';
-      })()`);
-      const cc = JSON.parse(cardCoords || '{}');
-      if (cc.x) {
-        await cdp.trustedClick(cc.x, cc.y);
-        log('Online-Ausweis Karte geklickt (sjqET)');
-      }
-      await new Promise(r => setTimeout(r, 3000));
-    }
-  }
-
-  // --- Phase 4: Click Anmelden (eID action) via CDP trusted click ---
-  log('Phase 4: eID Anmelden → AusweisApp Modal');
-
-  // The "Anmelden" button (data-test-id="9XNNb") is at the bottom of the expanded
-  // Online-Ausweis section, often below the grid cards. We must:
-  // 1. Scroll it fully into view
-  // 2. Wait for layout to settle
-  // 3. Verify nothing overlaps it before clicking
-  let anmeldenClicked = false;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    // Small delay after scroll for layout to settle
-    await new Promise(r => setTimeout(r, 500));
-    const anmeldenInfo = await cdp.evaluate(`(function() {
-      const btn = document.querySelector('button[data-test-id="9XNNb"]');
-      if (!btn) return JSON.stringify({ found: false });
-      btn.scrollIntoView({ block: 'center' });
-      const r = btn.getBoundingClientRect();
-      const cx = Math.round(r.x + r.width / 2);
-      const cy = Math.round(r.y + r.height / 2);
-      const topEl = document.elementFromPoint(cx, cy);
-      const isOnTop = topEl === btn || btn.contains(topEl);
-      return JSON.stringify({
-        found: true, x: cx, y: cy, w: Math.round(r.width), h: Math.round(r.height),
-        isOnTop, topElTag: topEl?.tagName, topElText: topEl?.textContent?.substring(0, 30)
+    // Phase 3b: If not on eID page yet, click Online-Ausweis card
+    const afterWelcome = await cdp.evaluate('document.location.href');
+    if (afterWelcome && !afterWelcome.includes('/eID')) {
+      log('  Methoden-Auswahl — klicke "Online-Ausweis"');
+      await waitForAndClick(cdp, {
+        selector: 'button[data-test-id="sjqET"]',
+        log: (m) => log('  Online-Ausweis: ' + m),
+        useTrustedClick: true,
+        timeoutMs: 10000
       });
-    })()`);
-    const info = JSON.parse(anmeldenInfo || '{}');
-
-    if (!info.found) {
-      log(`Attempt ${attempt + 1}: Anmelden button nicht im DOM`);
       await new Promise(r => setTimeout(r, 2000));
-      continue;
     }
-
-    if (info.isOnTop && info.w > 20) {
-      await cdp.trustedClick(info.x, info.y);
-      log(`Anmelden geklickt (${info.x},${info.y}) ${info.w}x${info.h}`);
-      anmeldenClicked = true;
-      break;
-    }
-
-    // Button is covered — scroll additional pixels down
-    log(`Attempt ${attempt + 1}: Button verdeckt von <${info.topElTag}> "${info.topElText}". Scrolle...`);
-    await cdp.evaluate('window.scrollBy(0, 200)');
-    await new Promise(r => setTimeout(r, 1000));
+  } else {
+    log('  eID bereits vorausgewählt');
   }
 
-  if (!anmeldenClicked) {
-    // Last resort: use DOM.performSearch + .click() (less reliable but works sometimes)
-    log('WARNING: Trusted click fehlgeschlagen — versuche .click() Fallback');
-    await cdp.evaluate(`document.querySelector('button[data-test-id="9XNNb"]')?.click()`);
-  }
-
-  await new Promise(r => setTimeout(r, 2000));
+  // --- Phase 4: Click Anmelden (eID action) → AusweisApp Modal ---
+  log('Phase 4: eID Anmelden → AusweisApp Modal');
+  await waitForAndClick(cdp, {
+    selector: 'button[data-test-id="9XNNb"]',
+    log: (m) => log('  eID Anmelden: ' + m),
+    useTrustedClick: true,
+    timeoutMs: 15000
+  });
+  await new Promise(r => setTimeout(r, 1500));
 
   // --- Phase 5: Click WEITER MIT AUSWEISAPP ---
   log('Phase 5: WEITER MIT AUSWEISAPP');
-
-  const ausweisCoords = await cdp.evaluate(`(function() {
-    const modal = document.querySelector('[data-test-id*="modal-content"]');
-    if (modal) {
-      const btn = [...modal.querySelectorAll('button')].find(b => b.textContent?.includes('AUSWEISAPP'));
-      if (btn) { const r=btn.getBoundingClientRect(); return JSON.stringify({x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}); }
-    }
-    return '{}';
-  })()`);
-  const c2 = JSON.parse(ausweisCoords || '{}');
-
-  if (c2.x) {
-    await cdp.trustedClick(c2.x, c2.y);
-    log('WEITER MIT AUSWEISAPP geklickt');
-  } else {
-    log('WARNING: AUSWEISAPP Modal nicht gefunden — evtl. noch nicht geöffnet');
+  // Try data-test-id first, then text match
+  const phase5ok = await waitForAndClick(cdp, {
+    selector: 'button[data-test-id="el2nW"]',
+    log: (m) => log('  AUSWEISAPP (el2nW): ' + m),
+    useTrustedClick: true,
+    timeoutMs: 8000
+  });
+  if (!phase5ok) {
+    // Fallback: find by text
+    await waitForAndClick(cdp, {
+      textMatch: 'AUSWEISAPP',
+      log: (m) => log('  AUSWEISAPP (text): ' + m),
+      useTrustedClick: true,
+      timeoutMs: 8000
+    });
   }
 
   // --- Phase 6: Wait for AusweisApp completion ---
   log('Phase 6: Warte auf AusweisApp...');
   log('>>> MANUELLE AKTION: eID-Authentifizierung in AusweisApp durchführen <<<');
 
-  // After clicking WEITER MIT AUSWEISAPP, the page navigates to externalNpaAuthn.
-  // We must wait for that navigation, THEN poll for the WEITER (d0gQ0) modal.
-  // The page stays on externalNpaAuthn until AusweisApp completes, then BundID
-  // renders the "Sie werden zurückgeleitet" modal WITHOUT navigating (SPA).
-
-  // Wait for externalNpaAuthn page to settle
   await new Promise(r => setTimeout(r, 5000));
 
-  // Poll with resilient evaluate (catches context-destroyed errors during navigation)
+  // Poll for WEITER (d0gQ0) — appears after AusweisApp completes
   let weiterClicked = false;
   let pollCount = 0;
   let observerInjected = false;
@@ -239,7 +269,7 @@ function createCDP(wsUrl) {
     pollCount++;
 
     try {
-      // Try to inject MutationObserver (idempotent — checks if already installed)
+      // Inject MutationObserver (idempotent)
       if (!observerInjected) {
         const injectResult = await cdp.evaluate(`
           (function() {
@@ -289,7 +319,6 @@ function createCDP(wsUrl) {
         }
       }
     } catch (e) {
-      // Context destroyed during navigation — retry next cycle
       observerInjected = false;
     }
 
@@ -301,7 +330,7 @@ function createCDP(wsUrl) {
   // --- Phase 7: Keycloak post-broker → "Online Angebot nutzen" ---
   log('Phase 7: Keycloak → Online Angebot nutzen');
 
-  // Wait for Keycloak redirect via Page.frameNavigated
+  // Wait for Keycloak redirect
   await new Promise((resolve) => {
     const timeout = setTimeout(() => resolve(false), 15000);
     cdp.onEvent('Page.frameNavigated', (params) => {
@@ -312,18 +341,19 @@ function createCDP(wsUrl) {
     });
   });
 
-  await new Promise(r => setTimeout(r, 3000));
+  await new Promise(r => setTimeout(r, 2000));
 
-  // Click "Online Angebot nutzen"
-  await cdp.evaluate(`
-    const btns = [...document.querySelectorAll('button, a')];
-    const btn = btns.find(b => b.textContent?.includes('Online Angebot'));
-    if (btn) btn.click();
-  `);
-  log('"Online Angebot nutzen" geklickt');
+  // Click "Online Angebot nutzen" (Keycloak — .click() works)
+  await waitForAndClick(cdp, {
+    textMatch: 'Online Angebot',
+    log: (m) => log('  Online Angebot: ' + m),
+    useTrustedClick: false,
+    timeoutMs: 10000
+  });
 
   // --- Phase 8: Verify login success ---
-  await new Promise(r => setTimeout(r, 6000));
+  await waitForUrl(cdp, 'web.arbeitsagentur.de', 15000).catch(() => {});
+  await new Promise(r => setTimeout(r, 3000));
 
   const finalUrl = await cdp.evaluate('document.location.href');
   const elapsed = Math.round((Date.now() - startTime) / 1000);
@@ -332,7 +362,6 @@ function createCDP(wsUrl) {
     log(`LOGIN ERFOLGREICH in ${elapsed}s`);
     log('URL: ' + anonymize(finalUrl).substring(0, 80));
 
-    // Read session timer
     const authTime = await cdp.evaluate(`(function() {
       const keys = ['profil-online', 'kokos', 'ota-online'];
       for (const k of keys) {

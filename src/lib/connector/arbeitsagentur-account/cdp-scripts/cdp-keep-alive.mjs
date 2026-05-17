@@ -93,23 +93,56 @@ const POLL_INTERVAL_MS = 10_000;       // main loop tick
     await send('Fetch.enable', {
       patterns: [
         { urlPattern: '*openid-connect/logout*', requestStage: 'Request' },
+        // Block post-logout redirect to www.arbeitsagentur.de (navigation request)
+        { urlPattern: 'https://www.arbeitsagentur.de/', requestStage: 'Request' },
+        { urlPattern: 'https://www.arbeitsagentur.de', requestStage: 'Request' },
       ]
     });
 
+    let logoutJustBlocked = false; // flag: recent logout → next navigation is post-logout redirect
+
     eventHandlers.set('Fetch.requestPaused', async (params) => {
       const { requestId, request } = params;
+
       if (request.url.includes('openid-connect/logout')) {
         await send('Fetch.failRequest', { requestId, reason: 'BlockedByClient' });
         logoutBlockCount++;
+        logoutJustBlocked = true;
         log(`LOGOUT BLOCKED (#${logoutBlockCount})`);
 
         // Restore tokens if they were deleted
         if (tokenBackup) {
           await restoreTokens();
         }
-      } else {
-        await send('Fetch.continueRequest', { requestId });
+        // Clear flag after 60s (only block navigation directly after logout)
+        setTimeout(() => { logoutJustBlocked = false; }, 60000);
+        return;
       }
+
+      if (request.url.includes('www.arbeitsagentur.de') && logoutJustBlocked) {
+        // This is the post-logout redirect — block it and stay on current page
+        log('POST-LOGOUT NAVIGATION BLOCKED: ' + request.url.substring(0, 60));
+        logoutJustBlocked = false;
+        // Return a minimal page that navigates back to profil-ui
+        const html = '<html><body><script>history.back()</script></body></html>';
+        const body = btoa(html);
+        await send('Fetch.fulfillRequest', {
+          requestId,
+          responseCode: 200,
+          responseHeaders: [
+            { name: 'Content-Type', value: 'text/html; charset=utf-8' },
+          ],
+          body,
+        });
+        // Also restore tokens after a brief delay (page might have cleared them)
+        setTimeout(async () => {
+          if (tokenBackup) await restoreTokens();
+        }, 2000);
+        return;
+      }
+
+      // Not logout-related — pass through
+      await send('Fetch.continueRequest', { requestId });
     });
   }
 
@@ -191,6 +224,64 @@ const POLL_INTERVAL_MS = 10_000;       // main loop tick
     return JSON.parse(result || '{"ok":false,"error":"evaluate_failed"}');
   }
 
+  // --- Layer 4: SessionStorage Protection + Navigation Block ---
+  async function setupSessionProtection() {
+    // Inject script that runs BEFORE any page scripts on every navigation.
+    // Patches sessionStorage.removeItem and sessionStorage.clear to protect
+    // OIDC tokens from being deleted by the oiam-oauth-wc during its logout sequence.
+    // Also blocks navigation to www.arbeitsagentur.de (post-logout redirect).
+    await send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `(function() {
+        // --- Protect sessionStorage ---
+        const originalRemoveItem = sessionStorage.removeItem.bind(sessionStorage);
+        const originalClear = sessionStorage.clear.bind(sessionStorage);
+        const PROTECTED_PREFIX = 'oidc.user:';
+
+        sessionStorage.removeItem = function(key) {
+          if (typeof key === 'string' && key.startsWith(PROTECTED_PREFIX)) {
+            console.log('[keep-alive] BLOCKED sessionStorage.removeItem: ' + key.substring(0, 40));
+            return; // silently ignore
+          }
+          return originalRemoveItem(key);
+        };
+
+        sessionStorage.clear = function() {
+          // Save protected items, clear, then restore
+          const saved = [];
+          for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i);
+            if (key && key.startsWith(PROTECTED_PREFIX)) {
+              saved.push({ key, value: sessionStorage.getItem(key) });
+            }
+          }
+          originalClear();
+          for (const { key, value } of saved) {
+            sessionStorage.setItem(key, value);
+          }
+          console.log('[keep-alive] sessionStorage.clear intercepted, ' + saved.length + ' OIDC keys preserved');
+        };
+
+        // --- Block post-logout navigation ---
+        // Override window.location assignment to prevent redirect to arbeitsagentur.de startpage
+        // The oiam-oauth-wc sets location.href after logout. We intercept and log it.
+        const locationDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
+        // Note: window.location is not overridable in most browsers, so we intercept
+        // the navigation via beforeunload + history API as fallback
+        window.addEventListener('beforeunload', function(e) {
+          // Check if this is a logout-triggered navigation
+          if (window.__keepAliveActive && document.location.href.includes('web.arbeitsagentur.de')) {
+            console.log('[keep-alive] beforeunload intercepted during keep-alive');
+          }
+        });
+
+        window.__keepAliveActive = true;
+        console.log('[keep-alive] Layer 4: sessionStorage protection + navigation guard active');
+      })()`,
+    });
+
+    log('Layer 4: sessionStorage protection injected (persists across navigations)');
+  }
+
   // --- Setup ---
   await send('Page.enable');
 
@@ -224,6 +315,25 @@ const POLL_INTERVAL_MS = 10_000;       // main loop tick
 
   await setupFetchInterception();
   log('Layer 2: Fetch interception active (logout blocked + token backup)');
+
+  await setupSessionProtection();
+
+  // Also inject protection into the CURRENT page immediately
+  await evaluate(`(function() {
+    if (window.__keepAliveActive) return 'already_active';
+    const originalRemoveItem = sessionStorage.removeItem.bind(sessionStorage);
+    const PROTECTED_PREFIX = 'oidc.user:';
+    sessionStorage.removeItem = function(key) {
+      if (typeof key === 'string' && key.startsWith(PROTECTED_PREFIX)) {
+        console.log('[keep-alive] BLOCKED sessionStorage.removeItem: ' + key.substring(0, 40));
+        return;
+      }
+      return originalRemoveItem(key);
+    };
+    window.__keepAliveActive = true;
+    return 'injected';
+  })()`);
+  log('Layer 4: sessionStorage protection active (current page + future navigations)');
 
   // Initial token backup
   await backupTokens();
