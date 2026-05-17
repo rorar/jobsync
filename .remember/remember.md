@@ -46,11 +46,19 @@ Key change from v4: blocks ALL 6 logout events (not just `oiamLogoutEvent`) + pr
 - Session died at T+34 because cookie gone → zombie state → navigation to www.arbeitsagentur.de
 
 ### Root cause of remaining failure
-`Re.deleteOiamCookie()` deletes the cookie via a path that bypasses our `document.cookie` setter patch. Need to analyze the exact cookie deletion mechanism in source (search for `deleteOiamCookie`, `deleteCookie` patterns).
+Cookie deletion via `document.cookie = "oiamsession=; expires=Thu, 01 Jan 1970..."` cannot be intercepted:
+- Instance-level `Object.defineProperty(document, 'cookie', ...)` → WC bypasses it
+- Prototype-level `Object.defineProperty(Document.prototype, 'cookie', ...)` → Chrome security prevents override
+- The cookie setter is a native browser API that cannot be monkey-patched
+
+### Next approach: Cookie-Restore (not Cookie-Delete-Prevention)
+Instead of preventing the cookie deletion, **restore the cookie within 1 second** after it's deleted.
+The `check(t)` function reads the cookie every 1s — if we re-create `oiamsession` with valid data before the next tick, the session continues.
+Alternative: use `setInterval(100ms)` to detect cookie absence and immediately re-set it with the last known value.
 
 ## Next
-1. **Fix cookie protection** — analyze Re.deleteOiamCookie() source, patch the actual deletion path
-2. **Fix Login BundID Welcome hang** — `waitForAndClick` for Tml88 intermittently fails
+1. **Implement cookie-restore strategy** — poll cookie existence, restore from backup when deleted
+2. **Fix Login BundID Welcome hang** — `waitForAndClick` for Tml88 intermittently fails (Vue 3 trusted click timing issue)
 
 ## Previous session state (still valid)
 - OpenAPI spec: 37 paths, 39 schemas (`docs/arbeitsagentur-api/openapi.yaml`)
