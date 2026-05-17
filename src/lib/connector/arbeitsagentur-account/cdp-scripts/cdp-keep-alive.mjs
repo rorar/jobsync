@@ -216,93 +216,92 @@ const LOGOUT_EVENTS = [
     return JSON.parse(result || '{"ok":false,"error":"evaluate_failed"}');
   }
 
-  // --- Layer 5: Cookie + SessionStorage Protection ---
-  // The oiam-oauth-wc deletes cookies via:
-  //   document.cookie = "oiamsession=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=...";
-  // We must patch the setter on BOTH Document.prototype AND the document instance
-  // because the WC may use either path (direct assignment or cached prototype setter).
-  // Also protect BA-SessionId cookie (used by hasSessionBeenTerminated check).
-
-  const COOKIE_PROTECTION_CODE = `(function() {
-    if (window.__cookieProtected) return 'already';
-    window.__cookieProtected = true;
-
-    // Find the cookie property descriptor on the prototype chain
-    const proto = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')
-                ? Document.prototype
-                : (typeof HTMLDocument !== 'undefined' && Object.getOwnPropertyDescriptor(HTMLDocument.prototype, 'cookie')
-                   ? HTMLDocument.prototype : null);
-
-    if (proto) {
-      const desc = Object.getOwnPropertyDescriptor(proto, 'cookie');
-      if (desc?.set) {
-        const originalSet = desc.set;
-        const originalGet = desc.get;
-
-        const protectedSetter = function(val) {
-          if (typeof val === 'string') {
-            const isDelete = val.includes('expires=Thu, 01 Jan 1970') || val.includes('max-age=0');
-            const isProtected = val.startsWith('oiamsession') || val.startsWith('BA-SessionId');
-            if (isDelete && isProtected) {
-              console.log('[keep-alive] BLOCKED cookie deletion: ' + val.substring(0, 50));
-              return;
-            }
-          }
-          return originalSet.call(this, val);
-        };
-
-        // Patch on PROTOTYPE (catches all access paths)
-        Object.defineProperty(proto, 'cookie', {
-          get: originalGet,
-          set: protectedSetter,
-          configurable: true
-        });
-
-        // Also patch on document instance (belt and suspenders)
-        Object.defineProperty(document, 'cookie', {
-          get: function() { return originalGet.call(this); },
-          set: protectedSetter,
-          configurable: true
-        });
-      }
-    }
-
-    // Protect sessionStorage OIDC keys from removal
-    const origRemove = sessionStorage.removeItem.bind(sessionStorage);
-    sessionStorage.removeItem = function(key) {
-      if (typeof key === 'string' && key.startsWith('oidc.user:')) {
-        console.log('[keep-alive] BLOCKED sessionStorage.removeItem: ' + key.substring(0, 40));
-        return;
-      }
-      return origRemove(key);
-    };
-
-    // Also protect sessionStorage.clear
-    const origClear = sessionStorage.clear.bind(sessionStorage);
-    sessionStorage.clear = function() {
-      const saved = [];
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const k = sessionStorage.key(i);
-        if (k?.startsWith('oidc.user:')) saved.push({ k, v: sessionStorage.getItem(k) });
-      }
-      origClear();
-      for (const { k, v } of saved) sessionStorage.setItem(k, v);
-      console.log('[keep-alive] sessionStorage.clear intercepted, ' + saved.length + ' OIDC keys preserved');
-    };
-
-    return 'installed';
-  })()`;
+  // --- Layer 5: Cookie Restore + SessionStorage Protection ---
+  // Cookie setter override DOES NOT WORK (Chrome protects native cookie setter).
+  // Instead: backup cookie value every 500ms, restore immediately when deleted.
+  // The check(t) timer reads the cookie every 1s — if we restore within 500ms,
+  // it never sees the cookie missing.
+  //
+  // Cookie format (from source analysis):
+  //   oiamsession={encoded JSON}; path=/; domain=.arbeitsagentur.de; samesite=lax;
+  //   JSON contains: {instance, clientid, additionalinfo, idlestart, maxstart, authnlevel, ...}
 
   async function setupProtection() {
-    // Inject into current page
-    await evaluate(COOKIE_PROTECTION_CODE);
+    await evaluate(`(function() {
+      if (window.__keepAliveProtection) return 'already';
+      window.__keepAliveProtection = { cookieBackup: null, restoreCount: 0 };
 
-    // Also inject via addScriptToEvaluateOnNewDocument (runs BEFORE page scripts on every navigation)
-    await send('Page.addScriptToEvaluateOnNewDocument', {
-      source: COOKIE_PROTECTION_CODE.replace("return 'installed'", "return 'installed_preload'")
-    });
+      // --- Cookie Restore (poll-based) ---
+      function getCookieValue(name) {
+        const prefix = name + '=';
+        const cookies = decodeURIComponent(document.cookie).split(';');
+        for (const c of cookies) {
+          const trimmed = c.trimStart();
+          if (trimmed.startsWith(prefix)) return trimmed.substring(prefix.length);
+        }
+        return null;
+      }
 
-    log('Layer 5: Cookie (prototype + instance) + sessionStorage protection active');
+      function getDomain() {
+        const h = window.location.hostname;
+        const parts = h.split('.');
+        return parts.length >= 2 ? '.' + parts.slice(-2).join('.') : h;
+      }
+
+      // Backup + restore loop (every 200ms for fast detection)
+      setInterval(function() {
+        const val = getCookieValue('oiamsession');
+        if (val) {
+          // Cookie exists — backup it
+          window.__keepAliveProtection.cookieBackup = val;
+        } else if (window.__keepAliveProtection.cookieBackup) {
+          // Cookie DELETED — restore from backup immediately!
+          const domain = getDomain();
+          document.cookie = 'oiamsession=' + window.__keepAliveProtection.cookieBackup + '; path=/; domain=' + domain + '; samesite=lax;';
+          window.__keepAliveProtection.restoreCount++;
+          console.log('[keep-alive] COOKIE RESTORED (#' + window.__keepAliveProtection.restoreCount + ')');
+        }
+      }, 200);
+
+      // Also backup+restore BA-SessionId (used by hasSessionBeenTerminated)
+      let baSessionBackup = null;
+      setInterval(function() {
+        const val = getCookieValue('BA-SessionId');
+        if (val) {
+          baSessionBackup = val;
+        } else if (baSessionBackup) {
+          const domain = getDomain();
+          document.cookie = 'BA-SessionId=' + baSessionBackup + '; path=/; domain=' + domain + '; samesite=lax;';
+          console.log('[keep-alive] BA-SessionId RESTORED');
+        }
+      }, 200);
+
+      // --- SessionStorage Protection ---
+      const origRemove = sessionStorage.removeItem.bind(sessionStorage);
+      sessionStorage.removeItem = function(key) {
+        if (typeof key === 'string' && key.startsWith('oidc.user:')) {
+          console.log('[keep-alive] BLOCKED sessionStorage.removeItem: ' + key.substring(0, 40));
+          return;
+        }
+        return origRemove(key);
+      };
+
+      const origClear = sessionStorage.clear.bind(sessionStorage);
+      sessionStorage.clear = function() {
+        const saved = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const k = sessionStorage.key(i);
+          if (k?.startsWith('oidc.user:')) saved.push({ k, v: sessionStorage.getItem(k) });
+        }
+        origClear();
+        for (const { k, v } of saved) sessionStorage.setItem(k, v);
+        console.log('[keep-alive] sessionStorage.clear intercepted, ' + saved.length + ' OIDC keys preserved');
+      };
+
+      return 'installed';
+    })()`);
+
+    log('Layer 5: Cookie restore (200ms poll) + sessionStorage protection active');
   }
 
   // --- Setup ---
