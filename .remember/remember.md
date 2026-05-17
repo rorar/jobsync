@@ -1,20 +1,46 @@
 # Handoff
 
 ## State
-Session 2026-05-17 (arbeitsagentur.de CDP Automation + API Deep-Dive). 17 commits on `main` (`681adfc`..`6043e5c`).
-Blindspots closed: #2 (NachrichtDetail+Anhang), #6 (Inaktivität=2-3min), #9 (cdp-anonymize shared module).
-CDP scripts: `cdp-anonymize.mjs`, `cdp-login-bundid.mjs` (verified 72s), `cdp-keep-alive.mjs` (trigger fixed, not yet live-verified).
-OpenAPI spec: 37 paths, 39 schemas. Key finding: API gateway requires cookies (`credentials: 'include'`), NOT x-api-key.
+Session 2026-05-17 continued (Keep-Alive v4 + Login robustness). 4 new commits (`108e6f6`..`e0eacfa`), 24 total on `main`.
 
-**Previous (2026-05-15 Twenty deep-dive) still valid:**
-- `docs/twenty-crm-implementation-patterns.md` — 1218 Zeilen, 13 Sektionen
-- S2 Prompt aktualisiert mit Twenty-Enhancements + Pre-Audit P0 Findings
+### CDP Scripts Status
+| Script | Status | Notes |
+|---|---|---|
+| `cdp-login-bundid.mjs` | **ROBUST** | Poll-based, 3/3 successful logins (74-99s) |
+| `cdp-keep-alive.mjs` | **PARTIAL** | Idle timer solved, 30-min bypass works, but dies at ~32 min |
+| `cdp-session-status.mjs` | **NEW** | Reads JWT + DOM timer, --watch mode |
+| `cdp-anonymize.mjs` | Stable | 30 PII patterns |
 
-## Next
-1. **Keep-Alive live verification** — Login → start `cdp-keep-alive.mjs` immediately → wait 5 min → confirm popup auto-dismissed (trigger: `inactivity-countdown` in shadow DOM)
-2. **Login script bug** — Phase 4 "Anmelden" button sometimes covered by grid cards. Fix: retry with `elementsFromPoint` check or scroll offset
-3. **GraphQL Introspection** (Blindspot #3) — Standard `__schema` query rejected (`FieldUndefined`). Try: `{ __schema { types { name kind } } }` or `{ __type(name: "Query") { fields { name } } }`
-4. **S2 UX Polish** — prompt at `~/s2-ux-polish-session.md` (AKTUALISIERT mit Twenty-Enhancements + P0 Findings)
+### Keep-Alive Architecture (v4)
+| Layer | Purpose | Status |
+|---|---|---|
+| 1: Synthetic keypress | Idle timer reset | **WORKS** — `document.dispatchEvent(new KeyboardEvent('keypress'))` via `Runtime.evaluate` |
+| 2: Fetch.failRequest | Block 30-min logout | **WORKS** — blocks GET /openid-connect/logout |
+| 3: Manual token refresh | Server session alive | **WORKS** — refreshes every ~200s, resets lastSessionRefresh |
+| 4: SessionStorage protection | Prevent token deletion | **FAILS** — oiam-oauth-wc destroys JS context before patch takes effect |
+
+### Critical Findings
+1. **oiam-oauth-wc activity detection**: `addEventListener("keypress")` + `addEventListener("mouseup")` on document. Does NOT check `isTrusted`. Source: `p-Bn5gH4YR.js` (142KB)
+2. **Shift key doesn't work**: generates `keydown`/`keyup` but NOT `keypress`
+3. **mouseMoved causes navigation**: triggers hover/click on page links (Vermittlungspostfach redirect)
+4. **DOM timer freezes**: when only synthetic keypress is sent (no real UI events), the shadow DOM timer stops updating (cosmetic)
+5. **Post-logout sequence**: Logout blocked → ~90s delay → WC destroys JS context (SPA navigation) → evaluate_failed → session dies at ~32 min
+6. **Popup types**: `popupIdle` (inactivity, `is-visible` class), `popupHL` (5-min warning, `is-visible` class). Both in bahf-header closed shadow DOM.
+
+## Next (Keep-Alive v5 — solve the post-logout navigation)
+The 30-min bypass almost works — server session stays alive, but the client navigates away ~90s after the blocked logout. Approaches to try:
+1. **Broader Fetch interception**: intercept ALL navigations away from `web.arbeitsagentur.de` after a blocked logout
+2. **Page.addScriptToEvaluateOnNewDocument with localStorage backup**: save tokens to localStorage (cross-origin persistent), restore on page load
+3. **Monkey-patch the oiam-oauth-wc's internal navigation**: find and override the function that triggers the redirect
+4. **Accept 30-min limit, auto-relogin**: instead of fighting the logout, detect it and automatically re-login (cdp-login-bundid.mjs is now reliable)
+
+Option 4 might be the most sustainable — the login is fast (74s) and reliable.
+
+## Previous session state (still valid)
+- OpenAPI spec: 37 paths, 39 schemas (`docs/arbeitsagentur-api/openapi.yaml`)
+- Auth docs: `auth-flow.md`, `session-lifecycle.md`, `postfach-protocol-spec.md`
+- Twenty reference: `docs/twenty-crm-implementation-patterns.md` (1218 lines)
+- S2 UX Polish prompt: `~/s2-ux-polish-session.md` (AKTUALISIERT mit Twenty-Enhancements + P0 Findings)
 
 ## S2 Pre-Audit Findings (aus Session 2026-05-15)
 
@@ -79,6 +105,5 @@ OpenAPI spec: 37 paths, 39 schemas. Key finding: API gateway requires cookies (`
 - `/full-stack-orchestration:full-stack-feature` für ALLE Entwicklung, Honesty Gate PFLICHT vor Push
 - Browser bridge: `~/bin/browser-bridge.sh` → CDP at 127.0.0.1:9223 (sapphire Chromium)
 - BundID buttons need CDP `Input.dispatchMouseEvent` (Vue 3, `.click()` doesn't work)
-- Inactivity popup: `#session-expiration-idle-warn-popup-continue-btn` in bahf-header shadow DOM, only detectable via `DOM.performSearch`
 - API calls require `credentials: 'include'` (sends ISTIOSESSIONID cookie) — without cookies = 403
-- Keep-alive old version spam-clicked (found button always in DOM) — fixed version checks `inactivity-countdown` existence
+- Never commit personal data
