@@ -37,9 +37,20 @@ Session 2026-05-17 continued (Keep-Alive v4 + Login robustness). 4 new commits (
 5 layers: synthetic keypress + 6-event interception + Fetch block + token refresh + cookie/sessionStorage protection.
 Key change from v4: blocks ALL 6 logout events (not just `oiamLogoutEvent`) + protects `oiamsession` cookie from deletion via `document.cookie` setter patch.
 
+### v5 Live-Test Result (2026-05-17, 34 Min — 4 Min beyond limit)
+- Layer 2: `oiamMaxSessionExpirationWarnEvent` BLOCKED at T+25 → NO popup ✓
+- Layer 2: `oiamLogoutEvent(max-session-timed-out)` BLOCKED at T+30 ✓ (first time ever!)
+- Layer 3: GET /openid-connect/logout BLOCKED by Fetch ✓
+- Layer 5: sessionStorage.removeItem BLOCKED ✓
+- Layer 5: oiamsession cookie deletion NOT blocked ✗ (document.cookie setter patch didn't catch it)
+- Session died at T+34 because cookie gone → zombie state → navigation to www.arbeitsagentur.de
+
+### Root cause of remaining failure
+`Re.deleteOiamCookie()` deletes the cookie via a path that bypasses our `document.cookie` setter patch. Need to analyze the exact cookie deletion mechanism in source (search for `deleteOiamCookie`, `deleteCookie` patterns).
+
 ## Next
-1. **Live-test Keep-Alive v5** — Login → run → verify session survives >35 min
-2. **Fix Login BundID Welcome hang** — `waitForAndClick` for Tml88 intermittently fails. Need to investigate why the poll times out on some attempts.
+1. **Fix cookie protection** — analyze Re.deleteOiamCookie() source, patch the actual deletion path
+2. **Fix Login BundID Welcome hang** — `waitForAndClick` for Tml88 intermittently fails
 
 ## Previous session state (still valid)
 - OpenAPI spec: 37 paths, 39 schemas (`docs/arbeitsagentur-api/openapi.yaml`)
