@@ -1,4 +1,5 @@
 import { writeFileSync } from 'fs';
+import { anonymize } from './cdp-anonymize.mjs';
 
 const resp = await fetch('http://127.0.0.1:9223/json/list');
 const targets = await resp.json();
@@ -30,18 +31,6 @@ function send(method, params = {}) {
   });
 }
 
-function anonymize(str) {
-  if (!str) return str;
-  return str
-    .replace(/access_token["\s:=]+[^&\s",}]+/g, 'access_token=<REDACTED>')
-    .replace(/Bearer [^\s"]+/g, 'Bearer <REDACTED>')
-    .replace(/"name"\s*:\s*"[^"]*"/g, '"name": "<REDACTED>"')
-    .replace(/"vorname"\s*:\s*"[^"]*"/g, '"vorname": "<REDACTED>"')
-    .replace(/"nachname"\s*:\s*"[^"]*"/g, '"nachname": "<REDACTED>"')
-    .replace(/"kundennummer"\s*:\s*"[^"]*"/gi, '"kundennummer": "<REDACTED>"')
-    // .replace(/<KUNDENNR_REGEX>/g, "<KUNDENNR>") // Configure per user
-    // .replace(/<NAME_REGEX>/gi, "<REDACTED>") // Configure per user
-}
 
 function isApiCall(url, type) {
   if (type === 'XHR' || type === 'Fetch') return true;

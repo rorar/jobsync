@@ -1,4 +1,5 @@
 import { writeFileSync } from 'fs';
+import { anonymize } from './cdp-anonymize.mjs';
 
 const resp = await fetch('http://127.0.0.1:9223/json/list');
 const targets = await resp.json();
@@ -28,20 +29,6 @@ function send(method, params = {}) {
   });
 }
 
-function anonymize(str) {
-  if (!str) return str;
-  return str
-    .replace(/Bearer [^\s"]+/g, 'Bearer <REDACTED>')
-    // .replace(/<KUNDENNR_REGEX>/g, "<KUNDENNR>") // Configure per user
-    // .replace(/<NAME_REGEX>/gi, "<REDACTED>") // Configure per user
-    // .replace(/<BETREUER_REGEX>/g, "<BETREUER>") // Configure per user
-    // .replace(/<ORT_REGEX>/g, "<ORT>") // Configure per user
-    // .replace(/<DSTNR_REGEX>/g, "<DSTNR>") // Configure per user
-    .replace(/"betreff"\s*:\s*"[^"]*"/g, '"betreff": "<SUBJECT>"')
-    .replace(/"text"\s*:\s*"[^"]*"/g, '"text": "<CONTENT>"')
-    .replace(/"inhalt"\s*:\s*"[^"]*"/g, '"inhalt": "<CONTENT>"')
-    .replace(/"nachrichtText"\s*:\s*"[^"]*"/g, '"nachrichtText": "<CONTENT>"');
-}
 
 function isApiCall(url, type) {
   if (type === 'XHR' || type === 'Fetch') return true;

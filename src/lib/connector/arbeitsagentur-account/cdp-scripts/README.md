@@ -36,10 +36,15 @@ node scripts/arbeitsagentur-cdp/cdp-api-discovery.mjs
 
 ## Anonymisierung
 
-Alle Scripts anonymisieren automatisch:
-- Bearer Tokens → `<REDACTED>`
-- Kundennummer → `<KUNDENNR>`
-- Personennamen → `<REDACTED>`
-- Betreuer-Namen → `<BETREUER>`
-- Ortsnamen → `<ORT>`
-- Dienststellennummern → `<DSTNR>`
+Alle Scripts importieren `anonymize()` aus `cdp-anonymize.mjs` (Single Source of Truth).
+
+Abgedeckte PII-Kategorien:
+- Auth Tokens (Bearer, access_token, id_token, refresh_token, session_state, code) → `<REDACTED>`
+- Kundennummer (JSON, URN, URL, Query-Params) → `<KUNDENNR>`
+- Personennamen (vorname, nachname, autorName, senderName, empfaengerName, leserName) → `<REDACTED>`
+- Betreuer-Namen (responsible) → `<BETREUER>`
+- Kontaktdaten (email, telefon, preferred_username) → `<REDACTED>`
+- Adressen (strasse, hausnummer, plz, ort, adresse) → `<REDACTED>`
+- Dienststellennummern (dstnr, dstnr5, dienststellennummer, dienststellenname) → `<DSTNR>`
+- Nachrichten-Inhalte (betreff, text, inhalt, nachrichtText) → `<SUBJECT>` / `<CONTENT>`
+- URN-Identitäten (identity, actingOnBehalf, leserId, empfaengerId) → `<REDACTED>`

@@ -1,4 +1,5 @@
 import { writeFileSync } from 'fs';
+import { anonymize } from './cdp-anonymize.mjs';
 
 const resp = await fetch('http://127.0.0.1:9223/json/list');
 const targets = await resp.json();
@@ -26,17 +27,6 @@ function send(method, params = {}) {
   });
 }
 
-function anonymize(str) {
-  if (!str) return str;
-  return str
-    .replace(/code=[^&\s"]+/g, 'code=<REDACTED>')
-    .replace(/access_token=[^&\s"]+/g, 'access_token=<REDACTED>')
-    .replace(/id_token=[^&\s"]+/g, 'id_token=<REDACTED>')
-    .replace(/session_state=[^&\s"]+/g, 'session_state=<REDACTED>')
-    .replace(/state=[0-9a-f]{16,}/g, 'state=<REDACTED>')
-    .replace(/session_code=[^&\s"]+/g, 'session_code=<REDACTED>')
-    .replace(/Bearer [^\s"]+/g, 'Bearer <REDACTED>');
-}
 
 ws.addEventListener('message', (event) => {
   const msg = JSON.parse(event.data);

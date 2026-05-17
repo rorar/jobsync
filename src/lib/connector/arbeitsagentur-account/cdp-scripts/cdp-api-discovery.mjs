@@ -1,4 +1,5 @@
 import { writeFileSync } from 'fs';
+import { anonymize } from './cdp-anonymize.mjs';
 
 const resp = await fetch('http://127.0.0.1:9223/json/list');
 const targets = await resp.json();
@@ -31,24 +32,6 @@ function send(method, params = {}) {
   });
 }
 
-function anonymize(str) {
-  if (!str) return str;
-  return str
-    .replace(/code=[^&\s"]+/g, 'code=<REDACTED>')
-    .replace(/access_token["\s:=]+[^&\s",}]+/g, 'access_token=<REDACTED>')
-    .replace(/id_token["\s:=]+[^&\s",}]+/g, 'id_token=<REDACTED>')
-    .replace(/refresh_token["\s:=]+[^&\s",}]+/g, 'refresh_token=<REDACTED>')
-    .replace(/session_state=[^&\s"]+/g, 'session_state=<REDACTED>')
-    .replace(/Bearer [^\s"]+/g, 'Bearer <REDACTED>')
-    .replace(/Kundennummer[:\s]*\d+/gi, 'Kundennummer: <REDACTED>')
-    .replace(/"name"\s*:\s*"[^"]*"/g, '"name": "<REDACTED>"')
-    .replace(/"vorname"\s*:\s*"[^"]*"/g, '"vorname": "<REDACTED>"')
-    .replace(/"nachname"\s*:\s*"[^"]*"/g, '"nachname": "<REDACTED>"')
-    .replace(/"email"\s*:\s*"[^"]*@[^"]*"/g, '"email": "<REDACTED>"')
-    .replace(/"kundennummer"\s*:\s*"[^"]*"/gi, '"kundennummer": "<REDACTED>"')
-    .replace(/"telefon[^"]*"\s*:\s*"[^"]*"/gi, '"telefon": "<REDACTED>"')
-    .replace(/"adresse[^"]*"\s*:\s*"[^"]*"/gi, '"adresse": "<REDACTED>"');
-}
 
 // Only capture API calls (XHR/Fetch), skip static assets
 function isApiCall(url, type) {
