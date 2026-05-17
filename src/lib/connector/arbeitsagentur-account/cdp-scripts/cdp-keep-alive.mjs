@@ -217,72 +217,92 @@ const LOGOUT_EVENTS = [
   }
 
   // --- Layer 5: Cookie + SessionStorage Protection ---
-  async function setupProtection() {
-    // Inject into current page
-    await evaluate(`(function() {
-      if (window.__cookieProtected) return;
-      window.__cookieProtected = true;
+  // The oiam-oauth-wc deletes cookies via:
+  //   document.cookie = "oiamsession=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=...";
+  // We must patch the setter on BOTH Document.prototype AND the document instance
+  // because the WC may use either path (direct assignment or cached prototype setter).
+  // Also protect BA-SessionId cookie (used by hasSessionBeenTerminated check).
 
-      // Protect oiamsession cookie from deletion
-      const cookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')
-                      || Object.getOwnPropertyDescriptor(HTMLDocument.prototype, 'cookie');
-      if (cookieDesc?.set) {
-        const originalSet = cookieDesc.set;
-        Object.defineProperty(document, 'cookie', {
-          get: cookieDesc.get,
-          set: function(val) {
-            // Block deletion of oiamsession (max-age=0 or expires in past)
-            if (typeof val === 'string' && val.includes('oiamsession') && (val.includes('max-age=0') || val.includes('expires=Thu, 01 Jan 1970'))) {
-              console.log('[keep-alive] BLOCKED oiamsession cookie deletion');
+  const COOKIE_PROTECTION_CODE = `(function() {
+    if (window.__cookieProtected) return 'already';
+    window.__cookieProtected = true;
+
+    // Find the cookie property descriptor on the prototype chain
+    const proto = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')
+                ? Document.prototype
+                : (typeof HTMLDocument !== 'undefined' && Object.getOwnPropertyDescriptor(HTMLDocument.prototype, 'cookie')
+                   ? HTMLDocument.prototype : null);
+
+    if (proto) {
+      const desc = Object.getOwnPropertyDescriptor(proto, 'cookie');
+      if (desc?.set) {
+        const originalSet = desc.set;
+        const originalGet = desc.get;
+
+        const protectedSetter = function(val) {
+          if (typeof val === 'string') {
+            const isDelete = val.includes('expires=Thu, 01 Jan 1970') || val.includes('max-age=0');
+            const isProtected = val.startsWith('oiamsession') || val.startsWith('BA-SessionId');
+            if (isDelete && isProtected) {
+              console.log('[keep-alive] BLOCKED cookie deletion: ' + val.substring(0, 50));
               return;
             }
-            return originalSet.call(document, val);
-          },
+          }
+          return originalSet.call(this, val);
+        };
+
+        // Patch on PROTOTYPE (catches all access paths)
+        Object.defineProperty(proto, 'cookie', {
+          get: originalGet,
+          set: protectedSetter,
+          configurable: true
+        });
+
+        // Also patch on document instance (belt and suspenders)
+        Object.defineProperty(document, 'cookie', {
+          get: function() { return originalGet.call(this); },
+          set: protectedSetter,
           configurable: true
         });
       }
+    }
 
-      // Protect sessionStorage OIDC keys
-      const originalRemoveItem = sessionStorage.removeItem.bind(sessionStorage);
-      sessionStorage.removeItem = function(key) {
-        if (typeof key === 'string' && key.startsWith('oidc.user:')) {
-          console.log('[keep-alive] BLOCKED sessionStorage.removeItem: ' + key.substring(0, 40));
-          return;
-        }
-        return originalRemoveItem(key);
-      };
-    })()`);
+    // Protect sessionStorage OIDC keys from removal
+    const origRemove = sessionStorage.removeItem.bind(sessionStorage);
+    sessionStorage.removeItem = function(key) {
+      if (typeof key === 'string' && key.startsWith('oidc.user:')) {
+        console.log('[keep-alive] BLOCKED sessionStorage.removeItem: ' + key.substring(0, 40));
+        return;
+      }
+      return origRemove(key);
+    };
 
-    // Also inject via addScriptToEvaluateOnNewDocument for persistence across navigations
+    // Also protect sessionStorage.clear
+    const origClear = sessionStorage.clear.bind(sessionStorage);
+    sessionStorage.clear = function() {
+      const saved = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k?.startsWith('oidc.user:')) saved.push({ k, v: sessionStorage.getItem(k) });
+      }
+      origClear();
+      for (const { k, v } of saved) sessionStorage.setItem(k, v);
+      console.log('[keep-alive] sessionStorage.clear intercepted, ' + saved.length + ' OIDC keys preserved');
+    };
+
+    return 'installed';
+  })()`;
+
+  async function setupProtection() {
+    // Inject into current page
+    await evaluate(COOKIE_PROTECTION_CODE);
+
+    // Also inject via addScriptToEvaluateOnNewDocument (runs BEFORE page scripts on every navigation)
     await send('Page.addScriptToEvaluateOnNewDocument', {
-      source: `(function() {
-        if (window.__cookieProtected) return;
-        window.__cookieProtected = true;
-        const cookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')
-                        || Object.getOwnPropertyDescriptor(HTMLDocument.prototype, 'cookie');
-        if (cookieDesc?.set) {
-          const originalSet = cookieDesc.set;
-          Object.defineProperty(document, 'cookie', {
-            get: cookieDesc.get,
-            set: function(val) {
-              if (typeof val === 'string' && val.includes('oiamsession') && (val.includes('max-age=0') || val.includes('expires=Thu, 01 Jan 1970'))) {
-                console.log('[keep-alive] BLOCKED oiamsession cookie deletion');
-                return;
-              }
-              return originalSet.call(document, val);
-            },
-            configurable: true
-          });
-        }
-        const origRemove = sessionStorage.removeItem.bind(sessionStorage);
-        sessionStorage.removeItem = function(key) {
-          if (typeof key === 'string' && key.startsWith('oidc.user:')) return;
-          return origRemove(key);
-        };
-      })()`
+      source: COOKIE_PROTECTION_CODE.replace("return 'installed'", "return 'installed_preload'")
     });
 
-    log('Layer 5: Cookie + sessionStorage protection active');
+    log('Layer 5: Cookie (prototype + instance) + sessionStorage protection active');
   }
 
   // --- Setup ---
