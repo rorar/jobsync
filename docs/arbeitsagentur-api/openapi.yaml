@@ -42,6 +42,10 @@ servers:
         - /ud/v{n}/ = upload data (auth required, file uploads)
       URL calculation for kokos:
         Frontend /kokos/kokos-ui/pd/ → Backend /kokos/kokos-ui-service/{pd|ud}/v1/
+  - url: https://sso.arbeitsagentur.de
+    description: |
+      Keycloak SSO (Realm: OCP). Handles OAuth2/OIDC token lifecycle.
+      Not a REST API in the traditional sense — used for token exchange only.
 
 tags:
   - name: Profil
@@ -62,8 +66,92 @@ tags:
     description: Benefits and cases
   - name: System
     description: Maintenance and config (public)
+  - name: Auth
+    description: OAuth2/OIDC token lifecycle (Keycloak SSO)
 
 paths:
+  # === AUTH (sso.arbeitsagentur.de) ===
+  /auth/realms/OCP/protocol/openid-connect/token:
+    post:
+      operationId: exchangeToken
+      summary: Exchange authorization code or refresh token
+      description: |
+        OAuth2 Token Endpoint (Keycloak Realm OCP).
+        Supports two grant types:
+        - `authorization_code` — initial login (with PKCE code_verifier)
+        - `refresh_token` — silent token refresh (every ~4 min)
+
+        Server: `sso.arbeitsagentur.de` (NOT rest.arbeitsagentur.de)
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/TokenRequestAuthCode"
+                - $ref: "#/components/schemas/TokenRequestRefresh"
+            examples:
+              authorizationCode:
+                summary: Initial login (code exchange)
+                value:
+                  grant_type: authorization_code
+                  redirect_uri: https://web.arbeitsagentur.de/profil/profil-ui/pd/
+                  code: "<AUTH_CODE>"
+                  code_verifier: "<PKCE_VERIFIER>"
+                  correlation-id: "<UUID>"
+                  client_id: profil-online
+                  client_secret: profil-online
+              refreshToken:
+                summary: Silent token refresh
+                value:
+                  grant_type: refresh_token
+                  refresh_token: "<CURRENT_REFRESH_TOKEN>"
+                  scope: openid baportal
+                  correlation-id: "<UUID>"
+                  client_id: profil-online
+                  client_secret: profil-online
+      responses:
+        "200":
+          description: Token issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: Invalid grant (session expired or bad code)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenError"
+              examples:
+                sessionExpired:
+                  summary: Session ended (30-min hard limit reached)
+                  value:
+                    error: invalid_grant
+                    error_description: "Session not active"
+
+  /auth/realms/OCP/protocol/openid-connect/logout:
+    get:
+      operationId: logout
+      summary: End SSO session (client-initiated)
+      description: |
+        Triggered by the oiam-oauth-wc when the 30-min session timer expires.
+        Invalidates all tokens (including refresh tokens for other clients sharing the session).
+        After this call, ALL apps (profil-ui, kokos-ui, termine) lose their session.
+      tags: [Auth]
+      security: []
+      parameters:
+        - name: id_token_hint
+          in: query
+          required: true
+          description: The current id_token (proves identity for logout)
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to www.arbeitsagentur.de (logged out)
   # === PROFIL ===
   /profil/profil-service/pd/v1/personalization:
     get:
@@ -564,7 +652,7 @@ paths:
             X-RateLimit-Limit:
               schema:
                 type: integer
-              description: Rate limit (observed: 1000)
+              description: "Rate limit (observed: 1000)"
 
   /vermittlung/nks-service/pd/v1/kundeninformation:
     get:
@@ -703,21 +791,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MitteilungenAnzahl"
-
-  /miso/miso-notification-service/pd/v2/notification/mail/konfiguration:
-    get:
-      operationId: getMailKonfiguration
-      summary: Get email notification preferences
-      tags: [Notifications]
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Email notification config
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MailKonfiguration"
 
   # === DIENSTSTELLEN ===
   /dos/dienststellen/pc/v2/orgeinheittyp:
@@ -1680,6 +1753,192 @@ components:
           type: string
           format: date-time
 
+    # === AUTH / TOKEN SCHEMAS ===
+    TokenRequestAuthCode:
+      type: object
+      required: [grant_type, redirect_uri, code, code_verifier, client_id, client_secret]
+      properties:
+        grant_type:
+          type: string
+          const: authorization_code
+        redirect_uri:
+          type: string
+          format: uri
+          description: Must match the redirect_uri from the authorization request
+        code:
+          type: string
+          description: Authorization code from Keycloak callback
+        code_verifier:
+          type: string
+          description: PKCE code verifier (S256)
+        correlation-id:
+          type: string
+          format: uuid
+          description: Request correlation ID (optional)
+        client_id:
+          type: string
+          description: OAuth client ID (e.g. profil-online, kokos)
+        client_secret:
+          type: string
+          description: Client secret (same as client_id for public clients)
+
+    TokenRequestRefresh:
+      type: object
+      required: [grant_type, refresh_token, client_id, client_secret]
+      properties:
+        grant_type:
+          type: string
+          const: refresh_token
+        refresh_token:
+          type: string
+          description: Current refresh token
+        scope:
+          type: string
+          default: openid baportal
+        correlation-id:
+          type: string
+          format: uuid
+        client_id:
+          type: string
+        client_secret:
+          type: string
+
+    TokenResponse:
+      type: object
+      required: [access_token, expires_in, refresh_token, refresh_expires_in, token_type, id_token, session_state, scope]
+      properties:
+        access_token:
+          type: string
+          description: JWT Bearer token (240s lifetime). Decode payload for session info.
+        expires_in:
+          type: integer
+          description: Access token lifetime in seconds
+          example: 240
+        refresh_token:
+          type: string
+          description: Refresh token (3600s technical lifetime, but dies with session)
+        refresh_expires_in:
+          type: integer
+          description: Refresh token technical lifetime (NOT effective — session ends at 30 min)
+          example: 3600
+        token_type:
+          type: string
+          example: Bearer
+        id_token:
+          type: string
+          description: OIDC ID token (JWT, contains profile claims)
+        not-before-policy:
+          type: integer
+          example: 0
+        session_state:
+          type: string
+          format: uuid
+          description: Keycloak session ID
+        scope:
+          type: string
+          example: openid baportal
+
+    TokenError:
+      type: object
+      required: [error, error_description]
+      properties:
+        error:
+          type: string
+          enum: [invalid_grant, invalid_client, invalid_request, unauthorized_client]
+          description: OAuth2 error code
+        error_description:
+          type: string
+          description: Human-readable error detail
+          example: "Session not active"
+
+    JWTAccessTokenPayload:
+      type: object
+      description: |
+        Decoded JWT access_token payload. Contains session timing and user identity.
+        Decode via: JSON.parse(atob(token.split('.')[1]))
+      required: [exp, iat, auth_time, iss, aud, sub, azp, sid, scope]
+      properties:
+        exp:
+          type: integer
+          description: Token expiration (Unix timestamp). exp - iat ≈ 240s.
+        iat:
+          type: integer
+          description: Token issued-at (Unix timestamp). Rotates with each refresh.
+        auth_time:
+          type: integer
+          description: |
+            Login timestamp (Unix). FIXED for entire session.
+            Session remaining = auth_time + 1800 - now()
+        iss:
+          type: string
+          example: https://sso.arbeitsagentur.de/auth/realms/OCP
+        aud:
+          type: string
+          description: Authorized audience (client_id)
+          example: profil-online
+        sub:
+          type: string
+          description: Subject (URN with eKID UUID)
+          example: "urn:ekid:7162f7fe-dbc3-4f31-a254-8a5abd80c685"
+        azp:
+          type: string
+          description: Authorized party (same as client_id)
+        sid:
+          type: string
+          format: uuid
+          description: Session ID (correlates with session_state in token response)
+        typ:
+          type: string
+          example: Bearer
+        scope:
+          type: string
+          example: openid baportal
+        authn-level:
+          type: string
+          enum: [STORK-QAA-Level-1, STORK-QAA-Level-2, STORK-QAA-Level-3, STORK-QAA-Level-4]
+          description: Authentication trust level (4 = eID, 1 = password)
+        acting-type:
+          type: string
+          enum: [privatperson, unternehmen, partner]
+        benutzertyp:
+          type: string
+          example: onlineuser
+        jwt-version:
+          type: string
+          example: "2.9"
+        amr:
+          type: array
+          items:
+            type: string
+          description: Authentication methods used
+          example: ["mfa"]
+        groups:
+          type: array
+          items:
+            type: string
+          description: Keycloak group memberships (includes permission levels)
+          example: ["2", "nid", "profil-online.level-300", "type.privatperson"]
+        identifier:
+          type: string
+          description: Kundennummer (PII — redact in logs)
+        identity:
+          type: string
+          description: Full URN identity (PII — contains Kundennummer)
+        acting-on-behalf-of:
+          type: array
+          items:
+            type: string
+          description: URN list of identities this user acts on behalf of
+        preferred_username:
+          type: string
+          description: Email address (PII — redact in logs)
+        acting-profile-name:
+          type: string
+          description: Display name (PII — redact in logs)
+        session_state:
+          type: string
+          format: uuid
+
   securitySchemes:
     bearerAuth:
       type: http
@@ -1687,8 +1946,27 @@ components:
       bearerFormat: JWT
       description: |
         OAuth2 Bearer Token from Keycloak (sso.arbeitsagentur.de/auth/realms/OCP).
-        Obtained via PKCE Authorization Code flow.
+        Obtained via PKCE Authorization Code flow (S256).
         Expires in 240s, auto-refreshed by oiam-oauth-wc.
+
+        Session timing derivable from JWT:
+          session_remaining = auth_time + 1800 - now()
+
+        Token stored in sessionStorage key:
+          oidc.user:https://sso.arbeitsagentur.de/auth/realms/OCP:{client_id}
+
+    oauthPKCE:
+      type: oauth2
+      description: |
+        PKCE Authorization Code flow via Keycloak.
+        Requires interactive login (BundID eID or BA-Konto).
+      flows:
+        authorizationCode:
+          authorizationUrl: https://sso.arbeitsagentur.de/auth/realms/OCP/protocol/openid-connect/auth
+          tokenUrl: https://sso.arbeitsagentur.de/auth/realms/OCP/protocol/openid-connect/token
+          scopes:
+            openid: OpenID Connect
+            baportal: BA Portal access
 
 security:
   - bearerAuth: []
