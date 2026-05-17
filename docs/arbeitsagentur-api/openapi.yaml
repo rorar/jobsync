@@ -367,6 +367,19 @@ paths:
     get:
       operationId: getNachricht
       summary: Read single message (full body)
+      description: |
+        Returns full message detail including body text and attachment metadata.
+
+        ## UI Actions (not separate endpoints)
+        - **"Download" button** (`#download-btn{id}`, class `ba-link-download`):
+          Does NOT call a server endpoint. Generates a PDF client-side using PDFKit
+          (loaded as `pdfkit.standalone.js` + Roboto fonts). Re-fetches this endpoint
+          for the message JSON, then renders to PDF in-browser → Blob URL download.
+        - **"Antworten"** (`#reply-btn{id}`): Navigates to compose view (client-side routing).
+        - **"Nachricht löschen"** (`#delete-btn{id}`): Calls DELETE on this endpoint.
+        - **Anhang-Download** (`a.ba-icon-mail-attachment` in `#nd-attachment`):
+          Calls GET on `.../anhaenge/{anhangId}` with `x-api-key: kokos` header.
+          See separate endpoint below.
       tags: [Postfach]
       security:
         - bearerAuth: []
@@ -1749,8 +1762,17 @@ components:
           example: "pdf"
         groesse:
           type: integer
-          description: "File size in bytes"
+          description: "File size in bytes (max 7.5 MB = 7864320 bytes)"
+          maximum: 7864320
           example: 359585
+        mimeType:
+          type: string
+          description: "Only these 4 MIME types accepted (validated via magic bytes!)"
+          enum:
+            - application/pdf
+            - image/png
+            - image/jpeg
+            - image/bmp
 
     UploadRestrictions:
       type: object
