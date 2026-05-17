@@ -27,14 +27,19 @@ Session 2026-05-17 continued (Keep-Alive v4 + Login robustness). 4 new commits (
 5. **Post-logout sequence**: Logout blocked → ~90s delay → WC destroys JS context (SPA navigation) → evaluate_failed → session dies at ~32 min
 6. **Popup types**: `popupIdle` (inactivity, `is-visible` class), `popupHL` (5-min warning, `is-visible` class). Both in bahf-header closed shadow DOM.
 
-## Next (Keep-Alive v5 — solve the post-logout navigation)
-The 30-min bypass almost works — server session stays alive, but the client navigates away ~90s after the blocked logout. Approaches to try:
-1. **Broader Fetch interception**: intercept ALL navigations away from `web.arbeitsagentur.de` after a blocked logout
-2. **Page.addScriptToEvaluateOnNewDocument with localStorage backup**: save tokens to localStorage (cross-origin persistent), restore on page load
-3. **Monkey-patch the oiam-oauth-wc's internal navigation**: find and override the function that triggers the redirect
-4. **Accept 30-min limit, auto-relogin**: instead of fighting the logout, detect it and automatically re-login (cdp-login-bundid.mjs is now reliable)
+### ACH Root Cause (3-Agent parallel debugging, 2026-05-17)
+- **H1 CONFIRMED (90%)**: `check(t)` has silent-death path — `if(!e){return}` when `oiamsession` cookie deleted
+- **H4 CONFIRMED (85%)**: 7 logout paths total, 4 bypass `oiamLogoutEvent`. Primary path is `checkOiamSession()` → `oiamMaxSessionExpirationEvent` (different event!)
+- **H5 FALSIFIED (95%)**: Event name IS `"oiamLogoutEvent"`, `window.self === window`, no custom EventBus
+- Two cookies: `oiamsession` (client JS, gates `check()`) vs `BA-SessionId` (server OAG, gates `hasSessionBeenTerminated()`)
 
-Option 4 might be the most sustainable — the login is fast (74s) and reliable.
+### Keep-Alive v5 (implemented, needs live test)
+5 layers: synthetic keypress + 6-event interception + Fetch block + token refresh + cookie/sessionStorage protection.
+Key change from v4: blocks ALL 6 logout events (not just `oiamLogoutEvent`) + protects `oiamsession` cookie from deletion via `document.cookie` setter patch.
+
+## Next
+1. **Live-test Keep-Alive v5** — Login → run → verify session survives >35 min
+2. **Fix Login BundID Welcome hang** — `waitForAndClick` for Tml88 intermittently fails. Need to investigate why the poll times out on some attempts.
 
 ## Previous session state (still valid)
 - OpenAPI spec: 37 paths, 39 schemas (`docs/arbeitsagentur-api/openapi.yaml`)
