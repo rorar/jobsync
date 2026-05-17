@@ -891,7 +891,20 @@ paths:
           content:
             application/graphql-response+json:
               schema:
-                type: object
+                $ref: "#/components/schemas/GraphQLLeistungenResponse"
+              example:
+                data:
+                  gruppenV2:
+                    sindAlleGruppenVorhanden: true
+                    gruppen:
+                      - name: "Bürgergeld"
+                        anzahlVorgaengeTotal: 1
+                        aktionen:
+                          - buttonText: "Verlauf zum Bürgergeld"
+                            url: "https://web.arbeitsagentur.de/verlauf/verlauf-ui/pd/filter/Bürgergeld"
+                            prioritaet: "TERTIAER"
+                          - buttonText: "Veränderung mitteilen"
+                            prioritaet: "SEKUNDAER"
 
   /leist/api/pd/v1/leistungen/privatPerson:
     get:
@@ -1296,6 +1309,7 @@ components:
     # --- Vermittlung ---
     JsonApiPersonResponse:
       type: object
+      description: "JSON:API 1.0 response for person data with sparse fieldsets and includes"
       properties:
         jsonapi:
           type: object
@@ -1311,6 +1325,7 @@ components:
               const: Person
             id:
               type: string
+              description: "Kundennummer (alphanumeric, 10 chars, e.g. 385D077100)"
             meta:
               type: object
               properties:
@@ -1322,8 +1337,60 @@ components:
                   format: date-time
         included:
           type: array
+          description: "Included related resources (controlled by ?include= param)"
           items:
-            type: object
+            oneOf:
+              - $ref: "#/components/schemas/JsonApiDienststelle"
+              - $ref: "#/components/schemas/JsonApiVermittlungsmerkmale"
+
+    JsonApiDienststelle:
+      type: object
+      description: "Included resource: assigned Dienststelle"
+      properties:
+        type:
+          type: string
+          const: Dienststelle
+        id:
+          type: string
+          description: "Internal Dienststelle ID (numeric)"
+        attributes:
+          type: object
+          properties:
+            nummer:
+              type: string
+              description: "5-digit Dienststellennummer"
+              example: "71502"
+        meta:
+          type: object
+          properties:
+            anlagedatum:
+              type: string
+              format: date-time
+            aenderungsdatum:
+              type: string
+              format: date-time
+
+    JsonApiVermittlungsmerkmale:
+      type: object
+      description: "Included resource: placement characteristics"
+      properties:
+        type:
+          type: string
+          const: Vermittlungsmerkmale
+        id:
+          type: string
+        attributes:
+          type: object
+          properties:
+            istAVAngemeldet:
+              type: boolean
+              description: "Registered as job-seeking (Arbeitsuchend/Vermittlung)"
+            istBBAngemeldet:
+              type: boolean
+              description: "Registered for vocational counseling"
+            istBBiEAngemeldet:
+              type: boolean
+              description: "Registered for vocational integration counseling"
 
     NksKundeninformation:
       type: object
@@ -1361,9 +1428,11 @@ components:
 
     OaloKundeninformation:
       type: object
+      description: "Job-seeking/unemployed registration status and enabled features"
       properties:
         oasu:
           type: object
+          description: "Arbeitsuchend-Meldung online"
           properties:
             enabled:
               type: boolean
@@ -1377,6 +1446,12 @@ components:
           properties:
             enabled:
               type: boolean
+        otvOasu:
+          type: object
+          description: "Online-Terminvereinbarung für Arbeitsuchend-Meldung"
+          properties:
+            enabled:
+              type: boolean
         beratungsgespraech:
           type: object
           properties:
@@ -1384,15 +1459,31 @@ components:
               type: boolean
         oalo:
           type: object
+          description: "Arbeitslos-Meldung online"
+          properties:
+            enabled:
+              type: boolean
+        otvOalo:
+          type: object
+          description: "Online-Terminvereinbarung für Arbeitslos-Meldung"
+          properties:
+            enabled:
+              type: boolean
+        persoenlicheAlome:
+          type: object
+          description: "Persönliche Arbeitslosmeldung (Pflichttermin)"
           properties:
             enabled:
               type: boolean
         istAVgemeldet:
           type: boolean
+          description: "Registered as job-seeking"
         istBBgemeldet:
           type: boolean
+          description: "Registered for vocational counseling"
         tdaBestaetigt:
           type: boolean
+          description: "Termin-Daten-Abfrage confirmed"
 
     # --- Jobboerse ---
     VermittlungsvorschlaegeResponse:
@@ -1492,21 +1583,32 @@ components:
 
     DienststelleKontakt:
       type: object
+      description: "Office/agency contact address"
       properties:
         name:
           type: string
+          description: "Official office name"
+          example: "Jobcenter Stadt Aschaffenburg"
         strasse:
           type: string
-        ort:
-          type: string
-        postort:
-          type: string
-        plz:
-          type: string
+          description: "Street name"
         hausnummer:
           type: string
+          description: "House number"
+        plz:
+          type: string
+          description: "Postal code (5 digits)"
+          pattern: "^\\d{5}$"
+        ort:
+          type: string
+          description: "City (from address record)"
+        postort:
+          type: string
+          description: "Postal city (may differ from ort for large municipalities)"
         lpurl:
           type: string
+          description: "Relative URL path to office landing page on arbeitsagentur.de"
+          example: "jobcenter/jobcenter-stadt-aschaffenburg-aschaffenburg.html"
 
     # --- Postfach CRUD Schemas ---
     NachrichtDetail:
@@ -1746,22 +1848,83 @@ components:
 
     BgDatenResponse:
       type: object
+      description: "Bedarfsgemeinschaft (BG) data — Bürgergeld/ALG recipients"
       properties:
         bgDaten:
           type: object
           properties:
             aktuelleBG:
               type: object
+              description: "Current Bedarfsgemeinschaft"
               properties:
                 bgNummer:
                   type: string
+                  description: "BG number (format: {dstnr}//{id})"
+                  example: "71502//0013032"
                 baTeam:
                   type: object
+                  description: "Assigned case management team"
                   properties:
                     dienststellennummer:
                       type: string
+                      description: "5-digit Dienststelle number"
                     teamkennzeichen:
                       type: string
+                      description: "Team identifier"
+                bevollmaechtigter:
+                  type: object
+                  nullable: true
+                  description: "Authorized representative (PII — may be null)"
+                  properties:
+                    kundennummer:
+                      type: string
+                      description: "Kundennummer of representative"
+                    vorname:
+                      type: string
+                      description: "First name (PII)"
+                    nachname:
+                      type: string
+                      description: "Last name (PII)"
+
+    # --- GraphQL ---
+    GraphQLLeistungenResponse:
+      type: object
+      description: "GraphQL response for gruppenV2 query (benefits/cases groups)"
+      properties:
+        data:
+          type: object
+          properties:
+            gruppenV2:
+              type: object
+              properties:
+                sindAlleGruppenVorhanden:
+                  type: boolean
+                  description: "Whether all groups are present in the response"
+                gruppen:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: "Benefit group name (e.g. Bürgergeld, Kindergeld)"
+                      anzahlVorgaengeTotal:
+                        type: integer
+                        description: "Total number of cases in this group"
+                      aktionen:
+                        type: array
+                        description: "Available actions/deep-links for this group"
+                        items:
+                          type: object
+                          properties:
+                            buttonText:
+                              type: string
+                            url:
+                              type: string
+                              format: uri
+                            prioritaet:
+                              type: string
+                              enum: [PRIMAER, SEKUNDAER, TERTIAER]
 
     # --- System ---
     Wartungshinweis:
