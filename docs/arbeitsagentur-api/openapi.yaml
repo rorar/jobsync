@@ -9,16 +9,31 @@ info:
     All `/pd/` endpoints require OAuth2 Bearer Token.
     All `/pc/` endpoints are public (no auth needed).
 
+    ## API Gateway Key (CRITICAL)
+    Some endpoints require an **additional `x-api-key` header** alongside the Bearer token.
+    Without it, the request returns **403 Forbidden** even with a valid Bearer token.
+
+    | Service | x-api-key value | Confirmed |
+    |---------|-----------------|-----------|
+    | kokos (Postfach) | `kokos` | Yes (live verified: attachment download) |
+    | profil-online | unknown | Not tested (works without for most endpoints) |
+    | ota-online | unknown | Not tested |
+
+    **Rule for module implementation:** ALWAYS send `x-api-key: {client_id}` with every
+    authenticated request. The header matches the OAuth2 client_id. This is an API gateway
+    enforcement — not documented anywhere, only discoverable via live traffic analysis.
+
     ## OAuth2 Clients
-    | Client | App | Secret |
-    |--------|-----|--------|
-    | profil-online | Profil-Dashboard | profil-online |
-    | ota-online | Terminverwaltung | unknown |
-    | kokos | Leistungspostfach | kokos |
+    | Client | App | Secret | x-api-key |
+    |--------|-----|--------|-----------|
+    | profil-online | Profil-Dashboard | profil-online | profil-online (?) |
+    | ota-online | Terminverwaltung | unknown | unknown |
+    | kokos | Leistungspostfach | kokos | kokos (confirmed) |
 
     ## Session Limits
     - Access Token: 240s (auto-refresh)
-    - Session Hard-Limit: 30 minutes (server-enforced)
+    - Session Hard-Limit: 30 minutes (auth_time + 1800)
+    - Inactivity Timeout: ~2-3 minutes (UI events only, API calls don't count)
     - Rate-Limit: 1000 req (on vamio-jsonapi)
 
     ## DISCLAIMER

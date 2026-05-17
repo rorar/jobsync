@@ -10,8 +10,20 @@
 - **Clients:** `profil-online`, `ota-online`, `kokos` (jeweils eigener Client pro App)
 - **Scope:** `openid baportal`
 - **Token-Lifetime:** Access Token 240s (4 Min), Refresh Token 3600s (technisch)
-- **Session-Hard-Limit:** 30 Minuten (client-initiated Logout, Server invalidiert)
+- **Session-Hard-Limit:** 30 Minuten (auth_time + 1800, client-initiated Logout)
+- **Inaktivitäts-Timeout:** ~2-3 Min (nur UI-Events resetten, API-Calls zählen NICHT)
 - **Rate-Limit:** 1000 req (auf vamio-jsonapi bestätigt)
+
+### x-api-key Gateway Header (KRITISCH)
+
+Manche Endpoints erfordern zusätzlich zum Bearer Token einen **`x-api-key` Header**. Ohne den Header: **403 Forbidden** trotz gültigem Token.
+
+```
+Authorization: Bearer {access_token}
+x-api-key: kokos
+```
+
+**Regel:** IMMER `x-api-key: {client_id}` mitsenden. Der Wert entspricht der OAuth2 `client_id` des jeweiligen Services. Bestätigt für `kokos` (Postfach Anhang-Download). Nicht dokumentiert — nur über Live-Traffic-Analyse entdeckbar.
 
 ## Dateien
 
