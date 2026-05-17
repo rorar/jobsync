@@ -36,6 +36,48 @@ T+30:01  Server: Session invalidiert → alle Refresh Tokens ungültig
 
 **Erkennung im Modul:** SessionStorage leer = Session beendet → Re-Login-Flow initiieren.
 
+## Manueller Logout (vorzeitige Beendigung, verifiziert 2026-05-17)
+
+**Trigger:** User klickt "Profil" → "Abmelden" im Header-Flyout.
+
+**UI-Selektoren:**
+1. `#profile-menu-button` (im `bahf-header` Shadow DOM) — öffnet Flyout
+2. `#profileLogout` (`<a>` im Flyout) — triggert Logout
+
+**Network-Flow:**
+```
+GET sso.arbeitsagentur.de/auth/realms/OCP/protocol/openid-connect/logout
+  ?id_token_hint={CURRENT_ID_TOKEN}
+  &post_logout_redirect_uri=https://www.arbeitsagentur.de
+  &correlation-id={UUID}
+
+→ 302 → https://www.arbeitsagentur.de/
+```
+
+**Verhalten identisch mit automatischem Timeout:**
+- `sessionStorage['oidc.user:...:profil-online']` → gelöscht
+- `sessionStorage['oiam-oauth-wc-state']` → null
+- Browser redirected zu Startseite
+- Server-Session invalidiert (alle Refresh Tokens tot)
+
+**Wichtige Parameter:**
+- `post_logout_redirect_uri` — konfigurierbar (wohin nach Logout?)
+- `id_token_hint` — beweist Identität für Logout (OIDC-Spec konform)
+- `correlation-id` — Request-Tracing
+
+**Für Modul (programmatischer Logout):**
+```javascript
+// Option A: Über UI (CDP)
+// 1. Click #profile-menu-button (open flyout)
+// 2. Click #profileLogout
+
+// Option B: Direkt (API)
+const logoutUrl = new URL('https://sso.arbeitsagentur.de/auth/realms/OCP/protocol/openid-connect/logout');
+logoutUrl.searchParams.set('id_token_hint', idToken);
+logoutUrl.searchParams.set('post_logout_redirect_uri', 'https://www.arbeitsagentur.de');
+// Navigate to logoutUrl → Session beendet
+```
+
 ## Implikationen für JobSync-Modul
 
 ### API-Nutzung
