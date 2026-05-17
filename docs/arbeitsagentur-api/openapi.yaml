@@ -591,7 +591,14 @@ paths:
   /kokos/kokos-ui-service/pd/v1/ordner/{ordnerType}/nachrichten/{nachrichtId}/anhaenge/{anhangId}:
     get:
       operationId: downloadAnhang
-      summary: Download attachment
+      summary: Download message attachment
+      description: |
+        Downloads the binary file attached to a message.
+        Requires BOTH Bearer token AND x-api-key header.
+        Response is the raw file (Content-Type matches the file type).
+        The Angular app creates a Blob URL from the response for client-side download.
+
+        IMPORTANT: This endpoint returns 403 without the x-api-key header!
       tags: [Postfach]
       security:
         - bearerAuth: []
@@ -601,6 +608,7 @@ paths:
           required: true
           schema:
             type: string
+            enum: [erhalten, gesendet, entwurf, geloescht]
         - name: nachrichtId
           in: path
           required: true
@@ -612,14 +620,37 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
+        - name: x-api-key
+          in: header
+          required: true
+          description: "Must be 'kokos' (API gateway key)"
+          schema:
+            type: string
+            const: kokos
       responses:
         "200":
-          description: File download
+          description: Binary file download
           content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
             application/octet-stream:
               schema:
                 type: string
                 format: binary
+          headers:
+            Content-Disposition:
+              description: "inline; filename=\"{original_filename}\""
+              schema:
+                type: string
+            Content-Encoding:
+              description: gzip (response is compressed)
+              schema:
+                type: string
+        "403":
+          description: Missing x-api-key header or invalid token
 
   # === NOTIFICATION CONFIG ===
   /miso/miso-notification-service/pd/v2/notification/mail/konfiguration:
@@ -1613,7 +1644,7 @@ components:
     # --- Postfach CRUD Schemas ---
     NachrichtDetail:
       type: object
-      description: Full message with body text (schema predicted, not yet captured via network)
+      description: "Full message detail (verified via live capture 2026-05-17)"
       properties:
         nachrichtId:
           type: string
@@ -1621,66 +1652,105 @@ components:
         datum:
           type: string
           format: date-time
+          description: "Message timestamp (UTC with microseconds)"
+        senderId:
+          type: string
+          description: "Sender ID (Dienststellennummer for institutional)"
+        senderName:
+          type: string
+          description: "Sender display name (PII)"
+        empfaengerId:
+          type: string
+          description: "Recipient URN (PII — contains Kundennummer)"
+        empfaengerName:
+          type: string
+          description: "Recipient display name (PII)"
+        autorId:
+          type: string
+          nullable: true
+          description: "Author identity (null for institutional senders)"
+        autorName:
+          type: string
+          description: "Author display name ('Mitarbeiter bzw. Mitarbeiterin' for anonymous)"
+        text:
+          type: string
+          description: "Full message body text (may contain PII)"
+        historie:
+          type: array
+          description: "Reply thread history (empty array if no replies)"
+          items:
+            type: object
+        anhaengeMetadaten:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnhangMetadaten"
         gelesen:
           type: boolean
         antwortErlaubt:
           type: boolean
         ordnerType:
           type: string
+          enum: [erhalten, gesendet, entwurf, geloescht]
         anhang:
           type: boolean
-        anhaengeMetadaten:
-          type: array
-          items:
-            $ref: "#/components/schemas/AnhangMetadaten"
+          description: "true if message has attachments"
         bezug:
           type: string
+          description: "Message category/topic"
         betreff:
           type: string
-        text:
-          type: string
-          description: Full message body text
+          description: "Subject line (PII)"
         dienststellennummer:
           type: string
+          description: "5-digit office number"
         dienststellenname:
           type: string
+          description: "Office display name"
         typ:
           type: string
           enum: [JC, AA]
-        autorName:
+          description: "JC = Jobcenter, AA = Agentur für Arbeit"
+        leserId:
           type: string
-        senderName:
+          nullable: true
+          description: "URN of first reader (null if unread)"
+        leserName:
           type: string
-        empfaengerName:
+          nullable: true
+          description: "Display name of first reader"
+        vertretungsBeziehung:
           type: string
+          enum: [NICHT_RELEVANT, VERTRETUNG, BEVOLLMAECHTIGT]
 
     AnhangMetadaten:
       type: object
+      description: "Attachment metadata (verified via live capture)"
+      required: [anhangId, dateiname, dateityp, groesse]
       properties:
-        id:
+        anhangId:
           type: string
+          format: uuid
+          description: "Attachment UUID (used in download URL)"
         dateiname:
           type: string
           maxLength: 80
           description: |
-            Filename restrictions (verified from JS source):
+            Original filename with extension.
+            Restrictions (from JS source):
             - Max 80 characters
             - Must not start/end with dot or space
             - Must not be OS-reserved word (CON, NUL, PRN, etc.)
             - Only ERLAUBTEZEICHEN charset allowed
             - No duplicate filenames per message
+          example: "Mietbescheinigung.pdf"
+        dateityp:
+          type: string
+          description: "File extension without dot"
+          example: "pdf"
         groesse:
           type: integer
-          description: File size in bytes (max 7.5 MB = 7864320 bytes)
-          maximum: 7864320
-        mimeType:
-          type: string
-          enum:
-            - application/pdf
-            - image/png
-            - image/jpeg
-            - image/bmp
-          description: Only these 4 MIME types accepted (validated via magic bytes!)
+          description: "File size in bytes"
+          example: 359585
 
     UploadRestrictions:
       type: object
