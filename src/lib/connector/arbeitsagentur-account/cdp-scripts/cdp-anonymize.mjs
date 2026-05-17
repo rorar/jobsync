@@ -31,7 +31,7 @@ export function anonymize(str) {
     .replace(/"kundennummer"\s*:\s*"[^"]*"/gi, '"kundennummer": "<KUNDENNR>"')
     .replace(/"kundennr"\s*:\s*"[^"]*"/gi, '"kundennr": "<KUNDENNR>"')
     .replace(/kundennummer:[^"}\s,]+/gi, 'kundennummer:<KUNDENNR>')
-    .replace(/\/person\/\d{6,}/g, '/person/<KUNDENNR>')
+    .replace(/\/person\/[A-Z0-9]{6,}/g, '/person/<KUNDENNR>')
     .replace(/kundennr=\d+/gi, 'kundennr=<KUNDENNR>')
 
     // === Personal names (JSON fields) ===
@@ -62,6 +62,7 @@ export function anonymize(str) {
     .replace(/"dienststellenname"\s*:\s*"[^"]*"/gi, '"dienststellenname": "<DSTNR>"')
     .replace(/dstnr=\d+/gi, 'dstnr=<DSTNR>')
     .replace(/dstnr5=\d+/gi, 'dstnr5=<DSTNR>')
+    .replace(/\/dienststelle\/\d{4,6}/g, '/dienststelle/<DSTNR>')
 
     // === Message content (Postfach — may contain PII) ===
     .replace(/"betreff"\s*:\s*"[^"]*"/g, '"betreff": "<SUBJECT>"')

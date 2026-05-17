@@ -264,3 +264,29 @@ Supported scopes: openid, baportal
 - `authn-level` = Login-Trust-Level
 - `acting-type` = Profil-Typ (privatperson/unternehmen)
 - `groups` enthält `profil-online.level-300` — internes Berechtigungs-Level
+
+## Implementation Notes (ROADMAP 1.9 Modul)
+
+### Login-Methoden-Auswahl
+
+Das Modul MUSS dem Benutzer die Wahl der Login-Methode anbieten. Die Keycloak-Login-Seite zeigt:
+
+| Button-ID | Methode | Trust-Level | UI-Selektoren |
+|---|---|---|---|
+| `#anmeldenBaKontoButton` | BA-Konto (Benutzername/Passkey) | Level-1 bis Level-2 | Direkt auf SSO-Seite |
+| `#mitBundIdButton` | BundID (Online-Ausweis/ELSTER) | Level-3 bis Level-4 | SSO → BundID-Portal |
+
+**Aktuelle Abdeckung:**
+- BundID/eID: Vollständig dokumentiert (dieser Flow, oben)
+- BA-Konto/Passkey: **NICHT dokumentiert** — erfordert separaten Entwickler mit BA-Konto-Login
+
+**BundID-Portal UI-Selektoren (id.bund.de):**
+- Authentifizierungsmethoden-Auswahl: `button[contentid="eID"]` (Online-Ausweis), `button[contentid="ELSTER"]`
+- Anmelden-Button: `button[data-test-id="9XNNb"]` (instabil — test-IDs können sich ändern)
+- Hinweis: BundID nutzt React — `.click()` funktioniert nicht, nur echte `Input.dispatchMouseEvent` oder manuelle Interaktion
+
+**Architektur-Entscheidung für Modul:**
+- Login-Methode wird in den Modul-Settings gespeichert (User wählt einmalig)
+- CDP-Script navigiert zur SSO-Seite und klickt den entsprechenden Button
+- Ab dort: manuelle Intervention (eID: Ausweis + PIN, BA-Konto: Credentials/Passkey)
+- Nach erfolgreichem Login: Agent übernimmt automatisch (Token-Management, API-Calls)
