@@ -184,6 +184,24 @@ const tokenRemainingSec = payload.exp - now;     // Nächster auto-refresh nöti
 | `sid` | UUID | Session ID (korreliert mit `session_state`) |
 | `benutzertyp` | `onlineuser` | User-Typ |
 
+## Cookie-Schema (verifiziert 2026-05-17)
+
+| Cookie | Domain | Typ | Zweck (verifiziert) |
+|---|---|---|---|
+| `STI_SSO` | sso.arbeitsagentur.de | session, httpOnly, secure | **Server-Affinity-Flag** (Wert: `.1`). Kein Session-Tracker. |
+| `STI_WEB` | web.arbeitsagentur.de | session, httpOnly, secure | **Server-Affinity-Flag** (Wert: `.6`). |
+| `ISTIOSESSIONID` | rest.arbeitsagentur.de | session, httpOnly | **Istio Sticky-Session** (`"6648cad55c87ea68"`, 64-Bit). Routet zum selben Pod. Ändert sich nicht zwischen Requests. |
+| `AVI_SITE` | rest.arbeitsagentur.de | session, SameSite=None | **Load-Balancer-Affinity** (85 Zeichen). Vermutlich WAF/Reverse-Proxy. |
+| `rest` | sso.arbeitsagentur.de | session | **Keycloak Session-Cookie** (85 Zeichen). Ähnlich wie AVI_SITE. |
+| `bahf_lang` | .arbeitsagentur.de | persistent | Sprach-Preference (de/en/es) |
+| `_pk_id.*` | .arbeitsagentur.de | persistent | Matomo Analytics Visitor-ID |
+| `_pk_ses.*` | .arbeitsagentur.de | persistent | Matomo Analytics Session |
+| `cookie_consent` | .arbeitsagentur.de | persistent | Cookie-Banner Zustimmung |
+
+**Fazit:** Kein Cookie ist ein eigenständiger Session-Tracker. Das 30-Min-Hard-Limit wird ausschließlich durch `auth_time` im JWT + client-seitigen oiam-oauth-wc Timer durchgesetzt.
+
+**Offene Frage:** Der API-Gateway gibt 403 für `fetch()` ohne Cookies (`credentials: 'include'`) — möglicherweise benötigt der Gateway `ISTIOSESSIONID` oder `AVI_SITE` für die Anfrage-Autorisierung (neben Bearer Token). Noch zu verifizieren.
+
 ## Token-Refresh Sequenz (normal, innerhalb 30 Min)
 
 ```http
