@@ -106,14 +106,57 @@ check(t):
   8. if (shouldRefreshToken(t, idleStart)) → token refresh
 ```
 
-### Logout-Dispatch
+### Logout-Dispatch — 7 Pfade (ACH Analysis, 2026-05-17)
 
-ALL logout paths go through the same mechanism:
+**WICHTIG:** Nicht alle Pfade gehen durch `oiamLogoutEvent`! Die State-Machine
+hat eigene Pfade die ANDERE Events oder KEINE Events dispatchen.
+
+#### Group A: Pfade die `oiamLogoutEvent` dispatchen (Timer check())
+
 ```javascript
 window.self.dispatchEvent(new CustomEvent('oiamLogoutEvent', {
   detail: { reason: '<reason>' }
 }))
 ```
+
+| Pfad | Reason | Bedingung |
+|---|---|---|
+| A1 | `idle-session-timed-out` | Tab sichtbar, idle timeout erreicht |
+| A2 | `max-session-timed-out` | Tab sichtbar, max timeout erreicht |
+| A3 | `logged-out-external` | Tab NICHT sichtbar, BA-SessionId Cookie weg |
+
+#### Group B: Pfade die `oiamLogoutEvent` BYPASSEN
+
+| Pfad | Mechanismus | Event (falls vorhanden) |
+|---|---|---|
+| B1 | `isSessionTerminated()` → `changeState()` direkt | Kein DOM Event |
+| B2 | `checkOiamSession()` → `handleLogoutAfterMaxSessionTimeoutState()` | `oiamMaxSessionExpirationEvent` |
+| B3 | `handleExternalLoggedoutState()` → `resetAtErrorOrExternalLogout()` | `oiamTokenEvent` (leer) |
+| B4 | `handleLogoutRequestedState()` → `Pe.doLogout()` direkt | Kein DOM Event |
+
+#### Silent-Death-Pfad (Root Cause des Keep-Alive Problems)
+
+```
+1. checkOiamSession() erkennt "self-max-timeout" (Pfad B2)
+2. handleLogoutAfterMaxSessionTimeoutState() → Re.deleteState()
+   → löscht oiamsession Cookie
+   → dispatcht oiamMaxSessionExpirationEvent (NICHT oiamLogoutEvent!)
+3. Nächster Timer-Tick: check(t) → Re.getOiamSessionCookie() → undefined
+   → if(!e){return} → stilles Return, kein Event, kein Logout-Dispatch
+4. Ergebnis: Session stirbt ohne dass oiamLogoutEvent je gefeuert wird
+```
+
+### Zwei Cookies (unterschiedliche Zwecke)
+
+| Cookie | Konstante | Gesetzt von | Geprüft von |
+|---|---|---|---|
+| `oiamsession` | `E.SESSIONCOOKIE` | Client (JS) | `check(t)` Entry Guard |
+| `BA-SessionId` | `E.SESSIONID` | Server (OAG) | `hasSessionBeenTerminated()` |
+
+`check(t)` prüft `oiamsession` als ERSTES. Wenn dieser Cookie fehlt, werden
+ALLE Timeout-Checks und DOLOGOUT-Dispatches übersprungen (stilles Return).
+`hasSessionBeenTerminated()` prüft einen ANDEREN Cookie (`BA-SessionId`)
+und wird nur bei `visibilityState !== 'visible'` aufgerufen.
 
 Reasons:
 - `idle-session-timed-out` — Idle-Timer abgelaufen (~2-3 Min ohne UI-Events)
@@ -150,12 +193,18 @@ State wird in einem Cookie (nicht sessionStorage!) gespeichert:
 
 ### Keep-Alive Strategy (verified)
 
-Blocking `oiamLogoutEvent` with `stopImmediatePropagation()` in capture phase prevents
-ALL automatic logouts. Combined with:
-- Synthetic keypress every ~30s (resets idle timer)
-- Manual token refresh every ~200s (keeps server session alive)
+Keep-Alive v5 uses 5 layers (zero page interaction):
 
-This allows the session to survive indefinitely beyond the 30-min limit.
+1. **Synthetic keypress** every ~30s — resets idle timer
+2. **Multi-event interception** (capture phase) — blocks ALL 6 logout events
+   (`oiamLogoutEvent`, `oiamMaxSessionExpirationEvent`, `oiamIdleSessionExpirationEvent`,
+   `oiamIdleSessionExpiredEvent`, `oiamMaxSessionExpirationWarnEvent`,
+   `oiamIdleSessionExpirationWarnEvent`)
+3. **Fetch.failRequest** — blocks logout URL + post-logout navigation
+4. **Manual token refresh** every ~200s — keeps server session alive
+5. **Cookie + sessionStorage protection** — patches `document.cookie` setter to block
+   `oiamsession` deletion, patches `sessionStorage.removeItem` to protect OIDC tokens.
+   Injected via `Page.addScriptToEvaluateOnNewDocument` (persists across navigations).
 
 ## Implikationen für JobSync-Modul
 
