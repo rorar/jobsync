@@ -1,41 +1,59 @@
-// cdp-keep-alive.mjs — Session Keep-Alive v4 for arbeitsagentur.de
-// ZERO page interaction. Two layers operating at JS/network level only.
+// cdp-keep-alive.mjs — Session Keep-Alive v5 for arbeitsagentur.de
+// ZERO page interaction. Prevents ALL logout paths identified by ACH analysis.
 //
-// === Architecture ===
+// === Root Cause (ACH Analysis, 2026-05-17) ===
 //
-// Layer 1 — Synthetic keypress (Inactivity Timer Reset)
-//   Dispatches `new KeyboardEvent('keypress')` on `document` via Runtime.evaluate
-//   every ~60s (±15s jitter). The oiam-oauth-wc listens for 'keypress' and 'mouseup'
-//   on the document to detect activity. It does NOT check `isTrusted`, so synthetic
-//   (untrusted) events work. This is a pure JS call — no element interaction, no
-//   mouse movement, no risk of unintended navigation or clicks.
+// The oiam-oauth-wc has 7 logout paths. Previous versions only blocked
+// oiamLogoutEvent, but the primary logout goes through a DIFFERENT path:
 //
-// Layer 2 — Fetch Interception (30-Min Logout Block + Token Backup)
-//   CDP Fetch.enable intercepts the client-initiated logout request
-//   (GET /openid-connect/logout) BEFORE it reaches the server.
-//   Also periodically backs up tokens from sessionStorage, and restores them
-//   if the oiam-oauth-wc deletes them during its logout sequence.
+//   checkOiamSession() → checkForValidSession() → "self-max-timeout"
+//   → handleLogoutAfterMaxSessionTimeoutState() → Re.deleteState()
+//   → dispatches oiamMaxSessionExpirationEvent (NOT oiamLogoutEvent!)
+//   → then check(t) finds cookie gone → if(!e){return} → silent death
 //
-// Layer 3 — Manual Token Refresh (Server Session Keep-Alive)
-//   Refreshes access token via fetch() every ~200s (before 240s expiry).
-//   Each refresh updates Keycloak's lastSessionRefresh, extending the
-//   server-side SSO session indefinitely.
+// === Architecture (v5) ===
 //
-// === Verified Facts (2026-05-17) ===
-//   - oiam-oauth-wc activity detection: addEventListener("keypress") + addEventListener("mouseup")
-//     on document. Does NOT check isTrusted. Source: p-Bn5gH4YR.js (142KB)
-//   - Inactivity timeout: ~2-3 min without activity events
-//   - 30-min hard limit: client-initiated by oiam-oauth-wc (auth_time + 1800)
-//   - Token refresh resets Keycloak lastSessionRefresh (server-side)
-//   - refresh_expires_in: 3600 (server allows 60 min technically)
-//   - Synthetic keypress via Runtime.evaluate: CONFIRMED working (5 min test, no popup)
+// Layer 1 — Synthetic keypress (Idle Timer Reset)
+//   document.dispatchEvent(new KeyboardEvent('keypress')) every ~30s (±10s)
+//   Resets the ~2-3 min inactivity timer. Does NOT check isTrusted.
+//
+// Layer 2 — Multi-Event Interception (ALL logout paths)
+//   Capture-phase listeners on window for ALL logout-related events:
+//   - oiamLogoutEvent (timer paths A1/A2/A3)
+//   - oiamMaxSessionExpirationEvent (state-machine max-timeout B2)
+//   - oiamIdleSessionExpirationEvent (state-machine idle-timeout B2)
+//   - oiamIdleSessionExpiredEvent (idle expired variant)
+//   All blocked with stopImmediatePropagation() + preventDefault().
+//
+// Layer 3 — Fetch Interception (Logout Request + Navigation Block)
+//   CDP Fetch.enable blocks GET /openid-connect/logout before server receives it.
+//   Also blocks post-logout redirect to www.arbeitsagentur.de.
+//
+// Layer 4 — Manual Token Refresh (Server Session Alive)
+//   Refreshes access token every ~200s via fetch(). Resets server-side
+//   lastSessionRefresh, keeping the Keycloak SSO session alive.
+//
+// Layer 5 — Cookie + SessionStorage Protection
+//   Page.addScriptToEvaluateOnNewDocument patches:
+//   - document.cookie setter to block oiamsession cookie deletion
+//   - sessionStorage.removeItem to protect OIDC tokens
+//   Injected before page scripts load, persists across SPA navigations.
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT || 'http://127.0.0.1:9223';
-const ACTIVITY_INTERVAL_MS = 60_000;   // base interval for keypress dispatch
-const ACTIVITY_JITTER_MS = 15_000;     // ±15s randomization
-const REFRESH_INTERVAL_MS = 200_000;   // token refresh every ~200s (expires at 240s)
-const BACKUP_INTERVAL_MS = 30_000;     // backup tokens every 30s
-const POLL_INTERVAL_MS = 10_000;       // main loop tick
+const KEYPRESS_INTERVAL_MS = 30_000;
+const KEYPRESS_JITTER_MS = 10_000;
+const REFRESH_INTERVAL_MS = 200_000;
+const POLL_INTERVAL_MS = 10_000;
+
+// All events that can trigger logout — from ACH analysis of p-Bn5gH4YR.js
+const LOGOUT_EVENTS = [
+  'oiamLogoutEvent',                    // Timer check() paths A1/A2/A3
+  'oiamMaxSessionExpirationEvent',      // State-machine path B2 (max timeout)
+  'oiamIdleSessionExpirationEvent',     // State-machine path B2 (idle timeout)
+  'oiamIdleSessionExpiredEvent',        // Idle expired variant
+  'oiamMaxSessionExpirationWarnEvent',  // 5-min warning (suppress to prevent popupHL)
+  'oiamIdleSessionExpirationWarnEvent', // Idle warning (suppress to prevent popupIdle)
+];
 
 (async () => {
   const log = (msg) => console.log(`[${new Date().toISOString()}] ${msg}`);
@@ -81,104 +99,87 @@ const POLL_INTERVAL_MS = 10_000;       // main loop tick
   }
 
   // --- Layer 1: Synthetic keypress ---
-  async function sendActivity() {
+  async function sendKeypress() {
     await evaluate(`document.dispatchEvent(new KeyboardEvent('keypress', { key: 'x', charCode: 120, bubbles: true }))`);
   }
 
-  // --- Layer 2: Fetch Interception + Token Backup ---
-  let logoutBlockCount = 0;
-  let tokenBackup = null; // { key, data } — last known good tokens
+  // --- Layer 2: Multi-Event Interception ---
+  let eventBlockCount = 0;
+
+  async function setupEventInterception() {
+    const eventList = JSON.stringify(LOGOUT_EVENTS);
+    const result = await evaluate(`(function() {
+      if (window.__keepAliveV5) return 'already_installed';
+      window.__keepAliveV5 = { blocked: 0, reasons: [] };
+
+      const events = ${eventList};
+      for (const eventName of events) {
+        // Capture phase — fires BEFORE any bubble-phase handlers
+        window.addEventListener(eventName, function(e) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          window.__keepAliveV5.blocked++;
+          window.__keepAliveV5.reasons.push(eventName + ':' + (e.detail?.reason || '') + '@' + new Date().toISOString());
+          // Keep only last 20 entries
+          if (window.__keepAliveV5.reasons.length > 20) window.__keepAliveV5.reasons.shift();
+          console.log('[keep-alive] BLOCKED ' + eventName + ' reason=' + (e.detail?.reason || ''));
+        }, true);
+
+        // Also bubble phase as backup
+        window.addEventListener(eventName, function(e) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+        }, false);
+      }
+
+      return 'installed_' + events.length + '_events';
+    })()`);
+    log('Layer 2: ' + result);
+  }
+
+  // --- Layer 3: Fetch Interception ---
+  let logoutRequestBlocked = 0;
 
   async function setupFetchInterception() {
     await send('Fetch.enable', {
       patterns: [
         { urlPattern: '*openid-connect/logout*', requestStage: 'Request' },
-        // Block post-logout redirect to www.arbeitsagentur.de (navigation request)
         { urlPattern: 'https://www.arbeitsagentur.de/', requestStage: 'Request' },
         { urlPattern: 'https://www.arbeitsagentur.de', requestStage: 'Request' },
       ]
     });
 
-    let logoutJustBlocked = false; // flag: recent logout → next navigation is post-logout redirect
+    let logoutJustBlocked = false;
 
     eventHandlers.set('Fetch.requestPaused', async (params) => {
       const { requestId, request } = params;
 
       if (request.url.includes('openid-connect/logout')) {
         await send('Fetch.failRequest', { requestId, reason: 'BlockedByClient' });
-        logoutBlockCount++;
+        logoutRequestBlocked++;
         logoutJustBlocked = true;
-        log(`LOGOUT BLOCKED (#${logoutBlockCount})`);
-
-        // Restore tokens if they were deleted
-        if (tokenBackup) {
-          await restoreTokens();
-        }
-        // Clear flag after 60s (only block navigation directly after logout)
+        log(`LOGOUT REQUEST BLOCKED (#${logoutRequestBlocked})`);
         setTimeout(() => { logoutJustBlocked = false; }, 60000);
         return;
       }
 
       if (request.url.includes('www.arbeitsagentur.de') && logoutJustBlocked) {
-        // This is the post-logout redirect — block it and stay on current page
-        log('POST-LOGOUT NAVIGATION BLOCKED: ' + request.url.substring(0, 60));
+        log('POST-LOGOUT NAVIGATION BLOCKED');
         logoutJustBlocked = false;
-        // Return a minimal page that navigates back to profil-ui
-        const html = '<html><body><script>history.back()</script></body></html>';
-        const body = btoa(html);
+        const body = btoa('<html><body><script>history.back()</script></body></html>');
         await send('Fetch.fulfillRequest', {
-          requestId,
-          responseCode: 200,
-          responseHeaders: [
-            { name: 'Content-Type', value: 'text/html; charset=utf-8' },
-          ],
+          requestId, responseCode: 200,
+          responseHeaders: [{ name: 'Content-Type', value: 'text/html; charset=utf-8' }],
           body,
         });
-        // Also restore tokens after a brief delay (page might have cleared them)
-        setTimeout(async () => {
-          if (tokenBackup) await restoreTokens();
-        }, 2000);
         return;
       }
 
-      // Not logout-related — pass through
       await send('Fetch.continueRequest', { requestId });
     });
   }
 
-  async function backupTokens() {
-    const result = await evaluate(`(function() {
-      const clients = ['profil-online', 'kokos', 'ota-online'];
-      for (const c of clients) {
-        const key = 'oidc.user:https://sso.arbeitsagentur.de/auth/realms/OCP:' + c;
-        const data = sessionStorage.getItem(key);
-        if (data) return JSON.stringify({ key, data });
-      }
-      return null;
-    })()`);
-    if (result) {
-      tokenBackup = JSON.parse(result);
-    }
-  }
-
-  async function restoreTokens() {
-    if (!tokenBackup) return false;
-    const restored = await evaluate(`(function() {
-      const key = ${JSON.stringify(tokenBackup.key)};
-      const existing = sessionStorage.getItem(key);
-      if (!existing) {
-        sessionStorage.setItem(key, ${JSON.stringify(tokenBackup.data)});
-        return 'restored';
-      }
-      return 'still_present';
-    })()`);
-    if (restored === 'restored') {
-      log('Tokens restored from backup');
-    }
-    return restored === 'restored';
-  }
-
-  // --- Layer 3: Manual Token Refresh ---
+  // --- Layer 4: Manual Token Refresh ---
   let refreshCount = 0;
 
   async function refreshToken() {
@@ -196,11 +197,8 @@ const POLL_INTERVAL_MS = 10_000;       // main loop tick
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             credentials: 'include',
             body: new URLSearchParams({
-              grant_type: 'refresh_token',
-              refresh_token: oidcUser.refresh_token,
-              client_id: clientId,
-              client_secret: clientId,
-              scope: 'openid baportal'
+              grant_type: 'refresh_token', refresh_token: oidcUser.refresh_token,
+              client_id: clientId, client_secret: clientId, scope: 'openid baportal'
             })
           });
           if (!resp.ok) return JSON.stringify({ ok: false, status: resp.status });
@@ -210,82 +208,87 @@ const POLL_INTERVAL_MS = 10_000;       // main loop tick
           oidcUser.id_token = tokens.id_token || oidcUser.id_token;
           oidcUser.expires_at = Math.floor(Date.now() / 1000) + tokens.expires_in;
           sessionStorage.setItem(key, JSON.stringify(oidcUser));
-          return JSON.stringify({
-            ok: true, client: clientId,
-            expiresIn: tokens.expires_in,
-            refreshExpiresIn: tokens.refresh_expires_in
-          });
-        } catch (e) {
-          return JSON.stringify({ ok: false, error: e.message });
-        }
+          return JSON.stringify({ ok: true, expiresIn: tokens.expires_in, refreshExpiresIn: tokens.refresh_expires_in });
+        } catch (e) { return JSON.stringify({ ok: false, error: e.message }); }
       }
       return JSON.stringify({ ok: false, error: 'no_session' });
     })()`);
     return JSON.parse(result || '{"ok":false,"error":"evaluate_failed"}');
   }
 
-  // --- Layer 4: SessionStorage Protection + Navigation Block ---
-  async function setupSessionProtection() {
-    // Inject script that runs BEFORE any page scripts on every navigation.
-    // Patches sessionStorage.removeItem and sessionStorage.clear to protect
-    // OIDC tokens from being deleted by the oiam-oauth-wc during its logout sequence.
-    // Also blocks navigation to www.arbeitsagentur.de (post-logout redirect).
+  // --- Layer 5: Cookie + SessionStorage Protection ---
+  async function setupProtection() {
+    // Inject into current page
+    await evaluate(`(function() {
+      if (window.__cookieProtected) return;
+      window.__cookieProtected = true;
+
+      // Protect oiamsession cookie from deletion
+      const cookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')
+                      || Object.getOwnPropertyDescriptor(HTMLDocument.prototype, 'cookie');
+      if (cookieDesc?.set) {
+        const originalSet = cookieDesc.set;
+        Object.defineProperty(document, 'cookie', {
+          get: cookieDesc.get,
+          set: function(val) {
+            // Block deletion of oiamsession (max-age=0 or expires in past)
+            if (typeof val === 'string' && val.includes('oiamsession') && (val.includes('max-age=0') || val.includes('expires=Thu, 01 Jan 1970'))) {
+              console.log('[keep-alive] BLOCKED oiamsession cookie deletion');
+              return;
+            }
+            return originalSet.call(document, val);
+          },
+          configurable: true
+        });
+      }
+
+      // Protect sessionStorage OIDC keys
+      const originalRemoveItem = sessionStorage.removeItem.bind(sessionStorage);
+      sessionStorage.removeItem = function(key) {
+        if (typeof key === 'string' && key.startsWith('oidc.user:')) {
+          console.log('[keep-alive] BLOCKED sessionStorage.removeItem: ' + key.substring(0, 40));
+          return;
+        }
+        return originalRemoveItem(key);
+      };
+    })()`);
+
+    // Also inject via addScriptToEvaluateOnNewDocument for persistence across navigations
     await send('Page.addScriptToEvaluateOnNewDocument', {
       source: `(function() {
-        // --- Protect sessionStorage ---
-        const originalRemoveItem = sessionStorage.removeItem.bind(sessionStorage);
-        const originalClear = sessionStorage.clear.bind(sessionStorage);
-        const PROTECTED_PREFIX = 'oidc.user:';
-
+        if (window.__cookieProtected) return;
+        window.__cookieProtected = true;
+        const cookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')
+                        || Object.getOwnPropertyDescriptor(HTMLDocument.prototype, 'cookie');
+        if (cookieDesc?.set) {
+          const originalSet = cookieDesc.set;
+          Object.defineProperty(document, 'cookie', {
+            get: cookieDesc.get,
+            set: function(val) {
+              if (typeof val === 'string' && val.includes('oiamsession') && (val.includes('max-age=0') || val.includes('expires=Thu, 01 Jan 1970'))) {
+                console.log('[keep-alive] BLOCKED oiamsession cookie deletion');
+                return;
+              }
+              return originalSet.call(document, val);
+            },
+            configurable: true
+          });
+        }
+        const origRemove = sessionStorage.removeItem.bind(sessionStorage);
         sessionStorage.removeItem = function(key) {
-          if (typeof key === 'string' && key.startsWith(PROTECTED_PREFIX)) {
-            console.log('[keep-alive] BLOCKED sessionStorage.removeItem: ' + key.substring(0, 40));
-            return; // silently ignore
-          }
-          return originalRemoveItem(key);
+          if (typeof key === 'string' && key.startsWith('oidc.user:')) return;
+          return origRemove(key);
         };
-
-        sessionStorage.clear = function() {
-          // Save protected items, clear, then restore
-          const saved = [];
-          for (let i = 0; i < sessionStorage.length; i++) {
-            const key = sessionStorage.key(i);
-            if (key && key.startsWith(PROTECTED_PREFIX)) {
-              saved.push({ key, value: sessionStorage.getItem(key) });
-            }
-          }
-          originalClear();
-          for (const { key, value } of saved) {
-            sessionStorage.setItem(key, value);
-          }
-          console.log('[keep-alive] sessionStorage.clear intercepted, ' + saved.length + ' OIDC keys preserved');
-        };
-
-        // --- Block post-logout navigation ---
-        // Override window.location assignment to prevent redirect to arbeitsagentur.de startpage
-        // The oiam-oauth-wc sets location.href after logout. We intercept and log it.
-        const locationDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
-        // Note: window.location is not overridable in most browsers, so we intercept
-        // the navigation via beforeunload + history API as fallback
-        window.addEventListener('beforeunload', function(e) {
-          // Check if this is a logout-triggered navigation
-          if (window.__keepAliveActive && document.location.href.includes('web.arbeitsagentur.de')) {
-            console.log('[keep-alive] beforeunload intercepted during keep-alive');
-          }
-        });
-
-        window.__keepAliveActive = true;
-        console.log('[keep-alive] Layer 4: sessionStorage protection + navigation guard active');
-      })()`,
+      })()`
     });
 
-    log('Layer 4: sessionStorage protection injected (persists across navigations)');
+    log('Layer 5: Cookie + sessionStorage protection active');
   }
 
   // --- Setup ---
   await send('Page.enable');
 
-  // Read initial session info
+  // Read session info
   const sessionInfo = await evaluate(`(function() {
     const keys = ['profil-online', 'kokos', 'ota-online'];
     for (const k of keys) {
@@ -309,52 +312,29 @@ const POLL_INTERVAL_MS = 10_000;       // main loop tick
   const session = JSON.parse(sessionInfo);
   const originalSessionEnd = (session.authTime + 1800) * 1000;
 
-  log(`Keep-Alive v4 gestartet (${session.client})`);
+  log(`Keep-Alive v5 gestartet (${session.client})`);
   log(`Original 30-Min-Limit: ${new Date(originalSessionEnd).toISOString()} (${session.remainingMin} Min)`);
-  log('Layer 1: synthetic keypress every ~60s (±15s) — idle timer reset');
 
+  // Setup all layers
+  log('Layer 1: synthetic keypress every ~30s (±10s)');
+  await setupEventInterception();
   await setupFetchInterception();
-  log('Layer 2: Fetch interception active (logout blocked + token backup)');
-
-  await setupSessionProtection();
-
-  // Also inject protection into the CURRENT page immediately
-  await evaluate(`(function() {
-    if (window.__keepAliveActive) return 'already_active';
-    const originalRemoveItem = sessionStorage.removeItem.bind(sessionStorage);
-    const PROTECTED_PREFIX = 'oidc.user:';
-    sessionStorage.removeItem = function(key) {
-      if (typeof key === 'string' && key.startsWith(PROTECTED_PREFIX)) {
-        console.log('[keep-alive] BLOCKED sessionStorage.removeItem: ' + key.substring(0, 40));
-        return;
-      }
-      return originalRemoveItem(key);
-    };
-    window.__keepAliveActive = true;
-    return 'injected';
-  })()`);
-  log('Layer 4: sessionStorage protection active (current page + future navigations)');
-
-  // Initial token backup
-  await backupTokens();
-
-  // Initial token refresh
+  log('Layer 3: Fetch interception active');
   const initRefresh = await refreshToken();
   if (initRefresh.ok) {
     refreshCount++;
-    log(`Layer 3: Token refresh OK (expires_in=${initRefresh.expiresIn}s, refresh_expires_in=${initRefresh.refreshExpiresIn}s)`);
-    await backupTokens(); // backup fresh tokens
+    log(`Layer 4: Token refresh OK (expires_in=${initRefresh.expiresIn}s)`);
   } else {
-    log(`Layer 3 WARNING: Initial refresh failed: ${JSON.stringify(initRefresh)}`);
+    log(`Layer 4 WARNING: ${JSON.stringify(initRefresh)}`);
   }
+  await setupProtection();
 
-  log('--- All layers active. Session should survive beyond 30 min. ---');
+  log('--- All 5 layers active. Session should survive indefinitely. ---');
 
   // --- Main Loop ---
-  let activityCount = 0;
-  let lastActivityTime = Date.now();
+  let keypressCount = 0;
+  let lastKeypressTime = Date.now();
   let lastRefreshTime = Date.now();
-  let lastBackupTime = Date.now();
   let running = true;
 
   process.on('SIGINT', () => { running = false; });
@@ -367,54 +347,44 @@ const POLL_INTERVAL_MS = 10_000;       // main loop tick
       const now = Date.now();
 
       // Layer 1: keypress with jitter
-      const jitter = Math.round((Math.random() * 2 - 1) * ACTIVITY_JITTER_MS);
-      if (now - lastActivityTime >= ACTIVITY_INTERVAL_MS + jitter) {
-        await sendActivity();
-        activityCount++;
-        lastActivityTime = now;
+      const jitter = Math.round((Math.random() * 2 - 1) * KEYPRESS_JITTER_MS);
+      if (now - lastKeypressTime >= KEYPRESS_INTERVAL_MS + jitter) {
+        await sendKeypress();
+        keypressCount++;
+        lastKeypressTime = now;
       }
 
-      // Layer 2: token backup
-      if (now - lastBackupTime >= BACKUP_INTERVAL_MS) {
-        await backupTokens();
-        lastBackupTime = now;
-      }
-
-      // Layer 3: token refresh
+      // Layer 4: token refresh
       if (now - lastRefreshTime >= REFRESH_INTERVAL_MS) {
         const result = await refreshToken();
         if (result.ok) {
           refreshCount++;
           lastRefreshTime = now;
-          await backupTokens();
           const totalMin = Math.round((now - (session.authTime * 1000)) / 60000);
-          log(`Token refresh #${refreshCount} OK — session alive ${totalMin} Min total (refresh_expires_in=${result.refreshExpiresIn}s)`);
+          log(`Token refresh #${refreshCount} OK — ${totalMin} Min alive (refresh_expires_in=${result.refreshExpiresIn}s)`);
         } else {
           log(`Token refresh FAILED: ${JSON.stringify(result)}`);
-          // Try restoring tokens and retrying
-          if (await restoreTokens()) {
-            const retry = await refreshToken();
-            if (retry.ok) {
-              refreshCount++;
-              lastRefreshTime = now;
-              log('Token refresh succeeded after restore');
-            } else {
-              log('Token refresh failed even after restore — server session may be dead');
-              running = false;
-            }
-          } else {
-            log('No backup available — stopping');
+          if (result.error === 'no_session' || result.error === 'evaluate_failed') {
+            log('Session lost — stopping.');
             running = false;
           }
         }
       }
 
-      // Periodic status (every ~5 min = every 30 activities)
-      if (activityCount > 0 && activityCount % 5 === 0) {
-        const totalMin = Math.round((now - (session.authTime * 1000)) / 60000);
-        const beyondLimit = now > originalSessionEnd;
-        log(`Status: ${totalMin} Min alive${beyondLimit ? ' (BEYOND 30-min limit!)' : ''} | ${activityCount} activities | ${refreshCount} refreshes | ${logoutBlockCount} logouts blocked`);
-        activityCount++; // prevent logging every tick
+      // Check blocked events
+      const stats = await evaluate(`JSON.stringify(window.__keepAliveV5 || {blocked:0})`);
+      const s = JSON.parse(stats || '{}');
+      if (s.blocked > eventBlockCount) {
+        log(`*** EVENTS BLOCKED: ${s.blocked} total, latest: ${s.reasons?.slice(-3).join(', ')}`);
+        eventBlockCount = s.blocked;
+      }
+
+      // Status every ~5 min
+      const totalMin = Math.round((now - (session.authTime * 1000)) / 60000);
+      const beyond = now > originalSessionEnd;
+      if (keypressCount > 0 && keypressCount % 10 === 0) {
+        log(`Status: ${totalMin} Min${beyond ? ' (BEYOND!)' : ''} | ${keypressCount} kp | ${refreshCount} ref | ${eventBlockCount} evt | ${logoutRequestBlocked} fetch`);
+        keypressCount++; // prevent repeat log
       }
 
     } catch (e) {
@@ -426,8 +396,8 @@ const POLL_INTERVAL_MS = 10_000;       // main loop tick
   }
 
   const totalMin = Math.round((Date.now() - (session.authTime * 1000)) / 60000);
-  log(`Keep-Alive v4 beendet nach ${totalMin} Min.`);
-  log(`Stats: ${activityCount} activities, ${refreshCount} refreshes, ${logoutBlockCount} logouts blocked.`);
+  log(`Keep-Alive v5 beendet nach ${totalMin} Min.`);
+  log(`Stats: ${keypressCount} keypresses, ${refreshCount} refreshes, ${eventBlockCount} events blocked, ${logoutRequestBlocked} fetches blocked.`);
 
   try { await send('Fetch.disable'); } catch (_) {}
   ws.close();
