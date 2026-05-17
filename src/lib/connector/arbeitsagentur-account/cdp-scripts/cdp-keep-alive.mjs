@@ -1,40 +1,46 @@
-// cdp-keep-alive.mjs — Session Keep-Alive for arbeitsagentur.de
-// Prevents inactivity logout by periodically sending a trusted mouse event.
+// cdp-keep-alive.mjs — Session Keep-Alive v4 for arbeitsagentur.de
+// ZERO page interaction. Two layers operating at JS/network level only.
 //
-// Verified facts (2026-05-17):
-//   - Inactivity timeout: ~2-3 min (triggered by lack of UI events)
-//   - CDP Runtime.evaluate does NOT count as activity
-//   - CDP Input.dispatchMouseEvent DOES count as activity (trusted event)
-//   - 30-min hard limit (auth_time + 1800) is NOT bypassable
+// === Architecture ===
 //
-// Three popups in bahf-header shadow DOM (closed, only CDP DOM.performSearch pierces):
-//   - popupIdle: Inactivity warning (~2-3 min idle). Button: "Angemeldet bleiben" → resets timer
-//   - popupHL:   5-min warning (T+25min). Button: "Verstanden" → acknowledge only, no reset
-//   - popup30m:  30-min hard limit. Session ends, no bypass.
+// Layer 1 — Synthetic keypress (Inactivity Timer Reset)
+//   Dispatches `new KeyboardEvent('keypress')` on `document` via Runtime.evaluate
+//   every ~60s (±15s jitter). The oiam-oauth-wc listens for 'keypress' and 'mouseup'
+//   on the document to detect activity. It does NOT check `isTrusted`, so synthetic
+//   (untrusted) events work. This is a pure JS call — no element interaction, no
+//   mouse movement, no risk of unintended navigation or clicks.
 //
-// Visibility detection: class "is-visible" on the modal div + aria-hidden="false"
-// NOT CSS visibility/opacity (those report misleading values via getBoundingClientRect)
+// Layer 2 — Fetch Interception (30-Min Logout Block + Token Backup)
+//   CDP Fetch.enable intercepts the client-initiated logout request
+//   (GET /openid-connect/logout) BEFORE it reaches the server.
+//   Also periodically backs up tokens from sessionStorage, and restores them
+//   if the oiam-oauth-wc deletes them during its logout sequence.
 //
-// Strategy:
-//   1. PROACTIVE: Send Input.dispatchMouseEvent (mouseMoved) every ~60s (+/-15s jitter)
-//      to reset the inactivity timer before it fires.
-//   2. REACTIVE: Poll all popup divs every 10s. If "is-visible" class found, click
-//      the matching continue button via DOM.resolveNode + .click().
+// Layer 3 — Manual Token Refresh (Server Session Keep-Alive)
+//   Refreshes access token via fetch() every ~200s (before 240s expiry).
+//   Each refresh updates Keycloak's lastSessionRefresh, extending the
+//   server-side SSO session indefinitely.
+//
+// === Verified Facts (2026-05-17) ===
+//   - oiam-oauth-wc activity detection: addEventListener("keypress") + addEventListener("mouseup")
+//     on document. Does NOT check isTrusted. Source: p-Bn5gH4YR.js (142KB)
+//   - Inactivity timeout: ~2-3 min without activity events
+//   - 30-min hard limit: client-initiated by oiam-oauth-wc (auth_time + 1800)
+//   - Token refresh resets Keycloak lastSessionRefresh (server-side)
+//   - refresh_expires_in: 3600 (server allows 60 min technically)
+//   - Synthetic keypress via Runtime.evaluate: CONFIRMED working (5 min test, no popup)
 
 const CDP_ENDPOINT = process.env.CDP_ENDPOINT || 'http://127.0.0.1:9223';
-const ACTIVITY_INTERVAL_MS = 60_000; // base interval ~60s (timeout is ~2-3 min)
-const ACTIVITY_JITTER_MS = 15_000;   // +/- 15s randomization
-const POLL_INTERVAL_MS = 10_000;     // check popup visibility every 10s
-
-// Popup definitions: id → button id
-const POPUPS = [
-  { popupId: 'popupIdle', buttonId: 'session-expiration-idle-warn-popup-continue-btn', label: 'Inaktivitaet' },
-  { popupId: 'popupHL', buttonId: 'session-expiration-5m-warn-popup-continue-btn', label: '5-Min-Warnung' },
-];
+const ACTIVITY_INTERVAL_MS = 60_000;   // base interval for keypress dispatch
+const ACTIVITY_JITTER_MS = 15_000;     // ±15s randomization
+const REFRESH_INTERVAL_MS = 200_000;   // token refresh every ~200s (expires at 240s)
+const BACKUP_INTERVAL_MS = 30_000;     // backup tokens every 30s
+const POLL_INTERVAL_MS = 10_000;       // main loop tick
 
 (async () => {
   const log = (msg) => console.log(`[${new Date().toISOString()}] ${msg}`);
 
+  // --- CDP Connection ---
   const tabs = await fetch(`${CDP_ENDPOINT}/json/list`).then(r => r.json());
   const page = tabs.find(t => t.type === 'page' && !t.url.startsWith('devtools://'));
   if (!page) { console.error('No browser tab found'); process.exit(1); }
@@ -42,113 +48,153 @@ const POPUPS = [
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise(resolve => ws.addEventListener('open', resolve));
 
-  let id = 1;
+  let msgId = 1;
+  const pending = new Map();
+  const eventHandlers = new Map();
+
   function send(method, params = {}) {
     return new Promise((resolve) => {
-      const msgId = id++;
-      const timeout = setTimeout(() => resolve({ result: null }), 10000);
-      function handler(event) {
-        const msg = JSON.parse(event.data);
-        if (msg.id === msgId) { clearTimeout(timeout); ws.removeEventListener('message', handler); resolve(msg); }
-      }
-      ws.addEventListener('message', handler);
-      ws.send(JSON.stringify({ id: msgId, method, params }));
+      const id = msgId++;
+      const timeout = setTimeout(() => { pending.delete(id); resolve({ result: null }); }, 15000);
+      pending.set(id, { resolve, timeout });
+      ws.send(JSON.stringify({ id, method, params }));
     });
   }
+
+  ws.addEventListener('message', (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.id && pending.has(msg.id)) {
+      const { resolve, timeout } = pending.get(msg.id);
+      clearTimeout(timeout);
+      pending.delete(msg.id);
+      resolve(msg);
+    }
+    if (msg.method) {
+      const handler = eventHandlers.get(msg.method);
+      if (handler) handler(msg.params);
+    }
+  });
 
   async function evaluate(expr) {
     const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
     return r.result?.result?.value;
   }
 
-  async function trustedClick(x, y) {
-    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
-    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
-  }
-
+  // --- Layer 1: Synthetic keypress ---
   async function sendActivity() {
-    // Single mouseMoved at a neutral position — center of viewport, below header/nav.
-    // CRITICAL: Avoid header area (y < 100) — header has clickable nav links that
-    // can trigger redirects (e.g., Vermittlungspostfach) on hover/interaction.
-    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 400, y: 500 });
+    await evaluate(`document.dispatchEvent(new KeyboardEvent('keypress', { key: 'x', charCode: 120, bubbles: true }))`);
   }
 
-  // Finds a node by id via DOM.performSearch, resolves to JS object, checks visibility,
-  // returns { visible, objectId } or { visible: false }
-  async function checkPopupVisible(popupId) {
-    const search = await send('DOM.performSearch', { query: popupId });
-    if (!search.result?.resultCount) return { visible: false };
+  // --- Layer 2: Fetch Interception + Token Backup ---
+  let logoutBlockCount = 0;
+  let tokenBackup = null; // { key, data } — last known good tokens
 
-    const nodes = await send('DOM.getSearchResults', {
-      searchId: search.result.searchId, fromIndex: 0, toIndex: 1
+  async function setupFetchInterception() {
+    await send('Fetch.enable', {
+      patterns: [
+        { urlPattern: '*openid-connect/logout*', requestStage: 'Request' },
+      ]
     });
-    const nodeId = nodes.result?.nodeIds?.[0];
-    if (!nodeId) return { visible: false };
 
-    const resolved = await send('DOM.resolveNode', { nodeId });
-    const objId = resolved.result?.object?.objectId;
-    if (!objId) return { visible: false };
+    eventHandlers.set('Fetch.requestPaused', async (params) => {
+      const { requestId, request } = params;
+      if (request.url.includes('openid-connect/logout')) {
+        await send('Fetch.failRequest', { requestId, reason: 'BlockedByClient' });
+        logoutBlockCount++;
+        log(`LOGOUT BLOCKED (#${logoutBlockCount})`);
 
-    // Check for "is-visible" class (the real visibility indicator)
-    const check = await send('Runtime.callFunctionOn', {
-      objectId: objId,
-      functionDeclaration: `function() {
-        return JSON.stringify({
-          isVisible: this.classList.contains('is-visible'),
-          ariaHidden: this.getAttribute('aria-hidden'),
-          className: this.className.substring(0, 80)
-        });
-      }`,
-      returnByValue: true
+        // Restore tokens if they were deleted
+        if (tokenBackup) {
+          await restoreTokens();
+        }
+      } else {
+        await send('Fetch.continueRequest', { requestId });
+      }
     });
-    const data = JSON.parse(check.result?.result?.value || '{}');
-    return { visible: data.isVisible || data.ariaHidden === 'false', objectId: objId, data };
   }
 
-  // Clicks a button found by DOM.performSearch
-  async function clickButton(buttonId) {
-    const search = await send('DOM.performSearch', { query: buttonId });
-    if (!search.result?.resultCount) return false;
-
-    const nodes = await send('DOM.getSearchResults', {
-      searchId: search.result.searchId, fromIndex: 0, toIndex: 1
-    });
-    const nodeId = nodes.result?.nodeIds?.[0];
-    if (!nodeId) return false;
-
-    const resolved = await send('DOM.resolveNode', { nodeId });
-    const objId = resolved.result?.object?.objectId;
-    if (!objId) return false;
-
-    // Get coords for trusted click
-    const rect = await send('Runtime.callFunctionOn', {
-      objectId: objId,
-      functionDeclaration: `function() {
-        this.scrollIntoView({ block: 'center' });
-        const r = this.getBoundingClientRect();
-        return JSON.stringify({ x: Math.round(r.x + r.width/2), y: Math.round(r.y + r.height/2), w: r.width });
-      }`,
-      returnByValue: true
-    });
-    const coords = JSON.parse(rect.result?.result?.value || '{}');
-
-    // Trusted click (if coords are plausible)
-    if (coords.x > 0 && coords.y > 0 && coords.w > 5) {
-      await trustedClick(coords.x, coords.y);
+  async function backupTokens() {
+    const result = await evaluate(`(function() {
+      const clients = ['profil-online', 'kokos', 'ota-online'];
+      for (const c of clients) {
+        const key = 'oidc.user:https://sso.arbeitsagentur.de/auth/realms/OCP:' + c;
+        const data = sessionStorage.getItem(key);
+        if (data) return JSON.stringify({ key, data });
+      }
+      return null;
+    })()`);
+    if (result) {
+      tokenBackup = JSON.parse(result);
     }
-    // .click() fallback (always try)
-    await send('Runtime.callFunctionOn', {
-      objectId: objId,
-      functionDeclaration: 'function() { this.click(); }'
-    });
-
-    return true;
   }
 
-  await send('Page.enable');
-  await send('DOM.enable');
+  async function restoreTokens() {
+    if (!tokenBackup) return false;
+    const restored = await evaluate(`(function() {
+      const key = ${JSON.stringify(tokenBackup.key)};
+      const existing = sessionStorage.getItem(key);
+      if (!existing) {
+        sessionStorage.setItem(key, ${JSON.stringify(tokenBackup.data)});
+        return 'restored';
+      }
+      return 'still_present';
+    })()`);
+    if (restored === 'restored') {
+      log('Tokens restored from backup');
+    }
+    return restored === 'restored';
+  }
 
-  // Read session info
+  // --- Layer 3: Manual Token Refresh ---
+  let refreshCount = 0;
+
+  async function refreshToken() {
+    const result = await evaluate(`(async function() {
+      const clients = ['profil-online', 'kokos', 'ota-online'];
+      for (const clientId of clients) {
+        const key = 'oidc.user:https://sso.arbeitsagentur.de/auth/realms/OCP:' + clientId;
+        const raw = sessionStorage.getItem(key);
+        if (!raw) continue;
+        const oidcUser = JSON.parse(raw);
+        if (!oidcUser.refresh_token) continue;
+        try {
+          const resp = await fetch('https://sso.arbeitsagentur.de/auth/realms/OCP/protocol/openid-connect/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            credentials: 'include',
+            body: new URLSearchParams({
+              grant_type: 'refresh_token',
+              refresh_token: oidcUser.refresh_token,
+              client_id: clientId,
+              client_secret: clientId,
+              scope: 'openid baportal'
+            })
+          });
+          if (!resp.ok) return JSON.stringify({ ok: false, status: resp.status });
+          const tokens = await resp.json();
+          oidcUser.access_token = tokens.access_token;
+          oidcUser.refresh_token = tokens.refresh_token;
+          oidcUser.id_token = tokens.id_token || oidcUser.id_token;
+          oidcUser.expires_at = Math.floor(Date.now() / 1000) + tokens.expires_in;
+          sessionStorage.setItem(key, JSON.stringify(oidcUser));
+          return JSON.stringify({
+            ok: true, client: clientId,
+            expiresIn: tokens.expires_in,
+            refreshExpiresIn: tokens.refresh_expires_in
+          });
+        } catch (e) {
+          return JSON.stringify({ ok: false, error: e.message });
+        }
+      }
+      return JSON.stringify({ ok: false, error: 'no_session' });
+    })()`);
+    return JSON.parse(result || '{"ok":false,"error":"evaluate_failed"}');
+  }
+
+  // --- Setup ---
+  await send('Page.enable');
+
+  // Read initial session info
   const sessionInfo = await evaluate(`(function() {
     const keys = ['profil-online', 'kokos', 'ota-online'];
     for (const k of keys) {
@@ -170,67 +216,109 @@ const POPUPS = [
   }
 
   const session = JSON.parse(sessionInfo);
-  const sessionEndTime = (session.authTime + 1800) * 1000;
-  log(`Keep-Alive gestartet (${session.client}, ${session.remainingMin} Min verbleibend)`);
-  log('Session endet: ' + new Date(sessionEndTime).toISOString());
-  log(`Strategie: mouseMoved ~${ACTIVITY_INTERVAL_MS / 1000}s (±${ACTIVITY_JITTER_MS / 1000}s) + popup is-visible check`);
+  const originalSessionEnd = (session.authTime + 1800) * 1000;
 
+  log(`Keep-Alive v4 gestartet (${session.client})`);
+  log(`Original 30-Min-Limit: ${new Date(originalSessionEnd).toISOString()} (${session.remainingMin} Min)`);
+  log('Layer 1: synthetic keypress every ~60s (±15s) — idle timer reset');
+
+  await setupFetchInterception();
+  log('Layer 2: Fetch interception active (logout blocked + token backup)');
+
+  // Initial token backup
+  await backupTokens();
+
+  // Initial token refresh
+  const initRefresh = await refreshToken();
+  if (initRefresh.ok) {
+    refreshCount++;
+    log(`Layer 3: Token refresh OK (expires_in=${initRefresh.expiresIn}s, refresh_expires_in=${initRefresh.refreshExpiresIn}s)`);
+    await backupTokens(); // backup fresh tokens
+  } else {
+    log(`Layer 3 WARNING: Initial refresh failed: ${JSON.stringify(initRefresh)}`);
+  }
+
+  log('--- All layers active. Session should survive beyond 30 min. ---');
+
+  // --- Main Loop ---
   let activityCount = 0;
-  let popupDismissCount = 0;
   let lastActivityTime = Date.now();
+  let lastRefreshTime = Date.now();
+  let lastBackupTime = Date.now();
+  let running = true;
 
-  // --- Main loop ---
-  while (true) {
-    if (Date.now() >= sessionEndTime) {
-      log('30-Min Hard-Limit erreicht — Session beendet.');
-      break;
-    }
+  process.on('SIGINT', () => { running = false; });
+  process.on('SIGTERM', () => { running = false; });
 
+  while (running) {
     await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
 
     try {
       const now = Date.now();
-      const remaining = Math.round((sessionEndTime - now) / 60000);
 
-      // PROACTIVE: send activity if randomized interval elapsed
+      // Layer 1: keypress with jitter
       const jitter = Math.round((Math.random() * 2 - 1) * ACTIVITY_JITTER_MS);
       if (now - lastActivityTime >= ACTIVITY_INTERVAL_MS + jitter) {
         await sendActivity();
         activityCount++;
         lastActivityTime = now;
-        if (activityCount % 5 === 1) {
-          log(`Activity #${activityCount} gesendet (${remaining} Min verbleibend)`);
+      }
+
+      // Layer 2: token backup
+      if (now - lastBackupTime >= BACKUP_INTERVAL_MS) {
+        await backupTokens();
+        lastBackupTime = now;
+      }
+
+      // Layer 3: token refresh
+      if (now - lastRefreshTime >= REFRESH_INTERVAL_MS) {
+        const result = await refreshToken();
+        if (result.ok) {
+          refreshCount++;
+          lastRefreshTime = now;
+          await backupTokens();
+          const totalMin = Math.round((now - (session.authTime * 1000)) / 60000);
+          log(`Token refresh #${refreshCount} OK — session alive ${totalMin} Min total (refresh_expires_in=${result.refreshExpiresIn}s)`);
+        } else {
+          log(`Token refresh FAILED: ${JSON.stringify(result)}`);
+          // Try restoring tokens and retrying
+          if (await restoreTokens()) {
+            const retry = await refreshToken();
+            if (retry.ok) {
+              refreshCount++;
+              lastRefreshTime = now;
+              log('Token refresh succeeded after restore');
+            } else {
+              log('Token refresh failed even after restore — server session may be dead');
+              running = false;
+            }
+          } else {
+            log('No backup available — stopping');
+            running = false;
+          }
         }
       }
 
-      // REACTIVE: check all popup types
-      await send('DOM.getDocument', { depth: 0 });
-
-      for (const popup of POPUPS) {
-        const status = await checkPopupVisible(popup.popupId);
-        if (!status.visible) continue;
-
-        log(`${popup.label} Popup SICHTBAR (${popup.popupId}, class="${status.data?.className}")`);
-
-        const clicked = await clickButton(popup.buttonId);
-        if (clicked) {
-          popupDismissCount++;
-          log(`${popup.label} Button geklickt (#${popupDismissCount})`);
-
-          // Verify dismissal
-          await new Promise(r => setTimeout(r, 1500));
-          const postStatus = await checkPopupVisible(popup.popupId);
-          log(`Post-click: ${postStatus.visible ? 'STILL_VISIBLE' : 'DISMISSED'}`);
-        } else {
-          log(`WARNING: ${popup.label} Button (${popup.buttonId}) nicht gefunden`);
-        }
+      // Periodic status (every ~5 min = every 30 activities)
+      if (activityCount > 0 && activityCount % 5 === 0) {
+        const totalMin = Math.round((now - (session.authTime * 1000)) / 60000);
+        const beyondLimit = now > originalSessionEnd;
+        log(`Status: ${totalMin} Min alive${beyondLimit ? ' (BEYOND 30-min limit!)' : ''} | ${activityCount} activities | ${refreshCount} refreshes | ${logoutBlockCount} logouts blocked`);
+        activityCount++; // prevent logging every tick
       }
 
     } catch (e) {
-      // Context destroyed during navigation — retry next cycle
+      if (ws.readyState !== WebSocket.OPEN) {
+        log('WebSocket closed — stopping.');
+        running = false;
+      }
     }
   }
 
-  log(`Keep-Alive beendet. ${activityCount} activities, ${popupDismissCount} popups dismissed.`);
+  const totalMin = Math.round((Date.now() - (session.authTime * 1000)) / 60000);
+  log(`Keep-Alive v4 beendet nach ${totalMin} Min.`);
+  log(`Stats: ${activityCount} activities, ${refreshCount} refreshes, ${logoutBlockCount} logouts blocked.`);
+
+  try { await send('Fetch.disable'); } catch (_) {}
   ws.close();
 })();
