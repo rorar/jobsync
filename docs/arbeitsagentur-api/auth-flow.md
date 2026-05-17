@@ -280,10 +280,25 @@ Das Modul MUSS dem Benutzer die Wahl der Login-Methode anbieten. Die Keycloak-Lo
 - BundID/eID: Vollständig dokumentiert (dieser Flow, oben)
 - BA-Konto/Passkey: **NICHT dokumentiert** — erfordert separaten Entwickler mit BA-Konto-Login
 
-**BundID-Portal UI-Selektoren (id.bund.de):**
-- Authentifizierungsmethoden-Auswahl: `button[contentid="eID"]` (Online-Ausweis), `button[contentid="ELSTER"]`
-- Anmelden-Button: `button[data-test-id="9XNNb"]` (instabil — test-IDs können sich ändern)
-- Hinweis: BundID nutzt React — `.click()` funktioniert nicht, nur echte `Input.dispatchMouseEvent` oder manuelle Interaktion
+**Vollständiger BundID-Flow mit Selektoren (verifiziert 2026-05-17):**
+
+| Schritt | Seite | Selektor | Aktion |
+|---|---|---|---|
+| 1 | sso.arbeitsagentur.de | `#mitBundIdButton` | Click → Zwischenseite |
+| 2 | sso.arbeitsagentur.de | Button "Zur BundID wechseln" (text-match) | Click → Redirect id.bund.de |
+| 3 | id.bund.de/de/welcome | Button "Anmelden" / "ANMELDEN" (text-match) | Click → Methoden-Auswahl |
+| 4 | id.bund.de/.../eID | `button[contentid="eID"]` | Bereits vorausgewählt (URL endet auf /eID) |
+| 5 | id.bund.de/.../eID | `button[data-test-id="9XNNb"]` "Anmelden" | Click → AusweisApp-Modal |
+| 6 | id.bund.de (Modal) | `button[data-test-id="el2nW"]` "WEITER MIT AUSWEISAPP" | Click → AusweisApp wartet |
+| 7 | — | **MANUELLE INTERVENTION** (Ausweis + PIN in AusweisApp) | User-Aktion |
+| 8 | id.bund.de (Modal) | `button[data-test-id="d0gQ0"]` "WEITER" | Click → Redirect zu Keycloak |
+| 9 | sso.arbeitsagentur.de | Button "Online Angebot nutzen" (text-match) | Click → Profil-Dashboard |
+
+**Hinweise:**
+- BundID nutzt React — `.click()` und `dispatchEvent` funktionieren NICHT. Nur `Input.dispatchMouseEvent` (CDP) oder manuelle Interaktion.
+- `data-test-id` Werte sind instabil (können bei Redeployment wechseln) — text-match als Fallback verwenden
+- Schritt 3-6 können sich ändern — BundID-Portal wird aktiv weiterentwickelt
+- Schritt 8 ("WEITER" nach Rückkehr) und Schritt 9 ("Online Angebot nutzen") können vom `cdp-auto-complete.mjs` Guardian automatisch geklickt werden
 
 **Architektur-Entscheidung für Modul:**
 - Login-Methode wird in den Modul-Settings gespeichert (User wählt einmalig)
