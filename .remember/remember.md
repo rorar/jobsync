@@ -51,14 +51,16 @@ Cookie deletion via `document.cookie = "oiamsession=; expires=Thu, 01 Jan 1970..
 - Prototype-level `Object.defineProperty(Document.prototype, 'cookie', ...)` → Chrome security prevents override
 - The cookie setter is a native browser API that cannot be monkey-patched
 
-### Next approach: Cookie-Restore (not Cookie-Delete-Prevention)
-Instead of preventing the cookie deletion, **restore the cookie within 1 second** after it's deleted.
-The `check(t)` function reads the cookie every 1s — if we re-create `oiamsession` with valid data before the next tick, the session continues.
-Alternative: use `setInterval(100ms)` to detect cookie absence and immediately re-set it with the last known value.
+### v5.2 Cookie-Restore: ALSO FAILED
+200ms poll-based cookie restore implemented but never fires — WC destroys JS context synchronously after event dispatch via `handleLogoutEvent → doLogout → signoutRedirect`. The 200ms poller is gone before it can detect the cookie deletion.
 
-## Next
-1. **Implement cookie-restore strategy** — poll cookie existence, restore from backup when deleted
-2. **Fix Login BundID Welcome hang** — `waitForAndClick` for Tml88 intermittently fails (Vue 3 trusted click timing issue)
+### Verified: direct state-machine path is the real killer
+The `check(t)` timer dispatches `oiamLogoutEvent` (which we block), but the WC's internal event queue handler `handleLogoutEvent` runs synchronously and calls `doLogout → doSignout → signoutRedirect` which navigates the page away. `stopImmediatePropagation` only prevents OTHER listeners — the WC's OWN handler (registered first) still fires.
+
+## Next (v6 approach)
+1. **`Page.addScriptToEvaluateOnNewDocument`** to monkey-patch `signoutRedirect` / `location.assign` / `location.replace` BEFORE the WC loads. This is the only way to prevent navigation since it happens synchronously in the same microtask.
+2. **Alternative:** Intercept `oidc-client`'s `UserManager.signoutRedirect` method since the WC uses oidc-client-ts internally.
+3. **Fix Login BundID Welcome hang** — `waitForAndClick` for Tml88 intermittently fails
 
 ## Previous session state (still valid)
 - OpenAPI spec: 37 paths, 39 schemas (`docs/arbeitsagentur-api/openapi.yaml`)
