@@ -137,9 +137,15 @@ paths:
       operationId: logout
       summary: End SSO session (client-initiated)
       description: |
-        Triggered by the oiam-oauth-wc when the 30-min session timer expires.
-        Invalidates all tokens (including refresh tokens for other clients sharing the session).
+        Terminates the Keycloak SSO session. Triggered in two scenarios:
+        - **Automatic:** oiam-oauth-wc fires this when the 30-min session timer expires
+        - **Manual:** User clicks "Abmelden" in the profile flyout (#profileLogout)
+
+        Invalidates all tokens (including refresh tokens for ALL clients sharing the session).
         After this call, ALL apps (profil-ui, kokos-ui, termine) lose their session.
+        sessionStorage is cleared by oiam-oauth-wc after redirect.
+
+        Server: `sso.arbeitsagentur.de` (NOT rest.arbeitsagentur.de)
       tags: [Auth]
       security: []
       parameters:
@@ -149,9 +155,30 @@ paths:
           description: The current id_token (proves identity for logout)
           schema:
             type: string
+        - name: post_logout_redirect_uri
+          in: query
+          required: false
+          description: Where to redirect after logout (must be registered in Keycloak client config)
+          schema:
+            type: string
+            format: uri
+          example: "https://www.arbeitsagentur.de"
+        - name: correlation-id
+          in: query
+          required: false
+          description: Request correlation UUID for tracing
+          schema:
+            type: string
+            format: uuid
       responses:
         "302":
-          description: Redirect to www.arbeitsagentur.de (logged out)
+          description: Redirect to post_logout_redirect_uri (default www.arbeitsagentur.de)
+          headers:
+            Location:
+              description: Redirect target after logout
+              schema:
+                type: string
+                format: uri
   # === PROFIL ===
   /profil/profil-service/pd/v1/personalization:
     get:
