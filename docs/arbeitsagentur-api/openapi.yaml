@@ -1,0 +1,1694 @@
+openapi: 3.1.0
+info:
+  title: arbeitsagentur.de REST API (Reverse-Engineered)
+  description: |
+    Reverse-engineered API specification for arbeitsagentur.de services.
+    Captured via CDP Network Analysis on 2026-05-17.
+
+    ## Authentication
+    All `/pd/` endpoints require OAuth2 Bearer Token.
+    All `/pc/` endpoints are public (no auth needed).
+
+    ## OAuth2 Clients
+    | Client | App | Secret |
+    |--------|-----|--------|
+    | profil-online | Profil-Dashboard | profil-online |
+    | ota-online | Terminverwaltung | unknown |
+    | kokos | Leistungspostfach | kokos |
+
+    ## Session Limits
+    - Access Token: 240s (auto-refresh)
+    - Session Hard-Limit: 30 minutes (server-enforced)
+    - Rate-Limit: 1000 req (on vamio-jsonapi)
+
+    ## DISCLAIMER
+    This spec was created through observation only. It is NOT officially documented.
+    Use at your own risk. See ROADMAP.md §1.9 for legal considerations.
+  version: 0.1.0-draft
+  contact:
+    name: "@rorar"
+    url: https://github.com/rorar
+  license:
+    name: Private - Not for distribution
+    identifier: UNLICENSED
+
+servers:
+  - url: https://rest.arbeitsagentur.de
+    description: |
+      Production REST API Gateway.
+      Path conventions:
+        - /pd/v{n}/ = personal data (auth required)
+        - /pc/v{n}/ = public content (no auth)
+        - /ud/v{n}/ = upload data (auth required, file uploads)
+      URL calculation for kokos:
+        Frontend /kokos/kokos-ui/pd/ → Backend /kokos/kokos-ui-service/{pd|ud}/v1/
+
+tags:
+  - name: Profil
+    description: Dashboard personalization
+  - name: Termine
+    description: Appointment management (OTA Service)
+  - name: Postfach
+    description: Benefits mailbox (KOKOS Service)
+  - name: Vermittlung
+    description: Placement services (JSON:API format)
+  - name: Jobboerse
+    description: Job board services (Vermittlungsvorschläge)
+  - name: Notifications
+    description: Notification bell + email config (MISO Service)
+  - name: Dienststellen
+    description: Office/agency information
+  - name: Leistungen
+    description: Benefits and cases
+  - name: System
+    description: Maintenance and config (public)
+
+paths:
+  # === PROFIL ===
+  /profil/profil-service/pd/v1/personalization:
+    get:
+      operationId: getPersonalization
+      summary: Get dashboard layout
+      tags: [Profil]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dashboard section order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Personalization"
+
+  # === TERMINE ===
+  /portal/ota-service/pd/v1/appointments:
+    get:
+      operationId: listAppointments
+      summary: List all appointments (upcoming + past)
+      tags: [Termine]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: All appointments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentsResponse"
+
+  /portal/ota-service/pd/v1/upcoming/appointment:
+    get:
+      operationId: getUpcomingAppointment
+      summary: Get next upcoming appointment (widget)
+      tags: [Termine]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Next appointment summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentSummary"
+
+  /portal/ota-service/pd/v1/markasread:
+    post:
+      operationId: markAppointmentsAsRead
+      summary: Mark appointments as read
+      tags: [Termine]
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Marked as read
+
+  /portal/otv-service/pd/v1/access/agencies:
+    get:
+      operationId: getAccessAgencies
+      summary: Get user's assigned agencies for booking
+      tags: [Termine]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Agencies per legal domain (SGB2 + SGB3)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessAgencies"
+
+  # === POSTFACH (KOKOS) ===
+  /kokos/kokos-ui-service/pd/v1/postfach:
+    post:
+      operationId: initPostfach
+      summary: Initialize mailbox context
+      description: Must be called before other mailbox operations. Returns identity and permissions.
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Mailbox context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostfachContext"
+
+  /kokos/kokos-ui-service/pd/v1/ordner:
+    get:
+      operationId: listOrdner
+      summary: List mailbox folders with counts
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: All folders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Ordner"
+
+  /kokos/kokos-ui-service/pd/v1/ordner/{ordnerId}/nachrichten:
+    get:
+      operationId: listNachrichten
+      summary: List messages in folder
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ordnerId
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [entwurf, erhalten, geloescht, gesendet]
+      responses:
+        "200":
+          description: Messages in folder
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NachrichtSummary"
+
+  /kokos/kokos-ui-service/pd/v1/dienststellen/vorbelegung:
+    get:
+      operationId: getDienststellenVorbelegung
+      summary: Get pre-selected offices for messaging
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Assigned offices per legal domain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DienststellenVorbelegung"
+
+  /kokos/kokos-ui-service/pd/v1/anliegen/{typ}/{dstnr}:
+    get:
+      operationId: getAnliegen
+      summary: Get message category tree for office
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: typ
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [AA, JC]
+          description: "AA = Agentur für Arbeit, JC = Jobcenter"
+        - name: dstnr
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^\\d{5}$"
+          description: 5-digit Dienststellennummer
+      responses:
+        "200":
+          description: Hierarchical category tree
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Anliegen"
+
+  # === POSTFACH CRUD (reverse-engineered from JS source) ===
+  /kokos/kokos-ui-service/pd/v1/ordner/{ordnerType}/nachrichten/{nachrichtId}:
+    get:
+      operationId: getNachricht
+      summary: Read single message (full body)
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ordnerType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [entwurf, erhalten, geloescht, gesendet]
+        - name: nachrichtId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Full message with body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NachrichtDetail"
+        "403":
+          description: Trust level insufficient (vNiveau too low)
+    delete:
+      operationId: deleteNachricht
+      summary: Move message to trash
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ordnerType
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: nachrichtId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Message moved to trash
+
+  /kokos/kokos-ui-service/pd/v1/ordner/senden/nachrichten:
+    post:
+      operationId: sendNachricht
+      summary: Send a message
+      description: |
+        Sends a message to the selected office. The message is delivered
+        to the Leistungspostfach of the office (not directly to a caseworker).
+        Body must include bezug from the anliegen catalog.
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendNachrichtRequest"
+      responses:
+        "200":
+          description: Message sent successfully
+
+  /kokos/kokos-ui-service/pd/v1/ordner/entwurf/nachrichten:
+    post:
+      operationId: saveEntwurf
+      summary: Save message as draft
+      description: Creates a draft message. Returns Location header with draft URL.
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendNachrichtRequest"
+      responses:
+        "201":
+          description: Draft created
+          headers:
+            Location:
+              description: URL of the created draft
+              schema:
+                type: string
+                format: uri
+
+  /kokos/kokos-ui-service/pd/v1/ordner/geloescht/nachrichten/{nachrichtId}:
+    put:
+      operationId: restoreNachricht
+      summary: Restore message from trash
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: nachrichtId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Message restored
+    delete:
+      operationId: deleteNachrichtPermanent
+      summary: Permanently delete message from trash
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: nachrichtId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Message permanently deleted
+
+  # === POSTFACH ATTACHMENTS (Upload-Pfad: /ud/v1) ===
+  /kokos/kokos-ui-service/ud/v1/ordner/entwurf/nachrichten/{nachrichtId}/anhaenge:
+    post:
+      operationId: uploadAnhang
+      summary: Upload attachment to draft message
+      description: |
+        Upload a file attachment to an existing draft.
+        Uses the upload path prefix (/ud/v1 instead of /pd/v1).
+
+        ## Restrictions (verified from JS source)
+        - **Accepted formats:** PDF, PNG, JPEG, BMP only
+        - **Magic bytes validated:** Client checks first 4 bytes (not just extension)
+        - **Max file size:** 7.5 MB per file AND 7.5 MB total per message
+        - **Max pages:** 100 (for PDFs)
+        - **Filename max:** 80 characters
+        - **Filename rules:** No leading/trailing dots or spaces, no OS-reserved words
+        - **All uploads converted to PDF server-side**
+        - **Virus scan:** Documents rejected if infected (FFP virus-infected)
+
+        ## Error codes (FFP)
+        - 430: Filename too long
+        - 440: Invalid characters in filename
+        - 441-444: Filename starts/ends with dot/space
+        - 445: Reserved OS word
+        - 450: File too large (7.5 MB)
+        - 451: Converted PDF too large
+        - 455: Total message size exceeded
+        - 470: Invalid file format
+        - 471-474: Non-convertible PDF/image variants
+        - 475: Too many pages (>100)
+        - 490: Duplicate file
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: nachrichtId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: |
+                    File to upload. Accepted MIME types:
+                    - application/pdf
+                    - image/png
+                    - image/jpeg
+                    - image/bmp
+            encoding:
+              file:
+                contentType: application/pdf, image/png, image/jpeg, image/bmp
+      responses:
+        "201":
+          description: Attachment uploaded
+        "400":
+          description: Validation error (see FFP codes in description)
+
+  /kokos/kokos-ui-service/ud/v1/ordner/entwurf/nachrichten/{nachrichtId}/anhaenge/{anhangId}/upload-status:
+    get:
+      operationId: getUploadStatus
+      summary: Check upload progress
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: nachrichtId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: anhangId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Upload status
+
+  /kokos/kokos-ui-service/pd/v1/ordner/{ordnerType}/nachrichten/{nachrichtId}/anhaenge/{anhangId}:
+    get:
+      operationId: downloadAnhang
+      summary: Download attachment
+      tags: [Postfach]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ordnerType
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: nachrichtId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: anhangId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File download
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  # === NOTIFICATION CONFIG ===
+  /miso/miso-notification-service/pd/v2/notification/mail/konfiguration:
+    get:
+      operationId: getMailKonfiguration
+      summary: Get email notification preferences
+      tags: [Notifications]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Email notification config with delivery preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MailKonfiguration"
+
+  # === VERMITTLUNG ===
+  /vermittlung/vamio-jsonapi/pd/v1/person/{kundennr}:
+    get:
+      operationId: getPerson
+      summary: Get person data with includes
+      description: JSON:API 1.0 format with sparse fieldsets and includes
+      tags: [Vermittlung]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: kundennr
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Z0-9]{10}$"
+        - name: include
+          in: query
+          schema:
+            type: string
+          example: zugeordneteDienststelle,vermittlungsmerkmale
+        - name: "fields[dienststelle]"
+          in: query
+          schema:
+            type: string
+          example: nummer
+        - name: "fields[vermittlungsmerkmale]"
+          in: query
+          schema:
+            type: string
+          example: istAVAngemeldet,istBBAngemeldet,istBBiEAngemeldet
+      responses:
+        "200":
+          description: Person data (JSON:API)
+          content:
+            application/vnd.api+json:
+              schema:
+                $ref: "#/components/schemas/JsonApiPersonResponse"
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Rate limit (observed: 1000)
+
+  /vermittlung/nks-service/pd/v1/kundeninformation:
+    get:
+      operationId: getNksKundeninformation
+      summary: Get "Nächste Schritte" status
+      tags: [Vermittlung]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Next steps status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NksKundeninformation"
+
+  /vermittlung/oalo-service/pd/v1/kundeninformation:
+    get:
+      operationId: getOaloKundeninformation
+      summary: Get job-seeking/unemployed registration status
+      tags: [Vermittlung]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Registration status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OaloKundeninformation"
+
+  # === JOBBOERSE ===
+  /jobboerse/vv-service/pd/v2/vv:
+    get:
+      operationId: getVermittlungsvorschlaege
+      summary: Get placement suggestions from advisor
+      tags: [Jobboerse]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: updateAufrufdatum
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Placement suggestions summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VermittlungsvorschlaegeResponse"
+
+  /jobboerse/vv-service/pd/v2/se:
+    get:
+      operationId: getStellenempfehlungen
+      summary: Get job recommendations
+      tags: [Jobboerse]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: updateAufrufdatum
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Job recommendations summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StellenempfehlungenResponse"
+
+  /jobboerse/jobsuche-service/pd/v1/suchauftraege/teaser:
+    get:
+      operationId: getSuchauftraegeTeaser
+      summary: Get saved job search teasers
+      tags: [Jobboerse]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Search agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /jobboerse/jobsuche-service/pd/v1/vormerkungen/teaser:
+    get:
+      operationId: getVormerkungenTeaser
+      summary: Get bookmarked jobs teaser
+      tags: [Jobboerse]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Bookmarked jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /vamJB/jobboerse/pd/v1/postfachnachrichten:
+    get:
+      operationId: getVermittlungsPostfach
+      summary: Get placement mailbox summary
+      tags: [Jobboerse]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Mailbox counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VermittlungsPostfachSummary"
+
+  # === NOTIFICATIONS ===
+  /miso/miso-service/pd/v2/mitteilungen/anzahl:
+    get:
+      operationId: getMitteilungenAnzahl
+      summary: Get notification count (bell icon)
+      tags: [Notifications]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Notification counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MitteilungenAnzahl"
+
+  /miso/miso-notification-service/pd/v2/notification/mail/konfiguration:
+    get:
+      operationId: getMailKonfiguration
+      summary: Get email notification preferences
+      tags: [Notifications]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Email notification config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MailKonfiguration"
+
+  # === DIENSTSTELLEN ===
+  /dos/dienststellen/pc/v2/orgeinheittyp:
+    get:
+      operationId: getOrgeinheittyp
+      summary: Get office type by number (public)
+      tags: [Dienststellen]
+      parameters:
+        - name: dstnr5
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: "^\\d{5}$"
+      responses:
+        "200":
+          description: Office type with HATEOAS links
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgeinheittypResponse"
+
+  /apok/kontakt-service/pd/v1/kontakt/dienststelle/{dstnr}:
+    get:
+      operationId: getDienststelleKontakt
+      summary: Get office contact details
+      tags: [Dienststellen]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: dstnr
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^\\d{5}$"
+      responses:
+        "200":
+          description: Office address
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DienststelleKontakt"
+
+  # === LEISTUNGEN ===
+  /aue/api/pd/graphql:
+    post:
+      operationId: queryLeistungen
+      summary: Query benefits/cases via GraphQL
+      tags: [Leistungen]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+                  description: GraphQL query
+                variables:
+                  type: object
+            example:
+              query: "query AueLipPp($anzahlVorgangeProGruppe: Int! = 2) { gruppenV2(anzahlVorgangeProGruppe: $anzahlVorgangeProGruppe) { sindAlleGruppenVorhanden gruppen { name anzahlVorgaengeTotal } } }"
+      responses:
+        "200":
+          description: GraphQL response
+          content:
+            application/graphql-response+json:
+              schema:
+                type: object
+
+  /leist/api/pd/v1/leistungen/privatPerson:
+    get:
+      operationId: getLeistungen
+      summary: Get ALG/BAB benefits overview
+      tags: [Leistungen]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Benefits
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeistungenResponse"
+
+  /bgdo/bgdo-public-api/pd/v3/bgdaten:
+    get:
+      operationId: getBgDaten
+      summary: Get Bedarfsgemeinschaft data
+      tags: [Leistungen]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Household unit data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BgDatenResponse"
+
+  /besch-schriftstueck-service/api/pd/v2/schriftstueckanzahlungelesen:
+    get:
+      operationId: getUngeleseneSchriftstuecke
+      summary: Get unread decisions/notices count
+      tags: [Leistungen]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  anzahlUngeleseneSchriftstuecke:
+                    type: integer
+
+  # === SYSTEM (PUBLIC) ===
+  /cmsportal/cmsportal-api/pc/wartungshinweis:
+    get:
+      operationId: getWartungshinweis
+      summary: Get maintenance notice (public, no auth)
+      tags: [System]
+      responses:
+        "200":
+          description: Maintenance info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wartungshinweis"
+
+  # === KOMMUNIKATIONS-EINSTELLUNGEN ===
+  /kusos/kusos-public-service/pd/v5/person/einstelloptionen:
+    get:
+      operationId: getEinstelloptionen
+      summary: Get communication settings
+      tags: [Profil]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Communication preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Einstelloptionen"
+
+components:
+  schemas:
+    # --- Profil ---
+    Personalization:
+      type: object
+      properties:
+        sektionen:
+          type: array
+          items:
+            type: string
+
+    Einstelloptionen:
+      type: object
+      properties:
+        datenuebernahme:
+          type: boolean
+        onlinekommunikation:
+          type: boolean
+        videokommunikation:
+          type: boolean
+        sms:
+          type: boolean
+
+    # --- Termine ---
+    AppointmentsResponse:
+      type: object
+      properties:
+        pastAppointments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Appointment"
+        upcomingAppointments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Appointment"
+
+    Appointment:
+      type: object
+      required: [subject, date, startTime, endTime, contactType]
+      properties:
+        subject:
+          type: string
+          description: Appointment type
+          examples: ["Vermittlungsgespräch", "Beratungstermin"]
+        weekday:
+          type: string
+          examples: ["Montag", "Dienstag"]
+        date:
+          type: string
+          format: date
+        startTime:
+          type: string
+          pattern: "^\\d{2}:\\d{2}$"
+        endTime:
+          type: string
+          pattern: "^\\d{2}:\\d{2}$"
+        agentur:
+          $ref: "#/components/schemas/Agency"
+        responsible:
+          type: string
+          nullable: true
+          description: Advisor name
+        location:
+          type: object
+          nullable: true
+          properties:
+            description:
+              type: string
+              description: Room number
+            dienstelleNummer:
+              type: string
+        shortly:
+          type: boolean
+          description: Appointment is imminent
+        legalStatement:
+          type: boolean
+          description: Legally binding (Meldetermin)
+        contactType:
+          type: string
+          enum: [VIDEO, PERSOENLICH, TELEFON]
+        videoUrl:
+          type: string
+          format: uri
+          nullable: true
+        wasCanceled:
+          type: boolean
+        online:
+          type: boolean
+        shiftUrl:
+          type: string
+          nullable: true
+        cancelUrl:
+          type: string
+          nullable: true
+
+    AppointmentSummary:
+      type: object
+      properties:
+        subject:
+          type: string
+        contactType:
+          type: string
+          enum: [VIDEO, PERSOENLICH, TELEFON]
+        date:
+          type: string
+          format: date
+        responsible:
+          type: string
+          nullable: true
+        startTime:
+          type: string
+
+    Agency:
+      type: object
+      properties:
+        name:
+          type: string
+        street:
+          type: string
+        housenumber:
+          type: string
+        plz:
+          type: string
+          pattern: "^\\d{5}$"
+        city:
+          type: string
+        agencyNumber:
+          type: string
+
+    AccessAgencies:
+      type: object
+      properties:
+        sgb2:
+          type: object
+          nullable: true
+          properties:
+            generalEntryUrl:
+              type: string
+              format: uri
+            agency:
+              $ref: "#/components/schemas/Agency"
+        sgb3:
+          type: object
+          nullable: true
+          properties:
+            generalEntryUrl:
+              type: string
+              format: uri
+            agency:
+              $ref: "#/components/schemas/Agency"
+
+    # --- Postfach ---
+    PostfachContext:
+      type: object
+      properties:
+        identity:
+          type: string
+          description: "URN format: urn:bafor:step:person:kundennummer:{id}"
+        actingOnBehalf:
+          type: string
+        actingOnBehalfOnlineKommunikation:
+          type: boolean
+        actingOnBehalfKontoStatus:
+          type: string
+          enum: [AKTIV, GESPERRT, INAKTIV]
+        loginVNiveau:
+          type: string
+          enum: [STORK-QAA-Level-1, STORK-QAA-Level-2, STORK-QAA-Level-3, STORK-QAA-Level-4]
+        kundenTyp:
+          type: string
+          enum: [Person, Unternehmen]
+
+    Ordner:
+      type: object
+      properties:
+        id:
+          type: string
+          enum: [entwurf, erhalten, geloescht, gesendet]
+        name:
+          type: string
+        anzahlGesamt:
+          type: integer
+        anzahlUngelesen:
+          type: integer
+
+    NachrichtSummary:
+      type: object
+      required: [nachrichtId, datum, gelesen, ordnerType, bezug, betreff, typ]
+      properties:
+        nachrichtId:
+          type: string
+          format: uuid
+        datum:
+          type: string
+          format: date-time
+        gelesen:
+          type: boolean
+        antwortErlaubt:
+          type: boolean
+        ordnerType:
+          type: string
+          enum: [erhalten, gesendet, entwurf, geloescht]
+        anhang:
+          type: boolean
+        bezug:
+          type: string
+          description: Message category tag
+        betreff:
+          type: string
+        dienststellennummer:
+          type: string
+        dienststellenname:
+          type: string
+        typ:
+          type: string
+          enum: [JC, AA]
+          description: "JC = Jobcenter, AA = Agentur für Arbeit"
+        vNiveauAusreichend:
+          type: boolean
+        vNiveau:
+          type: string
+        leserId:
+          type: string
+          nullable: true
+        leserName:
+          type: string
+          nullable: true
+        vertretungsBeziehung:
+          type: string
+          enum: [NICHT_RELEVANT, VERTRETUNG, BEVOLLMAECHTIGT]
+        autorId:
+          type: string
+          nullable: true
+        autorName:
+          type: string
+        senderId:
+          type: string
+        senderName:
+          type: string
+        empfaengerId:
+          type: string
+        empfaengerName:
+          type: string
+
+    DienststellenVorbelegung:
+      type: object
+      properties:
+        dstVorbelegungSGB2:
+          $ref: "#/components/schemas/DienststelleVorbelegung"
+        dstVorbelegungSGB3:
+          $ref: "#/components/schemas/DienststelleVorbelegung"
+        dstVorbelegungFamka:
+          $ref: "#/components/schemas/DienststelleVorbelegung"
+        dstVorbelegungZav:
+          $ref: "#/components/schemas/DienststelleVorbelegung"
+        wohnanschriftBekannt:
+          type: boolean
+        vorbelegt:
+          type: string
+          enum: [JC, AA, Famka, ZAV]
+
+    DienststelleVorbelegung:
+      type: object
+      nullable: true
+      properties:
+        dienststellenNummer:
+          type: string
+        dienststellenName:
+          type: string
+        dienststellenArt:
+          type: string
+          enum: [GE, AA, Famka, ZAV]
+        strasse:
+          type: string
+        hausnummer:
+          type: string
+        plz:
+          type: string
+        ort:
+          type: string
+        teilnehmend:
+          type: boolean
+
+    Anliegen:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        subanliegen:
+          type: array
+          items:
+            $ref: "#/components/schemas/Subanliegen"
+
+    Subanliegen:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        bezug:
+          type: string
+          description: Becomes the message's category tag
+        hinweis:
+          type: string
+          nullable: true
+          description: Help text (may contain HTML)
+        link:
+          type: string
+          nullable: true
+        linkText:
+          type: string
+          nullable: true
+        nachrichtErstellen:
+          type: boolean
+          description: Whether message creation is allowed
+        anhangErlaubt:
+          type: boolean
+          description: Whether file attachment is allowed
+
+    # --- Vermittlung ---
+    JsonApiPersonResponse:
+      type: object
+      properties:
+        jsonapi:
+          type: object
+          properties:
+            version:
+              type: string
+              const: "1.0"
+        data:
+          type: object
+          properties:
+            type:
+              type: string
+              const: Person
+            id:
+              type: string
+            meta:
+              type: object
+              properties:
+                anlagedatum:
+                  type: string
+                  format: date-time
+                aenderungsdatum:
+                  type: string
+                  format: date-time
+        included:
+          type: array
+          items:
+            type: object
+
+    NksKundeninformation:
+      type: object
+      properties:
+        persoenlicheDaten:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+        lebenslauf:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            data:
+              type: object
+              properties:
+                uebermittlungsDatum:
+                  type: string
+                  format: date-time
+        eignung:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+        faehigkeiten:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+        istAVgemeldet:
+          type: boolean
+        istBBgemeldet:
+          type: boolean
+
+    OaloKundeninformation:
+      type: object
+      properties:
+        oasu:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+        lebenslauf:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+        faehigkeiten:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+        beratungsgespraech:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+        oalo:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+        istAVgemeldet:
+          type: boolean
+        istBBgemeldet:
+          type: boolean
+        tdaBestaetigt:
+          type: boolean
+
+    # --- Jobboerse ---
+    VermittlungsvorschlaegeResponse:
+      type: object
+      properties:
+        anzahlGesamt:
+          type: integer
+        anzahlNeue:
+          type: integer
+        einsprungslink:
+          type: string
+          format: uri
+        letzterAufruf:
+          type: string
+          format: date-time
+
+    StellenempfehlungenResponse:
+      type: object
+      properties:
+        anzahlGesamt:
+          type: integer
+        anzahlNeue:
+          type: integer
+        einsprungslink:
+          type: string
+          format: uri
+
+    VermittlungsPostfachSummary:
+      type: object
+      properties:
+        anzahlGesamt:
+          type: integer
+        anzahlUngelesen:
+          type: integer
+        name:
+          type: string
+        id:
+          type: string
+
+    # --- Notifications ---
+    MitteilungenAnzahl:
+      type: object
+      properties:
+        gesamt:
+          type: integer
+        keineKenntnisnahme:
+          type: integer
+
+    MailKonfiguration:
+      type: object
+      properties:
+        emailAdresse:
+          type: string
+          format: email
+        emailAktiviert:
+          type: boolean
+        mitteilungsArten:
+          type: array
+          items:
+            type: object
+            properties:
+              mitteilungsArt:
+                type: string
+                enum:
+                  - NEUE_PFNACHRICHT_ERHALTEN_LEISTUNG
+                  - NEUE_PFNACHRICHT_ERHALTEN_VERMITTLUNG
+                  - NEUER_VERMITTLUNGSVORSCHLAG
+                  - NEUE_STELLENEMPFEHLUNG
+                  - VAM_AG_VERMITTLUNGSVORSCHLAG_ERSTELLT
+                  - VAM_BEWERBUNG_EINGEGANGEN
+              zustellungsArt:
+                type: string
+                enum: [SOFORT, TAEGLICH, KEINE]
+
+    # --- Dienststellen ---
+    OrgeinheittypResponse:
+      type: object
+      properties:
+        content:
+          type: object
+          properties:
+            id:
+              type: integer
+            dstnr5:
+              type: string
+            orgEinheitTyp:
+              type: string
+              enum: [JOBCENTER, AGENTUR]
+        _links:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              href:
+                type: string
+                format: uri
+
+    DienststelleKontakt:
+      type: object
+      properties:
+        name:
+          type: string
+        strasse:
+          type: string
+        ort:
+          type: string
+        postort:
+          type: string
+        plz:
+          type: string
+        hausnummer:
+          type: string
+        lpurl:
+          type: string
+
+    # --- Postfach CRUD Schemas ---
+    NachrichtDetail:
+      type: object
+      description: Full message with body text (schema predicted, not yet captured via network)
+      properties:
+        nachrichtId:
+          type: string
+          format: uuid
+        datum:
+          type: string
+          format: date-time
+        gelesen:
+          type: boolean
+        antwortErlaubt:
+          type: boolean
+        ordnerType:
+          type: string
+        anhang:
+          type: boolean
+        anhaengeMetadaten:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnhangMetadaten"
+        bezug:
+          type: string
+        betreff:
+          type: string
+        text:
+          type: string
+          description: Full message body text
+        dienststellennummer:
+          type: string
+        dienststellenname:
+          type: string
+        typ:
+          type: string
+          enum: [JC, AA]
+        autorName:
+          type: string
+        senderName:
+          type: string
+        empfaengerName:
+          type: string
+
+    AnhangMetadaten:
+      type: object
+      properties:
+        id:
+          type: string
+        dateiname:
+          type: string
+          maxLength: 80
+          description: |
+            Filename restrictions (verified from JS source):
+            - Max 80 characters
+            - Must not start/end with dot or space
+            - Must not be OS-reserved word (CON, NUL, PRN, etc.)
+            - Only ERLAUBTEZEICHEN charset allowed
+            - No duplicate filenames per message
+        groesse:
+          type: integer
+          description: File size in bytes (max 7.5 MB = 7864320 bytes)
+          maximum: 7864320
+        mimeType:
+          type: string
+          enum:
+            - application/pdf
+            - image/png
+            - image/jpeg
+            - image/bmp
+          description: Only these 4 MIME types accepted (validated via magic bytes!)
+
+    UploadRestrictions:
+      type: object
+      description: |
+        Upload constraints (verified from JS source + translations):
+
+        ## Accepted Formats (VALID_FILE_TYPES — exactly 4, no others!)
+        - application/pdf (magic: 25504446 = %PDF)
+        - image/png (magic: 89504E47)
+        - image/jpeg (magic: FFD8FF)
+        - image/bmp (magic: 424D)
+
+        ## Validation
+        - Client: Magic-bytes check via FileReader.slice(0,4)
+        - Server: Re-validates (error FFP 470)
+        - All uploads are server-side converted to PDF
+
+        ## Size Limits
+        - Single file: 7.5 MB (FFP 450)
+        - Total per message: 7.5 MB (FFP 455)
+        - PDF after conversion: 7.5 MB (FFP 451)
+        - Max pages (PDF): 100 (FFP 475)
+
+        ## Filename Rules
+        - Max length: 80 chars (FFP 430)
+        - No invalid characters (FFP 440)
+        - Must not start with dot (FFP 441)
+        - Must not end with dot (FFP 442)
+        - Must not start with space (FFP 443)
+        - Must not end with space (FFP 444)
+        - No OS-reserved words (FFP 445)
+        - No duplicates per message (FFP 490)
+
+        ## Non-convertible PDFs
+        - Form PDFs (FFP 471)
+        - Encrypted PDFs (FFP 472)
+        - PDFs with embedded attachments (FFP 473)
+        - Images with transparent background (FFP 474)
+      properties:
+        maxSingleFileBytes:
+          type: integer
+          const: 7864320
+          description: 7.5 MB
+        maxTotalBytes:
+          type: integer
+          const: 7864320
+          description: 7.5 MB total for all attachments
+        maxPages:
+          type: integer
+          const: 100
+        maxFilenameLength:
+          type: integer
+          const: 80
+        validMimeTypes:
+          type: array
+          items:
+            type: string
+          const:
+            - application/pdf
+            - image/png
+            - image/jpeg
+            - image/bmp
+        magicBytes:
+          type: object
+          properties:
+            PDF:
+              type: string
+              const: "25504446"
+            PNG:
+              type: string
+              const: "89504E47"
+            JPG:
+              type: string
+              const: "FFD8FF"
+            BMP:
+              type: string
+              const: "424D"
+
+    SendNachrichtRequest:
+      type: object
+      description: |
+        Request body for sending or drafting a message.
+        Exact field names not yet verified via network capture.
+        Predicted from form fields + anliegen catalog.
+
+        ## Server-side validation (FFP error codes):
+        - FFP 200: betreff missing
+        - FFP 204: bezug missing
+        - FFP 206: dienststellennummer missing
+        - FFP 208: dienststellenname missing
+        - FFP 209: vertrauensniveau missing
+        - FFP 210: betreff too long (max 255 chars server-side!)
+        - FFP 220: invalid chars in betreff
+        - FFP 230: text missing
+        - FFP 310: text too long (server says max 1000 chars — DISCREPANCY with UI max 5000!)
+        - FFP 320: invalid chars in text
+      required:
+        - betreff
+        - text
+        - bezug
+        - dienststellennummer
+        - dienststellenname
+      properties:
+        betreff:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: |
+            Subject line. JobSync uses browser-side limit (50 chars) to behave
+            like a normal user. Server technically accepts up to 255 (FFP 210).
+            Only ERLAUBTEZEICHEN charset allowed (FFP 220).
+        text:
+          type: string
+          minLength: 1
+          maxLength: 5000
+          description: |
+            Message body. JobSync uses browser-side limit (5000 chars).
+            Server FFP 310 error mentions 1000 — may be outdated translation.
+            Only ERLAUBTEZEICHEN + ERLAUBTE_LEERZEICHEN (tab, newline, CR) allowed.
+        bezug:
+          type: string
+          description: |
+            Category tag from anliegen catalog (e.g. "Anfrage Allgemeine Anfrage").
+            Must match a valid bezug for the target dienststelle.
+            FFP 1001: some bezug values only for initial messages.
+            FFP 1002: some bezug values only for replies.
+        dienststellennummer:
+          type: string
+          pattern: "^\\d{5}$"
+          description: 5-digit target office number (FFP 206 if missing, FFP 1000 if invalid)
+        dienststellenname:
+          type: string
+          description: Target office display name (FFP 208 if missing)
+        dienststellenArt:
+          type: string
+          enum: [AA, JC, GE]
+          description: Office type
+        anliegenId:
+          type: string
+          description: Anliegen ID from catalog
+        subanliegenId:
+          type: string
+          description: Sub-anliegen ID from catalog
+
+    # --- Leistungen ---
+    LeistungenResponse:
+      type: object
+      properties:
+        insgLeistungs:
+          type: array
+          items:
+            type: object
+        algLeistungs:
+          type: array
+          items:
+            type: object
+        babLeistungs:
+          type: array
+          items:
+            type: object
+        failedCalls:
+          type: array
+          items:
+            type: object
+
+    BgDatenResponse:
+      type: object
+      properties:
+        bgDaten:
+          type: object
+          properties:
+            aktuelleBG:
+              type: object
+              properties:
+                bgNummer:
+                  type: string
+                baTeam:
+                  type: object
+                  properties:
+                    dienststellennummer:
+                      type: string
+                    teamkennzeichen:
+                      type: string
+
+    # --- System ---
+    Wartungshinweis:
+      type: object
+      properties:
+        fromDate:
+          type: string
+          format: date-time
+        state:
+          type: string
+          enum: [active_from_to, inactive]
+        text:
+          type: string
+          description: HTML content
+        toDate:
+          type: string
+          format: date-time
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        OAuth2 Bearer Token from Keycloak (sso.arbeitsagentur.de/auth/realms/OCP).
+        Obtained via PKCE Authorization Code flow.
+        Expires in 240s, auto-refreshed by oiam-oauth-wc.
+
+security:
+  - bearerAuth: []
