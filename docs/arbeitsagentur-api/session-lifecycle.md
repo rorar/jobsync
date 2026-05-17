@@ -10,7 +10,7 @@
 | Access Token Lifetime | 240 Sekunden (4 Min) | Token-Response `expires_in` |
 | Refresh Token Lifetime (technisch) | 3600 Sekunden (1 Std) | Token-Response `refresh_expires_in` |
 | Refresh Token nach 30 Min | **UNGÜLTIG** (`invalid_grant: Session not active`) | curl-Test verifiziert |
-| Inaktivitäts-Timeout | ~5 Minuten | `session-expiration-inactivity-warn-popup` |
+| Inaktivitäts-Timeout | **~2-3 Minuten** (nicht 5!) | Verifiziert 2026-05-17: Popup nach ~2-3 Min ohne UI-Events |
 | Logout-Auslöser | **Client-seitig** (oiam-oauth-wc) | Network-Capture |
 | Logout-Methode | `GET /openid-connect/logout?id_token_hint=...` | Network-Capture |
 | Session-Timer Location | NUR in `profil-ui` (NICHT in kokos-ui, termine) | DOM-Inspection |
@@ -45,14 +45,38 @@ Der Logout wird **CLIENT-seitig** ausgelöst. Mögliche Interventionspunkte:
 
 **Hypothese (zu verifizieren):** Wenn der Logout-Request nie gesendet wird, lebt die SSO-Session weiter (Refresh Token bis 3600s gültig). Der Server terminiert nicht aktiv — nur der Client tut es.
 
-### Architektur-Optionen
+### Verifiziert: Inaktivitäts-Timeout (Blindspot #6, 2026-05-17)
+
+**Ergebnis:** Der Inaktivitäts-Timer liegt bei **~2-3 Minuten** (nicht 5 wie im UI-Text suggeriert).
+
+**Experiment:**
+- Login via BundID/eID
+- "Angemeldet bleiben" geklickt (Reset des Inaktivitäts-Timers)
+- Danach NUR CDP-Polling (Runtime.evaluate alle 10s) — keine UI-Interaktion
+- Nach ~2-3 Min: `session-expiration-inactivity-warn-popup` erscheint erneut
+
+**Schlüsselerkenntnis:** CDP/API-Calls zählen NICHT als "Aktivität". Nur echte UI-Events (Maus-Klick, Tastatur, Scroll) resetten den Timer. Das Popup bietet einen "Angemeldet bleiben" Button der den Timer zurücksetzt.
+
+**Web Component Architektur:**
+- `session-expiration-inactivity-warn-popup` — Stencil.js WC (Shadow DOM, `class="hydrated"`)
+- `session-timer` — SVG-Kreis im `bahf-header` Shadow DOM, zeigt verbleibende Zeit als Kuchenstück
+- Popup-Inhalt (Buttons, Text) liegt im verschachtelten Shadow DOM — nicht per `querySelector` erreichbar
+- Erreichbar nur via `DOM.performSearch` (CDP) oder Event-Intercept
+
+**Implikation für Keep-Alive:**
+- Option D (API-Calls als Aktivität) ist **AUSGESCHLOSSEN** — funktioniert nicht
+- Option C (Timer DOM-Reset) oder direkter Klick auf "Angemeldet bleiben" sind die einzigen Wege
+- Für Browser-Extension: Event-Listener auf `session-expiration-inactivity-warn-popup` Erscheinen → auto-click "Angemeldet bleiben"
+
+### Architektur-Optionen (aktualisiert)
 
 | Option | Mechanismus | Risiko | Effektives Fenster |
 |---|---|---|---|
 | A: Nichts tun | Session endet nach 30 Min | Kein | 30 Min |
 | B: Logout intercepten | Block GET /logout in Extension | Mittel — Server könnte parallel invalidieren | Bis 60 Min? |
 | C: Timer resetten | DOM-Manipulation des session-timer WC | Niedrig — rein client-seitig | Theoretisch unbegrenzt |
-| D: Activity simulieren | Periodisch API-Calls machen (als "User-Aktivität") | Niedrig | Bis Inaktivitäts-Timeout reset |
+| ~~D: Activity simulieren~~ | ~~API-Calls als Aktivität~~ | ~~VERIFIZIERT: FUNKTIONIERT NICHT~~ | — |
+| E: Auto-Click "Angemeldet bleiben" | MutationObserver auf popup-Erscheinen → click | Niedrig — natürliches Verhalten | Bis 30-Min Hard-Limit |
 
 **Noch zu klären:** Ist der 30-Min-Timer ein ABSOLUTES Limit (auth_time + 30min) oder ein INAKTIVITÄTS-Timer der durch Activity resetbar ist?
 
