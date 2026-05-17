@@ -57,10 +57,12 @@ Cookie deletion via `document.cookie = "oiamsession=; expires=Thu, 01 Jan 1970..
 ### Verified: direct state-machine path is the real killer
 The `check(t)` timer dispatches `oiamLogoutEvent` (which we block), but the WC's internal event queue handler `handleLogoutEvent` runs synchronously and calls `doLogout → doSignout → signoutRedirect` which navigates the page away. `stopImmediatePropagation` only prevents OTHER listeners — the WC's OWN handler (registered first) still fires.
 
-## Next (v6 approach)
-1. **`Page.addScriptToEvaluateOnNewDocument`** to monkey-patch `signoutRedirect` / `location.assign` / `location.replace` BEFORE the WC loads. This is the only way to prevent navigation since it happens synchronously in the same microtask.
-2. **Alternative:** Intercept `oidc-client`'s `UserManager.signoutRedirect` method since the WC uses oidc-client-ts internally.
-3. **Fix Login BundID Welcome hang** — `waitForAndClick` for Tml88 intermittently fails
+### v6 location.assign/replace/href patches: ALSO FAILED
+`Page.addScriptToEvaluateOnNewDocument` patches `location.assign`, `location.replace`, and `location.href` setter. `n=0` navigations blocked — WC does NOT use these APIs. The oidc-client-ts `RedirectNavigator` caches `location[method].bind()` — but our patch should intercept the `.bind()` call since it runs pre-load. Unknown escape mechanism remains.
+
+## Next (v7 approach)
+1. **Patch `signoutRedirect` on oidc-client's UserManager prototype** via `Page.addScriptToEvaluateOnNewDocument`. The WC creates `UserManager` at init time. If we patch the prototype before the module loads, `signoutRedirect()` becomes a no-op. Alternative: patch `RedirectNavigator.prototype.prepare` to return a no-op navigator.
+2. **Fix Login BundID Welcome hang** — `waitForAndClick` for Tml88 intermittently fails
 
 ## Previous session state (still valid)
 - OpenAPI spec: 37 paths, 39 schemas (`docs/arbeitsagentur-api/openapi.yaml`)

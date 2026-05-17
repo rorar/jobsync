@@ -216,65 +216,77 @@ const LOGOUT_EVENTS = [
     return JSON.parse(result || '{"ok":false,"error":"evaluate_failed"}');
   }
 
-  // --- Layer 5: Cookie Restore + SessionStorage Protection ---
-  // Cookie setter override DOES NOT WORK (Chrome protects native cookie setter).
-  // Instead: backup cookie value every 500ms, restore immediately when deleted.
-  // The check(t) timer reads the cookie every 1s — if we restore within 500ms,
-  // it never sees the cookie missing.
+  // --- Layer 5: Navigation Block + SessionStorage Protection ---
+  // The WC's logout path ends in:
+  //   doSignout() → userManager.signoutRedirect()
+  //     → RedirectNavigator.prepare({redirectMethod: "assign"})
+  //       → window.self.location["assign"].bind(location)
+  //         → navigate(url) → location.assign(logoutUrl)
   //
-  // Cookie format (from source analysis):
-  //   oiamsession={encoded JSON}; path=/; domain=.arbeitsagentur.de; samesite=lax;
-  //   JSON contains: {instance, clientid, additionalinfo, idlestart, maxstart, authnlevel, ...}
+  // We MUST patch location.assign and location.replace BEFORE the WC loads.
+  // Page.addScriptToEvaluateOnNewDocument runs before all page scripts.
+  // The patch blocks navigation to logout/arbeitsagentur.de URLs only.
 
   async function setupProtection() {
-    await evaluate(`(function() {
-      if (window.__keepAliveProtection) return 'already';
-      window.__keepAliveProtection = { cookieBackup: null, restoreCount: 0 };
+    const PROTECTION_CODE = `(function() {
+      if (window.__keepAliveV5Protection) return 'already';
+      window.__keepAliveV5Protection = { navBlocked: 0 };
 
-      // --- Cookie Restore (poll-based) ---
-      function getCookieValue(name) {
-        const prefix = name + '=';
-        const cookies = decodeURIComponent(document.cookie).split(';');
-        for (const c of cookies) {
-          const trimmed = c.trimStart();
-          if (trimmed.startsWith(prefix)) return trimmed.substring(prefix.length);
-        }
-        return null;
+      // --- Navigation Block ---
+      // Patch location.assign and location.replace to block logout redirects.
+      // The WC calls: window.self.location["assign"](logoutUrl)
+      // We block URLs containing "openid-connect/logout" or navigating to
+      // the bare arbeitsagentur.de startpage (post-logout redirect).
+
+      function isLogoutNavigation(url) {
+        if (!url) return false;
+        const s = String(url);
+        return s.includes('openid-connect/logout') ||
+               s.includes('post_logout_redirect_uri') ||
+               (s === 'https://www.arbeitsagentur.de/' || s === 'https://www.arbeitsagentur.de');
       }
 
-      function getDomain() {
-        const h = window.location.hostname;
-        const parts = h.split('.');
-        return parts.length >= 2 ? '.' + parts.slice(-2).join('.') : h;
-      }
+      const origAssign = location.assign.bind(location);
+      const origReplace = location.replace.bind(location);
 
-      // Backup + restore loop (every 200ms for fast detection)
-      setInterval(function() {
-        const val = getCookieValue('oiamsession');
-        if (val) {
-          // Cookie exists — backup it
-          window.__keepAliveProtection.cookieBackup = val;
-        } else if (window.__keepAliveProtection.cookieBackup) {
-          // Cookie DELETED — restore from backup immediately!
-          const domain = getDomain();
-          document.cookie = 'oiamsession=' + window.__keepAliveProtection.cookieBackup + '; path=/; domain=' + domain + '; samesite=lax;';
-          window.__keepAliveProtection.restoreCount++;
-          console.log('[keep-alive] COOKIE RESTORED (#' + window.__keepAliveProtection.restoreCount + ')');
+      location.assign = function(url) {
+        if (isLogoutNavigation(url)) {
+          window.__keepAliveV5Protection.navBlocked++;
+          console.log('[keep-alive] BLOCKED location.assign: ' + String(url).substring(0, 80));
+          return;
         }
-      }, 200);
+        return origAssign(url);
+      };
 
-      // Also backup+restore BA-SessionId (used by hasSessionBeenTerminated)
-      let baSessionBackup = null;
-      setInterval(function() {
-        const val = getCookieValue('BA-SessionId');
-        if (val) {
-          baSessionBackup = val;
-        } else if (baSessionBackup) {
-          const domain = getDomain();
-          document.cookie = 'BA-SessionId=' + baSessionBackup + '; path=/; domain=' + domain + '; samesite=lax;';
-          console.log('[keep-alive] BA-SessionId RESTORED');
+      location.replace = function(url) {
+        if (isLogoutNavigation(url)) {
+          window.__keepAliveV5Protection.navBlocked++;
+          console.log('[keep-alive] BLOCKED location.replace: ' + String(url).substring(0, 80));
+          return;
         }
-      }, 200);
+        return origReplace(url);
+      };
+
+      // Also patch window.location setter for direct assignments
+      // (window.location = "url" or window.location.href = "url")
+      try {
+        const origHrefDesc = Object.getOwnPropertyDescriptor(Location.prototype, 'href');
+        if (origHrefDesc?.set) {
+          const origHrefSet = origHrefDesc.set;
+          Object.defineProperty(location, 'href', {
+            get: origHrefDesc.get,
+            set: function(url) {
+              if (isLogoutNavigation(url)) {
+                window.__keepAliveV5Protection.navBlocked++;
+                console.log('[keep-alive] BLOCKED location.href=: ' + String(url).substring(0, 80));
+                return;
+              }
+              return origHrefSet.call(this, url);
+            },
+            configurable: true
+          });
+        }
+      } catch(e) { /* location.href override may not work in all browsers */ }
 
       // --- SessionStorage Protection ---
       const origRemove = sessionStorage.removeItem.bind(sessionStorage);
@@ -299,9 +311,15 @@ const LOGOUT_EVENTS = [
       };
 
       return 'installed';
-    })()`);
+    })()`;
 
-    log('Layer 5: Cookie restore (200ms poll) + sessionStorage protection active');
+    // CRITICAL: Inject BEFORE page scripts load (catches WC initialization)
+    await send('Page.addScriptToEvaluateOnNewDocument', { source: PROTECTION_CODE });
+
+    // Also inject into current page (already loaded)
+    await evaluate(PROTECTION_CODE);
+
+    log('Layer 5: Navigation block (assign/replace/href) + sessionStorage protection active');
   }
 
   // --- Setup ---
@@ -390,11 +408,14 @@ const LOGOUT_EVENTS = [
         }
       }
 
-      // Check blocked events
-      const stats = await evaluate(`JSON.stringify(window.__keepAliveV5 || {blocked:0})`);
+      // Check blocked events + nav
+      const stats = await evaluate(`JSON.stringify({
+        ...(window.__keepAliveV5 || {blocked:0}),
+        nav: (window.__keepAliveV5Protection || {navBlocked:0}).navBlocked
+      })`);
       const s = JSON.parse(stats || '{}');
-      if (s.blocked > eventBlockCount) {
-        log(`*** EVENTS BLOCKED: ${s.blocked} total, latest: ${s.reasons?.slice(-3).join(', ')}`);
+      if (s.blocked > eventBlockCount || s.nav > 0) {
+        log(`*** BLOCKED: ${s.blocked} events, ${s.nav} navigations. Latest: ${s.reasons?.slice(-3).join(', ')}`);
         eventBlockCount = s.blocked;
       }
 
