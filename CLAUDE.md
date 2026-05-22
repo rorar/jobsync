@@ -824,15 +824,13 @@ Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` on
 
 **Knip** (`bun knip`) detects unused files, dependencies, exports, and types. Config: `knip.ts`. Use the `/knip` skill for guidance.
 
-**When to run:**
-- After refactorings or deleting features — catch orphaned exports and files
-- Before feature completion — verify no dead code introduced
-- After dependency changes — verify no orphaned packages
+**When to run:** On user request — typically after refactorings, dependency changes, or feature deletions. Not automatically on every commit.
 
 **Commands:**
+- `bun knip --changed` — **primary**: scan only files changed since last commit
+- `bun knip --changed --base main` — scan all changes on current branch
 - `bun knip` — full scan (files, dependencies, exports)
 - `bun knip --dependencies` — fastest check, unused packages only
-- `bun knip --exports` — unused exports only
 - `bun knip:prod` — production dependencies only
 
 **Key config decisions** (in `knip.ts`):
