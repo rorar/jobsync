@@ -820,6 +820,26 @@ Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` on
 - Delegate large-scale changes (translation, formatting) to parallel agents
 - Use DDD terminology in code, comments, commits, and documentation
 
+### Dead Code Detection (Knip)
+
+**Knip** (`bun knip`) detects unused files, dependencies, exports, and types. Config: `knip.ts`. Use the `/knip` skill for guidance.
+
+**When to run:**
+- After refactorings or deleting features — catch orphaned exports and files
+- Before feature completion — verify no dead code introduced
+- After dependency changes — verify no orphaned packages
+
+**Commands:**
+- `bun knip` — full scan (files, dependencies, exports)
+- `bun knip --dependencies` — fastest check, unused packages only
+- `bun knip --exports` — unused exports only
+- `bun knip:prod` — production dependencies only
+
+**Key config decisions** (in `knip.ts`):
+- Side-effect imports (module self-registration via `register-all.ts`, event consumers) are explicit entry points
+- `ignoreExportsUsedInFile: true` — DDD action/model files co-export types used in the same file
+- Generated code (`eures/generated.ts`) and archive directories are excluded
+
 ## Post-Work Checklist
 
 - **When user reports bugs:** IMMEDIATELY add them to `docs/BUGS.md` with ID, description, file, and severity — before starting any fix. BUGS.md is the single source of truth for all known issues.
