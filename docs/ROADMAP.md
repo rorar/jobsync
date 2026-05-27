@@ -1633,6 +1633,23 @@ Eigener Automationstyp der über alle getrackten Jobs läuft — kein Job-Discov
 - Lokale Action-Queue, Optimistic Locking (Version-Field), Conflict Resolution bei Sync
 - Nur bei konkretem User-Demand implementieren
 
+### 3.11 Session Recovery & Stale-Session Guard
+
+**Problem:** JWT enthält User-ID die nach DB-Reset/Migration nicht mehr existiert → alle Schreiboperationen schlagen mit kryptischem FK-Fehler fehl.
+
+**Phase 1 — Stale-Session Guard:**
+- `getCurrentUser()` prüft DB-Existenz der JWT-User-ID (mit In-Memory-Cache, 60s TTL)
+- Bei Mismatch: Return `null` → alle Server Actions behandeln das als "Not authenticated"
+- Dashboard Layout zeigt Banner: *"Deine Sitzung ist ungültig. Bitte melde dich erneut an."* + Abmelden-Button
+- Kein kryptischer P2003-Fehler mehr — klarer Call-to-Action
+
+**Phase 2 — Form State Persistence (`usePersistedForm`):**
+- Custom Hook wrapping `react-hook-form`: auto-save Form-State in `localStorage` (debounced)
+- Key-Schema: `jobsync-form-{formId}`, TTL 30 min, auto-clear bei erfolgreichem Submit
+- Kandidaten: AddJob, AddAutomation, Profile-Sektionen, SMTP-Settings
+- Bei Session Recovery: State wird nach Re-Login automatisch wiederhergestellt
+- Cross-Ref: Ähnlich wie `useKanbanState` (localStorage-Persistenz) und `useStagingLayout`
+
 ---
 
 ## 4. Bewerbungsunterlagen
