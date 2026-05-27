@@ -49,6 +49,7 @@ import { format } from "date-fns";
 import { RecordsPerPageSelector } from "../RecordsPerPageSelector";
 import { RecordsCount } from "../RecordsCount";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
+import { KanbanEmptyState } from "@/components/kanban/KanbanEmptyState";
 import { KanbanViewModeToggle } from "@/components/kanban/KanbanViewModeToggle";
 import { type KanbanViewMode, getPersistedViewMode } from "@/hooks/useKanbanState";
 
@@ -419,6 +420,9 @@ function JobsContainer({
           ) : (
             <>
               {loading && <Loading />}
+              {!loading && jobs.length === 0 && totalJobs === 0 && (
+                <KanbanEmptyState onAddJob={handleKanbanAddJob} />
+              )}
               {jobs.length > 0 && (
                 <>
                   <MyJobsTable

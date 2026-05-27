@@ -1,6 +1,6 @@
 "use client";
 
-import { Inbox } from "lucide-react";
+import { Inbox, PlusCircle } from "lucide-react";
 import { useTranslations } from "@/i18n";
 import { Button } from "@/components/ui/button";
 
@@ -17,6 +17,7 @@ export function KanbanEmptyState({ onAddJob }: KanbanEmptyStateProps) {
       <h3 className="text-lg font-medium mt-4">{t("jobs.kanbanEmptyBoard")}</h3>
       {onAddJob && (
         <Button variant="outline" className="mt-6" onClick={onAddJob}>
+          <PlusCircle className="h-4 w-4" />
           {t("jobs.kanbanEmptyBoardAction")}
         </Button>
       )}
