@@ -328,14 +328,26 @@ export const addJob = async (
 
     const tagIds = tags ?? [];
 
+    // Normalize FK fields: treat empty strings as absent (defense against falsy-bypass)
+    const titleId = title || undefined;
+    const companyId = company || undefined;
+    const locationId = location || undefined;
+    const sourceId = source || undefined;
+    const resumeId = resume || undefined;
+
+    // Required FKs must be present
+    if (!titleId || !companyId) {
+      return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" as const };
+    }
+
     // Verify FK ownership (CON-C01 — prevent cross-user FK injection)
     const [titleOwned, companyOwned, locationOwned, sourceOwned, resumeOwned] =
       await Promise.all([
-        title ? prisma.jobTitle.findFirst({ where: { id: title, createdBy: user.id }, select: { id: true } }) : true,
-        company ? prisma.company.findFirst({ where: { id: company, createdBy: user.id }, select: { id: true } }) : true,
-        location ? prisma.location.findFirst({ where: { id: location, createdBy: user.id }, select: { id: true } }) : true,
-        source ? prisma.jobSource.findFirst({ where: { id: source, createdBy: user.id }, select: { id: true } }) : true,
-        resume ? prisma.resume.findFirst({ where: { id: resume, profile: { userId: user.id } }, select: { id: true } }) : true,
+        prisma.jobTitle.findFirst({ where: { id: titleId, createdBy: user.id }, select: { id: true } }),
+        prisma.company.findFirst({ where: { id: companyId, createdBy: user.id }, select: { id: true } }),
+        locationId ? prisma.location.findFirst({ where: { id: locationId, createdBy: user.id }, select: { id: true } }) : true,
+        sourceId ? prisma.jobSource.findFirst({ where: { id: sourceId, createdBy: user.id }, select: { id: true } }) : true,
+        resumeId ? prisma.resume.findFirst({ where: { id: resumeId, profile: { userId: user.id } }, select: { id: true } }) : true,
       ]);
 
     if (!titleOwned || !companyOwned || !locationOwned || !sourceOwned || !resumeOwned) {
@@ -365,11 +377,11 @@ export const addJob = async (
     const [job, historyEntry] = await prisma.$transaction(async (tx) => {
       const newJob = await tx.job.create({
         data: {
-          jobTitleId: title,
-          companyId: company,
-          locationId: location,
+          jobTitleId: titleId,
+          companyId: companyId,
+          locationId: locationId || null,
           statusId: status,
-          jobSourceId: source,
+          jobSourceId: sourceId || null,
           salaryRange: salaryRange,
           createdAt: new Date(),
           dueDate: dueDate,
@@ -379,7 +391,7 @@ export const addJob = async (
           userId: user.id,
           jobUrl,
           applied,
-          resumeId: resume || null,
+          resumeId: resumeId || null,
           ...(tagIds.length > 0
             ? { tags: { connect: tagIds.map((id) => ({ id })) } }
             : {}),
@@ -460,14 +472,26 @@ export const updateJob = async (
 
     const tagIds = tags ?? [];
 
+    // Normalize FK fields: treat empty strings as absent (defense against falsy-bypass)
+    const titleId = title || undefined;
+    const companyId = company || undefined;
+    const locationId = location || undefined;
+    const sourceId = source || undefined;
+    const resumeId = resume || undefined;
+
+    // Required FKs must be present
+    if (!titleId || !companyId) {
+      return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" as const };
+    }
+
     // Verify FK ownership (CON-C01 — prevent cross-user FK injection)
     const [titleOwned, companyOwned, locationOwned, sourceOwned, resumeOwned] =
       await Promise.all([
-        title ? prisma.jobTitle.findFirst({ where: { id: title, createdBy: user.id }, select: { id: true } }) : true,
-        company ? prisma.company.findFirst({ where: { id: company, createdBy: user.id }, select: { id: true } }) : true,
-        location ? prisma.location.findFirst({ where: { id: location, createdBy: user.id }, select: { id: true } }) : true,
-        source ? prisma.jobSource.findFirst({ where: { id: source, createdBy: user.id }, select: { id: true } }) : true,
-        resume ? prisma.resume.findFirst({ where: { id: resume, profile: { userId: user.id } }, select: { id: true } }) : true,
+        prisma.jobTitle.findFirst({ where: { id: titleId, createdBy: user.id }, select: { id: true } }),
+        prisma.company.findFirst({ where: { id: companyId, createdBy: user.id }, select: { id: true } }),
+        locationId ? prisma.location.findFirst({ where: { id: locationId, createdBy: user.id }, select: { id: true } }) : true,
+        sourceId ? prisma.jobSource.findFirst({ where: { id: sourceId, createdBy: user.id }, select: { id: true } }) : true,
+        resumeId ? prisma.resume.findFirst({ where: { id: resumeId, profile: { userId: user.id } }, select: { id: true } }) : true,
       ]);
 
     if (!titleOwned || !companyOwned || !locationOwned || !sourceOwned || !resumeOwned) {
@@ -515,11 +539,11 @@ export const updateJob = async (
     }
 
     const jobData = {
-      jobTitleId: title,
-      companyId: company,
-      locationId: location,
+      jobTitleId: titleId,
+      companyId: companyId,
+      locationId: locationId || null,
       statusId: status,
-      jobSourceId: source,
+      jobSourceId: sourceId || null,
       salaryRange: salaryRange,
       dueDate: dueDate,
       appliedDate: dateApplied,
@@ -527,7 +551,7 @@ export const updateJob = async (
       jobType: type,
       jobUrl,
       applied,
-      resumeId: resume || null,
+      resumeId: resumeId || null,
       tags: { set: tagIds.map((id) => ({ id })) },
       version: { increment: 1 },
     };

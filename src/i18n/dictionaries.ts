@@ -129,7 +129,8 @@ const core = {
     "errors.invalidSortOrder": "Invalid sort order value",
     "errors.duplicateEntry": "A record with this value already exists",
     "errors.fetchFailed": "Failed to fetch data",
-    "errors.referenceError": "Cannot delete: this record is referenced by other data",
+    "errors.referenceError": "Operation failed: a referenced record does not exist or is still in use",
+    "errors.unknown": "An unexpected error occurred. Please try again.",
     "errors.staleState": "This job was modified in another tab. Please refresh and try again.",
 
     // Server action error messages (F7)
@@ -298,7 +299,8 @@ const core = {
     "errors.invalidSortOrder": "Ungültiger Sortierungswert",
     "errors.duplicateEntry": "Ein Eintrag mit diesem Wert existiert bereits",
     "errors.fetchFailed": "Daten konnten nicht abgerufen werden",
-    "errors.referenceError": "Löschen nicht möglich: Dieser Eintrag wird von anderen Daten referenziert",
+    "errors.referenceError": "Vorgang fehlgeschlagen: Ein referenzierter Datensatz existiert nicht oder wird noch verwendet",
+    "errors.unknown": "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
     "errors.staleState": "Dieser Job wurde in einem anderen Tab geändert. Bitte aktualisieren und erneut versuchen.",
 
     // Server-Action-Fehlermeldungen (F7)
@@ -467,7 +469,8 @@ const core = {
     "errors.invalidSortOrder": "Valeur de tri invalide",
     "errors.duplicateEntry": "Un enregistrement avec cette valeur existe déjà",
     "errors.fetchFailed": "Impossible de récupérer les données",
-    "errors.referenceError": "Suppression impossible : cet enregistrement est référencé par d'autres données",
+    "errors.referenceError": "Opération échouée : un enregistrement référencé n'existe pas ou est encore utilisé",
+    "errors.unknown": "Une erreur inattendue s'est produite. Veuillez réessayer.",
     "errors.staleState": "Ce poste a été modifié dans un autre onglet. Veuillez actualiser et réessayer.",
 
     // Messages d'erreur des actions serveur (F7)
@@ -636,7 +639,8 @@ const core = {
     "errors.invalidSortOrder": "Valor de orden inválido",
     "errors.duplicateEntry": "Ya existe un registro con este valor",
     "errors.fetchFailed": "No se pudieron obtener los datos",
-    "errors.referenceError": "No se puede eliminar: este registro está referenciado por otros datos",
+    "errors.referenceError": "Operación fallida: un registro referenciado no existe o todavía está en uso",
+    "errors.unknown": "Se produjo un error inesperado. Por favor, inténtelo de nuevo.",
     "errors.staleState": "Esta oferta fue modificada en otra pestaña. Por favor, actualice e intente de nuevo.",
 
     // Mensajes de error de acciones del servidor (F7)

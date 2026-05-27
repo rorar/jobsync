@@ -596,6 +596,64 @@ describe("jobActions", () => {
         message: "errors.createJob",
       });
     });
+
+    it("should reject empty-string FK fields instead of bypassing ownership checks", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+
+      const emptyTitleData = { ...jobData, title: "", company: "company-id" };
+      const result1 = await addJob(emptyTitleData);
+      expect(result1).toStrictEqual({
+        success: false,
+        message: "errors.notFound",
+        errorCode: "NOT_FOUND",
+      });
+      // Prisma should never be called when required FKs are empty
+      expect(prisma.jobTitle.findFirst).not.toHaveBeenCalled();
+
+      jest.clearAllMocks();
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+
+      const emptyCompanyData = { ...jobData, title: "title-id", company: "" };
+      const result2 = await addJob(emptyCompanyData);
+      expect(result2).toStrictEqual({
+        success: false,
+        message: "errors.notFound",
+        errorCode: "NOT_FOUND",
+      });
+      expect(prisma.company.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("should treat empty optional FKs as null, not empty string", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      // Don't mock location/source findFirst — they shouldn't be called for empty strings
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue({ id: "status-id" });
+      const createdJob = {
+        ...jobData,
+        id: "new-job-id",
+        Status: { id: "status-id", label: "Bookmarked", value: "bookmarked" },
+      };
+      const historyEntry = { id: "history-1" };
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) => {
+        return fn({
+          job: { create: jest.fn().mockResolvedValue(createdJob) },
+          jobStatusHistory: { create: jest.fn().mockResolvedValue(historyEntry) },
+        });
+      });
+
+      const dataWithEmptyOptionals = {
+        ...jobData,
+        location: "",
+        source: "",
+        resume: "",
+      };
+      const result = await addJob(dataWithEmptyOptionals);
+      expect(result.success).toBe(true);
+      // Empty optional FK fields should NOT trigger ownership queries
+      expect(prisma.location.findFirst).not.toHaveBeenCalled();
+      expect(prisma.jobSource.findFirst).not.toHaveBeenCalled();
+    });
   });
   describe("updateJob", () => {
     it("should update a job successfully", async () => {

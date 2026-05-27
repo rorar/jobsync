@@ -199,20 +199,21 @@ export function AddJob({
         result = await addJob(data);
       }
 
-      reset();
-      setDialogOpen(false);
       if (!result.success) {
         toast({
           variant: "destructive",
           title: t("jobs.error"),
-          description: result.message,
+          description: t(result.message ?? "errors.unknown"),
         });
-      } else {
-        toast({
-          variant: "success",
-          description: editJob ? t("jobs.updatedSuccess") : t("jobs.createdSuccess"),
-        });
+        return;
       }
+
+      reset();
+      setDialogOpen(false);
+      toast({
+        variant: "success",
+        description: editJob ? t("jobs.updatedSuccess") : t("jobs.createdSuccess"),
+      });
       redirect(data.sendToQueue && !editJob ? "/dashboard/staging" : "/dashboard/myjobs");
     });
   }
@@ -312,7 +313,7 @@ export function AddJob({
                                 toast({
                                   variant: "destructive",
                                   title: t("common.error"),
-                                  description: res.message,
+                                  description: t(res.message ?? "errors.unknown"),
                                 });
                                 return null;
                               }
@@ -344,7 +345,7 @@ export function AddJob({
                                 toast({
                                   variant: "destructive",
                                   title: t("common.error"),
-                                  description: res.message,
+                                  description: t(res.message ?? "errors.unknown"),
                                 });
                                 return null;
                               }
@@ -376,7 +377,7 @@ export function AddJob({
                                 toast({
                                   variant: "destructive",
                                   title: t("common.error"),
-                                  description: res.message,
+                                  description: t(res.message ?? "errors.unknown"),
                                 });
                                 return null;
                               }
@@ -441,7 +442,7 @@ export function AddJob({
                               toast({
                                 variant: "destructive",
                                 title: t("common.error"),
-                                description: res.message,
+                                description: t(res.message ?? "errors.unknown"),
                               });
                               return null;
                             }
