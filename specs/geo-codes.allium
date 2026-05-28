@@ -63,19 +63,19 @@ contract GeoCodeLookupContract {
     get_countries: (locale: String) -> List<CountryInfo>
     get_subdivisions: (country_code: String, locale: String) -> List<SubdivisionInfo>
 
-    -- Normalization
-    normalize_country: (input: String) -> String
-    country_from_nuts: (nuts_code: String) -> String
-    nuts_to_subdivision: (nuts_code: String) -> String
+    -- Normalization (all return null/undefined for unrecognisable input)
+    normalize_country: (input: String) -> String?
+    country_from_nuts: (nuts_code: String) -> String?
+    nuts_to_subdivision: (nuts_code: String) -> String?
 
     -- Validation
     is_valid_country_code: (code: String) -> Boolean
     is_valid_subdivision_code: (country_code: String, subdivision_code: String) -> Boolean
 
-    -- Geo + Flags (Layer 3: amckenna41/iso3166-2)
-    get_subdivision_geo: (country_code: String, subdivision_code: String) -> GeoCoordinate
-    get_subdivision_flag: (country_code: String, subdivision_code: String) -> String
-    get_subdivision_type: (country_code: String, subdivision_code: String) -> String
+    -- Geo + Flags (Layer 3: amckenna41/iso3166-2, null for unknown codes)
+    get_subdivision_geo: (country_code: String, subdivision_code: String) -> GeoCoordinate?
+    get_subdivision_flag: (country_code: String, subdivision_code: String) -> String?
+    get_subdivision_type: (country_code: String, subdivision_code: String) -> String?
 
     @invariant CountryCodeFormat
         -- All returned country codes are ISO 3166-1 alpha-2

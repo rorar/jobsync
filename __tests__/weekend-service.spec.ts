@@ -16,32 +16,32 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("getWeekendDays", () => {
-  it("returns {6, 0} (Saturday + Sunday) for Germany", () => {
+  it("returns [6, 7] (Saturday + Sunday) for Germany in ISO 8601", () => {
     const days = getWeekendDays("DE");
-    expect(days.has(6)).toBe(true); // Saturday
-    expect(days.has(0)).toBe(true); // Sunday
-    expect(days.size).toBe(2);
+    expect(days).toContain(6); // Saturday (ISO)
+    expect(days).toContain(7); // Sunday (ISO)
+    expect(days).toHaveLength(2);
   });
 
-  it("returns {6, 0} (Saturday + Sunday) for the United States", () => {
+  it("returns [6, 7] (Saturday + Sunday) for the United States in ISO 8601", () => {
     const days = getWeekendDays("US");
-    expect(days.has(6)).toBe(true);
-    expect(days.has(0)).toBe(true);
-    expect(days.size).toBe(2);
+    expect(days).toContain(6);
+    expect(days).toContain(7);
+    expect(days).toHaveLength(2);
   });
 
-  it("returns {6, 0} for France", () => {
+  it("returns [6, 7] for France", () => {
     const days = getWeekendDays("FR");
-    expect(days.has(6)).toBe(true);
-    expect(days.has(0)).toBe(true);
-    expect(days.size).toBe(2);
+    expect(days).toContain(6);
+    expect(days).toContain(7);
+    expect(days).toHaveLength(2);
   });
 
-  it("returns {6, 0} for Austria", () => {
+  it("returns [6, 7] for Austria", () => {
     const days = getWeekendDays("AT");
-    expect(days.has(6)).toBe(true);
-    expect(days.has(0)).toBe(true);
-    expect(days.size).toBe(2);
+    expect(days).toContain(6);
+    expect(days).toContain(7);
+    expect(days).toHaveLength(2);
   });
 
   it("is case-insensitive — lowercase 'de' equals uppercase 'DE'", () => {
@@ -50,16 +50,22 @@ describe("getWeekendDays", () => {
     expect(lower).toEqual(upper);
   });
 
-  it("defaults to {6, 0} (Sat + Sun) for an unknown country code (XX)", () => {
+  it("defaults to [6, 7] (Sat + Sun) for an unknown country code (XX)", () => {
     const days = getWeekendDays("XX");
     // Falls back to CLDR "001" (World default = Sat+Sun)
-    expect(days.has(6)).toBe(true);
-    expect(days.has(0)).toBe(true);
+    expect(days).toContain(6);
+    expect(days).toContain(7);
   });
 
-  it("returns a Set (not an array)", () => {
+  it("returns a number[] array (not a Set)", () => {
     const days = getWeekendDays("DE");
-    expect(days).toBeInstanceOf(Set);
+    expect(Array.isArray(days)).toBe(true);
+    expect(days).not.toBeInstanceOf(Set);
+  });
+
+  it("does NOT contain JS day 0 (old Sunday format)", () => {
+    const days = getWeekendDays("DE");
+    expect(days).not.toContain(0); // JS Sunday was 0, ISO Sunday is 7
   });
 
   it("is idempotent — calling twice returns equivalent results", () => {

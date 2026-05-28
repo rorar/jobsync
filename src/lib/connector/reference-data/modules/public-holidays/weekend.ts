@@ -2,11 +2,10 @@
  * Holiday Module — Weekend Detection
  *
  * Determines weekend days per country using CLDR supplemental data.
- * Falls back to Intl.Locale.getWeekInfo() if available (Node 22+),
- * otherwise uses cldr-core JSON as the definitive source.
  *
- * Weekend day numbers follow JavaScript convention:
- *   0 = Sunday, 1 = Monday, ..., 6 = Saturday
+ * External API uses ISO 8601 day numbers: 1=Mon, 2=Tue, ..., 7=Sun
+ * Internal logic uses JS Date.getDay() convention: 0=Sun, 6=Sat
+ * Conversion happens at the boundary (getWeekendDays return).
  */
 
 // Load CLDR week data at module init (small JSON, ~2KB)
@@ -15,10 +14,10 @@ import weekDataJson from "cldr-core/supplemental/weekData.json";
 const weekData = weekDataJson.supplemental.weekData;
 
 /**
- * CLDR day name → JavaScript day number mapping.
+ * CLDR day name → JavaScript day number mapping (internal).
  * CLDR uses three-letter lowercase day names.
  */
-const CLDR_DAY_MAP: Record<string, number> = {
+const CLDR_DAY_TO_JS: Record<string, number> = {
   sun: 0,
   mon: 1,
   tue: 2,
@@ -28,9 +27,15 @@ const CLDR_DAY_MAP: Record<string, number> = {
   sat: 6,
 };
 
+/** Convert JS day (0=Sun..6=Sat) to ISO 8601 (1=Mon..7=Sun) */
+function jsToIso(jsDay: number): number {
+  return jsDay === 0 ? 7 : jsDay;
+}
+
 /**
  * Resolve weekend start/end from CLDR data.
  * Falls back to the "001" (World) default if the country is not listed.
+ * Returns JS day numbers (internal use only).
  */
 function getWeekendFromCldr(countryCode: string): [number, number] {
   const cc = countryCode.toUpperCase();
@@ -43,15 +48,14 @@ function getWeekendFromCldr(countryCode: string): [number, number] {
     (weekData.weekendEnd as Record<string, string>)["001"];
 
   return [
-    CLDR_DAY_MAP[startDay] ?? 6, // Default: Saturday
-    CLDR_DAY_MAP[endDay] ?? 0,   // Default: Sunday
+    CLDR_DAY_TO_JS[startDay] ?? 6, // Default: Saturday
+    CLDR_DAY_TO_JS[endDay] ?? 0,   // Default: Sunday
   ];
 }
 
 /**
- * Expand a weekend start/end range into the full set of weekend day numbers.
- *
- * Handles wrap-around (e.g. Friday → Saturday for some Middle Eastern countries).
+ * Expand a weekend start/end range into JS day numbers.
+ * Handles wrap-around (e.g. Friday → Saturday for Middle Eastern countries).
  */
 function expandWeekendRange(start: number, end: number): number[] {
   const days: number[] = [];
@@ -60,38 +64,51 @@ function expandWeekendRange(start: number, end: number): number[] {
     days.push(current);
     if (current === end) break;
     current = (current + 1) % 7;
-    // Safety: prevent infinite loop if start === end (single-day weekend)
-    if (days.length > 7) break;
+    if (days.length > 7) break; // Safety
   }
   return days;
 }
 
-/** In-memory cache: countryCode → Set of weekend day numbers */
-const weekendCache = new Map<string, Set<number>>();
+/** In-memory cache: countryCode → Set of JS weekend day numbers (for isWeekend) */
+const jsWeekendCache = new Map<string, Set<number>>();
 
-/**
- * Get the set of weekend day numbers for a country.
- *
- * @param countryCode ISO 3166-1 alpha-2 country code
- * @returns Set of JavaScript day numbers (0=Sun, 6=Sat) that are weekend days
- */
-export function getWeekendDays(countryCode: string): Set<number> {
+/** In-memory cache: countryCode → ISO 8601 day numbers (for getWeekendDays) */
+const isoWeekendCache = new Map<string, number[]>();
+
+function resolveJsWeekend(countryCode: string): Set<number> {
   const cc = countryCode.toUpperCase();
-
-  let cached = weekendCache.get(cc);
+  let cached = jsWeekendCache.get(cc);
   if (cached) return cached;
 
   const [start, end] = getWeekendFromCldr(cc);
   const days = expandWeekendRange(start, end);
   cached = new Set(days);
+  jsWeekendCache.set(cc, cached);
+  return cached;
+}
 
-  weekendCache.set(cc, cached);
+/**
+ * Get weekend day numbers for a country in ISO 8601 format.
+ *
+ * @param countryCode ISO 3166-1 alpha-2 country code
+ * @returns ISO 8601 day numbers: 1=Mon, 2=Tue, ..., 7=Sun
+ *          e.g. [6, 7] for Saturday+Sunday
+ */
+export function getWeekendDays(countryCode: string): number[] {
+  const cc = countryCode.toUpperCase();
+  let cached = isoWeekendCache.get(cc);
+  if (cached) return cached;
+
+  const jsDays = resolveJsWeekend(cc);
+  cached = [...jsDays].map(jsToIso).sort((a, b) => a - b);
+  isoWeekendCache.set(cc, cached);
   return cached;
 }
 
 /**
  * Check if a given date falls on a weekend for the specified country.
+ * Uses JS day numbers internally (Date.getDay()).
  */
 export function isWeekend(date: Date, countryCode: string): boolean {
-  return getWeekendDays(countryCode).has(date.getDay());
+  return resolveJsWeekend(countryCode).has(date.getDay());
 }

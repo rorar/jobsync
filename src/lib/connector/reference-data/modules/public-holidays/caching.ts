@@ -39,8 +39,8 @@ export function buildInstanceKey(
 
 interface CachedHolidays {
   holidays: HolidayEntry[];
-  /** Map from ISO date string to holiday entry for O(1) lookup */
-  dateMap: Map<string, HolidayEntry>;
+  /** Map from ISO date string to ALL holiday entries for that date (CB-11: multiple per date) */
+  dateMap: Map<string, HolidayEntry[]>;
 }
 
 /**
@@ -80,13 +80,14 @@ export class DayCache {
 
   /**
    * Check if a specific date is a holiday.
+   * Returns ALL matching holidays (CB-11: multiple per date per MultipleHolidaysPerDate invariant).
    */
   isHoliday(
     date: Date,
     countryCode: string,
     subdivisionCode?: string,
     types?: HolidayType[],
-  ): HolidayEntry | null {
+  ): HolidayEntry[] {
     const year = date.getFullYear();
     const key = buildInstanceKey(countryCode, subdivisionCode, year);
     let cached = this.cache.get(key);
@@ -97,36 +98,14 @@ export class DayCache {
     }
 
     const isoDate = formatIsoDate(date);
-    const entry = cached.dateMap.get(isoDate);
+    const entries = cached.dateMap.get(isoDate) ?? [];
 
-    if (!entry) return null;
-
-    // Check type filter
-    if (types && types.length > 0 && !types.includes(entry.type)) {
-      return null;
+    if (types && types.length > 0) {
+      const typeSet = new Set(types);
+      return entries.filter((h) => typeSet.has(h.type));
     }
 
-    return entry;
-  }
-
-  /**
-   * Batch check: is any date in the array a holiday?
-   * Returns a Map from ISO date string to HolidayEntry (or null).
-   */
-  isHolidayBatch(
-    dates: Date[],
-    countryCode: string,
-    subdivisionCode?: string,
-    types?: HolidayType[],
-  ): Map<string, HolidayEntry | null> {
-    const result = new Map<string, HolidayEntry | null>();
-
-    for (const date of dates) {
-      const isoDate = formatIsoDate(date);
-      result.set(isoDate, this.isHoliday(date, countryCode, subdivisionCode, types));
-    }
-
-    return result;
+    return entries;
   }
 
   /**
@@ -147,16 +126,12 @@ export class DayCache {
     }
   }
 
-  /**
-   * Clear the entire cache. Useful for testing.
-   */
+  /** Clear the entire cache. */
   clear(): void {
     this.cache.clear();
   }
 
-  /**
-   * Get the number of cached entries (for diagnostics).
-   */
+  /** Get the number of cached entries (for diagnostics). */
   get size(): number {
     return this.cache.size;
   }
@@ -171,14 +146,13 @@ export class DayCache {
     subdivisionCode?: string,
   ): CachedHolidays {
     const cc = countryCode.toUpperCase();
-    const hd = subdivisionCode
-      ? new Holidays(cc, subdivisionCode.toUpperCase())
-      : new Holidays(cc);
+    const sub = subdivisionCode?.toUpperCase();
+    const hd = sub ? new Holidays(cc, sub) : new Holidays(cc);
 
     const rawHolidays = hd.getHolidays(year) ?? [];
 
     const holidays: HolidayEntry[] = [];
-    const dateMap = new Map<string, HolidayEntry>();
+    const dateMap = new Map<string, HolidayEntry[]>();
 
     for (const h of rawHolidays) {
       if (!h.date || !h.name) continue;
@@ -188,14 +162,22 @@ export class DayCache {
         date: isoDate,
         name: h.name,
         type: mapHolidayType(h.type),
+        country: cc,
+        subdivision: sub ?? null,
+        region: null,
+        substitute: h.substitute ?? false,
+        start: h.start instanceof Date ? h.start : new Date(h.start),
+        end: h.end instanceof Date ? h.end : new Date(h.end),
       };
 
       holidays.push(entry);
 
-      // First holiday wins for a given date (some countries have multiple
-      // holidays on the same day — we keep the first/most important one)
-      if (!dateMap.has(isoDate)) {
-        dateMap.set(isoDate, entry);
+      // CB-11: Collect ALL entries per date (MultipleHolidaysPerDate invariant)
+      const existing = dateMap.get(isoDate);
+      if (existing) {
+        existing.push(entry);
+      } else {
+        dateMap.set(isoDate, [entry]);
       }
     }
 
@@ -206,7 +188,7 @@ export class DayCache {
 /**
  * Format a Date to ISO date string (YYYY-MM-DD) in local time.
  */
-function formatIsoDate(date: Date): string {
+export function formatIsoDate(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");

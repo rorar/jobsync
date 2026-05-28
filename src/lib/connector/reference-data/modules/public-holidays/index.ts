@@ -55,34 +55,40 @@ export interface HolidayService {
 
   /**
    * Check if a specific date is a holiday.
+   * Returns ALL matching holidays (multiple per date possible per MultipleHolidaysPerDate invariant).
    */
   isHoliday(
     date: Date,
-    options: HolidayCheckOptions,
-  ): HolidayEntry | null;
+    countryCode: string,
+    subdivisionCode?: string,
+    types?: HolidayType[],
+  ): HolidayEntry[];
 
   /**
-   * Get the set of weekend day numbers for a country.
-   * Returns JavaScript day numbers (0=Sunday, 6=Saturday).
+   * Get weekend day numbers for a country.
+   * Returns ISO 8601 day numbers: 1=Mon, 2=Tue, ..., 7=Sun
    */
-  getWeekendDays(countryCode: string): Set<number>;
+  getWeekendDays(countryCode: string): number[];
 
   /**
-   * Check if a date is a business day (not weekend, not holiday).
+   * Check if a date is a business day (not weekend, not public/bank holiday).
+   * Returns enriched result with blockingHolidays + isWeekend.
    */
   isBusinessDay(
     date: Date,
-    options: HolidayCheckOptions,
+    countryCode: string,
+    subdivisionCode?: string,
   ): BusinessDayResult;
 
   /**
-   * Batch check multiple dates for holidays.
-   * Returns a Map from ISO date string to HolidayEntry (or null).
+   * Batch holiday check: one date × multiple locations (CB-14: CRM use case).
+   * Deduplicates by location key. Returns Map from location key to HolidayEntry[].
    */
   isHolidayBatch(
-    dates: Date[],
-    options: HolidayCheckOptions,
-  ): Map<string, HolidayEntry | null>;
+    date: Date,
+    locations: Array<{ countryCode: string; subdivisionCode?: string }>,
+    types?: HolidayType[],
+  ): Map<string, HolidayEntry[]>;
 
   /**
    * Get available regions (subdivisions + sub-regions) for a country
@@ -133,58 +139,48 @@ function createHolidayService(): HolidayService {
 
     isHoliday(
       date: Date,
-      options: HolidayCheckOptions,
-    ): HolidayEntry | null {
-      return dayCache.isHoliday(
-        date,
-        options.countryCode,
-        options.subdivisionCode,
-        options.types,
-      );
+      countryCode: string,
+      subdivisionCode?: string,
+      types?: HolidayType[],
+    ): HolidayEntry[] {
+      return dayCache.isHoliday(date, countryCode, subdivisionCode, types);
     },
 
-    getWeekendDays(countryCode: string): Set<number> {
+    getWeekendDays(countryCode: string): number[] {
       return getWeekendDays(countryCode);
     },
 
     isBusinessDay(
       date: Date,
-      options: HolidayCheckOptions,
+      countryCode: string,
+      subdivisionCode?: string,
     ): BusinessDayResult {
-      // Check weekend first (cheaper)
-      if (isWeekend(date, options.countryCode)) {
-        return { isBusinessDay: false, reason: "weekend" };
-      }
-
-      // Check holiday
-      const holiday = dayCache.isHoliday(
-        date,
-        options.countryCode,
-        options.subdivisionCode,
-        options.types,
+      const weekendResult = isWeekend(date, countryCode);
+      const holidays = dayCache.isHoliday(date, countryCode, subdivisionCode);
+      const blockingHolidays = holidays.filter(
+        (h) => h.type === "public" || h.type === "bank",
       );
 
-      if (holiday) {
-        return {
-          isBusinessDay: false,
-          reason: "holiday",
-          holidayName: holiday.name,
-        };
-      }
-
-      return { isBusinessDay: true, reason: "business_day" };
+      return {
+        isBusinessDay: blockingHolidays.length === 0 && !weekendResult,
+        blockingHolidays,
+        isWeekend: weekendResult,
+      };
     },
 
     isHolidayBatch(
-      dates: Date[],
-      options: HolidayCheckOptions,
-    ): Map<string, HolidayEntry | null> {
-      return dayCache.isHolidayBatch(
-        dates,
-        options.countryCode,
-        options.subdivisionCode,
-        options.types,
-      );
+      date: Date,
+      locations: Array<{ countryCode: string; subdivisionCode?: string }>,
+      types?: HolidayType[],
+    ): Map<string, HolidayEntry[]> {
+      const results = new Map<string, HolidayEntry[]>();
+      for (const loc of locations) {
+        const key = `${loc.countryCode.toUpperCase()}:${loc.subdivisionCode?.toUpperCase() ?? ""}`;
+        if (!results.has(key)) {
+          results.set(key, dayCache.isHoliday(date, loc.countryCode, loc.subdivisionCode, types));
+        }
+      }
+      return results;
     },
 
     getRegions(
