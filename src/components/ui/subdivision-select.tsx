@@ -54,9 +54,11 @@ export function SubdivisionSelect({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          type="button"
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-label={t("crm.subdivisionSelect")}
           disabled={disabled}
           className={cn("w-full justify-between font-normal", className)}
         >
@@ -75,7 +77,10 @@ export function SubdivisionSelect({
         align="start"
       >
         <Command>
-          <CommandInput placeholder={t("crm.subdivisionSearch")} />
+          <CommandInput
+            placeholder={t("crm.subdivisionSearch")}
+            onKeyDown={(e) => { if (e.key === "Tab") setOpen(false); }}
+          />
           <CommandList>
             <CommandEmpty>{t("crm.noSubdivisionFound")}</CommandEmpty>
             <CommandGroup>

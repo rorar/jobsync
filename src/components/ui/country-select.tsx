@@ -47,7 +47,8 @@ function CountryFlag({
   return (
     <Image
       src={`/flags/${code.toLowerCase()}.svg`}
-      alt={code}
+      alt=""
+      aria-hidden="true"
       className={cn("inline-block shrink-0 rounded-sm", className)}
       width={16}
       height={16}
@@ -75,9 +76,11 @@ export function CountrySelect({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          type="button"
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-label={t("crm.countrySelect")}
           disabled={disabled}
           className={cn("w-full justify-between font-normal", className)}
         >
@@ -99,7 +102,10 @@ export function CountrySelect({
         align="start"
       >
         <Command>
-          <CommandInput placeholder={t("crm.countrySearch")} />
+          <CommandInput
+            placeholder={t("crm.countrySearch")}
+            onKeyDown={(e) => { if (e.key === "Tab") setOpen(false); }}
+          />
           <CommandList>
             <CommandEmpty>{t("crm.noCountryFound")}</CommandEmpty>
             <CommandGroup>
