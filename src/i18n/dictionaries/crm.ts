@@ -232,6 +232,8 @@ export const crm = {
     "crm.errors.blocklistEntryNotFound": "Blocklist entry not found",
     "crm.errors.invalidSocialProfileUrl": "Social profile URLs must start with http:// or https://",
     "crm.errors.invalidPlatform": "Invalid social platform",
+    "crm.errors.invalidCountryCode": "Invalid country code",
+    "crm.errors.subdivisionWithoutCountry": "Subdivision requires a country",
     "crm.errors.companyNotFound": "Company not found",
     "crm.errors.multiplePrimaryCompanies": "A contact can only have one primary company",
 
@@ -242,6 +244,15 @@ export const crm = {
     "crm.unknownError": "Unknown error",
     "crm.gdpr": "GDPR",
     "crm.dataSourceLabel": "Data Source",
+
+    // GeoCode (1.21)
+    "crm.countrySelect": "Select country...",
+    "crm.countrySearch": "Search countries...",
+    "crm.subdivisionSelect": "Select state/region...",
+    "crm.subdivisionSearch": "Search states/regions...",
+    "crm.noCountryFound": "No country found.",
+    "crm.noSubdivisionFound": "No state/region found.",
+    "crm.subdivision": "State/Region",
   },
 
   de: {
@@ -432,6 +443,8 @@ export const crm = {
     "crm.errors.blocklistEntryNotFound": "Sperrlisteneintrag nicht gefunden",
     "crm.errors.invalidSocialProfileUrl": "URLs sozialer Profile müssen mit http:// oder https:// beginnen",
     "crm.errors.invalidPlatform": "Ungültige soziale Plattform",
+    "crm.errors.invalidCountryCode": "Ungültiger Ländercode",
+    "crm.errors.subdivisionWithoutCountry": "Bundesland/Region erfordert ein Land",
     "crm.errors.companyNotFound": "Unternehmen nicht gefunden",
     "crm.errors.multiplePrimaryCompanies": "Ein Kontakt kann nur ein Hauptunternehmen haben",
 
@@ -442,6 +455,15 @@ export const crm = {
     "crm.unknownError": "Unbekannter Fehler",
     "crm.gdpr": "DSGVO",
     "crm.dataSourceLabel": "Datenquelle",
+
+    // GeoCode (1.21)
+    "crm.countrySelect": "Land auswählen...",
+    "crm.countrySearch": "Länder suchen...",
+    "crm.subdivisionSelect": "Bundesland/Region auswählen...",
+    "crm.subdivisionSearch": "Bundesländer/Regionen suchen...",
+    "crm.noCountryFound": "Kein Land gefunden.",
+    "crm.noSubdivisionFound": "Kein Bundesland/Region gefunden.",
+    "crm.subdivision": "Bundesland/Region",
   },
 
   fr: {
@@ -632,6 +654,8 @@ export const crm = {
     "crm.errors.blocklistEntryNotFound": "Entrée de blocage non trouvée",
     "crm.errors.invalidSocialProfileUrl": "Les URLs des profils sociaux doivent commencer par http:// ou https://",
     "crm.errors.invalidPlatform": "Plateforme sociale invalide",
+    "crm.errors.invalidCountryCode": "Code pays invalide",
+    "crm.errors.subdivisionWithoutCountry": "La subdivision nécessite un pays",
     "crm.errors.companyNotFound": "Entreprise non trouvée",
     "crm.errors.multiplePrimaryCompanies": "Un contact ne peut avoir qu'une seule entreprise principale",
 
@@ -642,6 +666,15 @@ export const crm = {
     "crm.unknownError": "Erreur inconnue",
     "crm.gdpr": "RGPD",
     "crm.dataSourceLabel": "Source des données",
+
+    // GeoCode (1.21)
+    "crm.countrySelect": "Sélectionner un pays...",
+    "crm.countrySearch": "Rechercher des pays...",
+    "crm.subdivisionSelect": "Sélectionner un état/région...",
+    "crm.subdivisionSearch": "Rechercher des états/régions...",
+    "crm.noCountryFound": "Aucun pays trouvé.",
+    "crm.noSubdivisionFound": "Aucun état/région trouvé.",
+    "crm.subdivision": "État/Région",
   },
 
   es: {
@@ -832,6 +865,8 @@ export const crm = {
     "crm.errors.blocklistEntryNotFound": "Entrada de bloqueo no encontrada",
     "crm.errors.invalidSocialProfileUrl": "Las URLs de perfiles sociales deben comenzar con http:// o https://",
     "crm.errors.invalidPlatform": "Plataforma social inválida",
+    "crm.errors.invalidCountryCode": "Código de país inválido",
+    "crm.errors.subdivisionWithoutCountry": "La subdivisión requiere un país",
     "crm.errors.companyNotFound": "Empresa no encontrada",
     "crm.errors.multiplePrimaryCompanies": "Un contacto solo puede tener una empresa principal",
 
@@ -842,5 +877,14 @@ export const crm = {
     "crm.unknownError": "Error desconocido",
     "crm.gdpr": "RGPD",
     "crm.dataSourceLabel": "Fuente de datos",
+
+    // GeoCode (1.21)
+    "crm.countrySelect": "Seleccionar país...",
+    "crm.countrySearch": "Buscar países...",
+    "crm.subdivisionSelect": "Seleccionar estado/región...",
+    "crm.subdivisionSearch": "Buscar estados/regiones...",
+    "crm.noCountryFound": "No se encontró ningún país.",
+    "crm.noSubdivisionFound": "No se encontró ningún estado/región.",
+    "crm.subdivision": "Estado/Región",
   },
 } as const;

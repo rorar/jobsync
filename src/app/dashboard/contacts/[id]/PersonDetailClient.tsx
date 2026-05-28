@@ -262,7 +262,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                 {(String(person.addressCity ?? "") || String(person.addressCountry ?? "")) && (
                   <div className="flex items-center gap-2 text-sm">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span>{[person.addressCity, person.addressCountry].filter(Boolean).map(String).join(", ")}</span>
+                    <span>{[person.addressCity, person.addressSubdivisionCode, person.addressCountry].filter(Boolean).map(String).join(", ")}</span>
                   </div>
                 )}
               </CardContent>

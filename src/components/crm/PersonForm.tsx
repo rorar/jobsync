@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,9 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2, Loader2 } from "lucide-react";
+import { CountrySelect, type CountryOption } from "@/components/ui/country-select";
+import { SubdivisionSelect, type SubdivisionOption } from "@/components/ui/subdivision-select";
+import { getCountryOptions, getSubdivisionOptions } from "@/actions/person.actions";
 import type {
   TypedEmail,
   TypedPhone,
@@ -44,7 +47,7 @@ const emptyPhone = (): TypedPhone => ({
 });
 
 export default function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const isEdit = !!person;
 
   const [firstName, setFirstName] = useState((person?.firstName as string) ?? "");
@@ -68,6 +71,14 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
   const [addressCountry, setAddressCountry] = useState(
     (person?.addressCountry as string) ?? "",
   );
+  const [addressCountryCode, setAddressCountryCode] = useState(
+    (person?.addressCountryCode as string) ?? "",
+  );
+  const [addressSubdivisionCode, setAddressSubdivisionCode] = useState(
+    (person?.addressSubdivisionCode as string) ?? "",
+  );
+  const [countries, setCountries] = useState<CountryOption[]>([]);
+  const [subdivisions, setSubdivisions] = useState<SubdivisionOption[]>([]);
 
   const [emails, setEmails] = useState<TypedEmail[]>(() => {
     const parsed = person?.emails;
@@ -82,6 +93,21 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
   });
 
   const [submitting, setSubmitting] = useState(false);
+
+  // Load countries on mount
+  useEffect(() => {
+    getCountryOptions(locale).then(setCountries);
+  }, [locale]);
+
+  // Load subdivisions when country changes
+  useEffect(() => {
+    if (!addressCountryCode) {
+      setSubdivisions([]);
+      setAddressSubdivisionCode("");
+      return;
+    }
+    getSubdivisionOptions(addressCountryCode, locale).then(setSubdivisions);
+  }, [addressCountryCode, locale]);
 
   // --- Email handlers ---
   const addEmail = () => setEmails((prev) => [...prev, emptyEmail()]);
@@ -194,6 +220,8 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
       addressCity: addressCity || null,
       addressPostalCode: addressPostalCode || null,
       addressCountry: addressCountry || null,
+      addressCountryCode: addressCountryCode || null,
+      addressSubdivisionCode: addressSubdivisionCode || null,
     });
 
     setSubmitting(false);
@@ -463,11 +491,27 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
             onChange={(e) => setAddressPostalCode(e.target.value)}
           />
         </div>
-        <Input
-          placeholder={t("crm.country")}
-          value={addressCountry}
-          onChange={(e) => setAddressCountry(e.target.value)}
+        <CountrySelect
+          value={addressCountryCode}
+          onValueChange={(code) => {
+            setAddressCountryCode(code);
+            // Sync free-text country for backward compat
+            if (code) {
+              const c = countries.find((x) => x.code === code);
+              setAddressCountry(c?.name ?? code);
+            } else {
+              setAddressCountry("");
+            }
+          }}
+          countries={countries}
         />
+        {subdivisions.length > 0 && (
+          <SubdivisionSelect
+            value={addressSubdivisionCode}
+            onValueChange={setAddressSubdivisionCode}
+            subdivisions={subdivisions}
+          />
+        )}
       </div>
 
       {/* Actions */}
