@@ -10,6 +10,8 @@
  * are handled on a best-effort basis.
  */
 
+import "server-only";
+
 import type { NutsResolution } from "./types";
 
 /**

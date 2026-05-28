@@ -10,6 +10,8 @@
  * Conversion happens at the boundary (getWeekendDays return).
  */
 
+import "server-only";
+
 // Load CLDR week data at module init (small JSON, ~2KB)
 import weekDataJson from "cldr-core/supplemental/weekData.json";
 

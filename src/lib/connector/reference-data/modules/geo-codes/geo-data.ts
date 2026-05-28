@@ -9,6 +9,8 @@
  * The vendored file is at data/iso3166-2.json.
  */
 
+import "server-only";
+
 import type { GeoCoordinate } from "./types";
 
 /**
@@ -71,16 +73,32 @@ export function getSubdivisionGeo(
   return { lat: sub.latLng[0], lng: sub.latLng[1] };
 }
 
+/** Allowlisted domains for subdivision flag URLs (S-5 security fix) */
+const ALLOWED_FLAG_DOMAINS = new Set([
+  "upload.wikimedia.org",
+  "raw.githubusercontent.com",
+  "commons.wikimedia.org",
+]);
+
 /**
  * Get the flag SVG URL for a subdivision.
- * Returns null if no flag is available.
+ * Returns null if no flag is available or the URL domain is not allowlisted.
  */
 export function getSubdivisionFlag(
   countryCode: string,
   subdivisionCode: string,
 ): string | null {
   const sub = lookupSubdivision(countryCode, subdivisionCode);
-  return sub?.flag ?? null;
+  const flag = sub?.flag ?? null;
+  if (!flag) return null;
+
+  try {
+    const url = new URL(flag);
+    if (!ALLOWED_FLAG_DOMAINS.has(url.hostname)) return null;
+    return flag;
+  } catch {
+    return null;
+  }
 }
 
 /**

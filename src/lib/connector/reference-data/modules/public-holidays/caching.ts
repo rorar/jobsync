@@ -6,6 +6,8 @@
  * the full holiday rule set. Caching amortizes this over many lookups.
  */
 
+import "server-only";
+
 import Holidays from "date-holidays";
 import type { HolidayEntry, HolidayType } from "./types";
 
@@ -48,11 +50,18 @@ interface CachedHolidays {
 /**
  * DayCache provides cached holiday data per country+subdivision+year.
  *
- * Thread-safe within a single Node.js process. Uses a simple Map as the
- * backing store — no TTL eviction (holiday data doesn't change within a year).
+ * Thread-safe within a single Node.js process. Uses a Map as the backing store
+ * with LRU eviction when maxSize is reached (P-5 fix). Holiday data doesn't
+ * change within a year, but unbounded growth across many locale/subdivision
+ * combinations needs a cap.
  */
 export class DayCache {
   private cache = new Map<string, CachedHolidays>();
+  private readonly maxSize: number;
+
+  constructor(maxSize = 500) {
+    this.maxSize = maxSize;
+  }
 
   /**
    * Get holidays for a country/subdivision/year combination.
@@ -70,6 +79,10 @@ export class DayCache {
 
     if (!cached) {
       cached = this.buildCache(countryCode, year, subdivisionCode, locale);
+      this.lruSet(key, cached);
+    } else {
+      // LRU touch: re-insert to move to end of Map iteration order
+      this.cache.delete(key);
       this.cache.set(key, cached);
     }
 
@@ -98,6 +111,9 @@ export class DayCache {
 
     if (!cached) {
       cached = this.buildCache(countryCode, year, subdivisionCode, locale);
+      this.lruSet(key, cached);
+    } else {
+      this.cache.delete(key);
       this.cache.set(key, cached);
     }
 
@@ -122,7 +138,7 @@ export class DayCache {
       if (!this.cache.has(key)) {
         try {
           const cached = this.buildCache(cc, year, undefined, locale);
-          this.cache.set(key, cached);
+          this.lruSet(key, cached);
         } catch (err) {
           console.warn(`[DayCache] Pre-warm failed for ${cc}/${year}:`, err);
         }
@@ -143,6 +159,16 @@ export class DayCache {
   // -------------------------------------------------------------------------
   // Private
   // -------------------------------------------------------------------------
+
+  /** Insert with LRU eviction: evict oldest entry when cache exceeds maxSize */
+  private lruSet(key: string, value: CachedHolidays): void {
+    if (this.cache.size >= this.maxSize) {
+      // Map iteration order = insertion order; first key is oldest (LRU)
+      const oldest = this.cache.keys().next().value;
+      if (oldest !== undefined) this.cache.delete(oldest);
+    }
+    this.cache.set(key, value);
+  }
 
   private buildCache(
     countryCode: string,

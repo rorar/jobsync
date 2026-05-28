@@ -185,8 +185,8 @@ export async function getPersons(filters?: {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "errors.notAuthenticated" };
 
-    const page = filters?.page ?? 1;
-    const pageSize = filters?.pageSize ?? 25;
+    const page = Math.max(1, filters?.page ?? 1);
+    const pageSize = Math.min(Math.max(1, filters?.pageSize ?? 25), 100);
     const skip = (page - 1) * pageSize;
 
     const where: Record<string, unknown> = { userId: user.id };
@@ -568,4 +568,48 @@ export async function getSubdivisionOptions(countryCode: string, locale: string)
     "@/lib/connector/reference-data/modules/geo-codes"
   );
   return getGeoCodeService().getSubdivisions(countryCode, locale);
+}
+
+// ---------------------------------------------------------------------------
+// Holiday PoC (ROADMAP 1.22 — PersonDetail integration)
+// ---------------------------------------------------------------------------
+
+export interface PersonHolidayInfo {
+  isHoliday: boolean;
+  holidayName: string | null;
+  isWeekend: boolean;
+  countryName: string;
+}
+
+export async function getPersonHolidayInfo(
+  countryCode: string,
+  locale: string,
+  subdivisionCode?: string | null,
+): Promise<PersonHolidayInfo | null> {
+  if (!countryCode || !/^[A-Z]{2}$/i.test(countryCode)) return null;
+
+  const [{ getHolidayService }, { getGeoCodeService }] = await Promise.all([
+    import("@/lib/connector/reference-data/modules/public-holidays"),
+    import("@/lib/connector/reference-data/modules/geo-codes"),
+  ]);
+
+  const holidayService = getHolidayService();
+  const geoCodeService = getGeoCodeService();
+  const today = new Date();
+  const sub = subdivisionCode ?? undefined;
+
+  const holidays = holidayService.isHoliday(today, countryCode, sub, undefined, locale);
+  const publicHoliday = holidays.find((h) => h.type === "public" || h.type === "bank");
+  const weekendDays = holidayService.getWeekendDays(countryCode);
+  const jsDay = today.getDay();
+  const isoDay = jsDay === 0 ? 7 : jsDay;
+  const isWeekend = weekendDays.includes(isoDay);
+  const countryName = geoCodeService.getCountryName(countryCode, locale);
+
+  return {
+    isHoliday: !!publicHoliday,
+    holidayName: publicHoliday?.name ?? null,
+    isWeekend,
+    countryName,
+  };
 }

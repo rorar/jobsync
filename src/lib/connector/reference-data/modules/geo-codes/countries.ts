@@ -5,6 +5,8 @@
  * with localized names in en/de/fr/es (our 4 supported locales).
  */
 
+import "server-only";
+
 import countries from "i18n-iso-countries";
 import enLocale from "i18n-iso-countries/langs/en.json";
 import deLocale from "i18n-iso-countries/langs/de.json";

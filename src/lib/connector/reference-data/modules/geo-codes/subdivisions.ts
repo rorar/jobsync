@@ -12,6 +12,8 @@
  * adds geo coordinates, flags, and subdivision types separately.
  */
 
+import "server-only";
+
 import { getDataSet, getRegionsFor } from "iso3166-2-db";
 import type { SubdivisionInfo } from "./types";
 
@@ -152,17 +154,34 @@ function getIso3166dbSubdivisions(
   }));
 }
 
+/** Cached Map: "CC:SC" → region entry, built lazily per country */
+const regionMapCache = new Map<string, Map<string, ReturnType<typeof getRegionsFor>[number]>>();
+
+function getRegionMap(countryCode: string): Map<string, ReturnType<typeof getRegionsFor>[number]> {
+  const cc = countryCode.toUpperCase();
+  let cached = regionMapCache.get(cc);
+  if (cached) return cached;
+
+  const regions = getRegionsFor(cc);
+  cached = new Map<string, ReturnType<typeof getRegionsFor>[number]>();
+  if (regions) {
+    for (const r of regions) {
+      cached.set(r.iso, r);
+    }
+  }
+  regionMapCache.set(cc, cached);
+  return cached;
+}
+
 function getIso3166dbName(
   countryCode: string,
   subdivisionCode: string,
   locale: string,
 ): string | null {
-  const cc = countryCode.toUpperCase();
   const sc = subdivisionCode.toUpperCase();
   const lang = resolveIso3166dbLocale(locale);
 
-  const regions = getRegionsFor(cc);
-  const region = regions?.find((r) => r.iso === sc);
+  const region = getRegionMap(countryCode).get(sc);
   if (!region) return null;
 
   return region.names?.[lang] ?? region.names?.en ?? region.name;
