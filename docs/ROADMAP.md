@@ -603,6 +603,8 @@ Felder die von den APIs geliefert aber noch nicht in `DiscoveredVacancy` extrahi
 - **Modul: CalDAV** — Standardprotokoll für Kalender-Synchronisation
 - **Modul: Google Kalender** — OAuth2-Authentifizierung, Events erstellen/lesen
 - **Modul: Outlook** — Microsoft Graph API, Events + Erinnerungen
+- **Dependency:** Holiday Reference Module (→ 1.22) für Feiertags-Anzeige im Kalender
+- **Dependency:** GeoCode Reference Module (→ 1.21) für länderspezifische Feiertage
 
 ### 1.8 Bewertungsportal Module (→ Data Enrichment Connector 1.13)
 Bewertungsdaten sind Unternehmens-Enrichment — überführt in den Data Enrichment Connector (1.13) als Review-Module.
@@ -915,6 +917,8 @@ Die Authentifizierung bei arbeitsagentur.de erfordert zwingend manuelle Entwickl
 ### 1.10 Geo/Map Connector
 Entfernungsberechnung und Kartenintegration als Connector mit austauschbaren Modules.
 
+**Abgrenzung zu GeoCode Reference Module (→ 1.21):** Geocoding = Koordinaten-Auflösung (Adresse → lat/lng). GeoCode = administrative Klassifikation (ISO 3166 Codes, NUTS Mapping). Beide teilen ISO-3166-Daten, aber unterschiedliche Concerns. 1.10 ist ein aktiver Connector mit externen API-Calls, 1.21 ist ein offline Reference Data Module.
+
 **DDD-Boundary Google Maps:** Google Maps ist ein externes System das von ZWEI Connectors genutzt wird. Geo/Map (1.10) nutzt Geocoding/Directions/Maps SDK ("Wo und wie?"), Data Enrichment (1.13) nutzt Places ("Was weiß ich über das Unternehmen?"). Beide teilen einen `google-maps-client` Utility (API-Key, HTTP-Client) als Infrastruktur.
 
 - **Connector Interface (`GeoConnector`):**
@@ -1191,6 +1195,97 @@ value ModuleDependency {
 - ≠ AI Provider: Keine Inferenz, rein deklarative Klassifikationsdaten.
 - Cross-Ref: CareerBERT (→ 9.1) nutzt ESCO-Centroids, Skillsets (→ 4.1) nutzt ESCO/NACE, Onboarding (→ 2.1) nutzt ESCO-Taxonomie
 
+### 1.21 GeoCode Reference Module (ISO 3166 + NUTS Mapping)
+Reference Data Module (`taxonomy: "geo_codes"`) als Single Source of Truth für geographische Code-Normalisierung. Foundation für Holiday (→ 1.22), Kalender (→ 1.7), CRM (→ 5.x) und alle zukünftigen geo-abhängigen Features.
+
+**Dreischicht-Architektur mit gegenseitigen Fallbacks:**
+
+| Schicht | Quelle | Stärke |
+|---|---|---|
+| **1. Ländernamen (npm)** | `i18n-iso-countries` (2M DL, 78 Sprachen, TypeScript) | Alpha-2/3/Numeric Conversion, lokalisierte Ländernamen |
+| **2. Subdivision-Übersetzungen (vendored)** | `countries-data-json` (primary, 80+ Sprachen) + `iso3166-2-db` (npm fallback, 9 Sprachen) | Lokalisierte Subdivision-Namen für UI-Anzeige |
+| **3. Codes + Geo + Flags (vendored)** | `amckenna41/iso3166-2` (3.4MB JSON, 5046 Subs, 100% Geo, 2843 Flags, 50+ Typen) | Validierung, Hierarchie (parentCode), Koordinaten, Flags |
+
+**Scope:**
+- ISO 3166-1 Länder-Lookup mit lokalisierten Namen (78 Sprachen)
+- ISO 3166-2 Subdivision-Lookup mit lokalisierten Namen (80+ Sprachen, Fallback-Chain)
+- Geo-Koordinaten pro Subdivision (100% Abdeckung, 5046/5046)
+- Subdivision-Flags (2843 SVGs)
+- Subdivision-Typ (Land, State, Province, Canton, etc. — 50+ Typen)
+- NUTS-zu-ISO-3166-2 Crosswalk (Custom File aus Eurostat Correspondence Tables)
+- Normalisierungsfunktion: Freitext → ISO-Code (z.B. "Germany" → "DE", "Bayern" → "DE-BY")
+- Validierungsfunktionen für Country- und Subdivision-Codes
+- CountrySelect + SubdivisionSelect UI-Komponenten
+- Prisma Migration: `addressCountryCode`, `addressSubdivisionCode` auf Person
+- Location.country Befüllung im Promoter (Quick-Fix für Datenverlust bei EURES→Job Promotion)
+
+**Online-Erweiterung (optional):**
+- `amckenna41/iso3166-2` REST-API (Vercel, kostenlos): Fuzzy Name Search + Geo→Subdivision-Lookup
+- Offline-Betrieb ohne API vollständig funktionsfähig
+
+**Update-Mechanismus:**
+- npm-Pakete (`i18n-iso-countries`, `iso3166-2-db`, `cldr-core`): Renovate/Dependabot PRs
+- Vendored JSON (`countries-data-json`, `amckenna41/iso3166-2`): CI/CD-Job synchronisiert periodisch gegen Upstream-Repos, erstellt PR bei Änderungen
+
+**Konsumiert von:** Holiday Module (1.22), Kalender Connector (1.7), Geo/Map Connector (1.10), AddressInput (2.6), CRM (5.x)
+
+**Abgrenzung:**
+- ≠ Geo/Map Connector (1.10): Geocoding = Koordinaten. GeoCode = administrative Klassifikation.
+- ≠ Address-Parsing: `localized-address-format`/libpostal sind ROADMAP 1.10/2.6 Concerns.
+- ≠ Holiday-Lookups: Feiertags-Daten gehören zu 1.22.
+
+**Allium Spec:** [`specs/geo-codes.allium`](specs/geo-codes.allium) — GeoCodeLookupContract, GeoCodeValidationContract, CountryInfo/SubdivisionInfo/RegionInfo Value Objects
+
+### 1.22 Holiday Reference Module (Feiertage + Weekend + BusinessDay)
+Reference Data Module (`taxonomy: "holidays"`) als Single Source of Truth für Feiertage weltweit (international, national, Bundesebene/State-Level, regional). Liefert Lookups für Consumer-Module (Kalender, CRM, Automationen).
+
+**Datenquelle:** `date-holidays` npm-Paket (offline, 200+ Länder, 78 Sprachen, islamischer+hebräischer Kalender, 3-stufige Hierarchie Country→Subdivision→Region).
+
+**Scope:**
+- Feiertags-Lookup: `getHolidays(country, year, subdivision?, region?)` mit 5 Typen (public/bank/school/optional/observance)
+- Holiday-Check: `isHoliday(date, country, subdivision?)` → `HolidayEntry[]` (mehrere pro Datum möglich)
+- Weekend-Patterns: `getWeekendDays(country)` via `Intl.Locale.getWeekInfo()` (Node.js 22) + `cldr-core` Fallback
+- Business-Day-Check: `isBusinessDay(date, country, subdivision?)` (kein Feiertag UND kein Wochenende)
+- Batch-Lookup: `isHolidayBatch(date, locations[])` für CRM-Directory (50+ Kontakte → deduplizierte Lookups)
+- 3-Layer Caching: Day-Cache + Instance-Cache + Pre-Warm (Pflicht bei Startup)
+- TZ-Handling: Subdivision-basiert auto-derive + IANA-Override für Edge-Cases
+- i18n: date-holidays liefert Übersetzungen in 78 Sprachen, User-Locale durchreichen
+- 3-stufige Hierarchie: Country → Subdivision → Region (z.B. DE → BY → A für Augsburger Friedensfest)
+- Historische Lookups (rückwirkend für CRM-Timeline)
+- Substitute Holidays (Ersatz-Feiertage), Halbtags-Feiertage, mehrtägige Feiertage
+
+**Fallback-Chains:**
+- Feiertage: `date-holidays` → [zukünftig: Nager.Date API als zweites Modul] → leeres Array
+- Weekend: `Intl.Locale.getWeekInfo()` → `cldr-core` weekData.json
+- Namen: date-holidays i18n (78 Sprachen) → English Fallback
+
+**Performance (verifiziert durch Benchmarks):**
+- Pre-Warm: ~88ms für 20 Länder (einmalig bei Startup)
+- Batch 50 Kontakte (cached): <0.1ms
+- Memory: ~18MB Basis + ~7MB für 20 Länder
+
+**Bekannte Limitationen:**
+- Islamische Feiertage: ±1-2 Tage Unsicherheit (Umm al-Qura Approximation, Mondsichtung variiert pro Land)
+- Historische Weekend-Changes: Nicht abgebildet (z.B. UAE-Wechsel 2022)
+- Multi-TZ States: Primary TZ wird verwendet (z.B. US-TX → Chicago statt Denver für El Paso)
+
+**Abhängigkeiten:**
+- Benötigt: GeoCode Reference Module (1.21) für ISO-Code-Validierung
+- Konsumiert von: Kalender Connector (1.7), CRM Kalender (5.2), CRM Availability (5.x), Automationen (zukünftig)
+
+**Abgrenzung:**
+- ≠ Kalender-Feature (5.2/1.7): Holiday liefert Daten, Kalender zeigt sie an
+- ≠ Availability-Service: Holiday ist Supplier, CRM komponiert mit Company Closures + Personal Absences
+- ≠ Weekend-Kalender: Weekend-Patterns sind Referenzdaten ("UAE hat Fr+Sa"), keine Business-Logik
+
+**Spätere Erweiterung (Open-Closed):**
+- Zweites Holiday-Modul (z.B. Nager.Date API) hinzufügbar ohne Änderung am Interface
+- Fallback-Chain-Orchestrierung analog zum Logo-Enrichment Pattern
+
+**Allium Spec:** [`specs/holiday-reference-data.allium`](specs/holiday-reference-data.allium) — HolidayLookupContract, HolidayEntry/HolidayType, Caching-Invarianten, TZ-Regeln
+
+**Design Spec:** [`docs/superpowers/specs/2026-05-28-holiday-reference-data-design.md`](docs/superpowers/specs/2026-05-28-holiday-reference-data-design.md) — Vollständige Evaluierung, Dependency-Graphen, Architektur-Entscheidungen
+
 ---
 
 ## 2. UX/UI
@@ -1278,6 +1373,8 @@ Kontextsensitiver Einrichtungsassistent für neue Benutzer, der sich an deren Zi
 - Text Input: Enter-Taste fügt Objekte hinzu (Chip-Pattern)
 - **AddressInput-Komponente (Shadcn):**
   - Ein Eingabefeld das sich per Land-Auswahl in strukturierte Unterfelder aufteilt (Straße, Hausnummer, PLZ, Stadt, C/O, etc.)
+  - **Land-Auswahl:** CountrySelect-Combobox aus GeoCode Reference Module (→ 1.21) — emittiert ISO 3166-1 alpha-2 Code
+  - **Subdivision-Auswahl:** SubdivisionSelect (cascading) aus GeoCode Module (→ 1.21) — emittiert ISO 3166-2 Code
   - **Feld-Layout pro Land:** Dynamisch generiert via `localized-address-format` Library (→ 1.10) — DE: Straße+Nr | PLZ+Stadt; FR: Nr+Rue | Code+Ville; US: Street | City | State+ZIP
   - **"Adresse einfügen" (Paste):** Freitext-Adresse wird via libpostal Modul (→ 1.10 Geo/Map Connector) geparst und in Unterfelder verteilt. User bestätigt/editiert.
   - **Graceful Degradation:** Wenn libpostal nicht verfügbar (Docker nicht konfiguriert), bleibt das manuelle Ausfüllen der Unterfelder. Kein Parsing-Fallback nötig — die Felder sind ja da.
@@ -1837,6 +1934,8 @@ Dynamische Dateipfade und Dateinamen:
 ### 5.2 Kalender (→ Kalender Connector 1.7)
 - Nutzt den Kalender Connector mit Modulen CalDAV, Google Kalender, Outlook
 - Interviews, Follow-Ups automatisch eintragen
+- **Feiertags-Integration:** Holiday Reference Module (→ 1.22) liefert länderspezifische Feiertage für Kalender-View
+- **CRM Availability Composition:** Kombiniert Holiday-Daten mit Company Closures + Personal Absences für "Ist der Kontakt heute erreichbar?"-Abfragen
 
 ### 5.3 Job Status Workflow -- DONE (Sprint C5)
 **Implementiert (2026-04-02):**

@@ -1,0 +1,208 @@
+-- allium: 3
+-- geo-codes.allium
+-- Scope: Geographic code normalization — ISO 3166-1 countries, ISO 3166-2
+--        subdivisions, NUTS-to-ISO crosswalk, geo-coordinates, flags.
+--        Single Source of Truth for geographic reference data consumed by
+--        Holiday, Calendar, CRM, and Geo/Map modules.
+-- Includes: CountryInfo, SubdivisionInfo, lookup contract, normalization rules,
+--           geo-coordinates, subdivision flags, fallback-chain architecture
+-- Excludes:
+--   - Geocoding / coordinate resolution (Geo/Map Connector, ROADMAP 1.10)
+--   - Address parsing / formatting (ROADMAP 2.6 AddressInput)
+--   - Holiday lookups (holiday-reference-data.allium)
+--   - EURES-specific location logic (eures module internals)
+-- Data sources (three-layer architecture with mutual fallbacks):
+--   Layer 1 (npm): i18n-iso-countries — country names, 78 languages, alpha-2/3/numeric
+--   Layer 2 (vendored): countries-data-json — subdivision names, 80+ languages per subdivision
+--                        iso3166-2-db (npm fallback) — subdivision names, 9 languages
+--   Layer 3 (vendored): amckenna41/iso3166-2 — 5046 subdivisions, 100% geo, 2843 flags,
+--                        50+ types, parentCode hierarchy, history tracking
+--                        REST API (optional): fuzzy search, geo-to-subdivision lookup
+--   Cross-ref: Custom NUTS-to-ISO crosswalk from Eurostat Correspondence Tables
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value CountryInfo {
+    code: String
+    name: String
+    has_subdivisions: Boolean
+}
+
+value SubdivisionInfo {
+    code: String
+    country_code: String
+    name: String
+    subdivision_type: String?
+    lat: Decimal?
+    lng: Decimal?
+    flag_url: String?
+    parent_code: String?
+}
+
+value RegionInfo {
+    code: String
+    subdivision_code: String
+    country_code: String
+    name: String
+}
+
+value GeoCoordinate {
+    lat: Decimal
+    lng: Decimal
+}
+
+-- NutsMapping is an internal lookup table, not a domain value.
+-- Implemented as a static Map<nuts_code, {country_code, subdivision_code}>
+-- in the geo-codes module. Not exposed to consumers.
+
+------------------------------------------------------------
+-- Contracts
+------------------------------------------------------------
+
+contract GeoCodeLookupContract {
+    -- Core lookups
+    get_countries: (locale: String) -> List<CountryInfo>
+    get_subdivisions: (country_code: String, locale: String) -> List<SubdivisionInfo>
+    get_regions: (country_code: String, subdivision_code: String, locale: String) -> List<RegionInfo>
+
+    -- Normalization
+    normalize_country: (input: String) -> String
+    country_from_nuts: (nuts_code: String) -> String
+    nuts_to_subdivision: (nuts_code: String) -> String
+
+    -- Validation
+    is_valid_country_code: (code: String) -> Boolean
+    is_valid_subdivision_code: (country_code: String, subdivision_code: String) -> Boolean
+
+    -- Geo + Flags (Layer 3: amckenna41/iso3166-2)
+    get_subdivision_geo: (country_code: String, subdivision_code: String) -> GeoCoordinate
+    get_subdivision_flag: (country_code: String, subdivision_code: String) -> String
+    get_subdivision_type: (country_code: String, subdivision_code: String) -> String
+
+    @invariant CountryCodeFormat
+        -- All returned country codes are ISO 3166-1 alpha-2
+        -- (two uppercase ASCII letters).
+
+    @invariant SubdivisionCodeFormat
+        -- All returned subdivision codes are ISO 3166-2 codes
+        -- without the country prefix (e.g. "BY" not "DE-BY").
+
+    @invariant LocaleFallback
+        -- Three-layer name resolution with fallback chain:
+        -- 1. countries-data-json (80+ languages, primary)
+        -- 2. iso3166-2-db (9 languages, npm fallback)
+        -- 3. Raw ISO code as last resort ("DE-BY")
+        -- Names are never empty — at minimum the code is returned.
+
+    @invariant NormalizationIdempotent
+        -- normalize_country(normalize_country(x)) = normalize_country(x)
+        -- for all valid inputs.
+
+    @invariant GeoAlwaysAvailable
+        -- get_subdivision_geo returns coordinates for all 5046
+        -- known subdivisions (100% coverage from amckenna41/iso3166-2).
+        -- Returns null only for unknown subdivision codes.
+
+    @guidance
+        -- normalize_country accepts: ISO 3166-1 alpha-2 ("DE"),
+        -- alpha-3 ("DEU"), numeric ("276"), or common English/German/
+        -- French/Spanish country names ("Germany", "Deutschland").
+        -- Returns alpha-2 or undefined if unrecognisable.
+        -- Backed by i18n-iso-countries (Layer 1).
+        --
+        -- country_from_nuts extracts the ISO 3166-1 alpha-2 country
+        -- code from a NUTS code (e.g. "de21" -> "DE"). Handles the
+        -- Greece el/GR discrepancy.
+        --
+        -- nuts_to_subdivision maps NUTS Level 1 codes to ISO 3166-2
+        -- subdivisions (e.g. "de2" -> "BY"). Best-effort: not all
+        -- NUTS regions map 1:1 to ISO 3166-2 subdivisions.
+        --
+        -- Geo-coordinates and flags are sourced from Layer 3
+        -- (amckenna41/iso3166-2 vendored JSON, 3.4MB).
+        -- Flag URLs point to SVGs hosted on GitHub.
+        --
+        -- Vendored data is updated via CI/CD jobs that sync against
+        -- upstream repos and create PRs on changes.
+}
+
+contract GeoCodeValidationContract {
+    validate_country_code: (code: String) -> Boolean
+    validate_subdivision_code: (country_code: String, subdivision_code: String) -> Boolean
+
+    @invariant RejectInvalid
+        -- Invalid codes return false, never throw.
+        -- Empty strings return false.
+
+    @guidance
+        -- Consumers should validate codes at their module boundary.
+        -- The Holiday module validates before lookup; CRM validates
+        -- on Person save. Each bounded context owns its validation.
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    supported_locales: String = "en,de,fr,es"
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- GeoCode is a stateless lookup service. Rules describe query
+-- behaviour, not entity lifecycle.
+
+rule NormalizeCountryInput {
+    when: NormalizeCountry(input)
+
+    ensures:
+        if is_valid_alpha_2(input):
+            NormalizationResult(code: to_upper(input))
+        else if is_valid_alpha_3(input):
+            NormalizationResult(code: alpha_3_to_alpha_2(input))
+        else:
+            NormalizationResult(code: name_to_alpha_2(input))
+
+    @guidance
+        -- is_valid_alpha_2, is_valid_alpha_3, alpha_3_to_alpha_2,
+        -- name_to_alpha_2, and to_upper are black box functions
+        -- backed by i18n-iso-countries.
+        -- name_to_alpha_2 searches across all supported locales.
+        -- Returns undefined if no match found.
+}
+
+rule MapNutsToSubdivision {
+    when: ResolveNutsCode(nuts_code)
+
+    ensures:
+        NutsResolutionResult(
+            country_code: country_from_nuts(nuts_code),
+            subdivision_code: nuts_to_subdivision(nuts_code)
+        )
+
+    @guidance
+        -- country_from_nuts extracts the 2-letter prefix and
+        -- uppercases it. Handles el -> GR for Greece.
+        -- nuts_to_subdivision uses the custom Eurostat crosswalk.
+        -- Returns null for NUTS codes below Level 1 that don't
+        -- map cleanly to a single ISO 3166-2 subdivision.
+}
+
+-- Design constraint: The GeoCode module performs no network calls for core lookups.
+-- All data is bundled via npm packages (Layer 1) and vendored JSON (Layers 2+3).
+-- Updates arrive through CI/CD sync jobs (vendored) and Renovate/Dependabot (npm).
+-- The amckenna41/iso3166-2 REST API is an optional online extension for fuzzy
+-- search and geo-to-subdivision lookup — the module works fully offline without it.
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Should the GeoCode module provide reverse lookup (subdivision name -> code) for data migration of existing free-text Person.addressCountry values?"
+
+open question "NUTS Level 2/3 to ISO 3166-2 mapping: Level 1 maps well for DE/AT/CH but not for all EU countries. Should we limit NUTS mapping to Level 1 for the initial release?"

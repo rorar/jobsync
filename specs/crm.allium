@@ -74,6 +74,11 @@ value Address {
     city: String?
     postal_code: String?
     country: String?
+    -- Structured ISO codes for Holiday/Calendar/Geo integration
+    -- Populated via CountrySelect/SubdivisionSelect UI components
+    -- Free-text 'country' retained for display/legacy
+    country_code: String?
+    subdivision_code: String?
 }
 
 value CompanyAssociation {

@@ -1,0 +1,268 @@
+-- allium: 3
+-- holiday-reference-data.allium
+-- Scope: Holiday Reference Data — Single Source of Truth for public holidays
+--        (international, national, state-level, regional), weekend patterns,
+--        and business day computation. Pure lookup service consumed by
+--        Calendar, CRM, and Automation modules.
+-- Includes: HolidayEntry, HolidayLookup contract, Weekend patterns,
+--           Business day computation, Caching invariants, TZ handling
+-- Excludes:
+--   - Calendar UI / event display (ROADMAP 1.7 / 5.2)
+--   - CRM Availability composition (CRM bounded context)
+--   - Company Closures / Personal Absences (CRM bounded context)
+--   - Address parsing / geocoding (ROADMAP 1.10)
+--   - Geographic code normalization (geo-codes.allium)
+-- Data sources:
+--   - date-holidays npm (offline, 200+ countries, 78 languages, islamic+hebrew)
+--   - Intl.Locale.getWeekInfo() primary / cldr-core weekData.json fallback
+-- Dependencies:
+--   - GeoCodeLookupContract from geo-codes.allium (code validation, geo, flags)
+--   - GeoCode three-layer architecture provides validated country/subdivision codes
+-- Fallback chains:
+--   Holidays: date-holidays -> [future: Nager.Date API] -> empty array
+--   Weekends: Intl.Locale.getWeekInfo() -> cldr-core weekData.json
+--   Names:    date-holidays built-in i18n (78 langs) -> English fallback
+
+use "./geo-codes.allium" as geo
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value HolidayEntry {
+    date: String
+    name: String
+    type: HolidayType
+    country: String
+    subdivision: String?
+    region: String?
+    substitute: Boolean
+    start: Timestamp
+    end: Timestamp
+
+    -- Derived
+    is_multi_day: end - start > 24.hours
+    is_half_day: end - start < 24.hours and end - start > 0.hours
+}
+
+value CountryInfo {
+    code: String
+    name: String
+    has_subdivisions: Boolean
+    weekend_days: List<Integer>
+}
+
+value SubdivisionInfo {
+    code: String
+    name: String
+}
+
+value RegionInfo {
+    code: String
+    name: String
+}
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum HolidayType { public | bank | school | optional | observance }
+
+------------------------------------------------------------
+-- Contracts
+------------------------------------------------------------
+
+contract HolidayLookupContract {
+    get_holidays: (country: String, year: Integer, subdivision: String, region: String) -> List<HolidayEntry>
+    is_holiday: (date: Timestamp, country: String, subdivision: String, region: String) -> List<HolidayEntry>
+    get_weekend_days: (country: String) -> List<Integer>
+    is_business_day: (date: Timestamp, country: String, subdivision: String, region: String) -> Boolean
+    is_holiday_batch: (date: Timestamp, locations: List<Any>) -> List<Any>
+    get_countries: (locale: String) -> List<CountryInfo>
+    get_subdivisions: (country: String) -> List<SubdivisionInfo>
+    get_regions: (country: String, subdivision: String) -> List<RegionInfo>
+
+    @invariant MultipleHolidaysPerDate
+        -- A single date can have multiple holidays (e.g. Dec 25 can be
+        -- both a public Christmas and an observance Feast). is_holiday
+        -- returns all matching entries, never just one.
+
+    @invariant WeekendPatternsFromCldr
+        -- Weekend days are sourced from CLDR via Intl.Locale.getWeekInfo()
+        -- (Node.js 22+) with cldr-core weekData.json as fallback for
+        -- older Node.js versions. Not from date-holidays getDayOff()
+        -- which is unreliable (returns single day, UAE is empty).
+
+    @invariant BusinessDaySemantics
+        -- is_business_day returns false if the date falls on a weekend
+        -- day for the given country OR if it is a public or bank holiday.
+        -- School, optional, and observance holidays do not affect
+        -- business day status.
+
+    @invariant TimezoneAwareness
+        -- All date checks account for the contact's local timezone.
+        -- Timezone is derived automatically: subdivision narrows to
+        -- the correct IANA timezone via date-holidays internal data.
+        -- Explicit IANA timezone override is available for edge cases
+        -- (e.g. El Paso, TX in Mountain Time vs. Texas default Central).
+
+    @invariant HistoricalLookupSupported
+        -- Lookups for past years are supported. date-holidays computes
+        -- holidays for arbitrary years. This enables CRM timeline
+        -- queries like "was Oct 3 2024 a holiday in Germany?".
+
+    @invariant LocaleFromUser
+        -- Holiday names are returned in the user's display locale.
+        -- date-holidays provides built-in translations for 78 languages
+        -- including en/de/fr/es. No custom i18n keys needed for names.
+        -- Fallback cascade: user locale -> country default -> English.
+
+    @invariant GracefulDegradation
+        -- If country_code is missing or invalid, the lookup returns
+        -- an empty list (no holidays) rather than an error. Consumers
+        -- handle the absence of holiday data gracefully.
+
+    @guidance
+        -- subdivision and region parameters are optional at call sites.
+        -- When omitted, only country-level holidays are returned.
+        -- When subdivision is provided, country-level + subdivision-level
+        -- holidays are returned. When region is also provided, all three
+        -- levels are included (e.g. Augsburg Friedensfest on Aug 8
+        -- requires country="DE", subdivision="BY", region="A").
+        --
+        -- is_holiday_batch accepts an array of {country, subdivision?,
+        -- region?} locations and deduplicates lookups internally.
+        -- 50 contacts across 10 countries = 10 actual lookups.
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    pre_warm_on_startup: Boolean = true
+    cache_clear_interval: Duration = 24.hours
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+rule LookupHolidays {
+    when: GetHolidays(country, year, subdivision, region, locale)
+
+    requires: geo/is_valid_country_code(country)
+
+    ensures:
+        HolidaysResult(
+            entries: get_holidays_for(country, year, subdivision, region, locale)
+        )
+
+    @guidance
+        -- get_holidays_for is a black box backed by date-holidays.
+        -- It creates or reuses a cached Holidays instance for the
+        -- country+subdivision+region combination, then calls
+        -- getHolidays(year) with the user's locale.
+}
+
+rule CheckHoliday {
+    when: CheckHoliday(date, country, subdivision, region, locale)
+
+    requires: geo/is_valid_country_code(country)
+
+    ensures:
+        HolidayCheckResult(
+            entries: check_holiday_for(date, country, subdivision, region, locale)
+        )
+
+    @guidance
+        -- check_holiday_for uses the 3-layer caching strategy:
+        -- Layer 1 (Day-Cache): Map<"country.subdivision:YYYY-MM-DD", entries>
+        -- Layer 2 (Instance-Cache): Map<"country.subdivision", Holidays>
+        -- Layer 3 (Pre-Warm): on startup, getHolidays(currentYear) for
+        -- all active countries. Pre-warm is mandatory, not optional.
+        --
+        -- Timezone is derived from subdivision via date-holidays internal
+        -- data. For multi-TZ states (e.g. US-TX), the primary timezone
+        -- is used. Callers can pass an explicit IANA timezone override.
+}
+
+rule CheckBusinessDay {
+    when: CheckBusinessDay(date, country, subdivision, region, locale)
+
+    requires: geo/is_valid_country_code(country)
+
+    let holidays = check_holiday_for(date, country, subdivision, region, locale)
+    let has_blocking_holiday = holidays.any(h => h.type in {public, bank})
+    let weekend_days = get_weekend_days_for(country)
+    let day_of_week = day_of_week(date)
+    let is_weekend = day_of_week in weekend_days
+
+    ensures:
+        BusinessDayResult(
+            is_business_day: not has_blocking_holiday and not is_weekend,
+            blocking_holidays: holidays where type in {public, bank},
+            is_weekend: is_weekend
+        )
+
+    @guidance
+        -- get_weekend_days_for uses Intl.Locale.getWeekInfo().weekend
+        -- on Node.js 22+ (returns number[] e.g. [6,7] for Sat+Sun).
+        -- Falls back to cldr-core weekData.json for older runtimes.
+        -- day_of_week returns 1=Mon through 7=Sun (ISO 8601).
+}
+
+rule BatchHolidayCheck {
+    when: CheckHolidayBatch(date, locations, locale)
+
+    for location in locations:
+        ensures:
+            BatchHolidayResult(
+                location_key: location_key(location),
+                entries: check_holiday_for(date, location.country, location.subdivision, location.region, locale)
+            )
+
+    @guidance
+        -- Deduplicates by location key before executing lookups.
+        -- 50 contacts across 10 countries = 10 unique lookups +
+        -- 40 cache hits. Sub-millisecond for cached results.
+}
+
+rule PreWarmCache {
+    when: SystemStartup(active_countries, current_year)
+
+    requires: config.pre_warm_on_startup
+
+    for country in active_countries:
+        ensures: CacheWarmed(country: country, year: current_year)
+
+    @guidance
+        -- active_countries is derived from CRM Person addresses
+        -- and active automation configurations. Typically 10-20
+        -- countries for EU-focused users.
+        -- Cost: ~88ms for 20 countries (one-time at startup).
+        -- Eliminates 24ms cold-start penalty per first lookup.
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant CacheClearOnDateChange {
+    -- Day-cache entries are keyed by date string (YYYY-MM-DD).
+    -- The cache is cleared at midnight or when the user navigates
+    -- to a different date in the calendar view.
+    -- This is an implementation invariant expressed as: stale
+    -- cache entries (date < today) must not be served.
+    true
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Islamic calendar holidays: should the UI display an uncertainty indicator for holidays derived from moon sighting (Eid al-Fitr, Eid al-Adha)? date-holidays uses Umm al-Qura approximation, actual observance may differ by 1-2 days per country."
+
+open question "Historical weekend changes: no data source tracks past weekend patterns (e.g. UAE changed from Fr+Sa to Sa+So on 2022-01-01). Should we document this as a known limitation or build a small temporal lookup table for the ~5 known changes?"
+
+open question "Pre-warm country list: should active countries be derived automatically from CRM Person.addressCountryCode values, or should the user configure them explicitly in Settings?"
