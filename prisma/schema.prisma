@@ -965,7 +965,9 @@ model Person {
   addressStreet     String?
   addressCity       String?
   addressPostalCode String?
-  addressCountry    String?
+  addressCountry         String?
+  addressCountryCode     String?
+  addressSubdivisionCode String?
 
   // Company associations (N:M via JSON value objects — specs/crm.allium CompanyAssociation)
   // Shape: [{ companyId, companyLabel, role, isPrimary, startDate, endDate }]

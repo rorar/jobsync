@@ -1342,6 +1342,8 @@ export interface PersonFixture {
   addressCity: string | null;
   addressPostalCode: string | null;
   addressCountry: string | null;
+  addressCountryCode: string | null;
+  addressSubdivisionCode: string | null;
   companies: string;
   status: string;
   dataSource: string;
@@ -1377,6 +1379,8 @@ export const mockPerson: PersonFixture = {
   addressCity: "Berlin",
   addressPostalCode: "10117",
   addressCountry: "DE",
+  addressCountryCode: "DE",
+  addressSubdivisionCode: "BE",
   companies: JSON.stringify([
     {
       companyId: "company-fixture-id",
@@ -1424,6 +1428,8 @@ export const mockPersonAnonymized: PersonFixture = {
   addressCity: null,
   addressPostalCode: null,
   addressCountry: null,
+  addressCountryCode: null,
+  addressSubdivisionCode: null,
   createdByName: null,
   updatedByName: null,
   updatedAt: new Date("2024-06-15T10:00:00.000Z"),

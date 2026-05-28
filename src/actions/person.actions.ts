@@ -42,6 +42,8 @@ interface PersonInput {
   addressCity?: string | null;
   addressPostalCode?: string | null;
   addressCountry?: string | null;
+  addressCountryCode?: string | null;
+  addressSubdivisionCode?: string | null;
 }
 
 interface PersonUpdateInput {
@@ -57,6 +59,8 @@ interface PersonUpdateInput {
   addressCity?: string | null;
   addressPostalCode?: string | null;
   addressCountry?: string | null;
+  addressCountryCode?: string | null;
+  addressSubdivisionCode?: string | null;
   processingBasis?: ProcessingBasis;
 }
 
@@ -94,6 +98,16 @@ export async function createPerson(input: PersonInput): Promise<ActionResult<{ i
       return { success: false, message: "crm.errors.invalidPlatform" };
     }
 
+    // Validate ISO 3166 codes at boundary (only if provided, null is valid)
+    if (input.addressCountryCode) {
+      if (!/^[A-Z]{2}$/i.test(input.addressCountryCode)) {
+        return { success: false, message: "crm.errors.invalidCountryCode" };
+      }
+    }
+    if (input.addressSubdivisionCode && !input.addressCountryCode) {
+      return { success: false, message: "crm.errors.subdivisionWithoutCountry" };
+    }
+
     const person = await prisma.person.create({
       data: {
         userId: user.id,
@@ -110,6 +124,8 @@ export async function createPerson(input: PersonInput): Promise<ActionResult<{ i
         addressCity: input.addressCity ?? null,
         addressPostalCode: input.addressPostalCode ?? null,
         addressCountry: input.addressCountry ?? null,
+        addressCountryCode: input.addressCountryCode ?? null,
+        addressSubdivisionCode: input.addressSubdivisionCode ?? null,
         status: "active",
         dataSource: "manual",
         processingBasis: "legitimate_interest",
@@ -188,6 +204,8 @@ export async function getPersons(filters?: {
         { emails: { contains: s } },
         { headline: { contains: s } },
         { companies: { contains: s } },
+        { addressCountryCode: { contains: s } },
+        { addressSubdivisionCode: { contains: s } },
       ];
     }
 
@@ -268,6 +286,15 @@ export async function updatePerson(
     if (input.addressCity !== undefined) data.addressCity = input.addressCity;
     if (input.addressPostalCode !== undefined) data.addressPostalCode = input.addressPostalCode;
     if (input.addressCountry !== undefined) data.addressCountry = input.addressCountry;
+    if (input.addressCountryCode !== undefined) {
+      if (input.addressCountryCode && !/^[A-Z]{2}$/i.test(input.addressCountryCode)) {
+        return { success: false, message: "crm.errors.invalidCountryCode" };
+      }
+      data.addressCountryCode = input.addressCountryCode;
+    }
+    if (input.addressSubdivisionCode !== undefined) {
+      data.addressSubdivisionCode = input.addressSubdivisionCode;
+    }
     if (input.processingBasis !== undefined) data.processingBasis = input.processingBasis;
 
     await prisma.person.update({
@@ -394,6 +421,8 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
           addressCity: null,
           addressPostalCode: null,
           addressCountry: null,
+          addressCountryCode: null,
+          addressSubdivisionCode: null,
           createdByName: null,
           updatedByName: null,
         },
@@ -495,17 +524,17 @@ export async function mergePersons(
         where: { targetPersonId: loserId, userId: user.id },
         data: { targetPersonId: winnerId },
       }),
-      // Update winner with merged data
+      // Update winner with merged data (ADR-015: userId in where)
       prisma.person.update({
-        where: { id: winnerId },
+        where: { id: winnerId, userId: user.id },
         data: {
           emails: JSON.stringify(mergedEmails),
           phones: JSON.stringify(mergedPhones),
           companies: JSON.stringify(mergedCompanies),
         },
       }),
-      // Delete loser
-      prisma.person.delete({ where: { id: loserId } }),
+      // Delete loser (ADR-015: userId in where)
+      prisma.person.delete({ where: { id: loserId, userId: user.id } }),
     ]);
 
     eventBus.publish(
@@ -520,4 +549,23 @@ export async function mergePersons(
   } catch (error) {
     return handleError(error);
   }
+}
+
+// ---------------------------------------------------------------------------
+// GeoCode Reference Lookups (ROADMAP 1.21)
+// ---------------------------------------------------------------------------
+
+export async function getCountryOptions(locale: string) {
+  const { getGeoCodeService } = await import(
+    "@/lib/connector/reference-data/modules/geo-codes"
+  );
+  return getGeoCodeService().getCountries(locale);
+}
+
+export async function getSubdivisionOptions(countryCode: string, locale: string) {
+  if (!countryCode) return [];
+  const { getGeoCodeService } = await import(
+    "@/lib/connector/reference-data/modules/geo-codes"
+  );
+  return getGeoCodeService().getSubdivisions(countryCode, locale);
 }
