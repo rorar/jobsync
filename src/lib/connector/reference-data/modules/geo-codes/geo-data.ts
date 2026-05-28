@@ -33,7 +33,6 @@ let _data: VendoredDataSet | null = null;
 
 function getData(): VendoredDataSet {
   if (!_data) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     _data = require("./data/iso3166-2.json") as VendoredDataSet;
   }
   return _data;

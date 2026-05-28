@@ -34,7 +34,6 @@ interface VendoredSubdivision {
 
 type VendoredData = Record<string, VendoredSubdivision>;
 
-/* eslint-disable @typescript-eslint/no-require-imports */
 const VENDORED: Record<string, VendoredData> = {
   AT: require("./data/subdivisions/AT.json"),
   BE: require("./data/subdivisions/BE.json"),
@@ -53,7 +52,6 @@ const VENDORED: Record<string, VendoredData> = {
   SE: require("./data/subdivisions/SE.json"),
   US: require("./data/subdivisions/US.json"),
 };
-/* eslint-enable @typescript-eslint/no-require-imports */
 
 function loadVendoredSubdivisions(
   countryCode: string,
