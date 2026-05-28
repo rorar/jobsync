@@ -45,18 +45,6 @@ value HolidayEntry {
     is_half_day: end - start < 24.hours and end - start > 0.hours
 }
 
-value CountryInfo {
-    code: String
-    name: String
-    has_subdivisions: Boolean
-    weekend_days: List<Integer>
-}
-
-value SubdivisionInfo {
-    code: String
-    name: String
-}
-
 value RegionInfo {
     code: String
     name: String
@@ -84,8 +72,6 @@ contract HolidayLookupContract {
     get_weekend_days: (country: String) -> List<Integer>
     is_business_day: (date: Timestamp, country: String, subdivision: String, region: String) -> BusinessDayResult
     is_holiday_batch: (date: Timestamp, locations: List<Any>) -> List<Any>
-    get_countries: (locale: String) -> List<CountryInfo>
-    get_subdivisions: (country: String) -> List<SubdivisionInfo>
     get_regions: (country: String, subdivision: String) -> List<RegionInfo>
 
     @invariant MultipleHolidaysPerDate
