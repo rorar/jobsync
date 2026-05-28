@@ -579,3 +579,117 @@ describe("HolidayService — Updated API contracts (CB-9..CB-14)", () => {
     expect(result.has("DE:BY")).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// D-L1: Locale passthrough to date-holidays
+// ---------------------------------------------------------------------------
+
+describe("D-L1: Locale passthrough to date-holidays", () => {
+  let svc: ReturnType<typeof getHolidayService>;
+
+  beforeEach(() => {
+    svc = getHolidayService();
+    svc.clearDayCache();
+  });
+
+  // -----------------------------------------------------------------------
+  // D-L1.1: French locale — holiday names in French
+  // -----------------------------------------------------------------------
+  it("D-L1.1: getHolidays with French locale returns French holiday names", () => {
+    const holidays = svc.getHolidays("DE", 2026, undefined, undefined, "fr");
+    const christmas = holidays.find(
+      (h: { date: string }) => h.date === "2026-12-25",
+    );
+    expect(christmas).toBeDefined();
+    // French: "Noël" or "Jour de Noël"
+    expect(christmas!.name).toMatch(/No[eë]l/i);
+  });
+
+  // -----------------------------------------------------------------------
+  // D-L1.2: Spanish locale — holiday names in Spanish
+  // -----------------------------------------------------------------------
+  it("D-L1.2: getHolidays with Spanish locale returns Spanish holiday names", () => {
+    const holidays = svc.getHolidays("DE", 2026, undefined, undefined, "es");
+    const newYear = holidays.find(
+      (h: { date: string }) => h.date === "2026-01-01",
+    );
+    expect(newYear).toBeDefined();
+    // Spanish: "Año Nuevo" or similar
+    expect(newYear!.name).toMatch(/A[ñn]o|Nuevo/i);
+  });
+
+  // -----------------------------------------------------------------------
+  // D-L1.3: English explicit locale
+  // -----------------------------------------------------------------------
+  it("D-L1.3: getHolidays with English locale returns English holiday names", () => {
+    const holidays = svc.getHolidays("DE", 2026, undefined, undefined, "en");
+    const newYear = holidays.find(
+      (h: { date: string }) => h.date === "2026-01-01",
+    );
+    expect(newYear).toBeDefined();
+    expect(newYear!.name).toBe("New Year's Day");
+  });
+
+  // -----------------------------------------------------------------------
+  // D-L1.4: No locale backward compatibility
+  // (existing tests cover this — included for explicit documentation)
+  // -----------------------------------------------------------------------
+  it("D-L1.4: getHolidays without locale returns country default names", () => {
+    const holidays = svc.getHolidays("DE", 2026);
+    const newYear = holidays.find((h) => h.date === "2026-01-01");
+    expect(newYear).toBeDefined();
+    // Default for DE is German
+    expect(newYear!.name).toMatch(/Neujahr/i);
+  });
+
+  // -----------------------------------------------------------------------
+  // D-L1.5: Cache isolation — different locales produce different names
+  // -----------------------------------------------------------------------
+  it("D-L1.5: cache isolates locale — French and German names differ for same holiday", () => {
+    const frHolidays = svc.getHolidays("DE", 2026, undefined, undefined, "fr");
+    const deHolidays = svc.getHolidays("DE", 2026, undefined, undefined, "de");
+
+    const frNewYear = frHolidays.find(
+      (h: { date: string }) => h.date === "2026-01-01",
+    );
+    const deNewYear = deHolidays.find(
+      (h: { date: string }) => h.date === "2026-01-01",
+    );
+
+    expect(frNewYear).toBeDefined();
+    expect(deNewYear).toBeDefined();
+    // French "Nouvel An" vs German "Neujahr" — must be different
+    expect(frNewYear!.name).not.toBe(deNewYear!.name);
+  });
+
+  // -----------------------------------------------------------------------
+  // D-L1.6: isHoliday with locale
+  // -----------------------------------------------------------------------
+  it("D-L1.6: isHoliday with French locale returns French holiday name", () => {
+    const christmas = localDate("2026-12-25");
+    const result = svc.isHoliday(christmas, "DE", undefined, undefined, "fr");
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0].name).toMatch(/No[eë]l/i);
+  });
+
+  // -----------------------------------------------------------------------
+  // D-L1.7: isBusinessDay with locale
+  // -----------------------------------------------------------------------
+  it("D-L1.7: isBusinessDay with French locale returns French blocking holiday names", () => {
+    const christmas = localDate("2026-12-25");
+    const result = svc.isBusinessDay(christmas, "DE", undefined, "fr");
+    expect(result.isBusinessDay).toBe(false);
+    expect(result.blockingHolidays.length).toBeGreaterThan(0);
+    expect(result.blockingHolidays[0].name).toMatch(/No[eë]l/i);
+  });
+
+  // -----------------------------------------------------------------------
+  // D-L1.8: buildInstanceKey with locale
+  // -----------------------------------------------------------------------
+  it("D-L1.8: buildInstanceKey includes locale in cache key", () => {
+    const { buildInstanceKey } = require("@/lib/connector/reference-data/modules/public-holidays/caching");
+
+    const key = buildInstanceKey("DE", undefined, 2026, "fr");
+    expect(key).toBe("DE::2026:fr");
+  });
+});

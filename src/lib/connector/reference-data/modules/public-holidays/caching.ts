@@ -25,16 +25,18 @@ function mapHolidayType(type: string): HolidayType {
   return HOLIDAY_TYPE_MAP[type] ?? "public";
 }
 
-/** Cache key format: "CC:SUB:YEAR" (e.g. "DE:BY:2026") */
+/** Cache key format: "CC:SUB:YEAR" or "CC:SUB:YEAR:LOCALE" */
 export function buildInstanceKey(
   countryCode: string,
   subdivisionCode?: string,
   year?: number,
+  locale?: string,
 ): string {
   const cc = countryCode.toUpperCase();
   const sub = subdivisionCode?.toUpperCase() ?? "";
   const y = year ?? new Date().getFullYear();
-  return `${cc}:${sub}:${y}`;
+  const lang = locale ? `:${locale.split("-")[0].toLowerCase()}` : "";
+  return `${cc}:${sub}:${y}${lang}`;
 }
 
 interface CachedHolidays {
@@ -61,12 +63,13 @@ export class DayCache {
     year: number,
     subdivisionCode?: string,
     types?: HolidayType[],
+    locale?: string,
   ): HolidayEntry[] {
-    const key = buildInstanceKey(countryCode, subdivisionCode, year);
+    const key = buildInstanceKey(countryCode, subdivisionCode, year, locale);
     let cached = this.cache.get(key);
 
     if (!cached) {
-      cached = this.buildCache(countryCode, year, subdivisionCode);
+      cached = this.buildCache(countryCode, year, subdivisionCode, locale);
       this.cache.set(key, cached);
     }
 
@@ -87,13 +90,14 @@ export class DayCache {
     countryCode: string,
     subdivisionCode?: string,
     types?: HolidayType[],
+    locale?: string,
   ): HolidayEntry[] {
     const year = date.getFullYear();
-    const key = buildInstanceKey(countryCode, subdivisionCode, year);
+    const key = buildInstanceKey(countryCode, subdivisionCode, year, locale);
     let cached = this.cache.get(key);
 
     if (!cached) {
-      cached = this.buildCache(countryCode, year, subdivisionCode);
+      cached = this.buildCache(countryCode, year, subdivisionCode, locale);
       this.cache.set(key, cached);
     }
 
@@ -112,12 +116,12 @@ export class DayCache {
    * Pre-warm the cache for specific countries and years.
    * Fire-and-forget — errors are logged but not thrown.
    */
-  preWarm(countryCodes: string[], year: number): void {
+  preWarm(countryCodes: string[], year: number, locale?: string): void {
     for (const cc of countryCodes) {
-      const key = buildInstanceKey(cc, undefined, year);
+      const key = buildInstanceKey(cc, undefined, year, locale);
       if (!this.cache.has(key)) {
         try {
-          const cached = this.buildCache(cc, year);
+          const cached = this.buildCache(cc, year, undefined, locale);
           this.cache.set(key, cached);
         } catch (err) {
           console.warn(`[DayCache] Pre-warm failed for ${cc}/${year}:`, err);
@@ -144,10 +148,21 @@ export class DayCache {
     countryCode: string,
     year: number,
     subdivisionCode?: string,
+    locale?: string,
   ): CachedHolidays {
     const cc = countryCode.toUpperCase();
     const sub = subdivisionCode?.toUpperCase();
-    const hd = sub ? new Holidays(cc, sub) : new Holidays(cc);
+
+    // Locale cascade: user locale + English fallback
+    const opts: Record<string, unknown> = {};
+    const effectiveLocale = locale && locale.length > 0 ? locale.split("-")[0].toLowerCase() : undefined;
+    if (effectiveLocale) {
+      opts.languages = effectiveLocale === "en" ? ["en"] : [effectiveLocale, "en"];
+    }
+
+    const hd = sub
+      ? new Holidays(cc, sub, opts)
+      : new Holidays(cc, opts);
 
     const rawHolidays = hd.getHolidays(year) ?? [];
 

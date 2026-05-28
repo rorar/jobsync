@@ -51,6 +51,7 @@ export interface HolidayService {
     year: number,
     subdivisionCode?: string,
     types?: HolidayType[],
+    locale?: string,
   ): HolidayEntry[];
 
   /**
@@ -62,6 +63,7 @@ export interface HolidayService {
     countryCode: string,
     subdivisionCode?: string,
     types?: HolidayType[],
+    locale?: string,
   ): HolidayEntry[];
 
   /**
@@ -78,6 +80,7 @@ export interface HolidayService {
     date: Date,
     countryCode: string,
     subdivisionCode?: string,
+    locale?: string,
   ): BusinessDayResult;
 
   /**
@@ -88,6 +91,7 @@ export interface HolidayService {
     date: Date,
     locations: Array<{ countryCode: string; subdivisionCode?: string }>,
     types?: HolidayType[],
+    locale?: string,
   ): Map<string, HolidayEntry[]>;
 
   /**
@@ -107,7 +111,7 @@ export interface HolidayService {
    * Pre-warm the cache for a list of countries and a year.
    * Fire-and-forget.
    */
-  preWarm(countryCodes: string[], year: number): void;
+  preWarm(countryCodes: string[], year: number, locale?: string): void;
 
   /**
    * Clear the day cache. Primarily for testing.
@@ -133,8 +137,9 @@ function createHolidayService(): HolidayService {
       year: number,
       subdivisionCode?: string,
       types?: HolidayType[],
+      locale?: string,
     ): HolidayEntry[] {
-      return dayCache.getHolidays(countryCode, year, subdivisionCode, types);
+      return dayCache.getHolidays(countryCode, year, subdivisionCode, types, locale);
     },
 
     isHoliday(
@@ -142,8 +147,9 @@ function createHolidayService(): HolidayService {
       countryCode: string,
       subdivisionCode?: string,
       types?: HolidayType[],
+      locale?: string,
     ): HolidayEntry[] {
-      return dayCache.isHoliday(date, countryCode, subdivisionCode, types);
+      return dayCache.isHoliday(date, countryCode, subdivisionCode, types, locale);
     },
 
     getWeekendDays(countryCode: string): number[] {
@@ -154,9 +160,10 @@ function createHolidayService(): HolidayService {
       date: Date,
       countryCode: string,
       subdivisionCode?: string,
+      locale?: string,
     ): BusinessDayResult {
       const weekendResult = isWeekend(date, countryCode);
-      const holidays = dayCache.isHoliday(date, countryCode, subdivisionCode);
+      const holidays = dayCache.isHoliday(date, countryCode, subdivisionCode, undefined, locale);
       const blockingHolidays = holidays.filter(
         (h) => h.type === "public" || h.type === "bank",
       );
@@ -172,12 +179,13 @@ function createHolidayService(): HolidayService {
       date: Date,
       locations: Array<{ countryCode: string; subdivisionCode?: string }>,
       types?: HolidayType[],
+      locale?: string,
     ): Map<string, HolidayEntry[]> {
       const results = new Map<string, HolidayEntry[]>();
       for (const loc of locations) {
         const key = `${loc.countryCode.toUpperCase()}:${loc.subdivisionCode?.toUpperCase() ?? ""}`;
         if (!results.has(key)) {
-          results.set(key, dayCache.isHoliday(date, loc.countryCode, loc.subdivisionCode, types));
+          results.set(key, dayCache.isHoliday(date, loc.countryCode, loc.subdivisionCode, types, locale));
         }
       }
       return results;
@@ -208,8 +216,8 @@ function createHolidayService(): HolidayService {
       }));
     },
 
-    preWarm(countryCodes: string[], year: number): void {
-      dayCache.preWarm(countryCodes, year);
+    preWarm(countryCodes: string[], year: number, locale?: string): void {
+      dayCache.preWarm(countryCodes, year, locale);
     },
 
     clearDayCache(): void {

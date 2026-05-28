@@ -1,10 +1,12 @@
 /**
  * Holiday Module — Weekend Detection
  *
- * Determines weekend days per country using CLDR supplemental data.
+ * Determines weekend days per country using Intl.Locale.getWeekInfo()
+ * as the primary source (Node.js 21+, auto-updates with CLDR).
+ * Falls back to cldr-core weekData.json when Intl API is unavailable.
  *
  * External API uses ISO 8601 day numbers: 1=Mon, 2=Tue, ..., 7=Sun
- * Internal logic uses JS Date.getDay() convention: 0=Sun, 6=Sat
+ * Internal CLDR fallback uses JS Date.getDay() convention: 0=Sun, 6=Sat
  * Conversion happens at the boundary (getWeekendDays return).
  */
 
@@ -90,6 +92,9 @@ function resolveJsWeekend(countryCode: string): Set<number> {
 /**
  * Get weekend day numbers for a country in ISO 8601 format.
  *
+ * Primary: Intl.Locale.getWeekInfo() (Node.js 21+, auto-updates with CLDR)
+ * Fallback: cldr-core weekData.json
+ *
  * @param countryCode ISO 3166-1 alpha-2 country code
  * @returns ISO 8601 day numbers: 1=Mon, 2=Tue, ..., 7=Sun
  *          e.g. [6, 7] for Saturday+Sunday
@@ -99,6 +104,23 @@ export function getWeekendDays(countryCode: string): number[] {
   let cached = isoWeekendCache.get(cc);
   if (cached) return cached;
 
+  // Primary: Intl.Locale.getWeekInfo() (Node 21+, auto-updates with CLDR)
+  try {
+    const locale = new Intl.Locale("und", { region: cc });
+    if (typeof (locale as any).getWeekInfo === "function") {
+      const info = (locale as any).getWeekInfo();
+      if (info?.weekend && Array.isArray(info.weekend) && info.weekend.length > 0) {
+        // getWeekInfo().weekend is already ISO 8601 (1=Mon..7=Sun)
+        cached = [...info.weekend].sort((a: number, b: number) => a - b);
+        isoWeekendCache.set(cc, cached);
+        return cached;
+      }
+    }
+  } catch {
+    // Fall through to CLDR fallback
+  }
+
+  // Fallback: cldr-core weekData.json
   const jsDays = resolveJsWeekend(cc);
   cached = [...jsDays].map(jsToIso).sort((a, b) => a - b);
   isoWeekendCache.set(cc, cached);
@@ -107,8 +129,16 @@ export function getWeekendDays(countryCode: string): number[] {
 
 /**
  * Check if a given date falls on a weekend for the specified country.
- * Uses JS day numbers internally (Date.getDay()).
+ * Derives from getWeekendDays() (ISO 8601) and converts the date's JS day to ISO.
  */
 export function isWeekend(date: Date, countryCode: string): boolean {
-  return resolveJsWeekend(countryCode).has(date.getDay());
+  const jsDay = date.getDay(); // 0=Sun..6=Sat
+  const isoDay = jsDay === 0 ? 7 : jsDay;
+  return getWeekendDays(countryCode).includes(isoDay);
+}
+
+/** Test-only: clear weekend caches for test isolation */
+export function clearWeekendCaches(): void {
+  jsWeekendCache.clear();
+  isoWeekendCache.clear();
 }
