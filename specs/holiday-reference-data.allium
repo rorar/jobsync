@@ -62,6 +62,12 @@ value RegionInfo {
     name: String
 }
 
+value BusinessDayResult {
+    is_business_day: Boolean
+    blocking_holidays: List<HolidayEntry>
+    is_weekend: Boolean
+}
+
 ------------------------------------------------------------
 -- Enumerations
 ------------------------------------------------------------
@@ -76,7 +82,7 @@ contract HolidayLookupContract {
     get_holidays: (country: String, year: Integer, subdivision: String, region: String) -> List<HolidayEntry>
     is_holiday: (date: Timestamp, country: String, subdivision: String, region: String) -> List<HolidayEntry>
     get_weekend_days: (country: String) -> List<Integer>
-    is_business_day: (date: Timestamp, country: String, subdivision: String, region: String) -> Boolean
+    is_business_day: (date: Timestamp, country: String, subdivision: String, region: String) -> BusinessDayResult
     is_holiday_batch: (date: Timestamp, locations: List<Any>) -> List<Any>
     get_countries: (locale: String) -> List<CountryInfo>
     get_subdivisions: (country: String) -> List<SubdivisionInfo>

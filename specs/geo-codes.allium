@@ -41,12 +41,9 @@ value SubdivisionInfo {
     parent_code: String?
 }
 
-value RegionInfo {
-    code: String
-    subdivision_code: String
-    country_code: String
-    name: String
-}
+-- RegionInfo REMOVED from GeoCode — regions (3rd level, e.g. DE-BY-A) are
+-- holiday-specific, not ISO 3166-2. Owned by HolidayLookupContract in
+-- holiday-reference-data.allium. Avoids circular dependency.
 
 value GeoCoordinate {
     lat: Decimal
@@ -62,10 +59,9 @@ value GeoCoordinate {
 ------------------------------------------------------------
 
 contract GeoCodeLookupContract {
-    -- Core lookups
+    -- Core lookups (regions are NOT here — owned by HolidayLookupContract)
     get_countries: (locale: String) -> List<CountryInfo>
     get_subdivisions: (country_code: String, locale: String) -> List<SubdivisionInfo>
-    get_regions: (country_code: String, subdivision_code: String, locale: String) -> List<RegionInfo>
 
     -- Normalization
     normalize_country: (input: String) -> String
