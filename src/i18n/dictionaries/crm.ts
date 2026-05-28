@@ -253,6 +253,11 @@ export const crm = {
     "crm.noCountryFound": "No country found.",
     "crm.noSubdivisionFound": "No state/region found.",
     "crm.subdivision": "State/Region",
+
+    // Holiday PoC (ROADMAP 1.22)
+    "crm.holidayToday": "Public holiday in {country}: {name}",
+    "crm.weekendToday": "Weekend in {country}",
+    "crm.businessDay": "Business day in {country}",
   },
 
   de: {
@@ -464,6 +469,11 @@ export const crm = {
     "crm.noCountryFound": "Kein Land gefunden.",
     "crm.noSubdivisionFound": "Kein Bundesland/Region gefunden.",
     "crm.subdivision": "Bundesland/Region",
+
+    // Holiday PoC (ROADMAP 1.22)
+    "crm.holidayToday": "Feiertag in {country}: {name}",
+    "crm.weekendToday": "Wochenende in {country}",
+    "crm.businessDay": "Werktag in {country}",
   },
 
   fr: {
@@ -675,6 +685,11 @@ export const crm = {
     "crm.noCountryFound": "Aucun pays trouvé.",
     "crm.noSubdivisionFound": "Aucun état/région trouvé.",
     "crm.subdivision": "État/Région",
+
+    // Holiday PoC (ROADMAP 1.22)
+    "crm.holidayToday": "Jour férié en {country} : {name}",
+    "crm.weekendToday": "Week-end en {country}",
+    "crm.businessDay": "Jour ouvrable en {country}",
   },
 
   es: {
@@ -886,5 +901,10 @@ export const crm = {
     "crm.noCountryFound": "No se encontró ningún país.",
     "crm.noSubdivisionFound": "No se encontró ningún estado/región.",
     "crm.subdivision": "Estado/Región",
+
+    // Holiday PoC (ROADMAP 1.22)
+    "crm.holidayToday": "Día festivo en {country}: {name}",
+    "crm.weekendToday": "Fin de semana en {country}",
+    "crm.businessDay": "Día laborable en {country}",
   },
 } as const;
