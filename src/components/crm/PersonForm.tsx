@@ -79,6 +79,8 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
   );
   const [countries, setCountries] = useState<CountryOption[]>([]);
   const [subdivisions, setSubdivisions] = useState<SubdivisionOption[]>([]);
+  const [countriesLoading, setCountriesLoading] = useState(true);
+  const [subdivisionsLoading, setSubdivisionsLoading] = useState(false);
 
   const [emails, setEmails] = useState<TypedEmail[]>(() => {
     const parsed = person?.emails;
@@ -96,7 +98,12 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
 
   // Load countries on mount
   useEffect(() => {
-    getCountryOptions(locale).then(setCountries);
+    let cancelled = false;
+    setCountriesLoading(true);
+    getCountryOptions(locale)
+      .then((c) => { if (!cancelled) setCountries(c); })
+      .finally(() => { if (!cancelled) setCountriesLoading(false); });
+    return () => { cancelled = true; };
   }, [locale]);
 
   // Load subdivisions when country changes
@@ -104,9 +111,15 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
     if (!addressCountryCode) {
       setSubdivisions([]);
       setAddressSubdivisionCode("");
+      setSubdivisionsLoading(false);
       return;
     }
-    getSubdivisionOptions(addressCountryCode, locale).then(setSubdivisions);
+    let cancelled = false;
+    setSubdivisionsLoading(true);
+    getSubdivisionOptions(addressCountryCode, locale)
+      .then((s) => { if (!cancelled) setSubdivisions(s); })
+      .finally(() => { if (!cancelled) setSubdivisionsLoading(false); });
+    return () => { cancelled = true; };
   }, [addressCountryCode, locale]);
 
   // --- Email handlers ---
@@ -504,12 +517,14 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
             }
           }}
           countries={countries}
+          loading={countriesLoading}
         />
-        {subdivisions.length > 0 && (
+        {(subdivisions.length > 0 || subdivisionsLoading) && (
           <SubdivisionSelect
             value={addressSubdivisionCode}
             onValueChange={setAddressSubdivisionCode}
             subdivisions={subdivisions}
+            loading={subdivisionsLoading}
           />
         )}
       </div>
@@ -520,7 +535,7 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
           {t("crm.cancel")}
         </Button>
         <Button type="submit" disabled={submitting}>
-          {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin motion-reduce:animate-none" />}
           {isEdit ? t("crm.editContact") : t("crm.addContact")}
         </Button>
       </div>

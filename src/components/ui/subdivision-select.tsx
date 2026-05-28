@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronsUpDown, Check } from "lucide-react";
+import { ChevronsUpDown, Check, Loader2 } from "lucide-react";
 import { useTranslations } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,8 @@ interface SubdivisionSelectProps {
   subdivisions: SubdivisionOption[];
   disabled?: boolean;
   className?: string;
+  /** Shows a spinner instead of the empty state while options load */
+  loading?: boolean;
 }
 
 export function SubdivisionSelect({
@@ -39,19 +41,38 @@ export function SubdivisionSelect({
   subdivisions,
   disabled,
   className,
+  loading,
 }: SubdivisionSelectProps) {
   const { t } = useTranslations();
   const [open, setOpen] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [announcement, setAnnouncement] = useState("");
 
   const selectedSub = useMemo(
     () => subdivisions.find((s) => s.code === value),
     [subdivisions, value],
   );
 
-  if (subdivisions.length === 0) return null;
+  // Manual filtering (shouldFilter={false}) so the clear item stays visible
+  // during search (matches EuresLocationCombobox pattern).
+  const filtered = useMemo(() => {
+    const q = inputValue.trim().toLowerCase();
+    if (!q) return subdivisions;
+    return subdivisions.filter(
+      (s) => s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q),
+    );
+  }, [subdivisions, inputValue]);
+
+  if (subdivisions.length === 0 && !loading) return null;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(isOpen) => {
+        setOpen(isOpen);
+        if (!isOpen) setInputValue("");
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -76,19 +97,33 @@ export function SubdivisionSelect({
         className="w-[--radix-popover-trigger-width] p-0"
         align="start"
       >
-        <Command>
+        <Command shouldFilter={false}>
           <CommandInput
             placeholder={t("crm.subdivisionSearch")}
-            onKeyDown={(e) => { if (e.key === "Tab") setOpen(false); }}
+            value={inputValue}
+            onValueChange={setInputValue}
+            onKeyDown={(e) => {
+              if (e.key === "Tab") {
+                setOpen(false);
+                setInputValue("");
+              }
+            }}
           />
           <CommandList>
-            <CommandEmpty>{t("crm.noSubdivisionFound")}</CommandEmpty>
+            {loading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none text-muted-foreground" />
+              </div>
+            ) : (
+              <CommandEmpty>{t("crm.noSubdivisionFound")}</CommandEmpty>
+            )}
             <CommandGroup>
               {value && (
                 <CommandItem
                   value="__clear__"
                   onSelect={() => {
                     onValueChange("");
+                    setAnnouncement(t("crm.subdivisionSelect"));
                     setOpen(false);
                   }}
                   className="text-muted-foreground"
@@ -96,12 +131,13 @@ export function SubdivisionSelect({
                   — {t("crm.subdivisionSelect")}
                 </CommandItem>
               )}
-              {subdivisions.map((s) => (
+              {filtered.map((s) => (
                 <CommandItem
                   key={s.code}
                   value={`${s.name} ${s.code}`}
                   onSelect={() => {
                     onValueChange(s.code);
+                    setAnnouncement(s.name);
                     setOpen(false);
                   }}
                 >
@@ -115,6 +151,9 @@ export function SubdivisionSelect({
           </CommandList>
         </Command>
       </PopoverContent>
+      <span role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </span>
     </Popover>
   );
 }

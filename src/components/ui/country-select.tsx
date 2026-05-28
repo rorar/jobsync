@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronsUpDown, Check } from "lucide-react";
+import { ChevronsUpDown, Check, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { useTranslations } from "@/i18n";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,8 @@ interface CountrySelectProps {
   countries: CountryOption[];
   disabled?: boolean;
   className?: string;
+  /** Shows a spinner instead of the empty state while options load */
+  loading?: boolean;
 }
 
 /** Flag component with error fallback */
@@ -63,17 +65,36 @@ export function CountrySelect({
   countries,
   disabled,
   className,
+  loading,
 }: CountrySelectProps) {
   const { t } = useTranslations();
   const [open, setOpen] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [announcement, setAnnouncement] = useState("");
 
   const selectedCountry = useMemo(
     () => countries.find((c) => c.code === value),
     [countries, value],
   );
 
+  // Manual filtering (shouldFilter={false}) so the clear item stays visible
+  // during search and we control the result set (matches EuresLocationCombobox).
+  const filtered = useMemo(() => {
+    const q = inputValue.trim().toLowerCase();
+    if (!q) return countries;
+    return countries.filter(
+      (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q),
+    );
+  }, [countries, inputValue]);
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(isOpen) => {
+        setOpen(isOpen);
+        if (!isOpen) setInputValue("");
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -101,19 +122,33 @@ export function CountrySelect({
         className="w-[--radix-popover-trigger-width] p-0"
         align="start"
       >
-        <Command>
+        <Command shouldFilter={false}>
           <CommandInput
             placeholder={t("crm.countrySearch")}
-            onKeyDown={(e) => { if (e.key === "Tab") setOpen(false); }}
+            value={inputValue}
+            onValueChange={setInputValue}
+            onKeyDown={(e) => {
+              if (e.key === "Tab") {
+                setOpen(false);
+                setInputValue("");
+              }
+            }}
           />
           <CommandList>
-            <CommandEmpty>{t("crm.noCountryFound")}</CommandEmpty>
+            {loading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none text-muted-foreground" />
+              </div>
+            ) : (
+              <CommandEmpty>{t("crm.noCountryFound")}</CommandEmpty>
+            )}
             <CommandGroup>
               {value && (
                 <CommandItem
                   value="__clear__"
                   onSelect={() => {
                     onValueChange("");
+                    setAnnouncement(t("crm.countrySelect"));
                     setOpen(false);
                   }}
                   className="text-muted-foreground"
@@ -121,12 +156,13 @@ export function CountrySelect({
                   — {t("crm.countrySelect")}
                 </CommandItem>
               )}
-              {countries.map((c) => (
+              {filtered.map((c) => (
                 <CommandItem
                   key={c.code}
                   value={`${c.name} ${c.code}`}
                   onSelect={() => {
                     onValueChange(c.code);
+                    setAnnouncement(c.name);
                     setOpen(false);
                   }}
                 >
@@ -141,6 +177,9 @@ export function CountrySelect({
           </CommandList>
         </Command>
       </PopoverContent>
+      <span role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </span>
     </Popover>
   );
 }

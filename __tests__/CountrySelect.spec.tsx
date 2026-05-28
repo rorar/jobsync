@@ -205,6 +205,55 @@ describe("CountrySelect", () => {
     expect(handleChange).toHaveBeenCalledWith("");
   });
 
+  it("filters the list by search input (manual filter, shouldFilter=false)", async () => {
+    const user = userEvent.setup();
+    render(
+      <CountrySelect
+        value=""
+        onValueChange={jest.fn()}
+        countries={COUNTRIES}
+      />,
+    );
+    await user.click(screen.getByRole("combobox"));
+    await user.type(screen.getByPlaceholderText("Search countries..."), "fra");
+
+    expect(screen.getByText("France")).toBeInTheDocument();
+    expect(screen.queryByText("Germany")).not.toBeInTheDocument();
+    expect(screen.queryByText("Austria")).not.toBeInTheDocument();
+  });
+
+  it("keeps the clear item visible while searching (F3)", async () => {
+    const user = userEvent.setup();
+    render(
+      <CountrySelect
+        value="DE"
+        onValueChange={jest.fn()}
+        countries={COUNTRIES}
+      />,
+    );
+    await user.click(screen.getByRole("combobox"));
+    // Type a query that matches no country
+    await user.type(screen.getByPlaceholderText("Search countries..."), "zzz");
+    // The clear item (— Select country...) must still be present
+    const clearItems = screen.getAllByText(/Select country\.\.\./);
+    expect(clearItems.length).toBeGreaterThan(0);
+  });
+
+  it("shows a loading spinner instead of the empty state when loading", async () => {
+    const user = userEvent.setup();
+    render(
+      <CountrySelect
+        value=""
+        onValueChange={jest.fn()}
+        countries={[]}
+        loading
+      />,
+    );
+    await user.click(screen.getByRole("combobox"));
+    // The "No country found" empty state must NOT show while loading
+    expect(screen.queryByText("No country found.")).not.toBeInTheDocument();
+  });
+
   it("applies a custom className to the trigger button", () => {
     const { container } = render(
       <CountrySelect
