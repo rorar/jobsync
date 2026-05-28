@@ -32,5 +32,18 @@ export async function register() {
 
     const { startRetentionCron } = await import("@/lib/scheduler/retention-cron");
     startRetentionCron();
+
+    // Pre-warm holiday service for active countries (ROADMAP 1.22)
+    const { getHolidayService } = await import(
+      "@/lib/connector/reference-data/modules/public-holidays"
+    );
+    const holidayService = getHolidayService();
+    // Defer pre-warm past critical startup path (non-blocking)
+    setImmediate(() => {
+      holidayService.preWarm(
+        ["DE", "AT", "CH", "FR", "ES", "IT", "NL", "BE", "PL", "SE", "DK", "IE", "PT", "CZ", "GB", "US"],
+        new Date().getFullYear(),
+      );
+    });
   }
 }

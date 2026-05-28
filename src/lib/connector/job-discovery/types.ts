@@ -53,6 +53,8 @@ export interface DiscoveredVacancy {
   contractEndDate?: string;
   /** Whether the vacancy is a EURES cross-border opportunity. */
   euresFlag?: boolean;
+  /** ISO 3166-1 alpha-2 country code from the source board (e.g. "DE"). */
+  countryCode?: string;
 }
 
 export type ConnectorError =

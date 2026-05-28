@@ -77,6 +77,7 @@ export async function promoteStagedVacancy(
       findOrCreateLocation(
         input.locationOverride ?? vacancy.location ?? "",
         userId,
+        deriveCountryCode(vacancy.sourceBoard),
       ),
       getOrCreateJobSource(vacancy.sourceBoard, userId),
       getDefaultJobStatus(),
@@ -178,6 +179,23 @@ export async function promoteStagedVacancy(
   );
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Country code derivation
+//
+// StagedVacancy does not persist countryCode (pending schema migration).
+// For now, derive it from the sourceBoard when it unambiguously maps to a
+// single country. Future: add countryCode to StagedVacancy, pass directly.
+// ---------------------------------------------------------------------------
+
+/** Known single-country source boards. */
+const SOURCE_BOARD_COUNTRY: Record<string, string> = {
+  arbeitsagentur: "DE",
+};
+
+function deriveCountryCode(sourceBoard: string): string | undefined {
+  return SOURCE_BOARD_COUNTRY[sourceBoard.toLowerCase()];
 }
 
 // ---------------------------------------------------------------------------
@@ -296,6 +314,7 @@ async function findOrCreateCompany(
 async function findOrCreateLocation(
   location: string,
   userId: string,
+  countryCode?: string,
 ): Promise<string | null> {
   if (!location) return null;
 
@@ -318,11 +337,29 @@ async function findOrCreateLocation(
     });
   }
 
-  if (existing) return existing.id;
+  if (existing) {
+    // Backfill: if existing Location has no country but we have countryCode, update it
+    if (countryCode && !existing.country) {
+      try {
+        await db.location.update({
+          where: { id: existing.id },
+          data: { country: countryCode.toUpperCase() },
+        });
+      } catch {
+        // Best-effort backfill — race condition is harmless
+      }
+    }
+    return existing.id;
+  }
 
   try {
     const newLocation = await db.location.create({
-      data: { label: location, value: normalized, createdBy: userId },
+      data: {
+        label: location,
+        value: normalized,
+        createdBy: userId,
+        country: countryCode?.toUpperCase() ?? null,
+      },
     });
     return newLocation.id;
   } catch {

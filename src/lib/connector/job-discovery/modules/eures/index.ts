@@ -102,6 +102,7 @@ function translateDetail(
     immediateStart: profile.immediateStartIndicator ?? undefined,
     contractStartDate: profile.employmentPeriod?.startDateText ?? undefined,
     contractEndDate: profile.employmentPeriod?.endDateText ?? undefined,
+    countryCode: location?.countryCode?.toUpperCase() ?? undefined,
   };
 }
 

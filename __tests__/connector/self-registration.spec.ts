@@ -8,8 +8,8 @@ import { moduleRegistry } from "@/lib/connector/registry";
 import { ConnectorType } from "@/lib/connector/manifest";
 
 describe("register-all.ts", () => {
-  it("registers all 11 modules", () => {
-    expect(moduleRegistry.availableModules().length).toBe(11);
+  it("registers all 13 modules", () => {
+    expect(moduleRegistry.availableModules().length).toBe(13);
   });
 
   it("registers job discovery modules", () => {
@@ -29,6 +29,6 @@ describe("register-all.ts", () => {
 
   it("registers reference data modules", () => {
     const rd = moduleRegistry.getByType(ConnectorType.REFERENCE_DATA);
-    expect(rd.map(m => m.manifest.id).sort()).toEqual(["esco_classification", "eurostat_nuts"]);
+    expect(rd.map(m => m.manifest.id).sort()).toEqual(["esco_classification", "eurostat_nuts", "geo_codes", "public_holidays"]);
   });
 });

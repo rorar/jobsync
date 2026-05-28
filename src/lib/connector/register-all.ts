@@ -30,3 +30,5 @@ import "./data-enrichment/modules/meta-parser";
 // Reference Data
 import "./reference-data/modules/esco-classification";
 import "./reference-data/modules/eurostat-nuts";
+import "./reference-data/modules/geo-codes";
+import "./reference-data/modules/public-holidays";

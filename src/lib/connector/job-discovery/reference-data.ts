@@ -42,6 +42,7 @@ export async function findOrCreateJobTitle(
 export async function findOrCreateLocation(
   location: string,
   userId: string,
+  countryCode?: string,
 ): Promise<string | null> {
   if (!location) return null;
 
@@ -68,6 +69,17 @@ export async function findOrCreateLocation(
   }
 
   if (existing) {
+    // Backfill: if existing Location has no country but we have countryCode, update it
+    if (countryCode && !existing.country) {
+      try {
+        await db.location.update({
+          where: { id: existing.id },
+          data: { country: countryCode.toUpperCase() },
+        });
+      } catch {
+        // Best-effort backfill — race condition is harmless
+      }
+    }
     return existing.id;
   }
 
@@ -76,6 +88,7 @@ export async function findOrCreateLocation(
       label: location,
       value: normalized,
       createdBy: userId,
+      country: countryCode?.toUpperCase() ?? null,
     },
   });
   return newLocation.id;

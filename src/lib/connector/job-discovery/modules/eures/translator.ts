@@ -39,6 +39,7 @@ export function translateEuresVacancy(
     numberOfPosts: jv.numberOfPosts ?? undefined,
     occupationUris: jv.jobCategoriesCodes?.length ? jv.jobCategoriesCodes : undefined,
     euresFlag: jv.euresFlag ?? undefined,
+    countryCode: extractCountryCode(jv.locationMap ?? {}),
   };
 }
 
@@ -56,6 +57,16 @@ function stripHtml(html: string): string {
     .replace(/&nbsp;/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/**
+ * Extract the first country code from the EURES locationMap.
+ * The locationMap keys are country codes (e.g. "DE", "FR").
+ */
+function extractCountryCode(locationMap: Record<string, (string | null)[]>): string | undefined {
+  const keys = Object.keys(locationMap);
+  if (keys.length === 0) return undefined;
+  return keys[0].toUpperCase();
 }
 
 function formatLocation(locationMap: Record<string, (string | null)[]>): string {

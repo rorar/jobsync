@@ -51,7 +51,7 @@ export async function mapDiscoveredVacancyToJobRecord(
   const { vacancy, userId, automationId, matchScore, matchData } = input;
 
   const jobTitleId = await findOrCreateJobTitle(vacancy.title, userId);
-  const locationId = await findOrCreateLocation(vacancy.location, userId);
+  const locationId = await findOrCreateLocation(vacancy.location, userId, vacancy.countryCode);
   const companyId = await findOrCreateCompany(vacancy.employerName, userId);
   const jobSourceId = await getOrCreateJobSource(vacancy.sourceBoard, userId);
   const statusId = await getDefaultJobStatus();

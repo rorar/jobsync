@@ -118,6 +118,7 @@ function translateJob(job: ArbeitsagenturJob): DiscoveredVacancy {
       : undefined,
     employmentType: mapEmploymentType(job.arbeitszeit),
     externalId: job.refnr,
+    countryCode: "DE",
   };
 }
 
@@ -145,6 +146,7 @@ function translateDetail(detail: ArbeitsagenturJobDetail): DiscoveredVacancy {
     applicationInstructions: detail.bewerbung
       ? stripHtml(detail.bewerbung)
       : undefined,
+    countryCode: "DE",
   };
 }
 
