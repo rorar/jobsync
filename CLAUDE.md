@@ -181,7 +181,46 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 **Current structure:** `src/lib/connector/reference-data/`:
 - **types.ts** — `ReferenceDataConnector` interface (health-only, no lookup yet)
 - **registry.ts** — Facade over `moduleRegistry` for `reference_data` modules
-- **Modules:** `modules/esco-classification/`, `modules/eurostat-nuts/` (each with `index.ts`, `manifest.ts`, `i18n.ts`)
+- **Modules:** `modules/esco-classification/`, `modules/eurostat-nuts/`, `modules/geo-codes/`, `modules/public-holidays/` (each with `index.ts`, `manifest.ts`, `i18n.ts`)
+
+### GeoCode Reference Module (ROADMAP 1.21)
+
+**GeoCodeService** (`src/lib/connector/reference-data/modules/geo-codes/index.ts`) — `globalThis` singleton. Three-layer architecture for ISO 3166 lookups:
+
+- **Layer 1 (npm):** `i18n-iso-countries` — country names (78 languages), alpha-2/3/numeric conversion, normalization
+- **Layer 2 (vendored + npm):** `countries-data-json` JSONs (primary, 82 languages per subdivision, 16 EU core countries vendored in `data/subdivisions/`) + `iso3166-2-db` (npm fallback, 9 languages)
+- **Layer 3 (vendored):** `amckenna41/iso3166-2` JSON (`data/iso3166-2.json`, 3.5MB, geo-coordinates, flags, subdivision types)
+
+**Key methods:** `getCountries(locale)`, `getSubdivisions(country, locale)`, `normalizeCountry(input)`, `isValidCountryCode(code)`, `isValidSubdivisionCode(country, sub)`, `countryFromNuts(code)`, `nutsToSubdivision(code)`, `getSubdivisionGeo/Flag/Type()`.
+
+**Performance:** Vendored JSONs loaded via `require()` (bundler-resolved, no runtime file I/O). Per-locale result cache on `getCountries()`. Pre-computed `hasSubdivisions` Set.
+
+**UI Components:** `src/components/ui/country-select.tsx` (CountrySelect Combobox with flags), `src/components/ui/subdivision-select.tsx` (SubdivisionSelect cascading). Both use server actions `getCountryOptions`/`getSubdivisionOptions` from `person.actions.ts` to bridge server-only module → client.
+
+**Prisma fields:** `Person.addressCountryCode` (ISO 3166-1 alpha-2), `Person.addressSubdivisionCode` (ISO 3166-2 without country prefix). Both nullable, GDPR-anonymized. Validated at boundary with `/^[A-Z]{2}$/i` regex.
+
+**NUTS mapping:** Custom crosswalk for EU core countries (DE, AT, FR, IT, ES, NL, BE, PL, SE, DK, IE, PT, CZ). Handles el→GR and uk→GB discrepancies.
+
+**Allium Spec:** `specs/geo-codes.allium` — GeoCodeLookupContract, GeoCodeValidationContract.
+
+### Holiday Reference Module (ROADMAP 1.22)
+
+**HolidayService** (`src/lib/connector/reference-data/modules/public-holidays/index.ts`) — `globalThis` singleton. Wraps `date-holidays` npm with 3-layer caching.
+
+**Caching:**
+- **Layer 1 (DayCache):** `Map<"CC:SUB:YEAR", CachedHolidays>` — per country+subdivision+year
+- **Layer 2 (Instance):** Holidays instances cached per combination
+- **Layer 3 (Pre-Warm):** PFLICHT at startup (`setImmediate` in `instrumentation.ts`) for 16 EU/US countries
+
+**Key methods:** `getHolidays(country, year, sub?, region?, locale?)`, `isHoliday(date, country, sub?, region?, locale?)`, `getWeekendDays(country)`, `isBusinessDay(date, country, sub?, region?, locale?)` → `BusinessDayResult`, `isHolidayBatch(date, locations)`, `getRegions(country, sub)`, `preWarm(countries, year)`, `clearDayCache()`.
+
+**Weekend service:** `src/lib/connector/reference-data/modules/public-holidays/weekend.ts` — `cldr-core` weekData.json. Returns ISO 8601 day numbers (1=Mon...7=Sun).
+
+**Business day semantics:** Only `public` + `bank` holidays block business days. `school`/`optional`/`observance` do NOT. Country-specific weekend patterns respected (UAE Sa+Su, Iran Fr).
+
+**Region support:** `getRegions()` is on HolidayService (NOT GeoCodeService) because regions (3rd level, e.g., DE→BY→A for Augsburger Friedensfest) exist only in date-holidays, not in ISO 3166-2. Avoids circular dependency.
+
+**Allium Spec:** `specs/holiday-reference-data.allium` — HolidayLookupContract, BusinessDayResult, Caching-Invarianten.
 
 **Module Dependencies:** Modules can declare `dependencies: DependencyHealthCheck[]` in their manifest. The health monitor probes dependencies alongside the main health check. A failed dependency can **degrade** the parent but **never** make it unreachable (spec rule `DependencyHealthDegradation`). EURES declares ESCO, Eurostat, and EURES Country Stats as dependencies.
 

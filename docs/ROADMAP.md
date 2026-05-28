@@ -1195,7 +1195,7 @@ value ModuleDependency {
 - ≠ AI Provider: Keine Inferenz, rein deklarative Klassifikationsdaten.
 - Cross-Ref: CareerBERT (→ 9.1) nutzt ESCO-Centroids, Skillsets (→ 4.1) nutzt ESCO/NACE, Onboarding (→ 2.1) nutzt ESCO-Taxonomie
 
-### 1.21 GeoCode Reference Module (ISO 3166 + NUTS Mapping)
+### 1.21 GeoCode Reference Module (ISO 3166 + NUTS Mapping) ✅ DONE (2026-05-28)
 Reference Data Module (`taxonomy: "geo_codes"`) als Single Source of Truth für geographische Code-Normalisierung. Foundation für Holiday (→ 1.22), Kalender (→ 1.7), CRM (→ 5.x) und alle zukünftigen geo-abhängigen Features.
 
 **Dreischicht-Architektur mit gegenseitigen Fallbacks:**
@@ -1234,9 +1234,9 @@ Reference Data Module (`taxonomy: "geo_codes"`) als Single Source of Truth für 
 - ≠ Address-Parsing: `localized-address-format`/libpostal sind ROADMAP 1.10/2.6 Concerns.
 - ≠ Holiday-Lookups: Feiertags-Daten gehören zu 1.22.
 
-**Allium Spec:** [`specs/geo-codes.allium`](specs/geo-codes.allium) — GeoCodeLookupContract, GeoCodeValidationContract, CountryInfo/SubdivisionInfo/RegionInfo Value Objects
+**Allium Spec:** [`specs/geo-codes.allium`](specs/geo-codes.allium) — GeoCodeLookupContract, GeoCodeValidationContract, CountryInfo/SubdivisionInfo Value Objects (RegionInfo → holiday-reference-data.allium)
 
-### 1.22 Holiday Reference Module (Feiertage + Weekend + BusinessDay)
+### 1.22 Holiday Reference Module (Feiertage + Weekend + BusinessDay) ✅ DONE (2026-05-28)
 Reference Data Module (`taxonomy: "holidays"`) als Single Source of Truth für Feiertage weltweit (international, national, Bundesebene/State-Level, regional). Liefert Lookups für Consumer-Module (Kalender, CRM, Automationen).
 
 **Datenquelle:** `date-holidays` npm-Paket (offline, 200+ Länder, 78 Sprachen, islamischer+hebräischer Kalender, 3-stufige Hierarchie Country→Subdivision→Region).
