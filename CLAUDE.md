@@ -195,7 +195,7 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **Performance:** Vendored JSONs loaded via `require()` (bundler-resolved, no runtime file I/O). Per-locale result cache on `getCountries()`. Pre-computed `hasSubdivisions` Set.
 
-**UI Components:** `src/components/ui/country-select.tsx` (CountrySelect Combobox with flags), `src/components/ui/subdivision-select.tsx` (SubdivisionSelect cascading). Both use server actions `getCountryOptions`/`getSubdivisionOptions` from `person.actions.ts` to bridge server-only module → client.
+**UI Components:** `src/components/ui/country-select.tsx` (CountrySelect Combobox with flags), `src/components/ui/subdivision-select.tsx` (SubdivisionSelect cascading). Both use server actions `getCountryOptions`/`getSubdivisionOptions` from `src/actions/reference-data.actions.ts` to bridge server-only module → client. These reference-data lookups live in their own Open Host Service action file (NOT in `person.actions.ts`) so the Person aggregate Repository stays pure (DDD). All three reference actions (incl. `getPersonHolidayInfo`) are auth-gated (ADR-019). Both comboboxes follow the EuresLocationCombobox pattern: `shouldFilter={false}` + manual filter, controlled `inputValue` reset on close, `aria-live` selection announcement, and a `loading` prop for the async fetch state.
 
 **Prisma fields:** `Person.addressCountryCode` (ISO 3166-1 alpha-2), `Person.addressSubdivisionCode` (ISO 3166-2 without country prefix). Both nullable, GDPR-anonymized. Validated at boundary with `/^[A-Z]{2}$/i` regex.
 
