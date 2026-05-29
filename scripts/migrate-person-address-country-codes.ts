@@ -5,10 +5,19 @@
  * attempts to resolve the free-text country name to an ISO 3166-1 alpha-2 code
  * using GeoCodeService.normalizeCountry().
  *
- * Idempotent: skips rows that already have addressCountryCode.
+ * Idempotent: the query only selects rows where addressCountryCode IS NULL,
+ * so re-running never re-processes already-migrated rows.
  * ADR-015: includes userId in all where clauses.
+ * Per-row failures are isolated (logged + counted) so one bad update does not
+ * abort the whole batch.
  *
- * Usage: npx tsx scripts/migrate-person-address-country-codes.ts
+ * Usage:        npx tsx scripts/migrate-person-address-country-codes.ts
+ * Dry run:      DRY_RUN=1 npx tsx scripts/migrate-person-address-country-codes.ts
+ *
+ * Note: normalizeCountry is intentionally re-implemented here (not imported from
+ * the GeoCode module) because the module carries `import "server-only"`, which
+ * throws outside the Next.js runtime. The logic is a faithful copy of
+ * geo-codes/countries.ts:normalizeCountry — keep them in sync if that changes.
  */
 import { PrismaClient } from "@prisma/client";
 
@@ -69,28 +78,42 @@ async function main() {
     },
   });
 
-  console.log(`Found ${persons.length} persons to migrate.`);
+  const dryRun = process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true";
+  console.log(
+    `Found ${persons.length} persons to migrate.${dryRun ? " (DRY RUN — no writes)" : ""}`,
+  );
 
   let migrated = 0;
-  let skipped = 0;
-  let failed = 0;
+  let unresolvable = 0;
+  let errored = 0;
 
   for (const person of persons) {
     const code = normalizeCountry(person.addressCountry!);
-    if (code) {
-      await prisma.person.update({
-        where: { id: person.id, userId: person.userId },
-        data: { addressCountryCode: code },
-      });
-      migrated++;
-      console.log(`  ✓ ${person.id}: "${person.addressCountry}" → ${code}`);
-    } else {
-      failed++;
+    if (!code) {
+      unresolvable++;
       console.log(`  ✗ ${person.id}: "${person.addressCountry}" — could not resolve`);
+      continue;
+    }
+    try {
+      if (!dryRun) {
+        // ADR-015: userId in where clause
+        await prisma.person.update({
+          where: { id: person.id, userId: person.userId },
+          data: { addressCountryCode: code },
+        });
+      }
+      migrated++;
+      console.log(`  ${dryRun ? "○" : "✓"} ${person.id}: "${person.addressCountry}" → ${code}`);
+    } catch (err) {
+      // Isolate per-row failures so one bad update doesn't abort the batch
+      errored++;
+      console.error(`  ! ${person.id}: update failed —`, err instanceof Error ? err.message : err);
     }
   }
 
-  console.log(`\nDone: ${migrated} migrated, ${skipped} skipped, ${failed} unresolvable.`);
+  console.log(
+    `\nDone: ${migrated} ${dryRun ? "would migrate" : "migrated"}, ${unresolvable} unresolvable, ${errored} errored.`,
+  );
 }
 
 main()

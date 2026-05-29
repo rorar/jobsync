@@ -75,16 +75,9 @@ export class DayCache {
     locale?: string,
   ): HolidayEntry[] {
     const key = buildInstanceKey(countryCode, subdivisionCode, year, locale);
-    let cached = this.cache.get(key);
-
-    if (!cached) {
-      cached = this.buildCache(countryCode, year, subdivisionCode, locale);
-      this.lruSet(key, cached);
-    } else {
-      // LRU touch: re-insert to move to end of Map iteration order
-      this.cache.delete(key);
-      this.cache.set(key, cached);
-    }
+    const cached = this.lruGetOrBuild(key, () =>
+      this.buildCache(countryCode, year, subdivisionCode, locale),
+    );
 
     if (types && types.length > 0) {
       const typeSet = new Set(types);
@@ -107,15 +100,9 @@ export class DayCache {
   ): HolidayEntry[] {
     const year = date.getFullYear();
     const key = buildInstanceKey(countryCode, subdivisionCode, year, locale);
-    let cached = this.cache.get(key);
-
-    if (!cached) {
-      cached = this.buildCache(countryCode, year, subdivisionCode, locale);
-      this.lruSet(key, cached);
-    } else {
-      this.cache.delete(key);
-      this.cache.set(key, cached);
-    }
+    const cached = this.lruGetOrBuild(key, () =>
+      this.buildCache(countryCode, year, subdivisionCode, locale),
+    );
 
     const isoDate = formatIsoDate(date);
     const entries = cached.dateMap.get(isoDate) ?? [];
@@ -156,9 +143,32 @@ export class DayCache {
     return this.cache.size;
   }
 
+  /** Current cache keys in LRU order (oldest first). Test seam for eviction-identity assertions. */
+  _keys(): string[] {
+    return [...this.cache.keys()];
+  }
+
   // -------------------------------------------------------------------------
   // Private
   // -------------------------------------------------------------------------
+
+  /**
+   * Single LRU access point: returns the cached entry (touched to most-recent)
+   * or builds, evicts-if-full, and inserts it. Centralizes the LRU policy so
+   * touch-on-hit and evict-on-miss live in exactly one place.
+   */
+  private lruGetOrBuild(key: string, build: () => CachedHolidays): CachedHolidays {
+    const existing = this.cache.get(key);
+    if (existing) {
+      // LRU touch: re-insert to move to end of Map iteration order
+      this.cache.delete(key);
+      this.cache.set(key, existing);
+      return existing;
+    }
+    const value = build();
+    this.lruSet(key, value);
+    return value;
+  }
 
   /** Insert with LRU eviction: evict oldest entry when cache exceeds maxSize */
   private lruSet(key: string, value: CachedHolidays): void {

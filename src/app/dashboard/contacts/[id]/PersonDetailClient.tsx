@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations, formatDateShort } from "@/i18n";
 import { useToast } from "@/components/ui/use-toast";
-import { getPerson, updatePerson, archivePerson, reactivatePerson, anonymizePerson, getPersonHolidayInfo, type PersonHolidayInfo } from "@/actions/person.actions";
+import { getPerson, updatePerson, archivePerson, reactivatePerson, anonymizePerson } from "@/actions/person.actions";
+import { getPersonHolidayInfo, type PersonHolidayInfo } from "@/actions/reference-data.actions";
 import { getInterviews } from "@/actions/crmInterview.actions";
 import { getCrmTasks } from "@/actions/crmTask.actions";
 import { getCrmNotes } from "@/actions/crmNote.actions";
@@ -84,12 +85,18 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
     loadRelated();
   }, [loadPerson, loadRelated]);
 
-  // Holiday PoC: fetch holiday info when person data is available
+  // Holiday PoC: fetch holiday info when person data is available.
+  // Guarded against stale writes — a slower earlier request must not overwrite
+  // the result of a newer one (or write after unmount).
   useEffect(() => {
     const cc = person?.addressCountryCode as string | undefined;
     if (!cc) { setHolidayInfo(null); return; }
     const sub = (person?.addressSubdivisionCode as string | undefined) ?? undefined;
-    getPersonHolidayInfo(cc, locale, sub).then(setHolidayInfo).catch(() => setHolidayInfo(null));
+    let cancelled = false;
+    getPersonHolidayInfo(cc, locale, sub)
+      .then((info) => { if (!cancelled) setHolidayInfo(info); })
+      .catch(() => { if (!cancelled) setHolidayInfo(null); });
+    return () => { cancelled = true; };
   }, [person?.addressCountryCode, person?.addressSubdivisionCode, locale]);
 
   const handleArchive = async () => {

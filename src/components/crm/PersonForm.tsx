@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2, Loader2 } from "lucide-react";
 import { CountrySelect, type CountryOption } from "@/components/ui/country-select";
 import { SubdivisionSelect, type SubdivisionOption } from "@/components/ui/subdivision-select";
-import { getCountryOptions, getSubdivisionOptions } from "@/actions/person.actions";
+import { getCountryOptions, getSubdivisionOptions } from "@/actions/reference-data.actions";
 import type {
   TypedEmail,
   TypedPhone,
@@ -519,14 +519,14 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
           countries={countries}
           loading={countriesLoading}
         />
-        {(subdivisions.length > 0 || subdivisionsLoading) && (
-          <SubdivisionSelect
-            value={addressSubdivisionCode}
-            onValueChange={setAddressSubdivisionCode}
-            subdivisions={subdivisions}
-            loading={subdivisionsLoading}
-          />
-        )}
+        {/* SubdivisionSelect self-hides (returns null) when there are no
+            subdivisions and it is not loading — single decision point. */}
+        <SubdivisionSelect
+          value={addressSubdivisionCode}
+          onValueChange={setAddressSubdivisionCode}
+          subdivisions={subdivisions}
+          loading={subdivisionsLoading}
+        />
       </div>
 
       {/* Actions */}
