@@ -9,12 +9,10 @@
 ## Process (unchanged, PFLICHT)
 
 - `/full-stack-orchestration:full-stack-feature` (lean where surgical) → TDD throughout → Allium ZUERST → `/comprehensive-review:full-review` (right-sized) + **Flashlight (project-wide grep, not just diff)** + blind-spot → fix all findings, verify each agent "fixed" claim vs `git diff` → **Honesty Gate before push** (no push without explicit go). @rorar, `origin/main` only (fork), no upstream PRs. Tests `nice -n 10 … --maxWorkers=1`, never tests+build parallel, stop dev server before `tsc`.
-- **Set up `/understand` auto-update** so devs needn't run the skill manually:
-  ```
-  # Auto-update on every commit via a post-commit hook
-  /understand --auto-update
-  ```
-  The knowledge graph (`.understand-anything/`) is now committed; wire a post-commit hook that runs `/understand --auto-update` to keep it in sync with HEAD.
+- **Understand-Anything graph hygiene (CORRECTED — the earlier "post-commit hook → `/understand --auto-update`" note was wrong):** `--auto-update` is only a *config toggle*, and the plugin's skills are interactive (LLM-driven) — a git hook / CI **cannot** invoke them headlessly. The real safeguards are now in place:
+  - `.claude/settings.json` **SessionStart hook** runs `scripts/understand-staleness-check.sh` → reports if the committed graph is stale vs `HEAD` + lists untrusted files (no LLM, no regen).
+  - Refresh, when needed, is an **in-session** `/understand-anything:understand` run (it auto-detects changed files and updates incrementally).
+  - **FEEDING RULE in CLAUDE.md** governs priming subagents with graph content (stamp freshness + verify-against-code). `allium:weed` stays authoritative for spec↔code drift — the graph is navigation/impact only.
 
 ---
 

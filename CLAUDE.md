@@ -887,6 +887,21 @@ Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` on
 - `ignoreExportsUsedInFile: true` — DDD action/model files co-export types used in the same file
 - Generated code (`eures/generated.ts`) and archive directories are excluded
 
+### Understand-Anything Knowledge Graph — Feeding Rule
+
+**Understand-Anything** (`/understand-anything:*` plugin) builds an **LLM-generated** knowledge graph in `.understand-anything/` — a *navigation + dependency/impact map*, NOT ground truth. Two failure modes: it can be **stale** (auto-update only fires for commits made *inside* a Claude Code session; external edits, `git pull`, branch/worktree switches silently invalidate it) and **LLM-fallible** (inferred summaries/edges may be wrong or missing).
+
+**Authority boundary:** the graph is a *hypothesis generator* for navigation / blast-radius / architecture-layer questions. It does **NOT** replace `allium:weed` — Allium specs remain authoritative for spec↔code drift and domain rules. Use the graph to *find where to look*, then verify against code; use Allium to judge divergence.
+
+**Staleness signal:** `bash scripts/understand-staleness-check.sh` compares the graph's build commit (`meta.json.gitCommitHash`) to `HEAD` and lists the files changed since (= untrusted nodes). Pure shell, no LLM. (`Bash(./scripts/*)` is allow-listed — run it freely.)
+
+**FEEDING RULE (PFLICHT when priming a subagent with graph content):** *Feeding strips the graph's commit-anchor* — a subagent handed graph text has no way to know it is stale and will treat it as current. The orchestrator is the only party that can know, so it MUST:
+1. Run `scripts/understand-staleness-check.sh` at feed time.
+2. Attach the verdict + stale-file list to the subagent's context (e.g. *"graph @ X vs HEAD @ Y; nodes for these files are UNTRUSTED: …"*).
+3. Instruct the subagent: *"Graph = hypothesis. Verify every edge / absence / divergence against the current file (grep/Read) before relying on or reporting it. For stale files, grep directly."*
+
+**Fail-loud, never fail-stale:** an absent graph, or a graph whose commit is not in current history (rebase/branch switch), means *navigate by grep and say so* — never feed a stale graph silently. A confidently-structured stale graph is the `feedback_verify_index_against_code` trap (a stale index that *looks* authoritative); the single worst case is a **missing dependency edge** → a "nothing uses this" false-negative → a silently-shipped breaking change.
+
 ## Post-Work Checklist
 
 - **When user reports bugs:** IMMEDIATELY add them to `docs/BUGS.md` with ID, description, file, and severity — before starting any fix. BUGS.md is the single source of truth for all known issues.
