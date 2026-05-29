@@ -134,8 +134,15 @@ contract AIProviderSafety {
         -- [NAME]/[EMAIL]/[PHONE]/[ADDRESS]) AND email + phone embedded in every
         -- FREE-TEXT field (resume title, headline, summary, work-experience and
         -- education descriptions; job description). Realised as stripPii = not
-        -- isLocal in the resume/review and
-        -- resume/match route handlers (fail-safe: redact when locality is unknown).
+        -- isLocal at ALL THREE AI-transfer sites: the resume/review and
+        -- resume/match route handlers AND the automation runner's job-match path
+        -- (fail-safe: redact when locality is unknown). The redaction policy
+        -- itself -- the [NAME]/[EMAIL]/[PHONE]/[ADDRESS] placeholders, the
+        -- free-text email/phone scrubber, and the structured-contact redactor --
+        -- lives in ONE dependency-free leaf module (src/lib/pii). Every converter
+        -- and every future egress sink MUST source redaction from there; this
+        -- prevents the per-converter drift that previously let the runner path
+        -- ship without redaction.
         -- LOCAL providers (ollama) keep full fidelity: there is no third-party
         -- transfer, so minimisation is not triggered.
         -- Free-text redaction scope is intentionally email + phone only: these are

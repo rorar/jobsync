@@ -42,12 +42,26 @@ The `invalidateAllChannels(userId)` method on ChannelRouter is documented as "GD
 
 No DSAR handler, no "Export my data" button, no structured data export. `getJobsIterator` covers only core Job fields (no Notes, Activities, Tasks, Questions, StatusHistory, matchData). CRM has no `exportPersonData` function despite the spec defining `PersonDataExport` at `specs/crm-gdpr.allium:94-111`. The `DataSubjectRequest` entity from the spec has no Prisma model.
 
-### S3 — Resume PII an Cloud-APIs (Art. 5(1)(c), 28, 44)
+### S3 — Resume PII an Cloud-APIs (Art. 5(1)(c), 28, 44) — RESOLVED (2026-05-29)
 
-**Severity:** HIGH
+**Severity:** HIGH → **RESOLVED**
 **Affected:** connectors
 
-`convertResumeToText()` at `preprocessing.ts:96-194` includes full name, email, phone, address, employment history. This is sent verbatim to OpenAI (US) and DeepSeek (China) via `buildJobMatchPrompt()` and `buildResumeReviewPrompt()`. No PII stripping. `TEXT_LIMITS` config at `config.ts:45-56` is defined but never imported or applied anywhere. No DPA documentation exists.
+**Original finding:** `convertResumeToText()` included full name, email, phone, address, employment history, sent verbatim to OpenAI (US) and DeepSeek (China). No PII stripping.
+
+**Resolution (GDPR S3 sprint + PII-Egress-Härtung):** Direct identifiers are now redacted on every cloud transfer. The redaction policy is centralised in the dependency-free leaf `src/lib/pii` (`redactContact` → `[NAME]/[EMAIL]/[PHONE]/[ADDRESS]`; `scrubFreeText`/`stripEmailPhonePatterns` for email+phone in free text). Applied as `stripPii = !isLocal` at all **three** AI-transfer sites: `resume/review` + `resume/match` route handlers and the automation runner's `convertResumeForMatch`/`matchJobToResume`. Local Ollama keeps full fidelity (no third-party transfer). `TEXT_LIMITS` are applied (`resumeCharLimit`/`jobCharLimit`). Authoritative spec: `specs/ai-provider.allium` `@invariant CloudTransferDataMinimization`.
+
+**Residual risk (accepted, documented):** names/addresses voluntarily embedded in free text, Unicode/IDN emails (ASCII regex), and Art. 9 special-category data — reliable NER detection is disproportionate and would corrupt the professional content the model needs.
+
+**Art. 13/30 recipient declaration (DSAR/RoPA — for the operator's privacy notice):** When a cloud AI module is configured and active, the resume/job text (with direct identifiers redacted per above) is transmitted to a third-party recipient acting as a **processor**:
+
+| Recipient | Role | Country (Art. 44 transfer) | Data transferred | Trigger |
+|---|---|---|---|---|
+| OpenAI | Processor | USA | Redacted resume + job text | Active `openai` AI module on resume review / job match / automation AI scoring |
+| DeepSeek | Processor | China | Redacted resume + job text | Active `deepseek` AI module on the same paths |
+| Ollama (self-hosted) | — (no transfer) | local | Full-fidelity resume + job text | Default; stays on the operator's own infrastructure |
+
+Operators using a cloud AI module MUST list the configured provider as a recipient in their privacy notice (Art. 13(1)(e)) and Record of Processing (Art. 30), and ensure an Art. 28 DPA + Art. 44+ transfer safeguard is in place. No cloud transfer occurs with the default local Ollama configuration.
 
 ### S4 — Keine Retention Policies (Art. 5(1)(e))
 

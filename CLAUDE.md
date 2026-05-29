@@ -541,6 +541,16 @@ JobSync has NO role/RBAC model — admin status is derived from a tiered rule ev
 - **Test helpers:** `_clearDerivedKeyCache()` and `_getDerivedKeyCacheSize()` exported for tests only
 - **Allium Spec:** `specs/api-key-management.allium` — `DecryptKey` rule with `@guidance` for caching
 
+### PII Egress Redaction (`src/lib/pii`)
+
+**Single source of truth for direct-identifier redaction before third-party (cloud AI) transfer** — GDPR Art. 5(1)(c). `src/lib/pii/index.ts` is a **dependency-free leaf** (zero internal imports — enforced by a test in `__tests__/pii-redaction.spec.ts`): `redactContact()` (→ `[NAME]/[EMAIL]/[PHONE]/[ADDRESS]`), `scrubFreeText(text, stripPii)`, `stripEmailPhonePatterns()` (ReDoS-bounded), `PII_PLACEHOLDERS`.
+
+- **Any new egress sink that sends resume/job/person free-text to an external recipient MUST source its redaction from `@/lib/pii`** — never reinvent inline `stripPii ? "[X]" : …` logic. (A per-converter duplicate of this logic is exactly what caused the automation-runner PII leak.)
+- Redaction policy is shared; **text LAYOUT stays per-call-site** (the two resume converters feed different LLM prompts — do NOT merge them into one function, that would change prompt text → behavior regress).
+- Gating is `stripPii = !isLocal` (fail-safe: redact when locality unknown). Local Ollama keeps full fidelity. Applied at all 3 AI-transfer sites: `resume/review` + `resume/match` routes + `runner.ts` (`convertResumeForMatch`/`matchJobToResume`).
+- Webhook egress uses a complementary **allowlist** (`filterWebhookData` in `webhook.channel.ts`), not the scrubber — different sink, different mechanism.
+- **Allium Spec:** `specs/ai-provider.allium` `@invariant CloudTransferDataMinimization`. Cloud AI providers (OpenAI/DeepSeek) are third-party recipients — see `docs/gdpr-audit-report.md` S3 for the DSAR/RoPA declaration.
+
 ### Credential Protection (ADR-016)
 - **Auth forms:** `method="POST"` + `action=""` on all `<form>` elements
 - **Client-side:** `useEffect` strips credential params from URL on mount
