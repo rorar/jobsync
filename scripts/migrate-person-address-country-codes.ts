@@ -11,8 +11,9 @@
  * Per-row failures are isolated (logged + counted) so one bad update does not
  * abort the whole batch.
  *
- * Usage:        npx tsx scripts/migrate-person-address-country-codes.ts
- * Dry run:      DRY_RUN=1 npx tsx scripts/migrate-person-address-country-codes.ts
+ * Usage:        bun scripts/migrate-person-address-country-codes.ts
+ *               (or: npx tsx scripts/migrate-person-address-country-codes.ts)
+ * Dry run:      DRY_RUN=1 bun scripts/migrate-person-address-country-codes.ts
  *
  * Note: normalizeCountry is intentionally re-implemented here (not imported from
  * the GeoCode module) because the module carries `import "server-only"`, which

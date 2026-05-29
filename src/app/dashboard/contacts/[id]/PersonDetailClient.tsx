@@ -27,8 +27,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ArrowLeft, Archive, RefreshCw, ShieldOff, Mail, Phone, MapPin, Briefcase, ExternalLink, Pencil, Trash2, CalendarDays, Sun } from "lucide-react";
+import { ArrowLeft, Archive, RefreshCw, ShieldOff, Mail, Phone, MapPin, Briefcase, ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { ActivityTimeline } from "@/components/crm/ActivityTimeline";
+import { HolidayBadge } from "@/components/crm/HolidayBadge";
 import PersonForm from "@/components/crm/PersonForm";
 import type { TypedEmail, TypedPhone, CompanyAssociation, SocialProfile } from "@/models/person.model";
 
@@ -281,25 +282,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                     <span>{[person.addressCity, person.addressSubdivisionCode, person.addressCountry].filter(Boolean).map(String).join(", ")}</span>
                   </div>
                 )}
-                {holidayInfo && (
-                  <div className="flex items-center gap-2 text-sm">
-                    {holidayInfo.isHoliday ? (
-                      <>
-                        <CalendarDays className="h-4 w-4 text-amber-500" />
-                        <Badge variant="outline" className="text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-600">
-                          {t("crm.holidayToday").replace("{country}", holidayInfo.countryName).replace("{name}", holidayInfo.holidayName ?? "")}
-                        </Badge>
-                      </>
-                    ) : holidayInfo.isWeekend ? (
-                      <>
-                        <Sun className="h-4 w-4 text-blue-500" />
-                        <Badge variant="outline" className="text-blue-600 border-blue-300 dark:text-blue-400 dark:border-blue-600">
-                          {t("crm.weekendToday").replace("{country}", holidayInfo.countryName)}
-                        </Badge>
-                      </>
-                    ) : null}
-                  </div>
-                )}
+                <HolidayBadge info={holidayInfo} />
               </CardContent>
             </Card>
 

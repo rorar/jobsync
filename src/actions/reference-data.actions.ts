@@ -73,6 +73,12 @@ export async function getPersonHolidayInfo(
 
   const holidayService = getHolidayService();
   const geoCodeService = getGeoCodeService();
+  // KNOWN LIMITATION (PoC): "today" is the SERVER clock, not the contact
+  // country's local date. Near midnight the server TZ and the country TZ can
+  // differ by a day, so the badge may be off-by-one. Proper fix requires
+  // deriving the country's IANA timezone (Allium TimezoneAwareness invariant /
+  // HolidayCheckOptions TZ override D-TZ) — tracked as a follow-up. Acceptable
+  // for the self-hosted single-user case where server TZ ≈ user TZ.
   const today = new Date();
   const sub = subdivisionCode ?? undefined;
 
