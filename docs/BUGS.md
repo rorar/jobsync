@@ -1,8 +1,23 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-05-15
+# Bug Tracker — Collected 2026-03-24, Updated 2026-05-29
 
-**Total: 584 bugs found, 583 fixed, 2 open (accepted risk), 1 new (blind spot)**
+**Total: 588 bugs found, 587 fixed, 2 open (accepted risk), 1 new (blind spot)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability) + 1 new blind spot (BS-01)
+
+## Session 2026-05-29 — GDPR S3 (resume free-text PII redaction to cloud AI)
+
+4 found + fixed (review + blind-spot + flashlight). Verified: 254 suites / 5017 tests, tsc 0 errors, E2E 9/9. NOT yet committed.
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| **S3-runner** | **HIGH** | **Flashlight-found, biggest leak.** The automation runner (`job-discovery/runner.ts`) serialises the resume via its OWN `convertResumeForMatch()` — a near-duplicate of `convertResumeToText` with **NO redaction** — and sends it to the user's AI module (which can be cloud OpenAI/DeepSeek). Job text is built inline, also unstripped. So EVERY scheduled automation run with AI scoring + a cloud provider transmitted the **full unredacted resume + job posting** (real name/email/phone + all free text) to a third party — unattended, once per matched vacancy. My initial S3 fix only covered the 2 interactive `/api/ai/resume/*` routes; the runner is a third AI-transfer path the scoped review missed. | Added `stripPii` param to `convertResumeForMatch` + `matchJobToResume`; reuse shared `stripEmailPhonePatterns` + contact placeholders; derive `isLocal` from manifest (`?? false` fail-safe) in `runAutomation`, identical to the routes. New `__tests__/runner-pii-redaction.spec.ts` (3 tests). Root cause = converter duplication; future cleanup: unify the two serialisers. |
+| S3-ReDoS | HIGH | **Latent SHIPPED vuln.** Email regex `/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g` in `stripEmailPhonePatterns` (was in `preprocessing-job.ts`, applied to job descriptions) is **quadratic O(n²)** — an unterminated local-part-like run restarts the engine at every position. Measured: 200 000-char input = 40 020 ms event-loop block. Authenticated DoS in multi-user mode; this sprint newly applies the scrubber to resume free text, widening exposure. | Bounded quantifiers to RFC 5321 caps `{1,64}@{1,255}\.{2,24}` → linear (40 020 ms → 69 ms). Single source of truth moved to `text-processing.ts`. Regression test (200k input < 1 s) added. CWE-1333/400. |
+| S3-headline | MEDIUM | `convertResumeToText({stripPii:true})` redacted the structured contact block + section descriptions but NOT the `headline` free-text field, which still reached the cloud LLM. Users embed phone/email in headlines. Flagged independently by both reviewers. | `scrub(contactInfo.headline)` on the strip path. 2 tests. |
+| S3-title | MEDIUM | Blind-spot: `resume.title` (`# ${resume.title}`) is also free text emitted to the cloud LLM and was unscrubbed. | `scrub(resume.title)` on the strip path. 2 tests. |
+
+**Flashlight sweep (2026-05-29):** the PII→cloud-AI pattern was grepped project-wide → found the runner (S3-runner, above). Server-clock "today" date pattern → only `getPersonHolidayInfo` was contact-local-relevant (fixed); other `new Date()` uses are correct system timestamps. Unbounded-regex pattern → `stripEmailPhonePatterns` was the only instance (bounded). Confirmed: exactly 3 AI-transfer sites (2 routes + runner), all now gate `stripPii = !isLocal`.
+
+Accepted residual (documented in `specs/ai-provider.allium` `CloudTransferDataMinimization`): free-text names/addresses + Art. 9 data (NER disproportionate); Unicode/IDN emails not matched by ASCII regex; multi-tz countries use first/representative zone. **Separate KNOWN deferred GDPR item (NOT this sprint):** webhook payloads send full data blobs to external URLs unfiltered (tracked in `project_deferred_sprints_for_future_sessions.md`).
 
 ## Sprint 5 Deferred-Items Cleanup (2026-04-10)
 
