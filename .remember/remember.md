@@ -17,10 +17,19 @@ DONE, plus comprehensive-review fixes. 9 commits this session (`db86060`..`786f6
 - Allium: get_countries/get_subdivisions + CountryInfo/SubdivisionInfo removed from HolidayLookupContract
 - Migration script: `scripts/migrate-person-address-country-codes.ts` (DRY_RUN=1 supported, per-row try/catch)
 
+## Blind-spot pass (2026-05-29)
+- Fixed: diacritic-insensitive combobox search (foldDiacritics in @/lib/utils)
+- Fixed: extracted HolidayBadge (+7 tests, aria-live) — closes UI test gap
+- Documented: getPersonHolidayInfo uses SERVER clock (TZ off-by-one near midnight) → D-TZ
+- Verified: migration runs (DRY_RUN=1 bun scripts/...), no `$` in holiday names
+
 ## Next
-1. E2E test for PersonDetail holiday badge (unit test done: reference-data.actions.spec.ts)
-2. D-TZ (IANA timezone override on HolidayCheckOptions) + D-W2 (CountryInfo.weekendDays type) — LOW
-3. Pre-existing dead imports in person.actions.ts (ActorSource, validateExactlyOneTarget) — cleanup pass
+1. D-TZ: derive contact country IANA timezone so holiday badge uses country-local date (top holiday item)
+2. E2E test for PersonDetail holiday badge (unit done: HolidayBadge.spec + reference-data.actions.spec)
+3. D-W2 (CountryInfo.weekendDays type) — LOW
+4. Pre-existing dead imports in person.actions.ts (ActorSource, validateExactlyOneTarget) — cleanup pass
+
+## Stats: 252 suites, 4997 tests, 0 failures, tsc clean, build clean. 13 commits this session (db86060..HEAD), all LOCAL/unpushed.
 
 ## Notes
 - Reference lookups now in reference-data.actions.ts, NOT person.actions.ts (CLAUDE.md updated)

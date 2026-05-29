@@ -28,8 +28,15 @@ UI design review ran; 12 findings triaged. Fixed: F1 (aria-label), F2 (type="but
 ### 7. ~~Allium Spec~~ — DONE (2026-05-28 follow-up session)
 Option A implemented: removed `get_countries`, `get_subdivisions`, `CountryInfo`, `SubdivisionInfo` from `holiday-reference-data.allium`. `allium check` passes.
 
+## Blind-spot analysis (2026-05-29) — what we missed, now handled
+- **TZ (Medium)**: `getPersonHolidayInfo` uses server-clock `new Date()`, not the contact country's local date — off-by-one near midnight. DOCUMENTED in code; proper fix = D-TZ below. (commit `cc85dad`)
+- **Diacritic search (Medium)**: combobox filter didn't fold accents — FIXED via `foldDiacritics` (commit `106b2b7`).
+- **Holiday badge had no UI test (Medium)**: extracted `HolidayBadge` + 7 tests + aria-live (commit `cc85dad`).
+- **Migration never run (Low)**: verified via `DRY_RUN=1 bun scripts/...` (0 rows, exit 0); bun invocation documented.
+- **`.replace()` `$` risk (Low)**: verified — no `$` in date-holidays names across 10 sampled countries. No action.
+
 ## Remaining for future sessions
-- D-TZ: IANA timezone override parameter on HolidayCheckOptions (LOW)
+- **D-TZ: derive the contact country's IANA timezone** so the holiday badge uses the country-local date (Allium TimezoneAwareness). Highest-value remaining holiday item. (LOW today, the PoC documents the gap)
 - D-W2: CountryInfo.weekendDays field missing in code type (LOW)
-- E2E test for PersonDetail holiday badge (unit test for getPersonHolidayInfo DONE — `__tests__/reference-data.actions.spec.ts`, 11 tests)
+- E2E test for PersonDetail holiday badge (unit-level done: `HolidayBadge.spec.tsx` + `reference-data.actions.spec.ts`)
 - Pre-existing dead imports in `src/actions/person.actions.ts` (`ActorSource`, `validateExactlyOneTarget`) — unused before this session, tsc does not error (noUnusedLocals off); remove in a cleanup pass
