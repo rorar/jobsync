@@ -8,9 +8,10 @@ import {
   stripEmailPhonePatterns,
 } from "@/lib/connector/ai-provider/tools/text-processing";
 
-describe("stripEmailPhonePatterns (canonical location: text-processing)", () => {
-  // Guards the single-source-of-truth: the scrubber lives here and is re-exported
-  // from preprocessing-job.ts. Both the resume and job paths must share it (S3).
+describe("stripEmailPhonePatterns (re-exported via text-processing)", () => {
+  // Canonical home is now the dependency-free leaf @/lib/pii; text-processing and
+  // preprocessing-job re-export it for backwards compatibility. This guards that
+  // the re-export path keeps resolving so both resume and job paths share it (S3).
   it("redacts email and phone, preserves non-PII", () => {
     const result = stripEmailPhonePatterns(
       "Reach me: dev@example.com or +49 151 22223333. 5 years experience.",

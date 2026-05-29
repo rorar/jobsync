@@ -46,33 +46,12 @@ export const normalizeHeadings = (text: string): string => {
 
 // PII PATTERN STRIPPING
 //
-// Single source of truth for free-text direct-identifier redaction, shared by
-// both the job-description path (preprocessing-job.ts) and the resume path
-// (preprocessing.ts). Applied ONLY when the target AI provider is non-local
-// (cloud), as a GDPR Art. 5(1)(c) data-minimization measure on the third-party
-// transfer. Scope is intentionally email + phone (high-confidence direct
-// identifiers unnecessary for the analysis purpose); names/addresses embedded
-// in free text are a documented residual risk (see specs/ai-provider.allium).
-
-/** Strip email addresses and phone numbers from free text using regex. */
-export const stripEmailPhonePatterns = (text: string): string => {
-  // Email pattern: standard email format. Quantifiers are bounded to RFC 5321
-  // limits (local-part <= 64, domain <= 255, TLD <= 24) so a long unterminated
-  // local-part-like run cannot cause quadratic backtracking (ReDoS) — the engine
-  // can only re-scan a bounded window at each start position, keeping it linear.
-  const emailRegex = /[a-zA-Z0-9._%+-]{1,64}@[a-zA-Z0-9.-]{1,255}\.[a-zA-Z]{2,24}/g;
-  // Phone pattern: international and local formats (e.g. +49 123 456789, (555) 123-4567, 0123/456789)
-  const phoneRegex = /(?:\+?\d{1,4}[\s.-]?)?(?:\(?\d{1,5}\)?[\s.-]?)?\d{2,5}[\s.-]?\d{2,5}[\s.-]?\d{0,5}/g;
-
-  let result = text.replace(emailRegex, "[EMAIL]");
-  result = result.replace(phoneRegex, (match) => {
-    // Only replace if it looks like an actual phone number (at least 7 digits)
-    const digits = match.replace(/\D/g, "");
-    return digits.length >= 7 ? "[PHONE]" : match;
-  });
-
-  return result;
-};
+// The canonical home of the free-text direct-identifier scrubber moved to the
+// dependency-free leaf module `src/lib/pii` (so every egress sink — routes,
+// runner, and future ones — shares ONE redaction policy). Re-exported here for
+// backwards compatibility with existing importers. See specs/ai-provider.allium
+// @invariant CloudTransferDataMinimization.
+export { stripEmailPhonePatterns } from "@/lib/pii";
 
 // METADATA EXTRACTION
 

@@ -17,8 +17,8 @@ import {
   JobMatchSchema,
   JOB_MATCH_SYSTEM_PROMPT,
   buildJobMatchPrompt,
-  stripEmailPhonePatterns,
 } from "@/lib/connector/ai-provider";
+import { redactContact, scrubFreeText } from "@/lib/pii";
 import type { AiManifest } from "@/lib/connector/manifest";
 import {
   AiModuleId,
@@ -743,7 +743,7 @@ async function matchJobToResume(
     // Scrub email/phone from the free-text job fields on the cloud path (the
     // posting may contain a recruiter's direct contact details). Title/company/
     // location are legitimate non-PII labels and are left intact.
-    const scrub = (t: string) => (stripPii ? stripEmailPhonePatterns(t) : t);
+    const scrub = (t: string) => scrubFreeText(t, stripPii);
     const instructions = job.applicationInstructions
       ? scrub(job.applicationInstructions)
       : job.applicationInstructions;
@@ -808,18 +808,23 @@ function convertResumeForMatch(
   resume: ResumeWithSections,
   stripPii = false,
 ): string {
-  const scrub = (t: string) => (stripPii ? stripEmailPhonePatterns(t) : t);
+  const scrub = (t: string) => scrubFreeText(t, stripPii);
 
   const parts: string[] = [`# ${scrub(resume.title)}`];
 
   if (resume.ContactInfo) {
     const contact = resume.ContactInfo;
+    // Redaction VALUES from the shared policy (src/lib/pii); LAYOUT is runner-
+    // specific (Markdown ## headings feeding buildJobMatchPrompt). Address is
+    // intentionally not rendered here — the match prompt never needed it (more
+    // data-minimising than the route path). Render guards stay on original fields.
+    const r = redactContact(contact, stripPii);
     parts.push(
       "## CONTACT",
-      `Name: ${stripPii ? "[NAME]" : `${contact.firstName} ${contact.lastName}`}`,
+      `Name: ${r.name}`,
       contact.headline ? `Headline: ${scrub(contact.headline)}` : "",
-      contact.email ? `Email: ${stripPii ? "[EMAIL]" : contact.email}` : "",
-      contact.phone ? `Phone: ${stripPii ? "[PHONE]" : contact.phone}` : "",
+      contact.email ? `Email: ${r.email}` : "",
+      contact.phone ? `Phone: ${r.phone}` : "",
     );
   }
 

@@ -19,9 +19,9 @@ import {
   normalizeHeadings,
   extractMetadata,
   validateText,
-  stripEmailPhonePatterns,
   type TextMetadata,
 } from "./text-processing";
+import { redactContact, scrubFreeText } from "@/lib/pii";
 
 // TYPES
 
@@ -110,18 +110,22 @@ export const convertResumeToText = (resume: Resume, options?: ResumeTextOptions)
     // the structured contact block. Applied to section *content* only — never to
     // labels (Company:/Job Title:/headings) — so legitimate professional data is
     // preserved. No-op when strip=false (local Ollama keeps full fidelity).
-    const scrub = (t: string) => (strip ? stripEmailPhonePatterns(t) : t);
+    const scrub = (t: string) => scrubFreeText(t, strip);
 
     const formatContactInfo = (contactInfo?: ContactInfo) => {
       if (!contactInfo) return "";
+      // Redaction VALUES come from the shared policy (src/lib/pii); the LAYOUT
+      // below is route-specific. Render guards stay on the ORIGINAL fields so
+      // empty/missing values drop out exactly as before (byte-identical output).
+      const r = redactContact(contactInfo, strip);
       const parts = [
-        `Name: ${strip ? "[NAME]" : `${contactInfo.firstName} ${contactInfo.lastName}`}`,
+        `Name: ${r.name}`,
         // Headline is free text (e.g. "Senior Dev | +49… | me@x.com") — scrub
         // embedded email/phone on the cloud path while keeping the role text.
         contactInfo.headline ? `Headline: ${scrub(contactInfo.headline)}` : "",
-        contactInfo.email ? `Email: ${strip ? "[EMAIL]" : contactInfo.email}` : "",
-        contactInfo.phone ? `Phone: ${strip ? "[PHONE]" : contactInfo.phone}` : "",
-        contactInfo.address ? `Address: ${strip ? "[ADDRESS]" : contactInfo.address}` : "",
+        contactInfo.email ? `Email: ${r.email}` : "",
+        contactInfo.phone ? `Phone: ${r.phone}` : "",
+        contactInfo.address ? `Address: ${r.address}` : "",
       ].filter(Boolean);
       return parts.join("\n");
     };

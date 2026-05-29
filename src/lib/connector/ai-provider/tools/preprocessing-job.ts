@@ -12,11 +12,11 @@ import {
   normalizeHeadings,
   extractMetadata,
   validateText,
-  stripEmailPhonePatterns,
   type TextMetadata,
 } from "./text-processing";
+import { stripEmailPhonePatterns } from "@/lib/pii";
 
-// Re-exported from the shared text-processing module (single source of truth).
+// Re-exported from the shared PII leaf module (single source of truth).
 // Kept here for backward compatibility with existing importers.
 export { stripEmailPhonePatterns };
 
