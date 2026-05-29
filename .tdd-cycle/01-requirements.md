@@ -1,630 +1,282 @@
-# S4 Test Scenario Matrix -- CRM Findings
+# TDD Cycle: Requirements Analysis
 
-## Document Purpose
-
-Comprehensive test scenario matrix for 16 open findings from the S3 weed and blind spot
-review. This document defines acceptance criteria, edge cases, test categorization, and
-mock strategy for each finding. It does NOT contain implementation code.
+**Scope:** W-1 (Intl.Locale.getWeekInfo() as primary weekend source) + D-L1 (Locale passthrough to date-holidays)
+**Date:** 2026-05-28
+**Status:** Analysis complete
 
 ---
 
-## Table of Contents
+## 1. Current State
 
-1. [Finding Index](#1-finding-index)
-2. [Acceptance Criteria by Finding](#2-acceptance-criteria-by-finding)
-3. [Test Scenario Matrix](#3-test-scenario-matrix)
-4. [Mock Strategy](#4-mock-strategy)
-5. [Verification of Already-Fixed Items](#5-verification-of-already-fixed-items)
+### W-1: Weekend Detection (weekend.ts)
 
----
+The current implementation uses **only** `cldr-core/supplemental/weekData.json` to determine weekend days per country. It:
+- Imports `weekData.json` at module init (~2KB JSON)
+- Maps CLDR three-letter day names (`sat`, `sun`, `fri`, etc.) to JS day numbers (0=Sun..6=Sat)
+- Expands a start/end range into all weekend days
+- Converts to ISO 8601 day numbers (1=Mon..7=Sun) at the public API boundary
+- Caches results in two module-level Maps: `jsWeekendCache` and `isoWeekendCache`
 
-## 1. Finding Index
+**Design doc AD-2** mandates: `Intl.Locale.getWeekInfo()` primary, `cldr-core` fallback. Node.js 24.13.1 is the runtime (getWeekInfo() available since Node.js 21).
 
-| ID | Severity | Root Cause | Summary |
-|----|----------|------------|---------|
-| F5 | HIGH | A | `updateJob` bypasses state machine -- statusId written directly to Prisma |
-| F7 | MEDIUM | A | `handleError` prefix strings are hardcoded English (~128 callsites) |
-| F6 | MEDIUM | B | Toast "Dismiss" sr-only text hardcoded English |
-| F1-partial | MEDIUM | C | 3 PRISMA_ERROR_MAP keys missing from dictionaries |
-| F8 | MEDIUM | D | `addJob` does not validate statusId existence |
-| F10 | LOW | D | `AddJobFormSchema` defaults to "draft" but seed renames to "bookmarked" |
-| F9 | LOW | E | `getToday()` stale past midnight in KanbanCard |
-| DAU-1 | MEDIUM | DAU | Rapid double-drag has no drag lock during async transition |
-| DAU-2 | HIGH | DAU | Two tabs, stale state -- no compare-and-swap on status change |
-| DAU-7 | HIGH | DAU | 500+ jobs -- Kanban uses paginated getJobsList instead of getKanbanBoard |
-| EDGE-2 | MEDIUM | Edge | Status value not in STATUS_ORDER -- jobs silently dropped from Kanban |
-| EDGE-3 | MEDIUM | Edge | KanbanEmptyState rendered without onAddJob prop |
-| EDGE-5 | MEDIUM | Edge | Within-column reorder is a no-op |
+### D-L1: Locale Passthrough (caching.ts + index.ts)
 
----
-
-## 2. Acceptance Criteria by Finding
-
-### F5 (HIGH) -- updateJob bypasses state machine
-
-**Current behavior:** `updateJob` at line 481 of `job.actions.ts` writes `statusId: status`
-directly to `prisma.job.update` without validating the transition through `isValidTransition`.
-A user can change a job from "bookmarked" to "accepted" via the edit form, completely
-circumventing the state machine that `changeJobStatus` enforces.
-
-**Acceptance criteria:**
-
-- AC-1: When `updateJob` is called with a `statusId` that differs from the current job's
-  `statusId`, the transition MUST be validated via `isValidTransition(currentStatus.value,
-  newStatus.value)`.
-- AC-2: When the status transition is invalid, `updateJob` MUST return
-  `{ success: false, errorCode: "INVALID_TRANSITION", message: "errors.invalidTransition" }`.
-- AC-3: When the status transition is valid, `updateJob` MUST create a
-  `JobStatusHistory` entry and compute side effects via `computeTransitionSideEffects`.
-- AC-4: When `statusId` is unchanged (same as current), no transition validation is needed
-  and no history entry is created. The update proceeds normally.
-- AC-5: `updateJob` MUST emit a `JobStatusChanged` domain event when the status changes.
-
-**Edge cases:**
-
-- Status field is unchanged (same statusId as current) -- should pass through without
-  transition validation.
-- Status field is set to a non-existent statusId -- should return NOT_FOUND.
-- Job does not exist or belongs to another user -- existing IDOR check covers this.
-- Concurrent status change (two edit form submissions) -- second should fail if first
-  changed the status to something that makes the second transition invalid.
-
----
-
-### F7 (MEDIUM) -- handleError prefix strings are hardcoded English
-
-**Current behavior:** `handleError(error, msg)` in `src/lib/utils.ts` receives a hardcoded
-English string like `"Failed to fetch status list. "` from 128 callsites across 21 action
-files. When the error is not a Prisma error with a mapped code, this raw English string is
-returned as `message` in the `ActionResult`, which is then shown to users via toast.
-
-**Acceptance criteria:**
-
-- AC-1: Every `handleError` call in `src/actions/*.ts` MUST pass an i18n key (e.g.,
-  `"errors.fetchStatusListFailed"`) instead of a hardcoded English string.
-- AC-2: All i18n keys passed to `handleError` MUST exist in all 4 locale dictionaries
-  (en, de, fr, es) with non-empty values.
-- AC-3: The `handleError` function itself does NOT need to change -- it already passes `msg`
-  through as `message` in the ActionResult. The consumer (toast) resolves the i18n key.
-- AC-4: The dictionary consistency test (`dictionaries.spec.ts`) MUST catch any missing keys.
-
-**Edge cases:**
-
-- Keys that contain interpolation variables (currently none in error messages).
-- Overlap with Prisma error map keys (errors.notFound, errors.duplicateEntry) -- avoid
-  double-prefixing. The `handleError` fallback `msg` is only used when no Prisma code
-  matches.
-
-**Scope note:** This is a large refactoring (128 callsites). Test strategy focuses on
-verifying the pattern, not testing every single callsite. A grep-based compliance test
-ensures no hardcoded English remains in `handleError` calls.
-
----
-
-### F6 (MEDIUM) -- Toast "Dismiss" hardcoded English
-
-**Current behavior:** `src/components/ui/toast.tsx` line 88 contains:
-```
-<span className="sr-only">Dismiss</span>
-```
-The `common.dismiss` key exists in all 4 locale dictionaries but is not used here.
-
-**Acceptance criteria:**
-
-- AC-1: The ToastClose component MUST use the translated `common.dismiss` value instead
-  of the hardcoded string "Dismiss".
-- AC-2: Screen readers in all 4 locales MUST hear the translated dismiss text.
-
-**Edge cases:**
-
-- ToastClose is a Shadcn UI primitive -- it uses `forwardRef` and does not currently
-  accept a `t` function. The fix must either accept a label prop or use the i18n hook.
-- Since toast.tsx is a client component (`"use client"`), `useTranslations()` is valid.
-- However, Shadcn primitives are typically not i18n-aware -- adding a hook here
-  creates a dependency. An alternative is a prop-based approach where the Toaster
-  component passes the translated label.
-
----
-
-### F1-partial (MEDIUM) -- Missing dictionary keys for PRISMA_ERROR_MAP
-
-**Current behavior:** `src/lib/utils.ts` PRISMA_ERROR_MAP references three i18n keys:
-- `errors.duplicateEntry` (P2002)
-- `errors.fetchFailed` (fetch failed handler)
-- `errors.referenceError` (P2003)
-
-None of these keys exist in any dictionary file. When these errors occur, the toast
-shows the raw key string (e.g., "errors.duplicateEntry") instead of a human-readable
-message.
-
-**Acceptance criteria:**
-
-- AC-1: Keys `errors.duplicateEntry`, `errors.fetchFailed`, and `errors.referenceError`
-  MUST exist in all 4 locale dictionaries (en, de, fr, es) with non-empty, user-friendly
-  translated values.
-- AC-2: The existing key `errors.notFound` (P2025) already exists. Verify it is present
-  in all 4 locales.
-- AC-3: The dictionary consistency test MUST pass after adding these keys.
-
-**Edge cases:**
-
-- Keys must be in the correct namespace file (likely a new `errors` section in the core
-  dictionary, or a new `errors.ts` namespace file).
-- Values should be generic ("A record with this value already exists") not technical
-  ("Prisma P2002 unique constraint violation").
-
----
-
-### F8 (MEDIUM) -- addJob does not validate statusId existence
-
-**Current behavior:** `addJob` at line 365 passes `statusId: status` directly to
-`prisma.job.create` without first verifying that the statusId refers to a real
-`JobStatus` record. If a client submits a fabricated statusId, Prisma will throw a
-foreign key constraint error (P2003), which is caught by `handleError` but returns a
-generic error. There is no explicit validation.
-
-**Acceptance criteria:**
-
-- AC-1: `addJob` MUST verify that the provided `statusId` exists in the `JobStatus` table
-  before creating the job.
-- AC-2: If the statusId does not exist, `addJob` MUST return
-  `{ success: false, message: "errors.notFound", errorCode: "NOT_FOUND" }`.
-- AC-3: The validation should use `prisma.jobStatus.findFirst({ where: { id: status } })`
-  -- JobStatus is a system table, no userId filter needed.
-
-**Edge cases:**
-
-- Empty string statusId -- should fail validation.
-- Valid UUID format but non-existent record -- should fail with NOT_FOUND.
-- The default schema value "draft" is not a valid statusId (it is a value, not an id) --
-  see F10 coupling.
-
----
-
-### F10 (LOW) -- AddJobFormSchema defaults to "draft" but seed renames to "bookmarked"
-
-**Current behavior:** `src/models/addJobForm.schema.ts` line 51:
-```
-.default("draft")
-```
-But the seed file (`prisma/seed.ts`) renames "draft" to "bookmarked" (legacy migration).
-If the form submits the default without selecting a status, the statusId will be
-"draft", which is not a valid status ID (it is a value, and IDs are UUIDs).
-
-**Acceptance criteria:**
-
-- AC-1: The `AddJobFormSchema` status field default MUST either be removed (require
-  explicit selection) or set to a semantically correct default that the UI always
-  overrides.
-- AC-2: The form component that uses this schema MUST always provide the actual statusId
-  from the status list, never relying on the schema default.
-- AC-3: If the Zod schema default is kept for type safety, it MUST be documented that the
-  form always overrides it.
-
-**Edge cases:**
-
-- Schema validation with default value -- `"draft"` passes `.min(2)` validation (length 5).
-- Direct server action call with no status field -- Zod applies the default, which is
-  "draft" (not a UUID, will fail FK constraint in Prisma).
-
----
-
-### F9 (LOW) -- getToday() stale past midnight in KanbanCard
-
-**Current behavior:** `src/components/kanban/KanbanCard.tsx` line 14-18:
-```
-const getToday = () => {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return now;
-};
-```
-Line 29: `const today = useMemo(() => getToday(), []);`
-
-The empty dependency array means `today` is computed once when the component mounts and
-never updated. If a user keeps the browser tab open past midnight, due date comparisons
-become stale: a job due "today" would show as "due in 1 day", and a job that became
-overdue at midnight would still show as "due today".
-
-**Acceptance criteria:**
-
-- AC-1: The `today` value in KanbanCard MUST be refreshed when the date changes.
-- AC-2: A reasonable refresh mechanism (e.g., re-compute on each render using a
-  ref comparison, or a midnight interval) MUST ensure correctness without causing
-  unnecessary re-renders.
-- AC-3: Due date badges ("Overdue", "Due today", "Due in N days") MUST reflect the
-  actual current date.
-
-**Edge cases:**
-
-- User opens page at 23:59, midnight passes -- badges must update.
-- Multiple KanbanCards visible -- all must use the same "today" (module-level is fine
-  if refreshed periodically).
-- Timezone edge cases -- `new Date()` uses browser local time, which is correct for
-  user-facing due dates.
-- Component unmount before interval fires -- interval must be cleaned up.
-
----
-
-### DAU-1 (MEDIUM) -- Rapid double-drag with no drag lock
-
-**Current behavior:** `KanbanBoard.tsx` has no lock mechanism during the async
-`handleTransitionConfirm` call. A user could:
-1. Drag job A from "bookmarked" to "applied" (dialog opens)
-2. Confirm the move (async call starts)
-3. While the async call is in flight, drag job A again from "applied" to "interview"
-
-The second drag operates on stale local state because `onRefresh` has not yet returned
-the server-confirmed data.
-
-**Acceptance criteria:**
-
-- AC-1: While `isPending` is true (async status change in flight), drag-and-drop MUST
-  be disabled for the job currently being transitioned.
-- AC-2: Optionally, ALL drag-and-drop MUST be disabled while any transition is pending
-  (simpler, prevents all race conditions).
-- AC-3: The drag sensors should be disabled or the overlay should indicate "operation in
-  progress".
-
-**Edge cases:**
-
-- User confirms dialog then immediately closes it -- pending state must still block.
-- Server returns error -- drag must be re-enabled.
-- Slow network (5+ second transition) -- user must see feedback that operation is pending.
-
----
-
-### DAU-2 (HIGH) -- Two tabs, stale state, no compare-and-swap
-
-**Current behavior:** `changeJobStatus` fetches the current job status and validates the
-transition, but does not use optimistic locking / compare-and-swap. Scenario:
-
-1. Tab A shows job in "bookmarked" status
-2. Tab B moves job to "applied" (succeeds)
-3. Tab A drags job from "bookmarked" (stale) to "rejected"
-4. Server sees current status is "applied" (from Tab B's change)
-5. "applied" -> "rejected" IS a valid transition, so it succeeds
-6. But the user in Tab A intended "bookmarked" -> "rejected"
-
-The fundamental issue is that Tab A's local state is stale and the server does not
-verify the expected source status.
-
-**Acceptance criteria:**
-
-- AC-1: `changeJobStatus` MUST accept an optional `expectedFromStatusId` parameter.
-- AC-2: When `expectedFromStatusId` is provided and the current job status does NOT
-  match, the action MUST return
-  `{ success: false, errorCode: "STALE_STATE", message: "errors.staleState" }`.
-- AC-3: The Kanban UI MUST pass the expected source status when initiating a transition.
-- AC-4: On STALE_STATE error, the UI MUST refresh the board and show a user-friendly
-  message.
-
-**Edge cases:**
-
-- `expectedFromStatusId` is not provided (backward compatibility) -- skip the check.
-- Job was deleted between the two tabs -- existing NOT_FOUND check covers this.
-- Same status change submitted from both tabs simultaneously -- first wins, second gets
-  STALE_STATE.
-- Legacy callers (updateJobStatus wrapper) -- must still work without expected status.
-
----
-
-### DAU-7 (HIGH) -- 500+ jobs, Kanban uses paginated getJobsList
-
-**Current behavior:** `JobsContainer.tsx` line 109 calls `getJobsList(page, jobsPerPage,
-filter, search)` with a default of `APP_CONSTANTS.RECORDS_PER_PAGE` (typically 25).
-This paginated data is passed to the `KanbanBoard` component. A user with 500 jobs sees
-only the first 25 on the Kanban board. Additionally, `getJobsList` does not fetch `tags`
-in its select clause, so tag badges are never rendered on Kanban cards.
-
-Meanwhile, `getKanbanBoard` (lines 770-843 of `job.actions.ts`) fetches ALL jobs with
-tags and is specifically designed for the Kanban view, but it is never called from
-JobsContainer.
-
-**Acceptance criteria:**
-
-- AC-1: The Kanban view in JobsContainer MUST use `getKanbanBoard()` instead of
-  `getJobsList()` when `viewMode === "kanban"`.
-- AC-2: The table view MUST continue using `getJobsList()` with pagination.
-- AC-3: Kanban cards MUST display tag badges (the data must include tags).
-- AC-4: Switching between kanban and table view MUST load the appropriate data source.
-
-**Edge cases:**
-
-- User with 0 jobs -- empty state must render correctly for both views.
-- User with 1000+ jobs -- getKanbanBoard loads all, may be slow. Consider whether a
-  performance warning or lazy loading per column is needed (future enhancement, not
-  blocking).
-- View mode switch while data is loading -- must handle abort/cancel correctly.
-- Tags array is empty for some jobs -- should render without errors.
-
----
-
-### EDGE-2 (MEDIUM) -- Status value not in STATUS_ORDER silently drops jobs
-
-**Current behavior:** In `getKanbanBoard` (job.actions.ts line 824):
-```
-const columns: KanbanColumn[] = STATUS_ORDER
-  .filter((statusValue) => statusMap.has(statusValue))
-  .map(...)
+The current `DayCache.buildCache()` constructs Holidays instances as:
+```typescript
+const hd = sub ? new Holidays(cc, sub) : new Holidays(cc);
 ```
 
-Jobs whose status value is NOT in `STATUS_ORDER` (e.g., a custom status or a legacy
-status like "saved" or "draft" that was not migrated) are grouped by
-`jobsByStatus.get(statusValue)` but never displayed because no column is created for them.
-
-Similarly, `useKanbanState.ts` line 127:
+No `languages` option is passed. The design doc Section 2 mandates:
+```typescript
+new Holidays(cc, sub, { languages: [userLocale, 'en'] })
 ```
-for (const statusValue of STATUS_ORDER) {
-```
-Same issue on the client side.
 
-**Acceptance criteria:**
-
-- AC-1: `getKanbanBoard` MUST NOT silently drop jobs with status values outside
-  STATUS_ORDER.
-- AC-2: Jobs with unrecognized status values MUST either:
-  - (Option A) Appear in a catch-all "Other" column, OR
-  - (Option B) Be mapped to the closest matching column (e.g., "draft" -> "bookmarked")
-- AC-3: A test MUST verify that a job with a status value not in STATUS_ORDER is still
-  present in the returned KanbanBoard data.
-
-**Edge cases:**
-
-- Status value is `null` or empty string (corrupted data) -- should not crash, should
-  appear in catch-all or be filtered with a warning.
-- Multiple unrecognized status values -- all should be handled.
-- Legacy "draft" and "saved" values -- these are mapped in VALID_TRANSITIONS but not in
-  STATUS_ORDER.
+This means holiday names are currently returned in the country's default language (e.g., "Neujahr" for DE) rather than the user's display locale. The locale must be threaded through the entire call chain: `HolidayService` interface -> `DayCache.getHolidays/isHoliday/preWarm` -> `buildCache` -> `Holidays` constructor. The cache key must include the locale to prevent cross-locale cache pollution.
 
 ---
 
-### EDGE-3 (MEDIUM) -- KanbanEmptyState rendered without onAddJob prop
+## 2. Acceptance Criteria
 
-**Current behavior:** `KanbanBoard.tsx` line 324:
+### W-1: Intl.Locale.getWeekInfo() as Primary
+
+| ID | Criterion | Pass Condition | Fail Condition |
+|----|-----------|---------------|----------------|
+| W-1.1 | Primary source is Intl.Locale.getWeekInfo() | When `Intl.Locale.prototype.getWeekInfo` exists, weekend days come from `new Intl.Locale('und-' + cc).getWeekInfo().weekend` | Falls through to CLDR without trying Intl first |
+| W-1.2 | CLDR fallback when Intl unavailable | When `getWeekInfo` is absent/throws, weekend days come from cldr-core weekData.json (existing logic) | Throws an error or returns empty/undefined |
+| W-1.3 | Return format is ISO 8601 | `getWeekendDays("DE")` returns `[6, 7]` (Sat=6, Sun=7), never JS day 0 | Contains 0, or uses wrong numbering |
+| W-1.4 | Intl.getWeekInfo() already returns ISO 8601 | No conversion needed for Intl path -- `.weekend` array is already 1=Mon..7=Sun | Applies jsToIso conversion to already-ISO numbers |
+| W-1.5 | CLDR path still converts JS->ISO | The fallback path through expandWeekendRange still uses JS day numbers internally and converts at the boundary | Double-conversion or no conversion on CLDR path |
+| W-1.6 | Country-specific weekends correct | IR returns `[5]` (Friday only), SA returns `[5, 6]`, AE returns `[6, 7]`, AF returns `[4, 5]` | Wrong days for any country |
+| W-1.7 | Unknown country fallback | `getWeekendDays("XX")` returns `[6, 7]` (world default) on both Intl and CLDR paths | Throws or returns empty |
+| W-1.8 | Case insensitivity preserved | `getWeekendDays("de")` equals `getWeekendDays("DE")` | Case-sensitive lookups |
+| W-1.9 | Results are cached | Second call for same country returns cached result, no re-computation | Creates new Intl.Locale on every call |
+| W-1.10 | isWeekend() works with new primary | `isWeekend(saturday, "DE")` returns true, `isWeekend(friday, "IR")` returns true | Weekend check inconsistent with getWeekendDays |
+| W-1.11 | Sorted output | Return array is sorted ascending (e.g., `[5, 6]` not `[6, 5]`) | Unsorted array |
+
+### D-L1: Locale Passthrough to date-holidays
+
+| ID | Criterion | Pass Condition | Fail Condition |
+|----|-----------|---------------|----------------|
+| D-L1.1 | Holidays constructor receives languages | `new Holidays(cc, sub, { languages: [locale, 'en'] })` | Constructor called without languages option |
+| D-L1.2 | Holiday names reflect user locale | `getHolidays("DE", 2026, undefined, undefined, "fr")` returns "Nouvel An" for Jan 1 | Returns "Neujahr" regardless of locale |
+| D-L1.3 | English fallback | `getHolidays("DE", 2026, undefined, undefined, "en")` returns "New Year's Day" | Falls back to country default instead of explicit English |
+| D-L1.4 | Cache key includes locale | Key format becomes `CC:SUB:YEAR:LOCALE` (e.g., `DE::2026:fr`) | Same cache entry serves different locales |
+| D-L1.5 | Different locales produce different cache entries | Requesting DE/2026 with locale "fr" then "de" creates two cache entries | Second request returns French names |
+| D-L1.6 | Locale parameter in HolidayService interface | All public methods accept optional `locale?: string` parameter | Locale not available at interface level |
+| D-L1.7 | Locale flows through DayCache | `DayCache.getHolidays()`, `DayCache.isHoliday()`, `DayCache.preWarm()` all accept locale | Locale dropped between service and cache |
+| D-L1.8 | Locale flows to buildCache | `buildCache()` receives locale and passes to Holidays constructor | Locale not threaded to constructor |
+| D-L1.9 | Backward compatibility | Calling without locale uses default behavior (country's default language) | Existing callers break |
+| D-L1.10 | isBusinessDay includes locale | `isBusinessDay(date, "DE", undefined, "fr")` returns blocking holidays with French names | Names in wrong locale |
+| D-L1.11 | isHolidayBatch includes locale | `isHolidayBatch(date, locations, types, "fr")` returns entries with French names | Locale not propagated to batch |
+| D-L1.12 | preWarm accepts locale | `preWarm(countries, year, locale)` warms cache for specific locale | Pre-warmed entries in wrong locale |
+| D-L1.13 | buildInstanceKey includes locale | Key format: `CC:SUB:YEAR:LOCALE` | Locale omitted from key |
+
+---
+
+## 3. Edge Cases
+
+### W-1 Edge Cases
+
+| ID | Edge Case | Expected Behavior |
+|----|-----------|-------------------|
+| W-E1 | Intl.Locale constructor throws (malformed country code like "", "X", "123") | Catch error, fall through to CLDR fallback |
+| W-E2 | `getWeekInfo()` method absent (Node.js < 21 runtime) | Feature detection: `typeof locale.getWeekInfo === 'function'`, fall to CLDR |
+| W-E3 | `getWeekInfo()` returns empty weekend array | Treated as valid (country with no weekend days -- theoretically possible), return `[]` |
+| W-E4 | `getWeekInfo()` returns undefined `.weekend` property | Fall through to CLDR fallback |
+| W-E5 | Country code is mixed case ("dE", "De") | Normalized to uppercase before Intl.Locale construction |
+| W-E6 | Country with single weekend day (IR = Friday only) | Returns `[5]` (length 1), not padded to 2 days |
+| W-E7 | Country with 3+ weekend days (if CLDR ever defines one) | Returns all days from `.weekend` array |
+| W-E8 | Concurrent calls for same country (race condition on cache) | Idempotent -- worst case: double computation, no corruption |
+| W-E9 | Intl and CLDR disagree for a country | Intl wins (primary), CLDR only used when Intl unavailable |
+| W-E10 | `Intl.Locale` exists but `getWeekInfo` does not (Safari polyfill scenario) | Feature-detect `getWeekInfo` specifically, not just `Intl.Locale` |
+
+### D-L1 Edge Cases
+
+| ID | Edge Case | Expected Behavior |
+|----|-----------|-------------------|
+| D-E1 | Locale is undefined/null | Omit `languages` from Holidays options (default behavior) |
+| D-E2 | Locale is empty string `""` | Treat as undefined, omit languages |
+| D-E3 | Locale not supported by date-holidays (e.g., "ja") | date-holidays falls back to English via `languages: ['ja', 'en']` |
+| D-E4 | Same country+year, different locales | Each locale gets its own cache entry; no cross-contamination |
+| D-E5 | Locale changes mid-session | Next lookup uses new locale, gets new cache entry or builds new one |
+| D-E6 | Pre-warm with locale, then lookup without locale | Different cache keys, lookup triggers fresh build |
+| D-E7 | buildInstanceKey with locale=undefined vs locale="" | Both should produce same key (no locale segment) |
+| D-E8 | Subdivision with locale (3 args + options) | `new Holidays(cc, sub, { languages: [locale, 'en'] })` -- options as 3rd arg when sub is present |
+| D-E9 | Locale "en" passed explicitly | Should not duplicate: `languages: ['en', 'en']` is harmless but should be `['en']` |
+| D-E10 | Cache size growth from many locales | 4 locales x N countries x Y years -- moderate growth; no eviction needed for typical usage |
+
+---
+
+## 4. Test Scenario Matrix
+
+### W-1: Weekend Detection (Intl primary, CLDR fallback)
+
+| # | Scenario | Category | Source | Input | Expected Output |
+|---|----------|----------|--------|-------|-----------------|
+| 1 | Standard Sat+Sun country (DE) | Unit | Intl | `"DE"` | `[6, 7]` |
+| 2 | Standard Sat+Sun country (US) | Unit | Intl | `"US"` | `[6, 7]` |
+| 3 | Friday-only weekend (IR) | Unit | Intl | `"IR"` | `[5]` |
+| 4 | Friday+Saturday weekend (SA) | Unit | Intl | `"SA"` | `[5, 6]` |
+| 5 | Friday+Saturday weekend (IL) | Unit | Intl | `"IL"` | `[5, 6]` |
+| 6 | Thursday+Friday weekend (AF) | Unit | Intl | `"AF"` | `[4, 5]` |
+| 7 | Sunday-only weekend (IN) | Unit | Intl | `"IN"` | `[7]` |
+| 8 | UAE modern (Sat+Sun since 2022) | Unit | Intl | `"AE"` | `[6, 7]` |
+| 9 | Unknown country (XX) | Unit | Intl/CLDR | `"XX"` | `[6, 7]` (world default) |
+| 10 | Case insensitivity | Unit | Both | `"de"` vs `"DE"` | Equal results |
+| 11 | CLDR fallback: Intl unavailable | Unit | CLDR | DE with mocked Intl | `[6, 7]` from CLDR |
+| 12 | CLDR fallback: Intl throws | Unit | CLDR | Mock getWeekInfo to throw | `[6, 7]` from CLDR |
+| 13 | CLDR fallback: getWeekInfo undefined | Unit | CLDR | Mock getWeekInfo as undefined | `[6, 7]` from CLDR |
+| 14 | Return type is sorted number[] | Unit | Intl | `"SA"` | `[5, 6]` not `[6, 5]` |
+| 15 | No JS day 0 in output | Unit | Intl | `"DE"` | Does not contain 0 |
+| 16 | Caching: idempotent | Unit | Both | Same country twice | Equal references or values |
+| 17 | isWeekend: Saturday in DE | Integration | Both | `Sat 2026-01-03, "DE"` | `true` |
+| 18 | isWeekend: Friday in IR | Integration | Both | `Fri 2026-01-09, "IR"` | `true` |
+| 19 | isWeekend: Saturday in IR | Integration | Both | `Sat 2026-01-03, "IR"` | `false` (not a weekend in Iran) |
+| 20 | isWeekend: Thursday in AF | Integration | Both | `Thu 2026-01-08, "AF"` | `true` |
+
+### D-L1: Locale Passthrough
+
+| # | Scenario | Category | Input | Expected Output |
+|---|----------|----------|-------|-----------------|
+| 21 | French locale, German holidays | Unit | `"DE", 2026, locale:"fr"` | Jan 1 name = "Nouvel An" |
+| 22 | Spanish locale, German holidays | Unit | `"DE", 2026, locale:"es"` | Jan 1 name contains "Nuevo" |
+| 23 | English locale, German holidays | Unit | `"DE", 2026, locale:"en"` | Jan 1 name = "New Year's Day" |
+| 24 | No locale (backward compat) | Unit | `"DE", 2026` (no locale) | Jan 1 name = "Neujahr" (country default) |
+| 25 | Cache isolation: fr then de | Unit | Two calls, diff locale | Different name for same holiday |
+| 26 | Cache key format | Unit | `buildInstanceKey("DE", "BY", 2026, "fr")` | `"DE:BY:2026:fr"` |
+| 27 | Cache key no locale | Unit | `buildInstanceKey("DE", undefined, 2026)` | `"DE::2026"` (unchanged) |
+| 28 | Subdivision + locale | Unit | `"DE", 2026, "BY", locale:"es"` | Epiphany in Spanish |
+| 29 | isHoliday with locale | Integration | `Dec 25, "DE", locale:"fr"` | Returns entry with French name |
+| 30 | isBusinessDay with locale | Integration | `Dec 25, "DE", locale:"fr"` | blockingHolidays have French names |
+| 31 | isHolidayBatch with locale | Integration | `Dec 25, [{DE},{FR}], locale:"es"` | All entries in Spanish |
+| 32 | preWarm with locale | Unit | `preWarm(["DE"], 2026, "fr")` | Cache populated for fr locale |
+| 33 | Unsupported locale fallback | Unit | `"DE", 2026, locale:"ja"` | Names in English (fallback via `['ja', 'en']`) |
+| 34 | Empty string locale | Unit | `"DE", 2026, locale:""` | Treated as no locale (country default) |
+| 35 | Locale dedup in languages array | Unit | locale="en" | `languages: ['en']` not `['en', 'en']` |
+
+---
+
+## 5. Test Categories
+
+### Unit Tests (weekend.ts)
+
+**W-1 Primary source tests** (Scenarios 1-10, 14-16):
+- Test `getWeekendDays()` returns correct ISO 8601 days for various countries
+- Test `getWeekendDays()` returns sorted arrays
+- Test case insensitivity
+- Test caching behavior
+
+**W-1 Fallback tests** (Scenarios 11-13):
+- Mock `Intl.Locale.prototype.getWeekInfo` as undefined/throwing
+- Verify CLDR path produces correct results
+- Verify feature detection logic
+
+**W-1 isWeekend integration** (Scenarios 17-20):
+- Test `isWeekend()` with specific dates against countries with non-standard weekends
+
+### Unit Tests (caching.ts)
+
+**D-L1 Cache key tests** (Scenarios 26-27):
+- Test `buildInstanceKey` includes locale in key
+- Test `buildInstanceKey` backward compatible when locale omitted
+
+**D-L1 DayCache tests** (Scenarios 21-25, 28, 32-35):
+- Test `DayCache.getHolidays()` passes locale to Holidays constructor
+- Test `DayCache.isHoliday()` passes locale to Holidays constructor
+- Test `DayCache.preWarm()` accepts and uses locale
+- Test cache isolation between locales
+- Test backward compatibility (no locale = default behavior)
+
+### Integration Tests (index.ts / HolidayService)
+
+**D-L1 Service interface tests** (Scenarios 29-31):
+- Test `HolidayService.isHoliday()` with locale parameter
+- Test `HolidayService.isBusinessDay()` with locale parameter
+- Test `HolidayService.isHolidayBatch()` with locale parameter
+
+### Regression Tests
+
+- All existing `weekend-service.spec.ts` tests must pass unchanged
+- All existing `holiday-service.spec.ts` tests must pass unchanged (backward compatibility)
+
+---
+
+## 6. Dependencies Needing Mocking
+
+### W-1: Mocking Strategy
+
+| Dependency | Mock Approach | Purpose |
+|------------|--------------|---------|
+| `Intl.Locale.prototype.getWeekInfo` | `jest.spyOn` / property delete | Test CLDR fallback when Intl API is unavailable |
+| `Intl.Locale` constructor | `jest.spyOn(globalThis, 'Intl', ...)` or `jest.fn()` | Test error handling when Locale construction throws |
+| Module-level caches (`jsWeekendCache`, `isoWeekendCache`) | Module re-import or `jest.resetModules()` | Test cache-miss paths; verify caching works |
+| `cldr-core/supplemental/weekData.json` | `jest.mock()` | Isolate CLDR fallback tests from actual CLDR data |
+
+**Important:** The caches in `weekend.ts` are module-level `Map` instances. To test cache behavior properly, either:
+- Export a `clearWeekendCaches()` function for tests (preferred, matches `clearDayCache()` pattern)
+- Use `jest.resetModules()` + dynamic import to get fresh caches
+- Accept that cached values persist across tests within the same module import
+
+### D-L1: Mocking Strategy
+
+| Dependency | Mock Approach | Purpose |
+|------------|--------------|---------|
+| `date-holidays` (`Holidays` class) | `jest.mock('date-holidays')` | Verify constructor receives `{ languages: [locale, 'en'] }` |
+| `server-only` | `jest.mock('server-only', () => ({}))` | Already mocked in existing tests |
+| `@/lib/connector/registry` | `jest.mock(...)` | Already mocked in existing tests |
+
+**For D-L1 unit tests of DayCache:** Mock the `Holidays` constructor to capture the options object and verify `languages` array content. This avoids depending on date-holidays' actual translation data in unit tests.
+
+**For D-L1 integration tests of HolidayService:** Use the real `date-holidays` library and verify actual translated names (e.g., "Nouvel An" vs "Neujahr"). This confirms end-to-end locale propagation.
+
+### Shared Test Utilities Needed
+
+```typescript
+/** Helper: clear weekend caches between tests (new export from weekend.ts) */
+export function clearWeekendCaches(): void;
+
+/** Helper: create Date from ISO string in local time (exists in holiday-service.spec.ts) */
+function localDate(iso: string): Date;
 ```
-return <KanbanEmptyState />;
-```
-
-`KanbanEmptyState` accepts an optional `onAddJob` prop. When not provided, only the
-empty message renders -- no call-to-action button. The user sees "Add your first job
-to start tracking" but has no button to actually add a job from this view.
-
-**Acceptance criteria:**
-
-- AC-1: `KanbanBoard` MUST pass an `onAddJob` callback to `KanbanEmptyState`.
-- AC-2: The callback should navigate to or open the add-job flow.
-- AC-3: The "Add Job" button MUST be visible in the empty state.
-
-**Edge cases:**
-
-- Empty state renders during initial load (loading=true, jobs=[]) -- currently covered
-  by the skeleton check (`loading && jobs.length === 0`).
-- User adds a job from the empty state -- the board should refresh and show the new job.
 
 ---
 
-### EDGE-5 (MEDIUM) -- Within-column reorder is a no-op
+## 7. Implementation Impact Summary
 
-**Current behavior:** `KanbanBoard.tsx` line 157:
-```
-if (sourceColumn === targetColumn) return;
-```
+### Files to Modify
 
-When a user drags a card within the same column (to reorder), the handler returns
-immediately without updating `sortOrder`. The server-side `updateKanbanOrder` action
-supports same-column reorder (it only does sort order update when no status change),
-but the client never calls it.
+| File | Change | Complexity |
+|------|--------|------------|
+| `weekend.ts` | Add `getWeekendFromIntl()`, feature detection, fallback chain | Medium |
+| `caching.ts` | Add `locale` param to `getHolidays`, `isHoliday`, `preWarm`, `buildCache`, `buildInstanceKey` | Medium |
+| `index.ts` | Add `locale` param to all `HolidayService` interface methods and factory implementation | Medium |
+| `types.ts` | Potentially add `locale` to `HolidayCheckOptions` | Low |
 
-**Acceptance criteria:**
+### Files to Create/Update for Tests
 
-- AC-1: Dragging a card within the same column MUST update the card's `sortOrder` via
-  `updateKanbanOrder(jobId, newSortOrder)` (no `newStatusId` parameter).
-- AC-2: The new sort order MUST be persisted server-side so that the order survives
-  page reload.
-- AC-3: The visual order MUST update optimistically in the UI before the server confirms.
+| File | Change |
+|------|--------|
+| `__tests__/weekend-service.spec.ts` | Add Intl primary tests, CLDR fallback tests, non-standard weekend countries |
+| `__tests__/holiday-service.spec.ts` | Add locale passthrough tests, cache isolation tests |
 
-**Edge cases:**
+### Invariants That Must Hold
 
-- Dragging a card to the same position -- no-op is correct, no API call needed.
-- Dragging the only card in a column -- no reorder possible, no API call.
-- Sort order collision -- two cards with the same sort order after reorder. The
-  midpoint strategy (newOrder = (above + below) / 2) should handle this.
-- Rapid reorder of multiple cards -- each must trigger its own update (or debounce).
+1. **WeekendPatternsFromCldr** (Allium) -- upgraded to "WeekendPatternsFromIntl" with CLDR fallback
+2. **LocaleFromUser** (Allium) -- currently NOT implemented; D-L1 implements it
+3. **GracefulDegradation** (Allium) -- must hold for both Intl errors and missing locales
+4. **MultipleHolidaysPerDate** (Allium) -- unaffected by locale changes
+5. **BusinessDaySemantics** (Allium) -- unaffected, but holiday names in results change per locale
+6. **HistoricalLookupSupported** (Allium) -- unaffected by these changes
 
----
+### API Signature Changes (Breaking)
 
-## 3. Test Scenario Matrix
+The `locale` parameter is **additive and optional** in all positions. No existing callers break because:
+- `getWeekendDays(countryCode)` -- unchanged signature
+- `getHolidays(cc, year, sub?, types?)` -- adds `locale?` as 5th parameter
+- `isHoliday(date, cc, sub?, types?)` -- adds `locale?` as 5th parameter
+- `isBusinessDay(date, cc, sub?)` -- adds `locale?` as 4th parameter
+- `isHolidayBatch(date, locs, types?)` -- adds `locale?` as 4th parameter
+- `preWarm(ccs, year)` -- adds `locale?` as 3rd parameter
+- `buildInstanceKey(cc, sub?, year?)` -- adds `locale?` as 4th parameter
 
-### 3.1 Legend
-
-- **U** = Unit test (Jest, direct function call, mocked Prisma)
-- **C** = Component test (Jest + Testing Library, mocked hooks/actions)
-- **I** = Integration test (Jest, multiple modules interacting)
-- **E** = E2E test (Playwright, full browser)
-- **D** = Dictionary validation test (key consistency across locales)
-
-### 3.2 Matrix
-
-| # | Finding | Test Case | Type | File Target |
-|---|---------|-----------|------|-------------|
-| 1 | F5 | updateJob with status change: valid transition succeeds, creates history | U | `__tests__/job.actions.spec.ts` |
-| 2 | F5 | updateJob with status change: invalid transition returns INVALID_TRANSITION | U | `__tests__/job.actions.spec.ts` |
-| 3 | F5 | updateJob with status change: non-existent newStatusId returns NOT_FOUND | U | `__tests__/job.actions.spec.ts` |
-| 4 | F5 | updateJob with unchanged status: no transition validation, no history | U | `__tests__/job.actions.spec.ts` |
-| 5 | F5 | updateJob with status change: emits JobStatusChanged domain event | U | `__tests__/job.actions.spec.ts` |
-| 6 | F5 | updateJob with status change: computes side effects (applied flag/date) | U | `__tests__/job.actions.spec.ts` |
-| 7 | F5 | E2E: edit job, change status to invalid target, form shows error | E | `e2e/crud/job.spec.ts` |
-| 8 | F7 | No handleError callsite in actions/ passes a string NOT starting with "errors." | I | `__tests__/handleError-i18n-compliance.spec.ts` |
-| 9 | F7 | All error i18n keys referenced in actions exist in all 4 locale dictionaries | D | `__tests__/dictionaries.spec.ts` |
-| 10 | F6 | ToastClose renders translated dismiss text, not hardcoded "Dismiss" | C | `__tests__/toast-i18n.spec.ts` |
-| 11 | F6 | ToastClose sr-only text changes with locale (de: "Schliessen") | C | `__tests__/toast-i18n.spec.ts` |
-| 12 | F1-partial | errors.duplicateEntry exists in all 4 locales with non-empty value | D | `__tests__/dictionaries.spec.ts` |
-| 13 | F1-partial | errors.fetchFailed exists in all 4 locales with non-empty value | D | `__tests__/dictionaries.spec.ts` |
-| 14 | F1-partial | errors.referenceError exists in all 4 locales with non-empty value | D | `__tests__/dictionaries.spec.ts` |
-| 15 | F1-partial | handleError returns errors.duplicateEntry for Prisma P2002 | U | `__tests__/lib-utils.spec.ts` |
-| 16 | F1-partial | handleError returns errors.fetchFailed for fetch failed Error | U | `__tests__/lib-utils.spec.ts` |
-| 17 | F1-partial | handleError returns errors.referenceError for Prisma P2003 | U | `__tests__/lib-utils.spec.ts` |
-| 18 | F8 | addJob with non-existent statusId returns NOT_FOUND | U | `__tests__/job.actions.spec.ts` |
-| 19 | F8 | addJob with valid statusId proceeds to create | U | `__tests__/job.actions.spec.ts` |
-| 20 | F8 | addJob with empty string statusId fails validation | U | `__tests__/job.actions.spec.ts` |
-| 21 | F10 | AddJobFormSchema default status value test (documents current behavior) | U | new or extend existing schema spec |
-| 22 | F10 | Form always overrides default statusId with actual selection | C | component-level if add-job form is tested |
-| 23 | F9 | getToday returns midnight-normalized date | U | `__tests__/kanban-card-today.spec.ts` |
-| 24 | F9 | Due date badge shows "Overdue" when due date is yesterday | C | `__tests__/kanban-card-today.spec.ts` |
-| 25 | F9 | Due date badge shows "Due today" when due date is today | C | `__tests__/kanban-card-today.spec.ts` |
-| 26 | F9 | Due date badge shows "Due in N days" for future dates within 3 days | C | `__tests__/kanban-card-today.spec.ts` |
-| 27 | DAU-1 | KanbanBoard disables drag while isPending is true | C | `__tests__/kanban-board-drag-lock.spec.ts` |
-| 28 | DAU-1 | Transition dialog confirm sets isPending, blocks sensors | C | `__tests__/kanban-board-drag-lock.spec.ts` |
-| 29 | DAU-2 | changeJobStatus with matching expectedFromStatusId succeeds | U | `__tests__/crm-actions.spec.ts` |
-| 30 | DAU-2 | changeJobStatus with mismatched expectedFromStatusId returns STALE_STATE | U | `__tests__/crm-actions.spec.ts` |
-| 31 | DAU-2 | changeJobStatus without expectedFromStatusId (backward compat) succeeds | U | `__tests__/crm-actions.spec.ts` |
-| 32 | DAU-2 | updateKanbanOrder with expectedFromStatusId validates freshness | U | `__tests__/crm-actions.spec.ts` |
-| 33 | DAU-2 | E2E: two-tab stale drag shows refresh message | E | `e2e/crud/kanban-stale.spec.ts` |
-| 34 | DAU-7 | JobsContainer kanban view calls getKanbanBoard, not getJobsList | C | `__tests__/jobs-container-view-mode.spec.ts` |
-| 35 | DAU-7 | JobsContainer table view calls getJobsList with pagination | C | `__tests__/jobs-container-view-mode.spec.ts` |
-| 36 | DAU-7 | getKanbanBoard returns tags in job data | U | `__tests__/crm-actions.spec.ts` |
-| 37 | DAU-7 | KanbanCard renders tag badges when tags are present | C | `__tests__/kanban-card-tags.spec.ts` |
-| 38 | EDGE-2 | getKanbanBoard includes jobs with unrecognized status values | U | `__tests__/crm-actions.spec.ts` |
-| 39 | EDGE-2 | useKanbanState includes jobs with legacy "draft" status | U | `__tests__/useKanbanState.spec.ts` |
-| 40 | EDGE-2 | Jobs with status not in STATUS_ORDER appear in catch-all column | U | `__tests__/crm-actions.spec.ts` |
-| 41 | EDGE-3 | KanbanBoard passes onAddJob to KanbanEmptyState | C | `__tests__/kanban-empty-state.spec.ts` |
-| 42 | EDGE-3 | KanbanEmptyState renders Add Job button when onAddJob provided | C | `__tests__/kanban-empty-state.spec.ts` |
-| 43 | EDGE-3 | KanbanEmptyState renders no button when onAddJob omitted | C | `__tests__/kanban-empty-state.spec.ts` |
-| 44 | EDGE-5 | handleDragEnd within same column calls updateKanbanOrder with sort order | C | `__tests__/kanban-board-reorder.spec.ts` |
-| 45 | EDGE-5 | Same-column reorder: no status change, no history, no event | U | `__tests__/crm-actions.spec.ts` |
-| 46 | EDGE-5 | Same position drop (no actual reorder) is a no-op | C | `__tests__/kanban-board-reorder.spec.ts` |
-
----
-
-## 4. Mock Strategy
-
-### 4.1 Prisma Mocks (for Unit and Integration Tests)
-
-All server action tests mock Prisma via `jest.mock("@prisma/client")`. The following
-models and methods need mocking per finding:
-
-**F5 (updateJob state machine):**
-- `prisma.job.findFirst` -- return current job WITH Status relation (for comparing
-  current vs new statusId)
-- `prisma.jobStatus.findFirst` -- return the target status record
-- `prisma.job.update` -- return updated job
-- `prisma.jobStatusHistory.create` -- return history entry
-- `prisma.$transaction` -- wrap update + history creation
-- `prisma.jobTitle.findFirst`, `prisma.company.findFirst`, `prisma.location.findFirst`,
-  `prisma.jobSource.findFirst` -- FK ownership mocks (already in existing test)
-- Mock import: `@/lib/crm/status-machine` -- real implementation (not mocked) to test
-  actual transition validation
-
-**F8 (addJob statusId validation):**
-- `prisma.jobStatus.findFirst` -- new mock for status existence check
-- All existing FK ownership mocks remain
-
-**DAU-2 (compare-and-swap):**
-- `prisma.job.findFirst` -- return job with specific statusId for freshness check
-- Existing `changeJobStatus` mocks plus assertion on `expectedFromStatusId` parameter
-
-**DAU-7 (getKanbanBoard integration):**
-- `prisma.jobStatus.findMany` -- return all statuses
-- `prisma.job.findMany` -- return jobs WITH tags relation
-- Verify the select clause includes `tags: { select: { id, label, value } }`
-
-**EDGE-2 (unrecognized status):**
-- `prisma.job.findMany` -- return a job with status value "custom_status" not in
-  STATUS_ORDER
-- `prisma.jobStatus.findMany` -- return standard statuses PLUS the custom one
-
-### 4.2 Hook and Function Mocks (for Component Tests)
-
-**F6 (Toast i18n):**
-- Mock `@/i18n` -- `useTranslations` returning `t` function that resolves
-  `common.dismiss` to the correct locale value
-
-**F9 (getToday staleness):**
-- Mock `Date` constructor to control time (use `jest.useFakeTimers()` and
-  `jest.setSystemTime()`)
-- Test: set time to 23:59, render KanbanCard, advance to 00:01, verify badge update
-
-**DAU-1 (drag lock):**
-- Mock `changeJobStatus` action as an async function with controllable resolution
-- Mock dnd-kit sensor activation to verify disabled state
-
-**EDGE-3 (empty state prop):**
-- Render `KanbanBoard` with `jobs=[]` and `loading=false`
-- Assert `KanbanEmptyState` receives `onAddJob` prop
-
-**EDGE-5 (within-column reorder):**
-- Mock `updateKanbanOrder` action
-- Simulate DnD end event with `sourceColumn === targetColumn`
-- Assert `updateKanbanOrder` called with `(jobId, newSortOrder)` and NO `newStatusId`
-
-### 4.3 Module Mocks (shared across test files)
-
-These modules are mocked in almost every server action test:
-
-| Module | Mock |
-|--------|------|
-| `@/utils/user.utils` | `getCurrentUser: jest.fn()` returning `{ id: "user-id" }` |
-| `next/cache` | `revalidatePath: jest.fn()` |
-| `@/lib/events` | `emitEvent: jest.fn()`, `createEvent: jest.fn()`, `DomainEventTypes` enum |
-| `@prisma/client` | Full PrismaClient mock with chained methods |
-
-### 4.4 Dictionary Validation (no mocks needed)
-
-Tests #12-14 and #9 are pure data validation tests that import real dictionary files
-and check for key existence and non-empty values. No mocks required.
-
-The existing `dictionaries.spec.ts` already validates key consistency across locales.
-New error keys will be automatically caught by the existing test if they are added to
-a namespace dictionary. If they are added to the core dictionary, the core consistency
-test covers them.
-
-### 4.5 E2E Test Infrastructure
-
-Tests #7 and #33 require Playwright:
-
-- Use existing `e2e/helpers/index.ts` utilities (login, expectToast, uniqueId)
-- Use `storageState` for authenticated sessions (crud project)
-- Test #7 (edit job invalid transition): Create job, attempt status edit via form to
-  invalid target, assert error toast
-- Test #33 (two-tab stale): Complex -- requires two browser contexts with independent
-  sessions viewing the same job. May be deferred to a manual test protocol if Playwright
-  multi-tab is too fragile.
-
----
-
-## 5. Verification of Already-Fixed Items
-
-The following items are marked as fixed. Existing tests should continue to pass, and
-no new tests are needed. However, verify during implementation that these remain intact:
-
-| ID | What to Verify | Where |
-|----|----------------|-------|
-| F1 | errors.notFound, errors.invalidTransition, errors.noteTooLong, errors.invalidSortOrder keys exist in dictionaries | `__tests__/dictionaries.spec.ts` |
-| F2 | jobs.kanbanChangeStatusMobile key exists in all 4 locales | Dictionary consistency check |
-| F3 | KanbanColumn uses getStatusLabel (no duplicate logic) | Visual inspection or grep |
-| F4 | Undo toast only shows when canUndo is true | `__tests__/undo-store.spec.ts` |
-
-**Verification method:** Run `bash scripts/test.sh --no-coverage` after all fixes.
-All existing tests must pass unchanged. The dictionary consistency test
-(`dictionaries.spec.ts`) automatically catches any regression in key coverage.
-
----
-
-## 6. Implementation Priority
-
-Recommended implementation order based on severity and dependency:
-
-1. **F5 (HIGH)** -- updateJob state machine enforcement. Foundation for correctness.
-2. **DAU-2 (HIGH)** -- compare-and-swap. Prevents silent data corruption.
-3. **DAU-7 (HIGH)** -- Kanban data source. Prevents data loss for large users.
-4. **F8 (MEDIUM)** -- addJob statusId validation. Quick fix, reduces error surface.
-5. **F1-partial (MEDIUM)** -- Dictionary keys. Quick fix, improves error UX.
-6. **F7 (MEDIUM)** -- handleError i18n. Large scope but mechanical refactoring.
-7. **F6 (MEDIUM)** -- Toast dismiss i18n. Small, self-contained.
-8. **EDGE-2 (MEDIUM)** -- Unrecognized status handling. Prevents silent data loss.
-9. **DAU-1 (MEDIUM)** -- Drag lock. Prevents race conditions.
-10. **EDGE-5 (MEDIUM)** -- Within-column reorder. Feature completion.
-11. **EDGE-3 (MEDIUM)** -- Empty state onAddJob. UX polish.
-12. **F10 (LOW)** -- Schema default alignment. Low risk, documentation fix.
-13. **F9 (LOW)** -- getToday staleness. Edge case, low probability.
+All new parameters are optional with `undefined` as default, preserving backward compatibility.
