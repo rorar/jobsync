@@ -2,6 +2,7 @@
 
 import "server-only";
 import { getCurrentUser } from "@/utils/user.utils";
+import { dateInTimeZone } from "@/lib/connector/reference-data/modules/public-holidays/timezone";
 
 /**
  * Reference Data Server Actions — Open Host Service over the GeoCode (1.21)
@@ -61,10 +62,12 @@ export async function getPersonHolidayInfo(
   locale: string,
   subdivisionCode?: string | null,
 ): Promise<PersonHolidayInfo | null> {
-  if (!countryCode || !/^[A-Z]{2}$/i.test(countryCode)) return null;
-
+  // Auth gate first (ADR-019), consistent with the sibling reference actions —
+  // do not expose input-validation behaviour to unauthenticated callers.
   const user = await getCurrentUser();
   if (!user) return null;
+
+  if (!countryCode || !/^[A-Z]{2}$/i.test(countryCode)) return null;
 
   const [{ getHolidayService }, { getGeoCodeService }] = await Promise.all([
     import("@/lib/connector/reference-data/modules/public-holidays"),
@@ -73,14 +76,16 @@ export async function getPersonHolidayInfo(
 
   const holidayService = getHolidayService();
   const geoCodeService = getGeoCodeService();
-  // KNOWN LIMITATION (PoC): "today" is the SERVER clock, not the contact
-  // country's local date. Near midnight the server TZ and the country TZ can
-  // differ by a day, so the badge may be off-by-one. Proper fix requires
-  // deriving the country's IANA timezone (Allium TimezoneAwareness invariant /
-  // HolidayCheckOptions TZ override D-TZ) — tracked as a follow-up. Acceptable
-  // for the self-hosted single-user case where server TZ ≈ user TZ.
-  const today = new Date();
   const sub = subdivisionCode ?? undefined;
+
+  // D-TZ (TimezoneAwareness): compute "today" in the contact country's LOCAL
+  // calendar, not the server clock. Near midnight the server TZ and the country
+  // TZ can differ by a day, so a server-clock check would make the badge
+  // off-by-one. getPrimaryTimezone returns the representative IANA zone (the
+  // first for multi-timezone countries, e.g. US → easternmost); on null (unknown
+  // country) we fall back to the server instant.
+  const timezone = holidayService.getPrimaryTimezone(countryCode, sub);
+  const today = timezone ? dateInTimeZone(new Date(), timezone) : new Date();
 
   // Delegate weekend + public/bank-holiday detection to the Holiday module's
   // public contract (BusinessDaySemantics) — no hand-rolled weekend conversion.

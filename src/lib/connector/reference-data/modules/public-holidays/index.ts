@@ -73,6 +73,15 @@ export interface HolidayService {
   getWeekendDays(countryCode: string): number[];
 
   /**
+   * Get the representative IANA timezone for a country (+ optional subdivision).
+   * Returns the FIRST timezone for multi-timezone countries (e.g. US → the
+   * easternmost), or null if the country is unknown / has no timezone data.
+   * Used to compute the contact-country-local date for the holiday badge
+   * (D-TZ / TimezoneAwareness).
+   */
+  getPrimaryTimezone(countryCode: string, subdivisionCode?: string): string | null;
+
+  /**
    * Check if a date is a business day (not weekend, not public/bank holiday).
    * Returns enriched result with blockingHolidays + isWeekend.
    */
@@ -154,6 +163,24 @@ function createHolidayService(): HolidayService {
 
     getWeekendDays(countryCode: string): number[] {
       return getWeekendDays(countryCode);
+    },
+
+    getPrimaryTimezone(countryCode: string, subdivisionCode?: string): string | null {
+      const cc = countryCode?.toUpperCase();
+      if (!cc) return null;
+      try {
+        // Fresh instance: getTimezones() reads the INITIALIZED country, so we must
+        // not mutate the shared holidaysHelper (used by getRegions/getStates).
+        const hd = new Holidays();
+        if (subdivisionCode) hd.init(cc, subdivisionCode.toUpperCase());
+        else hd.init(cc);
+        // NOTE: init() returns true even for unknown countries; the reliable
+        // "unknown" signal is an EMPTY timezone list (verified against date-holidays).
+        const timezones = hd.getTimezones();
+        return timezones && timezones.length > 0 ? timezones[0] : null;
+      } catch {
+        return null;
+      }
     },
 
     isBusinessDay(

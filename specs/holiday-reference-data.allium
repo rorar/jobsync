@@ -73,6 +73,7 @@ contract HolidayLookupContract {
     is_business_day: (date: Timestamp, country: String, subdivision: String, region: String) -> BusinessDayResult
     is_holiday_batch: (date: Timestamp, locations: List<Any>) -> List<Any>
     get_regions: (country: String, subdivision: String) -> List<RegionInfo>
+    get_primary_timezone: (country: String, subdivision: String) -> String?
 
     @invariant MultipleHolidaysPerDate
         -- A single date can have multiple holidays (e.g. Dec 25 can be
@@ -93,10 +94,16 @@ contract HolidayLookupContract {
 
     @invariant TimezoneAwareness
         -- All date checks account for the contact's local timezone.
-        -- Timezone is derived automatically: subdivision narrows to
-        -- the correct IANA timezone via date-holidays internal data.
-        -- Explicit IANA timezone override is available for edge cases
-        -- (e.g. El Paso, TX in Mountain Time vs. Texas default Central).
+        -- get_primary_timezone returns the representative IANA timezone for a
+        -- country (+ optional subdivision), or null when the country is unknown.
+        -- For multi-timezone countries it returns the first/representative zone
+        -- (e.g. US -> America/New_York); subdivision narrows where date-holidays
+        -- data allows.
+        -- A "today" holiday/weekend check (e.g. the contact holiday badge) MUST
+        -- compute the current calendar date in the contact country's local
+        -- timezone derived from get_primary_timezone -- NOT the server clock --
+        -- so the result is not off-by-one near midnight. When the timezone is
+        -- unknown (null), callers fall back to the server instant.
 
     @invariant HistoricalLookupSupported
         -- Lookups for past years are supported. date-holidays computes

@@ -25,6 +25,7 @@ const mockGetCountries = jest.fn();
 const mockGetSubdivisions = jest.fn();
 const mockGetCountryName = jest.fn();
 const mockIsBusinessDay = jest.fn();
+const mockGetPrimaryTimezone = jest.fn();
 
 jest.mock("@/lib/connector/reference-data/modules/geo-codes", () => ({
   getGeoCodeService: () => ({
@@ -37,6 +38,7 @@ jest.mock("@/lib/connector/reference-data/modules/geo-codes", () => ({
 jest.mock("@/lib/connector/reference-data/modules/public-holidays", () => ({
   getHolidayService: () => ({
     isBusinessDay: mockIsBusinessDay,
+    getPrimaryTimezone: mockGetPrimaryTimezone,
   }),
 }));
 
@@ -49,6 +51,7 @@ beforeEach(() => {
   mockGetSubdivisions.mockReturnValue([{ code: "BY", name: "Bavaria", countryCode: "DE", subdivisionType: "Land" }]);
   mockGetCountryName.mockReturnValue("Germany");
   mockIsBusinessDay.mockReturnValue({ isBusinessDay: true, blockingHolidays: [], isWeekend: false });
+  mockGetPrimaryTimezone.mockReturnValue("Europe/Berlin");
 });
 
 // ---------------------------------------------------------------------------
@@ -139,5 +142,30 @@ describe("getPersonHolidayInfo", () => {
   it("passes undefined subdivision through when not provided", async () => {
     await getPersonHolidayInfo("FR", "fr");
     expect(mockIsBusinessDay).toHaveBeenCalledWith(expect.any(Date), "FR", undefined, "fr");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getPersonHolidayInfo — D-TZ (contact-country-local date, not server clock)
+// ---------------------------------------------------------------------------
+
+describe("getPersonHolidayInfo — D-TZ", () => {
+  it("derives the contact country's timezone and uses its LOCAL date for the check", async () => {
+    await getPersonHolidayInfo("DE", "en", "BY");
+
+    expect(mockGetPrimaryTimezone).toHaveBeenCalledWith("DE", "BY");
+    // dateInTimeZone() pins the time to local noon — proves the date passed to
+    // isBusinessDay went through the tz helper, not the raw server clock.
+    const passedDate = mockIsBusinessDay.mock.calls[0][0] as Date;
+    expect(passedDate.getHours()).toBe(12);
+  });
+
+  it("falls back to a usable date when the timezone is unknown (null)", async () => {
+    mockGetPrimaryTimezone.mockReturnValue(null);
+    const info = await getPersonHolidayInfo("ZZ", "en");
+
+    expect(mockGetPrimaryTimezone).toHaveBeenCalledWith("ZZ", undefined);
+    expect(mockIsBusinessDay).toHaveBeenCalledWith(expect.any(Date), "ZZ", undefined, "en");
+    expect(info).not.toBeNull();
   });
 });
