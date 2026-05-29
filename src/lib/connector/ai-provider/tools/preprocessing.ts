@@ -19,6 +19,7 @@ import {
   normalizeHeadings,
   extractMetadata,
   validateText,
+  stripEmailPhonePatterns,
   type TextMetadata,
 } from "./text-processing";
 
@@ -104,11 +105,20 @@ export const convertResumeToText = (resume: Resume, options?: ResumeTextOptions)
   return new Promise((resolve) => {
     const strip = options?.stripPii ?? false;
 
+    // S3 (GDPR Art. 5(1)(c)): when sending to a non-local (cloud) provider,
+    // redact direct identifiers (email/phone) embedded in FREE TEXT as well as
+    // the structured contact block. Applied to section *content* only — never to
+    // labels (Company:/Job Title:/headings) — so legitimate professional data is
+    // preserved. No-op when strip=false (local Ollama keeps full fidelity).
+    const scrub = (t: string) => (strip ? stripEmailPhonePatterns(t) : t);
+
     const formatContactInfo = (contactInfo?: ContactInfo) => {
       if (!contactInfo) return "";
       const parts = [
         `Name: ${strip ? "[NAME]" : `${contactInfo.firstName} ${contactInfo.lastName}`}`,
-        contactInfo.headline ? `Headline: ${contactInfo.headline}` : "",
+        // Headline is free text (e.g. "Senior Dev | +49… | me@x.com") — scrub
+        // embedded email/phone on the cloud path while keeping the role text.
+        contactInfo.headline ? `Headline: ${scrub(contactInfo.headline)}` : "",
         contactInfo.email ? `Email: ${strip ? "[EMAIL]" : contactInfo.email}` : "",
         contactInfo.phone ? `Phone: ${strip ? "[PHONE]" : contactInfo.phone}` : "",
         contactInfo.address ? `Address: ${strip ? "[ADDRESS]" : contactInfo.address}` : "",
@@ -125,7 +135,7 @@ export const convertResumeToText = (resume: Resume, options?: ResumeTextOptions)
       if (!workExperiences || workExperiences.length === 0) return "";
       return workExperiences
         .map((experience) => {
-          const desc = removeHtmlTags(experience.description);
+          const desc = scrub(removeHtmlTags(experience.description));
           const startDate = formatDate(experience.startDate);
           const endDate = experience.currentJob
             ? "Present"
@@ -146,7 +156,7 @@ export const convertResumeToText = (resume: Resume, options?: ResumeTextOptions)
       if (!educations || educations.length === 0) return "";
       return educations
         .map((education) => {
-          const desc = removeHtmlTags(education.description ?? undefined);
+          const desc = scrub(removeHtmlTags(education.description ?? undefined));
           const startDate = formatDate(education.startDate);
           const endDate = education.endDate
             ? formatDate(education.endDate)
@@ -170,7 +180,7 @@ export const convertResumeToText = (resume: Resume, options?: ResumeTextOptions)
         .map((section) => {
           switch (section.sectionType) {
             case SectionType.SUMMARY: {
-              const content = removeHtmlTags(section.summary?.content);
+              const content = scrub(removeHtmlTags(section.summary?.content));
               return content ? `## SUMMARY\n${content}` : "";
             }
             case SectionType.EXPERIENCE: {
@@ -193,7 +203,8 @@ export const convertResumeToText = (resume: Resume, options?: ResumeTextOptions)
     const sections = formatResumeSections(resume.ResumeSections);
 
     const parts = [
-      `# ${resume.title}`,
+      // The title is user-set free text emitted to the cloud LLM — scrub it too.
+      `# ${scrub(resume.title)}`,
       contactInfo ? `## CONTACT\n${contactInfo}` : "",
       sections,
     ].filter(Boolean);

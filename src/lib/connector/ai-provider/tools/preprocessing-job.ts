@@ -12,8 +12,13 @@ import {
   normalizeHeadings,
   extractMetadata,
   validateText,
+  stripEmailPhonePatterns,
   type TextMetadata,
 } from "./text-processing";
+
+// Re-exported from the shared text-processing module (single source of truth).
+// Kept here for backward compatibility with existing importers.
+export { stripEmailPhonePatterns };
 
 // TYPES
 
@@ -43,25 +48,6 @@ export interface JobTextOptions {
   stripPiiPatterns?: boolean;
   jobCharLimit?: number;
 }
-
-// PII PATTERN STRIPPING
-
-/** Strip email addresses and phone numbers from text using regex */
-export const stripEmailPhonePatterns = (text: string): string => {
-  // Email pattern: standard email format
-  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-  // Phone pattern: international and local formats (e.g. +49 123 456789, (555) 123-4567, 0123/456789)
-  const phoneRegex = /(?:\+?\d{1,4}[\s.-]?)?(?:\(?\d{1,5}\)?[\s.-]?)?\d{2,5}[\s.-]?\d{2,5}[\s.-]?\d{0,5}/g;
-
-  let result = text.replace(emailRegex, "[EMAIL]");
-  result = result.replace(phoneRegex, (match) => {
-    // Only replace if it looks like an actual phone number (at least 7 digits)
-    const digits = match.replace(/\D/g, "");
-    return digits.length >= 7 ? "[PHONE]" : match;
-  });
-
-  return result;
-};
 
 // JOB DESCRIPTION TO TEXT CONVERSION
 

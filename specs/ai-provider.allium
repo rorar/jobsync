@@ -126,6 +126,25 @@ contract AIProviderSafety {
         --   unavailable -> 503
         --   network -> 502
 
+    @invariant CloudTransferDataMinimization
+        -- Resume/job text sent to a NON-local (cloud) provider (openai, deepseek)
+        -- MUST have direct identifiers redacted before the transfer. This is GDPR
+        -- Art. 5(1)(c) data minimisation applied to a third-party transfer.
+        -- Redacted: the structured contact block (name/email/phone/address ->
+        -- [NAME]/[EMAIL]/[PHONE]/[ADDRESS]) AND email + phone embedded in every
+        -- FREE-TEXT field (resume title, headline, summary, work-experience and
+        -- education descriptions; job description). Realised as stripPii = not
+        -- isLocal in the resume/review and
+        -- resume/match route handlers (fail-safe: redact when locality is unknown).
+        -- LOCAL providers (ollama) keep full fidelity: there is no third-party
+        -- transfer, so minimisation is not triggered.
+        -- Free-text redaction scope is intentionally email + phone only: these are
+        -- high-confidence direct identifiers unnecessary for the analysis purpose.
+        -- Names/addresses embedded in free text, and Art. 9 special-category data a
+        -- user voluntarily includes, are a documented RESIDUAL RISK -- reliable
+        -- NER-based detection is disproportionate and would risk corrupting the
+        -- professional content the model needs.
+
     @guidance
         -- These constraints are cross-cutting security properties.
         -- See security-rules.allium for the full URL validation spec.

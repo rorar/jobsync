@@ -5,7 +5,23 @@ import {
   normalizeHeadings,
   extractMetadata,
   validateText,
+  stripEmailPhonePatterns,
 } from "@/lib/connector/ai-provider/tools/text-processing";
+
+describe("stripEmailPhonePatterns (canonical location: text-processing)", () => {
+  // Guards the single-source-of-truth: the scrubber lives here and is re-exported
+  // from preprocessing-job.ts. Both the resume and job paths must share it (S3).
+  it("redacts email and phone, preserves non-PII", () => {
+    const result = stripEmailPhonePatterns(
+      "Reach me: dev@example.com or +49 151 22223333. 5 years experience.",
+    );
+    expect(result).toContain("[EMAIL]");
+    expect(result).toContain("[PHONE]");
+    expect(result).not.toContain("dev@example.com");
+    expect(result).not.toContain("+49 151 22223333");
+    expect(result).toContain("5 years experience.");
+  });
+});
 
 describe("removeHtmlTags", () => {
   it("returns empty string for undefined input", () => {

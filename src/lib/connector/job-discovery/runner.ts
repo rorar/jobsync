@@ -17,7 +17,9 @@ import {
   JobMatchSchema,
   JOB_MATCH_SYSTEM_PROMPT,
   buildJobMatchPrompt,
+  stripEmailPhonePatterns,
 } from "@/lib/connector/ai-provider";
+import type { AiManifest } from "@/lib/connector/manifest";
 import {
   AiModuleId,
   OllamaModel,
@@ -409,12 +411,18 @@ export async function runAutomation(
     let resumeText = "";
     let aiSettings: any = null;
     let modelName = "";
+    let stripPii = false;
 
     if (aiScoringEnabled) {
       aiSettings = await getUserAiSettings(automation.userId);
       modelName = aiSettings.model || getDefaultModelForModule(aiSettings.moduleId);
       resolvedModel = await getModel(aiSettings.moduleId, modelName, automation.userId);
-      resumeText = convertResumeForMatch(resume as ResumeWithSections);
+      // GDPR S3: redact PII before transmitting to a cloud provider. Fail-safe —
+      // strip when the module's locality is unknown (isLocal ?? false).
+      const isLocal =
+        (moduleRegistry.get(aiSettings.moduleId)?.manifest as AiManifest | undefined)?.isLocal ?? false;
+      stripPii = !isLocal;
+      resumeText = convertResumeForMatch(resume as ResumeWithSections, stripPii);
     } else {
       automationLogger.log(
         automation.id,
@@ -447,6 +455,7 @@ export async function runAutomation(
           job,
           resumeText,
           resolvedModel,
+          stripPii,
         );
 
         if (!matchResult.success) {
@@ -728,18 +737,26 @@ async function matchJobToResume(
   job: DiscoveredVacancy,
   resumeText: string,
   resolvedModel: LanguageModel,
+  stripPii = false,
 ): Promise<MatchResult> {
   try {
+    // Scrub email/phone from the free-text job fields on the cloud path (the
+    // posting may contain a recruiter's direct contact details). Title/company/
+    // location are legitimate non-PII labels and are left intact.
+    const scrub = (t: string) => (stripPii ? stripEmailPhonePatterns(t) : t);
+    const instructions = job.applicationInstructions
+      ? scrub(job.applicationInstructions)
+      : job.applicationInstructions;
     const jobText = `
 Title: ${job.title}
 Company: ${job.employerName}
 Location: ${job.location}
 ${job.salary ? `Salary: ${job.salary}` : ""}
 ${job.applicationDeadline ? `Application Deadline: ${job.applicationDeadline}` : ""}
-${job.applicationInstructions ? `\nApplication Instructions:\n${job.applicationInstructions}` : ""}
+${instructions ? `\nApplication Instructions:\n${instructions}` : ""}
 
 Description:
-${job.description}
+${scrub(job.description)}
 `.trim();
 
     const result = await generateText({
@@ -781,25 +798,34 @@ ${job.description}
   }
 }
 
+// GDPR S3 (Art. 5(1)(c)): when the automation's AI module is a NON-local (cloud)
+// provider, redact direct identifiers before the resume text is transmitted —
+// the structured contact fields to placeholders, and email/phone embedded in any
+// free-text field via the shared scrubber. Mirrors convertResumeToText on the
+// interactive route path; `stripPii` is derived from manifest.isLocal by the
+// caller. When false (local Ollama) the resume keeps full fidelity.
 function convertResumeForMatch(
   resume: ResumeWithSections,
+  stripPii = false,
 ): string {
-  const parts: string[] = [`# ${resume.title}`];
+  const scrub = (t: string) => (stripPii ? stripEmailPhonePatterns(t) : t);
+
+  const parts: string[] = [`# ${scrub(resume.title)}`];
 
   if (resume.ContactInfo) {
     const contact = resume.ContactInfo;
     parts.push(
       "## CONTACT",
-      `Name: ${contact.firstName} ${contact.lastName}`,
-      contact.headline ? `Headline: ${contact.headline}` : "",
-      contact.email ? `Email: ${contact.email}` : "",
-      contact.phone ? `Phone: ${contact.phone}` : "",
+      `Name: ${stripPii ? "[NAME]" : `${contact.firstName} ${contact.lastName}`}`,
+      contact.headline ? `Headline: ${scrub(contact.headline)}` : "",
+      contact.email ? `Email: ${stripPii ? "[EMAIL]" : contact.email}` : "",
+      contact.phone ? `Phone: ${stripPii ? "[PHONE]" : contact.phone}` : "",
     );
   }
 
   for (const section of resume.ResumeSections) {
     if (section.sectionType === "summary" && section.summary?.content) {
-      parts.push("## SUMMARY", section.summary.content);
+      parts.push("## SUMMARY", scrub(section.summary.content));
     }
 
     if (
@@ -812,7 +838,7 @@ function convertResumeForMatch(
           `Company: ${exp.Company.label}`,
           `Job Title: ${exp.jobTitle.label}`,
           `Location: ${exp.location.label}`,
-          `Description: ${exp.description}`,
+          `Description: ${scrub(exp.description)}`,
           "",
         );
       }
@@ -825,7 +851,7 @@ function convertResumeForMatch(
           `Institution: ${edu.institution}`,
           `Degree: ${edu.degree}`,
           `Field: ${edu.fieldOfStudy}`,
-          edu.description ? `Description: ${edu.description}` : "",
+          edu.description ? `Description: ${scrub(edu.description)}` : "",
           "",
         );
       }
@@ -834,6 +860,9 @@ function convertResumeForMatch(
 
   return parts.filter(Boolean).join("\n");
 }
+
+// Test-only export (module-private fn) — see _testGetExistingVacancyKeys pattern.
+export { convertResumeForMatch as _testConvertResumeForMatch };
 
 function getStatusFromError(error: ConnectorError): AutomationRunStatus {
   switch (error.type) {
