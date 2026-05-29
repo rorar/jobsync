@@ -1,51 +1,47 @@
-# Comprehensive Code Review Report — Session 2026-05-16
+# Comprehensive Review — PII-Egress-Härtung-Sprint (2026-05-29)
 
-## Review Target
+## Target
 
-4 commits (`392219e`..`83c6f93`): Allium v3 spec migration, 12 code bug fixes, 90 spec↔code divergence resolutions, blind spot fixes, ADR-031.
+Behavior-preserving refactor (~60 LOC): extract duplicated PII-redaction logic from the
+two resume converters into a new dependency-free leaf `src/lib/pii/`. Files: `src/lib/pii/index.ts`
+(new), `preprocessing.ts`, `preprocessing-job.ts`, `text-processing.ts`, `runner.ts`,
+`specs/ai-provider.allium`, `docs/gdpr-audit-report.md`, `__tests__/pii-redaction.spec.ts`.
 
-## Executive Summary
+## Execution (lean, right-sized)
 
-Code quality is high. No Critical or High severity issues. Architecture decisions are sound (ADR-031 well-reasoned, event-driven patterns consistent, guards correctly placed). Two Medium findings identified and fixed in-session (M-1: duplicated emission loop → refactored to shared helper; M-2: long line → broken up).
+Per user "lean / no ceremony" + prior GDPR S3 precedent, ran the 3 relevant dimensions in
+parallel instead of the full 8-agent / 5-phase ceremony (perf trivial — same regex, no DB/IO;
+testing + docs done in-sprint; CI/CD N/A). All findings cited file:line and were verified
+against the actual diff (feedback_verify_agent_claims).
 
-## Findings by Priority
+## Findings
 
-### Critical (P0): None
+**Correctness (code-reviewer): CONFIRMED OK — all 5 properties.**
+- `redactContact` reproduces both old inline contact-redaction paths byte-for-byte, incl. placeholders.
+- Render-guard parity verified for empty-string / null / present address (guard stays on original field; `r.address` only read inside the guarded branch → byte-identical).
+- `scrubFreeText` == old `strip ? stripEmailPhonePatterns(t) : t` for all 3 former closures.
+- `stripEmailPhonePatterns` moved verbatim — email/phone regex + `>=7`-digit gate + ReDoS bounds identical.
+- `stripPii = !isLocal` gating flow into converters unchanged.
 
-### High (P1): None
+**Security (security-auditor): CONFIRMED OK — coverage fully preserved.**
+- No redacted field dropped; gating intact + fail-safe (`?? false` ⇒ unknown locality ⇒ redact) at all 3 AI-transfer sites.
+- Regex byte-identical, ReDoS-bounded. New leaf is pure: zero imports, no logging/persistence/transmission.
+- **LOW / pre-existing (NOT fixed, out of scope):** converter-layer `stripPii = false` defaults are unsafe-by-default *if* a future caller forgets the arg. Unchanged by this diff; all current callers pass it explicitly; new shared primitives *require* the flag (improves the floor). Spec's fail-safe correctly lives at the `isLocal ?? false` call sites.
 
-### Medium (P2): 2 — Both Fixed
+**Architecture/DDD (architect-review): PASS — sound, no defects.**
+- True zero-dependency leaf (stricter than `enforced-writer.ts`); all 4 consumer edges point inward; no back-edge possible.
+- `src/lib/pii` is the DDD-correct shared-kernel home (consumed by both ai-provider AND job-discovery contexts; placing it in ai-provider would force a sideways ACL reach from the runner).
+- Policy-shared / layout-per-converter is the correct seam; the two converters are NOT safely mergeable (different prompt layouts). Structural-typing bridge (`RedactableContact`) is sound — compile-time safety net, no cast, preserves the zero-import property.
 
-- **M-1** (Fixed): `emitHealthUnreachableNotifications` duplicated loop pattern without sanitization → refactored to reuse `emitDegradationEvents` + `truncate` from degradation.ts
-- **M-2** (Fixed): orchestrator.ts:171 logAttempt 200-char line → multi-line format
+## Action taken
 
-### Low (P3): 4 — Accepted
+- **Adopted** the one sustainable hardening both reviewers converged on: a self-enforcing
+  leaf-invariant test (`pii-redaction.spec.ts` → "leaf-module invariant") asserting `src/lib/pii`
+  imports nothing internal. Converts the zero-import property from convention → checked invariant
+  (mirrors `scripts/check-notification-writers.sh`). Green.
+- **Documented** the converter-default note as a known/accepted residual (pre-existing, not reachable unsafely).
 
-- L-2: `?? undefined` in crmTask/crmNote — intentional null→undefined conversion
-- L-3: `await` on escalation notification blocks health check — rare edge case, acceptable
-- L-4: Test mock lost explicit signature — readability trade-off
-- F-2: CRM payload only propagates first target — acceptable for timeline summary
+## Verdict
 
-## Architecture Assessment
-
-All 6 architectural changes rated APPROPRIATE or CORRECT:
-1. ADR-031: Health escalation via AutomationDegraded event reuse — compile-time safe
-2. Payload enrichment: backward-compatible with DB fallback
-3. Enrichment guards: write-through consistency model
-4. CB-7 early returns: defensive, prevents cascading
-5. Person transition: GDPR compliance
-6. Credential guard: UX hardening
-
-## Metrics
-
-- 0 Critical, 0 High, 2 Medium (fixed), 4 Low (accepted)
-- 245 suites, 4751 tests, 0 failures
-- 0 TypeScript errors, 0 Allium errors
-- Build passes
-
-## Review Metadata
-
-- Review date: 2026-05-16
-- Phases completed: Phase 1 (Code Quality + Architecture)
-- Phases skipped: 2-4 (no Critical/High findings to investigate further)
-- Flags: none
+0 Critical / 0 High / 0 real Medium. 1 LOW pre-existing note (documented). Refactor is
+behavior-preserving and output-equivalent. Ready for Honesty Gate.
