@@ -18,7 +18,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { cn } from "@/lib/utils";
+import { cn, foldDiacritics } from "@/lib/utils";
 
 export interface CountryOption {
   code: string;
@@ -79,11 +79,12 @@ export function CountrySelect({
 
   // Manual filtering (shouldFilter={false}) so the clear item stays visible
   // during search and we control the result set (matches EuresLocationCombobox).
+  // Diacritic-insensitive: "osterreich" matches "Österreich", "mexico" → "México".
   const filtered = useMemo(() => {
-    const q = inputValue.trim().toLowerCase();
+    const q = foldDiacritics(inputValue.trim());
     if (!q) return countries;
     return countries.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q),
+      (c) => foldDiacritics(c.name).includes(q) || c.code.toLowerCase().includes(q),
     );
   }, [countries, inputValue]);
 

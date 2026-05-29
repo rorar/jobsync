@@ -9,6 +9,15 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Fold diacritics and lowercase for accent-insensitive matching.
+ * "Österreich" → "osterreich", "México" → "mexico".
+ * Used by comboboxes that filter localized names client-side.
+ */
+export function foldDiacritics(input: string): string {
+  return input.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+}
+
+/**
  * Formats a URL to ensure it starts with "http://" or "https://".
  * If the URL does not start with either, "https://" is prepended to the URL.
  *

@@ -17,7 +17,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { cn } from "@/lib/utils";
+import { cn, foldDiacritics } from "@/lib/utils";
 
 export interface SubdivisionOption {
   code: string;
@@ -55,11 +55,12 @@ export function SubdivisionSelect({
 
   // Manual filtering (shouldFilter={false}) so the clear item stays visible
   // during search (matches EuresLocationCombobox pattern).
+  // Diacritic-insensitive: "zurich" matches "Zürich".
   const filtered = useMemo(() => {
-    const q = inputValue.trim().toLowerCase();
+    const q = foldDiacritics(inputValue.trim());
     if (!q) return subdivisions;
     return subdivisions.filter(
-      (s) => s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q),
+      (s) => foldDiacritics(s.name).includes(q) || s.code.toLowerCase().includes(q),
     );
   }, [subdivisions, inputValue]);
 

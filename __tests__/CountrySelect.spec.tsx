@@ -57,7 +57,8 @@ import type { CountryOption } from "@/components/ui/country-select";
 const COUNTRIES: CountryOption[] = [
   { code: "DE", name: "Germany", hasSubdivisions: true },
   { code: "FR", name: "France", hasSubdivisions: true },
-  { code: "AT", name: "Austria", hasSubdivisions: true },
+  { code: "AT", name: "Österreich", hasSubdivisions: true },
+  { code: "MX", name: "México", hasSubdivisions: true },
 ];
 
 // ---------------------------------------------------------------------------
@@ -220,6 +221,20 @@ describe("CountrySelect", () => {
     expect(screen.getByText("France")).toBeInTheDocument();
     expect(screen.queryByText("Germany")).not.toBeInTheDocument();
     expect(screen.queryByText("Austria")).not.toBeInTheDocument();
+  });
+
+  it("matches accented names with an unaccented query (diacritic folding)", async () => {
+    const user = userEvent.setup();
+    render(
+      <CountrySelect value="" onValueChange={jest.fn()} countries={COUNTRIES} />,
+    );
+    await user.click(screen.getByRole("combobox"));
+    await user.type(screen.getByPlaceholderText("Search countries..."), "osterreich");
+
+    // "osterreich" must match "Österreich" via NFD diacritic folding
+    expect(screen.getByText("Österreich")).toBeInTheDocument();
+    expect(screen.queryByText("Germany")).not.toBeInTheDocument();
+    expect(screen.queryByText("México")).not.toBeInTheDocument();
   });
 
   it("keeps the clear item visible while searching (F3)", async () => {
