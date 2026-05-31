@@ -1,7 +1,12 @@
 # JobSync — Konsolidiertes Backlog
 
 **Erstellt:** 2026-05-31 | **Verifiziert gegen:** HEAD `663ff21` (Knowledge-Graph `c8e99df` + Code-grep)
-**Methode:** 6 parallele Scan-Agenten über ALLE `.md` (538 Dateien) + Knowledge-Graph-Verifikation + Code-grep-Konfliktauflösung.
+**Methode:** 2 Runden, 9 parallele Scan-Agenten über ALLE `.md` (539 Repo + 8 Home-Dir) + Knowledge-Graph + Code-grep-Konfliktauflösung.
+**Runde 2 (lückenlos):** 64 ungescannte Repo-Docs (ADRs/architecture/alte-prompts/specs) + 8 Home-Dir-Docs + WCAG-35 + Tech-Debt-Claims einzeln code-verifiziert.
+
+> **Drift-Quote gemessen:** Scan-Agenten meldeten ~38 längst-gefixte Items als offen (lasen stale
+> Analyse-Docs). Einzel-Verifikation: WCAG 11/35 gefixt (31%), Tech-Debt 11/20 gefixt (55%),
+> Home-Dir 4/4 "neue" Items gefixt (100%). **Code-grep = einzige Wahrheit.** Alles unten verifiziert.
 
 > **Single Source of Truth.** Diese Datei ersetzt verstreute Offene-Items-Listen aus:
 > `s2-ux-polish-session.md`, `add-job-modal-ux-findings.md`, `open-items-2026-05-13.md`,
@@ -38,8 +43,28 @@ Quell-Docs sollten entsprechend aktualisiert/markiert werden.
 | G5 newJobsCount, G7 i18n, G9 ContactDeleted consumer | domain-expert | siehe project_next_session verifications | ERLEDIGT |
 | F-AJ-01 Titel volle Breite | add-job-findings (frühere Session) | `AddJob.tsx:277` `md:col-span-2` | ERLEDIGT |
 | email.ts multi-prefix split, CRM-Cron guards | deferred-memory | `35a5d55`, `crm-cron.ts:28-42/308` | ERLEDIGT |
+| **— Runde-2 verifiziert ERLEDIGT (waren in §4/§5 falsch offen): —** | | | |
+| IF-2 Event-Payload unsafe casts | interface-fragility, B6 | `crm-activity-logger.ts:30-32` safeParsePayload | ERLEDIGT |
+| IF-4 degradation ChannelRouter-Bypass | interface-fragility, B6 | `degradation.ts:53-60` AutomationDegraded-Events (Sprint C) | ERLEDIGT |
+| IF-6 Promoter JobStatusChanged+CompanyCreated skip | B6 | `promoter.ts:162-179` + `:288-302` beide emittiert | ERLEDIGT |
+| IF-9 AI-Module Auth-Failure (G2b-Rest) | interface-fragility, B6 | `ai-provider/providers.ts:21-24` handleAuthFailure | ERLEDIGT |
+| IF-11 State-Machine-Dup | interface-fragility, B6 | `validate-edit-transition.ts:11` import single-source | ERLEDIGT |
+| DAU-2 changeJobStatus expectedFromStatusId | test-blindspots, B6 | `job.actions.ts:768/800` guard | ERLEDIGT |
+| F1-partial errors.* 4-Locale | test-blindspots | zu Domain-Namespaces migriert | ERLEDIGT |
+| Test-Fixture-Dup makeTestDispatchContext | s5-simplify-memory, B6 | `testFixtures.ts:1874` zentral | ERLEDIGT |
+| CRM-ActivityLogger Unit-Tests | review-memory, B6 | `__tests__/crm-activity-logger.spec.ts` | ERLEDIGT |
+| Gap-2 Company.domain | crm-gap, B6 | `schema.prisma:306` + autofill | ERLEDIGT |
+| Gap-3 headline vs role | crm-gap, B6 | `schema.prisma:960` headline + role in CompanyAssociation | ERLEDIGT |
+| Gap-4 socialProfiles multi-platform | crm-gap, B6 | `schema.prisma:961` + SocialProfile-VO | ERLEDIGT |
+| WCAG O-1/O-2/O-3/O-4/O-7/P-5/R-1/R-2 (Kanban aria/labels) | kanban-audit, B3 | KanbanCard/Column/Board aria + sr-only verifiziert | ERLEDIGT (8) |
+| WCAG A03/A06/A10 (SMTP toggle/contrast/form) | s5b-audit, B3 | SmtpSettings `<form>` + kein tabIndex + #636363 | ERLEDIGT (3) |
+| CrmActivityLog.targetCompanyId FK | s3-handoff (home) | `@relation("ActivityLogCompany")` | ERLEDIGT |
+| PersonDirectory companies JSON-Search | s3-handoff (home) | `person.actions.ts:204` `{companies:{contains}}` | ERLEDIGT |
+| EURES Translator Feld-Mapping | eures-api-missing-fields (home) | 16 Feld-Mappings im Translator | ERLEDIGT (Notiz veraltet) |
 
 **→ TODO:** Quell-Docs mit `[SUPERSEDED → BACKLOG.md]` markieren (separater Schritt).
+Bes. veraltet: `gdpr-audit-report.md`, `interface-fragility-analysis.md`, `crm-gap-analysis-twenty.md`,
+beide WCAG-Audits (teil-fixed), Home-Dir s3-handoffs + eures-api-missing-fields.
 
 ---
 
@@ -76,10 +101,10 @@ Ursprung `s2-ux-polish-session.md` Pre-Audit. **NICHT** zu verwechseln mit der g
 | P0-8 | NotificationSettings: natives `<select>` statt Shadcn | NotificationSettings.tsx:316 |
 | P0-9 | NotificationSettings: `grid-cols-3` zu eng @375px | NotificationSettings.tsx:283 |
 
-### 2b. WCAG-Compliance (35 Findings, 2 Audits, 0 remediated)
-Beide Audits dokumentiert, NIE umgesetzt. Meist A11y-Detail (aria, Kontrast, motion-reduce).
-- **Kanban-Audit (2026-04-02):** 21 Findings — 4 CRITICAL (Drag-Handle aria, aria-expanded, Mobile-Select/Search unlabelled), 4 HIGH, 9 MEDIUM, 3 LOW. → `docs/audits/wcag22-kanban-audit-2026-04-02.md`
-- **S5b-Settings-Audit (2026-04-05):** 14 Findings — 1 CRITICAL (SMTP-Form nicht `<form>`), 4 HIGH (aria-invalid, password-toggle tabIndex, Kontrast×2), 5 MEDIUM, 4 LOW. → `docs/reviews/s5b/wcag-audit.md`
+### 2b. WCAG-Compliance (23 verifiziert offen — von 35, 11 bereits gefixt, 1 downgraded)
+Runde-2 Einzel-Code-Verifikation: 11 gefixt (siehe §0), 1 informational (A14). **23 echt offen**, meist A11y-Detail.
+- **Kanban-Audit (2026-04-02)** → `docs/audits/wcag22-kanban-audit-2026-04-02.md`. OFFEN: O-5 (onDragOver ""), O-6 (role=group statt region), P-1 (color-only status, KanbanCard.tsx:60), P-2 (text-[10px] ×6, :138-171), P-3 (amber dark-contrast :167/171), P-4 (motion-reduce fehlt alert-dialog/toast), U-1 (transition-error kein hint), U-2 (StatusTransitionDialog kein aria-live), U-3 (KanbanEmptyState CTA), R-3 (ToastProvider hardcoded "Notification" toaster.tsx:19).
+- **S5b-Settings-Audit (2026-04-05)** → `docs/reviews/s5b/wcag-audit.md`. OFFEN: A01 (aria-invalid SmtpSettings:410-514), A02 (autoComplete=email :506), A04 (aria-live cooldown/subscription), A05 (Rotate-Button 36px), A11 (bg-green-600 Kontrast 3.5:1 PushSettings:414), A12 (yellow-950/20 dark :427), A13 (h3 ohne h1/h2), A07 (Email kein dark media-query), A09 (Email html dir-Attr), A08 (Email layout-tables — role=presentation OK, kein Fix nötig).
 
 ### 2c. Add-Job-Modal (F-AJ, offen-Teil)
 Voll-Detail + Chains: `docs/add-job-modal-ux-findings.md`. Verifizierter Status:
@@ -134,38 +159,37 @@ Kette D jederzeit parallel (kein Rewrite-Risiko). Kette A/B parallel zueinander;
 
 ## 4. Architektur / Tech-Debt (verifiziert offen)
 
-| ID | Titel | Datei | Severity |
-|----|-------|-------|----------|
-| IF-2 | Event-Payload unsafe `as`-casts | event consumers | HIGH |
-| IF-4 | degradation.ts ChannelRouter-Bypass (InApp-only Alerts) | degradation.ts:165/301/412 | HIGH |
-| IF-5 | ActionResult.message untyped i18n-key | actionResult | HIGH |
-| IF-7 | NotificationType 7-Datei-Fragment | notification types | HIGH |
-| IF-6 | Promoter `JobStatusChanged` skip (nur VacancyPromoted) | promoter.ts | TEILWEISE |
-| IF-9 | AI-Module Auth-Failure → handleAuthFailure nicht gewired (G2b-Rest) | ai-provider modules | HIGH |
-| IF-10 | emitEvent Race Condition | event-bus | MEDIUM |
-| IF-11/12 | State-Machine-Dup, DiscoveredJob Type-Cast | — | MEDIUM |
-| 13 Events ohne Consumer | ReminderTriggered etc. fire-and-forget ins Nichts | feature-map-and-gaps | MEDIUM |
+Runde-2 verifiziert: IF-2/IF-4/IF-6/IF-9/IF-11 ERLEDIGT (→ §0). **Echt offen:**
+
+| ID | Titel | Datei:Zeile | Severity |
+|----|-------|-------------|----------|
+| IF-5 | ActionResult.message untyped i18n-key (string statt key-union) | actionResult.ts:31 | HIGH |
+| IF-7 | NotificationType über 10 Dateien fragmentiert | 10 files | HIGH |
+| IF-10 | emitEvent fire-and-forget (void+.catch, kein await) | events/index.ts:53-58 | MEDIUM |
+| IF-12 | DiscoveredJob `as unknown as` Type-Cast | automations/[id]/page.tsx:267/269/278 | MEDIUM |
 | D3 | notification-dispatch.allium 160 Parse-Errors (Allium v3) | spec | LOW (1-2h) |
 | D4 | shared-entities.allium Company.domain Spec-Drift | spec | LOW (5min) |
 | D5 | enrichment-trigger A-05 bounded-context (schreibt Company.domain direkt) | enrichment-trigger.ts | LOW |
 | D1/D2 | runner.ts AI-SDK experimental_output deprecation + cast | runner.ts | LOW (je 30min) |
 
-**Test-Lücken:** DAU-2 (changeJobStatus expectedFromStatusId), F6 (Toast "Dismiss" hardcoded),
-F1-partial (errors.* keys 4 Locales), CRM-Consumer/Cron 0 Unit-Tests, Test-Fixture-Dup (6×).
+**Architektur-Note (kein Crash):** `audit-logger` konsumiert ALLE Events → jedes hat ≥1 Consumer.
+Aber ReminderTriggered/NotificationCreated haben keinen FUNKTIONALEN Consumer über Logging hinaus. Spec-Drift.
+
+**Test-Lücken (verifiziert offen):** F6 (Toast "Dismiss" hardcoded, toast.tsx:90), CRM-**Cron** 0 Unit-Tests
+(crm-activity-logger HAT Tests). DAU-2, F1-partial, Test-Fixture-Dup = ERLEDIGT (→ §0).
 
 ---
 
 ## 5. CRM-Gaps (Twenty-Vergleich, blockieren ROADMAP 5.x)
 
+Runde-2 verifiziert: Gap-2/Gap-3/Gap-4 ERLEDIGT (→ §0). **Echt offen:**
+
 | Gap | Titel | Blockiert | Status |
 |-----|-------|-----------|--------|
-| Gap-1 | Person→Job "Point of Contact" | 5.1/5.4/5.7 | OFFEN (= F-AJ-07) |
-| Gap-2 | Company.domain | — | **ERLEDIGT** (verifiziert) |
-| Gap-3 | headline vs role Trennung | 5.7/5.8 | OFFEN |
-| Gap-4 | Social-Links Multi-Platform | 5.7/5.8 | TEILWEISE (socialProfiles JSON da) |
-| Gap-5 | JobTimeline + CompanyTimeline UI | 5.1 | OFFEN (Component akzeptiert props, kein Page-Embed) |
-| Gap-6 | Blocklist Domain-Pattern | 1.12 | OFFEN |
-| Gap-7 | updated_by Tracking | 1.12/5.7 | OFFEN |
+| Gap-1 | Person→Job "Point of Contact" | 5.1/5.4/5.7 | OFFEN (= F-AJ-07, UI-Teil) |
+| Gap-5 | CompanyTimeline UI + JobDetail CRM-Tab | 5.1/5.5 | OFFEN (ActivityTimeline akzeptiert props, kein Page-Embed) |
+| Gap-6 | CrmBlocklist Domain-Pattern (nur exact `handle`) | 1.12 | OFFEN |
+| Gap-7 | updatedBy FK-Tracking (nur Name-based actor) | 1.12/5.7 | TEILWEISE |
 
 ---
 
@@ -208,12 +232,16 @@ F1-partial (errors.* keys 4 Locales), CRM-Consumer/Cron 0 Unit-Tests, Test-Fixtu
 
 | Kategorie | Anzahl |
 |-----------|--------|
-| Doku-Drift bereinigt (war falsch-offen) | ~16 |
+| Doku-Drift bereinigt (verifiziert war falsch-offen) | ~38 |
 | CRITICAL Security offen | 1 (BS-01) |
-| UX offen (S2-P0 9 + WCAG 35 + F-AJ 6) | 50 |
-| Arch/Tech-Debt offen | ~13 |
-| Test-Lücken | ~5 |
-| CRM-Gaps offen | 5 |
+| UX offen (S2-P0 9 + WCAG 23 + F-AJ 6) | 38 |
+| Arch/Tech-Debt offen | 8 (IF-5/7/10/12 + D1-D5) |
+| Test-Lücken offen | 2 (F6, CRM-Cron-Tests) |
+| CRM-Gaps offen | 4 (Gap-1/5/6/7) |
 | Dedizierte Sprints | 6 |
 | ROADMAP-Vorwärts-Features | ~38 |
 | Design-gated/Akzeptiert | ~10 |
+
+**Verifikations-Vollständigkeit:** 539 Repo-`.md` + 8 Home-Dir-`.md` + 30 Allium-Specs gescannt.
+319 Archive bewusst ausgeschlossen (historisch). 0 ungescannte Nicht-Archiv-Dateien verbleibend.
+Jeder OFFEN/ERLEDIGT-Status code-grep-verifiziert (keine Doku-Wort-Vertrauen).
