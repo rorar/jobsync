@@ -1,7 +1,7 @@
 "use client";
 
 import { addDays } from "date-fns";
-import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar as CalendarIcon, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useTranslations, formatDateShort } from "@/i18n";
@@ -28,6 +28,8 @@ interface DatePickerProps {
   presets: boolean;
   isEnabled: boolean;
   captionLayout?: boolean;
+  /** When true, render a "Clear" action that resets the value to undefined. */
+  allowClear?: boolean;
 }
 
 export function DatePicker({
@@ -35,6 +37,7 @@ export function DatePicker({
   presets,
   isEnabled,
   captionLayout,
+  allowClear = false,
 }: DatePickerProps) {
   const { t, locale } = useTranslations();
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
@@ -87,6 +90,21 @@ export function DatePicker({
           }}
           className="rounded-md border"
         />
+        {allowClear && field.value && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              field.onChange(undefined);
+              setIsPopoverOpen(false);
+            }}
+          >
+            <X className="mr-2 h-4 w-4" aria-hidden="true" />
+            {t("jobs.clearDate")}
+          </Button>
+        )}
       </PopoverContent>
     </Popover>
   );

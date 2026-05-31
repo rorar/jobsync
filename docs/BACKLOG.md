@@ -135,7 +135,7 @@ Voll-Detail + Chains: `docs/add-job-modal-ux-findings.md`. Verifizierter Status:
 | 01 Titel-Breite | **ERLEDIGT** | `md:col-span-2` da |
 | 02 Applied-Toggle → Status-ComboBox | OFFEN | hängt an F-AJ-09 |
 | 03 Status über Date Applied | OFFEN | Layout |
-| 04 Due Date optional + Reset | OFFEN | `schema:52` noch `z.date()` |
+| 04 Due Date optional + Reset | **ERLEDIGT** (Welle 0) | `dueDate: z.date().optional()`; DatePicker `allowClear` Ghost-Button (ui-design-reviewed); `updateJob` `dueDate ?? null` (Clear persistiert); `jobs.clearDate` ×4; +5 Tests |
 | 05 Salary Slider+Währung+Fixum | OFFEN (Infra teilw.) | `format-salary-range.ts` wiederverwendbar; Job-Model migrieren |
 | 06 Profil Adresse+Währung | TEILWEISE | CountrySelect/Subdivision/OHS da; Währung + User-Profil-Form fehlen |
 | 07 CRM-Person im Add Job | TEILWEISE | JobContact-Backend fertig; AddJob-UI fehlt |

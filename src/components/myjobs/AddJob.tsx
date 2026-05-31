@@ -571,6 +571,7 @@ export function AddJob({
                           field={field}
                           presets={true}
                           isEnabled={true}
+                          allowClear={true}
                         />
                         <FormMessage />
                       </FormItem>

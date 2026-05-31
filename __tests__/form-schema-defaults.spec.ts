@@ -38,4 +38,17 @@ describe("AddJobFormSchema defaults — F10", () => {
     const result = AddJobFormSchema.parse(minimalValidInput);
     expect(result.status).toBe("bookmarked");
   });
+
+  // F-AJ-04: due date is optional (Job.dueDate is DateTime? in the DB).
+  it("parses successfully when dueDate is omitted (optional)", () => {
+    const { dueDate, ...withoutDueDate } = minimalValidInput;
+    void dueDate;
+    const result = AddJobFormSchema.parse(withoutDueDate);
+    expect(result.dueDate).toBeUndefined();
+  });
+
+  it("still accepts a provided dueDate", () => {
+    const result = AddJobFormSchema.parse(minimalValidInput);
+    expect(result.dueDate).toEqual(new Date("2026-06-01"));
+  });
 });
