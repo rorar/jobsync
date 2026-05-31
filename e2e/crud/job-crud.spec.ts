@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { selectOrCreateComboboxOption, safeWait } from "../helpers";
+import { selectOrCreateComboboxOption } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -8,10 +8,12 @@ import { selectOrCreateComboboxOption, safeWait } from "../helpers";
 async function navigateToJobs(page: Page) {
   await page.goto("/dashboard/myjobs");
   await page.waitForLoadState("domcontentloaded");
+  // The add-job button proves the page shell is interactive. We deliberately
+  // do NOT wait for "networkidle" here: the dashboard holds a persistent
+  // scheduler SSE connection (/api/scheduler/status), so the page never reaches
+  // network idle and the wait would always time out. Tests that assert specific
+  // rows wait for those rows explicitly.
   await page.getByTestId("add-job-btn").waitFor({ state: "visible" });
-  // M-T-04 follow-up: replaced waitForTimeout(3000) — wait for the jobs table
-  // async loadJobs() call to complete rather than sleeping a fixed 3 000 ms.
-  await safeWait(page, { loadState: "networkidle" });
 }
 
 /**
@@ -35,9 +37,11 @@ async function ensureResumeExists(page: Page, resumeTitle: string) {
 
   await page.getByRole("button", { name: "New Resume" }).click();
   await page.getByPlaceholder("Ex: Full Stack Developer").fill(resumeTitle);
-  await page.getByRole("button", { name: "Save" }).click();
+  // exact: true — the form also has a "Save & Open" button; without exact the
+  // "Save" matcher is ambiguous (strict-mode violation).
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
-    page.getByText(/Resume title has been/i).first(),
+    page.getByText(/Resume created successfully/i).first(),
   ).toBeVisible({ timeout: 10000 });
 }
 
@@ -69,6 +73,7 @@ async function createJob(
     location: string;
     url?: string;
     description?: string;
+    clearDueDate?: boolean;
   },
 ) {
   await page.getByTestId("add-job-btn").click();
@@ -112,6 +117,17 @@ async function createJob(
   await page.locator(".tiptap").fill(
     opts.description ?? "E2E test job description.",
   );
+
+  // F-AJ-04: the due date is optional. Clear the default (+3 days) value via
+  // the DatePicker's Clear action and assert the trigger reverts to the
+  // empty placeholder.
+  if (opts.clearDueDate) {
+    await page.getByTestId("due-date-trigger").click();
+    await page.getByRole("button", { name: "Clear date" }).click();
+    await expect(page.getByTestId("due-date-trigger")).toContainText(
+      "Pick a date",
+    );
+  }
 
   // Select a resume to avoid the P2003 FK violation that occurs when
   // the form submits resume="" (empty string is not a valid Resume ID).
@@ -275,6 +291,38 @@ test.describe("Job CRUD", () => {
     ).not.toBeVisible({ timeout: 10000 });
 
     // Cleanup resume
+    await deleteResume(page, resumeTitle);
+  });
+
+  // F-AJ-04: due date is optional — a job can be created with no due date.
+  test("should create a job with the due date cleared (F-AJ-04)", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const uid = Date.now().toString(36);
+    const jobTitle = `E2E NoDue ${uid}`;
+    const company = `E2E Company ${uid}`;
+    const location = `E2E Location ${uid}`;
+    const resumeTitle = `E2E Resume ${uid}`;
+
+    await ensureResumeExists(page, resumeTitle);
+
+    await navigateToJobs(page);
+    await createJob(page, {
+      title: jobTitle,
+      company,
+      location,
+      clearDueDate: true,
+    });
+
+    // Job persists despite having no due date.
+    await navigateToJobs(page);
+    await expect(
+      page.getByRole("row", { name: jobTitle }).first(),
+    ).toBeVisible({ timeout: 15000 });
+
+    // Cleanup
+    await deleteJob(page, jobTitle);
     await deleteResume(page, resumeTitle);
   });
 });

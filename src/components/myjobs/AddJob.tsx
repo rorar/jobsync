@@ -572,6 +572,7 @@ export function AddJob({
                           presets={true}
                           isEnabled={true}
                           allowClear={true}
+                          triggerTestId="due-date-trigger"
                         />
                         <FormMessage />
                       </FormItem>
