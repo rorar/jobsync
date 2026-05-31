@@ -35,8 +35,8 @@
       "TypeScript"
     ],
     "description": "JobSync is a self-hosted, open-source job search assistant (Next.js + Prisma/SQLite, Docker-deployable) for tracking and organizing job applications, with resume AI review/matching, task and activity management, and EURES/ESCO European job discovery. Note: this project has over 100 source files; consider scoping analysis to a subdirectory for faster results.",
-    "analyzedAt": "2026-05-29T10:26:57.027Z",
-    "gitCommitHash": "58dea094d4619a3348a0a1143b09f40ace1d65b4"
+    "analyzedAt": "2026-05-29T13:12:26Z",
+    "gitCommitHash": "c8e99df1fbf628a7942ff4531488b89ebd61493c"
   },
   "nodes": [
     {
@@ -920,7 +920,7 @@
       "type": "file",
       "name": "credential-resolver.spec.ts",
       "filePath": "__tests__/credential-resolver.spec.ts",
-      "summary": "Unit tests for the connector credential resolver (DB → Env → Default PUSH resolution) including encryption handling.",
+      "summary": "Unit tests for the connector credential resolver (DB \u2192 Env \u2192 Default PUSH resolution) including encryption handling.",
       "tags": [
         "test",
         "unit-test",
@@ -976,7 +976,7 @@
       "type": "file",
       "name": "crmInterview.actions.spec.ts",
       "filePath": "__tests__/crmInterview.actions.spec.ts",
-      "summary": "Tests for CRM interview lifecycle server actions including the scheduled→completed state machine.",
+      "summary": "Tests for CRM interview lifecycle server actions including the scheduled\u2192completed state machine.",
       "tags": [
         "test",
         "crm",
@@ -1004,7 +1004,7 @@
       "type": "file",
       "name": "crmTask.actions.spec.ts",
       "filePath": "__tests__/crmTask.actions.spec.ts",
-      "summary": "Tests for CRM task server actions covering polymorphic targets and the pending→done state machine.",
+      "summary": "Tests for CRM task server actions covering polymorphic targets and the pending\u2192done state machine.",
       "tags": [
         "test",
         "crm",
@@ -3813,20 +3813,6 @@
       "complexity": "simple"
     },
     {
-      "id": "document:CLAUDE.md",
-      "type": "document",
-      "name": "CLAUDE.md",
-      "filePath": "CLAUDE.md",
-      "summary": "Authoritative project guidelines for JobSync covering dev environment, i18n, Connector/Module ACL architecture, security rules, DDD principles, testing requirements, and deferred sprint work.",
-      "tags": [
-        "documentation",
-        "guidelines",
-        "architecture",
-        "conventions"
-      ],
-      "complexity": "complex"
-    },
-    {
       "id": "document:CODE_OF_CONDUCT.md",
       "type": "document",
       "name": "CODE_OF_CONDUCT.md",
@@ -4051,7 +4037,7 @@
       "type": "document",
       "name": "004-acl-connector-module-architecture.md",
       "filePath": "docs/adr/004-acl-connector-module-architecture.md",
-      "summary": "ADR establishing the App ↔ Connector ↔ Module Anti-Corruption-Layer architecture for all external integrations.",
+      "summary": "ADR establishing the App \u2194 Connector \u2194 Module Anti-Corruption-Layer architecture for all external integrations.",
       "tags": [
         "documentation",
         "adr",
@@ -4796,21 +4782,6 @@
         "kanban"
       ],
       "complexity": "complex"
-    },
-    {
-      "id": "document:docs/BUGS.md",
-      "type": "document",
-      "name": "BUGS.md",
-      "filePath": "docs/BUGS.md",
-      "summary": "Single source of truth bug tracker logging fixes across all sprints (security audits, accessibility, performance, CRM) with status, severity, and commit references.",
-      "tags": [
-        "documentation",
-        "bug-tracker",
-        "changelog",
-        "sprint-log"
-      ],
-      "complexity": "complex",
-      "languageNotes": "Chronological sprint log with 126 sections; the project requires this stay in sync with reality before/after every bugfix."
     },
     {
       "id": "document:docs/crm-gap-analysis-twenty.md",
@@ -8336,7 +8307,7 @@
       "id": "table:prisma/migrations/20260405193546_add_push_models/migration.sql:WebPushSubscription",
       "type": "table",
       "name": "WebPushSubscription",
-      "summary": "Browser push subscription (endpoint, encrypted p256dh+auth keys, expirationTime) — multiple per user across devices/browsers.",
+      "summary": "Browser push subscription (endpoint, encrypted p256dh+auth keys, expirationTime) \u2014 multiple per user across devices/browsers.",
       "tags": [
         "database",
         "push",
@@ -8496,7 +8467,7 @@
       "id": "table:prisma/migrations/20260510092100_add_crm_core_models/migration.sql:CrmInterview",
       "type": "table",
       "name": "CrmInterview",
-      "summary": "Scheduled/completed interview linked to a Job and Person with status state machine (scheduled→completed/cancelled/rescheduled) and outcome notes.",
+      "summary": "Scheduled/completed interview linked to a Job and Person with status state machine (scheduled\u2192completed/cancelled/rescheduled) and outcome notes.",
       "tags": [
         "database",
         "crm",
@@ -8508,7 +8479,7 @@
       "id": "table:prisma/migrations/20260510092100_add_crm_core_models/migration.sql:CrmTask",
       "type": "table",
       "name": "CrmTask",
-      "summary": "CRM to-do (title, description, dueDate, status, completedAt) with a pending→in_progress→done/cancelled state machine.",
+      "summary": "CRM to-do (title, description, dueDate, status, completedAt) with a pending\u2192in_progress\u2192done/cancelled state machine.",
       "tags": [
         "database",
         "crm",
@@ -9586,7 +9557,7 @@
         "documentation"
       ],
       "complexity": "complex",
-      "languageNotes": "Allium behavioural spec — single source of truth for the base combobox contract."
+      "languageNotes": "Allium behavioural spec \u2014 single source of truth for the base combobox contract."
     },
     {
       "id": "file:specs/crm-gdpr.allium",
@@ -10548,7 +10519,7 @@
       "type": "file",
       "name": "company.actions.ts",
       "filePath": "src/actions/company.actions.ts",
-      "summary": "Repository server actions for the Company aggregate — list/CRUD with IDOR-scoped queries, logo-asset cleanup on delete, and CompanyCreated event emission.",
+      "summary": "Repository server actions for the Company aggregate \u2014 list/CRUD with IDOR-scoped queries, logo-asset cleanup on delete, and CompanyCreated event emission.",
       "tags": [
         "api-handler",
         "data-model",
@@ -10812,7 +10783,7 @@
       "type": "file",
       "name": "crmBlocklist.actions.ts",
       "filePath": "src/actions/crmBlocklist.actions.ts",
-      "summary": "CRM blocklist suppression actions — add/remove/query email/phone/domain handles and check whether a handle is blocked.",
+      "summary": "CRM blocklist suppression actions \u2014 add/remove/query email/phone/domain handles and check whether a handle is blocked.",
       "tags": [
         "api-handler",
         "crm",
@@ -10892,7 +10863,7 @@
       "type": "file",
       "name": "crmInterview.actions.ts",
       "filePath": "src/actions/crmInterview.actions.ts",
-      "summary": "CrmInterview lifecycle repository — schedule, complete, cancel, reschedule with state-machine validation and InterviewScheduled/Completed events.",
+      "summary": "CrmInterview lifecycle repository \u2014 schedule, complete, cancel, reschedule with state-machine validation and InterviewScheduled/Completed events.",
       "tags": [
         "api-handler",
         "crm",
@@ -11065,7 +11036,7 @@
       "type": "file",
       "name": "crmTask.actions.ts",
       "filePath": "src/actions/crmTask.actions.ts",
-      "summary": "CrmTask repository — create with polymorphic targets and lifecycle transitions (start/complete/cancel) validated by the task state machine, emitting CRM task events.",
+      "summary": "CrmTask repository \u2014 create with polymorphic targets and lifecycle transitions (start/complete/cancel) validated by the task state machine, emitting CRM task events.",
       "tags": [
         "api-handler",
         "crm",
@@ -11302,7 +11273,7 @@
       "type": "file",
       "name": "enrichment.actions.ts",
       "filePath": "src/actions/enrichment.actions.ts",
-      "summary": "Server actions driving the data-enrichment orchestrator — trigger/refresh enrichment with rate limiting and an in-flight semaphore, plus status/result reads.",
+      "summary": "Server actions driving the data-enrichment orchestrator \u2014 trigger/refresh enrichment with rate limiting and an in-flight semaphore, plus status/result reads.",
       "tags": [
         "api-handler",
         "service",
@@ -11380,7 +11351,7 @@
       "type": "file",
       "name": "job.actions.ts",
       "filePath": "src/actions/job.actions.ts",
-      "summary": "Core Job aggregate repository — list/detail/CRUD, Kanban board, status transitions via the status machine, history, and distribution queries with optimistic locking.",
+      "summary": "Core Job aggregate repository \u2014 list/detail/CRUD, Kanban board, status transitions via the status machine, history, and distribution queries with optimistic locking.",
       "tags": [
         "api-handler",
         "data-model",
@@ -11745,7 +11716,7 @@
       "type": "file",
       "name": "jobLocation.actions.ts",
       "filePath": "src/actions/jobLocation.actions.ts",
-      "summary": "Location reference-data actions — list/paginate and delete with referential-integrity guards against jobs and resume sections.",
+      "summary": "Location reference-data actions \u2014 list/paginate and delete with referential-integrity guards against jobs and resume sections.",
       "tags": [
         "api-handler",
         "data-model",
@@ -11807,7 +11778,7 @@
       "type": "file",
       "name": "jobSource.actions.ts",
       "filePath": "src/actions/jobSource.actions.ts",
-      "summary": "JobSource reference-data actions — paginated list with usage counts and delete guarded against in-use jobs.",
+      "summary": "JobSource reference-data actions \u2014 paginated list with usage counts and delete guarded against in-use jobs.",
       "tags": [
         "api-handler",
         "data-model",
@@ -11852,7 +11823,7 @@
       "type": "file",
       "name": "jobtitle.actions.ts",
       "filePath": "src/actions/jobtitle.actions.ts",
-      "summary": "JobTitle reference-data actions — list/paginate, upsert-create, and delete guarded against work-experience and job references.",
+      "summary": "JobTitle reference-data actions \u2014 list/paginate, upsert-create, and delete guarded against work-experience and job references.",
       "tags": [
         "api-handler",
         "data-model",
@@ -11930,7 +11901,7 @@
       "type": "file",
       "name": "logoAsset.actions.ts",
       "filePath": "src/actions/logoAsset.actions.ts",
-      "summary": "Logo asset actions — fetch/delete locally cached company logos and trigger fire-and-forget downloads via LogoAssetService.",
+      "summary": "Logo asset actions \u2014 fetch/delete locally cached company logos and trigger fire-and-forget downloads via LogoAssetService.",
       "tags": [
         "api-handler",
         "service",
@@ -12038,7 +12009,7 @@
       "type": "file",
       "name": "mock.actions.ts",
       "filePath": "src/actions/mock.actions.ts",
-      "summary": "Mock/E2E data generation and teardown actions — seed activities and profile data, clear mock and E2E test fixtures, gated behind a mock-data flag.",
+      "summary": "Mock/E2E data generation and teardown actions \u2014 seed activities and profile data, clear mock and E2E test fixtures, gated behind a mock-data flag.",
       "tags": [
         "test",
         "data-pipeline",
@@ -12132,7 +12103,7 @@
       "type": "file",
       "name": "module.actions.ts",
       "filePath": "src/actions/module.actions.ts",
-      "summary": "Module lifecycle admin actions — list manifests, activate/deactivate modules (admin-gated, pauses affected automations) and run health checks.",
+      "summary": "Module lifecycle admin actions \u2014 list manifests, activate/deactivate modules (admin-gated, pauses affected automations) and run health checks.",
       "tags": [
         "api-handler",
         "admin",
@@ -12259,7 +12230,7 @@
       "type": "file",
       "name": "note.actions.ts",
       "filePath": "src/actions/note.actions.ts",
-      "summary": "Job-scoped Note repository — list/add/update/delete notes tied to a job with IDOR ownership checks.",
+      "summary": "Job-scoped Note repository \u2014 list/add/update/delete notes tied to a job with IDOR ownership checks.",
       "tags": [
         "api-handler",
         "data-model",
@@ -12337,7 +12308,7 @@
       "type": "file",
       "name": "notification.actions.ts",
       "filePath": "src/actions/notification.actions.ts",
-      "summary": "In-app notification actions — paginated list, unread count, mark read / mark-all-read, and dismiss, all user-scoped.",
+      "summary": "In-app notification actions \u2014 paginated list, unread count, mark read / mark-all-read, and dismiss, all user-scoped.",
       "tags": [
         "api-handler",
         "notifications",
@@ -12431,7 +12402,7 @@
       "type": "file",
       "name": "person.actions.ts",
       "filePath": "src/actions/person.actions.ts",
-      "summary": "Person aggregate repository (CRM) — CRUD plus archive/reactivate state machine, GDPR anonymize cascade, and merge-persons consolidation with domain events.",
+      "summary": "Person aggregate repository (CRM) \u2014 CRUD plus archive/reactivate state machine, GDPR anonymize cascade, and merge-persons consolidation with domain events.",
       "tags": [
         "api-handler",
         "crm",
@@ -12574,7 +12545,7 @@
       "type": "file",
       "name": "privacy.actions.ts",
       "filePath": "src/actions/privacy.actions.ts",
-      "summary": "Privacy/GDPR settings actions — read and update per-user privacy preferences and report SMTP availability.",
+      "summary": "Privacy/GDPR settings actions \u2014 read and update per-user privacy preferences and report SMTP availability.",
       "tags": [
         "api-handler",
         "security",
@@ -12635,7 +12606,7 @@
       "type": "file",
       "name": "profile.actions.ts",
       "filePath": "src/actions/profile.actions.ts",
-      "summary": "Profile aggregate repository — resumes, contact info, summaries, work experience, education, and file management with chain-traversal ownership checks.",
+      "summary": "Profile aggregate repository \u2014 resumes, contact info, summaries, work experience, education, and file management with chain-traversal ownership checks.",
       "tags": [
         "api-handler",
         "data-model",
@@ -12922,7 +12893,7 @@
       "type": "file",
       "name": "publicApiKey.actions.ts",
       "filePath": "src/actions/publicApiKey.actions.ts",
-      "summary": "Public API key management actions — create (SHA-256 hashed, shown once), list, revoke, and delete keys, capped per user.",
+      "summary": "Public API key management actions \u2014 create (SHA-256 hashed, shown once), list, revoke, and delete keys, capped per user.",
       "tags": [
         "api-handler",
         "security",
@@ -13000,7 +12971,7 @@
       "type": "file",
       "name": "push.actions.ts",
       "filePath": "src/actions/push.actions.ts",
-      "summary": "Browser push notification actions — VAPID key retrieval/rotation, subscribe/unsubscribe, subscription count, and rate-limited test push.",
+      "summary": "Browser push notification actions \u2014 VAPID key retrieval/rotation, subscribe/unsubscribe, subscription count, and rate-limited test push.",
       "tags": [
         "api-handler",
         "notifications",
@@ -13110,7 +13081,7 @@
       "type": "file",
       "name": "question.actions.ts",
       "filePath": "src/actions/question.actions.ts",
-      "summary": "Interview-question bank repository — list/detail/CRUD plus tag-with-counts aggregation, user-scoped.",
+      "summary": "Interview-question bank repository \u2014 list/detail/CRUD plus tag-with-counts aggregation, user-scoped.",
       "tags": [
         "api-handler",
         "data-model",
@@ -13220,7 +13191,7 @@
       "type": "file",
       "name": "reference-data.actions.ts",
       "filePath": "src/actions/reference-data.actions.ts",
-      "summary": "Open Host Service bridging server-only geo/holiday reference modules to client components — country/subdivision options and person holiday info, auth-gated.",
+      "summary": "Open Host Service bridging server-only geo/holiday reference modules to client components \u2014 country/subdivision options and person holiday info, auth-gated.",
       "tags": [
         "api-handler",
         "reference-data",
@@ -13282,7 +13253,7 @@
       "type": "file",
       "name": "smtp.actions.ts",
       "filePath": "src/actions/smtp.actions.ts",
-      "summary": "SMTP configuration actions — save (AES-encrypted, SSRF-validated), read, test connection (rate-limited), and delete per-user SMTP config.",
+      "summary": "SMTP configuration actions \u2014 save (AES-encrypted, SSRF-validated), read, test connection (rate-limited), and delete per-user SMTP config.",
       "tags": [
         "api-handler",
         "notifications",
@@ -13393,7 +13364,7 @@
       "type": "file",
       "name": "stagedVacancy.actions.ts",
       "filePath": "src/actions/stagedVacancy.actions.ts",
-      "summary": "Staged vacancy pipeline repository — list/detail, dismiss/restore/archive/trash lifecycle, promote-to-job, retention cleanup, and bulk actions with undo support.",
+      "summary": "Staged vacancy pipeline repository \u2014 list/detail, dismiss/restore/archive/trash lifecycle, promote-to-job, retention cleanup, and bulk actions with undo support.",
       "tags": [
         "api-handler",
         "service",
@@ -18656,7 +18627,7 @@
         21,
         87
       ],
-      "summary": "NavLink — Sidebar navigation link that highlights the active route based on pathname matching, with tooltip support for collapsed state.",
+      "summary": "NavLink \u2014 Sidebar navigation link that highlights the active route based on pathname matching, with tooltip support for collapsed state.",
       "tags": [
         "component",
         "navigation",
@@ -18687,7 +18658,7 @@
         39,
         272
       ],
-      "summary": "AddContactInfo — Dialog form for adding or editing resume contact information (email, phone, address) with zod validation and optimistic transitions.",
+      "summary": "AddContactInfo \u2014 Dialog form for adding or editing resume contact information (email, phone, address) with zod validation and optimistic transitions.",
       "tags": [
         "component",
         "form",
@@ -18719,7 +18690,7 @@
         46,
         359
       ],
-      "summary": "AddEducation — Dialog form for adding/editing resume education entries with degree, location combobox, and rich-text description.",
+      "summary": "AddEducation \u2014 Dialog form for adding/editing resume education entries with degree, location combobox, and rich-text description.",
       "tags": [
         "component",
         "form",
@@ -18751,7 +18722,7 @@
         49,
         391
       ],
-      "summary": "AddExperience — Dialog form for adding/editing resume work experience with company, job title, and location comboboxes plus rich-text description.",
+      "summary": "AddExperience \u2014 Dialog form for adding/editing resume work experience with company, job title, and location comboboxes plus rich-text description.",
       "tags": [
         "component",
         "form",
@@ -18797,7 +18768,7 @@
         41,
         174
       ],
-      "summary": "AddResumeSummary — Dialog form for adding/editing a resume summary section using a rich-text editor with zod validation.",
+      "summary": "AddResumeSummary \u2014 Dialog form for adding/editing a resume summary section using a rich-text editor with zod validation.",
       "tags": [
         "component",
         "form",
@@ -18828,7 +18799,7 @@
         15,
         257
       ],
-      "summary": "AiJobMatchResponseContent — Presentational renderer for streamed AI job-match results: requirements, skills, keywords, deal-breakers, and tailoring tips.",
+      "summary": "AiJobMatchResponseContent \u2014 Presentational renderer for streamed AI job-match results: requirements, skills, keywords, deal-breakers, and tailoring tips.",
       "tags": [
         "component",
         "ai",
@@ -18859,7 +18830,7 @@
         44,
         248
       ],
-      "summary": "AiJobMatchSection — Sheet that runs the AI job-to-resume match: loads settings, checks model status, selects a resume, and streams structured match output.",
+      "summary": "AiJobMatchSection \u2014 Sheet that runs the AI job-to-resume match: loads settings, checks model status, selects a resume, and streams structured match output.",
       "tags": [
         "component",
         "ai",
@@ -18890,7 +18861,7 @@
         16,
         52
       ],
-      "summary": "ScoresSection — Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
+      "summary": "ScoresSection \u2014 Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
       "tags": [
         "component",
         "ai",
@@ -18907,7 +18878,7 @@
         64,
         122
       ],
-      "summary": "AchievementsSection — Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
+      "summary": "AchievementsSection \u2014 Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
       "tags": [
         "component",
         "ai",
@@ -18924,7 +18895,7 @@
         124,
         197
       ],
-      "summary": "KeywordsSection — Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
+      "summary": "KeywordsSection \u2014 Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
       "tags": [
         "component",
         "ai",
@@ -18941,7 +18912,7 @@
         199,
         279
       ],
-      "summary": "ActionVerbsSection — Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
+      "summary": "ActionVerbsSection \u2014 Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
       "tags": [
         "component",
         "ai",
@@ -18958,7 +18929,7 @@
         281,
         329
       ],
-      "summary": "SectionFeedbackSection — Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
+      "summary": "SectionFeedbackSection \u2014 Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
       "tags": [
         "component",
         "ai",
@@ -18975,7 +18946,7 @@
         331,
         358
       ],
-      "summary": "ATSIssuesSection — Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
+      "summary": "ATSIssuesSection \u2014 Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
       "tags": [
         "component",
         "ai",
@@ -18992,7 +18963,7 @@
         360,
         396
       ],
-      "summary": "TopImprovementsSection — Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
+      "summary": "TopImprovementsSection \u2014 Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
       "tags": [
         "component",
         "ai",
@@ -19009,7 +18980,7 @@
         398,
         472
       ],
-      "summary": "GrammarSection — Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
+      "summary": "GrammarSection \u2014 Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
       "tags": [
         "component",
         "ai",
@@ -19026,7 +18997,7 @@
         476,
         532
       ],
-      "summary": "AiResumeReviewResponseContent — Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
+      "summary": "AiResumeReviewResponseContent \u2014 Presentational renderer for streamed AI resume-review results across scores, achievements, keywords, action verbs, ATS, and grammar sections.",
       "tags": [
         "component",
         "ai",
@@ -19057,7 +19028,7 @@
         36,
         253
       ],
-      "summary": "AiResumeReviewSection — Sheet that runs the AI resume review: loads AI settings, checks model status, and streams structured review feedback.",
+      "summary": "AiResumeReviewSection \u2014 Sheet that runs the AI resume review: loads AI settings, checks model status, and streams structured review feedback.",
       "tags": [
         "component",
         "ai",
@@ -19088,7 +19059,7 @@
         13,
         45
       ],
-      "summary": "ContactInfoCard — Card displaying a resume's contact info summary with an edit affordance.",
+      "summary": "ContactInfoCard \u2014 Card displaying a resume's contact info summary with an edit affordance.",
       "tags": [
         "component",
         "profile",
@@ -19120,7 +19091,7 @@
         39,
         230
       ],
-      "summary": "CreateResume — Dialog form to create or edit a resume, uploading the file via multipart fetch and navigating to the new resume on success.",
+      "summary": "CreateResume \u2014 Dialog form to create or edit a resume, uploading the file via multipart fetch and navigating to the new resume on success.",
       "tags": [
         "component",
         "form",
@@ -19151,7 +19122,7 @@
         12,
         64
       ],
-      "summary": "DownloadFileButton — Button that downloads a resume file via fetch+blob with toast feedback on success or failure.",
+      "summary": "DownloadFileButton \u2014 Button that downloads a resume file via fetch+blob with toast feedback on success or failure.",
       "tags": [
         "component",
         "profile",
@@ -19182,7 +19153,7 @@
         27,
         140
       ],
-      "summary": "EducationCard — Card listing resume education entries with edit, add, and delete (with confirmation) actions.",
+      "summary": "EducationCard \u2014 Card listing resume education entries with edit, add, and delete (with confirmation) actions.",
       "tags": [
         "component",
         "profile",
@@ -19213,7 +19184,7 @@
         27,
         136
       ],
-      "summary": "ExperienceCard — Card listing resume work experience entries with edit, add, and delete (with confirmation) actions.",
+      "summary": "ExperienceCard \u2014 Card listing resume work experience entries with edit, add, and delete (with confirmation) actions.",
       "tags": [
         "component",
         "profile",
@@ -19245,7 +19216,7 @@
         17,
         144
       ],
-      "summary": "ProfileContainer — Profile page container that lists resumes with pagination, record counts, and resume create dialog wiring.",
+      "summary": "ProfileContainer \u2014 Profile page container that lists resumes with pagination, record counts, and resume create dialog wiring.",
       "tags": [
         "component",
         "profile",
@@ -19276,7 +19247,7 @@
         15,
         119
       ],
-      "summary": "ResumeContainer — Composes a single resume view from contact info, summary, experience, education cards, AI review, and download sections.",
+      "summary": "ResumeContainer \u2014 Composes a single resume view from contact info, summary, experience, education cards, AI review, and download sections.",
       "tags": [
         "component",
         "profile",
@@ -19307,7 +19278,7 @@
         40,
         173
       ],
-      "summary": "ResumeTable — Table of resumes with row actions (edit, delete, download) via dropdown menu and delete confirmation dialog.",
+      "summary": "ResumeTable \u2014 Table of resumes with row actions (edit, delete, download) via dropdown menu and delete confirmation dialog.",
       "tags": [
         "component",
         "profile",
@@ -19338,7 +19309,7 @@
         14,
         43
       ],
-      "summary": "SummarySectionCard — Card displaying a resume summary section with a rich-text viewer and edit affordance.",
+      "summary": "SummarySectionCard \u2014 Card displaying a resume summary section with a rich-text viewer and edit affordance.",
       "tags": [
         "component",
         "profile",
@@ -19369,7 +19340,7 @@
         24,
         68
       ],
-      "summary": "ProfileDropdown — User profile dropdown menu in the header with avatar, support dialog, and sign-out actions.",
+      "summary": "ProfileDropdown \u2014 User profile dropdown menu in the header with avatar, support dialog, and sign-out actions.",
       "tags": [
         "component",
         "navigation",
@@ -19401,7 +19372,7 @@
         31,
         131
       ],
-      "summary": "QuestionCard — Card displaying an interview question with truncated answer, tags, and edit/delete actions.",
+      "summary": "QuestionCard \u2014 Card displaying an interview question with truncated answer, tags, and edit/delete actions.",
       "tags": [
         "component",
         "questions",
@@ -19432,7 +19403,7 @@
         44,
         198
       ],
-      "summary": "QuestionForm — Dialog form to create or edit interview questions with rich-text answer, tag input, and zod validation.",
+      "summary": "QuestionForm \u2014 Dialog form to create or edit interview questions with rich-text answer, tag input, and zod validation.",
       "tags": [
         "component",
         "form",
@@ -19463,7 +19434,7 @@
         12,
         34
       ],
-      "summary": "QuestionList — Renders a list of QuestionCard components from a questions array.",
+      "summary": "QuestionList \u2014 Renders a list of QuestionCard components from a questions array.",
       "tags": [
         "component",
         "questions",
@@ -19494,7 +19465,7 @@
         35,
         228
       ],
-      "summary": "QuestionsContainer — Questions page container handling search, pagination, sidebar filtering, and the question create/edit form.",
+      "summary": "QuestionsContainer \u2014 Questions page container handling search, pagination, sidebar filtering, and the question create/edit form.",
       "tags": [
         "component",
         "questions",
@@ -19525,7 +19496,7 @@
         19,
         70
       ],
-      "summary": "QuestionsSidebar — Sidebar listing question categories/tags for filtering the questions list.",
+      "summary": "QuestionsSidebar \u2014 Sidebar listing question categories/tags for filtering the questions list.",
       "tags": [
         "component",
         "questions",
@@ -19556,7 +19527,7 @@
         23,
         83
       ],
-      "summary": "RadialChartComponent — Reusable radial bar chart component (Recharts) rendering a single score value as a gauge.",
+      "summary": "RadialChartComponent \u2014 Reusable radial bar chart component (Recharts) rendering a single score value as a gauge.",
       "tags": [
         "component",
         "chart",
@@ -19586,7 +19557,7 @@
         11,
         28
       ],
-      "summary": "RecordsCount — Small label showing the current record range and total count for paginated lists.",
+      "summary": "RecordsCount \u2014 Small label showing the current record range and total count for paginated lists.",
       "tags": [
         "component",
         "pagination",
@@ -19617,7 +19588,7 @@
         17,
         42
       ],
-      "summary": "RecordsPerPageSelector — Select dropdown letting users choose how many records appear per page.",
+      "summary": "RecordsPerPageSelector \u2014 Select dropdown letting users choose how many records appear per page.",
       "tags": [
         "component",
         "pagination",
@@ -19649,7 +19620,7 @@
         25,
         48
       ],
-      "summary": "getPhaseCounter — Live automation run progress panel showing per-phase steppers and counters fed by the scheduler SSE status hook.",
+      "summary": "getPhaseCounter \u2014 Live automation run progress panel showing per-phase steppers and counters fed by the scheduler SSE status hook.",
       "tags": [
         "component",
         "scheduler",
@@ -19666,7 +19637,7 @@
         50,
         201
       ],
-      "summary": "RunProgressPanel — Live automation run progress panel showing per-phase steppers and counters fed by the scheduler SSE status hook.",
+      "summary": "RunProgressPanel \u2014 Live automation run progress panel showing per-phase steppers and counters fed by the scheduler SSE status hook.",
       "tags": [
         "component",
         "scheduler",
@@ -19698,7 +19669,7 @@
         14,
         163
       ],
-      "summary": "SchedulerStatusBar — Header status bar showing scheduler state via SSE with a popover of active and upcoming automation runs.",
+      "summary": "SchedulerStatusBar \u2014 Header status bar showing scheduler state via SSE with a popover of active and upcoming automation runs.",
       "tags": [
         "component",
         "scheduler",
@@ -19815,7 +19786,7 @@
         "tested"
       ],
       "complexity": "complex",
-      "languageNotes": "Manifest-driven rendering — no hardcoded module knowledge."
+      "languageNotes": "Manifest-driven rendering \u2014 no hardcoded module knowledge."
     },
     {
       "id": "function:src/components/settings/ApiKeySettings.tsx:manifestToModuleConfig",
@@ -22554,7 +22525,7 @@
         "tested"
       ],
       "complexity": "complex",
-      "languageNotes": "Single source of truth for deck actions — all entry points (swipe, action rail, sheet, keyboard) must route through performAction per ADR-030 routing invariant."
+      "languageNotes": "Single source of truth for deck actions \u2014 all entry points (swipe, action rail, sheet, keyboard) must route through performAction per ADR-030 routing invariant."
     },
     {
       "id": "function:src/hooks/useDeckStack.ts:useDeckStack",
@@ -24057,7 +24028,7 @@
         "tested"
       ],
       "complexity": "complex",
-      "languageNotes": "No RBAC model — admin status derived per-call via a three-tier rule; every call emits a structured audit log line."
+      "languageNotes": "No RBAC model \u2014 admin status derived per-call via a three-tier rule; every call emits a structured audit log line."
     },
     {
       "id": "function:src/lib/auth/admin.ts:checkAdminAuthorization",
@@ -24202,7 +24173,7 @@
       "type": "file",
       "name": "config.ts",
       "filePath": "src/lib/connector/ai-provider/config.ts",
-      "summary": "Centralized constant config for the AI provider connector — timeouts, rate limits, temperatures, retry policy, text limits, and score variance.",
+      "summary": "Centralized constant config for the AI provider connector \u2014 timeouts, rate limits, temperatures, retry policy, text limits, and score variance.",
       "tags": [
         "configuration",
         "type-definition",
@@ -25302,7 +25273,7 @@
       "type": "file",
       "name": "credential-resolver.ts",
       "filePath": "src/lib/connector/credential-resolver.ts",
-      "summary": "Resolves module credentials via the PUSH pattern (DB → Env → Default), decrypting stored API keys before module instantiation.",
+      "summary": "Resolves module credentials via the PUSH pattern (DB \u2192 Env \u2192 Default), decrypting stored API keys before module instantiation.",
       "tags": [
         "security",
         "credential",
@@ -26500,7 +26471,7 @@
         "tested"
       ],
       "complexity": "complex",
-      "languageNotes": "Uses db.$transaction for atomic staged→job promotion."
+      "languageNotes": "Uses db.$transaction for atomic staged\u2192job promotion."
     },
     {
       "id": "function:src/lib/connector/job-discovery/promoter.ts:promoteStagedVacancy",
@@ -27232,7 +27203,7 @@
       "type": "file",
       "name": "nuts-mapping.ts",
       "filePath": "src/lib/connector/reference-data/modules/geo-codes/nuts-mapping.ts",
-      "summary": "Custom NUTS↔ISO 3166-2 crosswalk for EU core countries, deriving country codes from NUTS and resolving NUTS-L1 regions to subdivisions (handling el→GR, uk→GB).",
+      "summary": "Custom NUTS\u2194ISO 3166-2 crosswalk for EU core countries, deriving country codes from NUTS and resolving NUTS-L1 regions to subdivisions (handling el\u2192GR, uk\u2192GB).",
       "tags": [
         "reference-data",
         "geo",
@@ -27271,7 +27242,7 @@
         "utility"
       ],
       "complexity": "complex",
-      "languageNotes": "Two-tier fallback (vendored JSON → npm db) with per-country region-map caching."
+      "languageNotes": "Two-tier fallback (vendored JSON \u2192 npm db) with per-country region-map caching."
     },
     {
       "id": "function:src/lib/connector/reference-data/modules/geo-codes/subdivisions.ts:getSubdivisions",
@@ -31122,7 +31093,7 @@
         67,
         72
       ],
-      "summary": "Returns true when mock-data / developer tools should be accessible — in development mode or when NEXT_PUBLIC_ENABLE_MOCK_DATA=true.",
+      "summary": "Returns true when mock-data / developer tools should be accessible \u2014 in development mode or when NEXT_PUBLIC_ENABLE_MOCK_DATA=true.",
       "tags": [
         "utility",
         "config",
@@ -31144,6 +31115,83 @@
         "crm",
         "i18n",
         "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:scripts/understand-staleness-check.sh",
+      "type": "file",
+      "name": "understand-staleness-check.sh",
+      "filePath": "scripts/understand-staleness-check.sh",
+      "summary": "Knowledge-graph staleness guard that compares the Understand-Anything graph's build commit (meta.json.gitCommitHash) against current HEAD and lists files changed since, marking their graph nodes as untrusted. Pure shell, no LLM; wired as a Claude Code SessionStart hook.",
+      "tags": [
+        "script",
+        "tooling",
+        "knowledge-graph",
+        "git",
+        "validation"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Pure Bash diff against git HEAD; designed to fail-loud (absent/rebased graph) rather than fail-stale."
+    },
+    {
+      "id": "config:.claude/settings.json",
+      "type": "config",
+      "name": "settings.json",
+      "filePath": ".claude/settings.json",
+      "summary": "Claude Code project configuration that registers a SessionStart hook running the knowledge-graph staleness-check script at the start of each session.",
+      "tags": [
+        "configuration",
+        "claude-code",
+        "hooks",
+        "tooling"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:CLAUDE.md",
+      "type": "document",
+      "name": "CLAUDE.md",
+      "filePath": "CLAUDE.md",
+      "summary": "Authoritative project guidelines for JobSync covering dev environment, i18n, connector/module architecture, security rules (incl. the new PII Egress Redaction section), DDD principles, testing, and the Understand-Anything knowledge-graph feeding rule.",
+      "tags": [
+        "documentation",
+        "entry-point",
+        "architecture",
+        "security",
+        "conventions"
+      ],
+      "complexity": "complex",
+      "languageNotes": "69 sections spanning ~656 non-empty lines; serves as the project's single source of architectural and security truth for agents and contributors."
+    },
+    {
+      "id": "document:docs/BUGS.md",
+      "type": "document",
+      "name": "BUGS.md",
+      "filePath": "docs/BUGS.md",
+      "summary": "Bug tracker and single source of truth for all known issues, chronicling sprint-by-sprint findings and fixes; recently updated for the 2026-05-29 GDPR S3 session including the convertResume-unification done item.",
+      "tags": [
+        "documentation",
+        "bug-tracker",
+        "changelog",
+        "security",
+        "audit"
+      ],
+      "complexity": "complex",
+      "languageNotes": "126 sections (~1038 non-empty lines) of dated sprint logs; append-only ledger tracking accepted-risk, deferred, and fixed findings."
+    },
+    {
+      "id": "document:docs/superpowers/plans/2026-05-30-next-sprint-pii-at-rest.md",
+      "type": "document",
+      "name": "2026-05-30-next-sprint-pii-at-rest.md",
+      "filePath": "docs/superpowers/plans/2026-05-30-next-sprint-pii-at-rest.md",
+      "summary": "Startprompt/plan for the next sprint focused on PII-at-rest (Person PII field-level encryption), bundling adjacent-domain cleanups and optional hardening from the prior Egress sprint review.",
+      "tags": [
+        "documentation",
+        "planning",
+        "sprint-plan",
+        "security",
+        "pii"
       ],
       "complexity": "simple"
     }
@@ -36776,7 +36824,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/useAutomationWizard.spec.ts",
@@ -36833,7 +36881,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/useConflictDetection.spec.ts",
@@ -36869,7 +36917,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/useDeckStack.spec.ts",
@@ -36891,7 +36939,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/useStagingActions.spec.ts",
@@ -36906,7 +36954,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/useStagingLayout.spec.ts",
@@ -36921,7 +36969,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/useSuperLikeCelebrations.spec.ts",
@@ -36936,7 +36984,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/useTranslations.spec.ts",
@@ -36951,7 +36999,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/validate-api-key.spec.ts",
@@ -36966,7 +37014,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/validate-edit-transition.spec.ts",
@@ -36981,7 +37029,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/vapid.spec.ts",
@@ -36996,7 +37044,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/verify-route.spec.ts",
@@ -37011,7 +37059,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/ViewModeToggle.spec.tsx",
@@ -37026,7 +37074,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/webhook-channel.spec.ts",
@@ -37062,7 +37110,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/webhook-ssrf.spec.ts",
@@ -37077,7 +37125,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/WebhookSettings.spec.tsx",
@@ -37106,7 +37154,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/weekend-service.spec.ts",
@@ -37121,7 +37169,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/WeeklyBarChartToggleLabelKey.spec.tsx",
@@ -37136,7 +37184,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/widget-registry.spec.ts",
@@ -37151,7 +37199,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "file:__tests__/with-api-auth.spec.ts",
@@ -37180,7 +37228,7 @@
       "type": "tested_by",
       "direction": "forward",
       "weight": 0.5,
-      "description": "Direction corrected (was test → production)"
+      "description": "Direction corrected (was test \u2192 production)"
     },
     {
       "source": "document:CONTRIBUTING.md",
@@ -63869,6 +63917,48 @@
       "type": "exports",
       "direction": "forward",
       "weight": 0.8
+    },
+    {
+      "source": "config:.claude/settings.json",
+      "target": "file:scripts/understand-staleness-check.sh",
+      "type": "triggers",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:.claude/settings.json",
+      "target": "file:scripts/understand-staleness-check.sh",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:CLAUDE.md",
+      "target": "file:scripts/understand-staleness-check.sh",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:CLAUDE.md",
+      "target": "document:docs/BUGS.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/superpowers/plans/2026-05-30-next-sprint-pii-at-rest.md",
+      "target": "document:docs/BUGS.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/superpowers/plans/2026-05-30-next-sprint-pii-at-rest.md",
+      "target": "document:CLAUDE.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
     }
   ],
   "layers": [
@@ -64235,7 +64325,9 @@
         "file:scripts/tracks/track3-public-api.sh",
         "file:tailwind.config.ts",
         "config:tsconfig.json",
-        "file:types/index.t.ts"
+        "file:types/index.t.ts",
+        "file:scripts/understand-staleness-check.sh",
+        "config:.claude/settings.json"
       ]
     },
     {
@@ -64243,7 +64335,6 @@
       "name": "Documentation & Specifications",
       "description": "Project documentation (ADRs, architecture, design, security audits) and Allium formal specifications capturing domain rules.",
       "nodeIds": [
-        "document:CLAUDE.md",
         "document:CODE_OF_CONDUCT.md",
         "document:CONTRIBUTING.md",
         "file:docs/adr/.pending",
@@ -64302,7 +64393,6 @@
         "document:docs/architecture/overview.md",
         "document:docs/architecture/public-api-v1.md",
         "document:docs/audits/wcag22-kanban-audit-2026-04-02.md",
-        "document:docs/BUGS.md",
         "document:docs/crm-gap-analysis-twenty.md",
         "document:docs/design/crm-schema-design.md",
         "document:docs/design/gdpr-phase1-architecture.md",
@@ -64435,7 +64525,10 @@
         "file:specs/security-rules.allium",
         "file:specs/shared-entities.allium",
         "file:specs/ui-combobox-keyboard.allium",
-        "file:specs/vacancy-pipeline.allium"
+        "file:specs/vacancy-pipeline.allium",
+        "document:CLAUDE.md",
+        "document:docs/BUGS.md",
+        "document:docs/superpowers/plans/2026-05-30-next-sprint-pii-at-rest.md"
       ]
     },
     {
@@ -65201,8 +65294,8 @@
     },
     {
       "order": 3,
-      "title": "Server Bootstrap — Where the Backend Comes Alive",
-      "description": "Next.js App Router has no single main() — `instrumentation.ts` is the server boot hook. On startup it launches the automation scheduler and the separate CRM cron, registers all domain-event consumers, and pre-warms the holiday cache. Understanding this file tells you which background subsystems exist and how the otherwise event-driven app gets kicked into motion.",
+      "title": "Server Bootstrap \u2014 Where the Backend Comes Alive",
+      "description": "Next.js App Router has no single main() \u2014 `instrumentation.ts` is the server boot hook. On startup it launches the automation scheduler and the separate CRM cron, registers all domain-event consumers, and pre-warms the holiday cache. Understanding this file tells you which background subsystems exist and how the otherwise event-driven app gets kicked into motion.",
       "nodeIds": [
         "file:src/instrumentation.ts"
       ],
@@ -65211,17 +65304,17 @@
     {
       "order": 4,
       "title": "The Connector / Module ACL Architecture",
-      "description": "JobSync's central architectural idea is the App ↔ Connector ↔ Module Anti-Corruption Layer. `register-all.ts` is the integration entry point: a single side-effect import that self-registers every external Module. `manifest.ts` defines how each Module describes its identity, credentials, health, and resilience, and `registry.ts` is the one unified registry the whole app queries — no hardcoded knowledge of any specific provider.",
+      "description": "JobSync's central architectural idea is the App \u2194 Connector \u2194 Module Anti-Corruption Layer. `register-all.ts` is the integration entry point: a single side-effect import that self-registers every external Module. `manifest.ts` defines how each Module describes its identity, credentials, health, and resilience, and `registry.ts` is the one unified registry the whole app queries \u2014 no hardcoded knowledge of any specific provider.",
       "nodeIds": [
         "file:src/lib/connector/register-all.ts",
         "file:src/lib/connector/manifest.ts",
         "file:src/lib/connector/registry.ts"
       ],
-      "languageLesson": "Self-registration via side-effect imports (`import \"./modules/x\"` triggers `moduleRegistry.register(...)` at the bottom of each module) keeps the registry open for extension and free of central arrays — adding a module never edits shared code."
+      "languageLesson": "Self-registration via side-effect imports (`import \"./modules/x\"` triggers `moduleRegistry.register(...)` at the bottom of each module) keeps the registry open for extension and free of central arrays \u2014 adding a module never edits shared code."
     },
     {
       "order": 5,
-      "title": "A Concrete Module — EURES Job Discovery",
+      "title": "A Concrete Module \u2014 EURES Job Discovery",
       "description": "Building on the manifest/registry abstractions from Step 4, the EURES module is a representative implementation of a `DataSourceConnector`. It translates the foreign EURES API into the shared `DiscoveredVacancy` domain type, declares its filter fields and specialized widgets in a manifest, and lists ESCO and Eurostat as health dependencies. This is the pattern every job board (Arbeitsagentur, JSearch, future StepStone/Indeed) follows.",
       "nodeIds": [
         "file:src/lib/connector/job-discovery/modules/eures/index.ts"
@@ -65229,23 +65322,23 @@
     },
     {
       "order": 6,
-      "title": "The Vacancy Pipeline — The Runner",
+      "title": "The Vacancy Pipeline \u2014 The Runner",
       "description": "The Runner orchestrates a full automation run: it pushes resolved credentials into the active Module, searches for vacancies, deduplicates and blacklist-filters them, triggers best-effort enrichment, AI-matches them against the user's resume, and persists the results. This is where the discovery Modules from Step 5 actually produce the staged vacancies a user later swipes through.",
       "nodeIds": [
         "file:src/lib/connector/job-discovery/runner.ts",
         "file:src/lib/connector/data-enrichment/orchestrator.ts"
       ],
-      "languageLesson": "Enrichment is best-effort and non-blocking: the orchestrator runs a per-dimension fallback chain (first success wins) with per-module `Promise.race` timeouts, and never surfaces errors to the user — failures fall back to placeholders."
+      "languageLesson": "Enrichment is best-effort and non-blocking: the orchestrator runs a per-dimension fallback chain (first success wins) with per-module `Promise.race` timeouts, and never surfaces errors to the user \u2014 failures fall back to placeholders."
     },
     {
       "order": 7,
       "title": "Run Coordination & Scheduling",
-      "description": "Every automation run — scheduled or manual — must flow through the RunCoordinator, which uses an in-memory mutex per automation to prevent double-execution and reports live progress. The scheduler's cron loop drives it on a timer. This is the safety gate that sits in front of the Runner from Step 6.",
+      "description": "Every automation run \u2014 scheduled or manual \u2014 must flow through the RunCoordinator, which uses an in-memory mutex per automation to prevent double-execution and reports live progress. The scheduler's cron loop drives it on a timer. This is the safety gate that sits in front of the Runner from Step 6.",
       "nodeIds": [
         "file:src/lib/scheduler/run-coordinator.ts",
         "file:src/lib/scheduler/index.ts"
       ],
-      "languageLesson": "The coordinator is a `globalThis` singleton so it survives Next.js Hot Module Replacement in development — a pattern reused for the event bus and other long-lived in-process state."
+      "languageLesson": "The coordinator is a `globalThis` singleton so it survives Next.js Hot Module Replacement in development \u2014 a pattern reused for the event bus and other long-lived in-process state."
     },
     {
       "order": 8,
@@ -65261,17 +65354,17 @@
     {
       "order": 9,
       "title": "The Domain Event Bus",
-      "description": "Subsystems stay decoupled by publishing typed domain events rather than calling each other directly. The TypedEventBus carries events like CompanyCreated, VacancyPromoted, and AutomationDegraded; consumers (enrichment trigger, CRM activity logger, notification dispatcher) subscribe and react. This is the glue that connects the pipeline of Steps 6–8 to enrichment and notifications.",
+      "description": "Subsystems stay decoupled by publishing typed domain events rather than calling each other directly. The TypedEventBus carries events like CompanyCreated, VacancyPromoted, and AutomationDegraded; consumers (enrichment trigger, CRM activity logger, notification dispatcher) subscribe and react. This is the glue that connects the pipeline of Steps 6\u20138 to enrichment and notifications.",
       "nodeIds": [
         "file:src/lib/events/index.ts",
         "file:src/lib/events/event-bus.ts"
       ],
-      "languageLesson": "Events are created via a `createEvent()` typed factory, and every consumer revalidates payloads at runtime with Zod (`safeParsePayload`) — TypeScript types are erased at runtime, so the schema is the real boundary guard."
+      "languageLesson": "Events are created via a `createEvent()` typed factory, and every consumer revalidates payloads at runtime with Zod (`safeParsePayload`) \u2014 TypeScript types are erased at runtime, so the schema is the real boundary guard."
     },
     {
       "order": 10,
       "title": "Multi-Channel Notifications",
-      "description": "When events demand user-facing alerts, the ChannelRouter fans them out to every enabled channel — in-app, webhook, and email — each implementing the same NotificationChannel interface. A single per-dispatch DispatchContext supplies all user-scoped data so channels never query the DB for context. This shows how the event bus from Step 9 ultimately reaches the user.",
+      "description": "When events demand user-facing alerts, the ChannelRouter fans them out to every enabled channel \u2014 in-app, webhook, and email \u2014 each implementing the same NotificationChannel interface. A single per-dispatch DispatchContext supplies all user-scoped data so channels never query the DB for context. This shows how the event bus from Step 9 ultimately reaches the user.",
       "nodeIds": [
         "file:src/lib/notifications/channel-router.ts",
         "file:src/lib/notifications/channels/in-app.channel.ts",
@@ -65281,7 +65374,7 @@
     },
     {
       "order": 11,
-      "title": "The UI — Dashboard & Staging Deck",
+      "title": "The UI \u2014 Dashboard & Staging Deck",
       "description": "The React shell (`layout.tsx`) wraps the authenticated dashboard. The signature feature is the staging deck: a Tinder-style swipe UI where users triage AI-matched vacancies produced by the Runner. The StagingContainer/DeckView pair routes every action (swipe, button, keyboard, detail sheet) through one state machine, and MatchScoreRing visualizes the match scores computed back in Step 6.",
       "nodeIds": [
         "file:src/app/layout.tsx",
@@ -65293,7 +65386,7 @@
     },
     {
       "order": 12,
-      "title": "API Surface — Internal Routes & Public API v1",
+      "title": "API Surface \u2014 Internal Routes & Public API v1",
       "description": "Two namespaces coexist: `/api/*` serves the frontend and proxies EU APIs (always auth-gated), while `/api/v1/*` is the versioned public Open Host Service secured with API keys. Every v1 handler is wrapped by `withApiAuth()` (CORS + auth + rate limit + error sanitization) and uses explicit Prisma `select` shapes so internal fields never leak.",
       "nodeIds": [
         "file:src/app/api/v1/jobs/route.ts",
@@ -65303,18 +65396,18 @@
     },
     {
       "order": 13,
-      "title": "Internationalization — The Adapter Pattern",
-      "description": "Every user-visible string is translated across four locales (EN/DE/FR/ES). The i18n system hides its dictionary implementation behind two adapter barrels: `@/i18n` for client components and the `server-only` `@/i18n/server` for actions and routes. Consumers never import internals, so the backend could swap to LinguiJS later without touching call sites — `src/i18n/index.ts` is the single most depended-upon module in the codebase.",
+      "title": "Internationalization \u2014 The Adapter Pattern",
+      "description": "Every user-visible string is translated across four locales (EN/DE/FR/ES). The i18n system hides its dictionary implementation behind two adapter barrels: `@/i18n` for client components and the `server-only` `@/i18n/server` for actions and routes. Consumers never import internals, so the backend could swap to LinguiJS later without touching call sites \u2014 `src/i18n/index.ts` is the single most depended-upon module in the codebase.",
       "nodeIds": [
         "file:src/i18n/index.ts",
         "file:src/i18n/server.ts"
       ],
-      "languageLesson": "The `import \"server-only\"` marker in the server barrel makes the build fail if a client component ever imports server translation code — a compile-time enforcement of the client/server boundary."
+      "languageLesson": "The `import \"server-only\"` marker in the server barrel makes the build fail if a client component ever imports server translation code \u2014 a compile-time enforcement of the client/server boundary."
     },
     {
       "order": 14,
-      "title": "Specs & Tests — The Safety Net",
-      "description": "Finally, see how behavior is locked in. Allium specs (`module-lifecycle`, `scheduler-coordination`) are the authoritative source of truth for domain rules written before implementation. Jest covers units and components, while Playwright E2E suites — guided by `e2e/CONVENTIONS.md` — exercise critical paths like the automation wizard and CRUD flows end to end.",
+      "title": "Specs & Tests \u2014 The Safety Net",
+      "description": "Finally, see how behavior is locked in. Allium specs (`module-lifecycle`, `scheduler-coordination`) are the authoritative source of truth for domain rules written before implementation. Jest covers units and components, while Playwright E2E suites \u2014 guided by `e2e/CONVENTIONS.md` \u2014 exercise critical paths like the automation wizard and CRUD flows end to end.",
       "nodeIds": [
         "file:specs/module-lifecycle.allium",
         "file:specs/scheduler-coordination.allium",

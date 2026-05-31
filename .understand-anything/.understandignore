@@ -92,3 +92,11 @@ logs/
 *.gitkeep
 DEADLOCKS.md
 CHANGELOG.md
+
+# --- ACTIVE: secrets / PII / databases (belt-and-suspenders, non-git scans too) ---
+.env*
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/
