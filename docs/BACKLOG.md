@@ -183,7 +183,7 @@ Runde-2 verifiziert: IF-2/IF-4/IF-6/IF-9/IF-11 ERLEDIGT (→ §0). **Echt offen:
 | ID | Titel | Datei:Zeile | Severity |
 |----|-------|-------------|----------|
 | IF-5 | ActionResult.message untyped i18n-key (string statt key-union) | actionResult.ts:31 | HIGH |
-| IF-7 | NotificationType über 10 Dateien fragmentiert | 10 files | HIGH |
+| IF-7 | NotificationType über 13 Dateien fragmentiert | 13 files | HIGH |
 | IF-10 | emitEvent fire-and-forget (void+.catch, kein await) | events/index.ts:53-58 | MEDIUM |
 | IF-12 | DiscoveredJob `as unknown as` Type-Cast | automations/[id]/page.tsx:267/269/278 | MEDIUM |
 | D3 | notification-dispatch.allium 160 Parse-Errors (Allium v3) | spec | LOW (1-2h) |
