@@ -100,3 +100,6 @@ CHANGELOG.md
 *.sqlite
 *.sqlite3
 data/
+
+# Superseded task docs (historical, see docs/BACKLOG.md)
+.superseded-tasks/
