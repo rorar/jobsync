@@ -2,6 +2,21 @@
 
 Aufgenommen: 2026-05-27 (Session Bug-Fix P2003)
 Status: DOKUMENTIERT — nicht in dieser Session bearbeiten.
+Verifiziert gegen Code: 2026-05-29 (HEAD c8e99df, via /understand-chat + Direkt-Check)
+
+> **Verifikations-Ergebnis 2026-05-29:** Kein Finding vollständig erledigt.
+> Zwei TEILWEISE durch zwischenzeitliche Sprints (GeoCode 1.21 / Holiday 1.22 / CRM):
+> - **F-AJ-06 TEILWEISE:** `Person.addressCountryCode/addressSubdivisionCode/addressCity`
+>   existieren, `CountrySelect`+`SubdivisionSelect` Components + `reference-data.actions`
+>   OHS-Bridge geliefert, in `PersonForm` verdrahtet. OFFEN: (1) Währungsfeld fehlt
+>   überall (GeoCode = ISO-3166 Land, NICHT ISO-4217 Währung), (2) Felder auf **Person**,
+>   nicht auf **User-Profil** (Ziel war eigene Adresse), (3) Onboarding-Integration.
+> - **F-AJ-07 TEILWEISE:** JobContact-Backend komplett (`addJobContact`/`removeJobContact`/
+>   `getJobContactsForJob` + Events). OFFEN: UI in AddJob.
+> - **F-AJ-05 Infra-Teilstück:** `src/lib/staging/format-salary-range.ts` Formatter +
+>   `StagedVacancy.salaryMin/Max/Currency` existieren (wiederverwendbar). Job-Model noch
+>   `salaryRange String?`, AddJob noch `SALARY_RANGES`-String.
+> - Rest (01/02/03/04/08/09) unverändert OFFEN.
 
 ---
 
@@ -142,16 +157,29 @@ Person (Recruiter) -> arbeitet bei -> Company (Headhunter-Firma)
 
 ## Zusammenfassung
 
-| ID | Thema | Aufwand | Abhaengigkeiten |
-|----|-------|---------|-----------------|
-| F-AJ-01 | Titel volle Breite | S | — |
-| F-AJ-02 | Applied Toggle entfernen, Status ComboBox | M | F-AJ-09 |
-| F-AJ-03 | Status ueber Date Applied | S | — |
-| F-AJ-04 | Due Date optional + Reset | S | — |
-| F-AJ-05 | Salary Slider + Fixum + Waehrung | L | F-AJ-06 |
-| F-AJ-06 | Profil: Adresse + Standardwaehrung | M | — |
-| F-AJ-07 | CRM Person im Add Job | M | CRM Core (5.4) |
-| F-AJ-08 | Recruiter Dreiecksmodell | L | F-AJ-07, CRM Core |
-| F-AJ-09 | Benutzerdefinierter Status | XL | — |
+| ID | Thema | Aufwand | Status (2026-05-29) | Abhaengigkeiten / Wiederverwendbare Infra |
+|----|-------|---------|---------------------|-------------------------------------------|
+| F-AJ-01 | Titel volle Breite | S | OFFEN | — |
+| F-AJ-02 | Applied Toggle entfernen, Status ComboBox | M | OFFEN | F-AJ-09 |
+| F-AJ-03 | Status ueber Date Applied | S | OFFEN | — |
+| F-AJ-04 | Due Date optional + Reset | S | OFFEN | `addJobForm.schema.ts:52` noch `z.date()` |
+| F-AJ-05 | Salary Slider + Fixum + Waehrung | L | OFFEN (Infra teilw.) | `format-salary-range.ts` + `StagedVacancy.salaryMin/Max/Currency` wiederverwendbar; Job-Model migrieren |
+| F-AJ-06 | Profil: Adresse + Standardwaehrung | M | TEILWEISE | `CountrySelect`/`SubdivisionSelect`/`reference-data.actions` da (PersonForm); offen: Waehrung, User-Profil-Form, Onboarding |
+| F-AJ-07 | CRM Person im Add Job | M | TEILWEISE | JobContact-Backend fertig; offen: AddJob-UI |
+| F-AJ-08 | Recruiter Dreiecksmodell | L | OFFEN | F-AJ-07; kein `recruitingCompanyId`/`relationshipType` |
+| F-AJ-09 | Benutzerdefinierter Status | XL | OFFEN | — |
 
 **Empfohlene Reihenfolge:** F-AJ-01/03/04 (Quick Wins) -> F-AJ-02 -> F-AJ-06 -> F-AJ-05 -> F-AJ-07 -> F-AJ-08 -> F-AJ-09
+
+## Verbindungs-Punkte zu gelieferter Infra (2026-05-29)
+
+1. **F-AJ-06 ← CountrySelect/SubdivisionSelect/reference-data.actions (GeoCode 1.21):**
+   In **User-Profil/Settings** einbauen (eigene Adresse). AddJob-Location-Feld kann
+   CountrySelect wiederverwenden. Waehrung braucht NEUE ISO-4217-Quelle + Land→Waehrung-Map
+   fuer Default (GeoCode liefert nur Land).
+2. **F-AJ-05 ← format-salary-range.ts (staging):** Job-Model `salaryRange String` →
+   `salaryMin/Max/Currency/Period` migrieren (Angleich an StagedVacancy), Formatter
+   wiederverwenden, Slider-UI bauen.
+3. **F-AJ-07 ← JobContact actions + Events:** ComboBox in AddJob, nach Job-Create
+   `addJobContact()`. Danach F-AJ-08 (Dreieck) aufsetzen.
+4. **Holiday 1.22:** NICHT F-AJ-Scope (treibt CRM HolidayBadge).
