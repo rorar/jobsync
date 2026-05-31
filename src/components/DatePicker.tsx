@@ -30,6 +30,8 @@ interface DatePickerProps {
   captionLayout?: boolean;
   /** When true, render a "Clear" action that resets the value to undefined. */
   allowClear?: boolean;
+  /** Optional test id on the trigger button (for E2E targeting). */
+  triggerTestId?: string;
 }
 
 export function DatePicker({
@@ -38,9 +40,19 @@ export function DatePicker({
   isEnabled,
   captionLayout,
   allowClear = false,
+  triggerTestId,
 }: DatePickerProps) {
   const { t, locale } = useTranslations();
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
+  // Clear with `null`, NOT `undefined`: react-hook-form 7.x ignores `undefined`
+  // in onChange/setValue (the Controller keeps the prior value and the trigger
+  // never reverts to the placeholder). `null` is a defined falsy value that does
+  // re-render. The form schema accepts null (.nullable()) and the action coerces
+  // null -> DB null.
+  const clearValue = () => {
+    field.onChange(null);
+    setIsPopoverOpen(false);
+  };
 
   return (
     <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
@@ -48,6 +60,7 @@ export function DatePicker({
         <FormControl>
           <Button
             variant={"outline"}
+            data-testid={triggerTestId}
             className={cn(
               "md:w-[240px] lg:w-[280px] justify-start text-left font-normal",
               !field.value && "text-muted-foreground"
@@ -83,7 +96,7 @@ export function DatePicker({
           captionLayout={captionLayout ? "dropdown" : "label"}
           startMonth={captionLayout ? new Date(1970, 0) : undefined}
           endMonth={captionLayout ? new Date() : undefined}
-          selected={field.value}
+          selected={field.value ?? undefined}
           onSelect={(value) => {
             field.onChange(value);
             setIsPopoverOpen(false);
@@ -96,10 +109,7 @@ export function DatePicker({
             variant="ghost"
             size="sm"
             className="w-full text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              field.onChange(undefined);
-              setIsPopoverOpen(false);
-            }}
+            onClick={clearValue}
           >
             <X className="mr-2 h-4 w-4" aria-hidden="true" />
             {t("jobs.clearDate")}

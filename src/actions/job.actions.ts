@@ -384,7 +384,7 @@ export const addJob = async (
           jobSourceId: sourceId || null,
           salaryRange: salaryRange,
           createdAt: new Date(),
-          dueDate: dueDate,
+          dueDate: dueDate ?? null,
           appliedDate: dateApplied,
           description: jobDescription,
           jobType: type,
