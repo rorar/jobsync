@@ -61,6 +61,11 @@ Quell-Docs sollten entsprechend aktualisiert/markiert werden.
 | CrmActivityLog.targetCompanyId FK | s3-handoff (home) | `@relation("ActivityLogCompany")` | ERLEDIGT |
 | PersonDirectory companies JSON-Search | s3-handoff (home) | `person.actions.ts:204` `{companies:{contains}}` | ERLEDIGT |
 | EURES Translator Feld-Mapping | eures-api-missing-fields (home) | 16 Feld-Mappings im Translator | ERLEDIGT (Notiz veraltet) |
+| G3 degradation ChannelRouter (=IF-4) | gdpr/domain-expert | `degradation.ts` AutomationDegraded-Events | ERLEDIGT |
+| G6 NotificationCreated dead event | domain-expert | `event-types.ts:30` entfernt | ERLEDIGT |
+| G26 ENCRYPTION_KEY Startup-Check | domain-expert | `instrumentation.ts:3-5` throw | ERLEDIGT |
+| G27 CRM i18n keys (companyNotFound/multiplePrimary) | domain-expert | `crm.ts:237/238` ×4 Locales | ERLEDIGT |
+| API-v1 Cache-Control no-store (PII) | gdpr-audit | `with-api-auth.ts:99` | ERLEDIGT |
 
 **→ TODO:** Quell-Docs mit `[SUPERSEDED → BACKLOG.md]` markieren (separater Schritt).
 Bes. veraltet: `gdpr-audit-report.md`, `interface-fragility-analysis.md`, `crm-gap-analysis-twenty.md`,
@@ -80,6 +85,20 @@ beide WCAG-Audits (teil-fixed), Home-Dir s3-handoffs + eures-api-missing-fields.
 - **Fix:** Pattern A (ADR-019) — in `server-only`-Leaf verschieben ODER `callerUserId` required +
   internen `getCurrentUser()`-Gate. ~30 min.
 - **Quelle:** s5-pre-implementation-checkup, BUGS.md
+
+### 1b. GDPR-Long-Tail (verifiziert offen — aus gdpr-audit + domain-expert)
+Runde-2 verifiziert: G3/G6/G27/Cache-Control/ENCRYPTION_KEY-startup = ERLEDIGT (→ §0). **Echt offen:**
+
+| ID | Titel | Artikel | Datei | Severity |
+|----|-------|---------|-------|----------|
+| S6a | Kein GDPR-Audit-Trail für Job-CRUD (wer änderte was) | Art. 5(2) | — kein audit/ | HIGH |
+| S6b | Kein GDPR-Audit-Trail für CRM-Read-Access (wer sah Person-Daten) | Art. 5(2) | — | HIGH |
+| GDPR-JWT | JWT enthält email+name (nur `id` nötig) — Daten­minimierung | Art. 5(1)(c) | NextAuth jwt callback | MEDIUM |
+| GDPR-Consent | `processingBasis` write-only, kein Enforcement/Widerruf | Art. 7 | person.model | MEDIUM |
+| G25 | mergePersons: keine Target-Dedup (Task/Note doppelt bei Merge) | — | person.actions mergePersons | LOW |
+| G26b | ADMIN_USER_IDS keine Startup-Validierung (ENCRYPTION_KEY hat sie) | — | instrumentation.ts | LOW |
+| G28 | E2E-Cleanup fehlt CRM-FK-Reihenfolge (8 Entities) | — | e2e/cleanup-stale-data | LOW (Test) |
+| GDPR-KeyRotation | Encryption-Key-Rotation nur dokumentiert, keine Infra | Art. 32 | encryption.ts | DEFERRED |
 
 ---
 
@@ -232,8 +251,9 @@ Runde-2 verifiziert: Gap-2/Gap-3/Gap-4 ERLEDIGT (→ §0). **Echt offen:**
 
 | Kategorie | Anzahl |
 |-----------|--------|
-| Doku-Drift bereinigt (verifiziert war falsch-offen) | ~38 |
+| Doku-Drift bereinigt (verifiziert war falsch-offen) | ~43 |
 | CRITICAL Security offen | 1 (BS-01) |
+| GDPR-Long-Tail offen | 6 (S6a/S6b/JWT/Consent/G25/G26b/G28) + 1 deferred |
 | UX offen (S2-P0 9 + WCAG 23 + F-AJ 6) | 38 |
 | Arch/Tech-Debt offen | 8 (IF-5/7/10/12 + D1-D5) |
 | Test-Lücken offen | 2 (F6, CRM-Cron-Tests) |

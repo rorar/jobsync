@@ -1,3 +1,7 @@
+> **[SUPERSEDED → docs/BACKLOG.md]** (2026-05-31) — Status hier VERALTET. Mehrere FAIL/PARTIAL
+> sind code-verifiziert erledigt (Account-Deletion, DSAR, Retention-Cron, PII-Egress, G3/G6/G27,
+> Cache-Control). Echt offene GDPR-Items in BACKLOG §1b. Dieses Dokument nur als Audit-Historie.
+
 # GDPR Compliance Audit Report — JobSync
 
 **Date:** 2026-05-12

@@ -1,3 +1,5 @@
+> **[SUPERSEDED → docs/BACKLOG.md]** (2026-05-31) — Offene Items konsolidiert + code-verifiziert in BACKLOG. Nur Historie.
+
 # Offene Aufgaben — Stand 2026-05-13
 
 > Referenz für die nächste Session. Erstellt nach Sprint C + IF-2/5/6/7/8 + 2× Comprehensive Review (0 Debt).

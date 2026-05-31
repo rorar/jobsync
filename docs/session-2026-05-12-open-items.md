@@ -1,3 +1,5 @@
+> **[SUPERSEDED → docs/BACKLOG.md]** (2026-05-31) — Offene Items konsolidiert + code-verifiziert in BACKLOG. Nur Historie.
+
 # Session 2026-05-12 — Open Items
 
 23 items remaining from the S3 CRM Deferrals + Architecture Fixes session.

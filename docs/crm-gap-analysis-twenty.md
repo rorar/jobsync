@@ -1,3 +1,6 @@
+> **[SUPERSEDED → docs/BACKLOG.md]** (2026-05-31) — Status VERALTET. Gap-2/3/4 code-verifiziert
+> erledigt. Echt offen: Gap-1/5/6/7 (BACKLOG §5). Nur Historie.
+
 # GAP-Analyse: Twenty CRM → JobSync CRM
 
 Erstellt: 2026-05-10

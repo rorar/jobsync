@@ -1,3 +1,6 @@
+> **[SUPERSEDED → docs/BACKLOG.md]** (2026-05-31) — Status VERALTET. 8/12 IF-Items code-verifiziert
+> erledigt (IF-1/2/4/6/9/11). Echt offen: IF-5/7/10/12 (BACKLOG §4). Nur Historie.
+
 # Interface Fragility Analysis — 2026-05-12
 
 **Method:** 9 persistent domain expert agents, each queried independently: "Welche Schnittstellen zwischen deiner Domain und den anderen Domains sind die fragilsten? Wo wuerde eine Aenderung in deiner Domain unbemerkt etwas in einer anderen Domain kaputtmachen? Nenne die 3 gefaehrlichsten Koppelungspunkte mit file:line Referenzen."
