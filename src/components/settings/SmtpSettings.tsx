@@ -506,6 +506,7 @@ export default function SmtpSettings() {
               <Input
                 id="smtp-from"
                 type="email"
+                autoComplete="email"
                 placeholder={t("settings.smtpFromAddressPlaceholder")}
                 value={form.fromAddress}
                 onChange={(e) => updateField("fromAddress", e.target.value)}

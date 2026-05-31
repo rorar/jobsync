@@ -122,10 +122,19 @@ WebhookSettings/PushSettings/ApiKeySettings/AiSettings übernommen), dann implem
 | P0-8 | NotificationSettings: natives `<select>` statt Shadcn | ✅ Shadcn `<Select>` (29 Optionen → Select korrekt, nicht Combobox) |
 | P0-9 | NotificationSettings: `grid-cols-3` zu eng @375px | ✅ `grid-cols-1 sm:grid-cols-3` |
 
-### 2b. WCAG-Compliance (23 verifiziert offen — von 35, 11 bereits gefixt, 1 downgraded)
-Runde-2 Einzel-Code-Verifikation: 11 gefixt (siehe §0), 1 informational (A14). **23 echt offen**, meist A11y-Detail.
-- **Kanban-Audit (2026-04-02)** → `docs/audits/wcag22-kanban-audit-2026-04-02.md`. OFFEN: O-5 (onDragOver ""), O-6 (role=group statt region), P-1 (color-only status, KanbanCard.tsx:60), P-2 (text-[10px] ×6, :138-171), P-3 (amber dark-contrast :167/171), P-4 (motion-reduce fehlt alert-dialog/toast), U-1 (transition-error kein hint), U-2 (StatusTransitionDialog kein aria-live), U-3 (KanbanEmptyState CTA), R-3 (ToastProvider hardcoded "Notification" toaster.tsx:19).
-- **S5b-Settings-Audit (2026-04-05)** → `docs/reviews/s5b/wcag-audit.md`. OFFEN: A01 (aria-invalid SmtpSettings:410-514), A02 (autoComplete=email :506), A04 (aria-live cooldown/subscription), A05 (Rotate-Button 36px), A11 (bg-green-600 Kontrast 3.5:1 PushSettings:414), A12 (yellow-950/20 dark :427), A13 (h3 ohne h1/h2), A07 (Email kein dark media-query), A09 (Email html dir-Attr), A08 (Email layout-tables — role=presentation OK, kein Fix nötig).
+### 2b. WCAG-Compliance — Welle 0 verifiziert + behoben (Disposition: `.ui-design/audits/wcag-backlog-2b-verified-2026-05-31.md`)
+**Code-Verifikation der 23 (Audits 2026-04-02/05, stale): nur 3 echt offen auf AA-Niveau.** Rest erledigt/false/kontextuell — klassisches Stale-Audit-Over-Report (`feedback_verify_index_against_code`).
+
+**✅ BEHOBEN (Welle 0, 2026-05-31), +4 Regression-Guards:**
+- **P-4** (motion-reduce fehlt): `alert-dialog.tsx` Overlay+Content + `toast.tsx` → `motion-reduce:animate-none`.
+- **P-3** (amber dark-contrast): KanbanCard `dark:bg-amber-900/50 text-amber-300` → `dark:bg-amber-900 text-amber-200` (≥4.5:1).
+- **A02**: SmtpSettings fromAddress `autoComplete="email"`.
+
+**✅ war bereits erledigt (nicht erneut fixen):** A11 (=P0-3 Welle 0), O-5 (`onDragOver` hat Handler), U-3 (EmptyState hat CTA), R-3 (toaster nutzt `t("common.dismiss")`), O-6 (`group` in `region` = valides ARIA).
+
+**❌ FALSE:** P-1 (Status NICHT color-only — `KanbanColumn:56` rendert Status-Label als Text + aria-label; Card-Border = Verstärkung → 1.4.1 erfüllt).
+
+**Kontextuell/AAA-not-AA/design-gated (dokumentiert, deferred):** P-2 (text-[10px] — kein harter WCAG-Min, design-gated), A05 (36px > AA-24px → besteht AA), A13 (h3 kontextuell), A01 (kein Per-Field-Validation-Model → aria-invalid N/A), A04 (aria-live minor enhancement), U-1/U-2 (Radix alertdialog announced; minor), A07/A09 (Email dark/dir — alle 4 Locales LTR, low-prio).
 
 ### 2c. Add-Job-Modal (F-AJ, offen-Teil)
 Voll-Detail + Chains: `docs/add-job-modal-ux-findings.md`. Verifizierter Status:
@@ -256,7 +265,7 @@ Runde-2 verifiziert: Gap-2/Gap-3/Gap-4 ERLEDIGT (→ §0). **Echt offen:**
 | Doku-Drift bereinigt (verifiziert war falsch-offen) | ~43 |
 | CRITICAL Security offen | 0 (BS-01 ✅ erledigt Welle 0) |
 | GDPR-Long-Tail offen | 6 (S6a/S6b/JWT/Consent/G25/G26b/G28) + 1 deferred |
-| UX offen (S2-P0 ✅0 + WCAG 23 + F-AJ 6) | 29 (S2-P0 9 erledigt Welle 0) |
+| UX offen (S2-P0 ✅ + WCAG ✅3/~8 deferred + F-AJ 5) | ~13 (S2-P0 9 + WCAG 3 + F-AJ-04 erledigt Welle 0; WCAG-Rest verifiziert kontextuell/false) |
 | Arch/Tech-Debt offen | 8 (IF-5/7/10/12 + D1-D5) |
 | Test-Lücken offen | 2 (F6, CRM-Cron-Tests) |
 | CRM-Gaps offen | 4 (Gap-1/5/6/7) |

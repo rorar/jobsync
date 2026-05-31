@@ -164,11 +164,11 @@ export const KanbanCard = React.memo(function KanbanCard({ job, statusValue, isD
                   {t("jobs.kanbanOverdue")}
                 </Badge>
               ) : isDueToday ? (
-                <Badge className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 border-0">
+                <Badge className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-0">
                   {t("jobs.kanbanDueToday")}
                 </Badge>
               ) : isDueSoon ? (
-                <Badge className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 border-0">
+                <Badge className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-0">
                   {t("jobs.kanbanDueSoon").replace("{days}", String(daysUntilDue))}
                 </Badge>
               ) : (
