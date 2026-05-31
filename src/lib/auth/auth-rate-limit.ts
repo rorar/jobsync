@@ -34,6 +34,43 @@ const signupLimiter = createSlidingWindowLimiter({
 });
 
 /**
+ * E2E-only bypass of the auth rate limiter.
+ *
+ * The Playwright suite re-logs-in on every run (global-setup + the signin smoke
+ * test), which legitimately trips the 5-per-15-min signin limit and makes the
+ * suite flaky. This affordance disables the limiter ONLY in a controlled,
+ * non-production test server — it is NOT a backdoor:
+ *
+ *   1. HARD prod gate: `NODE_ENV !== "production"`. A production Next.js build
+ *      always sets NODE_ENV=production, so the bypass is physically inert in
+ *      prod even if the flag below is set by mistake. The limiter cannot be
+ *      turned off in the deployed app under any input.
+ *   2. Explicit server-side opt-in: `E2E_AUTH_RATE_LIMIT_BYPASS=1`. This is a
+ *      server environment variable — it is not derived from any request header,
+ *      cookie, body, or query param, so an attacker has no channel to enable it.
+ *   3. Default OFF and loud: absent the flag the limiter runs normally; when the
+ *      bypass IS active the server logs a one-time warning so it can never be on
+ *      silently.
+ *
+ * Set the flag only on the local/CI dev server used for E2E (see
+ * scripts/dev-e2e.sh). It must never be present in a production environment.
+ */
+let bypassWarningLogged = false;
+function isAuthRateLimitBypassed(): boolean {
+  const enabled =
+    process.env.NODE_ENV !== "production" &&
+    process.env.E2E_AUTH_RATE_LIMIT_BYPASS === "1";
+  if (enabled && !bypassWarningLogged) {
+    bypassWarningLogged = true;
+    console.warn(
+      "[auth-rate-limit] BYPASS ACTIVE — signin/signup rate limiting is disabled " +
+        "(E2E_AUTH_RATE_LIMIT_BYPASS=1, NODE_ENV!=production). This must never be set in production.",
+    );
+  }
+  return enabled;
+}
+
+/**
  * Check auth rate limit for signin or signup.
  */
 export function checkAuthRateLimit(
@@ -41,6 +78,9 @@ export function checkAuthRateLimit(
   action: "signin" | "signup",
 ): AuthRateLimitResult {
   const limiter = action === "signin" ? signinLimiter : signupLimiter;
+  if (isAuthRateLimitBypassed()) {
+    return { allowed: true };
+  }
   return limiter.check(`${action}:${ip}`);
 }
 
