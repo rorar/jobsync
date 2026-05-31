@@ -127,6 +127,11 @@ jest.mock("@/components/ui/company-logo", () => ({
   ),
 }));
 
+const mockToast = jest.fn();
+jest.mock("@/components/ui/use-toast", () => ({
+  toast: (...args: unknown[]) => mockToast(...args),
+}));
+
 import { StagedVacancyDetailSheet } from "@/components/staging/StagedVacancyDetailSheet";
 
 // ---------------------------------------------------------------------------
@@ -396,6 +401,28 @@ describe("StagedVacancyDetailSheet — list mode actions", () => {
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
+  });
+
+  // P0-4 (S2 pre-audit) — a failing action must surface a toast and keep the
+  // sheet OPEN (so the user can retry), not close silently.
+  it("shows an error toast and keeps the sheet open when an action fails", async () => {
+    const onPromote = jest.fn().mockRejectedValue(new Error("boom"));
+    const onOpenChange = jest.fn();
+    renderSheet({
+      mode: "list",
+      onPromote,
+      onOpenChange,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Promote to Job/i }));
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: "destructive" }),
+      );
+    });
+    // Sheet must NOT auto-close on failure.
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 
   it("does NOT show skip button in list mode", () => {

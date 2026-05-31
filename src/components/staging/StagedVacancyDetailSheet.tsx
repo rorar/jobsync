@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/i18n";
+import { toast } from "@/components/ui/use-toast";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { StagedVacancyDetailContent } from "./StagedVacancyDetailContent";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
@@ -89,6 +90,12 @@ export function StagedVacancyDetailSheet({
       onOpenChange(false);
     } catch (error) {
       console.error(`[StagedVacancyDetailSheet] Action "${key}" failed:`, error);
+      // Keep the sheet open so the user can retry; surface the failure.
+      toast({
+        variant: "destructive",
+        title: t("staging.error"),
+        description: t("staging.actionFailed"),
+      });
     } finally {
       setLoadingAction(null);
     }

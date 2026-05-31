@@ -105,21 +105,22 @@ Runde-2 verifiziert: G3/G6/G27/Cache-Control/ENCRYPTION_KEY-startup = ERLEDIGT (
 
 ## 2. UX/UI — verifiziert offen
 
-### 2a. S2-Pre-Audit P0 (9 Findings, code-grep offen)
-Ursprung `s2-ux-polish-session.md` Pre-Audit. **NICHT** zu verwechseln mit der gelaufenen S2-Session
-(deren 109 Findings sind erledigt). Diese 9 sind das offene Pre-Audit-Set:
+### 2a. S2-Pre-Audit P0 (9 Findings) — ✅ ALLE ERLEDIGT (Welle 0, 2026-05-31)
+Ursprung `s2-ux-polish-session.md` Pre-Audit. ui-design design-review konsultiert (Patterns aus
+WebhookSettings/PushSettings/ApiKeySettings/AiSettings übernommen), dann implementiert. 7 neue i18n-Keys
+×4 Locales. +6 Regression-Tests. 256 Suites / 5037 Tests grün, tsc 0 Errors.
 
-| ID | Finding | Datei |
-|----|---------|-------|
-| P0-1 | NotificationSettings: kein Error-State bei Fetch-Failure (verifiziert: kein setError) | NotificationSettings.tsx |
-| P0-2 | NotificationSettings: kein Confirm bei Global-Disable | NotificationSettings.tsx:111 |
-| P0-3 | PushSettings: `bg-green-600` ohne dark:-Variante | PushSettings.tsx:~414 |
-| P0-4 | StagedVacancyDetailSheet: Silent Error in runAction | StagedVacancyDetailSheet.tsx:81-95 |
-| P0-5 | NotificationDropdown: Fetch-Failure → Spinner forever | NotificationDropdown.tsx |
-| P0-6 | NotificationBell: Silent Error bei Poll-Failure | NotificationBell.tsx:50 |
-| P0-7 | ActivityTimeline: Select `w-[200px]` Overflow @375px | ActivityTimeline.tsx:93 |
-| P0-8 | NotificationSettings: natives `<select>` statt Shadcn | NotificationSettings.tsx:316 |
-| P0-9 | NotificationSettings: `grid-cols-3` zu eng @375px | NotificationSettings.tsx:283 |
+| ID | Finding | Fix |
+|----|---------|-----|
+| P0-1 | NotificationSettings: kein Error-State bei Fetch-Failure | ✅ `isError`-State + `role="alert"` + Retry-Button (`fetchPrefs` → useCallback) |
+| P0-2 | NotificationSettings: kein Confirm bei Global-Disable | ✅ AlertDialog-Confirm nur bei Disable (Enable bleibt instant) |
+| P0-3 | PushSettings: `bg-green-600` ohne dark:-Variante (Kontrast 3:1) | ✅ `bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200` (≥7:1) |
+| P0-4 | StagedVacancyDetailSheet: Silent Error in runAction | ✅ destructive Toast + Sheet bleibt offen (onOpenChange nur bei Success) |
+| P0-5 | NotificationDropdown: Fetch-Failure (Desc-Korrektur: KEIN Spinner-forever, `finally` clear loading; echtes Bug = fehlendes `catch` → unhandled rejection + stille leere Liste) | ✅ `catch` + `hasError`-State + distinct Error/Retry |
+| P0-6 | NotificationBell: Silent Error bei Poll-Failure | ✅ try/catch, fail-silent (Count bleibt, kein Reset auf 0, kein Toast) |
+| P0-7 | ActivityTimeline: Select `w-[200px]` Overflow @375px | ✅ `w-full min-w-[120px] sm:w-[200px]` |
+| P0-8 | NotificationSettings: natives `<select>` statt Shadcn | ✅ Shadcn `<Select>` (29 Optionen → Select korrekt, nicht Combobox) |
+| P0-9 | NotificationSettings: `grid-cols-3` zu eng @375px | ✅ `grid-cols-1 sm:grid-cols-3` |
 
 ### 2b. WCAG-Compliance (23 verifiziert offen — von 35, 11 bereits gefixt, 1 downgraded)
 Runde-2 Einzel-Code-Verifikation: 11 gefixt (siehe §0), 1 informational (A14). **23 echt offen**, meist A11y-Detail.
@@ -255,7 +256,7 @@ Runde-2 verifiziert: Gap-2/Gap-3/Gap-4 ERLEDIGT (→ §0). **Echt offen:**
 | Doku-Drift bereinigt (verifiziert war falsch-offen) | ~43 |
 | CRITICAL Security offen | 0 (BS-01 ✅ erledigt Welle 0) |
 | GDPR-Long-Tail offen | 6 (S6a/S6b/JWT/Consent/G25/G26b/G28) + 1 deferred |
-| UX offen (S2-P0 9 + WCAG 23 + F-AJ 6) | 38 |
+| UX offen (S2-P0 ✅0 + WCAG 23 + F-AJ 6) | 29 (S2-P0 9 erledigt Welle 0) |
 | Arch/Tech-Debt offen | 8 (IF-5/7/10/12 + D1-D5) |
 | Test-Lücken offen | 2 (F6, CRM-Cron-Tests) |
 | CRM-Gaps offen | 4 (Gap-1/5/6/7) |

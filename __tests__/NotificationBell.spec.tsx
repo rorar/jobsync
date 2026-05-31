@@ -150,6 +150,21 @@ describe("NotificationBell", () => {
     expect(screen.getByText("5")).toBeInTheDocument();
   });
 
+  // P0-6 (S2 pre-audit) — a failed background poll must not throw or reset
+  // the count; it fails silently and keeps the bell usable.
+  it("survives a rejected poll without crashing or showing a count", async () => {
+    mockGetUnreadCount.mockRejectedValue(new Error("network"));
+
+    await act(async () => {
+      render(<NotificationBell />);
+    });
+
+    // Renders normally; no unhandled rejection bubbled up.
+    expect(screen.getByTestId("icon-bell")).toBeInTheDocument();
+    // No count badge (count never reset to a misleading value either).
+    expect(screen.queryByText("0")).not.toBeInTheDocument();
+  });
+
   it("hides badge when unread count is 0", async () => {
     mockGetUnreadCount.mockResolvedValue({ success: true, data: 0 });
 

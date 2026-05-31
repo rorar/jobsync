@@ -73,7 +73,8 @@ describe("NotificationSettings", () => {
     });
   });
 
-  it("calls updateNotificationPreferences when global toggle is clicked", async () => {
+  // P0-2: disabling ALL notifications is destructive → must confirm first.
+  it("confirms before disabling all notifications, then saves enabled:false", async () => {
     render(<NotificationSettings />);
 
     await waitFor(() => {
@@ -82,13 +83,72 @@ describe("NotificationSettings", () => {
       ).toBeInTheDocument();
     });
 
-    const toggle = screen.getByLabelText("Enable notifications");
-    await user.click(toggle);
+    await user.click(screen.getByLabelText("Enable notifications"));
+
+    // Confirmation dialog appears; nothing saved yet.
+    await waitFor(() => {
+      expect(
+        screen.getByText("Disable all notifications?"),
+      ).toBeInTheDocument();
+    });
+    expect(updateNotificationPreferences).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Disable" }));
 
     await waitFor(() => {
       expect(updateNotificationPreferences).toHaveBeenCalledWith(
         expect.objectContaining({ enabled: false }),
       );
+    });
+  });
+
+  // P0-2: cancelling the confirmation must NOT disable notifications.
+  it("does not disable notifications when the confirmation is cancelled", async () => {
+    render(<NotificationSettings />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("Enable notifications"),
+      ).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText("Enable notifications"));
+    await waitFor(() => {
+      expect(
+        screen.getByText("Disable all notifications?"),
+      ).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(updateNotificationPreferences).not.toHaveBeenCalled();
+  });
+
+  // P0-1: a fetch failure surfaces an error + retry instead of silently
+  // rendering defaults as if the load succeeded.
+  it("shows an error state with retry when preferences fail to load", async () => {
+    (getNotificationPreferences as jest.Mock).mockResolvedValueOnce({
+      success: false,
+    });
+
+    render(<NotificationSettings />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Failed to load notification preferences"),
+      ).toBeInTheDocument();
+    });
+
+    // Retry re-fetches; second call succeeds → form renders.
+    (getNotificationPreferences as jest.Mock).mockResolvedValueOnce(
+      defaultResult,
+    );
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("Enable notifications"),
+      ).toBeInTheDocument();
     });
   });
 

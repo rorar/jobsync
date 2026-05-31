@@ -90,7 +90,7 @@ export function ActivityTimeline({ targetPersonId, targetJobId }: ActivityTimeli
       {/* Filter */}
       <div className="flex items-center gap-2">
         <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-full min-w-[120px] sm:w-[200px]">
             <SelectValue placeholder={t("crm.filterByType")} />
           </SelectTrigger>
           <SelectContent>
