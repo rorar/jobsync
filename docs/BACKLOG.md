@@ -73,17 +73,18 @@ beide WCAG-Audits (teil-fixed), Home-Dir s3-handoffs + eures-api-missing-fields.
 
 ---
 
-## 1. CRITICAL — Security (verifiziert offen)
+## 1. CRITICAL — Security
 
-### BS-01 — deleteFile latente IDOR (ADR-019)
-- **Datei:** `src/actions/profile.actions.ts:475-480`
-- **Problem:** `export const deleteFile(fileId, callerUserId?)` in `"use server"`-Datei → vom Browser als
-  Server-Action aufrufbar. Fehlt `callerUserId`, fällt where-clause auf `{ id: fileId }` zurück =
-  Löschen fremder Dateien (IDOR).
-- **Aktuelle Caller:** beide geben userId (`profile.actions.ts:400`, `api/profile/resume/route.ts:45`) →
-  kein aktiver Exploit, ABER der Export macht es browser-erreichbar.
-- **Fix:** Pattern A (ADR-019) — in `server-only`-Leaf verschieben ODER `callerUserId` required +
-  internen `getCurrentUser()`-Gate. ~30 min.
+### BS-01 — deleteFile latente IDOR (ADR-019) — ✅ ERLEDIGT (Welle 0, 2026-05-31)
+- **Fix:** `deleteFile` nach `src/lib/profile/delete-file.ts` (`server-only`-Leaf, ADR-019 Pattern A)
+  verschoben → KEIN Server-Action-Export mehr. `callerUserId` jetzt **required**; where-clause IMMER
+  `{ id: fileId, Resume: { profile: { userId } } }`; `if (!file) return` = No-op für fremde/fehlende Files
+  (kein unlink, kein DB-delete). Beide Caller auf Leaf umgestellt (`profile.actions.ts:399` +
+  `api/profile/resume/route.ts:42` mit definite-userId-Guard).
+- **Test:** `__tests__/delete-file-idor.spec.ts` (4 Cases: scope, IDOR-no-op, owner-happy, fs-missing).
+- **Flashlight:** projektweit gegrept — `deleteFile` war einziger use-server-Export mit raw-userId-Pattern.
+- **Spec:** `profile-resume.allium` (3 Comment-Sites aktualisiert, allium check clean).
+- **Verify:** 256 Suites / 5031 Tests grün, tsc 0 Errors.
 - **Quelle:** s5-pre-implementation-checkup, BUGS.md
 
 ### 1b. GDPR-Long-Tail (verifiziert offen — aus gdpr-audit + domain-expert)
@@ -252,7 +253,7 @@ Runde-2 verifiziert: Gap-2/Gap-3/Gap-4 ERLEDIGT (→ §0). **Echt offen:**
 | Kategorie | Anzahl |
 |-----------|--------|
 | Doku-Drift bereinigt (verifiziert war falsch-offen) | ~43 |
-| CRITICAL Security offen | 1 (BS-01) |
+| CRITICAL Security offen | 0 (BS-01 ✅ erledigt Welle 0) |
 | GDPR-Long-Tail offen | 6 (S6a/S6b/JWT/Consent/G25/G26b/G28) + 1 deferred |
 | UX offen (S2-P0 9 + WCAG 23 + F-AJ 6) | 38 |
 | Arch/Tech-Debt offen | 8 (IF-5/7/10/12 + D1-D5) |

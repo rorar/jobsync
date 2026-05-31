@@ -6,7 +6,8 @@
 -- Includes: createResumeProfile, getResumeById, editResume, deleteResumeById,
 --   addContactInfo, updateContactInfo, addExperience, updateExperience,
 --   addEducation, updateEducation, deleteWorkExperience, deleteEducation,
---   addResumeSummary, updateResumeSummary, getResumeList, uploadFile, deleteFile
+--   addResumeSummary, updateResumeSummary, getResumeList, uploadFile
+--   (deleteFile + uploadFile are server-only leaves, ADR-019 — not Server Actions)
 -- Excludes:
 --   - Job association (see job-aggregate.allium)
 --   - Automation resume reference (see module-lifecycle.allium)
@@ -294,7 +295,10 @@ rule DeleteResume {
         -- If file attached, file is deleted from filesystem AND database
         -- BEFORE the transaction. File deletion uses callerUserId for
         -- ownership verification: File -> Resume -> Profile -> User chain
-        -- traversal.
+        -- traversal. deleteFile lives in a server-only leaf
+        -- (src/lib/profile/delete-file.ts, ADR-019 Pattern A) — NOT a Server
+        -- Action export. callerUserId is REQUIRED; a non-owned/missing File
+        -- is a no-op (no unlink, no DB delete). BS-01.
         -- Transaction deletes in order:
         --   1. ContactInfo (where resumeId)
         --   2. Summary (where ResumeSection.resumeId)
@@ -574,7 +578,8 @@ rule UploadFile {
 --     DeleteEducation rules above.
 
 -- Q3: RESOLVED. deleteResumeById now verifies ownership via resume -> profile
---     -> userId before cascade delete. deleteFile accepts callerUserId for
---     File -> Resume -> Profile -> User chain verification.
+--     -> userId before cascade delete. deleteFile (server-only leaf, ADR-019
+--     Pattern A) REQUIRES callerUserId and always enforces the
+--     File -> Resume -> Profile -> User chain; non-owned files are a no-op (BS-01).
 
 open question "Should File cleanup be handled more robustly? Currently if the DB delete succeeds but the filesystem delete fails (or vice versa), there is no rollback mechanism for the orphaned resource."
