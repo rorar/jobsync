@@ -12,9 +12,9 @@ Outcome with specialized skills and plugins is going to be greatly improved.
 
 Pass skills to subagents. It's possible.
 
-## Delete server cache
+## Delete server caches
 Server cache may leave stale state.
-Delete server cache.
+Delete server caches.
 
 ## be cavemen
 Use and load `/cavemen full` for sessions.
@@ -57,8 +57,9 @@ MUST use i18n keys, not hardcoded English.
 ## Commit Strategy: Conventional Commits
 
 `feat(scope):`, `fix(scope):`, `refactor(scope):`, `chore(scope):`, `test(scope):`, etc.
-Commit in logical groups, never one big commit. Push only when explicitly asked.
-Co-author trailer per repo convention.
+Commit in logical groups, never one big commit. **Push autonomously** at the end of a
+track — after the Wrap-Up Honesty-Gate — to the fork `main`, **never upstream**
+(see Wrap-Up-Phase). Co-author trailer per repo convention.
 
 ## Code Review
 
@@ -78,6 +79,11 @@ implementing; wait for findings, then implement. **Verify agent "fixed" claims a
   `authorizeAdminAction()` + admin rate limit.
 - SSRF validation on every outbound fetch (webhook, SMTP, Ollama, enrichment, logo).
 - PII egress redaction via `@/lib/pii` before any cloud-AI transfer.
+- **Public API v1:** EVERY `/api/v1/*` route handler MUST use the `withApiAuth()`
+  wrapper (CORS + auth + pre-auth IP rate limit + error catch + security headers), and
+  responses MUST use an explicit `select` (NEVER `include`) so internal fields
+  (`userId`, `matchData`, FKs, `createdBy`, `File.filePath`) never leak. UUID-validate
+  all route params.
 
 ## Verification Checkpoints
 
@@ -91,7 +97,13 @@ commit: `bash scripts/test.sh` (all pass) + `source scripts/env.sh && bun run bu
 - Server actions = Repositories (one action file per aggregate). Return `ActionResult<T>`.
 - Never modify an aggregate's children from outside its action file.
 - Bounded contexts communicate only through shared domain types (`DiscoveredVacancy`).
-- New external systems are **Modules** behind existing Connectors — never new Connectors.
+- A new external **system** is ALWAYS a **Module** (never a Connector itself),
+  registered behind a Connector via Manifest. A new Connector **type** is added only
+  when no existing `ConnectorType` (job_discovery / ai_provider / data_enrichment /
+  reference_data) covers the integration **category** — rare, a deliberate architecture
+  decision (e.g. Communication / Calendar / Workflow per ROADMAP 1.x). The
+  ConnectorType set is open/extensible, not a closed list; the system-is-a-Module rule
+  is the absolute part.
 
 ## Post-Work Checklist
 
