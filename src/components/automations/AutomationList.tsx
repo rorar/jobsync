@@ -95,7 +95,7 @@ export function AutomationList({
     } else {
       toast({
         title: t("automations.validationError"),
-        description: result.message,
+        description: result.message ? t(result.message) : undefined,
         variant: "destructive",
       });
     }
@@ -112,7 +112,7 @@ export function AutomationList({
     } else {
       toast({
         title: t("automations.validationError"),
-        description: result.message,
+        description: result.message ? t(result.message) : undefined,
         variant: "destructive",
       });
     }
@@ -132,7 +132,7 @@ export function AutomationList({
     } else {
       toast({
         title: t("automations.validationError"),
-        description: result.message,
+        description: result.message ? t(result.message) : undefined,
         variant: "destructive",
       });
     }

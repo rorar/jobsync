@@ -169,7 +169,7 @@ function JobsContainer({
       toast({
         variant: "destructive",
         title: t("jobs.error"),
-        description: result.message,
+        description: result.message ? t(result.message) : undefined,
       });
     }
     setKanbanLoading(false);
@@ -195,7 +195,7 @@ function JobsContainer({
         toast({
           variant: "destructive",
           title: t("jobs.error"),
-          description: message,
+          description: message ? t(message) : undefined,
         });
         setLoading(false);
         return;
@@ -227,7 +227,7 @@ function JobsContainer({
       toast({
         variant: "destructive",
         title: t("jobs.error"),
-        description: message,
+        description: message ? t(message) : undefined,
       });
     }
     reloadJobs();
@@ -239,7 +239,7 @@ function JobsContainer({
       toast({
         variant: "destructive",
         title: t("jobs.error"),
-        description: message,
+        description: message ? t(message) : undefined,
       });
       return;
     }
@@ -258,7 +258,7 @@ function JobsContainer({
       toast({
         variant: "destructive",
         title: t("jobs.error"),
-        description: message,
+        description: message ? t(message) : undefined,
       });
     }
     reloadJobs();

@@ -356,7 +356,7 @@ describe("SMTP Actions", () => {
       const result = await saveSmtpConfig(VALID_INPUT);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("errors.unauthorized");
+      expect(result.message).toBe("errors.notAuthenticated");
       expect(mockSmtpConfigFindFirst).not.toHaveBeenCalled();
     });
   });
@@ -406,7 +406,7 @@ describe("SMTP Actions", () => {
       const result = await getSmtpConfig();
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("errors.unauthorized");
+      expect(result.message).toBe("errors.notAuthenticated");
     });
 
     it("returns generic mask when decryption fails", async () => {
@@ -506,7 +506,7 @@ describe("SMTP Actions", () => {
       const result = await testSmtpConnection();
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("errors.unauthorized");
+      expect(result.message).toBe("errors.notAuthenticated");
     });
 
     it("closes transporter after sending", async () => {
@@ -587,7 +587,7 @@ describe("SMTP Actions", () => {
       const result = await deleteSmtpConfig();
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("errors.unauthorized");
+      expect(result.message).toBe("errors.notAuthenticated");
       expect(mockSmtpConfigFindFirst).not.toHaveBeenCalled();
     });
   });

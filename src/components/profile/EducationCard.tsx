@@ -49,7 +49,7 @@ function EducationCard({
         toast({
           variant: "destructive",
           title: t("profile.error"),
-          description: res.message,
+          description: res.message ? t(res.message) : undefined,
         });
       }
       setDeleteDialogOpen(false);

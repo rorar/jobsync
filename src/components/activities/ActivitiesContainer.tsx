@@ -56,7 +56,7 @@ function ActivitiesContainer() {
       toast({
         variant: "destructive",
         title: t("common.error"),
-        description: result.message,
+        description: result.message ? t(result.message) : undefined,
       });
       return;
     }
@@ -81,7 +81,7 @@ function ActivitiesContainer() {
           toast({
             variant: "destructive",
             title: t("activities.error"),
-            description: message,
+            description: message ? t(message) : undefined,
           });
         }
       } catch (error) {

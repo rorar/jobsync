@@ -180,7 +180,7 @@ describe("getUserApiKeys", () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(null);
 
     const result = await getUserApiKeys();
-    expect(result).toEqual({ success: false, message: "Not authenticated" });
+    expect(result).toEqual({ success: false, message: "errors.notAuthenticated" });
   });
 
   it("returns masked keys for sensitive entries (non-empty iv)", async () => {
@@ -251,7 +251,7 @@ describe("deleteApiKey", () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(null);
 
     const result = await deleteApiKey("openai");
-    expect(result).toEqual({ success: false, message: "Not authenticated" });
+    expect(result).toEqual({ success: false, message: "errors.notAuthenticated" });
   });
 });
 
@@ -341,7 +341,7 @@ describe("saveApiKey", () => {
       key: "sk-test",
     });
 
-    expect(result).toEqual({ success: false, message: "Not authenticated" });
+    expect(result).toEqual({ success: false, message: "errors.notAuthenticated" });
   });
 
   it("treats unknown modules as sensitive (fail-safe)", async () => {
@@ -427,7 +427,7 @@ describe("getEnvApiKeyStatus", () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(null);
 
     const result = await getEnvApiKeyStatus();
-    expect(result).toEqual({ success: false, message: "Not authenticated" });
+    expect(result).toEqual({ success: false, message: "errors.notAuthenticated" });
   });
 
   it("returns empty map when no modules have envFallback", async () => {

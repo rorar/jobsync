@@ -86,7 +86,7 @@ describe("Company Actions", () => {
 
       await expect(getCompanyList(1, 10)).resolves.toStrictEqual({
         success: false,
-        message: "Failed to fetch company list. ",
+        message: "errors.fetchFailed",
       });
 
       expect(prisma.company.findMany).not.toHaveBeenCalled();
@@ -146,7 +146,7 @@ describe("Company Actions", () => {
 
       await expect(getCompanyList(1, 10)).resolves.toStrictEqual({
         success: false,
-        message: "Failed to fetch company list. ",
+        message: "errors.fetchFailed",
       });
 
       expect(prisma.company.findMany).not.toHaveBeenCalled();
@@ -177,7 +177,7 @@ describe("Company Actions", () => {
 
       await expect(getAllCompanies()).resolves.toStrictEqual({
         success: false,
-        message: "Failed to fetch all companies. ",
+        message: "errors.fetchFailed",
       });
 
       expect(prisma.company.findMany).not.toHaveBeenCalled();
@@ -191,7 +191,7 @@ describe("Company Actions", () => {
 
       const result = await getAllCompanies();
 
-      expect(result).toEqual({ success: false, message: "Failed to fetch all companies. " });
+      expect(result).toEqual({ success: false, message: "errors.fetchFailed" });
       expect(prisma.company.findMany).toHaveBeenCalledWith({
         where: { createdBy: mockUser.id },
       });
@@ -240,7 +240,7 @@ describe("Company Actions", () => {
 
       const result = await addCompany(validData);
 
-      expect(result).toEqual({ success: false, message: "Failed to create company." });
+      expect(result).toEqual({ success: false, message: "errors.createFailed" });
       expect(prisma.company.findFirst).not.toHaveBeenCalled();
       expect(prisma.company.create).not.toHaveBeenCalled();
     });
@@ -261,7 +261,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to create company.",
+        message: "errors.createFailed",
       });
       expect(prisma.company.findFirst).toHaveBeenCalledWith({
         where: { value: "new company", createdBy: mockUser.id },
@@ -277,7 +277,7 @@ describe("Company Actions", () => {
 
       const result = await addCompany(validData);
 
-      expect(result).toEqual({ success: false, message: "Failed to create company." });
+      expect(result).toEqual({ success: false, message: "errors.createFailed" });
       expect(prisma.company.findFirst).toHaveBeenCalledWith({
         where: { value: "new company", createdBy: mockUser.id },
       });
@@ -296,7 +296,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to create company.",
+        message: "errors.createFailed",
       });
 
       expect(prisma.company.findFirst).not.toHaveBeenCalled();
@@ -315,7 +315,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to create company.",
+        message: "errors.createFailed",
       });
 
       expect(prisma.company.create).not.toHaveBeenCalled();
@@ -411,7 +411,7 @@ describe("Company Actions", () => {
 
       const result = await updateCompany(validData);
 
-      expect(result).toEqual({ success: false, message: "Failed to update company." });
+      expect(result).toEqual({ success: false, message: "errors.updateFailed" });
 
       expect(prisma.company.findFirst).not.toHaveBeenCalled();
       expect(prisma.company.update).not.toHaveBeenCalled();
@@ -428,7 +428,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update company.",
+        message: "errors.updateFailed",
       });
 
       expect(prisma.company.update).not.toHaveBeenCalled();
@@ -443,7 +443,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update company.",
+        message: "errors.updateFailed",
       });
 
       expect(prisma.company.findFirst).not.toHaveBeenCalled();
@@ -462,7 +462,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update company.",
+        message: "errors.updateFailed",
       });
 
       expect(prisma.company.findFirst).not.toHaveBeenCalled();
@@ -481,7 +481,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update company.",
+        message: "errors.updateFailed",
       });
 
       expect(prisma.company.update).not.toHaveBeenCalled();
@@ -535,10 +535,10 @@ describe("Company Actions", () => {
       expect(result).toEqual({ success: true, data: mockCompany });
     });
 
-    it("should throw error when companyId is not provided", async () => {
+    it("should return invalidInput error when companyId is not provided", async () => {
       await expect(getCompanyById("")).resolves.toStrictEqual({
         success: false,
-        message: "Please provide company id",
+        message: "errors.invalidInput",
       });
 
       expect(prisma.company.findFirst).not.toHaveBeenCalled();
@@ -549,7 +549,7 @@ describe("Company Actions", () => {
 
       await expect(getCompanyById(mockCompanyId)).resolves.toStrictEqual({
         success: false,
-        message: "Not authenticated",
+        message: "errors.notAuthenticated",
       });
 
       expect(prisma.company.findFirst).not.toHaveBeenCalled();
@@ -563,7 +563,7 @@ describe("Company Actions", () => {
 
       await expect(getCompanyById(mockCompanyId)).resolves.toStrictEqual({
         success: false,
-        message: "Unexpected error",
+        message: "errors.fetchFailed",
       });
 
       expect(prisma.company.findFirst).toHaveBeenCalledWith({
@@ -594,7 +594,7 @@ describe("Company Actions", () => {
 
       const result = await deleteCompanyById("company-id");
 
-      expect(result).toEqual({ success: false, message: "Failed to delete company." });
+      expect(result).toEqual({ success: false, message: "errors.deleteFailed" });
       expect(prisma.company.delete).not.toHaveBeenCalled();
     });
 
@@ -606,7 +606,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to delete company.",
+        message: "errors.deleteFailed",
       });
       expect(prisma.job.count).not.toHaveBeenCalled();
       expect(prisma.company.delete).not.toHaveBeenCalled();
@@ -621,7 +621,7 @@ describe("Company Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to delete company.",
+        message: "errors.deleteFailed",
       });
       expect(prisma.company.delete).not.toHaveBeenCalled();
     });
@@ -636,7 +636,7 @@ describe("Company Actions", () => {
 
       const result = await deleteCompanyById("company-id");
 
-      expect(result).toEqual({ success: false, message: "Failed to delete company." });
+      expect(result).toEqual({ success: false, message: "errors.deleteFailed" });
     });
   });
 });

@@ -236,7 +236,7 @@ describe("module.actions", () => {
       const result = await getModuleManifests();
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("Not authenticated");
+      expect(result.message).toBe("errors.notAuthenticated");
     });
   });
 
@@ -365,7 +365,7 @@ describe("module.actions", () => {
       const result = await deactivateModule(moduleId);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("Not authenticated");
+      expect(result.message).toBe("errors.notAuthenticated");
       expect(emitEvent).not.toHaveBeenCalled();
     });
   });

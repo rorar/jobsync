@@ -525,11 +525,11 @@ describe("SEC-18: Error sanitization in actionToResponse", () => {
   });
 
   it("passes through a user-facing 'not authenticated' message unchanged", async () => {
-    const res = actionToResponse({ success: false, message: "Not authenticated" });
+    const res = actionToResponse({ success: false, message: "errors.notAuthenticated" });
     const body = await res.json();
 
     expect(res.status).toBe(401);
-    expect(body.error.message).toBe("Not authenticated");
+    expect(body.error.message).toBe("errors.notAuthenticated");
   });
 
   it("sanitizes a generic OS/internal error to the generic message", async () => {
@@ -876,7 +876,7 @@ describe("BS-8: Runtime validation for TaskStatus and BulkActionType", () => {
 
       const result = await executeBulkAction("invalid-action" as any, ["id-1"]);
 
-      expect(result).toEqual({ success: false, message: "Invalid action type" });
+      expect(result).toEqual({ success: false, message: "errors.invalidInput" });
     });
 
     it("returns { success: false } for an empty string actionType", async () => {
@@ -884,7 +884,7 @@ describe("BS-8: Runtime validation for TaskStatus and BulkActionType", () => {
 
       const result = await executeBulkAction("" as any, ["id-1"]);
 
-      expect(result).toEqual({ success: false, message: "Invalid action type" });
+      expect(result).toEqual({ success: false, message: "errors.invalidInput" });
     });
 
     it("resolves with success:false for a SQL-injection-like action string", async () => {
@@ -892,7 +892,7 @@ describe("BS-8: Runtime validation for TaskStatus and BulkActionType", () => {
 
       await expect(executeBulkAction("drop-table" as any, [])).resolves.toEqual({
         success: false,
-        message: "Invalid action type",
+        message: "errors.invalidInput",
       });
     });
   });

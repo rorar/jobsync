@@ -215,7 +215,7 @@ export function useStagingActions(reload: () => Promise<void>) {
           toast({
             variant: "destructive",
             title: tRef.current("staging.error"),
-            description: result.message,
+            description: result.message ? tRef.current(result.message) : undefined,
           });
         }
       };

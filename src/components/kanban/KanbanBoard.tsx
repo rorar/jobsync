@@ -309,7 +309,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
           toast({
             variant: "destructive",
             title: t("jobs.kanbanMoveFailed"),
-            description: result.message,
+            description: result.message ? t(result.message) : undefined,
           });
         }
       } catch {

@@ -392,14 +392,15 @@ export function useAutomationWizard({
     onOpenChange(false);
   }, [form, onOpenChange, syncConnectorParamsToForm]);
 
-  /** Parse a "performanceWarning:<count>" message. */
+  /** Build the localized performance-warning banner from a result's message + messageParams (IF-5). */
   const parseWarningMessage = useCallback(
-    (message?: string): string | null => {
-      if (!message) return null;
-      const prefix = "performanceWarning:";
-      if (!message.startsWith(prefix)) return null;
-      const count = message.slice(prefix.length);
-      return t("automations.performanceWarningBanner" as any).replace("{count}", count);
+    (result: {
+      message?: string;
+      messageParams?: Record<string, string | number>;
+    }): string | null => {
+      if (result.message !== "automations.performanceWarningBanner") return null;
+      const count = result.messageParams?.count ?? "";
+      return t("automations.performanceWarningBanner" as any).replace("{count}", String(count));
     },
     [t],
   );
@@ -434,7 +435,7 @@ export function useAutomationWizard({
               : t("automations.automationCreatedDesc" as any),
           });
 
-          const warningMsg = parseWarningMessage(result.message);
+          const warningMsg = parseWarningMessage(result);
           if (warningMsg) {
             toast({
               title: t("automations.warning" as any),

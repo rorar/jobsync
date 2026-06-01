@@ -234,7 +234,7 @@ describe("Push Actions", () => {
       const result = await getVapidPublicKeyAction();
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("errors.unauthorized");
+      expect(result.message).toBe("errors.notAuthenticated");
     });
   });
 
@@ -360,7 +360,7 @@ describe("Push Actions", () => {
       const result = await subscribePush(VALID_SUBSCRIPTION_INPUT);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("errors.unauthorized");
+      expect(result.message).toBe("errors.notAuthenticated");
     });
 
     it("stores combined IVs with pipe separator", async () => {
@@ -444,7 +444,7 @@ describe("Push Actions", () => {
       const result = await unsubscribePush("https://push.example.com/sub/x");
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("errors.unauthorized");
+      expect(result.message).toBe("errors.notAuthenticated");
     });
   });
 
@@ -478,7 +478,7 @@ describe("Push Actions", () => {
       const result = await getSubscriptionCount();
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("errors.unauthorized");
+      expect(result.message).toBe("errors.notAuthenticated");
     });
   });
 
@@ -512,7 +512,7 @@ describe("Push Actions", () => {
       const result = await rotateVapidKeysAction();
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("errors.unauthorized");
+      expect(result.message).toBe("errors.notAuthenticated");
     });
   });
 
@@ -608,7 +608,7 @@ describe("Push Actions", () => {
       const result = await sendTestPush();
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("errors.unauthorized");
+      expect(result.message).toBe("errors.notAuthenticated");
     });
 
     // -----------------------------------------------------------------------
