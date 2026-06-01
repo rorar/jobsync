@@ -4,13 +4,13 @@
   "type": "feature",
   "status": "pending",
   "created": "2026-06-01T08:46:16Z",
-  "updated": "2026-06-01T08:46:16Z",
+  "updated": "2026-06-01T09:11:27Z",
   "phases": {
-    "total": 5,
+    "total": 6,
     "completed": 0
   },
   "tasks": {
-    "total": 20,
+    "total": 23,
     "completed": 0
   }
 }

@@ -10,13 +10,14 @@
 
 ## Progress
 
-- Phases: 0/5 complete
-- Tasks: 0/20 complete
+- Phases: 0/6 complete
+- Tasks: 0/23 complete
 
 ## Scope (BACKLOG Welle 1)
 
-IF-5 (typed `ActionResult.message`) → IF-7 (single `NotificationType`) → then fan-out
-S6a (Job-CRUD audit), S6b (CRM read-access audit), GDPR-JWT (token minimisation).
+IF-5 (typed `ActionResult.message`) → IF-7 (single `NotificationType`) → Allium
+audit-contract spec (FIRST, before audit code) → then fan-out S6a (Job-CRUD audit),
+S6b (CRM read-access audit), GDPR-JWT (token minimisation).
 
 ## Quick Links
 

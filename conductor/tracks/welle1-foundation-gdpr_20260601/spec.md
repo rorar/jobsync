@@ -8,8 +8,9 @@
 ## Summary
 
 Stabilise two shared foundation types (`ActionResult.message`, `NotificationType`),
-then fan out three GDPR audit/data-minimisation items. Foundation-then-fan-out:
-IF-5 and IF-7 must land FIRST because they change types every later item touches.
+author an Allium audit-trail contract, then fan out three GDPR audit/data-minimisation
+items. Foundation-then-fan-out: IF-5 and IF-7 must land FIRST because they change types
+every later item touches; the audit-contract spec lands before S6a/S6b code.
 
 ## Context
 
@@ -28,9 +29,15 @@ NextAuth JWT to the minimum identifier.
       zero-error. (`src/models/actionResult.ts`)
 - [ ] **IF-7:** A single source-of-truth `NotificationType` union exists; the 13
       scattered definitions are removed and re-import from it. No duplicate literal sets.
+- [ ] **Audit-contract spec FIRST:** An Allium spec for the GDPR audit trail
+      (`AuditEntry` shape: actor id, action verb, target type+id, timestamp,
+      before/after diff; the Job-CRUD write rule, the Person-PII read rule, the
+      `AdminAuditLog` model extension) is authored and `allium:check`-clean BEFORE any
+      S6a/S6b code, and is the single source of truth (`allium:weed` zero-drift at end).
 - [ ] **S6a:** Every Job-CRUD mutation (create/update/delete/status-change/note) writes
       an audit-trail row (actor id, action, target id, timestamp, before/after where
-      relevant) via the `AdminAuditLog` pattern. Art. 5(2) accountability.
+      relevant) via the `AdminAuditLog` pattern, matching the Phase 3 contract. Art. 5(2)
+      accountability.
 - [ ] **S6b:** CRM read-access to `Person` PII (detail view, list-with-PII, export)
       writes a read-access audit row (who viewed which Person, when).
 - [ ] **GDPR-JWT:** The NextAuth JWT carries only the user `id` — `email` and `name`
@@ -43,7 +50,8 @@ NextAuth JWT to the minimum identifier.
 ## Dependencies
 
 - **Internal ordering:** IF-5 + IF-7 BEFORE the GDPR items (shared-type stabilisation).
-  The three GDPR items (S6a, S6b, GDPR-JWT) may fan out in parallel after.
+  The audit-contract spec (Phase 3) lands BEFORE S6a/S6b (they implement it). S6a, S6b,
+  and the independent GDPR-JWT may fan out in parallel once the spec is frozen.
 - **Existing code:** `AdminAuditLog` Prisma model + `writeAdminAuditLog()` pattern
   (`src/lib/auth/admin.ts`), `src/models/actionResult.ts`, NextAuth config, the 13
   files declaring `NotificationType`.
