@@ -2,18 +2,18 @@
   "id": "welle2-salary-profile_20260601",
   "title": "Welle 2 — Salary + Profil (Kette B)",
   "type": "feature",
-  "status": "in_progress",
+  "status": "complete",
   "created": "2026-06-01T08:46:16Z",
-  "updated": "2026-06-01T12:00:00Z",
+  "updated": "2026-06-01T21:00:00Z",
   "current_phase": 4,
-  "current_task": "4.1",
+  "current_task": "done",
   "phases": {
     "total": 4,
-    "completed": 3
+    "completed": 4
   },
   "tasks": {
     "total": 23,
-    "completed": 18
+    "completed": 23
   },
   "commits": [
     "7a29816: chore(conductor): close Welle 1, start Welle 2",
@@ -22,9 +22,16 @@
     "d03212b: feat(profile): home location + currency UI",
     "0c56deb: chore(conductor): capture 2 tracks; re-scope Phase 3",
     "db41299: spec(compensation): compensation.allium",
-    "(feat): structured salary schema + parser + backfill",
-    "(feat): bonus value object + fixum-disables-range setting",
-    "(feat): structured salary form + API + promotion",
-    "(test): e2e salary happy-path + Phase 3 complete"
+    "c6e18d1: feat(job): structured salary schema + parser + backfill",
+    "e17d32c: feat(salary): bonus value object + fixum-disables-range setting",
+    "1dd57a5: feat(job): structured salary form + API + promotion",
+    "78236f7: test(e2e): structured salary happy-path",
+    "f2d2251: fix(salary): server-side validation boundary + schema hardening (Phase 4)",
+    "d90c496: fix(job-form): reactive Fixum view on edit (Phase 4)",
+    "63a8510: fix(profile): Profile.userId @unique + atomic upsert (Phase 4)",
+    "20941e5: test(e2e): green the structured-salary happy-path (Phase 4)",
+    "bdca54e: spec(compensation): align invariants with enforced behaviour (Phase 4)",
+    "887d908: docs(welle2): BACKLOG/BUGS/handoff (Phase 4)",
+    "d1d76b7: merge: Welle 2 (Salary + Profil) into main"
   ]
 }

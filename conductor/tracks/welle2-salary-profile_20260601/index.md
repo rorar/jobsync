@@ -1,17 +1,18 @@
 # Track: Welle 2 — Salary + Profil (Kette B)
 
 **ID:** welle2-salary-profile_20260601
-**Status:** Pending
+**Status:** Complete (merged into fork main `d1d76b7`, 2026-06-01)
 
 ## Documents
 
 - [Specification](./spec.md)
 - [Implementation Plan](./plan.md)
+- [Phase 4 Wrap-Up Handoff](../../../docs/welle2-handoff.md)
 
 ## Progress
 
-- Phases: 0/3 complete
-- Tasks: 0/15 complete
+- Phases: 4/4 complete
+- Tasks: 23/23 complete
 
 ## Scope (BACKLOG Welle 2)
 
