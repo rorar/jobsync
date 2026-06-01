@@ -49,7 +49,7 @@ export const AddJobFormSchema = z.object({
       message: "Status must be at least 2 characters.",
     })
     .default("bookmarked"),
-  dueDate: z.date(),
+  dueDate: z.date().nullable().optional(),
   /**
    * Note: Timezone offsets can be allowed by setting the offset option to true.
    * z.string().datetime({ offset: true });

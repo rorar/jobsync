@@ -48,9 +48,15 @@ export function NotificationBell() {
   const announceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchCount = useCallback(async () => {
-    const result = await getUnreadCount();
-    if (result.success && result.data !== undefined) {
-      setUnreadCount(result.data);
+    try {
+      const result = await getUnreadCount();
+      if (result.success && result.data !== undefined) {
+        setUnreadCount(result.data);
+      }
+    } catch {
+      // Background poll — fail silently. Keep the previous count displayed;
+      // never reset to 0 (would falsely imply "all read") or surface a toast
+      // (would interrupt the user for a transient poll error).
     }
   }, []);
 

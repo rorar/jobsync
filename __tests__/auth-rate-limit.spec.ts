@@ -185,3 +185,53 @@ describe("getClientIp", () => {
     expect(ip).toBe("10.0.0.1");
   });
 });
+
+/**
+ * E2E rate-limit bypass — must be secure: opt-in via a server env var AND
+ * physically impossible in production (NODE_ENV gate). These tests pin that
+ * contract so the affordance can never silently become a production backdoor.
+ */
+describe("auth rate-limit E2E bypass", () => {
+  const ORIG_NODE_ENV = process.env.NODE_ENV;
+  const ORIG_FLAG = process.env.E2E_AUTH_RATE_LIMIT_BYPASS;
+
+  // process.env.NODE_ENV is typed read-only; mutate through a loose view.
+  const env = process.env as Record<string, string | undefined>;
+  const setEnv = (nodeEnv: string | undefined, flag: string | undefined) => {
+    if (nodeEnv === undefined) delete env.NODE_ENV;
+    else env.NODE_ENV = nodeEnv;
+    if (flag === undefined) delete env.E2E_AUTH_RATE_LIMIT_BYPASS;
+    else env.E2E_AUTH_RATE_LIMIT_BYPASS = flag;
+  };
+
+  beforeEach(() => resetAuthRateLimitStore());
+  afterEach(() => {
+    setEnv(ORIG_NODE_ENV, ORIG_FLAG);
+    resetAuthRateLimitStore();
+  });
+
+  it("disables limiting when NODE_ENV!=production AND the flag is set", () => {
+    setEnv("development", "1");
+    // Well past the 5/15min signin cap — all allowed under bypass.
+    for (let i = 0; i < 12; i++) {
+      expect(checkAuthRateLimit("9.9.9.9", "signin").allowed).toBe(true);
+    }
+  });
+
+  it("still limits when the flag is NOT set (default off)", () => {
+    setEnv("development", undefined);
+    for (let i = 0; i < 5; i++) {
+      expect(checkAuthRateLimit("8.8.8.8", "signin").allowed).toBe(true);
+    }
+    expect(checkAuthRateLimit("8.8.8.8", "signin").allowed).toBe(false);
+  });
+
+  it("NEVER bypasses in production even with the flag set (no backdoor)", () => {
+    setEnv("production", "1");
+    for (let i = 0; i < 5; i++) {
+      expect(checkAuthRateLimit("7.7.7.7", "signin").allowed).toBe(true);
+    }
+    // 6th attempt is blocked despite the flag — prod gate holds.
+    expect(checkAuthRateLimit("7.7.7.7", "signin").allowed).toBe(false);
+  });
+});

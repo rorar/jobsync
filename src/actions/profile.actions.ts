@@ -13,8 +13,7 @@ import { ActionResult } from "@/models/actionResult";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import path from "path";
-import fs from "fs";
+import { deleteFile } from "@/lib/profile/delete-file";
 
 // Narrow Prisma string to domain enum
 function toResumeSection<T extends { sectionType: string }>(
@@ -471,36 +470,8 @@ export const deleteResumeById = async (
 };
 
 // uploadFile moved to src/lib/upload.ts (server-only, ADR-019 — not a Server Action)
-
-export const deleteFile = async (fileId: string, callerUserId?: string) => {
-  try {
-    // Verify ownership: File → Resume → Profile → User
-    const whereClause = callerUserId
-      ? { id: fileId, Resume: { profile: { userId: callerUserId } } }
-      : { id: fileId };
-    const file = await prisma.file.findFirst({
-      where: whereClause,
-    });
-
-    const filePath = file?.filePath as string;
-
-    const fullFilePath = path.join(filePath);
-    if (!fs.existsSync(filePath)) {
-      throw new Error("File not found");
-    }
-    fs.unlinkSync(filePath);
-
-    await prisma.file.delete({
-      where: {
-        id: fileId,
-      },
-    });
-
-  } catch (error) {
-    const msg = "Failed to delete file.";
-    return handleError(error, msg);
-  }
-};
+// deleteFile moved to src/lib/profile/delete-file.ts (server-only, ADR-019 Pattern A —
+// not a Server Action; imported below for internal use by deleteResume)
 
 export const addResumeSummary = async (
   data: z.infer<typeof AddSummarySectionFormSchema>

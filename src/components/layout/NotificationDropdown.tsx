@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { CheckCheck } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import { useTranslations } from "@/i18n";
 import {
@@ -137,6 +138,7 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
   const { t } = useTranslations();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
 
   // M-P-SPEC-03 — request dedup + stale-result discard.
   //
@@ -165,6 +167,7 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
     }
     const myEpoch = fetchEpochRef.current;
     setLoading(true);
+    setHasError(false);
     const pending = getNotifications(false, 50);
     pendingFetchRef.current = pending;
     try {
@@ -178,8 +181,19 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
         setNotifications(result.data);
         const unread = result.data.filter((n) => !n.read).length;
         onCountChange?.(unread);
+      } else {
+        setHasError(true);
       }
       return result;
+    } catch (error) {
+      // Without this catch the rejection is unhandled (the useEffect caller
+      // does not await it) and the dropdown silently shows the empty
+      // "no notifications" state. Surface a distinct error + retry instead.
+      console.error("[NotificationDropdown] fetch failed:", error);
+      if (isMountedRef.current && fetchEpochRef.current === myEpoch) {
+        setHasError(true);
+      }
+      return undefined;
     } finally {
       // Clear the in-flight ref ONLY if this is still the current one.
       // A newer fetch may have started between the await and the finally,
@@ -299,6 +313,20 @@ export function NotificationDropdown({ onCountChange }: NotificationDropdownProp
         {loading ? (
           <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
             {t("common.loading")}
+          </div>
+        ) : hasError ? (
+          <div
+            role="alert"
+            className="flex flex-col items-center justify-center gap-2 py-8 text-sm text-muted-foreground"
+          >
+            <p>{t("notifications.loadFailed")}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fetchNotifications()}
+            >
+              {t("notifications.retry")}
+            </Button>
           </div>
         ) : notifications.length === 0 ? (
           <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">

@@ -2,7 +2,7 @@
 
 **Total: 588 bugs found, 587 fixed, 2 open (accepted risk), 1 new (blind spot)**
 
-### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability) + 1 new blind spot (BS-01)
+### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability) — BS-01 ✅ fixed (Welle 0, 2026-05-31)
 
 ## Session 2026-05-29 — GDPR S3 (resume free-text PII redaction to cloud AI)
 
@@ -1241,4 +1241,4 @@ No formatter/linter exists in the project (no Prettier, no git hooks, no lint-st
 
 | ID | Severity | Summary | File | Status |
 |----|----------|---------|------|--------|
-| BS-01 | MEDIUM | `deleteFile` in profile.actions.ts exported from `"use server"` file. Accepts optional `callerUserId?` — when omitted, queries by `fileId` alone (no ownership check). Same ADR-019 pattern as SEC-05. | `profile.actions.ts:475` | Open |
+| BS-01 | MEDIUM | `deleteFile` in profile.actions.ts exported from `"use server"` file. Accepts optional `callerUserId?` — when omitted, queries by `fileId` alone (no ownership check). Same ADR-019 pattern as SEC-05. | `profile.actions.ts:475` | ✅ Fixed (Welle 0, 2026-05-31): moved to `src/lib/profile/delete-file.ts` server-only leaf, `callerUserId` required, ownership always enforced, no-op for non-owned. Test `__tests__/delete-file-idor.spec.ts`. |

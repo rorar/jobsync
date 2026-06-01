@@ -548,6 +548,32 @@ describe("jobActions", () => {
       expect(result).toStrictEqual({ data: createdJob, success: true });
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
+    // F-AJ-04: a cleared (undefined) due date must persist as DB null, not be
+    // dropped — guards the `dueDate ?? null` coercion (job.actions.ts:387).
+    it("persists a cleared due date as null on create", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
+      const createSpy = jest.fn().mockResolvedValue(createdJob);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) =>
+        fn({
+          job: { create: createSpy },
+          jobStatusHistory: {
+            create: jest.fn().mockResolvedValue(historyEntry),
+          },
+        }),
+      );
+
+      await addJob({ ...jobData, dueDate: undefined });
+
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ dueDate: null }),
+        }),
+      );
+    });
     it("should emit JobStatusChanged event after creation", async () => {
       const { emitEvent } = require("@/lib/events");
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
@@ -669,6 +695,25 @@ describe("jobActions", () => {
 
       expect(result).toStrictEqual({ data: jobData, success: true });
       expect(prisma.job.update).toHaveBeenCalledTimes(1);
+    });
+    // F-AJ-04: clearing the due date on update must write null (not undefined,
+    // which Prisma treats as "no change") — guards `dueDate ?? null`
+    // (job.actions.ts:549). Without it, a cleared date silently keeps the old value.
+    it("persists a cleared due date as null on update", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
+      (prisma.job.update as jest.Mock).mockResolvedValue(jobData);
+
+      await updateJob({ ...jobData, dueDate: null });
+
+      expect(prisma.job.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ dueDate: null }),
+        }),
+      );
     });
     it("should handle unexpected errors", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);

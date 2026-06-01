@@ -441,8 +441,11 @@ REST API as "Open Host Service" (DDD) — manually designed surface over existin
 - `src/lib/email-rate-limit.ts` — 10/min dispatch + 1/60s test
 - `src/lib/push/rate-limit.ts` — 20/min dispatch + 1/60s test
 - `src/lib/auth/admin-rate-limit.ts` — 10/min per user
+- `src/lib/auth/auth-rate-limit.ts` — signin 5/15min, signup 3/60min per IP (FL-3)
 
 **For new rate limiters:** Import `createSlidingWindowLimiter` from `@/lib/rate-limit`, create a wrapper file with domain-specific exports. Do NOT copy-paste boilerplate.
+
+**E2E auth rate-limit bypass (`E2E_AUTH_RATE_LIMIT_BYPASS`):** `auth-rate-limit.ts` honours a test-only bypass so the Playwright suite (re-logs-in every run) doesn't trip the signin cap. It is **double-gated and prod-inert**: active ONLY when `NODE_ENV !== "production"` **AND** `E2E_AUTH_RATE_LIMIT_BYPASS=1`. Neither gate is request-derived (server env vars only), a prod build always sets `NODE_ENV=production`, default is OFF, and it logs a one-time warning when active — so it is NOT a backdoor and cannot weaken a deployed server. Start the E2E dev server with `scripts/dev-e2e.sh` (sets the flag). NEVER set it in production. Contract pinned by `__tests__/auth-rate-limit.spec.ts` ("NEVER bypasses in production even with the flag set").
 
 ### Centralized Storage Paths (`src/lib/storage.ts`)
 

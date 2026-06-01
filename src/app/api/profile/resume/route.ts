@@ -1,10 +1,7 @@
 import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
-import {
-  createResumeProfile,
-  deleteFile,
-  editResume,
-} from "@/actions/profile.actions";
+import { createResumeProfile, editResume } from "@/actions/profile.actions";
+import { deleteFile } from "@/lib/profile/delete-file";
 import { uploadFile } from "@/lib/upload";
 import { getResumesDir } from "@/lib/storage";
 import path from "path";
@@ -17,7 +14,7 @@ export const POST = async (req: NextRequest) => {
   let filePath;
 
   try {
-    if (!session || !session.user) {
+    if (!session || !session.user || !userId) {
       return NextResponse.json(
         {
           error: "Not Authenticated",

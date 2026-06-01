@@ -1,7 +1,7 @@
 "use client";
 
 import { addDays } from "date-fns";
-import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar as CalendarIcon, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useTranslations, formatDateShort } from "@/i18n";
@@ -28,6 +28,10 @@ interface DatePickerProps {
   presets: boolean;
   isEnabled: boolean;
   captionLayout?: boolean;
+  /** When true, render a "Clear" action that resets the value (to null — see clearValue). */
+  allowClear?: boolean;
+  /** Optional test id on the trigger button (for E2E targeting). */
+  triggerTestId?: string;
 }
 
 export function DatePicker({
@@ -35,9 +39,20 @@ export function DatePicker({
   presets,
   isEnabled,
   captionLayout,
+  allowClear = false,
+  triggerTestId,
 }: DatePickerProps) {
   const { t, locale } = useTranslations();
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
+  // Clear with `null`, NOT `undefined`: react-hook-form 7.x ignores `undefined`
+  // in onChange/setValue (the Controller keeps the prior value and the trigger
+  // never reverts to the placeholder). `null` is a defined falsy value that does
+  // re-render. The form schema accepts null (.nullable()) and the action coerces
+  // null -> DB null.
+  const clearValue = () => {
+    field.onChange(null);
+    setIsPopoverOpen(false);
+  };
 
   return (
     <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
@@ -45,6 +60,7 @@ export function DatePicker({
         <FormControl>
           <Button
             variant={"outline"}
+            data-testid={triggerTestId}
             className={cn(
               "md:w-[240px] lg:w-[280px] justify-start text-left font-normal",
               !field.value && "text-muted-foreground"
@@ -80,13 +96,25 @@ export function DatePicker({
           captionLayout={captionLayout ? "dropdown" : "label"}
           startMonth={captionLayout ? new Date(1970, 0) : undefined}
           endMonth={captionLayout ? new Date() : undefined}
-          selected={field.value}
+          selected={field.value ?? undefined}
           onSelect={(value) => {
             field.onChange(value);
             setIsPopoverOpen(false);
           }}
           className="rounded-md border"
         />
+        {allowClear && field.value && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full text-muted-foreground hover:text-foreground"
+            onClick={clearValue}
+          >
+            <X className="mr-2 h-4 w-4" aria-hidden="true" />
+            {t("jobs.clearDate")}
+          </Button>
+        )}
       </PopoverContent>
     </Popover>
   );

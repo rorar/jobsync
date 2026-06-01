@@ -48,6 +48,7 @@ export const staging = {
     "staging.undoAction": "Undo",
     "staging.bulkSuccess": "{succeeded} of {total} items processed",
     "staging.promotionFailed": "Failed to promote vacancy",
+    "staging.actionFailed": "Action failed. Please try again.",
     // Position offering codes
     "staging.offering.apprenticeship": "Apprenticeship",
     "staging.offering.contract": "Contract",
@@ -140,6 +141,7 @@ export const staging = {
     "staging.undoAction": "Rückgängig",
     "staging.bulkSuccess": "{succeeded} von {total} Elementen verarbeitet",
     "staging.promotionFailed": "Stelle konnte nicht befördert werden",
+    "staging.actionFailed": "Aktion fehlgeschlagen. Bitte erneut versuchen.",
     // Position offering codes
     "staging.offering.apprenticeship": "Ausbildung",
     "staging.offering.contract": "Befristet",
@@ -229,6 +231,7 @@ export const staging = {
     "staging.undoAction": "Annuler",
     "staging.bulkSuccess": "{succeeded} sur {total} éléments traités",
     "staging.promotionFailed": "Impossible de promouvoir l'offre",
+    "staging.actionFailed": "Échec de l'action. Veuillez réessayer.",
     // Position offering codes
     "staging.offering.apprenticeship": "Apprentissage",
     "staging.offering.contract": "Contrat",
@@ -318,6 +321,7 @@ export const staging = {
     "staging.undoAction": "Deshacer",
     "staging.bulkSuccess": "{succeeded} de {total} elementos procesados",
     "staging.promotionFailed": "Error al promover la vacante",
+    "staging.actionFailed": "La acción falló. Por favor, inténtalo de nuevo.",
     // Position offering codes
     "staging.offering.apprenticeship": "Aprendizaje",
     "staging.offering.contract": "Contrato",

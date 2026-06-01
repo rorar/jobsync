@@ -591,3 +591,59 @@ describe("NotificationDropdown mark-all-read hit-area (M-Y-03)", () => {
     expect(mockMarkAllAsRead).toHaveBeenCalledTimes(1);
   });
 });
+
+// P0-2 (S2 pre-audit) — fetch failure must not be silent.
+describe("NotificationDropdown error state (P0-5)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockLocale = "en";
+  });
+
+  it("shows an error + retry (not the empty state) when the fetch rejects", async () => {
+    mockGetNotifications.mockRejectedValueOnce(new Error("network"));
+
+    await act(async () => {
+      render(<NotificationDropdown />);
+    });
+
+    // Distinct error alert — NOT the "No notifications" empty state.
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/failed to load notifications/i);
+    expect(screen.queryByText(/no notifications/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /retry/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("recovers when retry succeeds", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    mockGetNotifications.mockRejectedValueOnce(new Error("network"));
+
+    await act(async () => {
+      render(<NotificationDropdown />);
+    });
+    await screen.findByRole("alert");
+
+    mockGetNotifications.mockResolvedValueOnce({
+      success: true,
+      data: [
+        makeNotification({
+          id: "recovered",
+          createdAt: new Date(),
+          message: "Recovered notification",
+        }),
+      ],
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+    expect(
+      await screen.findByRole("region", { name: /notifications/i }),
+    ).toBeInTheDocument();
+  });
+});

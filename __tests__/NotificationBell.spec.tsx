@@ -150,6 +150,48 @@ describe("NotificationBell", () => {
     expect(screen.getByText("5")).toBeInTheDocument();
   });
 
+  // P0-6 (S2 pre-audit) — a failed background poll must not throw or reset
+  // the count; it fails silently and keeps the bell usable.
+  it("survives a rejected poll without crashing or showing a count", async () => {
+    mockGetUnreadCount.mockRejectedValue(new Error("network"));
+
+    await act(async () => {
+      render(<NotificationBell />);
+    });
+
+    // Renders normally; no unhandled rejection bubbled up.
+    expect(screen.getByTestId("icon-bell")).toBeInTheDocument();
+    // No count badge (count never reset to a misleading value either).
+    expect(screen.queryByText("0")).not.toBeInTheDocument();
+  });
+
+  // P0-6 (strengthened) — a LATER poll failing must KEEP the last good count,
+  // not reset it. First poll succeeds with 5; the next interval poll rejects;
+  // the badge must still read 5 (the catch swallowed the error without resetting).
+  it("keeps the previous count when a later poll fails", async () => {
+    jest.useFakeTimers();
+    try {
+      mockGetUnreadCount
+        .mockResolvedValueOnce({ success: true, data: 5 })
+        .mockRejectedValue(new Error("network"));
+
+      await act(async () => {
+        render(<NotificationBell />);
+      });
+      expect(screen.getByText("5")).toBeInTheDocument();
+
+      // Advance one poll interval → the second (rejecting) fetch fires.
+      await act(async () => {
+        jest.advanceTimersByTime(30_000);
+      });
+
+      // Count retained, not reset to 0 or cleared.
+      expect(screen.getByText("5")).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("hides badge when unread count is 0", async () => {
     mockGetUnreadCount.mockResolvedValue({ success: true, data: 0 });
 

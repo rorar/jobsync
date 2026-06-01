@@ -411,7 +411,7 @@ export default function PushSettings() {
               </CardDescription>
             </div>
             {isSubscribed ? (
-              <Badge className="bg-green-600 hover:bg-green-600 text-white">
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 hover:bg-green-100 dark:hover:bg-green-900">
                 {t("settings.pushSubscribed")}
               </Badge>
             ) : (

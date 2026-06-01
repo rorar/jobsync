@@ -1,10 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { toast } from "../ui/use-toast";
 import { Loader2 } from "lucide-react";
 import {
@@ -54,27 +71,34 @@ const COMMON_TIMEZONES = [
 function NotificationSettings() {
   const { t } = useTranslations();
   const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [pendingGlobalDisable, setPendingGlobalDisable] = useState(false);
   const [prefs, setPrefs] = useState<NotificationPreferences>(
     DEFAULT_NOTIFICATION_PREFERENCES,
   );
 
-  useEffect(() => {
-    const fetchPrefs = async () => {
-      setIsLoading(true);
-      try {
-        const result = await getNotificationPreferences();
-        if (result.success && result.data) {
-          setPrefs(result.data);
-        }
-      } catch (error) {
-        console.error("Error fetching notification preferences:", error);
-      } finally {
-        setIsLoading(false);
+  const fetchPrefs = useCallback(async () => {
+    setIsLoading(true);
+    setIsError(false);
+    try {
+      const result = await getNotificationPreferences();
+      if (result.success && result.data) {
+        setPrefs(result.data);
+      } else {
+        setIsError(true);
       }
-    };
-    fetchPrefs();
+    } catch (error) {
+      console.error("Error fetching notification preferences:", error);
+      setIsError(true);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchPrefs();
+  }, [fetchPrefs]);
 
   const save = async (updated: NotificationPreferences) => {
     setPrefs(updated);
@@ -109,7 +133,18 @@ function NotificationSettings() {
   };
 
   const handleGlobalToggle = (enabled: boolean) => {
-    save({ ...prefs, enabled });
+    // Turning OFF is destructive (silences every channel) → confirm first.
+    // Turning ON is non-destructive → apply immediately.
+    if (enabled) {
+      save({ ...prefs, enabled: true });
+    } else {
+      setPendingGlobalDisable(true);
+    }
+  };
+
+  const confirmGlobalDisable = () => {
+    setPendingGlobalDisable(false);
+    save({ ...prefs, enabled: false });
   };
 
   const handleInAppToggle = (inApp: boolean) => {
@@ -175,6 +210,34 @@ function NotificationSettings() {
         <div className="flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
           <span>{t("settings.loadingSettings")}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-lg font-medium">
+            {t("settings.notificationSettings")}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {t("settings.notificationSettingsDesc")}
+          </p>
+        </div>
+        <div className="text-center py-8">
+          <p className="text-destructive" role="alert">
+            {t("settings.notificationLoadFailed")}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchPrefs}
+            className="mt-2"
+          >
+            {t("settings.errorTryAgain")}
+          </Button>
         </div>
       </div>
     );
@@ -280,7 +343,7 @@ function NotificationSettings() {
         </div>
 
         {prefs.quietHours?.enabled && (
-          <div className="grid grid-cols-3 gap-3 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
             <div className="space-y-1">
               <Label htmlFor="quiet-start" className="text-xs">
                 {t("settings.quietHoursStart")}
@@ -313,21 +376,24 @@ function NotificationSettings() {
               <Label htmlFor="quiet-timezone" className="text-xs">
                 {t("settings.quietHoursTimezone")}
               </Label>
-              <select
-                id="quiet-timezone"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              <Select
                 value={prefs.quietHours.timezone}
-                onChange={(e) =>
-                  handleQuietHoursChange("timezone", e.target.value)
+                onValueChange={(value) =>
+                  handleQuietHoursChange("timezone", value)
                 }
                 disabled={isSaving}
               >
-                {COMMON_TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>
-                    {tz}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="quiet-timezone">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {COMMON_TIMEZONES.map((tz) => (
+                    <SelectItem key={tz} value={tz}>
+                      {tz}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         )}
@@ -339,6 +405,31 @@ function NotificationSettings() {
           <span>{t("settings.loadingSettings")}</span>
         </div>
       )}
+
+      <AlertDialog
+        open={pendingGlobalDisable}
+        onOpenChange={setPendingGlobalDisable}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("settings.disableNotificationsTitle")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("settings.disableNotificationsDesc")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("settings.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmGlobalDisable}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t("settings.disableNotificationsConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

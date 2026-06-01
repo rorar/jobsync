@@ -73,17 +73,18 @@ beide WCAG-Audits (teil-fixed), Home-Dir s3-handoffs + eures-api-missing-fields.
 
 ---
 
-## 1. CRITICAL — Security (verifiziert offen)
+## 1. CRITICAL — Security
 
-### BS-01 — deleteFile latente IDOR (ADR-019)
-- **Datei:** `src/actions/profile.actions.ts:475-480`
-- **Problem:** `export const deleteFile(fileId, callerUserId?)` in `"use server"`-Datei → vom Browser als
-  Server-Action aufrufbar. Fehlt `callerUserId`, fällt where-clause auf `{ id: fileId }` zurück =
-  Löschen fremder Dateien (IDOR).
-- **Aktuelle Caller:** beide geben userId (`profile.actions.ts:400`, `api/profile/resume/route.ts:45`) →
-  kein aktiver Exploit, ABER der Export macht es browser-erreichbar.
-- **Fix:** Pattern A (ADR-019) — in `server-only`-Leaf verschieben ODER `callerUserId` required +
-  internen `getCurrentUser()`-Gate. ~30 min.
+### BS-01 — deleteFile latente IDOR (ADR-019) — ✅ ERLEDIGT (Welle 0, 2026-05-31)
+- **Fix:** `deleteFile` nach `src/lib/profile/delete-file.ts` (`server-only`-Leaf, ADR-019 Pattern A)
+  verschoben → KEIN Server-Action-Export mehr. `callerUserId` jetzt **required**; where-clause IMMER
+  `{ id: fileId, Resume: { profile: { userId } } }`; `if (!file) return` = No-op für fremde/fehlende Files
+  (kein unlink, kein DB-delete). Beide Caller auf Leaf umgestellt (`profile.actions.ts:399` +
+  `api/profile/resume/route.ts:42` mit definite-userId-Guard).
+- **Test:** `__tests__/delete-file-idor.spec.ts` (4 Cases: scope, IDOR-no-op, owner-happy, fs-missing).
+- **Flashlight:** projektweit gegrept — `deleteFile` war einziger use-server-Export mit raw-userId-Pattern.
+- **Spec:** `profile-resume.allium` (3 Comment-Sites aktualisiert, allium check clean).
+- **Verify:** 256 Suites / 5031 Tests grün, tsc 0 Errors.
 - **Quelle:** s5-pre-implementation-checkup, BUGS.md
 
 ### 1b. GDPR-Long-Tail (verifiziert offen — aus gdpr-audit + domain-expert)
@@ -104,26 +105,36 @@ Runde-2 verifiziert: G3/G6/G27/Cache-Control/ENCRYPTION_KEY-startup = ERLEDIGT (
 
 ## 2. UX/UI — verifiziert offen
 
-### 2a. S2-Pre-Audit P0 (9 Findings, code-grep offen)
-Ursprung `s2-ux-polish-session.md` Pre-Audit. **NICHT** zu verwechseln mit der gelaufenen S2-Session
-(deren 109 Findings sind erledigt). Diese 9 sind das offene Pre-Audit-Set:
+### 2a. S2-Pre-Audit P0 (9 Findings) — ✅ ALLE ERLEDIGT (Welle 0, 2026-05-31)
+Ursprung `s2-ux-polish-session.md` Pre-Audit. ui-design design-review konsultiert (Patterns aus
+WebhookSettings/PushSettings/ApiKeySettings/AiSettings übernommen), dann implementiert. 7 neue i18n-Keys
+×4 Locales. +6 Regression-Tests. 256 Suites / 5037 Tests grün, tsc 0 Errors.
 
-| ID | Finding | Datei |
-|----|---------|-------|
-| P0-1 | NotificationSettings: kein Error-State bei Fetch-Failure (verifiziert: kein setError) | NotificationSettings.tsx |
-| P0-2 | NotificationSettings: kein Confirm bei Global-Disable | NotificationSettings.tsx:111 |
-| P0-3 | PushSettings: `bg-green-600` ohne dark:-Variante | PushSettings.tsx:~414 |
-| P0-4 | StagedVacancyDetailSheet: Silent Error in runAction | StagedVacancyDetailSheet.tsx:81-95 |
-| P0-5 | NotificationDropdown: Fetch-Failure → Spinner forever | NotificationDropdown.tsx |
-| P0-6 | NotificationBell: Silent Error bei Poll-Failure | NotificationBell.tsx:50 |
-| P0-7 | ActivityTimeline: Select `w-[200px]` Overflow @375px | ActivityTimeline.tsx:93 |
-| P0-8 | NotificationSettings: natives `<select>` statt Shadcn | NotificationSettings.tsx:316 |
-| P0-9 | NotificationSettings: `grid-cols-3` zu eng @375px | NotificationSettings.tsx:283 |
+| ID | Finding | Fix |
+|----|---------|-----|
+| P0-1 | NotificationSettings: kein Error-State bei Fetch-Failure | ✅ `isError`-State + `role="alert"` + Retry-Button (`fetchPrefs` → useCallback) |
+| P0-2 | NotificationSettings: kein Confirm bei Global-Disable | ✅ AlertDialog-Confirm nur bei Disable (Enable bleibt instant) |
+| P0-3 | PushSettings: `bg-green-600` ohne dark:-Variante (Kontrast 3:1) | ✅ `bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200` (≥7:1) |
+| P0-4 | StagedVacancyDetailSheet: Silent Error in runAction | ✅ destructive Toast + Sheet bleibt offen (onOpenChange nur bei Success) |
+| P0-5 | NotificationDropdown: Fetch-Failure (Desc-Korrektur: KEIN Spinner-forever, `finally` clear loading; echtes Bug = fehlendes `catch` → unhandled rejection + stille leere Liste) | ✅ `catch` + `hasError`-State + distinct Error/Retry |
+| P0-6 | NotificationBell: Silent Error bei Poll-Failure | ✅ try/catch, fail-silent (Count bleibt, kein Reset auf 0, kein Toast) |
+| P0-7 | ActivityTimeline: Select `w-[200px]` Overflow @375px | ✅ `w-full min-w-[120px] sm:w-[200px]` |
+| P0-8 | NotificationSettings: natives `<select>` statt Shadcn | ✅ Shadcn `<Select>` (29 Optionen → Select korrekt, nicht Combobox) |
+| P0-9 | NotificationSettings: `grid-cols-3` zu eng @375px | ✅ `grid-cols-1 sm:grid-cols-3` |
 
-### 2b. WCAG-Compliance (23 verifiziert offen — von 35, 11 bereits gefixt, 1 downgraded)
-Runde-2 Einzel-Code-Verifikation: 11 gefixt (siehe §0), 1 informational (A14). **23 echt offen**, meist A11y-Detail.
-- **Kanban-Audit (2026-04-02)** → `docs/audits/wcag22-kanban-audit-2026-04-02.md`. OFFEN: O-5 (onDragOver ""), O-6 (role=group statt region), P-1 (color-only status, KanbanCard.tsx:60), P-2 (text-[10px] ×6, :138-171), P-3 (amber dark-contrast :167/171), P-4 (motion-reduce fehlt alert-dialog/toast), U-1 (transition-error kein hint), U-2 (StatusTransitionDialog kein aria-live), U-3 (KanbanEmptyState CTA), R-3 (ToastProvider hardcoded "Notification" toaster.tsx:19).
-- **S5b-Settings-Audit (2026-04-05)** → `docs/reviews/s5b/wcag-audit.md`. OFFEN: A01 (aria-invalid SmtpSettings:410-514), A02 (autoComplete=email :506), A04 (aria-live cooldown/subscription), A05 (Rotate-Button 36px), A11 (bg-green-600 Kontrast 3.5:1 PushSettings:414), A12 (yellow-950/20 dark :427), A13 (h3 ohne h1/h2), A07 (Email kein dark media-query), A09 (Email html dir-Attr), A08 (Email layout-tables — role=presentation OK, kein Fix nötig).
+### 2b. WCAG-Compliance — Welle 0 verifiziert + behoben (Disposition: `.ui-design/audits/wcag-backlog-2b-verified-2026-05-31.md`)
+**Code-Verifikation der 23 (Audits 2026-04-02/05, stale): nur 3 echt offen auf AA-Niveau.** Rest erledigt/false/kontextuell — klassisches Stale-Audit-Over-Report (`feedback_verify_index_against_code`).
+
+**✅ BEHOBEN (Welle 0, 2026-05-31), +4 Regression-Guards:**
+- **P-4** (motion-reduce fehlt): `alert-dialog.tsx` Overlay+Content + `toast.tsx` → `motion-reduce:animate-none`.
+- **P-3** (amber dark-contrast): KanbanCard `dark:bg-amber-900/50 text-amber-300` → `dark:bg-amber-900 text-amber-200` (≥4.5:1).
+- **A02**: SmtpSettings fromAddress `autoComplete="email"`.
+
+**✅ war bereits erledigt (nicht erneut fixen):** A11 (=P0-3 Welle 0), O-5 (`onDragOver` hat Handler), U-3 (EmptyState hat CTA), R-3 (toaster nutzt `t("common.dismiss")`), O-6 (`group` in `region` = valides ARIA).
+
+**❌ FALSE:** P-1 (Status NICHT color-only — `KanbanColumn:56` rendert Status-Label als Text + aria-label; Card-Border = Verstärkung → 1.4.1 erfüllt).
+
+**Kontextuell/AAA-not-AA/design-gated (dokumentiert, deferred):** P-2 (text-[10px] — kein harter WCAG-Min, design-gated), A05 (36px > AA-24px → besteht AA), A13 (h3 kontextuell), A01 (kein Per-Field-Validation-Model → aria-invalid N/A), A04 (aria-live minor enhancement), U-1/U-2 (Radix alertdialog announced; minor), A07/A09 (Email dark/dir — alle 4 Locales LTR, low-prio).
 
 ### 2c. Add-Job-Modal (F-AJ, offen-Teil)
 Voll-Detail + Chains: `docs/add-job-modal-ux-findings.md`. Verifizierter Status:
@@ -133,7 +144,7 @@ Voll-Detail + Chains: `docs/add-job-modal-ux-findings.md`. Verifizierter Status:
 | 01 Titel-Breite | **ERLEDIGT** | `md:col-span-2` da |
 | 02 Applied-Toggle → Status-ComboBox | OFFEN | hängt an F-AJ-09 |
 | 03 Status über Date Applied | OFFEN | Layout |
-| 04 Due Date optional + Reset | OFFEN | `schema:52` noch `z.date()` |
+| 04 Due Date optional + Reset | **ERLEDIGT** (Welle 0) | `dueDate: z.date().optional()`; DatePicker `allowClear` Ghost-Button (ui-design-reviewed); `updateJob` `dueDate ?? null` (Clear persistiert); `jobs.clearDate` ×4; +5 Tests |
 | 05 Salary Slider+Währung+Fixum | OFFEN (Infra teilw.) | `format-salary-range.ts` wiederverwendbar; Job-Model migrieren |
 | 06 Profil Adresse+Währung | TEILWEISE | CountrySelect/Subdivision/OHS da; Währung + User-Profil-Form fehlen |
 | 07 CRM-Person im Add Job | TEILWEISE | JobContact-Backend fertig; AddJob-UI fehlt |
@@ -252,9 +263,9 @@ Runde-2 verifiziert: Gap-2/Gap-3/Gap-4 ERLEDIGT (→ §0). **Echt offen:**
 | Kategorie | Anzahl |
 |-----------|--------|
 | Doku-Drift bereinigt (verifiziert war falsch-offen) | ~43 |
-| CRITICAL Security offen | 1 (BS-01) |
+| CRITICAL Security offen | 0 (BS-01 ✅ erledigt Welle 0) |
 | GDPR-Long-Tail offen | 6 (S6a/S6b/JWT/Consent/G25/G26b/G28) + 1 deferred |
-| UX offen (S2-P0 9 + WCAG 23 + F-AJ 6) | 38 |
+| UX offen (S2-P0 ✅ + WCAG ✅3/~8 deferred + F-AJ 5) | ~13 (S2-P0 9 + WCAG 3 + F-AJ-04 erledigt Welle 0; WCAG-Rest verifiziert kontextuell/false) |
 | Arch/Tech-Debt offen | 8 (IF-5/7/10/12 + D1-D5) |
 | Test-Lücken offen | 2 (F6, CRM-Cron-Tests) |
 | CRM-Gaps offen | 4 (Gap-1/5/6/7) |

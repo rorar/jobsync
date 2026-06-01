@@ -435,7 +435,7 @@ export function EuresLanguageCombobox({ field, value, onChange }: EuresLanguageC
           {entries.map((entry) => (
             <div
               key={entry.lang}
-              className="flex items-center gap-2 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm animate-in fade-in-50 slide-in-from-left-2 duration-200"
+              className="flex items-center gap-2 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm animate-in fade-in-50 slide-in-from-left-2 duration-200 motion-reduce:animate-none"
             >
               <LanguageFlag langCode={entry.lang} className="h-4 w-4 rounded-sm shrink-0" />
               <span className="font-medium flex-1 truncate">

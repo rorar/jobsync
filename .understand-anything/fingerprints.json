@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "gitCommitHash": "3191d8dc3993703b9d27778643eff5e75edc25e2",
-  "generatedAt": "2026-05-31T14:29:38.906Z",
+  "gitCommitHash": "40ec1c4c4113d27fbb1998b69a765d7f91dd6d57",
+  "generatedAt": "2026-06-01T07:54:44.444Z",
   "files": {
     "__mocks__/next-auth-providers.ts": {
       "filePath": "__mocks__/next-auth-providers.ts",
@@ -1139,7 +1139,7 @@
     },
     "__tests__/auth-rate-limit.spec.ts": {
       "filePath": "__tests__/auth-rate-limit.spec.ts",
-      "contentHash": "841b8ad7b9b6077660ebc2061030c8f2b47baf00e2288bd5c366fd3d42950a0e",
+      "contentHash": "562e5ac1b6e2be290d46b48bab339a3a7d938b7def1edf5e58e6a137c9af8398",
       "functions": [],
       "classes": [],
       "imports": [
@@ -1153,7 +1153,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 188,
+      "totalLines": 238,
       "hasStructuralAnalysis": true
     },
     "__tests__/auth-security.spec.tsx": {
@@ -2858,6 +2858,64 @@
       "totalLines": 63,
       "hasStructuralAnalysis": true
     },
+    "__tests__/DatePicker.spec.tsx": {
+      "filePath": "__tests__/DatePicker.spec.tsx",
+      "contentHash": "36775adc51924e92b666ca6a1ce702ef1e9e6c19c9d956405d3106af8c7fd782",
+      "functions": [
+        {
+          "name": "Harness",
+          "params": [
+            "{\n  defaultValue,\n  allowClear,\n}"
+          ],
+          "exported": false,
+          "lineCount": 27
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen",
+            "fireEvent",
+            "act"
+          ]
+        },
+        {
+          "source": "react-hook-form",
+          "specifiers": [
+            "useForm"
+          ]
+        },
+        {
+          "source": "@/components/ui/form",
+          "specifiers": [
+            "Form",
+            "FormField"
+          ]
+        },
+        {
+          "source": "@/components/DatePicker",
+          "specifiers": [
+            "DatePicker"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 125,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/debug.spec.ts": {
       "filePath": "__tests__/debug.spec.ts",
       "contentHash": "7e61573518ba0a266082d3a5cf6511e6daa701c76cf9e06a34664a56e8ab0e3f",
@@ -3069,6 +3127,35 @@
       ],
       "exports": [],
       "totalLines": 869,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/delete-file-idor.spec.ts": {
+      "filePath": "__tests__/delete-file-idor.spec.ts",
+      "contentHash": "53a4987836aa745025c6cddbbd5e419360e62e5e4bfe6f2cefa2198564883485",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/db",
+          "specifiers": [
+            "db"
+          ]
+        },
+        {
+          "source": "fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "@/lib/profile/delete-file",
+          "specifiers": [
+            "deleteFile"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 106,
       "hasStructuralAnalysis": true
     },
     "__tests__/developerSettings.model.spec.ts": {
@@ -4339,7 +4426,7 @@
     },
     "__tests__/form-schema-defaults.spec.ts": {
       "filePath": "__tests__/form-schema-defaults.spec.ts",
-      "contentHash": "d902b384076ab57c893395eb325cfad7230445dbf9b64df6097206b74d1d5eab",
+      "contentHash": "25e80c4f2308599f41a4f1c73e433424a447961938898c17e2f2e5db0f4a76f1",
       "functions": [],
       "classes": [],
       "imports": [
@@ -4351,7 +4438,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 42,
+      "totalLines": 62,
       "hasStructuralAnalysis": true
     },
     "__tests__/format-duration.spec.ts": {
@@ -5100,7 +5187,7 @@
     },
     "__tests__/job.actions.spec.ts": {
       "filePath": "__tests__/job.actions.spec.ts",
-      "contentHash": "95a85e7c24d6f68cce127d7c2c65fe795cf6aae185a72e520a72b622d5366b60",
+      "contentHash": "6ea6b868dcc62e672b3e951adbf1adbdca05e600daa0fd7cb12f1393760d2d3d",
       "functions": [],
       "classes": [],
       "imports": [
@@ -5146,7 +5233,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 1104,
+      "totalLines": 1149,
       "hasStructuralAnalysis": true
     },
     "__tests__/jobContact.actions.spec.ts": {
@@ -6551,7 +6638,7 @@
     },
     "__tests__/NotificationBell.spec.tsx": {
       "filePath": "__tests__/NotificationBell.spec.tsx",
-      "contentHash": "5b91210d54246bb9adad2025eb0c89aeeba828bfdd7c11ea40100f10b99dc886",
+      "contentHash": "2bf8b77731c0bfcd5d458ee4cfa0c2534ecf7f6ebe116b9e3c934e93411e1827",
       "functions": [],
       "classes": [],
       "imports": [
@@ -6582,12 +6669,12 @@
         }
       ],
       "exports": [],
-      "totalLines": 492,
+      "totalLines": 534,
       "hasStructuralAnalysis": true
     },
     "__tests__/NotificationDropdown.spec.tsx": {
       "filePath": "__tests__/NotificationDropdown.spec.tsx",
-      "contentHash": "1f8449196df84b55405c39fee36ecc1f74667c6e3620d370e38af1756869c18a",
+      "contentHash": "71f1fd0dd92b9a2f04e8fd5780f202e85e9fa21949bfa0b452e7eb4a02dbc9e7",
       "functions": [
         {
           "name": "makeNotification",
@@ -6650,7 +6737,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 594,
+      "totalLines": 650,
       "hasStructuralAnalysis": true
     },
     "__tests__/NotificationItem.spec.tsx": {
@@ -6700,7 +6787,7 @@
     },
     "__tests__/NotificationSettings.spec.tsx": {
       "filePath": "__tests__/NotificationSettings.spec.tsx",
-      "contentHash": "1c16464c2f1e511552e46f744d7787a83389b90f7bc916a9027b56893afff1f0",
+      "contentHash": "7f6b5a2886fb4edc38333859b7ad82660fc566a3d5c04bb8fdfd7902d60f674a",
       "functions": [],
       "classes": [],
       "imports": [
@@ -6749,7 +6836,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 146,
+      "totalLines": 206,
       "hasStructuralAnalysis": true
     },
     "__tests__/NumberCardToggleProgress.spec.tsx": {
@@ -8391,7 +8478,7 @@
     },
     "__tests__/StagedVacancyDetailSheet.spec.tsx": {
       "filePath": "__tests__/StagedVacancyDetailSheet.spec.tsx",
-      "contentHash": "c1b1046572f367ffbd7d60aa9726adda216e560bc8d3a9f8f5dbfea771638e4f",
+      "contentHash": "24a1c99ccac0b96409046513c6381870d023bb6580f91e0fd68fbc78627608f5",
       "functions": [
         {
           "name": "renderSheet",
@@ -8444,7 +8531,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 540,
+      "totalLines": 567,
       "hasStructuralAnalysis": true
     },
     "__tests__/StagingContainerBanner.spec.tsx": {
@@ -9930,6 +10017,42 @@
       "totalLines": 154,
       "hasStructuralAnalysis": true
     },
+    "__tests__/wcag-motion-reduce.spec.tsx": {
+      "filePath": "__tests__/wcag-motion-reduce.spec.tsx",
+      "contentHash": "6db0cf3f99950d1b0ad87ba7203bdcfd5f11cfd8e179c308f3597f0b33c80bad",
+      "functions": [
+        {
+          "name": "read",
+          "params": [
+            "p"
+          ],
+          "exported": false,
+          "lineCount": 1
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "fs",
+          "specifiers": [
+            "readFileSync"
+          ]
+        },
+        {
+          "source": "path",
+          "specifiers": [
+            "join"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 99,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/webhook-channel.spec.ts": {
       "filePath": "__tests__/webhook-channel.spec.ts",
       "contentHash": "1b30c39e91959023a7be7323821db47651ddf6c2bd54f643319513607e32bf93",
@@ -10247,6 +10370,16 @@
       "totalLines": 7,
       "hasStructuralAnalysis": false
     },
+    "deploy.sh": {
+      "filePath": "deploy.sh",
+      "contentHash": "d77c0cd395058aac62bbedda5489d9ba3c69c1be33559dfaacec53472dc74449",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 86,
+      "hasStructuralAnalysis": true
+    },
     "devenv.nix": {
       "filePath": "devenv.nix",
       "contentHash": "f95dbc08f17f949da30b22ae4d8d4a890a02e0c338d1fdcecb20dbc7c6b9446b",
@@ -10256,6 +10389,16 @@
       "exports": [],
       "totalLines": 119,
       "hasStructuralAnalysis": false
+    },
+    "docker-entrypoint.sh": {
+      "filePath": "docker-entrypoint.sh",
+      "contentHash": "bcf23570147bdc38acdc0da7a8d56f48a93ae7a4bfccfc1560130f1ecdc0511b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
     },
     "docs/adr/.pending": {
       "filePath": "docs/adr/.pending",
@@ -10717,7 +10860,7 @@
     },
     "e2e/crud/job-crud.spec.ts": {
       "filePath": "e2e/crud/job-crud.spec.ts",
-      "contentHash": "e503e6186dfb9c53f6a1798a3479040fe9cc280609fa5f91cdb101b4892701bb",
+      "contentHash": "25bd32b935957d48d868e7662836ef169be1b4119c64e0e63335c693e2a76859",
       "functions": [
         {
           "name": "navigateToJobs",
@@ -10725,7 +10868,7 @@
             "page"
           ],
           "exported": false,
-          "lineCount": 8
+          "lineCount": 10
         },
         {
           "name": "ensureResumeExists",
@@ -10734,7 +10877,7 @@
             "resumeTitle"
           ],
           "exported": false,
-          "lineCount": 21
+          "lineCount": 23
         },
         {
           "name": "deleteResume",
@@ -10752,7 +10895,7 @@
             "opts"
           ],
           "exported": false,
-          "lineCount": 68
+          "lineCount": 80
         },
         {
           "name": "deleteJob",
@@ -10777,13 +10920,12 @@
         {
           "source": "../helpers",
           "specifiers": [
-            "selectOrCreateComboboxOption",
-            "safeWait"
+            "selectOrCreateComboboxOption"
           ]
         }
       ],
       "exports": [],
-      "totalLines": 281,
+      "totalLines": 329,
       "hasStructuralAnalysis": true
     },
     "e2e/crud/job-detail-panels.spec.ts": {
@@ -12144,6 +12286,76 @@
       "totalLines": 40,
       "hasStructuralAnalysis": true
     },
+    "release.sh": {
+      "filePath": "release.sh",
+      "contentHash": "d1222b1553815a6ef7341780944e2313121c72c3ce9854879a133b83763eb593",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 189,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/build.sh": {
+      "filePath": "scripts/build.sh",
+      "contentHash": "daddf31785e559deaee50180cc5879a09533e7baf52081a6cd08bf5ab90b555d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 6,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/check-notification-writers.sh": {
+      "filePath": "scripts/check-notification-writers.sh",
+      "contentHash": "7c38788246e3882b99f594e68cb16f4f87e34c08f1d5529fa6b99328b5079c89",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 93,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/dev-and-check.sh": {
+      "filePath": "scripts/dev-and-check.sh",
+      "contentHash": "b467a9534005b69633c456a1a31b7f7341fa3843ab3c8eb75fa1fb05efba6a7c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 23,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/dev-e2e.sh": {
+      "filePath": "scripts/dev-e2e.sh",
+      "contentHash": "161d039a7e6e59a5656bee38bf6a3cabba23912df97e9489e0b096673615c5f1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/dev.sh": {
+      "filePath": "scripts/dev.sh",
+      "contentHash": "f9b4e85d132f239dd9cf8224fb05d88c53b5ac8c0a93ef0e2cf5ad633498ac67",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 7,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/env.sh": {
+      "filePath": "scripts/env.sh",
+      "contentHash": "e39315da366822419349bc26ff524b5f33df809584ff4e7137a99081526f66e7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
     "scripts/migrate-ai-settings-provider-to-moduleId.ts": {
       "filePath": "scripts/migrate-ai-settings-provider-to-moduleId.ts",
       "contentHash": "ade3585a86c70c7ac4bab662311d53cdac4d8e49e3ad5545ec86696a2ca58889",
@@ -12277,6 +12489,196 @@
       ],
       "exports": [],
       "totalLines": 111,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/prisma-generate.sh": {
+      "filePath": "scripts/prisma-generate.sh",
+      "contentHash": "1cadeb90b9d16bdb5e4318d46b2c3e80ccc63d321388d6ce38364e30701fe703",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/prisma-migrate.sh": {
+      "filePath": "scripts/prisma-migrate.sh",
+      "contentHash": "38e392017acb3a88a66a02508ab3c8abdcf0c61c6c5d8fc3339c2a27c2a580c2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/restart.sh": {
+      "filePath": "scripts/restart.sh",
+      "contentHash": "0b641b6040c9ebec7b5bef1c8377603fafbdce5630454ae4f0cddca15c1970a5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/sessions/run-session.sh": {
+      "filePath": "scripts/sessions/run-session.sh",
+      "contentHash": "a8f1477e172e227e46c289e8302dcde3d9f6bf78c9c9459dea84d46b91bf3c8c",
+      "functions": [
+        {
+          "name": "usage",
+          "params": [],
+          "exported": false,
+          "lineCount": 21
+        },
+        {
+          "name": "session_desc",
+          "params": [],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "show_status",
+          "params": [],
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "next_session",
+          "params": [],
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "write_inner_script",
+          "params": [],
+          "exported": false,
+          "lineCount": 40
+        },
+        {
+          "name": "run_session",
+          "params": [],
+          "exported": false,
+          "lineCount": 55
+        },
+        {
+          "name": "run_all",
+          "params": [],
+          "exported": false,
+          "lineCount": 47
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 393,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/setup-prisma-engines.sh": {
+      "filePath": "scripts/setup-prisma-engines.sh",
+      "contentHash": "a911d8c4bd9902bc70922af5034bb1ed3506931fe2b2f9f81fa85cc568213e7e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 66,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/stop.sh": {
+      "filePath": "scripts/stop.sh",
+      "contentHash": "ee457d189a0d251cba73295a7f5296bf5810be581c715cb240cb5145239edefd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/test.sh": {
+      "filePath": "scripts/test.sh",
+      "contentHash": "679d5581c1e061328c3076fff304dc620e2ad50191903b27dbddcc2dfde0bdc7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 69,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/tracks/post-merge-validate.sh": {
+      "filePath": "scripts/tracks/post-merge-validate.sh",
+      "contentHash": "c652a8fa97e45ccaffc8179ff478b0535b18abee10f70c19419627583d74925d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 101,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/tracks/run-all-tracks.sh": {
+      "filePath": "scripts/tracks/run-all-tracks.sh",
+      "contentHash": "42b2b5f435016ae8ee743332d67ae8a5f04b28826d25432477c873a7ee40ed10",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 113,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/tracks/track-runner.sh": {
+      "filePath": "scripts/tracks/track-runner.sh",
+      "contentHash": "24caad53c550c18f18e1c3ac55305dd4e709dfee4084decdaa0f7bdd9157f148",
+      "functions": [
+        {
+          "name": "run_track",
+          "params": [],
+          "exported": false,
+          "lineCount": 85
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 103,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/tracks/track1-blacklist-caching.sh": {
+      "filePath": "scripts/tracks/track1-blacklist-caching.sh",
+      "contentHash": "517483d00346edcc5c2cc705e63558ee9d344afc0f4562cc001fb9821f71a8d2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 78,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/tracks/track2-jobdeck.sh": {
+      "filePath": "scripts/tracks/track2-jobdeck.sh",
+      "contentHash": "f1d1aa332f3c2a4d3f18b813b14d0ed9d18e8daba894e164e82a9368fbabd0ad",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 102,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/tracks/track3-public-api.sh": {
+      "filePath": "scripts/tracks/track3-public-api.sh",
+      "contentHash": "c617b1c1b6c0ecab1c2e9cb8e483019ad69d4b6370ec9b873af9c68387c6a569",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 86,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/understand-staleness-check.sh": {
+      "filePath": "scripts/understand-staleness-check.sh",
+      "contentHash": "07250950e89b7833fae63b8c269cb380fa0a26bec9992e4735e5ea7eda7b0ade",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 69,
       "hasStructuralAnalysis": true
     },
     "specs/action-result.allium": {
@@ -12481,12 +12883,12 @@
     },
     "specs/profile-resume.allium": {
       "filePath": "specs/profile-resume.allium",
-      "contentHash": "b791ae919e24d05fc3b863cd4988271c341422be34247d87746d68fe2c328a0f",
+      "contentHash": "6c342ff0db0d99fabe147c10e5c853b6ffe8389d5075f1db72b46c84ef9b3b7b",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 581,
+      "totalLines": 586,
       "hasStructuralAnalysis": false
     },
     "specs/public-api-v1.allium": {
@@ -14378,7 +14780,7 @@
     },
     "src/actions/job.actions.ts": {
       "filePath": "src/actions/job.actions.ts",
-      "contentHash": "eb8a50148ae59c35e92d6ba28647b18e9effb600805a927f38343e43f7eceab5",
+      "contentHash": "699cb2b2248ff78b62fbf0c16b8fac9256b4e79e5db663395a5e07ef774a28e3",
       "functions": [
         {
           "name": "getStatusList",
@@ -14450,7 +14852,7 @@
           ],
           "returnType": "Promise<ActionResult<JobResponse>>",
           "exported": true,
-          "lineCount": 178
+          "lineCount": 180
         },
         {
           "name": "updateJobStatus",
@@ -14644,7 +15046,7 @@
         "getStatusDistribution",
         "getValidTransitions"
       ],
-      "totalLines": 1222,
+      "totalLines": 1224,
       "hasStructuralAnalysis": true
     },
     "src/actions/jobContact.actions.ts": {
@@ -15802,7 +16204,7 @@
     },
     "src/actions/profile.actions.ts": {
       "filePath": "src/actions/profile.actions.ts",
-      "contentHash": "4ddaf0e99e281a89231cc7da743e5743a2853df04130e918e5107e7bbd5850d3",
+      "contentHash": "3637934e9f39584f60ac64fe7cb76728872e71efc5f8fc281a49f8d2f85361a2",
       "functions": [
         {
           "name": "toResumeSection",
@@ -15892,15 +16294,6 @@
           "returnType": "Promise<ActionResult>",
           "exported": true,
           "lineCount": 102
-        },
-        {
-          "name": "deleteFile",
-          "params": [
-            "fileId",
-            "callerUserId"
-          ],
-          "exported": true,
-          "lineCount": 29
         },
         {
           "name": "addResumeSummary",
@@ -16069,15 +16462,9 @@
           ]
         },
         {
-          "source": "path",
+          "source": "@/lib/profile/delete-file",
           "specifiers": [
-            "path"
-          ]
-        },
-        {
-          "source": "fs",
-          "specifiers": [
-            "fs"
+            "deleteFile"
           ]
         }
       ],
@@ -16089,7 +16476,6 @@
         "createResumeProfile",
         "editResume",
         "deleteResumeById",
-        "deleteFile",
         "addResumeSummary",
         "updateResumeSummary",
         "addExperience",
@@ -16099,7 +16485,7 @@
         "deleteEducation",
         "updateEducation"
       ],
-      "totalLines": 873,
+      "totalLines": 844,
       "hasStructuralAnalysis": true
     },
     "src/actions/publicApiKey.actions.ts": {
@@ -18522,7 +18908,7 @@
     },
     "src/app/api/profile/resume/route.ts": {
       "filePath": "src/app/api/profile/resume/route.ts",
-      "contentHash": "4749694ae9aa3c7871aee42394ab788c2625b7e047ec239c8472e04849862fa4",
+      "contentHash": "eaaec6df187698a94db5c673b4eb75becb25430da4092d8012ac2f6174106e29",
       "functions": [
         {
           "name": "POST",
@@ -18560,8 +18946,13 @@
           "source": "@/actions/profile.actions",
           "specifiers": [
             "createResumeProfile",
-            "deleteFile",
             "editResume"
+          ]
+        },
+        {
+          "source": "@/lib/profile/delete-file",
+          "specifiers": [
+            "deleteFile"
           ]
         },
         {
@@ -18599,7 +18990,7 @@
         "POST",
         "GET"
       ],
-      "totalLines": 160,
+      "totalLines": 157,
       "hasStructuralAnalysis": true
     },
     "src/app/api/scheduler/status/route.ts": {
@@ -23923,7 +24314,7 @@
     },
     "src/components/automations/EuresLanguageCombobox.tsx": {
       "filePath": "src/components/automations/EuresLanguageCombobox.tsx",
-      "contentHash": "e90661439f055ad8f85c5cef8e1307a742cedd3dd4c7723bd9a9289231ceaee2",
+      "contentHash": "c5e74152c25d417fc5454dc4df8517093dda5b50dc42bbb5d9c45b7e91d830b9",
       "functions": [
         {
           "name": "LanguageFlag",
@@ -25149,7 +25540,7 @@
     },
     "src/components/crm/ActivityTimeline.tsx": {
       "filePath": "src/components/crm/ActivityTimeline.tsx",
-      "contentHash": "4c92e112d07783494409c2b6d6c86979ee53c47282f1415fd933c97e390f9d8b",
+      "contentHash": "7159ed77cdbf44fefa0e7626e71227ed93795ad685583d9c54b3ea0b482ea2e9",
       "functions": [
         {
           "name": "ActivityTimeline",
@@ -26285,15 +26676,15 @@
     },
     "src/components/DatePicker.tsx": {
       "filePath": "src/components/DatePicker.tsx",
-      "contentHash": "e654de465c0e010e06cc53301c5318fc46f31a41e3deaeb095e4e43fb3eb458d",
+      "contentHash": "23547f907006a251b47090f027127b4522b1322858cff9b4f6edf279dac5ee75",
       "functions": [
         {
           "name": "DatePicker",
           "params": [
-            "{\n  field,\n  presets,\n  isEnabled,\n  captionLayout,\n}"
+            "{\n  field,\n  presets,\n  isEnabled,\n  captionLayout,\n  allowClear = false,\n  triggerTestId,\n}"
           ],
           "exported": true,
-          "lineCount": 61
+          "lineCount": 85
         }
       ],
       "classes": [],
@@ -26307,7 +26698,8 @@
         {
           "source": "lucide-react",
           "specifiers": [
-            "CalendarIcon"
+            "CalendarIcon",
+            "X"
           ]
         },
         {
@@ -26375,7 +26767,7 @@
       "exports": [
         "DatePicker"
       ],
-      "totalLines": 94,
+      "totalLines": 122,
       "hasStructuralAnalysis": true
     },
     "src/components/DeleteAlertDialog.tsx": {
@@ -27015,7 +27407,7 @@
     },
     "src/components/kanban/KanbanCard.tsx": {
       "filePath": "src/components/kanban/KanbanCard.tsx",
-      "contentHash": "1f479196840d04ed6dec316daab9417f64ee7814dae2a6cba72edec3c4ec6d8e",
+      "contentHash": "7f260a90cfed51616c8f2039bb9fdb4899633deadbed385dcd73654ce01f3cd7",
       "functions": [
         {
           "name": "getToday",
@@ -27339,13 +27731,13 @@
     },
     "src/components/layout/NotificationBell.tsx": {
       "filePath": "src/components/layout/NotificationBell.tsx",
-      "contentHash": "aa3a14cc286e40354fe6887018d1bd02be985bc0c1688b699e6f8e3a3284c1d7",
+      "contentHash": "5d64e3ec8e53d3bf6f301d12b0436ec03e611574e76d2eb8583ba850e701be8a",
       "functions": [
         {
           "name": "NotificationBell",
           "params": [],
           "exported": true,
-          "lineCount": 250
+          "lineCount": 256
         }
       ],
       "classes": [],
@@ -27416,12 +27808,12 @@
       "exports": [
         "NotificationBell"
       ],
-      "totalLines": 281,
+      "totalLines": 287,
       "hasStructuralAnalysis": true
     },
     "src/components/layout/NotificationDropdown.tsx": {
       "filePath": "src/components/layout/NotificationDropdown.tsx",
-      "contentHash": "dc3dcc81ba12404db9b9317036e5ef9b452731d29ca0f1dcef30c42a9b092ec0",
+      "contentHash": "a03879425bb17ee45a8b3c1bbd5946f3a533a5176e60051e1beafa06f6182550",
       "functions": [
         {
           "name": "startOfDay",
@@ -27458,7 +27850,7 @@
             "{ onCountChange }"
           ],
           "exported": true,
-          "lineCount": 239
+          "lineCount": 266
         }
       ],
       "classes": [],
@@ -27483,6 +27875,12 @@
           "source": "@/components/ui/scroll-area",
           "specifiers": [
             "ScrollArea"
+          ]
+        },
+        {
+          "source": "@/components/ui/button",
+          "specifiers": [
+            "Button"
           ]
         },
         {
@@ -27525,7 +27923,7 @@
         "groupNotifications",
         "NotificationDropdown"
       ],
-      "totalLines": 375,
+      "totalLines": 403,
       "hasStructuralAnalysis": true
     },
     "src/components/layout/NotificationItem.tsx": {
@@ -27655,7 +28053,7 @@
     },
     "src/components/myjobs/AddJob.tsx": {
       "filePath": "src/components/myjobs/AddJob.tsx",
-      "contentHash": "60d9f12a632e0b0701cce5819559539101513d974d26cf2df28efb0122f9443d",
+      "contentHash": "c30b234b4dad1f8c00344ecd5d41a0b552c0d042adb40e3d874a6cbbfcf378dc",
       "functions": [
         {
           "name": "mergeConnectorSources",
@@ -27672,7 +28070,7 @@
             "{\n  jobStatuses,\n  companies,\n  jobTitles,\n  locations,\n  jobSources,\n  tags,\n  editJob,\n  resetEditJob,\n}"
           ],
           "exported": true,
-          "lineCount": 604
+          "lineCount": 606
         }
       ],
       "classes": [],
@@ -27899,7 +28297,7 @@
       "exports": [
         "AddJob"
       ],
-      "totalLines": 700,
+      "totalLines": 702,
       "hasStructuralAnalysis": true
     },
     "src/components/myjobs/JobDetails.tsx": {
@@ -32855,13 +33253,13 @@
     },
     "src/components/settings/NotificationSettings.tsx": {
       "filePath": "src/components/settings/NotificationSettings.tsx",
-      "contentHash": "71eb634a99d9e24267b46419acb8a585365b48603d7eb6a8d8c4684fad770c0b",
+      "contentHash": "6f0a38f55991669c7f4b04dcf0cf577f28940e7e5545807b59c72f786969c767",
       "functions": [
         {
           "name": "NotificationSettings",
           "params": [],
           "exported": false,
-          "lineCount": 291
+          "lineCount": 365
         }
       ],
       "classes": [],
@@ -32869,6 +33267,7 @@
         {
           "source": "react",
           "specifiers": [
+            "useCallback",
             "useEffect",
             "useState"
           ]
@@ -32895,6 +33294,29 @@
           "source": "../ui/button",
           "specifiers": [
             "Button"
+          ]
+        },
+        {
+          "source": "../ui/select",
+          "specifiers": [
+            "Select",
+            "SelectContent",
+            "SelectItem",
+            "SelectTrigger",
+            "SelectValue"
+          ]
+        },
+        {
+          "source": "../ui/alert-dialog",
+          "specifiers": [
+            "AlertDialog",
+            "AlertDialogAction",
+            "AlertDialogCancel",
+            "AlertDialogContent",
+            "AlertDialogDescription",
+            "AlertDialogFooter",
+            "AlertDialogHeader",
+            "AlertDialogTitle"
           ]
         },
         {
@@ -32943,7 +33365,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 347,
+      "totalLines": 438,
       "hasStructuralAnalysis": true
     },
     "src/components/settings/PrivacySecuritySettings.tsx": {
@@ -33183,7 +33605,7 @@
     },
     "src/components/settings/PushSettings.tsx": {
       "filePath": "src/components/settings/PushSettings.tsx",
-      "contentHash": "c77a0c9d2c18d7c4af974b3739204207abc208460d152d115c60d3c0e47cdf24",
+      "contentHash": "1c14795e7e6c2c7e8e32e0704479461717671c68bed773974d4334e850afb015",
       "functions": [
         {
           "name": "urlBase64ToUint8Array",
@@ -33377,13 +33799,13 @@
     },
     "src/components/settings/SmtpSettings.tsx": {
       "filePath": "src/components/settings/SmtpSettings.tsx",
-      "contentHash": "877ba6928415d2224bfa3b7ef0c09b2a3cdf03e6f06a61145e78be4efc4b6c68",
+      "contentHash": "ef940dd283bc510b71c6344f6895bd305c8fee34ab89356ac3a5f9156e8bbad7",
       "functions": [
         {
           "name": "SmtpSettings",
           "params": [],
           "exported": true,
-          "lineCount": 597
+          "lineCount": 598
         }
       ],
       "classes": [],
@@ -33482,7 +33904,7 @@
       "exports": [
         "SmtpSettings"
       ],
-      "totalLines": 671,
+      "totalLines": 672,
       "hasStructuralAnalysis": true
     },
     "src/components/settings/WebhookSettings.tsx": {
@@ -34314,7 +34736,7 @@
     },
     "src/components/staging/StagedVacancyDetailSheet.tsx": {
       "filePath": "src/components/staging/StagedVacancyDetailSheet.tsx",
-      "contentHash": "d3113dd3889a6512476719f35fe2f584dab32032f6390d1523616fc2847cea87",
+      "contentHash": "79d1a75ac84fd5ffc26a8404c5bd3151b2fa105a03a64ed34b2e475e2199e353",
       "functions": [
         {
           "name": "StagedVacancyDetailSheet",
@@ -34322,7 +34744,7 @@
             "{\n  vacancy,\n  open,\n  onOpenChange,\n  mode,\n  onDismiss,\n  onPromote,\n  onSuperLike,\n  onBlock,\n  onArchive,\n  onSkip,\n}"
           ],
           "exported": true,
-          "lineCount": 306
+          "lineCount": 312
         }
       ],
       "classes": [],
@@ -34381,6 +34803,12 @@
           ]
         },
         {
+          "source": "@/components/ui/use-toast",
+          "specifiers": [
+            "toast"
+          ]
+        },
+        {
           "source": "@/hooks/use-media-query",
           "specifiers": [
             "useMediaQuery"
@@ -34402,7 +34830,7 @@
       "exports": [
         "StagedVacancyDetailSheet"
       ],
-      "totalLines": 369,
+      "totalLines": 376,
       "hasStructuralAnalysis": true
     },
     "src/components/staging/StagingContainer.tsx": {
@@ -35670,7 +36098,7 @@
     },
     "src/components/ui/alert-dialog.tsx": {
       "filePath": "src/components/ui/alert-dialog.tsx",
-      "contentHash": "2ede53a17b342a8265b924563f08d352dc7358a91585b0332b3d4a055b692407",
+      "contentHash": "82f21129569319a8f7a54b6d2906a7367c9aea7ce1d5a26bedf84ce0099d3725",
       "functions": [
         {
           "name": "AlertDialogHeader",
@@ -36440,7 +36868,7 @@
     },
     "src/components/ui/dialog.tsx": {
       "filePath": "src/components/ui/dialog.tsx",
-      "contentHash": "b086648423c6f9151b94c46aeb58f7cdb94ea63d715cc37f986c43949d7974b8",
+      "contentHash": "e6f82f2f7aa5539dff532b699309d66426fa44aac22e98de2df2160db649cc8b",
       "functions": [
         {
           "name": "DialogHeader",
@@ -36503,7 +36931,7 @@
     },
     "src/components/ui/dropdown-menu.tsx": {
       "filePath": "src/components/ui/dropdown-menu.tsx",
-      "contentHash": "3820b8586480cbfd4ed33028e313f1157dcd586afca74081e3f55a0a65ddc426",
+      "contentHash": "ff9241f3981a387c6456eee85e14c0cf83794daf9d03cc2fa77c0d2484ac195b",
       "functions": [
         {
           "name": "DropdownMenuShortcut",
@@ -36972,7 +37400,7 @@
     },
     "src/components/ui/popover.tsx": {
       "filePath": "src/components/ui/popover.tsx",
-      "contentHash": "8a10fdf10a500f709581fb49690c3a86c82d07db969266ee47bcad6f0c2782e5",
+      "contentHash": "24fd947e395e5f151a3b1ca8dadcbfa30453c6dbb3fa4ade23074d99f77474f0",
       "functions": [],
       "classes": [],
       "imports": [
@@ -37106,7 +37534,7 @@
     },
     "src/components/ui/select.tsx": {
       "filePath": "src/components/ui/select.tsx",
-      "contentHash": "1aba9cfb792bfa02b0fc8764dfd524d23e2191367863545963940034f61526ee",
+      "contentHash": "1d40ecb4e8e05653c3fa541d6af0c13662c3a0c3f38279a0009f3cc334a17170",
       "functions": [],
       "classes": [],
       "imports": [
@@ -37154,7 +37582,7 @@
     },
     "src/components/ui/sheet.tsx": {
       "filePath": "src/components/ui/sheet.tsx",
-      "contentHash": "4328459989690672002d00577de1524326481c6a873f9f822892361fe5860571",
+      "contentHash": "8871a1c189af4c2ce51cf8f3c858a83fb90c7a9bc4f79c8daeec589d7b2cf370",
       "functions": [
         {
           "name": "SheetHeader",
@@ -37477,7 +37905,7 @@
     },
     "src/components/ui/toast.tsx": {
       "filePath": "src/components/ui/toast.tsx",
-      "contentHash": "3be3cc6e3d626ab0b4ae64a2cd8e35b7f34c725771c136690ce128262687fa01",
+      "contentHash": "c148f8a70145e8ad91c2f2af28ac2d3647937552d0d7d508548fa491742eb42a",
       "functions": [],
       "classes": [],
       "imports": [
@@ -37651,7 +38079,7 @@
     },
     "src/components/ui/tooltip.tsx": {
       "filePath": "src/components/ui/tooltip.tsx",
-      "contentHash": "e4c39a17833122e02fbe896914e466bf101ea7173dc3d8f18a0201414c74fffc",
+      "contentHash": "638764a5a60daaf2429d13ab03c2c053823b6f85de23adf06b281fd9341cd05d",
       "functions": [],
       "classes": [],
       "imports": [
@@ -38725,14 +39153,14 @@
     },
     "src/i18n/dictionaries/jobs.ts": {
       "filePath": "src/i18n/dictionaries/jobs.ts",
-      "contentHash": "26b9dfad19c901c56f7d507f5cac9b171796d462fb783cfdb9786d4108f933ee",
+      "contentHash": "a360e85ed3fbf0249f4649d516c805661e41959c28b909d2c8659eaf94bc964b",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [
         "jobs"
       ],
-      "totalLines": 723,
+      "totalLines": 727,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/logoAsset.ts": {
@@ -38749,14 +39177,14 @@
     },
     "src/i18n/dictionaries/notifications.ts": {
       "filePath": "src/i18n/dictionaries/notifications.ts",
-      "contentHash": "c430e91748942d44295f361b8017ae1a162033acebfeedea82db11ba215983c5",
+      "contentHash": "094f7e4dbd4edfd238218d267686ecfcf93e72deef4e18359eacd17a31797114",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [
         "notifications"
       ],
-      "totalLines": 368,
+      "totalLines": 376,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/profile.ts": {
@@ -38797,14 +39225,14 @@
     },
     "src/i18n/dictionaries/settings.ts": {
       "filePath": "src/i18n/dictionaries/settings.ts",
-      "contentHash": "7bd2e48b31f4b280f436d9a5166910c8febb18b3648c9aed51a8d6b5b7669ec5",
+      "contentHash": "03dd1c0457f2525c9febb401174a9537cb7cbb41272738d87287f307e7bfb067",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [
         "settings"
       ],
-      "totalLines": 1015,
+      "totalLines": 1031,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/smtp.ts": {
@@ -38821,14 +39249,14 @@
     },
     "src/i18n/dictionaries/staging.ts": {
       "filePath": "src/i18n/dictionaries/staging.ts",
-      "contentHash": "50c79f47300d1e159a30eb7610f13668b9e7a9ab8b09de8ee1e519d98230e828",
+      "contentHash": "88f867073df09979c0d46341ded33039c99c146d3c5fb1c2fdb8f5805988c0dc",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [
         "staging"
       ],
-      "totalLines": 365,
+      "totalLines": 369,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/tasks.ts": {
@@ -40353,8 +40781,15 @@
     },
     "src/lib/auth/auth-rate-limit.ts": {
       "filePath": "src/lib/auth/auth-rate-limit.ts",
-      "contentHash": "ebed42d57cedd8c867ac9ba397a746ad8f09223053379ebd5b304c6cc5227488",
+      "contentHash": "0094d4e6a9c1b4a2a0c1df2e657b0cab2344e0c32fc67c61e8e121f9690716f5",
       "functions": [
+        {
+          "name": "isAuthRateLimitBypassed",
+          "params": [],
+          "returnType": "boolean",
+          "exported": false,
+          "lineCount": 13
+        },
         {
           "name": "checkAuthRateLimit",
           "params": [
@@ -40363,7 +40798,7 @@
           ],
           "returnType": "AuthRateLimitResult",
           "exported": true,
-          "lineCount": 7
+          "lineCount": 10
         },
         {
           "name": "getClientIp",
@@ -40405,7 +40840,7 @@
         "getClientIp",
         "resetAuthRateLimitStore"
       ],
-      "totalLines": 71,
+      "totalLines": 111,
       "hasStructuralAnalysis": true
     },
     "src/lib/automation-display-keys.ts": {
@@ -49048,6 +49483,51 @@
       "totalLines": 110,
       "hasStructuralAnalysis": true
     },
+    "src/lib/profile/delete-file.ts": {
+      "filePath": "src/lib/profile/delete-file.ts",
+      "contentHash": "929c041860e9fc60d4237b6274697f229c1f02b8f3912577520ec79b7b38767e",
+      "functions": [
+        {
+          "name": "deleteFile",
+          "params": [
+            "fileId",
+            "callerUserId"
+          ],
+          "exported": true,
+          "lineCount": 20
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "server-only",
+          "specifiers": []
+        },
+        {
+          "source": "@/lib/db",
+          "specifiers": [
+            "prisma"
+          ]
+        },
+        {
+          "source": "@/lib/utils",
+          "specifiers": [
+            "handleError"
+          ]
+        },
+        {
+          "source": "fs",
+          "specifiers": [
+            "fs"
+          ]
+        }
+      ],
+      "exports": [
+        "deleteFile"
+      ],
+      "totalLines": 38,
+      "hasStructuralAnalysis": true
+    },
     "src/lib/push/rate-limit.ts": {
       "filePath": "src/lib/push/rate-limit.ts",
       "contentHash": "834bfc9938812b4480ca01277e0e331cc06aff1cfeb5dfd412cdb469200ed4e8",
@@ -50742,7 +51222,7 @@
     },
     "src/models/addJobForm.schema.ts": {
       "filePath": "src/models/addJobForm.schema.ts",
-      "contentHash": "10eecedf626a267408f449cfc935545c6ee2d4466fc851b9b4e019457df37f1f",
+      "contentHash": "6016e4d4738f654996dfd02e41921d5094780c699bd57111da7f61c495ebdb19",
       "functions": [],
       "classes": [],
       "imports": [

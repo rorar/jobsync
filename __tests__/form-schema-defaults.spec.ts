@@ -38,4 +38,24 @@ describe("AddJobFormSchema defaults — F10", () => {
     const result = AddJobFormSchema.parse(minimalValidInput);
     expect(result.status).toBe("bookmarked");
   });
+
+  // F-AJ-04: due date is optional (Job.dueDate is DateTime? in the DB).
+  it("parses successfully when dueDate is omitted (optional)", () => {
+    const { dueDate, ...withoutDueDate } = minimalValidInput;
+    void dueDate;
+    const result = AddJobFormSchema.parse(withoutDueDate);
+    expect(result.dueDate).toBeUndefined();
+  });
+
+  it("still accepts a provided dueDate", () => {
+    const result = AddJobFormSchema.parse(minimalValidInput);
+    expect(result.dueDate).toEqual(new Date("2026-06-01"));
+  });
+
+  // F-AJ-04: the Clear button emits null (RHF ignores undefined). The schema
+  // must accept null so a cleared due date validates on submit.
+  it("accepts null dueDate (the value the Clear action emits)", () => {
+    const result = AddJobFormSchema.parse({ ...minimalValidInput, dueDate: null });
+    expect(result.dueDate).toBeNull();
+  });
 });

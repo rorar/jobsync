@@ -384,7 +384,7 @@ export const addJob = async (
           jobSourceId: sourceId || null,
           salaryRange: salaryRange,
           createdAt: new Date(),
-          dueDate: dueDate,
+          dueDate: dueDate ?? null,
           appliedDate: dateApplied,
           description: jobDescription,
           jobType: type,
@@ -545,7 +545,9 @@ export const updateJob = async (
       statusId: status,
       jobSourceId: sourceId || null,
       salaryRange: salaryRange,
-      dueDate: dueDate,
+      // Coerce undefined -> null so clearing the (now optional) due date
+      // actually persists as null instead of being a no-op on update.
+      dueDate: dueDate ?? null,
       appliedDate: dateApplied,
       description: jobDescription,
       jobType: type,
