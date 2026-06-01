@@ -1,0 +1,18 @@
+{
+  "id": "undostore-pipethrough_20260601",
+  "title": "undoStore split-brain full pipe-through (M-A-09)",
+  "type": "feature",
+  "status": "pending",
+  "gated": true,
+  "entryCriteria": "ADR-030 amendment (onAction undoTokenId pipe-through) + in-flight-undo migration plan",
+  "created": "2026-06-01T09:11:27Z",
+  "updated": "2026-06-01T09:11:27Z",
+  "phases": {
+    "total": 4,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 9,
+    "completed": 0
+  }
+}
