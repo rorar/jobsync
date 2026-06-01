@@ -56,7 +56,24 @@ export const AddJobFormSchema = z.object({
    */
   //
   dateApplied: z.date().optional(),
-  salaryRange: z.string(),
+  // Structured salary (Welle 2 Phase 3). Fixum = min == max. All optional.
+  salaryMin: z.number().nonnegative().nullable().optional(),
+  salaryMax: z.number().nonnegative().nullable().optional(),
+  salaryCurrency: z
+    .string()
+    .regex(/^[A-Z]{3}$/i)
+    .nullable()
+    .optional(),
+  salaryPeriod: z.enum(["yearly", "monthly", "hourly"]).nullable().optional(),
+  salaryBonus: z
+    .object({
+      kind: z.enum(["fixed", "percentage", "mixed"]),
+      amount: z.number().nonnegative().nullable().optional(),
+      percentage: z.number().nonnegative().nullable().optional(),
+      condition: z.string().max(200).nullable().optional(),
+    })
+    .nullable()
+    .optional(),
   jobDescription: z
     .string({
       error: "Job description is required.",

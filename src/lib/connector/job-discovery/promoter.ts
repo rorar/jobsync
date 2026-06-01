@@ -3,6 +3,9 @@ import db from "@/lib/db";
 import { normalizeForSearch, extractKeywords, extractCityName } from "./utils";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 import type { PromotionInput } from "@/models/stagedVacancy.model";
+import { buildJobSalaryData } from "@/lib/salary/build-job-salary";
+import { parseSalaryRange } from "@/lib/salary/parse-salary-range";
+import type { SalaryPeriod } from "@/models/job.model";
 
 export interface PromotionResult {
   jobId: string;
@@ -127,7 +130,21 @@ export async function promoteStagedVacancy(
         companyId,
         jobSourceId,
         locationId,
-        salaryRange: vacancy.salary,
+        // Carry the StagedVacancy's structured salary through; fall back to
+        // parsing its free-text `salary` when no structured fields are present.
+        ...buildJobSalaryData(
+          vacancy.salaryMin != null ||
+          vacancy.salaryMax != null ||
+          vacancy.salaryCurrency != null ||
+          vacancy.salaryPeriod != null
+            ? {
+                salaryMin: vacancy.salaryMin,
+                salaryMax: vacancy.salaryMax,
+                salaryCurrency: vacancy.salaryCurrency,
+                salaryPeriod: (vacancy.salaryPeriod as SalaryPeriod | null) ?? null,
+              }
+            : parseSalaryRange(vacancy.salary),
+        ),
         ...(input.tagsToApply && input.tagsToApply.length > 0
           ? { tags: { connect: input.tagsToApply.map((id) => ({ id })) } }
           : {}),

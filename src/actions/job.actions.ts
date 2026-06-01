@@ -12,6 +12,7 @@ import { isValidTransition, computeTransitionSideEffects, getValidTargets, STATU
 import { isEditTransitionValid } from "@/lib/crm/validate-edit-transition";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
+import { buildJobSalaryData } from "@/lib/salary/build-job-salary";
 
 export const getStatusList = async (): Promise<ActionResult<JobStatus[]>> => {
   try {
@@ -110,6 +111,11 @@ export const getJobsList = async (
           dueDate: true,
           appliedDate: true,
           salaryRange: true,
+          salaryMin: true,
+          salaryMax: true,
+          salaryCurrency: true,
+          salaryPeriod: true,
+          salaryBonus: true,
           jobUrl: true,
           applied: true,
           description: false,
@@ -317,7 +323,6 @@ export const addJob = async (
       type,
       status,
       source,
-      salaryRange,
       dueDate,
       dateApplied,
       jobDescription,
@@ -328,6 +333,7 @@ export const addJob = async (
     } = data;
 
     const tagIds = tags ?? [];
+    const salaryData = buildJobSalaryData(data);
 
     // Normalize FK fields: treat empty strings as absent (defense against falsy-bypass)
     const titleId = title || undefined;
@@ -383,7 +389,7 @@ export const addJob = async (
           locationId: locationId || null,
           statusId: status,
           jobSourceId: sourceId || null,
-          salaryRange: salaryRange,
+          ...salaryData,
           createdAt: new Date(),
           dueDate: dueDate ?? null,
           appliedDate: dateApplied,
@@ -470,7 +476,6 @@ export const updateJob = async (
       type,
       status,
       source,
-      salaryRange,
       dueDate,
       dateApplied,
       jobDescription,
@@ -481,6 +486,7 @@ export const updateJob = async (
     } = data;
 
     const tagIds = tags ?? [];
+    const salaryData = buildJobSalaryData(data);
 
     // Normalize FK fields: treat empty strings as absent (defense against falsy-bypass)
     const titleId = title || undefined;
@@ -554,7 +560,7 @@ export const updateJob = async (
       locationId: locationId || null,
       statusId: status,
       jobSourceId: sourceId || null,
-      salaryRange: salaryRange,
+      ...salaryData,
       // Coerce undefined -> null so clearing the (now optional) due date
       // actually persists as null instead of being a no-op on update.
       dueDate: dueDate ?? null,
