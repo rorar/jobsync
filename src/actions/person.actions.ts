@@ -7,6 +7,7 @@ import { createEvent, DomainEventType } from "@/lib/events/event-types";
 import { eventBus } from "@/lib/events";
 import { ActionResult } from "@/models/actionResult";
 import { handleError } from "@/lib/utils";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import {
   type TypedEmail,
   type TypedPhone,
@@ -157,6 +158,16 @@ export async function getPerson(personId: string): Promise<ActionResult<Record<s
 
     if (!person) return { success: false, message: "crm.errors.personNotFound" };
 
+    // GDPR audit (S6b): record PII read-access. Fire-and-forget, server-only.
+    // Minimisation (Art. 5(1)(c)): target id + actor only — never PII content.
+    writeDataAuditLog({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: "person.pii_read",
+      targetType: "person",
+      targetId: person.id,
+    });
+
     return {
       success: true,
       data: {
@@ -216,6 +227,21 @@ export async function getPersons(filters?: {
       }),
       prisma.person.count({ where }),
     ]);
+
+    // GDPR audit (S6b): the list view exposes each returned person's PII
+    // (emails/phones/...), so record ONE read-access entry per person shown —
+    // precise DSAR granularity. The page is bounded (pageSize <= 100), so
+    // volume is acceptable. Fire-and-forget, server-only. Minimisation
+    // (Art. 5(1)(c)): target id + actor only — never PII content.
+    for (const p of persons) {
+      writeDataAuditLog({
+        actorId: user.id,
+        actorEmail: user.email,
+        action: "person.pii_read",
+        targetType: "person",
+        targetId: p.id,
+      });
+    }
 
     return {
       success: true,
