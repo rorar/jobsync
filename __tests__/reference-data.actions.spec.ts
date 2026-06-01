@@ -8,6 +8,8 @@ import {
   getCountryOptions,
   getSubdivisionOptions,
   getPersonHolidayInfo,
+  getCurrencyOptions,
+  getCurrencyInfo,
 } from "@/actions/reference-data.actions";
 import { getCurrentUser } from "@/utils/user.utils";
 
@@ -26,6 +28,8 @@ const mockGetSubdivisions = jest.fn();
 const mockGetCountryName = jest.fn();
 const mockIsBusinessDay = jest.fn();
 const mockGetPrimaryTimezone = jest.fn();
+const mockGetCurrencies = jest.fn();
+const mockGetCurrency = jest.fn();
 
 jest.mock("@/lib/connector/reference-data/modules/geo-codes", () => ({
   getGeoCodeService: () => ({
@@ -42,6 +46,13 @@ jest.mock("@/lib/connector/reference-data/modules/public-holidays", () => ({
   }),
 }));
 
+jest.mock("@/lib/connector/reference-data/modules/currency", () => ({
+  getCurrencyService: () => ({
+    getCurrencies: mockGetCurrencies,
+    getCurrency: mockGetCurrency,
+  }),
+}));
+
 const USER = { id: "user-1", name: "Test", email: "t@example.com" };
 
 beforeEach(() => {
@@ -52,6 +63,8 @@ beforeEach(() => {
   mockGetCountryName.mockReturnValue("Germany");
   mockIsBusinessDay.mockReturnValue({ isBusinessDay: true, blockingHolidays: [], isWeekend: false });
   mockGetPrimaryTimezone.mockReturnValue("Europe/Berlin");
+  mockGetCurrencies.mockReturnValue([{ code: "EUR", symbol: "€", name: "Euro", minorUnit: 2 }]);
+  mockGetCurrency.mockReturnValue({ code: "EUR", symbol: "€", name: "Euro", minorUnit: 2 });
 });
 
 // ---------------------------------------------------------------------------
@@ -98,6 +111,43 @@ describe("reference-data.actions lookups", () => {
   it("getSubdivisionOptions delegates to GeoCodeService for a valid country", async () => {
     await getSubdivisionOptions("DE", "de");
     expect(mockGetSubdivisions).toHaveBeenCalledWith("DE", "de");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getCurrencyOptions / getCurrencyInfo (Welle 2 — CUR)
+// ---------------------------------------------------------------------------
+
+describe("reference-data.actions currency", () => {
+  it("getCurrencyOptions returns [] when unauthenticated", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(null);
+    expect(await getCurrencyOptions("en")).toEqual([]);
+    expect(mockGetCurrencies).not.toHaveBeenCalled();
+  });
+
+  it("getCurrencyOptions delegates to CurrencyService", async () => {
+    const result = await getCurrencyOptions("de");
+    expect(mockGetCurrencies).toHaveBeenCalledWith("de");
+    expect(result).toEqual([{ code: "EUR", symbol: "€", name: "Euro", minorUnit: 2 }]);
+  });
+
+  it("getCurrencyInfo returns null when unauthenticated", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(null);
+    expect(await getCurrencyInfo("EUR", "en")).toBeNull();
+    expect(mockGetCurrency).not.toHaveBeenCalled();
+  });
+
+  it("getCurrencyInfo rejects malformed codes at the boundary (no service call)", async () => {
+    expect(await getCurrencyInfo("EU", "en")).toBeNull();
+    expect(await getCurrencyInfo("EURO", "en")).toBeNull();
+    expect(await getCurrencyInfo("", "en")).toBeNull();
+    expect(mockGetCurrency).not.toHaveBeenCalled();
+  });
+
+  it("getCurrencyInfo delegates a well-formed code to CurrencyService", async () => {
+    const result = await getCurrencyInfo("EUR", "en");
+    expect(mockGetCurrency).toHaveBeenCalledWith("EUR", "en");
+    expect(result).toEqual({ code: "EUR", symbol: "€", name: "Euro", minorUnit: 2 });
   });
 });
 
