@@ -106,7 +106,7 @@ describe("noteActions", () => {
 
       const result = await getNotesByJobId("non-existent-job");
 
-      expect(result).toEqual({ success: false, message: "Failed to fetch notes." });
+      expect(result).toEqual({ success: false, message: "errors.fetchFailed" });
     });
 
     it("should return error when user is not authenticated", async () => {
@@ -114,7 +114,7 @@ describe("noteActions", () => {
 
       const result = await getNotesByJobId("job-id");
 
-      expect(result).toEqual({ success: false, message: "Failed to fetch notes." });
+      expect(result).toEqual({ success: false, message: "errors.fetchFailed" });
     });
 
     it("should handle database errors", async () => {
@@ -125,7 +125,7 @@ describe("noteActions", () => {
 
       const result = await getNotesByJobId("job-id");
 
-      expect(result).toEqual({ success: false, message: "Failed to fetch notes." });
+      expect(result).toEqual({ success: false, message: "errors.fetchFailed" });
     });
   });
 
@@ -155,7 +155,7 @@ describe("noteActions", () => {
 
       const result = await addNote(noteData);
 
-      expect(result).toEqual({ success: false, message: "Failed to add note." });
+      expect(result).toEqual({ success: false, message: "errors.createFailed" });
       expect(prisma.note.create).not.toHaveBeenCalled();
     });
 
@@ -164,7 +164,7 @@ describe("noteActions", () => {
 
       const result = await addNote(noteData);
 
-      expect(result).toEqual({ success: false, message: "Failed to add note." });
+      expect(result).toEqual({ success: false, message: "errors.createFailed" });
     });
 
     it("should reject empty content via validation", async () => {
@@ -185,7 +185,7 @@ describe("noteActions", () => {
 
       const result = await addNote(noteData);
 
-      expect(result).toEqual({ success: false, message: "Failed to add note." });
+      expect(result).toEqual({ success: false, message: "errors.createFailed" });
     });
   });
 
@@ -217,7 +217,7 @@ describe("noteActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update note.",
+        message: "errors.updateFailed",
       });
     });
 
@@ -226,7 +226,7 @@ describe("noteActions", () => {
 
       const result = await updateNote(updateData);
 
-      expect(result).toEqual({ success: false, message: "Failed to update note." });
+      expect(result).toEqual({ success: false, message: "errors.updateFailed" });
     });
 
     it("should handle database errors", async () => {
@@ -237,7 +237,7 @@ describe("noteActions", () => {
 
       const result = await updateNote(updateData);
 
-      expect(result).toEqual({ success: false, message: "Failed to update note." });
+      expect(result).toEqual({ success: false, message: "errors.updateFailed" });
     });
   });
 
@@ -259,7 +259,7 @@ describe("noteActions", () => {
 
       const result = await deleteNote("note-id");
 
-      expect(result).toEqual({ success: false, message: "Failed to delete note." });
+      expect(result).toEqual({ success: false, message: "errors.deleteFailed" });
     });
 
     it("should handle database errors", async () => {
@@ -270,7 +270,7 @@ describe("noteActions", () => {
 
       const result = await deleteNote("note-id");
 
-      expect(result).toEqual({ success: false, message: "Failed to delete note." });
+      expect(result).toEqual({ success: false, message: "errors.deleteFailed" });
     });
 
     it("should handle deleting non-existent note", async () => {
@@ -283,7 +283,7 @@ describe("noteActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to delete note.",
+        message: "errors.deleteFailed",
       });
     });
   });

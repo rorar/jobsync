@@ -31,14 +31,14 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
     useState<AutomationWithResume | null>(null);
   const [performanceWarning, setPerformanceWarning] = useState<string | null>(null);
 
-  /** Safely parse a "performanceWarning:<count>" message. Returns localized string or null. */
-  const parseWarningMessage = (message?: string): string | null => {
-    if (!message) return null;
-    const prefix = "performanceWarning:";
-    if (!message.startsWith(prefix)) return null;
-    const count = message.slice(prefix.length);
-    // Return localized warning, never the raw prefix
-    return t("automations.performanceWarningBanner").replace("{count}", count);
+  /** Build the localized performance-warning banner from a result's message + messageParams (IF-5). */
+  const parseWarningMessage = (result: {
+    message?: string;
+    messageParams?: Record<string, string | number>;
+  }): string | null => {
+    if (result.message !== "automations.performanceWarningBanner") return null;
+    const count = result.messageParams?.count ?? "";
+    return t("automations.performanceWarningBanner").replace("{count}", String(count));
   };
 
   const loadAutomations = useCallback(async () => {
@@ -48,7 +48,7 @@ export function AutomationContainer({ resumes }: AutomationContainerProps) {
     if (result.success && result.data) {
       setAutomations(result.data as any);
       // Check for performance warning from server
-      const warningMsg = parseWarningMessage(result.message);
+      const warningMsg = parseWarningMessage(result);
       if (warningMsg) {
         setPerformanceWarning(warningMsg);
       } else {

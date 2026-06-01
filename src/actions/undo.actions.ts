@@ -18,7 +18,7 @@ import { ActionResult } from "@/models/actionResult";
  */
 export async function undoAction(tokenId: string): Promise<ActionResult> {
   const user = await getCurrentUser();
-  if (!user) return { success: false, message: "Not authenticated" };
+  if (!user) return { success: false, message: "errors.notAuthenticated" };
 
   // Pass user.id so undoById does the ownership check + removal atomically.
   // No separate undoStore.get() call — that was the TOCTOU window.
@@ -26,7 +26,7 @@ export async function undoAction(tokenId: string): Promise<ActionResult> {
   if (result.success) {
     return { success: true };
   }
-  return { success: false, message: result.message ?? "Undo failed" };
+  return { success: false, message: "undo.undoFailed" };
 }
 
 /**
@@ -34,11 +34,11 @@ export async function undoAction(tokenId: string): Promise<ActionResult> {
  */
 export async function undoLastAction(): Promise<ActionResult<{ tokenId: string | null }>> {
   const user = await getCurrentUser();
-  if (!user) return { success: false, message: "Not authenticated" };
+  if (!user) return { success: false, message: "errors.notAuthenticated" };
 
   const { tokenId, result } = await undoStore.undoLast(user.id);
   if (result.success) {
     return { success: true, data: { tokenId } };
   }
-  return { success: false, message: result.message ?? "Nothing to undo" };
+  return { success: false, message: "undo.nothingToUndo" };
 }

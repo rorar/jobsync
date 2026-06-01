@@ -60,7 +60,7 @@ export async function getModuleManifests(
   connectorType?: ConnectorType,
 ): Promise<ActionResult<ModuleManifestSummary[]>> {
   const user = await getCurrentUser();
-  if (!user) return { success: false, message: "Not authenticated" };
+  if (!user) return { success: false, message: "errors.notAuthenticated" };
 
   // Sync registry with DB state
   await syncRegistryFromDb();
@@ -158,7 +158,7 @@ export async function activateModule(
 ): Promise<ActionResult<{ moduleId: string; status: string }>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Admin authorization — see specs/module-lifecycle.allium invariant
     // `AdminOnlyModuleLifecycle`. Module activation mutates shared singleton
@@ -170,7 +170,7 @@ export async function activateModule(
     if (!authz.allowed) {
       return {
         success: false,
-        message: authz.reason ?? "errors.notAuthorized",
+        message: "errors.notAuthorized",
         errorCode: "UNAUTHORIZED",
       };
     }
@@ -186,7 +186,7 @@ export async function activateModule(
 
     const registered = moduleRegistry.get(moduleId);
     if (!registered) {
-      return { success: false, message: `Module "${moduleId}" not found` };
+      return { success: false, message: "automations.moduleNotFound" };
     }
 
     if (registered.status === ModuleStatus.ACTIVE) {
@@ -303,7 +303,7 @@ export async function deactivateModule(
 > {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Admin authorization — see specs/module-lifecycle.allium invariant
     // `AdminOnlyModuleLifecycle`. Module deactivation pauses automations for
@@ -315,7 +315,7 @@ export async function deactivateModule(
     if (!authz.allowed) {
       return {
         success: false,
-        message: authz.reason ?? "errors.notAuthorized",
+        message: "errors.notAuthorized",
         errorCode: "UNAUTHORIZED",
       };
     }
@@ -331,7 +331,7 @@ export async function deactivateModule(
 
     const registered = moduleRegistry.get(moduleId);
     if (!registered) {
-      return { success: false, message: `Module "${moduleId}" not found` };
+      return { success: false, message: "automations.moduleNotFound" };
     }
 
     if (registered.status === ModuleStatus.INACTIVE) {
@@ -506,11 +506,11 @@ export async function runHealthCheck(
 > {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const rateCheck = checkHealthCheckRateLimit(user.id);
     if (!rateCheck.allowed) {
-      return { success: false, message: "Too many health checks — please wait a moment" };
+      return { success: false, message: "errors.tooManyRequests" };
     }
 
     const result = await checkModuleHealth(moduleId);

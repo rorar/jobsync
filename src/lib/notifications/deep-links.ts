@@ -360,8 +360,14 @@ export function buildNotificationActions(
           ];
     }
 
-    default:
+    default: {
+      // Exhaustiveness guard (IF-7): every NotificationType must have a case
+      // above. A new union member without one lights up here at compile time.
+      // Still returns [] at runtime so an unmapped type degrades gracefully.
+      const _exhaustive: never = type;
+      void _exhaustive;
       return [];
+    }
   }
 }
 

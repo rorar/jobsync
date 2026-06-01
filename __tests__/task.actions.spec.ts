@@ -197,7 +197,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch tasks list.",
+        message: "errors.fetchFailed",
       });
     });
 
@@ -211,7 +211,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch tasks list.",
+        message: "errors.fetchFailed",
       });
     });
   });
@@ -249,7 +249,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Task not found",
+        message: "errors.notFound",
       });
     });
 
@@ -260,7 +260,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch task.",
+        message: "errors.fetchFailed",
       });
     });
 
@@ -274,7 +274,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch task.",
+        message: "errors.fetchFailed",
       });
     });
   });
@@ -324,7 +324,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to create task.",
+        message: "errors.createFailed",
       });
     });
 
@@ -352,7 +352,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to create task.",
+        message: "errors.createFailed",
       });
     });
   });
@@ -410,7 +410,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update task.",
+        message: "errors.updateFailed",
       });
     });
 
@@ -421,7 +421,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update task.",
+        message: "errors.updateFailed",
       });
     });
 
@@ -435,7 +435,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update task.",
+        message: "errors.updateFailed",
       });
     });
   });
@@ -473,7 +473,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update task status.",
+        message: "errors.updateFailed",
       });
     });
 
@@ -487,7 +487,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update task status.",
+        message: "errors.updateFailed",
       });
     });
   });
@@ -519,7 +519,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Task not found",
+        message: "errors.notFound",
       });
     });
 
@@ -536,7 +536,7 @@ describe("taskActions", () => {
       expect(result).toEqual({
         success: false,
         message:
-          "Cannot delete task with linked activity. Remove the activity first.",
+          "tasks.cannotDeleteWithActivity",
       });
       expect(prisma.task.delete).not.toHaveBeenCalled();
     });
@@ -548,7 +548,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to delete task.",
+        message: "errors.deleteFailed",
       });
     });
 
@@ -562,7 +562,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to delete task.",
+        message: "errors.deleteFailed",
       });
     });
   });
@@ -618,7 +618,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Task not found",
+        message: "errors.notFound",
       });
     });
 
@@ -634,7 +634,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Task already has a linked activity.",
+        message: "activities.taskAlreadyLinked",
       });
     });
 
@@ -652,7 +652,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Task must have an activity type to start an activity.",
+        message: "activities.taskNeedsActivityType",
       });
     });
 
@@ -668,7 +668,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Cannot start an activity from a completed or cancelled task.",
+        message: "activities.cannotStartFromClosedTask",
       });
     });
 
@@ -684,7 +684,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Cannot start an activity from a completed or cancelled task.",
+        message: "activities.cannotStartFromClosedTask",
       });
     });
 
@@ -701,7 +701,7 @@ describe("taskActions", () => {
       expect(result).toEqual({
         success: false,
         message:
-          "You already have a running activity. Please stop it before starting a new one.",
+          "activities.alreadyInProgress",
       });
     });
 
@@ -712,7 +712,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to start activity from task.",
+        message: "errors.unknown",
       });
     });
 
@@ -726,7 +726,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to start activity from task.",
+        message: "errors.unknown",
       });
     });
   });
@@ -807,7 +807,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch activity types with task counts.",
+        message: "errors.fetchFailed",
       });
     });
 
@@ -821,7 +821,7 @@ describe("taskActions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch activity types with task counts.",
+        message: "errors.fetchFailed",
       });
     });
   });

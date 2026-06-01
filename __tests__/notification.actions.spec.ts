@@ -96,7 +96,7 @@ describe("Notification Actions", () => {
 
       const result = await getNotifications();
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "errors.notAuthenticated" });
       expect(prisma.notification.findMany).not.toHaveBeenCalled();
     });
 
@@ -142,7 +142,7 @@ describe("Notification Actions", () => {
 
       const result = await getUnreadCount();
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "errors.notAuthenticated" });
       expect(prisma.notification.count).not.toHaveBeenCalled();
     });
 
@@ -189,7 +189,7 @@ describe("Notification Actions", () => {
 
       const result = await markAsRead("notif-1");
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "errors.notAuthenticated" });
       expect(prisma.notification.findFirst).not.toHaveBeenCalled();
       expect(prisma.notification.update).not.toHaveBeenCalled();
     });
@@ -262,7 +262,7 @@ describe("Notification Actions", () => {
 
       const result = await markAllAsRead();
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "errors.notAuthenticated" });
       expect(prisma.notification.updateMany).not.toHaveBeenCalled();
     });
 
@@ -307,7 +307,7 @@ describe("Notification Actions", () => {
 
       const result = await dismissNotification("notif-1");
 
-      expect(result).toEqual({ success: false, message: "Not authenticated" });
+      expect(result).toEqual({ success: false, message: "errors.notAuthenticated" });
       expect(prisma.notification.findFirst).not.toHaveBeenCalled();
       expect(prisma.notification.delete).not.toHaveBeenCalled();
     });

@@ -32,7 +32,7 @@ export const getResumeList = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const skip = (page - 1) * limit;
 
@@ -73,7 +73,7 @@ export const getResumeList = async (
     ]);
     return { data, total, success: true };
   } catch (error) {
-    const msg = "Failed to get resume list.";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -88,7 +88,7 @@ export const getResumeById = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const resume = await prisma.resume.findFirst({
@@ -134,7 +134,7 @@ export const getResumeById = async (
       success: true,
     };
   } catch (error) {
-    const msg = "Failed to get resume.";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -146,7 +146,7 @@ export const addContactInfo = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Verify ownership before mutation
@@ -180,7 +180,7 @@ export const addContactInfo = async (
     revalidatePath("/dashboard/profile/resume");
     return { data: res, success: true };
   } catch (error) {
-    const msg = "Failed to create contact info.";
+    const msg = "errors.createFailed";
     return handleError(error, msg);
   }
 };
@@ -192,7 +192,7 @@ export const updateContactInfo = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Verify ownership via contactInfo → resume → profile → userId
@@ -219,7 +219,7 @@ export const updateContactInfo = async (
     revalidatePath("/dashboard/profile/resume");
     return { data: res, success: true };
   } catch (error) {
-    const msg = "Failed to update contact info.";
+    const msg = "errors.updateFailed";
     return handleError(error, msg);
   }
 };
@@ -233,7 +233,7 @@ export const createResumeProfile = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     //check if title exists
@@ -294,7 +294,7 @@ export const createResumeProfile = async (
     // revalidatePath("/dashboard/myjobs", "page");
     return { success: true, data: res };
   } catch (error) {
-    const msg = "Failed to create resume.";
+    const msg = "errors.createFailed";
     return handleError(error, msg);
   }
 };
@@ -323,7 +323,7 @@ export const editResume = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Verify ownership before mutation
@@ -361,7 +361,7 @@ export const editResume = async (
     });
     return { success: true, data: res };
   } catch (error) {
-    const msg = "Failed to update resume or file.";
+    const msg = "errors.updateFailed";
     return handleError(error, msg);
   }
 };
@@ -374,7 +374,7 @@ export const deleteResumeById = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     // Verify ownership before destructive operation
     const owned = await prisma.resume.findFirst({
@@ -480,7 +480,7 @@ export const addResumeSummary = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Verify ownership of target resume
@@ -514,7 +514,7 @@ export const addResumeSummary = async (
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
     return { data: toResumeSection(summary), success: true };
   } catch (error) {
-    const msg = "Failed to create summary.";
+    const msg = "errors.createFailed";
     return handleError(error, msg);
   }
 };
@@ -526,7 +526,7 @@ export const updateResumeSummary = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Verify ownership via ResumeSection → Resume → profile → userId
@@ -561,7 +561,7 @@ export const updateResumeSummary = async (
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
     return { data: toResumeSection(summary), success: true };
   } catch (error) {
-    const msg = "Failed to update summary.";
+    const msg = "errors.updateFailed";
     return handleError(error, msg);
   }
 };
@@ -573,7 +573,7 @@ export const addExperience = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Verify ownership of target resume
@@ -628,7 +628,7 @@ export const addExperience = async (
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
     return { data: toResumeSection(experience), success: true };
   } catch (error) {
-    const msg = "Failed to create experience.";
+    const msg = "errors.createFailed";
     return handleError(error, msg);
   }
 };
@@ -640,7 +640,7 @@ export const updateExperience = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Verify ownership via WorkExperience → ResumeSection → Resume → profile → userId
@@ -667,7 +667,7 @@ export const updateExperience = async (
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
     return { data: summary, success: true };
   } catch (error) {
-    const msg = "Failed to update experience.";
+    const msg = "errors.updateFailed";
     return handleError(error, msg);
   }
 };
@@ -679,7 +679,7 @@ export const addEducation = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Verify ownership of target resume
@@ -731,7 +731,7 @@ export const addEducation = async (
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
     return { data: toResumeSection(education), success: true };
   } catch (error) {
-    const msg = "Failed to create education.";
+    const msg = "errors.createFailed";
     return handleError(error, msg);
   }
 };
@@ -744,7 +744,7 @@ export const deleteWorkExperience = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Verify ownership via WorkExperience → ResumeSection → Resume → profile → userId
@@ -764,7 +764,7 @@ export const deleteWorkExperience = async (
     revalidatePath(`/dashboard/profile/resume/${resumeId}`);
     return { success: true };
   } catch (error) {
-    const msg = "Failed to delete experience.";
+    const msg = "errors.deleteFailed";
     return handleError(error, msg);
   }
 };
@@ -777,7 +777,7 @@ export const deleteEducation = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Verify ownership via Education → ResumeSection → Resume → profile → userId
@@ -797,7 +797,7 @@ export const deleteEducation = async (
     revalidatePath(`/dashboard/profile/resume/${resumeId}`);
     return { success: true };
   } catch (error) {
-    const msg = "Failed to delete education.";
+    const msg = "errors.deleteFailed";
     return handleError(error, msg);
   }
 };
@@ -809,7 +809,7 @@ export const updateEducation = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Verify ownership via Education → ResumeSection → Resume → profile → userId
@@ -837,7 +837,7 @@ export const updateEducation = async (
     revalidatePath(`/dashboard/profile/resume/${data.resumeId}`);
     return { data: summary, success: true };
   } catch (error) {
-    const msg = "Failed to update education.";
+    const msg = "errors.updateFailed";
     return handleError(error, msg);
   }
 };

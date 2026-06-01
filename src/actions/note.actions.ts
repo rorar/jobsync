@@ -5,6 +5,7 @@ import { NoteFormSchema } from "@/models/note.schema";
 import { Note, NoteResponse } from "@/models/note.model";
 import { ActionResult } from "@/models/actionResult";
 import { getCurrentUser } from "@/utils/user.utils";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import { z } from "zod";
 
 export const getNotesByJobId = async (
@@ -13,7 +14,7 @@ export const getNotesByJobId = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const job = await prisma.job.findFirst({
@@ -36,7 +37,7 @@ export const getNotesByJobId = async (
 
     return { success: true, data };
   } catch (error) {
-    const msg = "Failed to fetch notes.";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -47,7 +48,7 @@ export const addNote = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const validated = NoteFormSchema.parse(data);
@@ -68,9 +69,20 @@ export const addNote = async (
       },
     });
 
+    // GDPR audit trail (S6a): record a note added against a Job. The audited
+    // target is the Job (no snapshot — note content is not copied into the
+    // audit payload). Fire-and-forget, non-blocking.
+    writeDataAuditLog({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: "job.note_add",
+      targetType: "job",
+      targetId: validated.jobId,
+    });
+
     return { success: true, data: note };
   } catch (error) {
-    const msg = "Failed to add note.";
+    const msg = "errors.createFailed";
     return handleError(error, msg);
   }
 };
@@ -81,7 +93,7 @@ export const updateNote = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const validated = NoteFormSchema.parse(data);
@@ -96,7 +108,7 @@ export const updateNote = async (
 
     return { success: true, data: note };
   } catch (error) {
-    const msg = "Failed to update note.";
+    const msg = "errors.updateFailed";
     return handleError(error, msg);
   }
 };
@@ -107,7 +119,7 @@ export const deleteNote = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     await prisma.note.delete({
@@ -116,7 +128,7 @@ export const deleteNote = async (
 
     return { success: true };
   } catch (error) {
-    const msg = "Failed to delete note.";
+    const msg = "errors.deleteFailed";
     return handleError(error, msg);
   }
 };

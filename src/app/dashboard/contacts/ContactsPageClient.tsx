@@ -138,7 +138,7 @@ export default function ContactsPageClient() {
     } else {
       toast({
         title: t("crm.errors.emailRequired"),
-        description: result.message,
+        description: result.message ? t(result.message) : undefined,
         variant: "destructive",
       });
     }

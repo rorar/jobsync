@@ -28,7 +28,7 @@ export type { SupportedLocale } from "./locales";
 
 // ─── Dictionary (client-safe) ──────────────────────────────────────
 export { getDictionary } from "./dictionaries";
-export type { TranslationKey, Dictionary } from "./dictionaries";
+export type { TranslationKey, TranslationKeyStrict, Dictionary } from "./dictionaries";
 
 // ─── Formatting (Intl + date-fns, client-safe) ─────────────────────
 export {

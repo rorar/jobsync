@@ -37,6 +37,14 @@ import {
   createdResponse,
   noContentResponse,
 } from "@/lib/api/response";
+import type { ActionResult } from "@/models/actionResult";
+
+// IF-5: `ActionResult.message` is now a typed i18n-key union. Several tests below
+// deliberately pass arbitrary / English / legacy non-key strings to exercise
+// `actionToResponse`'s runtime status inference and message sanitisation (public-API
+// robustness). `anyMsg` casts past the compile-time key constraint without altering
+// the runtime value being tested.
+const anyMsg = (m: string) => m as NonNullable<ActionResult["message"]>;
 
 describe("actionToResponse", () => {
   it("maps a successful ActionResult to 200 JSON", async () => {
@@ -57,7 +65,7 @@ describe("actionToResponse", () => {
   });
 
   it("maps 'Not authenticated' errors to 401", async () => {
-    const result = { success: false, message: "Not authenticated" };
+    const result = { success: false, message: anyMsg("Not authenticated") };
     const res = actionToResponse(result);
     expect(res.status).toBe(401);
     const body = await res.json();
@@ -66,19 +74,19 @@ describe("actionToResponse", () => {
   });
 
   it("maps 'not found' errors to 404", async () => {
-    const result = { success: false, message: "Job not found" };
+    const result = { success: false, message: anyMsg("Job not found") };
     const res = actionToResponse(result);
     expect(res.status).toBe(404);
   });
 
   it("maps validation errors to 400", async () => {
-    const result = { success: false, message: "Please provide job id" };
+    const result = { success: false, message: anyMsg("Please provide job id") };
     const res = actionToResponse(result);
     expect(res.status).toBe(400);
   });
 
   it("maps unknown errors to 500", async () => {
-    const result = { success: false, message: "Database connection failed" };
+    const result = { success: false, message: anyMsg("Database connection failed") };
     const res = actionToResponse(result);
     expect(res.status).toBe(500);
   });
@@ -135,7 +143,7 @@ describe("actionToResponse", () => {
     it("maps NOT_FOUND errorCode to 404", async () => {
       const res = actionToResponse({
         success: false,
-        message: "some.arbitrary.key",
+        message: anyMsg("some.arbitrary.key"),
         errorCode: "NOT_FOUND",
       });
       expect(res.status).toBe(404);
@@ -146,7 +154,7 @@ describe("actionToResponse", () => {
     it("maps UNAUTHORIZED errorCode to 401", async () => {
       const res = actionToResponse({
         success: false,
-        message: "some.arbitrary.key",
+        message: anyMsg("some.arbitrary.key"),
         errorCode: "UNAUTHORIZED",
       });
       expect(res.status).toBe(401);
@@ -157,7 +165,7 @@ describe("actionToResponse", () => {
     it("maps VALIDATION_ERROR errorCode to 400", async () => {
       const res = actionToResponse({
         success: false,
-        message: "some.arbitrary.key",
+        message: anyMsg("some.arbitrary.key"),
         errorCode: "VALIDATION_ERROR",
       });
       expect(res.status).toBe(400);
@@ -168,7 +176,7 @@ describe("actionToResponse", () => {
     it("maps DUPLICATE_ENTRY errorCode to 409", async () => {
       const res = actionToResponse({
         success: false,
-        message: "some.arbitrary.key",
+        message: anyMsg("some.arbitrary.key"),
         errorCode: "DUPLICATE_ENTRY",
       });
       expect(res.status).toBe(409);
@@ -179,7 +187,7 @@ describe("actionToResponse", () => {
     it("maps INTERNAL_ERROR errorCode to 500 and sanitizes message", async () => {
       const res = actionToResponse({
         success: false,
-        message: "Prisma query failed: connection reset",
+        message: anyMsg("Prisma query failed: connection reset"),
         errorCode: "INTERNAL_ERROR",
       });
       expect(res.status).toBe(500);
@@ -225,7 +233,7 @@ describe("actionToResponse", () => {
       // but errorCode says UNAUTHORIZED (should be 401)
       const res = actionToResponse({
         success: false,
-        message: "User not found",
+        message: anyMsg("User not found"),
         errorCode: "UNAUTHORIZED",
       });
       expect(res.status).toBe(401);
@@ -235,7 +243,7 @@ describe("actionToResponse", () => {
       // No errorCode — must still work via message inference (backward compat)
       const res = actionToResponse({
         success: false,
-        message: "Job not found",
+        message: anyMsg("Job not found"),
       });
       expect(res.status).toBe(404);
     });
@@ -281,7 +289,7 @@ describe("errorResponse", () => {
     const body = await res.json();
     expect(body).toEqual({
       success: false,
-      error: { code: "NOT_FOUND", message: "Job not found" },
+      error: { code: "NOT_FOUND", message: anyMsg("Job not found") },
     });
   });
 });

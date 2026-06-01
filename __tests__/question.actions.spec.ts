@@ -187,7 +187,7 @@ describe("Question Actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Question not found",
+        message: "errors.notFound",
       });
     });
 

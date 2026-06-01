@@ -79,7 +79,7 @@ export function NoteDialog({
         toast({
           variant: "destructive",
           title: t("jobs.error"),
-          description: result.message,
+          description: result.message ? t(result.message) : undefined,
         });
       }
     });

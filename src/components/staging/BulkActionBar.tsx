@@ -96,7 +96,7 @@ export function BulkActionBar({
       toast({
         variant: "destructive",
         title: t("staging.error"),
-        description: result.message,
+        description: result.message ? t(result.message) : undefined,
       });
     }
   };

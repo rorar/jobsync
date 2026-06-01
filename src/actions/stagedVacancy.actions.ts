@@ -13,6 +13,7 @@ import type {
   PromotionInput,
 } from "@/models/stagedVacancy.model";
 import { promoteStagedVacancy } from "@/lib/connector/job-discovery/promoter";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import { emitEvent, createEvent } from "@/lib/events";
 import { DomainEventType } from "@/lib/events/event-types";
 import { undoStore, createUndoEntry } from "@/lib/undo";
@@ -74,7 +75,7 @@ export async function getStagedVacancies(
 ): Promise<ActionResult<StagedVacancyWithAutomation[]>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const safeTake = Math.min(Math.max(1, limit), 100);
     const safePage = Math.max(1, page);
@@ -149,14 +150,14 @@ export async function getStagedVacancyById(
 ): Promise<ActionResult<StagedVacancyWithAutomation>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const vacancy = await prisma.stagedVacancy.findFirst({
       where: { id, userId: user.id },
       include: { automation: { select: { id: true, name: true } } },
     });
 
-    if (!vacancy) return { success: false, message: "Staged vacancy not found" };
+    if (!vacancy) return { success: false, message: "errors.notFound" };
 
     return { success: true, data: toStagedVacancy(vacancy) as StagedVacancyWithAutomation };
   } catch (error) {
@@ -172,15 +173,15 @@ export async function dismissStagedVacancy(
 ): Promise<ActionResult<StagedVacancy & { undoTokenId?: string }>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const vacancy = await prisma.stagedVacancy.findFirst({
       where: { id, userId: user.id },
     });
 
-    if (!vacancy) return { success: false, message: "Staged vacancy not found" };
+    if (!vacancy) return { success: false, message: "errors.notFound" };
     if (vacancy.status !== "staged" && vacancy.status !== "ready") {
-      return { success: false, message: "Can only dismiss staged or ready vacancies" };
+      return { success: false, message: "staging.canOnlyDismissStagedReady" };
     }
 
     const previousStatus = vacancy.status;
@@ -218,14 +219,14 @@ export async function restoreStagedVacancy(
 ): Promise<ActionResult<StagedVacancy>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const vacancy = await prisma.stagedVacancy.findFirst({
       where: { id, userId: user.id },
     });
 
-    if (!vacancy) return { success: false, message: "Staged vacancy not found" };
-    if (vacancy.status !== "dismissed") return { success: false, message: "Can only restore dismissed vacancies" };
+    if (!vacancy) return { success: false, message: "errors.notFound" };
+    if (vacancy.status !== "dismissed") return { success: false, message: "staging.canOnlyRestoreDismissed" };
 
     const updated = await prisma.stagedVacancy.update({
       where: { id },
@@ -246,14 +247,14 @@ export async function archiveStagedVacancy(
 ): Promise<ActionResult<StagedVacancy & { undoTokenId?: string }>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const vacancy = await prisma.stagedVacancy.findFirst({
       where: { id, userId: user.id },
     });
 
-    if (!vacancy) return { success: false, message: "Staged vacancy not found" };
-    if (vacancy.status === "promoted") return { success: false, message: "Cannot archive a promoted vacancy" };
+    if (!vacancy) return { success: false, message: "errors.notFound" };
+    if (vacancy.status === "promoted") return { success: false, message: "staging.cannotArchivePromoted" };
 
     const updated = await prisma.stagedVacancy.update({
       where: { id },
@@ -288,14 +289,14 @@ export async function trashStagedVacancy(
 ): Promise<ActionResult<StagedVacancy & { undoTokenId?: string }>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const vacancy = await prisma.stagedVacancy.findFirst({
       where: { id, userId: user.id },
     });
 
-    if (!vacancy) return { success: false, message: "Staged vacancy not found" };
-    if (vacancy.status === "promoted") return { success: false, message: "Cannot trash a promoted vacancy" };
+    if (!vacancy) return { success: false, message: "errors.notFound" };
+    if (vacancy.status === "promoted") return { success: false, message: "staging.cannotTrashPromoted" };
 
     const updated = await prisma.stagedVacancy.update({
       where: { id },
@@ -330,14 +331,14 @@ export async function restoreFromTrash(
 ): Promise<ActionResult<StagedVacancy>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const vacancy = await prisma.stagedVacancy.findFirst({
       where: { id, userId: user.id },
     });
 
-    if (!vacancy) return { success: false, message: "Staged vacancy not found" };
-    if (!vacancy.trashedAt) return { success: false, message: "Vacancy is not in trash" };
+    if (!vacancy) return { success: false, message: "errors.notFound" };
+    if (!vacancy.trashedAt) return { success: false, message: "staging.notInTrash" };
 
     const updated = await prisma.stagedVacancy.update({
       where: { id },
@@ -359,7 +360,7 @@ export async function getStagedVacancyCounts(): Promise<
 > {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const [newCount, ready, dismissed, archived, trashed] = await Promise.all([
       prisma.stagedVacancy.count({
@@ -396,9 +397,19 @@ export async function promoteStagedVacancyToJob(
 ): Promise<ActionResult<{ jobId: string; stagedVacancyId: string }>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const result = await promoteStagedVacancy(input, user.id);
+
+    // S6a: promoting a staged vacancy creates a Job — audit it like any other
+    // job.create (specs/audit-trail.allium). Fire-and-forget.
+    writeDataAuditLog({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: "job.create",
+      targetType: "job",
+      targetId: result.jobId,
+    });
 
     return { success: true, data: result };
   } catch (error) {
@@ -415,7 +426,7 @@ export async function runRetentionCleanup(
 ): Promise<ActionResult<RetentionResult>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Dynamic import to keep the server-only module out of the action's initial bundle
     const { runRetentionCleanup: runCleanup } = await import(
@@ -442,11 +453,11 @@ export async function executeBulkAction(
 ): Promise<ActionResult<BulkActionResult & { undoTokenId?: string }>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Runtime validation — TypeScript types are erased (BS-8)
     if (!(VALID_BULK_ACTIONS as readonly string[]).includes(actionType)) {
-      return { success: false, message: "Invalid action type" };
+      return { success: false, message: "errors.invalidInput" };
     }
 
     const { executeBulkAction: execBulk } = await import(

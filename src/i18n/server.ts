@@ -11,7 +11,7 @@ import "server-only";
 
 // ─── Translation (Server) ──────────────────────────────────────────
 export { t, getDictionary } from "./dictionaries";
-export type { TranslationKey } from "./dictionaries";
+export type { TranslationKey, TranslationKeyStrict } from "./dictionaries";
 
 // ─── Locale (Server-only: reads from DB/cookies) ───────────────────
 export { getUserLocale, getLocaleFromCookie } from "@/lib/locale";

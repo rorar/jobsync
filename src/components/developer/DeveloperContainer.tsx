@@ -71,11 +71,11 @@ export function MockActivitiesCard() {
     const result = await generateMockActivitiesAction();
     setMessage({
       type: result.success ? "success" : "error",
-      text:
-        result.message ||
-        (result.success
+      text: result.message
+        ? t(result.message)
+        : result.success
           ? t("developer.mockActivitiesGenerated")
-          : t("developer.mockActivitiesGenerateFailed")),
+          : t("developer.mockActivitiesGenerateFailed"),
     });
     setIsGenerating(false);
   };
@@ -86,11 +86,11 @@ export function MockActivitiesCard() {
     const result = await clearMockActivitiesAction();
     setMessage({
       type: result.success ? "success" : "error",
-      text:
-        result.message ||
-        (result.success
+      text: result.message
+        ? t(result.message)
+        : result.success
           ? t("developer.mockActivitiesCleared")
-          : t("developer.mockActivitiesClearFailed")),
+          : t("developer.mockActivitiesClearFailed"),
     });
     setIsClearing(false);
   };
@@ -180,6 +180,7 @@ export function ClearAllMockDataCard() {
     const allSuccess = activitiesResult.success && profileResult.success;
     const details = [activitiesResult.message, profileResult.message]
       .filter(Boolean)
+      .map((m) => t(m as string))
       .join(" ");
 
     setMessage({
@@ -247,11 +248,11 @@ export function ClearE2ETestDataCard() {
     const result = await clearE2ETestDataAction();
     setMessage({
       type: result.success ? "success" : "error",
-      text:
-        result.message ||
-        (result.success
+      text: result.message
+        ? t(result.message)
+        : result.success
           ? t("developer.e2eTestDataCleared")
-          : t("developer.e2eTestDataClearFailed")),
+          : t("developer.e2eTestDataClearFailed"),
     });
     setIsClearing(false);
   };
@@ -313,11 +314,11 @@ export function MockProfileCard() {
     const result = await generateMockProfileDataAction();
     setMessage({
       type: result.success ? "success" : "error",
-      text:
-        result.message ||
-        (result.success
+      text: result.message
+        ? t(result.message)
+        : result.success
           ? t("developer.mockProfileGenerated")
-          : t("developer.mockProfileGenerateFailed")),
+          : t("developer.mockProfileGenerateFailed"),
     });
     setIsGenerating(false);
   };
@@ -328,11 +329,11 @@ export function MockProfileCard() {
     const result = await clearMockProfileDataAction();
     setMessage({
       type: result.success ? "success" : "error",
-      text:
-        result.message ||
-        (result.success
+      text: result.message
+        ? t(result.message)
+        : result.success
           ? t("developer.mockProfileCleared")
-          : t("developer.mockProfileClearFailed")),
+          : t("developer.mockProfileClearFailed"),
     });
     setIsClearing(false);
   };
@@ -436,7 +437,7 @@ export function RetentionCleanupCard() {
         toast({
           variant: "destructive",
           title: t("developer.retentionCleanup"),
-          description: result.message || t("developer.error"),
+          description: result.message ? t(result.message) : t("developer.error"),
         });
       }
     } catch {

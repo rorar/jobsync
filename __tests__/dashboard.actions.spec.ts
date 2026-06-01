@@ -53,7 +53,7 @@ describe("Dashboard Actions", () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(null);
 
       await expect(getJobsAppliedForPeriod(7)).rejects.toThrow(
-        "Not authenticated",
+        "errors.notAuthenticated",
       );
     });
 
@@ -73,7 +73,7 @@ describe("Dashboard Actions", () => {
       );
 
       await expect(getJobsAppliedForPeriod(7)).rejects.toThrow(
-        "Failed to calculate job count",
+        "errors.unknown",
       );
     });
   });
@@ -123,7 +123,7 @@ describe("Dashboard Actions", () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(null);
 
       await expect(getRecentJobs()).rejects.toThrow(
-        "Failed to fetch jobs list. ",
+        "errors.fetchFailed",
       );
     });
 
@@ -134,7 +134,7 @@ describe("Dashboard Actions", () => {
       );
 
       await expect(getRecentJobs()).rejects.toThrow(
-        "Failed to fetch jobs list. ",
+        "errors.fetchFailed",
       );
     });
 
@@ -177,7 +177,7 @@ describe("Dashboard Actions", () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(null);
 
       await expect(getActivityDataForPeriod()).rejects.toThrow(
-        "Failed to fetch activities data.",
+        "errors.fetchFailed",
       );
     });
 
@@ -188,7 +188,7 @@ describe("Dashboard Actions", () => {
       );
 
       await expect(getActivityDataForPeriod()).rejects.toThrow(
-        "Failed to fetch activities data.",
+        "errors.fetchFailed",
       );
     });
 
@@ -252,7 +252,7 @@ describe("Dashboard Actions", () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(null);
 
       await expect(getJobsActivityForPeriod()).rejects.toThrow(
-        "Failed to fetch jobs list. ",
+        "errors.fetchFailed",
       );
     });
 
@@ -263,7 +263,7 @@ describe("Dashboard Actions", () => {
       );
 
       await expect(getJobsActivityForPeriod()).rejects.toThrow(
-        "Failed to fetch jobs list. ",
+        "errors.fetchFailed",
       );
     });
 
@@ -310,7 +310,7 @@ describe("Dashboard Actions", () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(null);
 
       await expect(getActivityCalendarData()).rejects.toThrow(
-        "Failed to fetch jobs list. ",
+        "errors.fetchFailed",
       );
     });
 
@@ -321,7 +321,7 @@ describe("Dashboard Actions", () => {
       );
 
       await expect(getActivityCalendarData()).rejects.toThrow(
-        "Failed to fetch jobs list. ",
+        "errors.fetchFailed",
       );
     });
 

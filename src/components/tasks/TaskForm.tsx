@@ -129,7 +129,7 @@ export function TaskForm({
         toast({
           variant: "destructive",
           title: t("tasks.error"),
-          description: message,
+          description: message ? t(message) : undefined,
         });
       }
     });
@@ -197,7 +197,7 @@ export function TaskForm({
                               toast({
                                 variant: "destructive",
                                 title: t("tasks.error"),
-                                description: res.message,
+                                description: res.message ? t(res.message) : undefined,
                               });
                               return null;
                             }

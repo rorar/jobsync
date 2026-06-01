@@ -83,7 +83,7 @@ describe("checkLogoUrl", () => {
       const result = await checkLogoUrl("https://example.com/logo.png");
 
       expect(result.success).toBe(false);
-      expect(result.message).toMatch(/rate limit/i);
+      expect(result.message).toBe("errors.tooManyRequests");
     });
 
     it("returns success:false when per-user rate limit is hit", async () => {
@@ -94,7 +94,7 @@ describe("checkLogoUrl", () => {
       const result = await checkLogoUrl("https://example.com/logo.png");
 
       expect(result.success).toBe(false);
-      expect(result.message).toMatch(/rate limit/i);
+      expect(result.message).toBe("errors.tooManyRequests");
     });
 
     it("returns success:true, data.isImage:false for non-http protocol (not a hard failure)", async () => {

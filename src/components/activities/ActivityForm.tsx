@@ -214,7 +214,7 @@ const ActivityFormComponent = ({
           toast({
             variant: "destructive",
             title: t("common.error"),
-            description: response.message,
+            description: response.message ? t(response.message) : undefined,
           });
         }
         resetEditActivity?.();
@@ -300,7 +300,7 @@ const ActivityFormComponent = ({
                         toast({
                           variant: "destructive",
                           title: t("common.error"),
-                          description: res.message,
+                          description: res.message ? t(res.message) : undefined,
                         });
                         return null;
                       }

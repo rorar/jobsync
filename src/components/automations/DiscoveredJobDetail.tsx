@@ -86,7 +86,7 @@ export function DiscoveredJobDetail({
     } else {
       toast({
         title: t("automations.discoveredJob.errorTitle"),
-        description: result.message,
+        description: result.message ? t(result.message) : undefined,
         variant: "destructive",
       });
     }
@@ -104,7 +104,7 @@ export function DiscoveredJobDetail({
     } else {
       toast({
         title: t("automations.discoveredJob.errorTitle"),
-        description: result.message,
+        description: result.message ? t(result.message) : undefined,
         variant: "destructive",
       });
     }

@@ -112,7 +112,7 @@ function AddContactInfo({
         toast({
           variant: "destructive",
           title: t("common.error"),
-          description: res.message,
+          description: res.message ? t(res.message) : undefined,
         });
       } else {
         reset();

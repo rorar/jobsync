@@ -16,7 +16,7 @@ export const getLatestContactInfo = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const contactInfo = await prisma.contactInfo.findFirst({
@@ -38,7 +38,7 @@ export const getLatestContactInfo = async (
       data: contactInfo ?? undefined,
     };
   } catch (error) {
-    const msg = "Failed to get latest contact info.";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };

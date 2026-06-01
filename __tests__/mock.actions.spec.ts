@@ -162,7 +162,7 @@ describe("mock.actions", () => {
 
       const result = await generateMockActivitiesAction();
 
-      expect(result).toEqual({ success: false, message: "Failed to generate mock activities" });
+      expect(result).toEqual({ success: false, message: "errors.unknown" });
       expect(prisma.activityType.findMany).not.toHaveBeenCalled();
     });
 
@@ -178,7 +178,7 @@ describe("mock.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to generate mock activities",
+        message: "errors.unknown",
       });
     });
 
@@ -198,7 +198,7 @@ describe("mock.actions", () => {
       const result = await generateMockActivitiesAction();
 
       expect(result.success).toBe(true);
-      expect(result.message).toMatch(/Generated \d+ mock activities/);
+      expect(result.data).toBeDefined();
       expect(result.data).toBeInstanceOf(Array);
       expect((result.data as any[]).length).toBeGreaterThan(0);
       // createMany was NOT called because all types were already present.
@@ -233,7 +233,7 @@ describe("mock.actions", () => {
 
       const result = await generateMockActivitiesAction();
 
-      expect(result).toEqual({ success: false, message: "Failed to generate mock activities" });
+      expect(result).toEqual({ success: false, message: "errors.unknown" });
     });
   });
 
@@ -245,7 +245,7 @@ describe("mock.actions", () => {
 
       const result = await clearMockActivitiesAction();
 
-      expect(result).toEqual({ success: false, message: "Failed to clear mock activities" });
+      expect(result).toEqual({ success: false, message: "errors.unknown" });
       expect(prisma.activity.findMany).not.toHaveBeenCalled();
     });
 
@@ -257,7 +257,7 @@ describe("mock.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to clear mock activities",
+        message: "errors.unknown",
       });
     });
 
@@ -274,7 +274,7 @@ describe("mock.actions", () => {
       const result = await clearMockActivitiesAction();
 
       expect(result.success).toBe(true);
-      expect(result.message).toMatch(/Deleted 2 mock activities/);
+      expect(result.data?.count).toBe(2);
 
       expect(prisma.activity.findMany).toHaveBeenCalledWith({
         where: {
@@ -295,7 +295,7 @@ describe("mock.actions", () => {
       const result = await clearMockActivitiesAction();
 
       expect(result.success).toBe(true);
-      expect(result.message).toMatch(/Deleted 0 mock activities/);
+      expect(result.data?.count).toBe(0);
     });
 
     it("handles unexpected Prisma errors gracefully", async () => {
@@ -306,7 +306,7 @@ describe("mock.actions", () => {
 
       const result = await clearMockActivitiesAction();
 
-      expect(result).toEqual({ success: false, message: "Failed to clear mock activities" });
+      expect(result).toEqual({ success: false, message: "errors.unknown" });
     });
   });
 
@@ -392,7 +392,7 @@ describe("mock.actions", () => {
 
       const result = await generateMockProfileDataAction();
 
-      expect(result).toEqual({ success: false, message: "Failed to generate mock profile data" });
+      expect(result).toEqual({ success: false, message: "errors.unknown" });
     });
 
     it("returns error when mock data is disabled", async () => {
@@ -403,7 +403,7 @@ describe("mock.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to generate mock profile data",
+        message: "errors.unknown",
       });
     });
 
@@ -414,7 +414,7 @@ describe("mock.actions", () => {
       const result = await generateMockProfileDataAction();
 
       expect(result.success).toBe(true);
-      expect(result.message).toMatch(/Generated \d+ resumes/);
+      expect(result.data?.created).toBeGreaterThan(0);
       expect(prisma.company.upsert).toHaveBeenCalled();
       expect(prisma.location.upsert).toHaveBeenCalled();
       expect(prisma.jobTitle.upsert).toHaveBeenCalled();
@@ -431,7 +431,7 @@ describe("mock.actions", () => {
 
       expect(result.success).toBe(true);
       // Message says 0 created and all skipped
-      expect(result.message).toMatch(/0 resumes/);
+      expect(result.data?.created).toBe(0);
       expect(prisma.resume.create).not.toHaveBeenCalled();
     });
 
@@ -459,7 +459,7 @@ describe("mock.actions", () => {
 
       const result = await generateMockProfileDataAction();
 
-      expect(result).toEqual({ success: false, message: "Failed to generate mock profile data" });
+      expect(result).toEqual({ success: false, message: "errors.unknown" });
     });
   });
 
@@ -471,7 +471,7 @@ describe("mock.actions", () => {
 
       const result = await clearMockProfileDataAction();
 
-      expect(result).toEqual({ success: false, message: "Failed to clear mock profile data" });
+      expect(result).toEqual({ success: false, message: "errors.unknown" });
     });
 
     it("returns error when mock data is disabled", async () => {
@@ -482,7 +482,7 @@ describe("mock.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to clear mock profile data",
+        message: "errors.unknown",
       });
     });
 
@@ -525,10 +525,10 @@ describe("mock.actions", () => {
       const result = await clearMockProfileDataAction();
 
       expect(result.success).toBe(true);
-      expect(result.message).toMatch(/Deleted 1 resumes/);
-      expect(result.message).toMatch(/12 companies/);
-      expect(result.message).toMatch(/12 locations/);
-      expect(result.message).toMatch(/15 job titles/);
+      expect(result.data?.resumes).toBe(1);
+      expect(result.data?.companies).toBe(12);
+      expect(result.data?.locations).toBe(12);
+      expect(result.data?.jobTitles).toBe(15);
 
       // Verify cascading deletes were called with the correct section IDs
       expect(prisma.workExperience.deleteMany).toHaveBeenCalledWith({
@@ -574,7 +574,7 @@ describe("mock.actions", () => {
       const result = await clearMockProfileDataAction();
 
       expect(result.success).toBe(true);
-      expect(result.message).toMatch(/Deleted 0 resumes/);
+      expect(result.data?.resumes).toBe(0);
     });
 
     it("handles Prisma errors gracefully", async () => {
@@ -585,7 +585,7 @@ describe("mock.actions", () => {
 
       const result = await clearMockProfileDataAction();
 
-      expect(result).toEqual({ success: false, message: "Failed to clear mock profile data" });
+      expect(result).toEqual({ success: false, message: "errors.unknown" });
     });
   });
 });

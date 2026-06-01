@@ -321,7 +321,7 @@ describe("logoAsset.actions", () => {
       const result = await triggerLogoDownload("other-user-company-id");
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("Company not found.");
+      expect(result.message).toBe("errors.notFound");
       expect(mockDownloadAndProcess).not.toHaveBeenCalled();
     });
 
@@ -331,7 +331,7 @@ describe("logoAsset.actions", () => {
       const result = await triggerLogoDownload("company-fixture-id");
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe("Company has no logo URL.");
+      expect(result.message).toBe("logoAsset.noLogoUrl");
       expect(mockDownloadAndProcess).not.toHaveBeenCalled();
     });
 
@@ -384,7 +384,7 @@ describe("logoAsset.actions", () => {
 
       // Empty string is falsy — treated as missing logoUrl
       expect(result.success).toBe(false);
-      expect(result.message).toBe("Company has no logo URL.");
+      expect(result.message).toBe("logoAsset.noLogoUrl");
     });
   });
 });

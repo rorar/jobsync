@@ -110,11 +110,18 @@ jest.mock("@/lib/events", () => ({
   DomainEventTypes: jest.requireActual("@/lib/events").DomainEventTypes,
 }));
 
+// data-audit is a server-only leaf importing @/lib/db — mock so we can assert
+// the GDPR audit-trail wiring (Welle 1 S6a) without touching prisma.
+jest.mock("@/lib/audit/data-audit", () => ({
+  writeDataAuditLog: jest.fn(),
+}));
+
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
 import db from "@/lib/db";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
 
 import {
   GET as listJobs,
@@ -147,6 +154,9 @@ const mockPrisma = db as unknown as {
   tag: { count: jest.Mock };
   $transaction: jest.Mock;
 };
+
+// Typed reference to the mocked data-audit writer
+const auditMock = writeDataAuditLog as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -334,6 +344,36 @@ describe("POST /api/v1/jobs", () => {
     expect(body.data.id).toBe(VALID_UUID);
   });
 
+  it("writes a job.create data-audit entry after a successful create (S6a)", async () => {
+    mockPrisma.job.create.mockResolvedValue(makeJobRow());
+
+    const req = mockRequest("http://localhost/api/v1/jobs", {
+      method: "POST",
+      body: { title: "Engineer", company: "Acme" },
+    });
+    await createJob(req, routeCtx());
+
+    expect(auditMock).toHaveBeenCalledTimes(1);
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: "test-user-id",
+        action: "job.create",
+        targetType: "job",
+        targetId: VALID_UUID,
+      }),
+    );
+  });
+
+  it("does not write a data-audit entry on a validation failure", async () => {
+    const req = mockRequest("http://localhost/api/v1/jobs", {
+      method: "POST",
+      body: { company: "Acme" }, // missing title
+    });
+    await createJob(req, routeCtx());
+
+    expect(auditMock).not.toHaveBeenCalled();
+  });
+
   it("passes userId to prisma.job.create (IDOR)", async () => {
     mockPrisma.job.create.mockResolvedValue(makeJobRow());
 
@@ -504,6 +544,39 @@ describe("PATCH /api/v1/jobs/:id", () => {
     expect(body.success).toBe(true);
   });
 
+  it("writes a job.update data-audit entry after a successful update (S6a)", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue({ id: VALID_UUID, version: 0 });
+    mockPrisma.job.update.mockResolvedValue(makeJobRow({ jobType: "Part-time" }));
+
+    const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}`, {
+      method: "PATCH",
+      body: { type: "Part-time" },
+    });
+    await patchJob(req, routeCtx(VALID_UUID));
+
+    expect(auditMock).toHaveBeenCalledTimes(1);
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: "test-user-id",
+        action: "job.update",
+        targetType: "job",
+        targetId: VALID_UUID,
+      }),
+    );
+  });
+
+  it("does not write a data-audit entry when the job is not owned", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue(null); // not owned
+
+    const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}`, {
+      method: "PATCH",
+      body: { type: "Part-time" },
+    });
+    await patchJob(req, routeCtx(VALID_UUID));
+
+    expect(auditMock).not.toHaveBeenCalled();
+  });
+
   it("verifies ownership before update (IDOR)", async () => {
     mockPrisma.job.findFirst.mockResolvedValue(null); // not owned
 
@@ -605,6 +678,37 @@ describe("DELETE /api/v1/jobs/:id", () => {
     expect(res.body).toBeNull();
     // No manual interview.deleteMany — cascade handles Interview, CrmInterview, JobContact, etc.
     expect(mockPrisma.interview.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("writes a job.delete data-audit entry after a successful delete (S6a)", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue({ id: VALID_UUID });
+    mockPrisma.job.delete.mockResolvedValue({});
+
+    const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}`, {
+      method: "DELETE",
+    });
+    await deleteJob(req, routeCtx(VALID_UUID));
+
+    expect(auditMock).toHaveBeenCalledTimes(1);
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: "test-user-id",
+        action: "job.delete",
+        targetType: "job",
+        targetId: VALID_UUID,
+      }),
+    );
+  });
+
+  it("does not write a data-audit entry when the job is not owned", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue(null); // not owned
+
+    const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}`, {
+      method: "DELETE",
+    });
+    await deleteJob(req, routeCtx(VALID_UUID));
+
+    expect(auditMock).not.toHaveBeenCalled();
   });
 
   it("verifies ownership before delete (IDOR)", async () => {
@@ -743,6 +847,44 @@ describe("POST /api/v1/jobs/:id/notes", () => {
     const body = await res.json();
     expect(body.success).toBe(true);
     expect(body.data.content).toBe("My note");
+  });
+
+  it("writes a job.note_add data-audit entry against the Job after a successful note create (S6a)", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue({ id: VALID_UUID });
+    mockPrisma.note.create.mockResolvedValue({
+      id: "note-1",
+      content: "My note",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const req = mockRequest(
+      `http://localhost/api/v1/jobs/${VALID_UUID}/notes`,
+      { method: "POST", body: { content: "My note" } },
+    );
+    await createNote(req, routeCtx(VALID_UUID));
+
+    expect(auditMock).toHaveBeenCalledTimes(1);
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: "test-user-id",
+        action: "job.note_add",
+        targetType: "job",
+        targetId: VALID_UUID,
+      }),
+    );
+  });
+
+  it("does not write a data-audit entry when the note's Job is not owned", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue(null); // not owned
+
+    const req = mockRequest(
+      `http://localhost/api/v1/jobs/${VALID_UUID}/notes`,
+      { method: "POST", body: { content: "Note" } },
+    );
+    await createNote(req, routeCtx(VALID_UUID));
+
+    expect(auditMock).not.toHaveBeenCalled();
   });
 
   it("verifies job ownership before creating note (IDOR)", async () => {

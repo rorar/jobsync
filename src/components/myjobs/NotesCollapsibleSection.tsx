@@ -90,7 +90,7 @@ export function NotesCollapsibleSection({
         toast({
           variant: "destructive",
           title: t("jobs.error"),
-          description: result.message,
+          description: result.message ? t(result.message) : undefined,
         });
       }
     });
@@ -116,7 +116,7 @@ export function NotesCollapsibleSection({
         toast({
           variant: "destructive",
           title: t("jobs.error"),
-          description: result.message,
+          description: result.message ? t(result.message) : undefined,
         });
       }
     });

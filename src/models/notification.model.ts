@@ -176,24 +176,38 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
 /**
  * All notification types for which per-type preferences can be configured.
  */
-export const CONFIGURABLE_NOTIFICATION_TYPES: NotificationType[] = [
-  "auth_failure",
-  "consecutive_failures",
-  "cb_escalation",
-  "module_deactivated",
-  "module_reactivated",
-  "module_unreachable",
-  "vacancy_promoted",
-  "vacancy_batch_staged",
-  "bulk_action_completed",
-  "retention_completed",
-  "job_status_changed",
-  "interview_scheduled",
-  "interview_reminder",
-  "follow_up_due",
-  "contact_from_job",
-  "retention_expired",
-];
+/**
+ * Single source of truth for notification-type configurability (IF-7).
+ *
+ * The `Record<NotificationType, boolean>` shape forces the compiler to list
+ * EVERY `NotificationType` member — adding a type to the union without adding it
+ * here is a build error. This kills the union↔array drift foot-gun: there is no
+ * longer a hand-maintained literal set that can silently fall out of sync.
+ * `true` = user-configurable in NotificationSettings (and a valid webhook event).
+ * Insertion order is the UI display order.
+ */
+const NOTIFICATION_TYPE_CONFIGURABILITY: Record<NotificationType, boolean> = {
+  auth_failure: true,
+  consecutive_failures: true,
+  cb_escalation: true,
+  module_deactivated: true,
+  module_reactivated: true,
+  module_unreachable: true,
+  vacancy_promoted: true,
+  vacancy_batch_staged: true,
+  bulk_action_completed: true,
+  retention_completed: true,
+  job_status_changed: true,
+  interview_scheduled: true,
+  interview_reminder: true,
+  follow_up_due: true,
+  contact_from_job: true,
+  retention_expired: true,
+};
+
+export const CONFIGURABLE_NOTIFICATION_TYPES: NotificationType[] = (
+  Object.keys(NOTIFICATION_TYPE_CONFIGURABILITY) as NotificationType[]
+).filter((type) => NOTIFICATION_TYPE_CONFIGURABILITY[type]);
 
 /** Channel identifiers for shouldNotify checks */
 export type NotificationChannelId = keyof NotificationPreferences["channels"];

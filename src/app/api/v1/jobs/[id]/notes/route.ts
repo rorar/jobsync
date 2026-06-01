@@ -2,6 +2,7 @@ import prisma from "@/lib/db";
 import { withApiAuth } from "@/lib/api/with-api-auth";
 import { paginatedResponse, createdResponse, errorResponse } from "@/lib/api/response";
 import { NotesListQuerySchema, CreateNoteSchema, isValidUUID } from "@/lib/api/schemas";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
 
 /** CORS preflight */
 export const OPTIONS = withApiAuth(async () => new Response(null));
@@ -104,6 +105,14 @@ export const POST = withApiAuth(async (req, { userId, params }) => {
       createdAt: true,
       updatedAt: true,
     },
+  });
+
+  // S6a: audit note-add via the public API (actor = API-key user).
+  writeDataAuditLog({
+    actorId: userId,
+    action: "job.note_add",
+    targetType: "job",
+    targetId: jobId,
   });
 
   return createdResponse(note);

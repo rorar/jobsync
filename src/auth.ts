@@ -20,6 +20,32 @@ async function getUser(email: string): Promise<User | undefined> {
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
   ...authConfig,
+  callbacks: {
+    ...authConfig.callbacks,
+    // Node-runtime session callback: the JWT holds only the user id (GDPR
+    // Art. 5(1)(c) data minimisation — see auth.config.ts). Display fields are
+    // resolved from the DB here, so name/email never have to live in the token.
+    async session({ session, token }) {
+      const userId = (token.id as string) || token.sub;
+      if (!userId) return session;
+      session.user.id = userId;
+      try {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { name: true, email: true },
+        });
+        if (dbUser) {
+          session.user.name = dbUser.name;
+          session.user.email = dbUser.email;
+        }
+      } catch (error) {
+        // Fail-safe: never break the session if the lookup fails; the id is
+        // still present, display fields are simply omitted.
+        console.error("Failed to resolve session display fields:", error);
+      }
+      return session;
+    },
+  },
   providers: [
     Credentials({
       async authorize(credentials) {

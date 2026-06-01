@@ -15,7 +15,7 @@ export const getJobSourceList = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const skip = (page - 1) * limit;
 
@@ -59,7 +59,7 @@ export const getJobSourceList = async (
     ]);
     return { success: true, data, total };
   } catch (error) {
-    const msg = "Failed to fetch job source list. ";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -71,7 +71,7 @@ export const deleteJobSourceById = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const jobs = await prisma.job.count({
@@ -94,7 +94,7 @@ export const deleteJobSourceById = async (
     });
     return { success: true, data: res };
   } catch (error) {
-    const msg = "Failed to delete job source.";
+    const msg = "errors.deleteFailed";
     return handleError(error, msg);
   }
 };

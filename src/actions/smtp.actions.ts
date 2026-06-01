@@ -13,6 +13,7 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { handleError } from "@/lib/utils";
 import { encrypt, decrypt, getLast4 } from "@/lib/encryption";
 import { validateSmtpHost } from "@/lib/smtp-validation";
+import type { TranslationKeyStrict } from "@/i18n/dictionaries";
 import { checkTestEmailRateLimit } from "@/lib/email-rate-limit";
 import { renderTestEmail } from "@/lib/email/templates";
 import { createSmtpTransporter } from "@/lib/email/transport";
@@ -67,7 +68,7 @@ const MAX_FROM_ADDRESS_LENGTH = 320; // RFC 5321 max mailbox length
 
 function validateInput(data: SaveSmtpConfigInput, requirePassword: boolean): {
   valid: boolean;
-  error?: string;
+  error?: TranslationKeyStrict;
 } {
   // Host validation (SSRF)
   if (!data.host || data.host.trim() === "") {
@@ -166,7 +167,7 @@ export async function saveSmtpConfig(
 ): Promise<ActionResult<SmtpConfigDTO>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Check if this is a create or update
     const existing = await prisma.smtpConfig.findFirst({
@@ -240,7 +241,7 @@ export async function saveSmtpConfig(
 export async function getSmtpConfig(): Promise<ActionResult<SmtpConfigDTO | null>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const config = await prisma.smtpConfig.findFirst({
       where: { userId: user.id },
@@ -263,7 +264,7 @@ export async function getSmtpConfig(): Promise<ActionResult<SmtpConfigDTO | null
 export async function testSmtpConnection(): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Rate limit: 1 test per 60 seconds
     const rateCheck = checkTestEmailRateLimit(user.id);
@@ -334,7 +335,7 @@ export async function testSmtpConnection(): Promise<ActionResult> {
 export async function deleteSmtpConfig(): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Verify ownership and existence (ADR-015: userId in where)
     const existing = await prisma.smtpConfig.findFirst({

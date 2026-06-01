@@ -143,7 +143,7 @@ export async function checkLogoUrl(
 ): Promise<ActionResult<CheckLogoUrlData>> {
   const user = await getCurrentUser();
   if (!user) {
-    return { success: false, message: "Unauthenticated" };
+    return { success: false, message: "errors.notAuthenticated" };
   }
 
   // M-S-04: Global cap checked BEFORE per-user cap. An authenticated attacker
@@ -156,13 +156,13 @@ export async function checkLogoUrl(
     GLOBAL_LOGO_CHECK_WINDOW_MS,
   );
   if (!globalResult.allowed) {
-    return { success: false, message: "Rate limit exceeded" };
+    return { success: false, message: "errors.tooManyRequests" };
   }
 
   // Per-user cap: 20/min — unchanged.
   const rateResult = checkRateLimit(`logoCheck:${user.id}`, 20, 60_000);
   if (!rateResult.allowed) {
-    return { success: false, message: "Rate limit exceeded" };
+    return { success: false, message: "errors.tooManyRequests" };
   }
 
   try {

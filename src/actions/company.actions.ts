@@ -21,7 +21,7 @@ export const getCompanyList = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const skip = (page - 1) * limit;
 
@@ -67,7 +67,7 @@ export const getCompanyList = async (
     ]);
     return { success: true, data, total };
   } catch (error) {
-    const msg = "Failed to fetch company list. ";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -77,7 +77,7 @@ export const getAllCompanies = async (): Promise<ActionResult<Company[]>> => {
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const companies = await prisma.company.findMany({
@@ -87,7 +87,7 @@ export const getAllCompanies = async (): Promise<ActionResult<Company[]>> => {
     });
     return { success: true, data: companies as Company[] };
   } catch (error) {
-    const msg = "Failed to fetch all companies. ";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -113,7 +113,7 @@ export const addCompany = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const { company, logoUrl } = data;
@@ -159,7 +159,7 @@ export const addCompany = async (
     revalidatePath("/dashboard/myjobs", "page");
     return { success: true, data: res };
   } catch (error) {
-    const msg = "Failed to create company.";
+    const msg = "errors.createFailed";
     return handleError(error, msg);
   }
 };
@@ -171,7 +171,7 @@ export const updateCompany = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const { id, company, logoUrl } = data;
@@ -233,7 +233,7 @@ export const updateCompany = async (
 
     return { success: true, data: res };
   } catch (error) {
-    const msg = "Failed to update company.";
+    const msg = "errors.updateFailed";
     return handleError(error, msg);
   }
 };
@@ -241,16 +241,14 @@ export const updateCompany = async (
 export const getCompanyById = async (
   companyId: string,
 ): Promise<ActionResult<Company>> => {
+  if (!companyId) {
+    return { success: false, message: "errors.invalidInput" };
+  }
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, message: "errors.notAuthenticated" };
+  }
   try {
-    if (!companyId) {
-      throw new Error("Please provide company id");
-    }
-    const user = await getCurrentUser();
-
-    if (!user) {
-      throw new Error("Not authenticated");
-    }
-
     const company = await prisma.company.findFirst({
       where: {
         id: companyId,
@@ -259,12 +257,7 @@ export const getCompanyById = async (
     });
     return { success: true, data: company ?? undefined };
   } catch (error) {
-    const msg = "Failed to fetch company by Id. ";
-    console.error(msg);
-    if (error instanceof Error) {
-      return { success: false, message: error.message };
-    }
-    return { success: false, message: msg };
+    return handleError(error, "errors.fetchFailed");
   }
 };
 
@@ -275,7 +268,7 @@ export const deleteCompanyById = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const experiences = await prisma.workExperience.count({
@@ -321,7 +314,7 @@ export const deleteCompanyById = async (
     });
     return { data: res, success: true };
   } catch (error) {
-    const msg = "Failed to delete company.";
+    const msg = "errors.deleteFailed";
     return handleError(error, msg);
   }
 };

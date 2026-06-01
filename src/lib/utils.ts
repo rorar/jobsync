@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { format, parse } from "date-fns";
 import { formatDate } from "@/i18n";
+import type { TranslationKeyStrict } from "@/i18n/dictionaries";
 import { twMerge } from "tailwind-merge";
 import { ActionResult, ActionErrorCode } from "@/models/actionResult";
 
@@ -50,13 +51,16 @@ export function formatUrl(url: string) {
  * Map Prisma error codes to ActionErrorCode for programmatic handling.
  * Raw Prisma messages are replaced with generic i18n-friendly messages.
  */
-const PRISMA_ERROR_MAP: Record<string, { errorCode: ActionErrorCode; message: string }> = {
+const PRISMA_ERROR_MAP: Record<string, { errorCode: ActionErrorCode; message: TranslationKeyStrict }> = {
   P2002: { errorCode: "DUPLICATE_ENTRY", message: "errors.duplicateEntry" },
   P2025: { errorCode: "NOT_FOUND", message: "errors.notFound" },
   P2003: { errorCode: "REFERENCE_ERROR", message: "errors.referenceError" },
 };
 
-export function handleError(error: unknown, msg = "Server Error."): ActionResult<never> {
+export function handleError(
+  error: unknown,
+  msg: TranslationKeyStrict = "errors.unknown",
+): ActionResult<never> {
   console.error(error, msg);
   if (error instanceof Error) {
     if (error.message === "fetch failed") {

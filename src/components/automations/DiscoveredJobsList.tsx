@@ -59,7 +59,7 @@ export function DiscoveredJobsList({
     } else {
       toast({
         title: t("automations.somethingWentWrong"),
-        description: result.message,
+        description: result.message ? t(result.message) : undefined,
         variant: "destructive",
       });
     }
@@ -76,7 +76,7 @@ export function DiscoveredJobsList({
     } else {
       toast({
         title: t("automations.somethingWentWrong"),
-        description: result.message,
+        description: result.message ? t(result.message) : undefined,
         variant: "destructive",
       });
     }

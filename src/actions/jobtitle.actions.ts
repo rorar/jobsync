@@ -10,7 +10,7 @@ export const getAllJobTitles = async (): Promise<ActionResult<JobTitle[]>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const list = await prisma.jobTitle.findMany({
       where: {
@@ -19,7 +19,7 @@ export const getAllJobTitles = async (): Promise<ActionResult<JobTitle[]>> => {
     });
     return { success: true, data: list };
   } catch (error) {
-    const msg = "Failed to fetch job title list. ";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -33,7 +33,7 @@ export const getJobTitleList = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const skip = (page - 1) * limit;
 
@@ -77,7 +77,7 @@ export const getJobTitleList = async (
     ]);
     return { success: true, data, total };
   } catch (error) {
-    const msg = "Failed to fetch job title list. ";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -89,7 +89,7 @@ export const createJobTitle = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const value = label.trim().toLowerCase();
@@ -102,7 +102,7 @@ export const createJobTitle = async (
 
     return { success: true, data: upsertedTitle };
   } catch (error) {
-    const msg = "Failed to create job title. ";
+    const msg = "errors.createFailed";
     return handleError(error, msg);
   }
 };
@@ -114,7 +114,7 @@ export const deleteJobTitleById = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const experiences = await prisma.workExperience.count({
@@ -147,7 +147,7 @@ export const deleteJobTitleById = async (
     });
     return { success: true, data: res };
   } catch (error) {
-    const msg = "Failed to delete job title.";
+    const msg = "errors.deleteFailed";
     return handleError(error, msg);
   }
 };

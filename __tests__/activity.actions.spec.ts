@@ -93,7 +93,7 @@ describe("activity.actions", () => {
 
       const result = await getAllActivityTypes();
 
-      expect(result).toEqual({ success: false, message: "Failed to fetch all activity types. " });
+      expect(result).toEqual({ success: false, message: "errors.fetchFailed" });
       expect(prisma.activityType.findMany).not.toHaveBeenCalled();
     });
 
@@ -105,7 +105,7 @@ describe("activity.actions", () => {
 
       const result = await getAllActivityTypes();
 
-      expect(result).toEqual({ success: false, message: "Failed to fetch all activity types. " });
+      expect(result).toEqual({ success: false, message: "errors.fetchFailed" });
     });
   });
 
@@ -139,7 +139,7 @@ describe("activity.actions", () => {
 
       const result = await createActivityType("Learning");
 
-      expect(result).toEqual({ success: false, message: "Failed to create activity type. " });
+      expect(result).toEqual({ success: false, message: "errors.createFailed" });
       expect(prisma.activityType.upsert).not.toHaveBeenCalled();
     });
 
@@ -151,7 +151,7 @@ describe("activity.actions", () => {
 
       const result = await createActivityType("Learning");
 
-      expect(result).toEqual({ success: false, message: "Failed to create activity type. " });
+      expect(result).toEqual({ success: false, message: "errors.createFailed" });
     });
   });
 
@@ -179,7 +179,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch activities list. ",
+        message: "errors.fetchFailed",
       });
     });
 
@@ -193,7 +193,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch activities list. ",
+        message: "errors.fetchFailed",
       });
     });
 
@@ -378,7 +378,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch activity.",
+        message: "errors.fetchFailed",
       });
       expect(prisma.activity.findFirst).not.toHaveBeenCalled();
     });
@@ -391,7 +391,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Activity not found",
+        message: "errors.notFound",
       });
       expect(prisma.activity.findFirst).toHaveBeenCalledWith({
         where: {
@@ -434,7 +434,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Activity not found",
+        message: "errors.notFound",
       });
       expect(prisma.activity.findFirst).toHaveBeenCalledWith({
         where: {
@@ -457,7 +457,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to fetch activity.",
+        message: "errors.fetchFailed",
       });
     });
   });
@@ -518,7 +518,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update activity.",
+        message: "errors.updateFailed",
       });
       expect(prisma.activity.findFirst).not.toHaveBeenCalled();
       expect(prisma.activity.update).not.toHaveBeenCalled();
@@ -534,7 +534,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update activity.",
+        message: "errors.updateFailed",
       });
       expect(prisma.activity.findFirst).not.toHaveBeenCalled();
       expect(prisma.activity.update).not.toHaveBeenCalled();
@@ -548,7 +548,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Activity not found",
+        message: "errors.notFound",
       });
       expect(prisma.activity.findFirst).toHaveBeenCalledWith({
         where: {
@@ -569,7 +569,7 @@ describe("activity.actions", () => {
       expect(result).toEqual({
         success: true,
         data: updatedActivity,
-        message: "Activity updated successfully",
+        message: "activities.updateSuccess",
       });
       expect(prisma.activity.findFirst).toHaveBeenCalledWith({
         where: {
@@ -606,7 +606,7 @@ describe("activity.actions", () => {
 
       expect(result).toEqual({
         success: false,
-        message: "Failed to update activity.",
+        message: "errors.updateFailed",
       });
     });
   });

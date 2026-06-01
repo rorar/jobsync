@@ -3,6 +3,7 @@ import { withApiAuth } from "@/lib/api/with-api-auth";
 import { actionToResponse, errorResponse, noContentResponse } from "@/lib/api/response";
 import { UpdateJobSchema, isValidUUID } from "@/lib/api/schemas";
 import { findOrCreate, JOB_DETAIL_SELECT, JOB_API_SELECT } from "@/lib/api/helpers";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
 
 /** CORS preflight */
 export const OPTIONS = withApiAuth(async () => new Response(null));
@@ -85,6 +86,14 @@ export const PATCH = withApiAuth(async (req, { userId, params }) => {
     select: JOB_API_SELECT,
   });
 
+  // S6a: audit the Job update via the public API (actor = API-key user).
+  writeDataAuditLog({
+    actorId: userId,
+    action: "job.update",
+    targetType: "job",
+    targetId: jobId,
+  });
+
   return actionToResponse({ success: true, data: job });
 });
 
@@ -107,6 +116,14 @@ export const DELETE = withApiAuth(async (_req, { userId, params }) => {
 
   // Interview, CrmInterview, JobContact, etc. cascade-delete via onDelete rules in schema
   await prisma.job.delete({ where: { id: jobId, userId } });
+
+  // S6a: audit the Job deletion via the public API (actor = API-key user).
+  writeDataAuditLog({
+    actorId: userId,
+    action: "job.delete",
+    targetType: "job",
+    targetId: jobId,
+  });
 
   return noContentResponse();
 });

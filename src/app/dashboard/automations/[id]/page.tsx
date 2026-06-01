@@ -85,7 +85,7 @@ export default function AutomationDetailPage() {
       } else {
         toast({
           title: t("common.error"),
-          description: automationResult.message || t("automations.notFound"),
+          description: automationResult.message ? t(automationResult.message) : t("automations.notFound"),
           variant: "destructive",
         });
         router.push("/dashboard/automations");
@@ -135,7 +135,7 @@ export default function AutomationDetailPage() {
     } else {
       toast({
         title: t("common.error"),
-        description: result.message,
+        description: result.message ? t(result.message) : undefined,
         variant: "destructive",
       });
     }
