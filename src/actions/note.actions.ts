@@ -13,7 +13,7 @@ export const getNotesByJobId = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const job = await prisma.job.findFirst({
@@ -36,7 +36,7 @@ export const getNotesByJobId = async (
 
     return { success: true, data };
   } catch (error) {
-    const msg = "Failed to fetch notes.";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -47,7 +47,7 @@ export const addNote = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const validated = NoteFormSchema.parse(data);
@@ -70,7 +70,7 @@ export const addNote = async (
 
     return { success: true, data: note };
   } catch (error) {
-    const msg = "Failed to add note.";
+    const msg = "errors.createFailed";
     return handleError(error, msg);
   }
 };
@@ -81,7 +81,7 @@ export const updateNote = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const validated = NoteFormSchema.parse(data);
@@ -96,7 +96,7 @@ export const updateNote = async (
 
     return { success: true, data: note };
   } catch (error) {
-    const msg = "Failed to update note.";
+    const msg = "errors.updateFailed";
     return handleError(error, msg);
   }
 };
@@ -107,7 +107,7 @@ export const deleteNote = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     await prisma.note.delete({
@@ -116,7 +116,7 @@ export const deleteNote = async (
 
     return { success: true };
   } catch (error) {
-    const msg = "Failed to delete note.";
+    const msg = "errors.deleteFailed";
     return handleError(error, msg);
   }
 };

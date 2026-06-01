@@ -1,4 +1,5 @@
 import "server-only";
+import type { TranslationKeyStrict } from "@/i18n/dictionaries";
 
 /**
  * SMTP Host Validation — SSRF prevention for user-supplied SMTP hosts.
@@ -23,7 +24,7 @@ import "server-only";
 
 export function validateSmtpHost(host: string): {
   valid: boolean;
-  error?: string;
+  error?: TranslationKeyStrict;
 } {
   if (!host || host.trim() === "") {
     return { valid: false, error: "smtp.hostEmpty" };

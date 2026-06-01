@@ -12,7 +12,7 @@ export const getJobsAppliedForPeriod = async (
   const user = await getCurrentUser();
 
   if (!user) {
-    throw new Error("Not authenticated");
+    throw new Error("errors.notAuthenticated");
   }
 
   try {
@@ -38,7 +38,7 @@ export const getJobsAppliedForPeriod = async (
     const trend = calculatePercentageDifference(difference, count);
     return { count, trend };
   } catch (error) {
-    const msg = "Failed to calculate job count";
+    const msg = "errors.unknown";
     console.error(msg, error);
     throw new Error(msg);
   }
@@ -49,7 +49,7 @@ export const getRecentJobs = async (): Promise<any[]> => {
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const list = await prisma.job.findMany({
       where: {
@@ -70,7 +70,7 @@ export const getRecentJobs = async (): Promise<any[]> => {
     });
     return list;
   } catch (error) {
-    const msg = "Failed to fetch jobs list. ";
+    const msg = "errors.fetchFailed";
     console.error(msg, error);
     throw new Error(msg);
   }
@@ -81,7 +81,7 @@ export const getActivityDataForPeriod = async (): Promise<Record<string, any>[]>
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const now = new Date();
     // Use local time for date range to match grouping and getLast7Days
@@ -148,7 +148,7 @@ export const getActivityDataForPeriod = async (): Promise<Record<string, any>[]>
     }));
     return result;
   } catch (error) {
-    const msg = "Failed to fetch activities data.";
+    const msg = "errors.fetchFailed";
     console.error(msg, error);
     throw new Error(msg);
   }
@@ -159,7 +159,7 @@ export const getJobsActivityForPeriod = async (): Promise<{ day: string; value: 
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const now = new Date();
     // Use local time for date range to match grouping and getLast7Days
@@ -216,7 +216,7 @@ export const getJobsActivityForPeriod = async (): Promise<{ day: string; value: 
 
     return result;
   } catch (error) {
-    const msg = "Failed to fetch jobs list. ";
+    const msg = "errors.fetchFailed";
     console.error(msg, error);
     throw new Error(msg);
   }
@@ -233,7 +233,7 @@ export const getTopActivityTypesByDuration = async (
   const user = await getCurrentUser();
 
   if (!user) {
-    throw new Error("Not authenticated");
+    throw new Error("errors.notAuthenticated");
   }
 
   try {
@@ -292,7 +292,7 @@ export const getTopActivityTypesByDuration = async (
 
     return sorted;
   } catch (error) {
-    const msg = "Failed to fetch top activity types";
+    const msg = "errors.fetchFailed";
     console.error(msg, error);
     throw new Error(msg);
   }
@@ -303,7 +303,7 @@ export const getRecentActivities = async () => {
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const list = await prisma.activity.findMany({
       where: {
@@ -320,7 +320,7 @@ export const getRecentActivities = async () => {
     });
     return list;
   } catch (error) {
-    const msg = "Failed to fetch recent activities.";
+    const msg = "errors.fetchFailed";
     console.error(msg, error);
     throw new Error(msg);
   }
@@ -331,7 +331,7 @@ export const getActivityCalendarData = async (): Promise<Record<string, { day: s
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const now = new Date();
     // Use local time for date range to match grouping
@@ -420,7 +420,7 @@ export const getActivityCalendarData = async (): Promise<Record<string, { day: s
 
     return groupedByYear;
   } catch (error) {
-    const msg = "Failed to fetch jobs list. ";
+    const msg = "errors.fetchFailed";
     console.error(msg, error);
     throw new Error(msg);
   }

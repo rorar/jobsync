@@ -16,7 +16,7 @@ export const getQuestionsList = async (
 ): Promise<ActionResult<Question[]>> => {
   try {
     const user = await getCurrentUser();
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("errors.notAuthenticated");
 
     const offset = (page - 1) * limit;
 
@@ -59,7 +59,7 @@ export const getQuestionById = async (
 ): Promise<ActionResult<Question>> => {
   try {
     const user = await getCurrentUser();
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("errors.notAuthenticated");
 
     const question = await prisma.question.findFirst({
       where: { id: questionId, createdBy: user.id },
@@ -67,7 +67,7 @@ export const getQuestionById = async (
     });
 
     if (!question) {
-      return { success: false, message: "Question not found" };
+      return { success: false, message: "errors.notFound" };
     }
 
     return { success: true, data: question };
@@ -81,7 +81,7 @@ export const createQuestion = async (
 ): Promise<ActionResult<Question>> => {
   try {
     const user = await getCurrentUser();
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("errors.notAuthenticated");
 
     const validatedData = AddQuestionFormSchema.parse(data);
 
@@ -108,7 +108,7 @@ export const updateQuestion = async (
 ): Promise<ActionResult<Question>> => {
   try {
     const user = await getCurrentUser();
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("errors.notAuthenticated");
 
     if (!data.id) throw new Error("Question ID is required for update");
 
@@ -137,7 +137,7 @@ export const deleteQuestion = async (
 ): Promise<ActionResult> => {
   try {
     const user = await getCurrentUser();
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("errors.notAuthenticated");
 
     await prisma.question.delete({
       where: { id: questionId, createdBy: user.id },
@@ -154,7 +154,7 @@ export const getTagsWithQuestionCounts = async (): Promise<
 > => {
   try {
     const user = await getCurrentUser();
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("errors.notAuthenticated");
 
     const tags = await prisma.tag.findMany({
       where: { createdBy: user.id },

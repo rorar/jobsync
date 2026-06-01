@@ -18,7 +18,7 @@ export const getStatusList = async (): Promise<ActionResult<JobStatus[]>> => {
     // JobStatus is a system-wide lookup table, not user-scoped — no userId filter needed.
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const statuses = await prisma.jobStatus.findMany();
     return { success: true, data: statuses };
@@ -32,7 +32,7 @@ export const getJobSourceList = async (): Promise<ActionResult<JobSource[]>> => 
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const list = await prisma.jobSource.findMany({
       where: {
@@ -61,7 +61,7 @@ export const getJobsList = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const skip = (safePage - 1) * safeLimit;
 
@@ -146,7 +146,7 @@ export const getJobsList = async (
 export async function* getJobsIterator(filter?: string, pageSize = 200) {
   const user = await getCurrentUser();
   if (!user) {
-    throw new Error("Not authenticated");
+    throw new Error("errors.notAuthenticated");
   }
   let page = 1;
   let fetchedCount = 0;
@@ -202,7 +202,7 @@ export const getJobDetails = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const job = await prisma.job.findFirst({
@@ -240,7 +240,7 @@ export const createLocation = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const value = label.trim().toLowerCase();
@@ -273,7 +273,7 @@ export const createJobSource = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const value = label.trim().toLowerCase();
@@ -306,7 +306,7 @@ export const addJob = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const {
@@ -446,7 +446,7 @@ export const updateJob = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     if (!data.id) {
       throw new Error("Id is not provided");
@@ -637,7 +637,7 @@ export const deleteJobById = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // CrmInterview, JobContact, etc. cascade-delete via onDelete: Cascade in schema
@@ -664,7 +664,7 @@ export const addJobToQueue = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Resolve names from IDs for the StagedVacancy record (CON-H05 — ownership filter)
@@ -773,7 +773,7 @@ export const changeJobStatus = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Validate note length (server-side enforcement)
@@ -886,7 +886,7 @@ export const getKanbanBoard = async (): Promise<ActionResult<KanbanBoard>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Fetch all statuses to build columns even if empty
@@ -972,7 +972,7 @@ export const updateKanbanOrder = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Validate sortOrder: must be a finite number (negative values are valid for insertion ordering)
@@ -1105,7 +1105,7 @@ export const getJobStatusHistory = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Clamp pagination parameters
@@ -1158,7 +1158,7 @@ export const getStatusDistribution = async (): Promise<ActionResult<StatusDistri
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const jobs = await prisma.job.groupBy({
@@ -1199,7 +1199,7 @@ export const getValidTransitions = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const job = await prisma.job.findFirst({

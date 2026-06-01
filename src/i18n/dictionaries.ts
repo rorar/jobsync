@@ -129,9 +129,23 @@ const core = {
     "errors.invalidSortOrder": "Invalid sort order value",
     "errors.duplicateEntry": "A record with this value already exists",
     "errors.fetchFailed": "Failed to fetch data",
+    "errors.createFailed": "Could not create. Please try again.",
+    "errors.updateFailed": "Could not save your changes. Please try again.",
+    "errors.deleteFailed": "Could not delete. Please try again.",
+    "errors.accountDeletion": "Could not schedule account deletion",
+    "errors.cancelDeletion": "Could not cancel the account deletion",
+    "errors.fetchDeletionStatus": "Could not load the account-deletion status",
+    "errors.checkSmtpAvailability": "Could not check SMTP availability",
+    "errors.fetchEnvApiKeyStatus": "Could not load the environment API-key status",
+    "errors.fetchPrivacySettings": "Could not load privacy settings",
+    "errors.updatePrivacySettings": "Could not update privacy settings",
     "errors.referenceError": "Operation failed: a referenced record does not exist or is still in use",
     "errors.unknown": "An unexpected error occurred. Please try again.",
     "errors.staleState": "This job was modified in another tab. Please refresh and try again.",
+    "errors.notAuthenticated": "You need to be signed in to do that",
+    "errors.invalidInput": "Invalid input",
+    "errors.smtpDecryptionFailed": "Could not decrypt the saved SMTP password",
+    "errors.noDeletionScheduled": "No account deletion is currently scheduled",
 
     // Server action error messages (F7)
     "errors.fetchStatusList": "Failed to fetch status list",
@@ -299,9 +313,23 @@ const core = {
     "errors.invalidSortOrder": "Ungültiger Sortierungswert",
     "errors.duplicateEntry": "Ein Eintrag mit diesem Wert existiert bereits",
     "errors.fetchFailed": "Daten konnten nicht abgerufen werden",
+    "errors.createFailed": "Konnte nicht erstellt werden. Bitte versuche es erneut.",
+    "errors.updateFailed": "Deine Änderungen konnten nicht gespeichert werden. Bitte versuche es erneut.",
+    "errors.deleteFailed": "Konnte nicht gelöscht werden. Bitte versuche es erneut.",
+    "errors.accountDeletion": "Kontolöschung konnte nicht geplant werden",
+    "errors.cancelDeletion": "Die Kontolöschung konnte nicht abgebrochen werden",
+    "errors.fetchDeletionStatus": "Der Status der Kontolöschung konnte nicht geladen werden",
+    "errors.checkSmtpAvailability": "SMTP-Verfügbarkeit konnte nicht geprüft werden",
+    "errors.fetchEnvApiKeyStatus": "Der Status des Umgebungs-API-Schlüssels konnte nicht geladen werden",
+    "errors.fetchPrivacySettings": "Datenschutzeinstellungen konnten nicht geladen werden",
+    "errors.updatePrivacySettings": "Datenschutzeinstellungen konnten nicht aktualisiert werden",
     "errors.referenceError": "Vorgang fehlgeschlagen: Ein referenzierter Datensatz existiert nicht oder wird noch verwendet",
     "errors.unknown": "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
     "errors.staleState": "Dieser Job wurde in einem anderen Tab geändert. Bitte aktualisieren und erneut versuchen.",
+    "errors.notAuthenticated": "Du musst angemeldet sein, um das zu tun",
+    "errors.invalidInput": "Ungültige Eingabe",
+    "errors.smtpDecryptionFailed": "Das gespeicherte SMTP-Passwort konnte nicht entschlüsselt werden",
+    "errors.noDeletionScheduled": "Aktuell ist keine Kontolöschung geplant",
 
     // Server-Action-Fehlermeldungen (F7)
     "errors.fetchStatusList": "Statusliste konnte nicht abgerufen werden",
@@ -469,9 +497,23 @@ const core = {
     "errors.invalidSortOrder": "Valeur de tri invalide",
     "errors.duplicateEntry": "Un enregistrement avec cette valeur existe déjà",
     "errors.fetchFailed": "Impossible de récupérer les données",
+    "errors.createFailed": "Impossible de créer. Veuillez réessayer.",
+    "errors.updateFailed": "Impossible d'enregistrer vos modifications. Veuillez réessayer.",
+    "errors.deleteFailed": "Impossible de supprimer. Veuillez réessayer.",
+    "errors.accountDeletion": "Impossible de programmer la suppression du compte",
+    "errors.cancelDeletion": "Impossible d'annuler la suppression du compte",
+    "errors.fetchDeletionStatus": "Impossible de charger l'état de la suppression du compte",
+    "errors.checkSmtpAvailability": "Impossible de vérifier la disponibilité SMTP",
+    "errors.fetchEnvApiKeyStatus": "Impossible de charger l'état de la clé API d'environnement",
+    "errors.fetchPrivacySettings": "Impossible de charger les paramètres de confidentialité",
+    "errors.updatePrivacySettings": "Impossible de mettre à jour les paramètres de confidentialité",
     "errors.referenceError": "Opération échouée : un enregistrement référencé n'existe pas ou est encore utilisé",
     "errors.unknown": "Une erreur inattendue s'est produite. Veuillez réessayer.",
     "errors.staleState": "Ce poste a été modifié dans un autre onglet. Veuillez actualiser et réessayer.",
+    "errors.notAuthenticated": "Vous devez être connecté pour effectuer cette action",
+    "errors.invalidInput": "Saisie invalide",
+    "errors.smtpDecryptionFailed": "Impossible de déchiffrer le mot de passe SMTP enregistré",
+    "errors.noDeletionScheduled": "Aucune suppression de compte n'est actuellement programmée",
 
     // Messages d'erreur des actions serveur (F7)
     "errors.fetchStatusList": "Impossible de récupérer la liste des statuts",
@@ -639,9 +681,23 @@ const core = {
     "errors.invalidSortOrder": "Valor de orden inválido",
     "errors.duplicateEntry": "Ya existe un registro con este valor",
     "errors.fetchFailed": "No se pudieron obtener los datos",
+    "errors.createFailed": "No se pudo crear. Por favor, inténtelo de nuevo.",
+    "errors.updateFailed": "No se pudieron guardar los cambios. Por favor, inténtelo de nuevo.",
+    "errors.deleteFailed": "No se pudo eliminar. Por favor, inténtelo de nuevo.",
+    "errors.accountDeletion": "No se pudo programar la eliminación de la cuenta",
+    "errors.cancelDeletion": "No se pudo cancelar la eliminación de la cuenta",
+    "errors.fetchDeletionStatus": "No se pudo cargar el estado de eliminación de la cuenta",
+    "errors.checkSmtpAvailability": "No se pudo comprobar la disponibilidad de SMTP",
+    "errors.fetchEnvApiKeyStatus": "No se pudo cargar el estado de la clave API del entorno",
+    "errors.fetchPrivacySettings": "No se pudieron cargar los ajustes de privacidad",
+    "errors.updatePrivacySettings": "No se pudieron actualizar los ajustes de privacidad",
     "errors.referenceError": "Operación fallida: un registro referenciado no existe o todavía está en uso",
     "errors.unknown": "Se produjo un error inesperado. Por favor, inténtelo de nuevo.",
     "errors.staleState": "Esta oferta fue modificada en otra pestaña. Por favor, actualice e intente de nuevo.",
+    "errors.notAuthenticated": "Debes haber iniciado sesión para hacer eso",
+    "errors.invalidInput": "Entrada inválida",
+    "errors.smtpDecryptionFailed": "No se pudo descifrar la contraseña SMTP guardada",
+    "errors.noDeletionScheduled": "Actualmente no hay ninguna eliminación de cuenta programada",
 
     // Mensajes de error de acciones del servidor (F7)
     "errors.fetchStatusList": "No se pudo obtener la lista de estados",
@@ -730,7 +786,53 @@ function mergeDictionaries(...namespaces: Record<string, Record<string, string>>
 
 const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, developer, staging, notifications, api, blacklist, deck, enrichment, webhook, email, smtp, push, logoAsset, crm);
 
+/**
+ * Loose key type used by the `t()` runtime accessor (`getDictionary`/`useTranslations`).
+ *
+ * Kept as `string` deliberately: the `t()` accessor is called from ~hundreds of
+ * sites, many with dynamically-built keys (`t(`jobs.${x}`)`), so tightening it
+ * is a separate, larger migration tracked in the BACKLOG (IF-5 follow-up:
+ * "type `t()` against TranslationKeyStrict").
+ */
 export type TranslationKey = string;
+
+/**
+ * STRICT i18n-key union — every literal key across all 23 namespace dictionaries.
+ *
+ * Derived (zero-churn) from the `as const` namespace objects, so it stays in
+ * lock-step with the dictionaries automatically. Used to type the boundary where
+ * a value is *asserted* to be a real translation key — currently
+ * `ActionResult.message` (IF-5). Assigning a bare/arbitrary string here is a
+ * compile error; assigning a real `namespace.key` is allowed.
+ *
+ * To extend: add the namespace to BOTH `mergeDictionaries(...)` above AND this
+ * union (same edit site you already touch when adding a namespace).
+ */
+export type TranslationKeyStrict =
+  | keyof (typeof core)["en"]
+  | keyof (typeof dashboard)["en"]
+  | keyof (typeof jobs)["en"]
+  | keyof (typeof activities)["en"]
+  | keyof (typeof tasks)["en"]
+  | keyof (typeof automations)["en"]
+  | keyof (typeof profile)["en"]
+  | keyof (typeof questions)["en"]
+  | keyof (typeof admin)["en"]
+  | keyof (typeof settings)["en"]
+  | keyof (typeof developer)["en"]
+  | keyof (typeof staging)["en"]
+  | keyof (typeof notifications)["en"]
+  | keyof (typeof api)["en"]
+  | keyof (typeof blacklist)["en"]
+  | keyof (typeof deck)["en"]
+  | keyof (typeof enrichment)["en"]
+  | keyof (typeof webhook)["en"]
+  | keyof (typeof email)["en"]
+  | keyof (typeof smtp)["en"]
+  | keyof (typeof push)["en"]
+  | keyof (typeof logoAsset)["en"]
+  | keyof (typeof crm)["en"];
+
 export type Dictionary = Record<string, string>;
 
 export function getDictionary(locale: string): Dictionary {

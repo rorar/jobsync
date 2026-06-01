@@ -30,7 +30,7 @@ export const getTasksList = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const offset = (page - 1) * limit;
@@ -79,7 +79,7 @@ export const getTasksList = async (
       total,
     };
   } catch (error) {
-    const msg = "Failed to fetch tasks list.";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -91,7 +91,7 @@ export const getTaskById = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const task = await prisma.task.findFirst({
@@ -108,7 +108,7 @@ export const getTaskById = async (
     });
 
     if (!task) {
-      return { success: false, message: "Task not found" };
+      return { success: false, message: "errors.notFound" };
     }
 
     return {
@@ -116,7 +116,7 @@ export const getTaskById = async (
       data: toTask(task),
     };
   } catch (error) {
-    const msg = "Failed to fetch task.";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -128,7 +128,7 @@ export const createTask = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const validatedData = AddTaskFormSchema.parse(data);
@@ -151,7 +151,7 @@ export const createTask = async (
 
     return { success: true, data: toTask(task) };
   } catch (error) {
-    const msg = "Failed to create task.";
+    const msg = "errors.createFailed";
     return handleError(error, msg);
   }
 };
@@ -163,7 +163,7 @@ export const updateTask = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     if (!data.id) {
@@ -193,7 +193,7 @@ export const updateTask = async (
 
     return { success: true, data: toTask(task) };
   } catch (error) {
-    const msg = "Failed to update task.";
+    const msg = "errors.updateFailed";
     return handleError(error, msg);
   }
 };
@@ -206,7 +206,7 @@ export const updateTaskStatus = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Runtime validation — TypeScript types are erased (BS-8)
@@ -229,7 +229,7 @@ export const updateTaskStatus = async (
 
     return { success: true, data: toTask(task) };
   } catch (error) {
-    const msg = "Failed to update task status.";
+    const msg = "errors.updateFailed";
     return handleError(error, msg);
   }
 };
@@ -241,7 +241,7 @@ export const deleteTaskById = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const task = await prisma.task.findFirst({
@@ -255,14 +255,14 @@ export const deleteTaskById = async (
     });
 
     if (!task) {
-      return { success: false, message: "Task not found" };
+      return { success: false, message: "errors.notFound" };
     }
 
     if (task.activity) {
       return {
         success: false,
         message:
-          "Cannot delete task with linked activity. Remove the activity first.",
+          "tasks.cannotDeleteWithActivity",
       };
     }
 
@@ -275,7 +275,7 @@ export const deleteTaskById = async (
 
     return { success: true };
   } catch (error) {
-    const msg = "Failed to delete task.";
+    const msg = "errors.deleteFailed";
     return handleError(error, msg);
   }
 };
@@ -287,7 +287,7 @@ export const startActivityFromTask = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const task = await prisma.task.findFirst({
@@ -301,27 +301,27 @@ export const startActivityFromTask = async (
     });
 
     if (!task) {
-      return { success: false, message: "Task not found" };
+      return { success: false, message: "errors.notFound" };
     }
 
     if (task.activity) {
       return {
         success: false,
-        message: "Task already has a linked activity.",
+        message: "activities.taskAlreadyLinked",
       };
     }
 
     if (!task.activityTypeId) {
       return {
         success: false,
-        message: "Task must have an activity type to start an activity.",
+        message: "activities.taskNeedsActivityType",
       };
     }
 
     if (task.status === "complete" || task.status === "cancelled") {
       return {
         success: false,
-        message: "Cannot start an activity from a completed or cancelled task.",
+        message: "activities.cannotStartFromClosedTask",
       };
     }
 
@@ -336,7 +336,7 @@ export const startActivityFromTask = async (
       return {
         success: false,
         message:
-          "You already have a running activity. Please stop it before starting a new one.",
+          "activities.alreadyInProgress",
       };
     }
 
@@ -356,7 +356,7 @@ export const startActivityFromTask = async (
 
     return { success: true, data: activity };
   } catch (error) {
-    const msg = "Failed to start activity from task.";
+    const msg = "errors.unknown";
     return handleError(error, msg);
   }
 };
@@ -368,7 +368,7 @@ export const getActivityTypesWithTaskCounts = async (): Promise<
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const excludedStatuses = ["complete", "cancelled"];
@@ -406,7 +406,7 @@ export const getActivityTypesWithTaskCounts = async (): Promise<
 
     return { success: true, data, total: totalTasks };
   } catch (error) {
-    const msg = "Failed to fetch activity types with task counts.";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };

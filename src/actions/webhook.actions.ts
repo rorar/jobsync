@@ -7,6 +7,7 @@ import { handleError } from "@/lib/utils";
 import { encrypt } from "@/lib/encryption";
 import { ActionResult } from "@/models/actionResult";
 import { validateWebhookUrl } from "@/lib/url-validation";
+import type { TranslationKeyStrict } from "@/i18n/dictionaries";
 import { channelRouter } from "@/lib/notifications/channel-router";
 import { CONFIGURABLE_NOTIFICATION_TYPES, type NotificationType } from "@/models/notification.model";
 import type { WebhookEndpointDTO } from "@/lib/notifications/types";
@@ -35,7 +36,7 @@ function maskSecret(secret: string): string {
   return `whsec_****${secret.slice(-4)}`;
 }
 
-function validateEvents(events: string[]): { valid: boolean; error?: string } {
+function validateEvents(events: string[]): { valid: boolean; error?: TranslationKeyStrict } {
   if (!Array.isArray(events) || events.length === 0) {
     return { valid: false, error: "webhook.eventsLabel" };
   }
@@ -88,7 +89,7 @@ export async function createWebhookEndpoint(
 ): Promise<ActionResult<{ endpoint: WebhookEndpointDTO; secret: string }>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Validate URL with SSRF check
     const urlResult = validateWebhookUrl(url);
@@ -153,7 +154,7 @@ export async function createWebhookEndpoint(
 export async function listWebhookEndpoints(): Promise<ActionResult<WebhookEndpointDTO[]>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const endpoints = await prisma.webhookEndpoint.findMany({
       where: { userId: user.id },
@@ -186,7 +187,7 @@ export async function getWebhookEndpoint(
 ): Promise<ActionResult<WebhookEndpointDTO>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const endpoint = await prisma.webhookEndpoint.findFirst({
       where: { id, userId: user.id },
@@ -221,7 +222,7 @@ export async function updateWebhookEndpoint(
 ): Promise<ActionResult<WebhookEndpointDTO>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Verify ownership with userId (ADR-015)
     const existing = await prisma.webhookEndpoint.findFirst({
@@ -301,7 +302,7 @@ export async function deleteWebhookEndpoint(
 ): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Verify ownership with userId (ADR-015)
     const existing = await prisma.webhookEndpoint.findFirst({

@@ -25,7 +25,7 @@ export async function getNotifications(
 ): Promise<ActionResult<Notification[]>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const safeTake = Math.min(Math.max(1, limit), 100);
 
@@ -50,7 +50,7 @@ export async function getNotifications(
 export async function getUnreadCount(): Promise<ActionResult<number>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const count = await prisma.notification.count({
       where: { userId: user.id, read: false },
@@ -76,7 +76,7 @@ export async function markAsRead(
 ): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Pre-flight ownership check (ADR-015): verify the notification exists
     // and belongs to this user before attempting the update. Returns a
@@ -117,7 +117,7 @@ export async function markAsRead(
 export async function markAllAsRead(): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     await prisma.notification.updateMany({
       where: { userId: user.id, read: false },
@@ -141,7 +141,7 @@ export async function dismissNotification(
 ): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Pre-flight ownership check (ADR-015): same pattern as markAsRead.
     const owned = await prisma.notification.findFirst({

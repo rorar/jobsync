@@ -11,7 +11,7 @@ export const getAllActivityTypes = async (): Promise<ActionResult<ActivityType[]
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const activityTypes = await prisma.activityType.findMany({
@@ -21,7 +21,7 @@ export const getAllActivityTypes = async (): Promise<ActionResult<ActivityType[]
     });
     return { success: true, data: activityTypes as ActivityType[] };
   } catch (error) {
-    const msg = "Failed to fetch all activity types. ";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -33,7 +33,7 @@ export const createActivityType = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const value = label.trim().toLowerCase();
@@ -46,7 +46,7 @@ export const createActivityType = async (
 
     return { success: true, data: upsertedActivityType };
   } catch (error) {
-    const msg = "Failed to create activity type. ";
+    const msg = "errors.createFailed";
     return handleError(error, msg);
   }
 };
@@ -60,7 +60,7 @@ export const getActivitiesList = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const offset = (page - 1) * limit;
@@ -103,7 +103,7 @@ export const getActivitiesList = async (
       total,
     };
   } catch (error) {
-    const msg = "Failed to fetch activities list. ";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -115,7 +115,7 @@ export const createActivity = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const {
@@ -140,7 +140,7 @@ export const createActivity = async (
     });
     return { data: activity, success: true };
   } catch (error) {
-    const msg = "Failed to create activity. ";
+    const msg = "errors.createFailed";
     return handleError(error, msg);
   }
 };
@@ -152,7 +152,7 @@ export const deleteActivityById = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const res = await prisma.activity.delete({
@@ -163,7 +163,7 @@ export const deleteActivityById = async (
     });
     return { data: res, success: true };
   } catch (error) {
-    const msg = "Failed to delete job.";
+    const msg = "errors.deleteFailed";
     return handleError(error, msg);
   }
 };
@@ -175,7 +175,7 @@ export const startActivityById = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Check for existing active activity to prevent concurrent activities
@@ -189,7 +189,7 @@ export const startActivityById = async (
     if (existingActive) {
       return {
         success: false,
-        message: "An activity is already in progress. Stop it before starting a new one.",
+        message: "activities.alreadyInProgress",
       };
     }
 
@@ -201,7 +201,7 @@ export const startActivityById = async (
     });
 
     if (!activity) {
-      throw new Error("Activity not found");
+      throw new Error("errors.notFound");
     }
     const { activityName, activityTypeId, description } = activity;
 
@@ -220,7 +220,7 @@ export const startActivityById = async (
     });
     return { data: newActivity, success: true };
   } catch (error) {
-    const msg = "Failed to start activity. ";
+    const msg = "errors.unknown";
     return handleError(error, msg);
   }
 };
@@ -234,7 +234,7 @@ export const stopActivityById = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const activity = await prisma.activity.update({
@@ -249,7 +249,7 @@ export const stopActivityById = async (
     });
     return { data: activity, success: true };
   } catch (error) {
-    const msg = "Failed to stop activity. ";
+    const msg = "errors.unknown";
     return handleError(error, msg);
   }
 };
@@ -259,7 +259,7 @@ export const getCurrentActivity = async (): Promise<ActionResult<Activity>> => {
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const activity = await prisma.activity.findFirst({
@@ -278,7 +278,7 @@ export const getCurrentActivity = async (): Promise<ActionResult<Activity>> => {
 
     return { data: activity, success: true };
   } catch (error) {
-    const msg = "Failed to get current activity. ";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -290,7 +290,7 @@ export const getActivityById = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const activity = await prisma.activity.findFirst({
@@ -304,7 +304,7 @@ export const getActivityById = async (
     });
 
     if (!activity) {
-      return { success: false, message: "Activity not found" };
+      return { success: false, message: "errors.notFound" };
     }
 
     return {
@@ -312,7 +312,7 @@ export const getActivityById = async (
       data: activity,
     };
   } catch (error) {
-    const msg = "Failed to fetch activity.";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -324,7 +324,7 @@ export const updateActivity = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     if (!data.id) {
@@ -339,7 +339,7 @@ export const updateActivity = async (
     });
 
     if (!existing) {
-      return { success: false, message: "Activity not found" };
+      return { success: false, message: "errors.notFound" };
     }
 
     const updated = await prisma.activity.update({
@@ -362,10 +362,10 @@ export const updateActivity = async (
     return {
       success: true,
       data: updated,
-      message: "Activity updated successfully",
+      message: "activities.updateSuccess",
     };
   } catch (error) {
-    const msg = "Failed to update activity.";
+    const msg = "errors.updateFailed";
     return handleError(error, msg);
   }
 };

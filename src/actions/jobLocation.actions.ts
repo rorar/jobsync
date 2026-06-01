@@ -10,7 +10,7 @@ export const getAllJobLocations = async (): Promise<ActionResult<JobLocation[]>>
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const list = await prisma.location.findMany({
       where: {
@@ -19,7 +19,7 @@ export const getAllJobLocations = async (): Promise<ActionResult<JobLocation[]>>
     });
     return { success: true, data: list as JobLocation[] };
   } catch (error) {
-    const msg = "Failed to fetch job location list. ";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -33,7 +33,7 @@ export const getJobLocationsList = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const skip = (page - 1) * limit;
 
@@ -77,7 +77,7 @@ export const getJobLocationsList = async (
     ]);
     return { success: true, data, total };
   } catch (error) {
-    const msg = "Failed to fetch job location list. ";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -89,7 +89,7 @@ export const deleteJobLocationById = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const experiences = await prisma.workExperience.count({
@@ -134,7 +134,7 @@ export const deleteJobLocationById = async (
     });
     return { success: true, data: res };
   } catch (error) {
-    const msg = "Failed to delete job location.";
+    const msg = "errors.deleteFailed";
     return handleError(error, msg);
   }
 };

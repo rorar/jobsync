@@ -24,7 +24,7 @@ export const generateMockActivitiesAction = async (): Promise<ActionResult<Activ
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Check if dev/mock mode is enabled
@@ -102,21 +102,20 @@ export const generateMockActivitiesAction = async (): Promise<ActionResult<Activ
 
     return {
       success: true,
-      message: `Generated ${createdActivities.length} mock activities`,
       data: createdActivities,
     };
   } catch (error) {
-    const msg = "Failed to generate mock activities";
+    const msg = "errors.unknown";
     return handleError(error, msg);
   }
 };
 
-export const clearMockActivitiesAction = async (): Promise<ActionResult> => {
+export const clearMockActivitiesAction = async (): Promise<ActionResult<{ count: number }>> => {
   try {
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     // Check if dev/mock mode is enabled
@@ -147,18 +146,20 @@ export const clearMockActivitiesAction = async (): Promise<ActionResult> => {
 
     return {
       success: true,
-      message: `Deleted ${deleteResult.count} mock activities`,
+      data: { count: deleteResult.count },
     };
   } catch (error) {
-    const msg = "Failed to clear mock activities";
+    const msg = "errors.unknown";
     return handleError(error, msg);
   }
 };
 
-export const generateMockProfileDataAction = async (): Promise<ActionResult> => {
+export const generateMockProfileDataAction = async (): Promise<
+  ActionResult<{ created: number; skipped: number }>
+> => {
   try {
     const user = await getCurrentUser();
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("errors.notAuthenticated");
 
     if (!isMockDataEnabled()) {
       throw new Error(
@@ -338,17 +339,17 @@ export const generateMockProfileDataAction = async (): Promise<ActionResult> => 
 
     return {
       success: true,
-      message: `Generated ${created} resumes (${skipped} already existed). Created ${mockCompanies.length} companies, ${mockLocations.length} locations, ${mockJobTitles.length} job titles.`,
+      data: { created, skipped },
     };
   } catch (error) {
-    return handleError(error, "Failed to generate mock profile data");
+    return handleError(error, "errors.unknown");
   }
 };
 
 export async function clearE2ETestDataAction(): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("errors.notAuthenticated");
 
     if (!isMockDataEnabled()) {
       throw new Error(
@@ -417,17 +418,18 @@ export async function clearE2ETestDataAction(): Promise<ActionResult> {
 
     return {
       success: true,
-      message: `Deleted ${resumeIds.length} E2E resumes, ${automationIds.length} E2E automations.`,
     };
   } catch (error) {
-    return handleError(error, "Failed to clear E2E test data");
+    return handleError(error, "errors.unknown");
   }
 }
 
-export const clearMockProfileDataAction = async (): Promise<ActionResult> => {
+export const clearMockProfileDataAction = async (): Promise<
+  ActionResult<{ resumes: number; companies: number; locations: number; jobTitles: number }>
+> => {
   try {
     const user = await getCurrentUser();
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("errors.notAuthenticated");
 
     if (!isMockDataEnabled()) {
       throw new Error(
@@ -533,9 +535,14 @@ export const clearMockProfileDataAction = async (): Promise<ActionResult> => {
 
     return {
       success: true,
-      message: `Deleted ${resumeIds.length} resumes, ${companiesCount} companies, ${locationsCount} locations, ${titlesCount} job titles.`,
+      data: {
+        resumes: resumeIds.length,
+        companies: companiesCount,
+        locations: locationsCount,
+        jobTitles: titlesCount,
+      },
     };
   } catch (error) {
-    return handleError(error, "Failed to clear mock profile data");
+    return handleError(error, "errors.unknown");
   }
 };

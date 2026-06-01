@@ -4,6 +4,7 @@
  * Used to validate user-supplied URLs (e.g. Ollama base URL) before
  * the server makes outbound fetch requests to them.
  */
+import type { TranslationKeyStrict } from "@/i18n/dictionaries";
 
 /**
  * Returns true if the URL targets a cloud metadata endpoint that must never
@@ -31,7 +32,7 @@ export function isBlockedHealthCheckUrl(url: string): boolean {
  */
 export function validateWebhookUrl(url: string): {
   valid: boolean;
-  error?: string;
+  error?: TranslationKeyStrict;
 } {
   if (!url || url.trim() === "") {
     return { valid: false, error: "webhook.urlEmpty" };

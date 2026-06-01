@@ -18,7 +18,7 @@ import "@/lib/connector/register-all";
 export async function getUserApiKeys(): Promise<ActionResult<ApiKeyClientResponse[]>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const keys = await db.apiKey.findMany({
       where: { userId: user.id },
@@ -62,7 +62,7 @@ export async function getUserApiKeys(): Promise<ActionResult<ApiKeyClientRespons
 export async function getEnvApiKeyStatus(): Promise<ActionResult<Record<string, boolean>>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const allTypes = [
       ConnectorType.JOB_DISCOVERY,
@@ -98,7 +98,7 @@ export async function saveApiKey(input: {
 }): Promise<ActionResult<ApiKeyClientResponse>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const parsed = apiKeySaveSchema.parse(input);
 
@@ -174,7 +174,7 @@ export async function saveApiKey(input: {
 export async function deleteApiKey(moduleId: string): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     await db.apiKey.deleteMany({
       where: { userId: user.id, moduleId },

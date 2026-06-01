@@ -35,7 +35,7 @@ export async function getLogoAssetForCompany(
 ): Promise<ActionResult<LogoAssetInfo | null>> {
   try {
     const user = await getCurrentUser();
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("errors.notAuthenticated");
 
     const asset = await prisma.logoAsset.findFirst({
       where: {
@@ -58,7 +58,7 @@ export async function getLogoAssetForCompany(
 
     return { success: true, data: asset ?? null };
   } catch (error) {
-    return handleError(error, "Failed to fetch logo asset.");
+    return handleError(error, "errors.fetchFailed");
   }
 }
 
@@ -70,13 +70,13 @@ export async function deleteLogoAsset(
 ): Promise<ActionResult<void>> {
   try {
     const user = await getCurrentUser();
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("errors.notAuthenticated");
 
     await logoAssetService.deleteAsset(logoAssetId, user.id);
 
     return { success: true };
   } catch (error) {
-    return handleError(error, "Failed to delete logo asset.");
+    return handleError(error, "errors.deleteFailed");
   }
 }
 
@@ -89,7 +89,7 @@ export async function triggerLogoDownload(
 ): Promise<ActionResult<void>> {
   try {
     const user = await getCurrentUser();
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("errors.notAuthenticated");
 
     // Find the company (IDOR: createdBy check)
     const company = await prisma.company.findFirst({
@@ -98,11 +98,11 @@ export async function triggerLogoDownload(
     });
 
     if (!company) {
-      return { success: false, message: "Company not found." };
+      return { success: false, message: "errors.notFound" };
     }
 
     if (!company.logoUrl) {
-      return { success: false, message: "Company has no logo URL." };
+      return { success: false, message: "logoAsset.noLogoUrl" };
     }
 
     // Fire-and-forget download
@@ -117,6 +117,6 @@ export async function triggerLogoDownload(
 
     return { success: true };
   } catch (error) {
-    return handleError(error, "Failed to trigger logo download.");
+    return handleError(error, "errors.unknown");
   }
 }

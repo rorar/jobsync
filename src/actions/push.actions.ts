@@ -61,7 +61,7 @@ export async function getVapidPublicKeyAction(): Promise<
 > {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const keys = await getOrCreateVapidKeys(user.id);
     return { success: true, data: { publicKey: keys.publicKey } };
@@ -80,7 +80,7 @@ export async function subscribePush(
 ): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Validate input
     if (
@@ -177,7 +177,7 @@ export async function unsubscribePush(
 ): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     if (!endpoint || typeof endpoint !== "string") {
       return { success: false, message: "push.invalidEndpoint" };
@@ -217,7 +217,7 @@ export async function getSubscriptionCount(): Promise<
 > {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const count = await prisma.webPushSubscription.count({
       where: { userId: user.id },
@@ -238,7 +238,7 @@ export async function rotateVapidKeysAction(): Promise<
 > {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const result = await rotateVapidKeys(user.id);
 
@@ -270,7 +270,7 @@ export async function rotateVapidKeysAction(): Promise<
 export async function sendTestPush(): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "errors.unauthorized" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     // Rate limit: 1 test per 60 seconds (only rate limit for test pushes)
     const rateCheck = checkTestPushRateLimit(user.id);

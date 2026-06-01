@@ -10,7 +10,7 @@ export const getAllTags = async (): Promise<ActionResult<Tag[]>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const list = await prisma.tag.findMany({
       where: { createdBy: user.id },
@@ -18,7 +18,7 @@ export const getAllTags = async (): Promise<ActionResult<Tag[]>> => {
     });
     return { success: true, data: list };
   } catch (error) {
-    const msg = "Failed to fetch tag list. ";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -30,7 +30,7 @@ export const getTagList = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
     const skip = (page - 1) * limit;
 
@@ -53,7 +53,7 @@ export const getTagList = async (
 
     return { success: true, data, total };
   } catch (error) {
-    const msg = "Failed to fetch tag list. ";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -62,7 +62,7 @@ export const createTag = async (label: string): Promise<ActionResult<Tag>> => {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const trimmed = label.trim();
@@ -80,7 +80,7 @@ export const createTag = async (label: string): Promise<ActionResult<Tag>> => {
 
     return { data: tag, success: true };
   } catch (error) {
-    const msg = "Failed to create tag. ";
+    const msg = "errors.createFailed";
     return handleError(error, msg);
   }
 };
@@ -91,7 +91,7 @@ export const deleteTagById = async (
   try {
     const user = await getCurrentUser();
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const [jobs, questions] = await Promise.all([
@@ -118,7 +118,7 @@ export const deleteTagById = async (
 
     return { data: res, success: true };
   } catch (error) {
-    const msg = "Failed to delete tag.";
+    const msg = "errors.deleteFailed";
     return handleError(error, msg);
   }
 };

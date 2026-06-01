@@ -56,7 +56,7 @@ export async function getAutomationsList(
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return { success: false, message: "Not authenticated" };
+      return { success: false, message: "errors.notAuthenticated" };
     }
 
     const skip = (page - 1) * limit;
@@ -77,24 +77,24 @@ export async function getAutomationsList(
     ]);
 
     // Soft warning when automation count exceeds user's configured threshold.
-    // Convention: result.message is overloaded — a "performanceWarning:<count>" prefix
-    // signals a non-error warning to the UI layer, which checks for the prefix in
-    // AutomationWizard.onSubmit to show a separate toast. This avoids adding a
-    // dedicated "warnings" field to ActionResult for a single use case.
-    let warning: string | undefined;
+    // Emitted as a STATIC i18n key + messageParams (IF-5) — the UI renders a
+    // separate non-error warning banner. Replaces the former overloaded
+    // "performanceWarning:<count>" message-prefix convention.
     const automationSettings = await getAutomationSettingsForUser(user.id);
-    if (
+    const showPerfWarning =
       automationSettings.performanceWarningEnabled &&
-      total >= automationSettings.performanceWarningThreshold
-    ) {
-      warning = `performanceWarning:${total}`;
-    }
+      total >= automationSettings.performanceWarningThreshold;
 
     return {
       success: true,
       data: automations.map(toAutomationWithResume) as AutomationWithResume[],
       total,
-      message: warning,
+      ...(showPerfWarning
+        ? {
+            message: "automations.performanceWarningBanner" as const,
+            messageParams: { count: total },
+          }
+        : {}),
     };
   } catch (error) {
     return handleError(error, "errors.fetchAutomationsList");
@@ -105,7 +105,7 @@ export async function getAutomationById(id: string): Promise<ActionResult<Automa
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return { success: false, message: "Not authenticated" };
+      return { success: false, message: "errors.notAuthenticated" };
     }
 
     const automation = await prisma.automation.findFirst({
@@ -122,7 +122,7 @@ export async function getAutomationById(id: string): Promise<ActionResult<Automa
     });
 
     if (!automation) {
-      return { success: false, message: "Automation not found" };
+      return { success: false, message: "automations.notFound" };
     }
 
     return {
@@ -143,7 +143,7 @@ export async function createAutomation(
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return { success: false, message: "Not authenticated" };
+      return { success: false, message: "errors.notAuthenticated" };
     }
 
     const validated = CreateAutomationSchema.parse(input);
@@ -151,7 +151,7 @@ export async function createAutomation(
     // S-1: Validate jobBoard against module registry
     const registered = moduleRegistry.get(validated.jobBoard);
     if (!registered) {
-      return { success: false, message: `Unknown module: ${validated.jobBoard}` };
+      return { success: false, message: "automations.unknownModule" };
     }
 
     // S-9: Normalize empty string connectorParams to undefined
@@ -167,7 +167,7 @@ export async function createAutomation(
     });
 
     if (!resume) {
-      return { success: false, message: "Resume not found or doesn't belong to you" };
+      return { success: false, message: "errors.notFound" };
     }
 
     // Validate connectorParams against module's declared schema
@@ -179,7 +179,7 @@ export async function createAutomation(
             ? JSON.parse(validated.connectorParams)
             : validated.connectorParams;
       } catch {
-        return { success: false, message: "Invalid connector params: malformed JSON" };
+        return { success: false, message: "automations.invalidConnectorParams" };
       }
       const validation = validateConnectorParams(
         validated.jobBoard,
@@ -188,7 +188,7 @@ export async function createAutomation(
       if (!validation.valid) {
         return {
           success: false,
-          message: `Invalid connector params: ${validation.errors?.join(", ")}`,
+          message: "automations.invalidConnectorParams",
         };
       }
     }
@@ -218,21 +218,22 @@ export async function createAutomation(
     });
 
     // Soft warning when automation count exceeds user's configured threshold.
-    // See getAutomationsList for the "performanceWarning:" prefix convention.
-    let warning: string | undefined;
+    // Static i18n key + messageParams (IF-5) — see getAutomationsList.
     const automationCount = await prisma.automation.count({ where: { userId: user.id } });
     const automationSettings = await getAutomationSettingsForUser(user.id);
-    if (
+    const showPerfWarning =
       automationSettings.performanceWarningEnabled &&
-      automationCount >= automationSettings.performanceWarningThreshold
-    ) {
-      warning = `performanceWarning:${automationCount}`;
-    }
+      automationCount >= automationSettings.performanceWarningThreshold;
 
     return {
       success: true,
       data: toAutomationWithResume(automation) as AutomationWithResume,
-      message: warning,
+      ...(showPerfWarning
+        ? {
+            message: "automations.performanceWarningBanner" as const,
+            messageParams: { count: automationCount },
+          }
+        : {}),
     };
   } catch (error) {
     return handleError(error, "errors.createAutomation");
@@ -246,7 +247,7 @@ export async function updateAutomation(
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return { success: false, message: "Not authenticated" };
+      return { success: false, message: "errors.notAuthenticated" };
     }
 
     const validated = UpdateAutomationSchema.parse(input);
@@ -255,7 +256,7 @@ export async function updateAutomation(
     if (validated.jobBoard) {
       const registered = moduleRegistry.get(validated.jobBoard);
       if (!registered) {
-        return { success: false, message: `Unknown module: ${validated.jobBoard}` };
+        return { success: false, message: "automations.unknownModule" };
       }
     }
 
@@ -264,7 +265,7 @@ export async function updateAutomation(
     });
 
     if (!existing) {
-      return { success: false, message: "Automation not found" };
+      return { success: false, message: "automations.notFound" };
     }
 
     if (validated.resumeId) {
@@ -275,7 +276,7 @@ export async function updateAutomation(
         },
       });
       if (!resume) {
-        return { success: false, message: "Resume not found or doesn't belong to you" };
+        return { success: false, message: "errors.notFound" };
       }
     }
 
@@ -288,7 +289,7 @@ export async function updateAutomation(
             ? JSON.parse(validated.connectorParams)
             : validated.connectorParams;
       } catch {
-        return { success: false, message: "Invalid connector params: malformed JSON" };
+        return { success: false, message: "automations.invalidConnectorParams" };
       }
       const moduleId = validated.jobBoard ?? existing.jobBoard;
       const validation = validateConnectorParams(
@@ -298,7 +299,7 @@ export async function updateAutomation(
       if (!validation.valid) {
         return {
           success: false,
-          message: `Invalid connector params: ${validation.errors?.join(", ")}`,
+          message: "automations.invalidConnectorParams",
         };
       }
     }
@@ -338,7 +339,7 @@ export async function deleteAutomation(id: string): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return { success: false, message: "Not authenticated" };
+      return { success: false, message: "errors.notAuthenticated" };
     }
 
     const automation = await prisma.automation.findFirst({
@@ -346,13 +347,13 @@ export async function deleteAutomation(id: string): Promise<ActionResult> {
     });
 
     if (!automation) {
-      return { success: false, message: "Automation not found" };
+      return { success: false, message: "automations.notFound" };
     }
 
     // Guard: cannot delete while running (prevents RecordNotFound in finalizeRun)
     const { runCoordinator } = await import("@/lib/scheduler/run-coordinator");
     if (runCoordinator.getRunStatus(id)) {
-      return { success: false, message: "Cannot delete: automation is currently running" };
+      return { success: false, message: "automations.cannotDeleteRunning" };
     }
 
     await prisma.automation.delete({ where: { id } });
@@ -367,7 +368,7 @@ export async function pauseAutomation(id: string): Promise<ActionResult<Automati
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return { success: false, message: "Not authenticated" };
+      return { success: false, message: "errors.notAuthenticated" };
     }
 
     const automation = await prisma.automation.findFirst({
@@ -375,7 +376,7 @@ export async function pauseAutomation(id: string): Promise<ActionResult<Automati
     });
 
     if (!automation) {
-      return { success: false, message: "Automation not found" };
+      return { success: false, message: "automations.notFound" };
     }
 
     const updated = await prisma.automation.update({
@@ -404,7 +405,7 @@ export async function resumeAutomation(id: string): Promise<ActionResult<Automat
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return { success: false, message: "Not authenticated" };
+      return { success: false, message: "errors.notAuthenticated" };
     }
 
     const automation = await prisma.automation.findFirst({
@@ -412,7 +413,7 @@ export async function resumeAutomation(id: string): Promise<ActionResult<Automat
     });
 
     if (!automation) {
-      return { success: false, message: "Automation not found" };
+      return { success: false, message: "automations.notFound" };
     }
 
     const nextRunAt = calculateNextRunAt(
@@ -450,7 +451,7 @@ export async function getDiscoveredJobs(
 ): Promise<ActionResult<StagedVacancyWithAutomation[]>> {
   try {
     const user = await getCurrentUser();
-    if (!user) return { success: false, message: "Not authenticated" };
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const skip = (page - 1) * limit;
     const where: Prisma.StagedVacancyWhereInput = {
@@ -491,7 +492,7 @@ export async function getDiscoveredJobById(id: string): Promise<ActionResult<Sta
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return { success: false, message: "Not authenticated" };
+      return { success: false, message: "errors.notAuthenticated" };
     }
 
     const vacancy = await prisma.stagedVacancy.findFirst({
@@ -509,7 +510,7 @@ export async function getDiscoveredJobById(id: string): Promise<ActionResult<Sta
     });
 
     if (!vacancy) {
-      return { success: false, message: "Discovered job not found" };
+      return { success: false, message: "errors.notFound" };
     }
 
     let parsedMatchData = null;
@@ -539,7 +540,7 @@ export async function dismissDiscoveredJob(id: string): Promise<ActionResult<Sta
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return { success: false, message: "Not authenticated" };
+      return { success: false, message: "errors.notAuthenticated" };
     }
 
     const vacancy = await prisma.stagedVacancy.findFirst({
@@ -552,11 +553,11 @@ export async function dismissDiscoveredJob(id: string): Promise<ActionResult<Sta
     });
 
     if (!vacancy) {
-      return { success: false, message: "Discovered job not found" };
+      return { success: false, message: "errors.notFound" };
     }
 
     if (vacancy.status !== "staged" && vacancy.status !== "ready") {
-      return { success: false, message: "Can only dismiss staged or ready vacancies" };
+      return { success: false, message: "staging.canOnlyDismissStagedReady" };
     }
 
     const updated = await prisma.stagedVacancy.update({
@@ -586,7 +587,7 @@ export async function acceptDiscoveredJob(id: string): Promise<ActionResult<Stag
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return { success: false, message: "Not authenticated" };
+      return { success: false, message: "errors.notAuthenticated" };
     }
 
     const vacancy = await prisma.stagedVacancy.findFirst({
@@ -599,7 +600,7 @@ export async function acceptDiscoveredJob(id: string): Promise<ActionResult<Stag
     });
 
     if (!vacancy) {
-      return { success: false, message: "Discovered job not found" };
+      return { success: false, message: "errors.notFound" };
     }
 
     const updated = await prisma.stagedVacancy.update({
@@ -635,7 +636,7 @@ export async function getAutomationRuns(
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return { success: false, message: "Not authenticated" };
+      return { success: false, message: "errors.notAuthenticated" };
     }
 
     const { page = 1, limit = 10 } = options || {};
@@ -646,7 +647,7 @@ export async function getAutomationRuns(
     });
 
     if (!automation) {
-      return { success: false, message: "Automation not found" };
+      return { success: false, message: "automations.notFound" };
     }
 
     const [runs, total] = await Promise.all([

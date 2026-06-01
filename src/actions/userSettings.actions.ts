@@ -20,7 +20,7 @@ export const getUserSettings = async (): Promise<ActionResult<UserSettings>> => 
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const userSettings = await prisma.userSettings.findUnique({
@@ -50,7 +50,7 @@ export const getUserSettings = async (): Promise<ActionResult<UserSettings>> => 
       },
     };
   } catch (error) {
-    const msg = "Failed to fetch user settings.";
+    const msg = "errors.fetchFailed";
     return handleError(error, msg);
   }
 };
@@ -62,7 +62,7 @@ export const updateUserSettings = async (
     const user = await getCurrentUser();
 
     if (!user) {
-      throw new Error("Not authenticated");
+      throw new Error("errors.notAuthenticated");
     }
 
     const existingSettings = await prisma.userSettings.findUnique({
@@ -128,7 +128,7 @@ export const updateUserSettings = async (
       },
     };
   } catch (error) {
-    const msg = "Failed to update user settings.";
+    const msg = "errors.updateFailed";
     return handleError(error, msg);
   }
 };
@@ -197,7 +197,7 @@ export async function getNotificationPreferences(): Promise<
 > {
   try {
     const user = await getCurrentUser();
-    if (!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("errors.notAuthenticated");
 
     const row = await prisma.userSettings.findUnique({
       where: { userId: user.id },
