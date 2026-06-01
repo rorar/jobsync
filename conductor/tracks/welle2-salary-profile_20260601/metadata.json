@@ -1,10 +1,12 @@
 {
   "id": "welle2-salary-profile_20260601",
-  "title": "Welle 2 \u2014 Salary + Profil (Kette B)",
+  "title": "Welle 2 — Salary + Profil (Kette B)",
   "type": "feature",
-  "status": "pending",
+  "status": "in_progress",
   "created": "2026-06-01T08:46:16Z",
-  "updated": "2026-06-01T09:30:00Z",
+  "updated": "2026-06-01T12:00:00Z",
+  "current_phase": 1,
+  "current_task": "1.1",
   "phases": {
     "total": 4,
     "completed": 0
@@ -12,5 +14,6 @@
   "tasks": {
     "total": 21,
     "completed": 0
-  }
+  },
+  "commits": []
 }

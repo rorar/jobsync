@@ -3,7 +3,7 @@
 **Track ID:** welle1-foundation-gdpr_20260601
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-06-01
-**Status:** [ ] Not Started
+**Status:** [x] Complete
 
 ## Overview
 
@@ -166,7 +166,7 @@ Per `conductor/workflow.md` § Wrap-Up-Phase. Run only after all prior phases pa
 ### Tasks
 - [x] Task 7.1: Blind-Spot-Analyse — projektweit `grep` nach den Pattern-Fixes dieses Tracks; adjacent Lücken schließen.
 - [x] Task 7.2: `/comprehensive-review:full-review` (Architecture+Security+Performance+Testing+Best-Practices) — alle realen Findings autonom fixen; Agent-Claims gegen `git diff`/Code verifizieren (kein Fabrizieren).
-- [~] Task 7.3: `/understand` inkrementell-Refresh + Graph-Commit (1× am Welle-Ende, NICHT per-Commit; `autoUpdate` OFF).
+- [x] Task 7.3: `/understand` inkrementell-Refresh + Graph-Commit (1× am Welle-Ende, NICHT per-Commit; `autoUpdate` OFF). Done in external session — commit `cafb848` "chore(understand): refresh knowledge graph after Welle 1".
 - [x] Task 7.4: Honesty-Gate voll ausführen (2 Fragen: Shortcuts/fehlende Skills/Gaps? Docs/Handoff?).
 - [x] Task 7.5: Push eigenständig — nach Gate, Fork `main`, NIE upstream.
 - [x] Task 7.6: Doku-Update (README/User-Guide/API/ADR wo nötig) + `docs/BACKLOG.md` + `docs/BUGS.md` + Memory-Handoff aktualisieren.

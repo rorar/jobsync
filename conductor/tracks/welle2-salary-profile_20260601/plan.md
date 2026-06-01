@@ -15,19 +15,19 @@ the salary Prisma migration is the highest-risk task — test the parser before 
 
 ### Tasks
 
-- [ ] Task 1.1: Unit test for the currency translator (code → symbol/name/minor-unit;
-      locale-aware names for en/de/fr/es; invalid code rejected).
-- [ ] Task 1.2: Scaffold `src/lib/connector/reference-data/modules/currency/` with
+- [x] Task 1.1: Unit test for the currency translator (code → symbol/name/minor-unit;
+      locale-aware names for en/de/fr/es; invalid code rejected). → `__tests__/currency-reference.spec.ts` (20 tests).
+- [x] Task 1.2: Scaffold `src/lib/connector/reference-data/modules/currency/` with
       `i18n.ts`, `manifest.ts` (`ReferenceDataManifest`, health-only), `index.ts`
-      (self-registers via `moduleRegistry.register(...)`).
-- [ ] Task 1.3: Add the import line to `src/lib/connector/register-all.ts`.
-- [ ] Task 1.4: Add `getCurrencyOptions` (+ lookup) to the reference-data OHS action file
-      (auth-gated, ADR-019); per-locale result cache.
-- [ ] Task 1.5: Build + tests.
+      (self-registers via `moduleRegistry.register(...)`). Backed by native `Intl` (zero dep, offline) + `types.ts` + `currency-data.ts` translator.
+- [x] Task 1.3: Add the import line to `src/lib/connector/register-all.ts`.
+- [x] Task 1.4: Add `getCurrencyOptions` (+ `getCurrencyInfo` lookup) to the reference-data OHS action file
+      (auth-gated, ADR-019, `/^[A-Z]{3}$/` boundary validation); per-locale result cache in the translator.
+- [x] Task 1.5: Build + tests. tsc --noEmit clean; 38 tests green (currency-reference + reference-data.actions).
 
 ### Verification
 
-- [ ] Currency module registers, health-checks, and serves locale-aware options via OHS.
+- [x] Currency module registers, health-checks, and serves locale-aware options via OHS.
 
 ## Phase 2: F-AJ-06 — Profile address + currency form
 
