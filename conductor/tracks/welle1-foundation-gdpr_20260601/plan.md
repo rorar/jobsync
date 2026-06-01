@@ -53,15 +53,23 @@ Consolidate the 13 scattered `NotificationType` definitions into one leaf module
 
 ### Tasks
 
-- [ ] Task 2.1: Inventory all 13 definition sites (grep `NotificationType`); write a test
-      asserting a known type literal is assignable from the canonical union.
-- [ ] Task 2.2: Create the canonical union in a zero-upstream-dep leaf module.
-- [ ] Task 2.3: Replace the 13 local definitions with re-imports; delete duplicates.
-- [ ] Task 2.4: Run Knip (`bun knip --changed`) to confirm no orphaned exports; build + tests.
+- [x] Task 2.1: Inventory done — plan premise CORRECTED. There were NOT 13 definitions:
+      exactly ONE `type NotificationType` def (`notification.model.ts:1`, zero-import leaf)
+      + importers + exhaustive consumer switches (`never`-guarded). Added
+      `__tests__/notification-type-source.spec.ts` (literal⇄union assignability + integrity).
+- [x] Task 2.2: Canonical union already in a leaf (notification.model.ts has 0 imports) —
+      spec's circular-import concern moot; no move needed.
+- [x] Task 2.3: The one real duplicate literal set was `CONFIGURABLE_NOTIFICATION_TYPES`
+      (hand-listed 16 literals). Now DERIVED from `Record<NotificationType, boolean>` —
+      compiler forces completeness, set can't drift. Added a `never` guard to
+      `buildNotificationActions` default (consumer exhaustiveness).
+- [x] Task 2.4: tsc 0 errors; targeted jest 8 suites/186 pass. (knip `--changed` flag
+      unsupported by installed knip; change adds no new exports → no orphan risk.)
 
 ### Verification
 
-- [ ] Exactly one `NotificationType` literal set remains; build + tests pass.
+- [x] Exactly one `NotificationType` literal set remains (the array is now derived, not a
+      duplicate); the union drift-proofs the array at compile time; build + tests pass.
 
 ## Phase 3: Allium audit-contract spec (FIRST — before any audit code)
 
