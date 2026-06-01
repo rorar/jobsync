@@ -29,6 +29,25 @@ describe("WCAG P-4 — prefers-reduced-motion on animated primitives", () => {
     const src = read("src/components/ui/toast.tsx");
     expect(src).toMatch(/animate-in[\s\S]*motion-reduce:animate-none/);
   });
+
+  // Flashlight guard: EVERY animated Radix primitive must opt out of motion,
+  // not just the two the original P-4 pass touched. Each `animate-in` class
+  // string must carry a `motion-reduce:animate-none` on the same line.
+  it.each([
+    "dialog",
+    "sheet",
+    "dropdown-menu",
+    "select",
+    "popover",
+    "alert-dialog",
+    "toast",
+  ])("%s: every animate-in line also sets motion-reduce", (name) => {
+    const src = read(`src/components/ui/${name}.tsx`);
+    const offenders = src
+      .split("\n")
+      .filter((l) => l.includes("animate-in") && !l.includes("motion-reduce:"));
+    expect(offenders).toEqual([]);
+  });
 });
 
 describe("WCAG P-3 — KanbanCard amber badge dark contrast", () => {

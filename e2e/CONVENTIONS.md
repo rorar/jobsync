@@ -190,7 +190,7 @@ comment with the reason.
 
 - **8 GB RAM, no swap** (until infra-issue #11 is resolved): Long serial runs (>10 min) can crash the dev server. Run tests in batches if needed.
 - **NixOS**: Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium`
-- **Dev server**: Agents may start it (`bun run dev`) but must **never stop it**.
+- **Dev server**: Agents may start it (`bun run dev`) but must **never stop it**. For E2E runs prefer `scripts/dev-e2e.sh` — it starts the dev server with `E2E_AUTH_RATE_LIMIT_BYPASS=1` so repeated logins (global-setup + the signin smoke test) don't trip the signin rate limiter (5/15min per IP). The bypass is prod-inert (gated on `NODE_ENV !== "production"`); never set it in production. See CLAUDE.md § Shared Rate-Limit Factory.
 - **SQLite**: Shared `dev.db` with no per-test isolation. Unique test data names are your only protection against collision.
 
 ## One Spec Per Aggregate

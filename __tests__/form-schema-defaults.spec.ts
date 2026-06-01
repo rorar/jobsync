@@ -51,4 +51,11 @@ describe("AddJobFormSchema defaults — F10", () => {
     const result = AddJobFormSchema.parse(minimalValidInput);
     expect(result.dueDate).toEqual(new Date("2026-06-01"));
   });
+
+  // F-AJ-04: the Clear button emits null (RHF ignores undefined). The schema
+  // must accept null so a cleared due date validates on submit.
+  it("accepts null dueDate (the value the Clear action emits)", () => {
+    const result = AddJobFormSchema.parse({ ...minimalValidInput, dueDate: null });
+    expect(result.dueDate).toBeNull();
+  });
 });

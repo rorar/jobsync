@@ -165,6 +165,33 @@ describe("NotificationBell", () => {
     expect(screen.queryByText("0")).not.toBeInTheDocument();
   });
 
+  // P0-6 (strengthened) — a LATER poll failing must KEEP the last good count,
+  // not reset it. First poll succeeds with 5; the next interval poll rejects;
+  // the badge must still read 5 (the catch swallowed the error without resetting).
+  it("keeps the previous count when a later poll fails", async () => {
+    jest.useFakeTimers();
+    try {
+      mockGetUnreadCount
+        .mockResolvedValueOnce({ success: true, data: 5 })
+        .mockRejectedValue(new Error("network"));
+
+      await act(async () => {
+        render(<NotificationBell />);
+      });
+      expect(screen.getByText("5")).toBeInTheDocument();
+
+      // Advance one poll interval → the second (rejecting) fetch fires.
+      await act(async () => {
+        jest.advanceTimersByTime(30_000);
+      });
+
+      // Count retained, not reset to 0 or cleared.
+      expect(screen.getByText("5")).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("hides badge when unread count is 0", async () => {
     mockGetUnreadCount.mockResolvedValue({ success: true, data: 0 });
 

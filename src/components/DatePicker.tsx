@@ -28,7 +28,7 @@ interface DatePickerProps {
   presets: boolean;
   isEnabled: boolean;
   captionLayout?: boolean;
-  /** When true, render a "Clear" action that resets the value to undefined. */
+  /** When true, render a "Clear" action that resets the value (to null — see clearValue). */
   allowClear?: boolean;
   /** Optional test id on the trigger button (for E2E targeting). */
   triggerTestId?: string;
