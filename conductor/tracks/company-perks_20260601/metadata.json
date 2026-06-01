@@ -1,0 +1,11 @@
+{
+  "id": "company-perks_20260601",
+  "title": "Company Perks / Gimmicks",
+  "type": "feature",
+  "status": "pending",
+  "created": "2026-06-01T14:00:00Z",
+  "updated": "2026-06-01T14:00:00Z",
+  "gated": true,
+  "phases": { "total": 4, "completed": 0 },
+  "tasks": { "total": 2, "completed": 0 }
+}
