@@ -5,22 +5,26 @@
   "status": "in_progress",
   "created": "2026-06-01T08:46:16Z",
   "updated": "2026-06-01T12:00:00Z",
-  "current_phase": 3,
-  "current_task": "3.2",
+  "current_phase": 4,
+  "current_task": "4.1",
   "phases": {
     "total": 4,
-    "completed": 2
+    "completed": 3
   },
   "tasks": {
     "total": 23,
-    "completed": 10
+    "completed": 18
   },
   "commits": [
     "7a29816: chore(conductor): close Welle 1, start Welle 2",
-    "765fb00: feat(reference-data): add ISO-4217 currency reference module (CUR)",
-    "e0b91d2: feat(profile): persist home location + preferred currency (ADR-034)",
+    "765fb00: feat(reference-data): CUR ISO-4217 currency module",
+    "e0b91d2: feat(profile): persist home location + currency (ADR-034)",
     "d03212b: feat(profile): home location + currency UI",
-    "(planning): capture salary-calculator + company-perks tracks; re-scope Phase 3",
-    "(spec): compensation.allium"
+    "0c56deb: chore(conductor): capture 2 tracks; re-scope Phase 3",
+    "db41299: spec(compensation): compensation.allium",
+    "(feat): structured salary schema + parser + backfill",
+    "(feat): bonus value object + fixum-disables-range setting",
+    "(feat): structured salary form + API + promotion",
+    "(test): e2e salary happy-path + Phase 3 complete"
   ]
 }
