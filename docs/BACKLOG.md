@@ -145,8 +145,9 @@ Voll-Detail + Chains: `docs/add-job-modal-ux-findings.md`. Verifizierter Status:
 | 02 Applied-Toggle → Status-ComboBox | OFFEN | hängt an F-AJ-09 |
 | 03 Status über Date Applied | OFFEN | Layout |
 | 04 Due Date optional + Reset | **ERLEDIGT** (Welle 0) | `dueDate: z.date().optional()`; DatePicker `allowClear` Ghost-Button (ui-design-reviewed); `updateJob` `dueDate ?? null` (Clear persistiert); `jobs.clearDate` ×4; +5 Tests |
-| 05 Salary Slider+Währung+Fixum | OFFEN (Infra teilw.) | `format-salary-range.ts` wiederverwendbar; Job-Model migrieren |
-| 06 Profil Adresse+Währung | TEILWEISE | CountrySelect/Subdivision/OHS da; Währung + User-Profil-Form fehlen |
+| 05 Salary Slider+Währung+Fixum | **ERLEDIGT** (Welle 2) | strukturierte Salary min/max/currency/period + Fixum + JSON-Bonus; Parser `parse-salary-range.ts` + Migration `20260601191028` (salaryRange RETAINED deprecated); `JobSalaryFields.tsx`; shared `build-job-salary.ts` als server-seitige Validierungs-Boundary (ISO-4217/period/finite/min≤max-swap) über job.actions + /api/v1 + promoter; `fixumDisablesRange` UserSetting; `specs/compensation.allium`; E2E happy-path grün |
+| 06 Profil Adresse+Währung | **ERLEDIGT** (Welle 2, ADR-034) | home location + `preferredCurrency` auf Profile-Aggregat (Migration `20260601134805`); `getProfilePreferences`/`updateProfilePreferences` (atomic upsert, `Profile.userId @unique` Migration `20260601205337`); `CurrencySelect` + `ProfilePreferencesCard` |
+| CUR ISO-4217 Währungsquelle | **ERLEDIGT** (Welle 2) | Reference-Data-Module `reference-data/modules/currency/` (native `Intl`, zero-dep, 162 Codes); OHS-Actions `getCurrencyOptions`/`getCurrencyInfo` (auth-gated); `isValidCurrencyCode` als Validator wiederverwendet |
 | 07 CRM-Person im Add Job | TEILWEISE | JobContact-Backend fertig; AddJob-UI fehlt |
 | 08 Recruiter-Dreieck | OFFEN | kein `recruitingCompanyId`/`relationshipType` |
 | 09 Custom JobStatus | OFFEN | XL — JobStatus user-spezifisch + category + dyn. Kanban |

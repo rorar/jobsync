@@ -1,8 +1,27 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-05-29
+# Bug Tracker — Collected 2026-03-24, Updated 2026-06-01
 
-**Total: 588 bugs found, 587 fixed, 2 open (accepted risk), 1 new (blind spot)**
+**Total: 592 bugs found, 591 fixed, 2 open (accepted risk), 1 new (blind spot)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability) — BS-01 ✅ fixed (Welle 0, 2026-05-31)
+
+## Session 2026-06-01 — Welle 2 Phase 4 full-review (Salary + Profil)
+
+4 bugs found + fixed during the full-review (+ 2 defense-in-depth hardenings). Every
+agent claim was verified against source before acting. Verified: 274 suites / 5244
+tests, tsc 0 errors, salary E2E happy-path green. Details: `docs/welle2-handoff.md`.
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| W2-F1 | HIGH | `addJob`/`updateJob` (`job.actions.ts:336,489`) never `safeParse` the form — the erased-union `salaryPeriod`, `salaryCurrency`, and salary numbers reached the DB unchecked from a browser-callable `"use server"` export (ADR-019). | Hardened the shared `build-job-salary.ts` into the server-side salary validation boundary for all 4 write paths: currency→active ISO-4217, period→`SALARY_PERIODS` membership, amounts→finite & ≥0, min/max→swap. Never throws. `__tests__/build-job-salary.spec.ts`. |
+| W2-F3 | HIGH | `JobSalaryFields.fixumMode` one-time `useState` initializer ran before the async edit `reset()` populated the form → editing a saved Fixum job (min===max) showed the range view, not the single-amount view. | `AddJob` derives `initialFixum` from the synchronous `editJob` prop + remounts via `key`; component takes it as a prop. Regression test in `JobSalaryFields.spec.tsx`. |
+| W2-F4 | MEDIUM | Promotion regression: an unparseable free-text vacancy salary (e.g. "competitive") was dropped — `buildJobSalaryData` nulled `salaryRange` when no structured amount was derived (old promoter wrote it verbatim). | `salaryRangeFallback` retained into the deprecated `salaryRange` column; wired in promoter + both `/api/v1` legacy branches. |
+| W2-F7 | HIGH | `Profile.userId` had no `@unique` → two lazy-create paths (`createResumeProfile`, `updateProfilePreferences`) could fork the aggregate on a concurrent race (split-brain). | `@unique` + migration `20260601205337`; `updateProfilePreferences` → atomic `upsert`. |
+
+**Hardenings (defense-in-depth, not pre-existing bugs):** W2-F2 Zod schema bounds
+(API currency ISO refine → 400, `percentage.max(1000)`, client `min≤max` superRefine);
+W2-F6 `bonus.ts` percentage [0,1000] cap + condition trim. Spec `compensation.allium`
+updated so `SalaryMaxGteMin`/`CurrencyIsActiveIso4217`/bonus invariants are now
+enforced; `CurrencyPresentWhenAmount` relaxed (currency intentionally optional).
 
 ## Session 2026-05-29 — GDPR S3 (resume free-text PII redaction to cloud AI)
 
