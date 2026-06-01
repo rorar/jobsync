@@ -11,6 +11,7 @@ import { z } from "zod";
 import { isValidTransition, computeTransitionSideEffects, getValidTargets, STATUS_ORDER, COLLAPSED_BY_DEFAULT } from "@/lib/crm/status-machine";
 import { isEditTransitionValid } from "@/lib/crm/validate-edit-transition";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
 
 export const getStatusList = async (): Promise<ActionResult<JobStatus[]>> => {
   try {
@@ -432,6 +433,15 @@ export const addJob = async (
       }),
     );
 
+    // GDPR audit trail (S6a): record Job creation. Fire-and-forget, non-blocking.
+    writeDataAuditLog({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: "job.create",
+      targetType: "job",
+      targetId: job.id,
+    });
+
     return { data: job, success: true };
   } catch (error) {
     return handleError(error, "errors.createJob");
@@ -567,6 +577,52 @@ export const updateJob = async (
       tags: true,
     };
 
+    // GDPR audit trail (S6a): build a before/after diff of CHANGED Job scalar
+    // fields only (never Person PII). `currentJob` was fetched above for the
+    // ADR-015 IDOR/state-machine check and serves as the "before" snapshot.
+    const auditScalarFields = {
+      jobTitleId: jobData.jobTitleId,
+      companyId: jobData.companyId,
+      locationId: jobData.locationId,
+      statusId: jobData.statusId,
+      jobSourceId: jobData.jobSourceId,
+      salaryRange: jobData.salaryRange,
+      dueDate: jobData.dueDate,
+      appliedDate: jobData.appliedDate,
+      description: jobData.description,
+      jobType: jobData.jobType,
+      jobUrl: jobData.jobUrl,
+      applied: jobData.applied,
+      resumeId: jobData.resumeId,
+    } as const;
+    const jobUpdateDiff: Record<string, { before: unknown; after: unknown }> = {};
+    if (currentJob) {
+      // Value-aware equality so equal Dates (distinct instances) are NOT flagged
+      // as changed, keeping the snapshot to genuinely-mutated fields.
+      const sameValue = (a: unknown, b: unknown): boolean => {
+        if (a instanceof Date && b instanceof Date) {
+          return a.getTime() === b.getTime();
+        }
+        return a === b;
+      };
+      for (const [field, after] of Object.entries(auditScalarFields)) {
+        const before = (currentJob as Record<string, unknown>)[field];
+        if (!sameValue(before, after)) {
+          jobUpdateDiff[field] = { before, after };
+        }
+      }
+    }
+    const writeJobUpdateAudit = () =>
+      writeDataAuditLog({
+        actorId: user.id,
+        actorEmail: user.email,
+        action: "job.update",
+        targetType: "job",
+        targetId: id,
+        beforeAfter:
+          Object.keys(jobUpdateDiff).length > 0 ? jobUpdateDiff : undefined,
+      });
+
     if (statusChanged && newStatus) {
       const sideEffects = computeTransitionSideEffects(newStatus.value, currentJob.appliedDate);
       const previousStatusValue = currentJob.Status.value;
@@ -604,6 +660,8 @@ export const updateJob = async (
       revalidatePath("/dashboard/myjobs", "page");
       revalidatePath("/dashboard", "page");
 
+      writeJobUpdateAudit();
+
       return { data: updatedJob, success: true };
     }
 
@@ -612,6 +670,8 @@ export const updateJob = async (
       data: jobData,
       include: jobInclude,
     });
+
+    writeJobUpdateAudit();
 
     return { data: job, success: true };
   } catch (error) {
@@ -647,6 +707,16 @@ export const deleteJobById = async (
         userId: user.id,
       },
     });
+
+    // GDPR audit trail (S6a): record Job deletion. No snapshot. Fire-and-forget.
+    writeDataAuditLog({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: "job.delete",
+      targetType: "job",
+      targetId: jobId,
+    });
+
     return { success: true };
   } catch (error) {
     return handleError(error, "errors.deleteJob");
@@ -871,6 +941,19 @@ export const changeJobStatus = async (
     revalidatePath("/dashboard/myjobs", "page");
     revalidatePath("/dashboard", "page");
 
+    // GDPR audit trail (S6a): record the status transition with a before/after
+    // snapshot (status values only — no Person PII). Fire-and-forget.
+    writeDataAuditLog({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: "job.status_change",
+      targetType: "job",
+      targetId: jobId,
+      beforeAfter: {
+        status: { before: currentStatusValue, after: newStatus.value },
+      },
+    });
+
     return { data: updatedJob, success: true };
   } catch (error) {
     return handleError(error, "errors.changeJobStatus");
@@ -1065,6 +1148,21 @@ export const updateKanbanOrder = async (
 
       revalidatePath("/dashboard/myjobs", "page");
       revalidatePath("/dashboard", "page");
+
+      // GDPR audit trail (S6a): Kanban drag-and-drop status transition.
+      writeDataAuditLog({
+        actorId: user.id,
+        actorEmail: user.email,
+        action: "job.status_change",
+        targetType: "job",
+        targetId: jobId,
+        beforeAfter: {
+          status: {
+            before: currentJob.Status.value,
+            after: updatedJob.Status.value,
+          },
+        },
+      });
 
       return { data: updatedJob, success: true };
     } else {

@@ -5,6 +5,7 @@ import { NoteFormSchema } from "@/models/note.schema";
 import { Note, NoteResponse } from "@/models/note.model";
 import { ActionResult } from "@/models/actionResult";
 import { getCurrentUser } from "@/utils/user.utils";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import { z } from "zod";
 
 export const getNotesByJobId = async (
@@ -66,6 +67,17 @@ export const addNote = async (
         userId: user.id,
         content: validated.content,
       },
+    });
+
+    // GDPR audit trail (S6a): record a note added against a Job. The audited
+    // target is the Job (no snapshot — note content is not copied into the
+    // audit payload). Fire-and-forget, non-blocking.
+    writeDataAuditLog({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: "job.note_add",
+      targetType: "job",
+      targetId: validated.jobId,
     });
 
     return { success: true, data: note };
