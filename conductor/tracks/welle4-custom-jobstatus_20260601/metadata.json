@@ -1,16 +1,16 @@
 {
   "id": "welle4-custom-jobstatus_20260601",
-  "title": "Welle 4 — Custom JobStatus XL (Kette A)",
+  "title": "Welle 4 \u2014 Custom JobStatus XL (Kette A)",
   "type": "feature",
   "status": "pending",
   "created": "2026-06-01T08:46:16Z",
-  "updated": "2026-06-01T08:46:16Z",
+  "updated": "2026-06-01T09:30:00Z",
   "phases": {
-    "total": 5,
+    "total": 6,
     "completed": 0
   },
   "tasks": {
-    "total": 18,
+    "total": 24,
     "completed": 0
   }
 }

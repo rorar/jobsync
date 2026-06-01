@@ -4,15 +4,15 @@
   "type": "feature",
   "status": "pending",
   "gated": true,
-  "entryCriteria": "User-scale/perf trigger (large staging backlog or measured slow deep page) — pre-emptive, no report yet",
+  "entryCriteria": "User-scale/perf trigger (large staging backlog or measured slow deep page) \u2014 pre-emptive, no report yet",
   "created": "2026-06-01T09:11:27Z",
-  "updated": "2026-06-01T09:11:27Z",
+  "updated": "2026-06-01T09:30:00Z",
   "phases": {
-    "total": 4,
+    "total": 5,
     "completed": 0
   },
   "tasks": {
-    "total": 8,
+    "total": 14,
     "completed": 0
   }
 }

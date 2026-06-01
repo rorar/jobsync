@@ -6,13 +6,13 @@
   "gated": true,
   "entryCriteria": "ADR-030 amendment (onAction undoTokenId pipe-through) + in-flight-undo migration plan",
   "created": "2026-06-01T09:11:27Z",
-  "updated": "2026-06-01T09:11:27Z",
+  "updated": "2026-06-01T09:30:00Z",
   "phases": {
-    "total": 4,
+    "total": 5,
     "completed": 0
   },
   "tasks": {
-    "total": 9,
+    "total": 15,
     "completed": 0
   }
 }

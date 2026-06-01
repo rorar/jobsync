@@ -4,13 +4,13 @@
   "type": "chore",
   "status": "pending",
   "created": "2026-06-01T09:11:27Z",
-  "updated": "2026-06-01T09:11:27Z",
+  "updated": "2026-06-01T09:30:00Z",
   "phases": {
-    "total": 5,
+    "total": 6,
     "completed": 0
   },
   "tasks": {
-    "total": 12,
+    "total": 18,
     "completed": 0
   }
 }

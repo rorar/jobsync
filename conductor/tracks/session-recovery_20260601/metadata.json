@@ -6,13 +6,13 @@
   "gated": true,
   "entryCriteria": "ROADMAP 3.11 prioritised for a sprint (product scheduling, effort M)",
   "created": "2026-06-01T09:11:27Z",
-  "updated": "2026-06-01T09:11:27Z",
+  "updated": "2026-06-01T09:30:00Z",
   "phases": {
-    "total": 3,
+    "total": 4,
     "completed": 0
   },
   "tasks": {
-    "total": 9,
+    "total": 15,
     "completed": 0
   }
 }

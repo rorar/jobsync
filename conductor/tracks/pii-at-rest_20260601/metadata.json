@@ -1,18 +1,18 @@
 {
   "id": "pii-at-rest_20260601",
-  "title": "PII-at-Rest — Person field-level encryption (Art. 32)",
+  "title": "PII-at-Rest \u2014 Person field-level encryption (Art. 32)",
   "type": "feature",
   "status": "pending",
   "gated": true,
   "entryCriteria": "Design phase resolves the 5 questions (fields/search/key/migration/anonymize-merge) + ADR",
   "created": "2026-06-01T09:11:27Z",
-  "updated": "2026-06-01T09:11:27Z",
+  "updated": "2026-06-01T09:30:00Z",
   "phases": {
-    "total": 5,
+    "total": 6,
     "completed": 0
   },
   "tasks": {
-    "total": 11,
+    "total": 17,
     "completed": 0
   }
 }
