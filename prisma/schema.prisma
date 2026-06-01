@@ -908,8 +908,13 @@ model AdminAuditLog {
   timestamp  DateTime @default(now())
   /// Action verb, e.g. "activateModule" / "deactivateModule".
   action     String
-  /// Optional target identifier (module id, automation id, …).
+  /// Optional target identifier (module id, automation id, job id, person id …).
   targetId   String?
+  /// Discriminates the kind of entity `targetId` points at (Welle 1 / IF-S6).
+  /// "module" | "automation" | "job" | "person" | "company". Nullable so legacy
+  /// admin rows (pre-extension) and rows where the kind is implied by `action`
+  /// remain valid. Spec: specs/audit-trail.allium (AuditTargetType).
+  targetType String?
   /// Required: id of the user who attempted the action. NOT a foreign key —
   /// see model docstring for the reason.
   actorId    String
