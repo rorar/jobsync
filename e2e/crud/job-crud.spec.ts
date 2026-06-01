@@ -74,6 +74,8 @@ async function createJob(
     url?: string;
     description?: string;
     clearDueDate?: boolean;
+    salaryMin?: string;
+    salaryMax?: string;
   },
 ) {
   await page.getByTestId("add-job-btn").click();
@@ -117,6 +119,14 @@ async function createJob(
   await page.locator(".tiptap").fill(
     opts.description ?? "E2E test job description.",
   );
+
+  // Welle 2 Phase 3: structured salary (range mode is the default). Optional.
+  if (opts.salaryMin !== undefined) {
+    await page.getByLabel("Minimum").fill(opts.salaryMin);
+  }
+  if (opts.salaryMax !== undefined) {
+    await page.getByLabel("Maximum").fill(opts.salaryMax);
+  }
 
   // F-AJ-04: the due date is optional. Clear the default (+3 days) value via
   // the DatePicker's Clear action and assert the trigger reverts to the
@@ -197,6 +207,35 @@ test.describe("Job CRUD", () => {
     await expect(
       page.getByText(jobTitle).first(),
     ).toBeVisible({ timeout: 15000 });
+
+    // Cleanup
+    await deleteJob(page, jobTitle);
+    await deleteResume(page, resumeTitle);
+  });
+
+  test("should create a job with a structured salary range (Welle 2 Phase 3)", async ({
+    page,
+  }) => {
+    const uid = Date.now().toString(36);
+    const jobTitle = `E2E Salary Job ${uid}`;
+    const company = `E2E Company ${uid}`;
+    const location = `E2E Location ${uid}`;
+    const resumeTitle = `E2E Resume ${uid}`;
+
+    await ensureResumeExists(page, resumeTitle);
+
+    await navigateToJobs(page);
+    await createJob(page, {
+      title: jobTitle,
+      company,
+      location,
+      salaryMin: "50000",
+      salaryMax: "70000",
+    });
+
+    // Job created with structured salary (dialog closed = save succeeded).
+    await navigateToJobs(page);
+    await expect(page.getByText(jobTitle).first()).toBeVisible({ timeout: 15000 });
 
     // Cleanup
     await deleteJob(page, jobTitle);

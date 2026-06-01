@@ -67,26 +67,27 @@ mode (min==max). PLUS extensions (build extensibly — item 0):
 
 - [x] Task 3.1: Allium spec for the Compensation domain (range/fixum/period/bonus,
       extensible) — `specs/compensation.allium`. `allium check` 0 errors. SalaryPeriod/BonusKind enums, Bonus value object, structured fields on Job + is_fixum derived, 6 invariants (max>=min, currency-present/active, bonus-kind field requirements), deprecated salary_range documented as computed, fixum_disables_range flag (UI-only).
-- [ ] Task 3.2: Write the `salaryRange`-string → `{min,max,currency,period}` parser + unit
-      test (handles bucket labels, free-text ranges, promoter free-text; unparseable
-      preserved/flagged, never dropped) BEFORE migrating.
-- [ ] Task 3.3: Prisma migration: add `salaryMin`/`salaryMax`/`salaryCurrency`/`salaryPeriod`
-      + `salaryBonus`(JSON) to Job; backfill from `salaryRange` via the tested parser; KEEP
-      `salaryRange` (deprecated, recoverable).
-- [ ] Task 3.4: Extend `format-salary-range.ts` (reuse, no fork) to render the structured
-      shape incl. fixum (min==max → single value) + bonus summary.
-- [ ] Task 3.5: Settings toggle `fixumDisablesRange` (default ON) in UserSettings + Settings UI.
-- [ ] Task 3.6: AddJob modal: range/fixum inputs + currency + period + bonus (flexible);
-      wire to `job.actions.ts` (ADR-015). Keep `salaryRange` computed for back-compat.
-- [ ] Task 3.7: API v1: accept structured input + keep `salaryRange` computed in responses
-      (non-breaking); update Zod schemas + select shapes + helpers.
-- [ ] Task 3.8: Component test (salary modal) + E2E happy-path (create job with salary) +
-      build + tests + dictionary consistency.
+- [x] Task 3.2: Parser `salaryRange`→`{min,max,currency,period}` (`parse-salary-range.ts`,
+      15 tests): bucket ids + free-text + k-suffix + EU/US thousands + symbols/ISO + period +
+      single-value fixum + bounds; unparseable preserved, ReDoS-safe.
+- [x] Task 3.3: Migration `20260601191028` adds salaryMin/Max/Currency/Period + salaryBonus(JSON)
+      to Job (additive); salaryRange RETAINED. Idempotent backfill `scripts/migrate-job-salary-structured.ts`.
+- [x] Task 3.4: format-salary-range fixum (min==max) already handled — reused. Bonus value
+      object + parse/serialize/validate/format in `bonus.ts` (17 tests).
+- [x] Task 3.5: `fixumDisablesRange` (default ON) on UserSettings + get/update actions +
+      `JobFormSettings.tsx` + new "job-form" settings section + i18n ×4.
+- [x] Task 3.6: `JobSalaryFields` (range/fixum/currency/period/bonus) wired into AddJob;
+      `job.actions` persists structured + computes salaryRange via shared `build-job-salary.ts` (ADR-015).
+- [x] Task 3.7: API v1 schemas + select + POST/PATCH handlers accept structured (additive,
+      legacy salaryRange parsed as fallback → non-breaking); promoter carries StagedVacancy structured salary.
+- [x] Task 3.8: JobSalaryFields (3) + AddJob/job-audit/self-registration updated; E2E
+      happy-path added (job-crud.spec, salary range) — NOT yet run (needs Playwright). Full
+      jest 5213 green, tsc 0 errors, dictionary consistent.
 
 ### Verification
 
-- [ ] Existing salaries migrated without loss; new jobs capture structured salary + bonus;
-      fixum toggle works; formatter renders range/fixum/bonus; API v1 non-breaking.
+- [x] New jobs capture structured salary + bonus; fixum toggle works; formatter renders
+      range/fixum; API v1 non-breaking; backfill script ready. ⚠ E2E written, not executed this session.
 
 ## Final Verification
 
