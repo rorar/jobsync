@@ -1,0 +1,111 @@
+# Specification: Tech-Debt Cleanup (Restposten + GDPR-LOW)
+
+**Track ID:** tech-debt-cleanup_20260601
+**Type:** Chore / Refactor (mixed — type hygiene, bounded-context, spec-drift, GDPR-LOW, test gaps)
+**Created:** 2026-06-01
+**Status:** Draft
+
+## Summary
+
+A parallel-einstreubarer cleanup track collecting the verified-open Restposten from
+BACKLOG §4 (Tech-Debt), §1b (GDPR-LOW), and §5 (CRM-Gaps tail). No single item is large;
+each is independently shippable and test-backed. Grouped into five clusters (one phase
+each) so they can be picked up opportunistically between the larger Wellen without
+rewrite risk (BACKLOG Kette D = "jederzeit parallel").
+
+## Context
+
+After Sprints 1–5 and Welle 0, the BACKLOG (verified against HEAD `663ff21`, code-grep)
+lists a small set of genuinely-open, low-coupling items. They are NOT new findings —
+they are the known tail. This track makes them executable. Every file:line below was
+**code-verified at HEAD `b4b20e9`** (this worktree) via grep/Read; the knowledge graph
+was stale (4 commits behind) and was NOT relied upon for any fact.
+
+## Acceptance Criteria
+
+Each item ships with its own test (regression for bugs, unit/coverage for gaps) and is
+committed in its own logical commit. Build zero-error, `bash scripts/test.sh` green.
+
+### Cluster 1 — TypeScript type-safety casts
+- [ ] **IF-12:** The three `as unknown as` casts in the automation-detail page are removed
+      in favour of correctly-typed props / a typed adapter. Verified sites:
+      `src/app/dashboard/automations/[id]/page.tsx:267` (`jobs as unknown as DiscoveredJob[]`),
+      `:269` (`job as unknown as StagedVacancyWithAutomation`), `:278`
+      (`selectedJob as unknown as DiscoveredJob | null`). MEDIUM.
+- [ ] **D1/D2:** `runner.ts` AI-SDK `experimental_output` deprecation migrated to the
+      current output API; the adjacent Prisma-result cast tightened. Verified:
+      `src/lib/connector/job-discovery/runner.ts:772` (`result.experimental_output`) +
+      the `resume as ResumeWithSections` cast (~`:425`). LOW.
+
+### Cluster 2 — Event semantics + bounded-context (DDD)
+- [ ] **IF-10:** `emitEvent` fire-and-forget reviewed; callers that need delivery
+      ordering/back-pressure get an awaitable path (or the void+`.catch` is documented as
+      the intentional ErrorIsolation contract with a guarding test). Verified:
+      `src/lib/events/index.ts:53` (`export function emitEvent … : void` → `.catch`). MEDIUM.
+- [ ] **D5:** `enrichment-trigger.ts` no longer writes `Company.domain` directly; the
+      write routes through the Company aggregate's repository (bounded-context fix, A-05).
+      Verified: `src/lib/events/consumers/enrichment-trigger.ts` extracts via
+      `extractDomain()` (`:205`) and writes `domain` back on `CompanyCreated`. LOW.
+
+### Cluster 3 — Allium spec-drift (no code behaviour change)
+- [ ] **D3:** `specs/notification-dispatch.allium` migrated to Allium v3 syntax;
+      `allium:check` parses clean (was ~160 parse errors). LOW (1–2h, isolated).
+- [ ] **D4:** `specs/shared-entities.allium` `Company.domain` reconciled with the
+      implementation via `allium:weed`. Verified spec line: `shared-entities.allium:68`
+      (`domain: String?  -- … populated by enrichment`) vs `schema.prisma:306` +
+      `enrichment-trigger.ts` autofill. LOW (5min).
+
+### Cluster 4 — GDPR-LOW
+- [ ] **GDPR-Consent (Art. 7):** `processingBasis` gains enforcement + a withdrawal path
+      (currently write-only — set on create/display/export, never enforced or revocable).
+      Verified write sites: `src/actions/person.actions.ts`, surfaced in
+      `PersonDetailClient.tsx`, exported in `lib/export/collect-user-data.ts`. MEDIUM.
+- [ ] **G25:** `mergePersons` dedups `CrmTaskTarget` / `CrmNoteTarget` so a target shared
+      by winner+loser is not duplicated. Verified: `person.actions.ts:444` `mergePersons`
+      already dedups `JobContact` (`duplicateJobIds`, ~`:498-502`) but reassigns
+      task/note targets loser→winner WITHOUT dedup (~`:505-518`). LOW.
+- [ ] **G26b:** `ADMIN_USER_IDS` gains a startup validation in `instrumentation.ts`
+      (mirrors the existing `ENCRYPTION_KEY` throw at `:3-5` and prod-`AUTH_SECRET` throw
+      at `:7-9` — verified). Malformed/empty entries fail fast. LOW.
+
+### Cluster 5 — i18n + test gaps
+- [ ] **F6:** The Toast close-button fallback label is i18n'd. Verified:
+      `src/components/ui/toast.tsx:90` renders `{label ?? "Dismiss"}` — the `?? "Dismiss"`
+      hardcoded-English fallback is the gap (the toaster passes `t("common.dismiss")`, but
+      the component default leaks English when no label is supplied). LOW (test gap).
+- [ ] **CRM-Cron:** Unit-test coverage added for `src/lib/scheduler/crm-cron.ts` (today
+      0 tests; `crm-activity-logger` is covered, `crm-cron` is not). Cover the three rules
+      `ExpireAutoCreatedPersons` / `InterviewReminder` / `TaskOverdueReminder` + the
+      24h-idempotency guard. The functions are already exported for testing (`crm-cron.ts:384`).
+- [ ] **G28:** `e2e/cleanup-stale-data.ts` deletes CRM entities in correct FK order
+      (8 entities) so cleanup does not fail on referential constraints. Verified file
+      exists: `e2e/cleanup-stale-data.ts`. LOW (test).
+
+## Dependencies
+
+- Independent of the four Wellen — **parallel-einstreubar** (no rewrite risk).
+- D3/D4 are best handled in one `allium:tend` / `allium:weed` pass.
+- GDPR-Consent (enforcement + withdrawal) is the heaviest item; if it grows, split it
+  into its own track rather than blocking the rest of the cluster.
+
+## Out of Scope
+
+- Items already verified ERLEDIGT in BACKLOG §0 (IF-2/4/6/9/11, DAU-2, Gap-2/3/4, etc.).
+- The dedicated-sprint items (observability, PII-at-rest, undoStore pipe-through,
+  cursor-pagination, session-recovery) — each has its own entry-gated track.
+- ROADMAP §7 forward features and NOT-PLANNED §8 items.
+
+## Technical Notes
+
+- TDD: bug items get a failing regression test first; test-gap items get coverage that
+  would fail against a deliberately-broken variant.
+- ADR-015 (userId in every query) + ADR-019 (no raw-userId `"use server"` export) apply
+  to the GDPR-Consent + G25 changes.
+- D5 is a DDD bounded-context fix — route the write through the Company Repository
+  (`company.actions.ts`), do not add a second cross-context writer.
+- i18n F6: add/confirm `common.dismiss` ×4 locales and make the component default use it.
+
+---
+
+_Generated by Conductor — distilled from BACKLOG §4 / §1b / §5. All file:line facts
+code-verified at HEAD `b4b20e9`; graph-derived facts: none (stale graph not relied upon)._

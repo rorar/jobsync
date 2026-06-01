@@ -1,0 +1,16 @@
+{
+  "id": "tech-debt-cleanup_20260601",
+  "title": "Tech-Debt Cleanup (Restposten + GDPR-LOW)",
+  "type": "chore",
+  "status": "pending",
+  "created": "2026-06-01T09:11:27Z",
+  "updated": "2026-06-01T09:30:00Z",
+  "phases": {
+    "total": 6,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 18,
+    "completed": 0
+  }
+}
