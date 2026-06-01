@@ -65,8 +65,8 @@ mode (min==max). PLUS extensions (build extensibly — item 0):
 
 ### Tasks
 
-- [ ] Task 3.1: Allium spec for the Compensation domain (range/fixum/period/bonus,
-      extensible) — `specs/compensation.allium`. Spec-before-complex-feature (workflow).
+- [x] Task 3.1: Allium spec for the Compensation domain (range/fixum/period/bonus,
+      extensible) — `specs/compensation.allium`. `allium check` 0 errors. SalaryPeriod/BonusKind enums, Bonus value object, structured fields on Job + is_fixum derived, 6 invariants (max>=min, currency-present/active, bonus-kind field requirements), deprecated salary_range documented as computed, fixum_disables_range flag (UI-only).
 - [ ] Task 3.2: Write the `salaryRange`-string → `{min,max,currency,period}` parser + unit
       test (handles bucket labels, free-text ranges, promoter free-text; unparseable
       preserved/flagged, never dropped) BEFORE migrating.
