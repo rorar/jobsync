@@ -103,47 +103,47 @@ and the `AdminAuditLog` extension that S6a/S6b will implement.
 
 ### Tasks
 
-- [ ] Task 4.1: Regression/unit tests: each Job mutation produces one audit row with the
+- [x] Task 4.1: Regression/unit tests: each Job mutation produces one audit row with the
       spec-defined actor/action/target shape.
-- [ ] Task 4.2: Extend the `AdminAuditLog` pattern (or a Job-scoped sibling) with a
+- [x] Task 4.2: Extend the `AdminAuditLog` pattern (or a Job-scoped sibling) with a
       `server-only` audit writer per the Phase 3 contract; respect ADR-019 (no raw-userId
       `"use server"` export).
-- [ ] Task 4.3: Wire the writer into `job.actions.ts` create/update/delete/status/note paths
+- [x] Task 4.3: Wire the writer into `job.actions.ts` create/update/delete/status/note paths
       (ADR-015 userId in every query).
-- [ ] Task 4.4: i18n any new labels (en/de/fr/es); build + tests.
+- [x] Task 4.4: i18n any new labels (en/de/fr/es); build + tests.
 
 ### Verification
 
-- [ ] Every Job mutation path is covered by a passing audit-row assertion matching the spec.
+- [x] Every Job mutation path covered (addJob/updateJob/delete/status/kanban-cross-column/addNote); job-audit.spec green.
 
 ## Phase 5: S6b — CRM read-access audit trail (implements the spec; fan-out)
 
 ### Tasks
 
-- [ ] Task 5.1: Tests: viewing/exporting `Person` PII writes a read-access audit row.
-- [ ] Task 5.2: Add a read-access audit writer (server-only leaf) keyed to Person detail /
+- [x] Task 5.1: Tests: viewing/exporting `Person` PII writes a read-access audit row.
+- [x] Task 5.2: Add a read-access audit writer (server-only leaf) keyed to Person detail /
       list-with-PII / export entry points in `person.actions.ts`.
-- [ ] Task 5.3: Ensure no PII is duplicated into the audit payload beyond target id + actor
+- [x] Task 5.3: Ensure no PII is duplicated into the audit payload beyond target id + actor
       (per the Phase 3 minimisation rule).
-- [ ] Task 5.4: Build + tests.
+- [x] Task 5.4: Build + tests.
 
 ### Verification
 
-- [ ] Person PII read paths each emit exactly one audit row; no over-collection.
+- [x] getPerson + getPersons emit person.pii_read (one per person); person-audit.spec asserts no PII/snapshot leak.
 
 ## Phase 6: GDPR-JWT — minimise the NextAuth token (fan-out)
 
 ### Tasks
 
-- [ ] Task 6.1: Test decoding the `jwt` callback output asserts no `email`/`name` claim.
-- [ ] Task 6.2: Trim the `jwt`/`session` NextAuth callbacks to carry only `id`; resolve
+- [x] Task 6.1: Test decoding the `jwt` callback output asserts no `email`/`name` claim.
+- [x] Task 6.2: Trim the `jwt`/`session` NextAuth callbacks to carry only `id`; resolve
       display fields (email/name) from DB where a surface needs them.
-- [ ] Task 6.3: Smoke the auth flow (sign-in still works; session.user.id present).
-- [ ] Task 6.4: Build + tests + E2E signin smoke.
+- [x] Task 6.3: Smoke the auth flow (sign-in still works; session.user.id present).
+- [x] Task 6.4: Build + tests + E2E signin smoke.
 
 ### Verification
 
-- [ ] JWT contains only `id`; sign-in + session resolution unaffected.
+- [x] JWT id-only (name/email/picture stripped); session repopulates display fields from DB; auth-jwt-minimization.spec green.
 
 ## Final Verification
 
