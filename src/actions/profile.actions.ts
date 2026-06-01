@@ -14,6 +14,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { deleteFile } from "@/lib/profile/delete-file";
+import { isValidCurrencyCode } from "@/lib/connector/reference-data/modules/currency/currency-data";
 
 // Narrow Prisma string to domain enum
 function toResumeSection<T extends { sectionType: string }>(
@@ -839,5 +840,114 @@ export const updateEducation = async (
   } catch (error) {
     const msg = "errors.updateFailed";
     return handleError(error, msg);
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Profile preferences — home location + preferred currency (Welle 2, ADR-034)
+//
+// Standalone reader + writer for the user's own home location (ISO 3166-1
+// country + ISO 3166-2 subdivision) and preferred currency (ISO 4217). Kept
+// deliberately decoupled from form-specific code so the future Onboarding
+// wizard (ROADMAP 2.1) and the profile form share ONE writer.
+// ---------------------------------------------------------------------------
+
+export interface ProfilePreferences {
+  addressCountryCode: string | null;
+  addressSubdivisionCode: string | null;
+  preferredCurrency: string | null;
+}
+
+const PROFILE_COUNTRY_RE = /^[A-Z]{2}$/;
+const PROFILE_SUBDIVISION_RE = /^[A-Z0-9]{1,3}$/;
+
+/** Trim + uppercase; empty/nullish → null. */
+function normalizeOptionalCode(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const s = String(value).trim().toUpperCase();
+  return s === "" ? null : s;
+}
+
+/**
+ * Read the current user's home location + preferred currency. Pattern B
+ * (returns the raw shape, not ActionResult). Null only when unauthenticated;
+ * an all-null object when the user has no Profile row yet. ADR-015: scoped by userId.
+ */
+export const getProfilePreferences = async (): Promise<ProfilePreferences | null> => {
+  const user = await getCurrentUser();
+  if (!user) return null;
+
+  const profile = await prisma.profile.findFirst({
+    where: { userId: user.id },
+    select: {
+      addressCountryCode: true,
+      addressSubdivisionCode: true,
+      preferredCurrency: true,
+    },
+  });
+
+  return {
+    addressCountryCode: profile?.addressCountryCode ?? null,
+    addressSubdivisionCode: profile?.addressSubdivisionCode ?? null,
+    preferredCurrency: profile?.preferredCurrency ?? null,
+  };
+};
+
+/**
+ * Persist the user's home location + preferred currency on the Profile
+ * aggregate (ADR-034). Update-if-exists-else-create (lazy Profile, mirrors
+ * createResumeProfile). All three fields are optional/clearable.
+ *
+ * Boundary validation (ADR-019 — the format/union is erased at runtime):
+ *   - country: /^[A-Z]{2}$/ or null
+ *   - subdivision: /^[A-Z0-9]{1,3}$/ or null; forced null when no country
+ *   - currency: active ISO-4217 (CUR module) or null
+ */
+export const updateProfilePreferences = async (
+  input: ProfilePreferences
+): Promise<ActionResult<ProfilePreferences>> => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, message: "errors.notAuthenticated", errorCode: "UNAUTHORIZED" };
+    }
+
+    const country = normalizeOptionalCode(input.addressCountryCode);
+    // A subdivision without a country is meaningless — drop it.
+    const subdivision = country ? normalizeOptionalCode(input.addressSubdivisionCode) : null;
+    const currency = normalizeOptionalCode(input.preferredCurrency);
+
+    if (country !== null && !PROFILE_COUNTRY_RE.test(country)) {
+      return { success: false, message: "errors.invalidInput", errorCode: "VALIDATION_ERROR" };
+    }
+    if (subdivision !== null && !PROFILE_SUBDIVISION_RE.test(subdivision)) {
+      return { success: false, message: "errors.invalidInput", errorCode: "VALIDATION_ERROR" };
+    }
+    if (currency !== null && !isValidCurrencyCode(currency)) {
+      return { success: false, message: "errors.invalidInput", errorCode: "VALIDATION_ERROR" };
+    }
+
+    const data = {
+      addressCountryCode: country,
+      addressSubdivisionCode: subdivision,
+      preferredCurrency: currency,
+    };
+
+    // ADR-015: locate the user's own Profile by userId, mutate by its id.
+    const existing = await prisma.profile.findFirst({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.profile.update({ where: { id: existing.id }, data });
+    } else {
+      await prisma.profile.create({ data: { userId: user.id, ...data } });
+    }
+
+    revalidatePath("/dashboard/profile");
+    return { success: true, data };
+  } catch (error) {
+    return handleError(error, "errors.updateFailed");
   }
 };
