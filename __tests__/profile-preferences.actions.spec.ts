@@ -3,8 +3,8 @@
  *
  * Tests getProfilePreferences + updateProfilePreferences:
  *   - auth gate (ADR-019)
- *   - ADR-015 userId scoping (findFirst by userId; update by profile id)
- *   - lazy-Profile: update if exists, else create
+ *   - ADR-015 userId scoping (findFirst read; atomic upsert by unique userId)
+ *   - lazy-Profile: single upsert (Arch H2 — Profile.userId @unique)
  *   - boundary validation: country /^[A-Z]{2}$/, currency via CUR module,
  *     subdivision forced null when no country, case normalization
  */
@@ -14,8 +14,7 @@ jest.mock("@/lib/db", () => ({
   default: {
     profile: {
       findFirst: jest.fn(),
-      update: jest.fn().mockResolvedValue({}),
-      create: jest.fn().mockResolvedValue({}),
+      upsert: jest.fn().mockResolvedValue({}),
     },
   },
 }));
@@ -94,21 +93,25 @@ describe("updateProfilePreferences", () => {
     });
     expect(res.success).toBe(false);
     expect(res.errorCode).toBe("UNAUTHORIZED");
-    expect(prisma.profile.update).not.toHaveBeenCalled();
-    expect(prisma.profile.create).not.toHaveBeenCalled();
+    expect(prisma.profile.upsert).not.toHaveBeenCalled();
   });
 
-  it("updates the existing Profile (scoped by its id) with normalized codes", async () => {
-    (prisma.profile.findFirst as jest.Mock).mockResolvedValue({ id: "profile-1" });
+  it("upserts atomically scoped by the unique userId with normalized codes (Arch H2)", async () => {
     const res = await updateProfilePreferences({
       addressCountryCode: "de",
       addressSubdivisionCode: "by",
       preferredCurrency: "eur",
     });
     expect(res.success).toBe(true);
-    expect(prisma.profile.update).toHaveBeenCalledWith({
-      where: { id: "profile-1" },
-      data: {
+    expect(prisma.profile.upsert).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      update: {
+        addressCountryCode: "DE",
+        addressSubdivisionCode: "BY",
+        preferredCurrency: "EUR",
+      },
+      create: {
+        userId: "user-1",
         addressCountryCode: "DE",
         addressSubdivisionCode: "BY",
         preferredCurrency: "EUR",
@@ -121,51 +124,33 @@ describe("updateProfilePreferences", () => {
     });
   });
 
-  it("creates a Profile (lazy-creation) when none exists, scoped by userId", async () => {
-    (prisma.profile.findFirst as jest.Mock).mockResolvedValue(null);
-    const res = await updateProfilePreferences({
-      addressCountryCode: "FR",
-      addressSubdivisionCode: null,
-      preferredCurrency: "EUR",
-    });
-    expect(res.success).toBe(true);
-    expect(prisma.profile.create).toHaveBeenCalledWith({
-      data: {
-        userId: "user-1",
-        addressCountryCode: "FR",
-        addressSubdivisionCode: null,
-        preferredCurrency: "EUR",
-      },
-    });
-  });
-
   it("forces subdivision to null when no country is given", async () => {
-    (prisma.profile.findFirst as jest.Mock).mockResolvedValue({ id: "profile-1" });
     const res = await updateProfilePreferences({
       addressCountryCode: null,
       addressSubdivisionCode: "BY", // orphaned region — must be dropped
       preferredCurrency: null,
     });
     expect(res.success).toBe(true);
-    expect(prisma.profile.update).toHaveBeenCalledWith({
-      where: { id: "profile-1" },
-      data: {
-        addressCountryCode: null,
-        addressSubdivisionCode: null,
-        preferredCurrency: null,
-      },
-    });
+    expect(prisma.profile.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: "user-1" },
+        update: {
+          addressCountryCode: null,
+          addressSubdivisionCode: null,
+          preferredCurrency: null,
+        },
+      }),
+    );
   });
 
   it("accepts an all-null input (clears all three fields)", async () => {
-    (prisma.profile.findFirst as jest.Mock).mockResolvedValue({ id: "profile-1" });
     const res = await updateProfilePreferences({
       addressCountryCode: null,
       addressSubdivisionCode: null,
       preferredCurrency: null,
     });
     expect(res.success).toBe(true);
-    expect(prisma.profile.update).toHaveBeenCalled();
+    expect(prisma.profile.upsert).toHaveBeenCalled();
   });
 
   it("rejects a malformed country code without writing", async () => {
@@ -176,8 +161,7 @@ describe("updateProfilePreferences", () => {
     });
     expect(res.success).toBe(false);
     expect(res.errorCode).toBe("VALIDATION_ERROR");
-    expect(prisma.profile.update).not.toHaveBeenCalled();
-    expect(prisma.profile.create).not.toHaveBeenCalled();
+    expect(prisma.profile.upsert).not.toHaveBeenCalled();
   });
 
   it("rejects an unknown currency code without writing", async () => {
@@ -188,7 +172,6 @@ describe("updateProfilePreferences", () => {
     });
     expect(res.success).toBe(false);
     expect(res.errorCode).toBe("VALIDATION_ERROR");
-    expect(prisma.profile.update).not.toHaveBeenCalled();
-    expect(prisma.profile.create).not.toHaveBeenCalled();
+    expect(prisma.profile.upsert).not.toHaveBeenCalled();
   });
 });

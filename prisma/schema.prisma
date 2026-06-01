@@ -111,7 +111,10 @@ model UserSettings {
 
 model Profile {
   id      String   @id @default(uuid())
-  userId  String
+  // One Profile per user (aggregate root). `@unique` lets both lazy-create paths
+  // (createResumeProfile, updateProfilePreferences) use upsert and prevents the
+  // split-brain where concurrent creates fork the aggregate (full-review Arch H2).
+  userId  String   @unique
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   resumes Resume[]
 
@@ -121,8 +124,6 @@ model Profile {
   addressCountryCode     String? // ISO 3166-1 alpha-2 (e.g. "DE")
   addressSubdivisionCode String? // ISO 3166-2 without country prefix (e.g. "BY")
   preferredCurrency      String? // ISO 4217 (e.g. "EUR")
-
-  @@index([userId])
 }
 
 model Resume {

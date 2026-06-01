@@ -933,17 +933,14 @@ export const updateProfilePreferences = async (
       preferredCurrency: currency,
     };
 
-    // ADR-015: locate the user's own Profile by userId, mutate by its id.
-    const existing = await prisma.profile.findFirst({
+    // ADR-015 + Arch H2: Profile.userId is @unique, so a single atomic upsert
+    // scoped to the session userId both enforces ownership and prevents the
+    // split-brain that a find-then-create race could otherwise fork.
+    await prisma.profile.upsert({
       where: { userId: user.id },
-      select: { id: true },
+      update: data,
+      create: { userId: user.id, ...data },
     });
-
-    if (existing) {
-      await prisma.profile.update({ where: { id: existing.id }, data });
-    } else {
-      await prisma.profile.create({ data: { userId: user.id, ...data } });
-    }
 
     revalidatePath("/dashboard/profile");
     return { success: true, data };
