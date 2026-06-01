@@ -13,6 +13,7 @@ import type {
   PromotionInput,
 } from "@/models/stagedVacancy.model";
 import { promoteStagedVacancy } from "@/lib/connector/job-discovery/promoter";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import { emitEvent, createEvent } from "@/lib/events";
 import { DomainEventType } from "@/lib/events/event-types";
 import { undoStore, createUndoEntry } from "@/lib/undo";
@@ -399,6 +400,16 @@ export async function promoteStagedVacancyToJob(
     if (!user) return { success: false, message: "errors.notAuthenticated" };
 
     const result = await promoteStagedVacancy(input, user.id);
+
+    // S6a: promoting a staged vacancy creates a Job — audit it like any other
+    // job.create (specs/audit-trail.allium). Fire-and-forget.
+    writeDataAuditLog({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: "job.create",
+      targetType: "job",
+      targetId: result.jobId,
+    });
 
     return { success: true, data: result };
   } catch (error) {
