@@ -11,6 +11,8 @@ import {
   AiSettings,
   AutomationSettings,
   DisplaySettings,
+  JobFormSettings,
+  defaultJobFormSettings,
 } from "@/models/userSettings.model";
 import type { NotificationPreferences } from "@/models/notification.model";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/models/notification.model";
@@ -181,6 +183,34 @@ export async function getAutomationSettingsForUser(
     return { ...defaults, ...parsed.automation };
   } catch {
     return defaults;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Job Form Settings (Welle 2 Phase 3)
+// ---------------------------------------------------------------------------
+
+export const updateJobFormSettings = async (
+  jobFormSettings: JobFormSettings
+): Promise<ActionResult<UserSettings>> => {
+  return updateUserSettings({ jobForm: jobFormSettings });
+};
+
+/**
+ * Resolved Job-form settings for the current session user. Session-based (no
+ * raw userId param, ADR-019). Merges DB settings over defaults so callers always
+ * get a complete object; returns defaults when unauthenticated or unset.
+ */
+export async function getJobFormSettings(): Promise<JobFormSettings> {
+  const user = await getCurrentUser();
+  if (!user) return defaultJobFormSettings;
+  try {
+    const row = await prisma.userSettings.findUnique({ where: { userId: user.id } });
+    if (!row) return defaultJobFormSettings;
+    const parsed: UserSettingsData = JSON.parse(row.settings);
+    return { ...defaultJobFormSettings, ...parsed.jobForm };
+  } catch {
+    return defaultJobFormSettings;
   }
 }
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import AiSettings from "@/components/settings/AiSettings";
 import ApiKeySettings from "@/components/settings/ApiKeySettings";
 import AutomationSettings from "@/components/settings/AutomationSettings";
+import JobFormSettings from "@/components/settings/JobFormSettings";
 import DeveloperSettings from "@/components/settings/DeveloperSettings";
 import DisplaySettings from "@/components/settings/DisplaySettings";
 import ErrorLogSettings from "@/components/settings/ErrorLogSettings";
@@ -41,6 +42,7 @@ function Settings() {
           {activeSection === "public-api" && <PublicApiKeySettings />}
           {activeSection === "appearance" && <DisplaySettings />}
           {activeSection === "automation" && <AutomationSettings />}
+          {activeSection === "job-form" && <JobFormSettings />}
           {activeSection === "enrichment" && <EnrichmentModuleSettings />}
           {activeSection === "api-status" && <ApiStatusOverview />}
           {activeSection === "logo-cache" && <LogoAssetSettings />}

@@ -43,6 +43,16 @@ export interface AutomationSettings {
   performanceWarningThreshold: number;
 }
 
+/** Job form preferences (Welle 2 Phase 3). */
+export interface JobFormSettings {
+  /**
+   * When true (default), entering a Fixum (fixed salary) disables the salary
+   * range inputs in the Job form. UI affordance only — no storage-level effect.
+   * (compensation.allium: fixum_disables_range)
+   */
+  fixumDisablesRange: boolean;
+}
+
 export interface LogoAssetConfig {
   maxFileSize: number;    // Default: 524288 (512KB)
   maxDimension: number;   // Default: 512px bounding box
@@ -63,10 +73,15 @@ export interface UserSettingsData {
   display: DisplaySettings;
   developer?: DeveloperSettings;
   automation?: AutomationSettings;
+  jobForm?: JobFormSettings;
   notifications?: NotificationPreferences;
   logoAsset?: LogoAssetConfig;
   privacy?: PrivacySettings;
 }
+
+export const defaultJobFormSettings: JobFormSettings = {
+  fixumDisablesRange: true,
+};
 
 export interface UserSettings {
   userId: string;
@@ -104,5 +119,8 @@ export const defaultUserSettings: UserSettingsData = {
   automation: {
     performanceWarningEnabled: true,
     performanceWarningThreshold: 10,
+  },
+  jobForm: {
+    fixumDisablesRange: true,
   },
 };
