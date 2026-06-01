@@ -92,6 +92,8 @@ commit: `bash scripts/test.sh` (all pass) + `source scripts/env.sh && bun run bu
 (zero type errors). Stop the dev server before tsc/build. Run
 `bash scripts/check-notification-writers.sh` when touching notification code.
 
+Never run jest+build and/or tsc+build at the same time.
+
 ## DDD Discipline
 
 - Server actions = Repositories (one action file per aggregate). Return `ActionResult<T>`.
