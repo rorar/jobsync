@@ -6,19 +6,21 @@
   "created": "2026-06-01T08:46:16Z",
   "updated": "2026-06-01T12:00:00Z",
   "current_phase": 3,
-  "current_task": "3.1",
+  "current_task": "3.2",
   "phases": {
     "total": 4,
     "completed": 2
   },
   "tasks": {
-    "total": 21,
-    "completed": 9
+    "total": 23,
+    "completed": 10
   },
   "commits": [
     "7a29816: chore(conductor): close Welle 1, start Welle 2",
     "765fb00: feat(reference-data): add ISO-4217 currency reference module (CUR)",
     "e0b91d2: feat(profile): persist home location + preferred currency (ADR-034)",
-    "d03212b: feat(profile): home location + currency UI"
+    "d03212b: feat(profile): home location + currency UI",
+    "(planning): capture salary-calculator + company-perks tracks; re-scope Phase 3",
+    "(spec): compensation.allium"
   ]
 }
