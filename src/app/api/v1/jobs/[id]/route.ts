@@ -235,7 +235,7 @@ async function buildUpdateData(
             salaryBonus: updates.salaryBonus,
           }
         : updates.salaryRange
-          ? parseSalaryRange(updates.salaryRange)
+          ? { ...parseSalaryRange(updates.salaryRange), salaryRangeFallback: updates.salaryRange }
           : {},
     );
     Object.assign(data, salaryData);

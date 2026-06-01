@@ -48,9 +48,23 @@ function canonical(input: unknown): JobBonus | null {
   if (typeof kind !== "string" || !BONUS_KINDS.has(kind)) return null;
 
   const out: JobBonus = { kind: kind as BonusKind };
-  if (typeof o.amount === "number" && !Number.isNaN(o.amount)) out.amount = o.amount;
-  if (typeof o.percentage === "number" && !Number.isNaN(o.percentage)) out.percentage = o.percentage;
-  if (typeof o.condition === "string" && o.condition.trim() !== "") out.condition = o.condition;
+  // Amounts must be finite & ≥0; percentage additionally capped at 1000% — an
+  // out-of-range value is dropped (then isValidBonus rejects the whole bonus if
+  // the kind required it). Mirrors the Zod bounds on both write schemas.
+  if (typeof o.amount === "number" && Number.isFinite(o.amount) && o.amount >= 0) {
+    out.amount = o.amount;
+  }
+  if (
+    typeof o.percentage === "number" &&
+    Number.isFinite(o.percentage) &&
+    o.percentage >= 0 &&
+    o.percentage <= 1000
+  ) {
+    out.percentage = o.percentage;
+  }
+  if (typeof o.condition === "string" && o.condition.trim() !== "") {
+    out.condition = o.condition.trim();
+  }
 
   return isValidBonus(out) ? out : null;
 }

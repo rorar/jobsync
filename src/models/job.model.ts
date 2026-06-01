@@ -1,8 +1,13 @@
 import { Resume } from "./profile.model";
 import type { JobBonus } from "@/lib/salary/bonus";
 
-/** Salary period (Welle 2 Phase 3). Mirrors compensation.allium SalaryPeriod. */
-export type SalaryPeriod = "yearly" | "monthly" | "hourly";
+/**
+ * Salary period (Welle 2 Phase 3). Mirrors compensation.allium SalaryPeriod.
+ * Single source of truth — derive the union from this `as const` tuple and use
+ * it for runtime membership checks (the TS union is erased at runtime, ADR-019).
+ */
+export const SALARY_PERIODS = ["yearly", "monthly", "hourly"] as const;
+export type SalaryPeriod = (typeof SALARY_PERIODS)[number];
 
 export interface JobForm {
   id?: string;

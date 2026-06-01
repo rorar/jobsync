@@ -143,7 +143,7 @@ export async function promoteStagedVacancy(
                 salaryCurrency: vacancy.salaryCurrency,
                 salaryPeriod: (vacancy.salaryPeriod as SalaryPeriod | null) ?? null,
               }
-            : parseSalaryRange(vacancy.salary),
+            : { ...parseSalaryRange(vacancy.salary), salaryRangeFallback: vacancy.salary },
         ),
         ...(input.tagsToApply && input.tagsToApply.length > 0
           ? { tags: { connect: input.tagsToApply.map((id) => ({ id })) } }

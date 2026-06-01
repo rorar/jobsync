@@ -83,3 +83,27 @@ describe("formatBonus", () => {
     expect(formatBonus({ kind: "fixed" } as JobBonus, "EUR", "en")).toBe("");
   });
 });
+
+// full-review F6 (Sec M-2 / Quality M2): percentage is capped and condition is
+// trimmed by the canonical normalizer used on every write/serialize path.
+describe("canonical hardening (via serializeBonus/parseBonus)", () => {
+  it("drops a percentage above 1000 (then rejects a percentage-only bonus)", () => {
+    expect(serializeBonus({ kind: "percentage", percentage: 999999 })).toBeNull();
+  });
+  it("drops a negative percentage", () => {
+    expect(serializeBonus({ kind: "percentage", percentage: -5 })).toBeNull();
+  });
+  it("keeps a percentage at the 1000 boundary", () => {
+    expect(isValidBonus(parseBonus(serializeBonus({ kind: "percentage", percentage: 1000 })))).toBe(true);
+  });
+  it("drops a non-finite amount", () => {
+    expect(serializeBonus({ kind: "fixed", amount: Infinity })).toBeNull();
+  });
+  it("trims the stored condition", () => {
+    const b = parseBonus(serializeBonus({ kind: "fixed", amount: 5000, condition: "  after goal  " }));
+    expect(b?.condition).toBe("after goal");
+  });
+  it("for a mixed bonus, an out-of-range percentage invalidates the whole bonus", () => {
+    expect(serializeBonus({ kind: "mixed", amount: 5000, percentage: 5000 })).toBeNull();
+  });
+});

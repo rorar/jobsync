@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { SALARY_PERIODS } from "@/models/job.model";
+import { isValidCurrencyCode } from "@/lib/connector/reference-data/modules/currency/currency-data";
 
 /**
  * Zod validation schemas for Public API v1 endpoints.
@@ -32,13 +34,18 @@ export const CreateJobSchema = z.object({
   // Structured salary (Welle 2 Phase 3). All optional + additive.
   salaryMin: z.number().nonnegative().optional().nullable(),
   salaryMax: z.number().nonnegative().optional().nullable(),
-  salaryCurrency: z.string().regex(/^[A-Z]{3}$/i).optional().nullable(),
-  salaryPeriod: z.enum(["yearly", "monthly", "hourly"]).optional().nullable(),
+  salaryCurrency: z
+    .string()
+    .regex(/^[A-Z]{3}$/i)
+    .refine(isValidCurrencyCode, { message: "Unknown ISO-4217 currency code" })
+    .optional()
+    .nullable(),
+  salaryPeriod: z.enum(SALARY_PERIODS).optional().nullable(),
   salaryBonus: z
     .object({
       kind: z.enum(["fixed", "percentage", "mixed"]),
       amount: z.number().nonnegative().nullable().optional(),
-      percentage: z.number().nonnegative().nullable().optional(),
+      percentage: z.number().nonnegative().max(1000).nullable().optional(),
       condition: z.string().max(200).nullable().optional(),
     })
     .optional()

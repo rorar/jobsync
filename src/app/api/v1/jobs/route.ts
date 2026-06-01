@@ -96,7 +96,7 @@ export const POST = withApiAuth(async (req, { userId }) => {
     hasStructured
       ? { salaryMin, salaryMax, salaryCurrency, salaryPeriod, salaryBonus }
       : salaryRange
-        ? parseSalaryRange(salaryRange)
+        ? { ...parseSalaryRange(salaryRange), salaryRangeFallback: salaryRange }
         : {},
   );
 
