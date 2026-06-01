@@ -37,6 +37,13 @@ interface JobSalaryFieldsProps {
   currenciesLoading?: boolean;
   /** User setting: entering a Fixum disables the range inputs (default true). */
   fixumDisablesRange: boolean;
+  /**
+   * Initial Fixum view, derived by the host from the loaded job (min === max).
+   * Passed as a prop — NOT computed from a one-time `useState` initializer here —
+   * because the form is reset asynchronously after mount; the host remounts this
+   * component (via `key`) per edit target so this value is always current.
+   */
+  initialFixum?: boolean;
 }
 
 const NONE = "__none__";
@@ -54,8 +61,9 @@ export function JobSalaryFields({
   currencies,
   currenciesLoading,
   fixumDisablesRange,
+  initialFixum = false,
 }: JobSalaryFieldsProps) {
-  const { t, locale } = useTranslations();
+  const { t } = useTranslations();
   const { watch, setValue } = form;
 
   const salaryMin = watch("salaryMin") ?? null;
@@ -64,11 +72,10 @@ export function JobSalaryFields({
   const salaryPeriod = watch("salaryPeriod") ?? null;
   const bonus = watch("salaryBonus") ?? null;
 
-  // Fixum mode is available only when the setting allows it. Initialize ON when
-  // the loaded job is already a fixum (min == max, both set).
-  const [fixumMode, setFixumMode] = useState<boolean>(
-    fixumDisablesRange && salaryMin != null && salaryMin === salaryMax,
-  );
+  // Fixum mode is available only when the setting allows it. The host derives the
+  // initial value from the loaded job (min === max) and remounts this component
+  // per edit target, so a one-time initializer here is correct and race-free.
+  const [fixumMode, setFixumMode] = useState<boolean>(initialFixum);
 
   const setNum = useCallback(
     (field: "salaryMin" | "salaryMax", raw: string) => {

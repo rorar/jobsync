@@ -42,11 +42,21 @@ import { JobSalaryFields } from "@/components/myjobs/JobSalaryFields";
 
 type Values = z.infer<typeof AddJobFormSchema>;
 
-function Harness({ fixumDisablesRange = true }: { fixumDisablesRange?: boolean }) {
+function Harness({
+  fixumDisablesRange = true,
+  initialFixum = false,
+  initialMin = null,
+  initialMax = null,
+}: {
+  fixumDisablesRange?: boolean;
+  initialFixum?: boolean;
+  initialMin?: number | null;
+  initialMax?: number | null;
+}) {
   const form = useForm<Values>({
     defaultValues: {
-      salaryMin: null,
-      salaryMax: null,
+      salaryMin: initialMin,
+      salaryMax: initialMax,
       salaryCurrency: null,
       salaryPeriod: null,
       salaryBonus: null,
@@ -55,7 +65,12 @@ function Harness({ fixumDisablesRange = true }: { fixumDisablesRange?: boolean }
   const v = form.watch();
   return (
     <div>
-      <JobSalaryFields form={form} currencies={[]} fixumDisablesRange={fixumDisablesRange} />
+      <JobSalaryFields
+        form={form}
+        currencies={[]}
+        fixumDisablesRange={fixumDisablesRange}
+        initialFixum={initialFixum}
+      />
       <output data-testid="min">{String(v.salaryMin)}</output>
       <output data-testid="max">{String(v.salaryMax)}</output>
       <output data-testid="bonus">{JSON.stringify(v.salaryBonus)}</output>
@@ -87,6 +102,23 @@ it("does not offer the Fixum switch when fixumDisablesRange is off", () => {
   render(<Harness fixumDisablesRange={false} />);
   expect(screen.queryByLabelText("jobs.fixedSalary")).not.toBeInTheDocument();
   expect(screen.getByLabelText("jobs.salaryMin")).toBeInTheDocument();
+});
+
+// Regression (full-review Quality H1): editing a saved Fixum job (min === max)
+// must open in the single-amount Fixum view, not the range view. The host derives
+// `initialFixum` from the loaded job and remounts via `key`, so the prop — not a
+// stale one-time useState read — drives the initial view.
+it("opens in Fixum (amount) view when initialFixum is set from a loaded job", () => {
+  render(<Harness initialFixum initialMin={55000} initialMax={55000} />);
+  expect(screen.getByLabelText("jobs.salaryAmount")).toBeInTheDocument();
+  expect(screen.queryByLabelText("jobs.salaryMin")).not.toBeInTheDocument();
+  expect(screen.getByTestId("min")).toHaveTextContent("55000");
+});
+
+it("opens in range view for a loaded ranged job (initialFixum false)", () => {
+  render(<Harness initialMin={50000} initialMax={70000} />);
+  expect(screen.getByLabelText("jobs.salaryMin")).toBeInTheDocument();
+  expect(screen.queryByLabelText("jobs.salaryAmount")).not.toBeInTheDocument();
 });
 
 // Note: the bonus-kind + period selectors use Radix Select (portal/pointer

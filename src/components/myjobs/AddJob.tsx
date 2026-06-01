@@ -26,6 +26,7 @@ import {
   JobTitle,
   Tag,
 } from "@/models/job.model";
+import { SALARY_PERIODS } from "@/models/job.model";
 import { addDays } from "date-fns";
 import { z } from "zod";
 import { toast } from "../ui/use-toast";
@@ -171,7 +172,7 @@ export function AddJob({
           salaryMax: editJob.salaryMax ?? null,
           salaryCurrency: editJob.salaryCurrency ?? null,
           salaryPeriod:
-            (["yearly", "monthly", "hourly"] as const).find((p) => p === editJob.salaryPeriod) ?? null,
+            SALARY_PERIODS.find((p) => p === editJob.salaryPeriod) ?? null,
           salaryBonus: parseBonus(editJob.salaryBonus ?? null),
           jobDescription: editJob.description,
           applied: editJob.applied,
@@ -624,10 +625,16 @@ export function AddJob({
                 {/* Structured salary (Welle 2 Phase 3) */}
                 <div>
                   <JobSalaryFields
+                    key={editJob?.id ?? "new-job"}
                     form={form}
                     currencies={currencies}
                     currenciesLoading={currenciesLoading}
                     fixumDisablesRange={fixumDisablesRange}
+                    initialFixum={
+                      fixumDisablesRange &&
+                      editJob?.salaryMin != null &&
+                      editJob.salaryMin === editJob.salaryMax
+                    }
                   />
                 </div>
 
