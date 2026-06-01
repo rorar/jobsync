@@ -78,6 +78,12 @@ external entity UserSettings {
 config {
     -- Default for UserSettings.fixum_disables_range on a new user.
     default_fixum_disables_range: Boolean = true
+
+    -- Sanity upper bound on Bonus.bonus_percentage (reject e.g. "999999%" as
+    -- garbage input). NOT a payout cap (see the open question) — purely a range
+    -- guard on the percentage field. Enforced by the Bonus value-object
+    -- normalizer and both write schemas.
+    max_bonus_percentage: Decimal = 1000
 }
 
 ------------------------------------------------------------
@@ -90,13 +96,18 @@ invariant SalaryMaxGteMin {
             implies j.salary_max >= j.salary_min
 }
 
-invariant CurrencyPresentWhenAmount {
-    for j in Jobs:
-        j.has_salary_amount implies j.salary_currency != null
-}
+-- CurrencyOptionalWithAmount (prose, not an enforced invariant):
+--   salary_currency is OPTIONAL even when an amount is present. A user may
+--   record a salary figure without committing to a currency (the display
+--   formatter renders the bare number when currency is null). The Job form,
+--   the public API, and the shared salary builder all accept amount-without-
+--   currency. (Earlier drafts declared a CurrencyPresentWhenAmount invariant;
+--   it was dropped as over-constrained — currency is a best-effort enrichment,
+--   not a hard requirement of a salary figure.)
 
 -- is_active_currency is a black box (the CUR module's isValidCurrencyCode,
--- backed by Intl.supportedValuesOf("currency")).
+-- backed by Intl.supportedValuesOf("currency")). The builder coerces an
+-- unknown code to null, so a stored non-null currency is always active.
 invariant CurrencyIsActiveIso4217 {
     for j in Jobs:
         j.salary_currency != null implies is_active_currency(j.salary_currency)
@@ -118,6 +129,16 @@ invariant MixedBonusHasBoth {
     for j in Jobs:
         (j.bonus != null and j.bonus.bonus_kind = mixed)
             implies (j.bonus.bonus_amount != null and j.bonus.bonus_percentage != null)
+}
+
+-- A populated bonus_percentage is bounded to a sane range; an out-of-range
+-- value invalidates the whole Bonus (the normalizer drops it). bonus_amount is
+-- likewise finite and non-negative.
+invariant BonusPercentageInRange {
+    for j in Jobs:
+        (j.bonus != null and j.bonus.bonus_percentage != null)
+            implies (j.bonus.bonus_percentage >= 0
+                and j.bonus.bonus_percentage <= max_bonus_percentage)
 }
 
 -- SalaryRangeIsComputed (prose, not an expression invariant):
