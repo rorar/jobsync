@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "gitCommitHash": "dc45f372c08d033fa9f0fb341ddc342a6deef02d",
-  "generatedAt": "2026-06-01T13:03:06.492Z",
+  "gitCommitHash": "d9b9d227067a3f5aecff358dd4c1aff2c34f5428",
+  "generatedAt": "2026-06-01T21:51:06.764Z",
   "files": {
     "__mocks__/next-auth-providers.ts": {
       "filePath": "__mocks__/next-auth-providers.ts",
@@ -595,7 +595,7 @@
     },
     "__tests__/AddJob.spec.tsx": {
       "filePath": "__tests__/AddJob.spec.tsx",
-      "contentHash": "05aacf53d925550f25ff4a43807b8d5dc25d0e77ace9aa045c1b13d48efdcc66",
+      "contentHash": "bf5b1719e77134ddf2de69ed9dd047155a8c5b30cb92bf5bd02f212e2075e37f",
       "functions": [],
       "classes": [],
       "imports": [
@@ -662,7 +662,24 @@
         }
       ],
       "exports": [],
-      "totalLines": 244,
+      "totalLines": 256,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/addJobForm.schema.salary.spec.ts": {
+      "filePath": "__tests__/addJobForm.schema.salary.spec.ts",
+      "contentHash": "854eb6adaa6446164d6493c1830e776a6623171d195dcfca020206eab4ec3aa5",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/models/addJobForm.schema",
+          "specifiers": [
+            "AddJobFormSchema"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 67,
       "hasStructuralAnalysis": true
     },
     "__tests__/addQuestionForm.schema.spec.ts": {
@@ -942,7 +959,7 @@
     },
     "__tests__/api-v1-jobs.spec.ts": {
       "filePath": "__tests__/api-v1-jobs.spec.ts",
-      "contentHash": "3228a2a3c62d6d4bf63d5c241c2051f6c6d82021920ca237a589eba0f61bdc7a",
+      "contentHash": "72aa936417b70e7b58f8f4ee491669ad86cda613a63a803c0c26c601fd296979",
       "functions": [
         {
           "name": "mockRequest",
@@ -1017,7 +1034,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 991,
+      "totalLines": 1072,
       "hasStructuralAnalysis": true
     },
     "__tests__/apiKey.actions.spec.ts": {
@@ -1609,6 +1626,44 @@
       ],
       "exports": [],
       "totalLines": 59,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/bonus.spec.ts": {
+      "filePath": "__tests__/bonus.spec.ts",
+      "contentHash": "e0b69f55d210109390db9bebacd1d8689bd2ebd939b1bfc8062e419f16d8b9af",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/salary/bonus",
+          "specifiers": [
+            "parseBonus",
+            "serializeBonus",
+            "isValidBonus",
+            "formatBonus",
+            "JobBonus"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 110,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/build-job-salary.spec.ts": {
+      "filePath": "__tests__/build-job-salary.spec.ts",
+      "contentHash": "feb62d10eb37ea6cb2d68e90760f5bb9517eec0cb5778586b6a0951f64c52d06",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/salary/build-job-salary",
+          "specifiers": [
+            "buildJobSalaryData"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 80,
       "hasStructuralAnalysis": true
     },
     "__tests__/bulk-action.spec.ts": {
@@ -2408,7 +2463,7 @@
     },
     "__tests__/connector/self-registration.spec.ts": {
       "filePath": "__tests__/connector/self-registration.spec.ts",
-      "contentHash": "c10e90dd0782f4fcf1dc4096c8197dbcb50acb09f958167217c0fa87aa1a6f03",
+      "contentHash": "c9636a4f3ca6ceac567cfad8ae414124d2361453ae4e6e6c318e78d9ba3138b1",
       "functions": [],
       "classes": [],
       "imports": [
@@ -2821,6 +2876,80 @@
       ],
       "exports": [],
       "totalLines": 448,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/currency-reference.spec.ts": {
+      "filePath": "__tests__/currency-reference.spec.ts",
+      "contentHash": "90f7c01cc2cb2fcd837b1ff74dc263b260c4beba3405992985a4132b4981975a",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/connector/reference-data/modules/currency/currency-data",
+          "specifiers": [
+            "getCurrencies",
+            "getCurrency",
+            "getCurrencyName",
+            "getCurrencySymbol",
+            "getCurrencyMinorUnit",
+            "isValidCurrencyCode"
+          ]
+        },
+        {
+          "source": "@/lib/connector/reference-data/modules/currency/index",
+          "specifiers": [
+            "getCurrencyService"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 183,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/CurrencySelect.spec.tsx": {
+      "filePath": "__tests__/CurrencySelect.spec.tsx",
+      "contentHash": "179cf119ae0ac7589484aa93065a1f067d3bacaf8702c07d4bc6e591f404967c",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen"
+          ]
+        },
+        {
+          "source": "@testing-library/user-event",
+          "specifiers": [
+            "userEvent"
+          ]
+        },
+        {
+          "source": "@/components/ui/currency-select",
+          "specifiers": [
+            "CurrencySelect"
+          ]
+        },
+        {
+          "source": "@/components/ui/currency-select",
+          "specifiers": [
+            "CurrencyOption"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 151,
       "hasStructuralAnalysis": true
     },
     "__tests__/dashboard.actions.spec.ts": {
@@ -5289,7 +5418,7 @@
     },
     "__tests__/job-audit.spec.ts": {
       "filePath": "__tests__/job-audit.spec.ts",
-      "contentHash": "5347f56d0cfa62a33056635344e52b7bd60149391b4ccdecad66f2857afcaa6b",
+      "contentHash": "0c94c47c6dba57194222d06cb04e5397af33d0963e6a29bcf80cdf102867243b",
       "functions": [],
       "classes": [],
       "imports": [
@@ -5329,7 +5458,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 436,
+      "totalLines": 440,
       "hasStructuralAnalysis": true
     },
     "__tests__/job.actions.spec.ts": {
@@ -5508,6 +5637,73 @@
       ],
       "exports": [],
       "totalLines": 258,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/JobSalaryFields.spec.tsx": {
+      "filePath": "__tests__/JobSalaryFields.spec.tsx",
+      "contentHash": "a14981eaebf9392ac7271b02405c89793895e3fb7282f312cb4bde07755b023a",
+      "functions": [
+        {
+          "name": "Harness",
+          "params": [
+            "{\n  fixumDisablesRange = true,\n  initialFixum = false,\n  initialMin = null,\n  initialMax = null,\n}"
+          ],
+          "exported": false,
+          "lineCount": 35
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen"
+          ]
+        },
+        {
+          "source": "@testing-library/user-event",
+          "specifiers": [
+            "userEvent"
+          ]
+        },
+        {
+          "source": "react-hook-form",
+          "specifiers": [
+            "useForm"
+          ]
+        },
+        {
+          "source": "zod",
+          "specifiers": [
+            "z"
+          ]
+        },
+        {
+          "source": "@/models/addJobForm.schema",
+          "specifiers": [
+            "AddJobFormSchema"
+          ]
+        },
+        {
+          "source": "@/components/myjobs/JobSalaryFields",
+          "specifiers": [
+            "JobSalaryFields"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 128,
       "hasStructuralAnalysis": true
     },
     "__tests__/JobsContainer.spec.tsx": {
@@ -7147,6 +7343,23 @@
       "totalLines": 397,
       "hasStructuralAnalysis": true
     },
+    "__tests__/parse-salary-range.spec.ts": {
+      "filePath": "__tests__/parse-salary-range.spec.ts",
+      "contentHash": "9b388b5e6e92ebe4350aa782c947c72acade66ad1000996454a362b0089e09fd",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/salary/parse-salary-range",
+          "specifiers": [
+            "parseSalaryRange"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 103,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/person-audit.spec.ts": {
       "filePath": "__tests__/person-audit.spec.ts",
       "contentHash": "fcdbdbc3344fbd0837fe50430599860841f30c994ab3ce0e39f882beba505e0e",
@@ -7409,6 +7622,36 @@
       "totalLines": 456,
       "hasStructuralAnalysis": true
     },
+    "__tests__/profile-preferences.actions.spec.ts": {
+      "filePath": "__tests__/profile-preferences.actions.spec.ts",
+      "contentHash": "d5c75bc0c260114fe677073c72c87934a15209d86d9cf67a3d4c7b0591db96fa",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/db",
+          "specifiers": [
+            "prisma"
+          ]
+        },
+        {
+          "source": "@/utils/user.utils",
+          "specifiers": [
+            "getCurrentUser"
+          ]
+        },
+        {
+          "source": "@/actions/profile.actions",
+          "specifiers": [
+            "getProfilePreferences",
+            "updateProfilePreferences"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 178,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/profile.actions.spec.ts": {
       "filePath": "__tests__/profile.actions.spec.ts",
       "contentHash": "2bc3e11c9ebe4d62976f40fa1dc2a6322647688de55fd69c3f31819b9c06529c",
@@ -7434,7 +7677,7 @@
     },
     "__tests__/ProfileContainer.spec.tsx": {
       "filePath": "__tests__/ProfileContainer.spec.tsx",
-      "contentHash": "274316522e00ef554aef94bf5ce9591d0ee6d12f1e168110d05493a3e1f50d98",
+      "contentHash": "f3ecbb52b8b4994d02c95bbe3c939abae289388774abba9c7d49eb5ce718f136",
       "functions": [],
       "classes": [],
       "imports": [
@@ -7465,7 +7708,48 @@
         }
       ],
       "exports": [],
-      "totalLines": 57,
+      "totalLines": 65,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/ProfilePreferencesCard.spec.tsx": {
+      "filePath": "__tests__/ProfilePreferencesCard.spec.tsx",
+      "contentHash": "747b635b55218a1291133f85c9033f7e77312b90ebc14d73d7f417b9ced44c0b",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen",
+            "waitFor"
+          ]
+        },
+        {
+          "source": "@testing-library/user-event",
+          "specifiers": [
+            "userEvent"
+          ]
+        },
+        {
+          "source": "@/components/profile/ProfilePreferencesCard",
+          "specifiers": [
+            "ProfilePreferencesCard"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 178,
       "hasStructuralAnalysis": true
     },
     "__tests__/promoter-history.spec.ts": {
@@ -7826,7 +8110,7 @@
     },
     "__tests__/reference-data.actions.spec.ts": {
       "filePath": "__tests__/reference-data.actions.spec.ts",
-      "contentHash": "eeef3054180290460304ff8fa325cf91acef01e1f6350da9a85df7c4a6ae99ee",
+      "contentHash": "5c15f84ff02f76365bbc292bb93ee6f99b78620d319e11cb5795679a3e30a21d",
       "functions": [],
       "classes": [],
       "imports": [
@@ -7835,7 +8119,9 @@
           "specifiers": [
             "getCountryOptions",
             "getSubdivisionOptions",
-            "getPersonHolidayInfo"
+            "getPersonHolidayInfo",
+            "getCurrencyOptions",
+            "getCurrencyInfo"
           ]
         },
         {
@@ -7846,7 +8132,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 172,
+      "totalLines": 222,
       "hasStructuralAnalysis": true
     },
     "__tests__/resilience.spec.ts": {
@@ -10758,12 +11044,52 @@
     },
     "conductor/tracks.md": {
       "filePath": "conductor/tracks.md",
-      "contentHash": "d0ded0d307e2ae69e5ac75cab2a99bf6e8ab4459c1785a05820141f3ab32dcc7",
+      "contentHash": "40680c72aa23ac5b8edb5d21e87e9811061e411c6a2f4ec4db3487005d910997",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 64,
+      "totalLines": 66,
+      "hasStructuralAnalysis": true
+    },
+    "conductor/tracks/company-perks_20260601/index.md": {
+      "filePath": "conductor/tracks/company-perks_20260601/index.md",
+      "contentHash": "5a00c16b70b758b59fb700dec14bf2c9ce68bb91fc57a784954a33a5db467870",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 23,
+      "hasStructuralAnalysis": true
+    },
+    "conductor/tracks/company-perks_20260601/metadata.json": {
+      "filePath": "conductor/tracks/company-perks_20260601/metadata.json",
+      "contentHash": "114c70af4ab0eb6663578d5b153b417558fba98bfd50a2c46e09d384c51fac22",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 12,
+      "hasStructuralAnalysis": true
+    },
+    "conductor/tracks/company-perks_20260601/plan.md": {
+      "filePath": "conductor/tracks/company-perks_20260601/plan.md",
+      "contentHash": "e04073137edd746100d38d22ef021181c0bc89caffde9740f8ae809d46b497c1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "conductor/tracks/company-perks_20260601/spec.md": {
+      "filePath": "conductor/tracks/company-perks_20260601/spec.md",
+      "contentHash": "5f736e18be526b083f5e83a4a02059020bfec1dba207c0e50b086f8a83bffc09",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 57,
       "hasStructuralAnalysis": true
     },
     "conductor/tracks/cursor-pagination_20260601/index.md": {
@@ -10884,6 +11210,46 @@
       "imports": [],
       "exports": [],
       "totalLines": 90,
+      "hasStructuralAnalysis": true
+    },
+    "conductor/tracks/salary-calculator_20260601/index.md": {
+      "filePath": "conductor/tracks/salary-calculator_20260601/index.md",
+      "contentHash": "45e6ea4ec966b184327d8658ce34f375f770393980d9d4f192dc272bc69c70fe",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 27,
+      "hasStructuralAnalysis": true
+    },
+    "conductor/tracks/salary-calculator_20260601/metadata.json": {
+      "filePath": "conductor/tracks/salary-calculator_20260601/metadata.json",
+      "contentHash": "3434ecede55b71f0021880ca1ca324c0f68eb10c2b825a7f156bf5ba03b6cffb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 12,
+      "hasStructuralAnalysis": true
+    },
+    "conductor/tracks/salary-calculator_20260601/plan.md": {
+      "filePath": "conductor/tracks/salary-calculator_20260601/plan.md",
+      "contentHash": "ccb182394a3ea4c58ca7253a0f593038e9435e80148942063933aca08f652739",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 24,
+      "hasStructuralAnalysis": true
+    },
+    "conductor/tracks/salary-calculator_20260601/spec.md": {
+      "filePath": "conductor/tracks/salary-calculator_20260601/spec.md",
+      "contentHash": "708b24011580fee0bf00635bcef3f62a2cf1743cbb9025df08d6404370850b58",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 78,
       "hasStructuralAnalysis": true
     },
     "conductor/tracks/session-recovery_20260601/index.md": {
@@ -11028,7 +11394,7 @@
     },
     "conductor/tracks/welle1-foundation-gdpr_20260601/plan.md": {
       "filePath": "conductor/tracks/welle1-foundation-gdpr_20260601/plan.md",
-      "contentHash": "300823edf1f85bfb1675a48b80bbea171df6c71886e0fa231b328615ca910297",
+      "contentHash": "942fcf1aaa1b12285685fe2b43da54b157026a2d0d23e951b9a01aa572ab0fc8",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -11048,32 +11414,32 @@
     },
     "conductor/tracks/welle2-salary-profile_20260601/index.md": {
       "filePath": "conductor/tracks/welle2-salary-profile_20260601/index.md",
-      "contentHash": "0a75d5d034535a908a312e26a2c1226091f8f659dcb9cfaa7978bc1b5ca135d0",
+      "contentHash": "619ad5a5fea4fa7365476d98799052ac302080ba64474ba693dc91189f6480ba",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 26,
+      "totalLines": 27,
       "hasStructuralAnalysis": true
     },
     "conductor/tracks/welle2-salary-profile_20260601/metadata.json": {
       "filePath": "conductor/tracks/welle2-salary-profile_20260601/metadata.json",
-      "contentHash": "fee7ebfefaa802447c6c4f070be43a225c93037eeae5b775e6e24b198bf2de27",
+      "contentHash": "4c644bc9b2eec4ce9bf2e12d14abece8bafacd0f2228a934a498e5619a2729d1",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 16,
+      "totalLines": 38,
       "hasStructuralAnalysis": true
     },
     "conductor/tracks/welle2-salary-profile_20260601/plan.md": {
       "filePath": "conductor/tracks/welle2-salary-profile_20260601/plan.md",
-      "contentHash": "cdfb7b53dcdaf37a75dcfb508674a47352569e3e2e9582627cd2ed60fef7e975",
+      "contentHash": "4027c5a77b06f30afa3fd99bbc5766ad43bb4322be52cdc72e44f3b0274bc47b",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 93,
+      "totalLines": 118,
       "hasStructuralAnalysis": true
     },
     "conductor/tracks/welle2-salary-profile_20260601/spec.md": {
@@ -11596,6 +11962,16 @@
       "totalLines": 49,
       "hasStructuralAnalysis": true
     },
+    "docs/adr/034-user-home-location-and-currency-on-profile.md": {
+      "filePath": "docs/adr/034-user-home-location-and-currency-on-profile.md",
+      "contentHash": "59e9ed05a8cd532c3584f6b697bbf45ea1cded8c9294c7f03d23a572ddc3a11a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 99,
+      "hasStructuralAnalysis": true
+    },
     "docs/arbeitsagentur-api/auth-flow.md": {
       "filePath": "docs/arbeitsagentur-api/auth-flow.md",
       "contentHash": "a2ac94eae35c9f1115d92905630e17761c40929dc7ff5492bb7a45dea1515d03",
@@ -11828,22 +12204,22 @@
     },
     "docs/BACKLOG.md": {
       "filePath": "docs/BACKLOG.md",
-      "contentHash": "4dc6386513706745bf7dd80e793e31a3f156bc699b61ed0c27cec81943ede08c",
+      "contentHash": "aa0c3abf3d8ea800c46b2054e5954e32422c107115192a40b3d4e8e932fe4053",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 301,
+      "totalLines": 302,
       "hasStructuralAnalysis": true
     },
     "docs/BUGS.md": {
       "filePath": "docs/BUGS.md",
-      "contentHash": "85bfa4c4b483d0108d59a9f7d36490ec339a6ff7410aa6e8f82a6427e4637b88",
+      "contentHash": "7e684a36f7c0beb8cd948c5b1b319dfad8a78129ebb185b89cd294c7ebe961b6",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 1245,
+      "totalLines": 1264,
       "hasStructuralAnalysis": true
     },
     "docs/crm-gap-analysis-twenty.md": {
@@ -12906,6 +13282,16 @@
       "totalLines": 478,
       "hasStructuralAnalysis": true
     },
+    "docs/welle2-handoff.md": {
+      "filePath": "docs/welle2-handoff.md",
+      "contentHash": "cc6f3fb62cb8da40b3db0bff4374f429d5412eab6a38b2257a5f5d4d97eba021",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 118,
+      "hasStructuralAnalysis": true
+    },
     "e2e/cleanup-stale-data.ts": {
       "filePath": "e2e/cleanup-stale-data.ts",
       "contentHash": "b6db8b159761e3d57fc14ea52666f0c6ba90f9fd607e2d859eda9d74de8fa683",
@@ -13366,7 +13752,7 @@
     },
     "e2e/crud/job-crud.spec.ts": {
       "filePath": "e2e/crud/job-crud.spec.ts",
-      "contentHash": "25bd32b935957d48d868e7662836ef169be1b4119c64e0e63335c693e2a76859",
+      "contentHash": "fb3459293d6a685fe20e6921a8e5837a78a6550ab4b56eec19094bd0911d1f64",
       "functions": [
         {
           "name": "navigateToJobs",
@@ -13375,6 +13761,14 @@
           ],
           "exported": false,
           "lineCount": 10
+        },
+        {
+          "name": "ensureTableView",
+          "params": [
+            "page"
+          ],
+          "exported": false,
+          "lineCount": 12
         },
         {
           "name": "ensureResumeExists",
@@ -13401,7 +13795,7 @@
             "opts"
           ],
           "exported": false,
-          "lineCount": 80
+          "lineCount": 90
         },
         {
           "name": "deleteJob",
@@ -13410,7 +13804,7 @@
             "jobTitle"
           ],
           "exported": false,
-          "lineCount": 18
+          "lineCount": 19
         }
       ],
       "classes": [],
@@ -13431,7 +13825,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 329,
+      "totalLines": 399,
       "hasStructuralAnalysis": true
     },
     "e2e/crud/job-detail-panels.spec.ts": {
@@ -15275,6 +15669,36 @@
       "totalLines": 3,
       "hasStructuralAnalysis": true
     },
+    "prisma/migrations/20260601134805_add_profile_location_currency/migration.sql": {
+      "filePath": "prisma/migrations/20260601134805_add_profile_location_currency/migration.sql",
+      "contentHash": "1c8d9ee00a387524f6c4a3a524f882457f9e11bfca64ad62724c9fe89ca9fed7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
+      "hasStructuralAnalysis": true
+    },
+    "prisma/migrations/20260601191028_add_job_structured_salary/migration.sql": {
+      "filePath": "prisma/migrations/20260601191028_add_job_structured_salary/migration.sql",
+      "contentHash": "97c43666e9ffedf46ba2d6c44042826c8c1d6401169e2f577d610428553aad29",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 7,
+      "hasStructuralAnalysis": true
+    },
+    "prisma/migrations/20260601205337_add_profile_userid_unique/migration.sql": {
+      "filePath": "prisma/migrations/20260601205337_add_profile_userid_unique/migration.sql",
+      "contentHash": "e3186c8af214ac20d7b748cf7e7f313fd0d1c403a92a97a3dce63be12dcf5c70",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
+      "hasStructuralAnalysis": true
+    },
     "prisma/migrations/migration_lock.toml": {
       "filePath": "prisma/migrations/migration_lock.toml",
       "contentHash": "3389dbaf2a3cf4b413275867ac6f550b27f79efe85ee9c12082cdd8c5b8239c4",
@@ -15304,12 +15728,12 @@
     },
     "prisma/schema.prisma": {
       "filePath": "prisma/schema.prisma",
-      "contentHash": "62d8a80d4ae22fd5252291b149e44827fa030501920d93d798a08a4acfd8fa44",
+      "contentHash": "9158fa7dc2e62b81bcb83baf8905064857c1921b409c2120a9cf013079065cbb",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 1215,
+      "totalLines": 1233,
       "hasStructuralAnalysis": false
     },
     "prisma/seed.ts": {
@@ -15454,6 +15878,36 @@
       ],
       "exports": [],
       "totalLines": 59,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/migrate-job-salary-structured.ts": {
+      "filePath": "scripts/migrate-job-salary-structured.ts",
+      "contentHash": "634cf54bf37527417abfa8d6ee3fd6cd19d47d9ee5a3e47a9dcfbbefa0015380",
+      "functions": [
+        {
+          "name": "main",
+          "params": [],
+          "exported": false,
+          "lineCount": 57
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@prisma/client",
+          "specifiers": [
+            "PrismaClient"
+          ]
+        },
+        {
+          "source": "@/lib/salary/parse-salary-range",
+          "specifiers": [
+            "parseSalaryRange"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 90,
       "hasStructuralAnalysis": true
     },
     "scripts/migrate-module-renames.ts": {
@@ -15955,6 +16409,16 @@
       "imports": [],
       "exports": [],
       "totalLines": 347,
+      "hasStructuralAnalysis": false
+    },
+    "specs/compensation.allium": {
+      "filePath": "specs/compensation.allium",
+      "contentHash": "4a6fcad8469094df438981d305668a08074e3b3df676f095be1bceb895a0cd17",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 156,
       "hasStructuralAnalysis": false
     },
     "specs/crm-gdpr.allium": {
@@ -17996,7 +18460,7 @@
     },
     "src/actions/job.actions.ts": {
       "filePath": "src/actions/job.actions.ts",
-      "contentHash": "68fc5521d505d3015ec56ad67377c3389585223bcf19cfb98b37591f317918dc",
+      "contentHash": "a03351411564a80dc7cc0e64ca2b2772b8bb8c30ea1c948c5c748b882aade713",
       "functions": [
         {
           "name": "getStatusList",
@@ -18022,7 +18486,7 @@
           ],
           "returnType": "Promise<ActionResult<JobResponse[]>>",
           "exported": true,
-          "lineCount": 96
+          "lineCount": 101
         },
         {
           "name": "getJobDetails",
@@ -18247,6 +18711,12 @@
           "specifiers": [
             "writeDataAuditLog"
           ]
+        },
+        {
+          "source": "@/lib/salary/build-job-salary",
+          "specifiers": [
+            "buildJobSalaryData"
+          ]
         }
       ],
       "exports": [
@@ -18268,7 +18738,7 @@
         "getStatusDistribution",
         "getValidTransitions"
       ],
-      "totalLines": 1322,
+      "totalLines": 1328,
       "hasStructuralAnalysis": true
     },
     "src/actions/jobContact.actions.ts": {
@@ -19438,7 +19908,7 @@
     },
     "src/actions/profile.actions.ts": {
       "filePath": "src/actions/profile.actions.ts",
-      "contentHash": "5fcadaf0a7a819d400e6f3262054a9ee1b61099b0e0a233436ac689546e9f357",
+      "contentHash": "4f88109e69bd4d4bdaf1869edc05815465a860ee4d4a7efe8af231fc14aa849c",
       "functions": [
         {
           "name": "toResumeSection",
@@ -19602,6 +20072,31 @@
           "returnType": "Promise<ActionResult<Education>>",
           "exported": true,
           "lineCount": 39
+        },
+        {
+          "name": "normalizeOptionalCode",
+          "params": [
+            "value"
+          ],
+          "returnType": "string | null",
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "getProfilePreferences",
+          "params": [],
+          "returnType": "Promise<ProfilePreferences | null>",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "updateProfilePreferences",
+          "params": [
+            "input"
+          ],
+          "returnType": "Promise<ActionResult<ProfilePreferences>>",
+          "exported": true,
+          "lineCount": 45
         }
       ],
       "classes": [],
@@ -19700,6 +20195,12 @@
           "specifiers": [
             "deleteFile"
           ]
+        },
+        {
+          "source": "@/lib/connector/reference-data/modules/currency/currency-data",
+          "specifiers": [
+            "isValidCurrencyCode"
+          ]
         }
       ],
       "exports": [
@@ -19717,9 +20218,11 @@
         "addEducation",
         "deleteWorkExperience",
         "deleteEducation",
-        "updateEducation"
+        "updateEducation",
+        "getProfilePreferences",
+        "updateProfilePreferences"
       ],
-      "totalLines": 844,
+      "totalLines": 951,
       "hasStructuralAnalysis": true
     },
     "src/actions/publicApiKey.actions.ts": {
@@ -20079,7 +20582,7 @@
     },
     "src/actions/reference-data.actions.ts": {
       "filePath": "src/actions/reference-data.actions.ts",
-      "contentHash": "c58ac34d6e077d59aa3c2f09b1cf4e63b7c349d45366770f168b14217cda2bfe",
+      "contentHash": "5a6d015431d0bd20f40312783480838e5a968332058544afd18dc22fc77f0da9",
       "functions": [
         {
           "name": "getCountryOptions",
@@ -20093,6 +20596,23 @@
           "name": "getSubdivisionOptions",
           "params": [
             "countryCode",
+            "locale"
+          ],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "getCurrencyOptions",
+          "params": [
+            "locale"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "getCurrencyInfo",
+          "params": [
+            "code",
             "locale"
           ],
           "exported": true,
@@ -20132,9 +20652,11 @@
       "exports": [
         "getCountryOptions",
         "getSubdivisionOptions",
+        "getCurrencyOptions",
+        "getCurrencyInfo",
         "getPersonHolidayInfo"
       ],
-      "totalLines": 103,
+      "totalLines": 136,
       "hasStructuralAnalysis": true
     },
     "src/actions/smtp.actions.ts": {
@@ -20838,7 +21360,7 @@
     },
     "src/actions/userSettings.actions.ts": {
       "filePath": "src/actions/userSettings.actions.ts",
-      "contentHash": "c9f87f26796778baacea11acaf4e404612094c17eb4980c2f23c4e5c1c1f38a8",
+      "contentHash": "926f136eb4e598b39475a0268a98e31c7b928a1b1803f365008e361aac55d6aa",
       "functions": [
         {
           "name": "getUserSettings",
@@ -20891,6 +21413,22 @@
           "returnType": "Promise<AutomationSettings>",
           "exported": true,
           "lineCount": 18
+        },
+        {
+          "name": "updateJobFormSettings",
+          "params": [
+            "jobFormSettings"
+          ],
+          "returnType": "Promise<ActionResult<UserSettings>>",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "getJobFormSettings",
+          "params": [],
+          "returnType": "Promise<JobFormSettings>",
+          "exported": true,
+          "lineCount": 12
         },
         {
           "name": "getNotificationPreferences",
@@ -20958,7 +21496,9 @@
             "defaultUserSettings",
             "AiSettings",
             "AutomationSettings",
-            "DisplaySettings"
+            "DisplaySettings",
+            "JobFormSettings",
+            "defaultJobFormSettings"
           ]
         },
         {
@@ -20981,11 +21521,13 @@
         "updateDisplaySettings",
         "updateAutomationSettings",
         "getAutomationSettingsForUser",
+        "updateJobFormSettings",
+        "getJobFormSettings",
         "getNotificationPreferences",
         "updateNotificationPreferences",
         "getNotificationPreferencesForUser"
       ],
-      "totalLines": 250,
+      "totalLines": 280,
       "hasStructuralAnalysis": true
     },
     "src/actions/webhook.actions.ts": {
@@ -22461,7 +23003,7 @@
     },
     "src/app/api/v1/jobs/[id]/route.ts": {
       "filePath": "src/app/api/v1/jobs/[id]/route.ts",
-      "contentHash": "077d4d27559312ab9a4826500f6597728b9380490ed0a293fd0314414bae2981",
+      "contentHash": "f13864cbf6d4119d36b058c1b91c74170fe9acadd45ad4b1279915ed02918244",
       "functions": [
         {
           "name": "buildUpdateData",
@@ -22471,7 +23013,7 @@
           ],
           "returnType": "Promise<BuildResult>",
           "exported": false,
-          "lineCount": 86
+          "lineCount": 111
         }
       ],
       "classes": [],
@@ -22516,6 +23058,30 @@
           "specifiers": [
             "writeDataAuditLog"
           ]
+        },
+        {
+          "source": "@/lib/salary/build-job-salary",
+          "specifiers": [
+            "buildJobSalaryData"
+          ]
+        },
+        {
+          "source": "@/lib/salary/parse-salary-range",
+          "specifiers": [
+            "parseSalaryRange"
+          ]
+        },
+        {
+          "source": "@/lib/salary/bonus",
+          "specifiers": [
+            "JobBonus"
+          ]
+        },
+        {
+          "source": "@/models/job.model",
+          "specifiers": [
+            "SalaryPeriod"
+          ]
         }
       ],
       "exports": [
@@ -22524,7 +23090,7 @@
         "PATCH",
         "DELETE"
       ],
-      "totalLines": 243,
+      "totalLines": 277,
       "hasStructuralAnalysis": true
     },
     "src/app/api/v1/jobs/[id]/status/route.ts": {
@@ -22590,7 +23156,7 @@
     },
     "src/app/api/v1/jobs/route.ts": {
       "filePath": "src/app/api/v1/jobs/route.ts",
-      "contentHash": "060ead66a38dd6141d76dbe5f73199b9c1da26c7395abf7d994b037d8644175b",
+      "contentHash": "4c2d48f062c420a50d45c328da087cf1c447f6212389ecf807fa936b1db2e1d9",
       "functions": [],
       "classes": [],
       "imports": [
@@ -22643,6 +23209,18 @@
           "specifiers": [
             "writeDataAuditLog"
           ]
+        },
+        {
+          "source": "@/lib/salary/build-job-salary",
+          "specifiers": [
+            "buildJobSalaryData"
+          ]
+        },
+        {
+          "source": "@/lib/salary/parse-salary-range",
+          "specifiers": [
+            "parseSalaryRange"
+          ]
         }
       ],
       "exports": [
@@ -22650,7 +23228,7 @@
         "GET",
         "POST"
       ],
-      "totalLines": 202,
+      "totalLines": 217,
       "hasStructuralAnalysis": true
     },
     "src/app/dashboard/activities/page.tsx": {
@@ -24184,13 +24762,13 @@
     },
     "src/app/dashboard/settings/page.tsx": {
       "filePath": "src/app/dashboard/settings/page.tsx",
-      "contentHash": "8576d5572359947b13ce32473d448333e6ea80bbaf8dd82602cc059538856ada",
+      "contentHash": "b4769dcea05efec2196ba82539d4c8bba649211328cb1750999c18785edd1e09",
       "functions": [
         {
           "name": "Settings",
           "params": [],
           "exported": false,
-          "lineCount": 37
+          "lineCount": 38
         }
       ],
       "classes": [],
@@ -24217,6 +24795,12 @@
           "source": "@/components/settings/AutomationSettings",
           "specifiers": [
             "AutomationSettings"
+          ]
+        },
+        {
+          "source": "@/components/settings/JobFormSettings",
+          "specifiers": [
+            "JobFormSettings"
           ]
         },
         {
@@ -24318,7 +24902,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 63,
+      "totalLines": 65,
       "hasStructuralAnalysis": true
     },
     "src/app/dashboard/staging/page.tsx": {
@@ -31333,7 +31917,7 @@
     },
     "src/components/myjobs/AddJob.tsx": {
       "filePath": "src/components/myjobs/AddJob.tsx",
-      "contentHash": "c30b234b4dad1f8c00344ecd5d41a0b552c0d042adb40e3d874a6cbbfcf378dc",
+      "contentHash": "9321a8ade4f8c691b28782784d4aac6df90b9ea9e5089ee3af7afb96c944a165",
       "functions": [
         {
           "name": "mergeConnectorSources",
@@ -31350,7 +31934,7 @@
             "{\n  jobStatuses,\n  companies,\n  jobTitles,\n  locations,\n  jobSources,\n  tags,\n  editJob,\n  resetEditJob,\n}"
           ],
           "exported": true,
-          "lineCount": 606
+          "lineCount": 638
         }
       ],
       "classes": [],
@@ -31435,6 +32019,12 @@
           ]
         },
         {
+          "source": "@/models/job.model",
+          "specifiers": [
+            "SALARY_PERIODS"
+          ]
+        },
+        {
           "source": "date-fns",
           "specifiers": [
             "addDays"
@@ -31483,9 +32073,33 @@
           ]
         },
         {
-          "source": "@/lib/data/salaryRangeData",
+          "source": "./JobSalaryFields",
           "specifiers": [
-            "SALARY_RANGES"
+            "JobSalaryFields"
+          ]
+        },
+        {
+          "source": "../ui/currency-select",
+          "specifiers": [
+            "CurrencyOption"
+          ]
+        },
+        {
+          "source": "@/actions/reference-data.actions",
+          "specifiers": [
+            "getCurrencyOptions"
+          ]
+        },
+        {
+          "source": "@/actions/userSettings.actions",
+          "specifiers": [
+            "getJobFormSettings"
+          ]
+        },
+        {
+          "source": "@/lib/salary/bonus",
+          "specifiers": [
+            "parseBonus"
           ]
         },
         {
@@ -31577,7 +32191,7 @@
       "exports": [
         "AddJob"
       ],
-      "totalLines": 702,
+      "totalLines": 739,
       "hasStructuralAnalysis": true
     },
     "src/components/myjobs/JobDetails.tsx": {
@@ -31721,6 +32335,109 @@
       ],
       "exports": [],
       "totalLines": 189,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/myjobs/JobSalaryFields.tsx": {
+      "filePath": "src/components/myjobs/JobSalaryFields.tsx",
+      "contentHash": "d57b7abaac0a06bc8f7da999a37a1d080230fa0e527e7685f25e3e634d8fd0a9",
+      "functions": [
+        {
+          "name": "toAmount",
+          "params": [
+            "raw"
+          ],
+          "returnType": "number | null",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "JobSalaryFields",
+          "params": [
+            "{\n  form,\n  currencies,\n  currenciesLoading,\n  fixumDisablesRange,\n  initialFixum = false,\n}"
+          ],
+          "exported": true,
+          "lineCount": 236
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useCallback",
+            "useState"
+          ]
+        },
+        {
+          "source": "react-hook-form",
+          "specifiers": [
+            "UseFormReturn"
+          ]
+        },
+        {
+          "source": "zod",
+          "specifiers": [
+            "z"
+          ]
+        },
+        {
+          "source": "@/models/addJobForm.schema",
+          "specifiers": [
+            "AddJobFormSchema"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "../ui/input",
+          "specifiers": [
+            "Input"
+          ]
+        },
+        {
+          "source": "../ui/label",
+          "specifiers": [
+            "Label"
+          ]
+        },
+        {
+          "source": "../ui/switch",
+          "specifiers": [
+            "Switch"
+          ]
+        },
+        {
+          "source": "../ui/select",
+          "specifiers": [
+            "Select",
+            "SelectContent",
+            "SelectItem",
+            "SelectTrigger",
+            "SelectValue"
+          ]
+        },
+        {
+          "source": "../ui/currency-select",
+          "specifiers": [
+            "CurrencySelect",
+            "CurrencyOption"
+          ]
+        },
+        {
+          "source": "@/lib/salary/bonus",
+          "specifiers": [
+            "BonusKind"
+          ]
+        }
+      ],
+      "exports": [
+        "JobSalaryFields"
+      ],
+      "totalLines": 297,
       "hasStructuralAnalysis": true
     },
     "src/components/myjobs/JobsContainer.tsx": {
@@ -34124,13 +34841,13 @@
     },
     "src/components/profile/ProfileContainer.tsx": {
       "filePath": "src/components/profile/ProfileContainer.tsx",
-      "contentHash": "032dfe5d9d5cb56a9afb18191c4f7b5d617968d9145d7122f8dbc022cda0235a",
+      "contentHash": "761984748d444e9b9b60cfff51b0604a67673c4d03ae966b732bf93e1fdaade6",
       "functions": [
         {
           "name": "ProfileContainer",
           "params": [],
           "exported": false,
-          "lineCount": 128
+          "lineCount": 131
         }
       ],
       "classes": [],
@@ -34147,6 +34864,12 @@
           "source": "./CreateResume",
           "specifiers": [
             "CreateResume"
+          ]
+        },
+        {
+          "source": "./ProfilePreferencesCard",
+          "specifiers": [
+            "ProfilePreferencesCard"
           ]
         },
         {
@@ -34226,7 +34949,101 @@
         }
       ],
       "exports": [],
-      "totalLines": 147,
+      "totalLines": 151,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/profile/ProfilePreferencesCard.tsx": {
+      "filePath": "src/components/profile/ProfilePreferencesCard.tsx",
+      "contentHash": "408ae0fc675ba5a9dee7c5a91da9824afacdf57a3ca134c9f5f7d7a6fce1a31b",
+      "functions": [
+        {
+          "name": "ProfilePreferencesCard",
+          "params": [],
+          "exported": false,
+          "lineCount": 159
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useCallback",
+            "useEffect",
+            "useState"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "../ui/card",
+          "specifiers": [
+            "Card",
+            "CardContent",
+            "CardHeader"
+          ]
+        },
+        {
+          "source": "../ui/button",
+          "specifiers": [
+            "Button"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Loader2"
+          ]
+        },
+        {
+          "source": "../ui/use-toast",
+          "specifiers": [
+            "toast"
+          ]
+        },
+        {
+          "source": "../ui/country-select",
+          "specifiers": [
+            "CountrySelect",
+            "CountryOption"
+          ]
+        },
+        {
+          "source": "../ui/subdivision-select",
+          "specifiers": [
+            "SubdivisionSelect",
+            "SubdivisionOption"
+          ]
+        },
+        {
+          "source": "../ui/currency-select",
+          "specifiers": [
+            "CurrencySelect",
+            "CurrencyOption"
+          ]
+        },
+        {
+          "source": "@/actions/profile.actions",
+          "specifiers": [
+            "getProfilePreferences",
+            "updateProfilePreferences"
+          ]
+        },
+        {
+          "source": "@/actions/reference-data.actions",
+          "specifiers": [
+            "getCountryOptions",
+            "getSubdivisionOptions",
+            "getCurrencyOptions"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 197,
       "hasStructuralAnalysis": true
     },
     "src/components/profile/ResumeContainer.tsx": {
@@ -36450,6 +37267,75 @@
       "totalLines": 328,
       "hasStructuralAnalysis": true
     },
+    "src/components/settings/JobFormSettings.tsx": {
+      "filePath": "src/components/settings/JobFormSettings.tsx",
+      "contentHash": "7c58d0812a417bffd91870c8ea5921dbb911d8e507a191f5f2aad00b77c189c9",
+      "functions": [
+        {
+          "name": "JobFormSettings",
+          "params": [],
+          "exported": false,
+          "lineCount": 68
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useEffect",
+            "useState"
+          ]
+        },
+        {
+          "source": "../ui/switch",
+          "specifiers": [
+            "Switch"
+          ]
+        },
+        {
+          "source": "../ui/label",
+          "specifiers": [
+            "Label"
+          ]
+        },
+        {
+          "source": "../ui/use-toast",
+          "specifiers": [
+            "toast"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Loader2"
+          ]
+        },
+        {
+          "source": "@/actions/userSettings.actions",
+          "specifiers": [
+            "getUserSettings",
+            "updateJobFormSettings"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/models/userSettings.model",
+          "specifiers": [
+            "JobFormSettingsType",
+            "defaultJobFormSettings"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 85,
+      "hasStructuralAnalysis": true
+    },
     "src/components/settings/LogoAssetSettings.tsx": {
       "filePath": "src/components/settings/LogoAssetSettings.tsx",
       "contentHash": "767f90842794acda0c3f9d57fce9a29b810a35a27e73391acd54915ff9d6987f",
@@ -36991,7 +37877,7 @@
     },
     "src/components/settings/SettingsSidebar.tsx": {
       "filePath": "src/components/settings/SettingsSidebar.tsx",
-      "contentHash": "14fff281eb54919979f59735551fdb8acfb408b2ae579e1b7950afedcc9c0d85",
+      "contentHash": "63675d859e626d20cc0e8558d7d57c40c6eaebad0cfe03975f06cc5af516f8d6",
       "functions": [
         {
           "name": "SettingsSidebar",
@@ -37017,6 +37903,7 @@
           "specifiers": [
             "Activity",
             "AlertTriangle",
+            "Banknote",
             "Ban",
             "Bell",
             "BellRing",
@@ -37074,7 +37961,7 @@
       "exports": [
         "SettingsSidebar"
       ],
-      "totalLines": 114,
+      "totalLines": 116,
       "hasStructuralAnalysis": true
     },
     "src/components/settings/SmtpSettings.tsx": {
@@ -40146,6 +41033,81 @@
       "totalLines": 187,
       "hasStructuralAnalysis": true
     },
+    "src/components/ui/currency-select.tsx": {
+      "filePath": "src/components/ui/currency-select.tsx",
+      "contentHash": "6551877a5ee9932c7754a1b903c97ada92c0533100f80807751be0643fe9c5c8",
+      "functions": [
+        {
+          "name": "CurrencySelect",
+          "params": [
+            "{\n  value,\n  onValueChange,\n  currencies,\n  disabled,\n  className,\n  loading,\n}"
+          ],
+          "exported": true,
+          "lineCount": 147
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useMemo",
+            "useState"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "ChevronsUpDown",
+            "Check",
+            "Loader2"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/components/ui/button",
+          "specifiers": [
+            "Button"
+          ]
+        },
+        {
+          "source": "@/components/ui/popover",
+          "specifiers": [
+            "Popover",
+            "PopoverContent",
+            "PopoverTrigger"
+          ]
+        },
+        {
+          "source": "@/components/ui/command",
+          "specifiers": [
+            "Command",
+            "CommandEmpty",
+            "CommandGroup",
+            "CommandInput",
+            "CommandItem",
+            "CommandList"
+          ]
+        },
+        {
+          "source": "@/lib/utils",
+          "specifiers": [
+            "cn",
+            "foldDiacritics"
+          ]
+        }
+      ],
+      "exports": [
+        "CurrencySelect"
+      ],
+      "totalLines": 201,
+      "hasStructuralAnalysis": true
+    },
     "src/components/ui/dialog.tsx": {
       "filePath": "src/components/ui/dialog.tsx",
       "contentHash": "e6f82f2f7aa5539dff532b699309d66426fa44aac22e98de2df2160db649cc8b",
@@ -42361,14 +43323,14 @@
     },
     "src/i18n/dictionaries/crm.ts": {
       "filePath": "src/i18n/dictionaries/crm.ts",
-      "contentHash": "8baad50801b7ee7ae1da7c05093b35d549f1d9201fa67b79c8fe497cc48e8df0",
+      "contentHash": "3cab5a6dd284bb77ead05d02d799c12ba4ffbffefab4888436709de067b6e605",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [
         "crm"
       ],
-      "totalLines": 907,
+      "totalLines": 919,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/dashboard.ts": {
@@ -42433,14 +43395,14 @@
     },
     "src/i18n/dictionaries/jobs.ts": {
       "filePath": "src/i18n/dictionaries/jobs.ts",
-      "contentHash": "a360e85ed3fbf0249f4649d516c805661e41959c28b909d2c8659eaf94bc964b",
+      "contentHash": "818e8628ca3908e98d2247ccf34bdf8ac4037c018a6287746b545b3d14fc0161",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [
         "jobs"
       ],
-      "totalLines": 727,
+      "totalLines": 803,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/logoAsset.ts": {
@@ -42469,14 +43431,14 @@
     },
     "src/i18n/dictionaries/profile.ts": {
       "filePath": "src/i18n/dictionaries/profile.ts",
-      "contentHash": "c2c58d50149aeea451cee0ecf106d3be5fd1d5bf00530f2f03a0df3cf8a34d51",
+      "contentHash": "cb4a702d6a396a5ac9f86f87963223206a8072b199f5ec630e40dfde0cddd60a",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [
         "profile"
       ],
-      "totalLines": 399,
+      "totalLines": 439,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/push.ts": {
@@ -42505,14 +43467,14 @@
     },
     "src/i18n/dictionaries/settings.ts": {
       "filePath": "src/i18n/dictionaries/settings.ts",
-      "contentHash": "03dd1c0457f2525c9febb401174a9537cb7cbb41272738d87287f307e7bfb067",
+      "contentHash": "e5165a0f46e1830240b6f3d00d03d37d1cbc3dccf765f6f79b0b66001c400faa",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [
         "settings"
       ],
-      "totalLines": 1031,
+      "totalLines": 1051,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/smtp.ts": {
@@ -43211,7 +44173,7 @@
     },
     "src/lib/api/helpers.ts": {
       "filePath": "src/lib/api/helpers.ts",
-      "contentHash": "a2dc5e68b2dc2129840e882163bf44a01c94c2baa2194afda2d5b06be64feb6c",
+      "contentHash": "bcf04c397cb0d20bc0a18245e8f4c25c2b70aa58adf6e8e515a3f356a9eb5a35",
       "functions": [
         {
           "name": "findOrCreate",
@@ -43255,7 +44217,7 @@
         "JOB_DETAIL_SELECT",
         "JOB_LIST_SELECT"
       ],
-      "totalLines": 120,
+      "totalLines": 125,
       "hasStructuralAnalysis": true
     },
     "src/lib/api/last-used-throttle.ts": {
@@ -43441,7 +44403,7 @@
     },
     "src/lib/api/schemas.ts": {
       "filePath": "src/lib/api/schemas.ts",
-      "contentHash": "0acfd1cb573b34b65ed9dca77f070d1e678ccc39f6f03c3acbe890bc1645519c",
+      "contentHash": "7b01ac81ff4d624b9cc78cf7795dbe3de4884270c0ae6c542ccbd33de51ea32b",
       "functions": [
         {
           "name": "isValidUUID",
@@ -43460,6 +44422,18 @@
           "specifiers": [
             "z"
           ]
+        },
+        {
+          "source": "@/models/job.model",
+          "specifiers": [
+            "SALARY_PERIODS"
+          ]
+        },
+        {
+          "source": "@/lib/connector/reference-data/modules/currency/currency-data",
+          "specifiers": [
+            "isValidCurrencyCode"
+          ]
         }
       ],
       "exports": [
@@ -43472,7 +44446,7 @@
         "CreateNoteSchema",
         "isValidUUID"
       ],
-      "totalLines": 69,
+      "totalLines": 92,
       "hasStructuralAnalysis": true
     },
     "src/lib/api/with-api-auth.ts": {
@@ -47689,7 +48663,7 @@
     },
     "src/lib/connector/job-discovery/promoter.ts": {
       "filePath": "src/lib/connector/job-discovery/promoter.ts",
-      "contentHash": "82c03808a725c46b790ba8aeb8626d47a631e1301029585a6a9caa9e14eb2fcf",
+      "contentHash": "221550ae0689c064ebcba8929547d3b50ecfb9c9213ca6e1ed26a48a85d58744",
       "functions": [
         {
           "name": "promoteStagedVacancy",
@@ -47699,7 +48673,7 @@
           ],
           "returnType": "Promise<PromotionResult>",
           "exported": true,
-          "lineCount": 132
+          "lineCount": 146
         },
         {
           "name": "deriveCountryCode",
@@ -47792,12 +48766,30 @@
           "specifiers": [
             "PromotionInput"
           ]
+        },
+        {
+          "source": "@/lib/salary/build-job-salary",
+          "specifiers": [
+            "buildJobSalaryData"
+          ]
+        },
+        {
+          "source": "@/lib/salary/parse-salary-range",
+          "specifiers": [
+            "parseSalaryRange"
+          ]
+        },
+        {
+          "source": "@/models/job.model",
+          "specifiers": [
+            "SalaryPeriod"
+          ]
         }
       ],
       "exports": [
         "promoteStagedVacancy"
       ],
-      "totalLines": 426,
+      "totalLines": 443,
       "hasStructuralAnalysis": true
     },
     "src/lib/connector/job-discovery/reference-data.ts": {
@@ -48440,6 +49432,241 @@
         "TokenBucketRateLimiter"
       ],
       "totalLines": 44,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/connector/reference-data/modules/currency/currency-data.ts": {
+      "filePath": "src/lib/connector/reference-data/modules/currency/currency-data.ts",
+      "contentHash": "828e9cbc1ea27531b3232b693818147078b06eeb0850aadb9fc7ac8423c471cd",
+      "functions": [
+        {
+          "name": "normalizeCode",
+          "params": [
+            "input"
+          ],
+          "returnType": "string | null",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "isValidCurrencyCode",
+          "params": [
+            "input"
+          ],
+          "returnType": "boolean",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "getCurrencyName",
+          "params": [
+            "code",
+            "locale"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "getCurrencySymbol",
+          "params": [
+            "code",
+            "locale"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "getCurrencyMinorUnit",
+          "params": [
+            "code"
+          ],
+          "returnType": "number",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "getCurrency",
+          "params": [
+            "code",
+            "locale"
+          ],
+          "returnType": "CurrencyInfo | null",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "getCurrencies",
+          "params": [
+            "locale"
+          ],
+          "returnType": "CurrencyInfo[]",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "_clearCurrencyCache",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./types",
+          "specifiers": [
+            "CurrencyInfo"
+          ]
+        }
+      ],
+      "exports": [
+        "isValidCurrencyCode",
+        "getCurrencyName",
+        "getCurrencySymbol",
+        "getCurrencyMinorUnit",
+        "getCurrency",
+        "getCurrencies",
+        "_clearCurrencyCache"
+      ],
+      "totalLines": 140,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/connector/reference-data/modules/currency/i18n.ts": {
+      "filePath": "src/lib/connector/reference-data/modules/currency/i18n.ts",
+      "contentHash": "fcbcbf3cac9534c11a62c038e41396df8d5b7b1a553125e59f378f04da60eae0",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/connector/manifest",
+          "specifiers": [
+            "ModuleI18n"
+          ]
+        }
+      ],
+      "exports": [
+        "currencyI18n"
+      ],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/connector/reference-data/modules/currency/index.ts": {
+      "filePath": "src/lib/connector/reference-data/modules/currency/index.ts",
+      "contentHash": "38adb43d1e4663569e03dfd38524cb507e8884939f64ae5befb7b3cf464642c5",
+      "functions": [
+        {
+          "name": "createCurrencyService",
+          "params": [],
+          "returnType": "CurrencyService",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "getCurrencyService",
+          "params": [],
+          "returnType": "CurrencyService",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "createCurrencyModule",
+          "params": [],
+          "returnType": "ReferenceDataConnector",
+          "exported": false,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "server-only",
+          "specifiers": []
+        },
+        {
+          "source": "../../types",
+          "specifiers": [
+            "ReferenceDataConnector"
+          ]
+        },
+        {
+          "source": "@/lib/connector/registry",
+          "specifiers": [
+            "moduleRegistry"
+          ]
+        },
+        {
+          "source": "./manifest",
+          "specifiers": [
+            "currencyManifest"
+          ]
+        },
+        {
+          "source": "./types",
+          "specifiers": [
+            "CurrencyInfo"
+          ]
+        },
+        {
+          "source": "./currency-data",
+          "specifiers": [
+            "dataGetCurrencies",
+            "dataGetCurrency",
+            "dataGetCurrencyName",
+            "dataGetCurrencySymbol",
+            "dataGetCurrencyMinorUnit",
+            "dataIsValidCurrencyCode"
+          ]
+        }
+      ],
+      "exports": [
+        "CurrencyInfo",
+        "getCurrencyService"
+      ],
+      "totalLines": 88,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/connector/reference-data/modules/currency/manifest.ts": {
+      "filePath": "src/lib/connector/reference-data/modules/currency/manifest.ts",
+      "contentHash": "c30dfcce66a4232263997243f8c02410d465768035427bf6b7a29cd514a57f5f",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/connector/manifest",
+          "specifiers": [
+            "ConnectorType",
+            "CredentialType"
+          ]
+        },
+        {
+          "source": "@/lib/connector/manifest",
+          "specifiers": [
+            "ReferenceDataManifest"
+          ]
+        },
+        {
+          "source": "./i18n",
+          "specifiers": [
+            "currencyI18n"
+          ]
+        }
+      ],
+      "exports": [
+        "currencyManifest"
+      ],
+      "totalLines": 28,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/connector/reference-data/modules/currency/types.ts": {
+      "filePath": "src/lib/connector/reference-data/modules/currency/types.ts",
+      "contentHash": "bf900a3824dd22082c184a1abec862bd69912e900c9b7e35444266b33264f75e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
       "hasStructuralAnalysis": true
     },
     "src/lib/connector/reference-data/modules/esco-classification/i18n.ts": {
@@ -49593,7 +50820,7 @@
     },
     "src/lib/connector/register-all.ts": {
       "filePath": "src/lib/connector/register-all.ts",
-      "contentHash": "429b649c1c90533444da7a39d70461c0593b86ca4c585dd4cd1828fe6f415602",
+      "contentHash": "bdf0d2d383de516366cd976e9b312d3bcae7c0e192bf9e3c6efa1a6d2c47719c",
       "functions": [],
       "classes": [],
       "imports": [
@@ -49652,10 +50879,14 @@
         {
           "source": "./reference-data/modules/public-holidays",
           "specifiers": []
+        },
+        {
+          "source": "./reference-data/modules/currency",
+          "specifiers": []
         }
       ],
       "exports": [],
-      "totalLines": 35,
+      "totalLines": 36,
       "hasStructuralAnalysis": true
     },
     "src/lib/connector/registry.ts": {
@@ -51283,7 +52514,7 @@
     },
     "src/lib/export/collect-user-data.ts": {
       "filePath": "src/lib/export/collect-user-data.ts",
-      "contentHash": "06494e76dc86e6b501ddd0da5bbf8036f715765827ef5a51d5a7a98892e8db79",
+      "contentHash": "b6e000051cf607872d3ab90599b8d78345bc603afdbb4606443c6ecbfdb73d80",
       "functions": [
         {
           "name": "collectUserData",
@@ -51291,7 +52522,7 @@
             "userId"
           ],
           "exported": true,
-          "lineCount": 527
+          "lineCount": 532
         }
       ],
       "classes": [],
@@ -51325,7 +52556,7 @@
       "exports": [
         "collectUserData"
       ],
-      "totalLines": 552,
+      "totalLines": 557,
       "hasStructuralAnalysis": true
     },
     "src/lib/export/export-metadata.ts": {
@@ -53075,6 +54306,208 @@
       "totalLines": 315,
       "hasStructuralAnalysis": true
     },
+    "src/lib/salary/bonus.ts": {
+      "filePath": "src/lib/salary/bonus.ts",
+      "contentHash": "b0a67b24a5ada8ed5ac1ad8406829d567954aa8eb3c3a6b9adbf93c52c437f80",
+      "functions": [
+        {
+          "name": "isValidBonus",
+          "params": [
+            "bonus"
+          ],
+          "returnType": "boolean",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "canonical",
+          "params": [
+            "input"
+          ],
+          "returnType": "JobBonus | null",
+          "exported": false,
+          "lineCount": 27
+        },
+        {
+          "name": "parseBonus",
+          "params": [
+            "json"
+          ],
+          "returnType": "JobBonus | null",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "serializeBonus",
+          "params": [
+            "bonus"
+          ],
+          "returnType": "string | null",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "formatBonus",
+          "params": [
+            "bonus",
+            "currency",
+            "locale"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 27
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "isValidBonus",
+        "parseBonus",
+        "serializeBonus",
+        "formatBonus"
+      ],
+      "totalLines": 121,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/salary/build-job-salary.ts": {
+      "filePath": "src/lib/salary/build-job-salary.ts",
+      "contentHash": "e9f03826761a39b973cddd047bb6bf6b592ff0e58beaf91906ed81773c2e0cc2",
+      "functions": [
+        {
+          "name": "sanitizeAmount",
+          "params": [
+            "v"
+          ],
+          "returnType": "number | null",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "buildJobSalaryData",
+          "params": [
+            "data"
+          ],
+          "returnType": "JobSalaryColumns",
+          "exported": true,
+          "lineCount": 34
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/staging/format-salary-range",
+          "specifiers": [
+            "formatSalaryRange"
+          ]
+        },
+        {
+          "source": "@/lib/salary/bonus",
+          "specifiers": [
+            "serializeBonus",
+            "JobBonus"
+          ]
+        },
+        {
+          "source": "@/models/job.model",
+          "specifiers": [
+            "SALARY_PERIODS",
+            "SalaryPeriod"
+          ]
+        },
+        {
+          "source": "@/lib/connector/reference-data/modules/currency/currency-data",
+          "specifiers": [
+            "isValidCurrencyCode"
+          ]
+        }
+      ],
+      "exports": [
+        "buildJobSalaryData"
+      ],
+      "totalLines": 91,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/salary/parse-salary-range.ts": {
+      "filePath": "src/lib/salary/parse-salary-range.ts",
+      "contentHash": "47938e21c4fa5af7f366986c98635bc46664afe869e98b0bda45f60c7f38d466",
+      "functions": [
+        {
+          "name": "detectCurrency",
+          "params": [
+            "text"
+          ],
+          "returnType": "string | null",
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "detectPeriod",
+          "params": [
+            "text"
+          ],
+          "returnType": "SalaryPeriod | null",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "normalizeNumber",
+          "params": [
+            "token"
+          ],
+          "returnType": "number",
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "extractNumbers",
+          "params": [
+            "text"
+          ],
+          "returnType": "number[]",
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "empty",
+          "params": [
+            "original",
+            "unparsed"
+          ],
+          "returnType": "ParsedSalary",
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "parseSalaryRange",
+          "params": [
+            "raw"
+          ],
+          "returnType": "ParsedSalary",
+          "exported": true,
+          "lineCount": 45
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/data/salaryRangeData",
+          "specifiers": [
+            "SALARY_RANGES"
+          ]
+        },
+        {
+          "source": "@/lib/connector/reference-data/modules/currency/currency-data",
+          "specifiers": [
+            "isValidCurrencyCode"
+          ]
+        }
+      ],
+      "exports": [
+        "parseSalaryRange"
+      ],
+      "totalLines": 142,
+      "hasStructuralAnalysis": true
+    },
     "src/lib/scheduler/crm-cron.ts": {
       "filePath": "src/lib/scheduler/crm-cron.ts",
       "contentHash": "c9ba85044f97ef914bcb411ea70dbae927f9f7462ab259c95d9d9af1a77be2e8",
@@ -54606,7 +56039,7 @@
     },
     "src/models/addJobForm.schema.ts": {
       "filePath": "src/models/addJobForm.schema.ts",
-      "contentHash": "6016e4d4738f654996dfd02e41921d5094780c699bd57111da7f61c495ebdb19",
+      "contentHash": "1d91516d7503bf9c86df7f31dc0041ecc83895300c3468ffc48c947440030eda",
       "functions": [],
       "classes": [],
       "imports": [
@@ -54615,12 +56048,18 @@
           "specifiers": [
             "z"
           ]
+        },
+        {
+          "source": "@/models/job.model",
+          "specifiers": [
+            "SALARY_PERIODS"
+          ]
         }
       ],
       "exports": [
         "AddJobFormSchema"
       ],
-      "totalLines": 73,
+      "totalLines": 106,
       "hasStructuralAnalysis": true
     },
     "src/models/addQuestionForm.schema.ts": {
@@ -54866,7 +56305,7 @@
     },
     "src/models/job.model.ts": {
       "filePath": "src/models/job.model.ts",
-      "contentHash": "d507f860d395cbe6a4c15d39591c857d8457cd73d78ee43d34ad38329272be90",
+      "contentHash": "5e2029c25339ef07acefcc9de3d8cf1c5d5879edc9c5be30533807fc3e8d5d1c",
       "functions": [],
       "classes": [],
       "imports": [
@@ -54875,10 +56314,18 @@
           "specifiers": [
             "Resume"
           ]
+        },
+        {
+          "source": "@/lib/salary/bonus",
+          "specifiers": [
+            "JobBonus"
+          ]
         }
       ],
-      "exports": [],
-      "totalLines": 117,
+      "exports": [
+        "SALARY_PERIODS"
+      ],
+      "totalLines": 139,
       "hasStructuralAnalysis": true
     },
     "src/models/note.model.ts": {
@@ -55189,7 +56636,7 @@
     },
     "src/models/userSettings.model.ts": {
       "filePath": "src/models/userSettings.model.ts",
-      "contentHash": "a8db4405a35168c66a4f23b82d886668e4140a345ec8865dcb13e67d48806821",
+      "contentHash": "df0581aabe969267e72cab512d2348203eba8431eea93e93f23424c778d9f032",
       "functions": [],
       "classes": [],
       "imports": [
@@ -55207,11 +56654,12 @@
         }
       ],
       "exports": [
+        "defaultJobFormSettings",
         "defaultLogoAssetConfig",
         "defaultPrivacySettings",
         "defaultUserSettings"
       ],
-      "totalLines": 109,
+      "totalLines": 127,
       "hasStructuralAnalysis": true
     },
     "src/types/iso3166-2-db.d.ts": {
