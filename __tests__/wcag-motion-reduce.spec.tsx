@@ -41,11 +41,37 @@ describe("WCAG P-4 — prefers-reduced-motion on animated primitives", () => {
     "popover",
     "alert-dialog",
     "toast",
+    "tooltip",
   ])("%s: every animate-in line also sets motion-reduce", (name) => {
     const src = read(`src/components/ui/${name}.tsx`);
     const offenders = src
       .split("\n")
       .filter((l) => l.includes("animate-in") && !l.includes("motion-reduce:"));
+    expect(offenders).toEqual([]);
+  });
+
+  // Project-wide sweep: NO src file may use `animate-in` without a same-line
+  // motion-reduce opt-out (WCAG 2.3.3 — prefers-reduced-motion). Catches new
+  // components, not just the known ui/ primitives. Shell-free fs walk.
+  it("no src/ file uses animate-in without motion-reduce", () => {
+    const { readdirSync } = require("fs");
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (/\.(tsx?|css)$/.test(entry.name)) {
+          const bad = readFileSync(full, "utf8")
+            .split("\n")
+            .some(
+              (l) => l.includes("animate-in") && !l.includes("motion-reduce:"),
+            );
+          if (bad) offenders.push(full);
+        }
+      }
+    };
+    walk(join(process.cwd(), "src"));
     expect(offenders).toEqual([]);
   });
 });
