@@ -276,3 +276,25 @@ Runde-2 verifiziert: Gap-2/Gap-3/Gap-4 ERLEDIGT (→ §0). **Echt offen:**
 **Verifikations-Vollständigkeit:** 539 Repo-`.md` + 8 Home-Dir-`.md` + 30 Allium-Specs gescannt.
 319 Archive bewusst ausgeschlossen (historisch). 0 ungescannte Nicht-Archiv-Dateien verbleibend.
 Jeder OFFEN/ERLEDIGT-Status code-grep-verifiziert (keine Doku-Wort-Vertrauen).
+
+---
+
+## Welle 1 — erledigt (2026-06-01, branch welle-1-foundation-gdpr)
+
+IF-5 (typed `ActionResult.message`), IF-7 (NotificationType drift-proof), Audit-Spec
+(`specs/audit-trail.allium`, ADR-033), **S6a** (Job-CRUD Audit), **S6b** (Person-PII-Read
+Audit inkl. Export), **GDPR-JWT** (id-only Token) — alle erledigt. tsc 0, 265 Suites/5118
+Tests grün, Build grün. Full-Review (Security + Architecture) Findings gefixt.
+
+### Neue Follow-ups (aus Welle-1-Review, bewusst deferred)
+- **IF-5b — `t()` global typisieren** gegen `TranslationKeyStrict` (bleibt aktuell `string`;
+  hunderte `t("…")`-Sites + dynamische Keys → eigener Migrations-Task).
+- **handleError schluckt geworfene i18n-Keys:** ~17 `throw new Error("errors.notAuthenticated")`
+  in `job.actions.ts` (+ vereinzelt andere) werden von `handleError()` verschluckt → User sieht
+  Fallback-Key statt Auth-Fehler. Pre-existing (war vorher gleich). Fix = throw→return-Refactor
+  pro Guard. M.
+- **person.pii_read Listen-Audit:** N Einzel-`create` statt `createMany` (≤100/Seite, fire-and-forget).
+  LOW Perf-Optimierung.
+- **gdpr-audit-report.md:** S6a/S6b/JWT in RoPA/DSAR-Abschnitt dokumentieren (Doku-Task).
+- **/understand-Graph-Refresh:** Welle-1-Code noch nicht in den Graph eingespeist (Token-Budget);
+  beim nächsten Session-Start refreshen (staleness-check flaggt es bereits).
