@@ -1,5 +1,24 @@
 # Workflow — JobSync
 
+## Load workflow.md into context
+Load workflow.md into context.
+Read workflow.md line by line.
+Follow the instructions.
+
+## Prefer specialized skills and plugins over generic-agents and/or general-purpose
+Load list of skills and plugins into context.
+Intead of using generic-agents and/or general-purpose, use specialized skills and plugins that matches the requirements and/or tasks.
+Outcome with specialized skills and plugins is going to be greatly improved.
+
+Pass skills to subagents. It's possible.
+
+## Delete server cache
+Server cache may leave stale state.
+Delete server cache.
+
+## be cavemen
+Use and load `/cavemen full` for sessions.
+
 ## TDD Policy: STRICT
 
 **Every feature, bugfix, and refactor MUST include tests. No code ships without coverage.**
@@ -25,6 +44,7 @@ Test pyramid (from CLAUDE.md → Testing Requirements):
 For complex/domain-heavy features, **write the Allium spec BEFORE implementing**.
 Specs in `specs/*.allium` are the single source of truth for domain rules. Use
 `allium:elicit` / `allium:tend` to author, `allium:weed` to check spec↔code drift.
+Check specs with Allium CLI.
 
 ## i18n Discipline (4 locales)
 

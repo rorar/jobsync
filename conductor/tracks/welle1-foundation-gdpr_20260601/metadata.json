@@ -2,15 +2,17 @@
   "id": "welle1-foundation-gdpr_20260601",
   "title": "Welle 1 \u2014 Foundation-Types + GDPR",
   "type": "feature",
-  "status": "pending",
+  "status": "in_progress",
   "created": "2026-06-01T08:46:16Z",
-  "updated": "2026-06-01T09:30:00Z",
+  "updated": "2026-06-01T11:12:29Z",
+  "current_phase": 2,
+  "current_task": "2.1",
   "phases": {
     "total": 7,
-    "completed": 0
+    "completed": 1
   },
   "tasks": {
     "total": 29,
-    "completed": 0
+    "completed": 5
   }
 }

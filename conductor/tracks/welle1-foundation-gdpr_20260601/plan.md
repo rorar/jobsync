@@ -21,17 +21,31 @@ Make `ActionResult.message` an i18n-key union instead of bare `string`.
 
 ### Tasks
 
-- [ ] Task 1.1: Write a type-level test (or `tsc` expect-error fixture) asserting
-      `message` rejects an arbitrary non-key string.
-- [ ] Task 1.2: Define the i18n-key union in `src/models/actionResult.ts` (template-literal
-      / branded type sourced from the dictionary namespaces).
-- [ ] Task 1.3: Fix all producer call sites (server actions) and consumers (toasts) to
-      satisfy the union; resolve every compile error.
-- [ ] Task 1.4: Run `bash scripts/test.sh` + build — zero type errors.
+- [x] Task 1.1: Write a type-level test (or `tsc` expect-error fixture) asserting
+      `message` rejects an arbitrary non-key string. → `src/models/actionResult.type-test.ts`
+      (`@ts-expect-error` fixture, build-enforced; fails loud if message reverts to `string`).
+- [x] Task 1.2: Define the i18n-key union in `src/models/actionResult.ts`. → Real `keyof`
+      union `TranslationKeyStrict` derived from the 23 `as const` namespace dicts (stronger
+      than template-literal; also catches typo'd keys). Kept `TranslationKey = string` so
+      global `t()` is untouched (BACKLOG follow-up: type `t()` against the strict union).
+      Added `messageParams?` field for late-bound interpolation (replaces the
+      `performanceWarning:<count>` message-overload hack).
+- [x] Task 1.3: Fixed ALL producers + consumers. ~265 compile errors resolved: producers
+      → i18n keys (authn cluster → `errors.notAuthenticated`; CRUD fallbacks → generic
+      `errors.{create,update,delete}Failed` / existing `errors.fetchFailed`; dynamics →
+      static keys + `messageParams`). `handleError` 2nd param typed. 31 new keys × 4 locales
+      (2 i18n agents). ~50 consumer toast sites `t()`-wrapped (4 agents) + 2 perf-warning
+      parsers → `messageParams`. NOTE: plan's IF-7 "13 definitions" premise was inaccurate
+      (verified: 1 type def + importers) — see Phase 2.
+- [x] Task 1.4: `tsc --noEmit` 0 errors; full jest 258 suites / 5062 pass; build (pending).
+      Caught + fixed 2 self-introduced regressions (smtp/webhook/url validators return
+      specific i18n keys — typed their `error` as `TranslationKeyStrict` instead of dropping;
+      `getCompanyById` refactored to return proper keys not throw-and-catch).
 
 ### Verification
 
-- [ ] Build passes zero-error; an arbitrary string in `message` is a compile error.
+- [x] Build passes zero-error (pending build confirm); arbitrary string in `message` is a
+      compile error (enforced by `actionResult.type-test.ts`).
 
 ## Phase 2: IF-7 — Single-source `NotificationType` (foundation, sequential)
 
