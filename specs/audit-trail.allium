@@ -196,9 +196,18 @@ rule AuditPersonPiiRead {
         allowed: true
     )
     @guidance
-        -- Write from person.actions.ts at the detail / list-with-PII / export
-        -- entry points. before_after is deliberately omitted: a read carries no
-        -- snapshot. target_id = person id only — no name/email/phone/address.
+        -- Covered entry points (the surfaces that expose the Person aggregate's
+        -- PII directly): person.actions.ts `getPerson` (detail) and `getPersons`
+        -- (list-with-PII), plus the full data export `collectUserData()`
+        -- (src/lib/export) behind GET /api/users/export. before_after is
+        -- deliberately omitted: a read carries no snapshot. target_id = person id
+        -- only — no name/email/phone/address.
+        --
+        -- OUT OF SCOPE: related-aggregate views that incidentally surface a
+        -- Person *name label* (e.g. JobContact rows on a Job, CrmInterview lists)
+        -- are NOT audited as person.pii_read — they expose a narrow identifier as
+        -- a join label, not the Person PII record, and auditing them would drown
+        -- the trail. The audited surfaces above are the Person-PII read contract.
 }
 
 ------------------------------------------------------------

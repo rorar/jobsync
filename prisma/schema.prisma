@@ -906,7 +906,10 @@ model AdminAuditLog {
   id         String   @id @default(cuid())
   /// Maps to the legacy `ts` field in the stderr JSON line.
   timestamp  DateTime @default(now())
-  /// Action verb, e.g. "activateModule" / "deactivateModule".
+  /// Action verb. Admin actions: "activateModule" / "deactivateModule".
+  /// Data-audit actions (Welle 1 / IF-S6, specs/audit-trail.allium):
+  /// "job.create" / "job.update" / "job.delete" / "job.status_change" /
+  /// "job.note_add" / "person.pii_read".
   action     String
   /// Optional target identifier (module id, automation id, job id, person id …).
   targetId   String?

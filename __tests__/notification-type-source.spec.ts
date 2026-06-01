@@ -44,6 +44,30 @@ describe("NotificationType single source of truth (IF-7)", () => {
     }
   });
 
+  it("preserves the exact UI display order (Record insertion order)", () => {
+    // The source comment states insertion order IS the UI display order. Pin the
+    // full ordered sequence so a future reorder of NOTIFICATION_TYPE_CONFIGURABILITY
+    // fails here instead of silently reshuffling NotificationSettings.
+    expect(CONFIGURABLE_NOTIFICATION_TYPES).toEqual([
+      "auth_failure",
+      "consecutive_failures",
+      "cb_escalation",
+      "module_deactivated",
+      "module_reactivated",
+      "module_unreachable",
+      "vacancy_promoted",
+      "vacancy_batch_staged",
+      "bulk_action_completed",
+      "retention_completed",
+      "job_status_changed",
+      "interview_scheduled",
+      "interview_reminder",
+      "follow_up_due",
+      "contact_from_job",
+      "retention_expired",
+    ]);
+  });
+
   it("type-level: a literal is assignable to/from the union", () => {
     const t: NotificationType = "vacancy_promoted";
     const back: string = t;

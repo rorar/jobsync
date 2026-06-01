@@ -15,6 +15,7 @@ import {
   updateJob,
   deleteJobById,
   changeJobStatus,
+  updateKanbanOrder,
 } from "@/actions/job.actions";
 import { addNote } from "@/actions/note.actions";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
@@ -361,6 +362,73 @@ describe("Job-CRUD audit trail (S6a)", () => {
       const result = await addNote({ jobId: "job-id", content: "Some note" } as never);
 
       expect(result.success).toBe(false);
+      expect(auditMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("updateKanbanOrder (drag-drop) → job.status_change", () => {
+    const bookmarked = { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked" };
+    const applied = { id: "status-applied", label: "Applied", value: "applied" };
+
+    it("writes one job.status_change audit entry with a status snapshot on a cross-column move", async () => {
+      const currentJob = {
+        id: "job-id",
+        userId: mockUser.id,
+        statusId: bookmarked.id,
+        Status: bookmarked,
+        appliedDate: null,
+        version: 1,
+      };
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue(currentJob);
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(applied);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) =>
+        fn({
+          job: {
+            update: jest.fn().mockResolvedValue({
+              ...currentJob,
+              statusId: applied.id,
+              Status: applied,
+            }),
+          },
+          jobStatusHistory: { create: jest.fn().mockResolvedValue({ id: "history-1" }) },
+        }),
+      );
+
+      const result = await updateKanbanOrder("job-id", 1000, applied.id);
+
+      expect(result.success).toBe(true);
+      expect(auditMock).toHaveBeenCalledTimes(1);
+      const call = auditMock.mock.calls[0][0];
+      expect(call).toMatchObject({
+        actorId: mockUser.id,
+        actorEmail: mockUser.email,
+        action: "job.status_change",
+        targetType: "job",
+        targetId: "job-id",
+      });
+      expect(call.beforeAfter).toEqual({
+        status: { before: "bookmarked", after: "applied" },
+      });
+    });
+
+    it("does not write an audit entry for a same-column reorder (no status change)", async () => {
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue({
+        id: "job-id",
+        userId: mockUser.id,
+        statusId: bookmarked.id,
+        Status: bookmarked,
+        appliedDate: null,
+        version: 1,
+      });
+      (prisma.job.update as jest.Mock).mockResolvedValue({
+        id: "job-id",
+        Status: bookmarked,
+      });
+
+      // No newStatusId → same-column reorder branch.
+      const result = await updateKanbanOrder("job-id", 2000);
+
+      expect(result.success).toBe(true);
       expect(auditMock).not.toHaveBeenCalled();
     });
   });

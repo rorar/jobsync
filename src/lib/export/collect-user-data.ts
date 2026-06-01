@@ -1,6 +1,7 @@
 import "server-only";
 
 import db from "@/lib/db";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import {
   parseEmails,
   parsePhones,
@@ -490,6 +491,19 @@ export async function collectUserData(userId: string) {
     // DedupHash (count only — potentially large)
     db.dedupHash.count({ where: { userId } }),
   ]);
+
+  // S6b: a full data export reads every Person's PII — the highest-sensitivity
+  // PII read in the app. Audit one person.pii_read per exported Person
+  // (specs/audit-trail.allium AuditPersonPiiRead names export as a covered entry
+  // point). Fire-and-forget; never copies PII into the audit payload.
+  for (const p of persons) {
+    writeDataAuditLog({
+      actorId: userId,
+      action: "person.pii_read",
+      targetType: "person",
+      targetId: p.id,
+    });
+  }
 
   // Parse Person JSON fields
   const parsedPersons = persons.map((p: (typeof persons)[number]) => ({
