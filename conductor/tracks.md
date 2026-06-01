@@ -9,7 +9,7 @@ HEAD `663ff21`); all file:line facts re-verified against code at HEAD `b4b20e9`.
 | Done | Track ID | Title | Type | Created | Updated |
 | ---- | -------- | ----- | ---- | ------- | ------- |
 | [x] | [welle1-foundation-gdpr_20260601](./tracks/welle1-foundation-gdpr_20260601/index.md) | Welle 1 — Foundation-Types + GDPR | feature | 2026-06-01 | 2026-06-01 |
-| [ ] | [welle2-salary-profile_20260601](./tracks/welle2-salary-profile_20260601/index.md) | Welle 2 — Salary + Profil (Kette B) | feature | 2026-06-01 | 2026-06-01 |
+| [~] | [welle2-salary-profile_20260601](./tracks/welle2-salary-profile_20260601/index.md) | Welle 2 — Salary + Profil (Kette B) | feature | 2026-06-01 | 2026-06-01 |
 | [ ] | [welle3-crm-connection_20260601](./tracks/welle3-crm-connection_20260601/index.md) | Welle 3 — CRM-Verbindung (Kette C) | feature | 2026-06-01 | 2026-06-01 |
 | [ ] | [welle4-custom-jobstatus_20260601](./tracks/welle4-custom-jobstatus_20260601/index.md) | Welle 4 — Custom JobStatus XL (Kette A) | feature | 2026-06-01 | 2026-06-01 |
 | [ ] | [tech-debt-cleanup_20260601](./tracks/tech-debt-cleanup_20260601/index.md) | Tech-Debt Cleanup (Restposten + GDPR-LOW) | chore | 2026-06-01 | 2026-06-01 |
@@ -28,6 +28,8 @@ pick up when unblocked.
 | [ ] | [undostore-pipethrough_20260601](./tracks/undostore-pipethrough_20260601/index.md) | undoStore split-brain pipe-through (M-A-09) | 2–3 days | ADR-030 amendment (onAction `undoTokenId` pipe-through) + migration plan |
 | [ ] | [cursor-pagination_20260601](./tracks/cursor-pagination_20260601/index.md) | getStagedVacancies cursor pagination | 2–3 days | User-scale/perf trigger (pre-emptive — no report yet) |
 | [ ] | [session-recovery_20260601](./tracks/session-recovery_20260601/index.md) | Session Recovery & Stale-Session Guard (3.11) | M | ROADMAP 3.11 prioritised for a sprint |
+| [ ] | [salary-calculator_20260601](./tracks/salary-calculator_20260601/index.md) | Salary Calculator — Gross↔Net Module (Discovery) | L | Welle 2 Phase 3 shipped + discovery spike picks per-country approach + Connector classification ADR |
+| [ ] | [company-perks_20260601](./tracks/company-perks_20260601/index.md) | Company Perks / Gimmicks (extensible multiselect) | M | Product scheduling (best after Phase 3; links to salary-calculator) |
 
 ## Suggested Execution Order
 

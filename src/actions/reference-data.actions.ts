@@ -42,6 +42,39 @@ export async function getSubdivisionOptions(countryCode: string, locale: string)
 }
 
 // ---------------------------------------------------------------------------
+// Currency Reference Lookups (Welle 2 — CUR, ISO-4217)
+// ---------------------------------------------------------------------------
+
+/**
+ * All active ISO-4217 currencies, localized to `locale`, for a CurrencySelect.
+ * Auth-gated (ADR-019): public reference data, but every "use server" export is
+ * browser-callable, so an authenticated session is required.
+ */
+export async function getCurrencyOptions(locale: string) {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const { getCurrencyService } = await import(
+    "@/lib/connector/reference-data/modules/currency"
+  );
+  return getCurrencyService().getCurrencies(locale);
+}
+
+/**
+ * Single currency lookup (code → symbol/name/minorUnit). Returns null for an
+ * unauthenticated caller or a malformed/unknown code. Code validated at the
+ * boundary with /^[A-Z]{3}$/ (ADR-019) before the service membership check.
+ */
+export async function getCurrencyInfo(code: string, locale: string) {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  if (!code || !/^[A-Z]{3}$/i.test(code)) return null;
+  const { getCurrencyService } = await import(
+    "@/lib/connector/reference-data/modules/currency"
+  );
+  return getCurrencyService().getCurrency(code, locale);
+}
+
+// ---------------------------------------------------------------------------
 // Holiday Reference Lookups (ROADMAP 1.22 — PersonDetail PoC)
 // ---------------------------------------------------------------------------
 

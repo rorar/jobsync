@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import CreateResume from "./CreateResume";
+import ProfilePreferencesCard from "./ProfilePreferencesCard";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { getResumeList } from "@/actions/profile.actions";
 import { Resume } from "@/models/profile.model";
@@ -77,7 +78,9 @@ const ProfileContainer = () => {
   const setResumeId = (id: string) => {};
 
   return (
-    <Card>
+    <div className="space-y-4">
+      <ProfilePreferencesCard />
+      <Card>
       <CardHeader className="flex-row justify-between items-center">
         <CardTitle>{t("profile.title")}</CardTitle>
         <div className="flex items-center">
@@ -139,7 +142,8 @@ const ProfileContainer = () => {
           </div>
         )}
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 };
 

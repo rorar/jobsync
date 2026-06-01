@@ -1,4 +1,13 @@
 import { Resume } from "./profile.model";
+import type { JobBonus } from "@/lib/salary/bonus";
+
+/**
+ * Salary period (Welle 2 Phase 3). Mirrors compensation.allium SalaryPeriod.
+ * Single source of truth — derive the union from this `as const` tuple and use
+ * it for runtime membership checks (the TS union is erased at runtime, ADR-019).
+ */
+export const SALARY_PERIODS = ["yearly", "monthly", "hourly"] as const;
+export type SalaryPeriod = (typeof SALARY_PERIODS)[number];
 
 export interface JobForm {
   id?: string;
@@ -11,7 +20,12 @@ export interface JobForm {
   status: string;
   dueDate: Date;
   dateApplied?: Date;
-  salaryRange: string;
+  // Structured salary (Welle 2 Phase 3); legacy salaryRange is computed server-side.
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryCurrency?: string | null;
+  salaryPeriod?: SalaryPeriod | null;
+  salaryBonus?: JobBonus | null;
   jobDescription: string;
   jobUrl?: string;
   applied: boolean;
@@ -40,7 +54,15 @@ export interface JobResponse {
   createdAt: Date;
   appliedDate: Date | null;
   dueDate: Date | null;
+  /** DEPRECATED (Welle 2 Phase 3): computed display string, kept for back-compat. */
   salaryRange: string | null;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryCurrency?: string | null;
+  /** Raw DB value (expected to be a SalaryPeriod, but typed string for DB fidelity). */
+  salaryPeriod?: string | null;
+  /** Raw JSON string as stored; parse with parseBonus() at the consumer. */
+  salaryBonus?: string | null;
   description?: string;
   jobUrl: string | null;
   applied: boolean;

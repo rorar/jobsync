@@ -1,0 +1,155 @@
+-- allium: 3
+-- compensation.allium
+--
+-- Scope: Structured Job compensation introduced in Welle 2 Phase 3 (F-AJ-05),
+--        built for extensibility.
+-- Includes: structured salary (min/max/currency/period), the Fixum (fixed-amount)
+--           case, a flexible Bonus value object, the deprecated computed
+--           salary_range display string (API back-compat), and the
+--           fixum-disables-range UserSettings flag.
+-- Excludes (separate tracks / specs):
+--   - Gross vs net distinction + gross<->net calculation (salary-calculator track)
+--   - Company perks incl. company-car taxation effects (company-perks track)
+--   - Live FX / cross-currency conversion (display in the stored currency only)
+--   - Job CRUD + status lifecycle (job-aggregate.allium owns the Job entity)
+-- Owner: Job Aggregate (src/actions/job.actions.ts); display formatter
+--        (src/lib/staging/format-salary-range.ts); CUR currency reference
+--        (src/lib/connector/reference-data/modules/currency).
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum SalaryPeriod { yearly | monthly | hourly }
+
+enum BonusKind { fixed | percentage | mixed }
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+-- Flexible bonus. Stored as a JSON value object on the Job so the shape can grow
+-- (e.g. future caps, vesting) without a schema migration.
+value Bonus {
+    bonus_kind: BonusKind
+    bonus_amount: Decimal?       -- absolute amount (kinds: fixed, mixed)
+    bonus_percentage: Decimal?   -- percentage share, e.g. 30 (kinds: percentage, mixed)
+    bonus_condition: String?     -- free text, e.g. "after reaching sales goal"
+}
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+-- Job is owned by job-aggregate.allium. This spec contributes the structured
+-- compensation fields and their constraints.
+external entity Job {
+    -- Structured salary (matches the StagedVacancy precedent; the
+    -- format-salary-range formatter consumes exactly this shape).
+    salary_min: Decimal?
+    salary_max: Decimal?
+    salary_currency: String?        -- ISO-4217 (validated against the active set)
+    salary_period: SalaryPeriod?
+
+    -- Flexible bonus (JSON-backed).
+    bonus: Bonus?
+
+    -- DEPRECATED: free-text display string, RETAINED and computed from the
+    -- structured fields for /api/v1 back-compat. Never the source of truth.
+    salary_range: String?
+
+    -- Fixum = the fixed-amount case: a single value, modelled as min = max.
+    is_fixum: salary_min != null and salary_min = salary_max
+    has_salary_amount: salary_min != null or salary_max != null
+}
+
+-- UserSettings is owned by other specs; this flag is form-behaviour only.
+external entity UserSettings {
+    -- When true (default), entering a Fixum disables the range inputs in the
+    -- Job form. This is a UI affordance only — it has NO storage-level effect
+    -- and imposes no constraint on stored Job data.
+    fixum_disables_range: Boolean
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    -- Default for UserSettings.fixum_disables_range on a new user.
+    default_fixum_disables_range: Boolean = true
+
+    -- Sanity upper bound on Bonus.bonus_percentage (reject e.g. "999999%" as
+    -- garbage input). NOT a payout cap (see the open question) — purely a range
+    -- guard on the percentage field. Enforced by the Bonus value-object
+    -- normalizer and both write schemas.
+    max_bonus_percentage: Decimal = 1000
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant SalaryMaxGteMin {
+    for j in Jobs:
+        (j.salary_min != null and j.salary_max != null)
+            implies j.salary_max >= j.salary_min
+}
+
+-- CurrencyOptionalWithAmount (prose, not an enforced invariant):
+--   salary_currency is OPTIONAL even when an amount is present. A user may
+--   record a salary figure without committing to a currency (the display
+--   formatter renders the bare number when currency is null). The Job form,
+--   the public API, and the shared salary builder all accept amount-without-
+--   currency. (Earlier drafts declared a CurrencyPresentWhenAmount invariant;
+--   it was dropped as over-constrained — currency is a best-effort enrichment,
+--   not a hard requirement of a salary figure.)
+
+-- is_active_currency is a black box (the CUR module's isValidCurrencyCode,
+-- backed by Intl.supportedValuesOf("currency")). The builder coerces an
+-- unknown code to null, so a stored non-null currency is always active.
+invariant CurrencyIsActiveIso4217 {
+    for j in Jobs:
+        j.salary_currency != null implies is_active_currency(j.salary_currency)
+}
+
+invariant FixedBonusHasAmount {
+    for j in Jobs:
+        (j.bonus != null and j.bonus.bonus_kind = fixed)
+            implies j.bonus.bonus_amount != null
+}
+
+invariant PercentageBonusHasPercentage {
+    for j in Jobs:
+        (j.bonus != null and j.bonus.bonus_kind = percentage)
+            implies j.bonus.bonus_percentage != null
+}
+
+invariant MixedBonusHasBoth {
+    for j in Jobs:
+        (j.bonus != null and j.bonus.bonus_kind = mixed)
+            implies (j.bonus.bonus_amount != null and j.bonus.bonus_percentage != null)
+}
+
+-- A populated bonus_percentage is bounded to a sane range; an out-of-range
+-- value invalidates the whole Bonus (the normalizer drops it). bonus_amount is
+-- likewise finite and non-negative.
+invariant BonusPercentageInRange {
+    for j in Jobs:
+        (j.bonus != null and j.bonus.bonus_percentage != null)
+            implies (j.bonus.bonus_percentage >= 0
+                and j.bonus.bonus_percentage <= max_bonus_percentage)
+}
+
+-- SalaryRangeIsComputed (prose, not an expression invariant):
+--   Job.salary_range, when populated, equals
+--   format_salary_range(salary_min, salary_max, salary_currency, salary_period).
+--   It is a backward-compatibility projection for the public API, never an input
+--   that overrides the structured fields. (Cannot be an expression invariant here:
+--   format_salary_range is a display black box and salary_range is deprecated.)
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Should a percentage bonus carry an optional cap (max payout)? Deferred until a user need appears; the JSON Bonus value object can absorb it additively."

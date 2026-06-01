@@ -32,3 +32,4 @@ import "./reference-data/modules/esco-classification";
 import "./reference-data/modules/eurostat-nuts";
 import "./reference-data/modules/geo-codes";
 import "./reference-data/modules/public-holidays";
+import "./reference-data/modules/currency";

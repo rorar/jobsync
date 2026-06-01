@@ -5,6 +5,8 @@ import { JobsListQuerySchema, CreateJobSchema } from "@/lib/api/schemas";
 import { findOrCreate, resolveStatus, JOB_LIST_SELECT, JOB_API_SELECT } from "@/lib/api/helpers";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
+import { buildJobSalaryData } from "@/lib/salary/build-job-salary";
+import { parseSalaryRange } from "@/lib/salary/parse-salary-range";
 
 /** CORS preflight */
 export const OPTIONS = withApiAuth(async () => new Response(null));
@@ -81,9 +83,22 @@ export const POST = withApiAuth(async (req, { userId }) => {
 
   const {
     title, company, location, type, status, source,
-    salaryRange, dueDate, dateApplied, jobDescription, jobUrl,
+    salaryRange, salaryMin, salaryMax, salaryCurrency, salaryPeriod, salaryBonus,
+    dueDate, dateApplied, jobDescription, jobUrl,
     applied, resume, tags,
   } = parsed.data;
+
+  // Structured salary wins; fall back to parsing a legacy free-text salaryRange.
+  const hasStructured =
+    salaryMin != null || salaryMax != null || salaryCurrency != null ||
+    salaryPeriod != null || salaryBonus != null;
+  const salaryData = buildJobSalaryData(
+    hasStructured
+      ? { salaryMin, salaryMax, salaryCurrency, salaryPeriod, salaryBonus }
+      : salaryRange
+        ? { ...parseSalaryRange(salaryRange), salaryRangeFallback: salaryRange }
+        : {},
+  );
 
   // Check if company already exists before find-or-create (for CompanyCreated event)
   const existingCompany = await prisma.company.findFirst({
@@ -138,7 +153,7 @@ export const POST = withApiAuth(async (req, { userId }) => {
         locationId: locationRecord?.id ?? null,
         statusId: statusRecord.id,
         jobSourceId: sourceRecord?.id ?? null,
-        salaryRange: salaryRange ?? null,
+        ...salaryData,
         createdAt: new Date(),
         dueDate: dueDate ? new Date(dueDate) : null,
         appliedDate: dateApplied ? new Date(dateApplied) : null,

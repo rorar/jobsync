@@ -26,6 +26,7 @@ import {
   JobTitle,
   Tag,
 } from "@/models/job.model";
+import { SALARY_PERIODS } from "@/models/job.model";
 import { addDays } from "date-fns";
 import { z } from "zod";
 import { toast } from "../ui/use-toast";
@@ -40,7 +41,11 @@ import {
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import SelectFormCtrl from "../Select";
 import { DatePicker } from "../DatePicker";
-import { SALARY_RANGES } from "@/lib/data/salaryRangeData";
+import JobSalaryFields from "./JobSalaryFields";
+import type { CurrencyOption } from "../ui/currency-select";
+import { getCurrencyOptions } from "@/actions/reference-data.actions";
+import { getJobFormSettings } from "@/actions/userSettings.actions";
+import { parseBonus } from "@/lib/salary/bonus";
 import TiptapEditor from "../TiptapEditor";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
@@ -103,12 +108,16 @@ export function AddJob({
   editJob,
   resetEditJob,
 }: AddJobProps) {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [resumeDialogOpen, setResumeDialogOpen] = useState(false);
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>(tags);
   const [isPending, startTransition] = useTransition();
+  // Welle 2 Phase 3 — structured salary support
+  const [currencies, setCurrencies] = useState<CurrencyOption[]>([]);
+  const [currenciesLoading, setCurrenciesLoading] = useState(true);
+  const [fixumDisablesRange, setFixumDisablesRange] = useState(true);
   const form = useForm<z.infer<typeof AddJobFormSchema>>({
     resolver: zodResolver(AddJobFormSchema) as any, // zod v4 + @hookform/resolvers type mismatch
     defaultValues: {
@@ -119,7 +128,11 @@ export function AddJob({
       type: Object.keys(JOB_TYPES)[0],
       dueDate: addDays(new Date(), 3),
       status: jobStatuses[0]?.id,
-      salaryRange: "1",
+      salaryMin: null,
+      salaryMax: null,
+      salaryCurrency: null,
+      salaryPeriod: null,
+      salaryBonus: null,
       jobDescription: "",
       jobUrl: "",
       applied: false,
@@ -155,7 +168,12 @@ export function AddJob({
           source: editJob.JobSource?.id ?? "",
           status: editJob.Status.id,
           dueDate: editJob.dueDate ?? undefined,
-          salaryRange: editJob.salaryRange ?? "",
+          salaryMin: editJob.salaryMin ?? null,
+          salaryMax: editJob.salaryMax ?? null,
+          salaryCurrency: editJob.salaryCurrency ?? null,
+          salaryPeriod:
+            SALARY_PERIODS.find((p) => p === editJob.salaryPeriod) ?? null,
+          salaryBonus: parseBonus(editJob.salaryBonus ?? null),
           jobDescription: editJob.description,
           applied: editJob.applied,
           jobUrl: editJob.jobUrl ?? "",
@@ -180,6 +198,30 @@ export function AddJob({
   useEffect(() => {
     loadResumes();
   }, [loadResumes]);
+
+  // Load currency options + the fixum-disables-range setting for the salary section.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setCurrenciesLoading(true);
+      try {
+        const [opts, jobFormSettings] = await Promise.all([
+          getCurrencyOptions(locale),
+          getJobFormSettings(),
+        ]);
+        if (!active) return;
+        setCurrencies(opts);
+        setFixumDisablesRange(jobFormSettings.fixumDisablesRange);
+      } catch (error) {
+        console.error("Failed to load salary settings:", error);
+      } finally {
+        if (active) setCurrenciesLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [locale]);
 
   const setNewResumeId = (id: string) => {
     setTimeout(() => {
@@ -580,24 +622,19 @@ export function AddJob({
                   />
                 </div>
 
-                {/* Salary Range */}
+                {/* Structured salary (Welle 2 Phase 3) */}
                 <div>
-                  <FormField
-                    control={form.control}
-                    name="salaryRange"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>{t("jobs.salaryRange")}</FormLabel>
-                        <FormControl>
-                          <SelectFormCtrl
-                            label="Salary Range"
-                            options={SALARY_RANGES}
-                            field={field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                  <JobSalaryFields
+                    key={editJob?.id ?? "new-job"}
+                    form={form}
+                    currencies={currencies}
+                    currenciesLoading={currenciesLoading}
+                    fixumDisablesRange={fixumDisablesRange}
+                    initialFixum={
+                      fixumDisablesRange &&
+                      editJob?.salaryMin != null &&
+                      editJob.salaryMin === editJob.salaryMax
+                    }
                   />
                 </div>
 

@@ -251,6 +251,9 @@ export const crm = {
     "crm.subdivisionSelect": "Select state/region...",
     "crm.subdivisionSearch": "Search states/regions...",
     "crm.noCountryFound": "No country found.",
+    "crm.currencySelect": "Select currency...",
+    "crm.currencySearch": "Search currency or code...",
+    "crm.noCurrencyFound": "No currency found.",
     "crm.noSubdivisionFound": "No state/region found.",
     "crm.subdivision": "State/Region",
 
@@ -466,6 +469,9 @@ export const crm = {
     "crm.subdivisionSelect": "Bundesland/Region auswählen...",
     "crm.subdivisionSearch": "Bundesländer/Regionen suchen...",
     "crm.noCountryFound": "Kein Land gefunden.",
+    "crm.currencySelect": "Währung auswählen...",
+    "crm.currencySearch": "Währung oder Code suchen...",
+    "crm.noCurrencyFound": "Keine Währung gefunden.",
     "crm.noSubdivisionFound": "Kein Bundesland/Region gefunden.",
     "crm.subdivision": "Bundesland/Region",
 
@@ -681,6 +687,9 @@ export const crm = {
     "crm.subdivisionSelect": "Sélectionner un état/région...",
     "crm.subdivisionSearch": "Rechercher des états/régions...",
     "crm.noCountryFound": "Aucun pays trouvé.",
+    "crm.currencySelect": "Sélectionner une devise...",
+    "crm.currencySearch": "Rechercher une devise ou un code...",
+    "crm.noCurrencyFound": "Aucune devise trouvée.",
     "crm.noSubdivisionFound": "Aucun état/région trouvé.",
     "crm.subdivision": "État/Région",
 
@@ -896,6 +905,9 @@ export const crm = {
     "crm.subdivisionSelect": "Seleccionar estado/región...",
     "crm.subdivisionSearch": "Buscar estados/regiones...",
     "crm.noCountryFound": "No se encontró ningún país.",
+    "crm.currencySelect": "Seleccionar moneda...",
+    "crm.currencySearch": "Buscar moneda o código...",
+    "crm.noCurrencyFound": "Ninguna moneda encontrada.",
     "crm.noSubdivisionFound": "No se encontró ningún estado/región.",
     "crm.subdivision": "Estado/Región",
 

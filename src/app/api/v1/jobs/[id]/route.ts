@@ -4,6 +4,10 @@ import { actionToResponse, errorResponse, noContentResponse } from "@/lib/api/re
 import { UpdateJobSchema, isValidUUID } from "@/lib/api/schemas";
 import { findOrCreate, JOB_DETAIL_SELECT, JOB_API_SELECT } from "@/lib/api/helpers";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
+import { buildJobSalaryData } from "@/lib/salary/build-job-salary";
+import { parseSalaryRange } from "@/lib/salary/parse-salary-range";
+import type { JobBonus } from "@/lib/salary/bonus";
+import type { SalaryPeriod } from "@/models/job.model";
 
 /** CORS preflight */
 export const OPTIONS = withApiAuth(async () => new Response(null));
@@ -137,6 +141,11 @@ type UpdateFields = Partial<{
   source: string | null;
   type: string;
   salaryRange: string | null;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: string | null;
+  salaryPeriod: SalaryPeriod | null;
+  salaryBonus: JobBonus | null;
   dueDate: string | null;
   dateApplied: string | null;
   jobDescription: string;
@@ -205,7 +214,32 @@ async function buildUpdateData(
 
   // 2. Map simple scalar fields
   if (updates.type !== undefined) data.jobType = updates.type;
-  if (updates.salaryRange !== undefined) data.salaryRange = updates.salaryRange || null;
+  // Salary: if any salary field is touched, recompute all salary columns.
+  // Structured fields win; a legacy free-text salaryRange is parsed as fallback.
+  const salaryTouched =
+    updates.salaryMin !== undefined || updates.salaryMax !== undefined ||
+    updates.salaryCurrency !== undefined || updates.salaryPeriod !== undefined ||
+    updates.salaryBonus !== undefined || updates.salaryRange !== undefined;
+  if (salaryTouched) {
+    const hasStructured =
+      updates.salaryMin != null || updates.salaryMax != null ||
+      updates.salaryCurrency != null || updates.salaryPeriod != null ||
+      updates.salaryBonus != null;
+    const salaryData = buildJobSalaryData(
+      hasStructured
+        ? {
+            salaryMin: updates.salaryMin,
+            salaryMax: updates.salaryMax,
+            salaryCurrency: updates.salaryCurrency,
+            salaryPeriod: updates.salaryPeriod,
+            salaryBonus: updates.salaryBonus,
+          }
+        : updates.salaryRange
+          ? { ...parseSalaryRange(updates.salaryRange), salaryRangeFallback: updates.salaryRange }
+          : {},
+    );
+    Object.assign(data, salaryData);
+  }
   if (updates.dueDate !== undefined) data.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
   if (updates.dateApplied !== undefined) data.appliedDate = updates.dateApplied ? new Date(updates.dateApplied) : null;
   if (updates.jobDescription !== undefined) data.description = updates.jobDescription;

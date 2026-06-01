@@ -17,6 +17,14 @@ jest.mock("@/actions/job.actions", () => ({
   addJobToQueue: jest.fn().mockResolvedValue({ success: true }),
 }));
 
+// Welle 2 Phase 3: AddJob loads currency options + the job-form setting on mount.
+jest.mock("@/actions/reference-data.actions", () => ({
+  getCurrencyOptions: jest.fn().mockResolvedValue([]),
+}));
+jest.mock("@/actions/userSettings.actions", () => ({
+  getJobFormSettings: jest.fn().mockResolvedValue({ fixumDisablesRange: true }),
+}));
+
 jest.mock("next/navigation", () => ({
   redirect: jest.fn(),
   useRouter: jest.fn(() => ({
@@ -159,12 +167,11 @@ describe("AddJob Component", () => {
     const optionTexts = options.map((o) => o.textContent);
     expect(optionTexts).toContain("Indeed");
   });
-  it("should load and show the salary range select list", async () => {
-    const salaryRangeSelect = screen.getByLabelText("Salary Range");
-    await user.click(salaryRangeSelect);
-    const options = screen.getAllByRole("option");
-    expect(options.length).toBeGreaterThan(0);
-    expect(options[0].textContent).toBe("0 - 10,000");
+  it("should render the structured salary fields (Welle 2 Phase 3)", async () => {
+    // The legacy bucket dropdown was replaced by structured min/max + currency
+    // + period + bonus. In range mode (default), min/max inputs are present.
+    expect(screen.getByLabelText("Minimum")).toBeInTheDocument();
+    expect(screen.getByLabelText("Maximum")).toBeInTheDocument();
   });
   it("should load and show the status select list", async () => {
     const statusSelect = screen.getByLabelText("Status");
@@ -230,7 +237,12 @@ describe("AddJob Component", () => {
         status: "d7ba200a-6dc1-4ea8-acff-29ebb0d4676a",
         dueDate: expect.any(Date),
         dateApplied: undefined,
-        salaryRange: "1",
+        // Welle 2 Phase 3: structured salary (untouched → all null defaults)
+        salaryMin: null,
+        salaryMax: null,
+        salaryCurrency: null,
+        salaryPeriod: null,
+        salaryBonus: null,
         jobDescription: "<p>New Job Description</p>",
         jobUrl: "",
         applied: false,

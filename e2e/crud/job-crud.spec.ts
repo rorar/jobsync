@@ -17,6 +17,35 @@ async function navigateToJobs(page: Page) {
 }
 
 /**
+ * Force the Table view. The Jobs view mode (Table | Kanban) is persisted in
+ * localStorage (useKanbanState), so a stale storageState can leave the page in
+ * Kanban, which has no `role="row"` rows for the row-based delete flow.
+ *
+ * Scope note: we deliberately do NOT call this from `navigateToJobs`. When the
+ * table is populated it renders a `columnheader` named "Company", which would
+ * collide with the dialog's "Company" combobox in the unscoped
+ * `selectOrCreateComboboxOption` (`getByLabel("Company")` → strict-mode
+ * violation). `createJob` therefore runs in whatever the persisted view is
+ * (Kanban shows cards, no column header → no collision), and only `deleteJob`
+ * — which queries `role="row"` and never `getByLabel` — switches to Table.
+ *
+ * Idempotent: clicking the already-active radio is a no-op, and the toggle is
+ * absent in the empty state, so we guard with a short visibility probe.
+ */
+async function ensureTableView(page: Page) {
+  const tableRadio = page.getByRole("radio", { name: "Table" });
+  try {
+    await tableRadio.waitFor({ state: "visible", timeout: 3000 });
+  } catch {
+    return; // toggle not rendered (e.g. empty state) — nothing to switch
+  }
+  if ((await tableRadio.getAttribute("aria-checked")) !== "true") {
+    await tableRadio.click();
+    await expect(tableRadio).toHaveAttribute("aria-checked", "true");
+  }
+}
+
+/**
  * Ensure at least one resume exists. The AddJob form defaults resume=""
  * which causes a P2003 FK violation when submitted. Having a resume
  * available lets us select it in the form to avoid this issue.
@@ -74,6 +103,8 @@ async function createJob(
     url?: string;
     description?: string;
     clearDueDate?: boolean;
+    salaryMin?: string;
+    salaryMax?: string;
   },
 ) {
   await page.getByTestId("add-job-btn").click();
@@ -118,6 +149,14 @@ async function createJob(
     opts.description ?? "E2E test job description.",
   );
 
+  // Welle 2 Phase 3: structured salary (range mode is the default). Optional.
+  if (opts.salaryMin !== undefined) {
+    await page.getByLabel("Minimum").fill(opts.salaryMin);
+  }
+  if (opts.salaryMax !== undefined) {
+    await page.getByLabel("Maximum").fill(opts.salaryMax);
+  }
+
   // F-AJ-04: the due date is optional. Clear the default (+3 days) value via
   // the DatePicker's Clear action and assert the trigger reverts to the
   // empty placeholder.
@@ -148,6 +187,7 @@ async function createJob(
 
 async function deleteJob(page: Page, jobTitle: string) {
   await navigateToJobs(page);
+  await ensureTableView(page); // delete is row-based; force Table regardless of persisted view
   const cells = page.getByText(new RegExp(jobTitle, "i"));
   await expect(cells.first()).toBeVisible({ timeout: 15000 });
   await page
@@ -197,6 +237,36 @@ test.describe("Job CRUD", () => {
     await expect(
       page.getByText(jobTitle).first(),
     ).toBeVisible({ timeout: 15000 });
+
+    // Cleanup
+    await deleteJob(page, jobTitle);
+    await deleteResume(page, resumeTitle);
+  });
+
+  test("should create a job with a structured salary range (Welle 2 Phase 3)", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000); // Resume + full job + salary fields requires >60s on slow dev server
+    const uid = Date.now().toString(36);
+    const jobTitle = `E2E Salary Job ${uid}`;
+    const company = `E2E Company ${uid}`;
+    const location = `E2E Location ${uid}`;
+    const resumeTitle = `E2E Resume ${uid}`;
+
+    await ensureResumeExists(page, resumeTitle);
+
+    await navigateToJobs(page);
+    await createJob(page, {
+      title: jobTitle,
+      company,
+      location,
+      salaryMin: "50000",
+      salaryMax: "70000",
+    });
+
+    // Job created with structured salary (dialog closed = save succeeded).
+    await navigateToJobs(page);
+    await expect(page.getByText(jobTitle).first()).toBeVisible({ timeout: 15000 });
 
     // Cleanup
     await deleteJob(page, jobTitle);

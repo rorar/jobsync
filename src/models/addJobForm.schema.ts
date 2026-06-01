@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SALARY_PERIODS } from "@/models/job.model";
 
 export const AddJobFormSchema = z.object({
   id: z.string().optional(),
@@ -56,7 +57,24 @@ export const AddJobFormSchema = z.object({
    */
   //
   dateApplied: z.date().optional(),
-  salaryRange: z.string(),
+  // Structured salary (Welle 2 Phase 3). Fixum = min == max. All optional.
+  salaryMin: z.number().nonnegative().nullable().optional(),
+  salaryMax: z.number().nonnegative().nullable().optional(),
+  salaryCurrency: z
+    .string()
+    .regex(/^[A-Z]{3}$/i)
+    .nullable()
+    .optional(),
+  salaryPeriod: z.enum(SALARY_PERIODS).nullable().optional(),
+  salaryBonus: z
+    .object({
+      kind: z.enum(["fixed", "percentage", "mixed"]),
+      amount: z.number().nonnegative().nullable().optional(),
+      percentage: z.number().nonnegative().max(1000).nullable().optional(),
+      condition: z.string().max(200).nullable().optional(),
+    })
+    .nullable()
+    .optional(),
   jobDescription: z
     .string({
       error: "Job description is required.",
@@ -69,4 +87,19 @@ export const AddJobFormSchema = z.object({
   resume: z.string().optional(),
   tags: z.array(z.string()).max(10).optional().default([]),
   sendToQueue: z.boolean().default(false),
+}).superRefine((data, ctx) => {
+  // compensation.allium SalaryMaxGteMin — reject an inverted range at the form
+  // boundary so the user gets inline feedback (the server builder also swaps as
+  // a defensive backstop).
+  if (
+    data.salaryMin != null &&
+    data.salaryMax != null &&
+    data.salaryMin > data.salaryMax
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["salaryMax"],
+      message: "Maximum salary must be greater than or equal to the minimum.",
+    });
+  }
 });

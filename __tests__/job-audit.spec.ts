@@ -113,7 +113,10 @@ describe("Job-CRUD audit trail (S6a)", () => {
     type: "FT",
     status: "status-id",
     source: "source-id",
-    salaryRange: "$50,000 - $70,000",
+    // Welle 2 Phase 3: structured salary (salaryRange is now computed from these).
+    salaryMin: 50000,
+    salaryMax: 70000,
+    salaryCurrency: "USD",
     dueDate: new Date("2023-01-01"),
     dateApplied: new Date("2022-12-31"),
     jobDescription: "Job description",
@@ -213,7 +216,8 @@ describe("Job-CRUD audit trail (S6a)", () => {
       // Snapshot present and contains only the changed scalar fields.
       expect(call.beforeAfter).toBeDefined();
       expect(call.beforeAfter).toEqual({
-        salaryRange: { before: "OLD SALARY", after: "$50,000 - $70,000" },
+        // salaryRange is now computed from the structured fields (en-dash range).
+        salaryRange: { before: "OLD SALARY", after: "$50,000 – $70,000" },
         jobUrl: {
           before: "https://old.example.com/job",
           after: "https://example.com/job",

@@ -25,6 +25,14 @@ jest.mock("@/actions/profile.actions", () => ({
   ),
 }));
 
+// ProfilePreferencesCard has its own test (ProfilePreferencesCard.spec.tsx) and
+// calls reference-data server actions on mount — stub it here so this test stays
+// focused on the résumé-management behavior of ProfileContainer.
+jest.mock("@/components/profile/ProfilePreferencesCard", () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
 describe("ProfileContainer Component", () => {
   beforeEach(async () => {
     jest.clearAllMocks();

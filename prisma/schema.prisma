@@ -111,11 +111,19 @@ model UserSettings {
 
 model Profile {
   id      String   @id @default(uuid())
-  userId  String
+  // One Profile per user (aggregate root). `@unique` lets both lazy-create paths
+  // (createResumeProfile, updateProfilePreferences) use upsert and prevents the
+  // split-brain where concurrent creates fork the aggregate (full-review Arch H2).
+  userId  String   @unique
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   resumes Resume[]
 
-  @@index([userId])
+  // Welle 2 (ADR-034): user's own home location + preferred currency.
+  // Reference point for the ROADMAP 2.5 distance/map filter and 2.1 onboarding;
+  // drives salary display/comparison currency. All nullable + optional.
+  addressCountryCode     String? // ISO 3166-1 alpha-2 (e.g. "DE")
+  addressSubdivisionCode String? // ISO 3166-2 without country prefix (e.g. "BY")
+  preferredCurrency      String? // ISO 4217 (e.g. "EUR")
 }
 
 model Resume {
@@ -361,7 +369,17 @@ model Job {
   companyId   String
   JobSource   JobSource?  @relation(fields: [jobSourceId], references: [id])
   jobSourceId String?
+  // DEPRECATED (Welle 2 Phase 3, ADR/compensation.allium): kept as a computed,
+  // recoverable display string for /api/v1 back-compat. Structured fields below
+  // are the source of truth. Backfilled via parse-salary-range.
   salaryRange String?
+  // Structured compensation (Welle 2 Phase 3, F-AJ-05). Mirrors StagedVacancy.
+  // Fixum = salaryMin == salaryMax. salaryBonus is a JSON value object.
+  salaryMin      Float?
+  salaryMax      Float?
+  salaryCurrency String? // ISO 4217 (EUR, USD, ...)
+  salaryPeriod   String? // yearly | monthly | hourly
+  salaryBonus    String? // JSON: { kind, amount?, percentage?, condition? }
   Location    Location?   @relation(fields: [locationId], references: [id])
   locationId  String?
   Interview   Interview[]

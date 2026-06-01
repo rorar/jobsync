@@ -474,6 +474,87 @@ describe("POST /api/v1/jobs", () => {
 });
 
 // =========================================================================
+// POST /api/v1/jobs — structured salary (Welle 2 Phase 3 / full-review G1)
+// =========================================================================
+
+describe("POST /api/v1/jobs — salary handling", () => {
+  function postSalary(body: Record<string, unknown>) {
+    return createJob(
+      mockRequest("http://localhost/api/v1/jobs", {
+        method: "POST",
+        body: { title: "Eng", company: "Acme", ...body },
+      }),
+      routeCtx(),
+    );
+  }
+
+  it("persists structured salary fields", async () => {
+    mockPrisma.job.create.mockResolvedValue(makeJobRow());
+    await postSalary({
+      salaryMin: 50000,
+      salaryMax: 70000,
+      salaryCurrency: "EUR",
+      salaryPeriod: "yearly",
+    });
+    expect(mockPrisma.job.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          salaryMin: 50000,
+          salaryMax: 70000,
+          salaryCurrency: "EUR",
+          salaryPeriod: "yearly",
+        }),
+      }),
+    );
+  });
+
+  it("parses a legacy free-text salaryRange when no structured fields are sent", async () => {
+    mockPrisma.job.create.mockResolvedValue(makeJobRow());
+    await postSalary({ salaryRange: "50,000 - 70,000 EUR per year" });
+    const data = mockPrisma.job.create.mock.calls[0][0].data;
+    expect(data.salaryMin).toBe(50000);
+    expect(data.salaryMax).toBe(70000);
+    expect(data.salaryCurrency).toBe("EUR");
+    expect(data.salaryPeriod).toBe("yearly");
+  });
+
+  it("retains an unparseable legacy salaryRange in the deprecated column (F4)", async () => {
+    mockPrisma.job.create.mockResolvedValue(makeJobRow());
+    await postSalary({ salaryRange: "competitive" });
+    const data = mockPrisma.job.create.mock.calls[0][0].data;
+    expect(data.salaryMin).toBeNull();
+    expect(data.salaryRange).toBe("competitive");
+  });
+
+  it("rejects a well-formed but non-existent currency with 400", async () => {
+    const res = asRes(await postSalary({ salaryMin: 1, salaryCurrency: "ZZZ" }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
+    expect(mockPrisma.job.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a negative salaryMin with 400", async () => {
+    const res = asRes(await postSalary({ salaryMin: -5 }));
+    expect(res.status).toBe(400);
+    expect(mockPrisma.job.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a bonus percentage above 1000 with 400", async () => {
+    const res = asRes(
+      await postSalary({ salaryBonus: { kind: "percentage", percentage: 999999 } }),
+    );
+    expect(res.status).toBe(400);
+    expect(mockPrisma.job.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unknown salaryPeriod with 400", async () => {
+    const res = asRes(await postSalary({ salaryPeriod: "weekly" }));
+    expect(res.status).toBe(400);
+    expect(mockPrisma.job.create).not.toHaveBeenCalled();
+  });
+});
+
+// =========================================================================
 // GET /api/v1/jobs/:id — Get single job
 // =========================================================================
 

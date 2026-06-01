@@ -1,0 +1,11 @@
+{
+  "id": "salary-calculator_20260601",
+  "title": "Salary Calculator — Gross↔Net Module (Discovery)",
+  "type": "feature",
+  "status": "pending",
+  "created": "2026-06-01T14:00:00Z",
+  "updated": "2026-06-01T14:00:00Z",
+  "gated": true,
+  "phases": { "total": 5, "completed": 0 },
+  "tasks": { "total": 4, "completed": 0 }
+}
