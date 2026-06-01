@@ -1,0 +1,18 @@
+{
+  "id": "observability_20260601",
+  "title": "Observability Infrastructure (H-P-09)",
+  "type": "feature",
+  "status": "pending",
+  "gated": true,
+  "entryCriteria": "Stack-decision ADR (OTel+Tempo+Prometheus+Grafana OR off-the-shelf APM)",
+  "created": "2026-06-01T09:11:27Z",
+  "updated": "2026-06-01T09:11:27Z",
+  "phases": {
+    "total": 5,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 12,
+    "completed": 0
+  }
+}
