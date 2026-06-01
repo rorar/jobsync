@@ -1,0 +1,236 @@
+-- allium: 3
+-- audit-trail.allium
+--
+-- GDPR audit trail for accountability (Art. 5(2)) and data minimisation
+-- (Art. 5(1)(c)). Single source of truth for the audit-row shape and the two
+-- write/read rules that Welle 1 implements over the existing AdminAuditLog table.
+--
+-- Scope:
+--   S6a — Job-CRUD accountability: every Job mutation (create / update / delete /
+--         status-change / note-add) writes one audit entry with actor, action,
+--         target and (for mutations) a before/after snapshot.
+--   S6b — Person-PII read-access: reading Person PII (detail view, list-with-PII,
+--         export) writes a read-access audit entry — who viewed which Person, when.
+--   Model extension — AdminAuditLog gains a `target_type` discriminator; the
+--         existing `extra` string column carries the JSON-encoded before/after
+--         snapshot (SQLite has no jsonb).
+--
+-- Excludes:
+--   - Admin-action audit (activate/deactivate module): already governed by
+--     security-rules.allium + the existing writeAdminAuditLog() path.
+--   - Person as data subject (export / anonymize / merge): see crm-gdpr.allium.
+--   - Retention / rotation of audit rows: see gdpr-data-rights.allium S4
+--     (config.admin_audit_log_retention).
+--   - An admin UI to browse audit rows (deferred — docs/BUGS.md "Admin audit UI").
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity User {
+    id: String
+    email: String
+}
+
+external entity Job {
+    user: User
+    title: String?
+    created_at: Timestamp
+}
+
+external entity Person {
+    user: User
+    -- PII fields (name, emails, phones, address) deliberately NOT mirrored here:
+    -- the audit trail records ACCESS to them, never copies their content.
+}
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+-- Action verbs. Dotted forms are external-style literals, hence backtick-quoted.
+enum AuditAction {
+    `job.create`
+    `job.update`
+    `job.delete`
+    `job.status_change`
+    `job.note_add`
+    `person.pii_read`
+}
+
+enum AuditTargetType {
+    job
+    person
+    company
+    module
+    automation
+}
+
+------------------------------------------------------------
+-- Entities and Variants
+------------------------------------------------------------
+
+-- Maps to the AdminAuditLog Prisma table (schema.prisma). The writer is
+-- writeAdminAuditLog() in src/lib/auth/admin.ts. Welle 1 adds `target_type`
+-- and carries the before/after diff in `before_after` (stored in the existing
+-- `extra` column, JSON-encoded).
+entity AuditLogEntry {
+    -- Who acted. NOT a foreign key to User: the entry must survive the actor's
+    -- account deletion for accountability (Art. 5(2)). `actor_email` is a
+    -- denormalised snapshot kept for readability after deletion.
+    actor_id: String
+    actor_email: String?
+
+    action: AuditAction
+    target_type: AuditTargetType
+    target_id: String?
+
+    timestamp: Timestamp
+
+    -- Whether the audited operation was permitted. Reads/mutations record true;
+    -- denied admin actions (security-rules.allium) record false.
+    allowed: Boolean
+
+    -- JSON-encoded before/after snapshot for mutations. ABSENT for reads and
+    -- for create/delete where no field-level diff applies. MUST NOT contain
+    -- Person PII (see DataMinimisation invariant).
+    before_after: String?
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- -----------------------------------------------------------------------------
+-- S6a: Job-CRUD accountability (Art. 5(2))
+-- -----------------------------------------------------------------------------
+
+rule AuditJobCreate {
+    when: JobCreated(actor, job)
+    ensures: AuditLogEntry.created(
+        actor_id: actor.id,
+        actor_email: actor.email,
+        action: `job.create`,
+        target_type: job,
+        target_id: job.id,
+        timestamp: now,
+        allowed: true
+    )
+    @guidance
+        -- Write from job.actions.ts create path via a server-only audit writer
+        -- (ADR-019: no raw-userId export). target_id = created job id.
+}
+
+rule AuditJobUpdate {
+    when: JobUpdated(actor, job, before, after)
+    ensures: AuditLogEntry.created(
+        actor_id: actor.id,
+        actor_email: actor.email,
+        action: `job.update`,
+        target_type: job,
+        target_id: job.id,
+        timestamp: now,
+        allowed: true,
+        before_after: diff_snapshot(before, after)
+    )
+    @guidance
+        -- diff_snapshot serialises only the changed Job fields (title, company,
+        -- location, status, tags) — never any related Person PII.
+}
+
+rule AuditJobStatusChange {
+    when: JobStatusChanged(actor, job, from_status, to_status)
+    ensures: AuditLogEntry.created(
+        actor_id: actor.id,
+        actor_email: actor.email,
+        action: `job.status_change`,
+        target_type: job,
+        target_id: job.id,
+        timestamp: now,
+        allowed: true,
+        before_after: status_snapshot(from_status, to_status)
+    )
+}
+
+rule AuditJobDelete {
+    when: JobDeleted(actor, job)
+    ensures: AuditLogEntry.created(
+        actor_id: actor.id,
+        actor_email: actor.email,
+        action: `job.delete`,
+        target_type: job,
+        target_id: job.id,
+        timestamp: now,
+        allowed: true
+    )
+}
+
+rule AuditJobNoteAdd {
+    when: JobNoteAdded(actor, job, note_id)
+    ensures: AuditLogEntry.created(
+        actor_id: actor.id,
+        actor_email: actor.email,
+        action: `job.note_add`,
+        target_type: job,
+        target_id: job.id,
+        timestamp: now,
+        allowed: true
+    )
+}
+
+-- -----------------------------------------------------------------------------
+-- S6b: Person-PII read-access (Art. 5(2))
+-- -----------------------------------------------------------------------------
+
+rule AuditPersonPiiRead {
+    -- Fires for each entry point that exposes Person PII: detail view,
+    -- list-with-PII, and export. Records the access, never the content.
+    when: PersonPiiAccessed(actor, person)
+    ensures: AuditLogEntry.created(
+        actor_id: actor.id,
+        actor_email: actor.email,
+        action: `person.pii_read`,
+        target_type: person,
+        target_id: person.id,
+        timestamp: now,
+        allowed: true
+    )
+    @guidance
+        -- Write from person.actions.ts at the detail / list-with-PII / export
+        -- entry points. before_after is deliberately omitted: a read carries no
+        -- snapshot. target_id = person id only — no name/email/phone/address.
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant DataMinimisation {
+    -- Art. 5(1)(c): a Person-PII read records access only — never a content
+    -- snapshot. No PII is copied into the audit payload beyond target id + actor.
+    for e in AuditLogEntries:
+        e.action = `person.pii_read` implies e.before_after = null
+}
+
+invariant SnapshotsAreFieldDiffsNotPii {
+    -- Only field-level mutations of the Job aggregate carry a before/after
+    -- snapshot. Creates, deletes, note-adds and any read carry none.
+    for e in AuditLogEntries:
+        e.before_after != null implies
+            (e.action = `job.update` or e.action = `job.status_change`)
+}
+
+invariant ActorAlwaysRecorded {
+    -- Art. 5(2): every audit entry attributes the action to an actor id, which
+    -- persists independently of the User record (not a foreign key).
+    for e in AuditLogEntries:
+        e.actor_id != null
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Should a failed Job mutation (e.g. IDOR-rejected, validation-failed) write an audit entry with allowed=false, mirroring the admin-audit deny path? S6a currently audits successful mutations only; auditing denials would strengthen intrusion detection but adds volume."
+
+open question "For person.pii_read on a list-with-PII view that returns N persons, is the obligation one audit entry per person shown, or one entry for the list access with a count? One-per-person is precise but high-volume; one-per-list loses per-subject granularity for a DSAR."

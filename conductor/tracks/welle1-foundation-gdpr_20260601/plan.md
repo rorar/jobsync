@@ -81,7 +81,7 @@ and the `AdminAuditLog` extension that S6a/S6b will implement.
 
 ### Tasks
 
-- [ ] Task 3.1: Author/extend the Allium audit-trail spec via `allium:elicit` /
+- [x] Task 3.1: Author/extend the Allium audit-trail spec via `allium:elicit` /
       `allium:tend`. Capture: the `AuditEntry` value object (actor id, action verb, target
       type + target id, timestamp, optional before/after diff), the Job-CRUD write rule
       (S6a) and the Person-PII read-access rule (S6b), and the `AdminAuditLog` model
@@ -89,15 +89,15 @@ and the `AdminAuditLog` extension that S6a/S6b will implement.
       `src/lib/auth/admin.ts:182`, emitting `kind: "admin_audit"` on stderr today —
       code-verified at HEAD). Decide host: extend `specs/gdpr-data-rights.allium` /
       `specs/security-rules.allium`, or a new `specs/audit-trail.allium`.
-- [ ] Task 3.2: Validate with `allium:check` (clean parse); refine with `allium:tend`.
-- [ ] Task 3.3: Review the contract against Art. 5(2) accountability + Art. 5(1)(c)
+- [x] Task 3.2: Validate with `allium:check` (clean parse); refine with `allium:tend`.
+- [x] Task 3.3: Review the contract against Art. 5(2) accountability + Art. 5(1)(c)
       minimisation (no PII over-collection into the audit payload); freeze as the single
       source of truth before S6a/S6b code.
 
 ### Verification
 
-- [ ] `allium:check` passes; the spec covers the audit-row shape, the Job-CRUD write rule,
-      the Person-PII read-access rule, and the `AdminAuditLog` extension.
+- [x] `allium:check` passes (0 errors); the spec covers the audit-row shape, the Job-CRUD write rule,
+      the Person-PII read-access rule, and the `AdminAuditLog` extension. Host: new `specs/audit-trail.allium`.
 
 ## Phase 4: S6a — Job-CRUD GDPR audit trail (implements the spec; fan-out)
 
