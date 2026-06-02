@@ -11,6 +11,43 @@ Mostly UI/wiring over an existing CRM backend, with two small backend extensions
 F-AJ-07 (contact picker) lands first; F-AJ-08 (recruiter triangle) follows; the three
 Gap items parallelise. TDD; UI phases consult the ui-design agents before implementing.
 
+## Domain Findings (exploration 2026-06-02 — `/understand-domain`, verified vs HEAD `92ded71`)
+
+Locked decisions + overlooked cross-aggregate items surfaced before implementation:
+
+- **P3 DECIDED — extend, don't fork.** Add optional `targetCompanyId` to `getActivityTimeline`
+  (`crmActivityLog.actions.ts:31-35`) + `ActivityTimeline.tsx:16-50`. Do NOT build a separate
+  `CompanyTimeline` — spec `crm.allium` CompanyTimeline = identical fields/contract/ordering as
+  Person/Job, read action already `include`s `targetCompany`. A fork only duplicates icon-map +
+  filter UI + i18n.
+- **P3 real blocker is upstream.** The `targetCompanyId` FK (mig `20260510193831`) is **never
+  populated** by any of the 11 projections (`crm-activity-logger.ts:97-290`) → company timeline is
+  empty until projections resolve `companyId → targetCompanyId`. P3 must patch the relevant
+  projections to set `targetCompanyId`, else the reused timeline shows nothing.
+- **P1↔P3 coupling.** `addJobContact` emits `ContactUpdated` with only `{personId, userId}`
+  (`jobContact.actions.ts:38`) → projection writes `targetPersonId` only, **no `targetJobId`**.
+  Linking a person to a job is invisible on the Job timeline. P1 must enrich the event payload +
+  the `ContactUpdated` projection with `targetJobId` (+ resolve `targetCompanyId` from job's company).
+- **P1 picker has no caller today.** `addJobContact` has **zero callers**; the only existing
+  person-combobox pattern is `InterviewForm.tsx:441-486` (reuse, don't reinvent). Person-side host
+  = `PersonDetailClient.tsx` "Related Jobs" tab (~`:144`); job-side host arrives with P1/P3.
+- **P4 honesty — no auto-creation flow exists.** `isHandleBlocked` (`crmBlocklist.actions.ts:103-119`)
+  has **zero callers** and is **exact-match only** (ignores `BlocklistType`). P4 = extend matcher
+  (domain-suffix + ReDoS-bounded pattern) + settings UI; the "wire into auto-creation" is a FUTURE
+  hook (no person auto-creation today — `enrichment-trigger` never does participant matching).
+- **P4 anonymize parity.** `anonymizePerson` blocklist cleanup (`person.actions.ts:425-430`) deletes
+  **exact email** only; spec `AnonymizePerson` also wants **domain-type** removal. When P4 adds domain
+  matching, the anonymize branch needs symmetric domain-handle deletion or the invariant drifts.
+- **P2 API leak.** New `recruitingCompanyId`/`relationshipType` MUST be added to `JOB_*_SELECT` in
+  `src/lib/api/helpers.ts` (explicit select — never `include`).
+- **P3 IDOR.** Gate company timeline by `crmActivityLog.userId = user.id AND targetCompanyId = X`.
+  Do NOT assume a `Company.userId` join (Company is a shared lookup).
+- **P5 carve-out (DECIDED, see memory `welle3-p5-actor-tracking-decision`).** Person KEEPS
+  name-string + source-tag actor model (anonymize-safe; future ROADMAP 9.5 self-submitters have no
+  User account). Add `updatedBy` User FK ONLY to internal CRM entities (CrmInterview/Task/Note/Blocklist).
+- **i18n pre-existing gap.** `ACTIVITY_TYPES` (`ActivityTimeline.tsx:39`) is missing
+  `vacancy_promoted`/`automation_degraded` though both are projected; P3 reuse inherits it — fix while there.
+
 ## Phase 1: F-AJ-07 / Gap-1 — Point-of-Contact picker in Add Job
 
 ### Tasks
@@ -21,10 +58,16 @@ Gap items parallelise. TDD; UI phases consult the ui-design agents before implem
       `jobContact.actions.ts` (NOT `job.actions.ts` — aggregate boundary).
 - [ ] Task 1.3: i18n picker/role labels (en/de/fr/es).
 - [ ] Task 1.4: E2E happy-path: add a job with a point of contact; build + tests.
+- [x] Task 1.5: Enrich `ContactUpdated` payload + projection with `targetJobId` (+ resolve
+      `targetCompanyId` from the job's company) so a job↔person link is visible on the Job/Company
+      timeline (closes the P1↔P3 coupling gap). Projection test asserts both targets written.
+      DONE (commit f7503e8): optional `jobId` on payload/schema, both emitters carry it, projection
+      resolves company via `job.findUnique`; 27 tests green, tsc 0. (link/unlink both covered.)
 
 ### Verification
 
 - [ ] Creating a job with a contact persists a `JobContact`; picker reuses Person flow.
+- [x] Linking a person to a job produces a `CrmActivityLog` row carrying `targetJobId` (+ company).
 
 ## Phase 2: F-AJ-08 — Recruiter triangle (depends on F-AJ-07)
 
@@ -44,40 +87,52 @@ Gap items parallelise. TDD; UI phases consult the ui-design agents before implem
 
 ### Tasks
 
-- [ ] Task 3.1: Component test: Job detail shows a CRM tab embedding `ActivityTimeline` +
-      a CompanyTimeline of the company's `CrmActivityLog`.
-- [ ] Task 3.2: Add the CRM tab to the Job detail page; embed `ActivityTimeline` via props;
-      build the CompanyTimeline read view.
-- [ ] Task 3.3: i18n tab/timeline labels; build + tests.
+- [ ] Task 3.1: Component test: Job detail shows a CRM tab embedding the (extended)
+      `ActivityTimeline` filtered by job + company. (NO separate CompanyTimeline component — DECIDED.)
+- [ ] Task 3.2: Extend `getActivityTimeline` (+IDOR: `userId AND targetCompanyId`) and
+      `ActivityTimeline.tsx` with an optional `targetCompanyId` prop; add the CRM tab to the Job
+      detail page (`myjobs/[id]/page.tsx` / `JobDetails.tsx`) embedding it via props.
+- [ ] Task 3.3: Patch the relevant projections (`crm-activity-logger.ts`) to populate
+      `targetCompanyId` from the job's company, else the company-filtered timeline is empty.
+- [ ] Task 3.4: i18n tab/timeline labels; add missing `vacancy_promoted`/`automation_degraded`
+      to `ACTIVITY_TYPES` + crm.* dict (4 locales); build + tests.
 
 ### Verification
 
-- [ ] Job page CRM tab renders person + company timeline entries.
+- [ ] Job page CRM tab renders person + company timeline entries; company rows gated by `userId`.
 
 ## Phase 4: Gap-6 — Blocklist domain/pattern matching (parallel)
 
 ### Tasks
 
 - [ ] Task 4.1: Unit tests: exact + domain + pattern matches; ReDoS-bounded; non-match passes.
-- [ ] Task 4.2: Extend the `CrmBlocklist` matcher with domain + pattern modes; wire into the
-      auto-creation suppression path.
-- [ ] Task 4.3: Settings UI for the new match modes; i18n; build + tests.
+- [ ] Task 4.2: Extend the `CrmBlocklist` matcher (`isHandleBlocked`) with domain-suffix + pattern
+      modes honouring `BlocklistType`. NOTE: no person auto-creation flow exists yet (zero callers) —
+      expose the matcher as the reusable suppression primitive; the auto-creation call-site is a
+      future hook, not built here. Document this in the spec `@guidance`.
+- [ ] Task 4.3: Anonymize parity — extend `anonymizePerson` blocklist cleanup
+      (`person.actions.ts:425-430`) to also remove **domain-type** entries matching the person's
+      email domain (spec `AnonymizePerson`), symmetric with the new domain matcher.
+- [ ] Task 4.4: Settings UI for the new match modes; i18n; build + tests.
 
 ### Verification
 
-- [ ] Domain + pattern blocklist entries suppress auto-creation as specified.
+- [ ] Domain + pattern blocklist entries match per `BlocklistType`; anonymize removes domain entries.
 
 ## Phase 5: Gap-7 — updatedBy FK tracking (parallel)
 
 ### Tasks
 
 - [ ] Task 5.1: Migration test: existing name-based actor strings preserved/backfilled.
-- [ ] Task 5.2: Prisma migration adding the `updatedBy` User FK on the relevant CRM entities.
-- [ ] Task 5.3: Update the action writers to populate the FK (ADR-015); build + tests.
+- [ ] Task 5.2: Prisma migration adding the `updatedBy` User FK to internal CRM entities ONLY —
+      CrmInterview, CrmTask, CrmNote, CrmBlocklist. **Person is EXCLUDED** (keeps name-string +
+      source-tag; DECIDED — memory `welle3-p5-actor-tracking-decision`, ROADMAP 9.5 self-submitters
+      have no User account). Write an ADR for the carve-out.
+- [ ] Task 5.3: Update the internal CRM action writers to populate the FK (ADR-015); build + tests.
 
 ### Verification
 
-- [ ] `updatedBy` resolves to a User FK; historical actor data not lost.
+- [ ] `updatedBy` resolves to a User FK on internal CRM entities; Person actor model unchanged; historical actor data not lost.
 
 ## Final Verification
 
