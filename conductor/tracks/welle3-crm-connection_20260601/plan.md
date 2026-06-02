@@ -104,19 +104,23 @@ Locked decisions + overlooked cross-aggregate items surfaced before implementati
 
 ### Tasks
 
-- [ ] Task 3.1: Component test: Job detail shows a CRM tab embedding the (extended)
+- [x] Task 3.1: Component test: Job detail shows a CRM tab embedding the (extended)
       `ActivityTimeline` filtered by job + company. (NO separate CompanyTimeline component — DECIDED.)
-- [ ] Task 3.2: Extend `getActivityTimeline` (+IDOR: `userId AND targetCompanyId`) and
-      `ActivityTimeline.tsx` with an optional `targetCompanyId` prop; add the CRM tab to the Job
-      detail page (`myjobs/[id]/page.tsx` / `JobDetails.tsx`) embedding it via props.
-- [ ] Task 3.3: Patch the relevant projections (`crm-activity-logger.ts`) to populate
-      `targetCompanyId` from the job's company, else the company-filtered timeline is empty.
-- [ ] Task 3.4: i18n tab/timeline labels; add missing `vacancy_promoted`/`automation_degraded`
-      to `ACTIVITY_TYPES` + crm.* dict (4 locales); build + tests.
+      DONE — `crmActivityLog.actions.spec.ts` (filter+IDOR, 4) + projection company-population (2).
+- [x] Task 3.2: Extend `getActivityTimeline` (+IDOR: `userId AND targetCompanyId`) and
+      `ActivityTimeline.tsx` with an optional `targetCompanyId` prop; add the CRM section to the Job
+      detail page (`JobDetails.tsx`) embedding it via props. DONE (commit 7a13b1a). NOTE: JobDetails
+      is a flat stacked layout (no Tabs system) → added a labeled CRM section, not a literal tab.
+- [x] Task 3.3: Patch the relevant projections (`crm-activity-logger.ts`) to populate
+      `targetCompanyId` from the job's company. DONE — JobStatusChanged, InterviewScheduled,
+      InterviewCompleted, VacancyPromoted (+ ContactUpdated from Task 1.5) now resolve companyId.
+- [x] Task 3.4: i18n tab/timeline labels; complete `ACTIVITY_TYPES` + icons with the projected-but-
+      missing `contact_deleted`/`automation_degraded` (the actual missing types; `vacancy_promoted`
+      maps to the already-present `application_submitted`) + crm.activity.* ×4. DONE.
 
 ### Verification
 
-- [ ] Job page CRM tab renders person + company timeline entries; company rows gated by `userId`.
+- [x] Job page CRM section renders person + company timeline entries; company rows gated by `userId`.
 
 ## Phase 4: Gap-6 — Blocklist domain/pattern matching (parallel)
 
