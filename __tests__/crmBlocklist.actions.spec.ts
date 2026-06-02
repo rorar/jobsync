@@ -219,6 +219,7 @@ describe("crmBlocklist.actions", () => {
     it("returns false for a non-blocked handle", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (prisma.crmBlocklist.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.crmBlocklist.findMany as jest.Mock).mockResolvedValue([]);
 
       const result = await isHandleBlocked("clean@example.com");
 
@@ -228,6 +229,31 @@ describe("crmBlocklist.actions", () => {
           where: { userId_handle: { userId: mockUser.id, handle: "clean@example.com" } },
         }),
       );
+    });
+
+    it("returns true via a domain-type entry (Welle 3 Gap-6)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.crmBlocklist.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.crmBlocklist.findMany as jest.Mock).mockResolvedValue([
+        { type: "domain", handle: "acme.com" },
+      ]);
+
+      expect(await isHandleBlocked("jane@acme.com")).toBe(true);
+      expect(prisma.crmBlocklist.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: mockUser.id, type: { in: ["domain", "pattern"] } },
+        }),
+      );
+    });
+
+    it("returns true via a glob pattern entry (Welle 3 Gap-6)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.crmBlocklist.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.crmBlocklist.findMany as jest.Mock).mockResolvedValue([
+        { type: "pattern", handle: "noreply*@*" },
+      ]);
+
+      expect(await isHandleBlocked("noreply42@globex.io")).toBe(true);
     });
 
     it("returns true for a blocked handle", async () => {

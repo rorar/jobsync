@@ -93,7 +93,9 @@ export type ActivityType =
   | "contact_deleted"
   | "automation_degraded";
 
-export type BlocklistType = "email" | "phone" | "domain";
+// Welle 3 (Gap-6): "pattern" enables glob (`*`) handle matching alongside exact
+// (email/phone) and domain-suffix (domain) suppression.
+export type BlocklistType = "email" | "phone" | "domain" | "pattern";
 
 // ---------------------------------------------------------------------------
 // State Machine Validators
