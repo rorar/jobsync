@@ -26,7 +26,7 @@ import {
   JobTitle,
   Tag,
 } from "@/models/job.model";
-import { SALARY_PERIODS } from "@/models/job.model";
+import { SALARY_PERIODS, RELATIONSHIP_TYPES } from "@/models/job.model";
 import { addDays } from "date-fns";
 import { z } from "zod";
 import { toast } from "../ui/use-toast";
@@ -148,6 +148,8 @@ export function AddJob({
       sendToQueue: false,
       contactPersonId: "",
       contactRole: "",
+      recruitingCompany: "",
+      relationshipType: null,
     },
   });
 
@@ -191,6 +193,14 @@ export function AddJob({
           dateApplied: editJob.appliedDate ?? undefined,
           resume: editJob.Resume?.id ?? undefined,
           tags: editJob.tags?.map((t) => t.id) ?? [],
+          // Welle 3 F-AJ-08: recruiter triangle prefill.
+          recruitingCompany: editJob.RecruitingCompany?.id ?? "",
+          relationshipType:
+            (RELATIONSHIP_TYPES as readonly string[]).includes(
+              editJob.relationshipType ?? "",
+            )
+              ? (editJob.relationshipType as (typeof RELATIONSHIP_TYPES)[number])
+              : null,
         },
         { keepDefaultValues: true },
       );
@@ -729,6 +739,58 @@ export function AddJob({
                     setResumeDialogOpen={setResumeDialogOpen}
                     reloadResumes={loadResumes}
                     setNewResumeId={setNewResumeId}
+                  />
+                </div>
+
+                {/* Recruiter triangle (Welle 3 F-AJ-08) — optional, create + edit */}
+                <div className="md:col-span-2 grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="recruitingCompany"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>{t("crm.recruitingCompany")}</FormLabel>
+                        <FormControl>
+                          <Combobox
+                            options={companies}
+                            field={field}
+                            creatable
+                            onCreateOption={async (label) => {
+                              const res = await addCompany({ company: label });
+                              if (!res.success) {
+                                toast({
+                                  variant: "destructive",
+                                  title: t("common.error"),
+                                  description: t(res.message ?? "errors.unknown"),
+                                });
+                                return null;
+                              }
+                              return res.data as { id: string; label: string; value: string };
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="relationshipType"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col [&>button]:capitalize">
+                        <FormLabel>{t("crm.relationshipType")}</FormLabel>
+                        <SelectFormCtrl
+                          label="Relationship"
+                          options={RELATIONSHIP_TYPES.map((rt) => ({
+                            id: rt,
+                            label: t(`crm.relationship.${rt}`),
+                            value: rt,
+                          }))}
+                          field={field}
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
                 </div>
 

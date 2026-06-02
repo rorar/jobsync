@@ -262,6 +262,9 @@ describe("AddJob Component", () => {
         // Welle 3 F-AJ-07: optional point-of-contact (untouched → empty defaults)
         contactPersonId: "",
         contactRole: "",
+        // Welle 3 F-AJ-08: recruiter triangle (untouched → empty/null defaults)
+        recruitingCompany: "",
+        relationshipType: null,
       });
     });
   });

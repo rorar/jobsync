@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SALARY_PERIODS } from "@/models/job.model";
+import { SALARY_PERIODS, RELATIONSHIP_TYPES } from "@/models/job.model";
 
 export const AddJobFormSchema = z.object({
   id: z.string().optional(),
@@ -92,6 +92,11 @@ export const AddJobFormSchema = z.object({
   // ignores these fields, so the Job aggregate write path is unchanged.
   contactPersonId: z.string().optional(),
   contactRole: z.string().max(120).nullable().optional(),
+  // Welle 3 (F-AJ-08): recruiter triangle — optional recruiting agency company id
+  // + its relationship to the hiring company. relationshipType is also runtime-
+  // validated at the server-action boundary (ADR-019).
+  recruitingCompany: z.string().optional(),
+  relationshipType: z.enum(RELATIONSHIP_TYPES).nullable().optional(),
 }).superRefine((data, ctx) => {
   // compensation.allium SalaryMaxGteMin — reject an inverted range at the form
   // boundary so the user gets inline feedback (the server builder also swaps as

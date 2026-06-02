@@ -312,7 +312,8 @@ model Company {
   label             String
   value             String
   domain            String? // Kette A: Email-Domain→Company Matching (e.g. "acme.com")
-  jobsApplied       Job[]
+  jobsApplied       Job[]              @relation("HiringCompany")
+  recruitingJobs    Job[]              @relation("RecruitingCompany") // Welle 3 F-AJ-08
   logoUrl           String? // field is optional
   logoAssetId       String?            @unique
   logoAsset         LogoAsset?         @relation("CompanyActiveLogo", fields: [logoAssetId], references: [id], onDelete: SetNull)
@@ -365,8 +366,14 @@ model Job {
   Status      JobStatus   @relation(fields: [statusId], references: [id])
   JobTitle    JobTitle    @relation(fields: [jobTitleId], references: [id])
   jobTitleId  String
-  Company     Company     @relation(fields: [companyId], references: [id])
+  Company     Company     @relation("HiringCompany", fields: [companyId], references: [id])
   companyId   String
+  // Recruiter triangle (Welle 3 F-AJ-08): optional recruiting/staffing agency
+  // distinct from the hiring Company. relationshipType ∈ RELATIONSHIP_TYPES
+  // (validated at the action boundary, ADR-019); null = direct application.
+  RecruitingCompany   Company? @relation("RecruitingCompany", fields: [recruitingCompanyId], references: [id], onDelete: SetNull)
+  recruitingCompanyId String?
+  relationshipType    String?
   JobSource   JobSource?  @relation(fields: [jobSourceId], references: [id])
   jobSourceId String?
   // DEPRECATED (Welle 2 Phase 3, ADR/compensation.allium): kept as a computed,
@@ -416,6 +423,7 @@ model Job {
   @@index([userId, statusId, sortOrder])
   @@index([jobTitleId])
   @@index([companyId])
+  @@index([recruitingCompanyId])
   @@index([jobSourceId])
   @@index([locationId])
   @@index([resumeId])
