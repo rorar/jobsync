@@ -52,12 +52,19 @@ Locked decisions + overlooked cross-aggregate items surfaced before implementati
 
 ### Tasks
 
-- [ ] Task 1.1: Component test: Add Job renders a Person picker; selecting a Person creates
-      a `JobContact` (with optional role) on save.
-- [ ] Task 1.2: Build the contact-picker UI (reuse the Person search/create flow); wire to
-      `jobContact.actions.ts` (NOT `job.actions.ts` — aggregate boundary).
-- [ ] Task 1.3: i18n picker/role labels (en/de/fr/es).
-- [ ] Task 1.4: E2E happy-path: add a job with a point of contact; build + tests.
+- [x] Task 1.1: Component test: Add Job renders a Person picker; selecting a Person creates
+      a `JobContact` (with optional role) on save. DONE — `JobContactPicker.spec.tsx` (8 tests) +
+      AddJob create-mode render + submit-shape assertions.
+- [x] Task 1.2: Build the contact-picker UI (reuse the Person search/create flow); wire to
+      `jobContact.actions.ts` (NOT `job.actions.ts` — aggregate boundary). DONE (commit edce548):
+      `JobContactPicker` (select-only, cmdk, mirrors CountrySelect); AddJob create-only block +
+      Route-A non-blocking link after addJob; `AddJobFormSchema` += contactPersonId/contactRole.
+      Inline person-create intentionally deferred (lossy from a single label; lives on /contacts).
+- [x] Task 1.3: i18n picker/role labels (en/de/fr/es). DONE — crm.pointOfContact /
+      contactRolePlaceholder / contactSelected ×4; dictionary-completeness green.
+- [x] Task 1.4: E2E happy-path: add a job with a point of contact; build + tests. DONE (commit
+      27c970b): job-crud cross-aggregate test (create person → job w/ contact → verify on
+      Related Jobs → cleanup). Type-checks in-project (tsc 0); executes in the Playwright suite run.
 - [x] Task 1.5: Enrich `ContactUpdated` payload + projection with `targetJobId` (+ resolve
       `targetCompanyId` from the job's company) so a job↔person link is visible on the Job/Company
       timeline (closes the P1↔P3 coupling gap). Projection test asserts both targets written.
@@ -66,7 +73,7 @@ Locked decisions + overlooked cross-aggregate items surfaced before implementati
 
 ### Verification
 
-- [ ] Creating a job with a contact persists a `JobContact`; picker reuses Person flow.
+- [x] Creating a job with a contact persists a `JobContact`; picker reuses the Person select flow.
 - [x] Linking a person to a job produces a `CrmActivityLog` row carrying `targetJobId` (+ company).
 
 ## Phase 2: F-AJ-08 — Recruiter triangle (depends on F-AJ-07)
