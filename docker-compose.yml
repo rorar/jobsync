@@ -1,21 +1,43 @@
 services:
   app:
-    image: ghcr.io/gsync/jobsync:latest
+    # Primary path: BUILD THE FORK FROM SOURCE.
+    # The upstream image (ghcr.io/gsync/jobsync) lacks Welle 0/1/2 and carries the
+    # cover-letter divergence (ROADMAP §8.5) — never run it for this fork.
+    # `docker compose up -d --build` builds this repo's Dockerfile and tags the
+    # result as the published fork name below, so a self-hoster can deploy the
+    # fork with zero registry/CI dependency.
+    #
+    # To PULL the published fork image instead of building, use the override:
+    #   docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
+    #   docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+    # (published by .github/workflows/docker-publish.yml — see docs/deploy-runbook.md)
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${JOBSYNC_IMAGE:-ghcr.io/rorar/jobsync:latest}
     container_name: jobsync_app
     ports:
       - "3737:3737"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:/data/dev.db
+      # REQUIRED — app refuses to start without it (ADR-018). Generate: openssl rand -base64 32
       - AUTH_SECRET=${AUTH_SECRET:-}
+      # REQUIRED for real deployments — encrypts stored API keys (ADR-017). The default
+      # below is a PLACEHOLDER; if left unchanged, stored keys become unrecoverable on a
+      # later real key. Set a stable value: openssl rand -base64 32
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-you-encryption-key-here}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3737}
       - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-true}
+      # Multi-user deployments MUST set ADMIN_USER_IDS (CLAUDE.md § Admin Tiered Rule).
+      # Single-user self-hosted: leave unset (sole user is implicit admin).
+      - ADMIN_USER_IDS=${ADMIN_USER_IDS:-}
       - TZ=${TZ:-America/Edmonton}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - RAPIDAPI_KEY=${RAPIDAPI_KEY:-}
+      - LOGODEV_API_KEY=${LOGODEV_API_KEY:-}
     volumes:
       - ./jobsyncdb/data:/data
     extra_hosts:

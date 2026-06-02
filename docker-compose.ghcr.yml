@@ -1,0 +1,16 @@
+# Override: PULL the published fork image instead of building from source.
+#
+# Usage (combine with the base file — it carries all env/volume/healthcheck wiring):
+#   docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
+#   docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+#
+# Pin a specific version instead of :latest via JOBSYNC_IMAGE, e.g.:
+#   JOBSYNC_IMAGE=ghcr.io/rorar/jobsync:v1.2.3 docker compose \
+#     -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+#
+# `pull_policy: always` makes compose pull the image (defined in the base file via
+# `image:`) rather than rebuild it locally. The published image is produced by
+# .github/workflows/docker-publish.yml on push to main + on tags.
+services:
+  app:
+    pull_policy: always
