@@ -126,19 +126,28 @@ Locked decisions + overlooked cross-aggregate items surfaced before implementati
 
 ### Tasks
 
-- [ ] Task 4.1: Unit tests: exact + domain + pattern matches; ReDoS-bounded; non-match passes.
-- [ ] Task 4.2: Extend the `CrmBlocklist` matcher (`isHandleBlocked`) with domain-suffix + pattern
-      modes honouring `BlocklistType`. NOTE: no person auto-creation flow exists yet (zero callers) —
-      expose the matcher as the reusable suppression primitive; the auto-creation call-site is a
-      future hook, not built here. Document this in the spec `@guidance`.
-- [ ] Task 4.3: Anonymize parity — extend `anonymizePerson` blocklist cleanup
-      (`person.actions.ts:425-430`) to also remove **domain-type** entries matching the person's
-      email domain (spec `AnonymizePerson`), symmetric with the new domain matcher.
-- [ ] Task 4.4: Settings UI for the new match modes; i18n; build + tests.
+- [x] Task 4.1: Unit tests: exact + domain + pattern matches; ReDoS-bounded; non-match passes.
+      DONE — `blocklist-match.spec.ts` (12, incl pathological-input ReDoS guard).
+- [x] Task 4.2: Extend the `CrmBlocklist` matcher (`isHandleBlocked`) with domain-suffix + pattern
+      modes honouring `BlocklistType`. DONE (commit 3f4e88a): pure `blocklist-match.ts` leaf +
+      `BlocklistType += pattern`; isHandleBlocked exact fast-path then set-evaluates domain+pattern.
+      Spec updated via /tend (crm-gdpr BlocklistType enum + invariant). NOTE confirmed: no person
+      auto-creation flow exists (zero callers) — shipped as the reusable suppression primitive.
+- [~] Task 4.3: ~~Anonymize parity (domain-type removal)~~ **DROPPED — agent finding was incorrect.**
+      Verified against spec: `FulfillErasureRequest` never deletes Blocklist entries, and
+      `BlocklistSuppressesAutoCreation` uses exact `e = b.handle`. A domain entry is a BROAD user
+      rule (blocks everyone @domain), NOT one person's PII — deleting it on a single person's erasure
+      would wrongly unblock the whole domain. Existing exact-email cleanup is correct + spec-aligned.
+      [[feedback_verify_agent_claims]].
+- [~] Task 4.4: Settings UI — **DEFERRED (no surface exists).** `CrmBlocklist` has NO UI component
+      (zero consumers) and there is no person auto-creation flow, so a settings UI has nothing to
+      drive yet. Building it + the auto-creation call-site is a paired future feature. Action-level
+      type validation (incl `pattern`) ships now; no speculative i18n/UI added.
 
 ### Verification
 
-- [ ] Domain + pattern blocklist entries match per `BlocklistType`; anonymize removes domain entries.
+- [x] Domain + pattern blocklist entries match per `BlocklistType` (matcher + isHandleBlocked tests).
+      Anonymize domain-removal intentionally NOT added (would be incorrect — see 4.3).
 
 ## Phase 5: Gap-7 — updatedBy FK tracking (parallel)
 
