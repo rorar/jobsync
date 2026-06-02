@@ -195,11 +195,13 @@ config {
 -- === Job CRUD ===
 
 rule CreateJob {
-    when: CreateJob(user, title, company, status, location?, source?, job_type, salary_range?, description, job_url?, applied, applied_date?, due_date?, resume?, tags?)
+    when: CreateJob(user, title, company, status, location?, source?, job_type, salary_range?, description, job_url?, applied, applied_date?, due_date?, resume?, tags?, recruiting_company?, relationship_type?)
 
     ensures: Job.created(
         title: title,
         company: company,
+        recruiting_company: recruiting_company,
+        relationship_type: relationship_type,
         status: status,
         location: location,
         source: source,
