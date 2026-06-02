@@ -1055,6 +1055,10 @@ model CrmInterview {
   outcomeNotes  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  // Welle 3 (Gap-7): actor provenance of the last update (type + nullable id;
+  // NOT a hard FK — supports user/automation/self per ACTOR_TYPES, survives deletion).
+  updatedByType String?
+  updatedById   String?
 
   @@index([userId])
   @@index([userId, jobId])
@@ -1098,6 +1102,9 @@ model CrmTask {
   completedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  // Welle 3 (Gap-7): actor provenance of the last update (see ACTOR_TYPES).
+  updatedByType String?
+  updatedById   String?
 
   targets CrmTaskTarget[]
 
@@ -1136,6 +1143,9 @@ model CrmNote {
   body      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // Welle 3 (Gap-7): actor provenance of the last update (see ACTOR_TYPES).
+  updatedByType String?
+  updatedById   String?
 
   targets CrmNoteTarget[]
 

@@ -97,6 +97,26 @@ export type ActivityType =
 // (email/phone) and domain-suffix (domain) suppression.
 export type BlocklistType = "email" | "phone" | "domain" | "pattern";
 
+/**
+ * Actor that last touched a CRM record (Welle 3 Gap-7 / F-AJ-08-adjacent).
+ *
+ * A plain User FK cannot represent every editor: the recruiter-self edit via the
+ * planned reverse-funnel landingpage (ROADMAP 9.5) has NO User account, and an
+ * automation/sync (ROADMAP 1.12) is not a User. So actor provenance is modelled
+ * as a `type` + a nullable `id` (the id is NOT a hard FK — it survives actor
+ * deletion, like CrmActivityLog.actorId and Person's source-tag).
+ *   - user        → a JobSync account edited it; id = userId.
+ *   - automation  → an automation/sync edited it; id = automationId/moduleId.
+ *   - self        → the data subject edited their own record (9.5); id = personId or null.
+ */
+export const ACTOR_TYPES = ["user", "automation", "self"] as const;
+export type ActorType = (typeof ACTOR_TYPES)[number];
+
+/** Runtime membership check for the erased ActorType union (ADR-019). */
+export function isValidActorType(value: unknown): value is ActorType {
+  return typeof value === "string" && (ACTOR_TYPES as readonly string[]).includes(value);
+}
+
 // ---------------------------------------------------------------------------
 // State Machine Validators
 // ---------------------------------------------------------------------------

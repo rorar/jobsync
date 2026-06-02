@@ -144,7 +144,7 @@ export async function startCrmTask(taskId: string): Promise<ActionResult<{ id: s
 
     await prisma.crmTask.update({
       where: { id: taskId },
-      data: { status: "in_progress" },
+      data: { status: "in_progress", updatedByType: "user", updatedById: user.id },
     });
 
     return { success: true, data: { id: taskId } };
@@ -170,7 +170,7 @@ export async function completeCrmTask(taskId: string): Promise<ActionResult<{ id
 
     await prisma.crmTask.update({
       where: { id: taskId },
-      data: { status: "done", completedAt: new Date() },
+      data: { status: "done", completedAt: new Date(), updatedByType: "user", updatedById: user.id },
     });
 
     // Activity log projected via crm-activity-logger consumer (TimelineProjection contract)
@@ -207,7 +207,7 @@ export async function cancelCrmTask(taskId: string): Promise<ActionResult<{ id: 
 
     await prisma.crmTask.update({
       where: { id: taskId },
-      data: { status: "cancelled" },
+      data: { status: "cancelled", updatedByType: "user", updatedById: user.id },
     });
 
     return { success: true, data: { id: taskId } };

@@ -130,6 +130,14 @@ enum ActorSource {
     manual | import | api | system | workflow | email | calendar
 }
 
+enum ActorType {
+    -- Who/what last updated a CRM record (Welle 3 Gap-7, ADR-035). Distinct from
+    -- ActorSource (a data-source channel): this is the editor's identity class.
+    user        -- a JobSync account holder
+    automation  -- an automation / sync (ROADMAP 1.12), not a user
+    self        -- the data subject editing their own record (ROADMAP 9.5), no account
+}
+
 enum ContactChannelType {
     work | home | other
 }
@@ -252,6 +260,11 @@ entity Interview {
     outcome_notes: String?
     created_at: Timestamp
     updated_at: Timestamp
+    -- Update-actor provenance (Gap-7, ADR-035): type + nullable id (NOT a FK —
+    -- survives actor deletion; the editor may be a user, an automation, or the
+    -- data subject themselves, who has no account).
+    updated_by_type: ActorType?
+    updated_by_id: String?
 
     transitions status {
         scheduled -> completed
@@ -276,6 +289,9 @@ entity Task {
     created_at: Timestamp
     updated_at: Timestamp
     completed_at: Timestamp?
+    -- Update-actor provenance (Gap-7, ADR-035): see ActorType.
+    updated_by_type: ActorType?
+    updated_by_id: String?
 
     targets: TaskTarget with task = this
 
@@ -307,6 +323,9 @@ entity Note {
     body: String
     created_at: Timestamp
     updated_at: Timestamp
+    -- Update-actor provenance (Gap-7, ADR-035): see ActorType.
+    updated_by_type: ActorType?
+    updated_by_id: String?
     targets: NoteTarget with note = this
 }
 
