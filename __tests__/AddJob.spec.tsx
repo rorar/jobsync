@@ -24,6 +24,16 @@ jest.mock("@/actions/reference-data.actions", () => ({
 jest.mock("@/actions/userSettings.actions", () => ({
   getJobFormSettings: jest.fn().mockResolvedValue({ fixumDisablesRange: true }),
 }));
+// Welle 3 F-AJ-07: AddJob loads persons for the contact picker (create-only) and
+// links the optional contact after a successful create.
+jest.mock("@/actions/person.actions", () => ({
+  getPersons: jest
+    .fn()
+    .mockResolvedValue({ success: true, data: { persons: [], total: 0 } }),
+}));
+jest.mock("@/actions/jobContact.actions", () => ({
+  addJobContact: jest.fn().mockResolvedValue({ success: true, data: { id: "jc-1" } }),
+}));
 
 jest.mock("next/navigation", () => ({
   redirect: jest.fn(),
@@ -249,7 +259,21 @@ describe("AddJob Component", () => {
         resume: "",
         tags: [],
         sendToQueue: false,
+        // Welle 3 F-AJ-07: optional point-of-contact (untouched → empty defaults)
+        contactPersonId: "",
+        contactRole: "",
       });
     });
+  });
+
+  it("renders the optional Point-of-Contact picker in create mode with the role field disabled until a person is chosen", async () => {
+    // The create dialog is already open (beforeEach clicks add-job-btn).
+    await screen.findByTestId("add-job-dialog-title");
+
+    // Block label present (create-only)
+    expect(screen.getByText("Point of Contact")).toBeInTheDocument();
+    // Role field starts disabled (no person selected yet)
+    const roleInput = screen.getByPlaceholderText("Recruiter, Hiring Manager…");
+    expect(roleInput).toBeDisabled();
   });
 });

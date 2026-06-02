@@ -87,6 +87,11 @@ export const AddJobFormSchema = z.object({
   resume: z.string().optional(),
   tags: z.array(z.string()).max(10).optional().default([]),
   sendToQueue: z.boolean().default(false),
+  // Welle 3 (F-AJ-07): optional point-of-contact, create-only. Consumed client-side
+  // after addJob succeeds (calls jobContact.actions.addJobContact) — addJob itself
+  // ignores these fields, so the Job aggregate write path is unchanged.
+  contactPersonId: z.string().optional(),
+  contactRole: z.string().max(120).nullable().optional(),
 }).superRefine((data, ctx) => {
   // compensation.allium SalaryMaxGteMin — reject an inverted range at the form
   // boundary so the user gets inline feedback (the server builder also swaps as
