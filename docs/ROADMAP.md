@@ -2428,6 +2428,28 @@ Eigenständige README für den Fork (@rorar/jobsync) — das Projekt als eigenst
 - Schema-Mapping, Daten-Export/Import, Validierung
 - Einmalige Migration mit Rollback-Möglichkeit
 
+**Divergenz-Analyse (Stand 2026-06-02, Fork-`main` `60a8856` vs `upstream/main`):**
+- Fork **920 commits ahead, 72 behind** upstream; **56 vs 19** Prisma-Migrationen.
+  Gemeinsame Basis-Migrationen sind **byte-identisch** (kein Checksum-Drift auf den
+  geteilten Karten) — saubere gemeinsame Abstammung.
+- **Einziger harter Blocker** für „bestehende Upstream-DB → Fork": Upstream hat eine
+  Migration, die der Fork NICHT hat — `20260326034736_add_cover_letter` (legt Tabelle
+  `CoverLetter` an + redefiniert `Job`/`Resume`). Der Fork kennt kein coverLetter.
+  Folge: `prisma migrate deploy` auf einer Upstream-DB meldet **Drift** (eine in der DB
+  eingetragene Migration fehlt im Fork-Ordner) und verweigert; die 22 Tabellen-Rebuild-
+  Migrationen des Forks kollidieren mit dem cover-letter-geformten Schema; `CoverLetter`-
+  Daten wären verwaist.
+- **Offene Entscheidung (8.x Feature-Vergleichstabelle, NICHT blind mergen):** Cover-Letter
+  portieren vs. weglassen — bewusst pro Feature wählen, kein `git merge upstream`.
+- **Datenform sonst vorwärtskompatibel:** Fork-Additionen sind fast nur neue Tabellen +
+  nullable Spalten; bestehende User/Job/Profile/Resume-Zeilen passen. `Job.salaryRange`
+  bleibt (deprecated, computed) → Alt-Gehälter überleben, Backfill füllt die strukturierten
+  Felder. Neue Pflicht-Config: `AUTH_SECRET` (ADR-018), `ADMIN_USER_IDS` (Multi-User).
+- **Fazit:** Fresh-Install → Fork ist **heute schon sicher** (alle 56 Migrationen from
+  scratch). Bestehende Upstream-DB → braucht diese 8.5-Brücke (Backup + Schema-Mapping +
+  Rollback) + die Cover-Letter-Entscheidung. **Reihenfolge:** erst offene Tracks
+  (Welle 3/4, Tech-Debt) abschließen, dann 8.5 angehen.
+
 ### 8.6 Backup & Restore
 Infrastructure Service — kein Domain-Concern. Distinct von DSGVO-Export (6.1): Export = per-User Datenportabilität, Backup = Operator-level Disaster Recovery.
 
