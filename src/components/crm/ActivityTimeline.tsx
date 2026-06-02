@@ -10,12 +10,15 @@ import {
   ArrowRightLeft, FileText, CheckSquare, Calendar,
   UserPlus, UserCog, Mail, MailOpen, Phone, Paperclip,
   Bell, Send, FileCheck, Activity as ActivityIcon,
+  UserX, AlertTriangle,
 } from "lucide-react";
 import type { ActivityType } from "@/models/person.model";
 
 interface ActivityTimelineProps {
   targetPersonId?: string;
   targetJobId?: string;
+  /** Welle 3 (P3): filter the timeline by company (Job-detail CRM tab). */
+  targetCompanyId?: string;
 }
 
 const ACTIVITY_ICONS: Record<string, React.ElementType> = {
@@ -34,6 +37,8 @@ const ACTIVITY_ICONS: Record<string, React.ElementType> = {
   reminder_triggered: Bell,
   follow_up_sent: Send,
   application_submitted: FileCheck,
+  contact_deleted: UserX,
+  automation_degraded: AlertTriangle,
 };
 
 const ACTIVITY_TYPES: ActivityType[] = [
@@ -41,10 +46,10 @@ const ACTIVITY_TYPES: ActivityType[] = [
   "interview_scheduled", "interview_completed", "contact_created",
   "contact_updated", "email_sent", "email_received", "call_logged",
   "document_attached", "reminder_triggered", "follow_up_sent",
-  "application_submitted",
+  "application_submitted", "contact_deleted", "automation_degraded",
 ];
 
-export function ActivityTimeline({ targetPersonId, targetJobId }: ActivityTimelineProps) {
+export function ActivityTimeline({ targetPersonId, targetJobId, targetCompanyId }: ActivityTimelineProps) {
   const { t, locale } = useTranslations();
   const [activities, setActivities] = useState<Record<string, unknown>[]>([]);
   const [total, setTotal] = useState(0);
@@ -56,6 +61,7 @@ export function ActivityTimeline({ targetPersonId, targetJobId }: ActivityTimeli
     const result = await getActivityTimeline({
       targetPersonId,
       targetJobId,
+      targetCompanyId,
       activityType: filter !== "all" ? (filter as ActivityType) : undefined,
       pageSize: 100,
     });
@@ -65,7 +71,7 @@ export function ActivityTimeline({ targetPersonId, targetJobId }: ActivityTimeli
       setTotal(data.total);
     }
     setLoading(false);
-  }, [targetPersonId, targetJobId, filter]);
+  }, [targetPersonId, targetJobId, targetCompanyId, filter]);
 
   useEffect(() => { load(); }, [load]);
 

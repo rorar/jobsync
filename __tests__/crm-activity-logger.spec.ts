@@ -93,6 +93,52 @@ describe("crm-activity-logger", () => {
     });
   });
 
+  // Welle 3 (P3): job-bearing projections resolve the job's company so entries
+  // also surface on the Company timeline.
+  it("status_changed resolves targetCompanyId from the job", async () => {
+    mockFindUnique.mockResolvedValueOnce({ companyId: "company-9" });
+    await emit(DomainEventType.JobStatusChanged, {
+      jobId: "job-1",
+      userId: "user-1",
+      previousStatusValue: "applied",
+      newStatusValue: "interview",
+      historyEntryId: "hist-1",
+    });
+    expect(mockFindUnique).toHaveBeenCalledWith({
+      where: { id: "job-1" },
+      select: { companyId: true },
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "status_changed",
+        targetJobId: "job-1",
+        targetCompanyId: "company-9",
+      }),
+    });
+  });
+
+  it("interview_scheduled resolves targetCompanyId alongside the job title", async () => {
+    mockFindUnique.mockResolvedValueOnce({
+      JobTitle: { label: "Staff Engineer" },
+      companyId: "company-7",
+    });
+    await emit(DomainEventType.InterviewScheduled, {
+      interviewId: "iv-1",
+      jobId: "job-1",
+      personId: "person-1",
+      userId: "user-1",
+      interviewDate: new Date().toISOString(),
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "interview_scheduled",
+        targetJobId: "job-1",
+        targetCompanyId: "company-7",
+        linkedRecordName: "Staff Engineer",
+      }),
+    });
+  });
+
   it("creates activity log for ContactCreated with DB lookup", async () => {
     mockFindUnique.mockResolvedValueOnce({
       firstName: "Jane",

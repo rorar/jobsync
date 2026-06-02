@@ -99,15 +99,24 @@ export function registerCrmActivityLogConsumers(): void {
     DomainEventType.JobStatusChanged,
     JobStatusChangedPayloadSchema,
     "status_changed",
-    (p) => ({
-      userId: p.userId,
-      actorId: p.userId,
-      targetJobId: p.jobId,
-      details: JSON.stringify({
-        previousStatus: p.previousStatusValue,
-        newStatus: p.newStatusValue,
-      }),
-    }),
+    async (p) => {
+      // Welle 3 (P3): resolve the job's company so the entry also lands on the
+      // Company timeline.
+      const job = await prisma.job.findUnique({
+        where: { id: p.jobId },
+        select: { companyId: true },
+      });
+      return {
+        userId: p.userId,
+        actorId: p.userId,
+        targetJobId: p.jobId,
+        targetCompanyId: job?.companyId ?? null,
+        details: JSON.stringify({
+          previousStatus: p.previousStatusValue,
+          newStatus: p.newStatusValue,
+        }),
+      };
+    },
   );
 
   // ContactCreated → contact_created (DB lookup: Person name)
@@ -178,13 +187,14 @@ export function registerCrmActivityLogConsumers(): void {
     async (p) => {
       const job = await prisma.job.findUnique({
         where: { id: p.jobId },
-        select: { JobTitle: { select: { label: true } } },
+        select: { JobTitle: { select: { label: true } }, companyId: true },
       });
       return {
         userId: p.userId,
         actorId: p.userId,
         targetJobId: p.jobId,
         targetPersonId: p.personId ?? null,
+        targetCompanyId: job?.companyId ?? null,
         linkedRecordName: job?.JobTitle?.label ?? null,
       };
     },
@@ -198,12 +208,13 @@ export function registerCrmActivityLogConsumers(): void {
     async (p) => {
       const job = await prisma.job.findUnique({
         where: { id: p.jobId },
-        select: { JobTitle: { select: { label: true } } },
+        select: { JobTitle: { select: { label: true } }, companyId: true },
       });
       return {
         userId: p.userId,
         actorId: p.userId,
         targetJobId: p.jobId,
+        targetCompanyId: job?.companyId ?? null,
         linkedRecordName: job?.JobTitle?.label ?? null,
       };
     },
@@ -285,12 +296,13 @@ export function registerCrmActivityLogConsumers(): void {
     async (p) => {
       const job = await prisma.job.findUnique({
         where: { id: p.jobId },
-        select: { JobTitle: { select: { label: true } }, Company: { select: { label: true } } },
+        select: { JobTitle: { select: { label: true } }, companyId: true },
       });
       return {
         userId: p.userId,
         actorId: p.userId,
         targetJobId: p.jobId,
+        targetCompanyId: job?.companyId ?? null,
         linkedRecordName: job?.JobTitle?.label ?? null,
         details: JSON.stringify({ stagedVacancyId: p.stagedVacancyId }),
       };
