@@ -2555,6 +2555,15 @@ Vorstufe für externe Module: Interne Module müssen zuerst selbstbeschreibend s
 - Cross-Ref: Administrative Queue (8.4) zeigt fehlgeschlagene Tasks
 
 ### 8.9 Docker & Deployment Improvements
+
+> **Teil-erledigt (2026-06-02):** Fork-Deploy-Pfad steht — `docker-compose.yml` baut jetzt
+> die Fork-Quelle (statt Upstream-Image), `docker-compose.ghcr.yml` zieht alternativ das
+> publizierte Image; `.github/workflows/docker-publish.yml` baut multi-arch
+> (amd64+arm64) + pusht nach `ghcr.io/rorar/jobsync` (latest/branch/sha/semver) via
+> `GITHUB_TOKEN`. Runbook: `docs/deploy-runbook.md`. **Offen:** Health-Check auf
+> `/api/health` (→ 8.8), Watchtower-Update-Mechanismus, Compose-Profile, Trivy-Scan,
+> README-Badges.
+
 - **Docker Compose:** Fertige `docker-compose.yml` für One-Command Setup
 - **Multi-Arch Builds:** ARM64 Support (Raspberry Pi, Synology NAS, Apple Silicon)
 - **Dockerfile Health Check:** `HEALTHCHECK` Directive nutzt `/api/health` Endpoint (→ 8.8)
