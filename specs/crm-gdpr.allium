@@ -48,7 +48,7 @@ external entity TaskTarget { task: Task?, target_person: Person? }
 external entity TimelineActivity { target_person: Person?, happens_at: Timestamp }
 external entity MessageParticipant { handle: String?, person: Person?, display_name: String? }
 external entity CalendarEventParticipant { handle: String?, person: Person?, display_name: String? }
-external entity Blocklist { handle: String }
+external entity Blocklist { handle: String, type: BlocklistType }
 external entity Attachment { target_person: Person? }
 
 -- =============================================================================
@@ -60,6 +60,15 @@ enum DataSource {
     manual
     auto_created
     imported
+}
+
+enum BlocklistType {
+    -- How a Blocklist entry's handle is matched against a person's handles
+    -- (Welle 3 Gap-6).
+    email      -- exact email handle
+    phone      -- exact phone handle
+    domain     -- the email's domain or any parent domain (acme.com ⊇ eu.acme.com)
+    pattern    -- a `*`-glob over the handle (ReDoS-safe matching)
 }
 
 enum ProcessingBasis {
@@ -511,12 +520,19 @@ invariant AutoCreatedContactHasRetention {
 }
 
 invariant BlocklistSuppressesAutoCreation {
-    -- No Person should be auto-created for a handle that is blocklisted.
-    -- This is enforced at creation time, not as a retroactive check.
+    -- No Person should be auto-created for a handle suppressed by the blocklist.
+    -- Enforced at creation time, not as a retroactive check. A Blocklist entry
+    -- suppresses according to its `type` (Welle 3 Gap-6):
+    --   email | phone → exact handle match
+    --   domain        → the email's domain or any parent domain
+    --   pattern       → a `*`-glob over the handle (ReDoS-safe)
+    -- Only the exact (email) case is expressible as a pure set predicate here;
+    -- the domain-suffix and glob modes are defined by the blocklist matching
+    -- rules and enforced by the same suppression check.
     for gdpr in PersonGdprExtensions:
         if gdpr.data_source = auto_created:
             not exists b in Blocklists
-            where gdpr.person.emails.any(e => e = b.handle)
+            where b.type = email and gdpr.person.emails.any(e => e = b.handle)
 }
 
 -- =============================================================================
