@@ -34,7 +34,9 @@ export async function addJobContact(
       },
     });
 
-    eventBus.publish(createEvent(DomainEventType.ContactUpdated, { personId, userId: user.id }));
+    // Welle 3 (Task 1.5): carry jobId so the activity projection writes
+    // targetJobId (+ resolves targetCompanyId) — link shows on Job/Company timelines.
+    eventBus.publish(createEvent(DomainEventType.ContactUpdated, { personId, userId: user.id, jobId }));
 
     return { success: true, data: { id: contact.id } };
   } catch (error) {
@@ -59,7 +61,8 @@ export async function removeJobContact(
 
     await prisma.jobContact.delete({ where: { id: jobContactId } });
 
-    eventBus.publish(createEvent(DomainEventType.ContactUpdated, { personId: entry.personId, userId: user.id }));
+    // Welle 3 (Task 1.5): unlink also carries jobId so it shows on the Job timeline.
+    eventBus.publish(createEvent(DomainEventType.ContactUpdated, { personId: entry.personId, userId: user.id, jobId: entry.jobId }));
 
     return { success: true, data: { id: jobContactId } };
   } catch (error) {

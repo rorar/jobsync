@@ -233,6 +233,7 @@ export const ContactCreatedPayloadSchema = z.object({
 export const ContactUpdatedPayloadSchema = z.object({
   personId: z.string(),
   userId: z.string(),
+  jobId: z.string().optional(),
 }) satisfies z.ZodType<ContactUpdatedPayload>;
 
 export const ContactDeletedPayloadSchema = z.object({

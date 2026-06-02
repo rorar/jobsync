@@ -179,6 +179,48 @@ describe("crm-activity-logger", () => {
     consoleSpy.mockRestore();
   });
 
+  // Welle 3 Task 1.5: a job↔person link carries jobId so the contact_updated
+  // row gets targetJobId + targetCompanyId (resolved from the job) → visible on
+  // the Job and Company timelines, not just the Person timeline.
+  it("creates contact_updated with targetJobId + resolved targetCompanyId when jobId present", async () => {
+    mockFindUnique.mockResolvedValueOnce({ companyId: "company-1" });
+
+    await emit(DomainEventType.ContactUpdated, {
+      personId: "person-1",
+      userId: "user-1",
+      jobId: "job-1",
+    });
+
+    expect(mockFindUnique).toHaveBeenCalledWith({
+      where: { id: "job-1" },
+      select: { companyId: true },
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "contact_updated",
+        targetPersonId: "person-1",
+        targetJobId: "job-1",
+        targetCompanyId: "company-1",
+      }),
+    });
+  });
+
+  it("creates contact_updated with person target only when no jobId (backward compatible)", async () => {
+    await emit(DomainEventType.ContactUpdated, {
+      personId: "person-1",
+      userId: "user-1",
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "contact_updated",
+        targetPersonId: "person-1",
+      }),
+    });
+    // No job lookup when jobId absent.
+    expect(mockFindUnique).not.toHaveBeenCalled();
+  });
+
   it("logs error but does not throw when DB create fails", async () => {
     mockCreate.mockRejectedValueOnce(new Error("DB write failed"));
     const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});

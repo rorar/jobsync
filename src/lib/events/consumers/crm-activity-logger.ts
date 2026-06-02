@@ -130,15 +130,30 @@ export function registerCrmActivityLogConsumers(): void {
   );
 
   // ContactUpdated → contact_updated
+  // Welle 3 (Task 1.5): when the update is a job↔person link/unlink (jobId set),
+  // also stamp targetJobId and resolve targetCompanyId from the job, so the link
+  // surfaces on the Job and Company timelines — not only the Person timeline.
   registerProjection(
     DomainEventType.ContactUpdated,
     ContactUpdatedPayloadSchema,
     "contact_updated",
-    (p) => ({
-      userId: p.userId,
-      actorId: p.userId,
-      targetPersonId: p.personId,
-    }),
+    async (p) => {
+      let targetCompanyId: string | null = null;
+      if (p.jobId) {
+        const job = await prisma.job.findUnique({
+          where: { id: p.jobId },
+          select: { companyId: true },
+        });
+        targetCompanyId = job?.companyId ?? null;
+      }
+      return {
+        userId: p.userId,
+        actorId: p.userId,
+        targetPersonId: p.personId,
+        targetJobId: p.jobId ?? null,
+        targetCompanyId,
+      };
+    },
   );
 
   // ContactDeleted → contact_deleted
