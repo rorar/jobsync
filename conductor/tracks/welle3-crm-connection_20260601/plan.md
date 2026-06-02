@@ -80,15 +80,25 @@ Locked decisions + overlooked cross-aggregate items surfaced before implementati
 
 ### Tasks
 
-- [ ] Task 2.1: Unit test: `relationshipType` boundary validation (runtime membership) +
-      hiring-vs-recruiting company distinction.
-- [ ] Task 2.2: Prisma migration: add `recruitingCompanyId` (FK) + `relationshipType` to Job.
-- [ ] Task 2.3: UI to set the recruiting company + relationship type on the Job form.
-- [ ] Task 2.4: i18n relationship-type labels; build + tests.
+- [x] Task 2.1: Unit test: `relationshipType` boundary validation (runtime membership) +
+      hiring-vs-recruiting company distinction. DONE — `relationshipType.spec.ts` (4 tests):
+      RELATIONSHIP_TYPES const + `isValidRelationshipType` (erased-union guard, ADR-019).
+- [x] Task 2.2: Prisma migration: add `recruitingCompanyId` (FK) + `relationshipType` to Job.
+      DONE — migration `20260602090323`; named "HiringCompany"/"RecruitingCompany" relations,
+      Company back-relation + index; FK onDelete SetNull.
+- [x] Task 2.3: UI to set the recruiting company + relationship type on the Job form. DONE
+      (commit 5b6d848): recruiting-company combobox (creatable) + relationship-type select in
+      AddJob, create + edit, prefilled on edit. addJob/updateJob persist + FK-verify ownership +
+      sanitize type; getJobsList selects the relation; JOB_*_SELECT leak-guarded (relation+type,
+      not raw FK).
+- [x] Task 2.4: i18n relationship-type labels; build + tests. DONE — crm.recruitingCompany /
+      relationshipType / relationship.{direct,recruiting_agency,staffing_agency} ×4;
+      dictionary-completeness green. Spec: job-aggregate.allium RelationshipType + invariant (via /tend).
 
 ### Verification
 
-- [ ] A job can record a distinct recruiting agency + relationship type; invalid types rejected.
+- [x] A job can record a distinct recruiting agency + relationship type; invalid types rejected
+      (isValidRelationshipType at the boundary; recruitingCompany FK-ownership verified).
 
 ## Phase 3: Gap-5 — Job-detail CRM tab + CompanyTimeline (parallel)
 
