@@ -107,11 +107,23 @@ declared-but-unenforced before). Two spec edits:
   written once the display surface lands; noted as a follow-up rather than documenting
   a half-visible feature.
 
-### Open items for the human (none block the push)
+### Open items for the human (none block anything)
+
+RESOLVED since this handoff was first written (do NOT re-flag):
+- ✅ `/understand` graph refresh — DONE in a separate session: commit `60a8856`
+  "chore(understand): refresh knowledge graph after Welle 2", pushed to fork `main`.
+- ✅ Migration `20260601205337_add_profile_userid_unique` — NOT a manual step: applies
+  automatically on deploy (`docker-entrypoint.sh` → `prisma migrate deploy`); already
+  applied on the dev DB. (Only fails a deploy if duplicate Profiles exist — they don't,
+  single-user self-hosted.)
+- ✅ Dev-DB salary backfill — run (1 job: `"7"` → 60000–70000); idempotent re-run = 0.
+
+STILL OPEN (deferred, non-blocking):
 1. Run the real (non-DRY) `scripts/migrate-job-salary-structured.ts` backfill on the
-   production DB when ready.
-2. Apply migration `20260601205337_add_profile_userid_unique` on prod (additive unique
-   index; assumes ≤1 Profile per user — true for single-user self-hosted).
-3. Follow-up (memory-tracked, non-blocking): DISPLAY structured salary + bonus on job
-   detail/cards; relocate the eager currency/settings fetch in `AddJob` to dialog-open;
-   write the User-Guide salary section once display lands.
+   PRODUCTION DB once deployed (optional; only fills pre-existing jobs).
+2. Follow-up (memory-tracked): DISPLAY structured salary + bonus on job detail/cards;
+   relocate the eager currency/settings fetch in `AddJob` to dialog-open; write the
+   User-Guide salary section once a display surface lands.
+
+> Future agents: the RESOLVED items above are DONE — do not re-surface them as open.
+> Welle 2 is genuinely complete (merged `d9b9d22`, pushed to fork `main`).
