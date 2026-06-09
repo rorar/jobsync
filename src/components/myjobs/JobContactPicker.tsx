@@ -18,11 +18,80 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import type { CompanyAssociation, TypedEmail } from "@/models/person.model";
 
+/**
+ * Two-tier option shape for the people-picker.
+ *
+ * - `name`       — primary line, the person's full name (the accessible label).
+ * - `secondary`  — muted second line: the most task-relevant identifier
+ *                  (role · company → company → primary email → ""). May be "".
+ * - `searchText` — pre-lowercased haystack (name + emails + company labels +
+ *                  roles) so the manual filter matches far more than the visible
+ *                  label. Computed once in the AddJob mapping, not per keystroke.
+ */
 export interface PersonOption {
   id: string;
-  /** Display label, e.g. "First Last — primaryEmail" */
-  label: string;
+  name: string;
+  secondary: string;
+  searchText: string;
+}
+
+/**
+ * Person fields needed to derive a {@link PersonOption}.
+ *
+ * `emails`/`companies` are the already-deserialized value objects — `getPersons`
+ * (the Person repository) parses the JSON columns before returning, so the
+ * picker never re-parses (DDD: deserialization is a repository concern).
+ */
+export interface PersonOptionSource {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  emails?: TypedEmail[] | null;
+  companies?: CompanyAssociation[] | null;
+}
+
+/**
+ * Derive the two-tier picker option from a Person.
+ *
+ * Company selection for the secondary line: the primary association if present,
+ * else the first association that carries a role, else the first association.
+ * Secondary-line priority: "role · company" → "company" → primary email → "".
+ * Tolerant of null/missing collections (treated as empty).
+ */
+export function toPersonOption(src: PersonOptionSource): PersonOption {
+  const name = `${src.firstName ?? ""} ${src.lastName ?? ""}`.trim();
+
+  const companies = (src.companies ?? []).filter((c) => c.companyLabel);
+  const emails = src.emails ?? [];
+  const primaryEmail =
+    emails.find((e) => e.isPrimary)?.email ?? emails[0]?.email ?? "";
+
+  const chosenCompany =
+    companies.find((c) => c.isPrimary) ??
+    companies.find((c) => (c.role ?? "").trim()) ??
+    companies[0];
+
+  let secondary = "";
+  if (chosenCompany) {
+    const role = (chosenCompany.role ?? "").trim();
+    secondary = role
+      ? `${role} · ${chosenCompany.companyLabel}`
+      : chosenCompany.companyLabel;
+  } else if (primaryEmail) {
+    secondary = primaryEmail;
+  }
+
+  const searchParts = [
+    name,
+    ...emails.map((e) => e.email),
+    ...companies.map((c) => c.companyLabel),
+    ...companies.map((c) => c.role ?? ""),
+  ].filter(Boolean);
+  const searchText = searchParts.join(" ").toLowerCase();
+
+  return { id: src.id, name, secondary, searchText };
 }
 
 interface JobContactPickerProps {
@@ -43,6 +112,10 @@ interface JobContactPickerProps {
  * person creation lives on /contacts). Mirrors the CountrySelect pattern:
  * props-based options, cmdk `shouldFilter={false}` + manual filter so the clear
  * item stays visible, controlled inputValue reset on close, aria-live announce.
+ *
+ * Each item is two-tier: the person's name (primary, the accessible label) over
+ * a muted secondary identifier. The manual filter matches `searchText`, not the
+ * visible label, so typing a company or role finds the person too.
  */
 export function JobContactPicker({
   value,
@@ -65,7 +138,7 @@ export function JobContactPicker({
   const filtered = useMemo(() => {
     const q = inputValue.trim().toLowerCase();
     if (!q) return persons;
-    return persons.filter((p) => p.label.toLowerCase().includes(q));
+    return persons.filter((p) => p.searchText.includes(q));
   }, [persons, inputValue]);
 
   return (
@@ -87,7 +160,7 @@ export function JobContactPicker({
           className={cn("w-full justify-between font-normal", className)}
         >
           {selectedPerson ? (
-            <span className="truncate">{selectedPerson.label}</span>
+            <span className="truncate">{selectedPerson.name}</span>
           ) : (
             <span className="text-muted-foreground">{t("crm.selectContact")}</span>
           )}
@@ -135,14 +208,26 @@ export function JobContactPicker({
               {filtered.map((p) => (
                 <CommandItem
                   key={p.id}
-                  value={`${p.label} ${p.id}`}
+                  // value keys off name+id (NOT the muted line) so cmdk
+                  // type-ahead + uniqueness work even on duplicate names.
+                  value={`${p.name} ${p.id}`}
                   onSelect={() => {
                     onValueChange(p.id);
-                    setAnnouncement(`${p.label}: ${t("crm.contactSelected")}`);
+                    setAnnouncement(`${p.name}: ${t("crm.contactSelected")}`);
                     setOpen(false);
                   }}
                 >
-                  <span className="flex-1 truncate">{p.label}</span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate">{p.name}</span>
+                    {p.secondary && (
+                      <span
+                        data-testid="contact-option-secondary"
+                        className="truncate text-xs text-muted-foreground"
+                      >
+                        {p.secondary}
+                      </span>
+                    )}
+                  </span>
                   {p.id === value && <Check className="ml-2 h-4 w-4 shrink-0" />}
                 </CommandItem>
               ))}

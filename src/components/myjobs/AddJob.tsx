@@ -60,10 +60,14 @@ import { connectorRegistry } from "@/lib/connector/job-discovery/registry";
 import { createJobTitle } from "@/actions/jobtitle.actions";
 import { addCompany } from "@/actions/company.actions";
 import { createLocation, createJobSource } from "@/actions/job.actions";
-import { JobContactPicker, type PersonOption } from "./JobContactPicker";
+import {
+  JobContactPicker,
+  toPersonOption,
+  type PersonOption,
+} from "./JobContactPicker";
 import { addJobContact } from "@/actions/jobContact.actions";
 import { getPersons } from "@/actions/person.actions";
-import { parseEmails } from "@/models/person.model";
+import type { CompanyAssociation, TypedEmail } from "@/models/person.model";
 
 /** Display names for connector modules used as job sources */
 const CONNECTOR_SOURCE_LABELS: Record<string, string> = {
@@ -254,18 +258,17 @@ export function AddJob({
         const result = await getPersons({ pageSize: 200 });
         if (!active || !result.success || !result.data) return;
         setPersons(
-          result.data.persons.map((p) => {
-            const firstName = (p.firstName as string) ?? "";
-            const lastName = (p.lastName as string) ?? "";
-            const emails = parseEmails(p.emails as string | null);
-            const primaryEmail =
-              emails.find((e) => e.isPrimary)?.email ?? emails[0]?.email ?? "";
-            const emailSuffix = primaryEmail ? ` — ${primaryEmail}` : "";
-            return {
+          result.data.persons.map((p) =>
+            toPersonOption({
               id: p.id as string,
-              label: `${firstName} ${lastName}${emailSuffix}`.trim(),
-            };
-          }),
+              firstName: p.firstName as string | null,
+              // getPersons (the Person repository) returns already-parsed value
+              // objects for the JSON columns — no re-parse here.
+              emails: p.emails as TypedEmail[] | null,
+              companies: p.companies as CompanyAssociation[] | null,
+              lastName: p.lastName as string | null,
+            }),
+          ),
         );
       } catch (error) {
         console.error("Failed to load contacts:", error);
