@@ -329,6 +329,21 @@ List the authenticated user's jobs with pagination, filtering, and search.
 
 Create a new job application.
 
+> **⚠️ Doc drift (pre-existing):** the request/response examples below predate the
+> name-string job schema. The live `CreateJobSchema` (`src/lib/api/schemas.ts`)
+> takes **name strings** (`title`, `company`, `location`, `source`) resolved via
+> `findOrCreate`, **not** uuid `*Id` fields, and the response uses `JOB_API_SELECT`
+> (no `matchData`/FK leak). Treat `src/lib/api/schemas.ts` + `helpers.ts` as the
+> source of truth. Full rewrite of these examples is a tracked follow-up.
+>
+> **Recruiter triangle (Welle 3 F-AJ-08) — writable since `feat/api-v1-recruiter-write`:**
+> - `recruitingCompany` *(string, optional)* — a recruiting-agency NAME, resolved
+>   like `company`. Trimmed-empty/null ⇒ no recruiter (never an empty upsert).
+> - `relationshipType` *(enum, optional)* — `direct | recruiting_agency | staffing_agency`;
+>   an invalid value is rejected **400**. Independent of `recruitingCompany`.
+> - Response exposes the `RecruitingCompany` relation + `relationshipType`, never
+>   the raw `recruitingCompanyId` FK.
+
 **Request Body:**
 ```json
 {
@@ -438,6 +453,12 @@ Get full details for a single job, including description and tags.
 ### `PATCH /api/v1/jobs/:id`
 
 Partial update of a job. Only provided fields are updated.
+
+> **Recruiter triangle (Welle 3 F-AJ-08):** `recruitingCompany` and
+> `relationshipType` are patchable. Optional-field clear pattern — a non-empty
+> name resolves to an id; `""`/`null` clears; an absent field is left untouched.
+> `relationshipType` persists as-is or `null`; an invalid enum value is rejected
+> **400**. (Same pre-existing example-drift caveat as POST above applies.)
 
 **Request Body:** (all fields optional)
 ```json

@@ -7,7 +7,7 @@ import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import { buildJobSalaryData } from "@/lib/salary/build-job-salary";
 import { parseSalaryRange } from "@/lib/salary/parse-salary-range";
 import type { JobBonus } from "@/lib/salary/bonus";
-import type { SalaryPeriod } from "@/models/job.model";
+import type { SalaryPeriod, RelationshipType } from "@/models/job.model";
 
 /** CORS preflight */
 export const OPTIONS = withApiAuth(async () => new Response(null));
@@ -137,6 +137,10 @@ export const DELETE = withApiAuth(async (_req, { userId, params }) => {
 type UpdateFields = Partial<{
   title: string;
   company: string;
+  // Welle 3 (F-AJ-08): recruiter triangle. recruitingCompany is a clearable NAME
+  // string; relationshipType is an enum (already Zod-validated) or null.
+  recruitingCompany: string | null;
+  relationshipType: RelationshipType | null;
   location: string | null;
   source: string | null;
   type: string;
@@ -187,6 +191,19 @@ async function buildUpdateData(
       }),
     );
   }
+  // Welle 3 (F-AJ-08): recruiter triangle. Follows the optional-field clear pattern
+  // (mirrors `location`): a non-empty name resolves to an id; "" / null clears.
+  if (updates.recruitingCompany !== undefined) {
+    if (updates.recruitingCompany) {
+      resolvers.push(
+        findOrCreate("company", userId, updates.recruitingCompany).then((r) => {
+          data.recruitingCompanyId = r.id;
+        }),
+      );
+    } else {
+      data.recruitingCompanyId = null;
+    }
+  }
   if (updates.location !== undefined) {
     if (updates.location) {
       resolvers.push(
@@ -214,6 +231,8 @@ async function buildUpdateData(
 
   // 2. Map simple scalar fields
   if (updates.type !== undefined) data.jobType = updates.type;
+  // relationshipType is already Zod-enum-validated; persist as-is or null (clear).
+  if (updates.relationshipType !== undefined) data.relationshipType = updates.relationshipType ?? null;
   // Salary: if any salary field is touched, recompute all salary columns.
   // Structured fields win; a legacy free-text salaryRange is parsed as fallback.
   const salaryTouched =

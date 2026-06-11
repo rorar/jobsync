@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SALARY_PERIODS } from "@/models/job.model";
+import { SALARY_PERIODS, RELATIONSHIP_TYPES } from "@/models/job.model";
 import { isValidCurrencyCode } from "@/lib/connector/reference-data/modules/currency/currency-data";
 
 /**
@@ -24,6 +24,14 @@ export const JobsListQuerySchema = PaginationSchema.extend({
 export const CreateJobSchema = z.object({
   title: z.string().trim().min(1, "Job title is required").max(500),
   company: z.string().trim().min(1, "Company is required").max(500),
+  // Welle 3 (F-AJ-08): recruiter triangle — write parity with the response shape.
+  // recruitingCompany is a NAME string (mirrors `company`) but, unlike the required
+  // hiring company, it is OPTIONAL and CLEARABLE — so it follows the `location`
+  // optional-field pattern (no `.min(1)`): trimmed-empty / null ⇒ "no recruiter".
+  recruitingCompany: z.string().trim().max(500).nullable().optional(),
+  // relationshipType is a Zod-validated enum boundary: an invalid value is a 400
+  // (we prefer an explicit reject over the form layer's silent coerce-to-null).
+  relationshipType: z.enum(RELATIONSHIP_TYPES).nullable().optional(),
   location: z.string().max(500).optional(),
   type: z.string().max(100).default("Full-time"),
   status: z.string().max(100).optional(),
