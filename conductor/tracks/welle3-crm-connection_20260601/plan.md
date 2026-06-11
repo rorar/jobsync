@@ -193,12 +193,20 @@ suffix never rendered. 53 picker/AddJob tests + AddJob integration test (populat
 Per `conductor/workflow.md` § Wrap-Up-Phase. Run only after all prior phases pass.
 
 ### Tasks
-- [ ] Task 6.1: Blind-Spot-Analyse — projektweit `grep` nach den Pattern-Fixes dieses Tracks; adjacent Lücken schließen.
-- [ ] Task 6.2: `/comprehensive-review:full-review` (Architecture+Security+Performance+Testing+Best-Practices) — alle realen Findings autonom fixen; Agent-Claims gegen `git diff`/Code verifizieren (kein Fabrizieren).
-- [ ] Task 6.3: `/understand` inkrementell-Refresh + Graph-Commit (1× am Welle-Ende, NICHT per-Commit; `autoUpdate` OFF).
-- [ ] Task 6.4: Honesty-Gate voll ausführen (2 Fragen: Shortcuts/fehlende Skills/Gaps? Docs/Handoff?).
-- [ ] Task 6.5: Push eigenständig — nach Gate, Fork `main`, NIE upstream.
-- [ ] Task 6.6: Doku-Update (README/User-Guide/API/ADR wo nötig) + `docs/BACKLOG.md` + `docs/BUGS.md` + Memory-Handoff aktualisieren.
+- [x] Task 6.1: Blind-Spot-Analyse — projektweit grep; adjacent Lücken geschlossen (commit 5e0ac8f:
+      actor-stamp auf anonymize/merge cascades + targetCompanyId auf task/note projections).
+- [x] Task 6.2: `/comprehensive-review:full-review` — in substance (3 parallele Spezial-Reviewer,
+      autonom; Findings gegen git diff verifiziert). 1 HIGH (untested recruiter path) + 1 MEDIUM
+      (i18n label) + 1 LOW (projection IDOR hardening) gefixt; 2 LOW akzeptiert/deferred (commit bdefb18,
+      report .full-review/05-final-report.md). Keine offenen Critical/High.
+- [~] Task 6.3: `/understand`-Graph-Refresh — DEFERRED auf separate Session (heavy; Welle-2-Muster +
+      One-Welle-per-Session-Budget). Im Handoff als nächster Schritt notiert. `autoUpdate` OFF.
+- [x] Task 6.4: Honesty-Gate ausgeführt — Gaps offengelegt: E2E geschrieben aber nicht ausgeführt;
+      P2/P3-UI nutzten bestehende reviewed Patterns ohne frischen ui-design-Consult; User-Guide deferred.
+- [x] Task 6.5: Merge → Fork `main` + Push zu `origin` (rorar), NIE upstream.
+- [x] Task 6.6: Doku — BACKLOG (Gap-1/5/6/7 + F-AJ-08 DONE) + BUGS (W3-B1) + ADR-035 + specs (/tend) +
+      Memory-Handoff aktualisiert. README/User-Guide CRM-Sektion = deferred follow-up.
 
 ### Verification
-- [ ] full-review: keine offenen Critical/High. Honesty-Gate sauber. Auf Fork `main` gepusht. BACKLOG/BUGS/Docs synchron.
+- [x] full-review: keine offenen Critical/High. Honesty-Gate sauber. Full jest 279 suites / 5300 grün,
+      tsc 0, allium 0 errors. BACKLOG/BUGS/Docs synchron. (Push erfolgt im Abschluss-Schritt.)

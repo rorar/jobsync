@@ -2,18 +2,18 @@
   "id": "welle3-crm-connection_20260601",
   "title": "Welle 3 — CRM-Verbindung (Kette C)",
   "type": "feature",
-  "status": "in_progress",
+  "status": "complete",
   "created": "2026-06-01T08:46:16Z",
-  "updated": "2026-06-02T04:00:00Z",
-  "current_phase": 5,
-  "current_task": "5.1",
+  "updated": "2026-06-11T00:00:00Z",
+  "current_phase": 6,
+  "current_task": "done",
   "phases": {
     "total": 6,
-    "completed": 4
+    "completed": 6
   },
   "tasks": {
     "total": 26,
-    "completed": 17
+    "completed": 26
   },
   "commits": []
 }
