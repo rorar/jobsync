@@ -16,7 +16,11 @@ jest.mock("@/lib/db", () => ({
   default: {
     crmActivityLog: { create: (...args: unknown[]) => mockCreate(...args) },
     person: { findUnique: (...args: unknown[]) => mockFindUnique(...args) },
-    job: { findUnique: (...args: unknown[]) => mockFindUnique(...args) },
+    job: {
+      findUnique: (...args: unknown[]) => mockFindUnique(...args),
+      // Welle 3 review fix: company resolution is now userId-scoped via findFirst.
+      findFirst: (...args: unknown[]) => mockFindUnique(...args),
+    },
     crmNote: { findUnique: (...args: unknown[]) => mockFindUnique(...args) },
   },
 }));
@@ -105,7 +109,7 @@ describe("crm-activity-logger", () => {
       historyEntryId: "hist-1",
     });
     expect(mockFindUnique).toHaveBeenCalledWith({
-      where: { id: "job-1" },
+      where: { id: "job-1", userId: "user-1" },
       select: { companyId: true },
     });
     expect(mockCreate).toHaveBeenCalledWith({
@@ -238,7 +242,7 @@ describe("crm-activity-logger", () => {
     });
 
     expect(mockFindUnique).toHaveBeenCalledWith({
-      where: { id: "job-1" },
+      where: { id: "job-1", userId: "user-1" },
       select: { companyId: true },
     });
     expect(mockCreate).toHaveBeenCalledWith({

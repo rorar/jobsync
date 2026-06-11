@@ -574,6 +574,83 @@ describe("jobActions", () => {
         }),
       );
     });
+    // F-AJ-08 recruiter triangle: persistence + ownership + runtime validation.
+    it("persists recruitingCompanyId + relationshipType when valid and owned", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      // hiring + recruiting company ownership probes both succeed
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
+      const createSpy = jest.fn().mockResolvedValue(createdJob);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) =>
+        fn({
+          job: { create: createSpy },
+          jobStatusHistory: { create: jest.fn().mockResolvedValue(historyEntry) },
+        }),
+      );
+
+      await addJob({
+        ...jobData,
+        recruitingCompany: "recruit-co-id",
+        relationshipType: "recruiting_agency",
+      });
+
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            recruitingCompanyId: "recruit-co-id",
+            relationshipType: "recruiting_agency",
+          }),
+        }),
+      );
+    });
+    it("rejects a cross-user recruitingCompany (CON-C01 ownership)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      // 1st company probe = hiring (owned); 2nd = recruiting (NOT owned → null)
+      (prisma.company.findFirst as jest.Mock)
+        .mockResolvedValueOnce({ id: "company-id" })
+        .mockResolvedValueOnce(null);
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
+
+      const result = await addJob({
+        ...jobData,
+        recruitingCompany: "foreign-co-id",
+        relationshipType: "recruiting_agency",
+      });
+
+      expect(result.success).toBe(false);
+      expect((result as { errorCode?: string }).errorCode).toBe("NOT_FOUND");
+    });
+    it("sanitizes an invalid relationshipType to null (ADR-019 erased union)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
+      const createSpy = jest.fn().mockResolvedValue(createdJob);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) =>
+        fn({
+          job: { create: createSpy },
+          jobStatusHistory: { create: jest.fn().mockResolvedValue(historyEntry) },
+        }),
+      );
+
+      // No recruiting company; a non-member relationshipType must be coerced to null.
+      await addJob({
+        ...jobData,
+        recruitingCompany: "",
+        relationshipType: "rpo" as never,
+      });
+
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ relationshipType: null }),
+        }),
+      );
+    });
     it("should emit JobStatusChanged event after creation", async () => {
       const { emitEvent } = require("@/lib/events");
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
@@ -695,6 +772,31 @@ describe("jobActions", () => {
 
       expect(result).toStrictEqual({ data: jobData, success: true });
       expect(prisma.job.update).toHaveBeenCalledTimes(1);
+    });
+    // F-AJ-08: update persists the recruiter triangle (same validation/ownership
+    // boundary as addJob).
+    it("persists recruitingCompanyId + relationshipType on update", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+      (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+      (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
+      (prisma.job.update as jest.Mock).mockResolvedValue(jobData);
+
+      await updateJob({
+        ...jobData,
+        recruitingCompany: "recruit-co-id",
+        relationshipType: "staffing_agency",
+      });
+
+      expect(prisma.job.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            recruitingCompanyId: "recruit-co-id",
+            relationshipType: "staffing_agency",
+          }),
+        }),
+      );
     });
     // F-AJ-04: clearing the due date on update must write null (not undefined,
     // which Prisma treats as "no change") — guards `dueDate ?? null`

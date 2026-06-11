@@ -98,10 +98,11 @@ export function registerCrmActivityLogConsumers(): void {
   // lands on the Company timeline. Returns null when there is no job.
   const resolveCompanyId = async (
     jobId: string | null | undefined,
+    userId: string,
   ): Promise<string | null> => {
     if (!jobId) return null;
-    const job = await prisma.job.findUnique({
-      where: { id: jobId },
+    const job = await prisma.job.findFirst({
+      where: { id: jobId, userId },
       select: { companyId: true },
     });
     return job?.companyId ?? null;
@@ -115,8 +116,8 @@ export function registerCrmActivityLogConsumers(): void {
     async (p) => {
       // Welle 3 (P3): resolve the job's company so the entry also lands on the
       // Company timeline.
-      const job = await prisma.job.findUnique({
-        where: { id: p.jobId },
+      const job = await prisma.job.findFirst({
+        where: { id: p.jobId, userId: p.userId },
         select: { companyId: true },
       });
       return {
@@ -162,8 +163,8 @@ export function registerCrmActivityLogConsumers(): void {
     async (p) => {
       let targetCompanyId: string | null = null;
       if (p.jobId) {
-        const job = await prisma.job.findUnique({
-          where: { id: p.jobId },
+        const job = await prisma.job.findFirst({
+          where: { id: p.jobId, userId: p.userId },
           select: { companyId: true },
         });
         targetCompanyId = job?.companyId ?? null;
@@ -198,8 +199,8 @@ export function registerCrmActivityLogConsumers(): void {
     InterviewScheduledPayloadSchema,
     "interview_scheduled",
     async (p) => {
-      const job = await prisma.job.findUnique({
-        where: { id: p.jobId },
+      const job = await prisma.job.findFirst({
+        where: { id: p.jobId, userId: p.userId },
         select: { JobTitle: { select: { label: true } }, companyId: true },
       });
       return {
@@ -219,8 +220,8 @@ export function registerCrmActivityLogConsumers(): void {
     InterviewCompletedPayloadSchema,
     "interview_completed",
     async (p) => {
-      const job = await prisma.job.findUnique({
-        where: { id: p.jobId },
+      const job = await prisma.job.findFirst({
+        where: { id: p.jobId, userId: p.userId },
         select: { JobTitle: { select: { label: true } }, companyId: true },
       });
       return {
@@ -243,7 +244,7 @@ export function registerCrmActivityLogConsumers(): void {
       actorId: p.userId,
       targetPersonId: p.targetPersonId ?? null,
       targetJobId: p.targetJobId ?? null,
-      targetCompanyId: await resolveCompanyId(p.targetJobId),
+      targetCompanyId: await resolveCompanyId(p.targetJobId, p.userId),
       linkedRecordName: p.title,
     }),
   );
@@ -258,7 +259,7 @@ export function registerCrmActivityLogConsumers(): void {
       actorId: p.userId,
       targetPersonId: p.targetPersonId ?? null,
       targetJobId: p.targetJobId ?? null,
-      targetCompanyId: await resolveCompanyId(p.targetJobId),
+      targetCompanyId: await resolveCompanyId(p.targetJobId, p.userId),
       linkedRecordName: p.title,
     }),
   );
@@ -298,7 +299,7 @@ export function registerCrmActivityLogConsumers(): void {
         actorId: p.userId,
         targetPersonId,
         targetJobId,
-        targetCompanyId: await resolveCompanyId(targetJobId),
+        targetCompanyId: await resolveCompanyId(targetJobId, p.userId),
         linkedRecordName,
       };
     },
@@ -310,8 +311,8 @@ export function registerCrmActivityLogConsumers(): void {
     VacancyPromotedPayloadSchema,
     "application_submitted",
     async (p) => {
-      const job = await prisma.job.findUnique({
-        where: { id: p.jobId },
+      const job = await prisma.job.findFirst({
+        where: { id: p.jobId, userId: p.userId },
         select: { JobTitle: { select: { label: true } }, companyId: true },
       });
       return {

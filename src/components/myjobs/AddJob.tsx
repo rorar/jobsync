@@ -783,7 +783,7 @@ export function AddJob({
                       <FormItem className="flex flex-col [&>button]:capitalize">
                         <FormLabel>{t("crm.relationshipType")}</FormLabel>
                         <SelectFormCtrl
-                          label="Relationship"
+                          label={t("crm.relationshipType")}
                           options={RELATIONSHIP_TYPES.map((rt) => ({
                             id: rt,
                             label: t(`crm.relationship.${rt}`),
