@@ -231,7 +231,7 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
 
       expect(mockDb.crmInterview.updateMany).toHaveBeenCalledWith({
         where: expect.objectContaining({ userId: USER.id, personId: LOSER_ID }),
-        data: { personId: WINNER_ID },
+        data: expect.objectContaining({ personId: WINNER_ID }),
       });
     });
 

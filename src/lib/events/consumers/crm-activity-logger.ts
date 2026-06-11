@@ -94,6 +94,19 @@ function registerProjection<T>(
 // =============================================================================
 
 export function registerCrmActivityLogConsumers(): void {
+  // Welle 3 (P3): resolve a job's hiring company so a job-linked activity also
+  // lands on the Company timeline. Returns null when there is no job.
+  const resolveCompanyId = async (
+    jobId: string | null | undefined,
+  ): Promise<string | null> => {
+    if (!jobId) return null;
+    const job = await prisma.job.findUnique({
+      where: { id: jobId },
+      select: { companyId: true },
+    });
+    return job?.companyId ?? null;
+  };
+
   // JobStatusChanged → status_changed
   registerProjection(
     DomainEventType.JobStatusChanged,
@@ -225,11 +238,12 @@ export function registerCrmActivityLogConsumers(): void {
     DomainEventType.CrmTaskCreated,
     CrmTaskCreatedPayloadSchema,
     "task_created",
-    (p) => ({
+    async (p) => ({
       userId: p.userId,
       actorId: p.userId,
       targetPersonId: p.targetPersonId ?? null,
       targetJobId: p.targetJobId ?? null,
+      targetCompanyId: await resolveCompanyId(p.targetJobId),
       linkedRecordName: p.title,
     }),
   );
@@ -239,11 +253,12 @@ export function registerCrmActivityLogConsumers(): void {
     DomainEventType.CrmTaskCompleted,
     CrmTaskCompletedPayloadSchema,
     "task_completed",
-    (p) => ({
+    async (p) => ({
       userId: p.userId,
       actorId: p.userId,
       targetPersonId: p.targetPersonId ?? null,
       targetJobId: p.targetJobId ?? null,
+      targetCompanyId: await resolveCompanyId(p.targetJobId),
       linkedRecordName: p.title,
     }),
   );
@@ -283,6 +298,7 @@ export function registerCrmActivityLogConsumers(): void {
         actorId: p.userId,
         targetPersonId,
         targetJobId,
+        targetCompanyId: await resolveCompanyId(targetJobId),
         linkedRecordName,
       };
     },

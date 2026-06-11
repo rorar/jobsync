@@ -267,6 +267,42 @@ describe("crm-activity-logger", () => {
     expect(mockFindUnique).not.toHaveBeenCalled();
   });
 
+  // Welle 3 (P3 blind-spot): job-linked tasks/notes also resolve targetCompanyId
+  // so they land on the Company timeline (consistency with the other projections).
+  it("task_created resolves targetCompanyId from a job-linked task", async () => {
+    mockFindUnique.mockResolvedValueOnce({ companyId: "company-3" });
+    await emit(DomainEventType.CrmTaskCreated, {
+      taskId: "task-1",
+      userId: "user-1",
+      title: "Follow up",
+      targetJobId: "job-1",
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "task_created",
+        targetJobId: "job-1",
+        targetCompanyId: "company-3",
+      }),
+    });
+  });
+
+  it("task_created leaves targetCompanyId null when the task is not job-linked", async () => {
+    await emit(DomainEventType.CrmTaskCreated, {
+      taskId: "task-2",
+      userId: "user-1",
+      title: "Generic todo",
+      targetPersonId: "person-1",
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "task_created",
+        targetCompanyId: null,
+      }),
+    });
+    // No job → no company lookup.
+    expect(mockFindUnique).not.toHaveBeenCalled();
+  });
+
   it("logs error but does not throw when DB create fails", async () => {
     mockCreate.mockRejectedValueOnce(new Error("DB write failed"));
     const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
