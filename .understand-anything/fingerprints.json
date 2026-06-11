@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "gitCommitHash": "d9b9d227067a3f5aecff358dd4c1aff2c34f5428",
-  "generatedAt": "2026-06-01T21:51:06.764Z",
+  "gitCommitHash": "3b099f2d3805321af3e6199f5d41b64aaab4e8c1",
+  "generatedAt": "2026-06-11T23:26:13.739Z",
   "files": {
     "__mocks__/next-auth-providers.ts": {
       "filePath": "__mocks__/next-auth-providers.ts",
@@ -428,6 +428,24 @@
       "totalLines": 329,
       "hasStructuralAnalysis": true
     },
+    "__tests__/actorType.spec.ts": {
+      "filePath": "__tests__/actorType.spec.ts",
+      "contentHash": "9d28577da13d6a2947409ccda7b785e1f74899ac177cbf51f8870dd8ea8bd43b",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/models/person.model",
+          "specifiers": [
+            "ACTOR_TYPES",
+            "isValidActorType"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 30,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/AddCompany.spec.tsx": {
       "filePath": "__tests__/AddCompany.spec.tsx",
       "contentHash": "6da8488646473751da5a1a76caa3e45e13a37188f57a14ac312e4a274ff59b70",
@@ -595,7 +613,7 @@
     },
     "__tests__/AddJob.spec.tsx": {
       "filePath": "__tests__/AddJob.spec.tsx",
-      "contentHash": "bf5b1719e77134ddf2de69ed9dd047155a8c5b30cb92bf5bd02f212e2075e37f",
+      "contentHash": "9ee7cfca9ebb5a8858843742721aeeaf7504f793120ae43675ecf805a24a1f32",
       "functions": [],
       "classes": [],
       "imports": [
@@ -633,7 +651,8 @@
           "specifiers": [
             "screen",
             "render",
-            "waitFor"
+            "waitFor",
+            "cleanup"
           ]
         },
         {
@@ -659,10 +678,16 @@
           "specifiers": [
             "addJob"
           ]
+        },
+        {
+          "source": "@/actions/person.actions",
+          "specifiers": [
+            "getPersons"
+          ]
         }
       ],
       "exports": [],
-      "totalLines": 256,
+      "totalLines": 337,
       "hasStructuralAnalysis": true
     },
     "__tests__/addJobForm.schema.salary.spec.ts": {
@@ -959,7 +984,7 @@
     },
     "__tests__/api-v1-jobs.spec.ts": {
       "filePath": "__tests__/api-v1-jobs.spec.ts",
-      "contentHash": "72aa936417b70e7b58f8f4ee491669ad86cda613a63a803c0c26c601fd296979",
+      "contentHash": "df2f282816d7b70e75b691eb0be38835a0314108224ee19344b02eba5a703ef3",
       "functions": [
         {
           "name": "mockRequest",
@@ -1011,6 +1036,13 @@
           ]
         },
         {
+          "source": "@/lib/events",
+          "specifiers": [
+            "emitEvent",
+            "DomainEventTypes"
+          ]
+        },
+        {
           "source": "@/app/api/v1/jobs/route",
           "specifiers": [
             "listJobs",
@@ -1034,7 +1066,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 1072,
+      "totalLines": 1279,
       "hasStructuralAnalysis": true
     },
     "__tests__/apiKey.actions.spec.ts": {
@@ -1626,6 +1658,25 @@
       ],
       "exports": [],
       "totalLines": 59,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/blocklist-match.spec.ts": {
+      "filePath": "__tests__/blocklist-match.spec.ts",
+      "contentHash": "2d49b667c1602c6b948df95592c00d5e867bdf40b8fe3ff62a1633953a84bd16",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/crm/blocklist-match",
+          "specifiers": [
+            "extractEmailDomain",
+            "matchGlobPattern",
+            "isBlockedByEntries"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 82,
       "hasStructuralAnalysis": true
     },
     "__tests__/bonus.spec.ts": {
@@ -2451,16 +2502,6 @@
       "totalLines": 53,
       "hasStructuralAnalysis": true
     },
-    "__tests__/connector/MODULE-TESTS.md": {
-      "filePath": "__tests__/connector/MODULE-TESTS.md",
-      "contentHash": "7cd7747b4f3c032f23366d8f93d8372324e0b57c3f2e8b2c451a171271e7459e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 34,
-      "hasStructuralAnalysis": true
-    },
     "__tests__/connector/self-registration.spec.ts": {
       "filePath": "__tests__/connector/self-registration.spec.ts",
       "contentHash": "c9636a4f3ca6ceac567cfad8ae414124d2361453ae4e6e6c318e78d9ba3138b1",
@@ -2664,7 +2705,7 @@
     },
     "__tests__/crm-activity-logger.spec.ts": {
       "filePath": "__tests__/crm-activity-logger.spec.ts",
-      "contentHash": "7f5e7f4bd11221fd12df2bf90e33582074012bf2b956d36496f65e5c354bba0e",
+      "contentHash": "c37391146a4d1591f7b91b2a9ee7f0ddadd3fbd65c29bc01a56f499eea8e49b3",
       "functions": [
         {
           "name": "emit",
@@ -2692,12 +2733,41 @@
         }
       ],
       "exports": [],
-      "totalLines": 266,
+      "totalLines": 394,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/crmActivityLog.actions.spec.ts": {
+      "filePath": "__tests__/crmActivityLog.actions.spec.ts",
+      "contentHash": "60e06872ec28e7aa10c616ec0418fd674842cf7f0995de5a93e1b840c7c79a5f",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/actions/crmActivityLog.actions",
+          "specifiers": [
+            "getActivityTimeline"
+          ]
+        },
+        {
+          "source": "@/utils/user.utils",
+          "specifiers": [
+            "getCurrentUser"
+          ]
+        },
+        {
+          "source": "@prisma/client",
+          "specifiers": [
+            "PrismaClient"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 72,
       "hasStructuralAnalysis": true
     },
     "__tests__/crmBlocklist.actions.spec.ts": {
       "filePath": "__tests__/crmBlocklist.actions.spec.ts",
-      "contentHash": "3411d7061ca72a905803003aa91fb0d7d1129104bd4be94082f0f6773a70ab4c",
+      "contentHash": "cccf618fe673dbeec03b47ef054846740c928644df5d498831ab45623ff27c49",
       "functions": [],
       "classes": [],
       "imports": [
@@ -2724,12 +2794,12 @@
         }
       ],
       "exports": [],
-      "totalLines": 249,
+      "totalLines": 275,
       "hasStructuralAnalysis": true
     },
     "__tests__/crmInterview.actions.spec.ts": {
       "filePath": "__tests__/crmInterview.actions.spec.ts",
-      "contentHash": "24db6ce80b1a72ae462729e4504ca4dca55af786230305dc5cc702ba456e14ac",
+      "contentHash": "8a2454766c8a3ddc15fa8ceed38bf6dd859821b4ffbfdc1d0564d959e2f53513",
       "functions": [],
       "classes": [],
       "imports": [
@@ -2770,12 +2840,12 @@
         }
       ],
       "exports": [],
-      "totalLines": 466,
+      "totalLines": 470,
       "hasStructuralAnalysis": true
     },
     "__tests__/crmNote.actions.spec.ts": {
       "filePath": "__tests__/crmNote.actions.spec.ts",
-      "contentHash": "b4b6ff0e24b6019538e2a6fc343b021b2ef49a52ec3ff92734439fbe17429415",
+      "contentHash": "b3f9c8429f3079418f4846d2b6d851ad67dbfd0771ece54d596b7ac32d378f4d",
       "functions": [],
       "classes": [],
       "imports": [
@@ -2826,7 +2896,7 @@
     },
     "__tests__/crmTask.actions.spec.ts": {
       "filePath": "__tests__/crmTask.actions.spec.ts",
-      "contentHash": "8159e0a672491a746aee05627a85a7561416d2c6073de2bb02d240a999f3d248",
+      "contentHash": "45dea78ca8f4b3eacccddc30a4921e455687166e24a3f39f92206e544103dcdb",
       "functions": [],
       "classes": [],
       "imports": [
@@ -5463,7 +5533,7 @@
     },
     "__tests__/job.actions.spec.ts": {
       "filePath": "__tests__/job.actions.spec.ts",
-      "contentHash": "6ea6b868dcc62e672b3e951adbf1adbdca05e600daa0fd7cb12f1393760d2d3d",
+      "contentHash": "bc9448bee8bb24b128353f2501a137ce849dbb82dbe7b5e004e731476b7c9e59",
       "functions": [],
       "classes": [],
       "imports": [
@@ -5509,12 +5579,12 @@
         }
       ],
       "exports": [],
-      "totalLines": 1149,
+      "totalLines": 1251,
       "hasStructuralAnalysis": true
     },
     "__tests__/jobContact.actions.spec.ts": {
       "filePath": "__tests__/jobContact.actions.spec.ts",
-      "contentHash": "943b97a95d8e221f4ea1a538c99d8c3aa07966b7aa01cf57b5793f145940cb19",
+      "contentHash": "8986c5e6bf5249f73fa7501e734eb8d00630e8501848076c0cb1d6257b01a06d",
       "functions": [],
       "classes": [],
       "imports": [
@@ -5554,7 +5624,54 @@
         }
       ],
       "exports": [],
-      "totalLines": 270,
+      "totalLines": 276,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/JobContactPicker.spec.tsx": {
+      "filePath": "__tests__/JobContactPicker.spec.tsx",
+      "contentHash": "937e1c45f5a6063d9db93b67ba481c23f6ab32fe8b47a0b420fc8c86b60389a2",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen"
+          ]
+        },
+        {
+          "source": "@testing-library/user-event",
+          "specifiers": [
+            "userEvent"
+          ]
+        },
+        {
+          "source": "@/components/myjobs/JobContactPicker",
+          "specifiers": [
+            "JobContactPicker",
+            "toPersonOption"
+          ]
+        },
+        {
+          "source": "@/components/myjobs/JobContactPicker",
+          "specifiers": [
+            "PersonOption"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 275,
       "hasStructuralAnalysis": true
     },
     "__tests__/JobDetails.spec.tsx": {
@@ -7423,7 +7540,7 @@
     },
     "__tests__/person.actions.spec.ts": {
       "filePath": "__tests__/person.actions.spec.ts",
-      "contentHash": "fcfa59a5562d2c3ac79d265978cab0a7c3aa45545d410ad1363b8b4f5f3e9665",
+      "contentHash": "b965f597785c4d09c466592bbe6ed1c762d602f0826b2b03ee05da3f81b1451c",
       "functions": [
         {
           "name": "basePerson",
@@ -8133,6 +8250,24 @@
       ],
       "exports": [],
       "totalLines": 222,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/relationshipType.spec.ts": {
+      "filePath": "__tests__/relationshipType.spec.ts",
+      "contentHash": "669ca7705d984ea230e6b927a7a6d12a22181875dac9b03d01bf2a1268f6fb37",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/models/job.model",
+          "specifiers": [
+            "RELATIONSHIP_TYPES",
+            "isValidRelationshipType"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 44,
       "hasStructuralAnalysis": true
     },
     "__tests__/resilience.spec.ts": {
@@ -10922,46 +11057,6 @@
       "totalLines": 803,
       "hasStructuralAnalysis": true
     },
-    ".claude/settings.json": {
-      "filePath": ".claude/settings.json",
-      "contentHash": "80d8883ffcf9b0590d54fa4e94f2e392054fd3d8f4c3d76a49fab9bc91b631bc",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 15,
-      "hasStructuralAnalysis": true
-    },
-    ".dockerignore": {
-      "filePath": ".dockerignore",
-      "contentHash": "56f6ea4b1363a79600c4a931ca9c816a6e2913b5fe1268b2e6155f8b70436baa",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 5,
-      "hasStructuralAnalysis": false
-    },
-    ".github/workflows/ci.yml": {
-      "filePath": ".github/workflows/ci.yml",
-      "contentHash": "51e12e68205c44b1e016b97caa90561863f336dcf386e6e3881d84171dd9845d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 56,
-      "hasStructuralAnalysis": true
-    },
-    ".mcp.json": {
-      "filePath": ".mcp.json",
-      "contentHash": "96577841b2ebcf36b9d8c8c7b89260aa4339ed88d6d6da773521dda37a360700",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 10,
-      "hasStructuralAnalysis": true
-    },
     "apiTest.rest": {
       "filePath": "apiTest.rest",
       "contentHash": "ef92444caa14efe6b16ef517c65ec3cf5ab2fec10360a13c0500ea8d34d63a17",
@@ -10971,586 +11066,6 @@
       "exports": [],
       "totalLines": 7,
       "hasStructuralAnalysis": false
-    },
-    "CLAUDE.md": {
-      "filePath": "CLAUDE.md",
-      "contentHash": "493f33edf00b8e186cf5eae8ab76c94774101d64db18c31dd98117c2b8c7eef9",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 956,
-      "hasStructuralAnalysis": true
-    },
-    "CODE_OF_CONDUCT.md": {
-      "filePath": "CODE_OF_CONDUCT.md",
-      "contentHash": "856e4051415222333906ab0dfa43d7b94c039cabf3bc55688fe1428efadbc1be",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 78,
-      "hasStructuralAnalysis": true
-    },
-    "components.json": {
-      "filePath": "components.json",
-      "contentHash": "3fa4439d3a3bd23a24e0542851fddfb4063fd9f5611e5856f7492ef55d48f44e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 17,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/index.md": {
-      "filePath": "conductor/index.md",
-      "contentHash": "22865d53a0beb4490d3d89c331f8fc67b4b47c797b4f82bdf2374c78803b0a9c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 29,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/product-guidelines.md": {
-      "filePath": "conductor/product-guidelines.md",
-      "contentHash": "4576139d992fb748d4875d48c5700764688afa242c6e2ec532eafa61f5618793",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 39,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/product.md": {
-      "filePath": "conductor/product.md",
-      "contentHash": "925ab8323b8f2fc713b2b701339b879cc94cfaf557cde41833d554d9381dc3e0",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 57,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tech-stack.md": {
-      "filePath": "conductor/tech-stack.md",
-      "contentHash": "861830b237a118ea5cf58ffd5f3081dffc9add187ec070ea73da40e1093c0f28",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 74,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks.md": {
-      "filePath": "conductor/tracks.md",
-      "contentHash": "40680c72aa23ac5b8edb5d21e87e9811061e411c6a2f4ec4db3487005d910997",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 66,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/company-perks_20260601/index.md": {
-      "filePath": "conductor/tracks/company-perks_20260601/index.md",
-      "contentHash": "5a00c16b70b758b59fb700dec14bf2c9ce68bb91fc57a784954a33a5db467870",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 23,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/company-perks_20260601/metadata.json": {
-      "filePath": "conductor/tracks/company-perks_20260601/metadata.json",
-      "contentHash": "114c70af4ab0eb6663578d5b153b417558fba98bfd50a2c46e09d384c51fac22",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 12,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/company-perks_20260601/plan.md": {
-      "filePath": "conductor/tracks/company-perks_20260601/plan.md",
-      "contentHash": "e04073137edd746100d38d22ef021181c0bc89caffde9740f8ae809d46b497c1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 19,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/company-perks_20260601/spec.md": {
-      "filePath": "conductor/tracks/company-perks_20260601/spec.md",
-      "contentHash": "5f736e18be526b083f5e83a4a02059020bfec1dba207c0e50b086f8a83bffc09",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 57,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/cursor-pagination_20260601/index.md": {
-      "filePath": "conductor/tracks/cursor-pagination_20260601/index.md",
-      "contentHash": "38f32383d3fc5d5e4317b25e1894c909690847685f4aba29c9e465713edcf2e3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 32,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/cursor-pagination_20260601/metadata.json": {
-      "filePath": "conductor/tracks/cursor-pagination_20260601/metadata.json",
-      "contentHash": "d3156219ce79b33414d791729b11f7a2ce02ae425ce4d6bec9e17a81cdc3abfa",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 18,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/cursor-pagination_20260601/plan.md": {
-      "filePath": "conductor/tracks/cursor-pagination_20260601/plan.md",
-      "contentHash": "2ffd6fb8bfd4528475ea11b32581cd36dfe6d523473526b67adc474e605c60e2",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 91,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/cursor-pagination_20260601/spec.md": {
-      "filePath": "conductor/tracks/cursor-pagination_20260601/spec.md",
-      "contentHash": "badc61da497e95ebb66916a0d3792c26cb87b6b1cdde978579a8674df9532dd7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 79,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/observability_20260601/index.md": {
-      "filePath": "conductor/tracks/observability_20260601/index.md",
-      "contentHash": "425a73aa7f287ebba32f7e53bcf2b5df7bda6a56c45f9ac954dbde0eb9c026de",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 31,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/observability_20260601/metadata.json": {
-      "filePath": "conductor/tracks/observability_20260601/metadata.json",
-      "contentHash": "cb26545adce7461fee46ee59f71a089775824df5efa39c61d79467abc338d270",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 18,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/observability_20260601/plan.md": {
-      "filePath": "conductor/tracks/observability_20260601/plan.md",
-      "contentHash": "ed2581cb15eddcd8d50372f6d6cdad2cb57e9c15b76eb3c5c1dcf3d9f5d9ba9d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 100,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/observability_20260601/spec.md": {
-      "filePath": "conductor/tracks/observability_20260601/spec.md",
-      "contentHash": "31eae01527f97735d86c43638f7391f53d15ff9d2ba6ba9eb069eebc8eefddea",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 76,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/pii-at-rest_20260601/index.md": {
-      "filePath": "conductor/tracks/pii-at-rest_20260601/index.md",
-      "contentHash": "c448a3e8204e3087e6b40255d7082b804ccb1052af284779285c2372b97e51dc",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 34,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/pii-at-rest_20260601/metadata.json": {
-      "filePath": "conductor/tracks/pii-at-rest_20260601/metadata.json",
-      "contentHash": "ab9c8b99e0d3b491593c8acf584771441cd8ec67e42690f1464218b73b42dc92",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 18,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/pii-at-rest_20260601/plan.md": {
-      "filePath": "conductor/tracks/pii-at-rest_20260601/plan.md",
-      "contentHash": "0edefe68a70d3745dbc75100445aa30411fdd0a2d76c932897333071cd77e157",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 103,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/pii-at-rest_20260601/spec.md": {
-      "filePath": "conductor/tracks/pii-at-rest_20260601/spec.md",
-      "contentHash": "3d2bca165da3ccbc95dc8d60a5aa31c27b515b007a5d1857ad4bc527829f130e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 90,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/salary-calculator_20260601/index.md": {
-      "filePath": "conductor/tracks/salary-calculator_20260601/index.md",
-      "contentHash": "45e6ea4ec966b184327d8658ce34f375f770393980d9d4f192dc272bc69c70fe",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 27,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/salary-calculator_20260601/metadata.json": {
-      "filePath": "conductor/tracks/salary-calculator_20260601/metadata.json",
-      "contentHash": "3434ecede55b71f0021880ca1ca324c0f68eb10c2b825a7f156bf5ba03b6cffb",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 12,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/salary-calculator_20260601/plan.md": {
-      "filePath": "conductor/tracks/salary-calculator_20260601/plan.md",
-      "contentHash": "ccb182394a3ea4c58ca7253a0f593038e9435e80148942063933aca08f652739",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 24,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/salary-calculator_20260601/spec.md": {
-      "filePath": "conductor/tracks/salary-calculator_20260601/spec.md",
-      "contentHash": "708b24011580fee0bf00635bcef3f62a2cf1743cbb9025df08d6404370850b58",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 78,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/session-recovery_20260601/index.md": {
-      "filePath": "conductor/tracks/session-recovery_20260601/index.md",
-      "contentHash": "240ad8aca932397ac6f2589d54e648bcc765fd922dd3d2d212cd97108412c87e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 33,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/session-recovery_20260601/metadata.json": {
-      "filePath": "conductor/tracks/session-recovery_20260601/metadata.json",
-      "contentHash": "04ed79ca8efa429f8761a45c94de5c1a941bc774f9a2b208a9516bdeb11c9572",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 18,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/session-recovery_20260601/plan.md": {
-      "filePath": "conductor/tracks/session-recovery_20260601/plan.md",
-      "contentHash": "ed06fa5d83338c436bfc54e49d7e2694ca614c7ecfed63ba1ae7fab3e43622de",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 81,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/session-recovery_20260601/spec.md": {
-      "filePath": "conductor/tracks/session-recovery_20260601/spec.md",
-      "contentHash": "f817421be961d69aec97998e46f9389894709571406532e79b9fb9200fc86c1d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 78,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/tech-debt-cleanup_20260601/index.md": {
-      "filePath": "conductor/tracks/tech-debt-cleanup_20260601/index.md",
-      "contentHash": "d844c3a98c9cd03c64f99117c20ec1d73beca3c63df9b92aed4fb521d8fc55e9",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 27,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/tech-debt-cleanup_20260601/metadata.json": {
-      "filePath": "conductor/tracks/tech-debt-cleanup_20260601/metadata.json",
-      "contentHash": "0fb44fe753d21fb3bc2f4f5f578dd8236e6d288c2749fc9b9dd843ac4904b225",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 16,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/tech-debt-cleanup_20260601/plan.md": {
-      "filePath": "conductor/tracks/tech-debt-cleanup_20260601/plan.md",
-      "contentHash": "c6cda745ffaa649ac9779b367a473d9bc6f67275270992f6b18a2ab6dae4e67a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 125,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/tech-debt-cleanup_20260601/spec.md": {
-      "filePath": "conductor/tracks/tech-debt-cleanup_20260601/spec.md",
-      "contentHash": "daed8427815ab16346c23170777b10631459766567ed72e73dfc06f3bdbc99fe",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 112,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/undostore-pipethrough_20260601/index.md": {
-      "filePath": "conductor/tracks/undostore-pipethrough_20260601/index.md",
-      "contentHash": "11927edc5a6d06beecf19ef958309ea0db44b51547c2fa4aaca87e137febd4e5",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 32,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/undostore-pipethrough_20260601/metadata.json": {
-      "filePath": "conductor/tracks/undostore-pipethrough_20260601/metadata.json",
-      "contentHash": "518afd9c8ba27c328e013e258bbcd5f7d772cd50433eada6e63817a4f49ec936",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 18,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/undostore-pipethrough_20260601/plan.md": {
-      "filePath": "conductor/tracks/undostore-pipethrough_20260601/plan.md",
-      "contentHash": "d895b5996a4a6d249eec60b266be55584845acb2b79afb66e076eca4e5d75658",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 95,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/undostore-pipethrough_20260601/spec.md": {
-      "filePath": "conductor/tracks/undostore-pipethrough_20260601/spec.md",
-      "contentHash": "879af9b8abd8d50854dbb18442f4c1c3c0d71e10149b353f72167a890c12190c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 86,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle1-foundation-gdpr_20260601/index.md": {
-      "filePath": "conductor/tracks/welle1-foundation-gdpr_20260601/index.md",
-      "contentHash": "5b6e3d37de5271d0d251856a1228616287e986438d0d2ca533e60aa3f18bf991",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 26,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle1-foundation-gdpr_20260601/metadata.json": {
-      "filePath": "conductor/tracks/welle1-foundation-gdpr_20260601/metadata.json",
-      "contentHash": "60705e9c7e1b1792a2f5d0f54c22b9864188b260202b7ace018405e67dfdc62b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 18,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle1-foundation-gdpr_20260601/plan.md": {
-      "filePath": "conductor/tracks/welle1-foundation-gdpr_20260601/plan.md",
-      "contentHash": "942fcf1aaa1b12285685fe2b43da54b157026a2d0d23e951b9a01aa572ab0fc8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 176,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle1-foundation-gdpr_20260601/spec.md": {
-      "filePath": "conductor/tracks/welle1-foundation-gdpr_20260601/spec.md",
-      "contentHash": "7bc32159fc2ad619be047ec22efac7047f3a588a9db29714bc17f023e1a8d8a0",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 81,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle2-salary-profile_20260601/index.md": {
-      "filePath": "conductor/tracks/welle2-salary-profile_20260601/index.md",
-      "contentHash": "619ad5a5fea4fa7365476d98799052ac302080ba64474ba693dc91189f6480ba",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 27,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle2-salary-profile_20260601/metadata.json": {
-      "filePath": "conductor/tracks/welle2-salary-profile_20260601/metadata.json",
-      "contentHash": "4c644bc9b2eec4ce9bf2e12d14abece8bafacd0f2228a934a498e5619a2729d1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 38,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle2-salary-profile_20260601/plan.md": {
-      "filePath": "conductor/tracks/welle2-salary-profile_20260601/plan.md",
-      "contentHash": "4027c5a77b06f30afa3fd99bbc5766ad43bb4322be52cdc72e44f3b0274bc47b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 118,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle2-salary-profile_20260601/spec.md": {
-      "filePath": "conductor/tracks/welle2-salary-profile_20260601/spec.md",
-      "contentHash": "0ada407e9250ec2ad5dfa238c77105e255a1003541aa7d1517c107e2496ebe91",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 77,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle3-crm-connection_20260601/index.md": {
-      "filePath": "conductor/tracks/welle3-crm-connection_20260601/index.md",
-      "contentHash": "64005779a1dd8deb18963fac63324c5661c52cac77767bfa9653fe462c2847d7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 26,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle3-crm-connection_20260601/metadata.json": {
-      "filePath": "conductor/tracks/welle3-crm-connection_20260601/metadata.json",
-      "contentHash": "454d4087cc46c1681a9e3671cedbd4812ade1ca6126b7521b11ae2164e07992c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 16,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle3-crm-connection_20260601/plan.md": {
-      "filePath": "conductor/tracks/welle3-crm-connection_20260601/plan.md",
-      "contentHash": "0c87ffecaa655095040d1999ee8ce74020e8e70d7e13fb1e43d7b4cbcc50e005",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 108,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle3-crm-connection_20260601/spec.md": {
-      "filePath": "conductor/tracks/welle3-crm-connection_20260601/spec.md",
-      "contentHash": "73353141fb7f082a8134fb351115f65d3f9d82ec2d29875a1ea410aa31c6d5f9",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 76,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle4-custom-jobstatus_20260601/index.md": {
-      "filePath": "conductor/tracks/welle4-custom-jobstatus_20260601/index.md",
-      "contentHash": "a9690fbed63234142b015724323f219f186b923c061492d96ba8162b9bd42406",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 26,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle4-custom-jobstatus_20260601/metadata.json": {
-      "filePath": "conductor/tracks/welle4-custom-jobstatus_20260601/metadata.json",
-      "contentHash": "153c98e124d86d0e64223bb7cbc28a7abe61416239dc4ebccbdb906340cfc09b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 16,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle4-custom-jobstatus_20260601/plan.md": {
-      "filePath": "conductor/tracks/welle4-custom-jobstatus_20260601/plan.md",
-      "contentHash": "b51b27f59ff1b5f1dd306aa8d535c48bf17204d3a8632a150d5762db1aae7ec2",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 111,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/tracks/welle4-custom-jobstatus_20260601/spec.md": {
-      "filePath": "conductor/tracks/welle4-custom-jobstatus_20260601/spec.md",
-      "contentHash": "f038bab16cf735d834037b1755904e95e3d70cda639abd565af24aeba56f0cc0",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 79,
-      "hasStructuralAnalysis": true
-    },
-    "conductor/workflow.md": {
-      "filePath": "conductor/workflow.md",
-      "contentHash": "01406312a752088b5f655581098d2a627c3c444cee4b822c79466ae4028efe5f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 155,
-      "hasStructuralAnalysis": true
-    },
-    "CONTRIBUTING.md": {
-      "filePath": "CONTRIBUTING.md",
-      "contentHash": "dc2cfd3ca1666f6c12103221288678014eb4c94f1293e5a36239e856bb0770a5",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 308,
-      "hasStructuralAnalysis": true
     },
     "deploy.sh": {
       "filePath": "deploy.sh",
@@ -11572,26 +11087,6 @@
       "totalLines": 119,
       "hasStructuralAnalysis": false
     },
-    "devenv.yaml": {
-      "filePath": "devenv.yaml",
-      "contentHash": "b2e4509ed3bb13224f17df2e77de66a1ee4ea91d46dcda4d6fb19d65d9e81457",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 4,
-      "hasStructuralAnalysis": true
-    },
-    "docker-compose.yml": {
-      "filePath": "docker-compose.yml",
-      "contentHash": "a090086c82fd02d41bc74210871a2ca1ada25611555a844b3d27051a5afec6d7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 30,
-      "hasStructuralAnalysis": true
-    },
     "docker-entrypoint.sh": {
       "filePath": "docker-entrypoint.sh",
       "contentHash": "bcf23570147bdc38acdc0da7a8d56f48a93ae7a4bfccfc1560130f1ecdc0511b",
@@ -11600,26 +11095,6 @@
       "imports": [],
       "exports": [],
       "totalLines": 20,
-      "hasStructuralAnalysis": true
-    },
-    "Dockerfile": {
-      "filePath": "Dockerfile",
-      "contentHash": "c9015ece65b7e16a83a12c6bdd748225cd6c286752bb766b4e73e3a5d76af395",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 57,
-      "hasStructuralAnalysis": true
-    },
-    "docs/add-job-modal-ux-findings.md": {
-      "filePath": "docs/add-job-modal-ux-findings.md",
-      "contentHash": "6d19d9b01c0bf2fa260387e8a824035271d179e0da03ffe6e3add630b5a192aa",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 186,
       "hasStructuralAnalysis": true
     },
     "docs/adr/.pending": {
@@ -11631,1666 +11106,6 @@
       "exports": [],
       "totalLines": 39,
       "hasStructuralAnalysis": false
-    },
-    "docs/adr/001-dictionary-i18n-over-linguijs-macros.md": {
-      "filePath": "docs/adr/001-dictionary-i18n-over-linguijs-macros.md",
-      "contentHash": "5899b54c7fa36d7672131995592e6e32e27870e90015e70033d5ba3749a6b450",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 42,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/002-action-result-unknown-over-specific-types.md": {
-      "filePath": "docs/adr/002-action-result-unknown-over-specific-types.md",
-      "contentHash": "d039c365ba81b1cae45ea8adbd5a3b6e7fd8c8e3e9ef7809d13a1bb770b2fa1e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 46,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/003-self-healing-prisma-engines-nixos.md": {
-      "filePath": "docs/adr/003-self-healing-prisma-engines-nixos.md",
-      "contentHash": "f7ae90c572647d734871997a8edca89a59cf07625d5eba44e3a6ccf157fce547",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 43,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/004-acl-connector-module-architecture.md": {
-      "filePath": "docs/adr/004-acl-connector-module-architecture.md",
-      "contentHash": "fd1f90eb15ff8fe8fffe100e170b1f2a6765c5f7918dd75c8aa325075e5dfa2b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 53,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/005-no-url-locale-routing.md": {
-      "filePath": "docs/adr/005-no-url-locale-routing.md",
-      "contentHash": "bfc08ec92a35dae922c7f84cc73f8080fb8d3becb39110aad2db87269eb30dad",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 39,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/006-keyword-location-separators.md": {
-      "filePath": "docs/adr/006-keyword-location-separators.md",
-      "contentHash": "a0e27fbbdd6fe13fa7b65e21910d41735c46753eee9c4b43346e5fb9b43cde30",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 46,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/007-locale-override-ssr-hydration.md": {
-      "filePath": "docs/adr/007-locale-override-ssr-hydration.md",
-      "contentHash": "0ecb174511097cbe180b003b6ed47782305ca4f222d43f003314a3a4234bdc08",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 59,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/008-debug-logging-env-over-db.md": {
-      "filePath": "docs/adr/008-debug-logging-env-over-db.md",
-      "contentHash": "3f191819b92ec33b12473de7c09522e2fd43d7ebd80d8bc7d442aefefdefd164",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 46,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/009-ollama-url-validation-ssrf-prevention.md": {
-      "filePath": "docs/adr/009-ollama-url-validation-ssrf-prevention.md",
-      "contentHash": "047cee322d39f3dc4f5c2c071eba5dff38e6579f93012ff0018b47466b5a0e27",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 54,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/010-connector-architecture-unification.md": {
-      "filePath": "docs/adr/010-connector-architecture-unification.md",
-      "contentHash": "bd32735095893da730555d57a8963e013decde3b0e39ba03735d8a980969feb2",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 79,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/011-e2e-test-parallelization.md": {
-      "filePath": "docs/adr/011-e2e-test-parallelization.md",
-      "contentHash": "75d6d1e3de2728e91de06baac0ed7c39f16e0877795c3eb1d2964a92f0387b01",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 99,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/012-harmonize-provider-to-module-terminology.md": {
-      "filePath": "docs/adr/012-harmonize-provider-to-module-terminology.md",
-      "contentHash": "a712639f8212abcaa3027705e61c8b7c99885e91869122c99919a9e25bcf2867",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 81,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/013-module-lifecycle-manager.md": {
-      "filePath": "docs/adr/013-module-lifecycle-manager.md",
-      "contentHash": "201b59f9c388684b16a745226e0a1e7e7086c9c55b7315ce08a41357d5e3a458",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 99,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/014-scheduler-coordination.md": {
-      "filePath": "docs/adr/014-scheduler-coordination.md",
-      "contentHash": "c432d70ac4e2df16c82a5bd6b0e9c337bacdb2fb0391d07d89f7c9edffc6f7b3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 78,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/015-idor-ownership-enforcement.md": {
-      "filePath": "docs/adr/015-idor-ownership-enforcement.md",
-      "contentHash": "6bac9808aa25477ea8ee7849b659d85c4177b2c2276c4a946b6dcf877b2dc921",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 66,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/016-three-layer-credential-url-defense.md": {
-      "filePath": "docs/adr/016-three-layer-credential-url-defense.md",
-      "contentHash": "ce39be02bdfbb52e1e2e26b73f5dd5dec0ee8a4f89482ab81c7c6ae44d05cf12",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 79,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/017-per-record-random-encryption-salt.md": {
-      "filePath": "docs/adr/017-per-record-random-encryption-salt.md",
-      "contentHash": "5b36ccb122b08b639ec2fd7a363168dd89b40bc310701f59e8288fac36b8b672",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 70,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/018-auth-secret-fail-fast.md": {
-      "filePath": "docs/adr/018-auth-secret-fail-fast.md",
-      "contentHash": "a0fbb5098526553e172c2691853e5f9a5be22c642f703b2946901e0a2a4cf032",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 73,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/019-pre-auth-rate-limiting-and-server-action-security.md": {
-      "filePath": "docs/adr/019-pre-auth-rate-limiting-and-server-action-security.md",
-      "contentHash": "4902a60bf0028b663e2dd9188da9c1754931aa6bb98ad5dc5dcf48c6372d2efa",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 117,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/020-cors-wildcard-public-api.md": {
-      "filePath": "docs/adr/020-cors-wildcard-public-api.md",
-      "contentHash": "a64303ba51283a195bdf689439aa88b1f4e537cc6a2ecac1e1fe47d8c18327d8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 53,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/021-cross-user-module-degradation.md": {
-      "filePath": "docs/adr/021-cross-user-module-degradation.md",
-      "contentHash": "c806cfb29e1d769d363a2d7085f9f67943c1505bcdb505b2ec4510ed1b77e671",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 80,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/022-error-status-inference-heuristics.md": {
-      "filePath": "docs/adr/022-error-status-inference-heuristics.md",
-      "contentHash": "6494a1323af432384b456be588d5d41a2495bf5a757985e19590efbafcad0a40",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 84,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/023-usedraggable-over-usesortable-kanban.md": {
-      "filePath": "docs/adr/023-usedraggable-over-usesortable-kanban.md",
-      "contentHash": "d5390ff9fc4ed2d456c81169b2afb78d1ce916e6920a2e3bfb8dd1427eb70fd5",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 36,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/024-compare-and-swap-status-transitions.md": {
-      "filePath": "docs/adr/024-compare-and-swap-status-transitions.md",
-      "contentHash": "ef88cf176aefbbcd4ba1cea4417619234e7d41909611319db374cacb4b4f4cfd",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 52,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/025-data-enrichment-connector.md": {
-      "filePath": "docs/adr/025-data-enrichment-connector.md",
-      "contentHash": "0c78052b6091410728052fc5ac92af2a65934ec495a4f4484a7cbd15715ec3b1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 140,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/026-multi-channel-notification-architecture.md": {
-      "filePath": "docs/adr/026-multi-channel-notification-architecture.md",
-      "contentHash": "c309fb78fd33e9414d8503442b5455e2d4799985059c2d0db9cfa54ee33823d0",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 162,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/027-publishable-key-in-enrichment-urls.md": {
-      "filePath": "docs/adr/027-publishable-key-in-enrichment-urls.md",
-      "contentHash": "a29d2434525f643c222fdee5ad975a0b88ecf296fd94329b04daf8f25e74e936",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 58,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/028-self-contained-modules.md": {
-      "filePath": "docs/adr/028-self-contained-modules.md",
-      "contentHash": "676161547fc19f319e97f6166f2343d983300682c05a2274c0a75ab9e74696c2",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 79,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/029-scope-enrichment-cache-keys-by-userid.md": {
-      "filePath": "docs/adr/029-scope-enrichment-cache-keys-by-userid.md",
-      "contentHash": "311935812010fb7eb4466b876bab83fcef7f08b6b10d54de55ae01b04f2c9841",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 58,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/030-deck-action-contract-and-notification-late-binding.md": {
-      "filePath": "docs/adr/030-deck-action-contract-and-notification-late-binding.md",
-      "contentHash": "762de6af64ef09b874573f666dace5ea8c76faea8b2035205dfff1676e56d0b1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 147,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/031-health-escalation-via-degradation-event.md": {
-      "filePath": "docs/adr/031-health-escalation-via-degradation-event.md",
-      "contentHash": "b74563b3a5324df38d13cb14bdf9679f6c5f7165b77ce2cc457f8ef72a8aaeba",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 51,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/032-pii-egress-redaction-shared-leaf.md": {
-      "filePath": "docs/adr/032-pii-egress-redaction-shared-leaf.md",
-      "contentHash": "94a701c5d678a06874a2846bcd99377e63d21031e77b0ebe35fbb2555cb137e8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 66,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/033-gdpr-data-audit-trail-on-adminauditlog.md": {
-      "filePath": "docs/adr/033-gdpr-data-audit-trail-on-adminauditlog.md",
-      "contentHash": "ebc08ef26c99043d1239841754c055cf72da0c7593a1679a50322b482b71c0cb",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 49,
-      "hasStructuralAnalysis": true
-    },
-    "docs/adr/034-user-home-location-and-currency-on-profile.md": {
-      "filePath": "docs/adr/034-user-home-location-and-currency-on-profile.md",
-      "contentHash": "59e9ed05a8cd532c3584f6b697bbf45ea1cded8c9294c7f03d23a572ddc3a11a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 99,
-      "hasStructuralAnalysis": true
-    },
-    "docs/arbeitsagentur-api/auth-flow.md": {
-      "filePath": "docs/arbeitsagentur-api/auth-flow.md",
-      "contentHash": "a2ac94eae35c9f1115d92905630e17761c40929dc7ff5492bb7a45dea1515d03",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 308,
-      "hasStructuralAnalysis": true
-    },
-    "docs/arbeitsagentur-api/openapi.yaml": {
-      "filePath": "docs/arbeitsagentur-api/openapi.yaml",
-      "contentHash": "fba54b2491aa054c2dba51808c576c5f107f9657c17f340b33ed5fd68fc6f505",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 2279,
-      "hasStructuralAnalysis": true
-    },
-    "docs/arbeitsagentur-api/postfach-apis.md": {
-      "filePath": "docs/arbeitsagentur-api/postfach-apis.md",
-      "contentHash": "0ac8f57b56a62e569c7e43da9e6972431b5f3159f6c8b7c2e8762ac50f43b371",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 91,
-      "hasStructuralAnalysis": true
-    },
-    "docs/arbeitsagentur-api/postfach-protocol-spec.md": {
-      "filePath": "docs/arbeitsagentur-api/postfach-protocol-spec.md",
-      "contentHash": "a69d1c5630830ad540be0574b8c5188743f4d702a71a09f7d5113e0c198e4daf",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 517,
-      "hasStructuralAnalysis": true
-    },
-    "docs/arbeitsagentur-api/profil-page-apis.md": {
-      "filePath": "docs/arbeitsagentur-api/profil-page-apis.md",
-      "contentHash": "72a78ad489702abfd931f3783130a38d592c3eb1d2d008ef7e4a217bd0e99ca5",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 105,
-      "hasStructuralAnalysis": true
-    },
-    "docs/arbeitsagentur-api/README.md": {
-      "filePath": "docs/arbeitsagentur-api/README.md",
-      "contentHash": "2d07957ad4aa9ccc4e9d540382fae07f0c1bb879b5e30b185d6a5516998a5bef",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 91,
-      "hasStructuralAnalysis": true
-    },
-    "docs/arbeitsagentur-api/session-lifecycle.md": {
-      "filePath": "docs/arbeitsagentur-api/session-lifecycle.md",
-      "contentHash": "8132ceda43e2234ac6c853e4b42f6ddf05c6696788f34a179b1ab27bc433630f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 384,
-      "hasStructuralAnalysis": true
-    },
-    "docs/arbeitsagentur-api/termine-apis.md": {
-      "filePath": "docs/arbeitsagentur-api/termine-apis.md",
-      "contentHash": "4dd3785cf436f7ad4d513d18f29223e469b9e9154e17f0aad7bd9ade49f7ca4e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 94,
-      "hasStructuralAnalysis": true
-    },
-    "docs/arbeitsagentur-api/termine-protocol-spec.md": {
-      "filePath": "docs/arbeitsagentur-api/termine-protocol-spec.md",
-      "contentHash": "116dce0b838afb48199afe8d95dba1a410a1793f106f7dd176571b3e8258cd70",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 164,
-      "hasStructuralAnalysis": true
-    },
-    "docs/architecture/c4-code-connector.md": {
-      "filePath": "docs/architecture/c4-code-connector.md",
-      "contentHash": "d96c863db78bccd2e05904aac805a1f9c6d00d83f8ba68a608d8bff969023beb",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 1319,
-      "hasStructuralAnalysis": true
-    },
-    "docs/architecture/c4-code-error-reporting.md": {
-      "filePath": "docs/architecture/c4-code-error-reporting.md",
-      "contentHash": "319e491eb5b563c68a8aef9c52b4a692248af4f586255011925de425f4674cce",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 835,
-      "hasStructuralAnalysis": true
-    },
-    "docs/architecture/c4-component-combobox.md": {
-      "filePath": "docs/architecture/c4-component-combobox.md",
-      "contentHash": "9c62df6c595e1671e45e8485b06ba50f109eaa853624376d35481dce128375b7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 383,
-      "hasStructuralAnalysis": true
-    },
-    "docs/architecture/c4-component-connector.md": {
-      "filePath": "docs/architecture/c4-component-connector.md",
-      "contentHash": "fa10b46a35c6470c909b97edc2175b592e95513736634a77e7140388d445d092",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 468,
-      "hasStructuralAnalysis": true
-    },
-    "docs/architecture/c4-component-e2e-current.md": {
-      "filePath": "docs/architecture/c4-component-e2e-current.md",
-      "contentHash": "8ef42fd2c996befed1e1b14ed84f35c6f2a0f0969e95d2db53e85121872c6c5a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 273,
-      "hasStructuralAnalysis": true
-    },
-    "docs/architecture/c4-component-e2e-target.md": {
-      "filePath": "docs/architecture/c4-component-e2e-target.md",
-      "contentHash": "f4c3e4b3756753f1fe9e33811a61c5c91ed37b530a3bf32dafb7806c17e29631",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 339,
-      "hasStructuralAnalysis": true
-    },
-    "docs/architecture/c4-components.md": {
-      "filePath": "docs/architecture/c4-components.md",
-      "contentHash": "a1421e2a2dd3e3eab551020cb50be8f60cd3804c92fae59cd7729e273361e8f8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 905,
-      "hasStructuralAnalysis": true
-    },
-    "docs/architecture/c4-container.md": {
-      "filePath": "docs/architecture/c4-container.md",
-      "contentHash": "e88261b89f7044512dd65e0a6f5365c3dd0cc865145bc7ecce39c6b7813c7276",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 294,
-      "hasStructuralAnalysis": true
-    },
-    "docs/architecture/c4-context.md": {
-      "filePath": "docs/architecture/c4-context.md",
-      "contentHash": "8ed509feb911390bfbe387954781d1d753d518ab100a950c88fcc82ef19d2e7c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 374,
-      "hasStructuralAnalysis": true
-    },
-    "docs/architecture/notification-channels.md": {
-      "filePath": "docs/architecture/notification-channels.md",
-      "contentHash": "2ee5344d6fa533f1689f7984707c441c1e2d928a9b537fd759c984116d973d66",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 698,
-      "hasStructuralAnalysis": true
-    },
-    "docs/architecture/notification-diagrams.md": {
-      "filePath": "docs/architecture/notification-diagrams.md",
-      "contentHash": "ae43afe5cb817a0842659b314902b32217137055c42b6268fe66c9782fd94c88",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 622,
-      "hasStructuralAnalysis": true
-    },
-    "docs/architecture/overview.md": {
-      "filePath": "docs/architecture/overview.md",
-      "contentHash": "a82a78af0d8dbc973e1fde9dd3fed809e313d1971d1979cb0d900b11ecf9dc87",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 890,
-      "hasStructuralAnalysis": true
-    },
-    "docs/architecture/public-api-v1.md": {
-      "filePath": "docs/architecture/public-api-v1.md",
-      "contentHash": "45916a2c574fbed950bc45d61ff66c87b906c6fea11232458057b238a35031dc",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 1221,
-      "hasStructuralAnalysis": true
-    },
-    "docs/audits/wcag22-kanban-audit-2026-04-02.md": {
-      "filePath": "docs/audits/wcag22-kanban-audit-2026-04-02.md",
-      "contentHash": "cdbbb27d5ffc32ab380f8abe371e91cdb5810d18e7ef5352f1ef43f000fa7575",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 462,
-      "hasStructuralAnalysis": true
-    },
-    "docs/BACKLOG.md": {
-      "filePath": "docs/BACKLOG.md",
-      "contentHash": "aa0c3abf3d8ea800c46b2054e5954e32422c107115192a40b3d4e8e932fe4053",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 302,
-      "hasStructuralAnalysis": true
-    },
-    "docs/BUGS.md": {
-      "filePath": "docs/BUGS.md",
-      "contentHash": "7e684a36f7c0beb8cd948c5b1b319dfad8a78129ebb185b89cd294c7ebe961b6",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 1264,
-      "hasStructuralAnalysis": true
-    },
-    "docs/crm-gap-analysis-twenty.md": {
-      "filePath": "docs/crm-gap-analysis-twenty.md",
-      "contentHash": "271d8028025ac6a8e0d137c322835bbc6752ea0d56b31918781c6f9b49c7dbe5",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 308,
-      "hasStructuralAnalysis": true
-    },
-    "docs/design/crm-schema-design.md": {
-      "filePath": "docs/design/crm-schema-design.md",
-      "contentHash": "cbc68ce68a6c8f2ea24ed848ad580af2a56a73b8cb93d174e24f984921b7cc5d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 733,
-      "hasStructuralAnalysis": true
-    },
-    "docs/design/gdpr-phase1-architecture.md": {
-      "filePath": "docs/design/gdpr-phase1-architecture.md",
-      "contentHash": "e919ba72a19aa563335ebadb992750d5e7ecda6300aa0a0cc36e6849c8fbb510",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 1049,
-      "hasStructuralAnalysis": true
-    },
-    "docs/design/kanban-ui-design.md": {
-      "filePath": "docs/design/kanban-ui-design.md",
-      "contentHash": "607b3f638fb7da6bc5be1d6eb3a98c904f7a28dfcb644076b1d1903beb983bdd",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 1012,
-      "hasStructuralAnalysis": true
-    },
-    "docs/design/perf-3-dispatch-context.md": {
-      "filePath": "docs/design/perf-3-dispatch-context.md",
-      "contentHash": "86eec51ad50a129412687b8e4ae27ff825718956e80fa3a2ee0840b95f0559f3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 681,
-      "hasStructuralAnalysis": true
-    },
-    "docs/documentation-agents.md": {
-      "filePath": "docs/documentation-agents.md",
-      "contentHash": "b936ebf22b6fdf8dbfe74ed8f0cbb1638a73415e85da23d609d436f062f72f99",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 97,
-      "hasStructuralAnalysis": true
-    },
-    "docs/enrichment-schema-design.md": {
-      "filePath": "docs/enrichment-schema-design.md",
-      "contentHash": "bbdeb36eaa6ffbcca669e11e920ef4a1a21e4c30a41f2643f60edc21fc9fed56",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 731,
-      "hasStructuralAnalysis": true
-    },
-    "docs/event-consumer-analysis.md": {
-      "filePath": "docs/event-consumer-analysis.md",
-      "contentHash": "65f4f34257845f3de724960aabe9ed084bf85b23de85285b3df9984346a3b152",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 66,
-      "hasStructuralAnalysis": true
-    },
-    "docs/feature-map-and-gaps.md": {
-      "filePath": "docs/feature-map-and-gaps.md",
-      "contentHash": "21becd3c1ddd346514e7d8ec5d32a9c406a50896b7238d2ede0322d5e7027d5c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 185,
-      "hasStructuralAnalysis": true
-    },
-    "docs/file-deletion-analysis.md": {
-      "filePath": "docs/file-deletion-analysis.md",
-      "contentHash": "9723b6c05d6194724003bcf0b05829faf65b815f2d087a345f55f1404d8acb39",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 38,
-      "hasStructuralAnalysis": true
-    },
-    "docs/gap-analysis-sprint-abc.md": {
-      "filePath": "docs/gap-analysis-sprint-abc.md",
-      "contentHash": "91a3bfcc469943196377171234fea0165d87922d2dd886cf14078c97705b64ee",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 87,
-      "hasStructuralAnalysis": true
-    },
-    "docs/gdpr-audit-report.md": {
-      "filePath": "docs/gdpr-audit-report.md",
-      "contentHash": "4c2d15fa873fec84711d3f10f027b4c2b9d49c10aa2615863e7cfedaa3fc5642",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 241,
-      "hasStructuralAnalysis": true
-    },
-    "docs/interface-fragility-analysis.md": {
-      "filePath": "docs/interface-fragility-analysis.md",
-      "contentHash": "a5029df222bb1fccdd903aa183481767445cc05d2bb02b3d5a72f663ce88fb2f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 235,
-      "hasStructuralAnalysis": true
-    },
-    "docs/next-session-prompt.md": {
-      "filePath": "docs/next-session-prompt.md",
-      "contentHash": "9535126cef6d31e3f6c976ece45488be5f7e0360c46905d2a819d2ff8fe872a3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 81,
-      "hasStructuralAnalysis": true
-    },
-    "docs/NOT-PLANNED.md": {
-      "filePath": "docs/NOT-PLANNED.md",
-      "contentHash": "e0c87b237b4a68721561111f6ca7d28d9edb85dc69262910a73e118fa4a7c10f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 10,
-      "hasStructuralAnalysis": true
-    },
-    "docs/open-items-2026-05-13.md": {
-      "filePath": "docs/open-items-2026-05-13.md",
-      "contentHash": "169b2853b1b26f46cfaadef3f5585f4e12b9b1e114274ea099bc3c3e5f7ce49d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 116,
-      "hasStructuralAnalysis": true
-    },
-    "docs/research/careerbert-hardware-research.md": {
-      "filePath": "docs/research/careerbert-hardware-research.md",
-      "contentHash": "e3ce85d0177bd56e43e6e4d18b361c56aac3792eeb90403b1e790f29cff47f61",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 489,
-      "hasStructuralAnalysis": true
-    },
-    "docs/research/careerbert-modellvergleich-einfach.md": {
-      "filePath": "docs/research/careerbert-modellvergleich-einfach.md",
-      "contentHash": "8764cafa2f99c8e4468233db3010fc21918ab11c8df938fcf0f79663999b47c7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 216,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s1b/00-scope.md": {
-      "filePath": "docs/reviews/s1b/00-scope.md",
-      "contentHash": "51a47d226b92a7a822f7cdcd0bd27313c017a86af4d3d43ef03dc4208c58435c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 77,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s1b/blind-spot-check.md": {
-      "filePath": "docs/reviews/s1b/blind-spot-check.md",
-      "contentHash": "292e27d35d81d56da37fa6362b6c72a8e79d3e642c1d14b7c11c4ba68da794d6",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 388,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s1b/consolidated-findings.md": {
-      "filePath": "docs/reviews/s1b/consolidated-findings.md",
-      "contentHash": "a0dfa12bea61e967c8294ad6eb3afb292ff76d6f1464dbb2906c0e1b3f2cfb07",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 745,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s1b/final-blind-spot.md": {
-      "filePath": "docs/reviews/s1b/final-blind-spot.md",
-      "contentHash": "d36a3ffd918e611400ae9c45c2f49d5a8305ef7265300fbaa9b294e20c8f24b1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 306,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s1b/main-agent-review.md": {
-      "filePath": "docs/reviews/s1b/main-agent-review.md",
-      "contentHash": "a0e1a73572249dfe6462e0807659fdc003274f01780f93acd63b147fc158246d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 176,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s1b/phase1-architecture.md": {
-      "filePath": "docs/reviews/s1b/phase1-architecture.md",
-      "contentHash": "cbfbdde782e51d9dfa66653f6b00b45b65ca6bfab377a2ea06b47ee98d9df182",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 473,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s1b/phase1-quality-testing.md": {
-      "filePath": "docs/reviews/s1b/phase1-quality-testing.md",
-      "contentHash": "515cddcb29b5bff3b005353ab674b6b5bdc84c067d4b2a15b7d16b07cc567923",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 189,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s1b/phase2-performance.md": {
-      "filePath": "docs/reviews/s1b/phase2-performance.md",
-      "contentHash": "e2543ba8191912cf4c467dcf06fbdd1dab09465e4f62680af9901f1cfee88332",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 265,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s1b/phase2-security.md": {
-      "filePath": "docs/reviews/s1b/phase2-security.md",
-      "contentHash": "7b900f698fd34317e15f751086f75bf8f3206e9e0370953085f7784da0fea7c2",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 384,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s2-resume/consolidated-report.md": {
-      "filePath": "docs/reviews/s2-resume/consolidated-report.md",
-      "contentHash": "86aae61f69f14c3e84821268fd2403091b065cec9cac471d4e10f345baa0a543",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 176,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s2-resume/interaction-design-review.md": {
-      "filePath": "docs/reviews/s2-resume/interaction-design-review.md",
-      "contentHash": "86b321be036598a61bf0cf1586461eb43d7f585800b55e24b748d9ccb4ff1303",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 97,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s2-resume/ux-data-story.md": {
-      "filePath": "docs/reviews/s2-resume/ux-data-story.md",
-      "contentHash": "aca61fc9316e110bd8aca08fe27f0edb168fecc77d9eb91760abcd65576c4c6f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 305,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s2-resume/wcag-audit.md": {
-      "filePath": "docs/reviews/s2-resume/wcag-audit.md",
-      "contentHash": "8c66e6f5bbfedaa78a7a2c69c291191bd0379e95aa2159ac8f1c2443efc5d9f5",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 119,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s2/accessibility-audit.md": {
-      "filePath": "docs/reviews/s2/accessibility-audit.md",
-      "contentHash": "3f525f8977a8df33a1662eb86d200e4a68200d977b13be15e4e4b1162a531614",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 66,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s2/consolidated-report.md": {
-      "filePath": "docs/reviews/s2/consolidated-report.md",
-      "contentHash": "2b6b6716abd3cc3bf538363d875dd0f9475465c616c08cae1c31a0087f1dd41c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 93,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s2/design-review.md": {
-      "filePath": "docs/reviews/s2/design-review.md",
-      "contentHash": "2833145dab7f38823cc8cc5e1854beaa258addb6382138ed9e33a6800d5b77ed",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 62,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s2/interaction-design-review.md": {
-      "filePath": "docs/reviews/s2/interaction-design-review.md",
-      "contentHash": "cae6c4514dbb7ba438f1bb7132646ea987a79edab9f1bd873ee0019569bb12ff",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 74,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s2/ux-quality-scorecard.md": {
-      "filePath": "docs/reviews/s2/ux-quality-scorecard.md",
-      "contentHash": "0bbb179df9ae9fe36fbce20bbfd482525ea48103d674578c397021d9eeecd9fa",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 283,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s2/wcag-2.2-audit.md": {
-      "filePath": "docs/reviews/s2/wcag-2.2-audit.md",
-      "contentHash": "2d1134d5d8b1dfcac3784f4f1bca2661c59ab6ddf9c4146722fc2b5f4ec7eddb",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 68,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s3-code-quality-review.md": {
-      "filePath": "docs/reviews/s3-code-quality-review.md",
-      "contentHash": "3f6702d01c4e04b4b30e8c41d9e8f49aa51086ffd639ce2a702a9f360ab49fd3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 396,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s3-crm-architecture-review.md": {
-      "filePath": "docs/reviews/s3-crm-architecture-review.md",
-      "contentHash": "bb1f9919654ab6e0165f969a8f198d5365f76792d0769d312aca195a21ad1647",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 201,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s3-performance-analysis.md": {
-      "filePath": "docs/reviews/s3-performance-analysis.md",
-      "contentHash": "4810c741976a17a8b9ba0317ca3fca946c696cbb6b64d4ed4d26ffc11ce53b88",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 520,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s3-resume/consolidated-report.md": {
-      "filePath": "docs/reviews/s3-resume/consolidated-report.md",
-      "contentHash": "64b8a7c2acbd23ade6a04c6d6136cdfac8a7a4e391f49c95e8c8bcd0951dd327",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 295,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s3-test-coverage-analysis.md": {
-      "filePath": "docs/reviews/s3-test-coverage-analysis.md",
-      "contentHash": "05f11a852d26cd8e9002effa83aee76a9034084e6cfab7e7a955a22978f29deb",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 368,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s3/blind-spot-analysis.md": {
-      "filePath": "docs/reviews/s3/blind-spot-analysis.md",
-      "contentHash": "f11e5e52edb1244eb75beb5445f7555981ccf28843e4c808e244717e375fa9af",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 384,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s3/comprehensive-review.md": {
-      "filePath": "docs/reviews/s3/comprehensive-review.md",
-      "contentHash": "4bbd9ab207ec470e1c949a5125f53e328fbeec81d428c090cc174df8c586ca7a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 105,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s4/blind-spot-analysis.md": {
-      "filePath": "docs/reviews/s4/blind-spot-analysis.md",
-      "contentHash": "0fc91fd095555e258f5055633bb96c5fc92a4e84be8ddca9a2304ba98126f631",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 160,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s4/consolidated-report.md": {
-      "filePath": "docs/reviews/s4/consolidated-report.md",
-      "contentHash": "04c12235f66560122aa4a0aa16a8214df97157bee51a759eca859c375f693365",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 244,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s4/wcag-audit.md": {
-      "filePath": "docs/reviews/s4/wcag-audit.md",
-      "contentHash": "9a1d35828822a201e32fe31fbd82edcca3e1d2756f4a67a3e5493d5a7388e2fc",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 131,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5-final-review.md": {
-      "filePath": "docs/reviews/s5-final-review.md",
-      "contentHash": "d8125d00073995294aa27277ac122e348f7a815b8f702ebafafbdc449729aad7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 580,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5-pre-implementation-checkup.md": {
-      "filePath": "docs/reviews/s5-pre-implementation-checkup.md",
-      "contentHash": "cf82f31c5abc9436103f6fff7b49679e30535df2a879ee67229ab2a680f5042d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 642,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5a-resume/allium-weed-report.md": {
-      "filePath": "docs/reviews/s5a-resume/allium-weed-report.md",
-      "contentHash": "67ce86d9e831f9b91571cfed65a388c9afdf77b232facd57031e372c6ec6d7dd",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 362,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5a-resume/consolidated-report-v2.md": {
-      "filePath": "docs/reviews/s5a-resume/consolidated-report-v2.md",
-      "contentHash": "c85f6b32719c7656d93a5384eb57f12a988307296385389badc3b7ff55f49cd7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 71,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5a-resume/consolidated-report.md": {
-      "filePath": "docs/reviews/s5a-resume/consolidated-report.md",
-      "contentHash": "5432a29434233e342a6bde89962ef9e0ffaf9d0bb255b5f15a99cda1a5633261",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 91,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5a-resume/data-storytelling.md": {
-      "filePath": "docs/reviews/s5a-resume/data-storytelling.md",
-      "contentHash": "4922fe04d6baf83e816bb94e2bb38ef1d6e07fb4cb041aa58fd6571c70495430",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 418,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5a-resume/interaction-design.md": {
-      "filePath": "docs/reviews/s5a-resume/interaction-design.md",
-      "contentHash": "ff8ce4ae65963f8cb77d3a7f7dc4f420f543dfb03a7d7e3754976f5141a8034b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 534,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5a-resume/performance-analysis.md": {
-      "filePath": "docs/reviews/s5a-resume/performance-analysis.md",
-      "contentHash": "864b775de148cace4aeca8bc999e128fdc531587263aa9a8baabff701e109a7a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 402,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5a-resume/stride-webhook.md": {
-      "filePath": "docs/reviews/s5a-resume/stride-webhook.md",
-      "contentHash": "59af1bbfe46bcb0c64f90d90cc2fae4615baef6238d518c6344b619e6fe6dc9d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 402,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5a-resume/test-gap-analysis.md": {
-      "filePath": "docs/reviews/s5a-resume/test-gap-analysis.md",
-      "contentHash": "71ad65813ac78532a7efc9992130005298a964efaca38a46c2c2ccda5adfbaf6",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 360,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5a-resume/ux-10point-checklist.md": {
-      "filePath": "docs/reviews/s5a-resume/ux-10point-checklist.md",
-      "contentHash": "4d57d401091adbca13e1bde7b4f61bcb6a1609e30eb63a8b06427327e5b58f71",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 216,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5a-resume/wcag-audit.md": {
-      "filePath": "docs/reviews/s5a-resume/wcag-audit.md",
-      "contentHash": "edd432ec68eb8783e8673a9b886f0e3a0d6594bce395a6671efeae18c59bcc2b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 1016,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5a/review-3stage-analysis.md": {
-      "filePath": "docs/reviews/s5a/review-3stage-analysis.md",
-      "contentHash": "ebd94e13c6959130dc6edb71ed70c190c5b7a21f1ea3ec84db66fa6f9c8e0642",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 198,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5a/review-allium-weed.md": {
-      "filePath": "docs/reviews/s5a/review-allium-weed.md",
-      "contentHash": "dcdbc44bb7ae44a234e12f5b738dc0692ff6b718073f8f64072f3ec8cbe8a079",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 147,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5a/review-comprehensive.md": {
-      "filePath": "docs/reviews/s5a/review-comprehensive.md",
-      "contentHash": "697824dbf7393d349166398dec15e5a82ec6f0b782f8e0e6a9b6ba60815383f4",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 273,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/architecture.md": {
-      "filePath": "docs/reviews/s5b/architecture.md",
-      "contentHash": "b315b08afd0b0466ea0d7c73f3352d7e5793b3e77e5884b60863bb683eab22b8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 286,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/best-practices.md": {
-      "filePath": "docs/reviews/s5b/best-practices.md",
-      "contentHash": "e2d610ceedc932d495ee471c213234058a9e7377f6ebcfcf21ac6a0c8a90cfe4",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 187,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/code-quality.md": {
-      "filePath": "docs/reviews/s5b/code-quality.md",
-      "contentHash": "98b115f2299969ffeb2e71b02a5a1dc2466341f03c0d0694f5f6e7885ff626f3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 326,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/comprehensive-review-final.md": {
-      "filePath": "docs/reviews/s5b/comprehensive-review-final.md",
-      "contentHash": "a34ecb073f8c20372dc099003dc8a521f798e610f8d1bcc1b0da4d96e9ea59ac",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 126,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/consolidated-report.md": {
-      "filePath": "docs/reviews/s5b/consolidated-report.md",
-      "contentHash": "6f550a1431c66791663f7ba7307e8eb9fc37a9222ffc1b50a78a65cf05fd24ce",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 156,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/data-storytelling.md": {
-      "filePath": "docs/reviews/s5b/data-storytelling.md",
-      "contentHash": "2acc26c2ee788fb2ce57785797be14794082922b6c457b65aaafa1903a422ede",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 305,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/flashlight-analysis.md": {
-      "filePath": "docs/reviews/s5b/flashlight-analysis.md",
-      "contentHash": "51d05043f3d9e037c5767f765ad8c4f537d494f3fdbdec7f2a442cba803d03a2",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 223,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/interaction-design.md": {
-      "filePath": "docs/reviews/s5b/interaction-design.md",
-      "contentHash": "cd7d33b0023703ae186fb996380fff1a0a9aeafa03aadce1c6b1a18ab0e75e2c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 262,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/performance.md": {
-      "filePath": "docs/reviews/s5b/performance.md",
-      "contentHash": "304cd507f620b6c462523f14f58e3a06dc3b2f1aa7e7c573f82e3ff942b2d8bd",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 956,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/security-audit.md": {
-      "filePath": "docs/reviews/s5b/security-audit.md",
-      "contentHash": "73fda95bdcfe68cecdd5c5f1ffb7f815dde25afedd51ce453dbe7a0a70812026",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 514,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/stride-analysis.md": {
-      "filePath": "docs/reviews/s5b/stride-analysis.md",
-      "contentHash": "c8279df9c3e2dbf01ee9c6d41eb6a987876dc197fbcc37f42e08ae50acdb1e3a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 359,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/test-gap-verification.md": {
-      "filePath": "docs/reviews/s5b/test-gap-verification.md",
-      "contentHash": "9e060718335466c20ac765df5f7f9bc2f75bd220af22723d4f295ebfbce74514",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 548,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/testing-coverage.md": {
-      "filePath": "docs/reviews/s5b/testing-coverage.md",
-      "contentHash": "5478fa59a3ba067da2d4cce60978b7de4ea5ada85be0900f5279e56da24da948",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 366,
-      "hasStructuralAnalysis": true
-    },
-    "docs/reviews/s5b/wcag-audit.md": {
-      "filePath": "docs/reviews/s5b/wcag-audit.md",
-      "contentHash": "c751831065d4c3f250bd46db7ca03a30625e1d64f81c7539dc8972bc46cf386b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 325,
-      "hasStructuralAnalysis": true
-    },
-    "docs/ROADMAP.md": {
-      "filePath": "docs/ROADMAP.md",
-      "contentHash": "91fa5dc6215f9f8a6430b86d1c83f3389036ada8ef49b629b72143bdfd816b4c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 2839,
-      "hasStructuralAnalysis": true
-    },
-    "docs/security/SECURITY-REPORT-upstream-credential-url-leakage.md": {
-      "filePath": "docs/security/SECURITY-REPORT-upstream-credential-url-leakage.md",
-      "contentHash": "b811848c7bef14ff25f12f386f2e82106a38a4c201527ba1bbfe363df6426805",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 147,
-      "hasStructuralAnalysis": true
-    },
-    "docs/security/STRIDE-auth-threat-model.md": {
-      "filePath": "docs/security/STRIDE-auth-threat-model.md",
-      "contentHash": "50355d44fb0019810f725f86916c29071bc99197573d92d0c1b65dda65e93035",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 646,
-      "hasStructuralAnalysis": true
-    },
-    "docs/session-2026-05-12-domain-expert-analysis.md": {
-      "filePath": "docs/session-2026-05-12-domain-expert-analysis.md",
-      "contentHash": "e47cfae872dbd93cf01160b608672f0a9df364513605e8bb0d406cc72bf2eaae",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 327,
-      "hasStructuralAnalysis": true
-    },
-    "docs/session-2026-05-12-open-items.md": {
-      "filePath": "docs/session-2026-05-12-open-items.md",
-      "contentHash": "263edd84d5c8d53b7d5aca3c16adf1f2b5968efeb53fa3dd638c65c1a17c6eac",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 57,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/development-flow.md": {
-      "filePath": "docs/superpowers/development-flow.md",
-      "contentHash": "208a3e21290724c551155574b28fa44f5f3da115d755eac325625d404c331d3b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 306,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/plans/2026-04-01-e2e-gap-analysis-and-repair.md": {
-      "filePath": "docs/superpowers/plans/2026-04-01-e2e-gap-analysis-and-repair.md",
-      "contentHash": "dbd411384ac0d538bebcbecb5dddc7c124daa4aecf79ee77378998a76d7c4ebe",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 167,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/plans/2026-04-01-session-staged-prompts.md": {
-      "filePath": "docs/superpowers/plans/2026-04-01-session-staged-prompts.md",
-      "contentHash": "1f431869ff98fd8325cdd426009345f62292510eb415ccf832a0eb65839f4833",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 940,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/plans/2026-04-03-sprint-s5-session-prompts.md": {
-      "filePath": "docs/superpowers/plans/2026-04-03-sprint-s5-session-prompts.md",
-      "contentHash": "35c59bf158a62b40f0bb31f20bb3c4d74b5dc56a1aff6cc73c06fc8ab378dcf7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 500,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/plans/2026-04-07-reference-data-connector.md": {
-      "filePath": "docs/superpowers/plans/2026-04-07-reference-data-connector.md",
-      "contentHash": "53bdf3b4e624a98e94e43c13b01a42858a5979bc739ded0a58a30aab1ea5ded1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 1100,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/plans/2026-04-08-manifest-v2-self-contained-modules.md": {
-      "filePath": "docs/superpowers/plans/2026-04-08-manifest-v2-self-contained-modules.md",
-      "contentHash": "8a90ff7ba7ed22843e98f499219371b6bd63cf5cd5339881afff97a96668d9ab",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 896,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/plans/2026-05-13-if2-zod-event-validation.md": {
-      "filePath": "docs/superpowers/plans/2026-05-13-if2-zod-event-validation.md",
-      "contentHash": "52a87594fa517bd9242537cf31cf40f00034716bc03e1d9cfda07b30558dc25c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 630,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/plans/2026-05-14-s1-account-deletion.md": {
-      "filePath": "docs/superpowers/plans/2026-05-14-s1-account-deletion.md",
-      "contentHash": "de77237a7e2cd401abb33ba1bac627e55f0e29349f9944a5f32bb349d8645e27",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 325,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/plans/2026-05-28-geocode-holiday-implementation.md": {
-      "filePath": "docs/superpowers/plans/2026-05-28-geocode-holiday-implementation.md",
-      "contentHash": "8b3e68583ac7e4f9e7d11018f2e2ec7a0685f1aba36243b3be38d533eb3bfded",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 2647,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/plans/2026-05-28-holiday-geocode-implementation-session.md": {
-      "filePath": "docs/superpowers/plans/2026-05-28-holiday-geocode-implementation-session.md",
-      "contentHash": "0d44a30387677318b9f0724d3d5bd212831c19f70196c14ea2eead8f47781278",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 106,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/plans/2026-05-28-next-session-followups.md": {
-      "filePath": "docs/superpowers/plans/2026-05-28-next-session-followups.md",
-      "contentHash": "5a7d235f06ca3ad28b021138b77fe40b127206784bb73efed30df5b0943d851b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 60,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/plans/2026-05-29-next-session-startprompt.md": {
-      "filePath": "docs/superpowers/plans/2026-05-29-next-session-startprompt.md",
-      "contentHash": "d57985b88bb3f4ffa2bc3ee1751b4f7b47fdf80a70f3aa70000b7bc2892f36a5",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 180,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/plans/2026-05-30-next-sprint-pii-at-rest.md": {
-      "filePath": "docs/superpowers/plans/2026-05-30-next-sprint-pii-at-rest.md",
-      "contentHash": "73a542444f8b7d1d1f5e67a466a5fc02889cc6ce0f11c4ec655b81659174259d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 60,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/specs/2026-03-29-roadmap-0.5-0.6-0.3-design.md": {
-      "filePath": "docs/superpowers/specs/2026-03-29-roadmap-0.5-0.6-0.3-design.md",
-      "contentHash": "f50f83f0358bc552b3943cfee92c6c8c848d4d420ba0dc5d040be4cf042cc8e0",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 416,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/specs/2026-04-01-session-staged-sprint-verification-design.md": {
-      "filePath": "docs/superpowers/specs/2026-04-01-session-staged-sprint-verification-design.md",
-      "contentHash": "19471c31b06b901679370721861d80dcf6c1f3b8477dcc38696b83c34d0de92f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 518,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/specs/2026-04-03-sprint-e-d-ui-gaps-notifications-design.md": {
-      "filePath": "docs/superpowers/specs/2026-04-03-sprint-e-d-ui-gaps-notifications-design.md",
-      "contentHash": "fcd7905c01c10621cf5a62aceac0525f902fe21ad33310243f56b1888d007bba",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 242,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/specs/2026-04-06-logo-asset-cache-design.md": {
-      "filePath": "docs/superpowers/specs/2026-04-06-logo-asset-cache-design.md",
-      "contentHash": "3c7f2ee1d42eb84ecae4a38f8cec8e133aba867bb392151542cd89e7a16a2045",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 185,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/specs/2026-05-28-holiday-reference-data-design.md": {
-      "filePath": "docs/superpowers/specs/2026-05-28-holiday-reference-data-design.md",
-      "contentHash": "c15ea45a43482b34882beb0e6c3a6004a8a93c0f2cf5ad8d7e9d2a6829ff25e7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 792,
-      "hasStructuralAnalysis": true
-    },
-    "docs/superpowers/templates/sprint-session-prompt.md": {
-      "filePath": "docs/superpowers/templates/sprint-session-prompt.md",
-      "contentHash": "2be6394ada5f85ce24b542c665d98af8645d406758bfe5f44fd4521b64a78189",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 207,
-      "hasStructuralAnalysis": true
-    },
-    "docs/test-design-s4-blindspots.md": {
-      "filePath": "docs/test-design-s4-blindspots.md",
-      "contentHash": "ca6e0f883536d4731d88e3136a5f2738a909e2e34743c9d83fe24db2ebc5fd26",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 526,
-      "hasStructuralAnalysis": true
-    },
-    "docs/test-fixture-analysis.md": {
-      "filePath": "docs/test-fixture-analysis.md",
-      "contentHash": "45be2a1e312fe10c9e1ca5eeb8762170ddf00047b667e5426bb1636a413908ab",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 71,
-      "hasStructuralAnalysis": true
-    },
-    "docs/test-scenario-matrix-s4.md": {
-      "filePath": "docs/test-scenario-matrix-s4.md",
-      "contentHash": "550f5df9e9c568d1908a6797b9d5ee1ca7456e34782950ffd6e8090f7ff9f7ac",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 631,
-      "hasStructuralAnalysis": true
-    },
-    "docs/twenty-crm-implementation-patterns.md": {
-      "filePath": "docs/twenty-crm-implementation-patterns.md",
-      "contentHash": "53d771e31b675423f47e0b4121c9a79896cdb4cc2894bf298376e1cbc89767ee",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 1219,
-      "hasStructuralAnalysis": true
-    },
-    "docs/UPSTREAM-BUGS.md": {
-      "filePath": "docs/UPSTREAM-BUGS.md",
-      "contentHash": "2155447188041a1a1919adf5f894f3523faf8db6d42d1225368f346fd2aa5257",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 208,
-      "hasStructuralAnalysis": true
-    },
-    "docs/user-journey-audit.md": {
-      "filePath": "docs/user-journey-audit.md",
-      "contentHash": "676417c5bd348f915a6848ec83a1551686df9b234a85471d03e37fbf33b12a5d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 478,
-      "hasStructuralAnalysis": true
-    },
-    "docs/welle2-handoff.md": {
-      "filePath": "docs/welle2-handoff.md",
-      "contentHash": "cc6f3fb62cb8da40b3db0bff4374f429d5412eab6a38b2257a5f5d4d97eba021",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 118,
-      "hasStructuralAnalysis": true
     },
     "e2e/cleanup-stale-data.ts": {
       "filePath": "e2e/cleanup-stale-data.ts",
@@ -13324,16 +11139,6 @@
         "cleanupStaleE2EData"
       ],
       "totalLines": 189,
-      "hasStructuralAnalysis": true
-    },
-    "e2e/CONVENTIONS.md": {
-      "filePath": "e2e/CONVENTIONS.md",
-      "contentHash": "b7dfe9e87faddfc6d5563a3a6d2e296800f74b4733166c0c5aa038bcd4de2f91",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 215,
       "hasStructuralAnalysis": true
     },
     "e2e/crud/activity-crud.spec.ts": {
@@ -13752,7 +11557,7 @@
     },
     "e2e/crud/job-crud.spec.ts": {
       "filePath": "e2e/crud/job-crud.spec.ts",
-      "contentHash": "fb3459293d6a685fe20e6921a8e5837a78a6550ab4b56eec19094bd0911d1f64",
+      "contentHash": "aa266135da0529371c331da75913e4473e7649e192c7e6dc5cdf0aa18fc547b6",
       "functions": [
         {
           "name": "navigateToJobs",
@@ -13795,7 +11600,7 @@
             "opts"
           ],
           "exported": false,
-          "lineCount": 90
+          "lineCount": 106
         },
         {
           "name": "deleteJob",
@@ -13825,7 +11630,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 399,
+      "totalLines": 474,
       "hasStructuralAnalysis": true
     },
     "e2e/crud/job-detail-panels.spec.ts": {
@@ -15101,16 +12906,6 @@
       "totalLines": 11,
       "hasStructuralAnalysis": true
     },
-    "package.json": {
-      "filePath": "package.json",
-      "contentHash": "c31e28a99d92d24c1f39e3177f721febab2f848696acf8e11c57ff20238c7d22",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 130,
-      "hasStructuralAnalysis": true
-    },
     "playwright.config.ts": {
       "filePath": "playwright.config.ts",
       "contentHash": "6297cca134ae7783897febef4b1d41fbc2a81520daf409191f4583842ab3b2ff",
@@ -15139,576 +12934,6 @@
       "totalLines": 9,
       "hasStructuralAnalysis": true
     },
-    "prisma/migrations/20240524022540_init/migration.sql": {
-      "filePath": "prisma/migrations/20240524022540_init/migration.sql",
-      "contentHash": "a0b6b291fbe7317b70b28a59394bf5aab8da8e73242c00a8db756a4776206d04",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 95,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20240528002543_add_string_id_to_user/migration.sql": {
-      "filePath": "prisma/migrations/20240528002543_add_string_id_to_user/migration.sql",
-      "contentHash": "8edc3da5a02ea1b996edddc23658d9fbecd3a60de0e5d4ded736fdb52648a4e3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 121,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20240604110546_add_label_and_value/migration.sql": {
-      "filePath": "prisma/migrations/20240604110546_add_label_and_value/migration.sql",
-      "contentHash": "7de2e0a7211c1ec91fcfc4be649f5ed45ca9101a1db66d15a7281f2d90edfef0",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 139,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20240612084946_add_joburl_and_applied_fields/migration.sql": {
-      "filePath": "prisma/migrations/20240612084946_add_joburl_and_applied_fields/migration.sql",
-      "contentHash": "4ddedb5962142199d447f999af3de4b0ac592f636e4f05ebaac9e4b556105529",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 31,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20240624230528_add_profile_resume_models/migration.sql": {
-      "filePath": "prisma/migrations/20240624230528_add_profile_resume_models/migration.sql",
-      "contentHash": "44013e9884acf731fb2e1c4b62303aefde10c62ec44dfa38742d4944c767c4b8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 113,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20240627061730_update_resume_section_and_summary_relationship/migration.sql": {
-      "filePath": "prisma/migrations/20240627061730_update_resume_section_and_summary_relationship/migration.sql",
-      "contentHash": "cd9a3357e225d790a9b154cc5d8697f9d97f974267c95f5f784f5c5a711ac60b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 26,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20241103213832_resume_upload/migration.sql": {
-      "filePath": "prisma/migrations/20241103213832_resume_upload/migration.sql",
-      "contentHash": "530da9be5e66b4274ff8f98352450da98b94463a0484c9141f060c761c94057a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 57,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20241210004820_add_activity_and_activty_type_table/migration.sql": {
-      "filePath": "prisma/migrations/20241210004820_add_activity_and_activty_type_table/migration.sql",
-      "contentHash": "8e47fc040c3ce9e6dc7d7f319e2c2e649a4465f6f7419eae4a86def7a08d148f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 31,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260113163354_add_task_model/migration.sql": {
-      "filePath": "prisma/migrations/20260113163354_add_task_model/migration.sql",
-      "contentHash": "53c7f09f95895c3c6e91cad78d65a3820c60797c02f733a5c362ca5c9fc57e60",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 55,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260130042742_add_automations/migration.sql": {
-      "filePath": "prisma/migrations/20260130042742_add_automations/migration.sql",
-      "contentHash": "7cef202cb4bca08f2483eaae298d4a30799862f0af3b58d3313314e904be5aa4",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 91,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260131063928_add_user_settings/migration.sql": {
-      "filePath": "prisma/migrations/20260131063928_add_user_settings/migration.sql",
-      "contentHash": "04b3640e27abf95cd8fa93af95282349690e8cbf8ad87c264b553ad8c36e63c0",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 13,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260212202940_add_createdby_to_jobsource/migration.sql": {
-      "filePath": "prisma/migrations/20260212202940_add_createdby_to_jobsource/migration.sql",
-      "contentHash": "1454a8942433c8e00c0bfbd34b28c2f4cbe3ad242f011d95932aa8d0cf97fa43",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 23,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260216_multi_user_unique_constraints/migration.sql": {
-      "filePath": "prisma/migrations/20260216_multi_user_unique_constraints/migration.sql",
-      "contentHash": "a1b88d6f7af5777ca8a723ea99f0fdd03e9e1ce62d5f359ab4087f591361ea2d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 24,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260217_add_location_unique_constraint/migration.sql": {
-      "filePath": "prisma/migrations/20260217_add_location_unique_constraint/migration.sql",
-      "contentHash": "351c839f39e19c9428a8a92400e29405a523d11a1be5c3f1e72e523967e7dac9",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 63,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260219201822_apply/migration.sql": {
-      "filePath": "prisma/migrations/20260219201822_apply/migration.sql",
-      "contentHash": "65b229a058db018d67f4395801e2e515c1f8279aab4ee071b931ee87dec26d34",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 21,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260220172347_add_connector_params/migration.sql": {
-      "filePath": "prisma/migrations/20260220172347_add_connector_params/migration.sql",
-      "contentHash": "6a46eaa83a05a6d574cec11d8329f0c638066a6c3fd59a49e61d6bbdfe073485",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 3,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260302223041_add_note_model/migration.sql": {
-      "filePath": "prisma/migrations/20260302223041_add_note_model/migration.sql",
-      "contentHash": "3f993ce6cb5f6489265bcaec50745cc87f7c96447f49ea80c21aeaf66968b3a1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 18,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260303014226_add_tag_model/migration.sql": {
-      "filePath": "prisma/migrations/20260303014226_add_tag_model/migration.sql",
-      "contentHash": "a776db25b56591324fcb60ee8b1907904d6e49ca83d1aad685d61f002235f5d9",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 26,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260305175020_add_question_model/migration.sql": {
-      "filePath": "prisma/migrations/20260305175020_add_question_model/migration.sql",
-      "contentHash": "190dcff790921337120aa54b060c69152e606f6ad91198927245700304da4633",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 28,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260329013355_add_module_lifecycle/migration.sql": {
-      "filePath": "prisma/migrations/20260329013355_add_module_lifecycle/migration.sql",
-      "contentHash": "b5d147ec1567fa36824447085df7c0edff8b0f77c2ccc425b41768776a4433be",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 25,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260329090029_add_notifications/migration.sql": {
-      "filePath": "prisma/migrations/20260329090029_add_notifications/migration.sql",
-      "contentHash": "05a79469481cd2155a0693b233badb942fb52ded94cac5e73b5613c274cc6ca0",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 19,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260329120748_add_vacancy_pipeline/migration.sql": {
-      "filePath": "prisma/migrations/20260329120748_add_vacancy_pipeline/migration.sql",
-      "contentHash": "34cb9d4a47d983a54be9e3cb6437c0b6e3a32384f29019aa220900bdb4649062",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 66,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260329130039_remove_staged_vacancy_unique/migration.sql": {
-      "filePath": "prisma/migrations/20260329130039_remove_staged_vacancy_unique/migration.sql",
-      "contentHash": "62703ade324bbeb0b8647dcd50ad1030480334a66cd442f7a4da95e728f75a7c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 6,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260329193149_add_schedule_frequency/migration.sql": {
-      "filePath": "prisma/migrations/20260329193149_add_schedule_frequency/migration.sql",
-      "contentHash": "931255a2eb1255643983f32fd814efd5f8dc627b24968063d6695591a2885b05",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 32,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260330174155_add_run_source_to_automation_run/migration.sql": {
-      "filePath": "prisma/migrations/20260330174155_add_run_source_to_automation_run/migration.sql",
-      "contentHash": "f67794f26d27c46991e1d69bc330d2d5c7da03507ed479018a3034bab6db0be2",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 27,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260331231314_add_public_api_key_and_company_blacklist/migration.sql": {
-      "filePath": "prisma/migrations/20260331231314_add_public_api_key_and_company_blacklist/migration.sql",
-      "contentHash": "7254cd1a00855c1cdfd0f5b49128701dbe3abe0e9ca78da450036895b28970b2",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 38,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260402124630_add_crm_core_status_history_kanban/migration.sql": {
-      "filePath": "prisma/migrations/20260402124630_add_crm_core_status_history_kanban/migration.sql",
-      "contentHash": "09e3df1d96af9d342659f8094f7e848099cb48b9a39e54358a5405ab2df71545",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 68,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260403072105_add_job_version_field/migration.sql": {
-      "filePath": "prisma/migrations/20260403072105_add_job_version_field/migration.sql",
-      "contentHash": "066f3af532903fea0e8be3d1f9932054c9519b74f0218f599a16e2651843b072",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 45,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260403073831_add_enrichment_models/migration.sql": {
-      "filePath": "prisma/migrations/20260403073831_add_enrichment_models/migration.sql",
-      "contentHash": "abae707cce14f3be47884f7608de2b680cf8268d08da2f686f54b8235f7972f0",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 56,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260404102746_add_webhook_endpoint/migration.sql": {
-      "filePath": "prisma/migrations/20260404102746_add_webhook_endpoint/migration.sql",
-      "contentHash": "4c93e32f606667618fdcef4f366016e94372c76ee3713ca52b4de10eed20ed5e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 18,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260405191941_add_smtp_config/migration.sql": {
-      "filePath": "prisma/migrations/20260405191941_add_smtp_config/migration.sql",
-      "contentHash": "744e8aef2d418afade5084b990fe5c3bc0976479a4e09820428b1c106509040c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 23,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260405193546_add_push_models/migration.sql": {
-      "filePath": "prisma/migrations/20260405193546_add_push_models/migration.sql",
-      "contentHash": "511861ebf036d3ddc94959ec0b9d27624db0ea45b550b551e4beab3f93b9e5da",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 35,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260406023317_add_logo_asset_model/migration.sql": {
-      "filePath": "prisma/migrations/20260406023317_add_logo_asset_model/migration.sql",
-      "contentHash": "3a919e651dcbc5f637ed96d373946919982f6cb37f3ca87f946fbc9522f3d82e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 46,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260408141442_add_notification_data_field/migration.sql": {
-      "filePath": "prisma/migrations/20260408141442_add_notification_data_field/migration.sql",
-      "contentHash": "4e6459d2bec83f18aa683eab9146cd50d2ab92b8f7906097e8998807f854fc6b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 3,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260408203420_add_eures_extended_fields/migration.sql": {
-      "filePath": "prisma/migrations/20260408203420_add_eures_extended_fields/migration.sql",
-      "contentHash": "3a1689a45414d7d5fc726da1de2270dc3c00af5ed0c42b202be6b3dfd6f30bf4",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 20,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260409135116_add_notification_structured_fields/migration.sql": {
-      "filePath": "prisma/migrations/20260409135116_add_notification_structured_fields/migration.sql",
-      "contentHash": "92ea98fb9a51a665e6f49f3d7ccab2b1a74d5394186c12984794c60a5b81e055",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 11,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260409220000_add_staged_vacancy_employer_name_index/migration.sql": {
-      "filePath": "prisma/migrations/20260409220000_add_staged_vacancy_employer_name_index/migration.sql",
-      "contentHash": "0a6afcf2f54e2a157b99e1d550ec27ed0d8592eae93db636f6b390c3d4c72589",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 10,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260410040000_sprint5_audit_and_index/migration.sql": {
-      "filePath": "prisma/migrations/20260410040000_sprint5_audit_and_index/migration.sql",
-      "contentHash": "4c7450eafa6fddc1beeffa8a22ff162c19a13f4cf590e3394638d7362439470f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 42,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260510092100_add_crm_core_models/migration.sql": {
-      "filePath": "prisma/migrations/20260510092100_add_crm_core_models/migration.sql",
-      "contentHash": "223708553f7c0498518f5e31e5edff41b639975ed4f026cc1f12957ad04f91de",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 220,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260510124631_person_multi_company/migration.sql": {
-      "filePath": "prisma/migrations/20260510124631_person_multi_company/migration.sql",
-      "contentHash": "318b6a482dbde5c2c10df95982a8269842fcec81f5353d88bb2d61308b772ef4",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 53,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260510164025_crm_chains_abc/migration.sql": {
-      "filePath": "prisma/migrations/20260510164025_crm_chains_abc/migration.sql",
-      "contentHash": "91133189795eff56795bb1049b26d3069620db5e59660febecd2a75a3145346d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 73,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260510193831_add_activity_log_company_job_relations/migration.sql": {
-      "filePath": "prisma/migrations/20260510193831_add_activity_log_company_job_relations/migration.sql",
-      "contentHash": "d57a17aa3cadb9677b09d2766917620215c0d344ad8c858e7b69e7370fdb8175",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 29,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260512212711_add_crm_cascade_deletes/migration.sql": {
-      "filePath": "prisma/migrations/20260512212711_add_crm_cascade_deletes/migration.sql",
-      "contentHash": "b4025440e672066fded29dd9481327fa205875c0a09abe11714aec2016df6e69",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 48,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260512221118_fix_polymorphic_target_cascade/migration.sql": {
-      "filePath": "prisma/migrations/20260512221118_fix_polymorphic_target_cascade/migration.sql",
-      "contentHash": "9569f91d2b9ffb99aa57ac99e06f947fdfcdd04ed13fae124537cf84aeebabe6",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 40,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260512224224_cascade_all_polymorphic_targets/migration.sql": {
-      "filePath": "prisma/migrations/20260512224224_cascade_all_polymorphic_targets/migration.sql",
-      "contentHash": "53744825bcf72417d1193f04b4763d08365da943a878aa0e98e524cde6d1f7d6",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 40,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260512225749_fix_legacy_interview_cascade/migration.sql": {
-      "filePath": "prisma/migrations/20260512225749_fix_legacy_interview_cascade/migration.sql",
-      "contentHash": "40d232d280e99e979d86364c00e2d7847af984ce319090dd8a02fcdff961bf55",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 15,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260512230537_flashlight_fix_person_company_fk_gaps/migration.sql": {
-      "filePath": "prisma/migrations/20260512230537_flashlight_fix_person_company_fk_gaps/migration.sql",
-      "contentHash": "00e7e4ab5db14fd6e902f35e8778411100e7bcac3e21bb2df8387fffd9c5ad7f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 24,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260512235352_add_missing_fk_indexes/migration.sql": {
-      "filePath": "prisma/migrations/20260512235352_add_missing_fk_indexes/migration.sql",
-      "contentHash": "77bfb7edbbf68f55c9ddc5a28bc1c08d8689b18c62b72990e3a60af2cd63b42a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 9,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260513112116_sprint_c_indexes_and_restrict/migration.sql": {
-      "filePath": "prisma/migrations/20260513112116_sprint_c_indexes_and_restrict/migration.sql",
-      "contentHash": "533b260854c2fa16aa184a044cec05add010e8cae94b63c0e6a310eefb22fd35",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 90,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260513170926_s1_account_deletion_cascades/migration.sql": {
-      "filePath": "prisma/migrations/20260513170926_s1_account_deletion_cascades/migration.sql",
-      "contentHash": "6b7be31e736df166265288d7099bd9b5be06079fb453c6b4cd7965396c982450",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 662,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260513183723_gdpr_privacy_settings/migration.sql": {
-      "filePath": "prisma/migrations/20260513183723_gdpr_privacy_settings/migration.sql",
-      "contentHash": "8b5e6f46fa74d8b9a78684a33c6846c693df6e5b77c441fefadd05e4a3883633",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 21,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260528184122_add_person_address_codes/migration.sql": {
-      "filePath": "prisma/migrations/20260528184122_add_person_address_codes/migration.sql",
-      "contentHash": "dfc6f33cb940ffd68cc2d648ba37cd47c49d625b3d79a0c9ff6fc5e1c3a1f21b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 4,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260601113218_welle1_audit_targettype/migration.sql": {
-      "filePath": "prisma/migrations/20260601113218_welle1_audit_targettype/migration.sql",
-      "contentHash": "31cd4226dbec9f7da81b44e9a34ec9aeb9fc30db15ac0291530a1e3ed9b64fff",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 3,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260601134805_add_profile_location_currency/migration.sql": {
-      "filePath": "prisma/migrations/20260601134805_add_profile_location_currency/migration.sql",
-      "contentHash": "1c8d9ee00a387524f6c4a3a524f882457f9e11bfca64ad62724c9fe89ca9fed7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 5,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260601191028_add_job_structured_salary/migration.sql": {
-      "filePath": "prisma/migrations/20260601191028_add_job_structured_salary/migration.sql",
-      "contentHash": "97c43666e9ffedf46ba2d6c44042826c8c1d6401169e2f577d610428553aad29",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 7,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/20260601205337_add_profile_userid_unique/migration.sql": {
-      "filePath": "prisma/migrations/20260601205337_add_profile_userid_unique/migration.sql",
-      "contentHash": "e3186c8af214ac20d7b748cf7e7f313fd0d1c403a92a97a3dce63be12dcf5c70",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 5,
-      "hasStructuralAnalysis": true
-    },
-    "prisma/migrations/migration_lock.toml": {
-      "filePath": "prisma/migrations/migration_lock.toml",
-      "contentHash": "3389dbaf2a3cf4b413275867ac6f550b27f79efe85ee9c12082cdd8c5b8239c4",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 4,
-      "hasStructuralAnalysis": true
-    },
     "prisma/prisma.config.ts": {
       "filePath": "prisma/prisma.config.ts",
       "contentHash": "c47a45024031fbf932043f5cb7d7daa910293b177a9833cb0b7fb06bce96e03e",
@@ -15725,16 +12950,6 @@
       "exports": [],
       "totalLines": 9,
       "hasStructuralAnalysis": true
-    },
-    "prisma/schema.prisma": {
-      "filePath": "prisma/schema.prisma",
-      "contentHash": "9158fa7dc2e62b81bcb83baf8905064857c1921b409c2120a9cf013079065cbb",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 1233,
-      "hasStructuralAnalysis": false
     },
     "prisma/seed.ts": {
       "filePath": "prisma/seed.ts",
@@ -15774,16 +12989,6 @@
       "imports": [],
       "exports": [],
       "totalLines": 40,
-      "hasStructuralAnalysis": true
-    },
-    "README.md": {
-      "filePath": "README.md",
-      "contentHash": "4e1d17fc90257688869b554955b4db24beb005ce49cd6a55f57de447746a3166",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 109,
       "hasStructuralAnalysis": true
     },
     "release.sh": {
@@ -16104,116 +13309,6 @@
       "totalLines": 393,
       "hasStructuralAnalysis": true
     },
-    "scripts/sessions/s1a-prompt.md": {
-      "filePath": "scripts/sessions/s1a-prompt.md",
-      "contentHash": "7793a935458bde346f8d41b3d9ad84fb969e40281286dc9cc9fa44a4efee81b1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 146,
-      "hasStructuralAnalysis": true
-    },
-    "scripts/sessions/s1b-prompt.md": {
-      "filePath": "scripts/sessions/s1b-prompt.md",
-      "contentHash": "187011c6a47c062e5f3061b9a1e50aa7c2aa14a4beaa0512204030077952dad6",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 170,
-      "hasStructuralAnalysis": true
-    },
-    "scripts/sessions/s2-prompt.md": {
-      "filePath": "scripts/sessions/s2-prompt.md",
-      "contentHash": "9357e75576fc61b084de7031acc166392a75c977040a1e1c0526549d1d5d6430",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 250,
-      "hasStructuralAnalysis": true
-    },
-    "scripts/sessions/s2-resume-prompt.md": {
-      "filePath": "scripts/sessions/s2-resume-prompt.md",
-      "contentHash": "d61122264c162e291d163fe3b1966e9e43fba3354e5148995858ce757ccc15eb",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 131,
-      "hasStructuralAnalysis": true
-    },
-    "scripts/sessions/s3-prompt.md": {
-      "filePath": "scripts/sessions/s3-prompt.md",
-      "contentHash": "2c59907478a9922d2c586e13734cdb1150b274b7504205db2a2a8edf0377b77a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 317,
-      "hasStructuralAnalysis": true
-    },
-    "scripts/sessions/s3-resume-prompt.md": {
-      "filePath": "scripts/sessions/s3-resume-prompt.md",
-      "contentHash": "4a4e591ef064b02e10378703fb55c0b57250469c5536d8a2779e61477f17ffa9",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 128,
-      "hasStructuralAnalysis": true
-    },
-    "scripts/sessions/s4-prompt.md": {
-      "filePath": "scripts/sessions/s4-prompt.md",
-      "contentHash": "22778dac8d952670cc6af3bc7a7c6eba276bba15d896a4ea2c1b5476d1048df4",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 428,
-      "hasStructuralAnalysis": true
-    },
-    "scripts/sessions/s5a-prompt.md": {
-      "filePath": "scripts/sessions/s5a-prompt.md",
-      "contentHash": "59978b8b70a9259b2f5547fa540df39c8f6b7fa794b1291af554bbc31b011a59",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 389,
-      "hasStructuralAnalysis": true
-    },
-    "scripts/sessions/s5a-resume-prompt.md": {
-      "filePath": "scripts/sessions/s5a-resume-prompt.md",
-      "contentHash": "bde8c55af154aa4d5b2157e5efd35e3b6fc5135e860f283a846ee8593b3cf198",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 101,
-      "hasStructuralAnalysis": true
-    },
-    "scripts/sessions/s5b-prompt.md": {
-      "filePath": "scripts/sessions/s5b-prompt.md",
-      "contentHash": "311e5d523d86f0c0b535ae655ead4eb84d3fb44d0e193c4c48d9b4bf6a234f9a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 353,
-      "hasStructuralAnalysis": true
-    },
-    "scripts/sessions/s5b-resume-prompt.md": {
-      "filePath": "scripts/sessions/s5b-resume-prompt.md",
-      "contentHash": "eba08646579db18976165bc6c3b4a20cd1eedde609314afb6e4c9611c27f2974",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 159,
-      "hasStructuralAnalysis": true
-    },
     "scripts/setup-prisma-engines.sh": {
       "filePath": "scripts/setup-prisma-engines.sh",
       "contentHash": "a911d8c4bd9902bc70922af5034bb1ed3506931fe2b2f9f81fa85cc568213e7e",
@@ -16244,16 +13339,6 @@
       "totalLines": 69,
       "hasStructuralAnalysis": true
     },
-    "scripts/tracks/MERGE-GUIDE.md": {
-      "filePath": "scripts/tracks/MERGE-GUIDE.md",
-      "contentHash": "5edbb990323605df59f8f19d727fd7bdae8607778b15ddca8315910e721e5883",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 74,
-      "hasStructuralAnalysis": true
-    },
     "scripts/tracks/post-merge-validate.sh": {
       "filePath": "scripts/tracks/post-merge-validate.sh",
       "contentHash": "c652a8fa97e45ccaffc8179ff478b0535b18abee10f70c19419627583d74925d",
@@ -16272,16 +13357,6 @@
       "imports": [],
       "exports": [],
       "totalLines": 113,
-      "hasStructuralAnalysis": true
-    },
-    "scripts/tracks/shared-process.md": {
-      "filePath": "scripts/tracks/shared-process.md",
-      "contentHash": "043679e5dfd0faae624b78bb0f5ff81491e0d476340360d4d274ff7d5694c474",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 64,
       "hasStructuralAnalysis": true
     },
     "scripts/tracks/track-runner.sh": {
@@ -16423,12 +13498,12 @@
     },
     "specs/crm-gdpr.allium": {
       "filePath": "specs/crm-gdpr.allium",
-      "contentHash": "86571ad89c8056a348f95b3c473adfd41c3961256e31efa99279c49d151b92ca",
+      "contentHash": "b658baf73e621fbcdd7ab51c2e14059844b05738c2e7fb87d8262a275b4cea26",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 531,
+      "totalLines": 547,
       "hasStructuralAnalysis": false
     },
     "specs/crm-workflow.allium": {
@@ -16443,12 +13518,12 @@
     },
     "specs/crm.allium": {
       "filePath": "specs/crm.allium",
-      "contentHash": "a2e91e166a2518902341b5cd08c137516bd7b27028246a7bec23c6d85513966c",
+      "contentHash": "a1d17db9ccb4ac0498621b8781ec7d903900b112946d3cf9564657fc6265c9da",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 1378,
+      "totalLines": 1397,
       "hasStructuralAnalysis": false
     },
     "specs/data-enrichment.allium": {
@@ -16523,12 +13598,12 @@
     },
     "specs/job-aggregate.allium": {
       "filePath": "specs/job-aggregate.allium",
-      "contentHash": "4c2b43197768ed51fdcbaca0d09df6771814e0543cf69898d24dd8f0541286c0",
+      "contentHash": "7057340169e5cf2ce88f0697a92a7854143af0b6b70e88ee01e61fb9a8ee06c0",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 430,
+      "totalLines": 451,
       "hasStructuralAnalysis": false
     },
     "specs/logo-asset-cache.allium": {
@@ -16573,12 +13648,12 @@
     },
     "specs/public-api-v1.allium": {
       "filePath": "specs/public-api-v1.allium",
-      "contentHash": "0424e83fe30b887011c029276c2bc9ef1ef98b1f81ccb6e151d190176d610221",
+      "contentHash": "8c047518011c16ef48026934b08f1fab8dd90e8dfd8a7a505e38ccd6e2a00eeb",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 501,
+      "totalLines": 532,
       "hasStructuralAnalysis": false
     },
     "specs/reference-atomic-crm.allium": {
@@ -17713,7 +14788,7 @@
     },
     "src/actions/crmActivityLog.actions.ts": {
       "filePath": "src/actions/crmActivityLog.actions.ts",
-      "contentHash": "9ecbb7e086ee7dfa3301895405ce9fd66cb2e37b0eb96742ac7ad6254f2c4e61",
+      "contentHash": "c743d1091f302e51c5dbb7a5f74815f52ded80b9537ca77273747ab093764b0c",
       "functions": [
         {
           "name": "getActivityTimeline",
@@ -17722,7 +14797,7 @@
           ],
           "returnType": "Promise<ActionResult<{ activities: Record<string, unknown>[]; total: number }>>",
           "exported": true,
-          "lineCount": 40
+          "lineCount": 45
         }
       ],
       "classes": [],
@@ -17765,12 +14840,12 @@
       "exports": [
         "getActivityTimeline"
       ],
-      "totalLines": 54,
+      "totalLines": 59,
       "hasStructuralAnalysis": true
     },
     "src/actions/crmBlocklist.actions.ts": {
       "filePath": "src/actions/crmBlocklist.actions.ts",
-      "contentHash": "2e390f942d97ad2d75cbc10f70d017a8e890b905044bcc3a959aee02cc90bf54",
+      "contentHash": "1469754ae96a9e608386225f3cb833c5e7607c908e69489e1d6e4a89bac39b2a",
       "functions": [
         {
           "name": "addToBlocklist",
@@ -17808,7 +14883,7 @@
           ],
           "returnType": "Promise<boolean>",
           "exported": true,
-          "lineCount": 16
+          "lineCount": 26
         }
       ],
       "classes": [],
@@ -17847,6 +14922,12 @@
             "BlocklistType",
             "CRM_CONFIG"
           ]
+        },
+        {
+          "source": "@/lib/crm/blocklist-match",
+          "specifiers": [
+            "isBlockedByEntries"
+          ]
         }
       ],
       "exports": [
@@ -17855,12 +14936,12 @@
         "getBlocklist",
         "isHandleBlocked"
       ],
-      "totalLines": 119,
+      "totalLines": 130,
       "hasStructuralAnalysis": true
     },
     "src/actions/crmInterview.actions.ts": {
       "filePath": "src/actions/crmInterview.actions.ts",
-      "contentHash": "a6919d9a4c0487dab48ff85f55d94102f395b3c7f450b067ef40a6ef85a85d60",
+      "contentHash": "8ba5d2c8e7fb3be30a77c93e4ce9219e141c2feb8eb31fa93b6768d0be11f5f7",
       "functions": [
         {
           "name": "scheduleInterview",
@@ -17880,7 +14961,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 43
+          "lineCount": 45
         },
         {
           "name": "cancelInterview",
@@ -17900,7 +14981,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 32
+          "lineCount": 34
         },
         {
           "name": "getInterviews",
@@ -17971,12 +15052,12 @@
         "rescheduleInterview",
         "getInterviews"
       ],
-      "totalLines": 241,
+      "totalLines": 245,
       "hasStructuralAnalysis": true
     },
     "src/actions/crmNote.actions.ts": {
       "filePath": "src/actions/crmNote.actions.ts",
-      "contentHash": "1e96b65b8139f321f27a4adf43e4bef0edaa2448bab8bdb8d771cd3032c52a9c",
+      "contentHash": "dfa257a6f7b5126de619c2ed969771a9b84cd854bf1e8d9922191971524fabd8",
       "functions": [
         {
           "name": "createCrmNote",
@@ -17995,7 +15076,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 27
+          "lineCount": 30
         },
         {
           "name": "deleteCrmNote",
@@ -18073,12 +15154,12 @@
         "deleteCrmNote",
         "getCrmNotes"
       ],
-      "totalLines": 193,
+      "totalLines": 196,
       "hasStructuralAnalysis": true
     },
     "src/actions/crmTask.actions.ts": {
       "filePath": "src/actions/crmTask.actions.ts",
-      "contentHash": "3000db44dd5ce3b0b96783ae6313ebd3af8c3c99a8fc5e9297d2baa43d9988f8",
+      "contentHash": "4d006e9eeec02ccd8488d0210e0735de2297ea07638ae7e9073da55eacb9cd33",
       "functions": [
         {
           "name": "createCrmTask",
@@ -18460,7 +15541,7 @@
     },
     "src/actions/job.actions.ts": {
       "filePath": "src/actions/job.actions.ts",
-      "contentHash": "a03351411564a80dc7cc0e64ca2b2772b8bb8c30ea1c948c5c748b882aade713",
+      "contentHash": "3ac197465e3d36a6e57b5890c4c0460154724639eafc6a7ec09454a8dcaf0fbd",
       "functions": [
         {
           "name": "getStatusList",
@@ -18486,7 +15567,7 @@
           ],
           "returnType": "Promise<ActionResult<JobResponse[]>>",
           "exported": true,
-          "lineCount": 101
+          "lineCount": 104
         },
         {
           "name": "getJobDetails",
@@ -18522,7 +15603,7 @@
           ],
           "returnType": "Promise<ActionResult<JobResponse>>",
           "exported": true,
-          "lineCount": 147
+          "lineCount": 158
         },
         {
           "name": "updateJob",
@@ -18532,7 +15613,7 @@
           ],
           "returnType": "Promise<ActionResult<JobResponse>>",
           "exported": true,
-          "lineCount": 230
+          "lineCount": 241
         },
         {
           "name": "updateJobStatus",
@@ -18655,7 +15736,8 @@
             "JobStatus",
             "JobResponse",
             "JobSource",
-            "JobLocation"
+            "JobLocation",
+            "isValidRelationshipType"
           ]
         },
         {
@@ -18738,12 +15820,12 @@
         "getStatusDistribution",
         "getValidTransitions"
       ],
-      "totalLines": 1328,
+      "totalLines": 1353,
       "hasStructuralAnalysis": true
     },
     "src/actions/jobContact.actions.ts": {
       "filePath": "src/actions/jobContact.actions.ts",
-      "contentHash": "db389c4420e159fd5b87005b7cd02f5e16781414b8600c52f8c854bedecec4bf",
+      "contentHash": "0189875257da8379be6eb974f80d5a378a2e02c286f09577d21550803e877918",
       "functions": [
         {
           "name": "addJobContact",
@@ -18754,7 +15836,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 36
+          "lineCount": 38
         },
         {
           "name": "removeJobContact",
@@ -18763,7 +15845,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 21
+          "lineCount": 22
         },
         {
           "name": "getJobContactsForPerson",
@@ -18834,7 +15916,7 @@
         "getJobContactsForPerson",
         "getJobContactsForJob"
       ],
-      "totalLines": 120,
+      "totalLines": 123,
       "hasStructuralAnalysis": true
     },
     "src/actions/jobLocation.actions.ts": {
@@ -19675,7 +16757,7 @@
     },
     "src/actions/person.actions.ts": {
       "filePath": "src/actions/person.actions.ts",
-      "contentHash": "1d2baaa3a3721e2b7f742bdb2d9bdab4da17586eea3db065baa612b9afdb3c43",
+      "contentHash": "03c098107cede3ce747802802d405a4fbf0fe92a35139af11bbcc90e075a81e4",
       "functions": [
         {
           "name": "createPerson",
@@ -19739,7 +16821,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 79
+          "lineCount": 86
         },
         {
           "name": "mergePersons",
@@ -19749,7 +16831,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 107
+          "lineCount": 112
         }
       ],
       "classes": [],
@@ -19831,7 +16913,7 @@
         "anonymizePerson",
         "mergePersons"
       ],
-      "totalLines": 583,
+      "totalLines": 595,
       "hasStructuralAnalysis": true
     },
     "src/actions/privacy.actions.ts": {
@@ -23003,7 +20085,7 @@
     },
     "src/app/api/v1/jobs/[id]/route.ts": {
       "filePath": "src/app/api/v1/jobs/[id]/route.ts",
-      "contentHash": "f13864cbf6d4119d36b058c1b91c74170fe9acadd45ad4b1279915ed02918244",
+      "contentHash": "bf8e8f31461ba021054d5889fce30332fd4601f18c3585770823ac9c554ece0b",
       "functions": [
         {
           "name": "buildUpdateData",
@@ -23013,7 +20095,7 @@
           ],
           "returnType": "Promise<BuildResult>",
           "exported": false,
-          "lineCount": 111
+          "lineCount": 126
         }
       ],
       "classes": [],
@@ -23080,7 +20162,8 @@
         {
           "source": "@/models/job.model",
           "specifiers": [
-            "SalaryPeriod"
+            "SalaryPeriod",
+            "RelationshipType"
           ]
         }
       ],
@@ -23090,7 +20173,7 @@
         "PATCH",
         "DELETE"
       ],
-      "totalLines": 277,
+      "totalLines": 296,
       "hasStructuralAnalysis": true
     },
     "src/app/api/v1/jobs/[id]/status/route.ts": {
@@ -23156,7 +20239,7 @@
     },
     "src/app/api/v1/jobs/route.ts": {
       "filePath": "src/app/api/v1/jobs/route.ts",
-      "contentHash": "4c2d48f062c420a50d45c328da087cf1c447f6212389ecf807fa936b1db2e1d9",
+      "contentHash": "760b05265edeaeaa0ad16a80628df3db01a47ecb43f0d6c1756601ca96416f62",
       "functions": [],
       "classes": [],
       "imports": [
@@ -23228,7 +20311,7 @@
         "GET",
         "POST"
       ],
-      "totalLines": 217,
+      "totalLines": 249,
       "hasStructuralAnalysis": true
     },
     "src/app/dashboard/activities/page.tsx": {
@@ -25100,16 +22183,6 @@
       ],
       "totalLines": 124,
       "hasStructuralAnalysis": true
-    },
-    "src/app/globals.css": {
-      "filePath": "src/app/globals.css",
-      "contentHash": "afd0e4131ccbdf7ae25a7427dd18871e43b13d82249cff5ebe747814b67d132b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 230,
-      "hasStructuralAnalysis": false
     },
     "src/app/layout.tsx": {
       "filePath": "src/app/layout.tsx",
@@ -29404,15 +26477,15 @@
     },
     "src/components/crm/ActivityTimeline.tsx": {
       "filePath": "src/components/crm/ActivityTimeline.tsx",
-      "contentHash": "7159ed77cdbf44fefa0e7626e71227ed93795ad685583d9c54b3ea0b482ea2e9",
+      "contentHash": "3f46b981c49006825e2550ee8882ec740377fccb2e8692803f7b3afaf9d8f4f2",
       "functions": [
         {
           "name": "ActivityTimeline",
           "params": [
-            "{ targetPersonId, targetJobId }"
+            "{ targetPersonId, targetJobId, targetCompanyId }"
           ],
           "exported": true,
-          "lineCount": 102
+          "lineCount": 103
         }
       ],
       "classes": [],
@@ -29475,7 +26548,9 @@
             "Bell",
             "Send",
             "FileCheck",
-            "ActivityIcon"
+            "ActivityIcon",
+            "UserX",
+            "AlertTriangle"
           ]
         },
         {
@@ -29488,7 +26563,7 @@
       "exports": [
         "ActivityTimeline"
       ],
-      "totalLines": 149,
+      "totalLines": 155,
       "hasStructuralAnalysis": true
     },
     "src/components/crm/CrmTaskForm.tsx": {
@@ -31917,7 +28992,7 @@
     },
     "src/components/myjobs/AddJob.tsx": {
       "filePath": "src/components/myjobs/AddJob.tsx",
-      "contentHash": "9321a8ade4f8c691b28782784d4aac6df90b9ea9e5089ee3af7afb96c944a165",
+      "contentHash": "f0f4e8ba70a2e1af6bde040f9035ef5ea7fdb530511395a0d4e78c2758b63f40",
       "functions": [
         {
           "name": "mergeConnectorSources",
@@ -31934,7 +29009,7 @@
             "{\n  jobStatuses,\n  companies,\n  jobTitles,\n  locations,\n  jobSources,\n  tags,\n  editJob,\n  resetEditJob,\n}"
           ],
           "exported": true,
-          "lineCount": 638
+          "lineCount": 807
         }
       ],
       "classes": [],
@@ -32021,7 +29096,8 @@
         {
           "source": "@/models/job.model",
           "specifiers": [
-            "SALARY_PERIODS"
+            "SALARY_PERIODS",
+            "RELATIONSHIP_TYPES"
           ]
         },
         {
@@ -32186,17 +29262,135 @@
             "createLocation",
             "createJobSource"
           ]
+        },
+        {
+          "source": "./JobContactPicker",
+          "specifiers": [
+            "JobContactPicker",
+            "toPersonOption",
+            "PersonOption"
+          ]
+        },
+        {
+          "source": "@/actions/jobContact.actions",
+          "specifiers": [
+            "addJobContact"
+          ]
+        },
+        {
+          "source": "@/actions/person.actions",
+          "specifiers": [
+            "getPersons"
+          ]
+        },
+        {
+          "source": "@/models/person.model",
+          "specifiers": [
+            "CompanyAssociation",
+            "TypedEmail"
+          ]
         }
       ],
       "exports": [
         "AddJob"
       ],
-      "totalLines": 739,
+      "totalLines": 916,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/myjobs/JobContactPicker.tsx": {
+      "filePath": "src/components/myjobs/JobContactPicker.tsx",
+      "contentHash": "ef146abbbd6b6f53e33077ccfc797b56139df702d2a4f7fa0bdf393f6a5df7aa",
+      "functions": [
+        {
+          "name": "toPersonOption",
+          "params": [
+            "src"
+          ],
+          "returnType": "PersonOption",
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "JobContactPicker",
+          "params": [
+            "{\n  value,\n  onValueChange,\n  persons,\n  disabled,\n  className,\n  loading,\n}"
+          ],
+          "exported": true,
+          "lineCount": 124
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useMemo",
+            "useState"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "ChevronsUpDown",
+            "Check",
+            "Loader2"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/components/ui/button",
+          "specifiers": [
+            "Button"
+          ]
+        },
+        {
+          "source": "@/components/ui/popover",
+          "specifiers": [
+            "Popover",
+            "PopoverContent",
+            "PopoverTrigger"
+          ]
+        },
+        {
+          "source": "@/components/ui/command",
+          "specifiers": [
+            "Command",
+            "CommandEmpty",
+            "CommandGroup",
+            "CommandInput",
+            "CommandItem",
+            "CommandList"
+          ]
+        },
+        {
+          "source": "@/lib/utils",
+          "specifiers": [
+            "cn"
+          ]
+        },
+        {
+          "source": "@/models/person.model",
+          "specifiers": [
+            "CompanyAssociation",
+            "TypedEmail"
+          ]
+        }
+      ],
+      "exports": [
+        "toPersonOption",
+        "JobContactPicker"
+      ],
+      "totalLines": 244,
       "hasStructuralAnalysis": true
     },
     "src/components/myjobs/JobDetails.tsx": {
       "filePath": "src/components/myjobs/JobDetails.tsx",
-      "contentHash": "5d4c52a05b9fee857373ecc4e1a64d9e75d7673c1ea057b3ea62ce3253383279",
+      "contentHash": "e6870c0015e5324d1393571a55f28e6858535dfbeaafd7168703050b523d0484",
       "functions": [
         {
           "name": "JobDetails",
@@ -32204,7 +29398,7 @@
             "{ job }"
           ],
           "exported": false,
-          "lineCount": 159
+          "lineCount": 172
         }
       ],
       "classes": [],
@@ -32267,7 +29461,14 @@
           "source": "lucide-react",
           "specifiers": [
             "ArrowLeft",
-            "Sparkles"
+            "Sparkles",
+            "ActivityIcon"
+          ]
+        },
+        {
+          "source": "../crm/ActivityTimeline",
+          "specifiers": [
+            "ActivityTimeline"
           ]
         },
         {
@@ -32334,7 +29535,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 189,
+      "totalLines": 203,
       "hasStructuralAnalysis": true
     },
     "src/components/myjobs/JobSalaryFields.tsx": {
@@ -43323,14 +40524,14 @@
     },
     "src/i18n/dictionaries/crm.ts": {
       "filePath": "src/i18n/dictionaries/crm.ts",
-      "contentHash": "3cab5a6dd284bb77ead05d02d799c12ba4ffbffefab4888436709de067b6e605",
+      "contentHash": "b2bf8b2b37cb79a9d3ae09a14b8db21e24396ddc4a704486a692250e14733aff",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [
         "crm"
       ],
-      "totalLines": 919,
+      "totalLines": 959,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/dashboard.ts": {
@@ -43788,16 +40989,6 @@
       "totalLines": 17,
       "hasStructuralAnalysis": true
     },
-    "src/i18n/README.md": {
-      "filePath": "src/i18n/README.md",
-      "contentHash": "069740b0c08b28a2697b3d021c908ead7c723fe44d45c4429765ec893ff54d42",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 200,
-      "hasStructuralAnalysis": true
-    },
     "src/i18n/server.ts": {
       "filePath": "src/i18n/server.ts",
       "contentHash": "877e871c1ca6eede29336171e1b8d77e47bfddeb12d6921db47f864056e83010",
@@ -44173,7 +41364,7 @@
     },
     "src/lib/api/helpers.ts": {
       "filePath": "src/lib/api/helpers.ts",
-      "contentHash": "bcf04c397cb0d20bc0a18245e8f4c25c2b70aa58adf6e8e515a3f356a9eb5a35",
+      "contentHash": "8d7c62d1ea6079e481190a3916ad17954124158e837c884b7e85f993502bfeec",
       "functions": [
         {
           "name": "findOrCreate",
@@ -44217,7 +41408,7 @@
         "JOB_DETAIL_SELECT",
         "JOB_LIST_SELECT"
       ],
-      "totalLines": 125,
+      "totalLines": 129,
       "hasStructuralAnalysis": true
     },
     "src/lib/api/last-used-throttle.ts": {
@@ -44403,7 +41594,7 @@
     },
     "src/lib/api/schemas.ts": {
       "filePath": "src/lib/api/schemas.ts",
-      "contentHash": "7b01ac81ff4d624b9cc78cf7795dbe3de4884270c0ae6c542ccbd33de51ea32b",
+      "contentHash": "7ede521ed2f29875cabf14b0c6650626144b145a881a5a2f8bcc298782e133a3",
       "functions": [
         {
           "name": "isValidUUID",
@@ -44426,7 +41617,8 @@
         {
           "source": "@/models/job.model",
           "specifiers": [
-            "SALARY_PERIODS"
+            "SALARY_PERIODS",
+            "RELATIONSHIP_TYPES"
           ]
         },
         {
@@ -44446,7 +41638,7 @@
         "CreateNoteSchema",
         "isValidUUID"
       ],
-      "totalLines": 92,
+      "totalLines": 100,
       "hasStructuralAnalysis": true
     },
     "src/lib/api/with-api-auth.ts": {
@@ -46569,16 +43761,6 @@
       ],
       "exports": [],
       "totalLines": 194,
-      "hasStructuralAnalysis": true
-    },
-    "src/lib/connector/arbeitsagentur-account/cdp-scripts/README.md": {
-      "filePath": "src/lib/connector/arbeitsagentur-account/cdp-scripts/README.md",
-      "contentHash": "ff9ff3992205d18deef2c17c180b1eee57d354a69abcd3804f8c54c697711123",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 51,
       "hasStructuralAnalysis": true
     },
     "src/lib/connector/cache.ts": {
@@ -51074,6 +48256,55 @@
       "totalLines": 163,
       "hasStructuralAnalysis": true
     },
+    "src/lib/crm/blocklist-match.ts": {
+      "filePath": "src/lib/crm/blocklist-match.ts",
+      "contentHash": "1fe1d33366892e1c6264c0e434314a7e51da5691b6517da9d287623b8ab45c9b",
+      "functions": [
+        {
+          "name": "extractEmailDomain",
+          "params": [
+            "handle"
+          ],
+          "returnType": "string | null",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "matchGlobPattern",
+          "params": [
+            "pattern",
+            "value"
+          ],
+          "returnType": "boolean",
+          "exported": true,
+          "lineCount": 34
+        },
+        {
+          "name": "isBlockedByEntries",
+          "params": [
+            "handle",
+            "entries"
+          ],
+          "returnType": "boolean",
+          "exported": true,
+          "lineCount": 26
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "server-only",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "extractEmailDomain",
+        "matchGlobPattern",
+        "isBlockedByEntries"
+      ],
+      "totalLines": 96,
+      "hasStructuralAnalysis": true
+    },
     "src/lib/crm/status-labels.ts": {
       "filePath": "src/lib/crm/status-labels.ts",
       "contentHash": "d65017e9e918582b56b0ee902ea79f6636bd57c4ef2d7d3e93c8ad99118a605e",
@@ -51781,7 +49012,7 @@
     },
     "src/lib/events/consumers/crm-activity-logger.ts": {
       "filePath": "src/lib/events/consumers/crm-activity-logger.ts",
-      "contentHash": "5d30ed3aab1bd3a19527113cc632790c86f659cee128ccec2a5677f64be20c0f",
+      "contentHash": "6caeaf9ad81a6d2e2bba636243c91dffb8e56509caa948a2b6be9d7c36c24bc2",
       "functions": [
         {
           "name": "registerProjection",
@@ -51800,7 +49031,7 @@
           "params": [],
           "returnType": "void",
           "exported": true,
-          "lineCount": 206
+          "lineCount": 250
         }
       ],
       "classes": [],
@@ -51860,7 +49091,7 @@
       "exports": [
         "registerCrmActivityLogConsumers"
       ],
-      "totalLines": 302,
+      "totalLines": 346,
       "hasStructuralAnalysis": true
     },
     "src/lib/events/consumers/enrichment-trigger.ts": {
@@ -52327,7 +49558,7 @@
     },
     "src/lib/events/event-schemas.ts": {
       "filePath": "src/lib/events/event-schemas.ts",
-      "contentHash": "7381bdb1e7ca2d2299785bfef1ba974704af3e5098753244b55c0cc11f2a7668",
+      "contentHash": "562efbd7c361801c1cdface78b6142841a52fc8db502d6bd0c455d598965a940",
       "functions": [
         {
           "name": "safeParsePayload",
@@ -52414,12 +49645,12 @@
         "EventPayloadSchemas",
         "safeParsePayload"
       ],
-      "totalLines": 354,
+      "totalLines": 355,
       "hasStructuralAnalysis": true
     },
     "src/lib/events/event-types.ts": {
       "filePath": "src/lib/events/event-types.ts",
-      "contentHash": "17af926555366691d06312c4121d57454a85426a2abf68d05c2331ad7c4136fd",
+      "contentHash": "579eadd5efc5dc00fbdf65f6c34933fe92eae144c7c75991e05468a75000a9da",
       "functions": [
         {
           "name": "createEvent",
@@ -52445,7 +49676,7 @@
         "DomainEventType",
         "createEvent"
       ],
-      "totalLines": 349,
+      "totalLines": 356,
       "hasStructuralAnalysis": true
     },
     "src/lib/events/index.ts": {
@@ -56039,7 +53270,7 @@
     },
     "src/models/addJobForm.schema.ts": {
       "filePath": "src/models/addJobForm.schema.ts",
-      "contentHash": "1d91516d7503bf9c86df7f31dc0041ecc83895300c3468ffc48c947440030eda",
+      "contentHash": "819a1d52fdee6c7102f386abfa2f6b24972d90f035f1a00bba42d28051a40d6e",
       "functions": [],
       "classes": [],
       "imports": [
@@ -56052,14 +53283,15 @@
         {
           "source": "@/models/job.model",
           "specifiers": [
-            "SALARY_PERIODS"
+            "SALARY_PERIODS",
+            "RELATIONSHIP_TYPES"
           ]
         }
       ],
       "exports": [
         "AddJobFormSchema"
       ],
-      "totalLines": 106,
+      "totalLines": 116,
       "hasStructuralAnalysis": true
     },
     "src/models/addQuestionForm.schema.ts": {
@@ -56305,8 +53537,17 @@
     },
     "src/models/job.model.ts": {
       "filePath": "src/models/job.model.ts",
-      "contentHash": "5e2029c25339ef07acefcc9de3d8cf1c5d5879edc9c5be30533807fc3e8d5d1c",
-      "functions": [],
+      "contentHash": "d0eda286f08766ce916941b6849e45c6a4e2741663cfb5ba9efe189aa7e6dc0b",
+      "functions": [
+        {
+          "name": "isValidRelationshipType",
+          "params": [
+            "value"
+          ],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
       "classes": [],
       "imports": [
         {
@@ -56323,9 +53564,11 @@
         }
       ],
       "exports": [
-        "SALARY_PERIODS"
+        "SALARY_PERIODS",
+        "RELATIONSHIP_TYPES",
+        "isValidRelationshipType"
       ],
-      "totalLines": 139,
+      "totalLines": 166,
       "hasStructuralAnalysis": true
     },
     "src/models/note.model.ts": {
@@ -56406,8 +53649,16 @@
     },
     "src/models/person.model.ts": {
       "filePath": "src/models/person.model.ts",
-      "contentHash": "34199cf307074811f832a1933f0b06e1c7c103feb49adbf53abebbe8bf6a6e27",
+      "contentHash": "3dc6169dba52587d233d385f89fe4338f65d4e30c50d7aa8db198413f8ca31bf",
       "functions": [
+        {
+          "name": "isValidActorType",
+          "params": [
+            "value"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
         {
           "name": "isValidPersonTransition",
           "params": [
@@ -56496,6 +53747,8 @@
       "classes": [],
       "imports": [],
       "exports": [
+        "ACTOR_TYPES",
+        "isValidActorType",
         "isValidPersonTransition",
         "isValidInterviewTransition",
         "isValidTaskTransition",
@@ -56507,7 +53760,7 @@
         "validateAtMostOnePrimaryCompany",
         "CRM_CONFIG"
       ],
-      "totalLines": 217,
+      "totalLines": 239,
       "hasStructuralAnalysis": true
     },
     "src/models/profile.model.ts": {
@@ -56890,16 +54143,6 @@
       ],
       "exports": [],
       "totalLines": 117,
-      "hasStructuralAnalysis": true
-    },
-    "tsconfig.json": {
-      "filePath": "tsconfig.json",
-      "contentHash": "68ec8f5b7ccd853d4918345528072bff14becbf4f9e3201ab59c632fb201fca1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 35,
       "hasStructuralAnalysis": true
     },
     "types/index.t.ts": {
