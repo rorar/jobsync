@@ -121,7 +121,10 @@ export async function updateCrmNote(
     });
     if (!note) return { success: false, message: "crm.errors.noteNotFound" };
 
-    const data: Record<string, unknown> = {};
+    const data: Record<string, unknown> = {
+      updatedByType: "user",
+      updatedById: user.id,
+    };
     if (input.title !== undefined) data.title = input.title;
     if (input.body !== undefined) data.body = input.body;
 

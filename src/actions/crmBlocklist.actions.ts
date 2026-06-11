@@ -6,8 +6,9 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { ActionResult } from "@/models/actionResult";
 import { handleError } from "@/lib/utils";
 import { type BlocklistType, CRM_CONFIG } from "@/models/person.model";
+import { isBlockedByEntries } from "@/lib/crm/blocklist-match";
 
-const VALID_BLOCKLIST_TYPES: BlocklistType[] = ["email", "phone", "domain"];
+const VALID_BLOCKLIST_TYPES: BlocklistType[] = ["email", "phone", "domain", "pattern"];
 
 // ---------------------------------------------------------------------------
 // CRUD
@@ -107,11 +108,21 @@ export async function isHandleBlocked(
     const user = await getCurrentUser();
     if (!user) return false;
 
-    const entry = await prisma.crmBlocklist.findUnique({
-      where: { userId_handle: { userId: user.id, handle: handle.trim().toLowerCase() } },
-    });
+    const h = handle.trim().toLowerCase();
+    if (!h) return false;
 
-    return entry !== null;
+    // Fast path: exact email / phone / domain-literal handle.
+    const exact = await prisma.crmBlocklist.findUnique({
+      where: { userId_handle: { userId: user.id, handle: h } },
+    });
+    if (exact) return true;
+
+    // Welle 3 (Gap-6): set evaluation for domain-suffix + glob-pattern entries.
+    const fuzzy = await prisma.crmBlocklist.findMany({
+      where: { userId: user.id, type: { in: ["domain", "pattern"] } },
+      select: { type: true, handle: true },
+    });
+    return isBlockedByEntries(h, fuzzy);
   } catch {
     return false;
   }

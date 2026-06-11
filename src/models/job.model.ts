@@ -9,6 +9,29 @@ import type { JobBonus } from "@/lib/salary/bonus";
 export const SALARY_PERIODS = ["yearly", "monthly", "hourly"] as const;
 export type SalaryPeriod = (typeof SALARY_PERIODS)[number];
 
+/**
+ * Recruiter-triangle relationship type (Welle 3 F-AJ-08). Describes the role of
+ * the optional `recruitingCompany` relative to the hiring `Company` on a Job:
+ * the candidate sits across from a hiring company that may be reached via a
+ * recruiting/staffing intermediary. Single source of truth — the TS union is
+ * erased at runtime, so validate membership at the server-action boundary
+ * (ADR-019). `null`/absent = no recruiter (direct application).
+ */
+export const RELATIONSHIP_TYPES = [
+  "direct",
+  "recruiting_agency",
+  "staffing_agency",
+] as const;
+export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
+
+/** Runtime membership check for the erased RelationshipType union (ADR-019). */
+export function isValidRelationshipType(value: unknown): value is RelationshipType {
+  return (
+    typeof value === "string" &&
+    (RELATIONSHIP_TYPES as readonly string[]).includes(value)
+  );
+}
+
 export interface JobForm {
   id?: string;
   userId?: string;
@@ -50,6 +73,10 @@ export interface JobResponse {
   Status: JobStatus;
   Location?: JobLocation | null;
   JobSource?: JobSource | null;
+  // Welle 3 (F-AJ-08): recruiter triangle.
+  RecruitingCompany?: Company | null;
+  recruitingCompanyId?: string | null;
+  relationshipType?: string | null;
   jobType: string;
   createdAt: Date;
   appliedDate: Date | null;

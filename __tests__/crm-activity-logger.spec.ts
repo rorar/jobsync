@@ -16,7 +16,11 @@ jest.mock("@/lib/db", () => ({
   default: {
     crmActivityLog: { create: (...args: unknown[]) => mockCreate(...args) },
     person: { findUnique: (...args: unknown[]) => mockFindUnique(...args) },
-    job: { findUnique: (...args: unknown[]) => mockFindUnique(...args) },
+    job: {
+      findUnique: (...args: unknown[]) => mockFindUnique(...args),
+      // Welle 3 review fix: company resolution is now userId-scoped via findFirst.
+      findFirst: (...args: unknown[]) => mockFindUnique(...args),
+    },
     crmNote: { findUnique: (...args: unknown[]) => mockFindUnique(...args) },
   },
 }));
@@ -89,6 +93,52 @@ describe("crm-activity-logger", () => {
         userId: "user-1",
         actorId: "user-1",
         targetJobId: "job-1",
+      }),
+    });
+  });
+
+  // Welle 3 (P3): job-bearing projections resolve the job's company so entries
+  // also surface on the Company timeline.
+  it("status_changed resolves targetCompanyId from the job", async () => {
+    mockFindUnique.mockResolvedValueOnce({ companyId: "company-9" });
+    await emit(DomainEventType.JobStatusChanged, {
+      jobId: "job-1",
+      userId: "user-1",
+      previousStatusValue: "applied",
+      newStatusValue: "interview",
+      historyEntryId: "hist-1",
+    });
+    expect(mockFindUnique).toHaveBeenCalledWith({
+      where: { id: "job-1", userId: "user-1" },
+      select: { companyId: true },
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "status_changed",
+        targetJobId: "job-1",
+        targetCompanyId: "company-9",
+      }),
+    });
+  });
+
+  it("interview_scheduled resolves targetCompanyId alongside the job title", async () => {
+    mockFindUnique.mockResolvedValueOnce({
+      JobTitle: { label: "Staff Engineer" },
+      companyId: "company-7",
+    });
+    await emit(DomainEventType.InterviewScheduled, {
+      interviewId: "iv-1",
+      jobId: "job-1",
+      personId: "person-1",
+      userId: "user-1",
+      interviewDate: new Date().toISOString(),
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "interview_scheduled",
+        targetJobId: "job-1",
+        targetCompanyId: "company-7",
+        linkedRecordName: "Staff Engineer",
       }),
     });
   });
@@ -177,6 +227,84 @@ describe("crm-activity-logger", () => {
 
     expect(mockCreate).not.toHaveBeenCalled();
     consoleSpy.mockRestore();
+  });
+
+  // Welle 3 Task 1.5: a job↔person link carries jobId so the contact_updated
+  // row gets targetJobId + targetCompanyId (resolved from the job) → visible on
+  // the Job and Company timelines, not just the Person timeline.
+  it("creates contact_updated with targetJobId + resolved targetCompanyId when jobId present", async () => {
+    mockFindUnique.mockResolvedValueOnce({ companyId: "company-1" });
+
+    await emit(DomainEventType.ContactUpdated, {
+      personId: "person-1",
+      userId: "user-1",
+      jobId: "job-1",
+    });
+
+    expect(mockFindUnique).toHaveBeenCalledWith({
+      where: { id: "job-1", userId: "user-1" },
+      select: { companyId: true },
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "contact_updated",
+        targetPersonId: "person-1",
+        targetJobId: "job-1",
+        targetCompanyId: "company-1",
+      }),
+    });
+  });
+
+  it("creates contact_updated with person target only when no jobId (backward compatible)", async () => {
+    await emit(DomainEventType.ContactUpdated, {
+      personId: "person-1",
+      userId: "user-1",
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "contact_updated",
+        targetPersonId: "person-1",
+      }),
+    });
+    // No job lookup when jobId absent.
+    expect(mockFindUnique).not.toHaveBeenCalled();
+  });
+
+  // Welle 3 (P3 blind-spot): job-linked tasks/notes also resolve targetCompanyId
+  // so they land on the Company timeline (consistency with the other projections).
+  it("task_created resolves targetCompanyId from a job-linked task", async () => {
+    mockFindUnique.mockResolvedValueOnce({ companyId: "company-3" });
+    await emit(DomainEventType.CrmTaskCreated, {
+      taskId: "task-1",
+      userId: "user-1",
+      title: "Follow up",
+      targetJobId: "job-1",
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "task_created",
+        targetJobId: "job-1",
+        targetCompanyId: "company-3",
+      }),
+    });
+  });
+
+  it("task_created leaves targetCompanyId null when the task is not job-linked", async () => {
+    await emit(DomainEventType.CrmTaskCreated, {
+      taskId: "task-2",
+      userId: "user-1",
+      title: "Generic todo",
+      targetPersonId: "person-1",
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "task_created",
+        targetCompanyId: null,
+      }),
+    });
+    // No job → no company lookup.
+    expect(mockFindUnique).not.toHaveBeenCalled();
   });
 
   it("logs error but does not throw when DB create fails", async () => {

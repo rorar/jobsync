@@ -188,7 +188,7 @@ describe("crmNote.actions", () => {
       expect(prisma.crmNote.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: "note-1" },
-          data: { title: "New Title", body: "New body" },
+          data: { updatedByType: "user", updatedById: mockUser.id, title: "New Title", body: "New body" },
         }),
       );
     });

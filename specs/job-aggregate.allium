@@ -42,6 +42,14 @@ enum JobType {
     contract    -- "Contract"
 }
 
+-- Recruiter triangle (Welle 3 F-AJ-08): the role of an optional recruiting
+-- intermediary relative to the hiring company. Absent = direct application.
+enum RelationshipType {
+    direct              -- "Direct employer"
+    recruiting_agency   -- "Recruiting agency"
+    staffing_agency     -- "Staffing agency"
+}
+
 ------------------------------------------------------------
 -- Entities and Variants
 ------------------------------------------------------------
@@ -49,6 +57,10 @@ enum JobType {
 entity Job {
     title: JobTitle
     company: Company
+    -- Recruiter triangle (Welle 3 F-AJ-08): optional recruiting agency distinct
+    -- from the hiring `company`, plus the relationship between them.
+    recruiting_company: Company?
+    relationship_type: RelationshipType?
     status: JobStatus
     location: Location?
     source: JobSource?
@@ -82,6 +94,13 @@ entity Job {
         -- Every Job belongs to exactly one User. All reads, writes, and deletes
         -- MUST include userId in the query to enforce ownership.
         -- This is the primary security invariant of the Job Aggregate.
+
+    @invariant RecruiterTriangleValidated
+        -- relationship_type, when present, MUST be a member of RelationshipType
+        -- (runtime-checked at the action boundary — the TS union is erased,
+        -- ADR-019). recruiting_company, when present, MUST be owned by the same
+        -- User (FK-ownership verified like the hiring company). Both are optional;
+        -- absence denotes a direct application with no intermediary.
 }
 
 entity Note {
@@ -176,11 +195,13 @@ config {
 -- === Job CRUD ===
 
 rule CreateJob {
-    when: CreateJob(user, title, company, status, location?, source?, job_type, salary_range?, description, job_url?, applied, applied_date?, due_date?, resume?, tags?)
+    when: CreateJob(user, title, company, status, location?, source?, job_type, salary_range?, description, job_url?, applied, applied_date?, due_date?, resume?, tags?, recruiting_company?, relationship_type?)
 
     ensures: Job.created(
         title: title,
         company: company,
+        recruiting_company: recruiting_company,
+        relationship_type: relationship_type,
         status: status,
         location: location,
         source: source,

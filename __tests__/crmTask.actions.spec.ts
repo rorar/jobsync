@@ -209,7 +209,7 @@ describe("crmTask.actions", () => {
       expect(result.success).toBe(true);
       expect(result.data).toEqual({ id: "task-1" });
       expect(prisma.crmTask.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { status: "in_progress" } }),
+        expect.objectContaining({ data: { status: "in_progress", updatedByType: "user", updatedById: mockUser.id } }),
       );
     });
   });
@@ -329,7 +329,7 @@ describe("crmTask.actions", () => {
       expect(result.success).toBe(true);
       expect(result.data).toEqual({ id: "task-1" });
       expect(prisma.crmTask.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { status: "cancelled" } }),
+        expect.objectContaining({ data: { status: "cancelled", updatedByType: "user", updatedById: mockUser.id } }),
       );
     });
   });

@@ -94,20 +94,43 @@ function registerProjection<T>(
 // =============================================================================
 
 export function registerCrmActivityLogConsumers(): void {
+  // Welle 3 (P3): resolve a job's hiring company so a job-linked activity also
+  // lands on the Company timeline. Returns null when there is no job.
+  const resolveCompanyId = async (
+    jobId: string | null | undefined,
+    userId: string,
+  ): Promise<string | null> => {
+    if (!jobId) return null;
+    const job = await prisma.job.findFirst({
+      where: { id: jobId, userId },
+      select: { companyId: true },
+    });
+    return job?.companyId ?? null;
+  };
+
   // JobStatusChanged → status_changed
   registerProjection(
     DomainEventType.JobStatusChanged,
     JobStatusChangedPayloadSchema,
     "status_changed",
-    (p) => ({
-      userId: p.userId,
-      actorId: p.userId,
-      targetJobId: p.jobId,
-      details: JSON.stringify({
-        previousStatus: p.previousStatusValue,
-        newStatus: p.newStatusValue,
-      }),
-    }),
+    async (p) => {
+      // Welle 3 (P3): resolve the job's company so the entry also lands on the
+      // Company timeline.
+      const job = await prisma.job.findFirst({
+        where: { id: p.jobId, userId: p.userId },
+        select: { companyId: true },
+      });
+      return {
+        userId: p.userId,
+        actorId: p.userId,
+        targetJobId: p.jobId,
+        targetCompanyId: job?.companyId ?? null,
+        details: JSON.stringify({
+          previousStatus: p.previousStatusValue,
+          newStatus: p.newStatusValue,
+        }),
+      };
+    },
   );
 
   // ContactCreated → contact_created (DB lookup: Person name)
@@ -130,15 +153,30 @@ export function registerCrmActivityLogConsumers(): void {
   );
 
   // ContactUpdated → contact_updated
+  // Welle 3 (Task 1.5): when the update is a job↔person link/unlink (jobId set),
+  // also stamp targetJobId and resolve targetCompanyId from the job, so the link
+  // surfaces on the Job and Company timelines — not only the Person timeline.
   registerProjection(
     DomainEventType.ContactUpdated,
     ContactUpdatedPayloadSchema,
     "contact_updated",
-    (p) => ({
-      userId: p.userId,
-      actorId: p.userId,
-      targetPersonId: p.personId,
-    }),
+    async (p) => {
+      let targetCompanyId: string | null = null;
+      if (p.jobId) {
+        const job = await prisma.job.findFirst({
+          where: { id: p.jobId, userId: p.userId },
+          select: { companyId: true },
+        });
+        targetCompanyId = job?.companyId ?? null;
+      }
+      return {
+        userId: p.userId,
+        actorId: p.userId,
+        targetPersonId: p.personId,
+        targetJobId: p.jobId ?? null,
+        targetCompanyId,
+      };
+    },
   );
 
   // ContactDeleted → contact_deleted
@@ -161,15 +199,16 @@ export function registerCrmActivityLogConsumers(): void {
     InterviewScheduledPayloadSchema,
     "interview_scheduled",
     async (p) => {
-      const job = await prisma.job.findUnique({
-        where: { id: p.jobId },
-        select: { JobTitle: { select: { label: true } } },
+      const job = await prisma.job.findFirst({
+        where: { id: p.jobId, userId: p.userId },
+        select: { JobTitle: { select: { label: true } }, companyId: true },
       });
       return {
         userId: p.userId,
         actorId: p.userId,
         targetJobId: p.jobId,
         targetPersonId: p.personId ?? null,
+        targetCompanyId: job?.companyId ?? null,
         linkedRecordName: job?.JobTitle?.label ?? null,
       };
     },
@@ -181,14 +220,15 @@ export function registerCrmActivityLogConsumers(): void {
     InterviewCompletedPayloadSchema,
     "interview_completed",
     async (p) => {
-      const job = await prisma.job.findUnique({
-        where: { id: p.jobId },
-        select: { JobTitle: { select: { label: true } } },
+      const job = await prisma.job.findFirst({
+        where: { id: p.jobId, userId: p.userId },
+        select: { JobTitle: { select: { label: true } }, companyId: true },
       });
       return {
         userId: p.userId,
         actorId: p.userId,
         targetJobId: p.jobId,
+        targetCompanyId: job?.companyId ?? null,
         linkedRecordName: job?.JobTitle?.label ?? null,
       };
     },
@@ -199,11 +239,12 @@ export function registerCrmActivityLogConsumers(): void {
     DomainEventType.CrmTaskCreated,
     CrmTaskCreatedPayloadSchema,
     "task_created",
-    (p) => ({
+    async (p) => ({
       userId: p.userId,
       actorId: p.userId,
       targetPersonId: p.targetPersonId ?? null,
       targetJobId: p.targetJobId ?? null,
+      targetCompanyId: await resolveCompanyId(p.targetJobId, p.userId),
       linkedRecordName: p.title,
     }),
   );
@@ -213,11 +254,12 @@ export function registerCrmActivityLogConsumers(): void {
     DomainEventType.CrmTaskCompleted,
     CrmTaskCompletedPayloadSchema,
     "task_completed",
-    (p) => ({
+    async (p) => ({
       userId: p.userId,
       actorId: p.userId,
       targetPersonId: p.targetPersonId ?? null,
       targetJobId: p.targetJobId ?? null,
+      targetCompanyId: await resolveCompanyId(p.targetJobId, p.userId),
       linkedRecordName: p.title,
     }),
   );
@@ -257,6 +299,7 @@ export function registerCrmActivityLogConsumers(): void {
         actorId: p.userId,
         targetPersonId,
         targetJobId,
+        targetCompanyId: await resolveCompanyId(targetJobId, p.userId),
         linkedRecordName,
       };
     },
@@ -268,14 +311,15 @@ export function registerCrmActivityLogConsumers(): void {
     VacancyPromotedPayloadSchema,
     "application_submitted",
     async (p) => {
-      const job = await prisma.job.findUnique({
-        where: { id: p.jobId },
-        select: { JobTitle: { select: { label: true } }, Company: { select: { label: true } } },
+      const job = await prisma.job.findFirst({
+        where: { id: p.jobId, userId: p.userId },
+        select: { JobTitle: { select: { label: true } }, companyId: true },
       });
       return {
         userId: p.userId,
         actorId: p.userId,
         targetJobId: p.jobId,
+        targetCompanyId: job?.companyId ?? null,
         linkedRecordName: job?.JobTitle?.label ?? null,
         details: JSON.stringify({ stagedVacancyId: p.stagedVacancyId }),
       };

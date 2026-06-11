@@ -92,8 +92,12 @@ export const JOB_API_SELECT = {
   applied: true,
   matchScore: true,
   version: true,
+  // Welle 3 (F-AJ-08): recruiter triangle. Expose the relation (label/value) +
+  // the relationship type — never the raw recruitingCompanyId FK (leak rule).
+  relationshipType: true,
   JobTitle: { select: labelValueSelect },
   Company: { select: labelValueSelect },
+  RecruitingCompany: { select: labelValueSelect },
   Status: { select: labelValueSelect },
   Location: { select: labelValueSelect },
   JobSource: { select: labelValueSelect },

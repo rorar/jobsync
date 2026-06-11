@@ -233,6 +233,8 @@ describe("completeInterview", () => {
         status: "completed",
         outcome: "passed",
         outcomeNotes: "Great cultural fit",
+        updatedByType: "user",
+        updatedById: mockUser.id,
       },
     });
   });
@@ -334,7 +336,7 @@ describe("cancelInterview", () => {
     expect((result as { success: true; data: { id: string } }).data).toEqual({ id: "interview-1" });
     expect(prisma.crmInterview.update).toHaveBeenCalledWith({
       where: { id: "interview-1" },
-      data: { status: "cancelled" },
+      data: { status: "cancelled", updatedByType: "user", updatedById: mockUser.id },
     });
   });
 });
@@ -401,6 +403,8 @@ describe("rescheduleInterview", () => {
         status: "rescheduled",
         interviewDate: new Date(NEW_DATE),
         location: "Hamburg Office",
+        updatedByType: "user",
+        updatedById: mockUser.id,
       },
     });
   });

@@ -105,6 +105,9 @@ async function createJob(
     clearDueDate?: boolean;
     salaryMin?: string;
     salaryMax?: string;
+    /** Welle 3 F-AJ-07: select an existing person as point of contact (option label). */
+    contactName?: string;
+    contactRole?: string;
   },
 ) {
   await page.getByTestId("add-job-btn").click();
@@ -176,6 +179,19 @@ async function createJob(
   const firstResumeOption = page.getByRole("option").first();
   await firstResumeOption.waitFor({ state: "visible", timeout: 10000 });
   await firstResumeOption.click();
+
+  // Welle 3 F-AJ-07: optionally pick an existing person as point of contact.
+  if (opts.contactName) {
+    await page.getByRole("combobox", { name: "Select contact..." }).click();
+    await page.getByPlaceholder("Search contacts...").fill(opts.contactName);
+    await page
+      .getByRole("option", { name: new RegExp(opts.contactName, "i") })
+      .first()
+      .click();
+    if (opts.contactRole) {
+      await page.getByLabel("Role").fill(opts.contactRole);
+    }
+  }
 
   await page.getByTestId("save-job-btn").click();
 
@@ -394,5 +410,64 @@ test.describe("Job CRUD", () => {
     // Cleanup
     await deleteJob(page, jobTitle);
     await deleteResume(page, resumeTitle);
+  });
+
+  // -------------------------------------------------------------------------
+  // Welle 3 F-AJ-07: point-of-contact happy-path
+  // -------------------------------------------------------------------------
+  test("should create a job with a point of contact and surface it on the contact's Related Jobs", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const uid = Date.now().toString(36);
+    const jobTitle = `E2E Contact Job ${uid}`;
+    const company = `E2E Company ${uid}`;
+    const location = `E2E Location ${uid}`;
+    const resumeTitle = `E2E Resume ${uid}`;
+    const firstName = `E2E${uid}`;
+    const lastName = "Recruiter";
+    const fullName = `${firstName} ${lastName}`;
+
+    // 1. Create the person to be linked as point of contact.
+    await page.goto("/dashboard/contacts");
+    await page.waitForLoadState("domcontentloaded");
+    await page.getByRole("button", { name: "Add Contact" }).first().click();
+    const sheet = page.getByRole("dialog");
+    await sheet.getByLabel("First Name").fill(firstName);
+    await sheet.getByLabel("Last Name").fill(lastName);
+    await sheet
+      .getByPlaceholder("email@example.com")
+      .fill(`${firstName.toLowerCase()}@e2e.test`);
+    await sheet.getByRole("button", { name: "Add Contact" }).click();
+    await expect(page.getByText(fullName).first()).toBeVisible({ timeout: 10000 });
+
+    // 2. Create a job and pick that person as point of contact.
+    await ensureResumeExists(page, resumeTitle);
+    await navigateToJobs(page);
+    await createJob(page, {
+      title: jobTitle,
+      company,
+      location,
+      contactName: fullName,
+      contactRole: "Recruiter",
+    });
+
+    // 3. Verify the link surfaces on the contact's Related Jobs tab.
+    await page.goto("/dashboard/contacts");
+    await page.waitForLoadState("domcontentloaded");
+    await page.getByText(fullName).first().click();
+    await expect(
+      page.getByRole("heading", { name: fullName, level: 1 }),
+    ).toBeVisible({ timeout: 10000 });
+    await page.getByRole("tab", { name: "Related Jobs" }).click();
+    await expect(page.getByText(jobTitle).first()).toBeVisible({ timeout: 10000 });
+
+    // 4. Cleanup (job + resume; archive the person — GDPR design, no hard delete).
+    await deleteJob(page, jobTitle);
+    await deleteResume(page, resumeTitle);
+    await page.goto("/dashboard/contacts");
+    await page.waitForLoadState("domcontentloaded");
+    await page.getByText(fullName).first().click();
+    await page.getByRole("button", { name: "Archive" }).click();
   });
 });

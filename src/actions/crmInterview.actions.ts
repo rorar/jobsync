@@ -125,6 +125,8 @@ export async function completeInterview(
         status: "completed",
         outcome,
         outcomeNotes: outcomeNotes ?? null,
+        updatedByType: "user",
+        updatedById: user.id,
       },
     });
 
@@ -162,7 +164,7 @@ export async function cancelInterview(
 
     await prisma.crmInterview.update({
       where: { id: interviewId },
-      data: { status: "cancelled" },
+      data: { status: "cancelled", updatedByType: "user", updatedById: user.id },
     });
 
     return { success: true, data: { id: interviewId } };
@@ -195,6 +197,8 @@ export async function rescheduleInterview(
         status: "rescheduled",
         interviewDate: new Date(newDate),
         location: newLocation !== undefined ? newLocation : interview.location,
+        updatedByType: "user",
+        updatedById: user.id,
       },
     });
 

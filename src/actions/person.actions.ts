@@ -415,7 +415,14 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
       // Detach interviews + scrub free-text fields (G2 fix, ADR-015: userId in where)
       prisma.crmInterview.updateMany({
         where: { personId, userId: user.id },
-        data: { personId: null, notes: null, outcomeNotes: null },
+        data: {
+          personId: null,
+          notes: null,
+          outcomeNotes: null,
+          // Welle 3 (Gap-7): the erasing user is the actor of this cascade edit.
+          updatedByType: "user",
+          updatedById: user.id,
+        },
       }),
       // Anonymize activity log references + scrub PII text fields (S5 fix, ADR-015: userId in where)
       prisma.crmActivityLog.updateMany({
@@ -526,7 +533,12 @@ export async function mergePersons(
       // Transfer interviews (ADR-015: userId in where)
       prisma.crmInterview.updateMany({
         where: { personId: loserId, userId: user.id },
-        data: { personId: winnerId },
+        data: {
+          personId: winnerId,
+          // Welle 3 (Gap-7): the merging user is the actor of this transfer.
+          updatedByType: "user",
+          updatedById: user.id,
+        },
       }),
       // Transfer task targets (ADR-015: scoped via task.userId — CrmTaskTarget has no userId column)
       prisma.crmTaskTarget.updateMany({

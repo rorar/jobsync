@@ -3,11 +3,12 @@ import { JOB_SOURCES } from "@/lib/data/jobSourcesData";
 import { JOB_STATUSES } from "@/lib/data/jobStatusesData";
 import { getMockJobDetails, getMockList } from "@/lib/mock.utils";
 import "@testing-library/jest-dom";
-import { screen, render, waitFor } from "@testing-library/react";
+import { screen, render, waitFor, cleanup } from "@testing-library/react";
 import { getCurrentUser } from "@/utils/user.utils";
 import userEvent from "@testing-library/user-event";
 import { format } from "date-fns";
 import { addJob } from "@/actions/job.actions";
+import { getPersons } from "@/actions/person.actions";
 jest.mock("@/utils/user.utils", () => ({
   getCurrentUser: jest.fn(),
 }));
@@ -23,6 +24,16 @@ jest.mock("@/actions/reference-data.actions", () => ({
 }));
 jest.mock("@/actions/userSettings.actions", () => ({
   getJobFormSettings: jest.fn().mockResolvedValue({ fixumDisablesRange: true }),
+}));
+// Welle 3 F-AJ-07: AddJob loads persons for the contact picker (create-only) and
+// links the optional contact after a successful create.
+jest.mock("@/actions/person.actions", () => ({
+  getPersons: jest
+    .fn()
+    .mockResolvedValue({ success: true, data: { persons: [], total: 0 } }),
+}));
+jest.mock("@/actions/jobContact.actions", () => ({
+  addJobContact: jest.fn().mockResolvedValue({ success: true, data: { id: "jc-1" } }),
 }));
 
 jest.mock("next/navigation", () => ({
@@ -249,7 +260,77 @@ describe("AddJob Component", () => {
         resume: "",
         tags: [],
         sendToQueue: false,
+        // Welle 3 F-AJ-07: optional point-of-contact (untouched → empty defaults)
+        contactPersonId: "",
+        contactRole: "",
+        // Welle 3 F-AJ-08: recruiter triangle (untouched → empty/null defaults)
+        recruitingCompany: "",
+        relationshipType: null,
       });
     });
+  });
+
+  it("renders the optional Point-of-Contact picker in create mode with the role field disabled until a person is chosen", async () => {
+    // The create dialog is already open (beforeEach clicks add-job-btn).
+    await screen.findByTestId("add-job-dialog-title");
+
+    // Block label present (create-only)
+    expect(screen.getByText("Point of Contact")).toBeInTheDocument();
+    // Role field starts disabled (no person selected yet)
+    const roleInput = screen.getByPlaceholderText("Recruiter, Hiring Manager…");
+    expect(roleInput).toBeDisabled();
+  });
+
+  it("maps loaded persons into two-tier picker items (name + secondary)", async () => {
+    // Drop the beforeEach render (which used the empty getPersons mock), then
+    // re-render with a populated repository response so the AddJob mapping runs.
+    cleanup();
+    (getPersons as jest.Mock).mockResolvedValueOnce({
+      success: true,
+      data: {
+        persons: [
+          {
+            id: "person-1",
+            firstName: "Jane",
+            lastName: "Doe",
+            // getPersons returns already-parsed value objects (not JSON strings).
+            emails: [{ email: "jane@acme.com", type: "work", isPrimary: true }],
+            companies: [
+              {
+                companyId: "c1",
+                companyLabel: "Acme Corp",
+                role: "Recruiter",
+                isPrimary: true,
+              },
+            ],
+          },
+        ],
+        total: 1,
+      },
+    });
+
+    const mockCompanies = (await getMockList(1, 10, "companies")).data;
+    const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
+    const mockLocations = (await getMockList(1, 10, "locations")).data;
+    render(
+      <AddJob
+        jobStatuses={mockJobStatuses}
+        companies={mockCompanies}
+        jobTitles={mockJobTitles}
+        locations={mockLocations}
+        jobSources={mockJobSources}
+        tags={[]}
+        editJob={null}
+        resetEditJob={mockResetEditJob}
+      />,
+    );
+    await user.click(screen.getByTestId("add-job-btn"));
+    await screen.findByTestId("add-job-dialog-title");
+
+    // Open the contact picker and assert the two-tier item rendered.
+    await user.click(screen.getByRole("combobox", { name: "Select contact..." }));
+    expect(await screen.findByText("Jane Doe")).toBeInTheDocument();
+    // Secondary line: role · company (priority over the email).
+    expect(screen.getByText("Recruiter · Acme Corp")).toBeInTheDocument();
   });
 });

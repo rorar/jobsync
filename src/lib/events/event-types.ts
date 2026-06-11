@@ -226,6 +226,13 @@ export interface ContactCreatedPayload {
 export interface ContactUpdatedPayload {
   personId: string;
   userId: string;
+  /**
+   * Welle 3 (Task 1.5): set when the update is a job↔person link/unlink so the
+   * activity projection can write targetJobId (+ resolve targetCompanyId from the
+   * job) — makes the link visible on the Job and Company timelines, not only the
+   * Person timeline. Optional → backward compatible with plain contact updates.
+   */
+  jobId?: string;
 }
 
 export interface ContactDeletedPayload {

@@ -14,6 +14,7 @@ import type { ActivityType } from "@/models/person.model";
 export async function getActivityTimeline(filters: {
   targetPersonId?: string;
   targetJobId?: string;
+  targetCompanyId?: string;
   activityType?: ActivityType;
   page?: number;
   pageSize?: number;
@@ -26,9 +27,13 @@ export async function getActivityTimeline(filters: {
     const pageSize = filters.pageSize ?? 50;
     const skip = (page - 1) * pageSize;
 
+    // IDOR: userId always scopes the query. targetCompanyId (Welle 3 P3) filters
+    // by company WITHOUT a Company.userId join — Company is a shared lookup, so the
+    // CrmActivityLog.userId scope is the ownership boundary.
     const where: Record<string, unknown> = { userId: user.id };
     if (filters.targetPersonId) where.targetPersonId = filters.targetPersonId;
     if (filters.targetJobId) where.targetJobId = filters.targetJobId;
+    if (filters.targetCompanyId) where.targetCompanyId = filters.targetCompanyId;
     if (filters.activityType) where.activityType = filters.activityType;
 
     const [activities, total] = await Promise.all([

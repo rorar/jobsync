@@ -114,13 +114,16 @@ describe("addJobContact", () => {
 
     await addJobContact("job-1", "person-1");
 
+    // Welle 3 Task 1.5: payload carries jobId so the projection can write
+    // targetJobId (+ resolve targetCompanyId) — link is visible on the Job timeline.
     expect(createEvent).toHaveBeenCalledWith(DomainEventType.ContactUpdated, {
       personId: "person-1",
       userId: mockUser.id,
+      jobId: "job-1",
     });
     expect(eventBus.publish).toHaveBeenCalledWith({
       type: DomainEventType.ContactUpdated,
-      payload: { personId: "person-1", userId: mockUser.id },
+      payload: { personId: "person-1", userId: mockUser.id, jobId: "job-1" },
     });
   });
 });
@@ -169,18 +172,21 @@ describe("removeJobContact", () => {
     (prisma.jobContact.findFirst as jest.Mock).mockResolvedValue({
       id: "contact-1",
       personId: "person-1",
+      jobId: "job-1",
     });
     (prisma.jobContact.delete as jest.Mock).mockResolvedValue({ id: "contact-1" });
 
     await removeJobContact("contact-1");
 
+    // Welle 3 Task 1.5: unlink also carries jobId so the unlink shows on the Job timeline.
     expect(createEvent).toHaveBeenCalledWith(DomainEventType.ContactUpdated, {
       personId: "person-1",
       userId: mockUser.id,
+      jobId: "job-1",
     });
     expect(eventBus.publish).toHaveBeenCalledWith({
       type: DomainEventType.ContactUpdated,
-      payload: { personId: "person-1", userId: mockUser.id },
+      payload: { personId: "person-1", userId: mockUser.id, jobId: "job-1" },
     });
   });
 });

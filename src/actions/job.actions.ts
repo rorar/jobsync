@@ -3,7 +3,7 @@ import prisma from "@/lib/db";
 import { handleError } from "@/lib/utils";
 import { AddJobFormSchema } from "@/models/addJobForm.schema";
 import { ActionResult } from "@/models/actionResult";
-import { JOB_TYPES, JobStatus, JobResponse, JobSource, JobLocation } from "@/models/job.model";
+import { JOB_TYPES, JobStatus, JobResponse, JobSource, JobLocation, isValidRelationshipType } from "@/models/job.model";
 import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
@@ -106,6 +106,9 @@ export const getJobsList = async (
           JobTitle: true,
           jobType: true,
           Company: true,
+          // Welle 3 (F-AJ-08): recruiter triangle — needed to prefill the edit form.
+          relationshipType: true,
+          RecruitingCompany: { select: { id: true, label: true, value: true } },
           Status: true,
           Location: true,
           dueDate: true,
@@ -330,6 +333,8 @@ export const addJob = async (
       applied,
       resume,
       tags,
+      recruitingCompany,
+      relationshipType,
     } = data;
 
     const tagIds = tags ?? [];
@@ -341,6 +346,12 @@ export const addJob = async (
     const locationId = location || undefined;
     const sourceId = source || undefined;
     const resumeId = resume || undefined;
+    // Welle 3 (F-AJ-08): recruiter triangle. relationshipType is runtime-validated
+    // (erased union, ADR-019); recruitingCompany ownership is verified below.
+    const recruitingCompanyId = recruitingCompany || undefined;
+    const safeRelationshipType = isValidRelationshipType(relationshipType)
+      ? relationshipType
+      : null;
 
     // Required FKs must be present
     if (!titleId || !companyId) {
@@ -348,16 +359,17 @@ export const addJob = async (
     }
 
     // Verify FK ownership (CON-C01 — prevent cross-user FK injection)
-    const [titleOwned, companyOwned, locationOwned, sourceOwned, resumeOwned] =
+    const [titleOwned, companyOwned, locationOwned, sourceOwned, resumeOwned, recruitingOwned] =
       await Promise.all([
         prisma.jobTitle.findFirst({ where: { id: titleId, createdBy: user.id }, select: { id: true } }),
         prisma.company.findFirst({ where: { id: companyId, createdBy: user.id }, select: { id: true } }),
         locationId ? prisma.location.findFirst({ where: { id: locationId, createdBy: user.id }, select: { id: true } }) : true,
         sourceId ? prisma.jobSource.findFirst({ where: { id: sourceId, createdBy: user.id }, select: { id: true } }) : true,
         resumeId ? prisma.resume.findFirst({ where: { id: resumeId, profile: { userId: user.id } }, select: { id: true } }) : true,
+        recruitingCompanyId ? prisma.company.findFirst({ where: { id: recruitingCompanyId, createdBy: user.id }, select: { id: true } }) : true,
       ]);
 
-    if (!titleOwned || !companyOwned || !locationOwned || !sourceOwned || !resumeOwned) {
+    if (!titleOwned || !companyOwned || !locationOwned || !sourceOwned || !resumeOwned || !recruitingOwned) {
       return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" as const };
     }
 
@@ -390,6 +402,8 @@ export const addJob = async (
           statusId: status,
           jobSourceId: sourceId || null,
           ...salaryData,
+          recruitingCompanyId: recruitingCompanyId || null,
+          relationshipType: safeRelationshipType,
           createdAt: new Date(),
           dueDate: dueDate ?? null,
           appliedDate: dateApplied,
@@ -483,6 +497,8 @@ export const updateJob = async (
       applied,
       resume,
       tags,
+      recruitingCompany,
+      relationshipType,
     } = data;
 
     const tagIds = tags ?? [];
@@ -494,6 +510,12 @@ export const updateJob = async (
     const locationId = location || undefined;
     const sourceId = source || undefined;
     const resumeId = resume || undefined;
+    // Welle 3 (F-AJ-08): recruiter triangle. relationshipType is runtime-validated
+    // (erased union, ADR-019); recruitingCompany ownership is verified below.
+    const recruitingCompanyId = recruitingCompany || undefined;
+    const safeRelationshipType = isValidRelationshipType(relationshipType)
+      ? relationshipType
+      : null;
 
     // Required FKs must be present
     if (!titleId || !companyId) {
@@ -501,16 +523,17 @@ export const updateJob = async (
     }
 
     // Verify FK ownership (CON-C01 — prevent cross-user FK injection)
-    const [titleOwned, companyOwned, locationOwned, sourceOwned, resumeOwned] =
+    const [titleOwned, companyOwned, locationOwned, sourceOwned, resumeOwned, recruitingOwned] =
       await Promise.all([
         prisma.jobTitle.findFirst({ where: { id: titleId, createdBy: user.id }, select: { id: true } }),
         prisma.company.findFirst({ where: { id: companyId, createdBy: user.id }, select: { id: true } }),
         locationId ? prisma.location.findFirst({ where: { id: locationId, createdBy: user.id }, select: { id: true } }) : true,
         sourceId ? prisma.jobSource.findFirst({ where: { id: sourceId, createdBy: user.id }, select: { id: true } }) : true,
         resumeId ? prisma.resume.findFirst({ where: { id: resumeId, profile: { userId: user.id } }, select: { id: true } }) : true,
+        recruitingCompanyId ? prisma.company.findFirst({ where: { id: recruitingCompanyId, createdBy: user.id }, select: { id: true } }) : true,
       ]);
 
-    if (!titleOwned || !companyOwned || !locationOwned || !sourceOwned || !resumeOwned) {
+    if (!titleOwned || !companyOwned || !locationOwned || !sourceOwned || !resumeOwned || !recruitingOwned) {
       return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" as const };
     }
 
@@ -561,6 +584,8 @@ export const updateJob = async (
       statusId: status,
       jobSourceId: sourceId || null,
       ...salaryData,
+      recruitingCompanyId: recruitingCompanyId || null,
+      relationshipType: safeRelationshipType,
       // Coerce undefined -> null so clearing the (now optional) due date
       // actually persists as null instead of being a no-op on update.
       dueDate: dueDate ?? null,

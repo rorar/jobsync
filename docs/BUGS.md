@@ -1,8 +1,24 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-06-01
+# Bug Tracker — Collected 2026-03-24, Updated 2026-06-11
 
-**Total: 592 bugs found, 591 fixed, 2 open (accepted risk), 1 new (blind spot)**
+**Total: 593 bugs found, 592 fixed, 2 open (accepted risk), 1 new (blind spot)**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability) — BS-01 ✅ fixed (Welle 0, 2026-05-31)
+
+## Session 2026-06-11 — Welle 3 (CRM-Verbindung) full-review
+
+1 latent bug found + fixed (by the delegated picker agent), plus 1 untested-path gap and
+1 defense-in-depth hardening from the full-review (every agent claim verified vs git diff).
+Verified: 279 suites green, tsc 0.
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| W3-B1 | LOW | The original P1 contact-picker label called `parseEmails()` on `getPersons`'s **already-parsed** `emails` array (the repository pre-parses value objects) → `parseEmails(array)` returned `[]` → the "— email" suffix in the picker label **never rendered** (silent no-op). | `toPersonOption` (`JobContactPicker.tsx`) accepts the already-parsed `TypedEmail[]`/`CompanyAssociation[]` directly; the two-tier item shows name + a real secondary (role·company / email). Commit `0c491e3`. |
+
+**Full-review (not pre-existing bugs):** HIGH — recruiter persistence/ownership(CON-C01)/
+`relationshipType`-sanitize(ADR-019) in `addJob`/`updateJob` were untested → +4 `job.actions.spec`
+tests (`bdefb18`). LOW defense-in-depth — `crm-activity-logger` company resolution made
+userId-scoped (`findFirst{id,userId}`) on all 6 job lookups, closing a latent projection-layer
+IDOR foot-gun. Accepted: unused `isValidActorType` (forward-provision, ADR-035).
 
 ## Session 2026-06-01 — Welle 2 Phase 4 full-review (Salary + Profil)
 

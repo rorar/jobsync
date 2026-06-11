@@ -26,7 +26,7 @@ import {
   JobTitle,
   Tag,
 } from "@/models/job.model";
-import { SALARY_PERIODS } from "@/models/job.model";
+import { SALARY_PERIODS, RELATIONSHIP_TYPES } from "@/models/job.model";
 import { addDays } from "date-fns";
 import { z } from "zod";
 import { toast } from "../ui/use-toast";
@@ -60,6 +60,14 @@ import { connectorRegistry } from "@/lib/connector/job-discovery/registry";
 import { createJobTitle } from "@/actions/jobtitle.actions";
 import { addCompany } from "@/actions/company.actions";
 import { createLocation, createJobSource } from "@/actions/job.actions";
+import {
+  JobContactPicker,
+  toPersonOption,
+  type PersonOption,
+} from "./JobContactPicker";
+import { addJobContact } from "@/actions/jobContact.actions";
+import { getPersons } from "@/actions/person.actions";
+import type { CompanyAssociation, TypedEmail } from "@/models/person.model";
 
 /** Display names for connector modules used as job sources */
 const CONNECTOR_SOURCE_LABELS: Record<string, string> = {
@@ -118,6 +126,9 @@ export function AddJob({
   const [currencies, setCurrencies] = useState<CurrencyOption[]>([]);
   const [currenciesLoading, setCurrenciesLoading] = useState(true);
   const [fixumDisablesRange, setFixumDisablesRange] = useState(true);
+  // Welle 3 (F-AJ-07) — optional point-of-contact picker (create-only)
+  const [persons, setPersons] = useState<PersonOption[]>([]);
+  const [personsLoading, setPersonsLoading] = useState(false);
   const form = useForm<z.infer<typeof AddJobFormSchema>>({
     resolver: zodResolver(AddJobFormSchema) as any, // zod v4 + @hookform/resolvers type mismatch
     defaultValues: {
@@ -139,12 +150,18 @@ export function AddJob({
       resume: "",
       tags: [],
       sendToQueue: false,
+      contactPersonId: "",
+      contactRole: "",
+      recruitingCompany: "",
+      relationshipType: null,
     },
   });
 
   const { setValue, reset, watch, resetField } = form;
 
   const appliedValue = watch("applied");
+  // Welle 3 (F-AJ-07): role is only meaningful once a contact person is chosen.
+  const contactPersonIdValue = watch("contactPersonId");
 
   const loadResumes = useCallback(async () => {
     try {
@@ -180,6 +197,14 @@ export function AddJob({
           dateApplied: editJob.appliedDate ?? undefined,
           resume: editJob.Resume?.id ?? undefined,
           tags: editJob.tags?.map((t) => t.id) ?? [],
+          // Welle 3 F-AJ-08: recruiter triangle prefill.
+          recruitingCompany: editJob.RecruitingCompany?.id ?? "",
+          relationshipType:
+            (RELATIONSHIP_TYPES as readonly string[]).includes(
+              editJob.relationshipType ?? "",
+            )
+              ? (editJob.relationshipType as (typeof RELATIONSHIP_TYPES)[number])
+              : null,
         },
         { keepDefaultValues: true },
       );
@@ -223,6 +248,39 @@ export function AddJob({
     };
   }, [locale]);
 
+  // Welle 3 (F-AJ-07): load persons for the point-of-contact picker (create-only).
+  useEffect(() => {
+    if (editJob) return;
+    let active = true;
+    (async () => {
+      setPersonsLoading(true);
+      try {
+        const result = await getPersons({ pageSize: 200 });
+        if (!active || !result.success || !result.data) return;
+        setPersons(
+          result.data.persons.map((p) =>
+            toPersonOption({
+              id: p.id as string,
+              firstName: p.firstName as string | null,
+              // getPersons (the Person repository) returns already-parsed value
+              // objects for the JSON columns — no re-parse here.
+              emails: p.emails as TypedEmail[] | null,
+              companies: p.companies as CompanyAssociation[] | null,
+              lastName: p.lastName as string | null,
+            }),
+          ),
+        );
+      } catch (error) {
+        console.error("Failed to load contacts:", error);
+      } finally {
+        if (active) setPersonsLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [editJob]);
+
   const setNewResumeId = (id: string) => {
     setTimeout(() => {
       setValue("resume", id);
@@ -232,13 +290,16 @@ export function AddJob({
   function onSubmit(data: z.infer<typeof AddJobFormSchema>) {
     startTransition(async () => {
       let result: { success: boolean; message?: string };
+      let createdJobId: string | undefined;
 
       if (editJob) {
         result = await updateJob(data);
       } else if (data.sendToQueue) {
         result = await addJobToQueue(data);
       } else {
-        result = await addJob(data);
+        const created = await addJob(data);
+        result = created;
+        if (created.success) createdJobId = created.data?.id;
       }
 
       if (!result.success) {
@@ -248,6 +309,24 @@ export function AddJob({
           description: t(result.message ?? "errors.unknown"),
         });
         return;
+      }
+
+      // Welle 3 (F-AJ-07): link the optional point of contact after the job is
+      // created (Route A — Job aggregate write stays untouched). Non-blocking:
+      // the job is already saved, so a link failure only warns, never rolls back.
+      if (createdJobId && data.contactPersonId) {
+        const linkResult = await addJobContact(
+          createdJobId,
+          data.contactPersonId,
+          data.contactRole || null,
+        );
+        if (!linkResult.success) {
+          toast({
+            variant: "destructive",
+            title: t("jobs.error"),
+            description: t(linkResult.message ?? "errors.unknown"),
+          });
+        }
       }
 
       reset();
@@ -665,6 +744,104 @@ export function AddJob({
                     setNewResumeId={setNewResumeId}
                   />
                 </div>
+
+                {/* Recruiter triangle (Welle 3 F-AJ-08) — optional, create + edit */}
+                <div className="md:col-span-2 grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="recruitingCompany"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>{t("crm.recruitingCompany")}</FormLabel>
+                        <FormControl>
+                          <Combobox
+                            options={companies}
+                            field={field}
+                            creatable
+                            onCreateOption={async (label) => {
+                              const res = await addCompany({ company: label });
+                              if (!res.success) {
+                                toast({
+                                  variant: "destructive",
+                                  title: t("common.error"),
+                                  description: t(res.message ?? "errors.unknown"),
+                                });
+                                return null;
+                              }
+                              return res.data as { id: string; label: string; value: string };
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="relationshipType"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col [&>button]:capitalize">
+                        <FormLabel>{t("crm.relationshipType")}</FormLabel>
+                        <SelectFormCtrl
+                          label={t("crm.relationshipType")}
+                          options={RELATIONSHIP_TYPES.map((rt) => ({
+                            id: rt,
+                            label: t(`crm.relationship.${rt}`),
+                            value: rt,
+                          }))}
+                          field={field}
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Point of Contact (Welle 3 F-AJ-07) — optional, create-only */}
+                {!editJob && (
+                  <div className="md:col-span-2 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="contactPersonId"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                          <FormLabel>{t("crm.pointOfContact")}</FormLabel>
+                          <FormControl>
+                            <JobContactPicker
+                              value={field.value ?? ""}
+                              onValueChange={(personId) => {
+                                field.onChange(personId);
+                                // Clearing the person clears any stale role.
+                                if (!personId) setValue("contactRole", "");
+                              }}
+                              persons={persons}
+                              loading={personsLoading}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="contactRole"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                          <FormLabel>{t("crm.contactRole")}</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ""}
+                              placeholder={t("crm.contactRolePlaceholder")}
+                              disabled={!contactPersonIdValue}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
 
                 {/* Add Skill Tags */}
                 <div className="md:col-span-2">

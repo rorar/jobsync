@@ -13,7 +13,8 @@ import {
   CardTitle,
 } from "../ui/card";
 import { Button } from "../ui/button";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Sparkles, Activity as ActivityIcon } from "lucide-react";
+import { ActivityTimeline } from "../crm/ActivityTimeline";
 import { useRouter } from "next/navigation";
 import { AiJobMatchSection } from "../profile/AiJobMatchSection";
 import { NotesSection } from "./NotesSection";
@@ -157,6 +158,19 @@ function JobDetails({ job }: { job: JobResponse }) {
               />
             )}
             <StatusHistoryTimeline jobId={job.id} />
+          </div>
+
+          {/* CRM activity timeline (Welle 3 P3): unified person + company + job
+              entries for this job, filtered by job and its hiring company. */}
+          <div className="mx-4 mb-4">
+            <h4 className="font-medium mb-2 flex items-center gap-2">
+              <ActivityIcon className="h-4 w-4" />
+              {t("crm.timeline")}
+            </h4>
+            <ActivityTimeline
+              targetJobId={job.id}
+              targetCompanyId={job.Company?.id}
+            />
           </div>
 
           {parsedMatchData && (
