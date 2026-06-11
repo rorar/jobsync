@@ -102,6 +102,15 @@ enum ErrorCode {
     internal_error
 }
 
+-- Recruiter-triangle relationship type (Welle 3 F-AJ-08). Describes the role of
+-- the optional recruiting_company relative to the hiring company on a Job.
+-- An invalid value is rejected with validation_error (400) at the request boundary.
+enum RelationshipType {
+    direct
+    recruiting_agency
+    staffing_agency
+}
+
 ------------------------------------------------------------
 -- Config
 ------------------------------------------------------------
@@ -328,7 +337,7 @@ rule ListJobs {
 -- POST /api/v1/jobs
 
 rule CreateJob {
-    when: CreateJob(api_request, title, company, location?, type?, status?, source?, salary_range?, job_description?, job_url?, tags?, resume_id?)
+    when: CreateJob(api_request, title, company, recruiting_company?, relationship_type?, location?, type?, status?, source?, salary_range?, job_description?, job_url?, tags?, resume_id?)
 
     requires: length(title) > 0
     requires: length(title) <= config.max_job_title_length
@@ -360,6 +369,18 @@ rule CreateJob {
         -- Shared entities use upsert to avoid TOCTOU race conditions.
         -- This means concurrent API calls creating jobs with the same company
         -- name will not fail with duplicate key errors.
+        --
+        -- Recruiter triangle (Welle 3 F-AJ-08), both fields optional:
+        --   recruiting_company is a NAME string resolved/created via upsert
+        --   (createdBy:userId-scoped) ONLY when present and non-empty; a
+        --   trimmed-empty or null value means "no recruiter" — never an
+        --   empty-string upsert.
+        --   relationship_type is a RelationshipType enum; an invalid value is
+        --   rejected with validation_error (400). null/absent ⇒ no relationship.
+        --   It is independent of recruiting_company (may be set without one).
+        -- CompanyCreated is emitted for a newly-created recruiting company,
+        --   UNLESS it resolved to the same record as the hiring company
+        --   (no duplicate event for a single resolved id).
 }
 
 -- GET /api/v1/jobs/:id
@@ -377,6 +398,9 @@ rule GetJob {
         --   title, company, status, location, source, resume (with file), tags.
         -- Resume.File includes only { id, fileName, fileType }.
         --   File.filePath excluded to prevent server path disclosure.
+        -- Recruiter triangle: the response exposes the RecruitingCompany relation
+        --   (id, label, value) + relationship_type, but NEVER the raw
+        --   recruitingCompanyId foreign key (FK leak rule).
         -- Uses findFirst with { id, userId } — IDOR-safe pattern.
 }
 
@@ -397,6 +421,13 @@ rule UpdateJob {
         -- Resume ownership verified if provided (IDOR prevention).
         -- Tag ownership verified if provided (IDOR prevention).
         -- Tags use "set" semantics (replaces entire tag list).
+        --
+        -- Recruiter triangle (Welle 3 F-AJ-08), optional-field clear pattern:
+        --   recruiting_company — a non-empty name resolves to an id via upsert;
+        --   "" or null clears the recruiting company (sets it to none).
+        --   relationship_type — persisted as-is (already an enum member) or null
+        --   to clear; an invalid value is rejected with validation_error (400).
+        --   An absent field is left untouched.
 }
 
 -- DELETE /api/v1/jobs/:id

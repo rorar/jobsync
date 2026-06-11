@@ -82,11 +82,15 @@ export const POST = withApiAuth(async (req, { userId }) => {
   }
 
   const {
-    title, company, location, type, status, source,
+    title, company, recruitingCompany, relationshipType, location, type, status, source,
     salaryRange, salaryMin, salaryMax, salaryCurrency, salaryPeriod, salaryBonus,
     dueDate, dateApplied, jobDescription, jobUrl,
     applied, resume, tags,
   } = parsed.data;
+
+  // Welle 3 (F-AJ-08): recruiter triangle. recruitingCompany is an optional NAME
+  // string; a trimmed-empty / null value means "no recruiter" (never a "" upsert).
+  const recruiterName = recruitingCompany || null;
 
   // Structured salary wins; fall back to parsing a legacy free-text salaryRange.
   const hasStructured =
@@ -100,17 +104,27 @@ export const POST = withApiAuth(async (req, { userId }) => {
         : {},
   );
 
-  // Check if company already exists before find-or-create (for CompanyCreated event)
-  const existingCompany = await prisma.company.findFirst({
-    where: { value: company.trim().toLowerCase(), createdBy: userId },
-    select: { id: true },
-  });
+  // Check if companies already exist before find-or-create (for CompanyCreated events).
+  // Mirror the hiring-company pre-check for the recruiting company.
+  const [existingCompany, existingRecruitingCompany] = await Promise.all([
+    prisma.company.findFirst({
+      where: { value: company.trim().toLowerCase(), createdBy: userId },
+      select: { id: true },
+    }),
+    recruiterName
+      ? prisma.company.findFirst({
+          where: { value: recruiterName.trim().toLowerCase(), createdBy: userId },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+  ]);
 
   // Resolve all independent entities in parallel
-  const [jobTitle, companyRecord, locationRecord, sourceRecord, statusRecord] =
+  const [jobTitle, companyRecord, recruitingCompanyRecord, locationRecord, sourceRecord, statusRecord] =
     await Promise.all([
       findOrCreate("jobTitle", userId, title),
       findOrCreate("company", userId, company),
+      recruiterName ? findOrCreate("company", userId, recruiterName) : Promise.resolve(null),
       location ? findOrCreate("location", userId, location) : null,
       source ? findOrCreate("jobSource", userId, source) : null,
       resolveStatus(status ?? "draft"),
@@ -150,6 +164,8 @@ export const POST = withApiAuth(async (req, { userId }) => {
         userId,
         jobTitleId: jobTitle.id,
         companyId: companyRecord.id,
+        recruitingCompanyId: recruitingCompanyRecord?.id ?? null,
+        relationshipType: relationshipType ?? null,
         locationId: locationRecord?.id ?? null,
         statusId: statusRecord.id,
         jobSourceId: sourceRecord?.id ?? null,
@@ -207,6 +223,22 @@ export const POST = withApiAuth(async (req, { userId }) => {
       createEvent(DomainEventTypes.CompanyCreated, {
         companyId: companyRecord.id,
         companyName: company,
+        userId,
+      }),
+    );
+  }
+
+  // Emit CompanyCreated for a newly-created recruiting company too — but never a
+  // duplicate when it resolved to the same record as the hiring company (edge 4).
+  if (
+    recruitingCompanyRecord &&
+    !existingRecruitingCompany &&
+    recruitingCompanyRecord.id !== companyRecord.id
+  ) {
+    emitEvent(
+      createEvent(DomainEventTypes.CompanyCreated, {
+        companyId: recruitingCompanyRecord.id,
+        companyName: recruiterName!,
         userId,
       }),
     );

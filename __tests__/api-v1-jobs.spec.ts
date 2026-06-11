@@ -122,6 +122,7 @@ jest.mock("@/lib/audit/data-audit", () => ({
 
 import db from "@/lib/db";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
+import { emitEvent, DomainEventTypes } from "@/lib/events";
 
 import {
   GET as listJobs,
@@ -157,6 +158,7 @@ const mockPrisma = db as unknown as {
 
 // Typed reference to the mocked data-audit writer
 const auditMock = writeDataAuditLog as jest.Mock;
+const emitMock = emitEvent as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -555,6 +557,144 @@ describe("POST /api/v1/jobs — salary handling", () => {
 });
 
 // =========================================================================
+// POST /api/v1/jobs — recruiter triangle (Welle 3 F-AJ-08, API write parity)
+// =========================================================================
+
+describe("POST /api/v1/jobs — recruiter triangle", () => {
+  // Differentiate hiring (acme) from recruiting (randstad) company upserts so
+  // we can assert the resolved recruitingCompanyId distinctly.
+  function distinctCompanies() {
+    mockPrisma.company.upsert.mockImplementation((args: { where: { value_createdBy: { value: string } } }) => {
+      const v = args.where.value_createdBy.value;
+      if (v === "acme") return Promise.resolve({ id: "co-acme" });
+      if (v === "randstad") return Promise.resolve({ id: "co-randstad" });
+      return Promise.resolve({ id: "co-other" });
+    });
+  }
+
+  function postBody(body: Record<string, unknown>) {
+    return createJob(
+      mockRequest("http://localhost/api/v1/jobs", {
+        method: "POST",
+        body: { title: "Eng", company: "Acme", ...body },
+      }),
+      routeCtx(),
+    );
+  }
+
+  it("persists recruitingCompany (name→id) + relationshipType", async () => {
+    distinctCompanies();
+    mockPrisma.job.create.mockResolvedValue(makeJobRow());
+
+    const res = asRes(await postBody({
+      recruitingCompany: "Randstad",
+      relationshipType: "recruiting_agency",
+    }));
+
+    expect(res.status).toBe(201);
+    expect(mockPrisma.job.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          recruitingCompanyId: "co-randstad",
+          relationshipType: "recruiting_agency",
+        }),
+      }),
+    );
+  });
+
+  it("defaults recruitingCompanyId + relationshipType to null when omitted", async () => {
+    mockPrisma.job.create.mockResolvedValue(makeJobRow());
+
+    await postBody({});
+
+    expect(mockPrisma.job.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          recruitingCompanyId: null,
+          relationshipType: null,
+        }),
+      }),
+    );
+  });
+
+  it("treats a whitespace-only recruitingCompany as no recruiter (no '' upsert)", async () => {
+    mockPrisma.job.create.mockResolvedValue(makeJobRow());
+
+    await postBody({ recruitingCompany: "   " });
+
+    // Only the hiring company is resolved — never a findOrCreate of ""
+    expect(mockPrisma.company.upsert).toHaveBeenCalledTimes(1);
+    const data = mockPrisma.job.create.mock.calls[0][0].data;
+    expect(data.recruitingCompanyId).toBeNull();
+  });
+
+  it("allows relationshipType without a recruitingCompany (independent metadata)", async () => {
+    mockPrisma.job.create.mockResolvedValue(makeJobRow());
+
+    await postBody({ relationshipType: "direct" });
+
+    const data = mockPrisma.job.create.mock.calls[0][0].data;
+    expect(data.recruitingCompanyId).toBeNull();
+    expect(data.relationshipType).toBe("direct");
+  });
+
+  it("rejects an invalid relationshipType with 400 (Zod boundary)", async () => {
+    const res = asRes(await postBody({ relationshipType: "rpo" }));
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
+    expect(mockPrisma.job.create).not.toHaveBeenCalled();
+  });
+
+  it("emits CompanyCreated for a newly-created recruiting company", async () => {
+    distinctCompanies();
+    mockPrisma.company.findFirst.mockResolvedValue(null); // both companies new
+    mockPrisma.job.create.mockResolvedValue(makeJobRow());
+
+    await postBody({ recruitingCompany: "Randstad", relationshipType: "recruiting_agency" });
+
+    expect(emitMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: DomainEventTypes.CompanyCreated,
+        payload: expect.objectContaining({ companyId: "co-randstad", companyName: "Randstad" }),
+      }),
+    );
+  });
+
+  it("does NOT emit a second CompanyCreated when recruiter == hiring company (same id)", async () => {
+    // Same name → findOrCreate returns the same id for both → one event only.
+    mockPrisma.company.upsert.mockResolvedValue({ id: "co-acme" });
+    mockPrisma.company.findFirst.mockResolvedValue(null);
+    mockPrisma.job.create.mockResolvedValue(makeJobRow());
+
+    await postBody({ recruitingCompany: "Acme", relationshipType: "direct" });
+
+    const companyCreatedCalls = emitMock.mock.calls.filter(
+      ([e]) => e.type === DomainEventTypes.CompanyCreated,
+    );
+    expect(companyCreatedCalls).toHaveLength(1);
+    expect(companyCreatedCalls[0][0].payload.companyId).toBe("co-acme");
+  });
+
+  it("emits no recruiting CompanyCreated when the recruiting company already exists", async () => {
+    distinctCompanies();
+    // hiring new (null), recruiting already exists
+    mockPrisma.company.findFirst.mockImplementation((args: { where: { value: string } }) => {
+      if (args.where.value === "randstad") return Promise.resolve({ id: "co-randstad" });
+      return Promise.resolve(null);
+    });
+    mockPrisma.job.create.mockResolvedValue(makeJobRow());
+
+    await postBody({ recruitingCompany: "Randstad", relationshipType: "recruiting_agency" });
+
+    const recruitingCreated = emitMock.mock.calls.filter(
+      ([e]) => e.type === DomainEventTypes.CompanyCreated && e.payload.companyId === "co-randstad",
+    );
+    expect(recruitingCreated).toHaveLength(0);
+  });
+});
+
+// =========================================================================
 // GET /api/v1/jobs/:id — Get single job
 // =========================================================================
 
@@ -738,6 +878,73 @@ describe("PATCH /api/v1/jobs/:id", () => {
         where: { value_createdBy: { value: "new co", createdBy: "test-user-id" } },
       }),
     );
+  });
+
+  // --- recruiter triangle (Welle 3 F-AJ-08, API write parity) ---
+
+  it("resolves + sets recruitingCompany (name→id) and relationshipType on PATCH", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue({ id: VALID_UUID, version: 0 });
+    mockPrisma.company.upsert.mockImplementation((args: { where: { value_createdBy: { value: string } } }) =>
+      Promise.resolve({ id: args.where.value_createdBy.value === "randstad" ? "co-randstad" : "co-x" }),
+    );
+    mockPrisma.job.update.mockResolvedValue(makeJobRow());
+
+    const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}`, {
+      method: "PATCH",
+      body: { recruitingCompany: "Randstad", relationshipType: "staffing_agency" },
+    });
+    await patchJob(req, routeCtx(VALID_UUID));
+
+    const data = mockPrisma.job.update.mock.calls[0][0].data;
+    expect(data.recruitingCompanyId).toBe("co-randstad");
+    expect(data.relationshipType).toBe("staffing_agency");
+  });
+
+  it("clears recruitingCompany + relationshipType when null is sent (PATCH)", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue({ id: VALID_UUID, version: 0 });
+    mockPrisma.job.update.mockResolvedValue(makeJobRow());
+
+    const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}`, {
+      method: "PATCH",
+      body: { recruitingCompany: null, relationshipType: null },
+    });
+    const res = asRes(await patchJob(req, routeCtx(VALID_UUID)));
+
+    expect(res.status).toBe(200);
+    const data = mockPrisma.job.update.mock.calls[0][0].data;
+    expect(data.recruitingCompanyId).toBeNull();
+    expect(data.relationshipType).toBeNull();
+    // No recruiting company resolution on a clear
+    expect(mockPrisma.company.upsert).not.toHaveBeenCalled();
+  });
+
+  it("leaves the recruiting company untouched when only relationshipType is patched", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue({ id: VALID_UUID, version: 0 });
+    mockPrisma.job.update.mockResolvedValue(makeJobRow());
+
+    const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}`, {
+      method: "PATCH",
+      body: { relationshipType: "direct" },
+    });
+    await patchJob(req, routeCtx(VALID_UUID));
+
+    const data = mockPrisma.job.update.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty("recruitingCompanyId");
+    expect(data.relationshipType).toBe("direct");
+  });
+
+  it("rejects an invalid relationshipType with 400 on PATCH (Zod boundary)", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue({ id: VALID_UUID, version: 0 });
+
+    const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}`, {
+      method: "PATCH",
+      body: { relationshipType: "rpo" },
+    });
+    const res = asRes(await patchJob(req, routeCtx(VALID_UUID)));
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
+    expect(mockPrisma.job.update).not.toHaveBeenCalled();
   });
 });
 
