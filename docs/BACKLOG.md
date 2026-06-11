@@ -217,10 +217,11 @@ Runde-2 verifiziert: Gap-2/Gap-3/Gap-4 ERLEDIGT (→ §0). **Echt offen:**
 
 | Gap | Titel | Blockiert | Status |
 |-----|-------|-----------|--------|
-| Gap-1 | Person→Job "Point of Contact" | 5.1/5.4/5.7 | OFFEN (= F-AJ-07, UI-Teil) |
-| Gap-5 | CompanyTimeline UI + JobDetail CRM-Tab | 5.1/5.5 | OFFEN (ActivityTimeline akzeptiert props, kein Page-Embed) |
-| Gap-6 | CrmBlocklist Domain-Pattern (nur exact `handle`) | 1.12 | OFFEN |
-| Gap-7 | updatedBy FK-Tracking (nur Name-based actor) | 1.12/5.7 | TEILWEISE |
+| Gap-1 | Person→Job "Point of Contact" | 5.1/5.4/5.7 | ✅ DONE (Welle 3 F-AJ-07: JobContactPicker in AddJob, two-tier + wider search) |
+| Gap-5 | CompanyTimeline UI + JobDetail CRM-Tab | 5.1/5.5 | ✅ DONE (Welle 3: ActivityTimeline gains targetCompanyId; JobDetails CRM section; 8 projections resolve company) |
+| Gap-6 | CrmBlocklist Domain-Pattern (nur exact `handle`) | 1.12 | ✅ DONE (Welle 3: domain-suffix + glob `pattern` matcher, ReDoS-safe; primitive only — no auto-creation flow yet, paired w/ 1.12) |
+| Gap-7 | updatedBy FK-Tracking (nur Name-based actor) | 1.12/5.7 | ✅ DONE (Welle 3: ActorType provenance type+id on CrmInterview/Task/Note, ADR-035; Person keeps name-string by design) |
+| F-AJ-08 | Recruiter-Dreieck (recruitingCompany + relationshipType) | — | ✅ DONE (Welle 3: migration + addJob/updateJob + JOB_*_SELECT + AddJob UI + job-aggregate.allium) |
 
 ---
 
@@ -269,7 +270,7 @@ Runde-2 verifiziert: Gap-2/Gap-3/Gap-4 ERLEDIGT (→ §0). **Echt offen:**
 | UX offen (S2-P0 ✅ + WCAG ✅3/~8 deferred + F-AJ 5) | ~13 (S2-P0 9 + WCAG 3 + F-AJ-04 erledigt Welle 0; WCAG-Rest verifiziert kontextuell/false) |
 | Arch/Tech-Debt offen | 8 (IF-5/7/10/12 + D1-D5) |
 | Test-Lücken offen | 2 (F6, CRM-Cron-Tests) |
-| CRM-Gaps offen | 4 (Gap-1/5/6/7) |
+| CRM-Gaps offen | 0 (Gap-1/5/6/7 + F-AJ-08 alle DONE — Welle 3) |
 | Dedizierte Sprints | 6 |
 | ROADMAP-Vorwärts-Features | ~38 |
 | Design-gated/Akzeptiert | ~10 |
