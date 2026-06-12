@@ -209,7 +209,12 @@ export const AiJobMatchSection = ({
                 }
               >
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Select a resume" />
+                  <SelectValue
+                    placeholder={t("forms.selectPlaceholder").replace(
+                      "{label}",
+                      t("jobs.resume"),
+                    )}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>

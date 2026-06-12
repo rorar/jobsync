@@ -655,7 +655,7 @@ export function AddJob({
                       <FormItem className="flex flex-col [&>button]:capitalize">
                         <FormLabel>{t("jobs.status")}</FormLabel>
                         <SelectFormCtrl
-                          label="Job Status"
+                          label={t("jobs.status")}
                           options={jobStatuses}
                           field={field}
                         />
@@ -730,7 +730,7 @@ export function AddJob({
                       <FormItem className="flex flex-col [&>button]:capitalize">
                         <FormLabel>{t("jobs.resume")}</FormLabel>
                         <SelectFormCtrl
-                          label="Resume"
+                          label={t("jobs.resume")}
                           options={resumes}
                           field={field}
                         />
