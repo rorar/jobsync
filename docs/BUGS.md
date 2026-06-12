@@ -20,6 +20,17 @@ tests (`bdefb18`). LOW defense-in-depth — `crm-activity-logger` company resolu
 userId-scoped (`findFirst{id,userId}`) on all 6 job lookups, closing a latent projection-layer
 IDOR foot-gun. Accepted: unused `isValidActorType` (forward-provision, ADR-035).
 
+## Session 2026-06-12 — Open BACKLOG bug-list verification + fixes
+
+Verify-against-source pass on the carried "open items". Outcome: **2 of 4 were not real as documented** (index-vs-code drift).
+
+- **#9 API-v1 recruiter-write** — already shipped (commit `3b099f2`, 66 tests). Docs/memory were stale; corrected.
+- **#6 company-combobox "top-N → placeholder on edit"** — **misdiagnosis, not a bug.** Both editable company comboboxes are fed by `getAllCompanies()` (ALL of the user's companies); the top-N `getCompanyList()` feeds only the admin paginated list. The trigger renders blank (not placeholder) when `value∉options`, an edge unreachable on the real form. Locked in by `__tests__/ComboBox.spec.tsx`; memory + BACKLOG corrected.
+- **#8 `SelectFormCtrl` hardcoded "Select " (+ flashlight `ComboBox.tsx`, `TaskForm`'s `placeholder="Select activityType"`)** — fixed: new `forms.*` i18n namespace with `{label}` interpolation (German verb-final correct); translated `label` wired into all combobox callers. Tech-debt, not a code defect.
+- **#7 company-targeted task/note** — event plumbing pre-staged (3 payloads/schemas/emitters/projection + `event-bus.allium`); read surface still gated on ROADMAP 2.20 CompanyDetail.
+
+No new code bugs found. tsc 0, affected suites green (incl. +10 new tests), allium 0 errors. Bug count unchanged (none of the above are newly-found code defects).
+
 ## Session 2026-06-01 — Welle 2 Phase 4 full-review (Salary + Profil)
 
 4 bugs found + fixed during the full-review (+ 2 defense-in-depth hardenings). Every
