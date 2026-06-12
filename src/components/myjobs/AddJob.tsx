@@ -427,6 +427,7 @@ export function AddJob({
                           <Combobox
                             options={jobTitles}
                             field={field}
+                            label={t("jobs.jobTitle")}
                             creatable
                             onCreateOption={async (label) => {
                               const res = await createJobTitle(label);
@@ -459,6 +460,7 @@ export function AddJob({
                           <Combobox
                             options={companies}
                             field={field}
+                            label={t("jobs.company")}
                             creatable
                             onCreateOption={async (label) => {
                               const res = await addCompany({ company: label });
@@ -491,6 +493,7 @@ export function AddJob({
                           <Combobox
                             options={locations}
                             field={field}
+                            label={t("jobs.location")}
                             creatable
                             onCreateOption={async (label) => {
                               const res = await createLocation(label);
@@ -556,6 +559,7 @@ export function AddJob({
                         <Combobox
                           options={mergeConnectorSources(jobSources)}
                           field={field}
+                          label={t("jobs.jobSource")}
                           creatable
                           onCreateOption={async (label) => {
                             const res = await createJobSource(label);
@@ -757,6 +761,7 @@ export function AddJob({
                           <Combobox
                             options={companies}
                             field={field}
+                            label={t("crm.recruitingCompany")}
                             creatable
                             onCreateOption={async (label) => {
                               const res = await addCompany({ company: label });

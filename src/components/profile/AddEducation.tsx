@@ -199,6 +199,7 @@ function AddEducation({
                       <Combobox
                         options={locations!}
                         field={field}
+                        label={t("profile.location")}
                         creatable
                         onCreateOption={async (label) => {
                           const res = await createLocation(label);

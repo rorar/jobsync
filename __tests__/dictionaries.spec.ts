@@ -24,6 +24,7 @@ import { smtp } from "@/i18n/dictionaries/smtp";
 import { push } from "@/i18n/dictionaries/push";
 import { webhook } from "@/i18n/dictionaries/webhook";
 import { crm } from "@/i18n/dictionaries/crm";
+import { forms } from "@/i18n/dictionaries/forms";
 
 const LOCALES = ["en", "de", "fr", "es"] as const;
 
@@ -46,6 +47,8 @@ const namespaceDictionaries = {
   webhook,
   // CRM namespace:
   crm,
+  // Shared form-control strings (SelectFormCtrl, Combobox):
+  forms,
 } as const;
 
 describe("getDictionary", () => {

@@ -293,6 +293,7 @@ const ActivityFormComponent = ({
                   <Combobox
                     options={activityTypes}
                     field={field}
+                    label={t("activities.activityType")}
                     creatable
                     onCreateOption={async (label) => {
                       const res = await createActivityType(label);

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "./ui/scroll-area";
 import { useMemo, useState, useTransition } from "react";
+import { useTranslations } from "@/i18n";
 
 interface ComboboxProps {
   options: any[];
@@ -30,6 +31,12 @@ interface ComboboxProps {
     label: string,
   ) => Promise<{ id: string; label: string; value: string } | null>;
   placeholder?: string;
+  /**
+   * Human-readable, already-translated noun for this field (e.g. "Company").
+   * Used in the placeholder / search / aria text. Falls back to the raw RHF
+   * `field.name` when not provided (keeps existing callers working).
+   */
+  label?: string;
 }
 
 export function Combobox({
@@ -38,7 +45,10 @@ export function Combobox({
   creatable,
   onCreateOption,
   placeholder,
+  label,
 }: ComboboxProps) {
+  const { t } = useTranslations();
+  const resolvedLabel = label ?? field.name;
   const [newOption, setNewOption] = useState<string>("");
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
   const [announcement, setAnnouncement] = useState<string>("");
@@ -53,7 +63,7 @@ export function Combobox({
         options.unshift(result);
         field.onChange(result.id);
         setIsPopoverOpen(false);
-        setAnnouncement(`Created ${result.label}`);
+        setAnnouncement(t("forms.optionCreated").replace("{label}", result.label));
       }
     });
   };
@@ -101,7 +111,8 @@ export function Combobox({
           >
             {field.value
               ? options.find((option) => option.id === field.value)?.label
-              : (placeholder ?? `Select ${field.name}`)}
+              : (placeholder ??
+                t("forms.selectPlaceholder").replace("{label}", resolvedLabel))}
 
             {isPending ? (
               <Loader className="h-4 w-4 shrink-0 spinner" />
@@ -117,7 +128,11 @@ export function Combobox({
             value={newOption}
             onValueChange={(val: string) => setNewOption(val)}
             onKeyDown={handleInputKeyDown}
-            placeholder={`${showCreate ? "Create or " : ""}Search ${field.name}`}
+            placeholder={t(
+              showCreate
+                ? "forms.createOrSearchPlaceholder"
+                : "forms.searchPlaceholder",
+            ).replace("{label}", resolvedLabel)}
           />
           <CommandEmpty
             onClick={() => {
@@ -135,13 +150,13 @@ export function Combobox({
             {showCreate ? (
               <>
                 <CirclePlus className="h-4 w-4" />
-                <p>Create: </p>
+                <p>{t("forms.createOption")} </p>
                 <p className="block max-w-48 truncate font-semibold text-primary">
                   {newOption}
                 </p>
               </>
             ) : (
-              <p className="font-semibold text-primary">No results found!</p>
+              <p className="font-semibold text-primary">{t("forms.noResults")}</p>
             )}
           </CommandEmpty>
           <ScrollArea>
@@ -155,7 +170,9 @@ export function Combobox({
                       if (field.onChange) {
                         field.onChange(option.id);
                         setIsPopoverOpen(false);
-                        setAnnouncement(`${option.label} selected`);
+                        setAnnouncement(
+                          t("forms.optionSelected").replace("{label}", option.label),
+                        );
                       }
                     }}
                   >

@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import {
   Select,
@@ -9,6 +11,7 @@ import {
 } from "./ui/select";
 import { FormControl } from "./ui/form";
 import { ControllerRenderProps } from "react-hook-form";
+import { useTranslations } from "@/i18n";
 
 interface SelectProps {
   label: string;
@@ -17,6 +20,8 @@ interface SelectProps {
 }
 
 function SelectFormCtrl({ label, options, field }: SelectProps) {
+  const { t } = useTranslations();
+  const selectPlaceholder = t("forms.selectPlaceholder").replace("{label}", label);
   return (
     <>
       <Select
@@ -25,8 +30,8 @@ function SelectFormCtrl({ label, options, field }: SelectProps) {
         name={field.name}
       >
         <FormControl>
-          <SelectTrigger aria-label={`Select ${label}`} className="w-[200px]">
-            <SelectValue placeholder={`Select ${label}`} />
+          <SelectTrigger aria-label={selectPlaceholder} className="w-[200px]">
+            <SelectValue placeholder={selectPlaceholder} />
           </SelectTrigger>
         </FormControl>
         <SelectContent>

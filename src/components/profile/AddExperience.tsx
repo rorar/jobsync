@@ -199,6 +199,7 @@ function AddExperience({
                       <Combobox
                         options={jobTitles}
                         field={field}
+                        label={t("profile.jobTitle")}
                         creatable
                         onCreateOption={async (label) => {
                           const res = await createJobTitle(label);
@@ -232,6 +233,7 @@ function AddExperience({
                       <Combobox
                         options={companies}
                         field={field}
+                        label={t("profile.company")}
                         creatable
                         onCreateOption={async (label) => {
                           const res = await addCompany({ company: label });
@@ -264,6 +266,7 @@ function AddExperience({
                       <Combobox
                         options={locations!}
                         field={field}
+                        label={t("profile.jobLocation")}
                         creatable
                         onCreateOption={async (label) => {
                           const res = await createLocation(label);

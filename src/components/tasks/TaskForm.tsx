@@ -189,8 +189,8 @@ export function TaskForm({
                         <Combobox
                           options={activityTypes}
                           field={field}
+                          label={t("tasks.activityType")}
                           creatable
-                          placeholder="Select activityType"
                           onCreateOption={async (label) => {
                             const res = await createActivityType(label);
                             if (!res.success) {
