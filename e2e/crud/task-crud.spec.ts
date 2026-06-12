@@ -296,7 +296,10 @@ test.describe("Task CRUD", () => {
     // toast to disappear rather than sleeping a fixed 2 000 ms.
     await safeWait(page, {
       condition: async () => {
-        await expect(page.getByRole("status").first()).not.toBeVisible();
+        // Target the creation toast by text, not getByRole("status") — the
+        // NotificationBell aria-live region also has role="status" and would
+        // never be "not visible".
+        await expect(page.getByText(/Task has been created/i)).not.toBeVisible();
       },
     }).catch(() => null); // acceptable if toast already gone
 

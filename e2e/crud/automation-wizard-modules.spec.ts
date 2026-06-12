@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { expectToast } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,10 +36,7 @@ async function ensureResumeExists(
   await page.getByRole("button", { name: "New Resume" }).click();
   await page.getByPlaceholder("Ex: Full Stack Developer").fill(resumeTitle);
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("status").first()).toContainText(
-    /Resume title has been/,
-    { timeout: 10000 },
-  );
+  await expectToast(page, /Resume title has been/);
   return resumeTitle;
 }
 
