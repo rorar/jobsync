@@ -272,6 +272,7 @@ export const CrmTaskCreatedPayloadSchema = z.object({
   title: z.string(),
   targetPersonId: z.string().optional(),
   targetJobId: z.string().optional(),
+  targetCompanyId: z.string().optional(),
 }) satisfies z.ZodType<CrmTaskCreatedPayload>;
 
 export const CrmTaskCompletedPayloadSchema = z.object({
@@ -280,6 +281,7 @@ export const CrmTaskCompletedPayloadSchema = z.object({
   title: z.string(),
   targetPersonId: z.string().optional(),
   targetJobId: z.string().optional(),
+  targetCompanyId: z.string().optional(),
 }) satisfies z.ZodType<CrmTaskCompletedPayload>;
 
 export const CrmNoteCreatedPayloadSchema = z.object({
@@ -287,6 +289,7 @@ export const CrmNoteCreatedPayloadSchema = z.object({
   userId: z.string(),
   targetPersonId: z.string().optional(),
   targetJobId: z.string().optional(),
+  targetCompanyId: z.string().optional(),
 }) satisfies z.ZodType<CrmNoteCreatedPayload>;
 
 // ---------------------------------------------------------------------------

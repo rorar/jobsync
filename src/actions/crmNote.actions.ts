@@ -99,6 +99,7 @@ export async function createCrmNote(
         userId: user.id,
         targetPersonId: firstTarget?.targetPersonId ?? undefined,
         targetJobId: firstTarget?.targetJobId ?? undefined,
+        targetCompanyId: firstTarget?.targetCompanyId ?? undefined,
       }),
     );
 

@@ -444,4 +444,61 @@ describe("crmTask.actions", () => {
       expect(callArg.where.status).toEqual({ in: ["pending", "in_progress"] });
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // targetCompanyId pre-staging (ROADMAP 2.20 CompanyDetail) — the event
+  // payloads carry the company target so a company-targeted task can later land
+  // on the (future) company timeline. Additive + optional.
+  // ---------------------------------------------------------------------------
+
+  describe("targetCompanyId in emitted events", () => {
+    it("publishes CrmTaskCreated with targetCompanyId for a company-targeted task", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (validateExactlyOneTarget as jest.Mock).mockReturnValue(true);
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "co-1" });
+      (prisma.crmTask.count as jest.Mock).mockResolvedValue(0);
+      (prisma.crmTask.create as jest.Mock).mockResolvedValue({ id: "task-co" });
+
+      await createCrmTask({ title: "Company Task", targets: [{ targetCompanyId: "co-1" }] });
+
+      expect(createEvent).toHaveBeenCalledWith(
+        DomainEventType.CrmTaskCreated,
+        expect.objectContaining({ taskId: "task-co", targetCompanyId: "co-1" }),
+      );
+    });
+
+    it("leaves targetCompanyId undefined for a person-targeted task", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (validateExactlyOneTarget as jest.Mock).mockReturnValue(true);
+      (prisma.person.findFirst as jest.Mock).mockResolvedValue({ id: "p-1" });
+      (prisma.crmTask.count as jest.Mock).mockResolvedValue(0);
+      (prisma.crmTask.create as jest.Mock).mockResolvedValue({ id: "task-p" });
+
+      await createCrmTask({ title: "Person Task", targets: [{ targetPersonId: "p-1" }] });
+
+      const call = (createEvent as jest.Mock).mock.calls.find(
+        (c) => c[0] === DomainEventType.CrmTaskCreated,
+      );
+      expect(call?.[1].targetCompanyId).toBeUndefined();
+    });
+
+    it("publishes CrmTaskCompleted with targetCompanyId from the task's company target", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.crmTask.findFirst as jest.Mock).mockResolvedValue({
+        id: "task-1",
+        status: "in_progress",
+        title: "Done",
+        targets: [{ targetPersonId: null, targetJobId: null, targetCompanyId: "co-9" }],
+      });
+      (isValidTaskTransition as jest.Mock).mockReturnValue(true);
+      (prisma.crmTask.update as jest.Mock).mockResolvedValue({});
+
+      await completeCrmTask("task-1");
+
+      expect(createEvent).toHaveBeenCalledWith(
+        DomainEventType.CrmTaskCompleted,
+        expect.objectContaining({ targetCompanyId: "co-9" }),
+      );
+    });
+  });
 });

@@ -150,6 +150,35 @@ describe("crmNote.actions", () => {
       );
       expect(eventBus.publish).toHaveBeenCalled();
     });
+
+    // targetCompanyId pre-staging (ROADMAP 2.20 CompanyDetail) — additive + optional.
+    it("publishes CrmNoteCreated with targetCompanyId for a company-targeted note", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (validateExactlyOneTarget as jest.Mock).mockReturnValue(true);
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "co-1" });
+      (prisma.crmNote.create as jest.Mock).mockResolvedValue({ id: "note-co" });
+
+      await createCrmNote({ body: "Company note.", targets: [{ targetCompanyId: "co-1" }] });
+
+      expect(createEvent).toHaveBeenCalledWith(
+        DomainEventType.CrmNoteCreated,
+        expect.objectContaining({ noteId: "note-co", targetCompanyId: "co-1" }),
+      );
+    });
+
+    it("leaves targetCompanyId undefined for a person-targeted note", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (validateExactlyOneTarget as jest.Mock).mockReturnValue(true);
+      (prisma.person.findFirst as jest.Mock).mockResolvedValue({ id: "p-1" });
+      (prisma.crmNote.create as jest.Mock).mockResolvedValue({ id: "note-p" });
+
+      await createCrmNote({ body: "Person note.", targets: [{ targetPersonId: "p-1" }] });
+
+      const call = (createEvent as jest.Mock).mock.calls.find(
+        (c) => c[0] === DomainEventType.CrmNoteCreated,
+      );
+      expect(call?.[1].targetCompanyId).toBeUndefined();
+    });
   });
 
   // ---------------------------------------------------------------------------

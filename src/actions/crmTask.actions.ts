@@ -119,6 +119,7 @@ export async function createCrmTask(
         title: input.title,
         targetPersonId: firstTarget?.targetPersonId ?? undefined,
         targetJobId: firstTarget?.targetJobId ?? undefined,
+        targetCompanyId: firstTarget?.targetCompanyId ?? undefined,
       }),
     );
 
@@ -160,7 +161,7 @@ export async function completeCrmTask(taskId: string): Promise<ActionResult<{ id
 
     const task = await prisma.crmTask.findFirst({
       where: { id: taskId, userId: user.id },
-      include: { targets: { select: { targetPersonId: true, targetJobId: true }, take: 1 } },
+      include: { targets: { select: { targetPersonId: true, targetJobId: true, targetCompanyId: true }, take: 1 } },
     });
     if (!task) return { success: false, message: "crm.errors.taskNotFound" };
 
@@ -182,6 +183,7 @@ export async function completeCrmTask(taskId: string): Promise<ActionResult<{ id
         title: task.title,
         targetPersonId: firstTarget?.targetPersonId ?? undefined,
         targetJobId: firstTarget?.targetJobId ?? undefined,
+        targetCompanyId: firstTarget?.targetCompanyId ?? undefined,
       }),
     );
 

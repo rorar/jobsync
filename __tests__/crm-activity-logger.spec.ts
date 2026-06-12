@@ -307,6 +307,41 @@ describe("crm-activity-logger", () => {
     expect(mockFindUnique).not.toHaveBeenCalled();
   });
 
+  // ROADMAP 2.20 pre-staging: a task/note targeting a Company directly carries
+  // targetCompanyId in the payload, which the projection prefers over the
+  // job→company resolution (so no job lookup happens).
+  it("task_created prefers the explicit payload targetCompanyId without a job lookup", async () => {
+    await emit(DomainEventType.CrmTaskCreated, {
+      taskId: "task-co",
+      userId: "user-1",
+      title: "Company task",
+      targetCompanyId: "company-direct",
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "task_created",
+        targetCompanyId: "company-direct",
+      }),
+    });
+    expect(mockFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("note_added prefers the explicit payload targetCompanyId", async () => {
+    mockFindUnique.mockResolvedValueOnce({ title: "Company note" });
+    await emit(DomainEventType.CrmNoteCreated, {
+      noteId: "note-co",
+      userId: "user-1",
+      targetCompanyId: "company-direct",
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "note_added",
+        targetCompanyId: "company-direct",
+        linkedRecordName: "Company note",
+      }),
+    });
+  });
+
   it("logs error but does not throw when DB create fails", async () => {
     mockCreate.mockRejectedValueOnce(new Error("DB write failed"));
     const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});

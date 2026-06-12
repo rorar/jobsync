@@ -244,7 +244,10 @@ export function registerCrmActivityLogConsumers(): void {
       actorId: p.userId,
       targetPersonId: p.targetPersonId ?? null,
       targetJobId: p.targetJobId ?? null,
-      targetCompanyId: await resolveCompanyId(p.targetJobId, p.userId),
+      // Prefer an explicit company target (CrmTask targeting a Company directly);
+      // otherwise resolve the company from the linked job. Pre-staged for the
+      // ROADMAP 2.20 CompanyDetail timeline.
+      targetCompanyId: p.targetCompanyId ?? (await resolveCompanyId(p.targetJobId, p.userId)),
       linkedRecordName: p.title,
     }),
   );
@@ -259,7 +262,10 @@ export function registerCrmActivityLogConsumers(): void {
       actorId: p.userId,
       targetPersonId: p.targetPersonId ?? null,
       targetJobId: p.targetJobId ?? null,
-      targetCompanyId: await resolveCompanyId(p.targetJobId, p.userId),
+      // Prefer an explicit company target (CrmTask targeting a Company directly);
+      // otherwise resolve the company from the linked job. Pre-staged for the
+      // ROADMAP 2.20 CompanyDetail timeline.
+      targetCompanyId: p.targetCompanyId ?? (await resolveCompanyId(p.targetJobId, p.userId)),
       linkedRecordName: p.title,
     }),
   );
@@ -271,19 +277,21 @@ export function registerCrmActivityLogConsumers(): void {
     "note_added",
     async (p) => {
       // Prefer payload fields (CB-5 pattern); fall back to DB for backward compat
-      const hasTargetInPayload = p.targetPersonId || p.targetJobId;
+      const hasTargetInPayload = p.targetPersonId || p.targetJobId || p.targetCompanyId;
       let targetPersonId: string | null = p.targetPersonId ?? null;
       let targetJobId: string | null = p.targetJobId ?? null;
+      let targetCompanyId: string | null = p.targetCompanyId ?? null;
       let linkedRecordName: string | null = null;
 
       if (!hasTargetInPayload) {
         // Backward compat: old events without target IDs — look up from DB
         const note = await prisma.crmNote.findUnique({
           where: { id: p.noteId },
-          select: { title: true, targets: { select: { targetPersonId: true, targetJobId: true }, take: 1 } },
+          select: { title: true, targets: { select: { targetPersonId: true, targetJobId: true, targetCompanyId: true }, take: 1 } },
         });
         targetPersonId = note?.targets[0]?.targetPersonId ?? null;
         targetJobId = note?.targets[0]?.targetJobId ?? null;
+        targetCompanyId = note?.targets[0]?.targetCompanyId ?? null;
         linkedRecordName = note?.title ?? null;
       } else {
         // Fetch title only (targets already known)
@@ -299,7 +307,7 @@ export function registerCrmActivityLogConsumers(): void {
         actorId: p.userId,
         targetPersonId,
         targetJobId,
-        targetCompanyId: await resolveCompanyId(targetJobId, p.userId),
+        targetCompanyId: targetCompanyId ?? (await resolveCompanyId(targetJobId, p.userId)),
         linkedRecordName,
       };
     },
