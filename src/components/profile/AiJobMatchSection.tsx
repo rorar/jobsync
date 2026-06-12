@@ -185,7 +185,7 @@ export const AiJobMatchSection = ({
               {runningModelName && (
                 <div className="flex items-center gap-1 text-green-600 text-sm mt-4">
                   <CheckCircle className="h-4 w-4 flex-shrink-0" />
-                  <span>{runningModelName} is running</span>
+                  <span>{t("profile.modelRunning").replace("{model}", runningModelName)}</span>
                 </div>
               )}
               {runningModelError && (
@@ -237,7 +237,7 @@ export const AiJobMatchSection = ({
             {isLoading && !hasContent ? (
               <div className="flex items-center flex-col mt-4">
                 <Loading />
-                <div className="mt-2">Analyzing job match...</div>
+                <div className="mt-2">{t("profile.analyzingJobMatch")}</div>
               </div>
             ) : (
               <AiJobMatchResponseContent

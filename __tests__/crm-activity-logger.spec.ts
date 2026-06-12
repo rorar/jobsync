@@ -342,6 +342,24 @@ describe("crm-activity-logger", () => {
     });
   });
 
+  it("note_added resolves targetCompanyId from a job-linked note when not in the payload", async () => {
+    mockFindUnique
+      .mockResolvedValueOnce({ title: "Meeting notes" }) // crmNote.findUnique (title, else-branch)
+      .mockResolvedValueOnce({ companyId: "company-5" }); // job.findFirst (resolveCompanyId)
+    await emit(DomainEventType.CrmNoteCreated, {
+      noteId: "note-job",
+      userId: "user-1",
+      targetJobId: "job-1",
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "note_added",
+        targetJobId: "job-1",
+        targetCompanyId: "company-5",
+      }),
+    });
+  });
+
   it("logs error but does not throw when DB create fails", async () => {
     mockCreate.mockRejectedValueOnce(new Error("DB write failed"));
     const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
