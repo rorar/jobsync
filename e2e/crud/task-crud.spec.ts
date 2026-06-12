@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { expectToast, safeWait } from "../helpers";
+import { expectToast, safeWait, selectOrCreateComboboxOption } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -26,24 +26,18 @@ async function createTask(
   await titleInput.blur();
 
   if (options?.activityType) {
-    await page.getByText("Select Activity Type").click({ force: true });
-    await page
-      .getByPlaceholder("Create or search Activity Type")
-      .fill(options.activityType);
-    // M-T-04 follow-up: replaced waitForTimeout(500) — wait for options list.
-    await page.getByRole("option").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
-    const existingOption = page.getByRole("option", {
-      name: options.activityType,
-      exact: true,
-    });
-    const createOption = page.getByText(`Create: ${options.activityType}`);
-    if (await existingOption.isVisible()) {
-      await existingOption.click({ force: true });
-    } else if (await createOption.isVisible()) {
-      await createOption.click({ force: true });
-    }
-    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for options list to close.
-    await page.getByRole("option").first().waitFor({ state: "hidden", timeout: 3000 }).catch(() => null);
+    // Use the shared combobox helper (proven for the job/activity comboboxes)
+    // instead of an ad-hoc force-click. The previous force-click on the cmdk
+    // option did not reliably fire its onSelect, so activityTypeId was left
+    // unset (NULL) — which then made startActivityFromTask fail with
+    // taskNeedsActivityType. The helper opens via getByLabel, selects the exact
+    // option (or creates), and waits deterministically.
+    await selectOrCreateComboboxOption(
+      page,
+      "Activity Type",
+      "",
+      options.activityType,
+    );
   }
 
   const saveBtn = page.getByTestId("save-task-btn");
@@ -375,7 +369,9 @@ test.describe("Task CRUD", () => {
 
     await expectToast(
       page,
-      /Cannot start an activity from a completed or cancelled task/,
+      // Substring match: the message is "You can't start an activity from a
+      // completed or cancelled task." (activities.cannotStartFromClosedTask).
+      /start an activity from a completed or cancelled task/,
     );
 
     await deleteTask(page, taskTitle);

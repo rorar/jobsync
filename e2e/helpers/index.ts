@@ -142,11 +142,15 @@ export async function selectOrCreateComboboxOption(
     }
   }
 
-  // M-T-04: replaced waitForTimeout(300) — wait for the combobox to close
-  // (i.e., the options list to disappear) rather than sleeping a fixed 300 ms.
-  await page
-    .getByRole("option")
-    .first()
-    .waitFor({ state: "hidden", timeout: 3000 })
-    .catch(() => null); // acceptable if the list was never visible to begin with
+  // Wait for the popover to actually close — i.e. the search input to disappear.
+  // We must NOT key this on getByRole("option") being hidden: the "Create: …"
+  // row is the CommandEmpty (NOT role="option"), so on the create path (no
+  // matching options) the option locator is already "hidden" and we'd return
+  // immediately — BEFORE the async onCreateOption → field.onChange resolves —
+  // letting the caller submit the form with an empty value. The popover only
+  // closes (search input unmounts) after the create completes and the value is
+  // set, so waiting on the search input covers both the select and create paths.
+  await searchInput
+    .waitFor({ state: "hidden", timeout: 5000 })
+    .catch(() => null);
 }

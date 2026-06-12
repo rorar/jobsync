@@ -116,7 +116,7 @@ function TasksContainer({
         toast({
           variant: "destructive",
           title: t("tasks.error"),
-          description: message,
+          description: message ? t(message) : undefined,
         });
         setLoading(false);
       }
@@ -141,7 +141,7 @@ function TasksContainer({
       toast({
         variant: "destructive",
         title: t("tasks.error"),
-        description: message,
+        description: message ? t(message) : undefined,
       });
     }
   };
@@ -152,7 +152,7 @@ function TasksContainer({
       toast({
         variant: "destructive",
         title: t("tasks.error"),
-        description: message,
+        description: message ? t(message) : undefined,
       });
       return;
     }
@@ -183,7 +183,7 @@ function TasksContainer({
       toast({
         variant: "destructive",
         title: t("tasks.error"),
-        description: message,
+        description: message ? t(message) : undefined,
       });
     }
   };
@@ -201,7 +201,7 @@ function TasksContainer({
       toast({
         variant: "destructive",
         title: t("tasks.error"),
-        description: message,
+        description: message ? t(message) : undefined,
       });
     }
   };
