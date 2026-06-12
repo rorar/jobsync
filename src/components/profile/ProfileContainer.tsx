@@ -45,7 +45,7 @@ const ProfileContainer = () => {
         return toast({
           variant: "destructive",
           title: t("profile.error"),
-          description: message,
+          description: message ? t(message) : undefined,
         });
       }
     },

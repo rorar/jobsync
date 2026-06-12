@@ -68,7 +68,7 @@ function ActivitiesTable({
       toast({
         variant: "destructive",
         title: t("activities.error"),
-        description: message,
+        description: message ? t(message) : undefined,
       });
     }
   };

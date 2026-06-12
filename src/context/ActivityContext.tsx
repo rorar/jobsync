@@ -119,7 +119,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
         toast({
           variant: "destructive",
           title: t("activities.error"),
-          description: message,
+          description: message ? t(message) : undefined,
         });
         return false;
       }
@@ -149,7 +149,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
         toast({
           variant: "destructive",
           title: t("activities.error"),
-          description: message,
+          description: message ? t(message) : undefined,
         });
         setIsLoading(false);
         return false;

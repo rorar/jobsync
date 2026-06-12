@@ -98,7 +98,7 @@ export function QuestionForm({
         toast({
           variant: "destructive",
           title: t("questions.error"),
-          description: message,
+          description: message ? t(message) : undefined,
         });
       }
     });

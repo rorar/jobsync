@@ -94,7 +94,7 @@ function QuestionsContainer({
       toast({
         variant: "destructive",
         title: t("questions.error"),
-        description: message,
+        description: message ? t(message) : undefined,
       });
     }
   };
@@ -105,7 +105,7 @@ function QuestionsContainer({
       toast({
         variant: "destructive",
         title: t("questions.error"),
-        description: message,
+        description: message ? t(message) : undefined,
       });
       return;
     }

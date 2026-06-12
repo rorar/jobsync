@@ -171,7 +171,7 @@ function StagingContainer() {
         toast({
           variant: "destructive",
           title: t("staging.error"),
-          description: message,
+          description: message ? t(message) : undefined,
         });
       }
       setLoading(false);

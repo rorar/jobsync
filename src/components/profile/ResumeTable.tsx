@@ -78,7 +78,7 @@ function ResumeTable({ resumes, editResume, reloadResumes }: ResumeTableProps) {
       toast({
         variant: "destructive",
         title: t("profile.error"),
-        description: message,
+        description: message ? t(message) : undefined,
       });
     }
   };

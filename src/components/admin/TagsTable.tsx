@@ -62,7 +62,7 @@ function TagsTable({ tags, reloadTags }: TagsTableProps) {
       toast({
         variant: "destructive",
         title: t("common.error"),
-        description: message,
+        description: message ? t(message) : undefined,
       });
     }
   };
