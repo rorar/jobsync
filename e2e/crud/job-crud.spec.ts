@@ -380,9 +380,11 @@ test.describe("Job CRUD", () => {
       location,
     );
     await expect(page.getByLabel("Job Source")).toContainText("Indeed");
-    await expect(page.getByLabel("Select Job Status")).toContainText(
+    await expect(page.getByLabel("Select Status")).toContainText(
       "Bookmarked",
-    ); // default status for a newly created job (no "Draft" status exists)
+    ); // SelectFormCtrl aria-label = "Select " + t("jobs.status")="Status" (was
+    // "Select Job Status" before the 2026-06-12 i18n label change). Default
+    // status for a newly created job (no "Draft" status exists).
 
     await page.locator(".tiptap").first().click();
     await page.locator(".tiptap").first().fill(
