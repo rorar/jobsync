@@ -1621,6 +1621,24 @@ Universelle Such- und Aktionsleiste im macOS-Spotlight-Stil. Öffnet per `Cmd+K`
 
 ---
 
+### 2.20 CompanyDetail Page
+
+Dedizierte Detailseite pro Company (`/dashboard/companies/[id]`) — heute nur als Navigationsziel
+referenziert (Spotlight 2.19, Enrichment-Panel E1.1), aber **noch keine eigene Seite**.
+
+- **Inhalt:** Firmenstammdaten + Logo, Enrichment-Status-Panel (→ 1.13), alle Jobs bei dieser Company,
+  verknüpfte Personen/Kontakte (CRM), und eine **Company-CRM-Timeline**.
+- **Company-Timeline (Welle-3-Anschluss):** Die `ActivityTimeline` akzeptiert bereits `targetCompanyId`
+  (Welle 3 Gap-5) und **job-verknüpfte** Aktivitäten setzen es schon. **OFFEN bei Bau dieser Seite:**
+  *company-getargetete* Tasks/Notes (Target = Company direkt, nicht über einen Job) erscheinen noch
+  NICHT, weil die Event-Payloads `CrmTaskCreated`/`CrmTaskCompleted`/`CrmNoteCreated` kein
+  `targetCompanyId` tragen. **TODO bei 2.20:** die 3 Payloads (+Schemas) additiv um optionales
+  `targetCompanyId` erweitern, in den `crmTask`/`crmNote`-Action-Emittern setzen (wenn Target=Company),
+  durch die Projektionen reichen. Siehe `docs/BACKLOG.md` §5 „CRM follow-ups".
+- **Cross-Ref:** CRM (5.x), Data Enrichment (1.13), ActivityTimeline (Welle 3 Gap-5).
+
+---
+
 ## 3. Quality of Life
 
 ### 3.1 Job-Gruppierung

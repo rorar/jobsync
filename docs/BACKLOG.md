@@ -223,6 +223,18 @@ Runde-2 verifiziert: Gap-2/Gap-3/Gap-4 ERLEDIGT (→ §0). **Echt offen:**
 | Gap-7 | updatedBy FK-Tracking (nur Name-based actor) | 1.12/5.7 | ✅ DONE (Welle 3: ActorType provenance type+id on CrmInterview/Task/Note, ADR-035; Person keeps name-string by design) |
 | F-AJ-08 | Recruiter-Dreieck (recruitingCompany + relationshipType) | — | ✅ DONE (Welle 3: migration + addJob/updateJob + JOB_*_SELECT + AddJob UI + job-aggregate.allium) |
 
+### CRM follow-ups (Welle 3 deferred — durable record)
+
+Decided-deferred during Welle 3 (CRM-Verbindung). Not bugs — scoped-out with a trigger.
+
+| Item | Trigger / why deferred | Pointer |
+|------|------------------------|---------|
+| **Company-targeted task/note on the Company timeline** | Today only *job-linked* tasks/notes resolve `targetCompanyId` (the projection looks it up from the job). A task/note targeting a **Company directly** can't appear on that company's timeline because the `CrmTaskCreated`/`CrmTaskCompleted`/`CrmNoteCreated` **event payloads carry no `targetCompanyId`**. **Gated on the CompanyDetail page** (no read surface for a company timeline exists yet — see ROADMAP §2.x CompanyDetail). When built: extend those 3 payloads (+schemas) with optional `targetCompanyId`, set it in the `crmTask`/`crmNote` action emitters when the target is a company, and pass it through the projections (additive, `safeParse`-safe). | `crm-activity-logger.ts`, `event-types.ts`, `crmTask/crmNote.actions.ts` |
+| **User-Guide CRM section** | Picker / recruiter-triangle / CRM-timeline are user-facing but undocumented for end users. | README / User-Guide |
+| **API v1 recruiter write** | ✅ DONE (post-Welle-3 follow-up, merged `3b099f2`) — POST/PATCH `/api/v1/jobs` set `recruitingCompany`+`relationshipType`. | — |
+| **`SelectFormCtrl` hardcoded "Select " prefix** | Placeholder/aria-label is hardcoded English across ALL callers (Job Status, Resume, Source, Relationship…). Pre-existing, app-wide → not CRM scope. | → `tech-debt-cleanup_20260601` |
+| **E2E recruiter-triangle path** | Welle 3 E2E covers the contact happy-path (written, runs in suite); the recruiter triangle has no E2E yet. | `e2e/crud/job-crud.spec.ts` |
+
 ---
 
 ## 6. Dedizierte Sprints (zu groß für Cleanup-Pass)
