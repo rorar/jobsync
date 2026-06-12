@@ -95,6 +95,23 @@ export async function cleanupStaleE2EData(): Promise<void> {
     where: { userId, JobTitle: { label: { startsWith: "E2E " } } },
   })).count;
 
+  // 6a. E2E Companies — both the hiring company and the Welle 3 F-AJ-08
+  // recruiting agency ("E2E Agency …"). Companies are never created with a
+  // userId-scoped name elsewhere, so they accumulated across runs before this
+  // step existed. Job→Company (HiringCompany) has NO onDelete (default
+  // Restrict), so this MUST run AFTER step 6. RecruitingCompany (SetNull) and
+  // the CRM target relations (Cascade/SetNull) do not block. We still guard on
+  // both job relations being empty so a company referenced by a non-E2E job
+  // (shared label) is never removed.
+  total += (await prisma.company.deleteMany({
+    where: {
+      createdBy: userId,
+      label: { startsWith: "E2E " },
+      jobsApplied: { none: {} },
+      recruitingJobs: { none: {} },
+    },
+  })).count;
+
   // 7. Resume children: ContactInfo, ResumeSection (→ Resume)
   total += (await prisma.contactInfo.deleteMany({
     where: { resume: { title: { startsWith: "E2E " }, profile: { userId } } },

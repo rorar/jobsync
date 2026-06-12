@@ -33,6 +33,8 @@ Job searching can be overwhelming, with numerous applications to track and deadl
 
 - **AI Assistant:** Leverage the power of AI to improve your resumes and match with jobs. Get personalized job matching with scoring to identify the best opportunities tailored to your profile.
 
+- **CRM & Contacts:** Track the recruiters, hiring managers, and agencies behind your applications — link a point of contact to each job, record whether you applied direct or through a recruiting/staffing agency, and see a unified activity timeline per person and per job. See the [CRM user guide](docs/user-guide/crm.md).
+
 
 ## Free to Use and Self-Hosted
 JobSync Assistant is completely free to use and open source. It provides a powerful job search management tool at no cost and ensures that everyone has access to the resources they need. Additionally, JobSeeker Assistant is designed to be self-hosted, giving you full control over your data. By using Docker, you can easily set up and run JobSync Assistant on your own server, ensuring a secure and personalized experience.

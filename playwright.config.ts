@@ -38,6 +38,12 @@ export default defineConfig({
       use: {
         ...chromiumOptions,
         storageState: "e2e/.auth/user.json",
+        // Taller than the 720px Desktop-Chrome default: the AddJob dialog is a
+        // long form, and the DatePicker calendar popover (with its "Clear date"
+        // button at the bottom) can render below the fold at 720px, leaving the
+        // button outside the viewport. Width is unchanged so responsive
+        // (width-based) breakpoints behave identically.
+        viewport: { width: 1280, height: 1000 },
       },
     },
   ],

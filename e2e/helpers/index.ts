@@ -99,7 +99,12 @@ export async function selectOrCreateComboboxOption(
   text: string,
   timeout = 3000,
 ) {
-  await page.getByLabel(label).click();
+  // exact: true — a stale CompanyLogo renders role="img" aria-label="<company
+  // name>" (e.g. "E2E Company abc"), and a substring getByLabel("Company")
+  // would strict-mode-collide with it. The combobox trigger's accessible name
+  // is exactly the FormLabel ("Company"/"Title"/…), so an exact match selects
+  // the control without matching any logo on the page behind the dialog.
+  await page.getByLabel(label, { exact: true }).click();
   const searchInput = page.getByPlaceholder(searchPlaceholder);
   await searchInput.click();
   await searchInput.fill(text);

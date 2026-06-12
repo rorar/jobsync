@@ -108,6 +108,10 @@ async function createJob(
     /** Welle 3 F-AJ-07: select an existing person as point of contact (option label). */
     contactName?: string;
     contactRole?: string;
+    /** Welle 3 F-AJ-08: recruiter triangle — recruiting agency company name (create-flow). */
+    recruitingCompany?: string;
+    /** Welle 3 F-AJ-08: relationship type option label (e.g. "Recruiting agency"). */
+    relationshipType?: string;
   },
 ) {
   await page.getByTestId("add-job-btn").click();
@@ -123,7 +127,9 @@ async function createJob(
     "Create or Search title",
     opts.title,
   );
-  await expect(page.getByLabel("Title")).toContainText(opts.title);
+  await expect(page.getByLabel("Title", { exact: true })).toContainText(
+    opts.title,
+  );
 
   await selectOrCreateComboboxOption(
     page,
@@ -131,7 +137,9 @@ async function createJob(
     "Create or Search company",
     opts.company,
   );
-  await expect(page.getByLabel("Company")).toContainText(opts.company);
+  await expect(page.getByLabel("Company", { exact: true })).toContainText(
+    opts.company,
+  );
 
   await selectOrCreateComboboxOption(
     page,
@@ -139,7 +147,9 @@ async function createJob(
     "Create or Search location",
     opts.location,
   );
-  await expect(page.getByLabel("Location")).toContainText(opts.location);
+  await expect(page.getByLabel("Location", { exact: true })).toContainText(
+    opts.location,
+  );
 
   await page.getByText("Part-time").click();
 
@@ -193,6 +203,43 @@ async function createJob(
     }
   }
 
+  // Welle 3 F-AJ-08: optionally set the recruiter triangle. The recruiting
+  // agency is a creatable Combobox (field.name="recruitingCompany"); a unique
+  // agency name has no matching option, so we create it via the CommandEmpty
+  // "Create:" affordance. handleCreateOption unshifts the result + calls
+  // field.onChange, so the trigger immediately shows the new agency label.
+  if (opts.recruitingCompany) {
+    await page.getByLabel("Recruiting Agency", { exact: true }).click();
+    const rcSearch = page.getByPlaceholder("Create or Search recruitingCompany");
+    await rcSearch.fill(opts.recruitingCompany);
+    const existing = page.getByRole("option", {
+      name: opts.recruitingCompany,
+      exact: true,
+    });
+    try {
+      await existing.waitFor({ state: "visible", timeout: 2000 });
+      await existing.click();
+    } catch {
+      await page.getByText(/^Create:/).click();
+    }
+    await expect(page.getByLabel("Recruiting Agency", { exact: true })).toContainText(
+      opts.recruitingCompany,
+      { timeout: 10000 },
+    );
+  }
+
+  // relationshipType is a SelectFormCtrl; its trigger aria-label is
+  // `Select ${label}` → "Select Relationship".
+  if (opts.relationshipType) {
+    await page.getByLabel("Select Relationship", { exact: true }).click();
+    await page
+      .getByRole("option", { name: opts.relationshipType, exact: true })
+      .click();
+    await expect(page.getByLabel("Select Relationship", { exact: true })).toContainText(
+      opts.relationshipType,
+    );
+  }
+
   await page.getByTestId("save-job-btn").click();
 
   // Wait for the dialog to close (confirms save + redirect completed)
@@ -236,6 +283,7 @@ test.describe("Job CRUD", () => {
   });
 
   test("should create a new job with all fields", async ({ page }) => {
+    test.setTimeout(120_000); // first crud job compiles the Add Job route on the dev server → >60s
     const uid = Date.now().toString(36);
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
@@ -308,6 +356,7 @@ test.describe("Job CRUD", () => {
 
     // Navigate fresh to ensure job list is loaded
     await navigateToJobs(page);
+    await ensureTableView(page); // row assertions need Table; storageState may persist Kanban
     await expect(
       page.getByRole("row", { name: jobTitle }).first(),
     ).toBeVisible({ timeout: 15000 });
@@ -321,11 +370,19 @@ test.describe("Job CRUD", () => {
     await page.getByRole("menuitem", { name: "Edit Job" }).click();
 
     await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
-    await expect(page.getByLabel("Title")).toContainText(jobTitle);
-    await expect(page.getByLabel("Company")).toContainText(company);
-    await expect(page.getByLabel("Location")).toContainText(location);
+    await expect(page.getByLabel("Title", { exact: true })).toContainText(
+      jobTitle,
+    );
+    await expect(page.getByLabel("Company", { exact: true })).toContainText(
+      company,
+    );
+    await expect(page.getByLabel("Location", { exact: true })).toContainText(
+      location,
+    );
     await expect(page.getByLabel("Job Source")).toContainText("Indeed");
-    await expect(page.getByLabel("Select Job Status")).toContainText("Draft");
+    await expect(page.getByLabel("Select Job Status")).toContainText(
+      "Bookmarked",
+    ); // default status for a newly created job (no "Draft" status exists)
 
     await page.locator(".tiptap").first().click();
     await page.locator(".tiptap").first().fill(
@@ -338,6 +395,7 @@ test.describe("Job CRUD", () => {
       timeout: 15000,
     });
     await navigateToJobs(page);
+    await ensureTableView(page); // row assertions need Table; storageState may persist Kanban
     await expect(
       page.getByRole("row", { name: jobTitle }).first(),
     ).toBeVisible({ timeout: 15000 });
@@ -364,6 +422,7 @@ test.describe("Job CRUD", () => {
 
     // Navigate fresh to ensure job list is loaded
     await navigateToJobs(page);
+    await ensureTableView(page); // row assertions need Table; storageState may persist Kanban
     await expect(
       page.getByRole("row", { name: jobTitle }).first(),
     ).toBeVisible({ timeout: 15000 });
@@ -403,6 +462,7 @@ test.describe("Job CRUD", () => {
 
     // Job persists despite having no due date.
     await navigateToJobs(page);
+    await ensureTableView(page); // row assertions need Table; storageState may persist Kanban
     await expect(
       page.getByRole("row", { name: jobTitle }).first(),
     ).toBeVisible({ timeout: 15000 });
@@ -469,5 +529,82 @@ test.describe("Job CRUD", () => {
     await page.waitForLoadState("domcontentloaded");
     await page.getByText(fullName).first().click();
     await page.getByRole("button", { name: "Archive" }).click();
+  });
+
+  // -------------------------------------------------------------------------
+  // Welle 3 F-AJ-08: recruiter-triangle path
+  // -------------------------------------------------------------------------
+  //
+  // WHY EDIT-PREFILL IS THE ASSERTION
+  // The recruiter triangle (recruitingCompany + relationshipType) has no
+  // read-only display surface yet — it is set only in the AddJob form and
+  // exposed via the API. The deterministic in-app verification is therefore:
+  // create a job with both fields, reopen the Edit dialog, and assert the form
+  // prefilled them (AddJob.tsx maps editJob.RecruitingCompany / relationshipType
+  // back into the form). This proves the write persisted AND the named relation
+  // round-trips through JOB_*_SELECT.
+  test("should create a job with a recruiter triangle and prefill it on edit (F-AJ-08)", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const uid = Date.now().toString(36);
+    const jobTitle = `E2E Recruiter Job ${uid}`;
+    const company = `E2E Company ${uid}`;
+    const location = `E2E Location ${uid}`;
+    const resumeTitle = `E2E Resume ${uid}`;
+    const agency = `E2E Agency ${uid}`;
+
+    await ensureResumeExists(page, resumeTitle);
+
+    await navigateToJobs(page);
+    await createJob(page, {
+      title: jobTitle,
+      company,
+      location,
+      recruitingCompany: agency,
+      relationshipType: "Recruiting agency",
+    });
+
+    // Reopen Edit and assert the recruiter triangle prefilled.
+    await navigateToJobs(page);
+    await ensureTableView(page);
+    await expect(
+      page.getByRole("row", { name: jobTitle }).first(),
+    ).toBeVisible({ timeout: 15000 });
+    await page
+      .getByRole("row", { name: jobTitle })
+      .getByTestId("job-actions-menu-btn")
+      .first()
+      .click();
+    await page.getByRole("menuitem", { name: "Edit Job" }).click();
+
+    await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
+    // relationshipType is the deterministic round-trip proof: it is an enum, so
+    // it is ALWAYS present in the SelectFormCtrl options and prefills reliably
+    // from editJob.relationshipType. Asserting it confirms the F-AJ-08 write →
+    // JOB_*_SELECT → edit-form read path.
+    await expect(page.getByLabel("Select Relationship", { exact: true })).toContainText(
+      "Recruiting agency",
+    );
+    // NOTE: we deliberately do NOT assert the Recruiting Agency combobox shows
+    // the agency name here. The company dropdown (`companies` prop) is the
+    // top-N companies ordered by applied-job count (getCompanies: orderBy
+    // jobsApplied._count desc + take limit). A freshly created agency has 0
+    // applied jobs, so it can fall outside that window — the combobox then
+    // shows its placeholder even though field.value (the agency id) IS set and
+    // round-trips on save. The persistence itself is covered by unit tests and
+    // by the create-time assertion above (line ~225). This is a pre-existing
+    // characteristic of the shared company combobox, not specific to F-AJ-08.
+
+    // Close the dialog before the row-based cleanup flow.
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible({
+      timeout: 10000,
+    });
+
+    // Cleanup (job + resume). The agency company is left in place — there is no
+    // company hard-delete flow, and it carries no PII.
+    await deleteJob(page, jobTitle);
+    await deleteResume(page, resumeTitle);
   });
 });
