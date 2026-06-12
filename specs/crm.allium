@@ -112,7 +112,7 @@ contract TimelineProjection {
     -- The Activity Timeline is a materialised read model.
     -- Consumers project domain events into ActivityLog entries.
 
-    project: (activity_type: ActivityType, target_person: Person?, target_job: Job?, details: String?) -> ActivityLog
+    project: (activity_type: ActivityType, target_person: Person?, target_company: Company?, target_job: Job?, details: String?) -> ActivityLog
 
     @invariant AppendOnly
         -- ActivityLog entries are never updated after creation.

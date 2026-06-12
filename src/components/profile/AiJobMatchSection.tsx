@@ -82,7 +82,7 @@ export const AiJobMatchSection = ({
       toast({
         variant: "destructive",
         title: t("common.error"),
-        description: err.message || "Failed to get job match analysis",
+        description: err.message || t("profile.errorJobMatchAnalysis"),
       });
     },
   });
@@ -98,7 +98,7 @@ export const AiJobMatchSection = ({
         throw new Error(message);
       }
     } catch (error) {
-      const message = "Error fetching resume list";
+      const message = t("profile.errorFetchingResumeList");
       const description = error instanceof Error ? error.message : message;
       toast({
         variant: "destructive",
