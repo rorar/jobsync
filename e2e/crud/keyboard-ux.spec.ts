@@ -177,7 +177,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
 
     // Open the Title combobox (first combobox in the dialog)
     await getTitleCombobox(page).click();
-    const titleInput = page.getByPlaceholder("Create or Search title");
+    const titleInput = page.getByPlaceholder("Create or search Title");
     await expect(titleInput).toBeVisible();
 
     await titleInput.fill(title);
@@ -207,7 +207,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await openAddJobDialog(page);
 
     await getCompanyCombobox(page).click();
-    const companyInput = page.getByPlaceholder("Create or Search company");
+    const companyInput = page.getByPlaceholder("Create or search Company");
     await expect(companyInput).toBeVisible();
 
     await companyInput.fill(company);
@@ -230,7 +230,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await openAddJobDialog(page);
 
     await getLocationCombobox(page).click();
-    const locationInput = page.getByPlaceholder("Create or Search location");
+    const locationInput = page.getByPlaceholder("Create or search Location");
     await expect(locationInput).toBeVisible();
 
     await locationInput.fill(location);
@@ -250,7 +250,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await openAddJobDialog(page);
 
     await getTitleCombobox(page).click();
-    const titleInput = page.getByPlaceholder("Create or Search title");
+    const titleInput = page.getByPlaceholder("Create or search Title");
     await expect(titleInput).toBeVisible();
 
     await titleInput.fill("test");
@@ -272,7 +272,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await openAddJobDialog(page);
 
     await getTitleCombobox(page).click();
-    const titleInput = page.getByPlaceholder("Create or Search title");
+    const titleInput = page.getByPlaceholder("Create or search Title");
     await expect(titleInput).toBeVisible();
 
     await titleInput.fill("test");
@@ -297,7 +297,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await openAddJobDialog(page);
 
     await getTitleCombobox(page).click();
-    const titleInput = page.getByPlaceholder("Create or Search title");
+    const titleInput = page.getByPlaceholder("Create or search Title");
     await expect(titleInput).toBeVisible();
 
     await titleInput.type(title, { delay: 20 });
@@ -314,7 +314,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await openAddJobDialog(page);
 
     await getTitleCombobox(page).click();
-    const titleInput = page.getByPlaceholder("Create or Search title");
+    const titleInput = page.getByPlaceholder("Create or search Title");
     await expect(titleInput).toBeVisible();
 
     await titleInput.fill("stale text here");
@@ -326,7 +326,7 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await page.waitForLoadState("domcontentloaded");
 
     await getTitleCombobox(page).click();
-    const titleInputAfter = page.getByPlaceholder("Create or Search title");
+    const titleInputAfter = page.getByPlaceholder("Create or search Title");
     await expect(titleInputAfter).toBeVisible();
 
     const inputVal = await titleInputAfter.inputValue();
@@ -798,7 +798,7 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
     await openAddJobDialog(page);
 
     await getTitleCombobox(page).click();
-    const titleInput = page.getByPlaceholder("Create or Search title");
+    const titleInput = page.getByPlaceholder("Create or search Title");
     await expect(titleInput).toBeVisible();
 
     await titleInput.fill(title);
@@ -811,7 +811,7 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
     await expect(getTitleCombobox(page)).toContainText(title, { timeout: 15000 });
 
     await getCompanyCombobox(page).click();
-    const companyInput = page.getByPlaceholder("Create or Search company");
+    const companyInput = page.getByPlaceholder("Create or search Company");
     await expect(companyInput).toBeVisible();
     await companyInput.fill("test mobile");
     // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
@@ -831,7 +831,7 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
 
     await getTitleCombobox(page).click();
     await expect(
-      page.getByPlaceholder("Create or Search title"),
+      page.getByPlaceholder("Create or search Title"),
     ).toBeVisible();
 
     const commandList = page.locator("[cmdk-list]");

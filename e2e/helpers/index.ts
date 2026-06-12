@@ -95,7 +95,11 @@ export async function safeWait(
 export async function selectOrCreateComboboxOption(
   page: Page,
   label: string,
-  searchPlaceholder: string,
+  // Retained for arg-position compatibility only. Since the 2026-06-12 i18n
+  // form-control change, the Combobox search placeholder is derived from the
+  // translated label ("Create or search <Label>"), so callers no longer need to
+  // pass it — it is computed from `label` below.
+  _legacySearchPlaceholder: string,
   text: string,
   timeout = 3000,
 ) {
@@ -105,7 +109,9 @@ export async function selectOrCreateComboboxOption(
   // is exactly the FormLabel ("Company"/"Title"/…), so an exact match selects
   // the control without matching any logo on the page behind the dialog.
   await page.getByLabel(label, { exact: true }).click();
-  const searchInput = page.getByPlaceholder(searchPlaceholder);
+  // Placeholder is "Create or search <Label>" (forms.createOrSearchPlaceholder,
+  // en) — derived from the same translated noun used as the trigger's label.
+  const searchInput = page.getByPlaceholder(`Create or search ${label}`);
   await searchInput.click();
   await searchInput.fill(text);
 

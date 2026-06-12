@@ -210,7 +210,7 @@ async function createJob(
   // field.onChange, so the trigger immediately shows the new agency label.
   if (opts.recruitingCompany) {
     await page.getByLabel("Recruiting Agency", { exact: true }).click();
-    const rcSearch = page.getByPlaceholder("Create or Search recruitingCompany");
+    const rcSearch = page.getByPlaceholder("Create or search Recruiting Agency");
     await rcSearch.fill(opts.recruitingCompany);
     const existing = page.getByRole("option", {
       name: opts.recruitingCompany,

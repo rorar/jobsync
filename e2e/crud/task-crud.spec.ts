@@ -26,9 +26,9 @@ async function createTask(
   await titleInput.blur();
 
   if (options?.activityType) {
-    await page.getByText("Select activityType").click({ force: true });
+    await page.getByText("Select Activity Type").click({ force: true });
     await page
-      .getByPlaceholder("Create or Search activityType")
+      .getByPlaceholder("Create or search Activity Type")
       .fill(options.activityType);
     // M-T-04 follow-up: replaced waitForTimeout(500) — wait for options list.
     await page.getByRole("option").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
