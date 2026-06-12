@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { selectOrCreateComboboxOption, uniqueId, safeWait } from "../helpers";
+import { selectOrCreateComboboxOption, uniqueId, safeWait, expectToast } from "../helpers";
 
 // storageState handles authentication — no per-test login needed
 
@@ -110,10 +110,7 @@ test.describe("Activity CRUD", () => {
 
     // Clean up
     await deleteActivity(page, activityName);
-    await expect(page.getByRole("status").first()).toContainText(
-      /Activity has been deleted/,
-      { timeout: 10000 },
-    );
+    await expectToast(page, /Activity has been deleted/);
   });
 
   test("should edit an activity", async ({ page }) => {
@@ -168,10 +165,7 @@ test.describe("Activity CRUD", () => {
 
     // Cleanup — delete using the updated name
     await deleteActivity(page, updatedName);
-    await expect(page.getByRole("status").first()).toContainText(
-      /Activity has been deleted/,
-      { timeout: 10000 },
-    );
+    await expectToast(page, /Activity has been deleted/);
   });
 
   test("should create and then delete an activity", async ({ page }) => {
@@ -196,10 +190,7 @@ test.describe("Activity CRUD", () => {
     await deleteActivity(page, deleteActivityName);
 
     // Verify toast success message
-    await expect(page.getByRole("status").first()).toContainText(
-      /Activity has been deleted/,
-      { timeout: 10000 },
-    );
+    await expectToast(page, /Activity has been deleted/);
   });
 
   test("should create activity with different times", async ({ page }) => {
@@ -222,9 +213,6 @@ test.describe("Activity CRUD", () => {
 
     // Clean up
     await deleteActivity(page, morningActivity);
-    await expect(page.getByRole("status").first()).toContainText(
-      /Activity has been deleted/,
-      { timeout: 10000 },
-    );
+    await expectToast(page, /Activity has been deleted/);
   });
 });

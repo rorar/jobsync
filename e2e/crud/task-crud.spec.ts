@@ -183,9 +183,7 @@ test.describe("Task CRUD", () => {
       .getByRole("menuitem", { name: "Needs Attention" })
       .click({ force: true });
 
-    await expect(page.getByRole("status").first()).toContainText(
-      /Task status updated/,
-    );
+    await expectToast(page, /Task status updated/);
 
     // Cleanup
     await deleteTask(page, taskTitle);
