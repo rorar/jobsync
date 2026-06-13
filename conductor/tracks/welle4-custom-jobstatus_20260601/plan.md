@@ -21,25 +21,28 @@ TDD; the status migration is the high-risk step (no job may lose its status).
       autonomous authoring tool `tend` was the correct fit per `feedback_use_tend_for_specs`.)
 - [x] Task 1.2: Validate with `allium:check` (0 errors; 7 warnings + 13 infos, all expected
       external-entity/no-surface notices, same shape as crm-workflow.allium); refined via `tend`.
-- [~] Task 1.3: Review the spec against product goals; freeze it as the source of truth.
-      (Self-review done; awaiting user freeze at the Phase-1 checkpoint.)
+- [x] Task 1.3: Reviewed against product goals via 3 analyses (edge-case + flashlight +
+      UCD), folded findings into spec, FROZEN as source of truth (user-approved 2026-06-13).
+      See design-review-findings.md (Phase-2 worklist).
 
 ### Verification
 
-- [~] `allium:check` passes (0 errors); the spec covers status CRUD, categories, Kanban, and API.
-      Awaiting user approval to freeze + proceed to Phase 2.
+- [x] `allium:check` passes (0 errors); spec covers status CRUD, categories, Kanban, API.
+      Hardened by design review (10 correctness gaps + UCD folded in). Frozen.
 
 ## Phase 2: F-AJ-09 — User-customisable JobStatus + category (XL)
 
 ### Tasks
 
-- [ ] Task 2.1: Unit tests for the state machine + category validation + delete-in-use
+- [~] Task 2.1: Unit tests for the state machine + category validation + delete-in-use
       handling (per spec) — failing first.
 - [ ] Task 2.2: Prisma migration: custom-status + category models (per user); seed a
       default set; map legacy fixed statuses onto seeded equivalents.
 - [ ] Task 2.3: Status-management actions (create/rename/reorder/delete) in the Job-status
       Repository (ADR-015 userId; ADR-019 boundary validation for category union).
 - [ ] Task 2.4: Status-management UI (Settings or Job area); i18n (en/de/fr/es).
+      **DEFERRED to wireframe phase** (UI-design-first rule; user chose backend-first).
+      Backend Phase 2 = 2.1/2.2/2.3/2.5 only.
 - [ ] Task 2.5: Build + tests; migrate a DB copy and verify no job lost its status.
 
 ### Verification

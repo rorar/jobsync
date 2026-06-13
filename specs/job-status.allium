@@ -407,8 +407,12 @@ rule TransitionJobStatus {
     requires:
         let from = job.status.category
         let to = new_status.category
+        -- Forward/lateral (covers lateral moves within a stage, incl. multi-round
+        -- interviewing statuses), OR bounded reopen from a closed stage into the
+        -- default stage only. Same-status self-transition is handled by the
+        -- requires above (allows_self_transition), NOT here -- so this clause does
+        -- not grant any->interviewing.
         to.sort_order >= from.sort_order
-        or new_status.category.allows_self_transition
         or (config.allow_reopen_from_closed
             and (from.is_terminal or from.default_collapsed)
             and to.kind = config.default_initial_kind)
