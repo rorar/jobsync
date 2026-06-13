@@ -50,7 +50,7 @@ export const POST = withApiAuth(async (req, { userId, params }) => {
       select: { id: true, statusId: true, version: true, appliedDate: true, Status: { select: { value: true } } },
     }),
     prisma.jobStatus.findFirst({
-      where: { id: newStatusId },
+      where: { id: newStatusId, userId },
       select: { id: true, value: true },
     }),
   ]);

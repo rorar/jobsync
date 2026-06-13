@@ -67,3 +67,21 @@ the IDOR/seed/default-resolver fixes (gaps 1–5,7 above).
 
 ## Still-open (parked) questions
 category-flag editability; user-creatable kinds. (per-status colour, free-transitions, expired-placement now RESOLVED in spec.)
+
+## Step 3 done (Repository + IDOR) + ONE tracked deferral
+- `src/actions/jobStatus.actions.ts` Repository: getJobStatuses / getJobStatusCategories /
+  create / rename (recomputes applied on stage-change) / reorder / setDefault /
+  delete (unused + reassign-in-use, FK-RESTRICT-aware). 15 tests. + seed-job-statuses.ts.
+- IDOR gap 1 CLOSED: every `jobStatus.findMany()` + `findFirst({id})` now userId-scoped
+  (job.actions getStatusList:25, createJob:391, updateJob:571, changeJobStatus:895,
+  kanban:1011, updateKanbanOrder:1122, distribution:1306, getValidTransitions:1351;
+  status route:53). +4 i18n error keys ×4 locales.
+- **DEFERRED (tracked spec↔code drift):** runtime transition validation still uses the
+  value-keyed VALID_TRANSITIONS / isEditTransitionValid / computeTransitionSideEffects
+  (status-machine.ts). This is CORRECT for the default seeded statuses (values match), so
+  nothing breaks today. Category-ordered wiring (isValidCategoryTransition +
+  computeAppliedSideEffect from status-categories.ts) lands in **Phase 5** alongside the
+  Kanban/ComboBox rebuild, where custom statuses actually flow through. `allium:weed`
+  (Phase 5.4) will confirm zero drift after that. Until then a user CANNOT create a custom
+  status (no UI yet — Phase 2.4 deferred), so the value-keyed machine is never hit with an
+  unknown value.

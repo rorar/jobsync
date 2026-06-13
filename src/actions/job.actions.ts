@@ -16,13 +16,16 @@ import { buildJobSalaryData } from "@/lib/salary/build-job-salary";
 
 export const getStatusList = async (): Promise<ActionResult<JobStatus[]>> => {
   try {
-    // Auth check gates access — only logged-in users can fetch status list.
-    // JobStatus is a system-wide lookup table, not user-scoped — no userId filter needed.
+    // Welle 4: JobStatus is now PER-USER (ADR-015). Scope by userId — a global
+    // findMany would leak every user's statuses.
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("errors.notAuthenticated");
     }
-    const statuses = await prisma.jobStatus.findMany();
+    const statuses = await prisma.jobStatus.findMany({
+      where: { userId: user.id },
+      orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+    });
     return { success: true, data: statuses };
   } catch (error) {
     const msg = "errors.fetchStatusList";
@@ -385,7 +388,7 @@ export const addJob = async (
 
     // Verify statusId exists (F8)
     const statusExists = await prisma.jobStatus.findFirst({
-      where: { id: status },
+      where: { id: status, userId: user.id },
       select: { id: true },
     });
     if (statusExists === null) {
@@ -565,7 +568,7 @@ export const updateJob = async (
 
     if (statusChanged) {
       newStatus = await prisma.jobStatus.findFirst({
-        where: { id: status },
+        where: { id: status, userId: user.id },
       });
 
       if (newStatus && !isEditTransitionValid(currentJob.Status.value, newStatus.value)) {
@@ -889,7 +892,7 @@ export const changeJobStatus = async (
         include: { Status: true },
       }),
       prisma.jobStatus.findFirst({
-        where: { id: newStatusId },
+        where: { id: newStatusId, userId: user.id },
       }),
     ]);
     if (!currentJob) {
@@ -1003,8 +1006,11 @@ export const getKanbanBoard = async (): Promise<ActionResult<KanbanBoard>> => {
       throw new Error("errors.notAuthenticated");
     }
 
-    // Fetch all statuses to build columns even if empty
-    const allStatuses = await prisma.jobStatus.findMany();
+    // Fetch the user's statuses to build columns even if empty (ADR-015 per-user).
+    const allStatuses = await prisma.jobStatus.findMany({
+      where: { userId: user.id },
+      orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+    });
 
     // Single query for all user jobs, ordered by sortOrder then createdAt
     const jobs = await prisma.job.findMany({
@@ -1113,7 +1119,7 @@ export const updateKanbanOrder = async (
     if (statusChanged) {
       // Validate transition
       const newStatus = await prisma.jobStatus.findFirst({
-        where: { id: newStatusId },
+        where: { id: newStatusId, userId: user.id },
       });
       if (!newStatus) {
         return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
@@ -1296,8 +1302,8 @@ export const getStatusDistribution = async (): Promise<ActionResult<StatusDistri
       _count: { id: true },
     });
 
-    // Fetch all statuses for labels
-    const allStatuses = await prisma.jobStatus.findMany();
+    // Fetch the user's statuses for labels (ADR-015 per-user).
+    const allStatuses = await prisma.jobStatus.findMany({ where: { userId: user.id } });
     const statusMap = new Map(allStatuses.map((s) => [s.id, s]));
 
     const distribution: StatusDistribution[] = jobs
@@ -1342,7 +1348,7 @@ export const getValidTransitions = async (
     const validValues = getValidTargets(job.Status.value);
 
     const statuses = await prisma.jobStatus.findMany({
-      where: { value: { in: validValues } },
+      where: { userId: user.id, value: { in: validValues } },
     });
 
     return { success: true, data: statuses };

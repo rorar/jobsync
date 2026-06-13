@@ -34,11 +34,11 @@ TDD; the status migration is the high-risk step (no job may lose its status).
 
 ### Tasks
 
-- [~] Task 2.1: Unit tests for the state machine + category validation + delete-in-use
+- [x] Task 2.1: Unit tests for the state machine + category validation + delete-in-use
       handling (per spec) — failing first.
 - [x] Task 2.2: Prisma migration: custom-status + category models (per user); seed a
       default set; map legacy fixed statuses onto seeded equivalents.
-- [ ] Task 2.3: Status-management actions (create/rename/reorder/delete) in the Job-status
+- [x] Task 2.3: Status-management actions (create/rename/reorder/delete) in the Job-status
       Repository (ADR-015 userId; ADR-019 boundary validation for category union).
 - [ ] Task 2.4: Status-management UI (Settings or Job area); i18n (en/de/fr/es).
       **DEFERRED to wireframe phase** (UI-design-first rule; user chose backend-first).
