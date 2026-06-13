@@ -328,12 +328,13 @@ These are deliberate deferrals, not bugs:
   `changeJobStatus`/`updateJob`/`updateKanbanOrder` (`job.actions.ts`) + `api/v1/jobs/[id]/status/route.ts`
   + `getValidTransitions` (current status surfaced only on a self-transition stage). Unit + action + API
   tests added; `allium:weed` 0 drift (spec already permitted it → ADR-036 known-limitation closed).
-  **Live trigger today:** the job edit form (re-save an interviewing job → round) + the public API; the
-  dedicated `changeJobStatus`/`updateKanbanOrder` self-transition fires for any caller that passes the
-  same status id. NOTE (UX consideration for a follow-up): `updateJob` records a round on *any* save of
-  an interviewing job with unchanged status, so an unrelated field edit also logs a round — if that
-  proves noisy, gate it behind an explicit "log a round" form intent. Kanban *same-column drag* is left
-  as a pure reorder (it passes no `newStatusId`) so reordering interviewing cards never spams rounds.
+  **Live triggers:** the job edit form via an explicit **"Log a new interview round"** Switch (shown only
+  when re-selecting the current interviewing status) + the public API + the dedicated
+  `changeJobStatus`/`updateKanbanOrder` self-transition for any caller passing the same status id. The
+  edit-form toggle is gated by a transient `logInterviewRound` flag (`addJobForm.schema`) so a same-status
+  save WITHOUT the toggle is a plain field update — no phantom round on unrelated edits (the original
+  edge-case risk, now closed). Kanban *same-column drag* stays a pure reorder (passes no `newStatusId`) so
+  reordering interviewing cards never spams rounds.
 - ~~**LOW — Orphan "Other" Kanban column partial cast.**~~ ✅ FIXED 2026-06-13 — `useKanbanState.ts`
   now gives the synthetic "Other" column a real neutral `category` object (grey, archived semantics,
   sorts last), so consumers reading `column.status.category.*` never hit undefined.

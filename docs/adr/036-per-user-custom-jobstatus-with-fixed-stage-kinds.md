@@ -89,8 +89,10 @@ of seven system "stage kinds", not from the status value.**
   (`changeJobStatus`/`updateJob`/`updateKanbanOrder` + `api/v1/jobs/[id]/status`): re-selecting the
   current status on a self-transition stage (interviewing) logs a new round (history + event); every
   other stage's same-status re-selection stays a benign no-op. Moving between DIFFERENT statuses in
-  the same stage (lateral) was already supported. See BACKLOG §Welle 4 for the live triggers + the
-  `updateJob`-records-on-any-save UX consideration left for a follow-up.
+  the same stage (lateral) was already supported. The edit-form path is gated behind an explicit
+  `logInterviewRound` toggle (shown only when re-selecting the current interviewing status) so an
+  unrelated field edit never logs a phantom round; the dedicated status changer + public API carry
+  intent inherently. See BACKLOG §Welle 4 for the full live-trigger list.
 
 **Spec:** `specs/job-status.allium` (authoritative). `allium check` 0 errors,
 `allium:weed` 0 drift.
