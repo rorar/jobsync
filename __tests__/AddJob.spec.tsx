@@ -9,6 +9,36 @@ import userEvent from "@testing-library/user-event";
 import { format } from "date-fns";
 import { addJob } from "@/actions/job.actions";
 import { getPersons } from "@/actions/person.actions";
+import { CATEGORY_SEED, categorySemanticsForKind, type StatusCategoryKind } from "@/lib/crm/status-categories";
+
+// Welle 4 (F-AJ-02): the status picker is grouped by stage and the `applied`
+// flag derives from the chosen status' category. Augment the legacy fixture with
+// stage (category) data so the new ComboBox + applied-derivation are exercised.
+const KIND_BY_VALUE: Record<string, StatusCategoryKind> = {
+  draft: "lead",
+  applied: "applied",
+  interview: "interviewing",
+  offer: "offer",
+  rejected: "lost",
+  expired: "archived",
+  archived: "archived",
+};
+function withCategories(statuses: { id: string; label: string; value: string }[]) {
+  return statuses.map((s, i) => {
+    const kind = KIND_BY_VALUE[s.value] ?? "lead";
+    return {
+      ...s,
+      sortOrder: 0,
+      isDefault: i === 0,
+      category: {
+        id: `cat-${kind}`,
+        label: CATEGORY_SEED[kind].label,
+        colour: CATEGORY_SEED[kind].colour,
+        ...categorySemanticsForKind(kind),
+      },
+    };
+  });
+}
 jest.mock("@/utils/user.utils", () => ({
   getCurrentUser: jest.fn(),
 }));
@@ -78,7 +108,7 @@ document.createRange = () => {
 
 describe("AddJob Component", () => {
   const mockUser = { id: "user-id" };
-  const mockJobStatuses = JOB_STATUSES;
+  const mockJobStatuses = withCategories(JOB_STATUSES);
   const mockJobSources = JOB_SOURCES;
   const mockResetEditJob = jest.fn();
   const user = userEvent.setup({ skipHover: true });
@@ -113,21 +143,25 @@ describe("AddJob Component", () => {
     expect(dialogTitle).toBeInTheDocument();
     expect(dialogTitle).toHaveTextContent("Add Job");
   });
-  it("should reflect on status and date applied when applied switch toggles", async () => {
-    const appliedSwitch = document.getElementById("applied-switch")!;
-    expect(appliedSwitch).not.toBeChecked();
+  it("derives applied + date applied from the chosen status' stage (F-AJ-02)", async () => {
+    // The separate `applied` Switch is gone: choosing an applied-stage status
+    // marks the job applied and enables the date field.
     const dateApplied = screen.getByLabelText("Date Applied");
     expect(dateApplied).toBeDisabled();
-    await user.click(appliedSwitch); // toggle applied switch
-    expect(appliedSwitch).toBeChecked();
-    expect(dateApplied).toBeEnabled(); // date applied is enabled
-    expect(dateApplied).toHaveTextContent(format(new Date(), "PP")); // to have today's date
-    const status = screen.getByLabelText("Status");
-    expect(status).toHaveTextContent("Applied");
-    await user.click(appliedSwitch);
-    expect(status).toHaveTextContent("Draft");
-    expect(dateApplied).toBeDisabled();
-    expect(dateApplied).toHaveTextContent("Pick a date");
+    const indicator = screen.getByTestId("applied-indicator");
+    expect(indicator).toHaveTextContent("Not Applied");
+
+    // Open the grouped status picker and choose the applied-stage "Applied"
+    // (other applied-stage items carry a "Marks as applied" hint, so disambiguate
+    // by the label prefix).
+    await user.click(screen.getByTestId("status-combobox-trigger"));
+    const options = await screen.findAllByRole("option");
+    const appliedOption = options.find((o) => o.textContent?.startsWith("Applied"))!;
+    await user.click(appliedOption);
+
+    expect(indicator).toHaveTextContent("Applied");
+    expect(dateApplied).toBeEnabled();
+    expect(dateApplied).toHaveTextContent(format(new Date(), "PP"));
   });
   it("should open the dialog when clicked on add job button with title 'Edit Job'", async () => {
     // TODO: To be tested with job container and jobs table component
@@ -184,12 +218,12 @@ describe("AddJob Component", () => {
     expect(screen.getByLabelText("Minimum")).toBeInTheDocument();
     expect(screen.getByLabelText("Maximum")).toBeInTheDocument();
   });
-  it("should load and show the status select list", async () => {
-    const statusSelect = screen.getByLabelText("Status");
-    await user.click(statusSelect);
+  it("should load and show the grouped status picker", async () => {
+    await user.click(screen.getByTestId("status-combobox-trigger"));
     const options = screen.getAllByRole("option");
     expect(options.length).toBeGreaterThan(0);
-    expect(options[0].textContent).toBe("Draft");
+    const labels = options.map((o) => o.textContent);
+    expect(labels.some((l) => l?.includes("Draft"))).toBe(true);
   });
   it("should closes the dialog and submit to save job when clicked on save button", async () => {
     const jobTitleInput = screen.getByRole("combobox", {

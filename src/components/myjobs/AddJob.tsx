@@ -49,6 +49,8 @@ import { parseBonus } from "@/lib/salary/bonus";
 import TiptapEditor from "../TiptapEditor";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
+import { Badge } from "../ui/badge";
+import { StatusStageCombobox } from "./StatusStageCombobox";
 import { redirect } from "next/navigation";
 import { Combobox } from "../ComboBox";
 import { NotesCollapsibleSection } from "./NotesCollapsibleSection";
@@ -157,7 +159,7 @@ export function AddJob({
     },
   });
 
-  const { setValue, reset, watch, resetField } = form;
+  const { setValue, reset, watch } = form;
 
   const appliedValue = watch("applied");
   // Welle 3 (F-AJ-07): role is only meaningful once a contact person is chosen.
@@ -347,14 +349,18 @@ export function AddJob({
     setDialogOpen(true);
   };
 
-  const jobAppliedChange = (applied: boolean) => {
-    if (applied) {
-      form.getValues("status") === jobStatuses[0]?.id &&
-        setValue("status", jobStatuses[1]?.id);
-      setValue("dateApplied", new Date());
-    } else {
-      resetField("dateApplied");
-      setValue("status", jobStatuses[0]?.id);
+  /**
+   * F-AJ-02: derive `applied` from the chosen status' stage. Choosing an
+   * applied-stage status marks the job applied and (first time) stamps the
+   * applied date. Choosing a non-applied stage does NOT clear `applied` — a
+   * submitted application stays submitted (mirrors the server immutability
+   * invariant), it only re-enables once true.
+   */
+  const applyStatusToApplied = (statusId: string) => {
+    const status = jobStatuses.find((s) => s.id === statusId);
+    if (status?.category?.isAppliedStage) {
+      setValue("applied", true);
+      if (!form.getValues("dateApplied")) setValue("dateApplied", new Date());
     }
   };
 
@@ -581,35 +587,18 @@ export function AddJob({
                   />
                 </div>
 
-                {/* Applied */}
-                <div
-                  className="flex items-center"
-                  data-testid="switch-container"
-                >
-                  <FormField
-                    control={form.control}
-                    name="applied"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row">
-                        <Switch
-                          id="applied-switch"
-                          checked={field.value ?? false}
-                          onCheckedChange={(a) => {
-                            field.onChange(a);
-                            jobAppliedChange(a);
-                          }}
-                        />
-                        <FormLabel
-                          htmlFor="applied-switch"
-                          className="flex items-center ml-4 mb-2"
-                        >
-                          {field.value ? t("jobs.applied") : t("jobs.notApplied")}
-                        </FormLabel>
-
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                {/* Applied — derived read-only from the selected status' stage
+                    (F-AJ-02). The former toggle is gone: applied-ness is now a
+                    consequence of choosing an applied-stage status, so it can
+                    never desync from the status. */}
+                <div className="flex items-center" data-testid="applied-indicator">
+                  <span className="text-sm text-muted-foreground">{t("jobs.status")}:</span>
+                  <Badge
+                    variant={appliedValue ? "default" : "secondary"}
+                    className="ml-3"
+                  >
+                    {appliedValue ? t("jobs.applied") : t("jobs.notApplied")}
+                  </Badge>
                 </div>
 
                 {/* Send to Queue (only in create mode) */}
@@ -646,18 +635,21 @@ export function AddJob({
                   </div>
                 )}
 
-                {/* Status */}
+                {/* Status (F-AJ-02: grouped-by-stage picker; folds in `applied`) */}
                 <div>
                   <FormField
                     control={form.control}
                     name="status"
                     render={({ field }) => (
-                      <FormItem className="flex flex-col [&>button]:capitalize">
+                      <FormItem className="flex flex-col">
                         <FormLabel>{t("jobs.status")}</FormLabel>
-                        <SelectFormCtrl
-                          label={t("jobs.status")}
+                        <StatusStageCombobox
                           options={jobStatuses}
-                          field={field}
+                          value={field.value}
+                          onChange={(id) => {
+                            field.onChange(id);
+                            applyStatusToApplied(id);
+                          }}
                         />
                         <FormMessage />
                       </FormItem>
