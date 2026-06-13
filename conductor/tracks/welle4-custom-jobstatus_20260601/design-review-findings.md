@@ -39,5 +39,31 @@ file is the Phase-2 worklist (file:line touchpoints the spec can't carry inline)
 ## Test/doc blast radius
 `__tests__/validate-edit-transition.spec.ts` (30 hardcoded edges — keep as default-set regression OR parameterize), e2e `job-crud` (status-label selectors silently break — memory: jest doesn't run e2e/), StatusHistoryTimeline color asserts. i18n `getStatusLabel()` fallback already correct (custom labels → status.label), no change.
 
+## Phase-2 migration plan (Step 2 — NEXT, destructive: verify on DB copy first)
+
+Schema (`prisma/schema.prisma`) is **edited + `prisma validate` clean but NOT migrated**
+(working tree, uncommitted): JobStatus gains userId/categoryId/sortOrder/isDefault +
+`@@unique([userId,value])`; new JobStatusCategory model `@@unique([userId,kind])`;
+User gains both relations. Old `value @unique` dropped. Required FKs can't go straight
+onto existing rows → **3-step migration**:
+
+1. **Migration A (additive/nullable, applies cleanly):** create JobStatusCategory; add
+   JobStatus.userId(NULL)/categoryId(NULL)/sortOrder(default 0)/isDefault(default false);
+   keep old `value @unique` for now.
+2. **Data migration (TS, idempotent, TDD with mocked prisma — write logic first):**
+   per user → upsert 7 categories (CATEGORY_SEED) + seed statuses (DEFAULT_STATUS_SEED,
+   mapping existing global statuses by LEGACY_VALUE_TO_SEED_VALUE) → repoint jobs +
+   BOTH JobStatusHistory FK cols → backfill applied/appliedDate (offer/won jobs).
+   Idempotent on the repoint (repoint any job whose statusId ∉ user's set), independent
+   of a categories-exist guard.
+3. **Migration B (finalize):** drop global `value @unique`; add `@@unique([userId,value])`
+   + `@@unique([userId,kind])`; set userId/categoryId NOT NULL; delete leftover global
+   JobStatus rows (userId IS NULL) — AFTER all repoints (FK RESTRICT). PRAGMA
+   defer_foreign_keys (cf. migration 20260513170926). Forward-only; backup first.
+
+Verify the whole chain against a **copy of dev.db** before applying to the real one
+(plan Task 2.5). Then Step 3 = `src/actions/jobStatus.actions.ts` (the Repository) +
+the IDOR/seed/default-resolver fixes (gaps 1–5,7 above).
+
 ## Still-open (parked) questions
 category-flag editability; user-creatable kinds. (per-status colour, free-transitions, expired-placement now RESOLVED in spec.)
