@@ -10,7 +10,8 @@ import {
 } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { File, ListFilter, Search } from "lucide-react";
+import { File, ListFilter, Search, SlidersHorizontal } from "lucide-react";
+import Link from "next/link";
 import {
   deleteJobById,
   getJobDetails,
@@ -395,6 +396,19 @@ function JobsContainer({
               <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
                 {t("jobs.export")}
               </span>
+            </Button>
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1"
+            >
+              <Link href="/dashboard/settings?section=statuses">
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+                  {t("jobStatus.manageStatuses")}
+                </span>
+              </Link>
             </Button>
             <AddJob
               jobStatuses={statuses}

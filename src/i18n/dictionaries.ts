@@ -27,6 +27,7 @@ import { push } from "./dictionaries/push";
 import { logoAsset } from "./dictionaries/logoAsset";
 import { crm } from "./dictionaries/crm";
 import { forms } from "./dictionaries/forms";
+import { jobStatus } from "./dictionaries/jobStatus";
 
 const core = {
   en: {
@@ -801,7 +802,7 @@ function mergeDictionaries(...namespaces: Record<string, Record<string, string>>
   return merged;
 }
 
-const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, developer, staging, notifications, api, blacklist, deck, enrichment, webhook, email, smtp, push, logoAsset, crm, forms);
+const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, developer, staging, notifications, api, blacklist, deck, enrichment, webhook, email, smtp, push, logoAsset, crm, forms, jobStatus);
 
 /**
  * Loose key type used by the `t()` runtime accessor (`getDictionary`/`useTranslations`).
@@ -849,7 +850,8 @@ export type TranslationKeyStrict =
   | keyof (typeof push)["en"]
   | keyof (typeof logoAsset)["en"]
   | keyof (typeof crm)["en"]
-  | keyof (typeof forms)["en"];
+  | keyof (typeof forms)["en"]
+  | keyof (typeof jobStatus)["en"];
 
 export type Dictionary = Record<string, string>;
 

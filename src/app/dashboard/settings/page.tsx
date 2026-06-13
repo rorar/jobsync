@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import AiSettings from "@/components/settings/AiSettings";
 import ApiKeySettings from "@/components/settings/ApiKeySettings";
 import AutomationSettings from "@/components/settings/AutomationSettings";
 import JobFormSettings from "@/components/settings/JobFormSettings";
+import JobStatusSettings from "@/components/settings/JobStatusSettings";
 import DeveloperSettings from "@/components/settings/DeveloperSettings";
 import DisplaySettings from "@/components/settings/DisplaySettings";
 import ErrorLogSettings from "@/components/settings/ErrorLogSettings";
@@ -22,9 +24,25 @@ import PrivacySecuritySettings from "@/components/settings/PrivacySecuritySettin
 import SettingsSidebar, { type SettingsSection } from "@/components/settings/SettingsSidebar";
 import { useTranslations } from "@/i18n";
 
+const VALID_SECTIONS: SettingsSection[] = [
+  "ai-module", "api-keys", "public-api", "appearance", "automation", "job-form",
+  "statuses", "enrichment", "api-status", "logo-cache", "notifications", "webhooks",
+  "email", "push", "blacklist", "developer", "error-log", "privacy", "danger-zone",
+];
+
 function Settings() {
+  const searchParams = useSearchParams();
   const [activeSection, setActiveSection] = useState<SettingsSection>("ai-module");
   const { t } = useTranslations();
+
+  // Deep-link support: ?section=statuses selects a section on load (e.g. the
+  // Kanban "Manage statuses" entry-point). Validated against the known set.
+  useEffect(() => {
+    const requested = searchParams.get("section");
+    if (requested && (VALID_SECTIONS as string[]).includes(requested)) {
+      setActiveSection(requested as SettingsSection);
+    }
+  }, [searchParams]);
 
   return (
     <div className="flex flex-col col-span-3">
@@ -43,6 +61,7 @@ function Settings() {
           {activeSection === "appearance" && <DisplaySettings />}
           {activeSection === "automation" && <AutomationSettings />}
           {activeSection === "job-form" && <JobFormSettings />}
+          {activeSection === "statuses" && <JobStatusSettings />}
           {activeSection === "enrichment" && <EnrichmentModuleSettings />}
           {activeSection === "api-status" && <ApiStatusOverview />}
           {activeSection === "logo-cache" && <LogoAssetSettings />}

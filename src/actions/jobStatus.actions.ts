@@ -38,6 +38,8 @@ export interface JobStatusView {
   label: string;
   sortOrder: number;
   isDefault: boolean;
+  /** Number of jobs currently in this status (delete-in-use + stage-move impact). */
+  jobCount: number;
   category: JobStatusCategoryView;
 }
 
@@ -60,7 +62,22 @@ const STATUS_SELECT = {
   sortOrder: true,
   isDefault: true,
   category: { select: CATEGORY_SELECT },
+  _count: { select: { jobs: true } },
 } as const;
+
+/** Flatten the Prisma `_count.jobs` shape into the JobStatusView `jobCount` field. */
+function toStatusView(row: {
+  id: string;
+  value: string;
+  label: string;
+  sortOrder: number;
+  isDefault: boolean;
+  category: JobStatusCategoryView;
+  _count: { jobs: number };
+}): JobStatusView {
+  const { _count, ...rest } = row;
+  return { ...rest, jobCount: _count.jobs };
+}
 
 const MAX_LABEL_LENGTH = 60;
 
@@ -88,22 +105,22 @@ export const getJobStatuses = async (): Promise<ActionResult<JobStatusView[]>> =
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "errors.notAuthenticated", errorCode: "UNAUTHORIZED" };
 
-    let statuses = await prisma.jobStatus.findMany({
+    let rows = await prisma.jobStatus.findMany({
       where: { userId: user.id },
       select: STATUS_SELECT,
       orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
     });
 
-    if (statuses.length === 0) {
+    if (rows.length === 0) {
       await seedJobStatusesForUser(prisma, user.id);
-      statuses = await prisma.jobStatus.findMany({
+      rows = await prisma.jobStatus.findMany({
         where: { userId: user.id },
         select: STATUS_SELECT,
         orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
       });
     }
 
-    return { success: true, data: statuses };
+    return { success: true, data: rows.map(toStatusView) };
   } catch (error) {
     return handleError(error, "errors.fetchFailed");
   }

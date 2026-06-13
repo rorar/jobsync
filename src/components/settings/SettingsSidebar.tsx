@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Activity, AlertTriangle, Banknote, Ban, Bell, BellRing, Bot, Bug, Database, Globe, HardDrive, Key, Mail, Palette, ShieldCheck, Trash2, Webhook, Zap } from "lucide-react";
+import { Activity, AlertTriangle, Banknote, Ban, Bell, BellRing, Bot, Bug, Database, Globe, HardDrive, Key, ListChecks, Mail, Palette, ShieldCheck, Trash2, Webhook, Zap } from "lucide-react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ export type SettingsSection =
   | "appearance"
   | "automation"
   | "job-form"
+  | "statuses"
   | "enrichment"
   | "api-status"
   | "logo-cache"
@@ -40,6 +41,7 @@ const SETTINGS_SECTIONS: {
   { id: "appearance", labelKey: "settings.sidebarAppearance", icon: Palette },
   { id: "automation", labelKey: "settings.sidebarAutomation", icon: Zap },
   { id: "job-form", labelKey: "settings.sidebarJobForm", icon: Banknote },
+  { id: "statuses", labelKey: "jobStatus.sidebarStatuses", icon: ListChecks },
   { id: "enrichment", labelKey: "enrichment.sidebarEnrichment", icon: Database },
   { id: "api-status", labelKey: "enrichment.sidebarApiStatus", icon: Activity },
   { id: "logo-cache", labelKey: "logoAsset.title", icon: HardDrive },
