@@ -30,6 +30,31 @@ async function gotoMyJobs(page: Page) {
   await page.getByTestId("add-job-btn").waitFor({ state: "visible", timeout: 15000 });
 }
 
+async function ensureTableView(page: Page) {
+  const tableRadio = page.getByRole("radio", { name: "Table" });
+  try {
+    await tableRadio.waitFor({ state: "visible", timeout: 3000 });
+  } catch {
+    return; // toggle not rendered — nothing to switch
+  }
+  if ((await tableRadio.getAttribute("aria-checked")) !== "true") {
+    await tableRadio.click();
+    await expect(tableRadio).toHaveAttribute("aria-checked", "true");
+  }
+}
+
+async function openEditDialog(page: Page, jobTitle: string) {
+  await gotoMyJobs(page);
+  await ensureTableView(page);
+  await page
+    .getByRole("row", { name: new RegExp(jobTitle, "i") })
+    .getByTestId("job-actions-menu-btn")
+    .first()
+    .click();
+  await page.getByRole("menuitem", { name: "Edit Job" }).click();
+  await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -120,6 +145,94 @@ test.describe("Custom JobStatus → dynamic Kanban", () => {
           // Not-in-use → simple confirm.
           await page.getByTestId("delete-confirm-btn").click().catch(() => {});
         }
+      }
+    } catch {
+      /* best-effort cleanup */
+    }
+  });
+
+  test("re-selecting the current interviewing status logs a new round (self-transition)", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000); // create + 2 edits + detail nav on a cold dev server
+    const uid = uniqueId();
+    const jobTitle = `E2E RoundJob ${uid}`;
+    const company = `E2E RoundCo ${uid}`;
+    const location = `E2E RoundLoc ${uid}`;
+
+    // 1. Create a job (seeded default = Bookmarked; addJob writes 1 initial history entry).
+    await gotoMyJobs(page);
+    await page.getByTestId("add-job-btn").click();
+    await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
+    await page
+      .getByPlaceholder("Copy and paste job link here")
+      .fill("https://example.com/careers/e2e-round");
+    await selectOrCreateComboboxOption(page, "Title", "Create or Search title", jobTitle);
+    await selectOrCreateComboboxOption(page, "Company", "Create or Search company", company);
+    await selectOrCreateComboboxOption(page, "Location", "Create or Search location", location);
+    await page.getByLabel("Job Source").click();
+    await page.getByRole("option", { name: "Indeed" }).click();
+    await page.locator(".tiptap").click();
+    await page.locator(".tiptap").fill("E2E self-transition round job description.");
+    await page.getByLabel("Select Resume").click();
+    const firstResume = page.getByRole("option").first();
+    await firstResume.waitFor({ state: "visible", timeout: 10000 });
+    await firstResume.click();
+    await page.getByTestId("save-job-btn").click();
+    await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible({ timeout: 15000 });
+
+    // 2. Edit → move to Interview (forward transition; no round toggle yet because
+    //    the status is CHANGING). Writes the 2nd history entry (bookmarked→interview).
+    await openEditDialog(page, jobTitle);
+    await page.getByTestId("status-combobox-trigger").click();
+    // Interviewing is an applied stage, so the option's accessible name is
+    // "Interview <marks-applied badge>" — match by substring, not exact.
+    await page.getByRole("option", { name: /Interview/ }).first().click();
+    await expect(page.getByTestId("status-combobox-trigger")).toContainText("Interview");
+    // Status is changing → the round toggle must NOT be shown.
+    await expect(page.getByTestId("log-interview-round-container")).toHaveCount(0);
+    await page.getByTestId("save-job-btn").click();
+    await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible({ timeout: 15000 });
+
+    // 3. Edit again → status is ALREADY Interview → the explicit round toggle appears.
+    //    Toggle it on + save → writes the 3rd history entry (interview→interview round).
+    await openEditDialog(page, jobTitle);
+    await expect(page.getByTestId("status-combobox-trigger")).toContainText("Interview");
+    const roundToggle = page.getByTestId("log-interview-round-container");
+    await expect(roundToggle).toBeVisible();
+    await roundToggle.getByRole("switch").click();
+    await page.getByTestId("save-job-btn").click();
+    await expect(page.getByTestId("add-job-dialog-title")).not.toBeVisible({ timeout: 15000 });
+
+    // 4. Open the job detail → Status History lists THREE entries: initial (bookmarked),
+    //    the bookmarked→interview move, and the interview→interview round.
+    await gotoMyJobs(page);
+    await ensureTableView(page);
+    const detailHref = await page
+      .getByRole("row", { name: new RegExp(jobTitle, "i") })
+      .getByRole("link", { name: new RegExp(jobTitle, "i") })
+      .first()
+      .getAttribute("href");
+    expect(detailHref).toMatch(/\/dashboard\/myjobs\//);
+    await page.goto(detailHref!);
+    await page.waitForLoadState("domcontentloaded");
+    // The Status History card title proves we're on the detail page with the timeline.
+    await expect(page.getByText("Status History").first()).toBeVisible({ timeout: 15000 });
+    const historyList = page.getByRole("list", { name: "Status History" });
+    await expect(historyList).toBeVisible({ timeout: 15000 });
+    await expect(historyList.getByRole("listitem")).toHaveCount(3);
+
+    // 5. Cleanup — delete the job (best-effort).
+    try {
+      await gotoMyJobs(page);
+      await ensureTableView(page);
+      const row = page.getByRole("row", { name: new RegExp(jobTitle, "i") }).first();
+      if (await row.count()) {
+        await row.getByTestId("job-actions-menu-btn").first().click();
+        await page.getByRole("menuitem", { name: /delete/i }).click();
+        const confirm = page.getByRole("button", { name: /^delete$/i });
+        if (await confirm.count()) await confirm.first().click();
+        await expectToast(page, /deleted/i).catch(() => {});
       }
     } catch {
       /* best-effort cleanup */

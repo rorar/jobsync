@@ -343,7 +343,10 @@ These are deliberate deferrals, not bugs:
   `0..N-1` in one transaction (no fractional midpoints → no collision class). The old
   `computeReorderSortValue` ×1000 helper (`reorder.ts`) is removed. Single `reorderJobStatus` is
   retained for the Allium `ReorderJobStatus` rule / public-API PATCH surface.
-- **E2E run-deferred.** `e2e/crud/job-status-crud.spec.ts` (create status → set on job → see Kanban
-  column) is written + selector-verified but its Playwright run did not complete on the 8 GB VM
-  (Next dev hung under compile load — the known infra constraint). Run locally with
-  `scripts/dev-e2e.sh` + `--project=crud --workers=1` after `source scripts/env.sh`.
+- ~~**E2E run-deferred.**~~ ✅ RUN GREEN 2026-06-13. `e2e/crud/job-status-crud.spec.ts` now has TWO
+  passing tests: (1) create status → set on job → see Kanban column, and (2) **self-transition** —
+  create → edit to Interview (round toggle hidden while status changes) → edit again (toggle appears) →
+  toggle + save → job-detail Status-History timeline shows exactly 3 entries (initial + move + round).
+  Full run `10 passed` (8 smoke + 2 crud) via `scripts/dev-e2e.sh` + `--project=crud --workers=1` after
+  `source scripts/env.sh`. NB: on a degraded server the signin smoke can flake (Tailscale-redirect) —
+  restart the dev server and re-run (env note, not a regression).
