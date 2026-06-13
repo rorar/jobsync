@@ -124,10 +124,31 @@ export interface Company {
   };
 }
 
+/**
+ * Stage (category) a JobStatus belongs to. Carries the workflow semantics that
+ * drive Kanban column order/colour/collapse, applied-derivation and transition
+ * validity (Welle 4, F-AJ-09). Optional on JobStatus because some lightweight
+ * status payloads (e.g. the Kanban server response) omit it.
+ */
+export interface JobStatusCategoryRef {
+  id: string;
+  kind: string;
+  label: string;
+  colour: string;
+  sortOrder: number;
+  isAppliedStage: boolean;
+  isTerminal: boolean;
+  defaultCollapsed: boolean;
+  allowsSelfTransition: boolean;
+}
+
 export interface JobStatus {
   id: string;
   label: string;
   value: string;
+  sortOrder?: number;
+  isDefault?: boolean;
+  category?: JobStatusCategoryRef;
 }
 
 export interface JobSource {

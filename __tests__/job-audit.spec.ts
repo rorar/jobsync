@@ -277,9 +277,9 @@ describe("Job-CRUD audit trail (S6a)", () => {
         statusId: "status-bookmarked",
         appliedDate: null,
         version: 1,
-        Status: { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked" },
+        Status: { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked", category: { kind: "lead" } },
       };
-      const newStatus = { id: "status-applied", label: "Applied", value: "applied" };
+      const newStatus = { id: "status-applied", label: "Applied", value: "applied", category: { kind: "applied" } };
       (prisma.job.findFirst as jest.Mock).mockResolvedValue(currentJob);
       (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(newStatus);
       (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) =>
@@ -313,23 +313,22 @@ describe("Job-CRUD audit trail (S6a)", () => {
     });
 
     it("does not write an audit entry when the transition is invalid", async () => {
-      const {
-        isValidTransition,
-      } = require("@/lib/crm/status-machine");
-      (isValidTransition as jest.Mock).mockReturnValueOnce(false);
+      // Welle 4: validity is category-ordered. offer -> applied is a backward jump
+      // that is NOT a bounded reopen, so it is rejected before the audit write.
       (prisma.job.findFirst as jest.Mock).mockResolvedValue({
         id: "job-id",
-        statusId: "status-bookmarked",
+        statusId: "status-offer",
         appliedDate: null,
         version: 1,
-        Status: { id: "status-bookmarked", value: "bookmarked" },
+        Status: { id: "status-offer", value: "offer", category: { kind: "offer" } },
       });
       (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue({
-        id: "status-offer",
-        value: "offer",
+        id: "status-applied",
+        value: "applied",
+        category: { kind: "applied" },
       });
 
-      const result = await changeJobStatus("job-id", "status-offer");
+      const result = await changeJobStatus("job-id", "status-applied");
 
       expect(result.success).toBe(false);
       expect(auditMock).not.toHaveBeenCalled();
@@ -371,8 +370,8 @@ describe("Job-CRUD audit trail (S6a)", () => {
   });
 
   describe("updateKanbanOrder (drag-drop) → job.status_change", () => {
-    const bookmarked = { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked" };
-    const applied = { id: "status-applied", label: "Applied", value: "applied" };
+    const bookmarked = { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked", category: { kind: "lead" } };
+    const applied = { id: "status-applied", label: "Applied", value: "applied", category: { kind: "applied" } };
 
     it("writes one job.status_change audit entry with a status snapshot on a cross-column move", async () => {
       const currentJob = {

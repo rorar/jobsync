@@ -8,8 +8,8 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { isValidTransition, computeTransitionSideEffects, getValidTargets, STATUS_ORDER, COLLAPSED_BY_DEFAULT } from "@/lib/crm/status-machine";
-import { isEditTransitionValid } from "@/lib/crm/validate-edit-transition";
+import { STATUS_ORDER, COLLAPSED_BY_DEFAULT } from "@/lib/crm/status-machine";
+import { isValidCategoryTransitionByKind, appliedSideEffectByKind } from "@/lib/crm/status-transition";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import { buildJobSalaryData } from "@/lib/salary/build-job-salary";
@@ -24,6 +24,9 @@ export const getStatusList = async (): Promise<ActionResult<JobStatus[]>> => {
     }
     const statuses = await prisma.jobStatus.findMany({
       where: { userId: user.id },
+      // Welle 4: carry the stage (category) so the form ComboBox, Kanban and
+      // applied-derivation read workflow semantics without a second query.
+      include: { category: true },
       orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
     });
     return { success: true, data: statuses };
@@ -555,7 +558,7 @@ export const updateJob = async (
     // validate the transition against the state machine before writing.
     const currentJob = await prisma.job.findFirst({
       where: { id, userId: user.id },
-      include: { Status: true },
+      include: { Status: { include: { category: true } } },
     }).catch(() => null);
 
     // Optimistic locking: reject if caller's expected version is stale (S3-D3)
@@ -564,14 +567,22 @@ export const updateJob = async (
     }
 
     const statusChanged = currentJob?.Status && status !== currentJob.statusId;
-    let newStatus: Awaited<ReturnType<typeof prisma.jobStatus.findFirst>> | null = null;
+    let newStatus: Awaited<
+      ReturnType<typeof prisma.jobStatus.findFirst<{ include: { category: true } }>>
+    > | null = null;
 
     if (statusChanged) {
       newStatus = await prisma.jobStatus.findFirst({
         where: { id: status, userId: user.id },
+        include: { category: true },
       });
 
-      if (newStatus && !isEditTransitionValid(currentJob.Status.value, newStatus.value)) {
+      // Welle 4: transition validity is CATEGORY-ordered (per-user custom statuses),
+      // not the value-keyed matrix — a custom status' value is not in the old graph.
+      if (
+        newStatus &&
+        !isValidCategoryTransitionByKind(currentJob.Status.category.kind, newStatus.category.kind)
+      ) {
         return {
           success: false,
           message: "errors.invalidTransition",
@@ -658,7 +669,7 @@ export const updateJob = async (
       });
 
     if (statusChanged && newStatus) {
-      const sideEffects = computeTransitionSideEffects(newStatus.value, currentJob.appliedDate);
+      const sideEffects = appliedSideEffectByKind(newStatus.category.kind, currentJob.appliedDate);
       const previousStatusValue = currentJob.Status.value;
 
       const [updatedJob, historyEntry] = await prisma.$transaction(async (tx) => {
@@ -889,10 +900,11 @@ export const changeJobStatus = async (
     const [currentJob, newStatus] = await Promise.all([
       prisma.job.findFirst({
         where: { id: jobId, userId: user.id },
-        include: { Status: true },
+        include: { Status: { include: { category: true } } },
       }),
       prisma.jobStatus.findFirst({
         where: { id: newStatusId, userId: user.id },
+        include: { category: true },
       }),
     ]);
     if (!currentJob) {
@@ -912,9 +924,9 @@ export const changeJobStatus = async (
       return { success: false, message: "errors.staleState", errorCode: "STALE_STATE" };
     }
 
-    // Validate transition against state machine
+    // Validate transition — category-ordered (Welle 4 per-user custom statuses).
     const currentStatusValue = currentJob.Status.value;
-    if (!isValidTransition(currentStatusValue, newStatus.value)) {
+    if (!isValidCategoryTransitionByKind(currentJob.Status.category.kind, newStatus.category.kind)) {
       return {
         success: false,
         message: "errors.invalidTransition",
@@ -922,9 +934,9 @@ export const changeJobStatus = async (
       };
     }
 
-    // Compute side effects
-    const sideEffects = computeTransitionSideEffects(
-      newStatus.value,
+    // Compute side effects (applied flag derived from the target stage)
+    const sideEffects = appliedSideEffectByKind(
+      newStatus.category.kind,
       currentJob.appliedDate,
     );
 
@@ -1108,7 +1120,7 @@ export const updateKanbanOrder = async (
     // Fetch job with ownership check
     const currentJob = await prisma.job.findFirst({
       where: { id: jobId, userId: user.id },
-      include: { Status: true },
+      include: { Status: { include: { category: true } } },
     });
     if (!currentJob) {
       return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
@@ -1117,15 +1129,16 @@ export const updateKanbanOrder = async (
     const statusChanged = newStatusId !== undefined && newStatusId !== currentJob.statusId;
 
     if (statusChanged) {
-      // Validate transition
+      // Validate transition — category-ordered (Welle 4 per-user custom statuses).
       const newStatus = await prisma.jobStatus.findFirst({
         where: { id: newStatusId, userId: user.id },
+        include: { category: true },
       });
       if (!newStatus) {
         return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
       }
 
-      if (!isValidTransition(currentJob.Status.value, newStatus.value)) {
+      if (!isValidCategoryTransitionByKind(currentJob.Status.category.kind, newStatus.category.kind)) {
         return {
           success: false,
           message: "errors.invalidTransition",
@@ -1133,8 +1146,8 @@ export const updateKanbanOrder = async (
         };
       }
 
-      const sideEffects = computeTransitionSideEffects(
-        newStatus.value,
+      const sideEffects = appliedSideEffectByKind(
+        newStatus.category.kind,
         currentJob.appliedDate,
       );
 
@@ -1339,17 +1352,22 @@ export const getValidTransitions = async (
 
     const job = await prisma.job.findFirst({
       where: { id: jobId, userId: user.id },
-      include: { Status: true },
+      include: { Status: { include: { category: true } } },
     });
     if (!job) {
       return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
     }
 
-    const validValues = getValidTargets(job.Status.value);
-
-    const statuses = await prisma.jobStatus.findMany({
-      where: { userId: user.id, value: { in: validValues } },
+    // Welle 4: valid targets derive from the category-ordered transition rule, not
+    // a value-keyed matrix. Filter the user's statuses by transition validity.
+    const allStatuses = await prisma.jobStatus.findMany({
+      where: { userId: user.id },
+      include: { category: true },
     });
+    const fromKind = job.Status.category.kind;
+    const statuses = allStatuses.filter(
+      (s) => s.id !== job.statusId && isValidCategoryTransitionByKind(fromKind, s.category.kind),
+    );
 
     return { success: true, data: statuses };
   } catch (error) {

@@ -859,11 +859,12 @@ describe("jobActions", () => {
       id: "status-applied",
       label: "Applied",
       value: "applied",
+      category: { kind: "applied" },
     };
     const currentJob = {
       id: "job-id",
       statusId: "status-bookmarked",
-      Status: { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked" },
+      Status: { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked", category: { kind: "lead" } },
       appliedDate: null,
     };
     const updatedJob = {
@@ -888,7 +889,7 @@ describe("jobActions", () => {
         });
       });
 
-      const result = await updateJobStatus("job-id", statusObj);
+      const result = await updateJobStatus("job-id", statusObj as never);
 
       expect(result.success).toBe(true);
       // Verify it went through changeJobStatus by checking $transaction was called
@@ -899,7 +900,7 @@ describe("jobActions", () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(null);
 
       await expect(
-        updateJobStatus("job-id", statusObj),
+        updateJobStatus("job-id", statusObj as never),
       ).resolves.toStrictEqual({
         success: false,
         message: "errors.changeJobStatus",
@@ -915,11 +916,13 @@ describe("jobActions", () => {
       id: "status-bookmarked",
       label: "Bookmarked",
       value: "bookmarked",
+      category: { kind: "lead" },
     };
     const offerStatus = {
       id: "status-offer",
       label: "Offer",
       value: "offer",
+      category: { kind: "offer" },
     };
 
     const existingJob = {
@@ -929,13 +932,29 @@ describe("jobActions", () => {
       Status: bookmarkedStatus,
     };
 
+    // Welle 4: transition validity is now CATEGORY-ordered. A backward jump that
+    // is NOT a bounded reopen is invalid — e.g. offer -> applied (offer is not a
+    // closed stage, applied has a lower stage sort_order). (The old value-matrix
+    // rejection bookmarked -> offer is now an allowed forward jump.)
+    const offerJob = {
+      id: "job-id",
+      userId: mockUser.id,
+      statusId: offerStatus.id,
+      Status: offerStatus,
+    };
+    const appliedTarget = {
+      id: "status-applied",
+      label: "Applied",
+      value: "applied",
+      category: { kind: "applied" },
+    };
     const updateData = {
       ...jobData,
       id: "job-id",
-      status: offerStatus.id, // Attempting bookmarked -> offer (INVALID)
+      status: appliedTarget.id, // Attempting offer -> applied (INVALID backward)
     };
 
-    it("should reject invalid status transition (bookmarked -> offer) via edit form", async () => {
+    it("should reject invalid status transition (offer -> applied) via edit form", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       // FK ownership verification mocks (CON-C01)
       (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
@@ -944,14 +963,14 @@ describe("jobActions", () => {
       (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
 
       // Mock: fetch the current job to check its current status
-      (prisma.job.findFirst as jest.Mock).mockResolvedValue(existingJob);
-      // Mock: fetch the target status to get its value
-      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(offerStatus);
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue(offerJob);
+      // Mock: fetch the target status to get its category
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(appliedTarget);
 
       const result = await updateJob(updateData);
 
-      // updateJob should validate the state machine BEFORE writing to DB.
-      // bookmarked -> offer is NOT a valid transition.
+      // updateJob should validate the category transition BEFORE writing to DB.
+      // offer -> applied is NOT a valid transition (backward, not a reopen).
       expect(result.success).toBe(false);
 
       // Prisma update should NOT have been called since the transition is invalid
@@ -963,6 +982,7 @@ describe("jobActions", () => {
         id: "status-applied",
         label: "Applied",
         value: "applied",
+        category: { kind: "applied" },
       };
       const validUpdateData = {
         ...jobData,
@@ -1142,6 +1162,7 @@ describe("jobActions", () => {
       id: "status-bookmarked",
       label: "Bookmarked",
       value: "bookmarked",
+      category: { kind: "lead" },
     };
     const currentJob = {
       id: "job-id",
@@ -1196,11 +1217,13 @@ describe("jobActions", () => {
       id: "status-bookmarked",
       label: "Bookmarked",
       value: "bookmarked",
+      category: { kind: "lead" },
     };
     const appliedStatus = {
       id: "status-applied",
       label: "Applied",
       value: "applied",
+      category: { kind: "applied" },
     };
     const currentJob = {
       id: "job-id",
