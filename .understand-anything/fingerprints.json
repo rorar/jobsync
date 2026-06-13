@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "gitCommitHash": "db31f68cb89bb7b8453c09b146dfb076136ebafb",
-  "generatedAt": "2026-06-12T22:31:02.277Z",
+  "gitCommitHash": "41514ce778e3e288f7cc598df2deb470830d027a",
+  "generatedAt": "2026-06-13T16:01:19.928Z",
   "files": {
     "__mocks__/next-auth-providers.ts": {
       "filePath": "__mocks__/next-auth-providers.ts",
@@ -611,10 +611,85 @@
       "totalLines": 784,
       "hasStructuralAnalysis": true
     },
+    "__tests__/AddJob.layout.spec.tsx": {
+      "filePath": "__tests__/AddJob.layout.spec.tsx",
+      "contentHash": "b52dd01b3bc9ca871cf3a0c512618224a372ce4853fe19b69d06db69540803e4",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "screen",
+            "render"
+          ]
+        },
+        {
+          "source": "@testing-library/user-event",
+          "specifiers": [
+            "userEvent"
+          ]
+        },
+        {
+          "source": "@/components/myjobs/AddJob",
+          "specifiers": [
+            "AddJob"
+          ]
+        },
+        {
+          "source": "@/lib/data/jobStatusesData",
+          "specifiers": [
+            "JOB_STATUSES"
+          ]
+        },
+        {
+          "source": "@/lib/data/jobSourcesData",
+          "specifiers": [
+            "JOB_SOURCES"
+          ]
+        },
+        {
+          "source": "@/lib/mock.utils",
+          "specifiers": [
+            "getMockList"
+          ]
+        },
+        {
+          "source": "@/lib/crm/status-categories",
+          "specifiers": [
+            "CATEGORY_SEED",
+            "categorySemanticsForKind",
+            "StatusCategoryKind"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 61,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/AddJob.spec.tsx": {
       "filePath": "__tests__/AddJob.spec.tsx",
-      "contentHash": "9ee7cfca9ebb5a8858843742721aeeaf7504f793120ae43675ecf805a24a1f32",
-      "functions": [],
+      "contentHash": "b2e91d5b5bbe0aa059e8f42f239c224336a31e72e2ad872ebbfccffd53c92a07",
+      "functions": [
+        {
+          "name": "withCategories",
+          "params": [
+            "statuses"
+          ],
+          "exported": false,
+          "lineCount": 16
+        }
+      ],
       "classes": [],
       "imports": [
         {
@@ -684,10 +759,18 @@
           "specifiers": [
             "getPersons"
           ]
+        },
+        {
+          "source": "@/lib/crm/status-categories",
+          "specifiers": [
+            "CATEGORY_SEED",
+            "categorySemanticsForKind",
+            "StatusCategoryKind"
+          ]
         }
       ],
       "exports": [],
-      "totalLines": 337,
+      "totalLines": 371,
       "hasStructuralAnalysis": true
     },
     "__tests__/addJobForm.schema.salary.spec.ts": {
@@ -1281,7 +1364,7 @@
     },
     "__tests__/auth.actions.spec.ts": {
       "filePath": "__tests__/auth.actions.spec.ts",
-      "contentHash": "8edff4255e116e4915a94f00113e96d60100ffdbc4045c2799b4e501fa854133",
+      "contentHash": "d000e36ead92de40d3fd7c462acfeeab292ffa7433a3790a8e33084c924e1bf1",
       "functions": [],
       "classes": [],
       "imports": [
@@ -1313,8 +1396,13 @@
         {
           "source": "@/lib/constants",
           "specifiers": [
-            "JOB_SOURCES",
-            "JOB_STATUSES"
+            "JOB_SOURCES"
+          ]
+        },
+        {
+          "source": "@/lib/crm/seed-job-statuses",
+          "specifiers": [
+            "seedJobStatusesForUser"
           ]
         },
         {
@@ -1325,7 +1413,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 455,
+      "totalLines": 435,
       "hasStructuralAnalysis": true
     },
     "__tests__/AuthCard.spec.tsx": {
@@ -2734,7 +2822,7 @@
     },
     "__tests__/crm-actions.spec.ts": {
       "filePath": "__tests__/crm-actions.spec.ts",
-      "contentHash": "2adfb082a83de76c8cdf9dd11f1b1557d4a228f30b5adf581a91aa6cf4419b93",
+      "contentHash": "89d331c6fb5a30fd46e43663917d37247bd8c44ba537dc0376554002ab8bd77d",
       "functions": [],
       "classes": [],
       "imports": [
@@ -2763,7 +2851,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 563,
+      "totalLines": 587,
       "hasStructuralAnalysis": true
     },
     "__tests__/crm-activity-logger.spec.ts": {
@@ -5585,7 +5673,7 @@
     },
     "__tests__/job-audit.spec.ts": {
       "filePath": "__tests__/job-audit.spec.ts",
-      "contentHash": "0c94c47c6dba57194222d06cb04e5397af33d0963e6a29bcf80cdf102867243b",
+      "contentHash": "0879742f3c4cc3b99bc01ae7397e62a195eb2611fd4dda647ee399583ecc5756",
       "functions": [],
       "classes": [],
       "imports": [
@@ -5625,12 +5713,12 @@
         }
       ],
       "exports": [],
-      "totalLines": 440,
+      "totalLines": 430,
       "hasStructuralAnalysis": true
     },
     "__tests__/job.actions.spec.ts": {
       "filePath": "__tests__/job.actions.spec.ts",
-      "contentHash": "bc9448bee8bb24b128353f2501a137ce849dbb82dbe7b5e004e731476b7c9e59",
+      "contentHash": "8e3763c53f571654da0e0c903c5a0968bf153bf9cd3c045a4e59258048e3b451",
       "functions": [],
       "classes": [],
       "imports": [
@@ -5676,7 +5764,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 1251,
+      "totalLines": 1257,
       "hasStructuralAnalysis": true
     },
     "__tests__/jobContact.actions.spec.ts": {
@@ -5974,6 +6062,116 @@
       "totalLines": 713,
       "hasStructuralAnalysis": true
     },
+    "__tests__/jobStatus.actions.spec.ts": {
+      "filePath": "__tests__/jobStatus.actions.spec.ts",
+      "contentHash": "5f74beb9ba44bf97fae20f1f257ca22c2fd61b5b99b31866bef9cfbfff8564f7",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/actions/jobStatus.actions",
+          "specifiers": [
+            "createJobStatus",
+            "renameJobStatus",
+            "reorderJobStatus",
+            "reorderJobStatuses",
+            "setDefaultJobStatus",
+            "deleteJobStatus"
+          ]
+        },
+        {
+          "source": "@/utils/user.utils",
+          "specifiers": [
+            "getCurrentUser"
+          ]
+        },
+        {
+          "source": "@prisma/client",
+          "specifiers": [
+            "PrismaClient"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 290,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/JobStatusSettings.spec.tsx": {
+      "filePath": "__tests__/JobStatusSettings.spec.tsx",
+      "contentHash": "afab207a006f383ba8c635271b99b5e8c3874890b19f741f5f5d292316f73e2c",
+      "functions": [
+        {
+          "name": "cat",
+          "params": [
+            "id",
+            "kind",
+            "sortOrder",
+            "isAppliedStage"
+          ],
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "status",
+          "params": [
+            "id",
+            "value",
+            "label",
+            "category",
+            "sortOrder",
+            "isDefault",
+            "jobCount"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "setup",
+          "params": [
+            "statuses"
+          ],
+          "exported": false,
+          "lineCount": 4
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen",
+            "waitFor",
+            "within"
+          ]
+        },
+        {
+          "source": "@testing-library/user-event",
+          "specifiers": [
+            "userEvent"
+          ]
+        },
+        {
+          "source": "@/components/settings/JobStatusSettings",
+          "specifiers": [
+            "JobStatusSettings"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 184,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/jobtitle.actions.spec.ts": {
       "filePath": "__tests__/jobtitle.actions.spec.ts",
       "contentHash": "43a3a17e33d84a8dd1c85289ac150c079f83177ef95afa372019c75d4971db79",
@@ -6008,7 +6206,7 @@
     },
     "__tests__/kanban-data-path.spec.ts": {
       "filePath": "__tests__/kanban-data-path.spec.ts",
-      "contentHash": "14ac1e21325e55d2fc521fc8bdca9fa01721e9af63908dd3b616c45879f18f06",
+      "contentHash": "8b66a1fa9ed388bf57ee2dd29094bb8511381a00e9679aab2452be08ccf8f2ec",
       "functions": [],
       "classes": [],
       "imports": [
@@ -6033,7 +6231,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 317,
+      "totalLines": 301,
       "hasStructuralAnalysis": true
     },
     "__tests__/kanban-reorder.spec.ts": {
@@ -7450,7 +7648,7 @@
     },
     "__tests__/optimistic-locking.spec.ts": {
       "filePath": "__tests__/optimistic-locking.spec.ts",
-      "contentHash": "0479d57215f25c0ca96c5b28d59fec0761e67e0394e1b60ab5beb52de814e8bb",
+      "contentHash": "a7146ac12924736b3fec35c7115ded6a12e96b6b1084a16d57d833e8c3f551a7",
       "functions": [],
       "classes": [],
       "imports": [
@@ -7475,7 +7673,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 419,
+      "totalLines": 420,
       "hasStructuralAnalysis": true
     },
     "__tests__/orphan-finder.spec.ts": {
@@ -8149,7 +8347,7 @@
     },
     "__tests__/public-api-status.spec.ts": {
       "filePath": "__tests__/public-api-status.spec.ts",
-      "contentHash": "959418e60637384fcd010e0cdfac7fc82e5e91a59a73f15e5683011865c21927",
+      "contentHash": "5b578bb164602692a6c1eb8798ab584be249b41fd1fa066e6577e74c969ca325",
       "functions": [
         {
           "name": "mockRequest",
@@ -8202,7 +8400,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 467,
+      "totalLines": 476,
       "hasStructuralAnalysis": true
     },
     "__tests__/push-actions.spec.ts": {
@@ -9161,6 +9359,25 @@
       "totalLines": 219,
       "hasStructuralAnalysis": true
     },
+    "__tests__/stage-colors.spec.ts": {
+      "filePath": "__tests__/stage-colors.spec.ts",
+      "contentHash": "ccf8e208a6cc8f20447422595a654987da091d69c2134e2596486142d3065f52",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/crm/stage-colors",
+          "specifiers": [
+            "STAGE_COLOR_TOKENS",
+            "resolveStageColor",
+            "stageColorVar"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 39,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/stagedVacancy-list-select.spec.ts": {
       "filePath": "__tests__/stagedVacancy-list-select.spec.ts",
       "contentHash": "a869d7dadd1b9ad4ad01e671b7e9f987b78292fcebd7cf08e44b07e934c81168",
@@ -9534,32 +9751,52 @@
       "totalLines": 188,
       "hasStructuralAnalysis": true
     },
-    "__tests__/status-machine.spec.ts": {
-      "filePath": "__tests__/status-machine.spec.ts",
-      "contentHash": "34a7eb74246d1fc474f23924e0e30353e27d5007d0b1d85dc9fb952398fbfb3f",
+    "__tests__/status-categories.spec.ts": {
+      "filePath": "__tests__/status-categories.spec.ts",
+      "contentHash": "db559386bb7ba51c553e1241a90573e94c894a157f07311830c4dd96a17a8131",
       "functions": [],
       "classes": [],
       "imports": [
         {
-          "source": "@/lib/crm/status-machine",
+          "source": "@/lib/crm/status-categories",
           "specifiers": [
-            "VALID_TRANSITIONS",
-            "isValidTransition",
-            "getValidTargets",
-            "STATUS_COLOR_NAMES",
-            "STATUS_ORDER",
-            "COLLAPSED_BY_DEFAULT",
-            "computeTransitionSideEffects"
+            "STATUS_CATEGORY_KINDS",
+            "StatusCategoryKind",
+            "CategorySemantics",
+            "categorySemanticsForKind",
+            "CATEGORY_SEED",
+            "DEFAULT_STATUS_SEED",
+            "LEGACY_VALUE_TO_SEED_VALUE",
+            "isValidCategoryTransition",
+            "computeAppliedSideEffect"
           ]
         }
       ],
       "exports": [],
-      "totalLines": 253,
+      "totalLines": 205,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/status-transition.spec.ts": {
+      "filePath": "__tests__/status-transition.spec.ts",
+      "contentHash": "d343e44871f296069eedd7cda24a9865dc7dc0b4360eb421407a832723337a39",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/crm/status-transition",
+          "specifiers": [
+            "isValidCategoryTransitionByKind",
+            "appliedSideEffectByKind"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 60,
       "hasStructuralAnalysis": true
     },
     "__tests__/StatusFunnelWidget.spec.tsx": {
       "filePath": "__tests__/StatusFunnelWidget.spec.tsx",
-      "contentHash": "ce85524eedcbf54eb6bb9c19249d0246003da31258d7f60aa3e0ee6b6c004436",
+      "contentHash": "fc3230f751d7abc8feaae97a88b0e14dceb755cbbf87105662c0fa2b8b642ef9",
       "functions": [
         {
           "name": "makeDistribution",
@@ -9568,7 +9805,7 @@
           ],
           "returnType": "StatusDistribution[]",
           "exported": false,
-          "lineCount": 18
+          "lineCount": 19
         }
       ],
       "classes": [],
@@ -9612,7 +9849,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 454,
+      "totalLines": 466,
       "hasStructuralAnalysis": true
     },
     "__tests__/StatusHistoryTimeline.spec.tsx": {
@@ -9649,6 +9886,64 @@
       ],
       "exports": [],
       "totalLines": 388,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/StatusStageCombobox.spec.tsx": {
+      "filePath": "__tests__/StatusStageCombobox.spec.tsx",
+      "contentHash": "b2b8ccba084f7b3abfc4fc07e6174532fb09bfdb106dd2e4f372c5a713ad5e25",
+      "functions": [
+        {
+          "name": "cat",
+          "params": [
+            "id",
+            "kind",
+            "sortOrder",
+            "isAppliedStage"
+          ],
+          "exported": false,
+          "lineCount": 11
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen"
+          ]
+        },
+        {
+          "source": "@testing-library/user-event",
+          "specifiers": [
+            "userEvent"
+          ]
+        },
+        {
+          "source": "@/components/myjobs/StatusStageCombobox",
+          "specifiers": [
+            "StatusStageCombobox"
+          ]
+        },
+        {
+          "source": "@/models/job.model",
+          "specifiers": [
+            "JobStatus"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 75,
       "hasStructuralAnalysis": true
     },
     "__tests__/storage.spec.ts": {
@@ -10595,6 +10890,76 @@
       "totalLines": 968,
       "hasStructuralAnalysis": true
     },
+    "__tests__/useKanbanState.spec.tsx": {
+      "filePath": "__tests__/useKanbanState.spec.tsx",
+      "contentHash": "b4021b52d22246d1385a3c438b7ff30158c6f37fa35f7d11ab98c9690f100f23",
+      "functions": [
+        {
+          "name": "cat",
+          "params": [
+            "id",
+            "kind",
+            "sortOrder",
+            "colour",
+            "defaultCollapsed"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "status",
+          "params": [
+            "id",
+            "value",
+            "label",
+            "category",
+            "sortOrder"
+          ],
+          "returnType": "JobStatus",
+          "exported": false,
+          "lineCount": 2
+        },
+        {
+          "name": "job",
+          "params": [
+            "id",
+            "statusValue"
+          ],
+          "returnType": "JobResponse",
+          "exported": false,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "renderHook"
+          ]
+        },
+        {
+          "source": "@/hooks/useKanbanState",
+          "specifiers": [
+            "useKanbanState"
+          ]
+        },
+        {
+          "source": "@/models/job.model",
+          "specifiers": [
+            "JobResponse",
+            "JobStatus"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 80,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/useStagingActions.spec.ts": {
       "filePath": "__tests__/useStagingActions.spec.ts",
       "contentHash": "4558749f7a27f5d24a39ee9f2c48c3a8a8fcc67d0e055089ff2419d376c575e3",
@@ -10719,23 +11084,6 @@
       ],
       "exports": [],
       "totalLines": 139,
-      "hasStructuralAnalysis": true
-    },
-    "__tests__/validate-edit-transition.spec.ts": {
-      "filePath": "__tests__/validate-edit-transition.spec.ts",
-      "contentHash": "afd9c93b53b1fce4416184960e9e2a2e2543d6ecde444dbb05ba1da999b761d3",
-      "functions": [],
-      "classes": [],
-      "imports": [
-        {
-          "source": "@/lib/crm/validate-edit-transition",
-          "specifiers": [
-            "isEditTransitionValid"
-          ]
-        }
-      ],
-      "exports": [],
-      "totalLines": 129,
       "hasStructuralAnalysis": true
     },
     "__tests__/vapid.spec.ts": {
@@ -11286,7 +11634,7 @@
     },
     "conductor/tracks.md": {
       "filePath": "conductor/tracks.md",
-      "contentHash": "8ee9ad575c16c604d8b55b808e86ffd444f47e0f1592ac6a28fc5c21075b9918",
+      "contentHash": "5914f7c978737a8a090ca39464a66a1c00cb861aa4a5c1f970c1722e000e8133",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -11744,6 +12092,16 @@
       "totalLines": 76,
       "hasStructuralAnalysis": true
     },
+    "conductor/tracks/welle4-custom-jobstatus_20260601/design-review-findings.md": {
+      "filePath": "conductor/tracks/welle4-custom-jobstatus_20260601/design-review-findings.md",
+      "contentHash": "32fa7dfad670c6173c0fae2b0a20508b75554aaf566353cdcdec2624053a4c39",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 96,
+      "hasStructuralAnalysis": true
+    },
     "conductor/tracks/welle4-custom-jobstatus_20260601/index.md": {
       "filePath": "conductor/tracks/welle4-custom-jobstatus_20260601/index.md",
       "contentHash": "a9690fbed63234142b015724323f219f186b923c061492d96ba8162b9bd42406",
@@ -11756,22 +12114,22 @@
     },
     "conductor/tracks/welle4-custom-jobstatus_20260601/metadata.json": {
       "filePath": "conductor/tracks/welle4-custom-jobstatus_20260601/metadata.json",
-      "contentHash": "153c98e124d86d0e64223bb7cbc28a7abe61416239dc4ebccbdb906340cfc09b",
+      "contentHash": "01a0cabf1b0ed097708c2b23699e45f48124e0dffe7ca9a7a4c36d69f51b495e",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 16,
+      "totalLines": 20,
       "hasStructuralAnalysis": true
     },
     "conductor/tracks/welle4-custom-jobstatus_20260601/plan.md": {
       "filePath": "conductor/tracks/welle4-custom-jobstatus_20260601/plan.md",
-      "contentHash": "b51b27f59ff1b5f1dd306aa8d535c48bf17204d3a8632a150d5762db1aae7ec2",
+      "contentHash": "97d530ac753940ce7610eb921890837c26391e31949ee4d1daeb24a81e9afad8",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 111,
+      "totalLines": 121,
       "hasStructuralAnalysis": true
     },
     "conductor/tracks/welle4-custom-jobstatus_20260601/spec.md": {
@@ -11782,6 +12140,16 @@
       "imports": [],
       "exports": [],
       "totalLines": 79,
+      "hasStructuralAnalysis": true
+    },
+    "conductor/tracks/welle4-custom-jobstatus_20260601/ui-design.md": {
+      "filePath": "conductor/tracks/welle4-custom-jobstatus_20260601/ui-design.md",
+      "contentHash": "42c596467f490b4638208ab8ab92cc17ae807dd410bfa91d5af2a216ff99fb5f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 161,
       "hasStructuralAnalysis": true
     },
     "conductor/workflow.md": {
@@ -12244,6 +12612,16 @@
       "totalLines": 61,
       "hasStructuralAnalysis": true
     },
+    "docs/adr/036-per-user-custom-jobstatus-with-fixed-stage-kinds.md": {
+      "filePath": "docs/adr/036-per-user-custom-jobstatus-with-fixed-stage-kinds.md",
+      "contentHash": "6bdf5d163b14ad668ce65f96be2104251303d78f23f3f53393286ee880fdd1e2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 95,
+      "hasStructuralAnalysis": true
+    },
     "docs/arbeitsagentur-api/auth-flow.md": {
       "filePath": "docs/arbeitsagentur-api/auth-flow.md",
       "contentHash": "a2ac94eae35c9f1115d92905630e17761c40929dc7ff5492bb7a45dea1515d03",
@@ -12476,22 +12854,22 @@
     },
     "docs/BACKLOG.md": {
       "filePath": "docs/BACKLOG.md",
-      "contentHash": "ddba8c70f56cfae3f94976cae60b700ff359631874ddae939156325d9da86ed9",
+      "contentHash": "6a0f6286de10ac5a54240a0ab3c5e3313033512f2c8f4891148fee82c726f3aa",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 315,
+      "totalLines": 354,
       "hasStructuralAnalysis": true
     },
     "docs/BUGS.md": {
       "filePath": "docs/BUGS.md",
-      "contentHash": "552aac1f14fe6d310d4bd5809253ae122d59aa096e0a5218a31db5d916276930",
+      "contentHash": "b81bf9a67269eeec37cb61b6616c3739d6325a2a48b0fa8ea82a7bb63ccd341d",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 1291,
+      "totalLines": 1301,
       "hasStructuralAnalysis": true
     },
     "docs/crm-gap-analysis-twenty.md": {
@@ -13574,6 +13952,16 @@
       "totalLines": 130,
       "hasStructuralAnalysis": true
     },
+    "docs/user-guide/job-statuses.md": {
+      "filePath": "docs/user-guide/job-statuses.md",
+      "contentHash": "1f3348e05940b6e7ef186f295fe3a2979639bcf0cd4fb86d30b1b6e9958c75e5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 65,
+      "hasStructuralAnalysis": true
+    },
     "docs/user-journey-audit.md": {
       "filePath": "docs/user-journey-audit.md",
       "contentHash": "676417c5bd348f915a6848ec83a1551686df9b234a85471d03e37fbf33b12a5d",
@@ -14061,7 +14449,7 @@
     },
     "e2e/crud/job-crud.spec.ts": {
       "filePath": "e2e/crud/job-crud.spec.ts",
-      "contentHash": "0bff1b7f8a3611c5da03f099b4301af50f6e0db9534ed1ecc2ada0262dea94f6",
+      "contentHash": "660393baed967320e651ebe6ceb73bc9bd7db53661271edc2e1a2e81cfe90dd3",
       "functions": [
         {
           "name": "navigateToJobs",
@@ -14234,6 +14622,59 @@
       ],
       "exports": [],
       "totalLines": 387,
+      "hasStructuralAnalysis": true
+    },
+    "e2e/crud/job-status-crud.spec.ts": {
+      "filePath": "e2e/crud/job-status-crud.spec.ts",
+      "contentHash": "1d3b610983c8dee42d308fb065dc23864eb771ac96146aef475e7daec21efe8d",
+      "functions": [
+        {
+          "name": "gotoStatusSettings",
+          "params": [
+            "page"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "createStatus",
+          "params": [
+            "page",
+            "label"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "gotoMyJobs",
+          "params": [
+            "page"
+          ],
+          "exported": false,
+          "lineCount": 5
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@playwright/test",
+          "specifiers": [
+            "test",
+            "expect",
+            "Page"
+          ]
+        },
+        {
+          "source": "../helpers",
+          "specifiers": [
+            "selectOrCreateComboboxOption",
+            "expectToast",
+            "uniqueId"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 129,
       "hasStructuralAnalysis": true
     },
     "e2e/crud/kanban.spec.ts": {
@@ -16029,6 +16470,16 @@
       "totalLines": 12,
       "hasStructuralAnalysis": true
     },
+    "prisma/migrations/20260613100000_welle4_custom_jobstatus/migration.sql": {
+      "filePath": "prisma/migrations/20260613100000_welle4_custom_jobstatus/migration.sql",
+      "contentHash": "804aa17f690e9147ae49e9c3fcd59b5b4d8397a016c2f8d220cd4bfa71f24130",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 127,
+      "hasStructuralAnalysis": true
+    },
     "prisma/migrations/migration_lock.toml": {
       "filePath": "prisma/migrations/migration_lock.toml",
       "contentHash": "3389dbaf2a3cf4b413275867ac6f550b27f79efe85ee9c12082cdd8c5b8239c4",
@@ -16058,23 +16509,23 @@
     },
     "prisma/schema.prisma": {
       "filePath": "prisma/schema.prisma",
-      "contentHash": "1de055b5bd42d6e41b843e01a54e2697c27b2f6cb60a0d46bcc3bf470c4c75bb",
+      "contentHash": "559d210be1a092521b0ef6275612d99b4d07431328dd099f6a4e4c4d8ee074fc",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 1251,
+      "totalLines": 1289,
       "hasStructuralAnalysis": false
     },
     "prisma/seed.ts": {
       "filePath": "prisma/seed.ts",
-      "contentHash": "e81fc248ccae2cc362958577423ae23120e4c32dc68c1a5293cdbb20ea0f9bb5",
+      "contentHash": "c3a6c5d9b0f9952f72244adcdcb73bd5196dfde49404971d1c7e612a579190fd",
       "functions": [
         {
           "name": "main",
           "params": [],
           "exported": false,
-          "lineCount": 104
+          "lineCount": 67
         }
       ],
       "classes": [],
@@ -16090,10 +16541,16 @@
           "specifiers": [
             "bcrypt"
           ]
+        },
+        {
+          "source": "../src/lib/crm/seed-job-statuses",
+          "specifiers": [
+            "seedJobStatusesForUser"
+          ]
         }
       ],
       "exports": [],
-      "totalLines": 161,
+      "totalLines": 108,
       "hasStructuralAnalysis": true
     },
     "public/sw-push.js": {
@@ -16861,6 +17318,16 @@
       "totalLines": 451,
       "hasStructuralAnalysis": false
     },
+    "specs/job-status.allium": {
+      "filePath": "specs/job-status.allium",
+      "contentHash": "a86dce45b8b852f2912d194391861833e57abc56fcdc1c2d09b6cef001b3ae42",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 722,
+      "hasStructuralAnalysis": false
+    },
     "specs/logo-asset-cache.allium": {
       "filePath": "specs/logo-asset-cache.allium",
       "contentHash": "21ed5a532f8dfa7732d9f0cebe9d353d57ba6ab4cc3a6567d48cd5f8f422a671",
@@ -17398,7 +17865,7 @@
     },
     "src/actions/auth.actions.ts": {
       "filePath": "src/actions/auth.actions.ts",
-      "contentHash": "2392c5717837b154af6176bdc20a00ff8b2ef321f632bcf6d48a2dcf81f103c1",
+      "contentHash": "483e3115de8949220511feeb418898b4fc0a6b751fd678efd68066932ebd56c4",
       "functions": [
         {
           "name": "signup",
@@ -17406,7 +17873,7 @@
             "formData"
           ],
           "exported": true,
-          "lineCount": 55
+          "lineCount": 52
         },
         {
           "name": "authenticate",
@@ -17459,8 +17926,13 @@
         {
           "source": "@/lib/constants",
           "specifiers": [
-            "JOB_SOURCES",
-            "JOB_STATUSES"
+            "JOB_SOURCES"
+          ]
+        },
+        {
+          "source": "@/lib/crm/seed-job-statuses",
+          "specifiers": [
+            "seedJobStatusesForUser"
           ]
         },
         {
@@ -17482,7 +17954,7 @@
         "signup",
         "authenticate"
       ],
-      "totalLines": 100,
+      "totalLines": 98,
       "hasStructuralAnalysis": true
     },
     "src/actions/automation.actions.ts": {
@@ -18796,14 +19268,14 @@
     },
     "src/actions/job.actions.ts": {
       "filePath": "src/actions/job.actions.ts",
-      "contentHash": "3ac197465e3d36a6e57b5890c4c0460154724639eafc6a7ec09454a8dcaf0fbd",
+      "contentHash": "28f2c4b7a6c86edd3d41035be3db848e7d3088168cdf9b4065c11391b4bd31b0",
       "functions": [
         {
           "name": "getStatusList",
           "params": [],
           "returnType": "Promise<ActionResult<JobStatus[]>>",
           "exported": true,
-          "lineCount": 15
+          "lineCount": 21
         },
         {
           "name": "getJobSourceList",
@@ -18831,7 +19303,7 @@
           ],
           "returnType": "Promise<ActionResult<JobResponse>>",
           "exported": true,
-          "lineCount": 40
+          "lineCount": 41
         },
         {
           "name": "createLocation",
@@ -18868,7 +19340,7 @@
           ],
           "returnType": "Promise<ActionResult<JobResponse>>",
           "exported": true,
-          "lineCount": 241
+          "lineCount": 249
         },
         {
           "name": "updateJobStatus",
@@ -18909,14 +19381,14 @@
           ],
           "returnType": "Promise<ActionResult<JobResponse>>",
           "exported": true,
-          "lineCount": 126
+          "lineCount": 127
         },
         {
           "name": "getKanbanBoard",
           "params": [],
           "returnType": "Promise<ActionResult<KanbanBoard>>",
           "exported": true,
-          "lineCount": 75
+          "lineCount": 76
         },
         {
           "name": "updateKanbanOrder",
@@ -18928,7 +19400,7 @@
           ],
           "returnType": "Promise<ActionResult<JobResponse>>",
           "exported": true,
-          "lineCount": 143
+          "lineCount": 144
         },
         {
           "name": "getJobStatusHistory",
@@ -18939,14 +19411,14 @@
           ],
           "returnType": "Promise<ActionResult<StatusHistoryEntry[]>>",
           "exported": true,
-          "lineCount": 50
+          "lineCount": 54
         },
         {
           "name": "getStatusDistribution",
           "params": [],
           "returnType": "Promise<ActionResult<StatusDistribution[]>>",
           "exported": true,
-          "lineCount": 35
+          "lineCount": 39
         },
         {
           "name": "getValidTransitions",
@@ -18955,7 +19427,7 @@
           ],
           "returnType": "Promise<ActionResult<JobStatus[]>>",
           "exported": true,
-          "lineCount": 28
+          "lineCount": 33
         }
       ],
       "classes": [],
@@ -19020,19 +19492,10 @@
           ]
         },
         {
-          "source": "@/lib/crm/status-machine",
+          "source": "@/lib/crm/status-transition",
           "specifiers": [
-            "isValidTransition",
-            "computeTransitionSideEffects",
-            "getValidTargets",
-            "STATUS_ORDER",
-            "COLLAPSED_BY_DEFAULT"
-          ]
-        },
-        {
-          "source": "@/lib/crm/validate-edit-transition",
-          "specifiers": [
-            "isEditTransitionValid"
+            "isValidCategoryTransitionByKind",
+            "appliedSideEffectByKind"
           ]
         },
         {
@@ -19075,7 +19538,7 @@
         "getStatusDistribution",
         "getValidTransitions"
       ],
-      "totalLines": 1353,
+      "totalLines": 1392,
       "hasStructuralAnalysis": true
     },
     "src/actions/jobContact.actions.ts": {
@@ -19322,6 +19785,155 @@
         "deleteJobSourceById"
       ],
       "totalLines": 101,
+      "hasStructuralAnalysis": true
+    },
+    "src/actions/jobStatus.actions.ts": {
+      "filePath": "src/actions/jobStatus.actions.ts",
+      "contentHash": "00b2e79aca5816bf9a9ad69aa0d6acf19ff90cec24a39bfa85f284db0533546a",
+      "functions": [
+        {
+          "name": "toStatusView",
+          "params": [
+            "row"
+          ],
+          "returnType": "JobStatusView",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "slugifyStatusValue",
+          "params": [
+            "label",
+            "existing"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "getJobStatuses",
+          "params": [],
+          "returnType": "Promise<ActionResult<JobStatusView[]>>",
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "getJobStatusCategories",
+          "params": [],
+          "returnType": "Promise<ActionResult<JobStatusCategoryView[]>>",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "createJobStatus",
+          "params": [
+            "categoryId",
+            "label"
+          ],
+          "returnType": "Promise<ActionResult<{ id: string }>>",
+          "exported": true,
+          "lineCount": 41
+        },
+        {
+          "name": "renameJobStatus",
+          "params": [
+            "statusId",
+            "newLabel",
+            "newCategoryId"
+          ],
+          "returnType": "Promise<ActionResult>",
+          "exported": true,
+          "lineCount": 50
+        },
+        {
+          "name": "reorderJobStatus",
+          "params": [
+            "statusId",
+            "newSortOrder"
+          ],
+          "returnType": "Promise<ActionResult>",
+          "exported": true,
+          "lineCount": 27
+        },
+        {
+          "name": "reorderJobStatuses",
+          "params": [
+            "orderedIds"
+          ],
+          "returnType": "Promise<ActionResult>",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "setDefaultJobStatus",
+          "params": [
+            "statusId"
+          ],
+          "returnType": "Promise<ActionResult>",
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "deleteJobStatus",
+          "params": [
+            "statusId",
+            "reassignToId"
+          ],
+          "returnType": "Promise<ActionResult>",
+          "exported": true,
+          "lineCount": 63
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/db",
+          "specifiers": [
+            "prisma"
+          ]
+        },
+        {
+          "source": "@/lib/utils",
+          "specifiers": [
+            "handleError"
+          ]
+        },
+        {
+          "source": "@/models/actionResult",
+          "specifiers": [
+            "ActionResult"
+          ]
+        },
+        {
+          "source": "@/utils/user.utils",
+          "specifiers": [
+            "getCurrentUser"
+          ]
+        },
+        {
+          "source": "next/cache",
+          "specifiers": [
+            "revalidatePath"
+          ]
+        },
+        {
+          "source": "@/lib/crm/seed-job-statuses",
+          "specifiers": [
+            "seedJobStatusesForUser"
+          ]
+        }
+      ],
+      "exports": [
+        "getJobStatuses",
+        "getJobStatusCategories",
+        "createJobStatus",
+        "renameJobStatus",
+        "reorderJobStatus",
+        "reorderJobStatuses",
+        "setDefaultJobStatus",
+        "deleteJobStatus"
+      ],
+      "totalLines": 398,
       "hasStructuralAnalysis": true
     },
     "src/actions/jobtitle.actions.ts": {
@@ -23433,7 +24045,7 @@
     },
     "src/app/api/v1/jobs/[id]/status/route.ts": {
       "filePath": "src/app/api/v1/jobs/[id]/status/route.ts",
-      "contentHash": "6ff1bc3a4907ce6bda6ba786a50df4525b24db311e3c4a5807ab3938cf9ef7fc",
+      "contentHash": "a886be533294d314596ec4b26ede3f85eeaa2b4063859ed3d5e36e020e7fe445",
       "functions": [],
       "classes": [],
       "imports": [
@@ -23470,10 +24082,10 @@
           ]
         },
         {
-          "source": "@/lib/crm/status-machine",
+          "source": "@/lib/crm/status-transition",
           "specifiers": [
-            "isValidTransition",
-            "computeTransitionSideEffects"
+            "isValidCategoryTransitionByKind",
+            "appliedSideEffectByKind"
           ]
         },
         {
@@ -23489,12 +24101,12 @@
         "OPTIONS",
         "POST"
       ],
-      "totalLines": 125,
+      "totalLines": 128,
       "hasStructuralAnalysis": true
     },
     "src/app/api/v1/jobs/route.ts": {
       "filePath": "src/app/api/v1/jobs/route.ts",
-      "contentHash": "760b05265edeaeaa0ad16a80628df3db01a47ecb43f0d6c1756601ca96416f62",
+      "contentHash": "77bc79734c279c5c65a7e9d2ce79aa9e7d837b4355740b1484cacf3dff4ef20e",
       "functions": [],
       "classes": [],
       "imports": [
@@ -25100,13 +25712,13 @@
     },
     "src/app/dashboard/settings/page.tsx": {
       "filePath": "src/app/dashboard/settings/page.tsx",
-      "contentHash": "b4769dcea05efec2196ba82539d4c8bba649211328cb1750999c18785edd1e09",
+      "contentHash": "f05f93b59a2bf74156493495f0d105b786ba6693fee404413c13cd24027b77b6",
       "functions": [
         {
           "name": "Settings",
           "params": [],
           "exported": false,
-          "lineCount": 38
+          "lineCount": 49
         }
       ],
       "classes": [],
@@ -25114,7 +25726,14 @@
         {
           "source": "react",
           "specifiers": [
+            "useEffect",
             "useState"
+          ]
+        },
+        {
+          "source": "next/navigation",
+          "specifiers": [
+            "useSearchParams"
           ]
         },
         {
@@ -25139,6 +25758,12 @@
           "source": "@/components/settings/JobFormSettings",
           "specifiers": [
             "JobFormSettings"
+          ]
+        },
+        {
+          "source": "@/components/settings/JobStatusSettings",
+          "specifiers": [
+            "JobStatusSettings"
           ]
         },
         {
@@ -25240,7 +25865,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 65,
+      "totalLines": 84,
       "hasStructuralAnalysis": true
     },
     "src/app/dashboard/staging/page.tsx": {
@@ -30239,16 +30864,16 @@
     },
     "src/components/crm/StatusHistoryTimeline.tsx": {
       "filePath": "src/components/crm/StatusHistoryTimeline.tsx",
-      "contentHash": "9abd8ca3032a9f4460016bda0508c6c46d36501f7ee231ad2d13689ab2012b84",
+      "contentHash": "7aa7dffe24bc67b175ec0cd89d67413dae3ae237e53081bafc0e27552bf372b1",
       "functions": [
         {
-          "name": "getStatusColor",
+          "name": "stageBadgeStyle",
           "params": [
-            "value"
+            "colour"
           ],
-          "returnType": "string",
+          "returnType": "React.CSSProperties",
           "exported": false,
-          "lineCount": 24
+          "lineCount": 8
         },
         {
           "name": "TimelineSkeleton",
@@ -30264,7 +30889,7 @@
             "{ jobId }"
           ],
           "exported": true,
-          "lineCount": 195
+          "lineCount": 200
         }
       ],
       "classes": [],
@@ -30339,12 +30964,18 @@
           "specifiers": [
             "cn"
           ]
+        },
+        {
+          "source": "@/lib/crm/stage-colors",
+          "specifiers": [
+            "stageColorVar"
+          ]
         }
       ],
       "exports": [
         "StatusHistoryTimeline"
       ],
-      "totalLines": 277,
+      "totalLines": 271,
       "hasStructuralAnalysis": true
     },
     "src/components/dashboard/ActivityCalendar.tsx": {
@@ -30651,7 +31282,7 @@
     },
     "src/components/dashboard/StatusFunnelWidget.tsx": {
       "filePath": "src/components/dashboard/StatusFunnelWidget.tsx",
-      "contentHash": "d374c96d8058154f6632ba32277be967288b9c6c1f43180b0f0e66126e42c8d2",
+      "contentHash": "09c4c3f0efa2415f4e21f143d1b7e041b2e5a24473a60811bf88d7b65436552a",
       "functions": [
         {
           "name": "conversionPercent",
@@ -30676,7 +31307,7 @@
           "name": "StatusFunnelWidget",
           "params": [],
           "exported": true,
-          "lineCount": 160
+          "lineCount": 159
         },
         {
           "name": "SkeletonBars",
@@ -30759,12 +31390,25 @@
           "specifiers": [
             "cn"
           ]
+        },
+        {
+          "source": "@/lib/crm/status-categories",
+          "specifiers": [
+            "CATEGORY_SEED",
+            "StatusCategoryKind"
+          ]
+        },
+        {
+          "source": "@/lib/crm/stage-colors",
+          "specifiers": [
+            "stageColorVar"
+          ]
         }
       ],
       "exports": [
         "StatusFunnelWidget"
       ],
-      "totalLines": 312,
+      "totalLines": 290,
       "hasStructuralAnalysis": true
     },
     "src/components/dashboard/TopActivitiesCard.tsx": {
@@ -31475,7 +32119,7 @@
     },
     "src/components/kanban/KanbanBoard.tsx": {
       "filePath": "src/components/kanban/KanbanBoard.tsx",
-      "contentHash": "46b72838d8d0b902aa71b693f5ea7b759926a323f5529dbaeefa6d701e650b43",
+      "contentHash": "6beb28f8e6d5653d11b954c60192abd39325ed89f6f18ec364eb51968f5e7eb8",
       "functions": [
         {
           "name": "KanbanBoard",
@@ -31483,7 +32127,7 @@
             "{ jobs, statuses, onRefresh, loading, onAddJob }"
           ],
           "exported": true,
-          "lineCount": 542
+          "lineCount": 554
         }
       ],
       "classes": [],
@@ -31573,9 +32217,13 @@
           "source": "@/hooks/useKanbanState",
           "specifiers": [
             "useKanbanState",
-            "isValidTransition",
-            "STATUS_ORDER",
             "computeSortOrder"
+          ]
+        },
+        {
+          "source": "@/lib/crm/status-transition",
+          "specifiers": [
+            "isValidStatusTransition"
           ]
         },
         {
@@ -31612,12 +32260,12 @@
       "exports": [
         "KanbanBoard"
       ],
-      "totalLines": 594,
+      "totalLines": 602,
       "hasStructuralAnalysis": true
     },
     "src/components/kanban/KanbanCard.tsx": {
       "filePath": "src/components/kanban/KanbanCard.tsx",
-      "contentHash": "7f260a90cfed51616c8f2039bb9fdb4899633deadbed385dcd73654ce01f3cd7",
+      "contentHash": "894ab4009416280ceffecb454cd9dc2e8e792eec1b5b9b5b8e8713c0418c7638",
       "functions": [
         {
           "name": "getToday",
@@ -31679,21 +32327,21 @@
           ]
         },
         {
-          "source": "@/hooks/useKanbanState",
+          "source": "@/lib/crm/stage-colors",
           "specifiers": [
-            "STATUS_COLORS"
+            "stageColorVar"
           ]
         }
       ],
       "exports": [
         "KanbanCard"
       ],
-      "totalLines": 186,
+      "totalLines": 192,
       "hasStructuralAnalysis": true
     },
     "src/components/kanban/KanbanColumn.tsx": {
       "filePath": "src/components/kanban/KanbanColumn.tsx",
-      "contentHash": "4a6759c116b5992410b3ba03fa1a659b0b366cefdbfb42cf511e2da8082f9210",
+      "contentHash": "b2cdac2e0d9a9400afb95cf37a394ad4387b3fa7a39658332e584ae10ae120a8",
       "functions": [],
       "classes": [],
       "imports": [
@@ -31747,9 +32395,9 @@
           ]
         },
         {
-          "source": "@/models/job.model",
+          "source": "@/lib/crm/stage-colors",
           "specifiers": [
-            "JobStatus"
+            "stageColorVar"
           ]
         },
         {
@@ -31762,7 +32410,7 @@
       "exports": [
         "KanbanColumn"
       ],
-      "totalLines": 125,
+      "totalLines": 135,
       "hasStructuralAnalysis": true
     },
     "src/components/kanban/KanbanEmptyState.tsx": {
@@ -31857,7 +32505,7 @@
     },
     "src/components/kanban/StatusTransitionDialog.tsx": {
       "filePath": "src/components/kanban/StatusTransitionDialog.tsx",
-      "contentHash": "67e394f3951ebdd4935b5cacf1654919d427d69428a2afe3ed7720021ca283ab",
+      "contentHash": "c989bcd9aacd51afde2aa21dda5c33c7bd57cf83ccd38d43cc51cdbe20a0d9c8",
       "functions": [
         {
           "name": "StatusTransitionDialog",
@@ -31865,7 +32513,7 @@
             "{\n  open,\n  job,\n  fromStatus,\n  toStatus,\n  onConfirm,\n  onCancel,\n  isPending,\n}"
           ],
           "exported": true,
-          "lineCount": 100
+          "lineCount": 114
         }
       ],
       "classes": [],
@@ -31927,16 +32575,16 @@
           ]
         },
         {
-          "source": "@/hooks/useKanbanState",
+          "source": "@/lib/crm/stage-colors",
           "specifiers": [
-            "STATUS_COLORS"
+            "stageColorVar"
           ]
         }
       ],
       "exports": [
         "StatusTransitionDialog"
       ],
-      "totalLines": 130,
+      "totalLines": 144,
       "hasStructuralAnalysis": true
     },
     "src/components/layout/NotificationBell.tsx": {
@@ -32263,7 +32911,7 @@
     },
     "src/components/myjobs/AddJob.tsx": {
       "filePath": "src/components/myjobs/AddJob.tsx",
-      "contentHash": "23740e80977b0ebfc3e32bc4958b57f0404e317f5bcf838cf63b36489f0d491f",
+      "contentHash": "66314962f4ccfd911313637e8ea239614af49d1b02898f06b4b649a1697789f3",
       "functions": [
         {
           "name": "mergeConnectorSources",
@@ -32280,7 +32928,7 @@
             "{\n  jobStatuses,\n  companies,\n  jobTitles,\n  locations,\n  jobSources,\n  tags,\n  editJob,\n  resetEditJob,\n}"
           ],
           "exported": true,
-          "lineCount": 812
+          "lineCount": 805
         }
       ],
       "classes": [],
@@ -32468,6 +33116,18 @@
           ]
         },
         {
+          "source": "../ui/badge",
+          "specifiers": [
+            "Badge"
+          ]
+        },
+        {
+          "source": "./StatusStageCombobox",
+          "specifiers": [
+            "StatusStageCombobox"
+          ]
+        },
+        {
           "source": "next/navigation",
           "specifiers": [
             "redirect"
@@ -32565,7 +33225,7 @@
       "exports": [
         "AddJob"
       ],
-      "totalLines": 921,
+      "totalLines": 916,
       "hasStructuralAnalysis": true
     },
     "src/components/myjobs/JobContactPicker.tsx": {
@@ -32661,7 +33321,7 @@
     },
     "src/components/myjobs/JobDetails.tsx": {
       "filePath": "src/components/myjobs/JobDetails.tsx",
-      "contentHash": "e6870c0015e5324d1393571a55f28e6858535dfbeaafd7168703050b523d0484",
+      "contentHash": "7a1eb9b2782b608a3c896a7cc48f539022699a9df789448e1a444a4cc3bac3ad",
       "functions": [
         {
           "name": "JobDetails",
@@ -32914,7 +33574,7 @@
     },
     "src/components/myjobs/JobsContainer.tsx": {
       "filePath": "src/components/myjobs/JobsContainer.tsx",
-      "contentHash": "919a7d325c6cb14828353e23714fcca04fec60712e311326595e846262d3e045",
+      "contentHash": "4151da59e30f0e1e1d668c1044dca91f37d7519f72accb617eeb5b7090d13ea7",
       "functions": [
         {
           "name": "kanbanBoardToJobResponses",
@@ -32931,7 +33591,7 @@
             "{\n  statuses,\n  companies,\n  titles,\n  locations,\n  sources,\n  tags,\n}"
           ],
           "exported": false,
-          "lineCount": 365
+          "lineCount": 378
         }
       ],
       "classes": [],
@@ -32978,7 +33638,14 @@
           "specifiers": [
             "File",
             "ListFilter",
-            "Search"
+            "Search",
+            "SlidersHorizontal"
+          ]
+        },
+        {
+          "source": "next/link",
+          "specifiers": [
+            "Link"
           ]
         },
         {
@@ -33111,12 +33778,12 @@
         }
       ],
       "exports": [],
-      "totalLines": 482,
+      "totalLines": 496,
       "hasStructuralAnalysis": true
     },
     "src/components/myjobs/MyJobsTable.tsx": {
       "filePath": "src/components/myjobs/MyJobsTable.tsx",
-      "contentHash": "0edacf692ac351455855dcb40efa5182f816043fa3a65f4969b6b35227f97c5b",
+      "contentHash": "88bcc5eacf2414109b8e78fb36a5f0cc9a90d0dc2b7acbec437d6c97c136eb38",
       "functions": [
         {
           "name": "MyJobsTable",
@@ -33622,6 +34289,97 @@
         "NotesSection"
       ],
       "totalLines": 139,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/myjobs/StatusStageCombobox.tsx": {
+      "filePath": "src/components/myjobs/StatusStageCombobox.tsx",
+      "contentHash": "16f7a9ae4a023a03ddd1bfc3fe18df0466ea27fb04c9f68b67e00b64ed788fdf",
+      "functions": [
+        {
+          "name": "StatusStageCombobox",
+          "params": [
+            "{\n  options,\n  value,\n  onChange,\n  disabled,\n}"
+          ],
+          "exported": true,
+          "lineCount": 139
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useMemo",
+            "useState"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Check",
+            "ChevronsUpDown"
+          ]
+        },
+        {
+          "source": "@/lib/utils",
+          "specifiers": [
+            "cn"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/components/ui/button",
+          "specifiers": [
+            "Button"
+          ]
+        },
+        {
+          "source": "@/components/ui/command",
+          "specifiers": [
+            "Command",
+            "CommandEmpty",
+            "CommandGroup",
+            "CommandInput",
+            "CommandItem",
+            "CommandList"
+          ]
+        },
+        {
+          "source": "@/components/ui/popover",
+          "specifiers": [
+            "Popover",
+            "PopoverContent",
+            "PopoverTrigger"
+          ]
+        },
+        {
+          "source": "@/components/ui/badge",
+          "specifiers": [
+            "Badge"
+          ]
+        },
+        {
+          "source": "@/models/job.model",
+          "specifiers": [
+            "JobStatus"
+          ]
+        },
+        {
+          "source": "@/lib/crm/stage-colors",
+          "specifiers": [
+            "stageColorVar"
+          ]
+        }
+      ],
+      "exports": [
+        "StatusStageCombobox"
+      ],
+      "totalLines": 191,
       "hasStructuralAnalysis": true
     },
     "src/components/myjobs/TagInput.tsx": {
@@ -37814,6 +38572,207 @@
       "totalLines": 85,
       "hasStructuralAnalysis": true
     },
+    "src/components/settings/JobStatusSettings.tsx": {
+      "filePath": "src/components/settings/JobStatusSettings.tsx",
+      "contentHash": "af7ebc1ab354a665f32a9bb5714a738e5cccf271f799ceadf60d191267a08bb6",
+      "functions": [
+        {
+          "name": "StageDot",
+          "params": [
+            "{ colour }"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "SortableStatusRow",
+          "params": [
+            "{\n  status,\n  index,\n  count,\n  totalStatuses,\n  onMove,\n  onSetDefault,\n  onEdit,\n  onDelete,\n}"
+          ],
+          "exported": false,
+          "lineCount": 141
+        },
+        {
+          "name": "JobStatusSettings",
+          "params": [],
+          "exported": true,
+          "lineCount": 291
+        },
+        {
+          "name": "EditStatusDialog",
+          "params": [
+            "{ status, categories, stageLabel, onClose, onSaved }"
+          ],
+          "exported": false,
+          "lineCount": 85
+        },
+        {
+          "name": "DeleteStatusDialog",
+          "params": [
+            "{ status, allStatuses, stageLabel, onClose, onDeleted }"
+          ],
+          "exported": false,
+          "lineCount": 86
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useEffect",
+            "useState",
+            "useCallback",
+            "useMemo"
+          ]
+        },
+        {
+          "source": "@dnd-kit/core",
+          "specifiers": [
+            "DndContext",
+            "closestCenter",
+            "KeyboardSensor",
+            "PointerSensor",
+            "useSensor",
+            "useSensors",
+            "DragEndEvent"
+          ]
+        },
+        {
+          "source": "@dnd-kit/sortable",
+          "specifiers": [
+            "SortableContext",
+            "sortableKeyboardCoordinates",
+            "useSortable",
+            "verticalListSortingStrategy"
+          ]
+        },
+        {
+          "source": "@dnd-kit/utilities",
+          "specifiers": [
+            "CSS"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "ChevronDown",
+            "ChevronUp",
+            "GripVertical",
+            "ListChecks",
+            "Loader2",
+            "Pencil",
+            "Plus",
+            "Star",
+            "Trash2"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "../ui/button",
+          "specifiers": [
+            "Button"
+          ]
+        },
+        {
+          "source": "../ui/input",
+          "specifiers": [
+            "Input"
+          ]
+        },
+        {
+          "source": "../ui/label",
+          "specifiers": [
+            "Label"
+          ]
+        },
+        {
+          "source": "../ui/badge",
+          "specifiers": [
+            "Badge"
+          ]
+        },
+        {
+          "source": "../ui/select",
+          "specifiers": [
+            "Select",
+            "SelectContent",
+            "SelectItem",
+            "SelectTrigger",
+            "SelectValue"
+          ]
+        },
+        {
+          "source": "../ui/dialog",
+          "specifiers": [
+            "Dialog",
+            "DialogContent",
+            "DialogDescription",
+            "DialogFooter",
+            "DialogHeader",
+            "DialogTitle"
+          ]
+        },
+        {
+          "source": "../ui/alert-dialog",
+          "specifiers": [
+            "AlertDialog",
+            "AlertDialogAction",
+            "AlertDialogCancel",
+            "AlertDialogContent",
+            "AlertDialogDescription",
+            "AlertDialogFooter",
+            "AlertDialogHeader",
+            "AlertDialogTitle"
+          ]
+        },
+        {
+          "source": "../ui/tooltip",
+          "specifiers": [
+            "Tooltip",
+            "TooltipContent",
+            "TooltipProvider",
+            "TooltipTrigger"
+          ]
+        },
+        {
+          "source": "../ui/use-toast",
+          "specifiers": [
+            "toast"
+          ]
+        },
+        {
+          "source": "@/actions/jobStatus.actions",
+          "specifiers": [
+            "getJobStatuses",
+            "getJobStatusCategories",
+            "createJobStatus",
+            "renameJobStatus",
+            "reorderJobStatuses",
+            "setDefaultJobStatus",
+            "deleteJobStatus",
+            "JobStatusView",
+            "JobStatusCategoryView"
+          ]
+        },
+        {
+          "source": "@/lib/crm/stage-colors",
+          "specifiers": [
+            "stageColorVar"
+          ]
+        }
+      ],
+      "exports": [
+        "JobStatusSettings"
+      ],
+      "totalLines": 743,
+      "hasStructuralAnalysis": true
+    },
     "src/components/settings/LogoAssetSettings.tsx": {
       "filePath": "src/components/settings/LogoAssetSettings.tsx",
       "contentHash": "767f90842794acda0c3f9d57fce9a29b810a35a27e73391acd54915ff9d6987f",
@@ -38355,7 +39314,7 @@
     },
     "src/components/settings/SettingsSidebar.tsx": {
       "filePath": "src/components/settings/SettingsSidebar.tsx",
-      "contentHash": "63675d859e626d20cc0e8558d7d57c40c6eaebad0cfe03975f06cc5af516f8d6",
+      "contentHash": "551bffa3793a1ad44e6955637d120e47d507533dc2259db66265f796d0bf75ba",
       "functions": [
         {
           "name": "SettingsSidebar",
@@ -38391,6 +39350,7 @@
             "Globe",
             "HardDrive",
             "Key",
+            "ListChecks",
             "Mail",
             "Palette",
             "ShieldCheck",
@@ -38439,7 +39399,7 @@
       "exports": [
         "SettingsSidebar"
       ],
-      "totalLines": 116,
+      "totalLines": 118,
       "hasStructuralAnalysis": true
     },
     "src/components/settings/SmtpSettings.tsx": {
@@ -43329,7 +44289,7 @@
     },
     "src/hooks/useKanbanState.ts": {
       "filePath": "src/hooks/useKanbanState.ts",
-      "contentHash": "8dcd624f60c3d4e768b9c36c0168e357319405049248943509c3df0e82a10f44",
+      "contentHash": "233de4effcefc38c2da5f91c00482f379193dca8944099d2afb62a00ab9d58dc",
       "functions": [
         {
           "name": "sortByKanbanOrder",
@@ -43369,9 +44329,9 @@
           "lineCount": 4
         },
         {
-          "name": "getPersistedCollapsed",
+          "name": "getStoredCollapsed",
           "params": [],
-          "returnType": "Set<string>",
+          "returnType": "Set<string> | null",
           "exported": false,
           "lineCount": 13
         },
@@ -43391,7 +44351,7 @@
             "statuses"
           ],
           "exported": true,
-          "lineCount": 158
+          "lineCount": 184
         }
       ],
       "classes": [],
@@ -43414,19 +44374,14 @@
           ]
         },
         {
-          "source": "@/lib/crm/status-machine",
+          "source": "@/lib/crm/status-transition",
           "specifiers": [
-            "isValidTransition",
-            "STATUS_ORDER",
-            "COLLAPSED_BY_DEFAULT"
+            "isValidStatusTransition"
           ]
         }
       ],
       "exports": [
-        "isValidTransition",
-        "STATUS_ORDER",
         "computeSortOrder",
-        "STATUS_COLORS",
         "getPersistedViewMode",
         "persistViewMode",
         "useKanbanState"
@@ -43567,7 +44522,7 @@
     },
     "src/i18n/dictionaries.ts": {
       "filePath": "src/i18n/dictionaries.ts",
-      "contentHash": "10b91a70cbdd2f87cbc170ead3a9b6384e62fd75df3127fd0480c47b0c75db74",
+      "contentHash": "70e7bfc673d2f8c279e521380c6271ebaf33663d20cfead65bcc94f89dffaf5e",
       "functions": [
         {
           "name": "mergeDictionaries",
@@ -43736,13 +44691,19 @@
           "specifiers": [
             "forms"
           ]
+        },
+        {
+          "source": "./dictionaries/jobStatus",
+          "specifiers": [
+            "jobStatus"
+          ]
         }
       ],
       "exports": [
         "getDictionary",
         "t"
       ],
-      "totalLines": 848,
+      "totalLines": 866,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/activities.ts": {
@@ -43899,6 +44860,18 @@
         "jobs"
       ],
       "totalLines": 803,
+      "hasStructuralAnalysis": true
+    },
+    "src/i18n/dictionaries/jobStatus.ts": {
+      "filePath": "src/i18n/dictionaries/jobStatus.ts",
+      "contentHash": "d76c335cf288c497970cecb29bd305f321f4aee008f402c93e7b849c8ec43d6a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "jobStatus"
+      ],
+      "totalLines": 280,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/logoAsset.ts": {
@@ -44669,7 +45642,7 @@
     },
     "src/lib/api/helpers.ts": {
       "filePath": "src/lib/api/helpers.ts",
-      "contentHash": "8d7c62d1ea6079e481190a3916ad17954124158e837c884b7e85f993502bfeec",
+      "contentHash": "3b0891b7b5075df101b858271df1871ba9e4a70e8ed7b5944b734d833eb0ff3b",
       "functions": [
         {
           "name": "findOrCreate",
@@ -44685,10 +45658,11 @@
         {
           "name": "resolveStatus",
           "params": [
-            "statusValue"
+            "statusValue",
+            "userId"
           ],
           "exported": true,
-          "lineCount": 6
+          "lineCount": 12
         }
       ],
       "classes": [],
@@ -44713,7 +45687,7 @@
         "JOB_DETAIL_SELECT",
         "JOB_LIST_SELECT"
       ],
-      "totalLines": 129,
+      "totalLines": 138,
       "hasStructuralAnalysis": true
     },
     "src/lib/api/last-used-throttle.ts": {
@@ -48334,7 +49308,7 @@
     },
     "src/lib/connector/job-discovery/mapper.ts": {
       "filePath": "src/lib/connector/job-discovery/mapper.ts",
-      "contentHash": "2a3c8b4dc963f8a7726feb2495a8f2046d981c07a2c2836ae61c4c6b77879042",
+      "contentHash": "99169c5d6c61c8145ec5a083b7875a635c3d03aa71070f9f402c0eb8e9acb943",
       "functions": [
         {
           "name": "mapDiscoveredVacancyToJobRecord",
@@ -49160,7 +50134,7 @@
     },
     "src/lib/connector/job-discovery/promoter.ts": {
       "filePath": "src/lib/connector/job-discovery/promoter.ts",
-      "contentHash": "221550ae0689c064ebcba8929547d3b50ecfb9c9213ca6e1ed26a48a85d58744",
+      "contentHash": "417ba0be1c1f89c144589484dc293da3c23d3568eda2ddd07bd99aef332c36a6",
       "functions": [
         {
           "name": "promoteStagedVacancy",
@@ -49224,10 +50198,12 @@
         },
         {
           "name": "getDefaultJobStatus",
-          "params": [],
+          "params": [
+            "userId"
+          ],
           "returnType": "Promise<{ id: string; value: string }>",
           "exported": false,
-          "lineCount": 22
+          "lineCount": 5
         }
       ],
       "classes": [],
@@ -49281,17 +50257,23 @@
           "specifiers": [
             "SalaryPeriod"
           ]
+        },
+        {
+          "source": "@/lib/crm/seed-job-statuses",
+          "specifiers": [
+            "getDefaultJobStatusForUser"
+          ]
         }
       ],
       "exports": [
         "promoteStagedVacancy"
       ],
-      "totalLines": 443,
+      "totalLines": 427,
       "hasStructuralAnalysis": true
     },
     "src/lib/connector/job-discovery/reference-data.ts": {
       "filePath": "src/lib/connector/job-discovery/reference-data.ts",
-      "contentHash": "abb4104ac61f472522093be0f04c4af23be7da6aaf7af13c061388a701d90cbf",
+      "contentHash": "dca18c1b21744318d273c5a788bd738f3f8abd33ce30dd6bbf86e33c6851f4bf",
       "functions": [
         {
           "name": "findOrCreateJobTitle",
@@ -49336,10 +50318,12 @@
         },
         {
           "name": "getDefaultJobStatus",
-          "params": [],
+          "params": [
+            "userId"
+          ],
           "returnType": "Promise<string>",
           "exported": true,
-          "lineCount": 16
+          "lineCount": 4
         }
       ],
       "classes": [],
@@ -49357,6 +50341,12 @@
             "extractKeywords",
             "extractCityName"
           ]
+        },
+        {
+          "source": "@/lib/crm/seed-job-statuses",
+          "specifiers": [
+            "getDefaultJobStatusForUser"
+          ]
         }
       ],
       "exports": [
@@ -49366,7 +50356,7 @@
         "getOrCreateJobSource",
         "getDefaultJobStatus"
       ],
-      "totalLines": 174,
+      "totalLines": 168,
       "hasStructuralAnalysis": true
     },
     "src/lib/connector/job-discovery/registry.ts": {
@@ -51620,6 +52610,154 @@
       "totalLines": 96,
       "hasStructuralAnalysis": true
     },
+    "src/lib/crm/seed-job-statuses.ts": {
+      "filePath": "src/lib/crm/seed-job-statuses.ts",
+      "contentHash": "db09260e11489f804eeb42b5c65c074a45fddb98f0d0b685080f3c69e6c2a5e3",
+      "functions": [
+        {
+          "name": "seedJobStatusesForUser",
+          "params": [
+            "db",
+            "userId"
+          ],
+          "returnType": "Promise<void>",
+          "exported": true,
+          "lineCount": 38
+        },
+        {
+          "name": "getDefaultJobStatusForUser",
+          "params": [
+            "db",
+            "userId"
+          ],
+          "returnType": "Promise<{ id: string; value: string }>",
+          "exported": true,
+          "lineCount": 27
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@prisma/client",
+          "specifiers": [
+            "PrismaClient",
+            "Prisma"
+          ]
+        },
+        {
+          "source": "./status-categories",
+          "specifiers": [
+            "CATEGORY_SEED",
+            "DEFAULT_STATUS_SEED",
+            "STATUS_CATEGORY_KINDS"
+          ]
+        }
+      ],
+      "exports": [
+        "seedJobStatusesForUser",
+        "getDefaultJobStatusForUser"
+      ],
+      "totalLines": 98,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/crm/stage-colors.ts": {
+      "filePath": "src/lib/crm/stage-colors.ts",
+      "contentHash": "06cbb7bf8ec8d2d9ab38e626e36dc06f73a82ea65005abd681ae7730ac6947dd",
+      "functions": [
+        {
+          "name": "resolveStageColor",
+          "params": [
+            "colourName"
+          ],
+          "returnType": "StageColorToken",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "stageColorVar",
+          "params": [
+            "colourName"
+          ],
+          "returnType": "CSSProperties & Record<\"--stage-color\", string>",
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "CSSProperties"
+          ]
+        }
+      ],
+      "exports": [
+        "STAGE_COLOR_TOKENS",
+        "resolveStageColor",
+        "stageColorVar"
+      ],
+      "totalLines": 61,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/crm/status-categories.ts": {
+      "filePath": "src/lib/crm/status-categories.ts",
+      "contentHash": "cb95f3c5faa95bb6f40fb3468ba406c5ad48bbc5718cf4a1198cd90fe9d7dbda",
+      "functions": [
+        {
+          "name": "isStatusCategoryKind",
+          "params": [
+            "value"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "categorySemanticsForKind",
+          "params": [
+            "kind"
+          ],
+          "returnType": "CategorySemantics",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "isValidCategoryTransition",
+          "params": [
+            "from",
+            "to",
+            "opts"
+          ],
+          "returnType": "boolean",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "computeAppliedSideEffect",
+          "params": [
+            "toCategory",
+            "currentAppliedDate"
+          ],
+          "returnType": "AppliedSideEffect",
+          "exported": true,
+          "lineCount": 10
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "STATUS_CATEGORY_KINDS",
+        "isStatusCategoryKind",
+        "CATEGORY_SEED",
+        "categorySemanticsForKind",
+        "DEFAULT_STATUS_SEED",
+        "LEGACY_VALUE_TO_SEED_VALUE",
+        "isValidCategoryTransition",
+        "computeAppliedSideEffect"
+      ],
+      "totalLines": 204,
+      "hasStructuralAnalysis": true
+    },
     "src/lib/crm/status-labels.ts": {
       "filePath": "src/lib/crm/status-labels.ts",
       "contentHash": "d65017e9e918582b56b0ee902ea79f6636bd57c4ef2d7d3e93c8ad99118a605e",
@@ -51650,82 +52788,66 @@
       "totalLines": 15,
       "hasStructuralAnalysis": true
     },
-    "src/lib/crm/status-machine.ts": {
-      "filePath": "src/lib/crm/status-machine.ts",
-      "contentHash": "e2c9161a41d080cd60c4b9af938faaa35f09f5a2e4b115a2b6bb83e2ade4d9f0",
+    "src/lib/crm/status-transition.ts": {
+      "filePath": "src/lib/crm/status-transition.ts",
+      "contentHash": "2bb8f1a77291a311727a1a5f4c2b7bf4810c8bff787ded6a2e787f7ac91bd8eb",
       "functions": [
         {
-          "name": "isValidTransition",
+          "name": "isValidCategoryTransitionByKind",
           "params": [
-            "fromValue",
-            "toValue"
+            "fromKind",
+            "toKind"
           ],
           "returnType": "boolean",
           "exported": true,
-          "lineCount": 9
+          "lineCount": 7
         },
         {
-          "name": "getValidTargets",
+          "name": "appliedSideEffectByKind",
           "params": [
-            "fromValue"
-          ],
-          "returnType": "string[]",
-          "exported": true,
-          "lineCount": 3
-        },
-        {
-          "name": "computeTransitionSideEffects",
-          "params": [
-            "newStatusValue",
+            "toKind",
             "currentAppliedDate"
           ],
-          "returnType": "Record<string, unknown>",
+          "returnType": "AppliedSideEffect",
           "exported": true,
-          "lineCount": 20
-        }
-      ],
-      "classes": [],
-      "imports": [],
-      "exports": [
-        "VALID_TRANSITIONS",
-        "isValidTransition",
-        "getValidTargets",
-        "STATUS_COLOR_NAMES",
-        "STATUS_ORDER",
-        "COLLAPSED_BY_DEFAULT",
-        "computeTransitionSideEffects"
-      ],
-      "totalLines": 148,
-      "hasStructuralAnalysis": true
-    },
-    "src/lib/crm/validate-edit-transition.ts": {
-      "filePath": "src/lib/crm/validate-edit-transition.ts",
-      "contentHash": "b2175ff16f30829f1dc61774fa2f6dd4159081cd341940674ebbb2c91b4f973b",
-      "functions": [
+          "lineCount": 7
+        },
         {
-          "name": "isEditTransitionValid",
+          "name": "isValidStatusTransition",
           "params": [
-            "fromValue",
-            "toValue"
+            "from",
+            "to"
           ],
           "returnType": "boolean",
           "exported": true,
-          "lineCount": 8
+          "lineCount": 7
         }
       ],
       "classes": [],
       "imports": [
         {
-          "source": "./status-machine",
+          "source": "./status-categories",
           "specifiers": [
-            "VALID_TRANSITIONS"
+            "categorySemanticsForKind",
+            "isStatusCategoryKind",
+            "isValidCategoryTransition",
+            "computeAppliedSideEffect",
+            "AppliedSideEffect"
+          ]
+        },
+        {
+          "source": "@/models/job.model",
+          "specifiers": [
+            "JobStatus"
           ]
         }
       ],
       "exports": [
-        "isEditTransitionValid"
+        "isValidCategoryTransitionByKind",
+        "appliedSideEffectByKind",
+        "isValidStatusTransition"
       ],
-      "totalLines": 25,
+      "totalLines": 64,
       "hasStructuralAnalysis": true
     },
     "src/lib/db.ts": {
@@ -56852,7 +57974,7 @@
     },
     "src/models/job.model.ts": {
       "filePath": "src/models/job.model.ts",
-      "contentHash": "d0eda286f08766ce916941b6849e45c6a4e2741663cfb5ba9efe189aa7e6dc0b",
+      "contentHash": "c24f3777101d6d44e9663f994ddd915c8534c2c304ba76c276be47f13abc0e21",
       "functions": [
         {
           "name": "isValidRelationshipType",
@@ -56883,7 +58005,7 @@
         "RELATIONSHIP_TYPES",
         "isValidRelationshipType"
       ],
-      "totalLines": 166,
+      "totalLines": 187,
       "hasStructuralAnalysis": true
     },
     "src/models/note.model.ts": {
