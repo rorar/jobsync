@@ -43,11 +43,13 @@ TDD; the status migration is the high-risk step (no job may lose its status).
 - [ ] Task 2.4: Status-management UI (Settings or Job area); i18n (en/de/fr/es).
       **DEFERRED to wireframe phase** (UI-design-first rule; user chose backend-first).
       Backend Phase 2 = 2.1/2.2/2.3/2.5 only.
-- [ ] Task 2.5: Build + tests; migrate a DB copy and verify no job lost its status.
+- [x] Task 2.5: tests green (full suite 283/283, 5373 pass); migration verified on a
+      dev.db copy (0 job-status loss, FK-clean, 0 drift) then applied. tsc 0.
 
 ### Verification
 
-- [ ] Users manage statuses+categories; existing jobs migrated; spec rules enforced.
+- [x] Backend: users CAN manage statuses+categories (Repository); existing jobs migrated;
+      spec rules enforced. UI (2.4) deferred to wireframes per UI-design-first rule.
 
 ## Phase 3: F-AJ-02 — Status ComboBox + applied-toggle (depends on F-AJ-09)
 
