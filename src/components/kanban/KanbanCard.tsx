@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { CompanyLogo } from "@/components/ui/company-logo";
 import Link from "next/link";
 import type { JobResponse } from "@/models/job.model";
-import { STATUS_COLORS } from "@/hooks/useKanbanState";
+import { stageColorVar } from "@/lib/crm/stage-colors";
 
 // Module-level "today" — refreshed on each page load, not per-render
 const getToday = () => {
@@ -20,12 +20,13 @@ const getToday = () => {
 interface KanbanCardProps {
   job: JobResponse;
   statusValue: string;
+  /** Stage colour NAME of the card's column (CSS-var driven left border). */
+  colour?: string;
   isDragOverlay?: boolean;
 }
 
-export const KanbanCard = React.memo(function KanbanCard({ job, statusValue, isDragOverlay = false }: KanbanCardProps) {
+export const KanbanCard = React.memo(function KanbanCard({ job, statusValue, colour, isDragOverlay = false }: KanbanCardProps) {
   const { t, locale } = useTranslations();
-  const color = STATUS_COLORS[statusValue] ?? STATUS_COLORS.draft;
   const dateKey = new Date().toISOString().slice(0, 10);
   const today = useMemo(() => getToday(), [dateKey]);
 
@@ -54,10 +55,15 @@ export const KanbanCard = React.memo(function KanbanCard({ job, statusValue, isD
   return (
     <div
       ref={isDragOverlay ? undefined : setNodeRef}
-      style={{ opacity: isDragging ? 0.4 : 1 }}
+      style={{
+        opacity: isDragging ? 0.4 : 1,
+        ...stageColorVar(colour),
+        borderLeftColor: "var(--stage-color)",
+      }}
+      data-status-value={statusValue}
       className={`
         group relative rounded-lg border bg-card shadow-sm
-        border-l-[3px] ${color.border} ${color.darkBorder}
+        border-l-[3px]
         hover:bg-accent/50 transition-colors
         motion-reduce:transition-none
         ${isDragOverlay ? "shadow-lg scale-[1.02] rotate-[1deg] motion-reduce:scale-100 motion-reduce:rotate-0" : ""}

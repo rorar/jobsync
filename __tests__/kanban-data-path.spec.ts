@@ -49,22 +49,6 @@ jest.mock("@/lib/events", () => ({
   DomainEventTypes: { JobStatusChanged: "JobStatusChanged" },
 }));
 
-jest.mock("@/lib/crm/status-machine", () => ({
-  isValidTransition: jest.fn().mockReturnValue(true),
-  computeTransitionSideEffects: jest.fn().mockReturnValue({}),
-  getValidTargets: jest.fn().mockReturnValue([]),
-  STATUS_ORDER: [
-    "bookmarked",
-    "applied",
-    "interview",
-    "offer",
-    "accepted",
-    "rejected",
-    "archived",
-  ],
-  COLLAPSED_BY_DEFAULT: ["rejected", "archived"],
-}));
-
 describe("Kanban data path — DAU-7 characterization", () => {
   const mockUser = { id: "user-id" };
 

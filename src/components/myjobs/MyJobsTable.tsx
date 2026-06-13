@@ -131,14 +131,14 @@ function MyJobsTable({
                   {job.Location?.label}
                 </TableCell>
                 <TableCell>
-                  {now && job.dueDate && now > job.dueDate && job.Status?.value === "draft" ? (
+                  {now && job.dueDate && now > job.dueDate && job.Status?.category?.kind === "lead" ? (
                     <Badge className="bg-red-500">{t("jobs.expired")}</Badge>
                   ) : (
                     <Badge
                       className={cn(
                         "w-[70px] justify-center",
-                        job.Status?.value === "applied" && "bg-cyan-500",
-                        job.Status?.value === "interview" && "bg-green-500"
+                        job.Status?.category?.kind === "applied" && "bg-cyan-500",
+                        job.Status?.category?.kind === "interviewing" && "bg-green-500"
                       )}
                     >
                       {getStatusLabel(t, job.Status ?? null)}

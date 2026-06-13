@@ -88,17 +88,8 @@ jest.mock("@/lib/events", () => ({
   DomainEventTypes: { JobStatusChanged: "JobStatusChanged" },
 }));
 
-jest.mock("@/lib/crm/status-machine", () => ({
-  isValidTransition: jest.fn().mockReturnValue(true),
-  computeTransitionSideEffects: jest.fn().mockReturnValue({}),
-  getValidTargets: jest.fn().mockReturnValue([]),
-  STATUS_ORDER: ["bookmarked", "applied", "interview", "offer", "rejected"],
-  COLLAPSED_BY_DEFAULT: [],
-}));
-
-jest.mock("@/lib/crm/validate-edit-transition", () => ({
-  isEditTransitionValid: jest.fn().mockReturnValue(true),
-}));
+// Welle 4: transition validity is category-ordered (status-transition.ts); the
+// job mocks below carry each status' category.kind so the real helpers run.
 
 const auditMock = writeDataAuditLog as jest.Mock;
 

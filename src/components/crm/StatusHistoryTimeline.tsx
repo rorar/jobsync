@@ -17,6 +17,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { stageColorVar } from "@/lib/crm/stage-colors";
 
 /** Number of entries fetched per page */
 const PAGE_SIZE = 50;
@@ -25,30 +26,18 @@ interface StatusHistoryTimelineProps {
   jobId: string;
 }
 
-/** Map status value to a consistent color class for badges */
-function getStatusColor(value: string | null): string {
-  switch (value) {
-    case "applied":
-      return "bg-cyan-500 text-white";
-    case "interview":
-      return "bg-green-500 text-white";
-    case "offer":
-      return "bg-emerald-600 text-white";
-    case "accepted":
-      return "bg-green-700 text-white";
-    case "rejected":
-      return "bg-red-500 text-white";
-    case "expired":
-      return "bg-orange-500 text-white";
-    case "archived":
-      return "bg-gray-500 text-white";
-    case "bookmarked":
-      return "bg-yellow-500 text-white";
-    case "draft":
-      return "bg-slate-400 text-white";
-    default:
-      return "";
-  }
+/**
+ * Welle 4: badge colour derives from the status' STAGE colour (a CSS custom
+ * property), not a hardcoded value switch. Returns the inline style for a badge
+ * tinted with the stage colour.
+ */
+function stageBadgeStyle(colour: string | null): React.CSSProperties {
+  return {
+    ...stageColorVar(colour),
+    backgroundColor: "color-mix(in srgb, var(--stage-color) 16%, transparent)",
+    color: "var(--stage-color)",
+    borderColor: "var(--stage-color)",
+  };
 }
 
 /**
@@ -191,9 +180,12 @@ export function StatusHistoryTimeline({ jobId }: StatusHistoryTimelineProps) {
                       <div
                         className={cn(
                           "h-3 w-3 rounded-full border-2 shrink-0",
-                          entry.newStatusValue === "rejected" || entry.newStatusValue === "expired"
+                          // Welle 4: semantic anchoring via category.kind, not value.
+                          entry.newStatusKind === "lost"
                             ? "border-destructive bg-destructive/20"
-                            : entry.newStatusValue === "interview" || entry.newStatusValue === "offer" || entry.newStatusValue === "accepted"
+                            : entry.newStatusKind === "interviewing" ||
+                                entry.newStatusKind === "offer" ||
+                                entry.newStatusKind === "won"
                               ? "border-green-500 bg-green-500/20"
                               : "border-primary bg-primary/20",
                         )}
@@ -216,7 +208,8 @@ export function StatusHistoryTimeline({ jobId }: StatusHistoryTimelineProps) {
                           <>
                             <Badge
                               variant="outline"
-                              className={cn("text-xs", getStatusColor(entry.previousStatusValue))}
+                              className="text-xs"
+                              style={stageBadgeStyle(entry.previousStatusColour)}
                             >
                               {entry.previousStatusLabel}
                             </Badge>
@@ -224,7 +217,8 @@ export function StatusHistoryTimeline({ jobId }: StatusHistoryTimelineProps) {
                           </>
                         )}
                         <Badge
-                          className={cn("text-xs", getStatusColor(entry.newStatusValue))}
+                          className="text-xs border-0"
+                          style={stageBadgeStyle(entry.newStatusColour)}
                         >
                           {entry.newStatusLabel}
                         </Badge>

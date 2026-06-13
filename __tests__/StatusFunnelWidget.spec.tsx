@@ -18,11 +18,13 @@ import type { ActionResult } from "@/models/actionResult";
 
 const i18nDict: Record<string, string> = {
   "dashboard.pipeline": "Application Pipeline",
-  "dashboard.statusBookmarked": "Bookmarked",
   "dashboard.statusApplied": "Applied",
-  "dashboard.statusInterview": "Interview",
-  "dashboard.statusOffer": "Offer",
-  "dashboard.statusHired": "Hired",
+  // Welle 4: the funnel now labels stages by category kind.
+  "jobStatus.stage.lead": "Bookmarked",
+  "jobStatus.stage.applied": "Applied",
+  "jobStatus.stage.interviewing": "Interview",
+  "jobStatus.stage.offer": "Offer",
+  "jobStatus.stage.won": "Hired",
   "dashboard.conversionRate": "{percent}% conversion",
   "dashboard.biggestDropoff": "Biggest drop-off",
   "dashboard.totalJobsTracked": "{count} jobs tracked",
@@ -72,6 +74,15 @@ import StatusFunnelWidget from "@/components/dashboard/StatusFunnelWidget";
 // Fixtures
 // ---------------------------------------------------------------------------
 
+// Map the legacy seed values onto their stage kinds (the funnel aggregates by kind).
+const VALUE_TO_KIND: Record<string, string> = {
+  bookmarked: "lead",
+  applied: "applied",
+  interview: "interviewing",
+  offer: "offer",
+  accepted: "won",
+};
+
 function makeDistribution(
   overrides: Partial<Record<string, number>> = {},
 ): StatusDistribution[] {
@@ -88,6 +99,7 @@ function makeDistribution(
     statusValue: value,
     statusLabel: value.charAt(0).toUpperCase() + value.slice(1),
     count,
+    categoryKind: VALUE_TO_KIND[value] ?? "lead",
   }));
 }
 

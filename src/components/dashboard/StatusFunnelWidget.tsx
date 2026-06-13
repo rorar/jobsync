@@ -16,43 +16,22 @@ import {
 import { Briefcase, RefreshCw, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { CATEGORY_SEED, type StatusCategoryKind } from "@/lib/crm/status-categories";
+import { stageColorVar } from "@/lib/crm/stage-colors";
 
 /**
- * Pipeline stages in funnel order.
- * Maps status values to i18n keys and bar colors.
+ * Pipeline funnel stages — the fixed progression STAGE KINDS (the spec's semantic
+ * backbone), NOT hardcoded status values. Counts aggregate every custom status in
+ * a stage (Welle 4: semantic anchoring via category.kind). Colour + label derive
+ * from the stage, so user-renamed/recoloured stages flow through automatically.
  */
-const PIPELINE_STAGES = [
-  {
-    value: "bookmarked",
-    i18nKey: "dashboard.statusBookmarked",
-    barColor: "bg-blue-500",
-    textColor: "text-blue-700 dark:text-blue-300",
-  },
-  {
-    value: "applied",
-    i18nKey: "dashboard.statusApplied",
-    barColor: "bg-green-500",
-    textColor: "text-green-700 dark:text-green-300",
-  },
-  {
-    value: "interview",
-    i18nKey: "dashboard.statusInterview",
-    barColor: "bg-yellow-500",
-    textColor: "text-yellow-700 dark:text-yellow-300",
-  },
-  {
-    value: "offer",
-    i18nKey: "dashboard.statusOffer",
-    barColor: "bg-purple-500",
-    textColor: "text-purple-700 dark:text-purple-300",
-  },
-  {
-    value: "accepted",
-    i18nKey: "dashboard.statusHired",
-    barColor: "bg-emerald-500",
-    textColor: "text-emerald-700 dark:text-emerald-300",
-  },
-] as const;
+const PIPELINE_KINDS: { kind: StatusCategoryKind; i18nKey: string }[] = [
+  { kind: "lead", i18nKey: "jobStatus.stage.lead" },
+  { kind: "applied", i18nKey: "jobStatus.stage.applied" },
+  { kind: "interviewing", i18nKey: "jobStatus.stage.interviewing" },
+  { kind: "offer", i18nKey: "jobStatus.stage.offer" },
+  { kind: "won", i18nKey: "jobStatus.stage.won" },
+];
 
 type FetchState =
   | { status: "loading" }
@@ -115,15 +94,14 @@ export default function StatusFunnelWidget() {
     fetchData();
   }, [fetchData]);
 
-  // Build count array aligned with pipeline stages
+  // Aggregate counts per progression STAGE (sum of every status in that stage).
   const countsForStages =
     state.status === "loaded"
-      ? PIPELINE_STAGES.map((stage) => {
-          const match = state.data.find(
-            (d) => d.statusValue === stage.value,
-          );
-          return match?.count ?? 0;
-        })
+      ? PIPELINE_KINDS.map((stage) =>
+          state.data
+            .filter((d) => d.categoryKind === stage.kind)
+            .reduce((sum, d) => sum + d.count, 0),
+        )
       : [];
 
   const maxCount = Math.max(...countsForStages, 1);
@@ -174,21 +152,20 @@ export default function StatusFunnelWidget() {
               )}
             </p>
             <div className="space-y-1.5" role="list" aria-label={t("dashboard.pipeline")}>
-              {PIPELINE_STAGES.map((stage, i) => {
+              {PIPELINE_KINDS.map((stage, i) => {
                 const count = countsForStages[i];
                 const widthPercent = (count / maxCount) * 100;
                 const percentage = totalJobs > 0 ? Math.round((count / totalJobs) * 100) : 0;
                 const isDropoff = biggestDropoff === i;
                 const tooltipText = `${t(stage.i18nKey)}: ${formatNumber(count, locale)} (${formatNumber(percentage, locale)}%)`;
+                const stageColour = CATEGORY_SEED[stage.kind].colour;
 
                 return (
-                  <div key={stage.value} role="listitem">
+                  <div key={stage.kind} role="listitem">
                     <div className="flex items-center gap-2">
                       <span
-                        className={cn(
-                          "text-xs font-medium w-20 shrink-0 truncate",
-                          stage.textColor,
-                        )}
+                        className="text-xs font-medium w-20 shrink-0 truncate"
+                        style={{ ...stageColorVar(stageColour), color: "var(--stage-color)" }}
                       >
                         {t(stage.i18nKey)}
                       </span>
@@ -199,10 +176,11 @@ export default function StatusFunnelWidget() {
                         <div
                           className={cn(
                             "h-full rounded-sm transition-all duration-500 ease-out",
-                            stage.barColor,
                             isDropoff && "ring-2 ring-orange-400 ring-offset-1",
                           )}
                           style={{
+                            ...stageColorVar(stageColour),
+                            backgroundColor: "var(--stage-color)",
                             width: `${Math.max(widthPercent, count > 0 ? 4 : 0)}%`,
                           }}
                           role="meter"
@@ -219,7 +197,7 @@ export default function StatusFunnelWidget() {
                       </div>
                     </div>
                     {/* Conversion arrow between stages */}
-                    {i < PIPELINE_STAGES.length - 1 && countsForStages[i] > 0 && (
+                    {i < PIPELINE_KINDS.length - 1 && countsForStages[i] > 0 && (
                       <div className="flex items-center gap-2 ml-20 pl-2">
                         <span className={cn(
                           "text-[10px] tabular-nums",

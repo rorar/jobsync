@@ -22,6 +22,7 @@ import {
   computeAppliedSideEffect,
   type AppliedSideEffect,
 } from "./status-categories";
+import type { JobStatus } from "@/models/job.model";
 
 /**
  * Is moving a job from a status in `fromKind` to a (different) status in `toKind`
@@ -46,4 +47,17 @@ export function appliedSideEffectByKind(
 ): AppliedSideEffect {
   if (!isStatusCategoryKind(toKind)) return {};
   return computeAppliedSideEffect(categorySemanticsForKind(toKind), currentAppliedDate);
+}
+
+/**
+ * Client-side transition check between two JobStatuses that carry their category
+ * (Kanban drag highlight, mobile dropdown filter). Fails closed when either
+ * status lacks category data.
+ */
+export function isValidStatusTransition(
+  from: JobStatus | undefined | null,
+  to: JobStatus | undefined | null,
+): boolean {
+  if (!from?.category || !to?.category) return false;
+  return isValidCategoryTransitionByKind(from.category.kind, to.category.kind);
 }

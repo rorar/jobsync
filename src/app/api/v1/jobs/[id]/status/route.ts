@@ -3,7 +3,7 @@ import { withApiAuth } from "@/lib/api/with-api-auth";
 import { actionToResponse, errorResponse } from "@/lib/api/response";
 import { ChangeJobStatusSchema, isValidUUID } from "@/lib/api/schemas";
 import { JOB_API_SELECT } from "@/lib/api/helpers";
-import { isValidTransition, computeTransitionSideEffects } from "@/lib/crm/status-machine";
+import { isValidCategoryTransitionByKind, appliedSideEffectByKind } from "@/lib/crm/status-transition";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 
 /** CORS preflight */
@@ -47,11 +47,14 @@ export const POST = withApiAuth(async (req, { userId, params }) => {
   const [currentJob, newStatus] = await Promise.all([
     prisma.job.findFirst({
       where: { id: jobId, userId },
-      select: { id: true, statusId: true, version: true, appliedDate: true, Status: { select: { value: true } } },
+      select: {
+        id: true, statusId: true, version: true, appliedDate: true,
+        Status: { select: { value: true, category: { select: { kind: true } } } },
+      },
     }),
     prisma.jobStatus.findFirst({
       where: { id: newStatusId, userId },
-      select: { id: true, value: true },
+      select: { id: true, value: true, category: { select: { kind: true } } },
     }),
   ]);
 
@@ -72,14 +75,14 @@ export const POST = withApiAuth(async (req, { userId, params }) => {
     return errorResponse("CONFLICT", "api.statusChange.staleState", 409);
   }
 
-  // Validate transition against state machine
-  if (!isValidTransition(currentJob.Status.value, newStatus.value)) {
+  // Validate transition — category-ordered (Welle 4 per-user custom statuses).
+  if (!isValidCategoryTransitionByKind(currentJob.Status.category.kind, newStatus.category.kind)) {
     return errorResponse("VALIDATION_ERROR", "api.statusChange.invalidTransition", 400);
   }
 
-  // Compute side effects (e.g., set appliedDate on first "applied" transition)
-  const sideEffects = computeTransitionSideEffects(
-    newStatus.value,
+  // Compute side effects (applied flag derived from the target stage).
+  const sideEffects = appliedSideEffectByKind(
+    newStatus.category.kind,
     currentJob.appliedDate,
   );
 

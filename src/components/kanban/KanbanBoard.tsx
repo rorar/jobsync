@@ -24,12 +24,8 @@ import { KanbanColumn } from "./KanbanColumn";
 import { KanbanCard } from "./KanbanCard";
 import { KanbanEmptyState } from "./KanbanEmptyState";
 import { StatusTransitionDialog } from "./StatusTransitionDialog";
-import {
-  useKanbanState,
-  isValidTransition,
-  STATUS_ORDER,
-  computeSortOrder,
-} from "@/hooks/useKanbanState";
+import { useKanbanState, computeSortOrder } from "@/hooks/useKanbanState";
+import { isValidStatusTransition } from "@/lib/crm/status-transition";
 import type { JobResponse, JobStatus } from "@/models/job.model";
 import { getStatusLabel } from "@/lib/crm/status-labels";
 import { changeJobStatus, updateKanbanOrder } from "@/actions/job.actions";
@@ -70,10 +66,20 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
   } | null>(null);
   const [isPending, setIsPending] = useState(false);
 
-  // Mobile active tab
-  const [mobileTab, setMobileTab] = useState<string>(
-    STATUS_ORDER.find(s => statuses.some(st => st.value === s)) ?? "draft"
+  // Status lookup (carries category) for category-ordered transition checks.
+  const statusByValue = useMemo(() => {
+    const m = new Map<string, JobStatus>();
+    for (const s of statuses) m.set(s.value, s);
+    return m;
+  }, [statuses]);
+  const canTransition = useCallback(
+    (fromValue?: string, toValue?: string) =>
+      isValidStatusTransition(statusByValue.get(fromValue ?? ""), statusByValue.get(toValue ?? "")),
+    [statusByValue],
   );
+
+  // Mobile active tab — first status in stage order (no hardcoded list).
+  const [mobileTab, setMobileTab] = useState<string>(statuses[0]?.value ?? "");
 
   // Sensor config
   const sensors = useSensors(
@@ -225,7 +231,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
       if (!fromStatus || !toStatus) return;
 
       // Check transition validity
-      if (!isValidTransition(sourceColumn, targetColumn)) {
+      if (!canTransition(sourceColumn, targetColumn)) {
         toast({
           variant: "destructive",
           title: t("jobs.kanbanInvalidTransition")
@@ -261,7 +267,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
           setTransitionDialog(null);
 
           // Check if reverse transition is valid before offering undo
-          const canUndo = isValidTransition(toStatus.value, fromStatus.value);
+          const canUndo = canTransition(toStatus.value, fromStatus.value);
 
           // Only set undo state if reverse transition is valid
           if (canUndo) {
@@ -335,7 +341,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
       const toStatus = statuses.find((s) => s.value === newStatusValue);
       if (!fromStatus || !toStatus) return;
 
-      if (!isValidTransition(fromStatus.value, newStatusValue)) {
+      if (!canTransition(fromStatus.value, newStatusValue)) {
         toast({
           variant: "destructive",
           title: t("jobs.kanbanInvalidTransition")
@@ -353,6 +359,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
   // Active card for drag overlay
   const activeJob = findJob(activeId);
   const activeJobColumn = activeId ? getJobColumn(activeId) : undefined;
+  const activeColumnColour = columns.find((c) => c.status.value === activeJobColumn)?.colour;
 
   // Determine valid/invalid drop targets based on active card
   const activeSourceStatus = activeJobColumn ?? "";
@@ -456,7 +463,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
                 isValidDropTarget={
                   activeId !== null && (
                     // Cross-column: valid transition target
-                    (isValidTransition(activeSourceStatus, column.status.value) &&
+                    (canTransition(activeSourceStatus, column.status.value) &&
                     column.status.value !== activeSourceStatus) ||
                     // Within-column: always a valid target (for reorder)
                     column.status.value === activeSourceStatus
@@ -464,7 +471,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
                 }
                 isInvalidDropTarget={
                   activeId !== null &&
-                  !isValidTransition(activeSourceStatus, column.status.value) &&
+                  !canTransition(activeSourceStatus, column.status.value) &&
                   column.status.value !== activeSourceStatus
                 }
                 isActiveColumn={column.status.value === activeSourceStatus && activeId !== null}
@@ -496,6 +503,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
                 <KanbanCard
                   job={activeJob}
                   statusValue={activeJobColumn}
+                  colour={activeColumnColour}
                   isDragOverlay
                 />
               </div>
@@ -538,7 +546,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
                 ) : (
                   column.jobs.map((job) => (
                     <div key={job.id} className="space-y-1">
-                      <KanbanCard job={job} statusValue={column.status.value} />
+                      <KanbanCard job={job} statusValue={column.status.value} colour={column.colour} />
                       {/* Mobile status change dropdown */}
                       <div className="pl-8">
                         <Select
@@ -555,7 +563,7 @@ export function KanbanBoard({ jobs, statuses, onRefresh, loading, onAddJob }: Ka
                             {statuses
                               .filter((s) =>
                                 s.value === job.Status?.value ||
-                                isValidTransition(job.Status?.value ?? "", s.value)
+                                canTransition(job.Status?.value ?? "", s.value)
                               )
                               .map((s) => (
                                 <SelectItem

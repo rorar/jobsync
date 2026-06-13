@@ -9,8 +9,11 @@ import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { KanbanCard } from "./KanbanCard";
 import { getStatusLabel } from "@/lib/crm/status-labels";
-import type { JobStatus } from "@/models/job.model";
+import { stageColorVar } from "@/lib/crm/stage-colors";
 import type { KanbanColumn as KanbanColumnType } from "@/hooks/useKanbanState";
+
+/** Light tint of the stage colour for column/header backgrounds. */
+const STAGE_TINT = "color-mix(in srgb, var(--stage-color) 14%, transparent)";
 
 interface KanbanColumnProps {
   column: KanbanColumnType;
@@ -28,7 +31,8 @@ export const KanbanColumn = React.memo(function KanbanColumn({
   onToggleCollapse,
 }: KanbanColumnProps) {
   const { t } = useTranslations();
-  const { status, jobs, isCollapsed, color } = column;
+  const { status, jobs, isCollapsed, colour } = column;
+  const stageStyle = stageColorVar(colour);
 
   const { setNodeRef, isOver } = useDroppable({
     id: `column-${status.value}`,
@@ -40,9 +44,10 @@ export const KanbanColumn = React.memo(function KanbanColumn({
     return (
       <button
         type="button"
+        style={{ ...stageStyle, backgroundColor: STAGE_TINT }}
         className={`
           flex items-center gap-2 rounded-lg border px-3 py-2
-          ${color.headerBg} text-sm font-medium
+          text-sm font-medium
           hover:bg-accent/70 transition-colors motion-reduce:transition-none
           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
           min-h-[44px]
@@ -53,7 +58,7 @@ export const KanbanColumn = React.memo(function KanbanColumn({
         data-testid={`kanban-collapsed-${status.value}`}
       >
         <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        <span className={color.text}>{getStatusLabel(t, status)}</span>
+        <span style={{ color: "var(--stage-color)" }}>{getStatusLabel(t, status)}</span>
         <Badge variant="secondary" className="text-xs px-1.5 py-0">
           {jobs.length}
         </Badge>
@@ -65,6 +70,7 @@ export const KanbanColumn = React.memo(function KanbanColumn({
     <div
       ref={setNodeRef}
       role="group"
+      style={stageStyle}
       aria-label={`${getStatusLabel(t, status)} - ${t("jobs.kanbanCollapsedCount").replace("{count}", String(jobs.length))}`}
       className={`
         flex flex-col rounded-lg border bg-muted/30 dark:bg-muted/10
@@ -77,9 +83,12 @@ export const KanbanColumn = React.memo(function KanbanColumn({
       data-testid={`kanban-column-${status.value}`}
     >
       {/* Column header */}
-      <div className={`flex items-center justify-between px-3 py-2.5 rounded-t-lg ${color.headerBg}`}>
+      <div
+        className="flex items-center justify-between px-3 py-2.5 rounded-t-lg"
+        style={{ backgroundColor: STAGE_TINT }}
+      >
         <div className="flex items-center gap-2">
-          <h3 className={`text-sm font-semibold ${color.text}`}>
+          <h3 className="text-sm font-semibold" style={{ color: "var(--stage-color)" }}>
             {getStatusLabel(t, status)}
           </h3>
           <Badge variant="secondary" className="text-xs px-1.5 py-0 min-w-[20px] justify-center">
@@ -114,6 +123,7 @@ export const KanbanColumn = React.memo(function KanbanColumn({
                 key={job.id}
                 job={job}
                 statusValue={status.value}
+                colour={colour}
               />
             ))
           )}

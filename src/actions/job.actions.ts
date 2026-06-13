@@ -8,7 +8,6 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { STATUS_ORDER, COLLAPSED_BY_DEFAULT } from "@/lib/crm/status-machine";
 import { isValidCategoryTransitionByKind, appliedSideEffectByKind } from "@/lib/crm/status-transition";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
@@ -187,7 +186,8 @@ export async function* getJobsIterator(filter?: string, pageSize = 200) {
         JobTitle: true,
         jobType: true,
         Company: true,
-        Status: true,
+        // Welle 4: carry the stage so list-row status checks use category.kind.
+        Status: { include: { category: true } },
         Location: true,
         dueDate: true,
         applied: true,
@@ -230,7 +230,8 @@ export const getJobDetails = async (
         JobSource: true,
         JobTitle: true,
         Company: true,
-        Status: true,
+        // Welle 4: carry the stage so detail status checks use category.kind.
+        Status: { include: { category: true } },
         Location: true,
         Resume: {
           include: {
@@ -859,6 +860,8 @@ export interface StatusDistribution {
   statusValue: string;
   statusLabel: string;
   count: number;
+  /** Stage kind of the status (Welle 4: lets the funnel aggregate by stage). */
+  categoryKind: string;
 }
 
 /** Type for status history entry */
@@ -870,6 +873,12 @@ export interface StatusHistoryEntry {
   newStatusValue: string;
   note: string | null;
   changedAt: Date;
+  // Welle 4: stage of each status so the timeline colours + semantic checks
+  // derive from category (kind/colour), not a hardcoded value switch.
+  previousStatusKind: string | null;
+  previousStatusColour: string | null;
+  newStatusKind: string | null;
+  newStatusColour: string | null;
 }
 
 /**
@@ -1019,8 +1028,10 @@ export const getKanbanBoard = async (): Promise<ActionResult<KanbanBoard>> => {
     }
 
     // Fetch the user's statuses to build columns even if empty (ADR-015 per-user).
+    // Welle 4: include the stage so collapse derives from category.defaultCollapsed.
     const allStatuses = await prisma.jobStatus.findMany({
       where: { userId: user.id },
+      include: { category: true },
       orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }],
     });
 
@@ -1065,21 +1076,17 @@ export const getKanbanBoard = async (): Promise<ActionResult<KanbanBoard>> => {
       });
     }
 
-    // Build status lookup
-    const statusMap = new Map(allStatuses.map((s) => [s.value, s]));
-
-    // Build columns in STATUS_ORDER
-    const columns: KanbanColumn[] = STATUS_ORDER
-      .filter((statusValue) => statusMap.has(statusValue))
-      .map((statusValue) => {
-        const status = statusMap.get(statusValue)!;
-        const columnJobs = jobsByStatus.get(statusValue) ?? [];
+    // Build columns from ALL the user's statuses, in stage order — NO hardcoded
+    // STATUS_ORDER filter (custom statuses' jobs were silently dropped before).
+    const columns: KanbanColumn[] = allStatuses
+      .map((status) => {
+        const columnJobs = jobsByStatus.get(status.value) ?? [];
         return {
           statusId: status.id,
           statusValue: status.value,
           statusLabel: status.label,
           jobCount: columnJobs.length,
-          isCollapsed: COLLAPSED_BY_DEFAULT.includes(statusValue),
+          isCollapsed: status.category?.defaultCollapsed ?? false,
           jobs: columnJobs,
         };
       });
@@ -1272,8 +1279,8 @@ export const getJobStatusHistory = async (
     const history = await prisma.jobStatusHistory.findMany({
       where: { jobId, userId: user.id },
       include: {
-        previousStatus: { select: { label: true, value: true } },
-        newStatus: { select: { label: true, value: true } },
+        previousStatus: { select: { label: true, value: true, category: { select: { kind: true, colour: true } } } },
+        newStatus: { select: { label: true, value: true, category: { select: { kind: true, colour: true } } } },
       },
       orderBy: { changedAt: "asc" },
       take: safeTake,
@@ -1288,6 +1295,10 @@ export const getJobStatusHistory = async (
       newStatusValue: h.newStatus.value,
       note: h.note,
       changedAt: h.changedAt,
+      previousStatusKind: h.previousStatus?.category?.kind ?? null,
+      previousStatusColour: h.previousStatus?.category?.colour ?? null,
+      newStatusKind: h.newStatus.category?.kind ?? null,
+      newStatusColour: h.newStatus.category?.colour ?? null,
     }));
 
     return { success: true, data: entries };
@@ -1315,8 +1326,11 @@ export const getStatusDistribution = async (): Promise<ActionResult<StatusDistri
       _count: { id: true },
     });
 
-    // Fetch the user's statuses for labels (ADR-015 per-user).
-    const allStatuses = await prisma.jobStatus.findMany({ where: { userId: user.id } });
+    // Fetch the user's statuses for labels + stage (ADR-015 per-user).
+    const allStatuses = await prisma.jobStatus.findMany({
+      where: { userId: user.id },
+      include: { category: true },
+    });
     const statusMap = new Map(allStatuses.map((s) => [s.id, s]));
 
     const distribution: StatusDistribution[] = jobs
@@ -1328,6 +1342,7 @@ export const getStatusDistribution = async (): Promise<ActionResult<StatusDistri
           statusValue: status.value,
           statusLabel: status.label,
           count: group._count.id,
+          categoryKind: status.category?.kind ?? "",
         };
       })
       .filter((d): d is StatusDistribution => d !== null);

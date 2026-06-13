@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowRight, Loader2 } from "lucide-react";
 import type { JobResponse, JobStatus } from "@/models/job.model";
-import { STATUS_COLORS } from "@/hooks/useKanbanState";
+import { stageColorVar } from "@/lib/crm/stage-colors";
 
 interface StatusTransitionDialogProps {
   open: boolean;
@@ -56,8 +56,8 @@ export function StatusTransitionDialog({
     onCancel();
   };
 
-  const fromColor = STATUS_COLORS[fromStatus?.value ?? ""] ?? STATUS_COLORS.draft;
-  const toColor = STATUS_COLORS[toStatus?.value ?? ""] ?? STATUS_COLORS.draft;
+  const fromStyle = stageColorVar(fromStatus?.category?.colour);
+  const toStyle = stageColorVar(toStatus?.category?.colour);
 
   const getStatusLabel = (status: JobStatus | null) => {
     if (!status) return "";
@@ -80,11 +80,25 @@ export function StatusTransitionDialog({
                   .replace("{to}", getStatusLabel(toStatus))}
               </p>
               <div className="flex items-center justify-center gap-3">
-                <Badge className={`${fromColor.bg} ${fromColor.text} ${fromColor.darkBg} border-0`}>
+                <Badge
+                  className="border-0"
+                  style={{
+                    ...fromStyle,
+                    backgroundColor: "color-mix(in srgb, var(--stage-color) 16%, transparent)",
+                    color: "var(--stage-color)",
+                  }}
+                >
                   {getStatusLabel(fromStatus)}
                 </Badge>
                 <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                <Badge className={`${toColor.bg} ${toColor.text} ${toColor.darkBg} border-0`}>
+                <Badge
+                  className="border-0"
+                  style={{
+                    ...toStyle,
+                    backgroundColor: "color-mix(in srgb, var(--stage-color) 16%, transparent)",
+                    color: "var(--stage-color)",
+                  }}
+                >
                   {getStatusLabel(toStatus)}
                 </Badge>
               </div>
