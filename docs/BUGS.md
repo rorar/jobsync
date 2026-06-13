@@ -1,8 +1,18 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-06-11
+# Bug Tracker — Collected 2026-03-24, Updated 2026-06-13
 
-**Total: 593 bugs found, 592 fixed, 2 open (accepted risk), 1 new (blind spot)**
+**Total: 594 bugs found, 593 fixed, 2 open (accepted risk), 0 new**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability) — BS-01 ✅ fixed (Welle 0, 2026-05-31)
+
+## Session 2026-06-13 — Welle 4 (Custom JobStatus XL) full-review
+
+1 HIGH found + fixed by the comprehensive-review pass (claim verified vs code before fixing).
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| W4-B1 | HIGH | "Move up"/drag a status to the TOP of its stage always errored: the midpoint reorder helper returns a negative ordinal (e.g. `-1` to place above the top item at sortOrder 0), but `reorderJobStatus` rejected `< 0` → `errors.invalidSortOrder`. Reproducible out-of-the-box (Expired → top of the archived stage). | Drop the `< 0` guard in `reorderJobStatus` (`jobStatus.actions.ts`); sortOrder is a relative within-stage ordinal, negatives sort correctly. +regression test asserting a negative value is accepted + persisted. Commit `6a07287`. |
+
+Security review: clean — no Critical/High (ADR-015 userId-scoping, ADR-019 erased-union boundary, public-API explicit-select, CSS-var colour allowlist all verified). MEDIUM/LOW observations (self-transition flag unwired; orphan-column partial cast) deferred to BACKLOG — not bugs.
 
 ## Session 2026-06-11 — Welle 3 (CRM-Verbindung) full-review
 

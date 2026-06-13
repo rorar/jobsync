@@ -312,3 +312,31 @@ Tests grün, Build grün. Full-Review (Security + Architecture) Findings gefixt.
 - **gdpr-audit-report.md:** S6a/S6b/JWT in RoPA/DSAR-Abschnitt dokumentieren (Doku-Task).
 - **/understand-Graph-Refresh:** Welle-1-Code noch nicht in den Graph eingespeist (Token-Budget);
   beim nächsten Session-Start refreshen (staleness-check flaggt es bereits).
+
+---
+
+## Welle 4 (Custom JobStatus XL) — deferred follow-ups (2026-06-13)
+
+From the Welle 4 comprehensive-review (security clean; one HIGH fixed → W4-B1 in BUGS.md).
+These are deliberate deferrals, not bugs:
+
+- **MED — Wire `allows_self_transition` (multi-round interviewing as SAME-status re-selection).**
+  `isValidCategoryTransition` (`status-categories.ts`) supports `sameStatus`/`allowReopenFromClosed`/
+  `defaultStageKind` via `TransitionOptions`, but `isValidCategoryTransitionByKind`
+  (`status-transition.ts`) does not thread them and the server actions short-circuit
+  `statusChanged` before validating, so re-selecting the *same* interviewing status is a no-op.
+  Lateral moves between DIFFERENT statuses in the interviewing stage already work. To enable
+  same-status multi-round, thread opts + a config source through the adapter, or trim the dead
+  branch + doc comments. See ADR-036 "Known limitation".
+- **LOW — Orphan "Other" Kanban column partial cast.** `useKanbanState.ts` builds `{id,value,label}
+  as JobStatus` (no `category`) for jobs whose status is unknown to the current set (defensive,
+  "should not occur post-migration"). Tolerated only because `isValidStatusTransition` fails closed
+  on missing category. Give it a real fallback category object if any new code reads stage
+  colour/order off the orphan column.
+- **LOW — `reorderJobStatus` integer-collision.** The client scales the fractional midpoint by 1000
+  and rounds; repeated reorders within one stage could eventually collide on equal integers
+  (display-order only, not correctness). Renormalize a stage's sortOrders if collisions are observed.
+- **E2E run-deferred.** `e2e/crud/job-status-crud.spec.ts` (create status → set on job → see Kanban
+  column) is written + selector-verified but its Playwright run did not complete on the 8 GB VM
+  (Next dev hung under compile load — the known infra constraint). Run locally with
+  `scripts/dev-e2e.sh` + `--project=crud --workers=1` after `source scripts/env.sh`.
