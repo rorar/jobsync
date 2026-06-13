@@ -15,14 +15,19 @@ TDD; the status migration is the high-risk step (no job may lose its status).
 
 ### Tasks
 
-- [ ] Task 1.1: Author `specs/job-status.allium` via `allium:elicit` — JobStatus state
+- [x] Task 1.1: Author `specs/job-status.allium` via `allium:tend` — JobStatus state
       machine, category model, Kanban-column derivation, API surface, delete-in-use rule.
-- [ ] Task 1.2: Validate with `allium:check`; refine with `allium:tend`.
-- [ ] Task 1.3: Review the spec against product goals; freeze it as the source of truth.
+      (Used `tend`, not `elicit`: discovery was done via direct code grounding, so the
+      autonomous authoring tool `tend` was the correct fit per `feedback_use_tend_for_specs`.)
+- [x] Task 1.2: Validate with `allium:check` (0 errors; 7 warnings + 13 infos, all expected
+      external-entity/no-surface notices, same shape as crm-workflow.allium); refined via `tend`.
+- [~] Task 1.3: Review the spec against product goals; freeze it as the source of truth.
+      (Self-review done; awaiting user freeze at the Phase-1 checkpoint.)
 
 ### Verification
 
-- [ ] `allium:check` passes; the spec covers status CRUD, categories, Kanban, and API.
+- [~] `allium:check` passes (0 errors); the spec covers status CRUD, categories, Kanban, and API.
+      Awaiting user approval to freeze + proceed to Phase 2.
 
 ## Phase 2: F-AJ-09 — User-customisable JobStatus + category (XL)
 

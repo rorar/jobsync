@@ -1,0 +1,590 @@
+-- allium: 3
+-- job-status.allium
+
+-- Scope: Custom JobStatus XL (Kette A / F-AJ-09, F-AJ-02, F-AJ-03)
+-- Includes: User-customisable JobStatus values + StatusCategory model,
+--           category-ordered transition validity, applied-flag derivation,
+--           Kanban column derivation, status-management CRUD (incl. delete-in-use),
+--           legacy-status migration, public API surface for statuses/categories.
+-- Excludes:
+--   - JobStatusHistory audit log + Kanban drag/drop/reorder mechanics
+--     (see crm-workflow.allium -- this spec changes WHAT a status is, not how
+--     history/DnD work; those rules are unchanged beyond reading status from a
+--     per-user entity instead of a fixed enum).
+--   - Job CRUD (see job-aggregate.allium).
+--   - Per-status automation triggers / workflow rules engine (out of scope).
+--   - Sharing custom status sets between users (out of scope).
+--
+-- Owner: Job Aggregate (src/actions/job.actions.ts) + Job-Status Repository.
+--
+-- Supersession:
+--   This spec SUPERSEDES the fixed `JobStatusValue` enum and the hardcoded
+--   `transitions status { ... }` graph in crm-workflow.allium. JobStatus is no
+--   longer a global, system-seeded entity with a closed value set; it is a
+--   per-user entity whose values, labels, ordering and category assignment the
+--   user controls. The transition state machine is no longer a hardcoded
+--   value->value graph; validity derives from the category each status belongs
+--   to (see rule TransitionJobStatus + invariant CategoryOrderedTransition).
+--   It RESOLVES the crm-workflow open question "Should the state machine be
+--   configurable per user?" (answer: yes, via categories) and the open question
+--   on migrating draft/expired statuses (see rule MigrateLegacyStatusesToPerUser).
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity User {
+    -- Authenticated user from session. Every status, category and job is
+    -- scoped to the owning user (ADR-015 IDOR). Same entity as elsewhere.
+    id: String
+}
+
+external entity Job {
+    -- The Job entity from job-aggregate.allium / crm-workflow.allium.
+    -- This spec references the fields it constrains.
+    id: String
+    user_id: String
+    status: JobStatus
+    applied: Boolean
+    applied_date: Timestamp?
+    kanban_sort_order: Decimal
+}
+
+external entity JobStatusHistory {
+    -- Append-only audit log from crm-workflow.allium. Referenced here only so
+    -- the delete-in-use reassignment rule can repoint its FK references.
+    -- Fields referenced: previous_status, new_status.
+    previous_status: JobStatus?
+    new_status: JobStatus
+}
+
+external entity EventBus {
+    -- In-process event bus from event-bus.allium. Status changes continue to
+    -- publish JobStatusChanged (defined in crm-workflow.allium).
+}
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum StatusCategoryKind {
+    lead            -- Pre-application backlog (bookmarked). Not yet applied.
+    | applied         -- Application submitted.
+    | interviewing    -- In an interview process (one or more rounds).
+    | offer           -- An offer is on the table.
+    | won             -- Offer accepted. Terminal (the only truly terminal stage).
+    | lost            -- Rejected or declined. Closed, but reactivatable.
+    | archived        -- No longer actively tracked / listing expired. Reactivatable.
+}
+
+-- The system category kinds are a FIXED set. They are the semantic backbone:
+-- each kind carries immutable semantics (whether it counts as "applied",
+-- whether it is terminal, whether it collapses by default in the Kanban,
+-- whether self-transitions are allowed, and its position in the workflow).
+-- Users do NOT create new kinds; they create custom JobStatus values and
+-- assign each to one of these kinds, and may rename / recolour / reorder the
+-- category presentation. Keeping kinds fixed keeps the applied-flag,
+-- terminal and transition semantics sound across arbitrary custom statuses.
+
+------------------------------------------------------------
+-- Entities and Variants
+------------------------------------------------------------
+
+entity JobStatusCategory {
+    -- A per-user semantic grouping of statuses. Seeded once per user (one row
+    -- per StatusCategoryKind) on first access. User-editable presentation
+    -- (label, colour, sort_order); system-fixed semantics (the flags below).
+    id: String
+    user_id: String
+    kind: StatusCategoryKind
+    label: String
+    colour: String
+    sort_order: Integer
+
+    -- System semantics (seeded by kind; not user-editable in this version):
+    is_applied_stage: Boolean   -- true for applied, interviewing, offer, won
+    is_terminal: Boolean        -- true for won only
+    default_collapsed: Boolean  -- true for lost, archived (Kanban UI default)
+    allows_self_transition: Boolean -- true for interviewing (multi-round)
+
+    statuses: JobStatus with category = this
+
+    invariant SemanticsMatchKind {
+        -- The system flags are a pure function of the kind. They are seeded on
+        -- category creation and never drift from the kind they describe.
+        is_applied_stage = (kind in {applied, interviewing, offer, won})
+        and is_terminal = (kind = won)
+        and default_collapsed = (kind in {lost, archived})
+        and allows_self_transition = (kind = interviewing)
+    }
+}
+
+entity JobStatus {
+    -- A user-defined application status. Belongs to exactly one category, which
+    -- supplies its workflow semantics. Replaces the former global, fixed-enum
+    -- JobStatus. `value` is a stable machine key (used by the API and Kanban
+    -- column identity); `label` is the human-facing name.
+    id: String
+    user_id: String
+    category: JobStatusCategory
+    label: String
+    value: String
+    sort_order: Integer
+    is_default: Boolean   -- the status new manually-created jobs start in
+
+    jobs: Job with status = this
+
+    -- Derived workflow semantics, read through the owning category:
+    is_applied_stage: category.is_applied_stage
+    is_terminal: category.is_terminal
+
+    invariant SameUserAsCategory {
+        -- A status and its category belong to the same user (no cross-tenant link).
+        user_id = category.user_id
+    }
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    -- Whether a job in a closed (terminal/archived/lost) status may be
+    -- "reopened" by moving it back to an earlier-ordered category.
+    allow_reopen_from_closed: Boolean = true
+
+    -- The category kind a newly-seeded default status belongs to, and which
+    -- status new manually-created jobs start in.
+    default_initial_kind: StatusCategoryKind = lead
+}
+
+------------------------------------------------------------
+-- Defaults
+------------------------------------------------------------
+
+-- On first access, each user is seeded with the seven system categories and an
+-- initial set of statuses mirroring the historical CRM set. See
+-- rule SeedDefaultStatusSet. Seeded statuses (kind -> value : label):
+--   lead         -> "bookmarked" : "Bookmarked"   (is_default = true)
+--   applied      -> "applied"     : "Applied"
+--   interviewing -> "interview"   : "Interview"
+--   offer        -> "offer"       : "Offer"
+--   won          -> "accepted"    : "Accepted"
+--   lost         -> "rejected"    : "Rejected"
+--   archived     -> "archived"    : "Archived"
+--   archived     -> "expired"     : "Expired"     (second status in archived)
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- Seeding
+
+rule SeedDefaultStatusSet {
+    -- The first time a user needs statuses (account creation / first job-status
+    -- read), seed the seven system categories and the initial status set.
+    -- Idempotent: only seeds when the user has no categories yet.
+    when: SeedDefaultStatusSet(user)
+
+    requires: user.id != null
+    requires: not Categories.any(c => c.user_id = user.id)
+
+    ensures:
+        for kind in StatusCategoryKind:
+            JobStatusCategory.created(
+                user_id: user.id,
+                kind: kind,
+                is_applied_stage: kind in {applied, interviewing, offer, won},
+                is_terminal: kind = won,
+                default_collapsed: kind in {lost, archived},
+                allows_self_transition: kind = interviewing
+            )
+        DefaultStatusesSeeded(user_id: user.id)
+
+    @guidance
+        -- Category label/colour/sort_order seed values come from a code-level
+        -- table keyed by kind (e.g. lead -> {label:"Lead", colour:"blue",
+        -- sort_order:0}). sort_order follows workflow progression:
+        -- lead 0, applied 1, interviewing 2, offer 3, won 4, lost 5, archived 6.
+        -- The eight seeded JobStatus rows (see Defaults) are created in the same
+        -- transaction, each linked to its category, with the "bookmarked" status
+        -- marked is_default = true. Seeding MUST run in one transaction and is
+        -- the per-user equivalent of the old global JobStatus seed.
+}
+
+-- Status management (the Job-Status Repository -- ADR-015 userId on every query)
+
+rule CreateJobStatus {
+    -- Add a custom status under one of the user's categories.
+    when: CreateJobStatus(user, category, label, value, sort_order)
+
+    requires: category.user_id = user.id
+    requires: not exists JobStatus{user_id: user.id, value: value}
+
+    ensures:
+        JobStatus.created(
+            user_id: user.id,
+            category: category,
+            label: label,
+            value: value,
+            sort_order: sort_order,
+            is_default: false
+        )
+
+    @guidance
+        -- `value` is normalised (lowercased, slugified) at the boundary and must
+        -- be unique within the user (invariant UniqueValuePerUser). The category
+        -- reference is validated for ownership before insert. New statuses are
+        -- never is_default; SetDefaultStatus governs that flag.
+}
+
+rule RenameJobStatus {
+    -- Change the human-facing label and/or category of a status. The machine
+    -- `value` is stable and not renamed (it anchors history + Kanban identity).
+    when: RenameJobStatus(user, status, new_label, new_category)
+
+    requires: status.user_id = user.id
+    requires: new_category.user_id = user.id
+
+    ensures:
+        status.label = new_label
+        status.category = new_category
+
+    @guidance
+        -- Moving a status to a different category changes its workflow semantics
+        -- (applied-flag, terminal-ness, Kanban column position/colour). This is
+        -- intentional: it is how a user re-classifies "Phone Screen" from lead to
+        -- interviewing. Existing jobs in this status are unaffected at rest; their
+        -- next transition is validated against the new category.
+}
+
+rule ReorderJobStatus {
+    -- Change a status's position within its category (Kanban column order).
+    when: ReorderJobStatus(user, status, new_sort_order)
+
+    requires: status.user_id = user.id
+
+    ensures:
+        status.sort_order = new_sort_order
+}
+
+rule SetDefaultStatus {
+    -- Choose which status new manually-created jobs start in. Exactly one
+    -- default per user.
+    when: SetDefaultStatus(user, status)
+
+    requires: status.user_id = user.id
+
+    ensures:
+        let current_default = JobStatus{user_id: user.id, is_default: true}
+        if exists current_default:
+            current_default.is_default = false
+        status.is_default = true
+
+    @guidance
+        -- At most one status per user has is_default = true (invariant
+        -- ExactlyOneDefaultPerUser), so the join lookup resolves to a single row.
+        -- Clear it, then set the new one, in one transaction.
+}
+
+rule DeleteUnusedJobStatus {
+    -- Delete a status that no job references. Plain removal.
+    when: DeleteUnusedJobStatus(user, status)
+
+    requires: status.user_id = user.id
+    requires: status.jobs.count = 0
+    requires: not status.is_default
+
+    ensures:
+        not exists status
+
+    @guidance
+        -- Guards enforced at the boundary in addition to the above: cannot delete
+        -- the user's LAST remaining status (invariant AtLeastOneStatusPerUser),
+        -- and cannot delete the is_default status (the user must pick a new
+        -- default first via SetDefaultStatus). "Not last" is enforced in code
+        -- (count of the user's statuses > 1) rather than in the spec because a
+        -- JobStatus module-collection is not addressable here.
+}
+
+rule ReassignAndDeleteJobStatus {
+    -- Delete a status that jobs reference. The caller MUST supply a reassignment
+    -- target; all jobs + history references are repointed to it before the
+    -- status is removed, so no job loses its status. Delete-in-use without a
+    -- target is rejected at the boundary (the UI prompts for a target first).
+    when: ReassignAndDeleteJobStatus(user, status, reassign_to)
+
+    requires: status.user_id = user.id
+    requires: not status.is_default
+    requires: reassign_to.user_id = user.id
+    requires: reassign_to != status
+
+    ensures:
+        for j in status.jobs:
+            j.status = reassign_to
+        for h in JobStatusHistorys where new_status = status:
+            h.new_status = reassign_to
+        for h in JobStatusHistorys where previous_status = status:
+            h.previous_status = reassign_to
+        not exists status
+
+    @guidance
+        -- Reassignment intentionally does NOT validate the category-ordered
+        -- transition graph -- it is a data-repair operation, not a workflow move,
+        -- so no JobStatusHistory entry and no JobStatusChanged event are emitted.
+        -- The whole operation runs in a single transaction. Works whether the
+        -- status has one referencing job or many.
+}
+
+-- Status transitions (supersedes crm-workflow TransitionJobStatus's enum machine)
+
+rule TransitionJobStatus {
+    -- Move a job to a new status. Validity is category-ordered (see invariant
+    -- CategoryOrderedTransition). The applied flag derives from the TARGET
+    -- status's category, not from a hardcoded value match.
+    when: TransitionJobStatus(job, user, new_status, transition_note?)
+
+    requires: job.user_id = user.id
+    requires: new_status.user_id = user.id
+    requires:
+        new_status != job.status
+        or new_status.category.allows_self_transition
+    requires:
+        let from = job.status.category
+        let to = new_status.category
+        to.sort_order >= from.sort_order
+        or (config.allow_reopen_from_closed and from.is_terminal)
+        or (config.allow_reopen_from_closed and from.default_collapsed)
+        or new_status.category.allows_self_transition
+
+    ensures:
+        job.status = new_status
+
+        if new_status.is_applied_stage:
+            job.applied = true
+            if job.applied_date = null:
+                job.applied_date = now
+
+        JobStatusChanged(
+            job_id: job.id,
+            user_id: user.id,
+            new_status: new_status.value,
+            note: transition_note,
+            changed_at: now
+        )
+
+    @guidance
+        -- The category-ordered rule is intentionally MORE permissive than the old
+        -- hardcoded value->value matrix: any forward or lateral move (target
+        -- category sort_order >= source) is allowed, plus a bounded "reopen" from
+        -- any closed category (terminal `won` or default-collapsed `lost`/
+        -- `archived`) back to an earlier stage. This trades the old strictness for
+        -- user-defined workflows: a user who invents "Phone Screen" and "Onsite"
+        -- under `interviewing` can move freely between them (same category =
+        -- lateral). The JobStatusHistory entry creation, transaction boundary,
+        -- optional transition note, optimistic-concurrency STALE_STATE check and
+        -- post-commit event publication are UNCHANGED from crm-workflow.allium and
+        -- are not restated here.
+        --
+        -- applied_date immutability is preserved: it is set only on the FIRST
+        -- entry into any applied-stage category and never overwritten.
+}
+
+rule InitialStatusOnManualCreate {
+    -- When a user creates a job manually, the selected status is recorded with
+    -- no transition validation (there is no previous status to move from).
+    when: ManualJobCreate(job, user, initial_status)
+
+    requires: initial_status.user_id = user.id
+
+    ensures:
+        job.status = initial_status
+        if initial_status.is_applied_stage:
+            job.applied = true
+            job.applied_date = now
+
+    @guidance
+        -- Mirrors crm-workflow.InitialStatusOnManualCreate but reads the
+        -- applied-stage semantics from the chosen status's category rather than
+        -- matching the value against {applied, interview, offer, accepted}.
+        -- If no status is chosen, the user's is_default status is used.
+}
+
+-- Kanban + badges (derivation, no hardcoded lists)
+
+rule GetKanbanBoard {
+    -- Load the user's jobs grouped into columns derived from their own statuses.
+    when: GetKanbanBoard(user)
+
+    requires: user.id != null
+
+    ensures:
+        KanbanBoardLoaded(user_id: user.id)
+
+    @guidance
+        -- Columns are the user's JobStatuses ordered by (category.sort_order,
+        -- status.sort_order) ascending -- there is NO hardcoded status list, order
+        -- array, colour map or collapsed-by-default list left in the code. Per
+        -- column: colour = status.category.colour; is_collapsed default =
+        -- status.category.default_collapsed (user localStorage override persists
+        -- as today). Within a column, jobs are ordered by kanban_sort_order
+        -- ascending (unchanged from crm-workflow). Navigation badge counts derive
+        -- the same way: e.g. an "active applications" badge counts jobs whose
+        -- status.category.is_applied_stage is true and is_terminal is false.
+}
+
+-- Migration
+
+rule MigrateLegacyStatusesToPerUser {
+    -- One-off migration from the former global JobStatus set to per-user statuses.
+    -- For every user, seed their categories + status set, then repoint each of
+    -- their jobs (and history) from the global status onto the equivalent
+    -- per-user status by value. No job loses its status.
+    when: MigrateLegacyStatusesToPerUser(user)
+
+    requires: user.id != null
+    requires: not Categories.any(c => c.user_id = user.id)
+
+    ensures:
+        SeedDefaultStatusSet(user: user)
+        LegacyStatusesMigrated(user_id: user.id)
+
+    @guidance
+        -- Legacy value mapping applied during the repoint (resolves the
+        -- crm-workflow migration open question):
+        --   "draft"  -> "bookmarked"   (lead)
+        --   "saved"  -> "bookmarked"   (lead)
+        --   "bookmarked" -> "bookmarked"
+        --   "applied"/"interview"/"offer"/"rejected"/"archived"/"expired" -> same
+        --   "accepted" -> "accepted"   (won; seeded even if absent in old data)
+        -- For each job: find the user's per-user status whose value equals the
+        -- mapped legacy value, set job.statusId to it. Repoint JobStatusHistory
+        -- previous/new status FKs the same way. Runs as a Prisma data migration,
+        -- idempotent, inside the migration transaction. After migration the global
+        -- JobStatus rows are dropped. Any job whose legacy value has no mapping
+        -- (should not occur) falls back to the user's is_default status, logged.
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant OneCategoryPerKindPerUser {
+    for a in Categories:
+        for b in Categories:
+            a != b and a.user_id = b.user_id implies a.kind != b.kind
+}
+
+invariant JobStatusBelongsToOwner {
+    for j in Jobs:
+        j.status.user_id = j.user_id
+}
+
+-- StatusOwnership:
+--   Every JobStatus belongs to the same user as its category
+--   (status.user_id = status.category.user_id). Expressed as the entity-level
+--   invariant SameUserAsCategory on JobStatus rather than a top-level collection
+--   invariant (a JobStatus module-collection is not addressable in this checker).
+
+-- UniqueValuePerUser:
+--   A status `value` is unique within a single user: no two of a user's statuses
+--   share a value. Enforced at the persistence boundary by a composite unique
+--   constraint (userId, value) and re-checked in CreateJobStatus via the
+--   `not exists JobStatus{user_id, value}` precondition.
+--   (Expressed as prose: the cross-instance JobStatus collection is not
+--   addressable as a point-in-time expression invariant here.)
+
+-- ExactlyOneDefaultPerUser:
+--   Exactly one of a user's statuses has is_default = true at all times. Seeded
+--   true on the lead "bookmarked" status; SetDefaultStatus clears the prior
+--   default before setting the new one; DeleteUnusedJobStatus refuses to remove
+--   the default. (Expressed as prose for the same reason as UniqueValuePerUser.)
+
+-- CategoryOrderedTransition:
+--   Every status transition (TransitionJobStatus) MUST satisfy: the target
+--   status's category sort_order is >= the source status's category sort_order
+--   (forward/lateral), OR the source is a closed category (is_terminal or
+--   default_collapsed) and config.allow_reopen_from_closed is true (bounded
+--   reopen), OR the target category allows self-transition. Transitions failing
+--   all three are REJECTED. Exception: initial status on manual create / promotion
+--   (no source status). This SUPERSEDES the hardcoded value->value graph in
+--   crm-workflow.allium.
+--   (Not expressible as a point-in-time invariant: it constrains mutation, not
+--   state. Enforced by TransitionJobStatus.requires.)
+
+-- AppliedFlagDerivedFromCategory:
+--   Job.applied is true whenever the job's status belongs to an applied-stage
+--   category (applied, interviewing, offer, won). It is set as a side effect of
+--   transitioning into such a status and never depends on matching a hardcoded
+--   status value string. This is the mechanism behind F-AJ-02 (the applied
+--   toggle is folded into the status ComboBox: choosing an applied-stage status
+--   sets the flag).
+--   (Not expressible cleanly as state invariant because applied is a stored flag
+--   maintained by rules, not a pure derivation -- it must survive a status later
+--   moving categories; enforced by TransitionJobStatus + InitialStatusOnManualCreate.)
+
+-- AppliedDateImmutability:
+--   Job.applied_date is set on the FIRST entry into any applied-stage category
+--   and is never overwritten on subsequent applied-stage transitions. Preserves
+--   the original application date for reporting. (Unchanged in intent from
+--   crm-workflow.allium; restated because the trigger condition is now
+--   category-based.) (Not expressible: constrains mutation history.)
+
+-- AtLeastOneStatusPerUser:
+--   A user always has at least one JobStatus (the default cannot be deleted, and
+--   DeleteUnusedJobStatus guards against removing the last status). Guarantees the
+--   AddJob form and Kanban always have something to render.
+--   (Enforced by Delete*JobStatus requires; not a point-in-time state invariant
+--   because it constrains the delete operation.)
+
+------------------------------------------------------------
+-- API Surface (Public API v1)
+------------------------------------------------------------
+
+-- Custom statuses and categories are exposed read+write through the Public API
+-- v1 Open Host Service (see public-api-v1.allium for the cross-cutting auth,
+-- rate-limit, explicit-select and UUID-validation rules every /api/v1 route
+-- obeys). This spec owns the resource shape; public-api-v1.allium owns the
+-- transport contract. Surface (all scoped to the authenticated key's user --
+-- ADR-015):
+--   GET    /api/v1/job-statuses              -> list the user's statuses
+--                                               (id, value, label, category kind,
+--                                                sort_order, is_default; ordered
+--                                                by category.sort_order then
+--                                                status.sort_order). NEVER expose
+--                                                user_id.
+--   POST   /api/v1/job-statuses              -> CreateJobStatus
+--   PATCH  /api/v1/job-statuses/:id          -> RenameJobStatus / ReorderJobStatus
+--                                               / SetDefaultStatus (partial update)
+--   DELETE /api/v1/job-statuses/:id          -> DeleteUnusedJobStatus, or
+--                                               ReassignAndDeleteJobStatus when a
+--                                               `reassign_to` query/body param is
+--                                               supplied. Delete-in-use without a
+--                                               target returns a 409-style domain
+--                                               error (STATUS_IN_USE).
+--   GET    /api/v1/job-status-categories     -> list the user's categories
+--                                               (id, kind, label, colour,
+--                                                sort_order + the four semantic
+--                                                flags). Read-only in v1
+--                                                (presentation edits via the
+--                                                internal settings actions; the
+--                                                public API does not yet mutate
+--                                                categories).
+-- The existing GET/POST/PATCH /api/v1/jobs endpoints continue to accept a status
+-- by `value`; the value is resolved against the authenticated user's own
+-- statuses (no longer a global lookup), and an unknown value is a validation
+-- error rather than silently creating a status.
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Should category semantic flags (is_applied_stage, is_terminal, default_collapsed, allows_self_transition) become user-editable? This version seeds them immutably from kind to keep applied/terminal/transition semantics sound. Making them editable would let a user declare, e.g., that their custom 'Ghosted' category does not count as applied. Deferred: revisit if users ask to reclassify the built-in semantics rather than just add statuses."
+
+open question "Should users be able to create entirely new category kinds (beyond the seven system kinds)? Current design fixes the kinds and lets users add statuses + rename/recolour/reorder categories. Fully user-defined categories would require user-defined ordering + applied/terminal semantics per category (subsumes the question above). Deferred as a larger scope than F-AJ-09."
+
+open question "Should colour be overridable per status, or only per category? This version sets colour at the category level (all statuses in a category share a colour, matching the Kanban-column mental model). Per-status colour is a presentation enhancement that can be added without changing the domain model."
+
+open question "Should the category-ordered transition rule be replaceable by fully free transitions (any status -> any status)? The category-ordered rule preserves an audit-meaningful workflow guard while allowing custom statuses. A 'free transitions' mode (user opts out of validation entirely) is a possible config toggle but is omitted until a user needs it -- removing the guard weakens the StateMachineEnforcement security property carried over from crm-workflow."
+
+open question "After migration, should the old draft/saved/expired status values be retired from new users' seed sets? New users are seeded with bookmarked/applied/interview/offer/accepted/rejected/archived/expired. 'expired' is retained (listing-expired is a real state); 'draft'/'saved' are legacy-only and not seeded for new users. Confirm 'expired' belongs under the archived category vs its own."
