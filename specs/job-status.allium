@@ -149,13 +149,22 @@ entity JobStatus {
 ------------------------------------------------------------
 
 config {
-    -- Whether a job in a closed (terminal/archived/lost) status may be
-    -- "reopened" by moving it back to an earlier-ordered category.
+    -- Whether a job in a closed (terminal `won` / default-collapsed `lost` /
+    -- `archived`) status may be "reopened". When true, reopen is BOUNDED: it
+    -- may only move the job back to a status in the default stage (see
+    -- default_initial_kind), NOT to any arbitrary earlier stage. This keeps a
+    -- meaningful workflow guard (a rejected job cannot teleport straight into
+    -- `offer`) while still letting users re-activate a closed job.
     allow_reopen_from_closed: Boolean = true
 
-    -- The category kind a newly-seeded default status belongs to, and which
-    -- status new manually-created jobs start in.
+    -- The category kind a newly-seeded default status belongs to, which status
+    -- new manually-created jobs start in, AND the only stage a closed job may be
+    -- reopened into.
     default_initial_kind: StatusCategoryKind = lead
+
+    -- Soft UI guardrail: above this many statuses the Kanban degrades (too many
+    -- columns). The management UI warns (does not hard-block) past this count.
+    soft_status_count_warning: Integer = 12
 }
 
 ------------------------------------------------------------
@@ -210,6 +219,27 @@ rule SeedDefaultStatusSet {
         -- transaction, each linked to its category, with the "bookmarked" status
         -- marked is_default = true. Seeding MUST run in one transaction and is
         -- the per-user equivalent of the old global JobStatus seed.
+        --
+        -- SIGNUP PATH (MUST-FIX): the current new-user signup (auth.actions.ts:~58)
+        -- does a GLOBAL `jobStatus.upsert({where:{value}})`. Post-migration that
+        -- (a) violates NOT NULL on the new userId column and (b) for users after
+        -- the first would no-op (value already exists) -> new users get ZERO
+        -- statuses, breaking AtLeastOneStatusPerUser + the AddJob form. The signup
+        -- path MUST be rewritten to invoke this per-user seed.
+        --
+        -- RACE: two concurrent first-requests can both pass the
+        -- `not Categories.any(user)` guard and double-seed. Back it with a DB
+        -- `@@unique([userId, kind])` on JobStatusCategory (invariant
+        -- OneCategoryPerKindPerUser) + `@@unique([userId, value])` on JobStatus
+        -- (invariant UniqueValuePerUser), and make the seed an upsert/ON CONFLICT
+        -- DO NOTHING so a lost race is harmless.
+        --
+        -- DEFAULT-STATUS RESOLVERS (MUST-FIX): the automation promoter
+        -- (promoter.ts:~421) and reference-data.ts:~158 `getDefaultJobStatus()` are
+        -- user-blind (`findFirst({where:{value:"bookmarked"}})`) and self-create a
+        -- global row -- post-migration this is cross-tenant attach / a NOT-NULL
+        -- crash. They MUST take and use userId and resolve the user's is_default
+        -- (or lead-stage) status.
 }
 
 -- Status management (the Job-Status Repository -- ADR-015 userId on every query)
@@ -250,12 +280,28 @@ rule RenameJobStatus {
         status.label = new_label
         status.category = new_category
 
+        -- Recompute the applied flag for every job currently in this status so
+        -- the stored flag never drifts from the (new) stage's semantics.
+        if new_category.is_applied_stage:
+            for j in status.jobs:
+                j.applied = true
+                if j.applied_date = null:
+                    j.applied_date = now
+
     @guidance
-        -- Moving a status to a different category changes its workflow semantics
+        -- Moving a status to a different stage changes its workflow semantics
         -- (applied-flag, terminal-ness, Kanban column position/colour). This is
-        -- intentional: it is how a user re-classifies "Phone Screen" from lead to
-        -- interviewing. Existing jobs in this status are unaffected at rest; their
-        -- next transition is validated against the new category.
+        -- how a user re-classifies "Phone Screen" from lead to interviewing.
+        -- BECAUSE `applied` is a stored flag (chosen over pure derivation to keep
+        -- the existing dashboard/appliedDate queries intact), moving a status INTO
+        -- an applied stage MUST recompute `applied` for its jobs (above). Moving a
+        -- status OUT of an applied stage does NOT clear `applied` (a submitted
+        -- application stays submitted -- consistent with appliedDate immutability).
+        -- UX: this is a high-impact, partly-irreversible change, so the management
+        -- UI MUST show an impact warning before confirming a stage change that
+        -- flips applied-ness, e.g. "Moving [Phone Screen] to Interviewing will mark
+        -- N jobs as submitted applications." `value` is NEVER renamed (it anchors
+        -- the API key + history identity) and is never shown in the management UI.
 }
 
 rule ReorderJobStatus {
@@ -288,23 +334,32 @@ rule SetDefaultStatus {
 }
 
 rule DeleteUnusedJobStatus {
-    -- Delete a status that no job references. Plain removal.
+    -- Delete a status that NO job references AND that NO history entry references.
+    -- Plain removal. A status referenced only by history (a job moved through it
+    -- then onward) must use ReassignAndDeleteJobStatus instead -- see guidance.
     when: DeleteUnusedJobStatus(user, status)
 
     requires: status.user_id = user.id
     requires: status.jobs.count = 0
+    requires: not exists JobStatusHistory{new_status: status}
     requires: not status.is_default
 
     ensures:
         not exists status
 
     @guidance
-        -- Guards enforced at the boundary in addition to the above: cannot delete
-        -- the user's LAST remaining status (invariant AtLeastOneStatusPerUser),
-        -- and cannot delete the is_default status (the user must pick a new
-        -- default first via SetDefaultStatus). "Not last" is enforced in code
-        -- (count of the user's statuses > 1) rather than in the spec because a
-        -- JobStatus module-collection is not addressable here.
+        -- CRITICAL FK fact (verified against the live schema): Job.statusId and
+        -- JobStatusHistory.newStatusId are ON DELETE RESTRICT (Prisma default for
+        -- a required relation); JobStatusHistory.previousStatusId is SET NULL. So
+        -- a plain delete of a status that ANY history row references as new_status
+        -- THROWS a FK violation -- "no live job uses it" is NOT sufficient. Hence
+        -- the extra `not exists JobStatusHistory{new_status: status}` guard: if
+        -- history still references it, route through ReassignAndDeleteJobStatus.
+        -- Additional boundary guards: cannot delete the user's LAST remaining
+        -- status (invariant AtLeastOneStatusPerUser, enforced in code as count > 1
+        -- since a JobStatus module-collection is not addressable here), and cannot
+        -- delete the is_default status (pick a new default first). The UI shows the
+        -- default's delete affordance disabled with a tooltip, not hidden.
 }
 
 rule ReassignAndDeleteJobStatus {
@@ -353,9 +408,10 @@ rule TransitionJobStatus {
         let from = job.status.category
         let to = new_status.category
         to.sort_order >= from.sort_order
-        or (config.allow_reopen_from_closed and from.is_terminal)
-        or (config.allow_reopen_from_closed and from.default_collapsed)
         or new_status.category.allows_self_transition
+        or (config.allow_reopen_from_closed
+            and (from.is_terminal or from.default_collapsed)
+            and to.kind = config.default_initial_kind)
 
     ensures:
         job.status = new_status
@@ -374,20 +430,29 @@ rule TransitionJobStatus {
         )
 
     @guidance
-        -- The category-ordered rule is intentionally MORE permissive than the old
-        -- hardcoded value->value matrix: any forward or lateral move (target
-        -- category sort_order >= source) is allowed, plus a bounded "reopen" from
-        -- any closed category (terminal `won` or default-collapsed `lost`/
-        -- `archived`) back to an earlier stage. This trades the old strictness for
-        -- user-defined workflows: a user who invents "Phone Screen" and "Onsite"
-        -- under `interviewing` can move freely between them (same category =
-        -- lateral). The JobStatusHistory entry creation, transaction boundary,
-        -- optional transition note, optimistic-concurrency STALE_STATE check and
-        -- post-commit event publication are UNCHANGED from crm-workflow.allium and
-        -- are not restated here.
+        -- Category-ordered validity: any forward or lateral move (target stage
+        -- sort_order >= source) is allowed, so a user who invents "Phone Screen"
+        -- and "Onsite" under the interviewing stage moves freely between them
+        -- (same stage = lateral). BOUNDED reopen: from a closed stage (terminal
+        -- `won` or default-collapsed `lost`/`archived`) a job may be reopened ONLY
+        -- into the default stage (`lead`) -- it may NOT jump to an arbitrary
+        -- earlier stage. This is the tightened model chosen over "reopen to any
+        -- earlier stage": it preserves a meaningful, audit-relevant workflow guard
+        -- (closest to the old matrix's `rejected -> bookmarked` / `archived ->
+        -- bookmarked` edges) while still supporting custom stages. It is still
+        -- more permissive than the old value->value matrix for forward jumps
+        -- (e.g. lead -> won directly is allowed); that relaxation is intentional.
+        -- IDOR: the impl MUST resolve `new_status` with a userId-scoped query
+        -- (today's `jobStatus.findFirst({where:{id}})` in job.actions.ts:891 and
+        -- api/v1/jobs/[id]/status/route.ts:52 has NO userId filter -- a
+        -- cross-tenant IDOR once statuses are per-user; add `userId` to the where).
+        -- The JobStatusHistory entry creation, transaction boundary, optional
+        -- transition note, optimistic-concurrency STALE_STATE check and post-commit
+        -- event publication are UNCHANGED from crm-workflow.allium.
         --
-        -- applied_date immutability is preserved: it is set only on the FIRST
-        -- entry into any applied-stage category and never overwritten.
+        -- applied_date immutability is preserved: set only on the FIRST entry into
+        -- any applied-stage category, never overwritten, never cleared on a later
+        -- move out of an applied stage (you cannot un-apply a submitted application).
 }
 
 rule InitialStatusOnManualCreate {
@@ -431,6 +496,24 @@ rule GetKanbanBoard {
         -- ascending (unchanged from crm-workflow). Navigation badge counts derive
         -- the same way: e.g. an "active applications" badge counts jobs whose
         -- status.category.is_applied_stage is true and is_terminal is false.
+        --
+        -- HARDCODED-LIST REMOVAL (blast radius, MUST cover all sites): besides
+        -- status-machine.ts (STATUS_ORDER / STATUS_COLOR_NAMES / COLLAPSED_BY_DEFAULT
+        -- / VALID_TRANSITIONS), the rich Tailwind map STATUS_COLORS lives in
+        -- src/hooks/useKanbanState.ts (:91, :228) with a `?? STATUS_COLORS.draft`
+        -- fallback that breaks post-migration. Replace per-value colour maps with
+        -- the stage colour applied via a CSS custom property
+        -- (`style={{'--stage-color': category.colour}}`) so user-defined colours
+        -- need no Tailwind JIT class. Colour is PER-STAGE in this version (the
+        -- per-status-colour open question is closed: deferred). Colour is never the
+        -- SOLE differentiator -- every column/badge keeps its text label (WCAG 2.2).
+        --
+        -- SEMANTIC ANCHORING via category.kind (replaces scattered value-string
+        -- checks): retention-cron.ts (:273, purge "rejected") routes via kind=lost;
+        -- JobDetails/MyJobsTable "draft"/"applied"/"interview" UI checks route via
+        -- kind=lead / is_applied_stage; StatusFunnelWidget's hardcoded 5-step funnel
+        -- derives from stage order. No code may match a status by a hardcoded value
+        -- string after this; semantics come from the status's category.kind / flags.
 }
 
 -- Migration
@@ -457,12 +540,36 @@ rule MigrateLegacyStatusesToPerUser {
         --   "bookmarked" -> "bookmarked"
         --   "applied"/"interview"/"offer"/"rejected"/"archived"/"expired" -> same
         --   "accepted" -> "accepted"   (won; seeded even if absent in old data)
+        --   "new"    -> "bookmarked"   (lead; the promoter/reference-data fallback
+        --                               value -- MUST be in the map, see below)
         -- For each job: find the user's per-user status whose value equals the
         -- mapped legacy value, set job.statusId to it. Repoint JobStatusHistory
-        -- previous/new status FKs the same way. Runs as a Prisma data migration,
-        -- idempotent, inside the migration transaction. After migration the global
-        -- JobStatus rows are dropped. Any job whose legacy value has no mapping
-        -- (should not occur) falls back to the user's is_default status, logged.
+        -- previous/new status FKs the same way. Any job whose legacy value has no
+        -- mapping falls back to the user's is_default status (a guaranteed path,
+        -- not a "should not occur"), logged.
+        --
+        -- PHASE ORDERING (the global value-unique + FK RESTRICT make order load-
+        -- bearing): (1) add nullable userId column to JobStatus + create
+        -- JobStatusCategory; (2) per user, seed categories + statuses; (3) repoint
+        -- ALL jobs + BOTH JobStatusHistory FK columns for ALL users; (4) drop the
+        -- old global `value @unique` index; (5) add `@@unique([userId, value])` +
+        -- make userId NOT NULL; (6) ONLY THEN delete the global JobStatus rows
+        -- (a single unrepointed row blocks the drop via FK RESTRICT, for everyone).
+        -- Use PRAGMA defer_foreign_keys / the table-rebuild pattern already used by
+        -- migration 20260513170926. Forward-only; take a DB backup first.
+        --
+        -- BACKFILL applied/appliedDate (MUST -- old data is inconsistent with the
+        -- new derivation): the OLD computeTransitionSideEffects only set
+        -- applied=true for the `applied`/`interview` values, so existing
+        -- `offer`/`accepted` jobs may have applied=false. After repoint, set
+        -- `applied = true` for every job whose NEW status category is_applied_stage,
+        -- and set appliedDate (where null) from the earliest applied-stage
+        -- JobStatusHistory.changedAt for that job (fallback: now).
+        --
+        -- IDEMPOTENCY: the seed guard `not Categories.any(user)` does NOT cover the
+        -- repoint phase. Make repoint independently idempotent (repoint any job
+        -- whose statusId is not in the user's per-user set), so a partial-failure
+        -- re-run completes rather than skipping.
 }
 
 ------------------------------------------------------------
@@ -573,7 +680,16 @@ invariant JobStatusBelongsToOwner {
 -- The existing GET/POST/PATCH /api/v1/jobs endpoints continue to accept a status
 -- by `value`; the value is resolved against the authenticated user's own
 -- statuses (no longer a global lookup), and an unknown value is a validation
--- error rather than silently creating a status.
+-- error rather than silently creating a status. The job-create DEFAULT must
+-- change from the hardcoded `status ?? "draft"` (jobs/route.ts:130 + helpers.ts
+-- resolveStatus) to the user's is_default status -- post-migration "draft" is no
+-- longer a seeded value, so the old default would 400 every defaulted create.
+--
+-- `value` IS the API/display key, NOT the FK identity (FK is `id`). Do NOT promise
+-- history/Kanban continuity across delete-then-recreate-with-the-same-value: the
+-- recreated status is a new `id`; repointed history rows stay on the reassign
+-- target. `value` slug generation must suffix on collision (`phone-screen-2`) and
+-- map the `(userId,value)` unique violation to a friendly domain error.
 
 ------------------------------------------------------------
 -- Open Questions
@@ -583,8 +699,19 @@ open question "Should category semantic flags (is_applied_stage, is_terminal, de
 
 open question "Should users be able to create entirely new category kinds (beyond the seven system kinds)? Current design fixes the kinds and lets users add statuses + rename/recolour/reorder categories. Fully user-defined categories would require user-defined ordering + applied/terminal semantics per category (subsumes the question above). Deferred as a larger scope than F-AJ-09."
 
-open question "Should colour be overridable per status, or only per category? This version sets colour at the category level (all statuses in a category share a colour, matching the Kanban-column mental model). Per-status colour is a presentation enhancement that can be added without changing the domain model."
+-- RESOLVED (Welle 4 design review): colour is PER-STAGE (category level) for this
+-- version -- all statuses in a stage share the stage colour, matching the Kanban-
+-- column mental model and avoiding a per-row colour picker. Per-status colour is a
+-- future presentation enhancement that needs no domain-model change.
 
-open question "Should the category-ordered transition rule be replaceable by fully free transitions (any status -> any status)? The category-ordered rule preserves an audit-meaningful workflow guard while allowing custom statuses. A 'free transitions' mode (user opts out of validation entirely) is a possible config toggle but is omitted until a user needs it -- removing the guard weakens the StateMachineEnforcement security property carried over from crm-workflow."
+-- RESOLVED (Welle 4 design review): the transition rule is category-ordered with
+-- BOUNDED reopen (forward/lateral + reopen-from-closed only into the default/lead
+-- stage), chosen over both "reopen to any earlier stage" (too permissive, lets a
+-- rejected job jump into offer) and "fully free transitions" (drops the audit
+-- guard). A free-transitions opt-out config toggle remains a possible future add
+-- but is intentionally omitted now.
 
-open question "After migration, should the old draft/saved/expired status values be retired from new users' seed sets? New users are seeded with bookmarked/applied/interview/offer/accepted/rejected/archived/expired. 'expired' is retained (listing-expired is a real state); 'draft'/'saved' are legacy-only and not seeded for new users. Confirm 'expired' belongs under the archived category vs its own."
+-- RESOLVED (Welle 4 design review): `expired` is seeded under the `archived` stage
+-- (both are not-applied, reactivatable, default-collapsed). 'draft'/'saved' are
+-- legacy-only (migrated to bookmarked), NOT seeded for new users; 'expired' is
+-- retained as a real state.
