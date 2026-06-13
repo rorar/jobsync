@@ -83,12 +83,14 @@ of seven system "stage kinds", not from the status value.**
   collapse to `bookmarked` (lead).
 - **Dead code removed:** `status-machine.ts` + `validate-edit-transition.ts` (the
   value-keyed machine) are deleted.
-- **Known limitation (deferred, see BACKLOG):** the `allows_self_transition` flag
-  (multi-round interviewing as a SAME-status re-selection) is not wired — same-status
-  changes are treated as no-ops by the actions. Moving between DIFFERENT statuses in
-  the same stage (lateral) IS supported. `TransitionOptions` (`sameStatus`/
-  configurable reopen) exists in the domain layer but is not threaded through the
-  server adapters.
+- **~~Known limitation~~ (RESOLVED 2026-06-13):** the `allows_self_transition` flag
+  (multi-round interviewing as a SAME-status re-selection) is now wired. `TransitionOptions`
+  (`sameStatus`) is threaded through `isValidCategoryTransitionByKind` and the four status sites
+  (`changeJobStatus`/`updateJob`/`updateKanbanOrder` + `api/v1/jobs/[id]/status`): re-selecting the
+  current status on a self-transition stage (interviewing) logs a new round (history + event); every
+  other stage's same-status re-selection stays a benign no-op. Moving between DIFFERENT statuses in
+  the same stage (lateral) was already supported. See BACKLOG §Welle 4 for the live triggers + the
+  `updateJob`-records-on-any-save UX consideration left for a follow-up.
 
 **Spec:** `specs/job-status.allium` (authoritative). `allium check` 0 errors,
 `allium:weed` 0 drift.

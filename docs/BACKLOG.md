@@ -320,25 +320,20 @@ Tests grün, Build grün. Full-Review (Security + Architecture) Findings gefixt.
 From the Welle 4 comprehensive-review (security clean; one HIGH fixed → W4-B1 in BUGS.md).
 These are deliberate deferrals, not bugs:
 
-- **MED — Wire `allows_self_transition` (multi-round interviewing as SAME-status re-selection).**
-  ✅ GREENLIT 2026-06-13 (user) — scheduled for a DEDICATED next session (this one closed at 66%
-  token budget). NOT started.
-  **User story:** *As a job-seeker deep in a multi-round loop with one employer, I want to log each
-  interview round under the same "Interviewing" status (each with its own date + note), so my job
-  timeline shows the full sequence (Round 1 → 2 → 3) without inventing a separate status per round.*
-  **Acceptance:** re-selecting the job's CURRENT status is accepted (not rejected, not a no-op) ONLY
-  when its category `allowsSelfTransition` (today: `interviewing`); it writes a `JobStatusHistory`
-  row + emits `JobStatusChanged` even though `statusId` is unchanged; all other stages stay no-op;
-  `applied`/`appliedDate` immutability preserved. Works from Kanban, the job form, and the public API.
-  **Impl:** thread `opts` (`sameStatus`) into `isValidCategoryTransitionByKind` (`status-transition.ts`);
-  in `changeJobStatus`/`updateJob`/`updateKanbanOrder` (`job.actions.ts`) stop short-circuiting on
-  `newStatusId === currentStatusId` when the status' `category.allowsSelfTransition` is true, and run
-  the transition (history + event) for that case; same for `api/v1/jobs/[id]/status/route.ts`. Unit +
-  component + 1 E2E. `allium:weed` after (rule `TransitionJobStatus` already permits self-transition,
-  so this CLOSES drift). `isValidCategoryTransition` (`status-categories.ts`) already supports
-  `sameStatus` — only the adapter + the action short-circuits need work. Est. 1–2h. See ADR-036
-  "Known limitation". NOTE: lateral moves between DIFFERENT interviewing statuses already work — this
-  only adds the same-status repeat-logging path.
+- ~~**MED — Wire `allows_self_transition` (multi-round interviewing as SAME-status re-selection).**~~
+  ✅ DONE 2026-06-13 (branch `welle4-self-transition`). Re-selecting a job's CURRENT status now logs a
+  new round (`JobStatusHistory` + `JobStatusChanged`) **only** on a self-transition stage (interviewing);
+  every other stage's same-status re-selection stays a benign no-op; `applied`/`appliedDate` immutability
+  preserved. Wired through: adapter `isValidCategoryTransitionByKind` (`sameStatus` opt) +
+  `changeJobStatus`/`updateJob`/`updateKanbanOrder` (`job.actions.ts`) + `api/v1/jobs/[id]/status/route.ts`
+  + `getValidTransitions` (current status surfaced only on a self-transition stage). Unit + action + API
+  tests added; `allium:weed` 0 drift (spec already permitted it → ADR-036 known-limitation closed).
+  **Live trigger today:** the job edit form (re-save an interviewing job → round) + the public API; the
+  dedicated `changeJobStatus`/`updateKanbanOrder` self-transition fires for any caller that passes the
+  same status id. NOTE (UX consideration for a follow-up): `updateJob` records a round on *any* save of
+  an interviewing job with unchanged status, so an unrelated field edit also logs a round — if that
+  proves noisy, gate it behind an explicit "log a round" form intent. Kanban *same-column drag* is left
+  as a pure reorder (it passes no `newStatusId`) so reordering interviewing cards never spams rounds.
 - ~~**LOW — Orphan "Other" Kanban column partial cast.**~~ ✅ FIXED 2026-06-13 — `useKanbanState.ts`
   now gives the synthetic "Other" column a real neutral `category` object (grey, archived semantics,
   sorts last), so consumers reading `column.status.category.*` never hit undefined.
