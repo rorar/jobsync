@@ -321,13 +321,24 @@ From the Welle 4 comprehensive-review (security clean; one HIGH fixed → W4-B1 
 These are deliberate deferrals, not bugs:
 
 - **MED — Wire `allows_self_transition` (multi-round interviewing as SAME-status re-selection).**
-  `isValidCategoryTransition` (`status-categories.ts`) supports `sameStatus`/`allowReopenFromClosed`/
-  `defaultStageKind` via `TransitionOptions`, but `isValidCategoryTransitionByKind`
-  (`status-transition.ts`) does not thread them and the server actions short-circuit
-  `statusChanged` before validating, so re-selecting the *same* interviewing status is a no-op.
-  Lateral moves between DIFFERENT statuses in the interviewing stage already work. To enable
-  same-status multi-round, thread opts + a config source through the adapter, or trim the dead
-  branch + doc comments. See ADR-036 "Known limitation".
+  ✅ GREENLIT 2026-06-13 (user) — scheduled for a DEDICATED next session (this one closed at 66%
+  token budget). NOT started.
+  **User story:** *As a job-seeker deep in a multi-round loop with one employer, I want to log each
+  interview round under the same "Interviewing" status (each with its own date + note), so my job
+  timeline shows the full sequence (Round 1 → 2 → 3) without inventing a separate status per round.*
+  **Acceptance:** re-selecting the job's CURRENT status is accepted (not rejected, not a no-op) ONLY
+  when its category `allowsSelfTransition` (today: `interviewing`); it writes a `JobStatusHistory`
+  row + emits `JobStatusChanged` even though `statusId` is unchanged; all other stages stay no-op;
+  `applied`/`appliedDate` immutability preserved. Works from Kanban, the job form, and the public API.
+  **Impl:** thread `opts` (`sameStatus`) into `isValidCategoryTransitionByKind` (`status-transition.ts`);
+  in `changeJobStatus`/`updateJob`/`updateKanbanOrder` (`job.actions.ts`) stop short-circuiting on
+  `newStatusId === currentStatusId` when the status' `category.allowsSelfTransition` is true, and run
+  the transition (history + event) for that case; same for `api/v1/jobs/[id]/status/route.ts`. Unit +
+  component + 1 E2E. `allium:weed` after (rule `TransitionJobStatus` already permits self-transition,
+  so this CLOSES drift). `isValidCategoryTransition` (`status-categories.ts`) already supports
+  `sameStatus` — only the adapter + the action short-circuits need work. Est. 1–2h. See ADR-036
+  "Known limitation". NOTE: lateral moves between DIFFERENT interviewing statuses already work — this
+  only adds the same-status repeat-logging path.
 - ~~**LOW — Orphan "Other" Kanban column partial cast.**~~ ✅ FIXED 2026-06-13 — `useKanbanState.ts`
   now gives the synthetic "Other" column a real neutral `category` object (grey, archived semantics,
   sorts last), so consumers reading `column.status.category.*` never hit undefined.
