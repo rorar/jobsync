@@ -357,12 +357,11 @@ These are deliberate deferrals, not bugs:
   marks-applied); applied indicator flip Not-Applied→Applied + purple interviewing dot + Date-Applied
   auto-enable; dynamic Kanban (per-user columns, `--stage-color` tints, default-collapsed Rejected/
   Archived/Expired pills, count badges, collapse chevrons). Two findings:
-  - **LOW (visual) — status ComboBox trigger clips the selected label.** The trigger is fixed
-    `w-[200px]` (`StatusStageCombobox.tsx:125`) with `<span class="truncate">{label}</span>` + a
-    `shrink-0` "Marks as applied" Badge; on an applied-stage status the badge squeezes the label to zero
-    width (e.g. "Interview" not shown). DOM/a11y unaffected (the label is present). Fix options: drop the
-    redundant badge from the TRIGGER (the separate "Status: Applied" indicator already conveys it), widen
-    the trigger, or hide the badge on overflow. UI change → run the ui-design review first.
+  - ~~**LOW (visual) — status ComboBox trigger clips the selected label.**~~ ✅ FIXED 2026-06-13
+    (`14d3c6b`). The fixed-width `w-[200px]` trigger squeezed the `truncate` label to zero behind the
+    `shrink-0` "Marks as applied" Badge on applied stages. Removed the redundant badge from the TRIGGER
+    (it stays in the dropdown options; the separate "Status: Applied" indicator conveys applied-ness).
+    Label now always shows (verified visually — trigger renders "● Interview"). Spec updated.
   - **Test-data debt (not a product bug)** — orphan custom `E2E Stage …` statuses accumulate from prior
     E2E runs (the specs' best-effort cleanup leaves the status rows), polluting the Kanban (pushes real
     columns off-screen) + the status list. Harden `e2e/cleanup-stale-data.ts` to purge orphan custom
