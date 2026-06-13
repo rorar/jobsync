@@ -85,26 +85,9 @@ jest.mock("@/lib/events", () => ({
   DomainEventTypes: { JobStatusChanged: "JobStatusChanged" },
 }));
 
-jest.mock("@/lib/crm/status-machine", () => ({
-  isValidTransition: jest.fn().mockReturnValue(true),
-  computeTransitionSideEffects: jest.fn().mockReturnValue({}),
-  getValidTargets: jest.fn().mockReturnValue([]),
-  STATUS_ORDER: ["bookmarked", "applied", "interview", "offer", "rejected", "ghosted", "withdrawn"],
-  COLLAPSED_BY_DEFAULT: [],
-  // CR-2: validate-edit-transition.ts now imports VALID_TRANSITIONS from status-machine.ts
-  VALID_TRANSITIONS: {
-    bookmarked: ["applied", "archived", "rejected"],
-    applied: ["interview", "rejected", "archived"],
-    interview: ["offer", "rejected", "archived", "interview"],
-    offer: ["accepted", "rejected", "archived"],
-    accepted: ["archived"],
-    rejected: ["bookmarked", "archived"],
-    archived: ["bookmarked"],
-    expired: ["bookmarked", "archived"],
-    saved: ["applied", "archived", "rejected"],
-    draft: ["applied", "archived", "rejected"],
-  },
-}));
+// Welle 4: transition validity moved off the value-keyed status-machine onto the
+// category model (status-transition.ts). The mocks in this suite supply each
+// status' `category.kind` directly, so the real (pure) category helpers run.
 
 describe("jobActions", () => {
   const mockUser = { id: "user-id" };
@@ -432,7 +415,7 @@ describe("jobActions", () => {
         JobSource: true,
         JobTitle: true,
         Company: true,
-        Status: true,
+        Status: { include: { category: true } },
         Location: true,
         Resume: {
           include: {

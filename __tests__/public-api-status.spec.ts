@@ -185,12 +185,13 @@ describe("POST /api/v1/jobs/:id/status", () => {
       id: VALID_UUID,
       statusId: STATUS_BOOKMARKED_ID,
       appliedDate: null,
-      Status: { value: "bookmarked" },
+      Status: { value: "bookmarked", category: { kind: "lead" } },
     });
     // Target status is "applied"
     mockPrisma.jobStatus.findFirst.mockResolvedValue({
       id: STATUS_APPLIED_ID,
       value: "applied",
+      category: { kind: "applied" },
     });
 
     const updatedJob = makeJobRow({ Status: { id: STATUS_APPLIED_ID, label: "Applied", value: "applied" } });
@@ -220,11 +221,12 @@ describe("POST /api/v1/jobs/:id/status", () => {
       id: VALID_UUID,
       statusId: STATUS_BOOKMARKED_ID,
       appliedDate: null,
-      Status: { value: "bookmarked" },
+      Status: { value: "bookmarked", category: { kind: "lead" } },
     });
     mockPrisma.jobStatus.findFirst.mockResolvedValue({
       id: STATUS_APPLIED_ID,
       value: "applied",
+      category: { kind: "applied" },
     });
 
     const mockHistoryCreate = jest.fn().mockResolvedValue({ id: "hist-1" });
@@ -253,21 +255,24 @@ describe("POST /api/v1/jobs/:id/status", () => {
     });
   });
 
-  it("returns 400 for invalid transition (bookmarked -> offer)", async () => {
+  it("returns 400 for invalid transition (offer -> applied, backward)", async () => {
+    // Welle 4 (category-ordered): lead -> offer is now a valid forward jump, so
+    // an invalid case must be a backward move that is not a bounded reopen.
     mockPrisma.job.findFirst.mockResolvedValue({
       id: VALID_UUID,
-      statusId: STATUS_BOOKMARKED_ID,
+      statusId: STATUS_OFFER_ID,
       appliedDate: null,
-      Status: { value: "bookmarked" },
+      Status: { value: "offer", category: { kind: "offer" } },
     });
     mockPrisma.jobStatus.findFirst.mockResolvedValue({
-      id: STATUS_OFFER_ID,
-      value: "offer",
+      id: STATUS_APPLIED_ID,
+      value: "applied",
+      category: { kind: "applied" },
     });
 
     const req = mockRequest(
       `http://localhost/api/v1/jobs/${VALID_UUID}/status`,
-      { body: { statusId: STATUS_OFFER_ID } },
+      { body: { statusId: STATUS_APPLIED_ID } },
     );
     const res = asRes(await changeStatus(req, routeCtx(VALID_UUID)));
 
@@ -309,11 +314,12 @@ describe("POST /api/v1/jobs/:id/status", () => {
       id: VALID_UUID,
       statusId: STATUS_APPLIED_ID, // actual current status
       appliedDate: null,
-      Status: { value: "applied" },
+      Status: { value: "applied", category: { kind: "applied" } },
     });
     mockPrisma.jobStatus.findFirst.mockResolvedValue({
       id: STATUS_OFFER_ID,
       value: "offer",
+      category: { kind: "offer" },
     });
 
     const req = mockRequest(
@@ -338,6 +344,7 @@ describe("POST /api/v1/jobs/:id/status", () => {
     mockPrisma.jobStatus.findFirst.mockResolvedValue({
       id: STATUS_APPLIED_ID,
       value: "applied",
+      category: { kind: "applied" },
     });
 
     const req = mockRequest(
@@ -356,6 +363,7 @@ describe("POST /api/v1/jobs/:id/status", () => {
     mockPrisma.jobStatus.findFirst.mockResolvedValue({
       id: STATUS_APPLIED_ID,
       value: "applied",
+      category: { kind: "applied" },
     });
 
     const req = mockRequest(
@@ -376,7 +384,7 @@ describe("POST /api/v1/jobs/:id/status", () => {
       id: VALID_UUID,
       statusId: STATUS_BOOKMARKED_ID,
       appliedDate: null,
-      Status: { value: "bookmarked" },
+      Status: { value: "bookmarked", category: { kind: "lead" } },
     });
     mockPrisma.jobStatus.findFirst.mockResolvedValue(null); // no such status
 
@@ -435,11 +443,12 @@ describe("POST /api/v1/jobs/:id/status", () => {
       id: VALID_UUID,
       statusId: STATUS_BOOKMARKED_ID,
       appliedDate: null,
-      Status: { value: "bookmarked" },
+      Status: { value: "bookmarked", category: { kind: "lead" } },
     });
     mockPrisma.jobStatus.findFirst.mockResolvedValue({
       id: STATUS_APPLIED_ID,
       value: "applied",
+      category: { kind: "applied" },
     });
 
     const mockHistoryCreate = jest.fn().mockResolvedValue({ id: "hist-1" });

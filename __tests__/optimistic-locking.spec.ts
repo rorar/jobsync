@@ -69,10 +69,11 @@ jest.mock("@/lib/events", () => ({
 describe("Optimistic Locking (S3-D3)", () => {
   const mockUser = { id: "user-id" };
 
+  // Welle 4: statuses carry their stage so category-ordered transitions apply.
   const mockStatuses = [
-    { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked" },
-    { id: "status-applied", label: "Applied", value: "applied" },
-    { id: "status-interview", label: "Interview", value: "interview" },
+    { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked", category: { kind: "lead" } },
+    { id: "status-applied", label: "Applied", value: "applied", category: { kind: "applied" } },
+    { id: "status-interview", label: "Interview", value: "interview", category: { kind: "interviewing" } },
   ];
 
   const mockJob = {
@@ -80,7 +81,7 @@ describe("Optimistic Locking (S3-D3)", () => {
     userId: "user-id",
     statusId: "status-bookmarked",
     version: 3,
-    Status: { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked" },
+    Status: { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked", category: { kind: "lead" } },
     appliedDate: null,
     sortOrder: 0,
     JobTitle: { id: "title-1", label: "Engineer" },

@@ -56,6 +56,17 @@ jest.mock("@/lib/events", () => ({
 describe("CRM Server Actions", () => {
   const mockUser = { id: "user-id" };
 
+  // Welle 4: statuses carry their stage (category.kind) so the category-ordered
+  // transition + applied-by-stage helpers run against the mocks.
+  const KIND_BY_VALUE: Record<string, string> = {
+    bookmarked: "lead", applied: "applied", interview: "interviewing",
+    offer: "offer", accepted: "won", rejected: "lost", archived: "archived",
+  };
+  const withCat = <T extends { value: string }>(s: T) => ({
+    ...s,
+    category: { kind: KIND_BY_VALUE[s.value], defaultCollapsed: ["lost", "archived"].includes(KIND_BY_VALUE[s.value]) },
+  });
+
   const mockStatuses = [
     { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked" },
     { id: "status-applied", label: "Applied", value: "applied" },
@@ -64,13 +75,13 @@ describe("CRM Server Actions", () => {
     { id: "status-accepted", label: "Accepted", value: "accepted" },
     { id: "status-rejected", label: "Rejected", value: "rejected" },
     { id: "status-archived", label: "Archived", value: "archived" },
-  ];
+  ].map(withCat);
 
   const mockJob = {
     id: "job-1",
     userId: "user-id",
     statusId: "status-bookmarked",
-    Status: { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked" },
+    Status: { id: "status-bookmarked", label: "Bookmarked", value: "bookmarked", category: { kind: "lead", defaultCollapsed: false } },
     appliedDate: null,
     sortOrder: 0,
     JobTitle: { label: "Engineer" },
@@ -113,12 +124,18 @@ describe("CRM Server Actions", () => {
     });
 
     it("should reject invalid transitions", async () => {
-      (prisma.job.findFirst as jest.Mock).mockResolvedValue(mockJob);
-      // bookmarked → offer is NOT a valid transition
+      // Welle 4 (category-ordered): a backward jump that is NOT a bounded reopen
+      // is invalid — offer → applied (offer is open, applied has a lower stage).
+      const offerJob = {
+        ...mockJob,
+        statusId: "status-offer",
+        Status: mockStatuses.find((s) => s.value === "offer"),
+      };
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue(offerJob);
       (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(
-        mockStatuses.find((s) => s.value === "offer"),
+        mockStatuses.find((s) => s.value === "applied"),
       );
-      const result = await changeJobStatus("job-1", "status-offer");
+      const result = await changeJobStatus("job-1", "status-applied");
       expect(result.success).toBe(false);
       expect(result.errorCode).toBe("INVALID_TRANSITION");
     });
@@ -210,7 +227,7 @@ describe("CRM Server Actions", () => {
         id: "job-1",
         userId: "user-id",
         statusId: "status-applied",
-        Status: { id: "status-applied", label: "Applied", value: "applied" },
+        Status: { id: "status-applied", label: "Applied", value: "applied", category: { kind: "applied", defaultCollapsed: false } },
         appliedDate: new Date("2026-03-15"),
         sortOrder: 0,
         JobTitle: { label: "Engineer" },
@@ -284,7 +301,7 @@ describe("CRM Server Actions", () => {
       const jobCurrentlyApplied = {
         ...mockJob,
         statusId: "status-applied",
-        Status: { id: "status-applied", label: "Applied", value: "applied" },
+        Status: { id: "status-applied", label: "Applied", value: "applied", category: { kind: "applied", defaultCollapsed: false } },
       };
 
       const interviewStatus = mockStatuses.find((s) => s.value === "interview")!;
@@ -341,7 +358,7 @@ describe("CRM Server Actions", () => {
           JobTitle: { label: "Dev" },
           Company: { label: "Co", logoUrl: null },
           Location: { label: "Remote" },
-          Status: { id: "status-bookmarked", value: "bookmarked", label: "Bookmarked" },
+          Status: { id: "status-bookmarked", value: "bookmarked", label: "Bookmarked", category: { kind: "lead", defaultCollapsed: false } },
           matchScore: 85,
           dueDate: null,
           tags: [],
@@ -354,7 +371,7 @@ describe("CRM Server Actions", () => {
           JobTitle: { label: "PM" },
           Company: { label: "Inc", logoUrl: null },
           Location: null,
-          Status: { id: "status-applied", value: "applied", label: "Applied" },
+          Status: { id: "status-applied", value: "applied", label: "Applied", category: { kind: "applied", defaultCollapsed: false } },
           matchScore: null,
           dueDate: null,
           tags: [],
@@ -441,12 +458,18 @@ describe("CRM Server Actions", () => {
     });
 
     it("should reject invalid status transitions during drag", async () => {
-      const offerStatus = mockStatuses.find((s) => s.value === "offer")!;
-      (prisma.job.findFirst as jest.Mock).mockResolvedValue(mockJob);
-      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(offerStatus);
+      // Welle 4 (category-ordered): offer → applied is a backward jump (invalid).
+      const offerJob = {
+        ...mockJob,
+        statusId: "status-offer",
+        Status: mockStatuses.find((s) => s.value === "offer"),
+      };
+      (prisma.job.findFirst as jest.Mock).mockResolvedValue(offerJob);
+      (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(
+        mockStatuses.find((s) => s.value === "applied"),
+      );
 
-      // bookmarked → offer is invalid
-      const result = await updateKanbanOrder("job-1", 2.0, offerStatus.id);
+      const result = await updateKanbanOrder("job-1", 2.0, "status-applied");
       expect(result.success).toBe(false);
       expect(result.errorCode).toBe("INVALID_TRANSITION");
     });
@@ -525,6 +548,7 @@ describe("CRM Server Actions", () => {
         statusValue: "bookmarked",
         statusLabel: "Bookmarked",
         count: 5,
+        categoryKind: "lead",
       });
     });
   });
