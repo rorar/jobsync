@@ -152,6 +152,7 @@ export function AddJob({
       resume: "",
       tags: [],
       sendToQueue: false,
+      logInterviewRound: false,
       contactPersonId: "",
       contactRole: "",
       recruitingCompany: "",
@@ -164,6 +165,17 @@ export function AddJob({
   const appliedValue = watch("applied");
   // Welle 3 (F-AJ-07): role is only meaningful once a contact person is chosen.
   const contactPersonIdValue = watch("contactPersonId");
+  // Welle 4 self-transition: offer an explicit "log another interview round" toggle
+  // ONLY when editing and the (unchanged) current status sits on a self-transition
+  // stage (interviewing). Selecting a DIFFERENT status hides it (that path is a
+  // normal transition) — this keeps an unrelated field edit from logging a phantom
+  // round. The server (updateJob) ignores logInterviewRound unless these same
+  // conditions hold, so the toggle is the sole explicit-intent signal.
+  const watchedStatus = watch("status");
+  const canLogInterviewRound =
+    !!editJob &&
+    watchedStatus === editJob.Status.id &&
+    !!jobStatuses.find((s) => s.id === watchedStatus)?.category?.allowsSelfTransition;
 
   const loadResumes = useCallback(async () => {
     try {
@@ -654,12 +666,48 @@ export function AddJob({
                           onChange={(id) => {
                             field.onChange(id);
                             applyStatusToApplied(id);
+                            // A status change is a normal transition, not a round —
+                            // clear any stale round intent so it can't leak through.
+                            if (editJob && id !== editJob.Status.id) {
+                              setValue("logInterviewRound", false);
+                            }
                           }}
                         />
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+
+                  {/* Welle 4 self-transition: explicit "log another interview round"
+                      intent. Only shown when re-selecting the current interviewing
+                      status (canLogInterviewRound) — see updateJob for the server gate. */}
+                  {canLogInterviewRound && (
+                    <FormField
+                      control={form.control}
+                      name="logInterviewRound"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row" data-testid="log-interview-round-container">
+                          <Switch
+                            id="log-interview-round-switch"
+                            checked={field.value ?? false}
+                            onCheckedChange={field.onChange}
+                          />
+                          <div className="flex flex-col ml-4">
+                            <FormLabel
+                              htmlFor="log-interview-round-switch"
+                              className="flex items-center mb-1"
+                            >
+                              {t("jobs.logInterviewRound")}
+                            </FormLabel>
+                            <p className="text-xs text-muted-foreground">
+                              {t("jobs.logInterviewRoundDescription")}
+                            </p>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
 
                   {/* Date Applied */}
                   <FormField

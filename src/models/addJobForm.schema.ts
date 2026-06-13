@@ -87,6 +87,11 @@ export const AddJobFormSchema = z.object({
   resume: z.string().optional(),
   tags: z.array(z.string()).max(10).optional().default([]),
   sendToQueue: z.boolean().default(false),
+  // Welle 4 self-transition: explicit "log another interview round" intent. Only
+  // meaningful on edit when the status is UNCHANGED and its stage allows self-
+  // transition (interviewing). Without this flag a same-status save is a plain
+  // field update (no phantom history round). Transient — not persisted on Job.
+  logInterviewRound: z.boolean().optional(),
   // Welle 3 (F-AJ-07): optional point-of-contact, create-only. Consumed client-side
   // after addJob succeeds (calls jobContact.actions.addJobContact) — addJob itself
   // ignores these fields, so the Job aggregate write path is unchanged.

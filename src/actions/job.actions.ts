@@ -506,6 +506,7 @@ export const updateJob = async (
       tags,
       recruitingCompany,
       relationshipType,
+      logInterviewRound,
     } = data;
 
     const tagIds = tags ?? [];
@@ -568,11 +569,13 @@ export const updateJob = async (
     }
 
     // Welle 4: a status move is recorded (history + event) when the target differs
-    // from the current status, OR when it re-selects the CURRENT status on a
-    // self-transition stage (interviewing multi-round). Any other same-status save
-    // is a no-op for the state machine (plain field update, no history spam).
+    // from the current status, OR when the user EXPLICITLY logs another round
+    // (logInterviewRound) by re-selecting the CURRENT status on a self-transition
+    // stage (interviewing multi-round). Without that explicit intent a same-status
+    // save is a plain field update (no phantom history round on unrelated edits).
     const statusDiffers = !!(currentJob?.Status && status !== currentJob.statusId);
     const selfTransition = !!(
+      logInterviewRound &&
       currentJob?.Status?.category &&
       status === currentJob.statusId &&
       isValidCategoryTransitionByKind(

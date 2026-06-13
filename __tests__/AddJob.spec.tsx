@@ -294,6 +294,8 @@ describe("AddJob Component", () => {
         resume: "",
         tags: [],
         sendToQueue: false,
+        // Welle 4 self-transition: explicit round intent (create mode → default false)
+        logInterviewRound: false,
         // Welle 3 F-AJ-07: optional point-of-contact (untouched → empty defaults)
         contactPersonId: "",
         contactRole: "",

@@ -98,6 +98,8 @@ export const jobs = {
     "jobs.noJobsToExport": "No jobs to export",
     "jobs.sendToQueue": "Send to Queue",
     "jobs.sendToQueueDescription": "Review this job later in the staging area",
+    "jobs.logInterviewRound": "Log a new interview round",
+    "jobs.logInterviewRoundDescription": "Record another round under this status (adds a timeline entry)",
 
     // Job sources
     "jobs.sourceIndeed": "Indeed",
@@ -298,6 +300,8 @@ export const jobs = {
     "jobs.noJobsToExport": "Keine Jobs zum Exportieren",
     "jobs.sendToQueue": "An Warteschlange senden",
     "jobs.sendToQueueDescription": "Diesen Job später in der Staging-Übersicht prüfen",
+    "jobs.logInterviewRound": "Neue Interviewrunde erfassen",
+    "jobs.logInterviewRoundDescription": "Eine weitere Runde unter diesem Status erfassen (erzeugt einen Verlaufseintrag)",
 
     // Job-Quellen
     "jobs.sourceIndeed": "Indeed",
@@ -498,6 +502,8 @@ export const jobs = {
     "jobs.noJobsToExport": "Aucun emploi à exporter",
     "jobs.sendToQueue": "Envoyer en file d'attente",
     "jobs.sendToQueueDescription": "Revoir cette offre plus tard dans la zone de tri",
+    "jobs.logInterviewRound": "Enregistrer un nouvel entretien",
+    "jobs.logInterviewRoundDescription": "Enregistrer un autre tour sous ce statut (ajoute une entrée à l'historique)",
 
     // Sources d'emploi
     "jobs.sourceIndeed": "Indeed",
@@ -698,6 +704,8 @@ export const jobs = {
     "jobs.noJobsToExport": "Sin empleos para exportar",
     "jobs.sendToQueue": "Enviar a cola",
     "jobs.sendToQueueDescription": "Revisar esta oferta más tarde en el área de preparación",
+    "jobs.logInterviewRound": "Registrar una nueva ronda de entrevista",
+    "jobs.logInterviewRoundDescription": "Registrar otra ronda con este estado (añade una entrada al historial)",
 
     // Fuentes de empleo
     "jobs.sourceIndeed": "Indeed",

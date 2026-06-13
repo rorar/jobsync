@@ -112,6 +112,7 @@ describe("jobActions", () => {
     resume: "",
     tags: [],
     sendToQueue: false,
+    logInterviewRound: false,
   };
   beforeEach(() => {
     jest.clearAllMocks();
@@ -1333,25 +1334,28 @@ describe("jobActions", () => {
     });
 
     describe("updateJob", () => {
-      it("logs a round when the edit form re-selects the same interviewing status", async () => {
-        const currentJob = {
-          id: "job-id",
-          userId: mockUser.id,
-          statusId: interviewStatus.id,
-          appliedDate: new Date("2026-01-01"),
-          Status: { ...interviewStatus },
-        };
+      const interviewCurrentJob = {
+        id: "job-id",
+        userId: mockUser.id,
+        statusId: interviewStatus.id,
+        appliedDate: new Date("2026-01-01"),
+        Status: { ...interviewStatus },
+      };
+      const mockEditFormDeps = () => {
         (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
         (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
         (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
         (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
         (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
-        (prisma.job.findFirst as jest.Mock).mockResolvedValue(currentJob);
+        (prisma.job.findFirst as jest.Mock).mockResolvedValue(interviewCurrentJob);
+      };
 
+      it("logs a round when the edit form re-selects the same interviewing status WITH logInterviewRound", async () => {
+        mockEditFormDeps();
         const txHistoryCreate = jest.fn().mockResolvedValue({ id: "hist-1" });
         (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) =>
           fn({
-            job: { update: jest.fn().mockResolvedValue({ ...currentJob, Status: interviewStatus }) },
+            job: { update: jest.fn().mockResolvedValue({ ...interviewCurrentJob, Status: interviewStatus }) },
             jobStatusHistory: { create: txHistoryCreate },
           }),
         );
@@ -1360,6 +1364,7 @@ describe("jobActions", () => {
           ...jobData,
           id: "job-id",
           status: interviewStatus.id, // same status, self-transition stage
+          logInterviewRound: true, // explicit intent
         });
 
         expect(result.success).toBe(true);
@@ -1370,6 +1375,21 @@ describe("jobActions", () => {
             newStatusId: interviewStatus.id,
           }),
         });
+      });
+
+      it("does NOT log a round on a same-status interviewing save WITHOUT the explicit flag (no phantom round)", async () => {
+        mockEditFormDeps();
+        (prisma.job.update as jest.Mock).mockResolvedValue({ ...interviewCurrentJob });
+
+        const result = await updateJob({
+          ...jobData,
+          id: "job-id",
+          status: interviewStatus.id, // same status, but logInterviewRound omitted (false)
+        });
+
+        expect(result.success).toBe(true);
+        // Plain field update — no state-machine transaction, no history round.
+        expect(prisma.$transaction).not.toHaveBeenCalled();
       });
     });
 
