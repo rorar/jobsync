@@ -350,3 +350,20 @@ These are deliberate deferrals, not bugs:
   Full run `10 passed` (8 smoke + 2 crud) via `scripts/dev-e2e.sh` + `--project=crud --workers=1` after
   `source scripts/env.sh`. NB: on a degraded server the signin smoke can flake (Tailscale-redirect) —
   restart the dev server and re-run (env note, not a regression).
+- **Real-browser visual smoke** ✅ done 2026-06-13 (chromium screenshots, /tmp/welle4-smoke). Verified
+  rendering of: Settings→Job-Statuses (7 stage groups in workflow order, correct colours, "Marks as
+  applied" badges on the 4 applied stages, Default badge + disabled-trash on Bookmarked, per-row
+  reorder/star/edit/delete + job counts); grouped status ComboBox (stage headings, colour dots, search,
+  marks-applied); applied indicator flip Not-Applied→Applied + purple interviewing dot + Date-Applied
+  auto-enable; dynamic Kanban (per-user columns, `--stage-color` tints, default-collapsed Rejected/
+  Archived/Expired pills, count badges, collapse chevrons). Two findings:
+  - **LOW (visual) — status ComboBox trigger clips the selected label.** The trigger is fixed
+    `w-[200px]` (`StatusStageCombobox.tsx:125`) with `<span class="truncate">{label}</span>` + a
+    `shrink-0` "Marks as applied" Badge; on an applied-stage status the badge squeezes the label to zero
+    width (e.g. "Interview" not shown). DOM/a11y unaffected (the label is present). Fix options: drop the
+    redundant badge from the TRIGGER (the separate "Status: Applied" indicator already conveys it), widen
+    the trigger, or hide the badge on overflow. UI change → run the ui-design review first.
+  - **Test-data debt (not a product bug)** — orphan custom `E2E Stage …` statuses accumulate from prior
+    E2E runs (the specs' best-effort cleanup leaves the status rows), polluting the Kanban (pushes real
+    columns off-screen) + the status list. Harden `e2e/cleanup-stale-data.ts` to purge orphan custom
+    statuses (value/label prefixed `E2E`/`e2e`) at globalSetup.
