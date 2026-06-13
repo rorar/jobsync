@@ -81,6 +81,9 @@ model User {
   CrmBlocklist         CrmBlocklist[]
   ConnectedAccount     ConnectedAccount[]
   JobContact           JobContact[]
+  // Custom JobStatus (Welle 4, F-AJ-09): per-user statuses + stage categories
+  JobStatus            JobStatus[]
+  JobStatusCategory    JobStatusCategory[]
 }
 
 model ApiKey {
@@ -282,14 +285,49 @@ model JobTitle {
   @@unique([value, createdBy])
 }
 
+// Custom JobStatus (Welle 4, F-AJ-09). Per-user. `value` is the stable machine
+// key (API + Kanban column identity); `label` is the human-facing name. Each
+// status belongs to a JobStatusCategory ("stage") that supplies its workflow
+// semantics. Spec: specs/job-status.allium.
 model JobStatus {
-  id    String @id @default(uuid())
-  label String
-  value String @unique
-  jobs  Job[]
+  id         String            @id @default(uuid())
+  userId     String
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   JobStatusCategory @relation(fields: [categoryId], references: [id])
+  label      String
+  value      String
+  sortOrder  Int               @default(0)
+  isDefault  Boolean           @default(false)
+  jobs       Job[]
 
   historyAsPrevious JobStatusHistory[] @relation("PreviousStatus")
   historyAsNew      JobStatusHistory[] @relation("NewStatus")
+
+  @@unique([userId, value])
+  @@index([userId, sortOrder])
+  @@index([categoryId])
+}
+
+// A per-user "stage": the semantic grouping of statuses. `kind` is one of the
+// seven fixed system kinds (StatusCategoryKind in src/lib/crm/status-categories.ts)
+// and carries the immutable workflow semantics; users edit label/colour/sortOrder.
+model JobStatusCategory {
+  id                   String      @id @default(uuid())
+  userId               String
+  user                 User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind                 String // StatusCategoryKind: lead|applied|interviewing|offer|won|lost|archived
+  label                String
+  colour               String
+  sortOrder            Int
+  isAppliedStage       Boolean
+  isTerminal           Boolean
+  defaultCollapsed     Boolean
+  allowsSelfTransition Boolean
+  statuses             JobStatus[]
+
+  @@unique([userId, kind])
+  @@index([userId, sortOrder])
 }
 
 model Location {

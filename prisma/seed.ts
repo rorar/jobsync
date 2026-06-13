@@ -7,6 +7,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { seedJobStatusesForUser } from "../src/lib/crm/seed-job-statuses";
 
 const prisma = new PrismaClient();
 
@@ -27,23 +28,6 @@ const JOB_SOURCES = [
   { label: "Arbeitsagentur", value: "arbeitsagentur" },
   { label: "JSearch", value: "jsearch" },
 ];
-
-const JOB_STATUSES = [
-  { label: "Bookmarked", value: "bookmarked" },
-  { label: "Applied", value: "applied" },
-  { label: "Interview", value: "interview" },
-  { label: "Offer", value: "offer" },
-  { label: "Accepted", value: "accepted" },
-  { label: "Rejected", value: "rejected" },
-  { label: "Expired", value: "expired" },
-  { label: "Archived", value: "archived" },
-];
-
-// Legacy status renames: "draft" → "bookmarked", "saved" → "bookmarked"
-const LEGACY_STATUS_RENAMES: Record<string, { label: string; value: string }> = {
-  draft: { label: "Bookmarked", value: "bookmarked" },
-  saved: { label: "Bookmarked", value: "bookmarked" },
-};
 
 async function main() {
   console.log("🌱 Seeding database...");
@@ -80,48 +64,11 @@ async function main() {
 
   console.log(`  ✓ Job Sources: ${JOB_SOURCES.length} entries`);
 
-  // 3. Rename legacy statuses (idempotent)
-  for (const [oldValue, newData] of Object.entries(LEGACY_STATUS_RENAMES)) {
-    const existing = await prisma.jobStatus.findFirst({ where: { value: oldValue } });
-    if (existing) {
-      // Only rename if the target value doesn't already exist
-      const targetExists = await prisma.jobStatus.findFirst({ where: { value: newData.value } });
-      if (!targetExists) {
-        await prisma.jobStatus.update({
-          where: { value: oldValue },
-          data: { label: newData.label, value: newData.value },
-        });
-        console.log(`  ✓ Renamed status "${oldValue}" → "${newData.value}"`);
-      } else {
-        // Target already exists — reassign jobs from old status to new status, then delete old
-        await prisma.job.updateMany({
-          where: { statusId: existing.id },
-          data: { statusId: targetExists.id },
-        });
-        await prisma.jobStatusHistory.updateMany({
-          where: { previousStatusId: existing.id },
-          data: { previousStatusId: targetExists.id },
-        });
-        await prisma.jobStatusHistory.updateMany({
-          where: { newStatusId: existing.id },
-          data: { newStatusId: targetExists.id },
-        });
-        await prisma.jobStatus.delete({ where: { value: oldValue } });
-        console.log(`  ✓ Migrated jobs from "${oldValue}" to "${newData.value}" and removed old status`);
-      }
-    }
-  }
+  // 3. Seed the user's per-user stage categories + default statuses (Welle 4).
+  // Replaces the old global jobStatus seed + legacy-rename block. Idempotent.
+  await seedJobStatusesForUser(prisma, user.id);
 
-  // 4. Create job statuses (shared, no createdBy)
-  for (const status of JOB_STATUSES) {
-    await prisma.jobStatus.upsert({
-      where: { value: status.value },
-      update: {},
-      create: status,
-    });
-  }
-
-  console.log(`  ✓ Job Statuses: ${JOB_STATUSES.length} entries`);
+  console.log(`  ✓ Job Statuses: per-user stage categories + default statuses seeded`);
 
   // 4. Create a default profile + resume for E2E tests
   const existingProfile = await prisma.profile.findFirst({

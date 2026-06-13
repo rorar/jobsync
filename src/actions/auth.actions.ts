@@ -5,7 +5,8 @@ import { delay } from "@/utils/delay";
 import prisma from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { SignupFormSchema } from "@/models/signupForm.schema";
-import { JOB_SOURCES, JOB_STATUSES } from "@/lib/constants";
+import { JOB_SOURCES } from "@/lib/constants";
+import { seedJobStatusesForUser } from "@/lib/crm/seed-job-statuses";
 import { t, getUserLocale } from "@/i18n/server";
 import { checkAuthRateLimit, getClientIp } from "@/lib/auth/auth-rate-limit";
 
@@ -54,13 +55,10 @@ export async function signup(formData: {
     })),
   });
 
-  for (const status of JOB_STATUSES) {
-    await prisma.jobStatus.upsert({
-      where: { value: status.value },
-      update: {},
-      create: status,
-    });
-  }
+  // Custom JobStatus (Welle 4): seed the new user's per-user stage categories +
+  // default statuses (replaces the old global jobStatus upsert, which post-
+  // migration would violate NOT NULL userId and leave new users status-less).
+  await seedJobStatusesForUser(prisma, newUser.id);
 
   return { success: true };
 }

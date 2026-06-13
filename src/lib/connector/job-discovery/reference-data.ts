@@ -1,5 +1,6 @@
 import db from "@/lib/db";
 import { normalizeForSearch, extractKeywords, extractCityName } from "./utils";
+import { getDefaultJobStatusForUser } from "@/lib/crm/seed-job-statuses";
 
 export async function findOrCreateJobTitle(
   title: string,
@@ -155,19 +156,12 @@ export async function getOrCreateJobSource(
   return jobSource.id;
 }
 
-export async function getDefaultJobStatus(): Promise<string> {
-  // Prefer "bookmarked" (spec), fall back to "new" (backward compat)
-  let status = await db.jobStatus.findFirst({ where: { value: "bookmarked" } });
-
-  if (!status) {
-    status = await db.jobStatus.findFirst({ where: { value: "new" } });
-  }
-
-  if (!status) {
-    status = await db.jobStatus.create({
-      data: { label: "Bookmarked", value: "bookmarked" },
-    });
-  }
-
+/**
+ * Resolve the default JobStatus id for a user (Welle 4: per-user statuses).
+ * userId-scoped (ADR-015) — never touches another user's statuses, never creates
+ * a global row. Seeds the user's set on first use if absent.
+ */
+export async function getDefaultJobStatus(userId: string): Promise<string> {
+  const status = await getDefaultJobStatusForUser(db, userId);
   return status.id;
 }

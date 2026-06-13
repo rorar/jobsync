@@ -6,6 +6,7 @@ import type { PromotionInput } from "@/models/stagedVacancy.model";
 import { buildJobSalaryData } from "@/lib/salary/build-job-salary";
 import { parseSalaryRange } from "@/lib/salary/parse-salary-range";
 import type { SalaryPeriod } from "@/models/job.model";
+import { getDefaultJobStatusForUser } from "@/lib/crm/seed-job-statuses";
 
 export interface PromotionResult {
   jobId: string;
@@ -83,7 +84,7 @@ export async function promoteStagedVacancy(
         deriveCountryCode(vacancy.sourceBoard),
       ),
       getOrCreateJobSource(vacancy.sourceBoard, userId),
-      getDefaultJobStatus(),
+      getDefaultJobStatus(userId),
     ]);
   const statusId = defaultStatus.id;
   const statusValue = defaultStatus.value;
@@ -418,25 +419,8 @@ async function getOrCreateJobSource(
   }
 }
 
-async function getDefaultJobStatus(): Promise<{ id: string; value: string }> {
-  // Prefer "bookmarked" (spec), fall back to "new" (backward compat)
-  let status = await db.jobStatus.findFirst({ where: { value: "bookmarked" } });
-
-  if (!status) {
-    status = await db.jobStatus.findFirst({ where: { value: "new" } });
-  }
-
-  if (!status) {
-    try {
-      status = await db.jobStatus.create({
-        data: { label: "Bookmarked", value: "bookmarked" },
-      });
-    } catch {
-      // Race: another promotion created it first.
-      status = await db.jobStatus.findFirst({ where: { value: "bookmarked" } });
-      if (!status) throw new Error("Failed to resolve default JobStatus");
-    }
-  }
-
-  return { id: status.id, value: status.value };
+async function getDefaultJobStatus(userId: string): Promise<{ id: string; value: string }> {
+  // Welle 4: per-user statuses. userId-scoped (ADR-015), seeds on first use,
+  // never creates a global row.
+  return getDefaultJobStatusForUser(db, userId);
 }
