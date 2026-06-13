@@ -362,7 +362,8 @@ These are deliberate deferrals, not bugs:
     `shrink-0` "Marks as applied" Badge on applied stages. Removed the redundant badge from the TRIGGER
     (it stays in the dropdown options; the separate "Status: Applied" indicator conveys applied-ness).
     Label now always shows (verified visually — trigger renders "● Interview"). Spec updated.
-  - **Test-data debt (not a product bug)** — orphan custom `E2E Stage …` statuses accumulate from prior
-    E2E runs (the specs' best-effort cleanup leaves the status rows), polluting the Kanban (pushes real
-    columns off-screen) + the status list. Harden `e2e/cleanup-stale-data.ts` to purge orphan custom
-    statuses (value/label prefixed `E2E`/`e2e`) at globalSetup.
+  - ~~**Test-data debt** — orphan custom `E2E Stage …` statuses accumulate from prior E2E runs.~~
+    ✅ FIXED 2026-06-13 (`af…`). Added a guarded `jobStatus.deleteMany` step (6aa) to
+    `e2e/cleanup-stale-data.ts` (label `startsWith "E2E "`, `isDefault:false`, `jobs:none`,
+    `historyAsNew:none` — RESTRICT-safe, never the default) so globalSetup purges them each run, and
+    cleared the 4 existing orphans from dev.db (verified 0 remaining).

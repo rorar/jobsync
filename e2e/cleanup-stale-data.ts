@@ -95,6 +95,24 @@ export async function cleanupStaleE2EData(): Promise<void> {
     where: { userId, JobTitle: { label: { startsWith: "E2E " } } },
   })).count;
 
+  // 6aa. Orphan custom JobStatuses created by the Welle 4 job-status E2E
+  // (labels prefixed "E2E "). Job.statusId and JobStatusHistory.newStatusId are
+  // ON DELETE RESTRICT, so a status is only removable once nothing references it.
+  // Step 6 already deleted the E2E jobs and (via JobStatusHistory.jobId Cascade)
+  // their history rows, so these guards normally hold; we still assert `jobs` and
+  // `historyAsNew` are empty so a status referenced by surviving data is never
+  // removed, and never touch the user's default status. The 7 system categories
+  // are kind-seeded (never E2E-created), so only JobStatus rows need cleanup.
+  total += (await prisma.jobStatus.deleteMany({
+    where: {
+      userId,
+      label: { startsWith: "E2E " },
+      isDefault: false,
+      jobs: { none: {} },
+      historyAsNew: { none: {} },
+    },
+  })).count;
+
   // 6a. E2E Companies — both the hiring company and the Welle 3 F-AJ-08
   // recruiting agency ("E2E Agency …"). Companies are never created with a
   // userId-scoped name elsewhere, so they accumulated across runs before this
