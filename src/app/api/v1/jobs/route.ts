@@ -127,7 +127,7 @@ export const POST = withApiAuth(async (req, { userId }) => {
       recruiterName ? findOrCreate("company", userId, recruiterName) : Promise.resolve(null),
       location ? findOrCreate("location", userId, location) : null,
       source ? findOrCreate("jobSource", userId, source) : null,
-      resolveStatus(status ?? "draft"),
+      resolveStatus(status, userId),
     ]);
 
   if (!statusRecord) {
@@ -212,7 +212,7 @@ export const POST = withApiAuth(async (req, { userId }) => {
       jobId: job.id,
       userId,
       previousStatusValue: null,
-      newStatusValue: statusRecord.value ?? "draft",
+      newStatusValue: statusRecord.value,
       historyEntryId: historyEntry.id,
     }),
   );

@@ -54,11 +54,20 @@ export async function findOrCreate(
 }
 
 /**
- * Resolve a job status by its value string.
+ * Resolve a job status for a user (Welle 4: per-user statuses, ADR-015).
+ * With a value, resolves that value within the user's statuses; without one,
+ * resolves the user's default status (no more hardcoded "draft" — it is no
+ * longer a seeded value, so the old default would 400 every defaulted create).
  */
-export async function resolveStatus(statusValue: string) {
+export async function resolveStatus(statusValue: string | undefined, userId: string) {
+  if (statusValue) {
+    return prisma.jobStatus.findFirst({
+      where: { value: statusValue, userId },
+      select: { id: true, value: true },
+    });
+  }
   return prisma.jobStatus.findFirst({
-    where: { value: statusValue },
+    where: { userId, isDefault: true },
     select: { id: true, value: true },
   });
 }

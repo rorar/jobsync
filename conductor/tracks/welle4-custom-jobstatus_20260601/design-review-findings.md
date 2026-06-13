@@ -85,3 +85,11 @@ category-flag editability; user-creatable kinds. (per-status colour, free-transi
   (Phase 5.4) will confirm zero drift after that. Until then a user CANNOT create a custom
   status (no UI yet — Phase 2.4 deferred), so the value-keyed machine is never hit with an
   unknown value.
+
+## Gap 5 fixed + Gap 7 correction
+- Gap 5 DONE: `resolveStatus(value?, userId)` now userId-scoped + defaults to the user's
+  is_default status (was global `?? "draft"` → 400 post-migration). `/api/v1/jobs` POST updated.
+- Gap 7 PARTIAL CORRECTION (verify-agent-claims): `retention-cron.ts:273
+  results[i].status === "rejected"` is a **Promise.allSettled** status, NOT a JobStatus —
+  the flashlight agent fabricated that one. The real gap-7 items (JobDetails/MyJobsTable
+  value checks, StatusFunnelWidget hardcoded funnel) are UI → Phase 5.
