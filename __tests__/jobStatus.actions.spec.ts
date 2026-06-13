@@ -8,6 +8,7 @@ import {
   createJobStatus,
   renameJobStatus,
   reorderJobStatus,
+  reorderJobStatuses,
   setDefaultJobStatus,
   deleteJobStatus,
 } from "@/actions/jobStatus.actions";
@@ -133,6 +134,36 @@ describe("reorderJobStatus", () => {
     expect(prisma.jobStatus.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "s-x", userId: "user-1" } }),
     );
+    expect(r.success).toBe(false);
+  });
+});
+
+describe("reorderJobStatuses (bulk renormalize)", () => {
+  it("rewrites each status' sortOrder to its index 0..N-1 in one transaction (userId-scoped)", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+    prisma.$transaction.mockResolvedValue([{ count: 1 }, { count: 1 }, { count: 1 }]);
+    const r = await reorderJobStatuses(["s-c", "s-a", "s-b"]);
+    expect(r.success).toBe(true);
+    // one updateMany per id, scoped + indexed
+    expect(prisma.jobStatus.updateMany).toHaveBeenNthCalledWith(1,
+      { where: { id: "s-c", userId: "user-1" }, data: { sortOrder: 0 } });
+    expect(prisma.jobStatus.updateMany).toHaveBeenNthCalledWith(2,
+      { where: { id: "s-a", userId: "user-1" }, data: { sortOrder: 1 } });
+    expect(prisma.jobStatus.updateMany).toHaveBeenNthCalledWith(3,
+      { where: { id: "s-b", userId: "user-1" }, data: { sortOrder: 2 } });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a non-array / empty payload", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+    const r = await reorderJobStatuses([]);
+    expect(r.success).toBe(false);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("requires auth", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(null);
+    const r = await reorderJobStatuses(["s-a"]);
     expect(r.success).toBe(false);
   });
 });

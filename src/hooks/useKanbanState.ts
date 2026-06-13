@@ -222,7 +222,27 @@ export function useKanbanState(jobs: JobResponse[], statuses: JobStatus[]) {
       if (!placedValues.has(statusVal)) orphanJobs.push(...statusJobs);
     }
     if (orphanJobs.length > 0) {
-      const otherStatus = { id: "__other__", value: "__other__", label: "Other" } as JobStatus;
+      // Real (neutral) category so any consumer reading column.status.category.*
+      // gets a defined object, not undefined-via-cast. Sorts last, neutral grey,
+      // never an applied/terminal stage.
+      const otherStatus: JobStatus = {
+        id: "__other__",
+        value: "__other__",
+        label: "Other",
+        sortOrder: 0,
+        isDefault: false,
+        category: {
+          id: "__other__",
+          kind: "archived",
+          label: "Other",
+          colour: "gray",
+          sortOrder: Number.MAX_SAFE_INTEGER,
+          isAppliedStage: false,
+          isTerminal: false,
+          defaultCollapsed: false,
+          allowsSelfTransition: false,
+        },
+      };
       result.push({
         status: otherStatus,
         jobs: orphanJobs.sort(sortByKanbanOrder),

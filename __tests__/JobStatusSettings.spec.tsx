@@ -23,6 +23,7 @@ const mockGetCategories = jest.fn();
 const mockCreate = jest.fn();
 const mockRename = jest.fn();
 const mockReorder = jest.fn();
+const mockReorderBulk = jest.fn();
 const mockSetDefault = jest.fn();
 const mockDelete = jest.fn();
 
@@ -32,6 +33,7 @@ jest.mock("@/actions/jobStatus.actions", () => ({
   createJobStatus: (...a: unknown[]) => mockCreate(...a),
   renameJobStatus: (...a: unknown[]) => mockRename(...a),
   reorderJobStatus: (...a: unknown[]) => mockReorder(...a),
+  reorderJobStatuses: (...a: unknown[]) => mockReorderBulk(...a),
   setDefaultJobStatus: (...a: unknown[]) => mockSetDefault(...a),
   deleteJobStatus: (...a: unknown[]) => mockDelete(...a),
 }));
@@ -120,14 +122,14 @@ describe("JobStatusSettings", () => {
       status("s1", "bookmarked", "Bookmarked", LEAD, 0, true),
       status("s2", "lead2", "Lead Two", LEAD, 1),
     ]);
-    mockReorder.mockResolvedValue({ success: true });
+    mockReorderBulk.mockResolvedValue({ success: true });
     render(<JobStatusSettings />);
     await screen.findByTestId("status-row-bookmarked");
 
-    // move the first lead status down past the second
+    // move the first lead status down past the second → renormalized order [s2, s1]
     await user.click(screen.getByTestId("status-down-bookmarked"));
-    await waitFor(() => expect(mockReorder).toHaveBeenCalled());
-    expect(mockReorder.mock.calls[0][0]).toBe("s1");
+    await waitFor(() => expect(mockReorderBulk).toHaveBeenCalled());
+    expect(mockReorderBulk.mock.calls[0][0]).toEqual(["s2", "s1"]);
   });
 
   it("deletes an unused status via simple confirm", async () => {

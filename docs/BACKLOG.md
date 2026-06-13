@@ -328,14 +328,14 @@ These are deliberate deferrals, not bugs:
   Lateral moves between DIFFERENT statuses in the interviewing stage already work. To enable
   same-status multi-round, thread opts + a config source through the adapter, or trim the dead
   branch + doc comments. See ADR-036 "Known limitation".
-- **LOW — Orphan "Other" Kanban column partial cast.** `useKanbanState.ts` builds `{id,value,label}
-  as JobStatus` (no `category`) for jobs whose status is unknown to the current set (defensive,
-  "should not occur post-migration"). Tolerated only because `isValidStatusTransition` fails closed
-  on missing category. Give it a real fallback category object if any new code reads stage
-  colour/order off the orphan column.
-- **LOW — `reorderJobStatus` integer-collision.** The client scales the fractional midpoint by 1000
-  and rounds; repeated reorders within one stage could eventually collide on equal integers
-  (display-order only, not correctness). Renormalize a stage's sortOrders if collisions are observed.
+- ~~**LOW — Orphan "Other" Kanban column partial cast.**~~ ✅ FIXED 2026-06-13 — `useKanbanState.ts`
+  now gives the synthetic "Other" column a real neutral `category` object (grey, archived semantics,
+  sorts last), so consumers reading `column.status.category.*` never hit undefined.
+- ~~**LOW — reorder integer-collision.**~~ ✅ FIXED 2026-06-13 — the management UI now calls a new
+  `reorderJobStatuses(orderedIds)` bulk action that **renormalizes** the stage to contiguous
+  `0..N-1` in one transaction (no fractional midpoints → no collision class). The old
+  `computeReorderSortValue` ×1000 helper (`reorder.ts`) is removed. Single `reorderJobStatus` is
+  retained for the Allium `ReorderJobStatus` rule / public-API PATCH surface.
 - **E2E run-deferred.** `e2e/crud/job-status-crud.spec.ts` (create status → set on job → see Kanban
   column) is written + selector-verified but its Playwright run did not complete on the 8 GB VM
   (Next dev hung under compile load — the known infra constraint). Run locally with

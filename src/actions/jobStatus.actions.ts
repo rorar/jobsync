@@ -267,6 +267,38 @@ export const reorderJobStatus = async (
   }
 };
 
+/**
+ * Renormalize a set of statuses to contiguous sort orders 0..N-1 in the given
+ * display order, in one transaction. Used by the management UI after a drag /
+ * up-down move so positions never drift toward colliding fractional values.
+ * Each update is userId-scoped (ADR-015); ids that are not the caller's are
+ * no-ops (updateMany count 0).
+ */
+export const reorderJobStatuses = async (orderedIds: string[]): Promise<ActionResult> => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "errors.notAuthenticated", errorCode: "UNAUTHORIZED" };
+
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0 || orderedIds.some((id) => typeof id !== "string")) {
+      return { success: false, message: "errors.invalidSortOrder", errorCode: "VALIDATION_ERROR" };
+    }
+
+    await prisma.$transaction(
+      orderedIds.map((id, index) =>
+        prisma.jobStatus.updateMany({
+          where: { id, userId: user.id },
+          data: { sortOrder: index },
+        }),
+      ),
+    );
+
+    revalidatePath("/dashboard/myjobs");
+    return { success: true };
+  } catch (error) {
+    return handleError(error, "errors.updateFailed");
+  }
+};
+
 /** Choose the status new manually-created jobs start in (exactly one per user). */
 export const setDefaultJobStatus = async (statusId: string): Promise<ActionResult> => {
   try {

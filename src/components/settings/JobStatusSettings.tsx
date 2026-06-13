@@ -78,14 +78,13 @@ import {
   getJobStatusCategories,
   createJobStatus,
   renameJobStatus,
-  reorderJobStatus,
+  reorderJobStatuses,
   setDefaultJobStatus,
   deleteJobStatus,
   type JobStatusView,
   type JobStatusCategoryView,
 } from "@/actions/jobStatus.actions";
 import { stageColorVar } from "@/lib/crm/stage-colors";
-import { computeReorderSortValue } from "@/lib/crm/reorder";
 
 const SOFT_CAP = 12;
 
@@ -331,9 +330,15 @@ export default function JobStatusSettings() {
     async (status: JobStatusView, toIndex: number) => {
       const siblings = statusesByCategory.get(status.category.id) ?? [];
       const fromIndex = siblings.findIndex((s) => s.id === status.id);
-      const newSort = computeReorderSortValue(siblings, fromIndex, toIndex);
-      if (newSort === null) return;
-      const res = await reorderJobStatus(status.id, Math.round(newSort * 1000));
+      if (fromIndex === -1 || toIndex < 0 || toIndex >= siblings.length || toIndex === fromIndex) {
+        return;
+      }
+      // Renormalize the whole stage to contiguous 0..N-1 in the new order — no
+      // fractional midpoints, so positions can never drift toward colliding.
+      const ids = siblings.map((s) => s.id);
+      const [moved] = ids.splice(fromIndex, 1);
+      ids.splice(toIndex, 0, moved);
+      const res = await reorderJobStatuses(ids);
       if (res.success) {
         setAnnounce(t("jobStatus.reordered"));
         load();
