@@ -635,8 +635,13 @@ export function AddJob({
                   </div>
                 )}
 
-                {/* Status (F-AJ-02: grouped-by-stage picker; folds in `applied`) */}
-                <div>
+                {/* F-AJ-03: Status sits directly above Date Applied so the
+                    applied-merge reads top-to-bottom (pick status → set date). */}
+                <div
+                  className="flex flex-col gap-4"
+                  data-testid="status-dateapplied-group"
+                >
+                  {/* Status (F-AJ-02: grouped-by-stage picker; folds in `applied`) */}
                   <FormField
                     control={form.control}
                     name="status"
@@ -655,10 +660,8 @@ export function AddJob({
                       </FormItem>
                     )}
                   />
-                </div>
 
-                {/* Date Applied */}
-                <div className="flex flex-col">
+                  {/* Date Applied */}
                   <FormField
                     control={form.control}
                     name="dateApplied"
