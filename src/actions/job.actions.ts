@@ -567,12 +567,25 @@ export const updateJob = async (
       return { success: false, message: "errors.staleState", errorCode: "STALE_STATE" };
     }
 
-    const statusChanged = currentJob?.Status && status !== currentJob.statusId;
+    // Welle 4: a status move is recorded (history + event) when the target differs
+    // from the current status, OR when it re-selects the CURRENT status on a
+    // self-transition stage (interviewing multi-round). Any other same-status save
+    // is a no-op for the state machine (plain field update, no history spam).
+    const statusDiffers = !!(currentJob?.Status && status !== currentJob.statusId);
+    const selfTransition = !!(
+      currentJob?.Status?.category &&
+      status === currentJob.statusId &&
+      isValidCategoryTransitionByKind(
+        currentJob.Status.category.kind,
+        currentJob.Status.category.kind,
+        { sameStatus: true },
+      )
+    );
     let newStatus: Awaited<
       ReturnType<typeof prisma.jobStatus.findFirst<{ include: { category: true } }>>
     > | null = null;
 
-    if (statusChanged) {
+    if (statusDiffers) {
       newStatus = await prisma.jobStatus.findFirst({
         where: { id: status, userId: user.id },
         include: { category: true },
@@ -582,7 +595,7 @@ export const updateJob = async (
       // not the value-keyed matrix — a custom status' value is not in the old graph.
       if (
         newStatus &&
-        !isValidCategoryTransitionByKind(currentJob.Status.category.kind, newStatus.category.kind)
+        !isValidCategoryTransitionByKind(currentJob!.Status.category.kind, newStatus.category.kind)
       ) {
         return {
           success: false,
@@ -590,7 +603,13 @@ export const updateJob = async (
           errorCode: "INVALID_TRANSITION",
         };
       }
+    } else if (selfTransition) {
+      // The target IS the current status (same category, already loaded) — logging
+      // a new round, not moving stage.
+      newStatus = currentJob!.Status;
     }
+
+    const recordTransition = (statusDiffers && !!newStatus) || selfTransition;
 
     const jobData = {
       jobTitleId: titleId,
@@ -669,9 +688,9 @@ export const updateJob = async (
           Object.keys(jobUpdateDiff).length > 0 ? jobUpdateDiff : undefined,
       });
 
-    if (statusChanged && newStatus) {
-      const sideEffects = appliedSideEffectByKind(newStatus.category.kind, currentJob.appliedDate);
-      const previousStatusValue = currentJob.Status.value;
+    if (recordTransition && newStatus) {
+      const sideEffects = appliedSideEffectByKind(newStatus.category.kind, currentJob!.appliedDate);
+      const previousStatusValue = currentJob!.Status.value;
 
       const [updatedJob, historyEntry] = await prisma.$transaction(async (tx) => {
         const updated = await tx.job.update({
@@ -934,8 +953,37 @@ export const changeJobStatus = async (
     }
 
     // Validate transition — category-ordered (Welle 4 per-user custom statuses).
+    // sameStatus re-selection is valid only on a self-transition stage (interviewing
+    // multi-round, Welle 4): it then logs a new round (history + event) below.
     const currentStatusValue = currentJob.Status.value;
-    if (!isValidCategoryTransitionByKind(currentJob.Status.category.kind, newStatus.category.kind)) {
+    const sameStatus = newStatusId === currentJob.statusId;
+    if (
+      !isValidCategoryTransitionByKind(
+        currentJob.Status.category.kind,
+        newStatus.category.kind,
+        { sameStatus },
+      )
+    ) {
+      // A same-status re-selection on a NON-self-transition stage is a benign
+      // no-op (no history spam), not an error — return the job unchanged. A
+      // genuine different-status invalid move is rejected.
+      if (sameStatus) {
+        const job = await prisma.job.findFirst({
+          where: { id: jobId, userId: user.id },
+          include: {
+            JobTitle: true,
+            Company: true,
+            Status: true,
+            Location: true,
+            JobSource: true,
+            tags: true,
+          },
+        });
+        if (!job) {
+          return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
+        }
+        return { data: job, success: true };
+      }
       return {
         success: false,
         message: "errors.invalidTransition",
@@ -1133,24 +1181,43 @@ export const updateKanbanOrder = async (
       return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
     }
 
-    const statusChanged = newStatusId !== undefined && newStatusId !== currentJob.statusId;
+    // Welle 4: a drop onto a DIFFERENT column is a status move; a drop onto the
+    // SAME interviewing column (self-transition stage) logs a new round. Any other
+    // same-column drop is a pure reorder (no history) — see the else branch.
+    const statusDiffers = newStatusId !== undefined && newStatusId !== currentJob.statusId;
+    const selfTransition =
+      newStatusId !== undefined &&
+      newStatusId === currentJob.statusId &&
+      !!currentJob.Status?.category &&
+      isValidCategoryTransitionByKind(
+        currentJob.Status.category.kind,
+        currentJob.Status.category.kind,
+        { sameStatus: true },
+      );
 
-    if (statusChanged) {
-      // Validate transition — category-ordered (Welle 4 per-user custom statuses).
-      const newStatus = await prisma.jobStatus.findFirst({
-        where: { id: newStatusId, userId: user.id },
-        include: { category: true },
-      });
-      if (!newStatus) {
-        return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
-      }
-
-      if (!isValidCategoryTransitionByKind(currentJob.Status.category.kind, newStatus.category.kind)) {
-        return {
-          success: false,
-          message: "errors.invalidTransition",
-          errorCode: "INVALID_TRANSITION",
-        };
+    if (statusDiffers || selfTransition) {
+      // Resolve the target status. A different status is fetched + validated; a
+      // self-transition re-selects the current status (same category, loaded).
+      let newStatus: Awaited<
+        ReturnType<typeof prisma.jobStatus.findFirst<{ include: { category: true } }>>
+      >;
+      if (statusDiffers) {
+        newStatus = await prisma.jobStatus.findFirst({
+          where: { id: newStatusId, userId: user.id },
+          include: { category: true },
+        });
+        if (!newStatus) {
+          return { success: false, message: "errors.notFound", errorCode: "NOT_FOUND" };
+        }
+        if (!isValidCategoryTransitionByKind(currentJob.Status.category.kind, newStatus.category.kind)) {
+          return {
+            success: false,
+            message: "errors.invalidTransition",
+            errorCode: "INVALID_TRANSITION",
+          };
+        }
+      } else {
+        newStatus = currentJob.Status;
       }
 
       const sideEffects = appliedSideEffectByKind(
@@ -1380,9 +1447,13 @@ export const getValidTransitions = async (
       include: { category: true },
     });
     const fromKind = job.Status.category.kind;
-    const statuses = allStatuses.filter(
-      (s) => s.id !== job.statusId && isValidCategoryTransitionByKind(fromKind, s.category.kind),
-    );
+    // Welle 4: the CURRENT status stays in the list only on a self-transition stage
+    // (interviewing multi-round) so the user can re-select it to log another round;
+    // every other status is filtered by the category-ordered transition rule.
+    const statuses = allStatuses.filter((s) => {
+      const sameStatus = s.id === job.statusId;
+      return isValidCategoryTransitionByKind(fromKind, s.category.kind, { sameStatus });
+    });
 
     return { success: true, data: statuses };
   } catch (error) {

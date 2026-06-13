@@ -21,19 +21,30 @@ import {
   isValidCategoryTransition,
   computeAppliedSideEffect,
   type AppliedSideEffect,
+  type TransitionOptions,
 } from "./status-categories";
 import type { JobStatus } from "@/models/job.model";
 
 /**
- * Is moving a job from a status in `fromKind` to a (different) status in `toKind`
- * a valid transition? Forward/lateral by stage order, or bounded reopen from a
- * closed stage into the default (lead) stage. Unknown kinds are rejected (closed).
+ * Is moving a job from a status in `fromKind` to a status in `toKind` a valid
+ * transition? Forward/lateral by stage order, or bounded reopen from a closed
+ * stage into the default (lead) stage. Unknown kinds are rejected (closed).
+ *
+ * `opts.sameStatus` signals the move re-selects the job's CURRENT status (not a
+ * different one): then validity reduces to the stage's `allowsSelfTransition`
+ * (interviewing multi-round, Welle 4 self-transition wiring) — see the domain
+ * `isValidCategoryTransition`. Omit it for ordinary status-to-status moves.
  */
-export function isValidCategoryTransitionByKind(fromKind: string, toKind: string): boolean {
+export function isValidCategoryTransitionByKind(
+  fromKind: string,
+  toKind: string,
+  opts: TransitionOptions = {},
+): boolean {
   if (!isStatusCategoryKind(fromKind) || !isStatusCategoryKind(toKind)) return false;
   return isValidCategoryTransition(
     categorySemanticsForKind(fromKind),
     categorySemanticsForKind(toKind),
+    opts,
   );
 }
 
@@ -59,5 +70,9 @@ export function isValidStatusTransition(
   to: JobStatus | undefined | null,
 ): boolean {
   if (!from?.category || !to?.category) return false;
-  return isValidCategoryTransitionByKind(from.category.kind, to.category.kind);
+  // Re-selecting the SAME status row is valid only on a self-transition stage
+  // (interviewing multi-round) — thread sameStatus so the Kanban drag highlight
+  // / dropdown enable matches the server rule (Welle 4 self-transition wiring).
+  const sameStatus = from.id === to.id;
+  return isValidCategoryTransitionByKind(from.category.kind, to.category.kind, { sameStatus });
 }

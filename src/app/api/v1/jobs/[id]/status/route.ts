@@ -76,7 +76,22 @@ export const POST = withApiAuth(async (req, { userId, params }) => {
   }
 
   // Validate transition — category-ordered (Welle 4 per-user custom statuses).
-  if (!isValidCategoryTransitionByKind(currentJob.Status.category.kind, newStatus.category.kind)) {
+  // Re-selecting the CURRENT status is valid only on a self-transition stage
+  // (interviewing multi-round) — it then logs a new round below. Any other
+  // same-status re-selection is a benign no-op (no history spam), not an error.
+  const sameStatus = newStatusId === currentJob.statusId;
+  if (
+    !isValidCategoryTransitionByKind(currentJob.Status.category.kind, newStatus.category.kind, {
+      sameStatus,
+    })
+  ) {
+    if (sameStatus) {
+      const job = await prisma.job.findFirst({
+        where: { id: jobId, userId },
+        select: JOB_API_SELECT,
+      });
+      return actionToResponse({ success: true, data: job });
+    }
     return errorResponse("VALIDATION_ERROR", "api.statusChange.invalidTransition", 400);
   }
 
