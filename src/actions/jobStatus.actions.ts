@@ -247,7 +247,10 @@ export const reorderJobStatus = async (
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "errors.notAuthenticated", errorCode: "UNAUTHORIZED" };
 
-    if (!Number.isInteger(newSortOrder) || newSortOrder < 0) {
+    // sortOrder is a RELATIVE ordinal within a stage — negatives are valid and
+    // intended (the midpoint reorder helper returns e.g. -1 to move a status
+    // above the current top item at sortOrder 0). Only reject non-integers.
+    if (!Number.isInteger(newSortOrder)) {
       return { success: false, message: "errors.invalidSortOrder", errorCode: "VALIDATION_ERROR" };
     }
 

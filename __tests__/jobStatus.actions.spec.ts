@@ -106,11 +106,24 @@ describe("createJobStatus", () => {
 });
 
 describe("reorderJobStatus", () => {
-  it("rejects a negative / non-integer sort order (ADR-019 boundary)", async () => {
+  it("rejects a non-integer sort order (ADR-019 boundary)", async () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
-    const r = await reorderJobStatus("s-1", -3);
+    const r = await reorderJobStatus("s-1", 2.5);
     expect(r.success).toBe(false);
     expect(r.message).toBe("errors.invalidSortOrder");
+  });
+
+  it("ACCEPTS a negative sort order — moving a status above the top item at 0", async () => {
+    // Regression (review HIGH): the midpoint reorder helper returns negative
+    // values to move a status to the top of its stage; the server must not
+    // reject them, or "move up" on a freshly-seeded top item always errors.
+    (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+    prisma.jobStatus.updateMany.mockResolvedValue({ count: 1 });
+    const r = await reorderJobStatus("s-1", -1000);
+    expect(r.success).toBe(true);
+    expect(prisma.jobStatus.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "s-1", userId: "user-1" }, data: { sortOrder: -1000 } }),
+    );
   });
 
   it("scopes the update by userId and 404s when nothing matched", async () => {
