@@ -34,6 +34,39 @@ describe("isValidCategoryTransitionByKind", () => {
     expect(isValidCategoryTransitionByKind("bogus", "lead")).toBe(false);
     expect(isValidCategoryTransitionByKind("lead", "bogus")).toBe(false);
   });
+
+  // Welle 4 self-transition wiring: re-selecting the SAME status (sameStatus:true)
+  // is valid ONLY for a stage whose category allows self-transition (interviewing).
+  describe("sameStatus option (self-transition)", () => {
+    it("allows a same-status re-selection on a self-transition stage (interviewing)", () => {
+      expect(
+        isValidCategoryTransitionByKind("interviewing", "interviewing", { sameStatus: true }),
+      ).toBe(true);
+    });
+
+    it("rejects a same-status re-selection on a non-self-transition stage (applied)", () => {
+      expect(
+        isValidCategoryTransitionByKind("applied", "applied", { sameStatus: true }),
+      ).toBe(false);
+    });
+
+    it("rejects same-status re-selection on lead / offer / won / lost / archived", () => {
+      for (const kind of ["lead", "offer", "won", "lost", "archived"]) {
+        expect(isValidCategoryTransitionByKind(kind, kind, { sameStatus: true })).toBe(false);
+      }
+    });
+
+    it("fails closed for unknown kinds even with sameStatus", () => {
+      expect(isValidCategoryTransitionByKind("bogus", "bogus", { sameStatus: true })).toBe(false);
+    });
+
+    it("defaults to a normal (different-status) transition when sameStatus is omitted", () => {
+      // interviewing -> interviewing without the flag is still a valid lateral move.
+      expect(isValidCategoryTransitionByKind("interviewing", "interviewing")).toBe(true);
+      // applied -> applied lateral (different statuses, same stage) is also valid.
+      expect(isValidCategoryTransitionByKind("applied", "applied")).toBe(true);
+    });
+  });
 });
 
 describe("appliedSideEffectByKind", () => {

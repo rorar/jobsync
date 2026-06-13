@@ -1,11 +1,13 @@
 import {
   addJob,
+  changeJobStatus,
   createLocation,
   deleteJobById,
   getJobDetails,
   getJobsList,
   getJobSourceList,
   getStatusList,
+  getValidTransitions,
   updateJob,
   updateJobStatus,
   updateKanbanOrder,
@@ -1251,6 +1253,222 @@ describe("jobActions", () => {
           }),
         }),
       );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Welle 4 self-transition wiring: re-selecting the CURRENT status logs a new
+  // round (history + event) ONLY for a self-transition stage (interviewing); any
+  // other stage's same-status re-selection stays a no-op (no history spam).
+  // ---------------------------------------------------------------------------
+
+  describe("self-transition (same-status re-selection)", () => {
+    const interviewStatus = {
+      id: "status-interview",
+      label: "Interview",
+      value: "interview",
+      category: { kind: "interviewing" },
+    };
+    const appliedStatus = {
+      id: "status-applied",
+      label: "Applied",
+      value: "applied",
+      category: { kind: "applied" },
+    };
+
+    describe("changeJobStatus", () => {
+      it("logs a new round when re-selecting the same interviewing status (history + event)", async () => {
+        const currentJob = {
+          id: "job-id",
+          statusId: interviewStatus.id,
+          version: 3,
+          appliedDate: new Date("2026-01-01"),
+          Status: { ...interviewStatus },
+        };
+        (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+        (prisma.job.findFirst as jest.Mock).mockResolvedValue(currentJob);
+        (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(interviewStatus);
+
+        const txJobUpdate = jest
+          .fn()
+          .mockResolvedValue({ ...currentJob, Status: interviewStatus });
+        const txHistoryCreate = jest.fn().mockResolvedValue({ id: "hist-round-2" });
+        (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) =>
+          fn({ job: { update: txJobUpdate }, jobStatusHistory: { create: txHistoryCreate } }),
+        );
+
+        const result = await changeJobStatus("job-id", interviewStatus.id, "Round 2 scheduled");
+
+        expect(result.success).toBe(true);
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        // History row records the round even though previous === new status.
+        expect(txHistoryCreate).toHaveBeenCalledWith({
+          data: expect.objectContaining({
+            jobId: "job-id",
+            previousStatusId: interviewStatus.id,
+            newStatusId: interviewStatus.id,
+            note: "Round 2 scheduled",
+          }),
+        });
+      });
+
+      it("is a no-op (no history, no transaction) when re-selecting a non-self-transition status (applied)", async () => {
+        const currentJob = {
+          id: "job-id",
+          statusId: appliedStatus.id,
+          version: 2,
+          appliedDate: new Date("2026-01-01"),
+          Status: { ...appliedStatus },
+        };
+        (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+        (prisma.job.findFirst as jest.Mock).mockResolvedValue(currentJob);
+        (prisma.jobStatus.findFirst as jest.Mock).mockResolvedValue(appliedStatus);
+
+        const result = await changeJobStatus("job-id", appliedStatus.id);
+
+        expect(result.success).toBe(true);
+        // No state-machine write: no transaction, no history.
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("updateJob", () => {
+      it("logs a round when the edit form re-selects the same interviewing status", async () => {
+        const currentJob = {
+          id: "job-id",
+          userId: mockUser.id,
+          statusId: interviewStatus.id,
+          appliedDate: new Date("2026-01-01"),
+          Status: { ...interviewStatus },
+        };
+        (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+        (prisma.jobTitle.findFirst as jest.Mock).mockResolvedValue({ id: "job-title-id" });
+        (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "company-id" });
+        (prisma.location.findFirst as jest.Mock).mockResolvedValue({ id: "location-id" });
+        (prisma.jobSource.findFirst as jest.Mock).mockResolvedValue({ id: "source-id" });
+        (prisma.job.findFirst as jest.Mock).mockResolvedValue(currentJob);
+
+        const txHistoryCreate = jest.fn().mockResolvedValue({ id: "hist-1" });
+        (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) =>
+          fn({
+            job: { update: jest.fn().mockResolvedValue({ ...currentJob, Status: interviewStatus }) },
+            jobStatusHistory: { create: txHistoryCreate },
+          }),
+        );
+
+        const result = await updateJob({
+          ...jobData,
+          id: "job-id",
+          status: interviewStatus.id, // same status, self-transition stage
+        });
+
+        expect(result.success).toBe(true);
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(txHistoryCreate).toHaveBeenCalledWith({
+          data: expect.objectContaining({
+            previousStatusId: interviewStatus.id,
+            newStatusId: interviewStatus.id,
+          }),
+        });
+      });
+    });
+
+    describe("getValidTransitions (dropdown / DnD targets)", () => {
+      const interviewStatusFull = {
+        ...interviewStatus,
+        category: { id: "cat-int", kind: "interviewing" },
+      };
+      const appliedStatusFull = {
+        ...appliedStatus,
+        category: { id: "cat-app", kind: "applied" },
+      };
+      const offerStatus = {
+        id: "status-offer",
+        label: "Offer",
+        value: "offer",
+        category: { id: "cat-offer", kind: "offer" },
+      };
+
+      it("keeps the CURRENT status in the list on a self-transition stage (interviewing)", async () => {
+        (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+        (prisma.job.findFirst as jest.Mock).mockResolvedValue({
+          id: "job-id",
+          statusId: interviewStatusFull.id,
+          Status: interviewStatusFull,
+        });
+        (prisma.jobStatus.findMany as jest.Mock).mockResolvedValue([
+          interviewStatusFull,
+          offerStatus,
+        ]);
+
+        const result = await getValidTransitions("job-id");
+
+        expect(result.success).toBe(true);
+        const ids = (result.data ?? []).map((s) => s.id);
+        // The interviewing status re-selects itself (round); offer is a forward target.
+        expect(ids).toContain(interviewStatusFull.id);
+        expect(ids).toContain(offerStatus.id);
+      });
+
+      it("excludes the CURRENT status on a non-self-transition stage (applied)", async () => {
+        (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+        (prisma.job.findFirst as jest.Mock).mockResolvedValue({
+          id: "job-id",
+          statusId: appliedStatusFull.id,
+          Status: appliedStatusFull,
+        });
+        (prisma.jobStatus.findMany as jest.Mock).mockResolvedValue([
+          appliedStatusFull,
+          interviewStatusFull,
+        ]);
+
+        const result = await getValidTransitions("job-id");
+
+        expect(result.success).toBe(true);
+        const ids = (result.data ?? []).map((s) => s.id);
+        expect(ids).not.toContain(appliedStatusFull.id);
+        expect(ids).toContain(interviewStatusFull.id);
+      });
+    });
+
+    describe("updateKanbanOrder", () => {
+      it("logs a round when a card is dropped onto the same interviewing column", async () => {
+        const currentJob = {
+          id: "job-id",
+          userId: mockUser.id,
+          statusId: interviewStatus.id,
+          appliedDate: new Date("2026-01-01"),
+          version: 1,
+          Status: { ...interviewStatus },
+        };
+        (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+        (prisma.job.findFirst as jest.Mock).mockResolvedValue(currentJob);
+
+        const txJobUpdate = jest
+          .fn()
+          .mockResolvedValue({ ...currentJob, sortOrder: 5000, Status: interviewStatus });
+        const txHistoryCreate = jest.fn().mockResolvedValue({ id: "hist-1" });
+        (prisma.$transaction as jest.Mock).mockImplementation(async (fn: Function) =>
+          fn({ job: { update: txJobUpdate }, jobStatusHistory: { create: txHistoryCreate } }),
+        );
+
+        const result = await updateKanbanOrder("job-id", 5000, interviewStatus.id);
+
+        expect(result.success).toBe(true);
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(txHistoryCreate).toHaveBeenCalledWith({
+          data: expect.objectContaining({
+            previousStatusId: interviewStatus.id,
+            newStatusId: interviewStatus.id,
+          }),
+        });
+        // Self-transition is a real move → version increments (optimistic lock).
+        expect(txJobUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ version: { increment: 1 } }),
+          }),
+        );
+      });
     });
   });
 });

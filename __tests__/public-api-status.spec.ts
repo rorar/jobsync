@@ -114,6 +114,7 @@ const VALID_UUID = "a1b2c3d4-e5f6-4890-abcd-ef1234567890";
 const STATUS_BOOKMARKED_ID = "11111111-1111-4111-a111-111111111111";
 const STATUS_APPLIED_ID = "22222222-2222-4222-a222-222222222222";
 const STATUS_OFFER_ID = "33333333-3333-4333-a333-333333333333";
+const STATUS_INTERVIEW_ID = "55555555-5555-4555-a555-555555555555";
 
 function mockRequest(
   url: string,
@@ -281,6 +282,73 @@ describe("POST /api/v1/jobs/:id/status", () => {
     expect(body.success).toBe(false);
     expect(body.error.code).toBe("VALIDATION_ERROR");
     expect(body.error.message).toBe("api.statusChange.invalidTransition");
+  });
+
+  // Welle 4 self-transition wiring -----------------------------------------
+
+  it("logs a round when re-selecting the same interviewing status (self-transition)", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue({
+      id: VALID_UUID,
+      statusId: STATUS_INTERVIEW_ID,
+      appliedDate: new Date("2026-01-01"),
+      Status: { value: "interview", category: { kind: "interviewing" } },
+    });
+    mockPrisma.jobStatus.findFirst.mockResolvedValue({
+      id: STATUS_INTERVIEW_ID,
+      value: "interview",
+      category: { kind: "interviewing" },
+    });
+
+    const mockHistoryCreate = jest.fn().mockResolvedValue({ id: "hist-round-2" });
+    mockTransaction.mockImplementation(async (fn: Function) =>
+      fn({
+        job: { update: jest.fn().mockResolvedValue(makeJobRow()) },
+        jobStatusHistory: { create: mockHistoryCreate },
+      }),
+    );
+
+    const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}/status`, {
+      body: { statusId: STATUS_INTERVIEW_ID, note: "Round 2" },
+    });
+    const res = asRes(await changeStatus(req, routeCtx(VALID_UUID)));
+
+    expect(res.status).toBe(200);
+    expect(mockHistoryCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        previousStatusId: STATUS_INTERVIEW_ID,
+        newStatusId: STATUS_INTERVIEW_ID,
+        note: "Round 2",
+      }),
+    });
+  });
+
+  it("is a no-op (no history) when re-selecting a non-self-transition status (applied)", async () => {
+    mockPrisma.job.findFirst
+      // First call: the ownership lookup (statusId + Status).
+      .mockResolvedValueOnce({
+        id: VALID_UUID,
+        statusId: STATUS_APPLIED_ID,
+        appliedDate: new Date("2026-01-01"),
+        Status: { value: "applied", category: { kind: "applied" } },
+      })
+      // Second call: the no-op re-fetch (JOB_API_SELECT shape).
+      .mockResolvedValueOnce(makeJobRow({ Status: { id: STATUS_APPLIED_ID, label: "Applied", value: "applied" } }));
+    mockPrisma.jobStatus.findFirst.mockResolvedValue({
+      id: STATUS_APPLIED_ID,
+      value: "applied",
+      category: { kind: "applied" },
+    });
+
+    const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}/status`, {
+      body: { statusId: STATUS_APPLIED_ID },
+    });
+    const res = asRes(await changeStatus(req, routeCtx(VALID_UUID)));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    // No state-machine write for a non-self-transition same-status re-selection.
+    expect(mockTransaction).not.toHaveBeenCalled();
   });
 
   it("returns 400 when statusId is missing", async () => {
