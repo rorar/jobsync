@@ -380,11 +380,11 @@ test.describe("Job CRUD", () => {
       location,
     );
     await expect(page.getByLabel("Job Source")).toContainText("Indeed");
-    await expect(page.getByLabel("Select Status")).toContainText(
+    // Welle 4 (F-AJ-02): status is now the grouped StatusStageCombobox; the
+    // trigger shows the default status label for a newly created job.
+    await expect(page.getByTestId("status-combobox-trigger")).toContainText(
       "Bookmarked",
-    ); // SelectFormCtrl aria-label = "Select " + t("jobs.status")="Status" (was
-    // "Select Job Status" before the 2026-06-12 i18n label change). Default
-    // status for a newly created job (no "Draft" status exists).
+    );
 
     await page.locator(".tiptap").first().click();
     await page.locator(".tiptap").first().fill(

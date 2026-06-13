@@ -1,19 +1,19 @@
 {
   "id": "welle4-custom-jobstatus_20260601",
-  "title": "Welle 4 \u2014 Custom JobStatus XL (Kette A)",
+  "title": "Welle 4 — Custom JobStatus XL (Kette A)",
   "type": "feature",
-  "status": "in_progress",
+  "status": "completed",
   "created": "2026-06-01T08:46:16Z",
-  "updated": "2026-06-13T00:00:00Z",
-  "current_phase": 2,
-  "current_task": "2.4 (deferred to wireframes)",
+  "updated": "2026-06-13T12:00:00Z",
+  "current_phase": 6,
+  "current_task": "complete",
   "phases": {
     "total": 6,
-    "completed": 1
+    "completed": 6
   },
   "tasks": {
     "total": 24,
-    "completed": 7
+    "completed": 24
   },
   "commits": []
 }
