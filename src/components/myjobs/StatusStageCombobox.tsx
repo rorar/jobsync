@@ -28,7 +28,6 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge";
 import type { JobStatus } from "@/models/job.model";
 import { stageColorVar } from "@/lib/crm/stage-colors";
 
@@ -134,11 +133,6 @@ export function StatusStageCombobox({
               />
             )}
             <span className="truncate">{selected ? selected.label : t("jobStatus.selectStatus")}</span>
-            {selected?.category?.isAppliedStage && (
-              <Badge variant="outline" className="ml-1 shrink-0 text-[10px]">
-                {t("jobStatus.marksApplied")}
-              </Badge>
-            )}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>

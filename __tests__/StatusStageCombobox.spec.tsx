@@ -54,9 +54,20 @@ describe("StatusStageCombobox", () => {
     expect(screen.getByTestId("status-combobox-trigger")).toHaveTextContent("Bookmarked");
   });
 
-  it("shows the 'marks applied' badge when an applied-stage status is selected", () => {
+  it("shows the selected label (NOT the marks-applied badge) on the trigger for an applied-stage status", () => {
+    // The trigger is fixed-width; the redundant 'marks applied' badge was removed
+    // from it (it clipped the label) — it lives only in the dropdown options now.
     render(<StatusStageCombobox options={OPTIONS} value="s2" onChange={jest.fn()} />);
-    expect(screen.getByTestId("status-combobox-trigger")).toHaveTextContent("jobStatus.marksApplied");
+    const trigger = screen.getByTestId("status-combobox-trigger");
+    expect(trigger).toHaveTextContent("Applied");
+    expect(trigger).not.toHaveTextContent("jobStatus.marksApplied");
+  });
+
+  it("still shows the 'marks applied' hint inside the dropdown for applied stages", async () => {
+    const user = userEvent.setup();
+    render(<StatusStageCombobox options={OPTIONS} value="s1" onChange={jest.fn()} />);
+    await user.click(screen.getByTestId("status-combobox-trigger"));
+    expect(await screen.findByText("jobStatus.marksApplied")).toBeInTheDocument();
   });
 
   it("opens grouped by stage and reports the chosen status id", async () => {
