@@ -9,7 +9,8 @@ import { signup, authenticate } from "@/actions/auth.actions";
 import { signIn } from "@/auth";
 import prisma from "@/lib/db";
 import bcrypt from "bcryptjs";
-import { JOB_SOURCES, JOB_STATUSES } from "@/lib/constants";
+import { JOB_SOURCES } from "@/lib/constants";
+import { seedJobStatusesForUser } from "@/lib/crm/seed-job-statuses";
 import { delay } from "@/utils/delay";
 
 // Mock dependencies
@@ -24,6 +25,11 @@ jest.mock("@/lib/db", () => ({
   jobStatus: {
     upsert: jest.fn(),
   },
+}));
+
+// Welle 4: signup seeds per-user statuses via this helper (tested separately).
+jest.mock("@/lib/crm/seed-job-statuses", () => ({
+  seedJobStatusesForUser: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock("@/auth", () => ({
@@ -234,61 +240,35 @@ describe("Auth Actions", () => {
       });
     });
 
-    it("should create job statuses for new user", async () => {
+    it("should seed per-user statuses for the new user (Welle 4)", async () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
       (bcrypt.hash as jest.Mock).mockResolvedValue("hashed_password_123");
       (prisma.user.create as jest.Mock).mockResolvedValue(mockNewUser);
       (prisma.jobSource.createMany as jest.Mock).mockResolvedValue(undefined);
-      (prisma.jobStatus.upsert as jest.Mock).mockResolvedValue(undefined);
 
       await signup(validSignupData);
 
-      expect(prisma.jobStatus.upsert).toHaveBeenCalledTimes(
-        JOB_STATUSES.length,
-      );
-      JOB_STATUSES.forEach((status) => {
-        expect(prisma.jobStatus.upsert).toHaveBeenCalledWith({
-          where: { value: status.value },
-          update: {},
-          create: status,
-        });
-      });
+      // Per-user seed (categories + default statuses) instead of the old global
+      // jobStatus.upsert loop.
+      expect(seedJobStatusesForUser).toHaveBeenCalledTimes(1);
+      expect(seedJobStatusesForUser).toHaveBeenCalledWith(prisma, mockNewUser.id);
+      expect(prisma.jobStatus.upsert).not.toHaveBeenCalled();
     });
 
-    it("should upsert all job statuses with correct data", async () => {
+    it("should create job sources before seeding statuses", async () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
       (bcrypt.hash as jest.Mock).mockResolvedValue("hashed_password_123");
       (prisma.user.create as jest.Mock).mockResolvedValue(mockNewUser);
       (prisma.jobSource.createMany as jest.Mock).mockResolvedValue(undefined);
-      (prisma.jobStatus.upsert as jest.Mock).mockResolvedValue(undefined);
-
-      await signup(validSignupData);
-
-      JOB_STATUSES.forEach((status, index) => {
-        const callArgs = (prisma.jobStatus.upsert as jest.Mock).mock.calls[
-          index
-        ][0];
-        expect(callArgs.where.value).toBe(status.value);
-        expect(callArgs.update).toEqual({});
-        expect(callArgs.create).toEqual(status);
-      });
-    });
-
-    it("should create job sources before job statuses", async () => {
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
-      (bcrypt.hash as jest.Mock).mockResolvedValue("hashed_password_123");
-      (prisma.user.create as jest.Mock).mockResolvedValue(mockNewUser);
-      (prisma.jobSource.createMany as jest.Mock).mockResolvedValue(undefined);
-      (prisma.jobStatus.upsert as jest.Mock).mockResolvedValue(undefined);
 
       await signup(validSignupData);
 
       const jobSourcesCallOrder = (prisma.jobSource.createMany as jest.Mock)
         .mock.invocationCallOrder[0];
-      const jobStatusCallOrder = (prisma.jobStatus.upsert as jest.Mock).mock
+      const seedCallOrder = (seedJobStatusesForUser as jest.Mock).mock
         .invocationCallOrder[0];
 
-      expect(jobSourcesCallOrder).toBeLessThan(jobStatusCallOrder);
+      expect(jobSourcesCallOrder).toBeLessThan(seedCallOrder);
     });
 
     it("should not create job sources if user creation fails", async () => {
@@ -301,7 +281,7 @@ describe("Auth Actions", () => {
       await expect(signup(validSignupData)).rejects.toThrow("Database error");
 
       expect(prisma.jobSource.createMany).not.toHaveBeenCalled();
-      expect(prisma.jobStatus.upsert).not.toHaveBeenCalled();
+      expect(seedJobStatusesForUser).not.toHaveBeenCalled();
     });
 
     it("should handle job source creation error", async () => {
@@ -319,17 +299,17 @@ describe("Auth Actions", () => {
       expect(prisma.jobStatus.upsert).not.toHaveBeenCalled();
     });
 
-    it("should handle job status creation error", async () => {
+    it("should handle job status seeding error", async () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
       (bcrypt.hash as jest.Mock).mockResolvedValue("hashed_password_123");
       (prisma.user.create as jest.Mock).mockResolvedValue(mockNewUser);
       (prisma.jobSource.createMany as jest.Mock).mockResolvedValue(undefined);
-      (prisma.jobStatus.upsert as jest.Mock).mockRejectedValue(
-        new Error("Failed to create job status"),
+      (seedJobStatusesForUser as jest.Mock).mockRejectedValueOnce(
+        new Error("Failed to seed job statuses"),
       );
 
       await expect(signup(validSignupData)).rejects.toThrow(
-        "Failed to create job status",
+        "Failed to seed job statuses",
       );
     });
 
