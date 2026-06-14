@@ -524,11 +524,50 @@ export async function mergePersons(
 
     const duplicateJobIds = conflictingJobIds.filter(id => winnerJobIds.has(id));
 
+    // G25: dedup CrmTaskTarget / CrmNoteTarget the same way. A task/note that
+    // targets BOTH loser and winner would, after the loser→winner transfer,
+    // leave TWO winner rows for the same task/note. Neither model has a
+    // @@unique, so this is a silent logical duplicate (not a P2002). Pre-read
+    // the overlapping task/note IDs (ADR-015: scoped via task.userId / note.userId,
+    // since these join tables have no userId column) and delete the loser's
+    // colliding rows inside the same transaction before the transfer.
+    const loserTaskIds = await prisma.crmTaskTarget.findMany({
+      where: { targetPersonId: loserId, task: { userId: user.id } },
+      select: { taskId: true },
+    }).then(rows => rows.map(r => r.taskId));
+    const winnerTaskIds = new Set(
+      await prisma.crmTaskTarget.findMany({
+        where: { targetPersonId: winnerId, task: { userId: user.id } },
+        select: { taskId: true },
+      }).then(rows => rows.map(r => r.taskId))
+    );
+    const duplicateTaskIds = loserTaskIds.filter(id => winnerTaskIds.has(id));
+
+    const loserNoteIds = await prisma.crmNoteTarget.findMany({
+      where: { targetPersonId: loserId, note: { userId: user.id } },
+      select: { noteId: true },
+    }).then(rows => rows.map(r => r.noteId));
+    const winnerNoteIds = new Set(
+      await prisma.crmNoteTarget.findMany({
+        where: { targetPersonId: winnerId, note: { userId: user.id } },
+        select: { noteId: true },
+      }).then(rows => rows.map(r => r.noteId))
+    );
+    const duplicateNoteIds = loserNoteIds.filter(id => winnerNoteIds.has(id));
+
     // Finding 9 fix: dedup delete inside transaction to prevent race condition
     await prisma.$transaction([
       // Remove conflicting JobContacts BEFORE transfer (prevents P2002 on unique constraint, ADR-015: userId in where)
       ...(duplicateJobIds.length > 0
         ? [prisma.jobContact.deleteMany({ where: { personId: loserId, userId: user.id, jobId: { in: duplicateJobIds } } })]
+        : []),
+      // G25: remove the loser's colliding task/note targets BEFORE transfer so
+      // a task/note targeting both persons does not end up with two winner rows.
+      ...(duplicateTaskIds.length > 0
+        ? [prisma.crmTaskTarget.deleteMany({ where: { targetPersonId: loserId, taskId: { in: duplicateTaskIds }, task: { userId: user.id } } })]
+        : []),
+      ...(duplicateNoteIds.length > 0
+        ? [prisma.crmNoteTarget.deleteMany({ where: { targetPersonId: loserId, noteId: { in: duplicateNoteIds }, note: { userId: user.id } } })]
         : []),
       // Transfer interviews (ADR-015: userId in where)
       prisma.crmInterview.updateMany({

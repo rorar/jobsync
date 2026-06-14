@@ -20,8 +20,8 @@ jest.mock("@/lib/db", () => ({
       update: jest.fn(),
       delete: jest.fn(),
     },
-    crmNoteTarget: { deleteMany: jest.fn(), updateMany: jest.fn() },
-    crmTaskTarget: { deleteMany: jest.fn(), updateMany: jest.fn() },
+    crmNoteTarget: { deleteMany: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
+    crmTaskTarget: { deleteMany: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
     crmInterview: { updateMany: jest.fn() },
     crmActivityLog: { updateMany: jest.fn() },
     jobContact: { deleteMany: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
@@ -52,8 +52,8 @@ jest.mock("@/lib/events/event-types", () => ({
 
 const mockDb = db as unknown as {
   person: { findFirst: jest.Mock; update: jest.Mock; delete: jest.Mock };
-  crmNoteTarget: { deleteMany: jest.Mock; updateMany: jest.Mock };
-  crmTaskTarget: { deleteMany: jest.Mock; updateMany: jest.Mock };
+  crmNoteTarget: { deleteMany: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
+  crmTaskTarget: { deleteMany: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
   crmInterview: { updateMany: jest.Mock };
   crmActivityLog: { updateMany: jest.Mock };
   jobContact: { deleteMany: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
@@ -102,8 +102,10 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
     wireTransaction();
     // Default mocks for successful operations
     mockDb.crmNoteTarget.deleteMany.mockResolvedValue({ count: 0 });
+    mockDb.crmNoteTarget.findMany.mockResolvedValue([]);
     mockDb.crmNoteTarget.updateMany.mockResolvedValue({ count: 0 });
     mockDb.crmTaskTarget.deleteMany.mockResolvedValue({ count: 0 });
+    mockDb.crmTaskTarget.findMany.mockResolvedValue([]);
     mockDb.crmTaskTarget.updateMany.mockResolvedValue({ count: 0 });
     mockDb.crmInterview.updateMany.mockResolvedValue({ count: 0 });
     mockDb.crmActivityLog.updateMany.mockResolvedValue({ count: 0 });
@@ -295,6 +297,51 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
           jobId: { in: ["job-1"] },
         }),
       });
+    });
+
+    // G25 — task/note target dedup
+    it("dedups CrmTaskTarget: deletes the loser's colliding task target before transfer", async () => {
+      // Both loser and winner target task "task-1" → after transfer that would
+      // leave two winner rows. The loser's colliding row must be removed first.
+      mockDb.crmTaskTarget.findMany
+        .mockResolvedValueOnce([{ taskId: "task-1" }]) // loser's targets
+        .mockResolvedValueOnce([{ taskId: "task-1" }]); // winner's targets
+
+      await mergePersons(WINNER_ID, LOSER_ID);
+
+      expect(mockDb.crmTaskTarget.deleteMany).toHaveBeenCalledWith({
+        where: {
+          targetPersonId: LOSER_ID,
+          taskId: { in: ["task-1"] },
+          task: { userId: USER.id },
+        },
+      });
+    });
+
+    it("dedups CrmNoteTarget: deletes the loser's colliding note target before transfer", async () => {
+      mockDb.crmNoteTarget.findMany
+        .mockResolvedValueOnce([{ noteId: "note-1" }]) // loser's targets
+        .mockResolvedValueOnce([{ noteId: "note-1" }]); // winner's targets
+
+      await mergePersons(WINNER_ID, LOSER_ID);
+
+      expect(mockDb.crmNoteTarget.deleteMany).toHaveBeenCalledWith({
+        where: {
+          targetPersonId: LOSER_ID,
+          noteId: { in: ["note-1"] },
+          note: { userId: USER.id },
+        },
+      });
+    });
+
+    it("does NOT delete task targets when there is no overlap", async () => {
+      mockDb.crmTaskTarget.findMany
+        .mockResolvedValueOnce([{ taskId: "task-loser" }])
+        .mockResolvedValueOnce([{ taskId: "task-winner" }]);
+
+      await mergePersons(WINNER_ID, LOSER_ID);
+
+      expect(mockDb.crmTaskTarget.deleteMany).not.toHaveBeenCalled();
     });
   });
 });
