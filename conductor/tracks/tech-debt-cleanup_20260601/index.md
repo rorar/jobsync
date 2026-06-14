@@ -10,8 +10,8 @@
 
 ## Progress
 
-- Phases: 2/5 complete (Clusters 1–2 done 2026-06-14)
-- Tasks: 6/12 complete (C1: IF-12 + D1/D2; C2: IF-10 + D5; plus D3 + G28 pre-done; **6 remain**)
+- Phases: 3/5 complete (Clusters 1–3 done 2026-06-14)
+- Tasks: 7/12 complete (C1: IF-12 + D1/D2; C2: IF-10 + D5; C3: D3 + D4; plus G28 pre-done; **5 remain**)
 
 ## Scope (BACKLOG §4 / §1b / §5 tail)
 

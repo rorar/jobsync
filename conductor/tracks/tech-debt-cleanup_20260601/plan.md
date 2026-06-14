@@ -57,8 +57,11 @@ for gaps), then fix. Each item is its own logical commit. Build zero-error +
 
 - [x] Task 3.1: D3 — DONE (verified 2026-06-14): `specs/notification-dispatch.allium`
       already v3 (header `-- allium: 3`); `allium analyse` → `findings:[]`. "160 errors" stale.
-- [ ] Task 3.2: D4 — `allium:weed` `specs/shared-entities.allium` `Company.domain`
-      (`:68`) against `schema.prisma:306` + the enrichment autofill; reconcile the drift.
+- [x] Task 3.2: D4 — DONE (2026-06-14, `423e54d`): allium:weed found 2 spec-lag drifts;
+      allium:tend applied (verified vs git diff + allium check, 0 errors). shared-entities:
+      domain comment corrected (label-derived/synthesised, write-once) + new @invariant
+      DomainPopulatedOnce. data-enrichment (DDD bounded context): new producer rule
+      PopulateCompanyDomainOnCreation modelling the sole writer. No code change.
 
 ### Verification
 

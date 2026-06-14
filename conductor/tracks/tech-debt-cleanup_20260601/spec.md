@@ -44,13 +44,13 @@ committed in its own logical commit. Build zero-error, `bash scripts/test.sh` gr
       owner-scoped (createdBy, ADR-015). Server-only leaf (not company.actions.ts) because the
       consumer has no session per ADR-019. LOW.
 
-### Cluster 3 — Allium spec-drift (no code behaviour change)
+### Cluster 3 — Allium spec-drift (no code behaviour change) ✅ DONE (2026-06-14)
 - [x] **D3:** DONE (2026-06-14) — `specs/notification-dispatch.allium` already v3
       (`-- allium: 3`); `allium analyse` → `findings:[]`. "~160 parse errors" stale.
-- [ ] **D4:** `specs/shared-entities.allium` `Company.domain` reconciled with the
-      implementation via `allium:weed`. Verified spec line: `shared-entities.allium:68`
-      (`domain: String?  -- … populated by enrichment`) vs `schema.prisma:306` +
-      `enrichment-trigger.ts` autofill. LOW (5min).
+- [x] **D4:** DONE (`423e54d`) — weed+tend reconciled `Company.domain`: shared-entities
+      comment corrected + `@invariant DomainPopulatedOnce`; data-enrichment gained producer
+      rule `PopulateCompanyDomainOnCreation` (DDD: writer lives in the enrichment context).
+      0 allium errors. LOW.
 
 ### Cluster 4 — GDPR-LOW
 - [ ] **GDPR-Consent (Art. 7):** `processingBasis` gains enforcement + a withdrawal path
