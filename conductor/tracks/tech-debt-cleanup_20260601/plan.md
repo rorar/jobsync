@@ -65,26 +65,29 @@ for gaps), then fix. Each item is its own logical commit. Build zero-error +
 
 ### Verification
 
-- [ ] `allium:check` clean on both specs; `allium:weed` reports zero `Company.domain` drift.
+- [x] `allium:check` clean on both specs; `allium:weed` reports zero `Company.domain` drift.
 
 ## Phase 4: GDPR-LOW
 
 ### Tasks
 
-- [ ] Task 4.1: GDPR-Consent (Art. 7) — add `processingBasis` enforcement + a withdrawal
-      path. Test: a withdrawn/absent basis blocks the processing it gates; the withdrawal
-      mutation is auth-gated (ADR-015 userId). Sites: `person.actions.ts`,
-      `PersonDetailClient.tsx`, `collect-user-data.ts`.
-- [ ] Task 4.2: G25 — dedup `CrmTaskTarget`/`CrmNoteTarget` in `mergePersons`
-      (`person.actions.ts:444`) the way `JobContact` is already deduped; regression test
-      merges two persons sharing a task/note target and asserts no duplicate row.
-- [ ] Task 4.3: G26b — add `ADMIN_USER_IDS` startup validation in `instrumentation.ts`
-      (mirror the `ENCRYPTION_KEY` throw at `:3-5`); test malformed/empty entries fail fast.
+- [x] Task 4.1: GDPR-Consent (Art. 7(3)) — DONE (2026-06-14, `d4460dc`): added
+      Person.consentWithdrawnAt + migration; withdrawConsent/reinstateConsent actions
+      (owner-scoped); updatePerson blocked when consent-blocked; crm-cron InterviewReminder
+      excludes consent-blocked persons; DSAR export includes the field; PersonDetailClient
+      withdraw/reinstate UI + badge; i18n ×4; crm-gdpr.allium (via tend, 0 errors); tests.
+      Scope chosen by user: "restrict + exclude from active flows" + full this session.
+- [x] Task 4.2: G25 — DONE (2026-06-14, `a0e79bf`): mergePersons dedups CrmTaskTarget/
+      CrmNoteTarget (pre-read overlap + delete loser's colliding rows before transfer,
+      mirroring JobContact). Regression tests cover overlap + no-overlap.
+- [x] Task 4.3: G26b — DONE (2026-06-14, `54a6fc0`): assertAdminUserIdsValid() fails fast
+      on set-but-malformed ADMIN_USER_IDS; called from instrumentation nodejs branch
+      (dynamic import keeps prisma out of edge runtime). Unit-tested.
 
 ### Verification
 
-- [ ] `processingBasis` is enforceable + revocable; merge never duplicates targets;
-      malformed `ADMIN_USER_IDS` fails startup. All test-backed.
+- [x] `processingBasis` enforceable + revocable; merge never duplicates targets;
+      malformed `ADMIN_USER_IDS` fails startup. tsc 0, build clean, tests green.
 
 ## Phase 5: i18n + test gaps
 

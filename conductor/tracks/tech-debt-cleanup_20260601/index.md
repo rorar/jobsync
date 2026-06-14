@@ -10,8 +10,8 @@
 
 ## Progress
 
-- Phases: 3/5 complete (Clusters 1–3 done 2026-06-14)
-- Tasks: 7/12 complete (C1: IF-12 + D1/D2; C2: IF-10 + D5; C3: D3 + D4; plus G28 pre-done; **5 remain**)
+- Phases: 4/5 complete (Clusters 1–4 done 2026-06-14)
+- Tasks: 10/12 complete (C1: IF-12 + D1/D2; C2: IF-10 + D5; C3: D3 + D4; C4: GDPR-Consent + G25 + G26b; plus G28 pre-done; **2 remain**)
 
 ## Scope (BACKLOG §4 / §1b / §5 tail)
 

@@ -52,18 +52,16 @@ committed in its own logical commit. Build zero-error, `bash scripts/test.sh` gr
       rule `PopulateCompanyDomainOnCreation` (DDD: writer lives in the enrichment context).
       0 allium errors. LOW.
 
-### Cluster 4 — GDPR-LOW
-- [ ] **GDPR-Consent (Art. 7):** `processingBasis` gains enforcement + a withdrawal path
-      (currently write-only — set on create/display/export, never enforced or revocable).
-      Verified write sites: `src/actions/person.actions.ts`, surfaced in
-      `PersonDetailClient.tsx`, exported in `lib/export/collect-user-data.ts`. MEDIUM.
-- [ ] **G25:** `mergePersons` dedups `CrmTaskTarget` / `CrmNoteTarget` so a target shared
-      by winner+loser is not duplicated. Verified: `person.actions.ts:444` `mergePersons`
-      already dedups `JobContact` (`duplicateJobIds`, ~`:498-502`) but reassigns
-      task/note targets loser→winner WITHOUT dedup (~`:505-518`). LOW.
-- [ ] **G26b:** `ADMIN_USER_IDS` gains a startup validation in `instrumentation.ts`
-      (mirrors the existing `ENCRYPTION_KEY` throw at `:3-5` and prod-`AUTH_SECRET` throw
-      at `:7-9` — verified). Malformed/empty entries fail fast. LOW.
+### Cluster 4 — GDPR-LOW ✅ DONE (2026-06-14)
+- [x] **GDPR-Consent (Art. 7(3)):** DONE (`d4460dc`) — Person.consentWithdrawnAt + migration;
+      withdraw/reinstate actions (owner-scoped); updatePerson blocked when consent-blocked;
+      crm-cron InterviewReminder exclusion; DSAR export field; PersonDetailClient UI + badge;
+      i18n ×4; crm-gdpr.allium via tend (0 errors); tests. Scope (user): restrict + exclude
+      from active flows, full this session. MEDIUM.
+- [x] **G25:** DONE (`a0e79bf`) — mergePersons dedups CrmTaskTarget/CrmNoteTarget mirroring
+      JobContact (pre-read overlap + delete loser's colliding rows pre-transfer). Tests. LOW.
+- [x] **G26b:** DONE (`54a6fc0`) — assertAdminUserIdsValid() fails fast on set-but-malformed
+      ADMIN_USER_IDS; wired in instrumentation nodejs branch. Unit-tested. LOW.
 
 ### Cluster 5 — i18n + test gaps
 - [ ] **F6:** The Toast close-button fallback label is i18n'd. Verified:
