@@ -1,0 +1,590 @@
+-- allium: 3
+-- cv-document.allium
+
+-- Scope: CvDocument aggregate — the document-first CV/resume builder
+--   (ROADMAP 4.2.2, cv-manager replacement). A CvDocument is a JSON Resume
+--   document (+ x-jobsync-* extensions) stored as an opaque `data` blob, with
+--   full-snapshot versioning, multi-language grouping, and public exposure.
+-- Includes: create/edit working doc, save/restore immutable versions,
+--   duplicate, translate, set-default, archive, copy-section, publication
+--   (private | revocable shared link | truly-public website slug), AI
+--   review/match with PII redaction, profile auto-fill with per-CV override.
+-- Excludes:
+--   - Legacy normalized resume model (see profile-resume.allium — KEPT for
+--     backward-compat + migration import; new builder operates on CvDocument)
+--   - PDF/DOCX rendering engine (pdfme — implementation, ROADMAP 4.2.1)
+--   - Shared-link token mechanics (see shared-surface, ROADMAP 2.18.2)
+--   - Applicant landing page / website rendering (see ROADMAP 9.5/4.7 —
+--     the public_slug mode RENDERS THROUGH that surface, defined there)
+--   - AI provider internals + the redaction algorithm (see ai-provider.allium)
+-- Dependencies: User, Profile (profile-resume.allium); Company, JobTitle,
+--   Location, Job (shared entities); SharedLink (shared-surface); AiProvider
+--   (ai-provider.allium).
+-- Owner: CvDocument Aggregate (src/actions/cvDocument.actions.ts — to build)
+
+-- Decision log (from Spikes A+B, ROADMAP 4.2.2):
+--   - Document-first: canonical model = JSON Resume in `data`, NOT the
+--     normalized Gsync schema. Entity links are OPTIONAL annotations.
+--   - Versioning = deep-copy JSON snapshot (cv-manager saved_datasets model)
+--     — a saved version is immutable, immune to later entity edits.
+--   - Lifecycle = mutable working doc + explicit "save version" snapshot
+--     (cv-manager style; chosen for low edit friction + explicit milestones).
+--   - Public CV = BOTH modes per CV; public_slug IS the website surface (9.5).
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity User {
+    -- Authenticated user from session. Owns every CvDocument (ADR-015).
+}
+
+external entity Profile {
+    -- Profile aggregate root (profile-resume.allium). Extended (this spec's
+    -- Decision) with canonical identity fields used as the auto-fill source.
+    user: User
+    full_name: String?
+    email: String?
+    phone: String?
+    headline: String?
+    photo_asset_id: String?
+    languages: String?
+    @invariant CanonicalIdentitySource
+        -- These nullable identity fields are the single source for CV
+        -- auto-fill. JobSync previously had NO central identity (it lived
+        -- per-resume in ContactInfo). Spike A finding F2.
+}
+
+external entity Company {
+    -- Shared entity. Optionally referenced by a CV experience for Job<->CV
+    -- traceability + dedup. The CV stores denormalized company_name regardless.
+}
+
+external entity Location {
+    -- Shared entity. Optional annotation on a CV experience/education.
+}
+
+external entity Job {
+    -- A CvDocument MAY be tailored for / linked to a Job application.
+}
+
+external entity SharedLink {
+    -- shared-surface aggregate (ROADMAP 2.18.2): signed, expiring, revocable,
+    -- optionally password-protected, audited token granting read-only access
+    -- to ONE rendered surface. The `shared_link` publication mode delegates here.
+    target_type: String            -- e.g. "cv_document"
+    target_id: String
+    expires_at: Timestamp?
+    revoked: Boolean
+}
+
+external entity AiProvider {
+    -- ai-provider.allium. Resume review + job match run here. Cloud providers
+    -- are third-party recipients; PII is redacted before transfer.
+    is_local: Boolean              -- true = Ollama (full fidelity, no redaction)
+}
+
+external entity AiMatch {
+    -- ai-provider.allium. A resume-to-job match request/result. Fed CV data
+    -- (PII-redacted for cloud providers).
+    resume_data: CvData
+    job: Job
+    provider: AiProvider
+}
+
+------------------------------------------------------------
+-- Enums
+------------------------------------------------------------
+
+enum DocumentStatus {
+    editing         -- Mutable working/default document. Edits allowed here only.
+    saved           -- Immutable saved version (snapshot). Metadata-only changes.
+    archived        -- Soft-deleted. Retained per policy, restorable.
+}
+
+enum PublicationMode {
+    private         -- Not exposed. Default.
+    shared_link     -- Exposed via a revocable shared-surface SharedLink.
+    public_slug     -- Truly-public, indexable page at the website slug (9.5).
+}
+
+enum SectionKind {
+    -- The CV sections an x-jobsync extension can carry/toggle/order.
+    basics
+    summary
+    experience
+    education
+    skills
+    certifications
+    projects
+    custom
+}
+
+------------------------------------------------------------
+-- Value Objects — the meaningful shape of the opaque `data` JSON
+------------------------------------------------------------
+
+-- `data` conforms to JSON Resume v1 plus `x-jobsync-*` extensions. It is
+-- stored opaquely (Json), but these value objects pin the domain-meaningful
+-- structure the builder, renderer and AI consume.
+
+value CvIdentityBasics {
+    -- Snapshotted from Profile on create, then PER-CV editable (override never
+    -- mutates Profile). Maps to JSON Resume `basics`.
+    name: String?
+    email: String?
+    phone: String?
+    headline: String?
+    photo_asset_id: String?
+    languages: String?
+    location_label: String?
+}
+
+value CvSectionMeta {
+    -- x-jobsync extension carried per section.
+    kind: SectionKind
+    visible: Boolean               -- section-level visibility toggle
+    icon: String?
+    layout_type: String?           -- e.g. "grid-3" (cv-manager parity)
+    display_title: String?         -- per-language title override
+    order: Integer
+}
+
+value CvCustomSectionItem {
+    -- x-jobsync custom-section item (cv-manager custom_section_items parity).
+    title: String?
+    subtitle: String?
+    description: String?
+    link: String?
+    icon: String?
+    image: String?
+    metadata: String?              -- opaque JSON for free-form fields
+    visible: Boolean
+}
+
+value CvExperienceLink {
+    -- OPTIONAL annotation on a JSON Resume `work` item. The CV always stores
+    -- denormalized company_name/location/highlights; these link to shared
+    -- entities for Job<->CV traceability + dedup. Spike A "optional links".
+    company: Company?
+    location: Location?
+    job: Job?                      -- if this CV was tailored for a Job
+}
+
+value CvData {
+    -- The domain shape of CvDocument.data. Stored as one JSON blob (JSON
+    -- Resume v1 + x-jobsync-* extensions); modelled here as typed structure
+    -- per the crm.allium JSON-as-typed convention.
+    resume_json: String            -- JSON Resume v1 standard sections (basics/work/education/skills/projects)
+    basics: CvIdentityBasics       -- authoritative snapshotted identity (per-CV override)
+    sections: List<CvSectionMeta>  -- per-section meta (visibility/icon/layout/order)
+    custom_sections: List<CvCustomSectionItem>
+    experience_links: List<CvExperienceLink>  -- optional entity annotations
+}
+
+------------------------------------------------------------
+-- Entity
+------------------------------------------------------------
+
+entity CvDocument {
+    user: User
+    name: String                   -- user-facing label, e.g. "Senior SRE — Acme"
+    status: DocumentStatus
+    data: CvData                   -- JSON Resume v1 + x-jobsync-* extensions (stored as JSON blob)
+
+    -- Versioning (deep-copy snapshot model)
+    version_group: String          -- groups a working doc + its saved versions
+    language_group: String         -- groups translations of the same CV
+    language: String               -- ISO 639-1
+    version: Integer               -- monotonic within (version_group, language)
+
+    -- Working-doc selection
+    is_default: Boolean            -- the working doc shown by default
+
+    -- Publication
+    publication_mode: PublicationMode
+    slug: String?                  -- set iff publication_mode = public_slug
+    public_consented_at: Timestamp?  -- explicit GDPR consent for public exposure
+
+    created_at: Timestamp
+    updated_at: Timestamp
+
+    @invariant TenantIsolation
+        -- Every read/write is scoped by user (ADR-015). A CvDocument and all
+        -- derived surfaces are visible only to the owning user, except where
+        -- a SharedLink (shared_link) or public_slug deliberately exposes it.
+
+    @invariant OnlyEditingIsMutable
+        -- `data` may only change while status = editing. A `saved` version is
+        -- an immutable snapshot (only metadata — name, publication — may change).
+        -- `archived` documents are read-only until restored.
+
+    @invariant OneDefaultPerUserPerLanguageGroup
+        -- At most one is_default = true CvDocument per (user, language_group).
+        -- The default is always status = editing (the working doc).
+
+    @invariant VersionMonotonicWithinGroup
+        -- `version` is strictly increasing per (version_group, language); a new
+        -- SaveVersion takes max(version)+1. (cv-manager UNIQUE(version_group,
+        -- version, language).)
+
+    @invariant SlugSetIffPublicSlug
+        -- slug is non-null and globally unique IFF publication_mode = public_slug;
+        -- null otherwise. (cv-manager UNIQUE(slug, ...).)
+
+    @invariant PublicSlugRequiresConsent
+        -- publication_mode = public_slug requires public_consented_at != null —
+        -- a CV carries personal data; truly-public/indexable exposure needs
+        -- explicit user consent (GDPR). shared_link does not (access-controlled,
+        -- revocable). private needs none.
+}
+
+------------------------------------------------------------
+-- Rules — happy path
+------------------------------------------------------------
+
+rule CreateCvDocument {
+    when: CreateCvDocument(user, name, language)
+
+    requires: exists user
+    requires: name != null
+    requires: language != null
+
+    ensures:
+        -- Auto-fill identity from Profile (per-CV editable thereafter).
+        let profile = Profile{user: user}
+        let basics = CvIdentityBasics(
+            name: profile.full_name,
+            email: profile.email,
+            phone: profile.phone,
+            headline: profile.headline,
+            photo_asset_id: profile.photo_asset_id,
+            languages: profile.languages
+        )
+        CvDocument.created(
+            user: user,
+            name: name,
+            status: editing,
+            data: JsonResume.initial(basics: basics),
+            version_group: Id.fresh(),
+            language_group: Id.fresh(),
+            language: language,
+            version: 1,
+            is_default: true,
+            publication_mode: private,
+            slug: null,
+            public_consented_at: null,
+            created_at: now,
+            updated_at: now
+        )
+
+    @guidance
+        -- A fresh CV is a working (editing) default. Identity is COPIED from
+        -- Profile into data.basics; later edits to the CV never mutate Profile,
+        -- and later Profile edits never retro-change existing CVs (snapshot).
+}
+
+rule EditCvDocument {
+    when: EditCvDocument(user, document, new_data)
+
+    requires: exists document where document.user = user
+    requires: document.status = editing
+    requires: new_data != null
+
+    ensures:
+        document.updated(data: new_data, updated_at: now)
+
+    @guidance
+        -- Low-friction editing: the working doc mutates in place. Use
+        -- SaveVersion to freeze a milestone. `new_data` is expected to conform
+        -- to JSON Resume v1 + x-jobsync-* extensions (validation = implementation;
+        -- see the x-jobsync schema open question).
+}
+
+rule SaveVersion {
+    when: SaveVersion(user, document, version_name)
+
+    requires: exists document where document.user = user
+    requires: document.status = editing
+
+    ensures:
+        -- Deep-copy snapshot: an immutable sibling in the same version_group.
+        CvDocument.created(
+            user: user,
+            name: version_name,
+            status: saved,
+            data: document.data,
+            version_group: document.version_group,
+            language_group: document.language_group,
+            language: document.language,
+            version: max(CvDocument{version_group: document.version_group, language: document.language}.version) + 1,
+            is_default: false,
+            publication_mode: private,
+            slug: null,
+            public_consented_at: null,
+            created_at: now,
+            updated_at: now
+        )
+
+    @guidance
+        -- The working doc stays editing and default. The snapshot is frozen
+        -- (OnlyEditingIsMutable) — safe to publish/restore later.
+}
+
+rule RestoreVersion {
+    when: RestoreVersion(user, snapshot)
+
+    requires: exists snapshot where snapshot.user = user
+    requires: snapshot.status = saved
+
+    ensures:
+        -- Overwrite the working doc of the same version_group with the snapshot.
+        let working = CvDocument{
+            user: user,
+            version_group: snapshot.version_group,
+            language: snapshot.language,
+            status: editing
+        }
+        working.updated(data: snapshot.data, updated_at: now)
+
+    @guidance
+        -- Restore copies a frozen snapshot's data BACK into the working doc.
+        -- The snapshot itself is untouched (immutable).
+}
+
+rule DuplicateAsWorking {
+    when: DuplicateAsWorking(user, source, name)
+
+    requires: exists source where source.user = user
+
+    ensures:
+        -- New independent working doc in a fresh version_group + language_group.
+        CvDocument.created(
+            user: user,
+            name: name,
+            status: editing,
+            data: source.data,
+            version_group: Id.fresh(),
+            language_group: Id.fresh(),
+            language: source.language,
+            version: 1,
+            is_default: false,
+            publication_mode: private,
+            slug: null,
+            public_consented_at: null,
+            created_at: now,
+            updated_at: now
+        )
+
+    @guidance
+        -- Branch a new CV (e.g. tailored for another application) from any doc.
+        -- is_default stays with the original; user can SetDefault if desired.
+}
+
+rule TranslateCvDocument {
+    when: TranslateCvDocument(user, source, target_language)
+
+    requires: exists source where source.user = user
+    requires: target_language != source.language
+    requires: not exists CvDocument{user: user, language_group: source.language_group, language: target_language}
+
+    ensures:
+        -- A sibling working doc sharing the language_group, new version_group.
+        CvDocument.created(
+            user: user,
+            name: source.name,
+            status: editing,
+            data: source.data,
+            version_group: Id.fresh(),
+            language_group: source.language_group,
+            language: target_language,
+            version: 1,
+            is_default: true,
+            publication_mode: private,
+            slug: null,
+            public_consented_at: null,
+            created_at: now,
+            updated_at: now
+        )
+
+    @guidance
+        -- Translations share language_group; each language has its own default
+        -- working doc + version chain. (cv-manager language_group parity.)
+}
+
+rule SetDefaultCvDocument {
+    when: SetDefault(user, document)
+
+    requires: exists document where document.user = user
+    requires: document.status = editing
+
+    ensures:
+        let prior = CvDocument{user: user, language_group: document.language_group, is_default: true}
+        prior.updated(is_default: false, updated_at: now)
+        document.updated(is_default: true, updated_at: now)
+
+    @guidance
+        -- Enforces OneDefaultPerUserPerLanguageGroup by demoting the prior default.
+}
+
+rule CopySectionBetweenDocuments {
+    when: CopySection(user, source, target, section_kind)
+
+    requires: exists source where source.user = user
+    requires: exists target where target.user = user
+    requires: target.status = editing
+
+    ensures:
+        -- Section-granularity copy; a diff is presented for review (cv-manager
+        -- `diff` package). The merge replaces the target's section of that kind.
+        let merged = JsonResume.replace_section(target.data, source.data, section_kind)
+        target.updated(data: merged, updated_at: now)
+
+    @guidance
+        -- Copy a whole section (e.g. a tailored "skills" block) between CVs.
+        -- Diff granularity for the review UI is item-level over the JSON.
+}
+
+rule ArchiveCvDocument {
+    when: ArchiveCvDocument(user, document)
+
+    requires: exists document where document.user = user
+    requires: document.is_default = false
+
+    ensures:
+        document.updated(status: archived, publication_mode: private, slug: null, updated_at: now)
+
+    @guidance
+        -- Archiving unpublishes (privacy by default). The default working doc
+        -- cannot be archived — SetDefault another first.
+}
+
+------------------------------------------------------------
+-- Rules — publication (BOTH modes; public_slug == the website surface, 9.5)
+------------------------------------------------------------
+
+rule PublishViaSharedLink {
+    when: SetPublication(user, document, mode: shared_link, expires_at?, password?)
+
+    requires: exists document where document.user = user
+    requires: document.status != archived
+
+    ensures:
+        document.updated(publication_mode: shared_link, slug: null, updated_at: now)
+        -- Delegates token mechanics to shared-surface.
+        SharedLink.created(target_type: "cv_document", target_id: document, expires_at: expires_at, revoked: false)
+
+    @guidance
+        -- Revocable, expiring, optionally password-protected, audited. No
+        -- public consent needed (access-controlled, not indexed). Same
+        -- shared-surface domain as the Bewerbungsbemühungen report (2.18.2).
+}
+
+rule PublishViaPublicSlug {
+    when: SetPublication(user, document, mode: public_slug, slug, consent)
+
+    requires: exists document where document.user = user
+    requires: document.status != archived
+    requires: consent = true
+    requires: slug != null
+    requires: not exists CvDocument{slug: slug} where CvDocument != document
+
+    ensures:
+        document.updated(
+            publication_mode: public_slug,
+            slug: slug,
+            public_consented_at: now,
+            updated_at: now
+        )
+
+    @guidance
+        -- Truly-public, indexable CV. The page is RENDERED BY THE WEBSITE /
+        -- Bewerber-Landingpage surface (ROADMAP 9.5) via the shared-surface
+        -- `applicant-landingpage` renderer — NOT a separate page. One CV data
+        -- source -> PDF + shared link + public website page. Requires explicit
+        -- GDPR consent (PublicSlugRequiresConsent).
+}
+
+rule Unpublish {
+    when: SetPublication(user, document, mode: private)
+
+    requires: exists document where document.user = user
+
+    ensures:
+        document.updated(publication_mode: private, slug: null, updated_at: now)
+        -- Any shared-surface SharedLink for this document is revoked.
+        let links = SharedLink{target_type: "cv_document", target_id: document, revoked: false}
+        links.updated(revoked: true)
+
+    @guidance
+        -- Unpublishing revokes outstanding shared links and removes the public
+        -- slug. Right-to-withdraw (GDPR) — exposure is always reversible.
+}
+
+------------------------------------------------------------
+-- Rules — AI (preserve matching, redact PII for cloud)
+------------------------------------------------------------
+
+rule RequestCvAiMatch {
+    when: RequestCvAiMatch(user, document, job, provider)
+
+    requires: exists document where document.user = user
+    requires: exists job where job.user = user
+
+    ensures:
+        -- The CV document feeds the existing AI match. PII is redacted unless
+        -- the provider is local (fail-safe: redact when locality unknown).
+        let payload =
+            if provider.is_local:
+                document.data
+            else:
+                Pii.redact(document.data)
+        AiMatch.requested(resume_data: payload, job: job, provider: provider)
+
+    @guidance
+        -- Preserves ROADMAP 4.2.2 step 6. Cloud providers (OpenAI/DeepSeek) are
+        -- third-party recipients — name/email/phone/address -> placeholders via
+        -- src/lib/pii. See ai-provider.allium CloudTransferDataMinimization.
+}
+
+------------------------------------------------------------
+-- Top-level Invariants
+------------------------------------------------------------
+
+invariant SavedVersionsImmutable {
+    -- No rule mutates `data` of a CvDocument whose status = saved.
+    -- Snapshots are the audit/restore guarantee.
+}
+
+invariant CloudAiAlwaysRedacted {
+    -- Any CvDocument data leaving to a non-local AiProvider passes through
+    -- Pii.redact first. Full fidelity only for provider.is_local (Ollama).
+}
+
+invariant PublicCvRendersViaWebsiteSurface {
+    -- A public_slug CvDocument is never rendered by a bespoke CV-only page;
+    -- it is served through the shared-surface applicant-landingpage renderer
+    -- (ROADMAP 9.5/4.7). One surface, three renderers (report, company-
+    -- landingpage, applicant-landingpage/CV).
+}
+
+invariant ExposureAlwaysReversible {
+    -- Every publication is revocable: shared_link via SharedLink.revoked,
+    -- public_slug via Unpublish. GDPR right-to-withdraw.
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Diff/copy granularity: CopySection works at section level with item-level diff display. Do we also need item-level cherry-pick (copy one experience entry, not the whole section)?"
+
+open question "x-jobsync-* extension: should it be a published JSON Schema (validated on EditCvDocument) or convention-only? A schema enables import/export validation but adds a maintenance surface."
+
+open question "Legacy migration: when is a legacy Resume (profile-resume.allium) imported into a CvDocument — lazily on first open, or a one-time bulk migration? And is the import one-way (legacy frozen) or kept in sync until cutover?"
+
+open question "Should skills/projects also surface to a shared Skillset model (ROADMAP 4.1) so they are reusable across CVs, or stay CV-local inside data? Shared model enables 'reuse my skills' but couples CV to another aggregate."
+
+open question "Public slug namespace: per-user prefix (/cv/{user}/{slug}) or global (/cv/{slug})? Global is cleaner but risks cross-user slug collisions and enumeration; relates to website (9.5) URL design."
+
+open question "Retention: do archived CvDocuments expire automatically (like CRM auto-created persons), or persist until the user deletes? They contain the user's OWN data (not third-party), so likely no auto-expiry — confirm against GDPR storage-limitation."
