@@ -1,7 +1,7 @@
 # Track: Welle 4 — Custom JobStatus XL (Kette A)
 
 **ID:** welle4-custom-jobstatus_20260601
-**Status:** Pending
+**Status:** Complete (plan 24/24; merged + pushed to fork main; verified 2026-06-14)
 
 ## Documents
 
@@ -10,8 +10,8 @@
 
 ## Progress
 
-- Phases: 0/5 complete
-- Tasks: 0/18 complete
+- Phases: 5/5 complete
+- Tasks: 24/24 complete
 
 ## Scope (BACKLOG Welle 4 — Allium-first)
 

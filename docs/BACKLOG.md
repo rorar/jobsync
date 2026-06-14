@@ -66,6 +66,14 @@ Quell-Docs sollten entsprechend aktualisiert/markiert werden.
 | G26 ENCRYPTION_KEY Startup-Check | domain-expert | `instrumentation.ts:3-5` throw | ERLEDIGT |
 | G27 CRM i18n keys (companyNotFound/multiplePrimary) | domain-expert | `crm.ts:237/238` ×4 Locales | ERLEDIGT |
 | API-v1 Cache-Control no-store (PII) | gdpr-audit | `with-api-auth.ts:99` | ERLEDIGT |
+| **— Runde-3 verifiziert ERLEDIGT (Tabellen §4/§1b nach Welle 1 nicht gepruned; §296 sagte längst DONE; Session 2026-06-14, code-grep): —** | | | |
+| IF-5 ActionResult.message typed key-union | §4 (war HIGH offen) | `actionResult.ts:42` `message?: TranslationKeyStrict` (Union aus 16 dict-`keyof`, `dictionaries.ts:829`) — Welle 1 | ERLEDIGT |
+| IF-7 NotificationType 13-Datei-Fragment | §4 (war HIGH offen) | genau **1** Def `notification.model.ts:1`, 13 Importer, **0** Redefs — Welle 1 | ERLEDIGT |
+| S6a Job-CRUD GDPR-Audit-Trail | §1b (war HIGH offen) | `lib/audit/data-audit.ts`→`adminAuditLog.create`; wired job.actions **5×**/api-v1 **4×**/stagedVacancy/note; `schema:969`; spec `audit-trail.allium` — Welle 1 | ERLEDIGT |
+| S6b CRM-PII-Read Audit | §1b (war HIGH offen) | `person.pii_read` wired `person.actions:166,240` + `collect-user-data:507`; DataMinimisation am Sink erzwungen — Welle 1 | ERLEDIGT |
+| GDPR-JWT id-only Token | §1b (war MEDIUM offen) | `auth.config.ts:53-54` `delete token.name; delete token.email;`; Display-Felder DB-resolved in session-callback — Welle 1 | ERLEDIGT |
+| G28 E2E-CRM-Cleanup FK-Reihenfolge | §1b (war LOW offen) | `e2e/cleanup-stale-data.ts` löscht 8 CRM-Entities child→parent (5a–5h) + RESTRICT-guards | ERLEDIGT |
+| D3 notification-dispatch.allium v3-Parse | §4 (war LOW offen, "160 Parse-Errors") | `allium analyse` → `findings:[]`, Header `-- allium: 3` (bereits v3; 160-Fehler-Notiz stale) | ERLEDIGT |
 
 **→ TODO:** Quell-Docs mit `[SUPERSEDED → BACKLOG.md]` markieren (separater Schritt).
 Bes. veraltet: `gdpr-audit-report.md`, `interface-fragility-analysis.md`, `crm-gap-analysis-twenty.md`,
@@ -88,17 +96,14 @@ beide WCAG-Audits (teil-fixed), Home-Dir s3-handoffs + eures-api-missing-fields.
 - **Quelle:** s5-pre-implementation-checkup, BUGS.md
 
 ### 1b. GDPR-Long-Tail (verifiziert offen — aus gdpr-audit + domain-expert)
-Runde-2 verifiziert: G3/G6/G27/Cache-Control/ENCRYPTION_KEY-startup = ERLEDIGT (→ §0). **Echt offen:**
+Runde-2 verifiziert: G3/G6/G27/Cache-Control/ENCRYPTION_KEY-startup = ERLEDIGT (→ §0).
+Runde-3 (2026-06-14): **S6a/S6b/GDPR-JWT/G28 = ERLEDIGT in Welle 1** (→ §0, code-verifiziert; Tabelle war nach Welle 1 nicht gepruned). **Echt offen:**
 
 | ID | Titel | Artikel | Datei | Severity |
 |----|-------|---------|-------|----------|
-| S6a | Kein GDPR-Audit-Trail für Job-CRUD (wer änderte was) | Art. 5(2) | — kein audit/ | HIGH |
-| S6b | Kein GDPR-Audit-Trail für CRM-Read-Access (wer sah Person-Daten) | Art. 5(2) | — | HIGH |
-| GDPR-JWT | JWT enthält email+name (nur `id` nötig) — Daten­minimierung | Art. 5(1)(c) | NextAuth jwt callback | MEDIUM |
 | GDPR-Consent | `processingBasis` write-only, kein Enforcement/Widerruf | Art. 7 | person.model | MEDIUM |
 | G25 | mergePersons: keine Target-Dedup (Task/Note doppelt bei Merge) | — | person.actions mergePersons | LOW |
 | G26b | ADMIN_USER_IDS keine Startup-Validierung (ENCRYPTION_KEY hat sie) | — | instrumentation.ts | LOW |
-| G28 | E2E-Cleanup fehlt CRM-FK-Reihenfolge (8 Entities) | — | e2e/cleanup-stale-data | LOW (Test) |
 | GDPR-KeyRotation | Encryption-Key-Rotation nur dokumentiert, keine Infra | Art. 32 | encryption.ts | DEFERRED |
 
 ---
@@ -190,18 +195,16 @@ Kette D jederzeit parallel (kein Rewrite-Risiko). Kette A/B parallel zueinander;
 
 ## 4. Architektur / Tech-Debt (verifiziert offen)
 
-Runde-2 verifiziert: IF-2/IF-4/IF-6/IF-9/IF-11 ERLEDIGT (→ §0). **Echt offen:**
+Runde-2 verifiziert: IF-2/IF-4/IF-6/IF-9/IF-11 ERLEDIGT (→ §0).
+Runde-3 (2026-06-14): **IF-5/IF-7 = ERLEDIGT in Welle 1, D3 = ERLEDIGT** (→ §0, code-verifiziert; Tabelle nicht gepruned). **Echt offen:**
 
 | ID | Titel | Datei:Zeile | Severity |
 |----|-------|-------------|----------|
-| IF-5 | ActionResult.message untyped i18n-key (string statt key-union) | actionResult.ts:31 | HIGH |
-| IF-7 | NotificationType über 13 Dateien fragmentiert | 13 files | HIGH |
 | IF-10 | emitEvent fire-and-forget (void+.catch, kein await) | events/index.ts:53-58 | MEDIUM |
 | IF-12 | DiscoveredJob `as unknown as` Type-Cast | automations/[id]/page.tsx:267/269/278 | MEDIUM |
-| D3 | notification-dispatch.allium 160 Parse-Errors (Allium v3) | spec | LOW (1-2h) |
 | D4 | shared-entities.allium Company.domain Spec-Drift | spec | LOW (5min) |
-| D5 | enrichment-trigger A-05 bounded-context (schreibt Company.domain direkt) | enrichment-trigger.ts | LOW |
-| D1/D2 | runner.ts AI-SDK experimental_output deprecation + cast | runner.ts | LOW (je 30min) |
+| D5 | enrichment-trigger A-05 bounded-context (schreibt Company.domain direkt) | enrichment-trigger.ts:217 | LOW |
+| D1/D2 | runner.ts AI-SDK experimental_output deprecation + cast | runner.ts:772 / :425 | LOW (je 30min) |
 
 **Architektur-Note (kein Crash):** `audit-logger` konsumiert ALLE Events → jedes hat ≥1 Consumer.
 Aber ReminderTriggered/NotificationCreated haben keinen FUNKTIONALEN Consumer über Logging hinaus. Spec-Drift.
@@ -276,11 +279,11 @@ Decided-deferred during Welle 3 (CRM-Verbindung). Not bugs — scoped-out with a
 
 | Kategorie | Anzahl |
 |-----------|--------|
-| Doku-Drift bereinigt (verifiziert war falsch-offen) | ~43 |
+| Doku-Drift bereinigt (verifiziert war falsch-offen) | ~50 (+7 Runde-3: IF-5/IF-7/S6a/S6b/JWT/G28/D3) |
 | CRITICAL Security offen | 0 (BS-01 ✅ erledigt Welle 0) |
-| GDPR-Long-Tail offen | 6 (S6a/S6b/JWT/Consent/G25/G26b/G28) + 1 deferred |
+| GDPR-Long-Tail offen | 3 (Consent/G25/G26b) + 1 deferred (KeyRotation) — S6a/S6b/JWT/G28 ✅ Welle 1 |
 | UX offen (S2-P0 ✅ + WCAG ✅3/~8 deferred + F-AJ 5) | ~13 (S2-P0 9 + WCAG 3 + F-AJ-04 erledigt Welle 0; WCAG-Rest verifiziert kontextuell/false) |
-| Arch/Tech-Debt offen | 8 (IF-5/7/10/12 + D1-D5) |
+| Arch/Tech-Debt offen | 5 (IF-10/12 + D1/D2/D4/D5) — IF-5/IF-7 ✅ Welle 1, D3 ✅ |
 | Test-Lücken offen | 2 (F6, CRM-Cron-Tests) |
 | CRM-Gaps offen | 0 (Gap-1/5/6/7 + F-AJ-08 alle DONE — Welle 3) |
 | Dedizierte Sprints | 6 |

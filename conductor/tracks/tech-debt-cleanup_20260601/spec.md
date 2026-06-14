@@ -48,8 +48,8 @@ committed in its own logical commit. Build zero-error, `bash scripts/test.sh` gr
       `extractDomain()` (`:205`) and writes `domain` back on `CompanyCreated`. LOW.
 
 ### Cluster 3 — Allium spec-drift (no code behaviour change)
-- [ ] **D3:** `specs/notification-dispatch.allium` migrated to Allium v3 syntax;
-      `allium:check` parses clean (was ~160 parse errors). LOW (1–2h, isolated).
+- [x] **D3:** DONE (2026-06-14) — `specs/notification-dispatch.allium` already v3
+      (`-- allium: 3`); `allium analyse` → `findings:[]`. "~160 parse errors" stale.
 - [ ] **D4:** `specs/shared-entities.allium` `Company.domain` reconciled with the
       implementation via `allium:weed`. Verified spec line: `shared-entities.allium:68`
       (`domain: String?  -- … populated by enrichment`) vs `schema.prisma:306` +
@@ -77,9 +77,8 @@ committed in its own logical commit. Build zero-error, `bash scripts/test.sh` gr
       0 tests; `crm-activity-logger` is covered, `crm-cron` is not). Cover the three rules
       `ExpireAutoCreatedPersons` / `InterviewReminder` / `TaskOverdueReminder` + the
       24h-idempotency guard. The functions are already exported for testing (`crm-cron.ts:384`).
-- [ ] **G28:** `e2e/cleanup-stale-data.ts` deletes CRM entities in correct FK order
-      (8 entities) so cleanup does not fail on referential constraints. Verified file
-      exists: `e2e/cleanup-stale-data.ts`. LOW (test).
+- [x] **G28:** DONE (2026-06-14) — `e2e/cleanup-stale-data.ts` deletes 8 CRM entities
+      child→parent (5a–5h) + RESTRICT-guards. Shipped (git `4d7c345`). LOW (test).
 
 ## Dependencies
 

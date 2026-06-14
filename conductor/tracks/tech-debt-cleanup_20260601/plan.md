@@ -50,8 +50,8 @@ for gaps), then fix. Each item is its own logical commit. Build zero-error +
 
 ### Tasks
 
-- [ ] Task 3.1: D3 — `allium:tend` `specs/notification-dispatch.allium` to v3 syntax until
-      `allium:check` parses clean (was ~160 errors). No code change.
+- [x] Task 3.1: D3 — DONE (verified 2026-06-14): `specs/notification-dispatch.allium`
+      already v3 (header `-- allium: 3`); `allium analyse` → `findings:[]`. "160 errors" stale.
 - [ ] Task 3.2: D4 — `allium:weed` `specs/shared-entities.allium` `Company.domain`
       (`:68`) against `schema.prisma:306` + the enrichment autofill; reconcile the drift.
 
@@ -88,8 +88,8 @@ for gaps), then fix. Each item is its own logical commit. Build zero-error +
 - [ ] Task 5.2: CRM-Cron — add `__tests__/crm-cron.spec.ts` covering
       `ExpireAutoCreatedPersons` / `InterviewReminder` / `TaskOverdueReminder` + the
       24h-idempotency guard (functions exported at `crm-cron.ts:384`).
-- [ ] Task 5.3: G28 — fix `e2e/cleanup-stale-data.ts` to delete the 8 CRM entities in
-      correct FK order; verify cleanup runs without a referential-constraint error.
+- [x] Task 5.3: G28 — DONE (verified 2026-06-14): `e2e/cleanup-stale-data.ts` deletes
+      8 CRM entities child→parent (5a–5h) + RESTRICT-guards. Shipped (git `4d7c345`).
 
 ### Verification
 
@@ -98,6 +98,7 @@ for gaps), then fix. Each item is its own logical commit. Build zero-error +
 ## Final Verification
 
 - [ ] All 12 items shipped, each with its own test + logical commit
+      (NB 2026-06-14: D3 + G28 already DONE before track start → **10 items remain**)
 - [ ] `bash scripts/test.sh` green; `bun run build` zero type errors
 - [ ] `allium:check` clean on the two touched specs
 - [ ] i18n dictionaries consistent across en/de/fr/es (F6)

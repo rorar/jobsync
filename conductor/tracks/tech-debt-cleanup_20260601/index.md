@@ -11,7 +11,7 @@
 ## Progress
 
 - Phases: 0/5 complete
-- Tasks: 0/12 complete
+- Tasks: 2/12 complete (D3 + G28 already DONE — verified 2026-06-14; **10 remain**)
 
 ## Scope (BACKLOG §4 / §1b / §5 tail)
 
