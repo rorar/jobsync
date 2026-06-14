@@ -68,6 +68,13 @@ external entity Job {
     -- A CvDocument MAY be tailored for / linked to a Job application.
 }
 
+external entity LegacyResume {
+    -- The normalized Resume aggregate (profile-resume.allium), KEPT for
+    -- backward-compat. Imported once into a CvDocument, then frozen (Q3).
+    user: User
+    title: String
+}
+
 external entity SharedLink {
     -- shared-surface aggregate (ROADMAP 2.18.2): signed, expiring, revocable,
     -- optionally password-protected, audited token granting read-only access
@@ -203,8 +210,10 @@ entity CvDocument {
 
     -- Publication
     publication_mode: PublicationMode
-    slug: String?                  -- set iff publication_mode = public_slug
+    slug: String?                  -- set iff publication_mode = public_slug; globally unique (Q5)
     public_consented_at: Timestamp?  -- explicit GDPR consent for public exposure
+
+    imported_from: LegacyResume?   -- set if lazily imported from a legacy Resume (Q3, one-way)
 
     created_at: Timestamp
     updated_at: Timestamp
@@ -296,9 +305,11 @@ rule EditCvDocument {
 
     @guidance
         -- Low-friction editing: the working doc mutates in place. Use
-        -- SaveVersion to freeze a milestone. `new_data` is expected to conform
-        -- to JSON Resume v1 + x-jobsync-* extensions (validation = implementation;
-        -- see the x-jobsync schema open question).
+        -- SaveVersion to freeze a milestone. Q2 decision: `new_data` is
+        -- validated at the boundary against a PUBLISHED JSON Schema (JSON Resume
+        -- v1 + x-jobsync-* extensions) — see invariant ExtensionDataValidated.
+        -- The published schema also powers import/export + the AI-section-creator
+        -- (4.2 manifest-pagebuilder).
 }
 
 rule SaveVersion {
@@ -441,8 +452,10 @@ rule CopySectionBetweenDocuments {
         target.updated(data: merged, updated_at: now)
 
     @guidance
-        -- Copy a whole section (e.g. a tailored "skills" block) between CVs.
-        -- Diff granularity for the review UI is item-level over the JSON.
+        -- Q1 decision: SECTION-level copy is the primitive (cv-manager parity);
+        -- the review UI shows an ITEM-level diff (read-only) of the JSON.
+        -- Item-level cherry-pick (copy a single experience entry) is a deferred
+        -- future enhancement, not v1.
 }
 
 rule ArchiveCvDocument {
@@ -457,6 +470,59 @@ rule ArchiveCvDocument {
     @guidance
         -- Archiving unpublishes (privacy by default). The default working doc
         -- cannot be archived — SetDefault another first.
+}
+
+rule ImportLegacyResume {
+    when: ImportLegacyResume(user, legacy_resume)
+
+    requires: exists legacy_resume where legacy_resume.user = user
+    requires: not exists CvDocument{user: user, imported_from: legacy_resume}
+
+    ensures:
+        -- Lazy, one-way: translate the normalized legacy Resume into a JSON
+        -- Resume CvData working doc the first time the user opens it in the new
+        -- builder. The CvDocument becomes the source of truth thereafter.
+        let imported = JsonResume.from_legacy(legacy_resume)
+        CvDocument.created(
+            user: user,
+            name: legacy_resume.title,
+            status: editing,
+            data: imported,
+            version_group: Id.fresh(),
+            language_group: Id.fresh(),
+            language: "en",
+            version: 1,
+            is_default: false,
+            publication_mode: private,
+            slug: null,
+            public_consented_at: null,
+            imported_from: legacy_resume,
+            created_at: now,
+            updated_at: now
+        )
+
+    @guidance
+        -- Q3 decision: lazy-on-first-open, ONE-WAY (Strangler Fig). The legacy
+        -- Resume is frozen (read-only) after import; no bidirectional sync.
+        -- imported_from records provenance + prevents double-import.
+}
+
+rule DeleteCvDocument {
+    when: DeleteCvDocument(user, document)
+
+    requires: exists document where document.user = user
+    requires: document.status = archived
+
+    ensures:
+        -- Hard delete. Revoke any outstanding shared links first.
+        let links = SharedLink{target_type: "cv_document", target_id: document, revoked: false}
+        links.updated(revoked: true)
+        document.deleted
+
+    @guidance
+        -- Q6 decision: CvDocuments hold the user's OWN (first-party) data, NOT
+        -- third-party PII — no automatic retention expiry. Removed only by
+        -- explicit user deletion, and only from the archived state.
 }
 
 ------------------------------------------------------------
@@ -573,18 +639,60 @@ invariant ExposureAlwaysReversible {
     -- public_slug via Unpublish. GDPR right-to-withdraw.
 }
 
+invariant ExtensionDataValidated {
+    -- Q2: on every EditCvDocument / ImportLegacyResume, `data` is validated
+    -- against the published JSON Schema (JSON Resume v1 + x-jobsync-*) at the
+    -- server-action boundary. Malformed data is rejected, never persisted.
+}
+
+invariant LegacyImportIsOneWay {
+    -- Q3: once a LegacyResume is imported (imported_from set), the legacy
+    -- record is frozen (read-only) and the CvDocument is the source of truth.
+    -- No bidirectional sync; a legacy Resume imports at most once.
+}
+
+invariant SlugGloballyUnique {
+    -- Q5: a public_slug is globally unique across all CvDocuments; the public
+    -- URL is /cv/{slug}. The revocable shared_link mode instead uses an
+    -- unguessable shared-surface token (no slug). Public slugs are user-chosen
+    -- and only reachable after explicit consent (PublicSlugRequiresConsent).
+}
+
+invariant FirstPartyRetentionNoAutoExpiry {
+    -- Q6: a CvDocument holds the user's OWN data (first-party), not third-party
+    -- PII. There is NO automatic retention expiry (unlike CRM auto-created
+    -- persons). Removal is only via explicit DeleteCvDocument from archived.
+}
+
+invariant SkillsAndProjectsAreCvLocal {
+    -- Q4: skills and projects live INSIDE data (document-first, self-contained).
+    -- A CvDocument does not depend on a shared Skillset aggregate. Importing
+    -- skills FROM a future shared library (ROADMAP 4.1) into data is an optional
+    -- future enhancement that copies values in — it never couples the CV to 4.1.
+}
+
 ------------------------------------------------------------
--- Open Questions
+-- Resolved Decisions (were open questions; resolved 2026-06-14)
 ------------------------------------------------------------
 
-open question "Diff/copy granularity: CopySection works at section level with item-level diff display. Do we also need item-level cherry-pick (copy one experience entry, not the whole section)?"
+-- Q1 Diff/copy granularity: SECTION-level copy primitive + item-level diff
+--    VIEW. Item-level cherry-pick deferred. (CopySectionBetweenDocuments)
+-- Q2 x-jobsync-* : PUBLISHED JSON Schema, validated at the Edit/Import
+--    boundary. Powers import/export + AI-section-creator. (ExtensionDataValidated)
+-- Q3 Legacy migration: LAZY on first open, ONE-WAY; legacy frozen after import,
+--    CvDocument is source of truth. (ImportLegacyResume, LegacyImportIsOneWay)
+-- Q4 Skills/projects: CV-LOCAL inside data (document-first). Optional future
+--    import FROM a shared Skillset library (4.1) copies values in, no coupling.
+--    (SkillsAndProjectsAreCvLocal)
+-- Q5 Slug namespace: GLOBAL user-chosen unique /cv/{slug}; link mode uses an
+--    unguessable shared-surface token. (SlugGloballyUnique)
+-- Q6 Retention: first-party data, NO auto-expiry; explicit delete only.
+--    (DeleteCvDocument, FirstPartyRetentionNoAutoExpiry)
 
-open question "x-jobsync-* extension: should it be a published JSON Schema (validated on EditCvDocument) or convention-only? A schema enables import/export validation but adds a maintenance surface."
+------------------------------------------------------------
+-- Remaining Open Questions (deferred to implementation)
+------------------------------------------------------------
 
-open question "Legacy migration: when is a legacy Resume (profile-resume.allium) imported into a CvDocument — lazily on first open, or a one-time bulk migration? And is the import one-way (legacy frozen) or kept in sync until cutover?"
+open question "x-jobsync-* JSON Schema authoring: hand-write the schema, or derive it from the pdfme template / JSON Resume themes? Affects who owns the schema as the CV builder evolves."
 
-open question "Should skills/projects also surface to a shared Skillset model (ROADMAP 4.1) so they are reusable across CVs, or stay CV-local inside data? Shared model enables 'reuse my skills' but couples CV to another aggregate."
-
-open question "Public slug namespace: per-user prefix (/cv/{user}/{slug}) or global (/cv/{slug})? Global is cleaner but risks cross-user slug collisions and enumeration; relates to website (9.5) URL design."
-
-open question "Retention: do archived CvDocuments expire automatically (like CRM auto-created persons), or persist until the user deletes? They contain the user's OWN data (not third-party), so likely no auto-expiry — confirm against GDPR storage-limitation."
+open question "JsonResume.from_legacy mapping fidelity: the legacy normalized model lacks skills/projects/visibility/highlights — import fills these as empty/defaults. Confirm the exact default-fill + how entity-linked WorkExperience (Company/Location FKs) denormalizes into data + optional CvExperienceLink."
