@@ -6,6 +6,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useTranslations } from "@/i18n";
 
 const ToastProvider = ToastPrimitives.Provider;
 
@@ -76,7 +77,12 @@ const ToastClose = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof ToastPrimitives.Close> & {
     label?: string;
   }
->(({ className, label, ...props }, ref) => (
+>(({ className, label, ...props }, ref) => {
+  // F6: fall back to the localised label (not a hardcoded English "Dismiss")
+  // when no explicit label is supplied. useTranslations safely defaults to "en"
+  // outside a LocaleProvider, so this primitive needs no provider to render.
+  const { t } = useTranslations();
+  return (
   <ToastPrimitives.Close
     ref={ref}
     className={cn(
@@ -87,9 +93,10 @@ const ToastClose = React.forwardRef<
     {...props}
   >
     <X className="h-4 w-4" aria-hidden="true" />
-    <span className="sr-only">{label ?? "Dismiss"}</span>
+    <span className="sr-only">{label ?? t("common.dismiss")}</span>
   </ToastPrimitives.Close>
-));
+  );
+});
 ToastClose.displayName = ToastPrimitives.Close.displayName;
 
 const ToastTitle = React.forwardRef<
