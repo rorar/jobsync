@@ -2084,10 +2084,23 @@ Der bestehende CV-Manager (Profile-Aggregat: `Profile → Resume → ResumeSecti
 
 **Cross-Refs:** Document Rendering Engine (4.2.1), Dokumenten-Generatoren/JSON-Resume-Pagebuilder (4.2), Skillsets (4.1), Bewerber-Landingpage (9.5), Public API (7.1), AI Review/Match (bestehende Resume-AI), PII-Egress-Redaktion (`src/lib/pii`, `CloudTransferDataMinimization`), Profile-Auto-Fill (`ContactInfo`), Profile-Spec (`specs/profile-resume.allium`), CvDocument-Spec (`specs/cv-document.allium`), shared-surface (2.18.2).
 
-### 4.3 Output-Struktur (Paperless-ngx Style)
-Dynamische Dateipfade und Dateinamen:
-- **Ordner:** `<Unternehmen>/<LANG>/<Jobtitel>/`
-- **Dateiname:** `<Datum> <Bewerbername> - <Jobtitel>` oder `<Datum> <Bewerbername> - <Unternehmen> - <Jobtitel>`
+### 4.3 Output-Struktur (Paperless-ngx Style) & Dateinamens-Konvention
+Dynamische Dateipfade und Dateinamen für generierte/exportierte Dokumente (CV, Anschreiben, Report, …).
+
+**Ordnerstruktur (Paperless-ngx Style):** `<Unternehmen>/<LANG>/<Jobtitel>/`
+
+**Dateinamens-Konvention:**
+- **Schema:** `{Nachname}_{Vorname}_{DocType}_{LANG}[_{Unternehmen}][_v{Version}].{ext}`
+  - Beispiel: `Chen_Marcus_CV_EN_SwissBank_v3.pdf`, `Chen_Marcus_Anschreiben_DE_SwissBank.pdf`
+- **`DocType`-Token:** `CV` | `Anschreiben` | `Motivation` | `Portfolio` | `Report` | `Titelblatt` (lokalisierbar als Anzeige, ASCII-Token im Dateinamen).
+- **`LANG`:** ISO 639-1 Großbuchstaben (`EN`/`DE`/`FR`/`ES`) — **immer im CV-Dateinamen** (Multi-Language-Bewerbung, 4.2 / cv-document.allium `language`).
+- **`{Unternehmen}` / `{Version}` optional:** Unternehmen wenn job-/firmenspezifisch getailort; `v{n}` wenn aus einer benannten CvDocument-Version (≠ Default-Arbeitsdokument).
+- **Paperless-Datums-Variante** (Ablage/Sync, 1.6): Prefix `YYYY-MM-DD ` → `2026-06-14 Chen_Marcus_CV_EN_SwissBank.pdf`.
+- **Sanitisierung (PFLICHT):** ASCII-transliteriert (ä→ae, é→e), Leerzeichen→`_`, Sonderzeichen entfernt, Längen-Cap — cross-OS-/Netzwerk-Mount-sicher (Ordner-Sync 1.6, File Explorer). **Dateiname = ASCII-safe; Anzeigename darf lokalisiert sein.**
+- **Öffentliche CV-URL** (kein Dateiname): `/cv/{slug}` — slug über die Sprachen einer language_group geteilt, Sprachumschalter (`?lang=` o.ä.), siehe `cv-document.allium` `SlugScopedToLanguageGroup`.
+- **Konfigurierbar:** Schema-Template in Settings überschreibbar (Platzhalter-Tokens), Default wie oben.
+
+**Cross-Ref:** Dokumenten-Generatoren (4.2), CvDocument (4.2.2 / `cv-document.allium`), Dokumentenworkflow/Paperless (1.6), Multi-Language (4.2).
 
 ### 4.4 Unterschrift
 - Upload einer bestehenden Unterschrift (Bild/SVG)

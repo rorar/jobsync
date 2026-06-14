@@ -127,6 +127,23 @@ enum SectionKind {
     custom
 }
 
+enum DocType {
+    -- Kind of generated application document (drives the filename token).
+    cv
+    cover_letter
+    motivation
+    portfolio
+    report
+    title_page
+}
+
+config {
+    -- Filename template for rendered/exported artifacts (ROADMAP 4.3). Tokens
+    -- are substituted then ASCII-sanitized. Company/version segments are
+    -- omitted when their value is absent. User-overridable in settings.
+    artifact_name_template: String = "{last_name}_{first_name}_{doc_type}_{lang}[_{company}][_v{version}]"
+}
+
 ------------------------------------------------------------
 -- Value Objects — the meaningful shape of the opaque `data` JSON
 ------------------------------------------------------------
@@ -238,8 +255,11 @@ entity CvDocument {
         -- version, language).)
 
     @invariant SlugSetIffPublicSlug
-        -- slug is non-null and globally unique IFF publication_mode = public_slug;
-        -- null otherwise. (cv-manager UNIQUE(slug, ...).)
+        -- slug is non-null IFF publication_mode = public_slug; null otherwise.
+        -- A slug is SHARED across all published language variants of the same
+        -- language_group (see SlugScopedToLanguageGroup) — (slug, language) is
+        -- unique, slug alone maps to exactly one language_group. (cv-manager
+        -- UNIQUE(slug, language).)
 
     @invariant PublicSlugRequiresConsent
         -- publication_mode = public_slug requires public_consented_at != null —
@@ -544,6 +564,9 @@ rule PublishViaSharedLink {
         -- Revocable, expiring, optionally password-protected, audited. No
         -- public consent needed (access-controlled, not indexed). Same
         -- shared-surface domain as the Bewerbungsbemühungen report (2.18.2).
+        -- MULTI-LANGUAGE: when a contact requests several languages, the link
+        -- can cover the language_group's published variants (one link, language
+        -- switcher) — MultiLanguageShareExposesPublishedOnly.
 }
 
 rule PublishViaPublicSlug {
@@ -553,7 +576,9 @@ rule PublishViaPublicSlug {
     requires: document.status != archived
     requires: consent = true
     requires: slug != null
-    requires: not exists CvDocument{slug: slug} where CvDocument != document
+    -- slug must be free, OR already in use by THIS document's language_group
+    -- (the group shares one slug across its published languages).
+    requires: not exists CvDocument{slug: slug} where CvDocument.language_group != document.language_group
 
     ensures:
         document.updated(
@@ -569,6 +594,10 @@ rule PublishViaPublicSlug {
         -- `applicant-landingpage` renderer — NOT a separate page. One CV data
         -- source -> PDF + shared link + public website page. Requires explicit
         -- GDPR consent (PublicSlugRequiresConsent).
+        -- MULTI-LANGUAGE: to honour a contact's request for several languages,
+        -- publish each language variant under the SAME slug; /cv/{slug} then
+        -- offers a language switcher across them (SlugScopedToLanguageGroup,
+        -- MultiLanguageShareExposesPublishedOnly).
 }
 
 rule Unpublish {
@@ -651,11 +680,24 @@ invariant LegacyImportIsOneWay {
     -- No bidirectional sync; a legacy Resume imports at most once.
 }
 
-invariant SlugGloballyUnique {
-    -- Q5: a public_slug is globally unique across all CvDocuments; the public
-    -- URL is /cv/{slug}. The revocable shared_link mode instead uses an
-    -- unguessable shared-surface token (no slug). Public slugs are user-chosen
-    -- and only reachable after explicit consent (PublicSlugRequiresConsent).
+invariant SlugScopedToLanguageGroup {
+    -- Q5 + language: a public_slug maps to exactly ONE language_group and is
+    -- SHARED by every published language variant in that group; (slug, language)
+    -- is unique. The public URL /cv/{slug} resolves to the group and serves the
+    -- visitor a language switcher across the published languages (locale-matched
+    -- default). The revocable shared_link mode instead uses an unguessable
+    -- shared-surface token. Public slugs are user-chosen, reachable only after
+    -- consent (PublicSlugRequiresConsent).
+}
+
+invariant MultiLanguageShareExposesPublishedOnly {
+    -- A company/contact can ask the user to share several CV languages
+    -- (e.g. "EN + DE"). The user publishes those language variants of the
+    -- CV under the one shared slug (public_slug) or one shared-surface link
+    -- (shared_link). A shared surface exposes EXACTLY the language variants the
+    -- user explicitly published — unpublished languages of the same
+    -- language_group stay private. The recipient switches language within the
+    -- shared set. Per-language consent applies (PublicSlugRequiresConsent).
 }
 
 invariant FirstPartyRetentionNoAutoExpiry {
@@ -672,6 +714,51 @@ invariant SkillsAndProjectsAreCvLocal {
 }
 
 ------------------------------------------------------------
+-- Contracts & Surfaces
+------------------------------------------------------------
+
+contract CvArtifactNaming {
+    -- The filename a rendered/exported application document carries (ROADMAP 4.3).
+    artifact_filename: (document: CvDocument, doc_type: DocType, company: Company?, version: Integer?) -> String
+
+    @invariant FilenameIsAsciiSafe
+        -- The produced filename is ASCII-transliterated (ä->ae, é->e),
+        -- spaces -> "_", special characters stripped, length-capped — safe
+        -- across OSes and network-mounted folder sync (ROADMAP 1.6). The
+        -- on-screen DISPLAY name MAY stay localized; the FILE name is ASCII.
+
+    @invariant CvFilenameCarriesLanguage
+        -- For doc_type = cv the language token is ALWAYS present (multi-language
+        -- applications; cv-document `language`). The company and version segments
+        -- are included only when their value is supplied.
+
+    @guidance
+        -- Built from config.artifact_name_template. Example outputs:
+        --   Chen_Marcus_cv_EN_SwissBank_v3.pdf
+        --   Chen_Marcus_cover_letter_DE_SwissBank.pdf
+        -- The Paperless folder layout <Company>/<LANG>/<Jobtitle>/ and the
+        -- optional "YYYY-MM-DD " date prefix are specified in ROADMAP 4.3.
+}
+
+surface CvArtifactExport {
+    -- The boundary where a user renders/downloads a CvDocument as a file
+    -- artifact (PDF/DOCX). The render engine (pdfme, ROADMAP 4.2.1) is out of
+    -- scope here; this surface pins the filename obligation + ownership.
+    facing owner: User
+    context document: CvDocument
+
+    exposes:
+        document.name
+        document.language
+
+    contracts:
+        fulfils CvArtifactNaming
+
+    @guarantee ExportRespectsTenantIsolation
+        -- A user can export only their own CvDocuments (ADR-015 / TenantIsolation).
+}
+
+------------------------------------------------------------
 -- Resolved Decisions (were open questions; resolved 2026-06-14)
 ------------------------------------------------------------
 
@@ -684,8 +771,14 @@ invariant SkillsAndProjectsAreCvLocal {
 -- Q4 Skills/projects: CV-LOCAL inside data (document-first). Optional future
 --    import FROM a shared Skillset library (4.1) copies values in, no coupling.
 --    (SkillsAndProjectsAreCvLocal)
--- Q5 Slug namespace: GLOBAL user-chosen unique /cv/{slug}; link mode uses an
---    unguessable shared-surface token. (SlugGloballyUnique)
+-- Q5 Slug namespace: a public_slug maps to ONE language_group and is shared
+--    across its published language variants ((slug,language) unique); /cv/{slug}
+--    serves a language switcher. Link mode uses an unguessable shared-surface
+--    token. (SlugScopedToLanguageGroup, MultiLanguageShareExposesPublishedOnly)
+-- Language/Multi-language share: a contact can request several CV languages;
+--    the user publishes those language variants under one slug/link, recipient
+--    switches language; unpublished languages stay private. File artifacts carry
+--    the language token (contract CvArtifactNaming; ROADMAP 4.3 naming).
 -- Q6 Retention: first-party data, NO auto-expiry; explicit delete only.
 --    (DeleteCvDocument, FirstPartyRetentionNoAutoExpiry)
 
