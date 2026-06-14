@@ -16,18 +16,19 @@ for gaps), then fix. Each item is its own logical commit. Build zero-error +
 
 ### Tasks
 
-- [ ] Task 1.1: IF-12 — type the automation-detail page props correctly (or add a typed
-      adapter) and remove the three `as unknown as` casts at
-      `automations/[id]/page.tsx:267/269/278`; component test asserts the page renders
-      with the real types. Build zero-error.
-- [ ] Task 1.2: D1/D2 — migrate `runner.ts:772` `result.experimental_output` to the
-      current AI-SDK output API; tighten the `resume as ResumeWithSections` cast (~`:425`)
-      to a typed query result. Unit test on the runner's match-data path stays green.
+- [x] Task 1.1: IF-12 — DONE (2026-06-14, `340e3bf`): retyped DiscoveredJobsList /
+      DiscoveredJobDetail / AutomationMetadataGrid props DiscoveredJob→StagedVacancyWithAutomation
+      (the real runtime type), dropped all 3 casts, deleted orphaned DiscoveredJob interface.
+      3 component test builders retyped onto mockStagedVacancy. Build zero-error.
+- [x] Task 1.2: D1/D2 — DONE (2026-06-14, `40a1dae`): D1 = `result.experimental_output`
+      → `result.output` (AI-SDK v6; code already used generateText+Output.object — verified
+      via Context7, generateObject is the DEPRECATED one). D2 = typed `RESUME_MATCH_INCLUDE`
+      const + `Prisma.ResumeGetPayload`, cast removed. runner-pii-redaction + dedup tests green.
 
 ### Verification
 
-- [ ] No `as unknown as` in the automation-detail page; no deprecated `experimental_output`;
-      build zero-error.
+- [x] No `as unknown as` in the automation-detail page; no deprecated `experimental_output`;
+      build zero-error (tsc 0, 5 suites/44 tests green, build exit 0).
 
 ## Phase 2: Event semantics + bounded-context (DDD)
 

@@ -26,16 +26,14 @@ was stale (4 commits behind) and was NOT relied upon for any fact.
 Each item ships with its own test (regression for bugs, unit/coverage for gaps) and is
 committed in its own logical commit. Build zero-error, `bash scripts/test.sh` green.
 
-### Cluster 1 — TypeScript type-safety casts
-- [ ] **IF-12:** The three `as unknown as` casts in the automation-detail page are removed
-      in favour of correctly-typed props / a typed adapter. Verified sites:
-      `src/app/dashboard/automations/[id]/page.tsx:267` (`jobs as unknown as DiscoveredJob[]`),
-      `:269` (`job as unknown as StagedVacancyWithAutomation`), `:278`
-      (`selectedJob as unknown as DiscoveredJob | null`). MEDIUM.
-- [ ] **D1/D2:** `runner.ts` AI-SDK `experimental_output` deprecation migrated to the
-      current output API; the adjacent Prisma-result cast tightened. Verified:
-      `src/lib/connector/job-discovery/runner.ts:772` (`result.experimental_output`) +
-      the `resume as ResumeWithSections` cast (~`:425`). LOW.
+### Cluster 1 — TypeScript type-safety casts ✅ DONE (2026-06-14)
+- [x] **IF-12:** DONE (`340e3bf`) — 3 components retyped DiscoveredJob→StagedVacancyWithAutomation,
+      all 3 `as unknown as` casts removed, orphaned DiscoveredJob interface deleted, test
+      builders retyped onto mockStagedVacancy. MEDIUM.
+- [x] **D1/D2:** DONE (`40a1dae`) — D1 `result.experimental_output`→`result.output` (AI-SDK v6;
+      Context7-verified the code already uses the current generateText+Output.object API, and
+      generateObject is the deprecated one). D2 cast replaced by typed `RESUME_MATCH_INCLUDE` +
+      `Prisma.ResumeGetPayload`. LOW.
 
 ### Cluster 2 — Event semantics + bounded-context (DDD)
 - [ ] **IF-10:** `emitEvent` fire-and-forget reviewed; callers that need delivery
