@@ -1,0 +1,440 @@
+-- allium: 3
+-- application-documents.allium
+
+-- Scope: Application document generators + the application bundle (ROADMAP 4.2
+--   Dokumenten-Generatoren). An ApplicationBundle groups, per Job, the CV plus
+--   LLM-GENERATED documents (cover letter / Anschreiben, motivation, Exposé,
+--   title page) and uploaded attachments (certificates). Covers generation
+--   (from CvDocument + Job, format-localized, salutation-aware), the document
+--   lifecycle (draft -> generated -> edited -> final), template management,
+--   and export to file artifacts.
+-- Includes: ApplicationBundle, GeneratedDocument, DocumentTemplate, Attachment;
+--   generation triggers (DocumentsAvailable event + manual), edit/finalize,
+--   format localization (DIN 5008 etc.), gender-aware salutation, export naming.
+-- Excludes:
+--   - The CV itself (see cv-document.allium — a GeneratedDocument is generated
+--     FROM a CvDocument; the CV is the bundle's source, not a generated doc)
+--   - PDF/DOCX rendering engine (pdfme — implementation, ROADMAP 4.2.1)
+--   - AI provider internals + redaction algorithm (see ai-provider.allium)
+--   - Shared-link / public exposure mechanics (see shared-surface, 2.18.2;
+--     reused for sharing a bundle, defined there)
+--   - E-mail application sending (see ROADMAP 4.9 — a consumer of final docs)
+--   - File storage paths (implementation; see src/lib/storage.ts)
+-- Dependencies: User, Job (shared); CvDocument (cv-document.allium); AiProvider
+--   (ai-provider.allium); Person (CRM, crm.allium — salutation gender);
+--   File (profile-resume.allium — see open question on generalising it);
+--   DocType + CvArtifactNaming convention (cv-document.allium / ROADMAP 4.3).
+-- Owner: ApplicationDocuments Aggregate (src/actions/applicationDocument.actions.ts — to build)
+
+-- Graph review (JobSync /understand-anything, 2026-06-14) — gaps this spec assumes:
+--   G1 `DocumentsAvailable` event is NOT defined in code (only in roadmap/specs);
+--      30 events exist incl. VacancyPromoted. -> open question on the trigger.
+--   G2 AI has resume/match + resume/review routes only — NO generation route.
+--      Generation is a new AI flow (GenerateDocument rule).
+--   G3 `File` is 1:1 with Resume — generated docs + attachments need their own
+--      file linkage per bundle. -> open question.
+--   G4 No ApplicationBundle concept exists — fully new (this spec).
+--   G5 CvDocument is spec-only (unbuilt) — generators depend on it (ordering).
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity User {
+    -- Authenticated user. Owns every bundle and generated document (ADR-015).
+}
+
+external entity Job {
+    -- The job application a bundle targets. One bundle per (user, job).
+}
+
+external entity CvDocument {
+    -- cv-document.allium. The CV that is the bundle's source and the input for
+    -- LLM document generation. Carries the application's identity + language.
+    user: User
+    language: String
+}
+
+external entity AiProvider {
+    -- ai-provider.allium. Generates document drafts from CV + Job text. Cloud
+    -- providers are third-party recipients; PII redacted before transfer.
+    is_local: Boolean              -- true = Ollama (full fidelity, no redaction)
+}
+
+external entity Person {
+    -- crm.allium contact (recruiter / hiring manager). Supplies the addressee
+    -- + gender for a localized salutation, when known.
+    gender: String?                -- nullable; absent -> neutral salutation
+    full_name: FullName?
+}
+
+external entity File {
+    -- profile-resume.allium upload. Reused for attachments + rendered output.
+    -- NOTE: File is currently 1:1 with Resume — see open question on generalising.
+    file_name: String
+    file_type: String
+}
+
+external entity SharedLink {
+    -- shared-surface (2.18.2). A whole bundle (or a single final document) can
+    -- be shared via a revocable link. Mechanics defined there.
+    target_type: String
+    target_id: String
+    revoked: Boolean
+}
+
+external entity FullName {
+    -- Value from crm.allium (last_name used for the salutation).
+    last_name: String
+}
+
+------------------------------------------------------------
+-- Enums
+------------------------------------------------------------
+
+enum GeneratedDocType {
+    -- The LLM-generated document kinds. The CV is NOT here (cv-document.allium).
+    -- Maps to the shared filename DocType tokens (cover_letter->CoverLetter, ...).
+    cover_letter
+    motivation
+    expose
+    title_page
+}
+
+enum DocumentStatus {
+    draft           -- created, not yet generated (placeholder / manual start)
+    generating      -- LLM generation in progress
+    generated       -- LLM produced a draft; awaiting user review
+    edited          -- user modified the generated content
+    final           -- approved; ready to render/send (immutable content)
+}
+
+enum BundleStatus {
+    assembling      -- being put together (docs generated/edited)
+    ready           -- all required documents are final
+    submitted       -- sent / handed over for the application
+    archived        -- closed application, retained
+}
+
+enum SalutationForm {
+    -- Resolved address form for a localized letter.
+    formal_named    -- e.g. "Sehr geehrte Frau Müller" — gender + name known
+    neutral_named   -- e.g. "Guten Tag, Frau Müller" / "Dear Alex Müller"
+    neutral_generic -- e.g. "Sehr geehrte Damen und Herren" / "Dear Sir or Madam"
+}
+
+------------------------------------------------------------
+-- Value Objects
+------------------------------------------------------------
+
+value FormatLocale {
+    -- The localized letter-format rules applied when rendering a document.
+    language: String               -- ISO 639-1 (content language)
+    letter_standard: String        -- e.g. "DIN-5008" (DE), country convention
+    include_photo: Boolean         -- cultural convention (DE/FR yes, UK no)
+}
+
+value GeneratedContent {
+    -- The produced document content. Stored opaquely (rich text / JSON), but
+    -- the addressee + salutation are domain-meaningful.
+    body: String                   -- rich-text / structured body (opaque)
+    salutation: SalutationForm
+    addressee: Person?             -- the CRM contact addressed, if any
+}
+
+------------------------------------------------------------
+-- Entities
+------------------------------------------------------------
+
+entity ApplicationBundle {
+    user: User
+    job: Job
+    cv: CvDocument                 -- the source CV for this application
+    status: BundleStatus
+
+    -- Relationships
+    documents: GeneratedDocument with bundle = this
+    attachments: Attachment with bundle = this
+
+    created_at: Timestamp
+    updated_at: Timestamp
+
+    @invariant TenantIsolation
+        -- A bundle and all its documents/attachments are scoped to user
+        -- (ADR-015). Never queried by id alone.
+
+    @invariant OneBundlePerUserPerJob
+        -- At most one ApplicationBundle per (user, job). Re-applying reopens
+        -- the existing bundle rather than forking a second.
+
+    @invariant BundleCvOwnedBySameUser
+        -- bundle.cv.user = bundle.user. A bundle's CV belongs to its owner.
+}
+
+entity GeneratedDocument {
+    bundle: ApplicationBundle
+    doc_type: GeneratedDocType
+    language: String               -- ISO 639-1; MAY differ from the CV's language
+    format_locale: FormatLocale
+    status: DocumentStatus
+    content: GeneratedContent
+    generated_by: AiProvider?      -- which AI module produced the draft (audit)
+    template: DocumentTemplate?    -- optional template the render uses
+    rendered_file: File?           -- set once exported to PDF/DOCX
+
+    created_at: Timestamp
+    updated_at: Timestamp
+
+    @invariant GeneratedFromCvAndJob
+        -- A generated document's source is its bundle's cv + job. The LLM input
+        -- is CvDocument.data + Job text (+ addressee). It is never authored from
+        -- nothing — generation always has the CV + Job as context.
+
+    @invariant FinalContentImmutable
+        -- content may change only while status in {draft, generated, edited}.
+        -- A `final` document is frozen; re-opening requires an explicit edit
+        -- transition back to `edited`.
+
+    @invariant PerDocumentLanguage
+        -- Each document carries its own language (e.g. "EN CV + DE Anschreiben").
+        -- The filename + format_locale follow this content language, not the
+        -- UI language (ROADMAP 4.3 / cv-document CvArtifactNaming).
+}
+
+entity DocumentTemplate {
+    user: User
+    doc_type: GeneratedDocType
+    name: String
+    country: String?               -- template specialised per country/standard
+    template_data: String          -- pdfme Template JSON (4.2.1)
+    created_at: Timestamp
+    updated_at: Timestamp
+
+    @invariant TemplateOwnedByUser
+        -- User templates are tenant-scoped. System templates (seeded) are the
+        -- starting point; users create/edit/version their own (4.2 pagebuilder).
+}
+
+entity Attachment {
+    bundle: ApplicationBundle
+    file: File                     -- uploaded certificate / supporting document
+    label: String
+    created_at: Timestamp
+
+    @invariant AttachmentFileOwnership
+        -- The attached File belongs to the bundle's user (ADR-015 chain).
+}
+
+------------------------------------------------------------
+-- Rules — bundle assembly
+------------------------------------------------------------
+
+rule OpenApplicationBundle {
+    when: OpenApplicationBundle(user, job, cv)
+
+    requires: exists job where job.user = user
+    requires: exists cv where cv.user = user
+    requires: not exists ApplicationBundle{user: user, job: job}
+
+    ensures:
+        ApplicationBundle.created(
+            user: user,
+            job: job,
+            cv: cv,
+            status: assembling,
+            created_at: now,
+            updated_at: now
+        )
+
+    @guidance
+        -- Created on demand when the user starts preparing an application, OR
+        -- reactively when documents become available for a promoted vacancy
+        -- (see open question on the DocumentsAvailable trigger). Idempotent per
+        -- (user, job) — OneBundlePerUserPerJob.
+}
+
+------------------------------------------------------------
+-- Rules — generation (new AI flow; gap G2)
+------------------------------------------------------------
+
+rule GenerateDocument {
+    when: GenerateDocument(user, bundle, doc_type, language, provider)
+
+    requires: exists bundle where bundle.user = user
+    requires: bundle.status = assembling
+
+    ensures:
+        -- LLM generation from CV + Job. PII redacted unless the provider is
+        -- local (fail-safe: redact when locality unknown). Cloud providers are
+        -- third-party recipients (ai-provider.allium CloudTransferDataMinimization).
+        let source =
+            if provider.is_local:
+                CvJob.context(bundle.cv.data, bundle.job)
+            else:
+                Pii.redact(CvJob.context(bundle.cv.data, bundle.job))
+
+        -- Salutation is a black box: it resolves the addressee (the CRM contact
+        -- for this job) and picks the gender-aware / neutral form. The spec
+        -- pins the inputs + outcome (SalutationLocalizedAndGendered), not the
+        -- algorithm.
+        GeneratedDocument.created(
+            bundle: bundle,
+            doc_type: doc_type,
+            language: language,
+            format_locale: FormatLocale.for(language),
+            status: generated,
+            generated_by: provider,
+            content: GeneratedContent(
+                body: Llm.generate(doc_type, source, provider),
+                salutation: Salutation.resolve(considering: { bundle.job, Person.gender, Person.full_name }),
+                addressee: Salutation.addressee(bundle.job)
+            ),
+            created_at: now,
+            updated_at: now
+        )
+
+    @guidance
+        -- New AI flow (no generation route exists today — only resume match +
+        -- review). The cover letter / Anschreiben is written by the LLM FROM the
+        -- bundle's CV + Job. Salutation is gender-aware when a CRM contact is the
+        -- addressee, neutral otherwise (SalutationLocalizedAndGendered).
+}
+
+rule EditGeneratedDocument {
+    when: EditGeneratedDocument(user, document, new_content)
+
+    requires: exists document where document.bundle.user = user
+    requires: document.status in {generated, edited, final}
+    requires: new_content != null
+
+    ensures:
+        document.updated(content: new_content, status: edited, updated_at: now)
+
+    @guidance
+        -- The user refines the generated draft (character limits for cover
+        -- letters apply at the UI per ROADMAP 3.3). Editing a `final` document
+        -- transitions it back to `edited`.
+}
+
+rule FinalizeDocument {
+    when: FinalizeDocument(user, document)
+
+    requires: exists document where document.bundle.user = user
+    requires: document.status in {generated, edited}
+
+    ensures:
+        document.updated(status: final, updated_at: now)
+
+    @guidance
+        -- Approves the document; content becomes immutable (FinalContentImmutable)
+        -- until an explicit edit re-opens it.
+}
+
+rule AddAttachment {
+    when: AddAttachment(user, bundle, file, label)
+
+    requires: exists bundle where bundle.user = user
+    requires: exists file where file.user = user
+
+    ensures:
+        Attachment.created(bundle: bundle, file: file, label: label, created_at: now)
+
+    @guidance
+        -- Certificates / references uploaded by the user join the bundle.
+}
+
+rule ReadyBundle {
+    when: ReadyBundle(user, bundle)
+
+    requires: exists bundle where bundle.user = user
+    requires: not exists GeneratedDocument{bundle: bundle} where GeneratedDocument.status != final
+
+    ensures:
+        bundle.updated(status: ready, updated_at: now)
+
+    @guidance
+        -- A bundle is ready when every generated document in it is final.
+        -- Attachments need no finalisation.
+}
+
+rule ShareBundle {
+    when: ShareBundle(user, bundle, expires_at?, password?)
+
+    requires: exists bundle where bundle.user = user
+    requires: bundle.status in {ready, submitted}
+
+    ensures:
+        -- Sharing reuses the shared-surface domain (2.18.2) — revocable, audited.
+        SharedLink.created(target_type: "application_bundle", target_id: bundle, revoked: false)
+
+    @guidance
+        -- A whole bundle (or a single final document) can be shared with a
+        -- contact/company via a revocable shared-surface link
+        -- (BundleSharingViaSharedSurface). Token mechanics live in shared-surface.
+}
+
+------------------------------------------------------------
+-- Rules — export
+------------------------------------------------------------
+
+rule ExportDocument {
+    when: ExportDocument(user, document, format)
+
+    requires: exists document where document.bundle.user = user
+    requires: document.status = final
+
+    ensures:
+        -- Rendered via the DocumentRenderingConnector (4.2.1, pdfme/Gotenberg)
+        -- into a File named per the shared 4.3 convention (DocType token + LANG).
+        let artifact = Render.toFile(document, format)
+        document.updated(rendered_file: artifact, updated_at: now)
+
+    @guidance
+        -- The render engine + filename convention are shared with the CV
+        -- (ROADMAP 4.2.1 + 4.3; cv-document CvArtifactNaming). The doc_type
+        -- token is language-independent ASCII; LANG is the document's content
+        -- language. format in {pdf, docx, html}.
+}
+
+------------------------------------------------------------
+-- Top-level Invariants
+------------------------------------------------------------
+
+invariant CloudGenerationRedactsPii {
+    -- Any CV/Job content sent to a non-local AiProvider for document generation
+    -- passes through Pii.redact first. Full fidelity only for provider.is_local.
+    -- Mirrors ai-provider.allium CloudTransferDataMinimization for the new
+    -- generation flow.
+}
+
+invariant SalutationLocalizedAndGendered {
+    -- A generated letter's salutation is gender-aware when a CRM addressee with
+    -- known gender exists (formal_named), name-only when gender is unknown
+    -- (neutral_named), and generic otherwise (neutral_generic). No letter
+    -- guesses gender.
+}
+
+invariant BundleSharingViaSharedSurface {
+    -- Sharing a bundle (or a final document) with a contact/company reuses the
+    -- shared-surface domain (2.18.2) — revocable, audited — not a bespoke link.
+}
+
+invariant DocumentFilenameFollowsConvention {
+    -- Exported documents follow the single ROADMAP 4.3 naming convention
+    -- (shared with the CV): {Last}_{First}_{DocType}_{LANG}[_{Company}][_v{N}],
+    -- ASCII-safe, language-independent DocType token.
+}
+
+------------------------------------------------------------
+-- Open Questions (informed by the graph review — gaps G1/G3)
+------------------------------------------------------------
+
+open question "Trigger (G1): does OpenApplicationBundle fire reactively from a domain event on promotion, and which one? `DocumentsAvailable` is referenced in the roadmap/specs but is NOT defined in code; 30 events exist incl. `VacancyPromoted`. Reuse VacancyPromoted, or add a dedicated DocumentsAvailable event?"
+
+open question "File model (G3): `File` is currently 1:1 with Resume (profile-resume.allium). Generated documents (rendered_file) and attachments need a per-bundle file linkage. Generalise File to a polymorphic owner, or introduce a separate document-file model?"
+
+open question "Template management scope: is DocumentTemplate (create/edit/version/share via the 4.2 manifest pagebuilder) substantial enough to warrant its own spec, or does it stay here? It overlaps the CV template system (4.2.1 pdfme templates) — shared template aggregate?"
+
+open question "Required-document policy: ReadyBundle treats every generated document as required. Should a bundle declare which doc_types are required for a given Job/country (e.g. DE often expects CV + cover letter + Anlagen) vs optional?"
+
+open question "Address formatting: ROADMAP 4.2 names @fragaria/address-formatter as the address single-source. Is the rendered address block part of GeneratedContent (domain) or purely a render-time concern (implementation)?"

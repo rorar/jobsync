@@ -1914,6 +1914,7 @@ Jeder Job hat ein **Application Locale Profile** das Sprache + Land + kulturelle
 - Kern-Skills vs. Neben-Skills Priorisierung
 
 ### 4.2 Dokumenten-Generatoren
+**Allium-Spec (DRAFT 2026-06-14):** `specs/application-documents.allium` — ApplicationBundle (CV + generierte Dokumente + Anhänge pro Job) + GeneratedDocument (Anschreiben/Motivation/Exposé/Titelblatt, LLM-generiert aus CvDocument + Job, PII-gestrippt für Cloud, gender-aware Salutation als Black Box, format-lokalisiert DIN 5008), DocumentTemplate, Attachment; Lifecycle draft→generated→edited→final, Export via 4.2.1 mit 4.3-Naming, Teilen via shared-surface. `allium check` grün. Graph-Review-Lücken als Open Questions: G1 `DocumentsAvailable`-Event existiert NICHT im Code (nur VacancyPromoted) — Trigger offen; G2 keine AI-Generierungs-Route (nur match/review); G3 `File` ist 1:1-Resume → Generalisierung nötig.
 - Consumer des `DocumentsAvailable` Domain Events bei Vacancy-Promotion (→ 0.5 Inbox)
 - LLM-gestützte Erstellung basierend auf CV + Jobanforderungen
 - Templates für verschiedene Länder und Branchen
