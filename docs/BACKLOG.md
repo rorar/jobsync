@@ -73,6 +73,17 @@ Quell-Docs sollten entsprechend aktualisiert/markiert werden.
 | S6b CRM-PII-Read Audit | §1b (war HIGH offen) | `person.pii_read` wired `person.actions:166,240` + `collect-user-data:507`; DataMinimisation am Sink erzwungen — Welle 1 | ERLEDIGT |
 | GDPR-JWT id-only Token | §1b (war MEDIUM offen) | `auth.config.ts:53-54` `delete token.name; delete token.email;`; Display-Felder DB-resolved in session-callback — Welle 1 | ERLEDIGT |
 | G28 E2E-CRM-Cleanup FK-Reihenfolge | §1b (war LOW offen) | `e2e/cleanup-stale-data.ts` löscht 8 CRM-Entities child→parent (5a–5h) + RESTRICT-guards | ERLEDIGT |
+| **— Runde-4 IMPLEMENTIERT (Tech-Debt-Cleanup-Track clusters 1-5 + full-review; Session 2026-06-14; branch `tech-debt-cleanup`): —** | | | |
+| IF-12 DiscoveredJob `as unknown as` casts | §4 | 3 Komponenten auf `StagedVacancyWithAutomation` umgetypt, 3 Casts weg, Legacy-Typ gelöscht (`340e3bf`) | ERLEDIGT |
+| D1/D2 runner.ts AI-SDK + Resume-Cast | §4 | `result.experimental_output`→`result.output` (AI-SDK v6, Context7-verifiziert); typed `RESUME_MATCH_INCLUDE` + `Prisma.ResumeGetPayload` (`40a1dae`) | ERLEDIGT |
+| IF-10 emitEvent fire-and-forget | §4 | Contract dokumentiert + Guard-Test (awaitable Pfad = `eventBus.publish`) (`fc724ba`) | ERLEDIGT |
+| D5 enrichment-trigger A-05 bounded-context | §4 | `Company.domain`-Write über server-only `company-repository.ts` (`setCompanyDomainIfUnset`, createdBy-scoped, ADR-015) (`cab8915`) | ERLEDIGT |
+| D4 shared-entities.allium Company.domain Spec-Drift | §4 | weed+tend: Kommentar+`@invariant DomainPopulatedOnce`; producer-rule in data-enrichment.allium (`423e54d`) | ERLEDIGT |
+| GDPR-Consent (Art. 7(3)) | §1b | `consentWithdrawnAt` + withdraw/reinstate + Enforcement (updatePerson/scheduleInterview/createCrmTask/createCrmNote/crm-cron) + UI + i18n×4 + crm-gdpr.allium + ADR-037 (`d4460dc`,`e34fb5f`) | ERLEDIGT |
+| G25 mergePersons Target-Dedup | §1b | CrmTaskTarget/CrmNoteTarget dedup wie JobContact (pre-read overlap + delete pre-transfer) (`a0e79bf`) | ERLEDIGT |
+| G26b ADMIN_USER_IDS Startup-Validierung | §1b | `assertAdminUserIdsValid()` fail-fast, in instrumentation nodejs-branch (`54a6fc0`) | ERLEDIGT |
+| F6 Toast "Dismiss" hardcoded | §4 Test-Lücken | ToastClose self-translate `common.dismiss` (`375eecc`) | ERLEDIGT |
+| CRM-Cron 0 Unit-Tests | §4 Test-Lücken | `__tests__/crm-cron.spec.ts`: 3 Regeln + 24h-Idempotenz + Consent-Exclusion (`8d5845b`) | ERLEDIGT |
 | D3 notification-dispatch.allium v3-Parse | §4 (war LOW offen, "160 Parse-Errors") | `allium analyse` → `findings:[]`, Header `-- allium: 3` (bereits v3; 160-Fehler-Notiz stale) | ERLEDIGT |
 
 **→ TODO:** Quell-Docs mit `[SUPERSEDED → BACKLOG.md]` markieren (separater Schritt).
@@ -97,13 +108,11 @@ beide WCAG-Audits (teil-fixed), Home-Dir s3-handoffs + eures-api-missing-fields.
 
 ### 1b. GDPR-Long-Tail (verifiziert offen — aus gdpr-audit + domain-expert)
 Runde-2 verifiziert: G3/G6/G27/Cache-Control/ENCRYPTION_KEY-startup = ERLEDIGT (→ §0).
-Runde-3 (2026-06-14): **S6a/S6b/GDPR-JWT/G28 = ERLEDIGT in Welle 1** (→ §0, code-verifiziert; Tabelle war nach Welle 1 nicht gepruned). **Echt offen:**
+Runde-3 (2026-06-14): **S6a/S6b/GDPR-JWT/G28 = ERLEDIGT in Welle 1** (→ §0, code-verifiziert).
+Runde-4 (2026-06-14): **GDPR-Consent/G25/G26b = IMPLEMENTIERT** (Tech-Debt-Track cluster 4 → §0). **Echt offen:**
 
 | ID | Titel | Artikel | Datei | Severity |
 |----|-------|---------|-------|----------|
-| GDPR-Consent | `processingBasis` write-only, kein Enforcement/Widerruf | Art. 7 | person.model | MEDIUM |
-| G25 | mergePersons: keine Target-Dedup (Task/Note doppelt bei Merge) | — | person.actions mergePersons | LOW |
-| G26b | ADMIN_USER_IDS keine Startup-Validierung (ENCRYPTION_KEY hat sie) | — | instrumentation.ts | LOW |
 | GDPR-KeyRotation | Encryption-Key-Rotation nur dokumentiert, keine Infra | Art. 32 | encryption.ts | DEFERRED |
 
 ---
@@ -196,21 +205,13 @@ Kette D jederzeit parallel (kein Rewrite-Risiko). Kette A/B parallel zueinander;
 ## 4. Architektur / Tech-Debt (verifiziert offen)
 
 Runde-2 verifiziert: IF-2/IF-4/IF-6/IF-9/IF-11 ERLEDIGT (→ §0).
-Runde-3 (2026-06-14): **IF-5/IF-7 = ERLEDIGT in Welle 1, D3 = ERLEDIGT** (→ §0, code-verifiziert; Tabelle nicht gepruned). **Echt offen:**
-
-| ID | Titel | Datei:Zeile | Severity |
-|----|-------|-------------|----------|
-| IF-10 | emitEvent fire-and-forget (void+.catch, kein await) | events/index.ts:53-58 | MEDIUM |
-| IF-12 | DiscoveredJob `as unknown as` Type-Cast | automations/[id]/page.tsx:267/269/278 | MEDIUM |
-| D4 | shared-entities.allium Company.domain Spec-Drift | spec | LOW (5min) |
-| D5 | enrichment-trigger A-05 bounded-context (schreibt Company.domain direkt) | enrichment-trigger.ts:217 | LOW |
-| D1/D2 | runner.ts AI-SDK experimental_output deprecation + cast | runner.ts:772 / :425 | LOW (je 30min) |
+Runde-3 (2026-06-14): IF-5/IF-7 = ERLEDIGT in Welle 1, D3 = ERLEDIGT (→ §0).
+Runde-4 (2026-06-14): **IF-10/IF-12/D1/D2/D4/D5 + Test-Lücken F6/CRM-Cron = IMPLEMENTIERT** (Tech-Debt-Track clusters 1-3+5 → §0). **✅ §4 vollständig abgearbeitet — keine offenen Tech-Debt-Items mehr.**
 
 **Architektur-Note (kein Crash):** `audit-logger` konsumiert ALLE Events → jedes hat ≥1 Consumer.
-Aber ReminderTriggered/NotificationCreated haben keinen FUNKTIONALEN Consumer über Logging hinaus. Spec-Drift.
+Aber ReminderTriggered/NotificationCreated haben keinen FUNKTIONALEN Consumer über Logging hinaus. Spec-Drift (akzeptiert).
 
-**Test-Lücken (verifiziert offen):** F6 (Toast "Dismiss" hardcoded, toast.tsx:90), CRM-**Cron** 0 Unit-Tests
-(crm-activity-logger HAT Tests). DAU-2, F1-partial, Test-Fixture-Dup = ERLEDIGT (→ §0).
+**Test-Lücken:** F6 + CRM-Cron ✅ ERLEDIGT (Runde-4 → §0). DAU-2, F1-partial, Test-Fixture-Dup = ERLEDIGT (→ §0).
 
 ---
 
@@ -279,12 +280,13 @@ Decided-deferred during Welle 3 (CRM-Verbindung). Not bugs — scoped-out with a
 
 | Kategorie | Anzahl |
 |-----------|--------|
-| Doku-Drift bereinigt (verifiziert war falsch-offen) | ~50 (+7 Runde-3: IF-5/IF-7/S6a/S6b/JWT/G28/D3) |
+| Doku-Drift bereinigt (verifiziert war falsch-offen) | ~50 |
+| Implementiert (Tech-Debt-Track Runde-4, 2026-06-14) | 10 (IF-10/12, D1/D2, D4, D5, GDPR-Consent, G25, G26b, F6, CRM-Cron) |
 | CRITICAL Security offen | 0 (BS-01 ✅ erledigt Welle 0) |
-| GDPR-Long-Tail offen | 3 (Consent/G25/G26b) + 1 deferred (KeyRotation) — S6a/S6b/JWT/G28 ✅ Welle 1 |
+| GDPR-Long-Tail offen | 0 + 1 deferred (KeyRotation) — Consent/G25/G26b ✅ Track cluster 4 |
 | UX offen (S2-P0 ✅ + WCAG ✅3/~8 deferred + F-AJ 5) | ~13 (S2-P0 9 + WCAG 3 + F-AJ-04 erledigt Welle 0; WCAG-Rest verifiziert kontextuell/false) |
-| Arch/Tech-Debt offen | 5 (IF-10/12 + D1/D2/D4/D5) — IF-5/IF-7 ✅ Welle 1, D3 ✅ |
-| Test-Lücken offen | 2 (F6, CRM-Cron-Tests) |
+| Arch/Tech-Debt offen | 0 — §4 vollständig abgearbeitet (Track Runde-4) |
+| Test-Lücken offen | 0 (F6, CRM-Cron ✅ Track cluster 5) |
 | CRM-Gaps offen | 0 (Gap-1/5/6/7 + F-AJ-08 alle DONE — Welle 3) |
 | Dedizierte Sprints | 6 |
 | ROADMAP-Vorwärts-Features | ~38 |

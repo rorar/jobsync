@@ -1,8 +1,18 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-06-13
+# Bug Tracker — Collected 2026-03-24, Updated 2026-06-14
 
-**Total: 594 bugs found, 593 fixed, 2 open (accepted risk), 0 new**
+**Total: 595 bugs found, 594 fixed, 2 open (accepted risk), 0 new**
 
 ### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability) — BS-01 ✅ fixed (Welle 0, 2026-05-31)
+
+## Session 2026-06-14 — Tech-Debt-Cleanup track (clusters 1-5) full-review
+
+1 MEDIUM found + fixed by the comprehensive-review pass (security + architecture both flagged it independently; verified vs code + the project's own Allium invariant before fixing).
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| TD-B1 | MEDIUM | GDPR-Consent (Art. 7(3)) enforcement was incomplete: `isConsentBlocked` gated only `updatePerson` + `checkInterviewReminders`, but a consent-blocked Person could still be processed via `scheduleInterview`, `createCrmTask`, `createCrmNote`, and `checkOverdueTasks` — violating `specs/crm-gdpr.allium` `ConsentBlockedRecordIsProcessingRestricted` and the chosen "restrict + exclude from active flows" scope. | Add `isConsentBlocked` gate to all four paths (overdue-task cron now selects `targets.targetPerson`); +regression tests for each. Commit `e34fb5f`. |
+
+Also fixed from the same review: L1 withdraw-consent dialog Cancel used `crm.cancelInterview` (German "Absagen" — wrong) → `crm.cancel`; M1/M2 added the missing event-emission + error-path tests for withdraw/reinstateConsent. Security/perf/best-practices/a11y: otherwise clean (D5/G26b/G25/IF-12/IF-10/F6 verified correct; consent UI WCAG-AA-clean). MINOR deferred (not bugs): TagInput `?? "Tag"` aria-fallback (unreachable), PersonDetailClient inline consent predicate (DRY nit), inherited `destructive` badge light-mode contrast (~3.4:1, pre-existing global token, tracked under dark-mode-contrast backlog).
 
 ## Session 2026-06-13 — Welle 4 (Custom JobStatus XL) full-review
 

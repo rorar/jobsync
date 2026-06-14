@@ -55,6 +55,28 @@ design choice.
   and unidentifiable. Use this to honour a "right to erasure" request without
   breaking the timeline of jobs the contact touched.
 
+### Withdrawing consent (GDPR Art. 7(3))
+
+If a contact's **processing basis** is **Consent**, the contact page shows a
+**Withdraw consent** button. When a contact asks you to stop processing their
+data, click it — the contact gets a red **"Consent withdrawn"** badge and
+becomes **processing-restricted**. While restricted, you **cannot**:
+
+- edit the contact's fields,
+- schedule a new interview naming them,
+- create a task or note targeting them,
+- and JobSync's automatic reminders skip them (interview reminders and
+  overdue-task reminders).
+
+What you **can** still do: **export** the contact (a data-access/portability
+request — the export records the withdrawal date), **anonymise/erase** them, and
+**delete** them. Withdrawal is **not retroactive** — anything recorded before is
+kept. The button flips to **Reinstate consent** so you can lift the restriction
+later if the contact re-consents.
+
+> Contacts on a *Legitimate Interest* or *Contract* basis don't show these
+> controls — withdrawal only applies to consent-based records.
+
 ---
 
 ## 2. Point of Contact on a job

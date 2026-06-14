@@ -10,8 +10,8 @@
 
 ## Progress
 
-- Phases: 5/5 complete — all clusters done 2026-06-14 (Phase 6 wrap-up pending)
-- Tasks: 12/12 complete (C1: IF-12 + D1/D2; C2: IF-10 + D5; C3: D3 + D4; C4: GDPR-Consent + G25 + G26b; C5: F6 + CRM-Cron + G28). **All substantive work done.**
+- Phases: 6/6 complete — **TRACK DONE 2026-06-14** (clusters 1-5 + Phase-6 wrap-up).
+- Tasks: 12/12 + Phase-6 (blind-spot, full-review→TD-B1 fixed, /understand refresh, honesty-gate, docs, push to fork main). C1: IF-12 + D1/D2; C2: IF-10 + D5; C3: D3 + D4; C4: GDPR-Consent + G25 + G26b; C5: F6 + CRM-Cron + G28.
 
 ## Scope (BACKLOG §4 / §1b / §5 tail)
 
