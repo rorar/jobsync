@@ -197,7 +197,7 @@ rule ExecuteAutopilotSend {
 
     -- Only YOLO auto-sends. Semi-YOLO never reaches this rule (it pauses for the
     -- user). Effective mode = override else global (EffectiveModePrecedence).
-    requires: EffectiveMode.of(user, automation) = yolo
+    requires: EffectiveAutomationMode.of(user, automation) = yolo
     requires: AutopilotPolicy{user: user}.kill_switch_active = false
     requires: not Blacklist.suppresses(user, job)
     requires: job.match_score != null
@@ -227,7 +227,7 @@ rule SkipUnsafeSend {
 
     -- A safeguard refused the send (mode not yolo, low match, blacklisted, or
     -- the daily limit is reached). The action is recorded as skipped for review.
-    requires: EffectiveMode.of(user, automation) != yolo
+    requires: EffectiveAutomationMode.of(user, automation) != yolo
         or job.match_score = null
         or job.match_score < AutopilotPolicy{user: user}.match_score_minimum
 
@@ -246,7 +246,7 @@ rule SkipUnsafeSend {
 invariant EffectiveModePrecedence {
     -- The effective mode for an automation is its AutomationModeOverride.mode if
     -- one exists, otherwise the user's AutopilotPolicy.global_mode (default
-    -- manual). EffectiveMode.of(user, automation) resolves exactly this. This is
+    -- manual). EffectiveAutomationMode.of(user, automation) resolves exactly this. This is
     -- what application-documents.allium's EffectiveAutomationMode.of references.
 }
 
