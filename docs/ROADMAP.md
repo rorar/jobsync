@@ -2015,6 +2015,8 @@ Der bestehende CV-Manager (Profile-Aggregat: `Profile → Resume → ResumeSecti
 
 **Referenz-Analyse (cv-manager, via `gh`):** Standalone Vanilla-Node/Express + better-sqlite3 + Vanilla-JS-Frontend; PDF = **Browser-Print eines HTML/CSS-Templates**. Features: Multi-CV (mehrere Versionen speichern/laden/vorschauen), editierbares Theme (eine „slicke" HTML/CSS-Vorlage), **ATS-Optimierung** (Schema.org-Markup, semantisches HTML, versteckte Keywords für Job-Site-Parser), JSON Import/Export (für LLM-Optimierung), Section-Visibility-Toggles. CV-Datenmodell (flach JSON): `profile`, `experiences[]`, `certifications[]`, `education[]`, `skills[]`, `projects[]`, `sectionVisibility{}`.
 
+**Vorarbeit (Discovery — PFLICHT vor Port):** cv-manager lokal nach `/projekte/cv-manager` clonen und **`/understand-anything` darüber laufen lassen** (eigener Knowledge- + Domain-Graph). Liefert die genaue Template-Struktur, das ATS-Markup-Schema, die Multi-Version-/Diff-Logik und das Print-CSS — Basis für einen sauberen nativen Nachbau (Pattern wie Twenty-CRM-Distillation). Graph als Hypothese behandeln, gegen Code verifizieren.
+
 **Integrations-Strategie — NICHT als Sidecar, sondern nativ portieren (MIT erlaubt es):** cv-manager ist eine eigenständige Vanilla-Express-App mit eigener SQLite + eigenem Auth + Vanilla-Frontend. Als Container danebenstellen = zwei DBs, zwei Auth-Modelle, zwei Datenmodelle, i18n-/DSGVO-/IDOR-Bruch → verworfen. Stattdessen die **wertvollen Teile in JobSync (Next.js/Prisma/React/Shadcn) nachbauen**, als **Strangler Fig** über der bestehenden Prisma-Datenschicht (deckt sich mit der 4.2-Migrationsstrategie):
 1. **Datenmodell:** cv-manager-JSON ↔ JSON Resume (4.2 adoptiert das ohnehin) ↔ bestehendes Prisma `Resume→ResumeSection`. Adapter-Schicht (ACL) mappt; Gsync-Upstream-Schema bleibt Datenschicht, `projects`/`certifications`/`sectionVisibility` via `OtherSection.jsonData`.
 2. **Template + PDF:** die „slicke" HTML/CSS-Vorlage als **React-Komponente** (CV-Preview-Seite) nachbauen → PDF via **HTML-first (Gotenberg, 4.2.1)**, weil hier der **exakte CSS-Look** zählt und die Web-Vorschau IST das Template (Reuse). → **Wichtige Engine-Konsequenz:** für design-reiche CVs ist der HTML-first-Pfad (Gotenberg) NICHT nur opt-in, sondern bevorzugt; pdfme bleibt Default für strukturierte/Formular-Dokumente (Report, Formulare). Beide leben im `DocumentRenderingConnector` (4.2.1).
@@ -2030,7 +2032,9 @@ Der bestehende CV-Manager (Profile-Aggregat: `Profile → Resume → ResumeSecti
 | Bewerbungsbemühungen-Report, Formulare | **pdfme (in-process)** | Tabellen/Pagination, kein Sidecar |
 | DOCX-Varianten | `dolanmiu/docx` | echte .docx |
 
-**Offene Fragen:** (a) Multi-Template (mehrere Designs) oder zunächst eine portierte Vorlage? (b) ATS-„hidden keywords" — DSGVO/Ehrlichkeits-Abwägung dokumentieren (versteckter Text in Bewerbungen ist heikel). (c) Lizenz-Attribution für portierten cv-manager-Code (MIT-Notice beilegen).
+**Entschieden:** ATS-„hidden keywords" werden **übernommen** (kein DSGVO-/Ehrlichkeits-Blocker) — ATS/AI-Systeme verarbeiten versteckte/strukturierte Keywords besser als Plain-Text; das ist gewollte ATS-Optimierung, kein Cloaking gegen den Leser.
+
+**Offene Fragen:** (a) Multi-Template (mehrere Designs) oder zunächst eine portierte Vorlage? (b) Lizenz-Attribution für portierten cv-manager-Code (MIT-Notice beilegen).
 
 **Cross-Refs:** Document Rendering Engine (4.2.1), Dokumenten-Generatoren/JSON-Resume-Pagebuilder (4.2), Skillsets (4.1), Bewerber-Landingpage (9.5), Public API (7.1), AI Review/Match (bestehende Resume-AI), Profile-Spec (`specs/profile-resume.allium`).
 
