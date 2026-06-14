@@ -1515,6 +1515,112 @@ Geführte Einführung über die UI-Elemente der App, kombinierbar mit dem Onboar
 - **Datenquellen:** Job Aggregate, StagedVacancy, AutomationRun, Activity, CRM
 - **Visualisierung:** Charts in Dashboard-Widget, detaillierte Statistik-Seite
 
+#### 2.18.1 Sankey-Diagramm: Bewerbungsfluss (Application Flow)
+Sankey-Visualisierung des gesamten Bewerbungstrichters — zeigt, wie sich alle Bewerbungen über die Status-Stufen verzweigen, mit absoluten Flow-Mengen pro Pfad. Ergänzt die Conversion-Rate-Metrik (2.18) um eine intuitive Fluss-Darstellung.
+
+**Referenz-Layout** ([SankeyMATIC](https://sankeymatic.com/)-Stil):
+```
+Total Applications ─┬─→ No Response
+                    ├─→ Rejected
+                    └─→ First Interview ─┬─→ Rejected
+                                         └─→ Second Interview ─┬─→ Rejected
+                                                               ├─→ Offer ──→ Declined / Accepted
+                                                               └─→ Third Interview ──→ Offer
+```
+- Jeder Knoten = Status-Stufe, jede Kante-Breite = Anzahl Bewerbungen auf diesem Pfad
+- Terminale Knoten: `No Response`, `Rejected`, `Declined`, `Accepted` (Outcome-Sinks)
+- Zwischenknoten: `First/Second/Third Interview`, `Offer` (Flow-through)
+
+**Datenquelle:** Job-Status-Historie. Knoten/Kanten werden aus den Status-Übergängen abgeleitet (`JobStatusChanged` Domain Events / Activity-Log → Status-Workflow 5.3). Kanten-Gewicht = Count der Jobs, die den Übergang `A → B` durchlaufen haben. Erfordert Status-Transition-Tracking (vorhanden via 5.3 Job Status Workflow + `JobStatusChanged` Event).
+
+**Status-Mapping (JobSync → Sankey-Knoten):** Bestehende JobStatus-Werte auf Funnel-Stufen abbilden. Mehrfach-Interviews benötigen ggf. eine Stage-Zählung (Interview-Runde) aus dem CRM (`CrmInterview`, 5.4) statt nur des flachen JobStatus.
+
+**Technik:** Reine SVG-Berechnung oder Lib evaluieren:
+- [`d3-sankey`](https://github.com/d3/d3-sankey) — De-facto-Standard, volle Kontrolle (zu evaluieren)
+- [Recharts `Sankey`](https://recharts.org/en-US/api/Sankey) — falls Recharts bereits als Chart-Lib gewählt wird (Konsistenz mit übrigen 2.18-Charts)
+- Bundle-Kosten + SSR-Kompatibilität (Next.js 15) vor Lib-Wahl prüfen
+
+**Invarianten:**
+- **Flow-Konservierung:** Summe der ausgehenden Kanten eines Knotens = eingehender Flow (außer Wurzel/Sinks). Offene Bewerbungen (noch in einer Zwischenstufe) als eigener „In Progress"-Sink darstellen, damit die Summen aufgehen.
+- **Tenant-Isolation:** Nur Jobs des eingeloggten Users (ADR-015, `userId` in allen Queries).
+- **Zeitfilter:** Diagramm respektiert den globalen Zeitraum-Filter der Statistik-Seite (z.B. „letzte 90 Tage").
+- **i18n:** Knoten-Labels lokalisiert (EN/DE/FR/ES), Zahlen via `formatNumber(locale)`.
+- **Leerzustand:** < N Bewerbungen → Hinweis statt leeres Diagramm.
+
+**Cross-Refs:** Conversion-Funnel (2.18), Job Status Workflow (5.3), `JobStatusChanged` Event (0.6), CRM Interviews (5.4).
+
+#### 2.18.2 Bewerbungsbemühungen-Report (Vermittler-/Coach-Nachweis)
+Nachweis der Eigenbemühungen für den Arbeitsagentur-/Jobcenter-Betreuer (Arbeitsvermittler, Job-Coach). Generiert aus den realen Bewerbungsdaten — kein manuelles Abtippen. Kombinierbar mit dem Sankey-Diagramm (2.18.1) als visuelle Trichter-Übersicht plus tabellarische Detail-Liste.
+
+**Report-Inhalt:**
+- Tabelle pro Bewerbung: Datum, Unternehmen, Position, Quelle/Kanal (online/persönlich), aktueller Status, letzte Aktivität
+- Aggregat-Kennzahlen: Anzahl Bewerbungen im Zeitraum, Interviews, Absagen, offene Vorgänge
+- Optional: Sankey-Trichter (2.18.1) als eingebettete Grafik
+- Zeitraum-Filter (z.B. „seit letztem Termin", „letzte 4 Wochen") — deckt sich mit dem Statistik-Zeitfilter
+- Tag-Mapping zu `Bewerbung Online` / `Bewerbung Persönlich` (vorhanden in 1.9 Phase 4)
+
+**Drei Zustellwege (alle optional, User entscheidet):**
+
+1. **Geteilte Read-Only-Ansicht (Advisor/Coach-Zugang) — zweistufig (beide Mechanismen, phased):**
+   - Scoped, read-only Sicht auf eine **kuratierte Report-Seite** — NIE Vollzugriff auf das Backend
+   - **Stufe A (zuerst) — signierter Share-Link:** ablaufender, widerrufbarer, signierter Link auf eine Report-Seite. Kein Account für den Coach. Kleinster GDPR-/Architektur-Footprint. Optional passwortgeschützt (→ 6.x „Geteilte Dokumente/Landingpages per Passwort schützen").
+   - **Stufe B (später) — Gast-/Viewer-Rolle:** echtes Permission-Modell (Owner / Viewer-Scope), Freigabe user-gesteuert; bei Multi-User-Deployments kann der Admin (Tier A) den Zugriff setzen. Wird gebaut, wenn Multi-User-Bedarf entsteht.
+   - **Architektur-Hinweis (wichtig):** JobSync hat HEUTE **kein RBAC/Rollenmodell** — Admin-Status ist eine tiered Regel (`ADMIN_USER_IDS`, siehe CLAUDE.md / ADR-018). Stufe B ist das **erste echte Rollen-/Berechtigungskonzept** → braucht vorab ADR + Allium-Spec (Owner / Viewer-Scope). Stufe A umgeht das, weil ein signierter Token-Scope kein Account/Rolle ist.
+   - Pflicht (beide Stufen): Ablauf-Datum, jederzeit widerrufbar, genau ein Report-Scope (keine Navigation ins restliche Backend), nicht enumerierbarer Token.
+
+   **→ Gemeinsame Domäne „Shared Surface" (Architektur-Vorbereitung, mit Website-Plänen verzahnen):** Der Share-Link-Mechanismus ist NICHT report-spezifisch. Dieselbe Infrastruktur — signierter, ablaufender, widerrufbarer, optional passwortgeschützter, read-only **öffentlicher Surface** über personenbezogene JobSync-Daten, mit Abruf-Audit und Datenminimierung — wird auch gebraucht von:
+   - **4.7 Landingpage für Unternehmen** (Expiring/Password-protected Links, DSGVO — bereits notiert)
+   - **9.5 Bewerber-Landingpage / Reverse-Funnel** (öffentliche Profil-Seite)
+   - **6.x** „Geteilte Dokumente und Landingpages per Passwort schützen"
+   - **Empfehlung:** Ein eigener Bounded Context **`shared-surface`** (Domäne: `SharedLink` Aggregate = Token + Scope + Ablauf + Passwort-Hash + Revocation + Audit; Renderer pro Surface-Typ: `report` | `company-landingpage` | `applicant-landingpage` | `document`). Vor 2.18.2-Implementierung als gemeinsames Fundament spezifizieren (ADR + Allium-Spec `specs/shared-surface.allium`), damit Report, 4.7 und 9.5 dieselbe Freigabe-/Widerrufs-/Audit-Logik teilen statt drei Insellösungen. Rendering-Kontext-Pattern analog 4.2 („eine Datenstruktur, mehrere Rendering-Kontexte").
+
+**Pre-Planning (graph-gestützt — `/understand-anything` Knowledge- + Domain-Graph @ commit `e34fb5f3`, src-Knoten aktuell):**
+
+Der Domain-Graph zeigt 13 Bounded Contexts — **kein** Sharing-/Report-/Landingpage-Kontext existiert → `shared-surface` ist echt neu. Konkrete Wiederverwendung (NICHT neu bauen):
+
+| Baustein | Existierender Code | Rolle für `shared-surface` / Report |
+|---|---|---|
+| **Token-Mechanik** | `src/lib/account/deletion-token.ts` | Near-exact Vorlage für `SharedLink`-Token: Prefix + 32 random bytes + **nur SHA-256-Hash speichern** (nie Raw) + TTL + Format-Regex + Single-Use. Erweitern um: konfigurierbare TTL, `scope`, Revocation-Flag. |
+| **Token-Serving + Rate-Limit + No-Leak** | `src/lib/api/with-api-auth.ts`, `api/auth.ts`, `api/response.ts` (explicit `select`), `api/rate-limit.ts` | Muster für die öffentliche Report-Route: Pre-Auth IP-Limit → Token-Validierung → explizite Feld-Selects (kein Leak interner Felder). |
+| **Passwortschutz** | bcrypt aus Auth-Domäne (`Authenticate User` Flow) | Optionaler Passwort-Hash auf `SharedLink` (NICHT `encryption.ts` AES — Passwort = Hash, nicht entschlüsselbar). |
+| **Audit** | `src/lib/audit/data-audit.ts` (`writeDataAuditLog`), `specs/audit-trail.allium` | Share-Erstellung + JEDER Abruf geloggt — Infra vorhanden, nur neue Audit-Events. |
+| **Report-Datenquelle** | `Change Job Status` Flow + `JobStatusChanged` Event + `audit-logger.ts` | Status-Übergänge → Sankey-Kanten + Report-Zeilen. Tracking existiert (5.3). |
+| **E-Mail-Zustellung** | Notifications-Domäne: `email.channel.ts`, `email/templates.ts`, `DispatchContext`/`ChannelRouter` | Report-per-Mail = neuer Notification-Typ + Template, kein neuer Channel. |
+| **Daten-Export-Präzedenz** | `src/lib/export/collect-user-data.ts`, `export-rate-limit.ts` | GDPR-Export-Muster (Daten sammeln + rate-limiten) als Vorlage für Report-Datensammlung. |
+
+**Genuin NEU zu bauen (Graph bestätigt: kein Präzedenzfall im Code):**
+- `SharedLink` Aggregate + Prisma-Modell + `shared-surface` Bounded Context (Renderer-Registry).
+- **PDF-Engine** — ⚠️ **keine Runtime-PDF-Lib vorhanden** (Export nutzt `archiver`→ZIP-of-JSON; Playwright ist nur devDependency). Entschieden (Web-Research 2026, → **4.2.1**): `DocumentRenderingConnector` mit **WeasyPrint** (leichter Default-Sidecar) + **Gotenberg** (opt-in Chromium-Upgrade) + Browser-Print-Fallback. Kein TS-native Shortcut (react-pdf/pdfme/Satori reichen für reflow+SVG+mehrseitig nicht). Report serverseitig zu statischem HTML+SVG rendern.
+- Viewer-Rolle / RBAC (Stufe B) — erstes Permission-Modell, eigener ADR.
+- Portal-Push-Schreibzugriff ins Vermittlungspostfach — Teil von 1.9.
+
+**Integration-Punkte (Domänen, an die `shared-surface` andockt):** Authentication & Privacy (Token/bcrypt/GDPR), Public API v1 (Serving-Muster), Multi-Channel Notifications (Versand), Job Application Tracking (Report-Daten). Diese 4 sind die Naht-Stellen für die Spec.
+
+2. **PDF-Report:**
+   - Server-seitige PDF-Generierung (→ Dokumenten-Generatoren 4.2, gleiche Engine; PDF/DOCX bereits in 4.2/4.9 vorgesehen)
+   - Lokalisiert (EN/DE/FR/ES), druckfertiges Layout, Branding optional
+   - Download ODER als Anhang an Zustellweg 3
+
+3. **Per Nachricht senden (inkl. direktem Portal-Push):**
+   - E-Mail-Channel (0.6 Phase 3) als Versandweg, PDF als Anhang
+   - **UND direkt ins Arbeitsagentur-Vermittlungspostfach** (1.9 — `postfachUebersichtAnzeigen.html`, Push-Richtung „Bewerbungsbemühungen melden") — gewünschter Kern-Zustellweg, nicht nur Alternative
+   - **Abhängigkeit:** Portal-Push erfordert das 1.9 Arbeitsagentur-Account-Modul (Auth-Flow, Session, verschlüsselte `encs=`-Entity-Referenzen, Vermittlungspostfach-Schreibzugriff). Bis 1.9 steht: PDF + E-Mail als Fallback-Zustellweg, Portal-Push als Phase 2 von 2.18.2.
+   - Überschneidung mit 1.9 Phase 4 („Lokale Bewerbungsbemühungen automatisch ausfüllen") — der Report ist die **standalone/offline** Variante, der Portal-Push ist die direkte Einreichung. Gemeinsame Datenquelle + gemeinsames Tag-Mapping (Online/Persönlich).
+
+**Security & GDPR (kritisch — Weitergabe an Dritte):**
+- Der Report enthält personenbezogene Bewerbungsdaten → Weitergabe an Dritte (Vermittler) ist eine **Datenübermittlung**. Datenminimierung: nur die für den Nachweis nötigen Felder (Datum, Firma, Position, Status) — keine internen Notizen, Match-Scores, AI-Daten, CRM-Privatfelder, sofern nicht explizit aufgenommen.
+- Share-Link: kryptographisch signiert, ablaufend, widerrufbar; kein Enumerieren (random Token, nicht inkrementell). Rate-Limit auf Link-Abruf.
+- Alle Queries `userId`-gescoped (ADR-015). Viewer sieht ausschließlich den freigegebenen Report, nie andere Aggregate.
+- Audit-Log: Erstellung + jeder Abruf eines geteilten Reports geloggt.
+- Cross-Ref: DSGVO-Konformität (6.1), API Security (6.2).
+
+**Reihenfolge / Phasen:**
+- **Phase 1:** Report-Datenmodell + Sankey (2.18.1) + PDF (nach 4.2 Dokumenten-Engine) + E-Mail-Versand (0.6 Phase 3) + Share-Link **Stufe A** (auf `shared-surface`-Domäne).
+- **Phase 2:** Portal-Push ins Vermittlungspostfach (abhängig von 1.9) + Viewer-Rolle **Stufe B** (RBAC, eigener ADR).
+- **Vorab-Fundament:** `shared-surface` Bounded Context (ADR + `specs/shared-surface.allium`) — gemeinsam mit 4.7 / 9.5 spezifizieren, BEVOR Stufe A gebaut wird.
+
+**Cross-Refs:** Sankey (2.18.1), Analytics (2.18), Arbeitsagentur-Modul Bewerbungsbemühungen-Push (1.9 Phase 4), Dokumenten-Generatoren (4.2), E-Mail-Versand (4.9 / 0.6), Shared Surface ↔ Company-Landingpage (4.7), Bewerber-Landingpage (9.5), Passwortschutz geteilter Surfaces (6.x), DSGVO (6.1), API/Auth-Security (6.2), Admin-Tier-Modell (CLAUDE.md / ADR-018).
+
 ### 2.19 Client-Side Data Layer (TanStack React Query)
 Paradigmenwechsel im Frontend-Datenmanagement: Von manuellen `fetch` + `useState`/`revalidatePath` zu deklarativem Server-State-Management mit [`@tanstack/react-query`](https://tanstack.com/query).
 
@@ -1835,12 +1941,12 @@ Jeder Job hat ein **Application Locale Profile** das Sprache + Land + kulturelle
     JSON Schema (Industriestandard)
       ↕
       ├→ react-jsonschema-form (@rjsf/core)  — Editor UI gratis aus Schema
-      ├→ react-pdf / pdfmake                 — CV PDF Output
+      ├→ Document Rendering Connector        — CV/Report PDF+DOCX Output (s.u., NICHT react-pdf — SVG-Charts)
       ├→ React Components                     — Landing Page (9.5)
       ├→ LLMs / Chatbot                       — Generiert Abschnitte als JSON Schema
       └→ Import/Export                         — LinkedIn JSON, Europass, JSON Resume
     ```
-  - **Packages:** `@rjsf/core` (Form-Renderer), `@react-pdf/renderer` oder `pdfmake` (PDF), `zod-to-json-schema` (Konversion), `@tiptap/core` oder `plate` (Rich Text Felder), JSON Resume Themes (50+ auf npm)
+  - **Packages:** `@rjsf/core` (Form-Renderer), Document Rendering Connector (PDF/DOCX — s.u. 4.2.1), `zod-to-json-schema` (Konversion), `@tiptap/core` oder `plate` (Rich Text Felder), JSON Resume Themes (50+ auf npm)
   - **AI-Section-Creator:** User sagt "Füge Publikationen hinzu" → LLM generiert JSON Schema mit Feldern → RJSF rendert Editor sofort → gleiche Daten fließen in PDF + Landingpage + API
   - **Import-Pfade:** LinkedIn Data Export → JSON Resume → JobSync, Europass XML → JSON Resume → JobSync
   - **Vorteil:** Eine Datenstruktur, fünf Rendering-Kontexte (Editor, PDF, Landingpage 9.5, Public API 7.1, E-Mail Templates). Neue Abschnitte ohne Code-Änderungen.
@@ -1863,6 +1969,46 @@ Jeder Job hat ein **Application Locale Profile** das Sprache + Land + kulturelle
     - `/frontend-mobile-development:react-state-management` — State-Management für den Pagebuilder (Drag-and-Drop, Undo/Redo)
     - `/documentation-generation:openapi-spec-generation` — API-Spec für das Manifest-Format (Public API 7.1 Erweiterung)
   - **Cross-Ref:** Skillsets (4.1), Social Proof (4.10), Portfolio (4.11), Bewerber-Landingpage (9.5), Public API (7.1)
+
+#### 4.2.1 Document Rendering Engine (PDF/DOCX) — Entscheidung (Web-Research 2026)
+Gemeinsame Render-Schicht für ALLE `data → PDF/DOCX` Bedarfe: Bewerbungsbemühungen-Report (2.18.2), CV/Anschreiben (4.2), E-Mail-Bewerbungen (4.9), Landingpage-Export (4.7/9.5). **Eine Engine-Schicht, viele Consumer.**
+
+**Anforderungen (projekt-spezifisch):** reflow-fähiges, mehrseitiges Layout (variable Tabellen) · **SVG-Charts** (Sankey 2.18.1) · CSS Paged Media (Seitenumbrüche, Kopf-/Fußzeile, A4/DIN 5008) · i18n-Fonts (EN/DE/FR/ES) · Wiederverwendung der React-Web-Ansicht (Share-Link IST der Report) · **self-hosted, kein Cloud-SaaS** (DSGVO) · ressourcenschonend für kleine VMs.
+
+**Recherche-Ergebnis — Engine-Kandidaten evaluiert (Web + GitHub via `gh`):**
+- **`pdfme` ✅ gewählt (Default)** — frühere „starr/Koordinaten"-Einschätzung **revidiert**: dynamische Tabellen + Auto-Pagination, `svg`/`image`-Schema, `@pdfme/jsx` (React-Authoring) + `md2pdf`, eigener gepflegter `pdf-lib`-Fork. In-process, kein Sidecar.
+- **HTML-first Engines (Opt-in):** **Gotenberg** (Chromium, aktiv) bzw. **WeasyPrint** (leicht, kein JS). Für volles CSS-Reflow. Pagination-Technik dort: **[Paged.js](https://pagedjs.org/)** (CSS Paged Media Polyfill — Seitenumbrüche/Running-Header/Seitenzahlen aus HTML+CSS).
+- **Verworfen:** `@react-pdf/renderer` (dynamische SVG/Recharts kaputt) · `pdf-lib` solo (Upstream 4+ Jahre stale, zu low-level — nur als pdfme-Fork für Post-Proc) · `Satori` (nur einseitige OG-Karten, CSS-Subset, keine Pagination) · `jsreport` (wrappt nur Chromium) · `LibPDF` (zu neu) · **`htmldocs`** (React+Tailwind+Paged.js, aber turnkey-PDF nur über deren **Cloud-SaaS** → DSGVO-No-Go; OSS-Pfad braucht trotzdem Chromium; Repo seit 2025-02 unbewegt) · **`wkhtmltopdf`** (seit 2023 archiviert, ungepatchte CVEs → **verboten**).
+- **Kein TS-native Paket** macht mehrseitiges HTML+CSS+SVG→PDF mit CSS-**Reflow** ohne Browser-Engine — dafür Gotenberg/WeasyPrint. pdfme umgeht das via Schema/Stack-Flow (kein CSS nötig).
+
+**Architektur — `DocumentRenderingConnector` (neuer ConnectorType `document_rendering`, Muster wie 1.18 Docling):** Interface `render(data|html, opts) → ConnectorResult<Bytes>`. Swappable Module, **In-Process-Default + optionale Sidecar-Module** (genau wie Docling: In-Process-Lib-Fallback + Docling-Sidecar). Reuse der 0.4-Maschinerie (Manifest, Health-Check, Circuit Breaker, `*_URL` Env-Fallback, docker-compose Profile wie Redis 0.9 Stufe 3).
+
+| Modul / Engine | Ansatz | Footprint | Notiz |
+|---|---|---|---|
+| **`pdfme`** (npm, in-process) — **empfohlener Default** | Schema/JSON-Template → PDF (eigener gepflegter `pdf-lib`-Fork + fontkit) | **npm-Lib, KEIN Sidecar** | v6.0.0 (2026-04, aktiv, MIT). **Dynamische Tabellen mit Auto-Pagination** ✅ (= Report-Kernfall), `svg`- + `image`-Schema (`graphics/`) → Sankey einbettbar, `dynamicLayout`, `multiVariableText`. **Authoring-Pfade:** `@pdfme/jsx` (JSX/React-Primitive `<Document><Page><Stack>`) UND `@pdfme/converter` `md2pdf` (Markdown→Template) UND WYSIWYG-Designer ↔ deckt sich mit 4.2-Pagebuilder. Pure JS im Next.js-Runtime, kein Browser. Layout = Schema/Stack-Flow, NICHT volles CSS-Reflow. |
+| **`gotenberg`** (Chromium+LibreOffice-Sidecar) — Opt-in High-Fidelity | HTML/CSS/JS → PDF, exakte Browser-Parität; zusätzlich Office→PDF/DOCX | 1.5–2 GB (chromium-only ~30% kleiner) | v8.32 (2026-04, aktiv). Wenn volles CSS-Reflow / pixelgenaue Web-Parität / Runtime-JS-Charts nötig (z.B. magazinartige Anschreiben). Fertige HTTP-API. `extraHttpHeaders` für Token-Routen, `waitForExpression` für SVG-Ready. |
+| **`weasyprint`** (Python-Sidecar) — Alternative | HTML+CSS+statisches SVG → PDF | 200–400 MB | Leichter Chromium-Ersatz wenn HTML-first gewünscht, aber kein eigener Node-Client (Wrapper selbst bauen). Stärkste Paged-Media-Kontrolle. Kein JS. |
+| **Browser „Print to PDF"** (Fallback) | User druckt die HTML-Share-Link-Seite | 0 | Zero-Dependency-Fallback für Minimal-Installs — der Report ist ohnehin eine HTML-Seite. |
+
+**Empfehlung (revidiert nach pdfme-Evaluierung):** **pdfme als in-process Default** — eliminiert den Sidecar komplett (entscheidend für self-hosted Single-User, N4/N7), dynamische Tabellen+Pagination treffen den Report-Kernfall, WYSIWYG-Designer alignt mit der 4.2-Pagebuilder-Vision, reine npm-Dependency. **Gotenberg als opt-in Escape-Hatch** für Fälle die echtes CSS/HTML-Reflow, Web-Parität oder Office-Konvertierung brauchen. WeasyPrint nur falls explizit HTML-first ohne Chromium gewünscht. NICHT in-process Playwright/Puppeteer (crasht unter Memory-Druck im Next.js-Runtime). **Verbleibender Spike (klein):** pdfme-`svg`-Schema existiert — nur Sankey-Render-Fidelity am echten Output verifizieren; Fallback = echarts/satori→PNG ins `image`-Schema.
+
+**npm-Pakete (Default-Engine + Glue):**
+- **`pdfme`** (Default-PDF-Engine, in-process) — v6.0.0 (2026-04, MIT, aktiv, 4.4k★), baut auf `pdf-lib` + `fontkit`. Dynamische Tabellen + Auto-Pagination, WYSIWYG-Designer-Paket separat verfügbar.
+- **`echarts`** (Sankey → statisches SVG serverseitig, SSR `renderToSVGString`, **kein DOM**, `sankey`-Series, TS-Typen) — falls pdfme-`svg`-Schema die Sankey nicht sauber rendert, via `satori`+`@resvg/resvg-js` → PNG → pdfme `image`-Schema. `d3-sankey`+`d3-node` als Pfad-Kontroll-Alternative.
+- **DOCX (4.9), separater Pfad:** [`dolanmiu/docx`](https://github.com/dolanmiu/docx) (= npm `docx`, v9.7.1 2026-05, aktiv, 5.8k★, MIT) — **echte editierbare .docx** programmatisch (Tabellen, Bilder, Kopf-/Fußzeilen). Kein HTML-Input → deklarative API. `@turbodocx/html-to-docx` nur falls HTML-Reuse statt nativer Generierung gewünscht; `docxtemplater` zum Befüllen echter .docx/.xlsx-Formulare (Arbeitsagentur, 1.9).
+- **`pdf-lib` Post-Processing** (Merge, Stempel, **Passwortschutz/Verschlüsselung** für Share-PDFs): den von pdfme gepflegten Fork **`@pdfme/pdf-lib`** nutzen (Upstream `pdf-lib` 4+ Jahre ohne Release) — bereits transitive Dependency via pdfme, keine zusätzliche tote Lib.
+- **Gotenberg-Glue (nur falls Opt-in-Sidecar):** ⚠️ **NICHT `gotenberg-js-client`** (Snyk: vermutlich eingestellt; baut Gotenberg-6-URLs → bricht gegen v8.32). Stattdessen **eigener ~30-Zeilen `fetch`-Wrapper** über den `resilientFetch`/Cockatiel-Kernel (multipart-POST an `/forms/chromium/convert/html`).
+
+**Doppelnutzung pdfme:** Dieselbe Default-Lib füllt via `basePdf` auch die **fixen Arbeitsagentur-PDF-Formulare** (1.9 Phase 4) — feste Koordinaten, kein Auto-Break. Eine Lib für freien Report-Flow UND Formular-Befüllung.
+
+**Template-System (erfüllt 4.2 „Template-Management"-Anforderung direkt):** pdfme ist im Kern ein Template-System. `Template = { basePdf, schemas }` (reines JSON aus `@pdfme/common`): `basePdf` = fixer Hintergrund (leeres A4 ODER bestehendes PDF zum Überlagern), `schemas` = variable Elemente (text, table, svg, image, …) mit Position/Style. Dasselbe Template speist Editor UND Generator.
+- **4 Erstellungs-Pfade:** (1) **`@pdfme/ui` `Designer`** — eingebetteter WYSIWYG-Drag-&-Drop-Editor (+ `Form` Ausfüll-UI + `Viewer` Vorschau, eigene Editor-i18n); (2) **JSON** hand-/programmatisch; (3) **`@pdfme/jsx`** `renderToTemplate` (JSX/React-Primitive); (4) **`@pdfme/converter` `md2pdf`** (Markdown→Template).
+- **Generierung:** `@pdfme/generator` `generate({ template, inputs })` → PDF-Bytes, serverseitig, in-process (kein Sidecar).
+- **JobSync-Integration:** Template-JSON in Prisma speichern → **per-User, versionierbar, teilbar** (dockt an `shared-surface`-Domäne 2.18.2 an). Designer = **Client-Component** (browser-only Drag-&-Drop), Generierung = **serverseitig** — saubere Trennung. Realisiert die 4.2 Manifest-Pagebuilder-Vision ohne Eigenbau-Editor.
+
+**Klarstellung — Docling (1.18) ≠ PDF-Engine:** Docling **parst** Dokumente (PDF/DOCX → `StructuredDocument`, Verstehens-Richtung). Report-Generierung ist die **Gegenrichtung** (Daten → PDF). Null Überschneidung — Docling kann hier NICHT verwendet werden.
+
+**Cross-Refs:** Bewerbungsbemühungen-Report (2.18.2), DOCX-Formate (4.9), Landingpages (4.7/9.5), Sidecar-Konvention (1.18 Docling, 0.9 Stufe 3 Redis), Module-Lifecycle/Manifest (0.4).
 
 ### 4.3 Output-Struktur (Paperless-ngx Style)
 Dynamische Dateipfade und Dateinamen:
@@ -1907,6 +2053,7 @@ Dynamische Dateipfade und Dateinamen:
 - Teilbar per Link oder QR-Code
 - Tracking: Aufrufe, Verweildauer (optional, erfordert Public API → 7.1)
 - **DSGVO:** Öffentliche Seite mit personenbezogenen Daten → Datenschutzhinweis erforderlich, Passwortschutz/Expiring Links (→ 6.1)
+- **Shared Surface:** Link/Passwort/Ablauf/Widerruf/Audit über die gemeinsame `shared-surface`-Domäne (→ 2.18.2) — Renderer-Typ `company-landingpage`. Keine eigene Insellösung.
 
 ### 4.8 Städte: Verdienst-Index
 - Gehaltsvergleich nach Stadt/Region
@@ -2804,7 +2951,8 @@ Generierte persönliche Landingpage die den Bewerbungs-Funnel invertiert: Statt 
   - **Generisch (Default, kein Consent nötig):** "Hallo, ich bin {Name}. Hier ist mein Profil und meine Projekte." Gleiche Seite, gleiche Inhalte — nur ohne Personalisierung. Zero Drittdaten-Verarbeitung, DSGVO-sauber by Default.
 - **Social Proof:** Testimonials (→ 4.10), Portfolio/Arbeitsproben (→ 4.11), GitHub-Stats
 - **Datenquelle:** JobSync-Profil, Skillsets (→ 4.1), generierte Dokumente (→ 4.2), Match-Scores, Portfolio (→ 4.11)
-- **Cross-Ref:** Public API (7.1) als Daten-Backend, Data Enrichment (1.13) für Logo/Company-Context, DSGVO Consent-by-Referral (6.1)
+- **Shared Surface:** öffentlicher read-only Zugang (Link/Passwort/Ablauf/Widerruf/Audit) über die gemeinsame `shared-surface`-Domäne (→ 2.18.2) — Renderer-Typ `applicant-landingpage`. Personalisierter Modus = scoped Token mit Consent-Referral-Daten.
+- **Cross-Ref:** Public API (7.1) als Daten-Backend, Data Enrichment (1.13) für Logo/Company-Context, DSGVO Consent-by-Referral (6.1), Shared Surface ↔ Report/4.7 (2.18.2)
 
 ---
 
