@@ -7,7 +7,7 @@ import { createEvent, DomainEventType } from "@/lib/events/event-types";
 import { eventBus } from "@/lib/events";
 import { ActionResult } from "@/models/actionResult";
 import { handleError } from "@/lib/utils";
-import { type PolymorphicTarget, validateExactlyOneTarget } from "@/models/person.model";
+import { type PolymorphicTarget, validateExactlyOneTarget, isConsentBlocked } from "@/models/person.model";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,6 +65,8 @@ export async function createCrmNote(
       if (target.targetPersonId) {
         const person = await prisma.person.findFirst({ where: { id: target.targetPersonId, userId: user.id } });
         if (!person) return { success: false, message: "crm.errors.personNotFound" };
+        // GDPR Art. 7(3): no new processing on a consent-blocked contact.
+        if (isConsentBlocked(person)) return { success: false, message: "crm.errors.consentWithdrawn" };
       }
       if (target.targetCompanyId) {
         const company = await prisma.company.findFirst({ where: { id: target.targetCompanyId, createdBy: user.id } });

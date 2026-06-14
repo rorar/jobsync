@@ -99,6 +99,30 @@ describe("scheduleInterview", () => {
     expect(result.message).toBe("crm.errors.personNotFound");
   });
 
+  it("GDPR Art. 7(3): rejects when the person has withdrawn consent", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+    (prisma.job.findFirst as jest.Mock).mockResolvedValue({
+      id: "job-1",
+      description: "Backend role",
+      JobTitle: { label: "Engineer" },
+    });
+    (prisma.person.findFirst as jest.Mock).mockResolvedValue({
+      id: "person-1",
+      processingBasis: "consent",
+      consentWithdrawnAt: new Date(),
+    });
+
+    const result = await scheduleInterview({
+      jobId: "job-1",
+      personId: "person-1",
+      interviewDate: FUTURE_DATE,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toBe("crm.errors.consentWithdrawn");
+    expect(prisma.crmInterview.create).not.toHaveBeenCalled();
+  });
+
   it("creates interview with status scheduled", async () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
     (prisma.job.findFirst as jest.Mock).mockResolvedValue({

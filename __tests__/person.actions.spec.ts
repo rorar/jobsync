@@ -403,6 +403,18 @@ describe("person.actions — GDPR-Consent (Art. 7(3))", () => {
         where: { id: PERSON_ID, userId: USER.id },
         data: expect.objectContaining({ consentWithdrawnAt: expect.any(Date) }),
       });
+      // M1: emits ContactUpdated so the activity-logger projects the change.
+      expect(jest.requireMock("@/lib/events").eventBus.publish).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns the i18n fallback when the update throws (M2 error path)", async () => {
+      mockDb.person.findFirst.mockResolvedValue({ processingBasis: "consent", consentWithdrawnAt: null });
+      mockDb.person.update.mockRejectedValueOnce(new Error("db down"));
+
+      const result = await withdrawConsent(PERSON_ID);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("crm.errors.withdrawConsent");
     });
 
     it("rejects when basis is not consent", async () => {
@@ -446,6 +458,18 @@ describe("person.actions — GDPR-Consent (Art. 7(3))", () => {
         where: { id: PERSON_ID, userId: USER.id },
         data: expect.objectContaining({ consentWithdrawnAt: null }),
       });
+      // M1: emits ContactUpdated.
+      expect(jest.requireMock("@/lib/events").eventBus.publish).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns the i18n fallback when the update throws (M2 error path)", async () => {
+      mockDb.person.findFirst.mockResolvedValue({ processingBasis: "consent", consentWithdrawnAt: new Date() });
+      mockDb.person.update.mockRejectedValueOnce(new Error("db down"));
+
+      const result = await reinstateConsent(PERSON_ID);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("crm.errors.reinstateConsent");
     });
 
     it("rejects when consent was not withdrawn", async () => {

@@ -11,6 +11,7 @@ import {
   type InterviewStatus,
   type InterviewOutcome,
   isValidInterviewTransition,
+  isConsentBlocked,
 } from "@/models/person.model";
 
 // ---------------------------------------------------------------------------
@@ -69,6 +70,10 @@ export async function scheduleInterview(
         where: { id: input.personId, userId: user.id },
       });
       if (!person) return { success: false, message: "crm.errors.personNotFound" };
+      // GDPR Art. 7(3): no new processing on a consent-blocked contact.
+      if (isConsentBlocked(person)) {
+        return { success: false, message: "crm.errors.consentWithdrawn" };
+      }
     }
 
     const interview = await prisma.crmInterview.create({

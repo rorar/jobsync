@@ -194,7 +194,14 @@ async function checkOverdueTasks(): Promise<number> {
       status: { in: ["pending", "in_progress"] },
       dueDate: { lte: now },
     },
-    select: { id: true, userId: true, title: true },
+    select: {
+      id: true,
+      userId: true,
+      title: true,
+      // GDPR Art. 7(3): a task targeting a consent-blocked person is excluded
+      // from this active reminder flow.
+      targets: { select: { targetPerson: { select: { processingBasis: true, consentWithdrawnAt: true } } } },
+    },
   });
 
   if (overdue.length === 0) return 0;
@@ -202,6 +209,9 @@ async function checkOverdueTasks(): Promise<number> {
   let reminded = 0;
   for (const task of overdue) {
     try {
+      // GDPR Art. 7(3): skip if any targeted contact has withdrawn consent.
+      if (task.targets.some((tt) => tt.targetPerson && isConsentBlocked(tt.targetPerson))) continue;
+
       // Idempotency: check by taskId in details (within last 24h)
       const existing = await prisma.crmActivityLog.findFirst({
         where: {

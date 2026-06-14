@@ -248,7 +248,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                   <AlertDialogDescription>{t("crm.consentWithdrawnHint")}</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>{t("crm.cancelInterview")}</AlertDialogCancel>
+                  <AlertDialogCancel>{t("crm.cancel")}</AlertDialogCancel>
                   <AlertDialogAction onClick={handleWithdrawConsent}>{t("crm.withdrawConsent")}</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

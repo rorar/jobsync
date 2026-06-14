@@ -124,7 +124,7 @@ describe("checkInterviewReminders", () => {
 
 describe("checkOverdueTasks", () => {
   it("creates a reminder for an overdue task when none exists", async () => {
-    mockDb.crmTask.findMany.mockResolvedValue([{ id: "t1", userId: "u1", title: "Follow up" }]);
+    mockDb.crmTask.findMany.mockResolvedValue([{ id: "t1", userId: "u1", title: "Follow up", targets: [] }]);
 
     const count = await checkOverdueTasks();
 
@@ -134,8 +134,24 @@ describe("checkOverdueTasks", () => {
   });
 
   it("idempotency: skips when a reminder already exists within 24h", async () => {
-    mockDb.crmTask.findMany.mockResolvedValue([{ id: "t1", userId: "u1", title: "Follow up" }]);
+    mockDb.crmTask.findMany.mockResolvedValue([{ id: "t1", userId: "u1", title: "Follow up", targets: [] }]);
     mockDb.crmActivityLog.findFirst.mockResolvedValue({ id: "existing" });
+
+    const count = await checkOverdueTasks();
+
+    expect(count).toBe(0);
+    expect(mockDb.crmActivityLog.create).not.toHaveBeenCalled();
+  });
+
+  it("GDPR Art. 7(3): skips a task targeting a consent-blocked person", async () => {
+    mockDb.crmTask.findMany.mockResolvedValue([
+      {
+        id: "t1",
+        userId: "u1",
+        title: "Follow up",
+        targets: [{ targetPerson: { processingBasis: "consent", consentWithdrawnAt: new Date() } }],
+      },
+    ]);
 
     const count = await checkOverdueTasks();
 

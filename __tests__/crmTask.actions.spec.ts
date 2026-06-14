@@ -49,6 +49,8 @@ jest.mock("@/lib/db", () => {
 jest.mock("@/models/person.model", () => ({
   isValidTaskTransition: jest.fn(),
   validateExactlyOneTarget: jest.fn(),
+  isConsentBlocked: (p: { processingBasis?: string; consentWithdrawnAt?: Date | null }) =>
+    p.processingBasis === "consent" && p.consentWithdrawnAt != null,
   CRM_CONFIG: { maxTasksPerUser: 5000 },
 }));
 
@@ -115,6 +117,22 @@ describe("crmTask.actions", () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toBe("crm.errors.taskLimitReached");
+    });
+
+    it("GDPR Art. 7(3): rejects a person target that has withdrawn consent", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (validateExactlyOneTarget as jest.Mock).mockReturnValue(true);
+      (prisma.person.findFirst as jest.Mock).mockResolvedValue({
+        id: "p-1",
+        processingBasis: "consent",
+        consentWithdrawnAt: new Date(),
+      });
+
+      const result = await createCrmTask({ title: "Task", targets: [{ targetPersonId: "p-1" }] });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("crm.errors.consentWithdrawn");
+      expect(prisma.crmTask.create).not.toHaveBeenCalled();
     });
 
     it("creates task with targets (activity log via consumer)", async () => {

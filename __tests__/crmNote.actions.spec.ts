@@ -41,6 +41,8 @@ jest.mock("@/lib/db", () => {
 });
 jest.mock("@/models/person.model", () => ({
   validateExactlyOneTarget: jest.fn(),
+  isConsentBlocked: (p: { processingBasis?: string; consentWithdrawnAt?: Date | null }) =>
+    p.processingBasis === "consent" && p.consentWithdrawnAt != null,
 }));
 
 import { validateExactlyOneTarget } from "@/models/person.model";
@@ -91,6 +93,26 @@ describe("crmNote.actions", () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toBe("crm.errors.exactlyOneTarget");
+    });
+
+    it("GDPR Art. 7(3): rejects a person target that has withdrawn consent", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (validateExactlyOneTarget as jest.Mock).mockReturnValue(true);
+      (prisma.person.findFirst as jest.Mock).mockResolvedValue({
+        id: "p-1",
+        processingBasis: "consent",
+        consentWithdrawnAt: new Date(),
+      });
+
+      const result = await createCrmNote({
+        title: "Meeting notes",
+        body: "Discussed timeline.",
+        targets: [{ targetPersonId: "p-1" }],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("crm.errors.consentWithdrawn");
+      expect(prisma.crmNote.create).not.toHaveBeenCalled();
     });
 
     it("creates note with targets", async () => {
