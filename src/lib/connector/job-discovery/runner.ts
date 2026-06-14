@@ -26,7 +26,7 @@ import {
   OpenaiModel,
   DeepseekModel,
 } from "@/models/ai.model";
-import type { Resume as PrismaResume } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { automationLogger } from "@/lib/automation-logger";
 import { emitEvent, createEvent } from "@/lib/events";
 import { DomainEventType } from "@/lib/events/event-types";
@@ -122,37 +122,36 @@ export interface RunnerResult {
   blockedReason?: string;
 }
 
-interface ResumeWithSections extends PrismaResume {
-  ContactInfo: {
-    firstName: string;
-    lastName: string;
-    headline: string;
-    email: string;
-    phone: string;
-    address: string | null;
-  } | null;
-  ResumeSections: Array<{
-    sectionType: string;
-    summary?: { content: string } | null;
-    workExperiences: Array<{
-      description: string;
-      startDate: Date;
-      endDate: Date | null;
-      Company: { label: string };
-      jobTitle: { label: string };
-      location: { label: string };
-    }>;
-    educations: Array<{
-      institution: string;
-      degree: string;
-      fieldOfStudy: string;
-      startDate: Date;
-      endDate: Date | null;
-      description: string | null;
-      location: { label: string };
-    }>;
-  }>;
-}
+/**
+ * The exact relation graph loaded for AI resume matching. Declared once as a
+ * typed Prisma include so the loaded shape and the consumer type stay in lockstep
+ * (D1/D2 tech-debt: replaces a hand-maintained interface + `as` cast that could
+ * silently drift from the query).
+ */
+const RESUME_MATCH_INCLUDE = {
+  ContactInfo: true,
+  ResumeSections: {
+    include: {
+      summary: true,
+      workExperiences: {
+        include: {
+          Company: true,
+          jobTitle: true,
+          location: true,
+        },
+      },
+      educations: {
+        include: {
+          location: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.ResumeInclude;
+
+type ResumeWithSections = Prisma.ResumeGetPayload<{
+  include: typeof RESUME_MATCH_INCLUDE;
+}>;
 
 export async function runAutomation(
   automation: Automation,
@@ -183,26 +182,7 @@ export async function runAutomation(
 
     const resume = await db.resume.findUnique({
       where: { id: automation.resumeId },
-      include: {
-        ContactInfo: true,
-        ResumeSections: {
-          include: {
-            summary: true,
-            workExperiences: {
-              include: {
-                Company: true,
-                jobTitle: true,
-                location: true,
-              },
-            },
-            educations: {
-              include: {
-                location: true,
-              },
-            },
-          },
-        },
-      },
+      include: RESUME_MATCH_INCLUDE,
     });
 
     if (!resume) {
@@ -422,7 +402,7 @@ export async function runAutomation(
       const isLocal =
         (moduleRegistry.get(aiSettings.moduleId)?.manifest as AiManifest | undefined)?.isLocal ?? false;
       stripPii = !isLocal;
-      resumeText = convertResumeForMatch(resume as ResumeWithSections, stripPii);
+      resumeText = convertResumeForMatch(resume, stripPii);
     } else {
       automationLogger.log(
         automation.id,
@@ -769,7 +749,7 @@ ${scrub(job.description)}
       temperature: 0.3,
     });
 
-    const matchData = result.experimental_output;
+    const matchData = result.output;
     if (!matchData) {
       return { success: false, score: 0, error: "No match data returned" };
     }
