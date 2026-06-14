@@ -25,6 +25,7 @@ import {
 } from "@/lib/connector/data-enrichment/orchestrator";
 import { applyLogoWriteback } from "@/lib/connector/data-enrichment/logo-writeback";
 import { extractDomain } from "@/lib/connector/data-enrichment/domain-extractor";
+import { setCompanyDomainIfUnset } from "@/lib/company-repository";
 import db from "@/lib/db";
 
 // Backwards compatibility: re-export extractDomain as extractDomainFromCompanyName
@@ -211,15 +212,11 @@ async function handleCompanyCreated(
     return;
   }
 
-  // Write back extracted domain to Company if not already set (fixes #9: Company.domain on manual creation)
-  try {
-    await db.company.updateMany({
-      where: { id: payload.companyId, domain: null },
-      data: { domain },
-    });
-  } catch {
-    // Best-effort — domain writeback failure is non-blocking
-  }
+  // Write back extracted domain to the Company aggregate if not already set
+  // (fixes #9). Routed through the Company repository (server-only leaf) instead
+  // of a raw Prisma write — bounded-context fix D5/A-05, and owner-scoped per
+  // ADR-015 (the prior inline write was not).
+  await setCompanyDomainIfUnset(payload.companyId, payload.userId, domain);
 
   const chain = getChainForDimension("logo");
   if (!chain) {
