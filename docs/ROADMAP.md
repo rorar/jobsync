@@ -2063,16 +2063,21 @@ Der bestehende CV-Manager (Profile-Aggregat: `Profile → Resume → ResumeSecti
 **Entschieden (2026-06-14):**
 - **CV-PDF-Engine:** **pdfme (in-process)** — kein Sidecar; cv-manager-Look in pdfme nachgebaut (Fidelity-Spike). Gotenberg nur Fallback. (Q4)
 - **Öffentliche CV-Seite = 9.5:** **konvergieren** — EINE Implementierung. Gleiche CV-Datenquelle → PDF + öffentliche CV-Seite + Reverse-Funnel-Landingpage (9.5), alles über den `shared-surface`-Renderer (2.18.2). Keine Doppellösung. (Q5)
-- **Datenmodell:** **Spike zuerst** (vor Festlegung) — Mapping `cv-manager-JSON ↔ JSON Resume ↔ Prisma Resume/ResumeSection` prototypisieren, DANN Hybrid vs. flach entscheiden. (Q1)
+- **Datenmodell (Spike A DONE 2026-06-14, `docs/design/cv-port-spike-a-datamodel.md`):** **Document-first** — kanonisches CV-Modell = **JSON Resume** (+ `x-jobsync-*` Extensions für `visible`/icon/layout/custom-sections), NICHT das normalisierte Gsync-Schema (dem fehlt ~die Hälfte: skills, projects, visibility, versioning, highlights[], zentrale Identität). **Entity-Links optional**: Experience trägt denormalisiert `company_name`/`location`/`highlights[]` PLUS optionale nullable `companyId`/`locationId` als Post-hoc-Annotation (Job↔CV-Traceability + Dedup), nicht als Speichermodell. (Q1 + Q3 gelöst)
 
-**Spike-Backlog (vor Implementierung):**
-- **Spike A — Datenmodell-Mapping:** cv-manager-JSON ↔ JSON Resume ↔ JobSync-Prisma. Klärt Entity-Normalisierung (WorkExperience↔`Company`/`Location`) vs. flach, und wohin `visible`/skills/projects (echte Felder vs. `OtherSection.jsonData`). Liefert die Antwort auf Q1 + Q3.
-- **Spike B — pdfme-Template-Fidelity:** cv-manager-Look (Timeline-SVG, Spalten, Typo) in pdfme nachbauen, gegen Original vergleichen. Liefert Go/No-Go für Q4-Engine.
+**Spike-Backlog:**
+- **Spike A — Datenmodell-Mapping — ✅ DONE.** Ergebnis: document-first JSON Resume + optionale Entity-Links + JSON-Snapshot-Versionierung. 2 Kern-Befunde: (F1) cv-managers Versionierung = **Full-CV-JSON-Snapshot** (`saved_datasets.data`) → umgeht das „geteilte mutable Entity"-Snapshot-Problem; (F2) JobSync hat **keine zentrale Identität** (Name/Email/Telefon liegen per-Resume in `ContactInfo`, nicht in `Profile`) → Auto-Fill (Schritt 7) braucht zuerst kanonische Identität auf `Profile`. Details: `docs/design/cv-port-spike-a-datamodel.md`.
+- **Spike B — pdfme-Template-Fidelity:** cv-manager-Look (Timeline-SVG, Spalten, Typo) in pdfme nachbauen, gegen Original vergleichen, auf `CvDocument`-JSON. Liefert Go/No-Go für die pdfme-Engine.
 
-**Offene Port-Fragen (nach Spikes klären):**
-1. **Versionierung + Snapshot:** Wie wird ein „pro-Bewerbung getailortes CV" gesnapshottet, wenn `Company`/`Location` geteilte mutable Entities sind? Version = tiefe Kopie oder Referenz+Override-Layer? Diff-Granularität (CV / Section / Item)? (Hängt an Spike-A-Ergebnis.)
-2. **Schema-Erweiterung vs. JSON:** Skills (Kategorie+Icon+nested), Projects, `visible`-Flags — echte Prisma-Felder/Modelle ODER `OtherSection.jsonData`? (Spike A.)
-3. **Migrations-Scope:** Strangler Fig — welche Sektion zuerst (Vorschlag: ContactInfo+Summary), Big-Bang vermeiden. Bestehende Tests/`specs/profile-resume.allium` mitziehen.
+**Resultierendes Zielmodell (aus Spike A):**
+- Neues Prisma-Modell **`CvDocument { id, userId, data Json (JSON Resume), versionGroup, languageGroup, slug?, isPublic, isDefault, createdAt }`** — Full-Snapshot pro Version/Sprache (Versionierung = tiefe JSON-Kopie, F1).
+- **`Profile` um kanonische Identität erweitern** (name, email, phone, headline, photo, languages) als Auto-Fill-Quelle (F2); jedes `CvDocument` snapshottet sie nach `data.basics` mit Per-CV-Override (Schritt 7), ohne `Profile` zu mutieren.
+- **Gsync `Resume/ResumeSection/*` Tabellen behalten** (Backward-Compat + Migrations-Import); neuer Builder arbeitet auf `CvDocument`; Adapter importiert Legacy-Resume → JSON Resume beim ersten Edit. AI-Match/Review (PII-gestrippt) läuft auf `CvDocument.data`.
+
+**Offene Port-Fragen (Rest):**
+1. **`x-jobsync-*` Extension-Schema** exakt definieren (visible/icon/layout/custom-sections); Legacy-Import-Adapter-Detail; Diff-Granularität (Document vs. Section).
+2. **Migrations-Scope:** Strangler Fig — welche Sektion zuerst (Vorschlag: Identität/`Profile` + ContactInfo→basics), Big-Bang vermeiden. `specs/profile-resume.allium` mitziehen.
+3. **Skills/Projects auch in 4.1 Skillsets** surfacen (geteiltes Skill-Modell) oder CV-lokal?
 4. **AI/ATS:** cv-managers „JSON-Export für LLM-Optimierung" + ATS-Optimierung als neue AI-Enrichment-Dimension auf der bestehenden Resume-AI (Review/Match)?
 
 **Cross-Refs:** Document Rendering Engine (4.2.1), Dokumenten-Generatoren/JSON-Resume-Pagebuilder (4.2), Skillsets (4.1), Bewerber-Landingpage (9.5), Public API (7.1), AI Review/Match (bestehende Resume-AI), PII-Egress-Redaktion (`src/lib/pii`, `CloudTransferDataMinimization`), Profile-Auto-Fill (`ContactInfo`), Profile-Spec (`specs/profile-resume.allium`), shared-surface (2.18.2).
