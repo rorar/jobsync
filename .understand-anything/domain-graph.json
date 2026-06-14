@@ -1,0 +1,3854 @@
+{
+ "version": "1.0.0",
+ "project": {
+  "name": "JobSync",
+  "languages": [
+   "typescript",
+   "javascript",
+   "prisma",
+   "sql",
+   "css"
+  ],
+  "frameworks": [
+   "Next.js",
+   "React",
+   "Prisma",
+   "NextAuth",
+   "Zod",
+   "Shadcn UI"
+  ],
+  "description": "JobSync is a self-hosted job-application tracker that lets a user record and progress applications through a customizable status pipeline, discover European jobs via EURES/ESCO automations, triage discovered vacancies, AI-review and match resumes, manage recruiter/contact relationships in a CRM, and run it all privately with GDPR-aware data handling.",
+  "analyzedAt": "2026-06-14T07:55:56.271705+00:00",
+  "gitCommitHash": "9e792ccfae9ccc87a947f4979df3d2a523ceaa6e"
+ },
+ "nodes": [
+  {
+   "id": "domain:job-application-tracking",
+   "type": "domain",
+   "name": "Job Application Tracking",
+   "summary": "The core domain that lets a user record, organize, and progress job applications through a per-user customizable pipeline of JobStatus stages. It owns the Job aggregate together with its notes, tags, status history, kanban ordering, and the custom JobStatus / JobStatusCategory stage model (ADR-036).",
+   "tags": [
+    "job",
+    "job-status",
+    "kanban",
+    "repository"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entities": [
+     "Job",
+     "JobStatus",
+     "JobStatusCategory",
+     "JobNote",
+     "Tag",
+     "JobStatusHistory"
+    ],
+    "businessRules": [
+     "All Prisma reads/writes are scoped by userId (IDOR, ADR-015)",
+     "Status transitions are validated by category stage-kind; the 'applied' flag is derived from stage kind",
+     "Interview self-transition logs a new round only on interviewing-kind statuses (ADR-036)",
+     "A user must always retain at least one JobStatus; deletion reassigns dependent jobs",
+     "updateJob uses optimistic version locking"
+    ],
+    "crossDomainInteractions": [
+     "Receives promoted vacancies from Job Discovery Automations",
+     "Linked to Persons via JobContact in the CRM domain",
+     "Exposed read/write through Public API v1"
+    ]
+   }
+  },
+  {
+   "id": "flow:create-job",
+   "type": "flow",
+   "name": "Create Job Application",
+   "summary": "Creates a new Job aggregate from form input, resolving related title/company/location/source entities and seeding the initial status history.",
+   "tags": [
+    "job",
+    "create",
+    "server-action"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "addJob() server action",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:create-job:validate-input",
+   "type": "step",
+   "name": "Validate job input",
+   "summary": "Validate the submitted job form (titles, salary, relations) at the server-action boundary.",
+   "tags": [
+    "validation"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/job.actions.ts",
+   "lineRange": [
+    319,
+    476
+   ]
+  },
+  {
+   "id": "step:create-job:resolve-relations",
+   "type": "step",
+   "name": "Resolve related entities",
+   "summary": "Find-or-create JobTitle, Company, JobLocation and JobSource relations for the job.",
+   "tags": [
+    "repository"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/job.actions.ts",
+   "lineRange": [
+    319,
+    476
+   ]
+  },
+  {
+   "id": "step:create-job:seed-status",
+   "type": "step",
+   "name": "Seed default status",
+   "summary": "Assign the user's default JobStatus and write the initial status-history entry inside a transaction.",
+   "tags": [
+    "job-status"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/job.actions.ts",
+   "lineRange": [
+    319,
+    476
+   ]
+  },
+  {
+   "id": "step:create-job:persist-job",
+   "type": "step",
+   "name": "Persist job aggregate",
+   "summary": "Persist the Job, salary value object, and tags transactionally, scoped by userId.",
+   "tags": [
+    "database",
+    "repository"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/job.actions.ts",
+   "lineRange": [
+    319,
+    476
+   ]
+  },
+  {
+   "id": "flow:change-job-status",
+   "type": "flow",
+   "name": "Change Job Status",
+   "summary": "Transitions a job to a new status, validating the move against category stage-kind rules and applying the derived applied flag and history.",
+   "tags": [
+    "job-status",
+    "transition"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "changeJobStatus() server action",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:change-job-status:load-job",
+   "type": "step",
+   "name": "Load job and statuses",
+   "summary": "Load the userId-scoped job plus the user's status set with category stage kinds.",
+   "tags": [
+    "repository"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/job.actions.ts",
+   "lineRange": [
+    912,
+    1067
+   ]
+  },
+  {
+   "id": "step:change-job-status:validate-transition",
+   "type": "step",
+   "name": "Validate transition",
+   "summary": "Reject the change unless the target status is a valid category-kind transition.",
+   "tags": [
+    "validation",
+    "job-status"
+   ],
+   "complexity": "complex",
+   "filePath": "src/actions/job.actions.ts",
+   "lineRange": [
+    912,
+    1067
+   ]
+  },
+  {
+   "id": "step:change-job-status:apply-flag",
+   "type": "step",
+   "name": "Apply applied flag",
+   "summary": "Derive and set the applied flag from the target status stage kind.",
+   "tags": [
+    "job-status"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/job.actions.ts",
+   "lineRange": [
+    912,
+    1067
+   ]
+  },
+  {
+   "id": "step:change-job-status:log-round",
+   "type": "step",
+   "name": "Log interview round",
+   "summary": "Log an interview round when re-selecting an interviewing-kind status (ADR-036 self-transition).",
+   "tags": [
+    "job-status"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/job.actions.ts",
+   "lineRange": [
+    912,
+    1067
+   ]
+  },
+  {
+   "id": "step:change-job-status:write-history",
+   "type": "step",
+   "name": "Write status history",
+   "summary": "Persist the status change and append a status-history record.",
+   "tags": [
+    "database"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/job.actions.ts",
+   "lineRange": [
+    912,
+    1067
+   ]
+  },
+  {
+   "id": "flow:kanban-board",
+   "type": "flow",
+   "name": "Manage Kanban Board",
+   "summary": "Builds the kanban board grouped by the user's statuses and applies category-kind validation when a card is moved between columns.",
+   "tags": [
+    "kanban",
+    "job-status"
+   ],
+   "complexity": "moderate",
+   "domainMeta": {
+    "entryPoint": "getKanbanBoard() / updateKanbanOrder()",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:kanban-board:build-board",
+   "type": "step",
+   "name": "Build kanban board",
+   "summary": "Load the user's statuses and group their jobs into ordered columns.",
+   "tags": [
+    "kanban"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/job.actions.ts",
+   "lineRange": [
+    1074,
+    1149
+   ]
+  },
+  {
+   "id": "step:kanban-board:validate-move",
+   "type": "step",
+   "name": "Validate column move",
+   "summary": "Validate a cross-column move against category-kind transition rules.",
+   "tags": [
+    "validation",
+    "job-status"
+   ],
+   "complexity": "complex",
+   "filePath": "src/actions/job.actions.ts",
+   "lineRange": [
+    1156,
+    1318
+   ]
+  },
+  {
+   "id": "step:kanban-board:reorder",
+   "type": "step",
+   "name": "Reorder cards",
+   "summary": "Renormalize sort order and persist the new card position/column.",
+   "tags": [
+    "kanban",
+    "database"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/job.actions.ts",
+   "lineRange": [
+    1156,
+    1318
+   ]
+  },
+  {
+   "id": "flow:manage-custom-status",
+   "type": "flow",
+   "name": "Manage Custom Job Statuses",
+   "summary": "Lets a user create, rename, re-categorize, reorder, delete, and set the default custom JobStatus within fixed stage categories (Welle-4 / ADR-036).",
+   "tags": [
+    "job-status",
+    "settings"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "jobStatus.actions.ts server actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:manage-custom-status:seed-defaults",
+   "type": "step",
+   "name": "Seed default statuses",
+   "summary": "Lazily seed the default status set when a user has none.",
+   "tags": [
+    "job-status"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/jobStatus.actions.ts",
+   "lineRange": [
+    103,
+    127
+   ]
+  },
+  {
+   "id": "step:manage-custom-status:create-status",
+   "type": "step",
+   "name": "Create custom status",
+   "summary": "Create a status in a chosen category with a generated unique slug.",
+   "tags": [
+    "job-status"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/jobStatus.actions.ts",
+   "lineRange": [
+    147,
+    187
+   ]
+  },
+  {
+   "id": "step:manage-custom-status:rename-status",
+   "type": "step",
+   "name": "Rename / re-categorize",
+   "summary": "Rename or move a status to another category, cascading the value to jobs.",
+   "tags": [
+    "job-status"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/jobStatus.actions.ts",
+   "lineRange": [
+    190,
+    239
+   ]
+  },
+  {
+   "id": "step:manage-custom-status:reorder-statuses",
+   "type": "step",
+   "name": "Reorder statuses",
+   "summary": "Renormalize sortOrder across the full ordered status list in one transaction.",
+   "tags": [
+    "job-status"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/jobStatus.actions.ts",
+   "lineRange": [
+    277,
+    300
+   ]
+  },
+  {
+   "id": "step:manage-custom-status:set-default",
+   "type": "step",
+   "name": "Set default status",
+   "summary": "Mark one status as default, clearing the flag on the others.",
+   "tags": [
+    "job-status"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/jobStatus.actions.ts",
+   "lineRange": [
+    303,
+    327
+   ]
+  },
+  {
+   "id": "step:manage-custom-status:delete-status",
+   "type": "step",
+   "name": "Delete status",
+   "summary": "Delete a status, guard the last-status case, and reassign dependent jobs.",
+   "tags": [
+    "job-status"
+   ],
+   "complexity": "complex",
+   "filePath": "src/actions/jobStatus.actions.ts",
+   "lineRange": [
+    335,
+    397
+   ]
+  },
+  {
+   "id": "domain:job-discovery-automations",
+   "type": "domain",
+   "name": "Job Discovery Automations",
+   "summary": "Schedules and runs automated job searches against pluggable Connector Modules (EURES, Arbeitsagentur, JSearch) following the Anti-Corruption-Layer pattern. The runner searches, deduplicates, enriches, AI-matches against the user's resume, and persists DiscoveredVacancies into a staging pipeline.",
+   "tags": [
+    "automation",
+    "connector",
+    "job-discovery",
+    "module"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entities": [
+     "Automation",
+     "AutomationRun",
+     "DiscoveredVacancy",
+     "StagedVacancy",
+     "Connector",
+     "Module",
+     "Manifest"
+    ],
+    "businessRules": [
+     "Every external integration is a Module behind a shared Connector that returns ConnectorResult<T>, never raw exceptions",
+     "All runs MUST go through RunCoordinator.requestRun() (per-automationId mutex)",
+     "Contexts communicate only via the shared DiscoveredVacancy domain type",
+     "Resume text sent to cloud AI providers is PII-redacted",
+     "Staged vacancies are filtered against the company blacklist during dedup"
+    ],
+    "crossDomainInteractions": [
+     "Promotes staged vacancies into the Job Application Tracking domain",
+     "Invokes the AI Resume Review & Matching domain for scoring",
+     "Calls Data Enrichment for company logos / deep links",
+     "Run lifecycle is driven by Scheduler Coordination"
+    ]
+   }
+  },
+  {
+   "id": "flow:run-automation",
+   "type": "flow",
+   "name": "Run Automation Pipeline",
+   "summary": "Executes a full automation run across search, dedup, enrich, AI-match, save, and finalize phases with progress reporting.",
+   "tags": [
+    "automation",
+    "pipeline",
+    "connector"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "runAutomation() via RunCoordinator",
+    "entryType": "cron"
+   }
+  },
+  {
+   "id": "step:run-automation:search",
+   "type": "step",
+   "name": "Search modules",
+   "summary": "Query each configured data-source Module via its Connector and translate results to DiscoveredVacancy.",
+   "tags": [
+    "connector",
+    "job-discovery"
+   ],
+   "complexity": "complex",
+   "filePath": "src/lib/connector/job-discovery/runner.ts",
+   "lineRange": [
+    157,
+    641
+   ]
+  },
+  {
+   "id": "step:run-automation:dedup",
+   "type": "step",
+   "name": "Deduplicate results",
+   "summary": "Load existing vacancy keys and drop already-seen results plus blacklisted companies.",
+   "tags": [
+    "job-discovery"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/connector/job-discovery/runner.ts",
+   "lineRange": [
+    651,
+    727
+   ]
+  },
+  {
+   "id": "step:run-automation:enrich",
+   "type": "step",
+   "name": "Enrich vacancies",
+   "summary": "Best-effort enrich company logos / deep links via the enrichment orchestrator.",
+   "tags": [
+    "enrichment"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/connector/job-discovery/runner.ts",
+   "lineRange": [
+    157,
+    641
+   ]
+  },
+  {
+   "id": "step:run-automation:match",
+   "type": "step",
+   "name": "AI-match resume",
+   "summary": "Score each vacancy against the user's resume using the active AI provider, redacting PII for cloud providers.",
+   "tags": [
+    "ai",
+    "matching"
+   ],
+   "complexity": "complex",
+   "filePath": "src/lib/connector/job-discovery/runner.ts",
+   "lineRange": [
+    736,
+    799
+   ]
+  },
+  {
+   "id": "step:run-automation:save",
+   "type": "step",
+   "name": "Persist staged vacancies",
+   "summary": "Persist scored DiscoveredVacancies as staged vacancies for review.",
+   "tags": [
+    "staging",
+    "database"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/connector/job-discovery/runner.ts",
+   "lineRange": [
+    157,
+    641
+   ]
+  },
+  {
+   "id": "step:run-automation:finalize",
+   "type": "step",
+   "name": "Finalize run",
+   "summary": "Record run outcome, report final progress, and publish run-completed events.",
+   "tags": [
+    "automation"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/connector/job-discovery/runner.ts",
+   "lineRange": [
+    157,
+    641
+   ]
+  },
+  {
+   "id": "flow:manage-automation",
+   "type": "flow",
+   "name": "Manage Automation",
+   "summary": "CRUD and lifecycle for an Automation: validating connector params against the module registry, scheduling, and pause/resume.",
+   "tags": [
+    "automation",
+    "settings"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "automation.actions.ts server actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:manage-automation:create-automation",
+   "type": "step",
+   "name": "Create automation",
+   "summary": "Validate input, check the module registry and connector params, then persist a new automation.",
+   "tags": [
+    "automation",
+    "validation"
+   ],
+   "complexity": "complex",
+   "filePath": "src/actions/automation.actions.ts",
+   "lineRange": [
+    140,
+    241
+   ]
+  },
+  {
+   "id": "step:manage-automation:update-automation",
+   "type": "step",
+   "name": "Update automation",
+   "summary": "Update an automation, recomputing its schedule and connector params.",
+   "tags": [
+    "automation"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/automation.actions.ts",
+   "lineRange": [
+    243,
+    336
+   ]
+  },
+  {
+   "id": "step:manage-automation:pause-resume",
+   "type": "step",
+   "name": "Pause / resume",
+   "summary": "Pause an automation (clearing next-run) or resume it (recomputing next-run).",
+   "tags": [
+    "automation",
+    "scheduler"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/automation.actions.ts",
+   "lineRange": [
+    367,
+    402
+   ]
+  },
+  {
+   "id": "step:manage-automation:delete-automation",
+   "type": "step",
+   "name": "Delete automation",
+   "summary": "Delete an automation after guarding against an in-flight run via the run coordinator.",
+   "tags": [
+    "automation"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/automation.actions.ts",
+   "lineRange": [
+    338,
+    365
+   ]
+  },
+  {
+   "id": "flow:review-discovered-jobs",
+   "type": "flow",
+   "name": "Review Discovered Jobs",
+   "summary": "Lets a user triage staged vacancies produced by automation runs: list, inspect match data, dismiss, or accept/promote.",
+   "tags": [
+    "automation",
+    "staging"
+   ],
+   "complexity": "moderate",
+   "domainMeta": {
+    "entryPoint": "automation.actions.ts read/triage actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:review-discovered-jobs:list-discovered",
+   "type": "step",
+   "name": "List discovered jobs",
+   "summary": "Return paginated staged vacancies for an automation, optionally status-filtered.",
+   "tags": [
+    "staging",
+    "pagination"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/automation.actions.ts",
+   "lineRange": [
+    446,
+    489
+   ]
+  },
+  {
+   "id": "step:review-discovered-jobs:inspect-match",
+   "type": "step",
+   "name": "Inspect match data",
+   "summary": "Load a single staged vacancy with parsed AI match data.",
+   "tags": [
+    "staging",
+    "matching"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/automation.actions.ts",
+   "lineRange": [
+    491,
+    537
+   ]
+  },
+  {
+   "id": "step:review-discovered-jobs:dismiss",
+   "type": "step",
+   "name": "Dismiss vacancy",
+   "summary": "Mark a staged vacancy as dismissed.",
+   "tags": [
+    "staging"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/automation.actions.ts",
+   "lineRange": [
+    539,
+    584
+   ]
+  },
+  {
+   "id": "step:review-discovered-jobs:accept",
+   "type": "step",
+   "name": "Accept vacancy",
+   "summary": "Accept a staged vacancy, promoting it in the pipeline.",
+   "tags": [
+    "staging"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/automation.actions.ts",
+   "lineRange": [
+    586,
+    627
+   ]
+  },
+  {
+   "id": "domain:vacancy-staging",
+   "type": "domain",
+   "name": "Vacancy Staging Pipeline",
+   "summary": "Manages the lifecycle of discovered vacancies in a swipeable review pipeline before they become Jobs. Supports status transitions (dismiss/archive/trash/restore), undo tokens, bulk actions, retention cleanup, and promotion of a staged vacancy into a full Job aggregate.",
+   "tags": [
+    "staging",
+    "pipeline",
+    "repository"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entities": [
+     "StagedVacancy",
+     "UndoToken",
+     "PromotionHistory"
+    ],
+    "businessRules": [
+     "All transitions are userId-scoped (IDOR)",
+     "Reversible actions register an undo token and emit domain events",
+     "Promotion writes promotion-history and audit entries",
+     "Retention cleanup removes stale staged vacancies"
+    ],
+    "crossDomainInteractions": [
+     "Fed by Job Discovery Automations runs",
+     "Promotes vacancies into Job Application Tracking",
+     "Undo bridges to the Notifications domain via the undo store"
+    ]
+   }
+  },
+  {
+   "id": "flow:triage-staged-vacancy",
+   "type": "flow",
+   "name": "Triage Staged Vacancy",
+   "summary": "Lets the user act on a single staged vacancy with reversible dismiss / archive / trash transitions backed by undo tokens.",
+   "tags": [
+    "staging",
+    "transition"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "stagedVacancy.actions.ts transitions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:triage-staged-vacancy:list-staged",
+   "type": "step",
+   "name": "List staged vacancies",
+   "summary": "Run a paginated, tab/status-filtered query of the user's staged vacancies.",
+   "tags": [
+    "staging",
+    "pagination"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/stagedVacancy.actions.ts",
+   "lineRange": [
+    69,
+    143
+   ]
+  },
+  {
+   "id": "step:triage-staged-vacancy:dismiss-staged",
+   "type": "step",
+   "name": "Dismiss",
+   "summary": "Dismiss a staged vacancy, registering an undo token and emitting events.",
+   "tags": [
+    "staging"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/stagedVacancy.actions.ts",
+   "lineRange": [
+    171,
+    212
+   ]
+  },
+  {
+   "id": "step:triage-staged-vacancy:archive-staged",
+   "type": "step",
+   "name": "Archive",
+   "summary": "Archive a staged vacancy with undo support.",
+   "tags": [
+    "staging"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/stagedVacancy.actions.ts",
+   "lineRange": [
+    245,
+    282
+   ]
+  },
+  {
+   "id": "step:triage-staged-vacancy:trash-staged",
+   "type": "step",
+   "name": "Trash",
+   "summary": "Move a staged vacancy to trash with undo support.",
+   "tags": [
+    "staging"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/stagedVacancy.actions.ts",
+   "lineRange": [
+    287,
+    324
+   ]
+  },
+  {
+   "id": "step:triage-staged-vacancy:restore-staged",
+   "type": "step",
+   "name": "Restore",
+   "summary": "Restore a dismissed or trashed staged vacancy to its active state.",
+   "tags": [
+    "staging"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/stagedVacancy.actions.ts",
+   "lineRange": [
+    217,
+    240
+   ]
+  },
+  {
+   "id": "flow:promote-vacancy",
+   "type": "flow",
+   "name": "Promote Vacancy to Job",
+   "summary": "Promotes a staged vacancy into a Job aggregate, writing promotion history and audit entries.",
+   "tags": [
+    "staging",
+    "promotion",
+    "job"
+   ],
+   "complexity": "moderate",
+   "domainMeta": {
+    "entryPoint": "promoteStagedVacancyToJob()",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:promote-vacancy:validate-ownership",
+   "type": "step",
+   "name": "Validate ownership",
+   "summary": "Load the staged vacancy userId-scoped before promotion.",
+   "tags": [
+    "staging"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/stagedVacancy.actions.ts",
+   "lineRange": [
+    395,
+    418
+   ]
+  },
+  {
+   "id": "step:promote-vacancy:create-job-from-vacancy",
+   "type": "step",
+   "name": "Create job from vacancy",
+   "summary": "Create a Job aggregate from the staged vacancy data.",
+   "tags": [
+    "job"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/stagedVacancy.actions.ts",
+   "lineRange": [
+    395,
+    418
+   ]
+  },
+  {
+   "id": "step:promote-vacancy:write-promotion-history",
+   "type": "step",
+   "name": "Write promotion history",
+   "summary": "Write promotion-history and audit-log entries for the promotion.",
+   "tags": [
+    "staging",
+    "audit"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/stagedVacancy.actions.ts",
+   "lineRange": [
+    395,
+    418
+   ]
+  },
+  {
+   "id": "flow:bulk-and-retention",
+   "type": "flow",
+   "name": "Bulk Actions & Retention Cleanup",
+   "summary": "Applies validated bulk actions to many staged vacancies and runs retention-based cleanup of stale entries.",
+   "tags": [
+    "staging",
+    "retention"
+   ],
+   "complexity": "moderate",
+   "domainMeta": {
+    "entryPoint": "executeBulkAction() / runRetentionCleanup()",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:bulk-and-retention:validate-bulk",
+   "type": "step",
+   "name": "Validate bulk action",
+   "summary": "Validate the bulk action type and target id set at the boundary.",
+   "tags": [
+    "validation"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/stagedVacancy.actions.ts",
+   "lineRange": [
+    450,
+    472
+   ]
+  },
+  {
+   "id": "step:bulk-and-retention:apply-bulk",
+   "type": "step",
+   "name": "Apply bulk action",
+   "summary": "Apply dismiss/archive/trash to the selected staged vacancy ids.",
+   "tags": [
+    "staging"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/stagedVacancy.actions.ts",
+   "lineRange": [
+    450,
+    472
+   ]
+  },
+  {
+   "id": "step:bulk-and-retention:retention-cleanup",
+   "type": "step",
+   "name": "Retention cleanup",
+   "summary": "Trigger retention-based cleanup of stale staged vacancies.",
+   "tags": [
+    "retention"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/stagedVacancy.actions.ts",
+   "lineRange": [
+    424,
+    441
+   ]
+  },
+  {
+   "id": "domain:ai-resume-review",
+   "type": "domain",
+   "name": "AI Resume Review & Matching",
+   "summary": "Provides AI-powered resume review and job-to-resume matching through pluggable AI Provider Modules (Ollama, OpenAI, DeepSeek). Streaming endpoints redact PII before any cloud transfer, preserving full fidelity only for local Ollama.",
+   "tags": [
+    "ai",
+    "ai-provider",
+    "review",
+    "matching"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entities": [
+     "AiModule",
+     "ResumeReview",
+     "JobMatchResult",
+     "AiManifest"
+    ],
+    "businessRules": [
+     "Resume/job free-text sent to cloud providers MUST be PII-redacted via @/lib/pii",
+     "Local Ollama keeps full fidelity (stripPii = !isLocal)",
+     "AI endpoints are rate-limited per user",
+     "Ollama URLs are validated (validateOllamaUrl) before every fetch"
+    ],
+    "crossDomainInteractions": [
+     "Consumed by the runner in Job Discovery Automations for match scoring",
+     "Reads resumes from the Profile domain"
+    ]
+   }
+  },
+  {
+   "id": "flow:review-resume",
+   "type": "flow",
+   "name": "Review Resume",
+   "summary": "Streams an AI-generated resume review via the active provider, applying PII redaction for cloud transfer.",
+   "tags": [
+    "ai",
+    "review"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "POST /api/ai/resume/review",
+    "entryType": "http"
+   }
+  },
+  {
+   "id": "step:review-resume:rate-limit-review",
+   "type": "step",
+   "name": "Rate-limit request",
+   "summary": "Enforce the per-user rate limit on the review endpoint.",
+   "tags": [
+    "security"
+   ],
+   "complexity": "simple",
+   "filePath": "src/app/api/ai/resume/review/route.ts",
+   "lineRange": [
+    25,
+    116
+   ]
+  },
+  {
+   "id": "step:review-resume:redact-pii-review",
+   "type": "step",
+   "name": "Redact PII",
+   "summary": "Redact resume PII for cloud providers (full fidelity for local Ollama).",
+   "tags": [
+    "security",
+    "gdpr"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/app/api/ai/resume/review/route.ts",
+   "lineRange": [
+    25,
+    116
+   ]
+  },
+  {
+   "id": "step:review-resume:stream-review",
+   "type": "step",
+   "name": "Stream review",
+   "summary": "Invoke the active AI provider and stream the structured review response.",
+   "tags": [
+    "ai"
+   ],
+   "complexity": "complex",
+   "filePath": "src/app/api/ai/resume/review/route.ts",
+   "lineRange": [
+    25,
+    116
+   ]
+  },
+  {
+   "id": "flow:match-resume",
+   "type": "flow",
+   "name": "Match Resume to Job",
+   "summary": "Streams a structured match score between a resume and a job using the active AI provider, redacting PII for cloud transfer.",
+   "tags": [
+    "ai",
+    "matching"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "POST /api/ai/resume/match",
+    "entryType": "http"
+   }
+  },
+  {
+   "id": "step:match-resume:load-resume-job",
+   "type": "step",
+   "name": "Load resume and job",
+   "summary": "Load the resume and job to be matched.",
+   "tags": [
+    "repository"
+   ],
+   "complexity": "simple",
+   "filePath": "src/app/api/ai/resume/match/route.ts",
+   "lineRange": [
+    29,
+    143
+   ]
+  },
+  {
+   "id": "step:match-resume:redact-pii-match",
+   "type": "step",
+   "name": "Redact PII",
+   "summary": "Redact PII for cloud providers before transfer.",
+   "tags": [
+    "security",
+    "gdpr"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/app/api/ai/resume/match/route.ts",
+   "lineRange": [
+    29,
+    143
+   ]
+  },
+  {
+   "id": "step:match-resume:stream-match",
+   "type": "step",
+   "name": "Stream match result",
+   "summary": "Invoke the AI provider and stream the structured match result.",
+   "tags": [
+    "ai",
+    "matching"
+   ],
+   "complexity": "complex",
+   "filePath": "src/app/api/ai/resume/match/route.ts",
+   "lineRange": [
+    29,
+    143
+   ]
+  },
+  {
+   "id": "domain:crm",
+   "type": "domain",
+   "name": "Contact Relationship Management",
+   "summary": "An independent CRM bounded context centred on the Person aggregate root, with interviews, tasks, notes (polymorphic targets), a job-contact join, and a blocklist. Includes GDPR operations (anonymize, merge) and an immutable activity-log timeline projection.",
+   "tags": [
+    "crm",
+    "person",
+    "interview",
+    "gdpr"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entities": [
+     "Person",
+     "CrmInterview",
+     "CrmTask",
+     "CrmNote",
+     "JobContact",
+     "CrmBlocklist",
+     "CrmActivityLog"
+    ],
+    "businessRules": [
+     "Person is an independent aggregate, not part of the Job aggregate",
+     "Polymorphic targets must reference exactly one of Person/Company/Job (validateExactlyOneTarget)",
+     "State machines guard Person, Interview, and Task transitions",
+     "AnonymizePerson is terminal and cascades to all targets and actor PII",
+     "Auto-created persons are suppressed against the CRM blocklist"
+    ],
+    "crossDomainInteractions": [
+     "Links Persons to the Job Application Tracking domain via JobContact",
+     "Time-based reminders are driven by Scheduler Coordination (CRM cron)",
+     "Reminder events fan out through the Notifications domain"
+    ]
+   }
+  },
+  {
+   "id": "flow:manage-person",
+   "type": "flow",
+   "name": "Manage Person",
+   "summary": "CRUD plus archive, reactivate, GDPR anonymize, and merge for the Person aggregate root.",
+   "tags": [
+    "crm",
+    "person"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "person.actions.ts server actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:manage-person:create-person",
+   "type": "step",
+   "name": "Create person",
+   "summary": "Create a Person with parsed JSON value objects and GDPR provenance fields, emitting ContactCreated.",
+   "tags": [
+    "crm",
+    "person"
+   ],
+   "complexity": "complex",
+   "filePath": "src/actions/person.actions.ts",
+   "lineRange": [
+    70,
+    148
+   ]
+  },
+  {
+   "id": "step:manage-person:update-person",
+   "type": "step",
+   "name": "Update person",
+   "summary": "Update a Person's fields and value objects, emitting ContactUpdated.",
+   "tags": [
+    "crm"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/person.actions.ts",
+   "lineRange": [
+    264,
+    340
+   ]
+  },
+  {
+   "id": "step:manage-person:archive-reactivate",
+   "type": "step",
+   "name": "Archive / reactivate",
+   "summary": "Transition a Person between active and archived states.",
+   "tags": [
+    "crm"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/person.actions.ts",
+   "lineRange": [
+    342,
+    364
+   ]
+  },
+  {
+   "id": "step:manage-person:anonymize-person",
+   "type": "step",
+   "name": "Anonymize (GDPR)",
+   "summary": "Irreversibly anonymize a Person, cascading to targets, job contacts and activity log.",
+   "tags": [
+    "crm",
+    "gdpr"
+   ],
+   "complexity": "complex",
+   "filePath": "src/actions/person.actions.ts",
+   "lineRange": [
+    390,
+    475
+   ]
+  },
+  {
+   "id": "step:manage-person:merge-persons",
+   "type": "step",
+   "name": "Merge persons",
+   "summary": "Merge a loser Person into a winner, transferring relations and value objects.",
+   "tags": [
+    "crm"
+   ],
+   "complexity": "complex",
+   "filePath": "src/actions/person.actions.ts",
+   "lineRange": [
+    477,
+    588
+   ]
+  },
+  {
+   "id": "flow:manage-interview",
+   "type": "flow",
+   "name": "Manage Interview",
+   "summary": "Schedules and progresses a CrmInterview through its state machine: schedule, complete, cancel, reschedule.",
+   "tags": [
+    "crm",
+    "interview"
+   ],
+   "complexity": "moderate",
+   "domainMeta": {
+    "entryPoint": "crmInterview.actions.ts server actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:manage-interview:schedule-interview",
+   "type": "step",
+   "name": "Schedule interview",
+   "summary": "Create a scheduled CrmInterview and emit InterviewScheduled.",
+   "tags": [
+    "crm",
+    "interview"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/crmInterview.actions.ts",
+   "lineRange": [
+    52,
+    101
+   ]
+  },
+  {
+   "id": "step:manage-interview:complete-interview",
+   "type": "step",
+   "name": "Complete interview",
+   "summary": "Transition an interview to completed with outcome notes, emitting InterviewCompleted.",
+   "tags": [
+    "crm",
+    "interview"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/crmInterview.actions.ts",
+   "lineRange": [
+    103,
+    147
+   ]
+  },
+  {
+   "id": "step:manage-interview:reschedule-interview",
+   "type": "step",
+   "name": "Reschedule interview",
+   "summary": "Reschedule an interview to a new date/location with state-machine validation.",
+   "tags": [
+    "crm",
+    "interview"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/crmInterview.actions.ts",
+   "lineRange": [
+    176,
+    209
+   ]
+  },
+  {
+   "id": "step:manage-interview:cancel-interview",
+   "type": "step",
+   "name": "Cancel interview",
+   "summary": "Cancel a scheduled interview after ownership and state validation.",
+   "tags": [
+    "crm",
+    "interview"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/crmInterview.actions.ts",
+   "lineRange": [
+    149,
+    174
+   ]
+  },
+  {
+   "id": "flow:manage-crm-task",
+   "type": "flow",
+   "name": "Manage CRM Task",
+   "summary": "Lifecycle for a CrmTask with polymorphic targets and a state machine: create, start, complete, cancel, delete.",
+   "tags": [
+    "crm",
+    "task"
+   ],
+   "complexity": "moderate",
+   "domainMeta": {
+    "entryPoint": "crmTask.actions.ts server actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:manage-crm-task:create-task",
+   "type": "step",
+   "name": "Create task",
+   "summary": "Create a CrmTask with polymorphic target validation, emitting CrmTaskCreated.",
+   "tags": [
+    "crm",
+    "task"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/crmTask.actions.ts",
+   "lineRange": [
+    56,
+    130
+   ]
+  },
+  {
+   "id": "step:manage-crm-task:start-task",
+   "type": "step",
+   "name": "Start task",
+   "summary": "Transition a task to in_progress.",
+   "tags": [
+    "crm",
+    "task"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/crmTask.actions.ts",
+   "lineRange": [
+    132,
+    155
+   ]
+  },
+  {
+   "id": "step:manage-crm-task:complete-task",
+   "type": "step",
+   "name": "Complete task",
+   "summary": "Transition a task to done, emitting CrmTaskCompleted.",
+   "tags": [
+    "crm",
+    "task"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/crmTask.actions.ts",
+   "lineRange": [
+    157,
+    194
+   ]
+  },
+  {
+   "id": "step:manage-crm-task:cancel-delete-task",
+   "type": "step",
+   "name": "Cancel / delete task",
+   "summary": "Cancel a task after state validation or delete it after an ownership check.",
+   "tags": [
+    "crm",
+    "task"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/crmTask.actions.ts",
+   "lineRange": [
+    196,
+    219
+   ]
+  },
+  {
+   "id": "domain:data-enrichment",
+   "type": "domain",
+   "name": "Data Enrichment",
+   "summary": "Best-effort, non-blocking enrichment of company data (logos, deep links) via per-dimension fallback chains of pluggable enrichment Modules (Logo.dev, Google Favicon, Meta/OpenGraph parser). Results are cached per user with TTL and an append-only audit trail.",
+   "tags": [
+    "enrichment",
+    "connector",
+    "module"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entities": [
+     "EnrichmentResult",
+     "EnrichmentLog",
+     "LogoData",
+     "DeepLinkData",
+     "DataEnrichmentManifest"
+    ],
+    "businessRules": [
+     "Enrichment is best-effort and non-blocking; failures never surface to users",
+     "First module in a dimension chain to succeed wins; the rest are skipped",
+     "Cache keys include userId to prevent cross-user leakage (ADR-029)",
+     "Meta-parser uses redirect:manual SSRF protection and sanitizes extracted values"
+    ],
+    "crossDomainInteractions": [
+     "Triggered by CompanyCreated / VacancyPromoted events from CRM and Staging",
+     "Invoked inline by the Job Discovery runner",
+     "Feeds the Logo Asset Cache which stores images locally"
+    ]
+   }
+  },
+  {
+   "id": "flow:enrich-company",
+   "type": "flow",
+   "name": "Enrich Company Data",
+   "summary": "Triggers a per-dimension enrichment chain for a domain, with caching, in-flight throttling, and a forced-refresh path.",
+   "tags": [
+    "enrichment"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "enrichment.actions.ts server actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:enrich-company:trigger-enrichment",
+   "type": "step",
+   "name": "Trigger enrichment",
+   "summary": "Trigger an enrichment chain for a domain with per-user in-flight throttling.",
+   "tags": [
+    "enrichment"
+   ],
+   "complexity": "complex",
+   "filePath": "src/actions/enrichment.actions.ts",
+   "lineRange": [
+    59,
+    150
+   ]
+  },
+  {
+   "id": "step:enrich-company:check-cache",
+   "type": "step",
+   "name": "Check cache",
+   "summary": "Check for a fresh cached result before running the chain.",
+   "tags": [
+    "enrichment"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/connector/data-enrichment/orchestrator.ts",
+   "lineRange": [
+    56,
+    65
+   ]
+  },
+  {
+   "id": "step:enrich-company:get-status",
+   "type": "step",
+   "name": "Get status",
+   "summary": "Return the current enrichment status for a user/domain/dimension.",
+   "tags": [
+    "enrichment"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/enrichment.actions.ts",
+   "lineRange": [
+    158,
+    189
+   ]
+  },
+  {
+   "id": "step:enrich-company:refresh-enrichment",
+   "type": "step",
+   "name": "Force refresh",
+   "summary": "Force a fresh enrichment run bypassing cache, rate-limited.",
+   "tags": [
+    "enrichment"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/enrichment.actions.ts",
+   "lineRange": [
+    230,
+    308
+   ]
+  },
+  {
+   "id": "flow:event-triggered-enrichment",
+   "type": "flow",
+   "name": "Event-Triggered Enrichment",
+   "summary": "Subscribes to CompanyCreated and VacancyPromoted events and runs best-effort enrichment with cache-before-chain checks and a concurrency semaphore.",
+   "tags": [
+    "enrichment",
+    "event"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "CompanyCreated / VacancyPromoted events",
+    "entryType": "event"
+   }
+  },
+  {
+   "id": "step:event-triggered-enrichment:subscribe-events",
+   "type": "step",
+   "name": "Subscribe to events",
+   "summary": "Subscribe to CompanyCreated and VacancyPromoted domain events.",
+   "tags": [
+    "event",
+    "enrichment"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/events/consumers/enrichment-trigger.ts",
+   "lineRange": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "step:event-triggered-enrichment:cache-before-chain",
+   "type": "step",
+   "name": "Cache-before-chain check",
+   "summary": "Check the DB for an existing fresh result before executing the chain.",
+   "tags": [
+    "enrichment"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/events/consumers/enrichment-trigger.ts",
+   "lineRange": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "step:event-triggered-enrichment:execute-chain",
+   "type": "step",
+   "name": "Execute fallback chain",
+   "summary": "Run the dimension fallback chain (first success wins), bounded by a concurrency semaphore.",
+   "tags": [
+    "enrichment"
+   ],
+   "complexity": "complex",
+   "filePath": "src/lib/connector/data-enrichment/orchestrator.ts",
+   "lineRange": [
+    56,
+    65
+   ]
+  },
+  {
+   "id": "domain:notifications",
+   "type": "domain",
+   "name": "Multi-Channel Notifications",
+   "summary": "Fans notification drafts out to all enabled channels (in-app, webhook, email, browser push) through a ChannelRouter driven by a per-dispatch DispatchContext. Each channel enforces its own security: HMAC-signed webhooks, TLS SMTP, and VAPID push.",
+   "tags": [
+    "notifications",
+    "webhook",
+    "email",
+    "push"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entities": [
+     "Notification",
+     "WebhookEndpoint",
+     "SmtpConfig",
+     "VapidConfig",
+     "WebPushSubscription",
+     "DispatchContext"
+    ],
+    "businessRules": [
+     "DispatchContext is built fresh per dispatch and threaded to all channels (PERF-3)",
+     "Direct notification writers must import enforced-writer helpers from the leaf module",
+     "Webhooks are HMAC-signed and auto-deactivate after 5 consecutive failures",
+     "Webhook/SMTP/push targets pass SSRF validation on save and on dispatch",
+     "Secrets are AES-encrypted at rest and shown once on creation"
+    ],
+    "crossDomainInteractions": [
+     "Receives reminder events from the CRM and degradation events from Scheduler/Modules",
+     "Per-channel configuration is owned by the Settings domain"
+    ]
+   }
+  },
+  {
+   "id": "flow:dispatch-notification",
+   "type": "flow",
+   "name": "Dispatch Notification",
+   "summary": "Routes a notification draft to every enabled channel using a single DispatchContext.",
+   "tags": [
+    "notifications"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "ChannelRouter.route()",
+    "entryType": "event"
+   }
+  },
+  {
+   "id": "step:dispatch-notification:build-context",
+   "type": "step",
+   "name": "Build dispatch context",
+   "summary": "Build a fresh DispatchContext consolidating per-user channel data in parallel queries.",
+   "tags": [
+    "notifications"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/notifications/channel-router.ts",
+   "lineRange": [
+    244,
+    252
+   ]
+  },
+  {
+   "id": "step:dispatch-notification:register-channels",
+   "type": "step",
+   "name": "Register channels",
+   "summary": "Register the four built-in channels (in-app, email, webhook, push).",
+   "tags": [
+    "notifications"
+   ],
+   "complexity": "simple",
+   "filePath": "src/lib/notifications/channel-router.ts",
+   "lineRange": [
+    244,
+    252
+   ]
+  },
+  {
+   "id": "step:dispatch-notification:fan-out",
+   "type": "step",
+   "name": "Fan out to channels",
+   "summary": "Fan the draft out to all enabled channels derived from context availability flags.",
+   "tags": [
+    "notifications"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/notifications/channel-router.ts",
+   "lineRange": [
+    244,
+    252
+   ]
+  },
+  {
+   "id": "flow:deliver-webhook",
+   "type": "flow",
+   "name": "Deliver Webhook",
+   "summary": "Delivers a notification to external webhook endpoints with HMAC signing, retry/backoff, and auto-deactivation on repeated failure.",
+   "tags": [
+    "notifications",
+    "webhook"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "WebhookChannel.dispatch()",
+    "entryType": "event"
+   }
+  },
+  {
+   "id": "step:deliver-webhook:filter-data",
+   "type": "step",
+   "name": "Filter payload",
+   "summary": "Filter notification data to an allowlist of fields safe to send externally.",
+   "tags": [
+    "security",
+    "webhook"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/notifications/channels/webhook.channel.ts",
+   "lineRange": [
+    97,
+    107
+   ]
+  },
+  {
+   "id": "step:deliver-webhook:sign-and-post",
+   "type": "step",
+   "name": "Sign and POST",
+   "summary": "Compute the HMAC signature and POST with a timeout via AbortController.",
+   "tags": [
+    "security",
+    "webhook"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/notifications/channels/webhook.channel.ts",
+   "lineRange": [
+    131,
+    182
+   ]
+  },
+  {
+   "id": "step:deliver-webhook:retry-delivery",
+   "type": "step",
+   "name": "Retry with backoff",
+   "summary": "Retry delivery up to 3 times with 1s/5s/30s backoff.",
+   "tags": [
+    "webhook"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/notifications/channels/webhook.channel.ts",
+   "lineRange": [
+    188,
+    214
+   ]
+  },
+  {
+   "id": "step:deliver-webhook:handle-failure",
+   "type": "step",
+   "name": "Handle failure",
+   "summary": "Notify and auto-deactivate the endpoint after repeated delivery failures.",
+   "tags": [
+    "webhook"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/notifications/channels/webhook.channel.ts",
+   "lineRange": [
+    289,
+    322
+   ]
+  },
+  {
+   "id": "flow:manage-push",
+   "type": "flow",
+   "name": "Manage Browser Push",
+   "summary": "Manages VAPID keys and web-push subscriptions for browser push notifications.",
+   "tags": [
+    "notifications",
+    "push"
+   ],
+   "complexity": "moderate",
+   "domainMeta": {
+    "entryPoint": "push.actions.ts / vapid.ts",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:manage-push:create-vapid",
+   "type": "step",
+   "name": "Get or create VAPID keys",
+   "summary": "Return decrypted VAPID keys, generating and persisting new encrypted keys on first enable.",
+   "tags": [
+    "push",
+    "security"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/push/vapid.ts",
+   "lineRange": [
+    54,
+    83
+   ]
+  },
+  {
+   "id": "step:manage-push:subscribe-push",
+   "type": "step",
+   "name": "Subscribe device",
+   "summary": "Persist an encrypted web-push subscription for a browser/device.",
+   "tags": [
+    "push"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/push.actions.ts",
+   "lineRange": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "step:manage-push:rotate-vapid",
+   "type": "step",
+   "name": "Rotate VAPID keys",
+   "summary": "Transactionally delete all subscriptions and regenerate VAPID config.",
+   "tags": [
+    "push",
+    "security"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/push/vapid.ts",
+   "lineRange": [
+    104,
+    116
+   ]
+  },
+  {
+   "id": "domain:scheduler-coordination",
+   "type": "domain",
+   "name": "Scheduler Coordination",
+   "summary": "Single entry point and cron loop for all automation runs, plus a separate CRM temporal-rules cron. The RunCoordinator serializes runs per automationId, reports progress, reconciles orphaned runs, and bridges degradation to notifications.",
+   "tags": [
+    "scheduler",
+    "automation",
+    "cron"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entities": [
+     "RunCoordinator",
+     "RunLock",
+     "SchedulerSnapshot",
+     "AutomationRun"
+    ],
+    "businessRules": [
+     "ALL automation runs MUST go through RunCoordinator.requestRun() (per-automationId mutex)",
+     "RunCoordinator is a globalThis singleton that survives HMR",
+     "CRM temporal rules run on a separate cron, independent from the automation scheduler (bounded-context separation)",
+     "Reminders are idempotent within a 24h window via activity-log checks",
+     "Max 5 concurrent SSE status connections per user"
+    ],
+    "crossDomainInteractions": [
+     "Drives runs in the Job Discovery Automations domain",
+     "Fires reminder events consumed by CRM and Notifications",
+     "Executes account-deletion grace-period expiry for Privacy"
+    ]
+   }
+  },
+  {
+   "id": "flow:automation-scheduler",
+   "type": "flow",
+   "name": "Automation Scheduler Loop",
+   "summary": "Finds due automations and dispatches each run through the RunCoordinator, with watchdog and orphan reconciliation.",
+   "tags": [
+    "scheduler",
+    "cron"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "Scheduler cron loop",
+    "entryType": "cron"
+   }
+  },
+  {
+   "id": "step:automation-scheduler:find-due",
+   "type": "step",
+   "name": "Find due automations",
+   "summary": "Scan for automations whose next-run time has elapsed.",
+   "tags": [
+    "scheduler"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/scheduler/index.ts",
+   "lineRange": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "step:automation-scheduler:request-run",
+   "type": "step",
+   "name": "Request run",
+   "summary": "Dispatch each due run through RunCoordinator with a per-automationId mutex.",
+   "tags": [
+    "scheduler"
+   ],
+   "complexity": "complex",
+   "filePath": "src/lib/scheduler/run-coordinator.ts",
+   "lineRange": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "step:automation-scheduler:reconcile-orphans",
+   "type": "step",
+   "name": "Reconcile orphaned runs",
+   "summary": "Reconcile automation runs left orphaned by a process restart.",
+   "tags": [
+    "scheduler"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/scheduler/run-coordinator.ts",
+   "lineRange": [
+    425,
+    441
+   ]
+  },
+  {
+   "id": "flow:crm-temporal-rules",
+   "type": "flow",
+   "name": "CRM Temporal Rules",
+   "summary": "A separate cron that enforces time-based CRM rules: expiring auto-created persons, interview/overdue reminders, and purging expired deletions.",
+   "tags": [
+    "scheduler",
+    "crm",
+    "cron"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "CRM cron loop (every 15 min)",
+    "entryType": "cron"
+   }
+  },
+  {
+   "id": "step:crm-temporal-rules:expire-persons",
+   "type": "step",
+   "name": "Expire auto-created persons",
+   "summary": "Archive auto-created persons whose retention has expired.",
+   "tags": [
+    "crm",
+    "gdpr"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/scheduler/crm-cron.ts",
+   "lineRange": [
+    50,
+    100
+   ]
+  },
+  {
+   "id": "step:crm-temporal-rules:interview-reminders",
+   "type": "step",
+   "name": "Interview reminders",
+   "summary": "Fire ReminderTriggered events for interviews scheduled within 24h.",
+   "tags": [
+    "crm",
+    "notifications"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/scheduler/crm-cron.ts",
+   "lineRange": [
+    106,
+    176
+   ]
+  },
+  {
+   "id": "step:crm-temporal-rules:overdue-task-reminders",
+   "type": "step",
+   "name": "Overdue task reminders",
+   "summary": "Fire ReminderTriggered events for overdue CRM tasks.",
+   "tags": [
+    "crm",
+    "notifications"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/scheduler/crm-cron.ts",
+   "lineRange": [
+    182,
+    238
+   ]
+  },
+  {
+   "id": "step:crm-temporal-rules:purge-deletions",
+   "type": "step",
+   "name": "Purge expired deletions",
+   "summary": "Execute pending account-deletion requests whose grace period has elapsed.",
+   "tags": [
+    "gdpr"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/lib/scheduler/crm-cron.ts",
+   "lineRange": [
+    244,
+    279
+   ]
+  },
+  {
+   "id": "domain:reference-data",
+   "type": "domain",
+   "name": "Reference Data",
+   "summary": "Health-only connector providing taxonomy and geo/temporal reference data (ISO 3166 geo codes, public holidays, ESCO classification, Eurostat NUTS). An Open Host Service bridges these server-only modules to client components.",
+   "tags": [
+    "reference-data",
+    "connector",
+    "module"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entities": [
+     "GeoCodeService",
+     "HolidayService",
+     "EscoClassification",
+     "EurostatNuts"
+    ],
+    "businessRules": [
+     "Reference-data lookups live in their own Open Host Service action file to keep aggregate repositories pure (DDD)",
+     "All three reference actions are auth-gated (ADR-019)",
+     "Only public and bank holidays block business days",
+     "Vendored JSONs are loaded via require() (no runtime file I/O)"
+    ],
+    "crossDomainInteractions": [
+     "Supplies geo/holiday lookups to the Profile and CRM domains",
+     "Declared as dependencies of EURES in Job Discovery Automations"
+    ]
+   }
+  },
+  {
+   "id": "flow:lookup-reference-data",
+   "type": "flow",
+   "name": "Lookup Reference Data",
+   "summary": "Auth-gated Open Host Service exposing country, subdivision, currency, and holiday/business-day lookups to client components.",
+   "tags": [
+    "reference-data"
+   ],
+   "complexity": "moderate",
+   "domainMeta": {
+    "entryPoint": "reference-data.actions.ts server actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:lookup-reference-data:get-countries",
+   "type": "step",
+   "name": "Get countries & subdivisions",
+   "summary": "Return localized ISO 3166 country and subdivision options for selectors.",
+   "tags": [
+    "reference-data"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/reference-data.actions.ts",
+   "lineRange": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "step:lookup-reference-data:get-holiday-info",
+   "type": "step",
+   "name": "Get holiday / business-day info",
+   "summary": "Auth-gated lookup returning holiday and business-day info for a Person's location.",
+   "tags": [
+    "reference-data"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/reference-data.actions.ts",
+   "lineRange": [
+    93,
+    135
+   ]
+  },
+  {
+   "id": "domain:settings-module-lifecycle",
+   "type": "domain",
+   "name": "Settings & Module Lifecycle",
+   "summary": "Manages user settings (AI, display, automation, notification preferences), module credentials, and the admin-gated connector module lifecycle: activation, deactivation, registry sync, and health checks.",
+   "tags": [
+    "settings",
+    "module",
+    "admin"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entities": [
+     "UserSettings",
+     "ApiKey",
+     "RegisteredModule",
+     "ModuleManifest",
+     "ModuleHealth"
+    ],
+    "businessRules": [
+     "Server actions that mutate shared singleton module state must be admin-gated and rate-limited (ADR-019, Sprint 1.5)",
+     "Deactivating a module pauses affected automations with a pauseReason",
+     "Module API keys are AES-encrypted at rest",
+     "Every admin call emits a structured admin-audit log line"
+    ],
+    "crossDomainInteractions": [
+     "Controls which Modules are available to Job Discovery, AI, and Enrichment domains",
+     "Owns per-channel configuration consumed by Notifications"
+    ]
+   }
+  },
+  {
+   "id": "flow:manage-user-settings",
+   "type": "flow",
+   "name": "Manage User Settings",
+   "summary": "Reads and writes the UserSettings aggregate (AI, display, automation, job-form, notification preferences), IDOR-scoped.",
+   "tags": [
+    "settings"
+   ],
+   "complexity": "moderate",
+   "domainMeta": {
+    "entryPoint": "userSettings.actions.ts / apiKey.actions.ts",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:manage-user-settings:read-settings",
+   "type": "step",
+   "name": "Read preferences",
+   "summary": "Read the user's settings, scoped to the current user.",
+   "tags": [
+    "settings"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/userSettings.actions.ts",
+   "lineRange": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "step:manage-user-settings:update-settings",
+   "type": "step",
+   "name": "Update preferences",
+   "summary": "Update AI/display/automation/notification preferences with validation.",
+   "tags": [
+    "settings"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/userSettings.actions.ts",
+   "lineRange": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "step:manage-user-settings:save-credentials",
+   "type": "step",
+   "name": "Save module credentials",
+   "summary": "Save encrypted module API keys and resolve the Ollama base URL.",
+   "tags": [
+    "settings",
+    "security"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/apiKey.actions.ts",
+   "lineRange": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "flow:module-lifecycle",
+   "type": "flow",
+   "name": "Module Lifecycle",
+   "summary": "Admin-gated activation, deactivation, registry sync, and health checks for connector modules.",
+   "tags": [
+    "module",
+    "admin"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "module.actions.ts admin actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:module-lifecycle:list-modules",
+   "type": "step",
+   "name": "List module manifests",
+   "summary": "Return module manifests for a connector type, merging registry state.",
+   "tags": [
+    "module"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/module.actions.ts",
+   "lineRange": [
+    59,
+    120
+   ]
+  },
+  {
+   "id": "step:module-lifecycle:activate-module",
+   "type": "step",
+   "name": "Activate module",
+   "summary": "Admin-gated, rate-limited, audited activation of a module.",
+   "tags": [
+    "module",
+    "admin",
+    "security"
+   ],
+   "complexity": "complex",
+   "filePath": "src/actions/module.actions.ts",
+   "lineRange": [
+    156,
+    293
+   ]
+  },
+  {
+   "id": "step:module-lifecycle:deactivate-module",
+   "type": "step",
+   "name": "Deactivate module",
+   "summary": "Admin-gated deactivation that pauses affected automations.",
+   "tags": [
+    "module",
+    "admin",
+    "automation"
+   ],
+   "complexity": "complex",
+   "filePath": "src/actions/module.actions.ts",
+   "lineRange": [
+    295,
+    424
+   ]
+  },
+  {
+   "id": "step:module-lifecycle:health-check",
+   "type": "step",
+   "name": "Run health check",
+   "summary": "Run a rate-limited health probe for a module and persist the result.",
+   "tags": [
+    "module"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/module.actions.ts",
+   "lineRange": [
+    496,
+    531
+   ]
+  },
+  {
+   "id": "step:module-lifecycle:sync-registry",
+   "type": "step",
+   "name": "Sync registry",
+   "summary": "Reconcile the in-memory module registry with persisted DB activation state.",
+   "tags": [
+    "module"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/module.actions.ts",
+   "lineRange": [
+    436,
+    454
+   ]
+  },
+  {
+   "id": "domain:profile-management",
+   "type": "domain",
+   "name": "Profile & Resume Management",
+   "summary": "Owns the Profile aggregate: resumes, contact info, work experience, education, summaries, and location/currency preferences. Enforces IDOR ownership through relation-chain pre-flight checks.",
+   "tags": [
+    "profile",
+    "resume",
+    "repository"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entities": [
+     "Profile",
+     "Resume",
+     "ResumeSection",
+     "ContactInfo",
+     "WorkExperience",
+     "Education"
+    ],
+    "businessRules": [
+     "All access is IDOR-enforced via relation-chain ownership checks (ADR-015)",
+     "Profile.userId is unique (one profile per user)",
+     "Deleting a resume removes its backing file"
+    ],
+    "crossDomainInteractions": [
+     "Resumes are read by the AI Resume Review & Matching domain",
+     "Preferences use Reference Data for location/currency"
+    ]
+   }
+  },
+  {
+   "id": "flow:manage-resume",
+   "type": "flow",
+   "name": "Manage Resume",
+   "summary": "Creates, edits, and deletes resumes and their sections (contact info, experience, education, summaries) with ownership enforcement.",
+   "tags": [
+    "profile",
+    "resume"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "profile.actions.ts server actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:manage-resume:create-resume",
+   "type": "step",
+   "name": "Create resume profile",
+   "summary": "Create a new resume and profile records for the user.",
+   "tags": [
+    "profile",
+    "resume"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/profile.actions.ts",
+   "lineRange": [
+    228,
+    301
+   ]
+  },
+  {
+   "id": "step:manage-resume:add-contact-info",
+   "type": "step",
+   "name": "Add contact info",
+   "summary": "Add contact info to a resume with ownership validation.",
+   "tags": [
+    "profile"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/profile.actions.ts",
+   "lineRange": [
+    143,
+    187
+   ]
+  },
+  {
+   "id": "step:manage-resume:add-experience",
+   "type": "step",
+   "name": "Add experience",
+   "summary": "Add a work-experience entry to a resume section.",
+   "tags": [
+    "profile"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/profile.actions.ts",
+   "lineRange": [
+    570,
+    635
+   ]
+  },
+  {
+   "id": "step:manage-resume:add-education",
+   "type": "step",
+   "name": "Add education",
+   "summary": "Add an education entry to a resume.",
+   "tags": [
+    "profile"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/profile.actions.ts",
+   "lineRange": [
+    676,
+    738
+   ]
+  },
+  {
+   "id": "step:manage-resume:delete-resume",
+   "type": "step",
+   "name": "Delete resume",
+   "summary": "Delete a resume and its file after an ownership check.",
+   "tags": [
+    "profile"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/profile.actions.ts",
+   "lineRange": [
+    370,
+    471
+   ]
+  },
+  {
+   "id": "flow:manage-preferences",
+   "type": "flow",
+   "name": "Manage Profile Preferences",
+   "summary": "Reads and updates the user's location and currency preferences.",
+   "tags": [
+    "profile",
+    "settings"
+   ],
+   "complexity": "simple",
+   "domainMeta": {
+    "entryPoint": "profile.actions.ts preference actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:manage-preferences:read-preferences",
+   "type": "step",
+   "name": "Read preferences",
+   "summary": "Read the user's location/currency profile preferences.",
+   "tags": [
+    "profile"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/profile.actions.ts",
+   "lineRange": [
+    876,
+    894
+   ]
+  },
+  {
+   "id": "step:manage-preferences:update-preferences",
+   "type": "step",
+   "name": "Update preferences",
+   "summary": "Update profile preferences with validation against reference data.",
+   "tags": [
+    "profile",
+    "reference-data"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/profile.actions.ts",
+   "lineRange": [
+    906,
+    950
+   ]
+  },
+  {
+   "id": "domain:public-api",
+   "type": "domain",
+   "name": "Public API v1",
+   "summary": "A versioned REST surface ('Open Host Service') over the Jobs data layer, authenticated by hashed API keys and protected by per-key and pre-auth IP rate limiting. Responses use explicit selects to avoid leaking internal fields.",
+   "tags": [
+    "api-handler",
+    "auth",
+    "security"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entities": [
+     "PublicApiKey",
+     "Job",
+     "JobNote"
+    ],
+    "businessRules": [
+     "All /api/v1/* routes MUST use the withApiAuth() wrapper",
+     "Responses MUST use explicit select, never include, to avoid leaking internal fields",
+     "Pre-auth IP rate limiting (120/min) runs before key validation",
+     "All route params are UUID-validated; errors are sanitized"
+    ],
+    "crossDomainInteractions": [
+     "Reads and writes the Job Application Tracking domain",
+     "API keys are managed via the Settings domain"
+    ]
+   }
+  },
+  {
+   "id": "flow:manage-api-key",
+   "type": "flow",
+   "name": "Manage Public API Keys",
+   "summary": "Creates (SHA-256 hashed), lists, revokes, and deletes public API keys with max-key and ownership enforcement.",
+   "tags": [
+    "api-handler",
+    "auth"
+   ],
+   "complexity": "moderate",
+   "domainMeta": {
+    "entryPoint": "publicApiKey.actions.ts server actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:manage-api-key:create-api-key",
+   "type": "step",
+   "name": "Create API key",
+   "summary": "Create a SHA-256-hashed API key, shown once, enforcing the per-user max.",
+   "tags": [
+    "security",
+    "auth"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/publicApiKey.actions.ts",
+   "lineRange": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "step:manage-api-key:revoke-api-key",
+   "type": "step",
+   "name": "Revoke / delete key",
+   "summary": "Revoke or delete an API key with ownership enforcement.",
+   "tags": [
+    "security"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/publicApiKey.actions.ts",
+   "lineRange": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "flow:public-jobs-api",
+   "type": "flow",
+   "name": "Public Jobs API",
+   "summary": "Authenticated, rate-limited REST endpoints for listing, creating, and mutating jobs over explicit Prisma selects.",
+   "tags": [
+    "api-handler",
+    "job"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "GET/POST /api/v1/jobs",
+    "entryType": "http"
+   }
+  },
+  {
+   "id": "step:public-jobs-api:authenticate-request",
+   "type": "step",
+   "name": "Authenticate request",
+   "summary": "Validate the API key and apply pre-auth IP + per-key rate limits via withApiAuth.",
+   "tags": [
+    "security",
+    "auth"
+   ],
+   "complexity": "complex",
+   "filePath": "src/app/api/v1/jobs/route.ts",
+   "lineRange": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "step:public-jobs-api:list-create-jobs",
+   "type": "step",
+   "name": "List / create jobs",
+   "summary": "Return a paginated job list or create a job over explicit selects.",
+   "tags": [
+    "job",
+    "api-handler"
+   ],
+   "complexity": "complex",
+   "filePath": "src/app/api/v1/jobs/route.ts",
+   "lineRange": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "step:public-jobs-api:update-job-status-api",
+   "type": "step",
+   "name": "Update job status",
+   "summary": "Validate and apply a job status transition through the public API.",
+   "tags": [
+    "job",
+    "job-status"
+   ],
+   "complexity": "complex",
+   "filePath": "src/app/api/v1/jobs/[id]/status/route.ts",
+   "lineRange": [
+    24,
+    142
+   ]
+  },
+  {
+   "id": "domain:auth-privacy",
+   "type": "domain",
+   "name": "Authentication & Privacy",
+   "summary": "Owns user signup/sign-in (IP rate-limited, bcrypt-hashed, credential-stripped) and GDPR account lifecycle: privacy preferences plus a confirmation-token account-deletion flow with a grace period.",
+   "tags": [
+    "auth",
+    "gdpr",
+    "security"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entities": [
+     "User",
+     "AccountDeletionRequest",
+     "PrivacySettings"
+    ],
+    "businessRules": [
+     "Signup/sign-in are IP rate-limited; credentials are stripped from URLs (ADR-016)",
+     "New users are seeded with job sources and default job statuses",
+     "Account deletion is a confirmation-token flow with a cancellable grace period",
+     "Deletion execution runs from the CRM temporal cron after the grace period"
+    ],
+    "crossDomainInteractions": [
+     "Seeds the Job Application Tracking domain (default statuses) on signup",
+     "Deletion expiry is executed by Scheduler Coordination"
+    ]
+   }
+  },
+  {
+   "id": "flow:authenticate-user",
+   "type": "flow",
+   "name": "Authenticate User",
+   "summary": "Signup and sign-in with IP rate-limiting, validation, bcrypt hashing, and per-user data seeding.",
+   "tags": [
+    "auth",
+    "security"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "auth.actions.ts server actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:authenticate-user:signup",
+   "type": "step",
+   "name": "Sign up",
+   "summary": "Rate-limit by IP, validate the form, reject duplicates, hash the password, and seed defaults.",
+   "tags": [
+    "auth",
+    "security"
+   ],
+   "complexity": "complex",
+   "filePath": "src/actions/auth.actions.ts",
+   "lineRange": [
+    13,
+    64
+   ]
+  },
+  {
+   "id": "step:authenticate-user:authenticate",
+   "type": "step",
+   "name": "Sign in",
+   "summary": "Wrap NextAuth signIn with IP rate-limiting and credential handling.",
+   "tags": [
+    "auth",
+    "security"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/auth.actions.ts",
+   "lineRange": [
+    66,
+    97
+   ]
+  },
+  {
+   "id": "flow:account-deletion",
+   "type": "flow",
+   "name": "Account Deletion (GDPR)",
+   "summary": "Initiates, cancels, and reports a token-confirmed account-deletion request with a grace period.",
+   "tags": [
+    "gdpr",
+    "account"
+   ],
+   "complexity": "complex",
+   "domainMeta": {
+    "entryPoint": "account.actions.ts server actions",
+    "entryType": "manual"
+   }
+  },
+  {
+   "id": "step:account-deletion:request-deletion",
+   "type": "step",
+   "name": "Request deletion",
+   "summary": "Generate a signed confirmation token and dispatch the deletion request.",
+   "tags": [
+    "gdpr"
+   ],
+   "complexity": "complex",
+   "filePath": "src/actions/account.actions.ts",
+   "lineRange": [
+    60,
+    177
+   ]
+  },
+  {
+   "id": "step:account-deletion:cancel-deletion",
+   "type": "step",
+   "name": "Cancel deletion",
+   "summary": "Cancel a pending account-deletion request during the grace period.",
+   "tags": [
+    "gdpr"
+   ],
+   "complexity": "moderate",
+   "filePath": "src/actions/account.actions.ts",
+   "lineRange": [
+    182,
+    214
+   ]
+  },
+  {
+   "id": "step:account-deletion:report-status",
+   "type": "step",
+   "name": "Report deletion status",
+   "summary": "Return the current account-deletion request status for the user.",
+   "tags": [
+    "gdpr"
+   ],
+   "complexity": "simple",
+   "filePath": "src/actions/account.actions.ts",
+   "lineRange": [
+    219,
+    242
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "source": "domain:job-application-tracking",
+   "target": "flow:create-job",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:create-job",
+   "target": "step:create-job:validate-input",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:create-job",
+   "target": "step:create-job:resolve-relations",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:create-job",
+   "target": "step:create-job:seed-status",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:create-job",
+   "target": "step:create-job:persist-job",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "domain:job-application-tracking",
+   "target": "flow:change-job-status",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:change-job-status",
+   "target": "step:change-job-status:load-job",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:change-job-status",
+   "target": "step:change-job-status:validate-transition",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:change-job-status",
+   "target": "step:change-job-status:apply-flag",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:change-job-status",
+   "target": "step:change-job-status:log-round",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "flow:change-job-status",
+   "target": "step:change-job-status:write-history",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "domain:job-application-tracking",
+   "target": "flow:kanban-board",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:kanban-board",
+   "target": "step:kanban-board:build-board",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.3
+  },
+  {
+   "source": "flow:kanban-board",
+   "target": "step:kanban-board:validate-move",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:kanban-board",
+   "target": "step:kanban-board:reorder",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.9
+  },
+  {
+   "source": "domain:job-application-tracking",
+   "target": "flow:manage-custom-status",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:manage-custom-status",
+   "target": "step:manage-custom-status:seed-defaults",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:manage-custom-status",
+   "target": "step:manage-custom-status:create-status",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:manage-custom-status",
+   "target": "step:manage-custom-status:rename-status",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:manage-custom-status",
+   "target": "step:manage-custom-status:reorder-statuses",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "flow:manage-custom-status",
+   "target": "step:manage-custom-status:set-default",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:manage-custom-status",
+   "target": "step:manage-custom-status:delete-status",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "domain:job-discovery-automations",
+   "target": "flow:run-automation",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:run-automation",
+   "target": "step:run-automation:search",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:run-automation",
+   "target": "step:run-automation:dedup",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:run-automation",
+   "target": "step:run-automation:enrich",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:run-automation",
+   "target": "step:run-automation:match",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "flow:run-automation",
+   "target": "step:run-automation:save",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:run-automation",
+   "target": "step:run-automation:finalize",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "domain:job-discovery-automations",
+   "target": "flow:manage-automation",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:manage-automation",
+   "target": "step:manage-automation:create-automation",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:manage-automation",
+   "target": "step:manage-automation:update-automation",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:manage-automation",
+   "target": "step:manage-automation:pause-resume",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:manage-automation",
+   "target": "step:manage-automation:delete-automation",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "domain:job-discovery-automations",
+   "target": "flow:review-discovered-jobs",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:review-discovered-jobs",
+   "target": "step:review-discovered-jobs:list-discovered",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:review-discovered-jobs",
+   "target": "step:review-discovered-jobs:inspect-match",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:review-discovered-jobs",
+   "target": "step:review-discovered-jobs:dismiss",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:review-discovered-jobs",
+   "target": "step:review-discovered-jobs:accept",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "domain:vacancy-staging",
+   "target": "flow:triage-staged-vacancy",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:triage-staged-vacancy",
+   "target": "step:triage-staged-vacancy:list-staged",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:triage-staged-vacancy",
+   "target": "step:triage-staged-vacancy:dismiss-staged",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:triage-staged-vacancy",
+   "target": "step:triage-staged-vacancy:archive-staged",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:triage-staged-vacancy",
+   "target": "step:triage-staged-vacancy:trash-staged",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "flow:triage-staged-vacancy",
+   "target": "step:triage-staged-vacancy:restore-staged",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "domain:vacancy-staging",
+   "target": "flow:promote-vacancy",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:promote-vacancy",
+   "target": "step:promote-vacancy:validate-ownership",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.3
+  },
+  {
+   "source": "flow:promote-vacancy",
+   "target": "step:promote-vacancy:create-job-from-vacancy",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:promote-vacancy",
+   "target": "step:promote-vacancy:write-promotion-history",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.9
+  },
+  {
+   "source": "domain:vacancy-staging",
+   "target": "flow:bulk-and-retention",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:bulk-and-retention",
+   "target": "step:bulk-and-retention:validate-bulk",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.3
+  },
+  {
+   "source": "flow:bulk-and-retention",
+   "target": "step:bulk-and-retention:apply-bulk",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:bulk-and-retention",
+   "target": "step:bulk-and-retention:retention-cleanup",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.9
+  },
+  {
+   "source": "domain:ai-resume-review",
+   "target": "flow:review-resume",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:review-resume",
+   "target": "step:review-resume:rate-limit-review",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.3
+  },
+  {
+   "source": "flow:review-resume",
+   "target": "step:review-resume:redact-pii-review",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:review-resume",
+   "target": "step:review-resume:stream-review",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.9
+  },
+  {
+   "source": "domain:ai-resume-review",
+   "target": "flow:match-resume",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:match-resume",
+   "target": "step:match-resume:load-resume-job",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.3
+  },
+  {
+   "source": "flow:match-resume",
+   "target": "step:match-resume:redact-pii-match",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:match-resume",
+   "target": "step:match-resume:stream-match",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.9
+  },
+  {
+   "source": "domain:crm",
+   "target": "flow:manage-person",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:manage-person",
+   "target": "step:manage-person:create-person",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:manage-person",
+   "target": "step:manage-person:update-person",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:manage-person",
+   "target": "step:manage-person:archive-reactivate",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:manage-person",
+   "target": "step:manage-person:anonymize-person",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "flow:manage-person",
+   "target": "step:manage-person:merge-persons",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "domain:crm",
+   "target": "flow:manage-interview",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:manage-interview",
+   "target": "step:manage-interview:schedule-interview",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:manage-interview",
+   "target": "step:manage-interview:complete-interview",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:manage-interview",
+   "target": "step:manage-interview:reschedule-interview",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:manage-interview",
+   "target": "step:manage-interview:cancel-interview",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "domain:crm",
+   "target": "flow:manage-crm-task",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:manage-crm-task",
+   "target": "step:manage-crm-task:create-task",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:manage-crm-task",
+   "target": "step:manage-crm-task:start-task",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:manage-crm-task",
+   "target": "step:manage-crm-task:complete-task",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:manage-crm-task",
+   "target": "step:manage-crm-task:cancel-delete-task",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "domain:data-enrichment",
+   "target": "flow:enrich-company",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:enrich-company",
+   "target": "step:enrich-company:trigger-enrichment",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:enrich-company",
+   "target": "step:enrich-company:check-cache",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:enrich-company",
+   "target": "step:enrich-company:get-status",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:enrich-company",
+   "target": "step:enrich-company:refresh-enrichment",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "domain:data-enrichment",
+   "target": "flow:event-triggered-enrichment",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:event-triggered-enrichment",
+   "target": "step:event-triggered-enrichment:subscribe-events",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.3
+  },
+  {
+   "source": "flow:event-triggered-enrichment",
+   "target": "step:event-triggered-enrichment:cache-before-chain",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:event-triggered-enrichment",
+   "target": "step:event-triggered-enrichment:execute-chain",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.9
+  },
+  {
+   "source": "domain:notifications",
+   "target": "flow:dispatch-notification",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:dispatch-notification",
+   "target": "step:dispatch-notification:build-context",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.3
+  },
+  {
+   "source": "flow:dispatch-notification",
+   "target": "step:dispatch-notification:register-channels",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:dispatch-notification",
+   "target": "step:dispatch-notification:fan-out",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.9
+  },
+  {
+   "source": "domain:notifications",
+   "target": "flow:deliver-webhook",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:deliver-webhook",
+   "target": "step:deliver-webhook:filter-data",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:deliver-webhook",
+   "target": "step:deliver-webhook:sign-and-post",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:deliver-webhook",
+   "target": "step:deliver-webhook:retry-delivery",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:deliver-webhook",
+   "target": "step:deliver-webhook:handle-failure",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "domain:notifications",
+   "target": "flow:manage-push",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:manage-push",
+   "target": "step:manage-push:create-vapid",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.3
+  },
+  {
+   "source": "flow:manage-push",
+   "target": "step:manage-push:subscribe-push",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:manage-push",
+   "target": "step:manage-push:rotate-vapid",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.9
+  },
+  {
+   "source": "domain:scheduler-coordination",
+   "target": "flow:automation-scheduler",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:automation-scheduler",
+   "target": "step:automation-scheduler:find-due",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.3
+  },
+  {
+   "source": "flow:automation-scheduler",
+   "target": "step:automation-scheduler:request-run",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:automation-scheduler",
+   "target": "step:automation-scheduler:reconcile-orphans",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.9
+  },
+  {
+   "source": "domain:scheduler-coordination",
+   "target": "flow:crm-temporal-rules",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:crm-temporal-rules",
+   "target": "step:crm-temporal-rules:expire-persons",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:crm-temporal-rules",
+   "target": "step:crm-temporal-rules:interview-reminders",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:crm-temporal-rules",
+   "target": "step:crm-temporal-rules:overdue-task-reminders",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:crm-temporal-rules",
+   "target": "step:crm-temporal-rules:purge-deletions",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "domain:reference-data",
+   "target": "flow:lookup-reference-data",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:lookup-reference-data",
+   "target": "step:lookup-reference-data:get-countries",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "flow:lookup-reference-data",
+   "target": "step:lookup-reference-data:get-holiday-info",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "domain:settings-module-lifecycle",
+   "target": "flow:manage-user-settings",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:manage-user-settings",
+   "target": "step:manage-user-settings:read-settings",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.3
+  },
+  {
+   "source": "flow:manage-user-settings",
+   "target": "step:manage-user-settings:update-settings",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:manage-user-settings",
+   "target": "step:manage-user-settings:save-credentials",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.9
+  },
+  {
+   "source": "domain:settings-module-lifecycle",
+   "target": "flow:module-lifecycle",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:module-lifecycle",
+   "target": "step:module-lifecycle:list-modules",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:module-lifecycle",
+   "target": "step:module-lifecycle:activate-module",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:module-lifecycle",
+   "target": "step:module-lifecycle:deactivate-module",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:module-lifecycle",
+   "target": "step:module-lifecycle:health-check",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "flow:module-lifecycle",
+   "target": "step:module-lifecycle:sync-registry",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "domain:profile-management",
+   "target": "flow:manage-resume",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:manage-resume",
+   "target": "step:manage-resume:create-resume",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.2
+  },
+  {
+   "source": "flow:manage-resume",
+   "target": "step:manage-resume:add-contact-info",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.4
+  },
+  {
+   "source": "flow:manage-resume",
+   "target": "step:manage-resume:add-experience",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:manage-resume",
+   "target": "step:manage-resume:add-education",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "flow:manage-resume",
+   "target": "step:manage-resume:delete-resume",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "domain:profile-management",
+   "target": "flow:manage-preferences",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:manage-preferences",
+   "target": "step:manage-preferences:read-preferences",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "flow:manage-preferences",
+   "target": "step:manage-preferences:update-preferences",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "domain:public-api",
+   "target": "flow:manage-api-key",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:manage-api-key",
+   "target": "step:manage-api-key:create-api-key",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "flow:manage-api-key",
+   "target": "step:manage-api-key:revoke-api-key",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "domain:public-api",
+   "target": "flow:public-jobs-api",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:public-jobs-api",
+   "target": "step:public-jobs-api:authenticate-request",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.3
+  },
+  {
+   "source": "flow:public-jobs-api",
+   "target": "step:public-jobs-api:list-create-jobs",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:public-jobs-api",
+   "target": "step:public-jobs-api:update-job-status-api",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.9
+  },
+  {
+   "source": "domain:auth-privacy",
+   "target": "flow:authenticate-user",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:authenticate-user",
+   "target": "step:authenticate-user:signup",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "flow:authenticate-user",
+   "target": "step:authenticate-user:authenticate",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "domain:auth-privacy",
+   "target": "flow:account-deletion",
+   "type": "contains_flow",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "flow:account-deletion",
+   "target": "step:account-deletion:request-deletion",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.3
+  },
+  {
+   "source": "flow:account-deletion",
+   "target": "step:account-deletion:cancel-deletion",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "flow:account-deletion",
+   "target": "step:account-deletion:report-status",
+   "type": "flow_step",
+   "direction": "forward",
+   "weight": 0.9
+  },
+  {
+   "source": "domain:job-discovery-automations",
+   "target": "domain:vacancy-staging",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Automation runs persist discovered vacancies into the staging pipeline.",
+   "weight": 0.8
+  },
+  {
+   "source": "domain:vacancy-staging",
+   "target": "domain:job-application-tracking",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Promotes staged vacancies into Job aggregates.",
+   "weight": 0.8
+  },
+  {
+   "source": "domain:job-discovery-automations",
+   "target": "domain:ai-resume-review",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "The runner calls the AI provider to score vacancy-to-resume matches.",
+   "weight": 0.7
+  },
+  {
+   "source": "domain:job-discovery-automations",
+   "target": "domain:data-enrichment",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "The runner enriches company logos/deep links during the enrich phase.",
+   "weight": 0.6
+  },
+  {
+   "source": "domain:vacancy-staging",
+   "target": "domain:data-enrichment",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "VacancyPromoted events trigger best-effort enrichment.",
+   "weight": 0.5
+  },
+  {
+   "source": "domain:crm",
+   "target": "domain:data-enrichment",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "CompanyCreated events trigger company logo/deep-link enrichment.",
+   "weight": 0.5
+  },
+  {
+   "source": "domain:ai-resume-review",
+   "target": "domain:profile-management",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Resume review/matching reads resumes from the Profile aggregate.",
+   "weight": 0.6
+  },
+  {
+   "source": "domain:scheduler-coordination",
+   "target": "domain:job-discovery-automations",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "RunCoordinator is the single entry point for all automation runs.",
+   "weight": 0.8
+  },
+  {
+   "source": "domain:scheduler-coordination",
+   "target": "domain:crm",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "The CRM cron expires auto-created persons and fires interview/task reminders.",
+   "weight": 0.6
+  },
+  {
+   "source": "domain:scheduler-coordination",
+   "target": "domain:notifications",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Reminder and degradation events fan out through the notification channels.",
+   "weight": 0.6
+  },
+  {
+   "source": "domain:scheduler-coordination",
+   "target": "domain:auth-privacy",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "The CRM cron executes account-deletion requests after the grace period.",
+   "weight": 0.5
+  },
+  {
+   "source": "domain:crm",
+   "target": "domain:notifications",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Interview/task reminder events are delivered through notification channels.",
+   "weight": 0.5
+  },
+  {
+   "source": "domain:crm",
+   "target": "domain:job-application-tracking",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Persons are linked to jobs via the JobContact join.",
+   "weight": 0.5
+  },
+  {
+   "source": "domain:settings-module-lifecycle",
+   "target": "domain:job-discovery-automations",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Deactivating a job-discovery module pauses affected automations.",
+   "weight": 0.6
+  },
+  {
+   "source": "domain:settings-module-lifecycle",
+   "target": "domain:ai-resume-review",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Settings select and credential the active AI provider module.",
+   "weight": 0.5
+  },
+  {
+   "source": "domain:settings-module-lifecycle",
+   "target": "domain:data-enrichment",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Settings activate/deactivate enrichment modules.",
+   "weight": 0.5
+  },
+  {
+   "source": "domain:settings-module-lifecycle",
+   "target": "domain:notifications",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Per-channel notification configuration is owned by settings.",
+   "weight": 0.5
+  },
+  {
+   "source": "domain:reference-data",
+   "target": "domain:profile-management",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Profile preferences use country/currency reference lookups.",
+   "weight": 0.5
+  },
+  {
+   "source": "domain:reference-data",
+   "target": "domain:crm",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Person holiday/business-day info is derived from reference data.",
+   "weight": 0.4
+  },
+  {
+   "source": "domain:reference-data",
+   "target": "domain:job-discovery-automations",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "EURES declares ESCO/Eurostat reference modules as dependencies.",
+   "weight": 0.4
+  },
+  {
+   "source": "domain:public-api",
+   "target": "domain:job-application-tracking",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "The public API reads and mutates jobs over explicit selects.",
+   "weight": 0.7
+  },
+  {
+   "source": "domain:public-api",
+   "target": "domain:settings-module-lifecycle",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Public API keys are created and revoked via settings.",
+   "weight": 0.4
+  },
+  {
+   "source": "domain:auth-privacy",
+   "target": "domain:job-application-tracking",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Signup seeds default job statuses and job sources.",
+   "weight": 0.5
+  },
+  {
+   "source": "domain:auth-privacy",
+   "target": "domain:crm",
+   "type": "cross_domain",
+   "direction": "forward",
+   "description": "Account anonymization/deletion cascades to CRM Person data.",
+   "weight": 0.5
+  }
+ ],
+ "layers": [],
+ "tour": []
+}
