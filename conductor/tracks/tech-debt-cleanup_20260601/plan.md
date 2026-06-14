@@ -93,18 +93,18 @@ for gaps), then fix. Each item is its own logical commit. Build zero-error +
 
 ### Tasks
 
-- [ ] Task 5.1: F6 — replace the `?? "Dismiss"` fallback at `toast.tsx:90` with the
-      `common.dismiss` i18n key (confirm key ×4 locales); component test asserts the
-      localised label with no `label` prop supplied.
-- [ ] Task 5.2: CRM-Cron — add `__tests__/crm-cron.spec.ts` covering
-      `ExpireAutoCreatedPersons` / `InterviewReminder` / `TaskOverdueReminder` + the
-      24h-idempotency guard (functions exported at `crm-cron.ts:384`).
+- [x] Task 5.1: F6 — DONE (2026-06-14, `375eecc`): ToastClose self-translates the dismiss
+      fallback via useTranslations (`common.dismiss`, ×4 locales; safe outside provider).
+      Test: de/en/explicit-label.
+- [x] Task 5.2: CRM-Cron — DONE (2026-06-14, `8d5845b`): `__tests__/crm-cron.spec.ts` covers
+      expireAutoCreatedPersons / checkInterviewReminders / checkOverdueTasks + 24h idempotency
+      + the GDPR Art. 7(3) consent-blocked exclusion. 7 tests.
 - [x] Task 5.3: G28 — DONE (verified 2026-06-14): `e2e/cleanup-stale-data.ts` deletes
       8 CRM entities child→parent (5a–5h) + RESTRICT-guards. Shipped (git `4d7c345`).
 
 ### Verification
 
-- [ ] Toast label localised; `crm-cron.ts` has unit coverage; E2E cleanup runs clean.
+- [x] Toast label localised; `crm-cron.ts` has unit coverage; E2E cleanup runs clean.
 
 ## Final Verification
 

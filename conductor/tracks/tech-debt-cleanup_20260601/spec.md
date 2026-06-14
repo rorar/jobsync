@@ -63,15 +63,11 @@ committed in its own logical commit. Build zero-error, `bash scripts/test.sh` gr
 - [x] **G26b:** DONE (`54a6fc0`) — assertAdminUserIdsValid() fails fast on set-but-malformed
       ADMIN_USER_IDS; wired in instrumentation nodejs branch. Unit-tested. LOW.
 
-### Cluster 5 — i18n + test gaps
-- [ ] **F6:** The Toast close-button fallback label is i18n'd. Verified:
-      `src/components/ui/toast.tsx:90` renders `{label ?? "Dismiss"}` — the `?? "Dismiss"`
-      hardcoded-English fallback is the gap (the toaster passes `t("common.dismiss")`, but
-      the component default leaks English when no label is supplied). LOW (test gap).
-- [ ] **CRM-Cron:** Unit-test coverage added for `src/lib/scheduler/crm-cron.ts` (today
-      0 tests; `crm-activity-logger` is covered, `crm-cron` is not). Cover the three rules
-      `ExpireAutoCreatedPersons` / `InterviewReminder` / `TaskOverdueReminder` + the
-      24h-idempotency guard. The functions are already exported for testing (`crm-cron.ts:384`).
+### Cluster 5 — i18n + test gaps ✅ DONE (2026-06-14)
+- [x] **F6:** DONE (`375eecc`) — ToastClose self-translates the dismiss fallback via
+      useTranslations (`common.dismiss`, ×4 locales). Test de/en/explicit-label. LOW.
+- [x] **CRM-Cron:** DONE (`8d5845b`) — `__tests__/crm-cron.spec.ts` covers the 3 rules +
+      24h idempotency + GDPR Art. 7(3) consent-blocked exclusion. 7 tests. LOW.
 - [x] **G28:** DONE (2026-06-14) — `e2e/cleanup-stale-data.ts` deletes 8 CRM entities
       child→parent (5a–5h) + RESTRICT-guards. Shipped (git `4d7c345`). LOW (test).
 
