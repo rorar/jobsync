@@ -2010,6 +2010,30 @@ Gemeinsame Render-Schicht für ALLE `data → PDF/DOCX` Bedarfe: Bewerbungsbemü
 
 **Cross-Refs:** Bewerbungsbemühungen-Report (2.18.2), DOCX-Formate (4.9), Landingpages (4.7/9.5), Sidecar-Konvention (1.18 Docling, 0.9 Stufe 3 Redis), Module-Lifecycle/Manifest (0.4).
 
+#### 4.2.2 CV-Manager-Ablösung (cv-manager-inspiriert)
+Der bestehende CV-Manager (Profile-Aggregat: `Profile → Resume → ResumeSection`, Form-Card-Editor `ProfileContainer`/`ResumeTable`/`CreateResume`/`Add{Experience,Education,ContactInfo,Summary}` + AI Review/Match) ist ein **strukturierter Formular-Editor ohne Design-Templates, ohne Multi-Version-Theming, ohne ATS-Optimierung, ohne Live-Vorschau**. Ablösen durch ein template-getriebenes Erlebnis nach Vorbild [vincentmakes/cv-manager](https://github.com/vincentmakes/cv-manager) (MIT, aktiv).
+
+**Referenz-Analyse (cv-manager, via `gh`):** Standalone Vanilla-Node/Express + better-sqlite3 + Vanilla-JS-Frontend; PDF = **Browser-Print eines HTML/CSS-Templates**. Features: Multi-CV (mehrere Versionen speichern/laden/vorschauen), editierbares Theme (eine „slicke" HTML/CSS-Vorlage), **ATS-Optimierung** (Schema.org-Markup, semantisches HTML, versteckte Keywords für Job-Site-Parser), JSON Import/Export (für LLM-Optimierung), Section-Visibility-Toggles. CV-Datenmodell (flach JSON): `profile`, `experiences[]`, `certifications[]`, `education[]`, `skills[]`, `projects[]`, `sectionVisibility{}`.
+
+**Integrations-Strategie — NICHT als Sidecar, sondern nativ portieren (MIT erlaubt es):** cv-manager ist eine eigenständige Vanilla-Express-App mit eigener SQLite + eigenem Auth + Vanilla-Frontend. Als Container danebenstellen = zwei DBs, zwei Auth-Modelle, zwei Datenmodelle, i18n-/DSGVO-/IDOR-Bruch → verworfen. Stattdessen die **wertvollen Teile in JobSync (Next.js/Prisma/React/Shadcn) nachbauen**, als **Strangler Fig** über der bestehenden Prisma-Datenschicht (deckt sich mit der 4.2-Migrationsstrategie):
+1. **Datenmodell:** cv-manager-JSON ↔ JSON Resume (4.2 adoptiert das ohnehin) ↔ bestehendes Prisma `Resume→ResumeSection`. Adapter-Schicht (ACL) mappt; Gsync-Upstream-Schema bleibt Datenschicht, `projects`/`certifications`/`sectionVisibility` via `OtherSection.jsonData`.
+2. **Template + PDF:** die „slicke" HTML/CSS-Vorlage als **React-Komponente** (CV-Preview-Seite) nachbauen → PDF via **HTML-first (Gotenberg, 4.2.1)**, weil hier der **exakte CSS-Look** zählt und die Web-Vorschau IST das Template (Reuse). → **Wichtige Engine-Konsequenz:** für design-reiche CVs ist der HTML-first-Pfad (Gotenberg) NICHT nur opt-in, sondern bevorzugt; pdfme bleibt Default für strukturierte/Formular-Dokumente (Report, Formulare). Beide leben im `DocumentRenderingConnector` (4.2.1).
+3. **Features übernehmen:** Multi-Version-CVs, Section-Visibility-Toggles, **ATS-Optimierung** (semantisches HTML + Keywords), JSON Import/Export, Versions-`diff` (cv-manager nutzt `diff`).
+4. **UI-Ablösung:** Form-Card-Editor → template-getriebener Editor mit **Live-Vorschau** (WYSIWYG); via Strangler Fig schrittweise, bestehende Tests/Spec (`specs/profile-resume.allium`) mitziehen.
+5. **Bestehendes behalten:** AI Resume Review + Job-Match (PII-redacted) bleiben; neu andocken: CV-Tailoring pro Bewerbung (Job-Aggregat), Daten fließen in Bewerber-Landingpage (9.5, gleiche CV-Daten) + Public API (7.1).
+
+**Engine-Wahl pro Dokumenttyp (Konsequenz 4.2.1):**
+
+| Dokumenttyp | Engine | Grund |
+|---|---|---|
+| Design-reiches CV / Anschreiben (cv-manager-Template) | **Gotenberg (HTML-first)** | exakter CSS-Look, Web-Vorschau = Template |
+| Bewerbungsbemühungen-Report, Formulare | **pdfme (in-process)** | Tabellen/Pagination, kein Sidecar |
+| DOCX-Varianten | `dolanmiu/docx` | echte .docx |
+
+**Offene Fragen:** (a) Multi-Template (mehrere Designs) oder zunächst eine portierte Vorlage? (b) ATS-„hidden keywords" — DSGVO/Ehrlichkeits-Abwägung dokumentieren (versteckter Text in Bewerbungen ist heikel). (c) Lizenz-Attribution für portierten cv-manager-Code (MIT-Notice beilegen).
+
+**Cross-Refs:** Document Rendering Engine (4.2.1), Dokumenten-Generatoren/JSON-Resume-Pagebuilder (4.2), Skillsets (4.1), Bewerber-Landingpage (9.5), Public API (7.1), AI Review/Match (bestehende Resume-AI), Profile-Spec (`specs/profile-resume.allium`).
+
 ### 4.3 Output-Struktur (Paperless-ngx Style)
 Dynamische Dateipfade und Dateinamen:
 - **Ordner:** `<Unternehmen>/<LANG>/<Jobtitel>/`
