@@ -10,6 +10,12 @@ export async function register() {
   }
 
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    // G26b: fail fast on a set-but-malformed ADMIN_USER_IDS (would otherwise
+    // silently fall through to the single-user/fail-closed admin tiers).
+    // Dynamic import keeps admin.ts (→ prisma) out of the edge runtime.
+    const { assertAdminUserIdsValid } = await import("@/lib/auth/admin");
+    assertAdminUserIdsValid();
+
     // Event Bus consumers must register before any events are published
     const { registerEventConsumers } = await import("@/lib/events/consumers");
     registerEventConsumers();

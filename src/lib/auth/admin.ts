@@ -74,6 +74,32 @@ function parseAdminUserIds(): string[] | null {
 }
 
 /**
+ * Startup guard (G26b): fail fast if `ADMIN_USER_IDS` is SET to a non-empty but
+ * unparseable value (e.g. `",, ,"` — only commas/whitespace). Such a value
+ * yields zero IDs and `parseAdminUserIds()` returns null, so the operator's
+ * intent to restrict admins would silently fall through to Tier B (single-user
+ * implicit) or Tier C (fail-closed) — masking the misconfiguration. An unset or
+ * empty var is valid (intentional Tier B/C) and does NOT throw. Mirrors the
+ * `ENCRYPTION_KEY` / `AUTH_SECRET` startup asserts in `instrumentation.ts`.
+ *
+ * Pure (no DB/IO) so it is unit-testable; called once from `register()`.
+ */
+export function assertAdminUserIdsValid(): void {
+  const raw = process.env[ADMIN_ENV_VAR];
+  if (!raw) return; // unset or empty → Tier B/C, valid
+  const ids = raw
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
+  if (ids.length === 0) {
+    throw new Error(
+      `${ADMIN_ENV_VAR} is set but contains no valid user IDs (only commas/whitespace). ` +
+        `Unset it for single-user mode, or provide at least one user ID.`,
+    );
+  }
+}
+
+/**
  * Check whether `user` is authorized as an admin. Does NOT throw — callers
  * use the returned `allowed` flag to build an `ActionResult` response.
  *
