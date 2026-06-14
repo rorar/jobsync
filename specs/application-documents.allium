@@ -284,30 +284,34 @@ rule OpenApplicationBundle {
 }
 
 rule PrepareDocumentsOnPromotion {
-    when: VacancyPromoted(user, job, cv, mode)
+    -- Subscribes to the VacancyPromoted domain event (vacancy-pipeline.allium),
+    -- which carries IDs only. Entities + the effective mode are resolved here.
+    when: VacancyPromoted(staged_vacancy_id, job_id, user_id)
 
-    requires: mode != manual
-    requires: exists job where job.user = user
-    requires: exists cv where cv.user = user
-    requires: not exists ApplicationBundle{user: user, job: job}
+    let mode = EffectiveAutomationMode.of(user_id, staged_vacancy_id)
+
+    requires: not exists ApplicationBundle{user: User{id: user_id}, job: Job{id: job_id}}
 
     ensures:
         -- Semi-YOLO / YOLO (G1): a vacancy promoted by an automation auto-opens
-        -- the bundle; the LLM then generates the required document drafts.
-        ApplicationBundle.created(
-            user: user,
-            job: job,
-            cv: cv,
-            status: assembling,
-            preparation_mode: mode,
-            created_at: now,
-            updated_at: now
-        )
+        -- the bundle (gate via mode). Manual mode does nothing here.
+        if mode != manual:
+            let cv = DefaultCv.for(user_id, job_id)
+            ApplicationBundle.created(
+                user: User{id: user_id},
+                job: Job{id: job_id},
+                cv: cv,
+                status: assembling,
+                preparation_mode: mode,
+                created_at: now,
+                updated_at: now
+            )
 
     @guidance
-        -- G1 RESOLVED — the trigger is the existing VacancyPromoted signal
-        -- (vacancy-pipeline.allium), gated by AutomationMode (9.4); no new
-        -- `DocumentsAvailable` auto-trigger is required.
+        -- G1 RESOLVED — the trigger is the existing VacancyPromoted signal; no
+        -- new `DocumentsAvailable` event. The effective AutomationMode (9.4) is
+        -- looked up (per-automation or global setting — EffectiveAutomationMode
+        -- is a black box, not part of the event payload):
         --   manual    -> no auto-prep (a notification nudge may use JobStatusChanged)
         --   semi_yolo -> auto-open + auto-generate DRAFTS, then PAUSE for review
         --   yolo      -> auto-open + auto-generate + auto-finalize + auto-send,
@@ -535,6 +539,10 @@ invariant DocumentFilenameFollowsConvention {
 ------------------------------------------------------------
 
 open question "Template management scope: is DocumentTemplate (create/edit/version/share via the 4.2 manifest pagebuilder) substantial enough to warrant its own spec, or does it stay here? It overlaps the CV template system (4.2.1 pdfme templates) — shared template aggregate?"
+
+open question "Auto-prep CV resolution: VacancyPromoted carries no CV, so PrepareDocumentsOnPromotion resolves one via DefaultCv.for(user_id, job_id). Which CV is it — the user's default working CvDocument, or one language-matched to the job's detected language (4.2 auto-detection)? And if the user has no CV yet, does semi-yolo/yolo prep skip, or generate from Profile identity only?"
+
+open question "EffectiveAutomationMode source: the mode is looked up (per-automation OR global default, 9.4). Does it live on the Automation entity, a global UserSetting, or both with automation overriding global? (Defines what EffectiveAutomationMode.of resolves.)"
 
 open question "Required-document policy: ReadyBundle treats every generated document as required. Should a bundle declare which doc_types are required for a given Job/country (e.g. DE often expects CV + cover letter + Anlagen) vs optional?"
 
