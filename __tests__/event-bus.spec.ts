@@ -453,3 +453,49 @@ describe("emitEvent backward compatibility", () => {
     expect(received).toEqual(["VacancyPromoted"]);
   });
 });
+
+describe("emitEvent contract (IF-10)", () => {
+  const { emitEvent } = require("@/lib/events");
+
+  beforeEach(() => {
+    eventBus.reset();
+  });
+
+  it("returns void synchronously (fire-and-forget, never a Promise)", () => {
+    const result = emitEvent({
+      type: "VacancyPromoted",
+      timestamp: new Date(),
+      payload: { stagedVacancyId: "sv-1", jobId: "job-1", userId: "user-1" },
+    });
+
+    // The wrapper MUST stay fire-and-forget: a future "fix" that returns/awaits
+    // the publish promise would block every publisher on its consumers.
+    expect(result).toBeUndefined();
+  });
+
+  it("does not throw to the publisher when a consumer throws (ErrorIsolation)", async () => {
+    const consoleSpy = jest.spyOn(console, "error").mockImplementation();
+    const goodHandler = jest.fn();
+
+    eventBus.subscribe("VacancyPromoted", () => {
+      throw new Error("consumer blew up");
+    });
+    eventBus.subscribe("VacancyPromoted", goodHandler);
+
+    // emitEvent itself returns void and cannot throw; the failing consumer is
+    // isolated inside publish() and the surviving consumer still runs.
+    expect(() =>
+      emitEvent({
+        type: "VacancyPromoted",
+        timestamp: new Date(),
+        payload: { stagedVacancyId: "sv-2", jobId: "job-2", userId: "user-1" },
+      }),
+    ).not.toThrow();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(goodHandler).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+});
