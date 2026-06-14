@@ -4,7 +4,7 @@
  * Verifies that anonymizePerson and mergePersons include userId in ALL
  * Prisma updateMany/deleteMany WHERE clauses (defense-in-depth).
  */
-import { anonymizePerson, mergePersons } from "@/actions/person.actions";
+import { anonymizePerson, mergePersons, updatePerson, withdrawConsent, reinstateConsent } from "@/actions/person.actions";
 import { getCurrentUser } from "@/utils/user.utils";
 import db from "@/lib/db";
 
@@ -342,6 +342,123 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
       await mergePersons(WINNER_ID, LOSER_ID);
 
       expect(mockDb.crmTaskTarget.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// ===========================================================================
+// GDPR-Consent (DSGVO Art. 7(3)) — withdrawal, reinstatement, enforcement
+// ===========================================================================
+describe("person.actions — GDPR-Consent (Art. 7(3))", () => {
+  const PERSON_ID = "person-1";
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (getCurrentUser as jest.Mock).mockResolvedValue(USER);
+    mockDb.person.update.mockResolvedValue({});
+  });
+
+  describe("updatePerson enforcement", () => {
+    it("blocks edits when consent is withdrawn (consent-blocked)", async () => {
+      mockDb.person.findFirst.mockResolvedValue({
+        id: PERSON_ID,
+        status: "active",
+        processingBasis: "consent",
+        consentWithdrawnAt: new Date(),
+      });
+
+      const result = await updatePerson(PERSON_ID, { firstName: "Nope" });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("crm.errors.consentWithdrawn");
+      expect(mockDb.person.update).not.toHaveBeenCalled();
+    });
+
+    it("allows edits when consent basis but NOT withdrawn", async () => {
+      mockDb.person.findFirst.mockResolvedValue({
+        id: PERSON_ID,
+        status: "active",
+        processingBasis: "consent",
+        consentWithdrawnAt: null,
+      });
+
+      const result = await updatePerson(PERSON_ID, { firstName: "Ok" });
+
+      expect(result.success).toBe(true);
+      expect(mockDb.person.update).toHaveBeenCalled();
+    });
+  });
+
+  describe("withdrawConsent", () => {
+    it("sets consentWithdrawnAt (owner-scoped) when basis=consent and not withdrawn", async () => {
+      mockDb.person.findFirst.mockResolvedValue({
+        processingBasis: "consent",
+        consentWithdrawnAt: null,
+      });
+
+      const result = await withdrawConsent(PERSON_ID);
+
+      expect(result.success).toBe(true);
+      expect(mockDb.person.update).toHaveBeenCalledWith({
+        where: { id: PERSON_ID, userId: USER.id },
+        data: expect.objectContaining({ consentWithdrawnAt: expect.any(Date) }),
+      });
+    });
+
+    it("rejects when basis is not consent", async () => {
+      mockDb.person.findFirst.mockResolvedValue({
+        processingBasis: "legitimate_interest",
+        consentWithdrawnAt: null,
+      });
+
+      const result = await withdrawConsent(PERSON_ID);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("crm.errors.consentNotApplicable");
+      expect(mockDb.person.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects when consent already withdrawn", async () => {
+      mockDb.person.findFirst.mockResolvedValue({
+        processingBasis: "consent",
+        consentWithdrawnAt: new Date(),
+      });
+
+      const result = await withdrawConsent(PERSON_ID);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("crm.errors.consentAlreadyWithdrawn");
+      expect(mockDb.person.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("reinstateConsent", () => {
+    it("clears consentWithdrawnAt when currently withdrawn", async () => {
+      mockDb.person.findFirst.mockResolvedValue({
+        processingBasis: "consent",
+        consentWithdrawnAt: new Date(),
+      });
+
+      const result = await reinstateConsent(PERSON_ID);
+
+      expect(result.success).toBe(true);
+      expect(mockDb.person.update).toHaveBeenCalledWith({
+        where: { id: PERSON_ID, userId: USER.id },
+        data: expect.objectContaining({ consentWithdrawnAt: null }),
+      });
+    });
+
+    it("rejects when consent was not withdrawn", async () => {
+      mockDb.person.findFirst.mockResolvedValue({
+        processingBasis: "consent",
+        consentWithdrawnAt: null,
+      });
+
+      const result = await reinstateConsent(PERSON_ID);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("crm.errors.consentNotWithdrawn");
+      expect(mockDb.person.update).not.toHaveBeenCalled();
     });
   });
 });

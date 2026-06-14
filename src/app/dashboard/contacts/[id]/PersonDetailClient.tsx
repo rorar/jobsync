@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations, formatDateShort } from "@/i18n";
 import { useToast } from "@/components/ui/use-toast";
-import { getPerson, updatePerson, archivePerson, reactivatePerson, anonymizePerson } from "@/actions/person.actions";
+import { getPerson, updatePerson, archivePerson, reactivatePerson, anonymizePerson, withdrawConsent, reinstateConsent } from "@/actions/person.actions";
 import { getPersonHolidayInfo, type PersonHolidayInfo } from "@/actions/reference-data.actions";
 import { getInterviews } from "@/actions/crmInterview.actions";
 import { getCrmTasks } from "@/actions/crmTask.actions";
@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ArrowLeft, Archive, RefreshCw, ShieldOff, Mail, Phone, MapPin, Briefcase, ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Archive, RefreshCw, ShieldOff, Mail, Phone, MapPin, Briefcase, ExternalLink, Pencil, Trash2, Ban, ShieldCheck } from "lucide-react";
 import { ActivityTimeline } from "@/components/crm/ActivityTimeline";
 import { HolidayBadge } from "@/components/crm/HolidayBadge";
 import PersonForm from "@/components/crm/PersonForm";
@@ -130,6 +130,26 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
     }
   };
 
+  const handleWithdrawConsent = async () => {
+    const result = await withdrawConsent(personId);
+    if (result.success) {
+      toast({ title: t(result.message ?? "crm.consentWithdrawnSuccess") });
+      loadPerson();
+    } else {
+      toast({ title: t(result.message ?? ""), variant: "destructive" });
+    }
+  };
+
+  const handleReinstateConsent = async () => {
+    const result = await reinstateConsent(personId);
+    if (result.success) {
+      toast({ title: t(result.message ?? "crm.consentReinstatedSuccess") });
+      loadPerson();
+    } else {
+      toast({ title: t(result.message ?? ""), variant: "destructive" });
+    }
+  };
+
   const handleUpdate = async (input: Record<string, unknown>) => {
     const result = await updatePerson(personId, input as unknown as Parameters<typeof updatePerson>[1]);
     if (result.success) {
@@ -212,6 +232,32 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
             <Button variant="outline" size="sm" onClick={handleReactivate}>
               <RefreshCw className="mr-2 h-4 w-4" />
               {t("crm.reactivate")}
+            </Button>
+          )}
+          {status === "active" && person.processingBasis === "consent" && !person.consentWithdrawnAt && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Ban className="mr-2 h-4 w-4" />
+                  {t("crm.withdrawConsent")}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>{t("crm.withdrawConsent")}</AlertDialogTitle>
+                  <AlertDialogDescription>{t("crm.consentWithdrawnHint")}</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>{t("crm.cancelInterview")}</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleWithdrawConsent}>{t("crm.withdrawConsent")}</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+          {status === "active" && person.processingBasis === "consent" && person.consentWithdrawnAt != null && (
+            <Button variant="outline" size="sm" onClick={handleReinstateConsent}>
+              <ShieldCheck className="mr-2 h-4 w-4" />
+              {t("crm.reinstateConsent")}
             </Button>
           )}
           {status !== "anonymized" && (
@@ -316,6 +362,12 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                   <span className="text-muted-foreground">{t("crm.processingBasis")}</span>
                   <span>{t(`crm.processingBasis.${person.processingBasis}`)}</span>
                 </div>
+                {person.processingBasis === "consent" && person.consentWithdrawnAt != null && (
+                  <div className="flex justify-between">
+                    <Badge variant="destructive" className="text-xs">{t("crm.consentWithdrawnBadge")}</Badge>
+                    <span className="text-muted-foreground text-xs">{t("crm.consentWithdrawnHint")}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t("crm.dataSourceLabel")}</span>
                   <span>{t(`crm.dataSource.${person.dataSource}`)}</span>

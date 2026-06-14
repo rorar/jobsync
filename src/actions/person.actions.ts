@@ -17,6 +17,7 @@ import {
   type DataSource,
   type ProcessingBasis,
   isValidPersonTransition,
+  isConsentBlocked,
   validateAtMostOnePrimaryCompany,
   parseEmails,
   parsePhones,
@@ -276,6 +277,11 @@ export async function updatePerson(
     if (existing.status !== "active") {
       return { success: false, message: "crm.errors.personNotActive" };
     }
+    // GDPR Art. 7(3): consent withdrawn → processing restricted. No further
+    // edits are permitted; only export / anonymize / delete / reinstate-consent.
+    if (isConsentBlocked(existing)) {
+      return { success: false, message: "crm.errors.consentWithdrawn" };
+    }
 
     const data: Record<string, unknown> = {};
     if (input.firstName !== undefined) data.firstName = input.firstName;
@@ -384,6 +390,94 @@ export async function reactivatePerson(personId: string): Promise<ActionResult<{
     return { success: true, data: { id: personId } };
   } catch (error) {
     return handleError(error);
+  }
+}
+
+/**
+ * GDPR Art. 7(3): withdraw a Person's consent. Only valid when the lawful basis
+ * is `consent` and consent has not already been withdrawn. Records the withdrawal
+ * timestamp, after which the Person is processing-restricted (see isConsentBlocked):
+ * edits are blocked and automated CRM reminders skip the record. Auth-gated by
+ * owner (ADR-015). Reversible via reinstateConsent.
+ */
+export async function withdrawConsent(
+  personId: string,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
+
+    const person = await prisma.person.findFirst({
+      where: { id: personId, userId: user.id },
+      select: { processingBasis: true, consentWithdrawnAt: true },
+    });
+    if (!person) return { success: false, message: "crm.errors.personNotFound" };
+    if (person.processingBasis !== "consent") {
+      return { success: false, message: "crm.errors.consentNotApplicable" };
+    }
+    if (person.consentWithdrawnAt != null) {
+      return { success: false, message: "crm.errors.consentAlreadyWithdrawn" };
+    }
+
+    await prisma.person.update({
+      where: { id: personId, userId: user.id },
+      data: {
+        consentWithdrawnAt: new Date(),
+        updatedBySource: "manual",
+        updatedByName: user.name,
+      },
+    });
+
+    eventBus.publish(
+      createEvent(DomainEventType.ContactUpdated, { personId, userId: user.id }),
+    );
+
+    return { success: true, data: { id: personId }, message: "crm.consentWithdrawnSuccess" };
+  } catch (error) {
+    return handleError(error, "crm.errors.withdrawConsent");
+  }
+}
+
+/**
+ * Reinstate (re-grant) a Person's consent that was previously withdrawn. Clears
+ * the withdrawal timestamp, lifting the processing restriction. Only valid when
+ * basis is `consent` and consent is currently withdrawn. Auth-gated (ADR-015).
+ */
+export async function reinstateConsent(
+  personId: string,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
+
+    const person = await prisma.person.findFirst({
+      where: { id: personId, userId: user.id },
+      select: { processingBasis: true, consentWithdrawnAt: true },
+    });
+    if (!person) return { success: false, message: "crm.errors.personNotFound" };
+    if (person.processingBasis !== "consent") {
+      return { success: false, message: "crm.errors.consentNotApplicable" };
+    }
+    if (person.consentWithdrawnAt == null) {
+      return { success: false, message: "crm.errors.consentNotWithdrawn" };
+    }
+
+    await prisma.person.update({
+      where: { id: personId, userId: user.id },
+      data: {
+        consentWithdrawnAt: null,
+        updatedBySource: "manual",
+        updatedByName: user.name,
+      },
+    });
+
+    eventBus.publish(
+      createEvent(DomainEventType.ContactUpdated, { personId, userId: user.id }),
+    );
+
+    return { success: true, data: { id: personId }, message: "crm.consentReinstatedSuccess" };
+  } catch (error) {
+    return handleError(error, "crm.errors.reinstateConsent");
   }
 }
 

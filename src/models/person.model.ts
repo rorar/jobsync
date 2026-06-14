@@ -145,6 +145,25 @@ export function isValidPersonTransition(from: PersonStatus, to: PersonStatus): b
   return VALID_PERSON_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
+/**
+ * GDPR-Consent (DSGVO Art. 7(3)): a Person is "consent-blocked" — i.e.
+ * processing-restricted — when its lawful basis is `consent` AND consent has
+ * been withdrawn (`consentWithdrawnAt` set). A consent-blocked Person may only
+ * be exported (Art. 15/20), anonymized/erased (Art. 17), or have its consent
+ * reinstated; all other processing (edits, automated reminders, enrichment)
+ * MUST be suppressed. Processing performed BEFORE withdrawal stays lawful.
+ *
+ * Withdrawal only restricts a `consent`-based record — `legitimate_interest`
+ * and `contract` records are unaffected (a stray `consentWithdrawnAt` on those
+ * is inert), so the check is basis-gated.
+ */
+export function isConsentBlocked(person: {
+  processingBasis: string;
+  consentWithdrawnAt: Date | null;
+}): boolean {
+  return person.processingBasis === "consent" && person.consentWithdrawnAt != null;
+}
+
 export function isValidInterviewTransition(from: InterviewStatus, to: InterviewStatus): boolean {
   return VALID_INTERVIEW_TRANSITIONS[from]?.includes(to) ?? false;
 }

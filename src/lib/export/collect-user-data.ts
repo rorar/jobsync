@@ -302,6 +302,7 @@ export async function collectUserData(userId: string) {
         status: true,
         dataSource: true,
         processingBasis: true,
+        consentWithdrawnAt: true,
         retentionExpiresAt: true,
         createdAt: true,
       },

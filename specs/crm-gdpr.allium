@@ -74,7 +74,11 @@ enum BlocklistType {
 enum ProcessingBasis {
     -- DSGVO Art. 6(1) legal basis for processing this record
     legitimate_interest    -- Art. 6(1)(f) — default for all CRM contacts
-    consent                -- Art. 6(1)(a) — if explicit consent obtained
+    consent                -- Art. 6(1)(a) — if explicit consent obtained.
+                           -- Withdrawable at any time per Art. 7(3); see
+                           -- consent_withdrawn_at + rules WithdrawConsent /
+                           -- ReinstateConsent. Processing performed before
+                           -- withdrawal remains lawful.
     contract               -- Art. 6(1)(b) — if contact is a contractual party
 }
 
@@ -112,6 +116,7 @@ value PersonDataExport {
     person_created_at: Timestamp
     data_source: DataSource
     processing_basis: ProcessingBasis
+    consent_withdrawn_at: Timestamp?
     linked_notes: List<String>
     linked_tasks: List<String>
     linked_timeline_events: Integer
@@ -145,11 +150,16 @@ entity PersonGdprExtension {
     data_source: DataSource
     processing_basis: ProcessingBasis
     retention_expires_at: Timestamp?
+    consent_withdrawn_at: Timestamp?
     erasure_requested_at: Timestamp?
     is_anonymized: Boolean
 
     is_retention_expired: retention_expires_at != null and retention_expires_at <= now
     is_auto_created: data_source = auto_created
+
+    -- Art. 7(3): a consent-based record whose consent has been withdrawn is
+    -- processing-restricted. Records on other legal bases are never blocked.
+    is_consent_blocked: processing_basis = consent and consent_withdrawn_at != null
 }
 
 entity DataSubjectRequest {
@@ -250,6 +260,7 @@ rule FulfillAccessRequest {
         person_created_at: person.created_at,
         data_source: gdpr.data_source,
         processing_basis: gdpr.processing_basis,
+        consent_withdrawn_at: gdpr.consent_withdrawn_at,
         linked_notes: collect_linked_notes(person),
         linked_tasks: collect_linked_tasks(person),
         linked_timeline_events: count_timeline_activities(person),
@@ -389,6 +400,7 @@ rule FulfillPortabilityRequest {
         person_created_at: person.created_at,
         data_source: gdpr.data_source,
         processing_basis: gdpr.processing_basis,
+        consent_withdrawn_at: gdpr.consent_withdrawn_at,
         linked_notes: collect_linked_notes(person),
         linked_tasks: collect_linked_tasks(person),
         linked_timeline_events: count_timeline_activities(person),
@@ -431,6 +443,37 @@ rule ExpireOldTimelineActivities {
         for ta in TimelineActivities:
             if ta.happens_at + config.timeline_retention < now:
                 ta.target_person = null
+}
+
+-- -----------------------------------------------------------------------------
+-- Art. 7(3): Consent Withdrawal
+-- -----------------------------------------------------------------------------
+
+rule WithdrawConsent {
+    -- Art. 7(3): the data subject may withdraw consent at any time, as easily
+    -- as it was given. Only meaningful for consent-based records, and only when
+    -- consent has not already been withdrawn. The withdrawal restricts further
+    -- processing (see invariant ConsentBlockedRecordIsProcessingRestricted);
+    -- processing performed before this point stays lawful. Reversible via
+    -- ReinstateConsent.
+    when: WithdrawConsent(gdpr)
+
+    requires: gdpr.processing_basis = consent
+    requires: gdpr.consent_withdrawn_at = null
+
+    ensures: gdpr.consent_withdrawn_at = now
+}
+
+rule ReinstateConsent {
+    -- Inverse of WithdrawConsent: the data subject re-grants consent, clearing
+    -- the withdrawal marker and lifting the processing restriction. Only valid
+    -- for a consent-based record that is currently withdrawn.
+    when: ReinstateConsent(gdpr)
+
+    requires: gdpr.processing_basis = consent
+    requires: gdpr.consent_withdrawn_at != null
+
+    ensures: gdpr.consent_withdrawn_at = null
 }
 
 -- -----------------------------------------------------------------------------
@@ -517,6 +560,31 @@ invariant AutoCreatedContactHasRetention {
     for gdpr in PersonGdprExtensions:
         if gdpr.data_source = auto_created:
             gdpr.retention_expires_at != null
+}
+
+invariant ConsentBlockOnlyOnConsentBasis {
+    -- Art. 7(3): consent withdrawal only restricts records processed on the
+    -- consent basis. A withdrawal marker on a legitimate_interest or contract
+    -- record would be meaningless — those bases are unaffected by withdrawal.
+    for gdpr in PersonGdprExtensions:
+        gdpr.consent_withdrawn_at != null implies gdpr.processing_basis = consent
+}
+
+invariant ConsentBlockedRecordIsProcessingRestricted {
+    -- Art. 7(3): once consent is withdrawn, the Person record MUST NOT be
+    -- processed further. Concretely: no field edits and no automated activity
+    -- (e.g. interview reminders) may act on a consent-blocked record. The only
+    -- operations that remain permitted are export (Art. 15 access / Art. 20
+    -- portability), erasure or anonymization (Art. 17), and consent
+    -- reinstatement (which lifts the restriction). Processing that occurred
+    -- before withdrawal stays lawful and is not undone.
+    --
+    -- The "no edits / no reminders" half is a guard on processing rules rather
+    -- than a state predicate, so it is asserted in prose here; the structural
+    -- half (a block implies the consent basis) is checked by
+    -- ConsentBlockOnlyOnConsentBasis above.
+    for gdpr in PersonGdprExtensions:
+        gdpr.is_consent_blocked implies gdpr.processing_basis = consent
 }
 
 invariant BlocklistSuppressesAutoCreation {

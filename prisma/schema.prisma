@@ -1052,6 +1052,10 @@ model Person {
   dataSource         String    @default("manual")
   processingBasis    String    @default("legitimate_interest")
   retentionExpiresAt DateTime?
+  // Art. 7(3): timestamp of consent withdrawal. Only meaningful when
+  // processingBasis = "consent". When set, the Person is processing-restricted
+  // (GDPR-Consent enforcement) — see specs/crm-gdpr.allium.
+  consentWithdrawnAt DateTime?
 
   // Actor metadata — who/what created/updated this record (Kette A: updated_by)
   createdBySource String  @default("manual")

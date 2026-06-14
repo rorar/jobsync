@@ -18,7 +18,7 @@ import cron, { type ScheduledTask } from "node-cron";
 import prisma from "@/lib/db";
 import { eventBus } from "@/lib/events";
 import { createEvent, DomainEventType } from "@/lib/events/event-types";
-import { CRM_CONFIG } from "@/models/person.model";
+import { CRM_CONFIG, isConsentBlocked } from "@/models/person.model";
 import { debugLog, debugError } from "@/lib/debug";
 import { getPrivacySettingsForUser } from "@/lib/account/privacy-helpers";
 import { executeAccountDeletion } from "@/lib/account/execute-deletion";
@@ -121,6 +121,8 @@ async function checkInterviewReminders(): Promise<number> {
       personId: true,
       interviewDate: true,
       job: { select: { JobTitle: { select: { label: true } } } },
+      // GDPR Art. 7(3): skip reminders for a consent-withdrawn contact.
+      person: { select: { processingBasis: true, consentWithdrawnAt: true } },
     },
   });
 
@@ -129,6 +131,10 @@ async function checkInterviewReminders(): Promise<number> {
   let reminded = 0;
   for (const interview of upcoming) {
     try {
+      // GDPR Art. 7(3): the interview's contact withdrew consent → exclude from
+      // this active processing flow (no automated reminder).
+      if (interview.person && isConsentBlocked(interview.person)) continue;
+
       // Idempotency: check by interviewId in details (Finding 5 fix — scoped to specific interview)
       const existing = await prisma.crmActivityLog.findFirst({
         where: {
