@@ -23,13 +23,13 @@ import {
   X,
   Loader2,
 } from "lucide-react";
-import type { DiscoveredJob } from "@/models/automation.model";
+import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 import type { JobMatchResponse } from "@/models/ai.schemas";
 import { acceptDiscoveredJob, dismissDiscoveredJob } from "@/actions/automation.actions";
 import { MatchDetails } from "./MatchDetails";
 
 interface DiscoveredJobDetailProps {
-  job: DiscoveredJob | null;
+  job: StagedVacancyWithAutomation | null;
   matchData: JobMatchResponse | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;

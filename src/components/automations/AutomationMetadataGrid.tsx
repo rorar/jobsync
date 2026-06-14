@@ -12,14 +12,14 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { AutomationWithResume } from "@/models/automation.model";
-import type { DiscoveredJob } from "@/models/automation.model";
+import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 
 import { STATUS_DISPLAY_KEYS, MODULE_DISPLAY_KEYS } from "@/lib/automation-display-keys";
 
 interface AutomationMetadataGridProps {
   automation: AutomationWithResume;
   resumeMissing: boolean;
-  jobs: DiscoveredJob[];
+  jobs: StagedVacancyWithAutomation[];
   newJobsCount: number;
 }
 

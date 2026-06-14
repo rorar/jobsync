@@ -16,7 +16,6 @@ import {
 import type {
   AutomationWithResume,
   AutomationRun,
-  DiscoveredJob,
 } from "@/models/automation.model";
 import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 import type { Resume } from "@/models/profile.model";
@@ -264,9 +263,9 @@ export default function AutomationDetailPage() {
         </TabsContent>
         <TabsContent value="jobs" className="mt-4">
           <DiscoveredJobsList
-            jobs={jobs as unknown as DiscoveredJob[]}
+            jobs={jobs}
             onRefresh={loadData}
-            onViewDetails={(job) => handleViewJobDetails(job as unknown as StagedVacancyWithAutomation)}
+            onViewDetails={(job) => handleViewJobDetails(job)}
           />
         </TabsContent>
         <TabsContent value="history" className="mt-4">
@@ -275,7 +274,7 @@ export default function AutomationDetailPage() {
       </Tabs>
 
       <DiscoveredJobDetail
-        job={selectedJob as unknown as DiscoveredJob | null}
+        job={selectedJob}
         matchData={selectedJobMatchData}
         open={detailOpen}
         onOpenChange={setDetailOpen}

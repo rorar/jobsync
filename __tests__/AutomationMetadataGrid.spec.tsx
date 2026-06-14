@@ -8,7 +8,9 @@
 import "@testing-library/jest-dom";
 import React from "react";
 import { render, screen } from "@testing-library/react";
-import type { AutomationWithResume, DiscoveredJob } from "@/models/automation.model";
+import type { AutomationWithResume } from "@/models/automation.model";
+import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
+import { mockStagedVacancy } from "@/lib/data/testFixtures";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -92,26 +94,16 @@ function makeAutomation(
 }
 
 function makeDiscoveredJob(
-  overrides: Partial<DiscoveredJob> = {},
-): DiscoveredJob {
+  overrides: Partial<StagedVacancyWithAutomation> = {},
+): StagedVacancyWithAutomation {
   return {
+    ...mockStagedVacancy,
     id: "job-1",
     userId: "user-1",
     automationId: "auto-1",
-    jobUrl: "https://example.com/job/1",
     description: "Test job description",
-    jobType: "fullTime",
-    createdAt: new Date(),
-    jobTitleId: "jt-1",
-    companyId: "co-1",
-    locationId: "loc-1",
     matchScore: 85,
     matchData: null,
-    discoveryStatus: "new",
-    discoveredAt: new Date(),
-    JobTitle: { label: "Software Engineer" },
-    Company: { label: "Acme Corp" },
-    Location: { label: "Berlin" },
     ...overrides,
   };
 }

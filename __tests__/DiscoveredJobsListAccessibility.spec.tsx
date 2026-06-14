@@ -15,7 +15,8 @@ import "@testing-library/jest-dom";
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import { DiscoveredJobsList } from "@/components/automations/DiscoveredJobsList";
-import type { DiscoveredJob } from "@/models/automation.model";
+import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
+import { mockStagedVacancy } from "@/lib/data/testFixtures";
 
 // Stable English translations so we can assert accessible names.
 jest.mock("@/i18n", () => ({
@@ -70,8 +71,11 @@ jest.mock("@/components/ui/use-toast", () => ({
   toast: jest.fn(),
 }));
 
-function makeJob(overrides: Partial<DiscoveredJob> = {}): DiscoveredJob {
+function makeJob(
+  overrides: Partial<StagedVacancyWithAutomation> = {},
+): StagedVacancyWithAutomation {
   return {
+    ...mockStagedVacancy,
     id: "job-1",
     userId: "user-1",
     automationId: null,

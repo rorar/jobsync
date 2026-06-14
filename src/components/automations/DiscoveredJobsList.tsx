@@ -31,13 +31,13 @@ import {
   MapPin,
   Loader2,
 } from "lucide-react";
-import type { DiscoveredJob } from "@/models/automation.model";
+import type { StagedVacancyWithAutomation } from "@/models/stagedVacancy.model";
 import { acceptDiscoveredJob, dismissDiscoveredJob } from "@/actions/automation.actions";
 
 interface DiscoveredJobsListProps {
-  jobs: DiscoveredJob[];
+  jobs: StagedVacancyWithAutomation[];
   onRefresh: () => void;
-  onViewDetails?: (job: DiscoveredJob) => void;
+  onViewDetails?: (job: StagedVacancyWithAutomation) => void;
 }
 
 export function DiscoveredJobsList({

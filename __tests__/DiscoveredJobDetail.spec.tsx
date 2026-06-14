@@ -21,7 +21,11 @@ import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DiscoveredJobDetail } from "@/components/automations/DiscoveredJobDetail";
-import type { DiscoveredJob } from "@/models/automation.model";
+import type {
+  StagedVacancyWithAutomation,
+  StagedVacancyStatus,
+} from "@/models/stagedVacancy.model";
+import { mockStagedVacancy } from "@/lib/data/testFixtures";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -99,8 +103,11 @@ jest.mock("@/components/ui/dialog", () => ({
 // Fixtures
 // ---------------------------------------------------------------------------
 
-function makeJob(overrides: Partial<DiscoveredJob> = {}): DiscoveredJob {
+function makeJob(
+  overrides: Partial<StagedVacancyWithAutomation> = {},
+): StagedVacancyWithAutomation {
   return {
+    ...mockStagedVacancy,
     id: "djob-1",
     userId: "user-1",
     automationId: "auto-1",
@@ -265,11 +272,14 @@ describe("DiscoveredJobDetail — status label", () => {
     expect(screen.getByText("staged")).toBeInTheDocument();
   });
 
-  it("renders empty string for null status", () => {
+  it("renders empty string for empty status", () => {
     render(
       <DiscoveredJobDetail
         {...baseProps}
-        job={makeJob({ status: undefined })}
+        // Defensive guard: status is a typed union at compile time, but the DB
+        // column is a plain String — force an empty value to exercise the
+        // `if (!job.status)` fallback against malformed runtime data.
+        job={makeJob({ status: "" as StagedVacancyStatus })}
       />,
     );
     // No crash; status badge area simply renders an empty string badge.
