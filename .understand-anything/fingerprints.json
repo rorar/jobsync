@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "gitCommitHash": "9e792ccfae9ccc87a947f4979df3d2a523ceaa6e",
-  "generatedAt": "2026-06-14T07:50:38.888Z",
+  "gitCommitHash": "e34fb5f32a0f6209fbf991f2034caab02492df7b",
+  "generatedAt": "2026-06-14T12:07:40.494Z",
   "files": {
     "__mocks__/next-auth-providers.ts": {
       "filePath": "__mocks__/next-auth-providers.ts",
@@ -892,6 +892,23 @@
       "totalLines": 308,
       "hasStructuralAnalysis": true
     },
+    "__tests__/admin-user-ids-validation.spec.ts": {
+      "filePath": "__tests__/admin-user-ids-validation.spec.ts",
+      "contentHash": "f0f0b8b40850bc6621fc91debe38c113ee5e72620222dee6943fb12041bde52c",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/auth/admin",
+          "specifiers": [
+            "assertAdminUserIdsValid"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 53,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/AdminTabsContainer.spec.tsx": {
       "filePath": "__tests__/AdminTabsContainer.spec.tsx",
       "contentHash": "e105762bd4b986f392d86cd595e347dfb39fa41c0c1504d1761da03f7b5b446e",
@@ -1608,7 +1625,7 @@
     },
     "__tests__/AutomationMetadataGrid.spec.tsx": {
       "filePath": "__tests__/AutomationMetadataGrid.spec.tsx",
-      "contentHash": "8f220057e45389a7ddb22307e463f4b6b3bdd0567c80d39f64ca41c01bcd157a",
+      "contentHash": "b3a8c99c0a5f2b8ce045bf346fe1b745a0571cd44da6433c460247cf43979c78",
       "functions": [
         {
           "name": "makeAutomation",
@@ -1624,9 +1641,9 @@
           "params": [
             "overrides"
           ],
-          "returnType": "DiscoveredJob",
+          "returnType": "StagedVacancyWithAutomation",
           "exported": false,
-          "lineCount": 24
+          "lineCount": 14
         }
       ],
       "classes": [],
@@ -1651,8 +1668,19 @@
         {
           "source": "@/models/automation.model",
           "specifiers": [
-            "AutomationWithResume",
-            "DiscoveredJob"
+            "AutomationWithResume"
+          ]
+        },
+        {
+          "source": "@/models/stagedVacancy.model",
+          "specifiers": [
+            "StagedVacancyWithAutomation"
+          ]
+        },
+        {
+          "source": "@/lib/data/testFixtures",
+          "specifiers": [
+            "mockStagedVacancy"
           ]
         },
         {
@@ -1663,7 +1691,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 218,
+      "totalLines": 210,
       "hasStructuralAnalysis": true
     },
     "__tests__/AutomationSettings.spec.tsx": {
@@ -2153,6 +2181,29 @@
       ],
       "exports": [],
       "totalLines": 86,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/company-repository.spec.ts": {
+      "filePath": "__tests__/company-repository.spec.ts",
+      "contentHash": "b7d63dbc684c882b82ca4077173625488cbfb6372fc1e0b38049e7d8a46991fd",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/company-repository",
+          "specifiers": [
+            "setCompanyDomainIfUnset"
+          ]
+        },
+        {
+          "source": "@/lib/db",
+          "specifiers": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 55,
       "hasStructuralAnalysis": true
     },
     "__tests__/company.actions.spec.ts": {
@@ -2877,6 +2928,37 @@
       "totalLines": 447,
       "hasStructuralAnalysis": true
     },
+    "__tests__/crm-cron.spec.ts": {
+      "filePath": "__tests__/crm-cron.spec.ts",
+      "contentHash": "595f43fe3094237362c9dccd486e52722a955a70f9d5aab3d4c648f32b8746a1",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/db",
+          "specifiers": [
+            "db"
+          ]
+        },
+        {
+          "source": "@/lib/events",
+          "specifiers": [
+            "eventBus"
+          ]
+        },
+        {
+          "source": "@/lib/scheduler/crm-cron",
+          "specifiers": [
+            "expireAutoCreatedPersons",
+            "checkInterviewReminders",
+            "checkOverdueTasks"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 162,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/crmActivityLog.actions.spec.ts": {
       "filePath": "__tests__/crmActivityLog.actions.spec.ts",
       "contentHash": "60e06872ec28e7aa10c616ec0418fd674842cf7f0995de5a93e1b840c7c79a5f",
@@ -2940,7 +3022,7 @@
     },
     "__tests__/crmInterview.actions.spec.ts": {
       "filePath": "__tests__/crmInterview.actions.spec.ts",
-      "contentHash": "8a2454766c8a3ddc15fa8ceed38bf6dd859821b4ffbfdc1d0564d959e2f53513",
+      "contentHash": "d3727f26056cfc3db7ca9516a1e2482cca1f590b050099632d3d33e85a995a87",
       "functions": [],
       "classes": [],
       "imports": [
@@ -2981,12 +3063,12 @@
         }
       ],
       "exports": [],
-      "totalLines": 470,
+      "totalLines": 494,
       "hasStructuralAnalysis": true
     },
     "__tests__/crmNote.actions.spec.ts": {
       "filePath": "__tests__/crmNote.actions.spec.ts",
-      "contentHash": "bc0199bb4adc160bfaa4ea5882018dbbe06f466e9dd76016db8a04511a116c4b",
+      "contentHash": "bdb04630141379aa5ae99afa7557fdd2f24107c74fa259b13e6325e59d942457",
       "functions": [],
       "classes": [],
       "imports": [
@@ -3032,12 +3114,12 @@
         }
       ],
       "exports": [],
-      "totalLines": 345,
+      "totalLines": 367,
       "hasStructuralAnalysis": true
     },
     "__tests__/crmTask.actions.spec.ts": {
       "filePath": "__tests__/crmTask.actions.spec.ts",
-      "contentHash": "3c316c7616438ee5cfb39dee6706b1b593b3a497236eb5e31eb488d2fd715e62",
+      "contentHash": "bbc1e5cc112b7f358c3a88c812a9901a7b9b2492473f451af52f72ff11a2a01f",
       "functions": [],
       "classes": [],
       "imports": [
@@ -3086,7 +3168,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 505,
+      "totalLines": 523,
       "hasStructuralAnalysis": true
     },
     "__tests__/currency-reference.spec.ts": {
@@ -3746,16 +3828,16 @@
     },
     "__tests__/DiscoveredJobDetail.spec.tsx": {
       "filePath": "__tests__/DiscoveredJobDetail.spec.tsx",
-      "contentHash": "1d835685db83e581bf68cede26dffd276899e85c0f8561e3dc9e6acd2f0e46d7",
+      "contentHash": "11fc45d842ec314a55139f5da01af60ab8ff947397dc9ab6a65804a93eb3db8e",
       "functions": [
         {
           "name": "makeJob",
           "params": [
             "overrides"
           ],
-          "returnType": "DiscoveredJob",
+          "returnType": "StagedVacancyWithAutomation",
           "exported": false,
-          "lineCount": 19
+          "lineCount": 22
         }
       ],
       "classes": [],
@@ -3791,28 +3873,35 @@
           ]
         },
         {
-          "source": "@/models/automation.model",
+          "source": "@/models/stagedVacancy.model",
           "specifiers": [
-            "DiscoveredJob"
+            "StagedVacancyWithAutomation",
+            "StagedVacancyStatus"
+          ]
+        },
+        {
+          "source": "@/lib/data/testFixtures",
+          "specifiers": [
+            "mockStagedVacancy"
           ]
         }
       ],
       "exports": [],
-      "totalLines": 565,
+      "totalLines": 575,
       "hasStructuralAnalysis": true
     },
     "__tests__/DiscoveredJobsListAccessibility.spec.tsx": {
       "filePath": "__tests__/DiscoveredJobsListAccessibility.spec.tsx",
-      "contentHash": "7b43e2a140b806530932509dfba42047c2810cff1abccac21d0f9a9e5b6311b1",
+      "contentHash": "c271a68beddfd1627f9aeab6afa9d3f86ba96ca438922f3907bf07999397db65",
       "functions": [
         {
           "name": "makeJob",
           "params": [
             "overrides"
           ],
-          "returnType": "DiscoveredJob",
+          "returnType": "StagedVacancyWithAutomation",
           "exported": false,
-          "lineCount": 19
+          "lineCount": 22
         }
       ],
       "classes": [],
@@ -3841,14 +3930,20 @@
           ]
         },
         {
-          "source": "@/models/automation.model",
+          "source": "@/models/stagedVacancy.model",
           "specifiers": [
-            "DiscoveredJob"
+            "StagedVacancyWithAutomation"
+          ]
+        },
+        {
+          "source": "@/lib/data/testFixtures",
+          "specifiers": [
+            "mockStagedVacancy"
           ]
         }
       ],
       "exports": [],
-      "totalLines": 238,
+      "totalLines": 242,
       "hasStructuralAnalysis": true
     },
     "__tests__/dispatch-context.spec.ts": {
@@ -4736,7 +4831,7 @@
     },
     "__tests__/event-bus.spec.ts": {
       "filePath": "__tests__/event-bus.spec.ts",
-      "contentHash": "924b5758877d1184f7821418d1dec06626e958827b881a9d4829249249780c58",
+      "contentHash": "5fdb7e026305f24ccd5dea3e5cfdce329991f63caecd9fb0ba41e49386f2310d",
       "functions": [],
       "classes": [],
       "imports": [
@@ -4761,7 +4856,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 456,
+      "totalLines": 502,
       "hasStructuralAnalysis": true
     },
     "__tests__/event-schemas.spec.ts": {
@@ -7827,7 +7922,7 @@
     },
     "__tests__/person.actions.spec.ts": {
       "filePath": "__tests__/person.actions.spec.ts",
-      "contentHash": "b965f597785c4d09c466592bbe6ed1c762d602f0826b2b03ee05da3f81b1451c",
+      "contentHash": "029a11e49031bf34f1e10d38cacae9e646bfd13e0a734d9aac5ed92686ffab09",
       "functions": [
         {
           "name": "basePerson",
@@ -7852,7 +7947,10 @@
           "source": "@/actions/person.actions",
           "specifiers": [
             "anonymizePerson",
-            "mergePersons"
+            "mergePersons",
+            "updatePerson",
+            "withdrawConsent",
+            "reinstateConsent"
           ]
         },
         {
@@ -7869,7 +7967,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 301,
+      "totalLines": 489,
       "hasStructuralAnalysis": true
     },
     "__tests__/person.model.spec.ts": {
@@ -10477,6 +10575,59 @@
       "totalLines": 325,
       "hasStructuralAnalysis": true
     },
+    "__tests__/toast-dismiss-i18n.spec.tsx": {
+      "filePath": "__tests__/toast-dismiss-i18n.spec.tsx",
+      "contentHash": "e0cab982ff6acc5f2fdd612ecdb72784b21654885d7456677635ccbc33a65bec",
+      "functions": [
+        {
+          "name": "renderToast",
+          "params": [
+            "locale",
+            "label"
+          ],
+          "exported": false,
+          "lineCount": 12
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen"
+          ]
+        },
+        {
+          "source": "@/i18n/locale-context",
+          "specifiers": [
+            "LocaleProvider"
+          ]
+        },
+        {
+          "source": "@/components/ui/toast",
+          "specifiers": [
+            "ToastProvider",
+            "Toast",
+            "ToastClose",
+            "ToastViewport"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 45,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/ToolbarRadioGroup.spec.tsx": {
       "filePath": "__tests__/ToolbarRadioGroup.spec.tsx",
       "contentHash": "06aab06ef497a0fa36aa00be51088f7e6392c5aefd38bd8a9c22eec61a511592",
@@ -11504,6 +11655,16 @@
       "totalLines": 7,
       "hasStructuralAnalysis": false
     },
+    "deploy.sh": {
+      "filePath": "deploy.sh",
+      "contentHash": "d77c0cd395058aac62bbedda5489d9ba3c69c1be33559dfaacec53472dc74449",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 86,
+      "hasStructuralAnalysis": true
+    },
     "devenv.nix": {
       "filePath": "devenv.nix",
       "contentHash": "f95dbc08f17f949da30b22ae4d8d4a890a02e0c338d1fdcecb20dbc7c6b9446b",
@@ -11513,6 +11674,16 @@
       "exports": [],
       "totalLines": 119,
       "hasStructuralAnalysis": false
+    },
+    "docker-entrypoint.sh": {
+      "filePath": "docker-entrypoint.sh",
+      "contentHash": "bcf23570147bdc38acdc0da7a8d56f48a93ae7a4bfccfc1560130f1ecdc0511b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
     },
     "docs/adr/.pending": {
       "filePath": "docs/adr/.pending",
@@ -13492,6 +13663,76 @@
       "totalLines": 40,
       "hasStructuralAnalysis": true
     },
+    "release.sh": {
+      "filePath": "release.sh",
+      "contentHash": "d1222b1553815a6ef7341780944e2313121c72c3ce9854879a133b83763eb593",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 189,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/build.sh": {
+      "filePath": "scripts/build.sh",
+      "contentHash": "daddf31785e559deaee50180cc5879a09533e7baf52081a6cd08bf5ab90b555d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 6,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/check-notification-writers.sh": {
+      "filePath": "scripts/check-notification-writers.sh",
+      "contentHash": "7c38788246e3882b99f594e68cb16f4f87e34c08f1d5529fa6b99328b5079c89",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 93,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/dev-and-check.sh": {
+      "filePath": "scripts/dev-and-check.sh",
+      "contentHash": "b467a9534005b69633c456a1a31b7f7341fa3843ab3c8eb75fa1fb05efba6a7c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 23,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/dev-e2e.sh": {
+      "filePath": "scripts/dev-e2e.sh",
+      "contentHash": "161d039a7e6e59a5656bee38bf6a3cabba23912df97e9489e0b096673615c5f1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/dev.sh": {
+      "filePath": "scripts/dev.sh",
+      "contentHash": "f9b4e85d132f239dd9cf8224fb05d88c53b5ac8c0a93ef0e2cf5ad633498ac67",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 7,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/env.sh": {
+      "filePath": "scripts/env.sh",
+      "contentHash": "e39315da366822419349bc26ff524b5f33df809584ff4e7137a99081526f66e7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
     "scripts/migrate-ai-settings-provider-to-moduleId.ts": {
       "filePath": "scripts/migrate-ai-settings-provider-to-moduleId.ts",
       "contentHash": "ade3585a86c70c7ac4bab662311d53cdac4d8e49e3ad5545ec86696a2ca58889",
@@ -13657,6 +13898,196 @@
       "totalLines": 111,
       "hasStructuralAnalysis": true
     },
+    "scripts/prisma-generate.sh": {
+      "filePath": "scripts/prisma-generate.sh",
+      "contentHash": "1cadeb90b9d16bdb5e4318d46b2c3e80ccc63d321388d6ce38364e30701fe703",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/prisma-migrate.sh": {
+      "filePath": "scripts/prisma-migrate.sh",
+      "contentHash": "38e392017acb3a88a66a02508ab3c8abdcf0c61c6c5d8fc3339c2a27c2a580c2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/restart.sh": {
+      "filePath": "scripts/restart.sh",
+      "contentHash": "0b641b6040c9ebec7b5bef1c8377603fafbdce5630454ae4f0cddca15c1970a5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/sessions/run-session.sh": {
+      "filePath": "scripts/sessions/run-session.sh",
+      "contentHash": "a8f1477e172e227e46c289e8302dcde3d9f6bf78c9c9459dea84d46b91bf3c8c",
+      "functions": [
+        {
+          "name": "usage",
+          "params": [],
+          "exported": false,
+          "lineCount": 21
+        },
+        {
+          "name": "session_desc",
+          "params": [],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "show_status",
+          "params": [],
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "next_session",
+          "params": [],
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "write_inner_script",
+          "params": [],
+          "exported": false,
+          "lineCount": 40
+        },
+        {
+          "name": "run_session",
+          "params": [],
+          "exported": false,
+          "lineCount": 55
+        },
+        {
+          "name": "run_all",
+          "params": [],
+          "exported": false,
+          "lineCount": 47
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 393,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/setup-prisma-engines.sh": {
+      "filePath": "scripts/setup-prisma-engines.sh",
+      "contentHash": "a911d8c4bd9902bc70922af5034bb1ed3506931fe2b2f9f81fa85cc568213e7e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 66,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/stop.sh": {
+      "filePath": "scripts/stop.sh",
+      "contentHash": "ee457d189a0d251cba73295a7f5296bf5810be581c715cb240cb5145239edefd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/test.sh": {
+      "filePath": "scripts/test.sh",
+      "contentHash": "679d5581c1e061328c3076fff304dc620e2ad50191903b27dbddcc2dfde0bdc7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 69,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/tracks/post-merge-validate.sh": {
+      "filePath": "scripts/tracks/post-merge-validate.sh",
+      "contentHash": "c652a8fa97e45ccaffc8179ff478b0535b18abee10f70c19419627583d74925d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 101,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/tracks/run-all-tracks.sh": {
+      "filePath": "scripts/tracks/run-all-tracks.sh",
+      "contentHash": "42b2b5f435016ae8ee743332d67ae8a5f04b28826d25432477c873a7ee40ed10",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 113,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/tracks/track-runner.sh": {
+      "filePath": "scripts/tracks/track-runner.sh",
+      "contentHash": "24caad53c550c18f18e1c3ac55305dd4e709dfee4084decdaa0f7bdd9157f148",
+      "functions": [
+        {
+          "name": "run_track",
+          "params": [],
+          "exported": false,
+          "lineCount": 85
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 103,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/tracks/track1-blacklist-caching.sh": {
+      "filePath": "scripts/tracks/track1-blacklist-caching.sh",
+      "contentHash": "517483d00346edcc5c2cc705e63558ee9d344afc0f4562cc001fb9821f71a8d2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 78,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/tracks/track2-jobdeck.sh": {
+      "filePath": "scripts/tracks/track2-jobdeck.sh",
+      "contentHash": "f1d1aa332f3c2a4d3f18b813b14d0ed9d18e8daba894e164e82a9368fbabd0ad",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 102,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/tracks/track3-public-api.sh": {
+      "filePath": "scripts/tracks/track3-public-api.sh",
+      "contentHash": "c617b1c1b6c0ecab1c2e9cb8e483019ad69d4b6370ec9b873af9c68387c6a569",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 86,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/understand-staleness-check.sh": {
+      "filePath": "scripts/understand-staleness-check.sh",
+      "contentHash": "07250950e89b7833fae63b8c269cb380fa0a26bec9992e4735e5ea7eda7b0ade",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 69,
+      "hasStructuralAnalysis": true
+    },
     "specs/action-result.allium": {
       "filePath": "specs/action-result.allium",
       "contentHash": "efdcbd0bfef34d0524daabb5ab6ddb45003f1e166d3b2bb6376e8746ae704f71",
@@ -13739,12 +14170,12 @@
     },
     "specs/crm-gdpr.allium": {
       "filePath": "specs/crm-gdpr.allium",
-      "contentHash": "b658baf73e621fbcdd7ab51c2e14059844b05738c2e7fb87d8262a275b4cea26",
+      "contentHash": "f2062ff8559eb43cd9cb344f6ea3c4b8ba0e17272af05aed0e0b961da4a93078",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 547,
+      "totalLines": 615,
       "hasStructuralAnalysis": false
     },
     "specs/crm-workflow.allium": {
@@ -13769,12 +14200,12 @@
     },
     "specs/data-enrichment.allium": {
       "filePath": "specs/data-enrichment.allium",
-      "contentHash": "018db242f94bb43fb4cacda585c3d4dcff13ac30417baf1895cd1d8a0dfab3aa",
+      "contentHash": "fca2658cee1def8bf26ee13fe578e6f08128db21ac191f743de7bfbb6e07e758",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 931,
+      "totalLines": 968,
       "hasStructuralAnalysis": false
     },
     "specs/e2e-test-infrastructure.allium": {
@@ -13959,12 +14390,12 @@
     },
     "specs/shared-entities.allium": {
       "filePath": "specs/shared-entities.allium",
-      "contentHash": "1e5edab2026a688d98cf3566c0ca519611c7d18d10030f0cd333a3c5e39a3963",
+      "contentHash": "90070fa59ba84eb7670e03b2af958d48b94b0f183994fa52e7699a6648209a69",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 386,
+      "totalLines": 396,
       "hasStructuralAnalysis": false
     },
     "specs/ui-combobox-keyboard.allium": {
@@ -15197,7 +15628,7 @@
     },
     "src/actions/crmInterview.actions.ts": {
       "filePath": "src/actions/crmInterview.actions.ts",
-      "contentHash": "8ba5d2c8e7fb3be30a77c93e4ce9219e141c2feb8eb31fa93b6768d0be11f5f7",
+      "contentHash": "e08c152c64a91e5305144c0db5fb6c1555b1a8cef056e9ca9ab672c0b2ddea74",
       "functions": [
         {
           "name": "scheduleInterview",
@@ -15206,7 +15637,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 50
+          "lineCount": 54
         },
         {
           "name": "completeInterview",
@@ -15297,7 +15728,8 @@
           "specifiers": [
             "InterviewStatus",
             "InterviewOutcome",
-            "isValidInterviewTransition"
+            "isValidInterviewTransition",
+            "isConsentBlocked"
           ]
         }
       ],
@@ -15308,12 +15740,12 @@
         "rescheduleInterview",
         "getInterviews"
       ],
-      "totalLines": 245,
+      "totalLines": 250,
       "hasStructuralAnalysis": true
     },
     "src/actions/crmNote.actions.ts": {
       "filePath": "src/actions/crmNote.actions.ts",
-      "contentHash": "94e0f2fdc7ea154b628ef879ed8a422ed66b1a8eb03c1f346a92dfe4002682a4",
+      "contentHash": "c8590401a9b589dc1fcfbbc51eace8818c75353379d3d8261667f47dc53280a1",
       "functions": [
         {
           "name": "createCrmNote",
@@ -15322,7 +15754,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 65
+          "lineCount": 67
         },
         {
           "name": "updateCrmNote",
@@ -15400,7 +15832,8 @@
           "source": "@/models/person.model",
           "specifiers": [
             "PolymorphicTarget",
-            "validateExactlyOneTarget"
+            "validateExactlyOneTarget",
+            "isConsentBlocked"
           ]
         }
       ],
@@ -15410,12 +15843,12 @@
         "deleteCrmNote",
         "getCrmNotes"
       ],
-      "totalLines": 197,
+      "totalLines": 199,
       "hasStructuralAnalysis": true
     },
     "src/actions/crmTask.actions.ts": {
       "filePath": "src/actions/crmTask.actions.ts",
-      "contentHash": "7b71d567b0bcb89813bc59b7c0b3272b2d492f65f3ed261a6dc3c8cb65181891",
+      "contentHash": "86dea0d967908aed199e720b302549da1815d582ff5c07696f94630c44ccbf96",
       "functions": [
         {
           "name": "createCrmTask",
@@ -15424,7 +15857,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 75
+          "lineCount": 77
         },
         {
           "name": "startCrmTask",
@@ -15522,6 +15955,7 @@
             "PolymorphicTarget",
             "isValidTaskTransition",
             "validateExactlyOneTarget",
+            "isConsentBlocked",
             "CRM_CONFIG"
           ]
         }
@@ -15534,7 +15968,7 @@
         "deleteCrmTask",
         "getCrmTasks"
       ],
-      "totalLines": 282,
+      "totalLines": 285,
       "hasStructuralAnalysis": true
     },
     "src/actions/dashboard.actions.ts": {
@@ -17153,7 +17587,7 @@
     },
     "src/actions/person.actions.ts": {
       "filePath": "src/actions/person.actions.ts",
-      "contentHash": "03c098107cede3ce747802802d405a4fbf0fe92a35139af11bbcc90e075a81e4",
+      "contentHash": "64b07d30872c99045da1fea18a73d642270e3d876c96a5c132a5e1a5ade00c31",
       "functions": [
         {
           "name": "createPerson",
@@ -17190,7 +17624,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 77
+          "lineCount": 82
         },
         {
           "name": "archivePerson",
@@ -17211,6 +17645,24 @@
           "lineCount": 23
         },
         {
+          "name": "withdrawConsent",
+          "params": [
+            "personId"
+          ],
+          "returnType": "Promise<ActionResult<{ id: string }>>",
+          "exported": true,
+          "lineCount": 37
+        },
+        {
+          "name": "reinstateConsent",
+          "params": [
+            "personId"
+          ],
+          "returnType": "Promise<ActionResult<{ id: string }>>",
+          "exported": true,
+          "lineCount": 37
+        },
+        {
           "name": "anonymizePerson",
           "params": [
             "personId"
@@ -17227,7 +17679,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 112
+          "lineCount": 151
         }
       ],
       "classes": [],
@@ -17290,6 +17742,7 @@
             "DataSource",
             "ProcessingBasis",
             "isValidPersonTransition",
+            "isConsentBlocked",
             "validateAtMostOnePrimaryCompany",
             "parseEmails",
             "parsePhones",
@@ -17306,10 +17759,12 @@
         "updatePerson",
         "archivePerson",
         "reactivatePerson",
+        "withdrawConsent",
+        "reinstateConsent",
         "anonymizePerson",
         "mergePersons"
       ],
-      "totalLines": 595,
+      "totalLines": 728,
       "hasStructuralAnalysis": true
     },
     "src/actions/privacy.actions.ts": {
@@ -20766,7 +21221,7 @@
     },
     "src/app/dashboard/automations/[id]/page.tsx": {
       "filePath": "src/app/dashboard/automations/[id]/page.tsx",
-      "contentHash": "ad23a908b1080e20be6a71240cc29eb2899f92250e04719f6fbbbf563ba79c3e",
+      "contentHash": "ab20f1e1716636211d2ad6cc20cd2e959a708e67be22a0490208e54a467fc74f",
       "functions": [
         {
           "name": "AutomationDetailPage",
@@ -20833,8 +21288,7 @@
           "source": "@/models/automation.model",
           "specifiers": [
             "AutomationWithResume",
-            "AutomationRun",
-            "DiscoveredJob"
+            "AutomationRun"
           ]
         },
         {
@@ -20943,7 +21397,7 @@
       "exports": [
         "AutomationDetailPage"
       ],
-      "totalLines": 314,
+      "totalLines": 313,
       "hasStructuralAnalysis": true
     },
     "src/app/dashboard/automations/page.tsx": {
@@ -21008,7 +21462,7 @@
     },
     "src/app/dashboard/contacts/[id]/PersonDetailClient.tsx": {
       "filePath": "src/app/dashboard/contacts/[id]/PersonDetailClient.tsx",
-      "contentHash": "8cc63e2ea028222b3f70e66585ed039f61045e6cd195264f114acc72dfc648b0",
+      "contentHash": "025437cd7a645796fdf9f6a15e9db578cde2bcb393ab1a97494604a3baef5abe",
       "functions": [
         {
           "name": "statusVariant",
@@ -21024,7 +21478,7 @@
             "{ personId }"
           ],
           "exported": true,
-          "lineCount": 435
+          "lineCount": 487
         }
       ],
       "classes": [],
@@ -21063,7 +21517,9 @@
             "updatePerson",
             "archivePerson",
             "reactivatePerson",
-            "anonymizePerson"
+            "anonymizePerson",
+            "withdrawConsent",
+            "reinstateConsent"
           ]
         },
         {
@@ -21170,7 +21626,9 @@
             "Briefcase",
             "ExternalLink",
             "Pencil",
-            "Trash2"
+            "Trash2",
+            "Ban",
+            "ShieldCheck"
           ]
         },
         {
@@ -21204,7 +21662,7 @@
       "exports": [
         "PersonDetailClient"
       ],
-      "totalLines": 484,
+      "totalLines": 536,
       "hasStructuralAnalysis": true
     },
     "src/app/dashboard/contacts/ContactsPageClient.tsx": {
@@ -25168,7 +25626,7 @@
     },
     "src/components/automations/AutomationMetadataGrid.tsx": {
       "filePath": "src/components/automations/AutomationMetadataGrid.tsx",
-      "contentHash": "f2d69f2d774140cf22fc71c6a2eafeb1a94648a4854602a8fa730e696e2703e9",
+      "contentHash": "0bbdc58494ad2f29b5733afb86ab4fd28c867618c43154ac2405477341b3eb76",
       "functions": [
         {
           "name": "AutomationMetadataGrid",
@@ -25216,9 +25674,9 @@
           ]
         },
         {
-          "source": "@/models/automation.model",
+          "source": "@/models/stagedVacancy.model",
           "specifiers": [
-            "DiscoveredJob"
+            "StagedVacancyWithAutomation"
           ]
         },
         {
@@ -25336,7 +25794,7 @@
     },
     "src/components/automations/DiscoveredJobDetail.tsx": {
       "filePath": "src/components/automations/DiscoveredJobDetail.tsx",
-      "contentHash": "fb48d3e7bcecd992613153787ae854100c1081587252a12c015fe7edd477654f",
+      "contentHash": "c250f550c61811dda65b3e25216788e884a563f04a2117eb3af94645991787dc",
       "functions": [
         {
           "name": "DiscoveredJobDetail",
@@ -25414,9 +25872,9 @@
           ]
         },
         {
-          "source": "@/models/automation.model",
+          "source": "@/models/stagedVacancy.model",
           "specifiers": [
-            "DiscoveredJob"
+            "StagedVacancyWithAutomation"
           ]
         },
         {
@@ -25447,7 +25905,7 @@
     },
     "src/components/automations/DiscoveredJobsList.tsx": {
       "filePath": "src/components/automations/DiscoveredJobsList.tsx",
-      "contentHash": "45f6f3c2e18a6117e031701f28699f690b10bf4cb8fffeb4fd3ac0c8bd7746f6",
+      "contentHash": "6701883fe8b989d2a9dace5ba6becece75b34259171261035e0acb325d1a422b",
       "functions": [
         {
           "name": "DiscoveredJobsList",
@@ -25536,9 +25994,9 @@
           ]
         },
         {
-          "source": "@/models/automation.model",
+          "source": "@/models/stagedVacancy.model",
           "specifiers": [
-            "DiscoveredJob"
+            "StagedVacancyWithAutomation"
           ]
         },
         {
@@ -40098,7 +40556,7 @@
     },
     "src/components/ui/toast.tsx": {
       "filePath": "src/components/ui/toast.tsx",
-      "contentHash": "c148f8a70145e8ad91c2f2af28ac2d3647937552d0d7d508548fa491742eb42a",
+      "contentHash": "381d412a4deaf6eee9dce41868886401caa589aacb34aa998eade28bbdf5f03c",
       "functions": [],
       "classes": [],
       "imports": [
@@ -40132,6 +40590,12 @@
           "specifiers": [
             "cn"
           ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
         }
       ],
       "exports": [
@@ -40145,7 +40609,7 @@
         "ToastClose",
         "ToastAction"
       ],
-      "totalLines": 134,
+      "totalLines": 141,
       "hasStructuralAnalysis": true
     },
     "src/components/ui/toaster.tsx": {
@@ -41281,14 +41745,14 @@
     },
     "src/i18n/dictionaries/crm.ts": {
       "filePath": "src/i18n/dictionaries/crm.ts",
-      "contentHash": "b2bf8b2b37cb79a9d3ae09a14b8db21e24396ddc4a704486a692250e14733aff",
+      "contentHash": "4cf93017a6b52288c4ee9c1f5a8efef1acbdc2d7c0eaf8ae1f9b52ece1db626c",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [
         "crm"
       ],
-      "totalLines": 959,
+      "totalLines": 1007,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/dashboard.ts": {
@@ -41851,13 +42315,13 @@
     },
     "src/instrumentation.ts": {
       "filePath": "src/instrumentation.ts",
-      "contentHash": "ca167f17fe4d3eb0ca81d992a358266e030a6b9c2058dde538e3aa2819e2e7ae",
+      "contentHash": "c7d0ddd05ba04ff85f13e7ba74ca460b60b934695fcd1af749cabb35ef019477",
       "functions": [
         {
           "name": "register",
           "params": [],
           "exported": true,
-          "lineCount": 49
+          "lineCount": 55
         }
       ],
       "classes": [],
@@ -41865,7 +42329,7 @@
       "exports": [
         "register"
       ],
-      "totalLines": 50,
+      "totalLines": 56,
       "hasStructuralAnalysis": true
     },
     "src/lib/account/deletion-token.ts": {
@@ -42985,7 +43449,7 @@
     },
     "src/lib/auth/admin.ts": {
       "filePath": "src/lib/auth/admin.ts",
-      "contentHash": "13cb81490a4ef03d5205ed756542d38207ee1d4ed4d35b3cb0b0e396f08f57f2",
+      "contentHash": "0a1854eb0f7afc385d671b17c08178b47aea84a946d9e5e9c37b680ee4dcbf12",
       "functions": [
         {
           "name": "parseAdminUserIds",
@@ -42993,6 +43457,13 @@
           "returnType": "string[] | null",
           "exported": false,
           "lineCount": 9
+        },
+        {
+          "name": "assertAdminUserIdsValid",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 14
         },
         {
           "name": "checkAdminAuthorization",
@@ -43045,11 +43516,12 @@
         }
       ],
       "exports": [
+        "assertAdminUserIdsValid",
         "checkAdminAuthorization",
         "authorizeAdminAction",
         "writeAdminAuditLog"
       ],
-      "totalLines": 264,
+      "totalLines": 290,
       "hasStructuralAnalysis": true
     },
     "src/lib/auth/auth-rate-limit.ts": {
@@ -43205,6 +43677,41 @@
         "getBlacklistEntriesForUser"
       ],
       "totalLines": 30,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/company-repository.ts": {
+      "filePath": "src/lib/company-repository.ts",
+      "contentHash": "b19ecb04fe3216d5e0c0c27abc777173f3f0e2649d3d199cf721a24cea515566",
+      "functions": [
+        {
+          "name": "setCompanyDomainIfUnset",
+          "params": [
+            "companyId",
+            "ownerUserId",
+            "domain"
+          ],
+          "returnType": "Promise<number>",
+          "exported": true,
+          "lineCount": 16
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "server-only",
+          "specifiers": []
+        },
+        {
+          "source": "@/lib/db",
+          "specifiers": [
+            "prisma"
+          ]
+        }
+      ],
+      "exports": [
+        "setCompanyDomainIfUnset"
+      ],
+      "totalLines": 42,
       "hasStructuralAnalysis": true
     },
     "src/lib/connector/ai-provider/config.ts": {
@@ -46898,7 +47405,7 @@
     },
     "src/lib/connector/job-discovery/runner.ts": {
       "filePath": "src/lib/connector/job-discovery/runner.ts",
-      "contentHash": "1c5571650d775bf6afa0da94ca1513e04c4d365d6e206085a4b7e90b8e1de42f",
+      "contentHash": "531b186f5f7f49d3429a105432ab6642da0abbb575e2b2e90738d202967ec512",
       "functions": [
         {
           "name": "reportRunProgress",
@@ -46947,7 +47454,7 @@
           ],
           "returnType": "Promise<RunnerResult>",
           "exported": true,
-          "lineCount": 485
+          "lineCount": 466
         },
         {
           "name": "getExistingVacancyKeys",
@@ -47109,7 +47616,7 @@
         {
           "source": "@prisma/client",
           "specifiers": [
-            "PrismaResume"
+            "Prisma"
           ]
         },
         {
@@ -47182,7 +47689,7 @@
         "_testGetExistingVacancyKeys",
         "_testConvertResumeForMatch"
       ],
-      "totalLines": 933,
+      "totalLines": 913,
       "hasStructuralAnalysis": true
     },
     "src/lib/connector/job-discovery/schedule.ts": {
@@ -50028,7 +50535,7 @@
     },
     "src/lib/events/consumers/enrichment-trigger.ts": {
       "filePath": "src/lib/events/consumers/enrichment-trigger.ts",
-      "contentHash": "73e3168cfa07d2b27e32111c6f4cfe28433e9548064e1f48b237a9b9306dcff4",
+      "contentHash": "0091c5014e84840c9c0474c5bf08e47c98450b5e35203c64320ad1c85e61990d",
       "functions": [
         {
           "name": "resetSemaphoreForTesting",
@@ -50075,7 +50582,7 @@
           ],
           "returnType": "Promise<void>",
           "exported": false,
-          "lineCount": 84
+          "lineCount": 80
         },
         {
           "name": "handleVacancyPromoted",
@@ -50142,6 +50649,12 @@
           ]
         },
         {
+          "source": "@/lib/company-repository",
+          "specifiers": [
+            "setCompanyDomainIfUnset"
+          ]
+        },
+        {
           "source": "@/lib/db",
           "specifiers": [
             "db"
@@ -50162,7 +50675,7 @@
         "registerEnrichmentTrigger",
         "_testHelpers"
       ],
-      "totalLines": 414,
+      "totalLines": 411,
       "hasStructuralAnalysis": true
     },
     "src/lib/events/consumers/index.ts": {
@@ -50613,7 +51126,7 @@
     },
     "src/lib/events/index.ts": {
       "filePath": "src/lib/events/index.ts",
-      "contentHash": "117e12462c947f5b8ad371a1476138c47a934dcdbca1345f3a7d83d63c2aafd7",
+      "contentHash": "26eacd4a19b70e33175ce7bee58f6f7c9e312e49d3c2d8bb21139297543cd8f4",
       "functions": [
         {
           "name": "emitEvent",
@@ -50622,7 +51135,7 @@
           ],
           "returnType": "void",
           "exported": true,
-          "lineCount": 6
+          "lineCount": 7
         }
       ],
       "classes": [],
@@ -50672,12 +51185,12 @@
         "WILDCARD",
         "emitEvent"
       ],
-      "totalLines": 59,
+      "totalLines": 75,
       "hasStructuralAnalysis": true
     },
     "src/lib/export/collect-user-data.ts": {
       "filePath": "src/lib/export/collect-user-data.ts",
-      "contentHash": "b6e000051cf607872d3ab90599b8d78345bc603afdbb4606443c6ecbfdb73d80",
+      "contentHash": "6632bd08b44ff28009b9326c127d1c1649b0ab6697e0923b456af4131351e32d",
       "functions": [
         {
           "name": "collectUserData",
@@ -50685,7 +51198,7 @@
             "userId"
           ],
           "exported": true,
-          "lineCount": 532
+          "lineCount": 533
         }
       ],
       "classes": [],
@@ -50719,7 +51232,7 @@
       "exports": [
         "collectUserData"
       ],
-      "totalLines": 557,
+      "totalLines": 558,
       "hasStructuralAnalysis": true
     },
     "src/lib/export/export-metadata.ts": {
@@ -52673,7 +53186,7 @@
     },
     "src/lib/scheduler/crm-cron.ts": {
       "filePath": "src/lib/scheduler/crm-cron.ts",
-      "contentHash": "c9ba85044f97ef914bcb411ea70dbae927f9f7462ab259c95d9d9af1a77be2e8",
+      "contentHash": "171130d77d55c3cab48f99d388041436d9226cbae428e129b846111c4a2e68ac",
       "functions": [
         {
           "name": "getCrmTask",
@@ -52719,14 +53232,14 @@
           "params": [],
           "returnType": "Promise<number>",
           "exported": true,
-          "lineCount": 71
+          "lineCount": 77
         },
         {
           "name": "checkOverdueTasks",
           "params": [],
           "returnType": "Promise<number>",
           "exported": true,
-          "lineCount": 57
+          "lineCount": 67
         },
         {
           "name": "purgeExpiredDeletions",
@@ -52799,7 +53312,8 @@
         {
           "source": "@/models/person.model",
           "specifiers": [
-            "CRM_CONFIG"
+            "CRM_CONFIG",
+            "isConsentBlocked"
           ]
         },
         {
@@ -52838,7 +53352,7 @@
         "sweepExpiredDeletionTokens",
         "runCrmTemporalRules"
       ],
-      "totalLines": 392,
+      "totalLines": 408,
       "hasStructuralAnalysis": true
     },
     "src/lib/scheduler/index.ts": {
@@ -54373,7 +54887,7 @@
     },
     "src/models/automation.model.ts": {
       "filePath": "src/models/automation.model.ts",
-      "contentHash": "d6c68ac48b2ec92428bda08648cf2b2612b9fa1d73ada108f567f0d6872b046c",
+      "contentHash": "96325fb6cfec97a10ffffa8cf12dd271551ec68fc74bf8fb55480d7833904a50",
       "functions": [],
       "classes": [],
       "imports": [
@@ -54387,7 +54901,7 @@
       "exports": [
         "RunSource"
       ],
-      "totalLines": 150,
+      "totalLines": 64,
       "hasStructuralAnalysis": true
     },
     "src/models/automation.schema.ts": {
@@ -54581,7 +55095,7 @@
     },
     "src/models/person.model.ts": {
       "filePath": "src/models/person.model.ts",
-      "contentHash": "3dc6169dba52587d233d385f89fe4338f65d4e30c50d7aa8db198413f8ca31bf",
+      "contentHash": "74cfc7f9981c904f9ee6e467149ff3c7da6b0807b280b038f7599c88cec7c61e",
       "functions": [
         {
           "name": "isValidActorType",
@@ -54600,6 +55114,15 @@
           "returnType": "boolean",
           "exported": true,
           "lineCount": 3
+        },
+        {
+          "name": "isConsentBlocked",
+          "params": [
+            "person"
+          ],
+          "returnType": "boolean",
+          "exported": true,
+          "lineCount": 6
         },
         {
           "name": "isValidInterviewTransition",
@@ -54682,6 +55205,7 @@
         "ACTOR_TYPES",
         "isValidActorType",
         "isValidPersonTransition",
+        "isConsentBlocked",
         "isValidInterviewTransition",
         "isValidTaskTransition",
         "validateExactlyOneTarget",
@@ -54692,7 +55216,7 @@
         "validateAtMostOnePrimaryCompany",
         "CRM_CONFIG"
       ],
-      "totalLines": 239,
+      "totalLines": 258,
       "hasStructuralAnalysis": true
     },
     "src/models/profile.model.ts": {
