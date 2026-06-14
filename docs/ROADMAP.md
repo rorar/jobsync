@@ -2028,7 +2028,7 @@ Der bestehende CV-Manager (Profile-Aggregat: `Profile → Resume → ResumeSecti
 
 **Integrations-Strategie — NICHT als Sidecar, sondern nativ portieren (MIT erlaubt es):** cv-manager ist eine eigenständige Vanilla-Express-App mit eigener SQLite + eigenem Auth + Vanilla-Frontend. Als Container danebenstellen = zwei DBs, zwei Auth-Modelle, zwei Datenmodelle, i18n-/DSGVO-/IDOR-Bruch → verworfen. Stattdessen die **wertvollen Teile in JobSync (Next.js/Prisma/React/Shadcn) nachbauen**, als **Strangler Fig** über der bestehenden Prisma-Datenschicht (deckt sich mit der 4.2-Migrationsstrategie):
 1. **Datenmodell:** cv-manager-JSON ↔ JSON Resume (4.2 adoptiert das ohnehin) ↔ bestehendes Prisma `Resume→ResumeSection`. Adapter-Schicht (ACL) mappt; Gsync-Upstream-Schema bleibt Datenschicht, `projects`/`certifications`/`sectionVisibility` via `OtherSection.jsonData`.
-2. **Template + PDF:** die „slicke" HTML/CSS-Vorlage als **React-Komponente** (CV-Preview-Seite) nachbauen → PDF via **HTML-first (Gotenberg, 4.2.1)**, weil hier der **exakte CSS-Look** zählt und die Web-Vorschau IST das Template (Reuse). → **Wichtige Engine-Konsequenz:** für design-reiche CVs ist der HTML-first-Pfad (Gotenberg) NICHT nur opt-in, sondern bevorzugt; pdfme bleibt Default für strukturierte/Formular-Dokumente (Report, Formulare). Beide leben im `DocumentRenderingConnector` (4.2.1).
+2. **Template + PDF (ENTSCHIEDEN: pdfme, in-process):** CV-PDF über **pdfme** (4.2.1 Default, kein Sidecar). Die „slicke" cv-manager-Vorlage wird in **pdfme nachgebaut** (Designer/`@pdfme/jsx`, NICHT 1:1-HTML-Port) — Live-Preview = pdfme `Viewer`. **Fidelity-Spike PFLICHT:** validieren, dass pdfme den gewünschten Look (Timeline-SVG, Spalten, Typo) trifft; Gotenberg/HTML-first nur Fallback, falls der Look in pdfme nicht erreichbar ist.
 3. **Features übernehmen:** Multi-Version-CVs, Section-Visibility-Toggles, **ATS-Optimierung** (semantisches HTML + Keywords), JSON Import/Export, Versions-`diff` (cv-manager nutzt `diff`).
 4. **UI-Ablösung:** Form-Card-Editor → template-getriebener Editor mit **Live-Vorschau** (WYSIWYG); via Strangler Fig schrittweise, bestehende Tests/Spec (`specs/profile-resume.allium`) mitziehen.
 5. **Bestehendes behalten:** AI Resume Review + Job-Match (PII-redacted) bleiben; neu andocken: CV-Tailoring pro Bewerbung (Job-Aggregat), Daten fließen in Bewerber-Landingpage (9.5, gleiche CV-Daten) + Public API (7.1).
@@ -2037,7 +2037,7 @@ Der bestehende CV-Manager (Profile-Aggregat: `Profile → Resume → ResumeSecti
 
 | Dokumenttyp | Engine | Grund |
 |---|---|---|
-| Design-reiches CV / Anschreiben (cv-manager-Template) | **Gotenberg (HTML-first)** | exakter CSS-Look, Web-Vorschau = Template |
+| Design-reiches CV / Anschreiben | **pdfme (in-process)** — ENTSCHIEDEN | kein Sidecar; Template in pdfme nachgebaut (Fidelity-Spike). Gotenberg nur Fallback falls Look nicht erreichbar. |
 | Bewerbungsbemühungen-Report, Formulare | **pdfme (in-process)** | Tabellen/Pagination, kein Sidecar |
 | DOCX-Varianten | `dolanmiu/docx` | echte .docx |
 
@@ -2051,21 +2051,27 @@ Der bestehende CV-Manager (Profile-Aggregat: `Profile → Resume → ResumeSecti
 |---|---|---|
 | CV-Datenmodell (flach, `visible`, skills+icon, projects, versioning) | `Profile→Resume→ResumeSection→{ContactInfo,Summary,WorkExperience[],Education[],LicenseOrCertification[],OtherSection[]}` (`prisma/schema.prisma`) | **Mismatch** — JobSync ist **entity-normalisiert** (WorkExperience→`Company`/`JobTitle`/`Location` FKs, geteilt mit Job-Aggregat); cv-manager ist flach/self-contained. Strangler Fig: Datenschicht behalten, **fehlende Felder ergänzen** (`visible`, skills+icon, projects) via Schema-Erweiterung bzw. `OtherSection.jsonData`. |
 | Multi-CV-Versionierung (`saved_datasets`) + Section-Diff (`diff`) | — (existiert NICHT) | **Neu:** Prisma-Modell(e) für CV-Versionen + Version-Group + Diff. Andockbar an `shared-surface` (2.18.2). |
-| PDF (`pdfkit`, ATS-getaggt) | `DocumentRenderingConnector` (4.2.1) — `src/lib/connector/{manifest,registry,register-all,resilience}.ts` | Engine ersetzt (pdfme/**Gotenberg** für design-reiches CV), ATS-Accessibility-Tagging-Idee übernehmen. |
+| PDF (`pdfkit`, ATS-getaggt) | `DocumentRenderingConnector` (4.2.1) — `src/lib/connector/{manifest,registry,register-all,resilience}.ts` | Engine ersetzt durch **pdfme** (in-process, entschieden; Gotenberg nur Fallback), ATS-Accessibility-Tagging-Idee übernehmen. |
 | Keine Auth (dual Express, Port-Trennung) | `src/auth.ts`, `src/lib/auth/*`, `with-api-auth.ts`, ADR-015 IDOR | **Reuse** — JobSync löst das bereits; Port erbt Auth/IDOR automatisch. |
 | SSR öffentliche CV-Seite (`/v/:slug`) | `shared-surface` (2.18.2) Renderer `applicant-landingpage` (= 9.5) + Next.js Server Component | **Neu, aber konvergent** mit 9.5 — eine CV-Datenquelle → PDF + öffentliche Seite + Landingpage. |
 | Static-Site-ZIP-Export (`archiver`) | `src/lib/export/*` (nutzt bereits archiver-Muster, `collect-user-data.ts`, `export-rate-limit.ts`) | **Reuse** Export-Infra. |
 | Vanilla-JS-Editor (`admin.js` 263 fns) + SVG-Timeline | `src/components/profile/*` (React/Shadcn), neue Timeline-Komponente | **Neu** — komplett React-Rebuild; Timeline als eigene Komponente. |
 | 8-Locale flat-key i18n | `src/i18n/*` (4 Locales, adapter pattern) | Keys übernehmen, JobSync-i18n-System nutzen. |
 
-**Offene Port-Fragen (entscheidungsrelevant — vor Implementierung klären):**
-1. **Datenmodell (Kern-Frage):** JobSync-Normalisierung behalten (WorkExperience↔`Company`/`Location`-Entities, geteilt mit Jobs — DDD-rein, ermöglicht „wo habe ich mich mit welchem CV beworben") ODER cv-managers flaches self-contained Modell (presentation-first, einfacher, aber keine Entity-Links)? **Empfehlung:** Hybrid/Strangler — normalisierte Datenschicht behalten, Presentation-/Template-Layer + fehlende Felder (`visible`, skills, projects) darüber.
-2. **Versionierung + Snapshot:** Wie wird ein „pro-Bewerbung getailortes CV" gesnapshottet, wenn `Company`/`Location` geteilte mutable Entities sind? Version = tiefe Kopie oder Referenz+Override-Layer? Diff-Granularität (CV / Section / Item)?
-3. **Schema-Erweiterung vs. JSON:** Skills (Kategorie+Icon+nested), Projects, `visible`-Flags — als echte Prisma-Felder/Modelle ODER in `OtherSection.jsonData`? (Trade-off: Queryability/Migration vs. Flexibilität.)
-4. **CV-PDF-Engine:** Gotenberg (HTML-first, exakter Template-Look) als bevorzugt bestätigen — oder pdfme-Designer-Rebuild? (4.2.2 Engine-Tabelle.)
-5. **Öffentliche CV-Seite = 9.5?** Konvergiert der `/v/:slug`-Public-CV mit der Bewerber-Landingpage (9.5)? Eine Implementierung statt zwei?
-6. **Migrations-Scope:** Strangler Fig — welche Sektion zuerst (Vorschlag: ContactInfo+Summary), Big-Bang vermeiden. Bestehende Tests/`specs/profile-resume.allium` mitziehen.
-7. **AI/ATS:** cv-managers „JSON-Export für LLM-Optimierung" + ATS-Optimierung als neue AI-Enrichment-Dimension auf der bestehenden Resume-AI (Review/Match)?
+**Entschieden (2026-06-14):**
+- **CV-PDF-Engine:** **pdfme (in-process)** — kein Sidecar; cv-manager-Look in pdfme nachgebaut (Fidelity-Spike). Gotenberg nur Fallback. (Q4)
+- **Öffentliche CV-Seite = 9.5:** **konvergieren** — EINE Implementierung. Gleiche CV-Datenquelle → PDF + öffentliche CV-Seite + Reverse-Funnel-Landingpage (9.5), alles über den `shared-surface`-Renderer (2.18.2). Keine Doppellösung. (Q5)
+- **Datenmodell:** **Spike zuerst** (vor Festlegung) — Mapping `cv-manager-JSON ↔ JSON Resume ↔ Prisma Resume/ResumeSection` prototypisieren, DANN Hybrid vs. flach entscheiden. (Q1)
+
+**Spike-Backlog (vor Implementierung):**
+- **Spike A — Datenmodell-Mapping:** cv-manager-JSON ↔ JSON Resume ↔ JobSync-Prisma. Klärt Entity-Normalisierung (WorkExperience↔`Company`/`Location`) vs. flach, und wohin `visible`/skills/projects (echte Felder vs. `OtherSection.jsonData`). Liefert die Antwort auf Q1 + Q3.
+- **Spike B — pdfme-Template-Fidelity:** cv-manager-Look (Timeline-SVG, Spalten, Typo) in pdfme nachbauen, gegen Original vergleichen. Liefert Go/No-Go für Q4-Engine.
+
+**Offene Port-Fragen (nach Spikes klären):**
+1. **Versionierung + Snapshot:** Wie wird ein „pro-Bewerbung getailortes CV" gesnapshottet, wenn `Company`/`Location` geteilte mutable Entities sind? Version = tiefe Kopie oder Referenz+Override-Layer? Diff-Granularität (CV / Section / Item)? (Hängt an Spike-A-Ergebnis.)
+2. **Schema-Erweiterung vs. JSON:** Skills (Kategorie+Icon+nested), Projects, `visible`-Flags — echte Prisma-Felder/Modelle ODER `OtherSection.jsonData`? (Spike A.)
+3. **Migrations-Scope:** Strangler Fig — welche Sektion zuerst (Vorschlag: ContactInfo+Summary), Big-Bang vermeiden. Bestehende Tests/`specs/profile-resume.allium` mitziehen.
+4. **AI/ATS:** cv-managers „JSON-Export für LLM-Optimierung" + ATS-Optimierung als neue AI-Enrichment-Dimension auf der bestehenden Resume-AI (Review/Match)?
 
 **Cross-Refs:** Document Rendering Engine (4.2.1), Dokumenten-Generatoren/JSON-Resume-Pagebuilder (4.2), Skillsets (4.1), Bewerber-Landingpage (9.5), Public API (7.1), AI Review/Match (bestehende Resume-AI), Profile-Spec (`specs/profile-resume.allium`), shared-surface (2.18.2).
 
