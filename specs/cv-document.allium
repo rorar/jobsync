@@ -560,6 +560,10 @@ rule DeleteCvDocument {
         -- Q6 decision: CvDocuments hold the user's OWN (first-party) data, NOT
         -- third-party PII — no automatic retention expiry. Removed only by
         -- explicit user deletion, and only from the archived state.
+        -- Downstream: a deleted CV nulls any ApplicationBundle.cv that referenced
+        -- it (application-documents.allium GeneratedDocumentsSurviveCvDeletion) —
+        -- already-generated documents persist; this aggregate adds NO coupling
+        -- to bundles (clean separation).
 }
 
 ------------------------------------------------------------
@@ -717,6 +721,15 @@ invariant MultiLanguageShareExposesPublishedOnly {
     -- shared set. Per-language consent applies (PublicSlugRequiresConsent).
 }
 
+invariant VersionNumbersStableOnDelete {
+    -- Deleting one saved version does NOT renumber the others — `version` is a
+    -- stable identifier within (version_group, language); a deletion leaves a
+    -- gap. The default working doc cannot be deleted directly: DeleteCvDocument
+    -- requires status = archived, and ArchiveCvDocument requires is_default =
+    -- false, so the user must SetDefault another doc first. The default is thus
+    -- always delete-protected without a special rule.
+}
+
 invariant FirstPartyRetentionNoAutoExpiry {
     -- Q6: a CvDocument holds the user's OWN data (first-party), not third-party
     -- PII. There is NO automatic retention expiry (unlike CRM auto-created
@@ -812,4 +825,3 @@ open question "x-jobsync-* JSON Schema authoring: hand-write the schema, or deri
 
 open question "JsonResume.from_legacy mapping fidelity: the legacy normalized model lacks skills/projects/visibility/highlights — import fills these as empty/defaults. Confirm the exact default-fill + how entity-linked WorkExperience (Company/Location FKs) denormalizes into data + optional CvExperienceLink."
 
-open question "Cross-aggregate integrity on hard delete: DeleteCvDocument removes a CvDocument, but an ApplicationBundle (application-documents.allium) references it as bundle.cv, and saved versions share its version_group/language_group. What happens to a bundle whose CV is deleted (block deletion while referenced, null the ref, or cascade-archive the bundle)? And does deleting one version affect its group's default/slug?"

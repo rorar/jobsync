@@ -157,7 +157,7 @@ value GeneratedContent {
 entity ApplicationBundle {
     user: User
     job: Job
-    cv: CvDocument                 -- the source CV for this application
+    cv: CvDocument?                -- the source CV; null if it was later deleted
     status: BundleStatus
     preparation_mode: AutomationMode  -- the mode that opened it (9.4 audit / review queue)
 
@@ -177,7 +177,9 @@ entity ApplicationBundle {
         -- the existing bundle rather than forking a second.
 
     @invariant BundleCvOwnedBySameUser
-        -- bundle.cv.user = bundle.user. A bundle's CV belongs to its owner.
+        -- When cv is set, bundle.cv.user = bundle.user — a bundle's CV belongs
+        -- to its owner. cv may be null after the source CV is deleted (see
+        -- GeneratedDocumentsSurviveCvDeletion).
 }
 
 entity GeneratedDocument {
@@ -330,6 +332,7 @@ rule GenerateDocument {
 
     requires: exists bundle where bundle.user = user
     requires: bundle.status = assembling
+    requires: bundle.cv != null
 
     ensures:
         -- LLM generation from CV + Job. PII redacted unless the provider is
@@ -505,6 +508,15 @@ invariant OnlyYoloAutoFinalizesAndSends {
     -- its safeguards (daily application limit, company blacklist, match-score
     -- minimum, kill-switch, dry-run). Semi-YOLO auto-GENERATES drafts but
     -- always stops before sending.
+}
+
+invariant GeneratedDocumentsSurviveCvDeletion {
+    -- A GeneratedDocument captures its content (GeneratedContent.body) at
+    -- generation time, so it is independent of the source CV thereafter.
+    -- Hard-deleting the CvDocument (cv-document.allium DeleteCvDocument) nulls
+    -- bundle.cv but NEVER destroys existing generated documents or attachments.
+    -- (Re)generation requires a non-null cv (GenerateDocument). This keeps the
+    -- aggregates decoupled — cv-document does not know about bundles.
 }
 
 invariant BundleSharingViaSharedSurface {
