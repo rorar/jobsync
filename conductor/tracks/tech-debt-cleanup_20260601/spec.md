@@ -35,15 +35,14 @@ committed in its own logical commit. Build zero-error, `bash scripts/test.sh` gr
       generateObject is the deprecated one). D2 cast replaced by typed `RESUME_MATCH_INCLUDE` +
       `Prisma.ResumeGetPayload`. LOW.
 
-### Cluster 2 — Event semantics + bounded-context (DDD)
-- [ ] **IF-10:** `emitEvent` fire-and-forget reviewed; callers that need delivery
-      ordering/back-pressure get an awaitable path (or the void+`.catch` is documented as
-      the intentional ErrorIsolation contract with a guarding test). Verified:
-      `src/lib/events/index.ts:53` (`export function emitEvent … : void` → `.catch`). MEDIUM.
-- [ ] **D5:** `enrichment-trigger.ts` no longer writes `Company.domain` directly; the
-      write routes through the Company aggregate's repository (bounded-context fix, A-05).
-      Verified: `src/lib/events/consumers/enrichment-trigger.ts` extracts via
-      `extractDomain()` (`:205`) and writes `domain` back on `CompanyCreated`. LOW.
+### Cluster 2 — Event semantics + bounded-context (DDD) ✅ DONE (2026-06-14)
+- [x] **IF-10:** DONE (`fc724ba`) — documented the void+`.catch` ErrorIsolation contract on
+      `emitEvent` + guard test; awaitable path (`eventBus.publish()`) already exists, no caller
+      needs it. No behaviour change. MEDIUM.
+- [x] **D5:** DONE (`cab8915`) — `Company.domain` write routed through a server-only Company
+      repository leaf (`setCompanyDomainIfUnset`) instead of raw `db.company.updateMany`;
+      owner-scoped (createdBy, ADR-015). Server-only leaf (not company.actions.ts) because the
+      consumer has no session per ADR-019. LOW.
 
 ### Cluster 3 — Allium spec-drift (no code behaviour change)
 - [x] **D3:** DONE (2026-06-14) — `specs/notification-dispatch.allium` already v3

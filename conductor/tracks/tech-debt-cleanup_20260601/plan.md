@@ -34,18 +34,22 @@ for gaps), then fix. Each item is its own logical commit. Build zero-error +
 
 ### Tasks
 
-- [ ] Task 2.1: IF-10 — decide the `emitEvent` contract: either expose an awaitable
-      `publish` path for callers needing delivery/ordering, or document the void+`.catch`
-      ErrorIsolation contract and add a test pinning it (`events/index.ts:53`). Test the
-      chosen behaviour.
-- [ ] Task 2.2: D5 — route the `Company.domain` write in `enrichment-trigger.ts` through
-      the Company aggregate Repository (`company.actions.ts`) instead of a direct write;
-      regression test that `CompanyCreated` still backfills the domain.
+- [x] Task 2.1: IF-10 — DONE (2026-06-14, `fc724ba`): chose "document the contract".
+      The awaitable path already exists (`eventBus.publish()` directly — spec escape hatch,
+      no caller needs it; all ~30 sites are fire-and-forget). Documented the void+`.catch`
+      ErrorIsolation contract on `emitEvent` + added "emitEvent contract (IF-10)" test block
+      (void return, no throw to publisher on consumer error, survivors still run).
+- [x] Task 2.2: D5 — DONE (2026-06-14, `cab8915`): routed the `Company.domain` write through
+      a new server-only Company repository leaf `src/lib/company-repository.ts`
+      (`setCompanyDomainIfUnset`, mirrors blacklist-query.ts) instead of raw Prisma — and
+      added the missing owner-scope (`createdBy`, ADR-015). NB: used a server-only leaf, NOT
+      `company.actions.ts`, because that is a "use server" file (ADR-019) and the consumer has
+      no session. Unit test on the repo fn; enrichment-auto-trigger regression stays green.
 
 ### Verification
 
-- [ ] `emitEvent` semantics are tested + documented; `Company.domain` is written only via
-      the Company Repository (no cross-context write).
+- [x] `emitEvent` semantics tested + documented; `Company.domain` written only via the
+      Company repository (no cross-context raw write). tsc 0, 55 tests green, build exit 0.
 
 ## Phase 3: Allium spec-drift (no behaviour change)
 
