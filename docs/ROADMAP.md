@@ -2031,7 +2031,9 @@ Der bestehende CV-Manager (Profile-Aggregat: `Profile → Resume → ResumeSecti
 2. **Template + PDF (ENTSCHIEDEN: pdfme, in-process):** CV-PDF über **pdfme** (4.2.1 Default, kein Sidecar). Die „slicke" cv-manager-Vorlage wird in **pdfme nachgebaut** (Designer/`@pdfme/jsx`, NICHT 1:1-HTML-Port) — Live-Preview = pdfme `Viewer`. **Fidelity-Spike PFLICHT:** validieren, dass pdfme den gewünschten Look (Timeline-SVG, Spalten, Typo) trifft; Gotenberg/HTML-first nur Fallback, falls der Look in pdfme nicht erreichbar ist.
 3. **Features übernehmen:** Multi-Version-CVs, Section-Visibility-Toggles, **ATS-Optimierung** (semantisches HTML + Keywords), JSON Import/Export, Versions-`diff` (cv-manager nutzt `diff`).
 4. **UI-Ablösung:** Form-Card-Editor → template-getriebener Editor mit **Live-Vorschau** (WYSIWYG); via Strangler Fig schrittweise, bestehende Tests/Spec (`specs/profile-resume.allium`) mitziehen.
-5. **Bestehendes behalten:** AI Resume Review + Job-Match (PII-redacted) bleiben; neu andocken: CV-Tailoring pro Bewerbung (Job-Aggregat), Daten fließen in Bewerber-Landingpage (9.5, gleiche CV-Daten) + Public API (7.1).
+5. **Bestehendes behalten:** AI Resume Review + Job-Match bleiben; neu andocken: CV-Tailoring pro Bewerbung (Job-Aggregat), Daten fließen in Bewerber-Landingpage (9.5, gleiche CV-Daten) + Public API (7.1).
+6. **AI-Matching + PII-Stripping (PFLICHT, reuse bestehende Infra):** Die AI-Matching-Möglichkeiten (Resume↔Job-Match, Review) bleiben für portierte CVs erhalten. **Vor jedem Cloud-AI-Transfer** werden Personendaten über das bestehende `src/lib/pii` redaktiert (`redactContact`/`scrubFreeText`, `@invariant CloudTransferDataMinimization` in `specs/ai-provider.allium`) — Name/Email/Telefon/Adresse → Platzhalter. Volle Fidelity nur lokal (Ollama); Cloud (OpenAI/DeepSeek) immer gestrippt (fail-safe). Gilt auch für neue Match-Pfade auf CV-Versionen.
+7. **Profil-Auto-Fill mit Override:** Eine neue CV/Version übernimmt die Personendaten **automatisch aus dem Profile-Aggregat** (`ContactInfo`: firstName/lastName/headline/email/phone/address), **pro CV editierbar/überschreibbar** (Override-Layer auf CV-Ebene — ändert NICHT das zentrale Profil). Default = Profildaten, User kann pro CV abweichen (z.B. andere Telefonnummer/Headline je Bewerbung).
 
 **Engine-Wahl pro Dokumenttyp (Konsequenz 4.2.1):**
 
@@ -2073,7 +2075,7 @@ Der bestehende CV-Manager (Profile-Aggregat: `Profile → Resume → ResumeSecti
 3. **Migrations-Scope:** Strangler Fig — welche Sektion zuerst (Vorschlag: ContactInfo+Summary), Big-Bang vermeiden. Bestehende Tests/`specs/profile-resume.allium` mitziehen.
 4. **AI/ATS:** cv-managers „JSON-Export für LLM-Optimierung" + ATS-Optimierung als neue AI-Enrichment-Dimension auf der bestehenden Resume-AI (Review/Match)?
 
-**Cross-Refs:** Document Rendering Engine (4.2.1), Dokumenten-Generatoren/JSON-Resume-Pagebuilder (4.2), Skillsets (4.1), Bewerber-Landingpage (9.5), Public API (7.1), AI Review/Match (bestehende Resume-AI), Profile-Spec (`specs/profile-resume.allium`), shared-surface (2.18.2).
+**Cross-Refs:** Document Rendering Engine (4.2.1), Dokumenten-Generatoren/JSON-Resume-Pagebuilder (4.2), Skillsets (4.1), Bewerber-Landingpage (9.5), Public API (7.1), AI Review/Match (bestehende Resume-AI), PII-Egress-Redaktion (`src/lib/pii`, `CloudTransferDataMinimization`), Profile-Auto-Fill (`ContactInfo`), Profile-Spec (`specs/profile-resume.allium`), shared-surface (2.18.2).
 
 ### 4.3 Output-Struktur (Paperless-ngx Style)
 Dynamische Dateipfade und Dateinamen:
