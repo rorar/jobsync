@@ -1899,7 +1899,7 @@ Jeder Job hat ein **Application Locale Profile** das Sprache + Land + kulturelle
 - **Auto-Detection:** Aus der Sprache des Stellenangebots ableiten (EURES liefert `language`, Arbeitsagentur → DE, StepStone → DE, HelloWork → FR, etc.)
 - **User-Override:** Pro Job und pro Dokument konfigurierbar
 - **Fallback:** User-Locale wenn keine Sprache erkennbar
-- **Dateinamen lokalisiert:** `<Datum> <Lang-Code> <Dok-Titel>` (z.B. `2026-03-28 DE Anschreiben`, `2026-03-28 EN Cover Letter`). Bezeichnungen vom User anpassbar.
+- **Dateinamen:** Single Source of Truth ist die Dateinamens-Konvention in **4.3** (`{Nachname}_{Vorname}_{DocType}_{LANG}[_{Unternehmen}][_v{Version}]`, ASCII-sanitisiert, LANG immer dabei; Paperless-Datums-Prefix-Variante für Ablage). Jedes Bewerbungsdokument (CV, Anschreiben, …) trägt seinen `DocType`-Token; ein Bewerbungs-Bundle teilt Nachname/Vorname/Unternehmen und unterscheidet sich per DocType + LANG. Anzeige-Bezeichnungen lokalisierbar, Dateiname ASCII-safe.
 - **Gender-Handling Anrede:**
   - Wenn CRM-Kontaktperson vorhanden (→ 5.7): Geschlecht aus Kontakt → "Sehr geehrte Frau Müller" / "Sehr geehrter Herr Müller"
   - Wenn kein Geschlecht bekannt: Gender-neutrale Default-Variante (DE: "Guten Tag, [Name]" / "Sehr geehrte Damen und Herren", EN: "Dear [Name]", FR: "Madame, Monsieur")
@@ -2091,9 +2091,10 @@ Dynamische Dateipfade und Dateinamen für generierte/exportierte Dokumente (CV, 
 
 **Dateinamens-Konvention:**
 - **Schema:** `{Nachname}_{Vorname}_{DocType}_{LANG}[_{Unternehmen}][_v{Version}].{ext}`
-  - Beispiel: `Chen_Marcus_CV_EN_SwissBank_v3.pdf`, `Chen_Marcus_Anschreiben_DE_SwissBank.pdf`
-- **`DocType`-Token:** `CV` | `Anschreiben` | `Motivation` | `Portfolio` | `Report` | `Titelblatt` (lokalisierbar als Anzeige, ASCII-Token im Dateinamen).
-- **`LANG`:** ISO 639-1 Großbuchstaben (`EN`/`DE`/`FR`/`ES`) — **immer im CV-Dateinamen** (Multi-Language-Bewerbung, 4.2 / cv-document.allium `language`).
+  - Beispiel: `Chen_Marcus_CV_EN_SwissBank_v3.pdf`, `Chen_Marcus_CoverLetter_DE_SwissBank.pdf`
+- **`DocType`-Token (sprach-UNABHÄNGIG, stabil):** `CV` | `CoverLetter` | `Motivation` | `Portfolio` | `Report` | `TitlePage` — fester ASCII-Token, **NICHT lokalisiert** (sonst bekäme dasselbe Dokument je UI-Sprache einen anderen Dateinamen → Sync/Dedup bricht). Der Anzeige-Label in der UI darf lokalisiert sein (DE „Anschreiben", EN „Cover Letter"). Mappt 1:1 auf `cv-document.allium` enum `DocType` (`cv`→`CV`, `cover_letter`→`CoverLetter`, …).
+- **`LANG`:** ISO 639-1 Großbuchstaben (`EN`/`DE`/`FR`/`ES`) = **Inhaltssprache** des Dokuments (≠ UI-Sprache); **immer im Dateinamen** (Multi-Language-Bewerbung, 4.2 / cv-document.allium `language`).
+- **Bewerbungs-Bundle:** CV + Anschreiben + Anhänge einer Bewerbung teilen `{Nachname}_{Vorname}` (+ `{Unternehmen}`) und unterscheiden sich nur per `DocType` + `LANG` — gemeinsamer Paperless-Ordner `<Unternehmen>/<LANG>/<Jobtitel>/`.
 - **`{Unternehmen}` / `{Version}` optional:** Unternehmen wenn job-/firmenspezifisch getailort; `v{n}` wenn aus einer benannten CvDocument-Version (≠ Default-Arbeitsdokument).
 - **Paperless-Datums-Variante** (Ablage/Sync, 1.6): Prefix `YYYY-MM-DD ` → `2026-06-14 Chen_Marcus_CV_EN_SwissBank.pdf`.
 - **Sanitisierung (PFLICHT):** ASCII-transliteriert (ä→ae, é→e), Leerzeichen→`_`, Sonderzeichen entfernt, Längen-Cap — cross-OS-/Netzwerk-Mount-sicher (Ordner-Sync 1.6, File Explorer). **Dateiname = ASCII-safe; Anzeigename darf lokalisiert sein.**
