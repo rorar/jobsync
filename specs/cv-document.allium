@@ -554,7 +554,7 @@ rule DeleteCvDocument {
         -- Hard delete. Revoke any outstanding shared links first.
         let links = SharedLink{target_type: "cv_document", target_id: document, revoked: false}
         links.updated(revoked: true)
-        document.deleted
+        not exists document
 
     @guidance
         -- Q6 decision: CvDocuments hold the user's OWN (first-party) data, NOT
@@ -811,3 +811,5 @@ surface CvArtifactExport {
 open question "x-jobsync-* JSON Schema authoring: hand-write the schema, or derive it from the pdfme template / JSON Resume themes? Affects who owns the schema as the CV builder evolves."
 
 open question "JsonResume.from_legacy mapping fidelity: the legacy normalized model lacks skills/projects/visibility/highlights — import fills these as empty/defaults. Confirm the exact default-fill + how entity-linked WorkExperience (Company/Location FKs) denormalizes into data + optional CvExperienceLink."
+
+open question "Cross-aggregate integrity on hard delete: DeleteCvDocument removes a CvDocument, but an ApplicationBundle (application-documents.allium) references it as bundle.cv, and saved versions share its version_group/language_group. What happens to a bundle whose CV is deleted (block deletion while referenced, null the ref, or cascade-archive the bundle)? And does deleting one version affect its group's default/slug?"
