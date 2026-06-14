@@ -2989,6 +2989,8 @@ Capability-basierte Isolation für untrusted Community-Module. Nur wenn Communit
 - Depends on: 8.7 (Module SDK)
 
 ### 9.4 Automation Modes (Semi-YOLO + YOLO)
+**Allium-Spec (DRAFT 2026-06-14):** `specs/automation-modes.allium` (via `allium:elicit`, `allium check` grün) — `AutomationMode` (kanonisch: manual/semi_yolo/yolo), `AutopilotPolicy` (per-User: global_mode + Safeguards), `AutomationModeOverride` (per-Automation), `AutopilotAction` (Review-Queue / Kill-Switch-Target). **Mode-Präzedenz gelöst** (`EffectiveModePrecedence`): Per-Automation-Override schlägt globalen Default (manual) — löst die dangling Referenz `EffectiveAutomationMode.of` aus application-documents.allium. **Safeguards als Invarianten:** `OnlyYoloAutoSends`, `KillSwitchHaltsAllSends`, `DailyLimitCapsSends`, `DryRunNeverSends`, `BlacklistedCompaniesNeverAutoSent`. Pipeline-Stufen werden gegated, nicht re-owned (Cross-Refs). Offene Fragen: Daily-Limit zählt Sends vs. Drafts, Kill-Switch global vs. per-Automation, Dry-Run-Output später sendbar.
+
 **Drei Stufen der Automatisierung** — User wählt in Settings pro Automation oder global:
 
 | Modus | LLM bereitet vor | User reviewt | Versand |

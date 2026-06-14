@@ -1,0 +1,289 @@
+-- allium: 3
+-- automation-modes.allium
+
+-- Scope: Automation Modes (ROADMAP 9.4) — the autopilot SETTING, its
+--   precedence resolution, and the YOLO safeguards. Three levels: Manual,
+--   Semi-YOLO (assistant: auto-prepares, pauses before every send), YOLO
+--   (full autopilot: auto-sends within safeguards). This spec owns the mode
+--   configuration + the safeguards/kill-switch; it GATES pipeline stages that
+--   are owned by other specs.
+-- Includes: AutomationMode (canonical), AutopilotPolicy (per-user config +
+--   safeguards), AutomationModeOverride (per-automation), AutopilotAction
+--   (pending autonomous action / review queue / kill-switch target),
+--   effective-mode precedence, daily limit, match-score minimum, kill-switch,
+--   dry-run, blacklist respect.
+-- Excludes (gated here, owned elsewhere):
+--   - Staging evaluation + promotion (vacancy-pipeline.allium)
+--   - Document generation (application-documents.allium — already gates on
+--     AutomationMode; this spec is the canonical owner of that enum + the
+--     effective-mode resolution it references)
+--   - E-mail sending / Communication Connector (ROADMAP 1.12 / 4.9)
+--   - Scheduler runs (scheduler-coordination.allium); Automation entity
+--     (module-lifecycle.allium); company blacklist contents (2.15)
+--   - The match-score computation (AI Connector — ai-provider.allium)
+-- Dependencies: User, Automation, Job (shared). Company blacklist (2.15) is
+--   referenced via the Blacklist.suppresses black box (not modelled here).
+-- Owner: AutomationModes Aggregate (src/actions/automationMode.actions.ts — to build)
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity User {
+    -- Owns the autopilot policy + every autopilot action (ADR-015).
+}
+
+external entity Automation {
+    -- module-lifecycle.allium. A scheduled job-search configuration. MAY carry
+    -- a per-automation mode override (AutomationModeOverride).
+    user: User
+}
+
+external entity Job {
+    -- The job an autopilot action acts on. Carries the match score + company.
+    user: User
+    match_score: Integer?          -- 0..100; null when not scored
+}
+
+------------------------------------------------------------
+-- Enums
+------------------------------------------------------------
+
+enum AutomationMode {
+    -- CANONICAL definition (ROADMAP 9.4). application-documents.allium declares
+    -- a mirror it gates on; this spec is the authoritative owner.
+    manual          -- LLM prepares nothing; everything is user-initiated
+    semi_yolo       -- LLM auto-prepares (eval/promote/generate/draft); PAUSES before every send
+    yolo            -- full autopilot: auto-sends within safeguards
+}
+
+enum AutopilotActionKind {
+    prepare         -- autonomous preparation (eval/promote/generate/draft)
+    send            -- autonomous submission of an application
+}
+
+enum AutopilotActionStatus {
+    pending         -- queued autonomous action, not yet executed
+    executed        -- prepared OR sent successfully
+    dry_run         -- prepared but deliberately NOT sent (dry-run mode)
+    held            -- blocked by the kill-switch; awaiting resume/cancel
+    skipped         -- a safeguard refused it (limit, low match, blacklist)
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    default_daily_application_limit: Integer = 5   -- max auto-SENDS per user per day
+    default_match_score_minimum: Integer = 90      -- min Job.match_score to auto-act
+}
+
+------------------------------------------------------------
+-- Entities
+------------------------------------------------------------
+
+entity AutopilotPolicy {
+    -- One per user: the global autopilot configuration + safeguards.
+    user: User
+    global_mode: AutomationMode            -- default for automations without an override
+    daily_application_limit: Integer       -- max auto-sends/day (default config)
+    match_score_minimum: Integer           -- min match to auto-act (default config)
+    dry_run: Boolean                       -- if true, prepare everything but never send
+    kill_switch_active: Boolean            -- if true, all pending sends are held
+
+    @invariant OnePolicyPerUser
+        -- Lazily created on first autopilot configuration; defaults to
+        -- global_mode = manual, limits from config, dry_run/kill_switch off.
+
+    @invariant TenantIsolation
+        -- Policy + all actions are scoped to user (ADR-015).
+}
+
+entity AutomationModeOverride {
+    -- Optional per-automation override of the user's global_mode (9.4: mode is
+    -- settable "per automation OR globally").
+    automation: Automation
+    mode: AutomationMode
+
+    @invariant OneOverridePerAutomation
+        -- At most one override per automation; absence means the global applies.
+}
+
+entity AutopilotAction {
+    -- A single autonomous step the autopilot wants to take. The unit the
+    -- kill-switch holds, the daily limit counts, and the YOLO review queue shows.
+    user: User
+    automation: Automation
+    job: Job
+    kind: AutopilotActionKind
+    status: AutopilotActionStatus
+    created_at: Timestamp
+
+    @invariant ActionOwnedByUser
+        -- Ownership chain AutopilotAction -> User (ADR-015).
+}
+
+------------------------------------------------------------
+-- Rules — configuration
+------------------------------------------------------------
+
+rule SetGlobalMode {
+    when: SetGlobalMode(user, mode)
+
+    requires: exists user
+
+    ensures:
+        let policy = AutopilotPolicy{user: user}
+        policy.updated(global_mode: mode)
+
+    @guidance
+        -- Switching to yolo is opt-in behind a confirmation dialog with a
+        -- warning (ROADMAP 9.4) — the warning is a UI concern, the consent
+        -- decision is the act of calling this with mode = yolo.
+}
+
+rule SetAutomationOverride {
+    when: SetAutomationOverride(user, automation, mode)
+
+    requires: exists automation where automation.user = user
+
+    ensures:
+        AutomationModeOverride.created(automation: automation, mode: mode)
+
+    @guidance
+        -- Per-automation override. Precedence: an override wins over the
+        -- user's global_mode (EffectiveModePrecedence).
+}
+
+rule ActivateKillSwitch {
+    when: ActivateKillSwitch(user)
+
+    requires: exists user
+
+    ensures:
+        let policy = AutopilotPolicy{user: user}
+        policy.updated(kill_switch_active: true)
+        -- Every pending send is frozen immediately.
+        let pending_sends = AutopilotAction{user: user, kind: send, status: pending}
+        pending_sends.updated(status: held)
+
+    @guidance
+        -- Instant safeguard: pauses ALL pending autonomous sends at once. Already
+        -- executed/sent actions cannot be recalled — the kill-switch stops
+        -- future sends, it does not un-send.
+}
+
+rule DeactivateKillSwitch {
+    when: DeactivateKillSwitch(user)
+
+    requires: exists user
+    requires: AutopilotPolicy{user: user}.kill_switch_active = true
+
+    ensures:
+        let policy = AutopilotPolicy{user: user}
+        policy.updated(kill_switch_active: false)
+        -- Held actions return to pending for re-evaluation against safeguards.
+        let held = AutopilotAction{user: user, status: held}
+        held.updated(status: pending)
+}
+
+------------------------------------------------------------
+-- Rules — autonomous send (the safeguarded gate)
+------------------------------------------------------------
+
+rule ExecuteAutopilotSend {
+    when: AutopilotSendRequested(user, automation, job, action)
+
+    -- Only YOLO auto-sends. Semi-YOLO never reaches this rule (it pauses for the
+    -- user). Effective mode = override else global (EffectiveModePrecedence).
+    requires: EffectiveMode.of(user, automation) = yolo
+    requires: AutopilotPolicy{user: user}.kill_switch_active = false
+    requires: not Blacklist.suppresses(user, job)
+    requires: job.match_score != null
+    requires: job.match_score >= AutopilotPolicy{user: user}.match_score_minimum
+    requires: DailySendCount.of(user) < AutopilotPolicy{user: user}.daily_application_limit
+
+    ensures:
+        if AutopilotPolicy{user: user}.dry_run:
+            -- Dry-run: prepared, deliberately not sent. Reviewable + sendable later.
+            action.updated(status: dry_run)
+        else:
+            -- Real send via the Communication Connector (1.12 / 4.9, external).
+            action.updated(status: executed)
+
+    @guidance
+        -- THE safeguarded gate. All five safeguards (kill-switch, blacklist,
+        -- match-score minimum, daily limit, dry-run) are checked before any
+        -- autonomous submission. A failed guard leaves the action for the
+        -- review queue (status stays pending or is set skipped by SkipUnsafeSend).
+        -- Manual + Semi-YOLO modes never auto-send: Semi-YOLO produces a draft
+        -- and waits for the user's one-click approval (application-documents
+        -- OnlyYoloAutoFinalizesAndSends).
+}
+
+rule SkipUnsafeSend {
+    when: AutopilotSendRequested(user, automation, job, action)
+
+    -- A safeguard refused the send (mode not yolo, low match, blacklisted, or
+    -- the daily limit is reached). The action is recorded as skipped for review.
+    requires: EffectiveMode.of(user, automation) != yolo
+        or job.match_score = null
+        or job.match_score < AutopilotPolicy{user: user}.match_score_minimum
+
+    ensures:
+        action.updated(status: skipped)
+
+    @guidance
+        -- Visible in the review queue so the user sees what the autopilot did
+        -- NOT send and why. (The kill-switch path produces `held`, not `skipped`.)
+}
+
+------------------------------------------------------------
+-- Top-level Invariants
+------------------------------------------------------------
+
+invariant EffectiveModePrecedence {
+    -- The effective mode for an automation is its AutomationModeOverride.mode if
+    -- one exists, otherwise the user's AutopilotPolicy.global_mode (default
+    -- manual). EffectiveMode.of(user, automation) resolves exactly this. This is
+    -- what application-documents.allium's EffectiveAutomationMode.of references.
+}
+
+invariant OnlyYoloAutoSends {
+    -- No AutopilotAction reaches status = executed for kind = send unless the
+    -- effective mode is yolo AND every safeguard passed. Manual + Semi-YOLO
+    -- never produce an autonomous send (Semi-YOLO pauses for user approval).
+}
+
+invariant KillSwitchHaltsAllSends {
+    -- While AutopilotPolicy.kill_switch_active, no pending send transitions to
+    -- executed; all pending sends are held. The switch is immediate and total.
+}
+
+invariant DailyLimitCapsSends {
+    -- The count of executed send-actions per user per calendar day never exceeds
+    -- AutopilotPolicy.daily_application_limit. Prevents autopilot spam.
+}
+
+invariant DryRunNeverSends {
+    -- While AutopilotPolicy.dry_run, send-actions reach status = dry_run, never
+    -- executed — the autopilot does everything except actually submit.
+}
+
+invariant BlacklistedCompaniesNeverAutoSent {
+    -- An application is never autonomously sent to a company on the user's
+    -- CompanyBlacklist (2.15), regardless of mode.
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Daily limit scope: does daily_application_limit count only autonomous SENDS (current model — executed send-actions), or also Semi-YOLO drafts awaiting approval? Counting only sends means a user can have many drafts queued but ≤ N actually go out per day."
+
+open question "Kill-switch scope: is it per-user (current model — one AutopilotPolicy flag halting all the user's automations) or also per-automation (pause one runaway automation without disabling the rest)? 9.4 implies a global emergency stop; a per-automation pause may also be wanted."
+
+open question "Dry-run output reuse: a dry_run send-action is prepared but not sent. Can the user later promote a dry_run action to a real send (one-click, like Semi-YOLO), or is dry-run purely observational and the user re-runs to actually send?"
+
+open question "Auto-prep CV resolution lives in application-documents.allium (DefaultCv.for) — confirm 9.4 does not also need to pick the CV; this spec only gates whether preparation/sending happens, not which CV."
