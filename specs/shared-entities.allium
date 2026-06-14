@@ -65,7 +65,10 @@ entity Company {
     label: String               -- display name as entered by user
     value: String               -- label.trim().toLowerCase()
     logo_url: String?           -- optional company logo URL
-    domain: String?             -- extracted domain (e.g. "github.com"), populated by enrichment
+    domain: String?             -- best-guess web domain DERIVED FROM THE COMPANY LABEL
+                                --   on creation (e.g. "acme GmbH" -> "acme.com").
+                                --   Set at most once, never overwritten. Populated by
+                                --   the enrichment context, not the creating actor.
     created_by: User
 
     @invariant UserScopedUniqueness
@@ -74,6 +77,13 @@ entity Company {
 
     @invariant LogoUrlProtocol
         -- Logo URL must use http or https protocol (validated server-side).
+
+    @invariant DomainPopulatedOnce
+        -- domain is derived from the company label by the enrichment context
+        -- on creation; written at most once (never overwritten once set);
+        -- the write is owner-scoped (matched on created_by). Population is
+        -- best-effort — a Company may permanently have no domain, and that
+        -- is not an error.
 }
 
 entity Location {

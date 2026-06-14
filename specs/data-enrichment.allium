@@ -340,6 +340,43 @@ rule TriggerEnrichmentOnCompanyCreated {
     -- for both manual and automation-created companies.
 }
 
+rule PopulateCompanyDomainOnCreation {
+  -- "When a new company is created, back-fill Company.domain from its label."
+  -- The enrichment context owns domain derivation; the creating actor does not
+  -- supply it. Set at most once — an already-populated domain is never overwritten.
+  when: company: Company.created
+
+  let derivedDomain = extractDomain(company.label)
+    -- Black box: derives a plausible web domain from the company label.
+    -- Shared utility in data-enrichment/domain-extractor (same function used
+    -- by TriggerEnrichmentOnCompanyCreated). Returns null when no domain can
+    -- be derived from the label.
+
+  requires: derivedDomain != null
+    -- Nothing to write if the label yields no domain.
+  requires: company.domain = null
+    -- Owner-scoped write happens at most once: never overwrite an existing domain.
+
+  ensures: company.domain = derivedDomain
+
+  @guidance
+    -- This populates Company.domain for both manually created and
+    -- automation-created companies. It is the SOLE writer of Company.domain
+    -- (the VacancyPromoted logo path also derives a domain but does NOT write
+    -- it back to the company).
+    -- The write is owner-scoped: the handler resolves the company by id within
+    -- its owning user's scope (created_by) before writing.
+    -- The domain is SYNTHESISED from the label, not extracted from a live page:
+    -- if the label already looks like a domain it is lowercased; otherwise legal
+    -- suffixes (AG/GmbH/Inc/Ltd...) are stripped, the text is NFD-normalised and
+    -- non-alphanumerics removed, then ".com" is appended (e.g. "acme GmbH" ->
+    -- "acme.com"). The result is a best guess, which is why population is
+    -- best-effort and the field may legitimately stay null.
+    -- Best-effort and non-blocking: a failure here NEVER blocks company creation
+    -- or the event bus. The domain simply stays null and the next domain event
+    -- for the same company may retry.
+}
+
 rule TriggerEnrichmentOnJobImported {
   -- "When a job is imported via automation, trigger logo + deep link enrichment."
   when: VacancyPromoted(stagedVacancyId, jobId, userId)
