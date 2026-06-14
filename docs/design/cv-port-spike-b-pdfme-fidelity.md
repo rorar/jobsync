@@ -39,3 +39,5 @@ OK in-process generate | bytes: 16595 | header: %PDF- | pages: 2 | A4 595×842pt
 - Timeline + any chart: server-render to static SVG → pdfme `svg` schema.
 - Data: render from `CvDocument.data` (JSON Resume, Spike A) → template `inputs`.
 - Open follow-up: build the actual cv-manager-equivalent Designer template + Inter font asset; validate visual against originals with a human eye (this spike proved capability, not final pixels).
+
+**Reference prototype:** `docs/design/cv-port-spike-b-pdfme-prototype.mjs` — the validated known-good render script (encodes all 5 gotchas above as runnable code). Not wired into the build; run standalone per its header. Starting point for the implementation template.
