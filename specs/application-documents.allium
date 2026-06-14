@@ -8,9 +8,10 @@
 --   (from CvDocument + Job, format-localized, salutation-aware), the document
 --   lifecycle (draft -> generated -> edited -> final), template management,
 --   and export to file artifacts.
--- Includes: ApplicationBundle, GeneratedDocument, DocumentTemplate, Attachment;
---   generation triggers (DocumentsAvailable event + manual), edit/finalize,
---   format localization (DIN 5008 etc.), gender-aware salutation, export naming.
+-- Includes: ApplicationBundle, GeneratedDocument, DocumentTemplate, Attachment,
+--   ApplicationFile; generation triggers (mode-gated: manual + reactive
+--   VacancyPromoted per AutomationMode/9.4), edit/finalize, format localization
+--   (DIN 5008 etc.), gender-aware salutation, export naming.
 -- Excludes:
 --   - The CV itself (see cv-document.allium — a GeneratedDocument is generated
 --     FROM a CvDocument; the CV is the bundle's source, not a generated doc)
@@ -22,17 +23,17 @@
 --   - File storage paths (implementation; see src/lib/storage.ts)
 -- Dependencies: User, Job (shared); CvDocument (cv-document.allium); AiProvider
 --   (ai-provider.allium); Person (CRM, crm.allium — salutation gender);
---   File (profile-resume.allium — see open question on generalising it);
 --   DocType + CvArtifactNaming convention (cv-document.allium / ROADMAP 4.3).
+--   (G3 resolved: application files use the own ApplicationFile entity below,
+--    NOT the Gsync `File` model — keeps upstream schema untouched.)
 -- Owner: ApplicationDocuments Aggregate (src/actions/applicationDocument.actions.ts — to build)
 
 -- Graph review (JobSync /understand-anything, 2026-06-14) — gaps this spec assumes:
---   G1 `DocumentsAvailable` event is NOT defined in code (only in roadmap/specs);
---      30 events exist incl. VacancyPromoted. -> open question on the trigger.
+--   G1 RESOLVED — no new `DocumentsAvailable` auto-trigger; mode-gated on the
+--      existing VacancyPromoted (AutomationMode/9.4). See PrepareDocumentsOnPromotion.
 --   G2 AI has resume/match + resume/review routes only — NO generation route.
---      Generation is a new AI flow (GenerateDocument rule).
---   G3 `File` is 1:1 with Resume — generated docs + attachments need their own
---      file linkage per bundle. -> open question.
+--      Generation is a new AI flow (GenerateDocument rule) — implementation gap.
+--   G3 RESOLVED — own ApplicationFile entity (not the Gsync 1:1-Resume File model).
 --   G4 No ApplicationBundle concept exists — fully new (this spec).
 --   G5 CvDocument is spec-only (unbuilt) — generators depend on it (ordering).
 
@@ -66,13 +67,6 @@ external entity Person {
     -- + gender for a localized salutation, when known.
     gender: String?                -- nullable; absent -> neutral salutation
     full_name: FullName?
-}
-
-external entity File {
-    -- profile-resume.allium upload. Reused for attachments + rendered output.
-    -- NOTE: File is currently 1:1 with Resume — see open question on generalising.
-    file_name: String
-    file_type: String
 }
 
 external entity SharedLink {
@@ -123,6 +117,20 @@ enum SalutationForm {
     neutral_generic -- e.g. "Sehr geehrte Damen und Herren" / "Dear Sir or Madam"
 }
 
+enum ApplicationFileKind {
+    -- An ApplicationFile is either a rendered output or a user upload (G3).
+    rendered        -- PDF/DOCX produced by ExportDocument
+    uploaded        -- a certificate / supporting document the user uploaded
+}
+
+enum AutomationMode {
+    -- Automation level (ROADMAP 9.4), set per automation or globally. Gates
+    -- whether document preparation is user-initiated or auto-triggered (G1).
+    manual          -- LLM prepares nothing; user opens bundle + generates
+    semi_yolo       -- LLM auto-generates drafts on promotion; PAUSES for review
+    yolo            -- full autopilot: auto-generate + auto-send within safeguards
+}
+
 ------------------------------------------------------------
 -- Value Objects
 ------------------------------------------------------------
@@ -151,6 +159,7 @@ entity ApplicationBundle {
     job: Job
     cv: CvDocument                 -- the source CV for this application
     status: BundleStatus
+    preparation_mode: AutomationMode  -- the mode that opened it (9.4 audit / review queue)
 
     -- Relationships
     documents: GeneratedDocument with bundle = this
@@ -180,7 +189,7 @@ entity GeneratedDocument {
     content: GeneratedContent
     generated_by: AiProvider?      -- which AI module produced the draft (audit)
     template: DocumentTemplate?    -- optional template the render uses
-    rendered_file: File?           -- set once exported to PDF/DOCX
+    rendered_file: ApplicationFile?  -- set once exported to PDF/DOCX
 
     created_at: Timestamp
     updated_at: Timestamp
@@ -217,12 +226,32 @@ entity DocumentTemplate {
 
 entity Attachment {
     bundle: ApplicationBundle
-    file: File                     -- uploaded certificate / supporting document
+    file: ApplicationFile          -- uploaded certificate / supporting document
     label: String
     created_at: Timestamp
 
     @invariant AttachmentFileOwnership
-        -- The attached File belongs to the bundle's user (ADR-015 chain).
+        -- The attached file belongs to the bundle's user (ADR-015 chain).
+}
+
+entity ApplicationFile {
+    -- G3 resolution: a file owned by THIS aggregate (rendered output or upload),
+    -- distinct from the Gsync `File` model (which stays 1:1 with Resume). Keeps
+    -- the upstream schema untouched; gives generated docs + attachments proper
+    -- per-bundle ownership.
+    bundle: ApplicationBundle
+    kind: ApplicationFileKind
+    file_name: String
+    file_path: String              -- server filesystem path (src/lib/storage.ts)
+    file_type: String              -- MIME / extension
+    created_at: Timestamp
+
+    @invariant FileOwnedViaBundle
+        -- Ownership chain ApplicationFile -> ApplicationBundle -> User (ADR-015).
+
+    @invariant FilePathNeverInResponses
+        -- file_path is a server path and is NEVER returned in API responses
+        -- (same rule as the Gsync File model). Serve via an authenticated route.
 }
 
 ------------------------------------------------------------
@@ -242,15 +271,50 @@ rule OpenApplicationBundle {
             job: job,
             cv: cv,
             status: assembling,
+            preparation_mode: manual,
             created_at: now,
             updated_at: now
         )
 
     @guidance
-        -- Created on demand when the user starts preparing an application, OR
-        -- reactively when documents become available for a promoted vacancy
-        -- (see open question on the DocumentsAvailable trigger). Idempotent per
-        -- (user, job) — OneBundlePerUserPerJob.
+        -- Manual mode (G1): the bundle is opened on demand when the user starts
+        -- preparing an application. In Semi-YOLO/YOLO it is opened reactively on
+        -- promotion (see PrepareDocumentsOnPromotion). Idempotent per (user, job)
+        -- — OneBundlePerUserPerJob.
+}
+
+rule PrepareDocumentsOnPromotion {
+    when: VacancyPromoted(user, job, cv, mode)
+
+    requires: mode != manual
+    requires: exists job where job.user = user
+    requires: exists cv where cv.user = user
+    requires: not exists ApplicationBundle{user: user, job: job}
+
+    ensures:
+        -- Semi-YOLO / YOLO (G1): a vacancy promoted by an automation auto-opens
+        -- the bundle; the LLM then generates the required document drafts.
+        ApplicationBundle.created(
+            user: user,
+            job: job,
+            cv: cv,
+            status: assembling,
+            preparation_mode: mode,
+            created_at: now,
+            updated_at: now
+        )
+
+    @guidance
+        -- G1 RESOLVED — the trigger is the existing VacancyPromoted signal
+        -- (vacancy-pipeline.allium), gated by AutomationMode (9.4); no new
+        -- `DocumentsAvailable` auto-trigger is required.
+        --   manual    -> no auto-prep (a notification nudge may use JobStatusChanged)
+        --   semi_yolo -> auto-open + auto-generate DRAFTS, then PAUSE for review
+        --   yolo      -> auto-open + auto-generate + auto-finalize + auto-send,
+        --                within 9.4 safeguards (daily limit, blacklist,
+        --                match-score min, kill-switch).
+        -- Generation itself = GenerateDocument; finalisation/sending is gated by
+        -- OnlyYoloAutoFinalizesAndSends.
 }
 
 ------------------------------------------------------------
@@ -331,16 +395,25 @@ rule FinalizeDocument {
 }
 
 rule AddAttachment {
-    when: AddAttachment(user, bundle, file, label)
+    when: AddAttachment(user, bundle, file_name, file_path, file_type, label)
 
     requires: exists bundle where bundle.user = user
-    requires: exists file where file.user = user
+    requires: file_name != null
 
     ensures:
-        Attachment.created(bundle: bundle, file: file, label: label, created_at: now)
+        let uploaded = ApplicationFile.created(
+            bundle: bundle,
+            kind: uploaded,
+            file_name: file_name,
+            file_path: file_path,
+            file_type: file_type,
+            created_at: now
+        )
+        Attachment.created(bundle: bundle, file: uploaded, label: label, created_at: now)
 
     @guidance
-        -- Certificates / references uploaded by the user join the bundle.
+        -- Certificates / references uploaded by the user join the bundle as an
+        -- ApplicationFile (kind: uploaded) — not the Gsync File model (G3).
 }
 
 rule ReadyBundle {
@@ -385,8 +458,15 @@ rule ExportDocument {
 
     ensures:
         -- Rendered via the DocumentRenderingConnector (4.2.1, pdfme/Gotenberg)
-        -- into a File named per the shared 4.3 convention (DocType token + LANG).
-        let artifact = Render.toFile(document, format)
+        -- into an ApplicationFile named per the shared 4.3 convention.
+        let artifact = ApplicationFile.created(
+            bundle: document.bundle,
+            kind: rendered,
+            file_name: Render.filename(document, format),
+            file_path: Render.path(document, format),
+            file_type: format,
+            created_at: now
+        )
         document.updated(rendered_file: artifact, updated_at: now)
 
     @guidance
@@ -414,6 +494,15 @@ invariant SalutationLocalizedAndGendered {
     -- guesses gender.
 }
 
+invariant OnlyYoloAutoFinalizesAndSends {
+    -- G1 / ROADMAP 9.4: in manual and semi_yolo modes a generated document is
+    -- never finalized or sent without explicit user approval (the Semi-YOLO
+    -- review pause). Only yolo may auto-finalize + auto-send, and only within
+    -- its safeguards (daily application limit, company blacklist, match-score
+    -- minimum, kill-switch, dry-run). Semi-YOLO auto-GENERATES drafts but
+    -- always stops before sending.
+}
+
 invariant BundleSharingViaSharedSurface {
     -- Sharing a bundle (or a final document) with a contact/company reuses the
     -- shared-surface domain (2.18.2) — revocable, audited — not a bespoke link.
@@ -426,12 +515,24 @@ invariant DocumentFilenameFollowsConvention {
 }
 
 ------------------------------------------------------------
--- Open Questions (informed by the graph review — gaps G1/G3)
+-- Resolved Decisions (G1, G3 — 2026-06-14)
 ------------------------------------------------------------
 
-open question "Trigger (G1): does OpenApplicationBundle fire reactively from a domain event on promotion, and which one? `DocumentsAvailable` is referenced in the roadmap/specs but is NOT defined in code; 30 events exist incl. `VacancyPromoted`. Reuse VacancyPromoted, or add a dedicated DocumentsAvailable event?"
+-- G1 Trigger: RESOLVED — no new `DocumentsAvailable` auto-trigger. Preparation
+--    is gated by AutomationMode (ROADMAP 9.4): manual = user-initiated
+--    (OpenApplicationBundle); semi_yolo/yolo = reactive on the existing
+--    VacancyPromoted signal (PrepareDocumentsOnPromotion). Finalisation/sending
+--    is gated by OnlyYoloAutoFinalizesAndSends (semi-yolo pauses for review;
+--    yolo auto-sends within 9.4 safeguards). A manual-mode notification nudge
+--    may reuse JobStatusChanged (no new event needed).
+-- G3 File model: RESOLVED — generated output + attachments use the own
+--    ApplicationFile entity (per-bundle ownership, file_path never in responses),
+--    NOT the Gsync `File` model (which stays 1:1 with Resume) — keeps the
+--    upstream schema untouched (Strangler Fig).
 
-open question "File model (G3): `File` is currently 1:1 with Resume (profile-resume.allium). Generated documents (rendered_file) and attachments need a per-bundle file linkage. Generalise File to a polymorphic owner, or introduce a separate document-file model?"
+------------------------------------------------------------
+-- Open Questions (remaining)
+------------------------------------------------------------
 
 open question "Template management scope: is DocumentTemplate (create/edit/version/share via the 4.2 manifest pagebuilder) substantial enough to warrant its own spec, or does it stay here? It overlaps the CV template system (4.2.1 pdfme templates) — shared template aggregate?"
 
