@@ -2045,7 +2045,29 @@ Der bestehende CV-Manager (Profile-Aggregat: `Profile → Resume → ResumeSecti
 
 **Offene Fragen:** (a) Multi-Template (mehrere Designs) oder zunächst eine portierte Vorlage? (b) Lizenz-Attribution für portierten cv-manager-Code (MIT-Notice beilegen).
 
-**Cross-Refs:** Document Rendering Engine (4.2.1), Dokumenten-Generatoren/JSON-Resume-Pagebuilder (4.2), Skillsets (4.1), Bewerber-Landingpage (9.5), Public API (7.1), AI Review/Match (bestehende Resume-AI), Profile-Spec (`specs/profile-resume.allium`).
+**Port-Mapping (cv-manager → JobSync, via JobSync `/understand-anything`-Graph + Prisma-Ground-Truth):**
+
+| cv-manager-Teil | JobSync-Ziel | Reuse / Neu |
+|---|---|---|
+| CV-Datenmodell (flach, `visible`, skills+icon, projects, versioning) | `Profile→Resume→ResumeSection→{ContactInfo,Summary,WorkExperience[],Education[],LicenseOrCertification[],OtherSection[]}` (`prisma/schema.prisma`) | **Mismatch** — JobSync ist **entity-normalisiert** (WorkExperience→`Company`/`JobTitle`/`Location` FKs, geteilt mit Job-Aggregat); cv-manager ist flach/self-contained. Strangler Fig: Datenschicht behalten, **fehlende Felder ergänzen** (`visible`, skills+icon, projects) via Schema-Erweiterung bzw. `OtherSection.jsonData`. |
+| Multi-CV-Versionierung (`saved_datasets`) + Section-Diff (`diff`) | — (existiert NICHT) | **Neu:** Prisma-Modell(e) für CV-Versionen + Version-Group + Diff. Andockbar an `shared-surface` (2.18.2). |
+| PDF (`pdfkit`, ATS-getaggt) | `DocumentRenderingConnector` (4.2.1) — `src/lib/connector/{manifest,registry,register-all,resilience}.ts` | Engine ersetzt (pdfme/**Gotenberg** für design-reiches CV), ATS-Accessibility-Tagging-Idee übernehmen. |
+| Keine Auth (dual Express, Port-Trennung) | `src/auth.ts`, `src/lib/auth/*`, `with-api-auth.ts`, ADR-015 IDOR | **Reuse** — JobSync löst das bereits; Port erbt Auth/IDOR automatisch. |
+| SSR öffentliche CV-Seite (`/v/:slug`) | `shared-surface` (2.18.2) Renderer `applicant-landingpage` (= 9.5) + Next.js Server Component | **Neu, aber konvergent** mit 9.5 — eine CV-Datenquelle → PDF + öffentliche Seite + Landingpage. |
+| Static-Site-ZIP-Export (`archiver`) | `src/lib/export/*` (nutzt bereits archiver-Muster, `collect-user-data.ts`, `export-rate-limit.ts`) | **Reuse** Export-Infra. |
+| Vanilla-JS-Editor (`admin.js` 263 fns) + SVG-Timeline | `src/components/profile/*` (React/Shadcn), neue Timeline-Komponente | **Neu** — komplett React-Rebuild; Timeline als eigene Komponente. |
+| 8-Locale flat-key i18n | `src/i18n/*` (4 Locales, adapter pattern) | Keys übernehmen, JobSync-i18n-System nutzen. |
+
+**Offene Port-Fragen (entscheidungsrelevant — vor Implementierung klären):**
+1. **Datenmodell (Kern-Frage):** JobSync-Normalisierung behalten (WorkExperience↔`Company`/`Location`-Entities, geteilt mit Jobs — DDD-rein, ermöglicht „wo habe ich mich mit welchem CV beworben") ODER cv-managers flaches self-contained Modell (presentation-first, einfacher, aber keine Entity-Links)? **Empfehlung:** Hybrid/Strangler — normalisierte Datenschicht behalten, Presentation-/Template-Layer + fehlende Felder (`visible`, skills, projects) darüber.
+2. **Versionierung + Snapshot:** Wie wird ein „pro-Bewerbung getailortes CV" gesnapshottet, wenn `Company`/`Location` geteilte mutable Entities sind? Version = tiefe Kopie oder Referenz+Override-Layer? Diff-Granularität (CV / Section / Item)?
+3. **Schema-Erweiterung vs. JSON:** Skills (Kategorie+Icon+nested), Projects, `visible`-Flags — als echte Prisma-Felder/Modelle ODER in `OtherSection.jsonData`? (Trade-off: Queryability/Migration vs. Flexibilität.)
+4. **CV-PDF-Engine:** Gotenberg (HTML-first, exakter Template-Look) als bevorzugt bestätigen — oder pdfme-Designer-Rebuild? (4.2.2 Engine-Tabelle.)
+5. **Öffentliche CV-Seite = 9.5?** Konvergiert der `/v/:slug`-Public-CV mit der Bewerber-Landingpage (9.5)? Eine Implementierung statt zwei?
+6. **Migrations-Scope:** Strangler Fig — welche Sektion zuerst (Vorschlag: ContactInfo+Summary), Big-Bang vermeiden. Bestehende Tests/`specs/profile-resume.allium` mitziehen.
+7. **AI/ATS:** cv-managers „JSON-Export für LLM-Optimierung" + ATS-Optimierung als neue AI-Enrichment-Dimension auf der bestehenden Resume-AI (Review/Match)?
+
+**Cross-Refs:** Document Rendering Engine (4.2.1), Dokumenten-Generatoren/JSON-Resume-Pagebuilder (4.2), Skillsets (4.1), Bewerber-Landingpage (9.5), Public API (7.1), AI Review/Match (bestehende Resume-AI), Profile-Spec (`specs/profile-resume.allium`), shared-surface (2.18.2).
 
 ### 4.3 Output-Struktur (Paperless-ngx Style)
 Dynamische Dateipfade und Dateinamen:
