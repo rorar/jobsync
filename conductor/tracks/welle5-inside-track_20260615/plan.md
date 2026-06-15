@@ -62,7 +62,12 @@ Prisma models for Referral + PersonConnection.
 
 ## Phase 5: UI & i18n (IT-5c)
 
+Design gate DONE (2026-06-15): `docs/design/inside-track-ui.md` (frontend-design + ui-designer +
+accessibility-expert). IA: new `/dashboard/referrals` route + `[id]` workspace PAGE; WarmPathFinder
+panel reused on `myjobs/[id]`; components in NEW `src/components/inside-track/`.
+
 ### Tasks
+- [x] Task 5.0: Referral READ actions (gap — `referral.actions.ts` is write-only): `getReferral(id)` + `listReferrals({jobId?})` (ActionResult, userId-scoped, explicit `select`; resolve tipster live per @guarantee TipsterShownLive — no snapshot). Mirror `listPersonConnections`. Tests first.
 - [ ] Task 5.1: `TipCapture` (quick-add insider/network tip + add connection) — consult ui-design agent first; component tests.
 - [ ] Task 5.2: `ReferralWorkspace` (status-gated lifecycle actions, exposes per spec); component tests.
 - [ ] Task 5.3: WarmPathFinder panel on Job/Company (reveals the path); component tests.
