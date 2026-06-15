@@ -84,6 +84,9 @@ model User {
   // Custom JobStatus (Welle 4, F-AJ-09): per-user statuses + stage categories
   JobStatus            JobStatus[]
   JobStatusCategory    JobStatusCategory[]
+  // Inside Track (Welle 5): warm referrals + person-to-person network
+  Referral             Referral[]
+  PersonConnection     PersonConnection[]
 }
 
 model ApiKey {
@@ -364,6 +367,8 @@ model Company {
   crmTaskTargets    CrmTaskTarget[]    @relation("CrmTaskTargetCompany")
   crmNoteTargets    CrmNoteTarget[]    @relation("CrmNoteTargetCompany")
   crmActivityLogs   CrmActivityLog[]   @relation("ActivityLogCompany")
+  // Inside Track (Welle 5): referrals targeting this company
+  referralsTargeted Referral[]         @relation("ReferralTargetCompany")
 
   @@unique([value, createdBy])
 }
@@ -455,6 +460,10 @@ model Job {
   crmTaskTargets  CrmTaskTarget[]  @relation("CrmTaskTargetJob")
   crmNoteTargets  CrmNoteTarget[]  @relation("CrmNoteTargetJob")
   crmActivityLogs CrmActivityLog[] @relation("ActivityLogJob")
+  // Inside Track (Welle 5): the Referral this Job reified from (TipReifiesToJob).
+  // 1:1 — a Job comes from at most one referral; a referral converts to one Job.
+  sourceReferralId String?   @unique
+  sourceReferral   Referral? @relation("ReferralTargetJob", fields: [sourceReferralId], references: [id], onDelete: SetNull)
 
   @@index([userId, automationId])
   @@index([userId, discoveryStatus])
@@ -1073,6 +1082,13 @@ model Person {
   crmNoteTargets CrmNoteTarget[]
   activityLogs   CrmActivityLog[] @relation("ActivityLogPerson")
 
+  // Inside Track (Welle 5) — referral roles + network edges this Person plays in
+  referralsAsTipster    Referral[]         @relation("ReferralTipster")
+  referralsForwardedTo  Referral[]         @relation("ReferralForwardedTo")
+  referralsAsInsider    Referral[]         @relation("ReferralInsider")
+  connectionsFrom       PersonConnection[] @relation("ConnectionFrom")
+  connectionsTo         PersonConnection[] @relation("ConnectionTo")
+
   @@index([userId])
   @@index([userId, status])
 }
@@ -1289,4 +1305,86 @@ model DeletionConfirmationToken {
   createdAt DateTime @default(now())
 
   @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Inside Track (Welle 5) — warm referrals (Tippgeber/Vitamin B) + P2P network.
+// SoT: specs/inside-track.allium. Controlled vocabularies (kind/status/
+// ConnectionKind/ConnectionStrength) are enforced app-level via
+// src/models/insideTrack.model.ts (SQLite has no native enums).
+// ---------------------------------------------------------------------------
+
+// A warm path into a role/company opened by a tipster. Sum type over `kind`
+// (insider_relay | network_path): a single table holds both variants, with the
+// variant-specific fields nullable. Own lifecycle (`status` transition graph).
+model Referral {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Discriminator (ReferralKind) + lifecycle state (ReferralStatus).
+  kind   String
+  status String @default("open")
+
+  // The contact who opened the door. Nullable so the GDPR cascade can
+  // de-identify a referral (drop the person link, keep the trace).
+  tipsterId String?
+  tipster   Person? @relation("ReferralTipster", fields: [tipsterId], references: [id], onDelete: SetNull)
+
+  // Optional target company (null = a pure market tip with no company yet).
+  targetCompanyId String?
+  targetCompany   Company? @relation("ReferralTargetCompany", fields: [targetCompanyId], references: [id], onDelete: SetNull)
+
+  // InsiderRelay variant: the decision-maker the tipster forwards to.
+  forwardedToId String?
+  forwardedTo   Person? @relation("ReferralForwardedTo", fields: [forwardedToId], references: [id], onDelete: SetNull)
+
+  // NetworkPath variant: the insider + the connection edge tipster -> insider.
+  insiderId String?
+  insider   Person? @relation("ReferralInsider", fields: [insiderId], references: [id], onDelete: SetNull)
+  viaId     String?
+  via       PersonConnection? @relation("ReferralVia", fields: [viaId], references: [id], onDelete: SetNull)
+
+  // The reified Job (1:1, set on the Job side via TipReifiesToJob).
+  targetJob Job? @relation("ReferralTargetJob")
+
+  receivedAt     DateTime @default(now())
+  lastActivityAt DateTime @default(now())
+
+  // Update-actor provenance (mirrors CrmInterview / ADR-035) — ActorType.
+  updatedByType String?
+  updatedById   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([tipsterId])
+  @@index([targetCompanyId])
+}
+
+// A directed acquaintance edge between two of the user's contacts:
+// from_person knows to_person. Powers 2-hop warm-path discovery.
+model PersonConnection {
+  id           String  @id @default(uuid())
+  userId       String
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromPersonId String
+  fromPerson   Person  @relation("ConnectionFrom", fields: [fromPersonId], references: [id], onDelete: Cascade)
+  toPersonId   String
+  toPerson     Person  @relation("ConnectionTo", fields: [toPersonId], references: [id], onDelete: Cascade)
+  kind         String
+  strength     String
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  // NetworkPath referrals whose warm path runs along this edge.
+  referralsVia Referral[] @relation("ReferralVia")
+
+  // DistinctEndpointsPerUser: at most one edge per (user, from, to).
+  @@unique([userId, fromPersonId, toPersonId])
+  @@index([userId])
+  @@index([fromPersonId])
+  @@index([toPersonId])
 }
