@@ -17,12 +17,12 @@ Phases 3/4/6**; Phase 1 (CRM prereqs) is independent and goes first. Phase order
 Controlled contact-role vocabulary + company-position rename. No inside-track dependency.
 
 ### Tasks
-- [ ] Task 1.1: Add `JOB_CONTACT_ROLES` const + `isValidJobContactRole` runtime guard (mirror `RELATIONSHIP_TYPES`/`ActorType` in `src/models/job.model.ts`); unit tests first.
-- [ ] Task 1.2: Enforce role at the boundary in `addJobContact` (validate → reject invalid); regression test for invalid value.
-- [ ] Task 1.3: Migration script mapping existing free-text `JobContact.role` (known→enum, unmappable→null); idempotent; test on a seeded fixture.
-- [ ] Task 1.4: `CompanyAssociation.role` → `position`: rename interface field + `parseCompanies` (`src/models/person.model.ts`); data migration of `companies` JSON key role→position (+ parser backcompat read); tests.
-- [ ] Task 1.5: PersonForm — role `Input`→`Select` (JobContactRole), company `c.role`→`c.position` (`updateCompany` key); PersonDetailClient display; component tests; i18n keys (role labels + badge) × 4 locales.
-- [ ] Task 1.6: Role badge on Person (ROADMAP 2244) derived from primary JobContact.role; component test.
+- [x] Task 1.1: Add `JOB_CONTACT_ROLES` const + `isValidJobContactRole` runtime guard (mirror `RELATIONSHIP_TYPES`/`ActorType` in `src/models/job.model.ts`); unit tests first.
+- [x] Task 1.2: Enforce role at the boundary in `addJobContact` (validate → reject invalid); regression test for invalid value.
+- [x] Task 1.3: Migration script mapping existing free-text `JobContact.role` (known→enum, unmappable→null); idempotent; test on a seeded fixture.
+- [x] Task 1.4: `CompanyAssociation.role` → `position`: rename interface field + `parseCompanies` (`src/models/person.model.ts`); data migration of `companies` JSON key role→position (+ parser backcompat read); tests.
+- [x] Task 1.5: PersonForm — role `Input`→`Select` (JobContactRole), company `c.role`→`c.position` (`updateCompany` key); PersonDetailClient display; component tests; i18n keys (role labels + badge) × 4 locales.
+- [x] Task 1.6: Role badge on Person (ROADMAP 2244) derived from primary JobContact.role; component test.
 
 ### Verification
 - [ ] tsc 0, jest green; dictionary test 4 locales; `allium:weed` shows JobContactRole + position aligned (crm.allium 0 drift).
