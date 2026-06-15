@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SALARY_PERIODS, RELATIONSHIP_TYPES } from "@/models/job.model";
+import { SALARY_PERIODS, RELATIONSHIP_TYPES, JOB_CONTACT_ROLES } from "@/models/job.model";
 
 export const AddJobFormSchema = z.object({
   id: z.string().optional(),
@@ -96,7 +96,9 @@ export const AddJobFormSchema = z.object({
   // after addJob succeeds (calls jobContact.actions.addJobContact) — addJob itself
   // ignores these fields, so the Job aggregate write path is unchanged.
   contactPersonId: z.string().optional(),
-  contactRole: z.string().max(120).nullable().optional(),
+  // Welle 5 (Task 1.5): controlled JobContactRole (also runtime-validated at the
+  // addJobContact server-action boundary, ADR-019). null/absent = unspecified.
+  contactRole: z.enum(JOB_CONTACT_ROLES).nullable().optional(),
   // Welle 3 (F-AJ-08): recruiter triangle — optional recruiting agency company id
   // + its relationship to the hiring company. relationshipType is also runtime-
   // validated at the server-action boundary (ADR-019).

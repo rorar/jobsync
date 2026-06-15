@@ -17,9 +17,10 @@ interface SelectProps {
   label: string;
   options: any[];
   field: ControllerRenderProps<any, any>;
+  disabled?: boolean;
 }
 
-function SelectFormCtrl({ label, options, field }: SelectProps) {
+function SelectFormCtrl({ label, options, field, disabled }: SelectProps) {
   const { t } = useTranslations();
   const selectPlaceholder = t("forms.selectPlaceholder").replace("{label}", label);
   return (
@@ -28,6 +29,7 @@ function SelectFormCtrl({ label, options, field }: SelectProps) {
         onValueChange={field.onChange}
         value={field.value}
         name={field.name}
+        disabled={disabled}
       >
         <FormControl>
           <SelectTrigger aria-label={selectPlaceholder} className="w-[200px]">

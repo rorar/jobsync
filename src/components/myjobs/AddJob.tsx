@@ -26,7 +26,7 @@ import {
   JobTitle,
   Tag,
 } from "@/models/job.model";
-import { SALARY_PERIODS, RELATIONSHIP_TYPES } from "@/models/job.model";
+import { SALARY_PERIODS, RELATIONSHIP_TYPES, JOB_CONTACT_ROLES } from "@/models/job.model";
 import { addDays } from "date-fns";
 import { z } from "zod";
 import { toast } from "../ui/use-toast";
@@ -154,7 +154,7 @@ export function AddJob({
       sendToQueue: false,
       logInterviewRound: false,
       contactPersonId: "",
-      contactRole: "",
+      contactRole: null,
       recruitingCompany: "",
       relationshipType: null,
     },
@@ -860,7 +860,7 @@ export function AddJob({
                               onValueChange={(personId) => {
                                 field.onChange(personId);
                                 // Clearing the person clears any stale role.
-                                if (!personId) setValue("contactRole", "");
+                                if (!personId) setValue("contactRole", null);
                               }}
                               persons={persons}
                               loading={personsLoading}
@@ -874,16 +874,18 @@ export function AddJob({
                       control={form.control}
                       name="contactRole"
                       render={({ field }) => (
-                        <FormItem className="flex flex-col">
+                        <FormItem className="flex flex-col [&>button]:capitalize">
                           <FormLabel>{t("crm.contactRole")}</FormLabel>
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ""}
-                              placeholder={t("crm.contactRolePlaceholder")}
-                              disabled={!contactPersonIdValue}
-                            />
-                          </FormControl>
+                          <SelectFormCtrl
+                            label={t("crm.contactRole")}
+                            options={JOB_CONTACT_ROLES.map((r) => ({
+                              id: r,
+                              label: t(`crm.jobContactRole.${r}`),
+                              value: r,
+                            }))}
+                            field={field}
+                            disabled={!contactPersonIdValue}
+                          />
                           <FormMessage />
                         </FormItem>
                       )}
