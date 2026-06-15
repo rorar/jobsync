@@ -19,6 +19,7 @@ import prisma from "@/lib/db";
 import { eventBus } from "@/lib/events";
 import { createEvent, DomainEventType } from "@/lib/events/event-types";
 import { CRM_CONFIG, isConsentBlocked } from "@/models/person.model";
+import { INSIDE_TRACK_CONFIG } from "@/models/insideTrack.model";
 import { debugLog, debugError } from "@/lib/debug";
 import { getPrivacySettingsForUser } from "@/lib/account/privacy-helpers";
 import { executeAccountDeletion } from "@/lib/account/execute-deletion";
@@ -97,6 +98,28 @@ async function expireAutoCreatedPersons(): Promise<number> {
   }
 
   return archived;
+}
+
+// ---------------------------------------------------------------------------
+// Rule: ReferralGoesStale (specs/inside-track.allium)
+// A working referral with no activity for config.stale_after is flagged `stale`
+// so it surfaces for follow-up. Pure status flag (no notification → no consent
+// concern). Idempotent: stale rows leave the working-status set, so re-runs are
+// no-ops.
+// ---------------------------------------------------------------------------
+
+async function flagStaleReferrals(): Promise<number> {
+  const threshold = new Date(
+    Date.now() - INSIDE_TRACK_CONFIG.staleAfterDays * 24 * 60 * 60 * 1000,
+  );
+  const result = await prisma.referral.updateMany({
+    where: {
+      status: { in: ["open", "engaged", "relayed", "in_review"] },
+      lastActivityAt: { lte: threshold },
+    },
+    data: { status: "stale" },
+  });
+  return result.count;
 }
 
 // ---------------------------------------------------------------------------
@@ -327,6 +350,7 @@ async function runCrmTemporalRules(): Promise<void> {
       checkOverdueTasks(),
       purgeExpiredDeletions(),
       sweepExpiredDeletionTokens(),
+      flagStaleReferrals(),
     ]);
 
     const expired = results[0].status === "fulfilled" ? results[0].value : 0;
@@ -334,6 +358,7 @@ async function runCrmTemporalRules(): Promise<void> {
     const tasks = results[2].status === "fulfilled" ? results[2].value : 0;
     const purged = results[3].status === "fulfilled" ? results[3].value : 0;
     const swept = results[4].status === "fulfilled" ? results[4].value : 0;
+    const stale = results[5].status === "fulfilled" ? results[5].value : 0;
 
     // Log individual rule failures
     const ruleLabels = [
@@ -342,6 +367,7 @@ async function runCrmTemporalRules(): Promise<void> {
       "overdueTasks",
       "purgeExpiredDeletions",
       "sweepExpiredDeletionTokens",
+      "flagStaleReferrals",
     ];
     for (const [i, label] of ruleLabels.entries()) {
       if (results[i].status === "rejected") {
@@ -349,10 +375,10 @@ async function runCrmTemporalRules(): Promise<void> {
       }
     }
 
-    if (expired > 0 || interviews > 0 || tasks > 0 || purged > 0 || swept > 0) {
+    if (expired > 0 || interviews > 0 || tasks > 0 || purged > 0 || swept > 0 || stale > 0) {
       debugLog(
         "crm-cron",
-        `[CRM-Cron] Processed: ${expired} expired persons, ${interviews} interview reminders, ${tasks} overdue tasks, ${purged} purged accounts, ${swept} swept tokens`,
+        `[CRM-Cron] Processed: ${expired} expired persons, ${interviews} interview reminders, ${tasks} overdue tasks, ${purged} purged accounts, ${swept} swept tokens, ${stale} stale referrals`,
       );
     }
   } catch (error) {
@@ -403,5 +429,6 @@ export {
   checkOverdueTasks,
   purgeExpiredDeletions,
   sweepExpiredDeletionTokens,
+  flagStaleReferrals,
   runCrmTemporalRules,
 };

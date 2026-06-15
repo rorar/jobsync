@@ -16,6 +16,7 @@ jest.mock("@/lib/db", () => ({
     crmInterview: { findMany: jest.fn() },
     crmTask: { findMany: jest.fn() },
     crmActivityLog: { findFirst: jest.fn(), create: jest.fn() },
+    referral: { updateMany: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
@@ -35,6 +36,7 @@ import {
   expireAutoCreatedPersons,
   checkInterviewReminders,
   checkOverdueTasks,
+  flagStaleReferrals,
 } from "@/lib/scheduler/crm-cron";
 
 const mockDb = db as unknown as {
@@ -42,6 +44,7 @@ const mockDb = db as unknown as {
   crmInterview: { findMany: jest.Mock };
   crmTask: { findMany: jest.Mock };
   crmActivityLog: { findFirst: jest.Mock; create: jest.Mock };
+  referral: { updateMany: jest.Mock };
   $transaction: jest.Mock;
 };
 const mockPublish = (eventBus as unknown as { publish: jest.Mock }).publish;
@@ -157,5 +160,29 @@ describe("checkOverdueTasks", () => {
 
     expect(count).toBe(0);
     expect(mockDb.crmActivityLog.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("flagStaleReferrals (ReferralGoesStale)", () => {
+  afterEach(() => jest.useRealTimers());
+
+  it("flags only working-status referrals quiet past config.stale_after (21d)", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-06-15T12:00:00.000Z"));
+    mockDb.referral.updateMany.mockResolvedValue({ count: 3 });
+
+    const count = await flagStaleReferrals();
+
+    expect(count).toBe(3);
+    const arg = mockDb.referral.updateMany.mock.calls[0][0];
+    expect(arg.data).toEqual({ status: "stale" });
+    expect(arg.where.status).toEqual({ in: ["open", "engaged", "relayed", "in_review"] });
+    // threshold = now - 21 days
+    const expected = new Date("2026-05-25T12:00:00.000Z");
+    expect((arg.where.lastActivityAt.lte as Date).toISOString()).toBe(expected.toISOString());
+  });
+
+  it("returns 0 when nothing is stale (idempotent re-run)", async () => {
+    mockDb.referral.updateMany.mockResolvedValue({ count: 0 });
+    expect(await flagStaleReferrals()).toBe(0);
   });
 });
