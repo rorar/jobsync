@@ -10,6 +10,7 @@
 import {
   JOB_CONTACT_ROLES,
   isValidJobContactRole,
+  mapLegacyContactRole,
 } from "@/models/job.model";
 
 describe("JOB_CONTACT_ROLES + isValidJobContactRole", () => {
@@ -44,5 +45,43 @@ describe("JOB_CONTACT_ROLES + isValidJobContactRole", () => {
     expect(isValidJobContactRole(0)).toBe(false);
     expect(isValidJobContactRole({})).toBe(false);
     expect(isValidJobContactRole(["recruiter"])).toBe(false);
+  });
+});
+
+describe("mapLegacyContactRole (Task 1.3 — free-text → enum migration)", () => {
+  it("passes through values that are already canonical", () => {
+    for (const value of JOB_CONTACT_ROLES) {
+      expect(mapLegacyContactRole(value)).toBe(value);
+    }
+  });
+
+  it("normalizes case and separators to the canonical enum", () => {
+    expect(mapLegacyContactRole("Recruiter")).toBe("recruiter");
+    expect(mapLegacyContactRole("Hiring Manager")).toBe("hiring_manager");
+    expect(mapLegacyContactRole("hiring-manager")).toBe("hiring_manager");
+    expect(mapLegacyContactRole("HR")).toBe("hr");
+    expect(mapLegacyContactRole("Decision Maker")).toBe("decision_maker");
+    expect(mapLegacyContactRole("  Interviewer  ")).toBe("interviewer");
+  });
+
+  it("maps known synonyms to the canonical enum", () => {
+    expect(mapLegacyContactRole("recruiting")).toBe("recruiter");
+    expect(mapLegacyContactRole("Human Resources")).toBe("hr");
+    expect(mapLegacyContactRole("referrer")).toBe("referral");
+    expect(mapLegacyContactRole("Tippgeber")).toBe("tipster");
+    expect(mapLegacyContactRole("tip")).toBe("tipster");
+  });
+
+  it("returns null for unmappable free text", () => {
+    expect(mapLegacyContactRole("Chief Wizard")).toBeNull();
+    expect(mapLegacyContactRole("Manager")).toBeNull();
+    expect(mapLegacyContactRole("CEO")).toBeNull();
+  });
+
+  it("returns null for empty / nullish input", () => {
+    expect(mapLegacyContactRole(null)).toBeNull();
+    expect(mapLegacyContactRole(undefined)).toBeNull();
+    expect(mapLegacyContactRole("")).toBeNull();
+    expect(mapLegacyContactRole("   ")).toBeNull();
   });
 });

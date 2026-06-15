@@ -60,6 +60,35 @@ export function isValidJobContactRole(value: unknown): value is JobContactRole {
   );
 }
 
+/**
+ * Known synonyms for the one-off migration of legacy free-text JobContact.role
+ * values (Welle 5 Task 1.3). Keyed by the normalized form (lowercased, runs of
+ * whitespace/hyphens collapsed to a single underscore).
+ */
+const LEGACY_CONTACT_ROLE_SYNONYMS: Record<string, JobContactRole> = {
+  recruiting: "recruiter",
+  human_resources: "hr",
+  referrer: "referral",
+  tip: "tipster",
+  tippgeber: "tipster",
+};
+
+/**
+ * Maps a legacy free-text JobContact.role string to a canonical JobContactRole.
+ * Known strings (incl. case/separator variants and a small synonym table) map
+ * to the matching enum; everything unmappable (and empty/nullish) maps to null.
+ * Pure + dependency-free so the migration script and unit tests can both use it.
+ */
+export function mapLegacyContactRole(
+  raw: string | null | undefined,
+): JobContactRole | null {
+  if (raw == null) return null;
+  const normalized = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized.length === 0) return null;
+  if (isValidJobContactRole(normalized)) return normalized;
+  return LEGACY_CONTACT_ROLE_SYNONYMS[normalized] ?? null;
+}
+
 export interface JobForm {
   id?: string;
   userId?: string;
