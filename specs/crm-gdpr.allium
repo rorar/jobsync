@@ -45,6 +45,8 @@ external entity Note { title: String }
 external entity Task { title: String? }
 external entity NoteTarget { note: Note?, target_person: Person? }
 external entity TaskTarget { task: Task?, target_person: Person? }
+external entity JobContact { person: Person? }
+external entity Interview { person: Person?, notes: String?, outcome_notes: String? }
 external entity TimelineActivity { target_person: Person?, happens_at: Timestamp }
 external entity MessageParticipant { handle: String?, person: Person?, display_name: String? }
 external entity CalendarEventParticipant { handle: String?, person: Person?, display_name: String? }
@@ -126,8 +128,10 @@ value PersonDataExport {
 }
 
 value ErasureResult {
-    -- Documents what was deleted/anonymized during an Art. 17 erasure.
-    person_deleted: Boolean
+    -- Documents what was anonymized/removed during an Art. 17 erasure.
+    person_anonymized: Boolean
+    job_contacts_removed: Integer
+    interviews_detached: Integer
     note_targets_removed: Integer
     task_targets_removed: Integer
     timeline_activities_anonymized: Integer
@@ -277,7 +281,12 @@ rule FulfillAccessRequest {
 -- -----------------------------------------------------------------------------
 
 rule FulfillErasureRequest {
-    -- Delete the Person record and cascade/anonymize linked data.
+    -- Anonymize the Person in place (status = anonymized, all direct
+    -- identifiers nulled); the row is RETAINED as a de-identified tombstone
+    -- (audit trail + prevents re-creation), it is NOT deleted. Linked data is
+    -- cascaded/anonymized. Art. 17 is satisfied by irreversible anonymization,
+    -- not row deletion (the user-account-deletion path in gdpr-data-rights is a
+    -- separate, true hard delete).
     -- CRITICAL PATTERN: Anonymize participants, do NOT delete messages/events.
     -- Other participants in the same message/event still have rights to it.
     when: FulfillErasure(request)
@@ -319,18 +328,42 @@ rule FulfillErasureRequest {
                 cp.display_name = null
                 cp.person = null
 
+    -- Remove the job-contact links (hard delete — they only join this person)
+    ensures:
+        for jc in JobContacts:
+            if jc.person = person:
+                not exists jc
+
+    -- Detach interviews + scrub their free-text PII (preserve the interview row)
+    ensures:
+        for iv in Interviews:
+            if iv.person = person:
+                iv.person = null
+                iv.notes = null
+                iv.outcome_notes = null
+
     -- Anonymize timeline references
     ensures:
         for ta in TimelineActivities:
             if ta.target_person = person:
                 ta.target_person = null
 
-    -- Delete the Person record itself
-    ensures: not exists person
+    -- Anonymize the Person record in place (retain row as de-identified tombstone)
+    ensures: person.status = anonymized
+    ensures: person.name = FullName(first_name: null, last_name: null)
+    ensures: person.emails = {}
+    ensures: person.phones = {}
+    ensures: person.headline = null
+    ensures: person.social_profiles = {}
+    ensures: person.avatar_url = null
+    ensures: person.address = null
+    ensures: person.companies = {}
 
     -- Record what was done for audit trail
     ensures: request.response_data = ErasureResult(
-        person_deleted: true,
+        person_anonymized: true,
+        job_contacts_removed: count(JobContacts, jc => jc.person = person),
+        interviews_detached: count(Interviews, iv => iv.person = person),
         note_targets_removed: count(NoteTargets, nt => nt.target_person = person),
         task_targets_removed: count(TaskTargets, tt => tt.target_person = person),
         timeline_activities_anonymized: count(TimelineActivities, ta => ta.target_person = person),
