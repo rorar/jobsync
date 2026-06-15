@@ -179,7 +179,7 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
   const emptyCompany = (): CompanyAssociation => ({
     companyId: "",
     companyLabel: "",
-    role: null,
+    position: null,
     isPrimary: false,
     startDate: null,
     endDate: null,
@@ -476,8 +476,8 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
             </div>
             <Input
               placeholder={t("crm.jobTitle")}
-              value={c.role ?? ""}
-              onChange={(e) => updateCompany(idx, "role", e.target.value || null)}
+              value={c.position ?? ""}
+              onChange={(e) => updateCompany(idx, "position", e.target.value || null)}
               className="text-sm"
             />
           </div>

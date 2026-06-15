@@ -70,14 +70,14 @@ export function toPersonOption(src: PersonOptionSource): PersonOption {
 
   const chosenCompany =
     companies.find((c) => c.isPrimary) ??
-    companies.find((c) => (c.role ?? "").trim()) ??
+    companies.find((c) => (c.position ?? "").trim()) ??
     companies[0];
 
   let secondary = "";
   if (chosenCompany) {
-    const role = (chosenCompany.role ?? "").trim();
-    secondary = role
-      ? `${role} · ${chosenCompany.companyLabel}`
+    const position = (chosenCompany.position ?? "").trim();
+    secondary = position
+      ? `${position} · ${chosenCompany.companyLabel}`
       : chosenCompany.companyLabel;
   } else if (primaryEmail) {
     secondary = primaryEmail;
@@ -87,7 +87,7 @@ export function toPersonOption(src: PersonOptionSource): PersonOption {
     name,
     ...emails.map((e) => e.email),
     ...companies.map((c) => c.companyLabel),
-    ...companies.map((c) => c.role ?? ""),
+    ...companies.map((c) => c.position ?? ""),
   ].filter(Boolean);
   const searchText = searchParts.join(" ").toLowerCase();
 

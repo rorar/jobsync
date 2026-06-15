@@ -310,7 +310,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                   <div key={c.companyId ?? c.companyLabel} className="flex items-center gap-2 text-sm">
                     <Briefcase className="h-4 w-4 text-muted-foreground" />
                     <span>{c.companyLabel}</span>
-                    {c.role && <span className="text-muted-foreground">— {c.role}</span>}
+                    {c.position && <span className="text-muted-foreground">— {c.position}</span>}
                     {c.isPrimary && <Badge className="text-xs">{t("crm.primary")}</Badge>}
                   </div>
                 ))}

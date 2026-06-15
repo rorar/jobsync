@@ -156,7 +156,7 @@ describe("toPersonOption", () => {
     {
       companyId: "c1",
       companyLabel: "Acme Corp",
-      role: "Recruiter" as string | null,
+      position: "Recruiter" as string | null,
       isPrimary: true,
       ...over,
     },
@@ -199,17 +199,17 @@ describe("toPersonOption", () => {
       firstName: "Bob",
       lastName: "Lee",
       emails: null,
-      companies: company({ role: null }),
+      companies: company({ position: null }),
     });
     expect(opt.secondary).toBe("Acme Corp");
     expect(opt.secondary).not.toContain("·");
   });
 
-  it("edge 3: multiple companies → prefers isPrimary, else first-with-role, else first", () => {
+  it("edge 3: multiple companies → prefers isPrimary, else first-with-position, else first", () => {
     const companies = [
-      { companyId: "c1", companyLabel: "First Co", role: null, isPrimary: false },
-      { companyId: "c2", companyLabel: "Role Co", role: "Manager", isPrimary: false },
-      { companyId: "c3", companyLabel: "Primary Co", role: "Lead", isPrimary: true },
+      { companyId: "c1", companyLabel: "First Co", position: null, isPrimary: false },
+      { companyId: "c2", companyLabel: "Role Co", position: "Manager", isPrimary: false },
+      { companyId: "c3", companyLabel: "Primary Co", position: "Lead", isPrimary: true },
     ];
     const opt = toPersonOption({
       id: "p4",
@@ -221,10 +221,10 @@ describe("toPersonOption", () => {
     expect(opt.secondary).toBe("Lead · Primary Co");
   });
 
-  it("edge 3b: multiple companies, none primary → first-with-role wins", () => {
+  it("edge 3b: multiple companies, none primary → first-with-position wins", () => {
     const companies = [
-      { companyId: "c1", companyLabel: "First Co", role: null, isPrimary: false },
-      { companyId: "c2", companyLabel: "Role Co", role: "Manager", isPrimary: false },
+      { companyId: "c1", companyLabel: "First Co", position: null, isPrimary: false },
+      { companyId: "c2", companyLabel: "Role Co", position: "Manager", isPrimary: false },
     ];
     const opt = toPersonOption({
       id: "p5",
