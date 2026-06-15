@@ -349,7 +349,7 @@ describe("parseCompanies", () => {
     ]);
     const parsed = parseCompanies(legacy);
     expect(parsed[0].position).toBe("Lecturer");
-    expect((parsed[0] as Record<string, unknown>).role).toBeUndefined();
+    expect((parsed[0] as unknown as Record<string, unknown>).role).toBeUndefined();
   });
 
   it("prefers `position` when both keys are present", () => {
