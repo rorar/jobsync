@@ -82,11 +82,15 @@ value Address {
 }
 
 value CompanyAssociation {
-    -- Links a Person to a Company with role and temporal context.
-    -- A Person may hold positions at multiple companies simultaneously
+    -- Links a Person to a Company with their position there and temporal
+    -- context. A Person may hold positions at multiple companies simultaneously
     -- (e.g. recruiter at staffing agency + lecturer at university).
+    -- `position` is a free-text job title / position at the company — a
+    -- DIFFERENT concept from JobContact.role (the person's function in a hiring
+    -- process, a controlled JobContactRole). Positions are open-ended
+    -- ("VP Engineering", "Lecturer"), hence free text, not an enum.
     company: Company
-    role: String?
+    position: String?
     is_primary: Boolean
     start_date: Timestamp?
     end_date: Timestamp?
@@ -136,6 +140,17 @@ enum ActorType {
     user        -- a JobSync account holder
     automation  -- an automation / sync (ROADMAP 1.12), not a user
     self        -- the data subject editing their own record (ROADMAP 9.5), no account
+}
+
+enum JobContactRole {
+    -- The person's function in a hiring process for a specific Job (the
+    -- JobContact link). A closed, classifiable set — powers role badges
+    -- (ROADMAP 2244) and warm-path / referral filtering (inside-track.allium).
+    -- Distinct from CompanyAssociation.position (a free-text job title).
+    -- A null JobContact.role means "unspecified" — there is deliberately NO
+    -- `other` member: a role that doesn't fit is a signal to add a value here,
+    -- not to hide it behind a catch-all (Allium: force ambiguity into the open).
+    recruiter | hiring_manager | hr | referral | tipster | interviewer | decision_maker
 }
 
 enum ContactChannelType {
@@ -347,7 +362,10 @@ entity JobContact {
     user_id: String
     job: Job
     person: Person
-    role: String?
+    -- Controlled vocabulary (JobContactRole); null = unspecified. Existing
+    -- free-text role values are mapped on migration: known strings -> the
+    -- matching JobContactRole, unmappable -> null (weed / implementation task).
+    role: JobContactRole?
     created_at: Timestamp
 }
 
@@ -462,7 +480,7 @@ rule AutoCreatePersonFromEmail {
     let domain = extract_domain(email_handle)
     let matching_company = find_company_by_domain(user.id, domain)
     let initial_companies = if matching_company != null:
-        {CompanyAssociation(company: matching_company, role: null, is_primary: true, start_date: now, end_date: null)}
+        {CompanyAssociation(company: matching_company, position: null, is_primary: true, start_date: now, end_date: null)}
     else:
         {}
 
@@ -1383,7 +1401,7 @@ deferred ImportExport.bulkImport           -- CSV import/export (5.8)
 -- Open Questions
 ------------------------------------------------------------
 
-open question "Company remains a lookup value. Person now references multiple companies via CompanyAssociation (role, isPrimary, temporal bounds). Should Company gain independent lifecycle management in the future, or does the current lookup + association model suffice?"
+open question "Company remains a lookup value. Person now references multiple companies via CompanyAssociation (position, isPrimary, temporal bounds). Should Company gain independent lifecycle management in the future, or does the current lookup + association model suffice?"
 
 open question "Should Tasks be standalone entities or always linked to a Job/Person? What about personal reminders?"
 
