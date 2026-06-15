@@ -11,6 +11,8 @@ import {
   declineReferral,
   reviveReferral,
   commitReferralToApply,
+  getReferral,
+  listReferrals,
 } from "@/actions/referral.actions";
 import { getCurrentUser } from "@/utils/user.utils";
 import { PrismaClient } from "@prisma/client";
@@ -18,7 +20,7 @@ import { resolveAppliedStatusId } from "@/lib/crm/resolve-applied-status";
 
 jest.mock("@prisma/client", () => {
   const m = {
-    referral: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
+    referral: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
     person: { findFirst: jest.fn() },
     company: { findFirst: jest.fn() },
     personConnection: { findFirst: jest.fn() },
@@ -182,5 +184,76 @@ describe("commitReferralToApply (TipReifiesToJob)", () => {
     (prisma.referral.findFirst as jest.Mock).mockResolvedValue({ id: "r1", status: "in_review", targetCompanyId: null });
     const res = await commitReferralToApply("r1");
     expect(res.message).toBe("crm.errors.referralRequiresTargetCompany");
+  });
+});
+
+// Task 5.0 — read actions (gate the Phase-5 UI). SoT: surface ReferralWorkspace
+// (exposes kind/tipster/target_company/target_job/status/dates) + @guarantee
+// TipsterShownLive (tipster resolved LIVE from the Person, never snapshotted).
+describe("getReferral", () => {
+  it("rejects unauthenticated", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(null);
+    expect((await getReferral("r1")).success).toBe(false);
+  });
+
+  it("returns an owned referral with the tipster resolved live (TipsterShownLive)", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.referral.findFirst as jest.Mock).mockResolvedValue({
+      id: "r1",
+      kind: "insider_relay",
+      status: "open",
+      tipster: { id: "p1", firstName: "Mara", lastName: "S", status: "active" },
+      targetCompany: { id: "c1", label: "Acme" },
+      targetJob: null,
+    });
+
+    const res = await getReferral("r1");
+
+    expect(res.success).toBe(true);
+    const call = (prisma.referral.findFirst as jest.Mock).mock.calls[0][0];
+    // ADR-015: userId-scoped.
+    expect(call.where).toEqual({ id: "r1", userId: "user-1" });
+    // Live person resolution (a nested select on the Person), not a flat name string.
+    expect(call.select.tipster).toBeTruthy();
+    expect(call.select.tipster.select.status).toBe(true);
+    expect(
+      (res as { success: true; data: { tipster: { status: string } | null } }).data.tipster?.status,
+    ).toBe("active");
+  });
+
+  it("returns referralNotFound when not owned / missing", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.referral.findFirst as jest.Mock).mockResolvedValue(null);
+    expect((await getReferral("missing")).message).toBe("crm.errors.referralNotFound");
+  });
+});
+
+describe("listReferrals", () => {
+  it("rejects unauthenticated", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(null);
+    expect((await listReferrals()).success).toBe(false);
+  });
+
+  it("returns the user's referrals newest-activity first", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.referral.findMany as jest.Mock).mockResolvedValue([{ id: "r1" }, { id: "r2" }]);
+
+    const res = await listReferrals();
+
+    expect(res.success).toBe(true);
+    const call = (prisma.referral.findMany as jest.Mock).mock.calls[0][0];
+    expect(call.where).toEqual({ userId: "user-1" });
+    expect(call.orderBy).toEqual({ lastActivityAt: "desc" });
+    expect((res as { success: true; data: unknown[] }).data).toHaveLength(2);
+  });
+
+  it("scopes by jobId via the targetJob relation (userId still enforced)", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.referral.findMany as jest.Mock).mockResolvedValue([]);
+
+    await listReferrals({ jobId: "job-9" });
+
+    const call = (prisma.referral.findMany as jest.Mock).mock.calls[0][0];
+    expect(call.where).toEqual({ userId: "user-1", targetJob: { id: "job-9" } });
   });
 });
