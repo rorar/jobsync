@@ -30,6 +30,12 @@ jest.mock("@prisma/client", () => {
 });
 jest.mock("@/utils/user.utils", () => ({ getCurrentUser: jest.fn() }));
 jest.mock("@/lib/crm/resolve-applied-status", () => ({ resolveAppliedStatusId: jest.fn() }));
+jest.mock("@/lib/events", () => ({
+  emitEvent: jest.fn(),
+  createEvent: jest.fn((type: string, payload: unknown) => ({ type, payload })),
+  DomainEventTypes: { JobStatusChanged: "JobStatusChanged" },
+}));
+jest.mock("@/lib/audit/data-audit", () => ({ writeDataAuditLog: jest.fn() }));
 
 const prisma = new PrismaClient();
 const user = { id: "user-1", name: "U", email: "u@x.io" };
@@ -142,13 +148,25 @@ describe("commitReferralToApply (TipReifiesToJob)", () => {
     (prisma.company.findFirst as jest.Mock).mockResolvedValue({ id: "c1", label: "Acme" });
     (resolveAppliedStatusId as jest.Mock).mockResolvedValue("applied-1");
     (prisma.jobTitle.upsert as jest.Mock).mockResolvedValue({ id: "jt1" });
-    (prisma.$transaction as jest.Mock).mockResolvedValue([{ id: "job-1" }, { id: "r1" }]);
+    // Interactive ($transaction(cb)) form: provide a tx with the writers used.
+    (prisma.$transaction as jest.Mock).mockImplementation(async (cb: (tx: unknown) => unknown) =>
+      cb({
+        job: { create: jest.fn().mockResolvedValue({ id: "job-1", Status: { value: "applied" } }) },
+        jobStatusHistory: { create: jest.fn().mockResolvedValue({ id: "h1" }) },
+        referral: { update: jest.fn().mockResolvedValue({ id: "r1" }) },
+      }),
+    );
 
     const res = await commitReferralToApply("r1");
 
     expect(res.success).toBe(true);
     expect((res as { success: true; data: { jobId: string } }).data.jobId).toBe("job-1");
     expect(resolveAppliedStatusId).toHaveBeenCalledWith("user-1");
+    // Mirrors addJob: emits JobStatusChanged + writes the GDPR job.create audit.
+    expect(jest.requireMock("@/lib/events").emitEvent).toHaveBeenCalledTimes(1);
+    expect(jest.requireMock("@/lib/audit/data-audit").writeDataAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "job.create", targetId: "job-1" }),
+    );
   });
 
   it("rejects when the referral is not in_review (illegal -> converted)", async () => {

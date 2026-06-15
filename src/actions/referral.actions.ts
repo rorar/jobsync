@@ -11,6 +11,8 @@ import {
   isValidReferralTransition,
 } from "@/models/insideTrack.model";
 import { resolveAppliedStatusId } from "@/lib/crm/resolve-applied-status";
+import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
 
 // ---------------------------------------------------------------------------
 // referral.actions.ts — Referral aggregate Repository (Welle 5, Inside Track).
@@ -229,10 +231,12 @@ export async function commitReferralToApply(
       select: { id: true },
     });
 
-    // Atomic: create the Job (linked back via sourceReferralId) + convert the
-    // referral, so a converted referral always has its Job (ConvertedReferralHasJob).
-    const [job] = await prisma.$transaction([
-      prisma.job.create({
+    // Atomic: create the Job (linked back via sourceReferralId) + its initial
+    // JobStatusHistory + convert the referral, so a converted referral always
+    // has its Job (ConvertedReferralHasJob) and the new Job is consistent with
+    // every other Job (addJob also seeds history + emits JobStatusChanged).
+    const result = await prisma.$transaction(async (tx) => {
+      const newJob = await tx.job.create({
         data: {
           userId: user.id,
           companyId: company.id,
@@ -240,9 +244,19 @@ export async function commitReferralToApply(
           statusId,
           sourceReferralId: referral.id,
         },
-        select: { id: true },
-      }),
-      prisma.referral.update({
+        select: { id: true, Status: { select: { value: true } } },
+      });
+      const history = await tx.jobStatusHistory.create({
+        data: {
+          jobId: newJob.id,
+          userId: user.id,
+          previousStatusId: null,
+          newStatusId: statusId,
+          note: null,
+          changedAt: new Date(),
+        },
+      });
+      await tx.referral.update({
         where: { id: referralId },
         data: {
           status: "converted",
@@ -250,10 +264,30 @@ export async function commitReferralToApply(
           updatedByType: "user",
           updatedById: user.id,
         },
-      }),
-    ]);
+      });
+      return { jobId: newJob.id, statusValue: newJob.Status.value, historyId: history.id };
+    });
 
-    return { success: true, data: { id: referralId, jobId: job.id } };
+    // Post-commit side-effects (mirror addJob): timeline event + GDPR audit.
+    emitEvent(
+      createEvent(DomainEventTypes.JobStatusChanged, {
+        jobId: result.jobId,
+        userId: user.id,
+        previousStatusValue: null,
+        newStatusValue: result.statusValue,
+        note: undefined,
+        historyEntryId: result.historyId,
+      }),
+    );
+    writeDataAuditLog({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: "job.create",
+      targetType: "job",
+      targetId: result.jobId,
+    });
+
+    return { success: true, data: { id: referralId, jobId: result.jobId } };
   } catch (error) {
     return handleError(error);
   }
