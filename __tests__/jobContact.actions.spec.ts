@@ -79,7 +79,7 @@ describe("addJobContact", () => {
     (prisma.person.findFirst as jest.Mock).mockResolvedValue({ id: "person-1" });
     (prisma.jobContact.create as jest.Mock).mockResolvedValue({ id: "contact-1" });
 
-    const result = await addJobContact("job-1", "person-1", "Recruiter");
+    const result = await addJobContact("job-1", "person-1", "recruiter");
 
     expect(result.success).toBe(true);
     expect((result as { success: true; data: { id: string } }).data).toEqual({ id: "contact-1" });
@@ -88,9 +88,35 @@ describe("addJobContact", () => {
         userId: mockUser.id,
         jobId: "job-1",
         personId: "person-1",
-        role: "Recruiter",
+        role: "recruiter",
       },
     });
+  });
+
+  it("creates job contact with null role (unspecified)", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+    (prisma.job.findFirst as jest.Mock).mockResolvedValue({ id: "job-1" });
+    (prisma.person.findFirst as jest.Mock).mockResolvedValue({ id: "person-1" });
+    (prisma.jobContact.create as jest.Mock).mockResolvedValue({ id: "contact-1" });
+
+    const result = await addJobContact("job-1", "person-1");
+
+    expect(result.success).toBe(true);
+    expect(prisma.jobContact.create).toHaveBeenCalledWith({
+      data: { userId: mockUser.id, jobId: "job-1", personId: "person-1", role: null },
+    });
+  });
+
+  it("rejects an invalid contact role at the boundary (ADR-019)", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+    (prisma.job.findFirst as jest.Mock).mockResolvedValue({ id: "job-1" });
+    (prisma.person.findFirst as jest.Mock).mockResolvedValue({ id: "person-1" });
+
+    const result = await addJobContact("job-1", "person-1", "Recruiter");
+
+    expect(result.success).toBe(false);
+    expect(result.message).toBe("crm.errors.invalidContactRole");
+    expect(prisma.jobContact.create).not.toHaveBeenCalled();
   });
 
   it("handles P2002 unique constraint (already linked)", async () => {

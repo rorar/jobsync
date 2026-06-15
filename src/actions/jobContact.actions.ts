@@ -7,6 +7,7 @@ import { ActionResult } from "@/models/actionResult";
 import { handleError } from "@/lib/utils";
 import { createEvent, DomainEventType } from "@/lib/events/event-types";
 import { eventBus } from "@/lib/events";
+import { isValidJobContactRole } from "@/models/job.model";
 
 export async function addJobContact(
   jobId: string,
@@ -16,6 +17,12 @@ export async function addJobContact(
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "errors.notAuthenticated" };
+
+    // Controlled vocabulary at the boundary (ADR-019): null = unspecified is
+    // allowed; any provided role MUST be a valid JobContactRole (crm.allium).
+    if (role != null && !isValidJobContactRole(role)) {
+      return { success: false, message: "crm.errors.invalidContactRole" };
+    }
 
     // Verify job ownership
     const job = await prisma.job.findFirst({ where: { id: jobId, userId: user.id } });
