@@ -1,0 +1,89 @@
+# Specification: Welle 5 — Inside Track (Tippgeber/Vitamin-B)
+
+**Track ID:** welle5-inside-track_20260615
+**Type:** Feature
+**Created:** 2026-06-15
+**Status:** Draft
+
+## ⚠️ Source of Truth = Allium specs (do NOT re-specify behaviour here)
+
+Behaviour is **authoritatively defined** in the committed Allium specs (branch
+`inside-track-spec`). This track implements them; it does not redefine them.
+
+- **`specs/inside-track.allium`** — Referral sum-type (InsiderRelay | NetworkPath),
+  PersonConnection network, WarmPathFinder, lifecycle, GDPR cascade, invariants.
+- **`specs/crm.allium`** — `JobContactRole` enum, `CompanyAssociation.position`.
+- **`specs/crm-gdpr.allium`** — `FulfillErasureRequest` in-place anonymize + cascade.
+
+This spec.md adds only the **implementation layer** (Prisma, server actions, UI,
+migrations, i18n) and cites the Allium rules/invariants as acceptance criteria.
+**Phase ordering input:** `docs/inside-track-implementation-debt.md` (verified IT-1..8 + mermaid).
+
+## Summary
+
+Implement "Inside Track" — warm referrals via personal connections (Tippgeber/Vitamin B):
+record a tip from an insider or a networked contact, track it through a referral lifecycle,
+discover warm paths into a target company (1-hop insiders + 2-hop network), and reify a
+matured tip into a real Job. Plus two CRM prerequisites (controlled contact-role vocabulary,
+company-position rename). **Scope: Phase 0 + Phase 1 of the debt doc only.**
+
+## Context
+
+CRM bounded context (Person aggregate, ROADMAP 5.x + 9.5 reverse-funnel groundwork).
+Real use-cases: (A) a conference acquaintance who works at the target company relays the
+user's CV to an unknown decision-maker; (B) an ex-boss/friend who knows an insider at the
+target company (2-hop warm path). Both are instances of one `Referral` aggregate.
+
+## User Story
+
+As a job-seeker, I want to record who tipped me off / can open a door at a company and track
+that referral to conversion, and to see who in my network can warm-introduce me to a target
+company, so that I can leverage personal connections ("Vitamin B") instead of cold applying.
+
+## Acceptance Criteria (cite Allium SoT)
+
+- [ ] `JobContact.role` is a controlled `JobContactRole` (runtime-checked, ADR-019); existing
+      free-text mapped (known→enum, else null). `CompanyAssociation.role` renamed to `position`
+      (free-text) end-to-end (model, parser, form, display, data migration).
+- [ ] Prisma models `Referral` (kind InsiderRelay|NetworkPath, nullable tipster/forwarded_to/
+      insider/via/target_company, status, source_referral back-ref on Job) + `PersonConnection`
+      (directed, kind/strength, unique pair) exist; migration applied, zero data loss.
+- [ ] Referral lifecycle `open→engaged→relayed→in_review→converted|declined|stale` enforced
+      (only spec transitions legal); `ReferralGoesStale` temporal rule; `TipReifiesToJob`
+      creates a Job with `resolve_applied_status` fallback (applied-kind→default→any, never null).
+- [ ] `WarmPathFinder` returns 1-hop insiders (CompanyAssociation incl. former/endDate) + 2-hop
+      paths (PersonConnection), **excludes consent-blocked persons** (@guarantee).
+- [ ] `anonymizePerson` satisfies `AnonymizeCascadesToInsideTrack`: severs tipster/forwarded_to/
+      insider, nulls `via`, deletes PersonConnection, declines/detaches Referral, scrubs draft refs.
+- [ ] `collect-user-data` + `gdpr-data-rights.allium UserDataExport` include Referral +
+      PersonConnection (Art. 15/20).
+- [ ] All queries userId-scoped (ADR-015); user_id from session, never client (ADR-019).
+- [ ] Tests: unit + component + ≥1 E2E happy-path; i18n 4 locales; `allium:weed` shows 0 drift
+      against the three specs after implementation.
+
+## Dependencies
+
+- **IT-4 (Prisma models) blocks IT-3, IT-5, IT-6** (intra-track).
+- IT-1 / IT-2 fully independent (Phase 0, parallel).
+- **Adjacent (NOT duplicated here):** `pii-at-rest_20260601` track — encrypt-first recommended
+  before adding more Person PII; reference, do not absorb.
+- Allium spec branch `inside-track-spec` must be merged/available.
+
+## Out of Scope
+
+- **IT-7** cover-letter tipster reference — gated on cv-document 4.2 (not built). Future track.
+- **IT-8** referral outreach tone-gate — gated on 1.12 Communication Connector (spec only). Future track.
+- Any change to behaviour defined in the Allium specs (SoT is frozen for this track).
+- Account-deletion path (separate: auth-session.allium + `deleteAccount`).
+
+## Technical Notes
+
+- DDD: Person aggregate; each action file = a Repository returning `ActionResult<T>`.
+- Reference-data lookups stay out of the Person Repository (Open Host Service pattern).
+- `resolve_applied_status` uses `src/lib/crm/status-categories` StatusCategoryKind infra.
+- Resource discipline: stop dev server before tsc/jest; single worker + nice.
+- Drift gate: run `allium:weed` after each phase that touches a spec'd surface.
+
+---
+
+_Generated by Conductor. Behaviour SoT = Allium specs; this track is the implementation plan._

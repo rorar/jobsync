@@ -19,6 +19,7 @@ Navigation hub for project context.
 | [welle2-salary-profile_20260601](./tracks/welle2-salary-profile_20260601/index.md) | Welle 2 — Salary + Profil (Kette B) | Pending |
 | [welle3-crm-connection_20260601](./tracks/welle3-crm-connection_20260601/index.md) | Welle 3 — CRM-Verbindung (Kette C) | Pending |
 | [welle4-custom-jobstatus_20260601](./tracks/welle4-custom-jobstatus_20260601/index.md) | Welle 4 — Custom JobStatus XL (Kette A) | Pending |
+| [welle5-inside-track_20260615](./tracks/welle5-inside-track_20260615/index.md) | Welle 5 — Inside Track (Tippgeber/Vitamin-B) | Pending |
 
 ## Getting Started
 

@@ -1,0 +1,26 @@
+{
+  "id": "welle5-inside-track_20260615",
+  "title": "Welle 5 — Inside Track (Tippgeber/Vitamin-B)",
+  "type": "feature",
+  "status": "pending",
+  "created": "2026-06-15T00:00:00Z",
+  "updated": "2026-06-15T00:00:00Z",
+  "current_phase": 0,
+  "current_task": "not_started",
+  "phases": {
+    "total": 7,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 26,
+    "completed": 0
+  },
+  "source_of_truth": [
+    "specs/inside-track.allium",
+    "specs/crm.allium",
+    "specs/crm-gdpr.allium"
+  ],
+  "ordering_input": "docs/inside-track-implementation-debt.md",
+  "out_of_scope": ["IT-7 cover-letter ref (gated cv-document 4.2)", "IT-8 outreach tone-gate (gated 1.12 Communication)"],
+  "commits": []
+}
