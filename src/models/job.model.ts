@@ -32,6 +32,34 @@ export function isValidRelationshipType(value: unknown): value is RelationshipTy
   );
 }
 
+/**
+ * JobContactRole — controlled vocabulary for a Person's function in the hiring
+ * process for a specific Job (the JobContact link). SoT: specs/crm.allium
+ * `enum JobContactRole`. A closed, classifiable set — powers role badges
+ * (ROADMAP 2244) and warm-path / referral filtering (inside-track.allium).
+ * Distinct from CompanyAssociation.position (a free-text job title). A `null`
+ * JobContact.role means "unspecified"; there is deliberately NO `other` member
+ * (Allium: force ambiguity into the open — add a value rather than hide it).
+ */
+export const JOB_CONTACT_ROLES = [
+  "recruiter",
+  "hiring_manager",
+  "hr",
+  "referral",
+  "tipster",
+  "interviewer",
+  "decision_maker",
+] as const;
+export type JobContactRole = (typeof JOB_CONTACT_ROLES)[number];
+
+/** Runtime membership check for the erased JobContactRole union (ADR-019). */
+export function isValidJobContactRole(value: unknown): value is JobContactRole {
+  return (
+    typeof value === "string" &&
+    (JOB_CONTACT_ROLES as readonly string[]).includes(value)
+  );
+}
+
 export interface JobForm {
   id?: string;
   userId?: string;
