@@ -1,0 +1,571 @@
+-- allium: 3
+-- inside-track.allium
+
+-- Scope: "Inside Track" — how an applicant gains access to roles/companies
+--   through personal connections (tipsters, insiders, warm referrals,
+--   "Vitamin B"). Models the referral relationship + its lifecycle, the
+--   person-to-person network used to discover warm paths, and how a tipster
+--   surfaces in generated application documents.
+-- Includes:
+--   - Referral aggregate (own lifecycle; sum type InsiderRelay | NetworkPath)
+--   - PersonConnection (person-to-person network edge for 2-hop warm paths)
+--   - Warm-path discovery (1-hop insider via CompanyAssociation, 2-hop via
+--     PersonConnection)
+--   - Reification of a matured tip into a real Job
+--   - Tipster reference in generated cover letters (late-bound)
+--   - GDPR erasure cascade into referrals / connections / draft references
+-- Excludes:
+--   - Person / Company / Job / CompanyAssociation lifecycle (crm.allium,
+--     shared-entities.allium, job-aggregate.allium)
+--   - Cover-letter / CV document lifecycle + rendering (cv-document.allium)
+--   - Outbound message delivery + channel/recipient resolution
+--     (communication-connector.allium); this spec only constrains WHEN a
+--     referral-driven outreach is permitted and in what register
+--   - Person anonymization mechanics (crm-gdpr.allium AnonymizePerson); this
+--     spec only adds the inside-track-specific severing obligations
+-- Dependencies: Person, CompanyAssociation, ActorType (crm.allium)
+
+use "./crm.allium" as crm
+
+-- ---------------------------------------------------------------------------
+-- External entities (owned by other specs)
+-- ---------------------------------------------------------------------------
+
+external entity User {
+    -- The application user / job-seeker (shared-entities.allium). The party
+    -- who owns referrals + connections and uses the warm-path finder.
+    id: String
+}
+
+external entity Company {
+    -- shared-entities.allium / job-aggregate.allium lookup.
+    label: String
+    domain: String?
+}
+
+external entity Job {
+    -- job-aggregate.allium. The real application, created only once a tip
+    -- matures into an intent to apply (see TipReifiesToJob).
+    user_id: String
+    title: String
+    company: Company
+    status: String
+    -- Back-reference set at reification so a Referral can project its Job
+    -- without storing a duplicate FK (the link lives on the Job side).
+    source_referral: Referral?
+}
+
+external entity CoverLetterDraft {
+    -- cv-document.allium. A generated application document that may reference
+    -- the tipster ("über {tipster} habe ich diese Stelle gefunden").
+    -- `finalized` mirrors cv-document's editing(mutable) vs saved(immutable):
+    -- a finalized/sent draft is a lawful processing record, not late-bound.
+    --
+    -- FORWARD-LOOKING (verified 2026-06-15): no CoverLetter/CvDocument code or
+    -- Prisma model exists yet — cv-document.allium is a DRAFT spec (ROADMAP
+    -- 4.2). So everything tied to this entity (TipsterReference,
+    -- TipsterReferenceResolvesLive, the draft-scrub arm of the GDPR cascade) is
+    -- a future cross-spec dependency. Inside-track implementation Welle 1
+    -- ships Referral + PersonConnection + WarmPathFinder ONLY; the cover-letter
+    -- tipster reference lands when 4.2 / cv-document is built.
+    user_id: String
+    finalized: Boolean
+    tipster_reference: TipsterReference?
+}
+
+-- ---------------------------------------------------------------------------
+-- Value types
+-- ---------------------------------------------------------------------------
+
+enum ConnectionKind {
+    former_colleague | friend | acquaintance | mentor | family | other
+}
+
+enum ConnectionStrength {
+    close | medium | weak
+}
+
+value TipsterReference {
+    -- A late-bound reference to the tipster, resolved at render time so it
+    -- degrades automatically if the person is anonymized (see
+    -- TipsterReferenceResolvesLive). The display name is NOT snapshotted here.
+    person: crm/Person
+    referral: Referral
+}
+
+-- ---------------------------------------------------------------------------
+-- Person-to-person network (enables 2-hop warm paths — use case B)
+-- ---------------------------------------------------------------------------
+
+entity PersonConnection {
+    -- A directed acquaintance edge between two of the user's contacts:
+    -- from_person knows to_person. Powers warm-path discovery beyond the
+    -- 1-hop "insider at the target company" relationship.
+    user_id: String
+    from_person: crm/Person
+    to_person: crm/Person
+    kind: ConnectionKind
+    strength: ConnectionStrength
+    notes: String?
+    created_at: Timestamp
+
+    @invariant NoSelfConnection
+        -- from_person != to_person.
+    @invariant DistinctEndpointsPerUser
+        -- At most one connection per (user_id, from_person, to_person).
+}
+
+-- ---------------------------------------------------------------------------
+-- Referral aggregate (own lifecycle — own transition graph, NOT Interview)
+-- ---------------------------------------------------------------------------
+
+entity Referral {
+    -- A warm path into a role/company opened by a tipster. Spans the whole
+    -- spectrum from a vague tip (no target company yet) to a converted
+    -- application — so a tip does NOT have to be a Job up front.
+    --
+    -- Each variant runs its OWN lifecycle (its own `status` + transition
+    -- graph), because relaying documents (InsiderRelay) and brokering an
+    -- introduction (NetworkPath) are genuinely different processes.
+    user_id: String
+
+    -- The contact who opened the door. For InsiderRelay this is the relay
+    -- themselves; for NetworkPath this is the person in the user's network
+    -- who knows an insider. Nullable so the GDPR cascade can de-identify a
+    -- referral (drop the person link, keep the de-identified trace) — see
+    -- AnonymizeCascadesToInsideTrack / ActiveReferralHasTipster.
+    tipster: crm/Person?
+
+    kind: InsiderRelay | NetworkPath        -- discriminator (sum type)
+
+    -- Optional target. Both null = a pure market tip with no company yet.
+    target_company: Company?
+
+    -- Relationship: the real Job this tip reified into, if any (set on the Job
+    -- side via TipReifiesToJob). Empty until/unless the referral converts.
+    target_job: Job with source_referral = this
+
+    -- When the tip entered the system (e.g. met Maxime at the conference).
+    received_at: Timestamp
+    last_activity_at: Timestamp
+
+    -- Update-actor provenance (mirrors crm Interview / ADR-035): the editor
+    -- may be the user, an automation, or — via the reverse-funnel landing page
+    -- (ROADMAP 9.5) — the tipster themselves, who has no account.
+    updated_by_type: crm/ActorType?
+    updated_by_id: String?
+
+    -- Lifecycle — ONE semantic graph shared by both variants. The two access
+    -- routes (relaying documents vs brokering an introduction) are the SAME
+    -- abstract process — only the structural fields and the display label per
+    -- step differ — so they share one graph rather than two parallel ones:
+    --   engaged  = the applicant acted on the tip
+    --              (InsiderRelay: sent documents to the relay;
+    --               NetworkPath: asked the tipster for an introduction)
+    --   relayed  = the intermediary acted
+    --              (InsiderRelay: forwarded to the decision-maker;
+    --               NetworkPath: made the introduction)
+    -- New referral kinds (e.g. an endorsement-derived tip, ROADMAP 4.10) reuse
+    -- this lifecycle and only add their own structure + labels.
+    status: open | engaged | relayed | in_review | converted | declined | stale
+
+    created_at: Timestamp
+    updated_at: Timestamp
+
+    transitions status {
+        open      -> engaged        -- applicant acts on the tip
+        open      -> declined
+        open      -> stale
+        engaged   -> relayed        -- intermediary acts
+        engaged   -> declined
+        engaged   -> stale
+        relayed   -> in_review      -- the target side is reviewing
+        relayed   -> declined
+        relayed   -> stale
+        in_review -> converted      -- became a real application (-> Job)
+        in_review -> declined
+        in_review -> stale
+        stale     -> open           -- revived when the tipster re-engages
+        stale     -> declined       -- GDPR de-identification may decline a stale tip
+        terminal: converted, declined
+    }
+
+    @guidance
+        -- Only `converted` and `declined` are terminal. `stale` is reachable
+        -- from every non-terminal working state via ReferralGoesStale and is
+        -- itself revivable. The per-step display label is variant-specific
+        -- (resolved in i18n), the graph is not.
+}
+
+variant InsiderRelay : Referral {
+    -- Use case A: the tipster works at the target company and relays the
+    -- user's documents onward. The decision-maker is frequently UNKNOWN at
+    -- the start and filled in later when the tipster names them.
+    forwarded_to: crm/Person?
+}
+
+variant NetworkPath : Referral {
+    -- Use case B: the tipster is NOT (necessarily) at the target company but
+    -- knows someone who is. The warm path runs tipster -> insider.
+    insider: crm/Person?
+    via: PersonConnection?
+}
+
+-- ---------------------------------------------------------------------------
+-- Config
+-- ---------------------------------------------------------------------------
+
+config {
+    -- A referral with no activity for this long goes stale.
+    stale_after: Duration = 21.days
+    -- Maximum hops the warm-path finder will traverse (2 = friend -> insider).
+    max_warm_path_depth: Integer = 2
+    -- Network size cap, mirroring crm CRM_CONFIG limits. Enforced by
+    -- AddPersonConnection.
+    max_connections_per_user: Integer = 10000
+}
+
+-- ---------------------------------------------------------------------------
+-- Rules — happy path
+-- ---------------------------------------------------------------------------
+
+rule TipReifiesToJob {
+    -- The boundary between "a tip" and "a Job": a Job is created only when the
+    -- user commits to applying AND a target company is known. Until then the
+    -- Referral itself is the lightweight opportunity holder.
+    when: ApplicantCommitsToApply(referral)
+    requires: referral.target_company != null
+    requires: referral.status = in_review
+    ensures: Job.created(
+        user_id: referral.user_id,
+        company: referral.target_company,
+        title: referral.target_company.label,   -- placeholder title; user edits
+        status: resolve_applied_status(referral.user_id),
+        source_referral: referral
+    )
+    ensures: referral.status = converted
+    @guidance
+        -- VERIFIED against code (2026-06-15): JobStatus is per-user and
+        -- customizable (Welle 4) with a category `kind` ∈ lead|applied|
+        -- interviewing|... — so the new Job's status must be RESOLVED to the
+        -- user's status whose kind = "applied" (via the existing
+        -- src/lib/crm/status-categories StatusCategoryKind infra), NOT a
+        -- hardcoded literal. resolve_applied_status(user) is that black box.
+        -- FALLBACK CONTRACT (verified 2026-06-15 against jobStatus.actions
+        -- deleteJobStatus): the delete-guard only protects the last status
+        -- OVERALL + the default — NOT one-per-kind — so a user may have zero
+        -- applied-kind statuses. resolve_applied_status therefore resolves:
+        -- applied-kind status, else the user's default (isDefault) status,
+        -- else any status. It never returns null (≥1 status always exists).
+        -- The title is a placeholder (no posting exists for a speculative
+        -- application); the user renames it. relationshipType on the Job stays
+        -- orthogonal — the referral channel is recorded by the source_referral
+        -- link, not by a RecruitingCompany.
+        -- A `lead` category also exists; an alternative design would create the
+        -- Job early in `lead` and move it to `applied` on conversion. Rejected
+        -- here: the Referral itself holds the pre-application opportunity so
+        -- unmaterialized tips never pollute the Job list.
+}
+
+rule ReferralGoesStale {
+    -- Temporal: a quiet referral is flagged so it surfaces for follow-up
+    -- instead of lingering as a false "open" lead.
+    when: referral: Referral.last_activity_at + config.stale_after <= now
+    requires: referral.status in {open, engaged, relayed, in_review}
+    ensures: referral.status = stale
+}
+
+-- Phase 2 — stimulus rules driving the lifecycle (user / 9.5 self-service
+-- actions). Each refreshes last_activity_at so ReferralGoesStale re-arms.
+--
+-- P-E (security, ADR-015/019): in every creation rule below, `user` is the
+-- AUTHENTICATED session user (getCurrentUser). user_id is derived from it,
+-- NEVER from client-submitted input — the established IDOR-ownership pattern.
+-- P-D (note): the implementing server actions follow the existing CRM naming
+-- convention (createX / addX / removeX, cf. addJobContact / createCrmNote);
+-- the Record*/Add* trigger names here are domain events, not action names.
+
+rule RecordInsiderTip {
+    -- A tip from a contact who works at the target company and will relay
+    -- the user's documents onward (use case A).
+    when: RecordInsiderTip(user, tipster, target_company)
+    ensures: InsiderRelay.created(
+        user_id: user.id,
+        tipster: tipster,
+        target_company: target_company,
+        status: open,
+        received_at: now,
+        last_activity_at: now
+    )
+}
+
+rule RecordNetworkTip {
+    -- A tip from a contact who knows an insider at the target company
+    -- (use case B). `insider` and `via` may be supplied if already known.
+    when: RecordNetworkTip(user, tipster, insider, via, target_company)
+    ensures: NetworkPath.created(
+        user_id: user.id,
+        tipster: tipster,
+        insider: insider,
+        via: via,
+        target_company: target_company,
+        status: open,
+        received_at: now,
+        last_activity_at: now
+    )
+}
+
+rule ApplicantEngagesTip {
+    -- The applicant acts on the tip (InsiderRelay: sends documents to the
+    -- relay; NetworkPath: asks the tipster for an introduction).
+    when: ApplicantEngages(referral)
+    requires: referral.status = open
+    ensures: referral.status = engaged
+    ensures: referral.last_activity_at = now
+}
+
+rule IntermediaryRelaysTip {
+    -- The intermediary acts (forwarded the documents / made the introduction).
+    when: IntermediaryRelays(referral)
+    requires: referral.status = engaged
+    ensures: referral.status = relayed
+    ensures: referral.last_activity_at = now
+}
+
+rule TargetReviewsApplication {
+    -- The target side engages — reviewing the (forwarded / introduced) candidate.
+    when: TargetReviews(referral)
+    requires: referral.status = relayed
+    ensures: referral.status = in_review
+    ensures: referral.last_activity_at = now
+}
+
+rule DeclineReferral {
+    -- The tip dies (intermediary can't help, target passes, applicant drops it).
+    when: DeclineReferral(referral)
+    requires: referral.status in {open, engaged, relayed, in_review, stale}
+    ensures: referral.status = declined
+}
+
+rule ReviveReferral {
+    -- A stale tip is revived when the tipster re-engages.
+    when: ReviveReferral(referral)
+    requires: referral.status = stale
+    ensures: referral.status = open
+    ensures: referral.last_activity_at = now
+}
+
+rule AddPersonConnection {
+    -- Records a directed network edge (from_person knows to_person), bounded
+    -- by the per-user network cap.
+    when: AddPersonConnection(user, from_person, to_person, kind, strength)
+    requires: from_person != to_person
+    requires: not exists PersonConnection{user_id: user.id, from_person: from_person, to_person: to_person}
+    requires: (PersonConnection where user_id = user.id).count < config.max_connections_per_user
+    ensures: PersonConnection.created(
+        user_id: user.id,
+        from_person: from_person,
+        to_person: to_person,
+        kind: kind,
+        strength: strength,
+        created_at: now
+    )
+}
+
+-- ---------------------------------------------------------------------------
+-- Rules — GDPR (inside-track-specific erasure cascade; complements
+-- crm-gdpr.allium AnonymizePerson which ends with `not exists person`)
+-- ---------------------------------------------------------------------------
+
+rule AnonymizeCascadesToInsideTrack {
+    -- When a contact is anonymized (crm Person active|archived -> anonymized),
+    -- sever every inside-track link that re-identifies them and scrub their
+    -- reference from any NON-finalized cover-letter draft. Finalized/sent
+    -- drafts are a lawful record of what was actually sent and are NOT edited
+    -- (see TipsterReferenceResolvesLive / cv-document immutability).
+    --
+    -- VERIFIED against code (2026-06-15): anonymizePerson KEEPS the Person row
+    -- (status="anonymized" + all PII fields nulled), it does NOT delete it.
+    -- The established cascade pattern is: JobContact deleteMany (hard remove),
+    -- Interview/CrmActivityLog updateMany personId=null + scrub (detach). The
+    -- arms below match that pattern: PersonConnection hard-removed, Referral
+    -- detached (tipster=null). NOTE: crm-gdpr.allium's DeleteCrmContact rule
+    -- says `not exists person`, which DRIFTS from this implementation — flag
+    -- for `weed`; do NOT copy that assumption here.
+    when: person: crm/Person.status transitions_to anonymized
+    -- Network edges are hard-removed (they only exist to re-identify a path).
+    ensures:
+        for c in PersonConnection where from_person = person or to_person = person:
+            not exists c
+    -- G-B (Art. 17): a NetworkPath whose `via` edge is one of those removed
+    -- connections must drop the now-dangling reference.
+    ensures:
+        for r in NetworkPath where via != null and (via.from_person = person or via.to_person = person):
+            r.via = null
+    -- G-A (Art. 17): the variant-specific Person references must also be
+    -- severed, else the anonymized contact stays identifiable through them.
+    ensures:
+        for r in InsiderRelay where forwarded_to = person:
+            r.forwarded_to = null
+    ensures:
+        for r in NetworkPath where insider = person:
+            r.insider = null
+    -- Referrals are DE-IDENTIFIED, not deleted: drop the person link (so no
+    -- PII remains) but keep the row as an anonymous trace. A still-working tip
+    -- is also declined (the door-opener is gone); a tip already in a terminal
+    -- state (converted/declined) keeps its status — the Job already exists, or
+    -- it is already closed — and only loses the link. (Splitting on terminal
+    -- vs working avoids an illegal declined -> declined self-transition.)
+    ensures:
+        for r in Referral where tipster = person and status not in {converted, declined}:
+            r.tipster = null
+            r.status = declined
+    ensures:
+        for r in Referral where tipster = person and status in {converted, declined}:
+            r.tipster = null
+    -- Non-finalized drafts lose the live reference; finalized/sent drafts are
+    -- an immutable lawful record and are left untouched.
+    ensures:
+        for d in CoverLetterDraft where d.tipster_reference?.person = person and not d.finalized:
+            d.tipster_reference = null
+}
+
+-- ---------------------------------------------------------------------------
+-- Warm-path discovery surface ("lege die Beziehungen offen")
+-- ---------------------------------------------------------------------------
+
+surface WarmPathFinder {
+    -- Given a target company, reveal how the user is connected to it:
+    -- 1-hop insiders (contacts with a CompanyAssociation at the company) and
+    -- 2-hop paths (a contact who knows an insider, via PersonConnection).
+    facing viewer: User
+
+    context company: Company
+
+    exposes:
+        -- The discovered warm paths from the viewer to the target company.
+        -- Past associations (end_date set) are INCLUDED — ex-employees are
+        -- often the best door-openers.
+        find_warm_paths(viewer, company, config.max_warm_path_depth)
+
+    @guarantee ExcludesConsentBlockedPersons
+        -- G-C (Art. 7(3)): find_warm_paths never surfaces a Person who is
+        -- consent-blocked (crm processing_basis = consent AND
+        -- consent_withdrawn_at set — crm-gdpr.allium is_consent_blocked). A
+        -- contact who withdrew consent must not be suggested as a door-opener,
+        -- matching the crm-cron reminder-suppression pattern. Applies to both
+        -- 1-hop insiders and any Person on a 2-hop path.
+
+    @guidance
+        -- find_warm_paths is a black box over the viewer's CRM: it walks 1-hop
+        -- insiders (Persons with a crm/CompanyAssociation at `company`) and
+        -- 2-hop paths (a Person who, via PersonConnection, knows an insider),
+        -- capped at config.max_warm_path_depth, ranked by connection strength
+        -- and recency (active before former).
+}
+
+surface TipCapture {
+    -- Where the user records a new tip (e.g. right after the conference) and
+    -- builds out their network.
+    facing viewer: User
+
+    provides:
+        RecordInsiderTip(viewer, tipster, target_company?)
+        RecordNetworkTip(viewer, tipster, insider?, via?, target_company?)
+        AddPersonConnection(viewer, from_person, to_person, kind, strength)
+}
+
+surface ReferralWorkspace {
+    -- Manage a single referral through its lifecycle. Every action is gated on
+    -- the current status so only legal transitions are offered.
+    facing viewer: User
+    context referral: Referral where user_id = viewer.id
+
+    exposes:
+        referral.kind
+        referral.tipster
+        referral.target_company
+        referral.target_job
+        referral.status
+        referral.received_at
+        referral.last_activity_at
+
+    provides:
+        ApplicantEngages(referral)        when referral.status = open
+        IntermediaryRelays(referral)      when referral.status = engaged
+        TargetReviews(referral)           when referral.status = relayed
+        ApplicantCommitsToApply(referral)
+            when referral.status = in_review and referral.target_company != null
+        ReviveReferral(referral)          when referral.status = stale
+        DeclineReferral(referral)
+            when referral.status in {open, engaged, relayed, in_review, stale}
+
+    related:
+        WarmPathFinder(referral.target_company)
+            when referral.target_company != null
+
+    @guarantee TipsterShownLive
+        -- The displayed tipster is resolved live from the linked Person, so an
+        -- anonymized tipster shows as de-identified rather than a stale name
+        -- (consistent with TipsterReferenceResolvesLive).
+}
+
+-- ---------------------------------------------------------------------------
+-- Invariants
+-- ---------------------------------------------------------------------------
+
+invariant TipsterReferenceResolvesLive {
+    -- A tipster reference in a non-finalized cover-letter draft is resolved
+    -- live (it points at the Person, not a snapshotted name), so anonymizing
+    -- the person makes the reference disappear rather than leaking stale PII.
+    for d in CoverLetterDraft where not d.finalized and d.tipster_reference != null:
+        d.tipster_reference.person.status != anonymized
+}
+
+invariant ConvertedReferralHasJob {
+    for r in Referral where r.status = converted:
+        r.target_job != null
+}
+
+invariant NetworkPathViaConnectsTipsterToInsider {
+    -- P-C: if a NetworkPath records its `via` edge, that edge must actually
+    -- connect the tipster to the insider (from_person -> to_person). When the
+    -- GDPR cascade nulls via (whenever tipster or insider is anonymized) this
+    -- holds vacuously, so de-identified rows never violate it.
+    for r in NetworkPath where r.via != null:
+        r.via.from_person = r.tipster and r.via.to_person = r.insider
+}
+
+
+-- ---------------------------------------------------------------------------
+-- Open questions (restambiguität — to resolve in this session)
+-- ---------------------------------------------------------------------------
+
+-- DECIDED (elicitation 2026-06-15):
+--   - ONE semantic lifecycle (open->engaged->relayed->in_review->converted),
+--     shared by both variants. The two access routes are the same abstract
+--     process; only structure + per-step display label differ. (Chose this
+--     over two-entities and over superset+carving-invariants: most sustainable
+--     for new referral kinds — ROADMAP 4.10 — and Allium-idiomatic for "one
+--     aggregate, structural variants".)
+--   - GDPR: tipster referrals are de-identified (tipster -> null, declined),
+--     PersonConnection hard-removed (AnonymizeCascadesToInsideTrack).
+--   - PersonConnection is directed (from_person knows to_person), at most one
+--     per ordered pair (DistinctEndpointsPerUser).
+--   - Role becomes a controlled enum (recruiter, hiring_manager, hr, referral,
+--     tipster, former_boss, ...): this is a crm.allium change (JobContact.role
+--     / CompanyAssociation.role) — follow-up `tend` on crm.allium, NOT here.
+
+open question "resolve_applied_status fallback (P-A): when a user has no applied-kind JobStatus, is falling back to their default status the desired behaviour, or should reification be blocked / the user prompted to pick a status? A silent fallback could land the Job in a non-applied category."
+
+open question "stale_after default (21 days) — right value? Should it be configurable per user, and should a stale referral notify the user (follow-up reminder via crm-cron / notification-dispatch)?"
+
+open question "Outreach tone-gate: a referral-driven outreach to a PRIVATE contact (friend/family/former_colleague) must not use a cold-recruiter template. Where is this enforced — a guard in communication-connector keyed on ConnectionKind / processing_basis, or an automation-modes register flag? Cold templates only for arms-length tipsters?"
+
+open question "GDPR processing_basis for private network contacts (a friend who never opted in): legitimate_interest (personal job-search networking) the right default, or consent? G-F: the household exemption (Art. 2(2)(c)) does NOT cleanly apply to multi-user SaaS, so legitimate_interest needs a documented balancing test (LIA). Does adding someone as a PersonConnection change the basis vs a plain CRM Person?"
+
+open question "G-C Phase 2: the stale-referral follow-up reminder (when added) MUST suppress consent-blocked persons — same Art. 7(3) guard as WarmPathFinder.ExcludesConsentBlockedPersons and the verified crm-cron pattern. ReferralGoesStale itself only flags internal state (no person processing), so the guard belongs on the reminder/notification, not the stale transition."
+
+open question "G-D (Art. 15/20): Referral + PersonConnection must be added to the DSAR export aggregator (collect-user-data currently gathers only crm entities — persons/jobContacts/interviews). Implementation/code scope, but the data-subject-access obligation is recorded here."
+
+open question "G-E (Art. 44/5): the tipster name is intentionally rendered into a generated cover letter ('über {tipster} ...'), which conflicts with cv-document's CloudAiAlwaysRedacted when generation/review runs on a cloud AI provider — that name is third-party PII egress. Design decision for the 4.2 / cv-document integration: redact-then-reinsert locally, gate on is_local, or require explicit per-tipster consent for the named reference?"
