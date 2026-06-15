@@ -32,10 +32,10 @@ Controlled contact-role vocabulary + company-position rename. No inside-track de
 Prisma models for Referral + PersonConnection.
 
 ### Tasks
-- [ ] Task 2.1: `Referral` model (kind, nullable tipster/forwarded_to/insider/via/target_company, status, received_at, last_activity_at, updated_by_type/id, timestamps; `@@index([userId])`); `Job.sourceReferralId` back-ref. Domain model types in `src/models/`.
-- [ ] Task 2.2: `PersonConnection` model (userId, fromPersonId, toPersonId, kind, strength, notes, createdAt; `@@unique([userId, fromPersonId, toPersonId])`, indexes).
-- [ ] Task 2.3: Prisma migration; verify zero data loss + engine-rpath (NixOS) per CLAUDE.md; `prisma generate`.
-- [ ] Task 2.4: Lifecycle/transition validators (`isValidReferralTransition`) + ConnectionKind/Strength guards (ADR-019); unit tests first.
+- [x] Task 2.1: `Referral` model (kind, nullable tipster/forwarded_to/insider/via/target_company, status, received_at, last_activity_at, updated_by_type/id, timestamps; `@@index([userId])`); `Job.sourceReferralId` back-ref. Domain model types in `src/models/`.
+- [x] Task 2.2: `PersonConnection` model (userId, fromPersonId, toPersonId, kind, strength, notes, createdAt; `@@unique([userId, fromPersonId, toPersonId])`, indexes).
+- [x] Task 2.3: Prisma migration; verify zero data loss + engine-rpath (NixOS) per CLAUDE.md; `prisma generate`.
+- [x] Task 2.4: Lifecycle/transition validators (`isValidReferralTransition`) + ConnectionKind/Strength guards (ADR-019); unit tests first.
 
 ### Verification
 - [ ] Migration applies clean on a copy; tsc 0; validator unit tests green.
