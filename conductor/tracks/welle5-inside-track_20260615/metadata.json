@@ -5,15 +5,15 @@
   "status": "in_progress",
   "created": "2026-06-15T00:00:00Z",
   "updated": "2026-06-15T12:00:00Z",
-  "current_phase": 3,
-  "current_task": "3.4",
+  "current_phase": 4,
+  "current_task": "4.2",
   "phases": {
     "total": 7,
-    "completed": 3
+    "completed": 4
   },
   "tasks": {
     "total": 26,
-    "completed": 14
+    "completed": 16
   },
   "source_of_truth": [
     "specs/inside-track.allium",

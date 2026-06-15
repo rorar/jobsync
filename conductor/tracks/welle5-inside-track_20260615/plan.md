@@ -54,8 +54,8 @@ Prisma models for Referral + PersonConnection.
 ## Phase 4: Warm-Path Discovery (IT-5b)
 
 ### Tasks
-- [ ] Task 4.1: `findWarmPaths(company)` server action — 1-hop insiders (CompanyAssociation.companyId incl. former/endDate) + 2-hop (PersonConnection); rank by strength + recency (active before former). Tests.
-- [ ] Task 4.2: Consent-block exclusion (`isConsentBlocked`) for every surfaced person — satisfies `@guarantee ExcludesConsentBlockedPersons`; regression test with a withdrawn-consent person.
+- [x] Task 4.1: `findWarmPaths(company)` server action — 1-hop insiders (CompanyAssociation.companyId incl. former/endDate) + 2-hop (PersonConnection); rank by strength + recency (active before former). Tests.
+- [x] Task 4.2: Consent-block exclusion (`isConsentBlocked`) for every surfaced person — satisfies `@guarantee ExcludesConsentBlockedPersons`; regression test with a withdrawn-consent person.
 
 ### Verification
 - [ ] Finder excludes consent-blocked; depth capped at config.max_warm_path_depth; jest green.
