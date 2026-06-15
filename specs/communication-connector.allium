@@ -10,8 +10,8 @@
 -- Fulfils two existing deferred contracts:
 --   - crm.allium `deferred CommunicationConnector.sync` — inbox-sync ->
 --     CRM timeline activities (email_received / email_sent).
---   - automation-modes.allium outbound delivery (its `Outreach.deliver` black
---     box + OutreachChannel) — this spec OWNS OutreachChannel + the deliver
+--   - automation-modes.allium outbound delivery (the `DeliverOutreach` trigger
+--     it emits + OutreachChannel) — this spec OWNS OutreachChannel + the deliver
 --     operation; automation-modes references them and only GATES the send.
 -- Includes: CommunicationConnector + Modules (coarse), OutreachChannel,
 --   MessageThread, CommunicationMessage, recipient resolution, deliver, sync,
@@ -121,20 +121,23 @@ entity OutreachChannel {
 }
 
 entity MessageThread {
-    -- A conversation for one application: outbound application + any inbound
-    -- replies. Threaded to the Job (and optionally a contact). Feeds the CRM
-    -- timeline + the 9.4 reply-handling stage.
+    -- A conversation: an application's outbound message + any inbound replies.
+    -- Normally threaded to a Job; job is NULL for a contact-scoped ORPHAN thread
+    -- (inbound that matched no application — G3). Feeds the CRM timeline + the
+    -- 9.4 reply-handling stage.
     user: User
-    job: Job
+    job: Job?                      -- null = orphan / contact-scoped (G3 cold inbound)
     channel: OutreachChannel
     messages: CommunicationMessage with thread = this
 
     @invariant ThreadOwnedByUser
-        -- A thread, its job and channel all belong to the same user (ADR-015).
+        -- A thread, its (optional) job and its channel all belong to the same
+        -- user (ADR-015).
 
     @invariant OneOpenThreadPerJobChannel
-        -- At most one thread per (user, job, channel) — replies append to it
-        -- rather than forking a new conversation.
+        -- When job is set: at most one thread per (user, job, channel) — replies
+        -- append rather than forking. Job-less orphan threads are not deduped by
+        -- job (one per unmatched inbound origin).
 }
 
 entity CommunicationMessage {
@@ -152,7 +155,7 @@ entity CommunicationMessage {
 }
 
 ------------------------------------------------------------
--- Rules — outbound delivery (fulfils automation-modes Outreach.deliver)
+-- Rules — outbound delivery (the DeliverOutreach trigger automation-modes emits)
 ------------------------------------------------------------
 
 rule ResolveRecipient {
@@ -177,14 +180,19 @@ rule ResolveRecipient {
 }
 
 rule DeliverOutreach {
-    -- Fulfils automation-modes.allium outbound delivery (its Outreach.deliver).
-    when: DeliverOutreach(user, job, message, channel, recipient)
+    -- The single outbound-delivery operation. automation-modes.allium emits this
+    -- trigger directly (reconciled name — was its `Outreach.deliver` black box).
+    when: DeliverOutreach(user, job, channel)
 
     requires: exists job where job.user = user
-    requires: recipient != null
 
     ensures:
-        -- Append to the job's thread (created on first contact) and queue the send.
+        -- Resolve the recipient + the job's finalized outreach message, append to
+        -- the job thread (created on first contact) and queue the send. The
+        -- recipient is guaranteed upstream (automation-modes only calls this after
+        -- a channel resolved — DeliveryRequiresResolvedRecipient).
+        let recipient = Recipient.resolve(considering: { JobContact.email, job.company.domain })
+        let message = OutreachMessage.forJob(job)
         let thread = MessageThread{user: user, job: job, channel: channel}
         CommunicationMessage.created(
             thread: thread,
@@ -198,10 +206,10 @@ rule DeliverOutreach {
         )
 
     @guidance
-        -- The OutreachMessage CONTENT comes from application-documents; the
-        -- attachments are the bundle's documents (referenced there, not copied).
-        -- Sending to an employer is a third-party transfer (GDPR) — see
-        -- OutboundIsThirdPartyTransfer.
+        -- The OutreachMessage CONTENT comes from application-documents (the job's
+        -- finalized bundle message); attachments are the bundle's documents
+        -- (referenced there, not copied). Sending to an employer is a third-party
+        -- transfer (GDPR) — see OutboundIsThirdPartyTransfer.
 }
 
 rule MarkOutboundSent {
@@ -246,22 +254,37 @@ rule SyncInbox {
 
     ensures:
         -- Match the inbound message to its application thread (by sender / subject
-        -- / references — a black box); thread to the job and record it.
-        let thread = InboundThreading.match(considering: { user, channel, raw_message })
-        CommunicationMessage.created(
-            thread: thread,
-            direction: inbound,
-            status: received,
-            body: raw_message,
-            recipient: null,
-            sent_at: null,
-            received_at: now
-        )
+        -- / references — a black box). If matched, append; if not (G3 orphan:
+        -- cold recruiter outreach, wrong reply-to), record it on a NEW contact-
+        -- scoped (job-less) thread so it is never dropped.
+        let matched = InboundThreading.match(considering: { user, channel, raw_message })
+        if matched != null:
+            CommunicationMessage.created(
+                thread: matched,
+                direction: inbound,
+                status: received,
+                body: raw_message,
+                recipient: null,
+                sent_at: null,
+                received_at: now
+            )
+        else:
+            let orphan = MessageThread.created(user: user, job: null, channel: channel)
+            CommunicationMessage.created(
+                thread: orphan,
+                direction: inbound,
+                status: received,
+                body: raw_message,
+                recipient: null,
+                sent_at: null,
+                received_at: now
+            )
 
     @guidance
-        -- G3 threading: an inbound reply appends to the existing job thread. If no
-        -- thread matches, see open question (orphan inbound). This feeds the 9.4
-        -- reply-handling stage (LLM next-action) — cross-ref, NOT owned here.
+        -- G3 resolved: an inbound reply appends to its job thread; an unmatched
+        -- inbound lands on a job-less orphan thread (OrphanInboundNeverDropped),
+        -- still projected to the timeline (unlinked) for the user to assign to a
+        -- job later. Feeds the 9.4 reply-handling stage — cross-ref, NOT owned here.
 }
 
 rule ProjectInboundToTimeline {
@@ -314,15 +337,24 @@ invariant EveryMessageBelongsToAThread {
     -- handling read it as a thread).
 }
 
+invariant OrphanInboundNeverDropped {
+    -- G3: an inbound message that matches no application thread is recorded on a
+    -- contact-scoped (job-less) MessageThread and still projected to the CRM
+    -- timeline (unlinked, via CommunicationReceived with a null job) — never
+    -- discarded. The user can later assign the orphan thread to a job.
+}
+
 ------------------------------------------------------------
 -- Open Questions
 ------------------------------------------------------------
 
-open question "Outreach.deliver vs DeliverOutreach naming: automation-modes.allium calls the black box `Outreach.deliver`; this spec defines the `DeliverOutreach` rule. Equivalent-terms reconciliation needed — rename automation-modes' reference to this connector's operation (a follow-up tend) so one name spans both specs."
+-- Resolved (reconciled 2026-06-15): the outbound-delivery operation is named
+-- `DeliverOutreach` in BOTH specs (automation-modes emits it; this spec defines
+-- it) — the former `Outreach.deliver` black box is gone.
+-- Resolved (G3): orphan inbound -> contact-scoped (job-less) thread, never
+-- dropped (OrphanInboundNeverDropped).
 
-open question "SMTP transport sharing with 0.6: notification-dispatch.allium already has an email channel + SmtpConfig (system notifications). Does 1.12's email Module reuse the same SmtpConfig/transport, or hold its own send/receive credentials (application email often wants a different from-address + IMAP receive that notifications never need)? Boundary is clear; transport-sharing is the open detail."
-
-open question "Orphan inbound: an inbound message that matches no application thread (cold outreach, wrong reply-to, a recruiter contacting first). Create a thread-less timeline entry, a new contact-scoped thread, or hold in an unmatched inbox for the user to assign?"
+open question "SMTP transport sharing with 0.6 (G1, backlog): notification-dispatch.allium already has an email channel + SmtpConfig (system notifications). Does 1.12's email Module reuse the same SmtpConfig/transport, or hold its own send/receive credentials (application email often wants a different from-address + IMAP receive that notifications never need)? Boundary is clear; transport-sharing is an implementation detail."
 
 open question "Channel selection for an outbound send: when several channels could reach a recipient (email AND portal), who chooses — a per-automation/user channel priority (config), or per-job auto-detection (portal link present -> portal; else email)? Relates to automation-modes (which passes the channel) and ROADMAP 1.9/1.17."
 

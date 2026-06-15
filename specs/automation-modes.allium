@@ -18,10 +18,9 @@
 --     AutomationMode; this spec is the canonical owner of that enum + the
 --     effective-mode resolution it references)
 --   - Outreach delivery — channel selection, recipient/address resolution, and
---     the send itself = Communication Connector (ROADMAP 1.12 / 4.9, separate
---     bounded context, not yet specced). This spec references OutreachChannel +
---     the Outreach.deliver black box as EXTERNAL and only GATES the send; both
---     conceptually belong to the 1.12 spec when it is written.
+--     the send itself = Communication Connector (communication-connector.allium,
+--     ROADMAP 1.12 / 4.9). This spec references OutreachChannel and EMITS the
+--     `DeliverOutreach` trigger (defined there) — it only GATES the send.
 --   - Scheduler runs (scheduler-coordination.allium); Automation entity
 --     (module-lifecycle.allium); company blacklist contents (2.15)
 --   - The match-score computation (AI Connector — ai-provider.allium)
@@ -229,7 +228,7 @@ rule ExecuteAutopilotSend {
             action.updated(status: executed)
             -- Multi-channel delivery via the Communication Connector (1.12):
             -- email / portal message (1.9) / webhook / physical letter (1.17).
-            Outreach.deliver(action, action.channel)
+            DeliverOutreach(user, job, action.channel)
             -- Drive the Job to applied. crm-workflow.allium owns this transition;
             -- it sets applied/applied_date and emits JobStatusChanged, which
             -- CASCADES to the CRM timeline (crm.allium) + follow-up reminder (5.4).
@@ -300,7 +299,7 @@ rule BatchApproveAndSend {
             -- autonomous path (AutonomousSendAppliesAndCascadesCrm).
             if not AutopilotPolicy{user: user}.kill_switch_active and not Blacklist.suppresses(user, action.job):
                 action.updated(status: executed)
-                Outreach.deliver(action, action.channel)
+                DeliverOutreach(user, action.job, action.channel)
                 TransitionJobStatus(action.job, user, applied)
 
     @guidance
