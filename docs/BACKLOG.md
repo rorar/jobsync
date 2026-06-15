@@ -156,15 +156,15 @@ Voll-Detail + Chains: `docs/add-job-modal-ux-findings.md`. Verifizierter Status:
 | F-AJ | Status | Kern |
 |------|--------|------|
 | 01 Titel-Breite | **ERLEDIGT** | `md:col-span-2` da |
-| 02 Applied-Toggle → Status-ComboBox | OFFEN | hängt an F-AJ-09 |
-| 03 Status über Date Applied | OFFEN | Layout |
+| 02 Applied-Toggle → Status-ComboBox | **ERLEDIGT** (Welle 4) | `StatusStageCombobox` (`AddJob.tsx:663`); kein manueller Applied-Toggle mehr — `applied` abgeleitet via `applyStatusToApplied()` (`:371`) aus `status.category.isAppliedStage` |
+| 03 Status über Date Applied | **ERLEDIGT** (Welle 4) | `status`-Feld (`AddJob.tsx:659`) direkt über `dateApplied` (`:715`) — Kommentar `:650` |
 | 04 Due Date optional + Reset | **ERLEDIGT** (Welle 0) | `dueDate: z.date().optional()`; DatePicker `allowClear` Ghost-Button (ui-design-reviewed); `updateJob` `dueDate ?? null` (Clear persistiert); `jobs.clearDate` ×4; +5 Tests |
 | 05 Salary Slider+Währung+Fixum | **ERLEDIGT** (Welle 2) | strukturierte Salary min/max/currency/period + Fixum + JSON-Bonus; Parser `parse-salary-range.ts` + Migration `20260601191028` (salaryRange RETAINED deprecated); `JobSalaryFields.tsx`; shared `build-job-salary.ts` als server-seitige Validierungs-Boundary (ISO-4217/period/finite/min≤max-swap) über job.actions + /api/v1 + promoter; `fixumDisablesRange` UserSetting; `specs/compensation.allium`; E2E happy-path grün |
 | 06 Profil Adresse+Währung | **ERLEDIGT** (Welle 2, ADR-034) | home location + `preferredCurrency` auf Profile-Aggregat (Migration `20260601134805`); `getProfilePreferences`/`updateProfilePreferences` (atomic upsert, `Profile.userId @unique` Migration `20260601205337`); `CurrencySelect` + `ProfilePreferencesCard` |
 | CUR ISO-4217 Währungsquelle | **ERLEDIGT** (Welle 2) | Reference-Data-Module `reference-data/modules/currency/` (native `Intl`, zero-dep, 162 Codes); OHS-Actions `getCurrencyOptions`/`getCurrencyInfo` (auth-gated); `isValidCurrencyCode` als Validator wiederverwendet |
-| 07 CRM-Person im Add Job | TEILWEISE | JobContact-Backend fertig; AddJob-UI fehlt |
-| 08 Recruiter-Dreieck | OFFEN | kein `recruitingCompanyId`/`relationshipType` |
-| 09 Custom JobStatus | OFFEN | XL — JobStatus user-spezifisch + category + dyn. Kanban |
+| 07 CRM-Person im Add Job | **ERLEDIGT** (Welle 3) | `JobContactPicker` gerendert (`AddJob.tsx:858`); `addJobContact()` (`:332`, create-only) |
+| 08 Recruiter-Dreieck | **ERLEDIGT** (Welle 3) | Form `:799/:829`; persistiert `job.actions.ts:412-413` (IDOR `:376` + runtime-validate `:359`); Schema FK `:412` + index `:464`; E2E `job-crud.spec.ts:548` |
+| 09 Custom JobStatus | **ERLEDIGT** (Welle 4) | per-user `JobStatus`/`JobStatusCategory` (`schema:307/:329`); dyn. Kanban `job.actions.ts:1130` (kein hardcoded STATUS_ORDER) |
 
 ---
 
@@ -237,7 +237,7 @@ Decided-deferred during Welle 3 (CRM-Verbindung). Not bugs — scoped-out with a
 | **User-Guide CRM section** | Picker / recruiter-triangle / CRM-timeline are user-facing but undocumented for end users. | README / User-Guide |
 | **API v1 recruiter write** | ✅ DONE (post-Welle-3 follow-up, merged `3b099f2`) — POST/PATCH `/api/v1/jobs` set `recruitingCompany`+`relationshipType`. | — |
 | **`SelectFormCtrl` hardcoded "Select " prefix** | ✅ DONE (2026-06-12) — i18n'd via a new `forms.*` namespace using the project's `{label}` interpolation idiom (German verb-final word order correct). Flashlight also caught + fixed `ComboBox.tsx` (Select/Search/Create/No-results/announcements) and a hardcoded `placeholder="Select activityType"` in `TaskForm`; translated `label` wired into all combobox callers (AddJob, AddExperience, AddEducation, ActivityForm, TaskForm). | `forms.ts`, `Select.tsx`, `ComboBox.tsx` |
-| **E2E recruiter-triangle path** | Welle 3 E2E covers the contact happy-path (written, runs in suite); the recruiter triangle has no E2E yet. | `e2e/crud/job-crud.spec.ts` |
+| **E2E recruiter-triangle path** | ✅ DONE (2026-06-12) — dedicated test `should create a job with a recruiter triangle and prefill it on edit (F-AJ-08)` creates with `recruitingCompany`+`relationshipType` and asserts edit-prefill round-trip through `JOB_*_SELECT`. | `e2e/crud/job-crud.spec.ts:548` |
 
 ---
 
@@ -249,8 +249,9 @@ Decided-deferred during Welle 3 (CRM-Verbindung). Not bugs — scoped-out with a
 | PII-at-Rest (Person field-encryption, Art. 32) | multi-day | Design-Phase → Migration. Plan: `2026-05-30-next-sprint-pii-at-rest.md` |
 | M-A-09 undoStore split-brain pipe-through | 2-3 Tage | ADR-030-Amendment + Migration |
 | getStagedVacancies Cursor-Pagination | 2-3 Tage | User-Scale/Perf (präemptiv, kein Report) |
-| F-AJ-09 Custom JobStatus | XL | Allium-Spec ZUERST (State-Machine + Kanban + API) |
 | 3.11 Session-Recovery (Stale-Session Guard + usePersistedForm) | M | siehe ROADMAP 3.11 |
+
+> ~~F-AJ-09 Custom JobStatus~~ → **ERLEDIGT Welle 4** (per-user JobStatus + Kategorien + dyn. Kanban + API; `specs/job-aggregate.allium`). Aus Sprint-Liste entfernt.
 
 ---
 
@@ -264,6 +265,17 @@ Decided-deferred during Welle 3 (CRM-Verbindung). Not bugs — scoped-out with a
 - **Docs 7.x:** API v1 Phase 2+, OpenAPI-Spec
 
 → Detail + Status in `docs/ROADMAP.md` (nicht hier duplizieren).
+
+### 7a. Spec-derived deferred (Autopilot/Communication-Spec-Layer, 2026-06-15)
+
+Implementierungs-Details aus den neuen Allium-Specs (cv-document / application-documents / automation-modes / communication-connector). Domain-Verhalten ist gespect; diese sind „Wie", an der Implementierung zu klären — KEINE Spec-Lücken.
+
+- **G1 — SMTP-Transport-Sharing 1.12 ↔ 0.6** *(Backlog, Implementierung)*: Nutzt das 1.12-Email-Modul (Application-Communication) denselben `SmtpConfig`/Transport wie der 0.6-Notification-Email-Channel (System-Notifications), oder eigene Send-/Receive-Credentials (Application-Email will oft andere From-Adresse + IMAP-Receive, das Notifications nie brauchen)? **Boundary ist gespect** (`InboundFeedsCrmNotNotifications` in `communication-connector.allium`); nur das physische Transport-Sharing ist offen. Entscheidung beim Bau des 1.12-Email-Moduls.
+- **G2-Refinement — Recipient-Resolution-Precedence** *(Backlog, klein)*: `ResolveRecipient`/`Recipient.resolve` ist gespect (JobContact-Email → Company-Domain); die exakte Fallback-Reihenfolge inkl. Portal-Handle (1.9) ist Feinarbeit.
+- **Channel-Selection-Policy** *(Backlog/Design)*: per-Automation/User-Channel-Priority (config) vs. per-Job-Auto-Detection (Portal-Link → Portal, sonst Email). Relevant für `automation-modes` (übergibt den Channel) + 1.9/1.17.
+- **Delivery-Confirmation-Tiefe** *(Backlog)*: `delivered`-Status (Read-Receipts/DSN) als optionale Modul-Capability (Manifest-deklariert, wie `availabilityCheck` in 0.4) modellieren — Email liefert das selten zuverlässig.
+
+→ Spec-Details + gelöste Open Questions in den jeweiligen `specs/*.allium`.
 
 ---
 
@@ -284,11 +296,11 @@ Decided-deferred during Welle 3 (CRM-Verbindung). Not bugs — scoped-out with a
 | Implementiert (Tech-Debt-Track Runde-4, 2026-06-14) | 10 (IF-10/12, D1/D2, D4, D5, GDPR-Consent, G25, G26b, F6, CRM-Cron) |
 | CRITICAL Security offen | 0 (BS-01 ✅ erledigt Welle 0) |
 | GDPR-Long-Tail offen | 0 + 1 deferred (KeyRotation) — Consent/G25/G26b ✅ Track cluster 4 |
-| UX offen (S2-P0 ✅ + WCAG ✅3/~8 deferred + F-AJ 5) | ~13 (S2-P0 9 + WCAG 3 + F-AJ-04 erledigt Welle 0; WCAG-Rest verifiziert kontextuell/false) |
+| UX offen (S2-P0 ✅ + WCAG ✅3/~8 deferred + F-AJ ✅) | ~8 (alle F-AJ 01-09 erledigt Welle 0/2/3/4; S2-P0 9 ✅; WCAG-Rest verifiziert kontextuell/false) |
 | Arch/Tech-Debt offen | 0 — §4 vollständig abgearbeitet (Track Runde-4) |
 | Test-Lücken offen | 0 (F6, CRM-Cron ✅ Track cluster 5) |
 | CRM-Gaps offen | 0 (Gap-1/5/6/7 + F-AJ-08 alle DONE — Welle 3) |
-| Dedizierte Sprints | 6 |
+| Dedizierte Sprints | 5 (F-AJ-09 ✅ Welle 4 entfernt) |
 | ROADMAP-Vorwärts-Features | ~38 |
 | Design-gated/Akzeptiert | ~10 |
 
