@@ -43,10 +43,10 @@ Prisma models for Referral + PersonConnection.
 ## Phase 3: Referral Lifecycle & Actions (IT-5a)
 
 ### Tasks
-- [ ] Task 3.1: `referral.actions.ts` Repository (ActionResult<T>, userId-scoped, session user only): RecordInsiderTip/RecordNetworkTip (create), ApplicantEngages/IntermediaryRelays/TargetReviews/DeclineReferral/ReviveReferral (status-gated transitions). Tests first per transition (incl. illegal-transition rejection).
-- [ ] Task 3.2: `personConnection.actions.ts` (add/remove/list; from≠to guard; unique guard; max-per-user cap). Tests.
-- [ ] Task 3.3: `TipReifiesToJob` — commit-to-apply creates a Job; `resolve_applied_status` helper (applied-kind→default→any, never null) via `status-categories`; tests incl. no-applied-status fallback.
-- [ ] Task 3.4: `ReferralGoesStale` in CRM cron (`crm-cron.ts`); idempotent; consent-block respected for any reminder; test with fake clock.
+- [x] Task 3.1: `referral.actions.ts` Repository (ActionResult<T>, userId-scoped, session user only): RecordInsiderTip/RecordNetworkTip (create), ApplicantEngages/IntermediaryRelays/TargetReviews/DeclineReferral/ReviveReferral (status-gated transitions). Tests first per transition (incl. illegal-transition rejection).
+- [x] Task 3.2: `personConnection.actions.ts` (add/remove/list; from≠to guard; unique guard; max-per-user cap). Tests.
+- [x] Task 3.3: `TipReifiesToJob` — commit-to-apply creates a Job; `resolve_applied_status` helper (applied-kind→default→any, never null) via `status-categories`; tests incl. no-applied-status fallback.
+- [x] Task 3.4: `ReferralGoesStale` in CRM cron (`crm-cron.ts`); idempotent; consent-block respected for any reminder; test with fake clock.
 
 ### Verification
 - [ ] All transitions match `specs/inside-track.allium` graph; jest green; `allium:weed` 0 drift on Referral rules.
