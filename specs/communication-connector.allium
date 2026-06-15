@@ -1,0 +1,329 @@
+-- allium: 3
+-- communication-connector.allium
+
+-- Scope: Communication Connector (ROADMAP 1.12) — the ACL for application
+--   communication between the user and employers/contacts. BIDIRECTIONAL:
+--   outbound delivery of an application message via a channel, and inbound
+--   sync of received messages into the CRM timeline. A Connector (module-
+--   lifecycle.allium ConnectorType, add `communication`) with pluggable
+--   Modules (Email, PBX, Portal, LinkedIn).
+-- Fulfils two existing deferred contracts:
+--   - crm.allium `deferred CommunicationConnector.sync` — inbox-sync ->
+--     CRM timeline activities (email_received / email_sent).
+--   - automation-modes.allium outbound delivery (its `Outreach.deliver` black
+--     box + OutreachChannel) — this spec OWNS OutreachChannel + the deliver
+--     operation; automation-modes references them and only GATES the send.
+-- Includes: CommunicationConnector + Modules (coarse), OutreachChannel,
+--   MessageThread, CommunicationMessage, recipient resolution, deliver, sync,
+--   inbound threading, CRM-timeline projection (via events).
+-- Excludes:
+--   - System NOTIFICATIONS (JobSync -> user, transactional) = 0.6
+--     notification-dispatch.allium. DISTINCT concern (see boundary G1). The
+--     SMTP transport (SmtpConfig) MAY be physically shared, but notifications
+--     are NOT re-owned here.
+--   - CRM timeline storage + ActivityLog (crm.allium) — this spec EMITS
+--     communication events; the CRM projects them. Not re-owned.
+--   - OutreachMessage CONTENT (body + attachments) = application-documents.allium.
+--   - Calendar sync (ROADMAP 1.7, separate connector) — sync here is comms-only.
+--   - Autopilot mode gating / safeguards (automation-modes.allium).
+--   - Module credentials/health/resilience mechanics (module-lifecycle.allium 0.4).
+-- Dependencies: User, Job, JobContact, Company (shared); OutreachMessage,
+--   AutopilotAction (application-documents / automation-modes); RegisteredModule
+--   (module-lifecycle.allium).
+-- Owner: Communication Connector (src/lib/connector/communication/ — to build)
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity User {
+    -- Owns every channel, thread and message (ADR-015).
+}
+
+external entity Job {
+    -- The application a communication thread belongs to.
+    user: User
+    company: Company
+}
+
+external entity JobContact {
+    -- crm.allium join (Person <-> Job, optional role). Primary source of a
+    -- recipient address (the contact's email). May be absent.
+    job: Job
+    email: String?
+}
+
+external entity Company {
+    -- The hiring company. Fallback recipient source (generic application address).
+    domain: String?
+}
+
+external entity OutreachMessage {
+    -- application-documents.allium. The channel-agnostic message CONTENT to send
+    -- (body + the bundle's attached documents). This connector delivers it.
+    body: String
+}
+
+external entity RegisteredModule {
+    -- module-lifecycle.allium. A communication Module (email/pbx/portal/linkedin)
+    -- declares a manifest; health/resilience/credentials are 0.4's concern.
+}
+
+------------------------------------------------------------
+-- Enums
+------------------------------------------------------------
+
+enum ChannelKind {
+    -- The communication channels (1.12 Modules). NOT email-only.
+    email           -- SMTP/IMAP, MS Graph, Gmail API, Resend/SendGrid/Mailgun/SES
+    portal          -- e.g. Arbeitsagentur Vermittlungspostfach (1.9)
+    letter          -- physical mail (1.17 Briefversand)
+    pbx             -- telephony / call tracking
+    linkedin        -- LinkedIn / messaging
+}
+
+enum MessageDirection {
+    outbound        -- user -> employer/contact (the application)
+    inbound         -- employer/contact -> user (a reply)
+}
+
+enum MessageStatus {
+    queued          -- accepted for delivery, not yet sent
+    sent            -- handed to the channel/provider
+    delivered       -- provider confirmed delivery (where supported)
+    failed          -- delivery failed (bounce / error)
+    received        -- an inbound message synced from the channel
+}
+
+------------------------------------------------------------
+-- Value Objects
+------------------------------------------------------------
+
+value Recipient {
+    -- A resolved destination for an outbound message.
+    address: String                -- email address, portal handle, postal address, etc.
+    channel_kind: ChannelKind
+}
+
+------------------------------------------------------------
+-- Entities
+------------------------------------------------------------
+
+entity OutreachChannel {
+    -- A configured delivery channel for a user (owned HERE; automation-modes
+    -- references it). Backed by a communication Module.
+    user: User
+    kind: ChannelKind
+    module: RegisteredModule
+
+    @invariant ChannelOwnedByUser
+        -- Channels are tenant-scoped (ADR-015).
+}
+
+entity MessageThread {
+    -- A conversation for one application: outbound application + any inbound
+    -- replies. Threaded to the Job (and optionally a contact). Feeds the CRM
+    -- timeline + the 9.4 reply-handling stage.
+    user: User
+    job: Job
+    channel: OutreachChannel
+    messages: CommunicationMessage with thread = this
+
+    @invariant ThreadOwnedByUser
+        -- A thread, its job and channel all belong to the same user (ADR-015).
+
+    @invariant OneOpenThreadPerJobChannel
+        -- At most one thread per (user, job, channel) — replies append to it
+        -- rather than forking a new conversation.
+}
+
+entity CommunicationMessage {
+    thread: MessageThread
+    direction: MessageDirection
+    status: MessageStatus
+    body: String
+    source_message: OutreachMessage?  -- outbound: the OutreachMessage content it was built from
+    recipient: Recipient?          -- set for outbound (the resolved destination)
+    sent_at: Timestamp?            -- set when status reaches sent (outbound)
+    received_at: Timestamp?        -- set for inbound (received)
+
+    @invariant MessageOwnedViaThread
+        -- Ownership chain CommunicationMessage -> MessageThread -> User (ADR-015).
+}
+
+------------------------------------------------------------
+-- Rules — outbound delivery (fulfils automation-modes Outreach.deliver)
+------------------------------------------------------------
+
+rule ResolveRecipient {
+    when: ResolveRecipient(user, job)
+
+    requires: exists job where job.user = user
+
+    ensures:
+        -- Resolution chain: a JobContact's email, else the company's application
+        -- address (derived from its domain), else nothing. The black box owns the
+        -- ordering; the OUTCOME is a Recipient or null.
+        RecipientResolved(
+            job: job,
+            recipient: Recipient.resolve(considering: { JobContact.email, job.company.domain })
+        )
+
+    @guidance
+        -- G2: when no address resolves (no contact email, no company address,
+        -- no portal handle), the recipient is null. automation-modes'
+        -- HoldForMissingRecipient consumes that dead-end and HOLDS the autopilot
+        -- action — this connector never invents a destination.
+}
+
+rule DeliverOutreach {
+    -- Fulfils automation-modes.allium outbound delivery (its Outreach.deliver).
+    when: DeliverOutreach(user, job, message, channel, recipient)
+
+    requires: exists job where job.user = user
+    requires: recipient != null
+
+    ensures:
+        -- Append to the job's thread (created on first contact) and queue the send.
+        let thread = MessageThread{user: user, job: job, channel: channel}
+        CommunicationMessage.created(
+            thread: thread,
+            direction: outbound,
+            status: queued,
+            body: message.body,
+            source_message: message,
+            recipient: recipient,
+            sent_at: null,
+            received_at: null
+        )
+
+    @guidance
+        -- The OutreachMessage CONTENT comes from application-documents; the
+        -- attachments are the bundle's documents (referenced there, not copied).
+        -- Sending to an employer is a third-party transfer (GDPR) — see
+        -- OutboundIsThirdPartyTransfer.
+}
+
+rule MarkOutboundSent {
+    when: msg: CommunicationMessage.status transitions_to sent
+
+    requires: msg.direction = outbound
+
+    ensures:
+        msg.sent_at = now
+        -- Project to the CRM timeline as an email_sent activity (crm.allium owns
+        -- the projection; this connector only emits the event).
+        CommunicationSent(user: msg.thread.user, job: msg.thread.job, message: msg)
+
+    @guidance
+        -- Provider acknowledgement moves queued -> sent -> (optionally) delivered.
+        -- A bounce/error moves it to failed (DeliveryFailed).
+}
+
+rule DeliveryFailed {
+    when: msg: CommunicationMessage.status transitions_to failed
+
+    requires: msg.direction = outbound
+
+    ensures:
+        CommunicationDeliveryFailed(user: msg.thread.user, job: msg.thread.job, message: msg)
+
+    @guidance
+        -- A failed outbound send surfaces to the user (and, for an autopilot
+        -- send, marks the action for review) — never silently dropped.
+}
+
+------------------------------------------------------------
+-- Rules — inbound sync (fulfils crm.allium CommunicationConnector.sync)
+------------------------------------------------------------
+
+rule SyncInbox {
+    -- Fulfils crm.allium `deferred CommunicationConnector.sync`. Periodic poll OR
+    -- provider webhook delivers received messages; each is threaded + projected.
+    when: InboundMessageReceived(user, channel, raw_message)
+
+    requires: exists channel where channel.user = user
+
+    ensures:
+        -- Match the inbound message to its application thread (by sender / subject
+        -- / references — a black box); thread to the job and record it.
+        let thread = InboundThreading.match(considering: { user, channel, raw_message })
+        CommunicationMessage.created(
+            thread: thread,
+            direction: inbound,
+            status: received,
+            body: raw_message,
+            recipient: null,
+            sent_at: null,
+            received_at: now
+        )
+
+    @guidance
+        -- G3 threading: an inbound reply appends to the existing job thread. If no
+        -- thread matches, see open question (orphan inbound). This feeds the 9.4
+        -- reply-handling stage (LLM next-action) — cross-ref, NOT owned here.
+}
+
+rule ProjectInboundToTimeline {
+    when: msg: CommunicationMessage.status becomes received
+
+    requires: msg.direction = inbound
+
+    ensures:
+        -- crm.allium projects this into the timeline as an email_received activity.
+        CommunicationReceived(user: msg.thread.user, job: msg.thread.job, message: msg)
+
+    @guidance
+        -- The CRM timeline (crm.allium / 5.9) owns the ActivityLog; this connector
+        -- only emits CommunicationReceived. Inbound bodies carry third-party PII
+        -- into the timeline (GDPR — InboundPiiEntersTimeline).
+}
+
+------------------------------------------------------------
+-- Top-level Invariants
+------------------------------------------------------------
+
+invariant TenantIsolation {
+    -- Every channel, thread and message is scoped to its owning user (ADR-015).
+    -- Never queried by id alone; ownership chains to User.
+}
+
+invariant OutboundIsThirdPartyTransfer {
+    -- An outbound message goes to an employer/contact — a third party. The user
+    -- initiates it (manual approval, or YOLO within automation-modes safeguards).
+    -- It carries the user's own application data; no other user's data is included.
+}
+
+invariant InboundFeedsCrmNotNotifications {
+    -- G1 boundary: inbound communication is projected to the CRM TIMELINE
+    -- (crm.allium, via CommunicationReceived), NOT to the 0.6 notification system.
+    -- 0.6 notifications are JobSync->user system messages; 1.12 is user<->employer
+    -- application communication. Distinct concerns; this connector never creates
+    -- a system notification (a 0.6 consumer MAY separately notify "new reply").
+}
+
+invariant DeliveryRequiresResolvedRecipient {
+    -- DeliverOutreach never proceeds without a non-null Recipient. A missing
+    -- recipient is the dead-end consumed by automation-modes HoldForMissingRecipient
+    -- — this connector neither invents an address nor sends blind.
+}
+
+invariant EveryMessageBelongsToAThread {
+    -- Both outbound and inbound messages belong to exactly one MessageThread,
+    -- giving every application one continuous conversation (CRM timeline + reply
+    -- handling read it as a thread).
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Outreach.deliver vs DeliverOutreach naming: automation-modes.allium calls the black box `Outreach.deliver`; this spec defines the `DeliverOutreach` rule. Equivalent-terms reconciliation needed — rename automation-modes' reference to this connector's operation (a follow-up tend) so one name spans both specs."
+
+open question "SMTP transport sharing with 0.6: notification-dispatch.allium already has an email channel + SmtpConfig (system notifications). Does 1.12's email Module reuse the same SmtpConfig/transport, or hold its own send/receive credentials (application email often wants a different from-address + IMAP receive that notifications never need)? Boundary is clear; transport-sharing is the open detail."
+
+open question "Orphan inbound: an inbound message that matches no application thread (cold outreach, wrong reply-to, a recruiter contacting first). Create a thread-less timeline entry, a new contact-scoped thread, or hold in an unmatched inbox for the user to assign?"
+
+open question "Channel selection for an outbound send: when several channels could reach a recipient (email AND portal), who chooses — a per-automation/user channel priority (config), or per-job auto-detection (portal link present -> portal; else email)? Relates to automation-modes (which passes the channel) and ROADMAP 1.9/1.17."
+
+open question "Delivery confirmation depth: `delivered` status requires provider read receipts / DSN, which email rarely gives reliably. Do we model only queued->sent (best-effort) and treat `delivered` as optional per-module capability (manifest-declared), like the availabilityCheck capability in module-lifecycle?"
