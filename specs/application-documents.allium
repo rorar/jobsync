@@ -296,10 +296,10 @@ rule PrepareDocumentsOnPromotion {
 
     ensures:
         -- Semi-YOLO / YOLO (G1): a vacancy promoted by an automation auto-opens
-        -- the bundle (gate via mode). Manual mode does nothing here.
+        -- the bundle AND auto-generates its drafts. Manual mode does nothing here.
         if mode != manual:
             let cv = DefaultCv.for(user_id, job_id)
-            ApplicationBundle.created(
+            let bundle = ApplicationBundle.created(
                 user: User{id: user_id},
                 job: Job{id: job_id},
                 cv: cv,
@@ -307,6 +307,17 @@ rule PrepareDocumentsOnPromotion {
                 preparation_mode: mode,
                 created_at: now,
                 updated_at: now
+            )
+            -- Auto-generate the cover-letter draft via AI (the user's request).
+            -- Fires GenerateDocument; the draft stops at status = generated.
+            -- Semi-YOLO pauses for review; YOLO continues to finalize+send
+            -- (OnlyYoloAutoFinalizesAndSends + automation-modes safeguards).
+            GenerateDocument(
+                User{id: user_id},
+                bundle,
+                cover_letter,
+                JobLanguage.of(job_id),
+                ActiveAiProvider.of(User{id: user_id})
             )
 
     @guidance

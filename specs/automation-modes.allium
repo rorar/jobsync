@@ -45,6 +45,14 @@ external entity Job {
     match_score: Integer?          -- 0..100; null when not scored
 }
 
+external entity OutreachChannel {
+    -- The delivery channel for an autonomous application (ROADMAP 1.12
+    -- Communication Connector). NOT email-only: email (SMTP/Graph/Gmail/Resend/
+    -- SES), portal message (1.9 Arbeitsagentur Vermittlungspostfach), webhook,
+    -- physical letter (1.17 Briefversand). The module behind it is pluggable.
+    user: User
+}
+
 ------------------------------------------------------------
 -- Enums
 ------------------------------------------------------------
@@ -118,6 +126,7 @@ entity AutopilotAction {
     job: Job
     kind: AutopilotActionKind
     status: AutopilotActionStatus
+    channel: OutreachChannel?      -- the delivery channel for a send action (1.12)
     created_at: Timestamp
 
     @invariant ActionOwnedByUser
@@ -207,10 +216,17 @@ rule ExecuteAutopilotSend {
     ensures:
         if AutopilotPolicy{user: user}.dry_run:
             -- Dry-run: prepared, deliberately not sent. Reviewable + sendable later.
+            -- No delivery, no status change, no CRM entry.
             action.updated(status: dry_run)
         else:
-            -- Real send via the Communication Connector (1.12 / 4.9, external).
             action.updated(status: executed)
+            -- Multi-channel delivery via the Communication Connector (1.12):
+            -- email / portal message (1.9) / webhook / physical letter (1.17).
+            Outreach.deliver(action, action.channel)
+            -- Drive the Job to applied. crm-workflow.allium owns this transition;
+            -- it sets applied/applied_date and emits JobStatusChanged, which
+            -- CASCADES to the CRM timeline (crm.allium) + follow-up reminder (5.4).
+            TransitionJobStatus(job, user, applied)
 
     @guidance
         -- THE safeguarded gate. All five safeguards (kill-switch, blacklist,
@@ -237,6 +253,30 @@ rule SkipUnsafeSend {
     @guidance
         -- Visible in the review queue so the user sees what the autopilot did
         -- NOT send and why. (The kill-switch path produces `held`, not `skipped`.)
+}
+
+rule BatchApproveAndSend {
+    -- Semi-YOLO batch review (ROADMAP 9.4): the user reviews the prepared
+    -- applications and approves them in ONE action ("morning, approve 5 at once").
+    when: BatchApproveAndSend(user, actions)
+
+    requires: exists user
+
+    ensures:
+        for action in actions:
+            -- User approval IS the authority for a Semi-YOLO send (no yolo gate),
+            -- but the safety guards still hold: never while the kill-switch is on,
+            -- never to a blacklisted company. Delivery + apply mirror the
+            -- autonomous path (AutonomousSendAppliesAndCascadesCrm).
+            if not AutopilotPolicy{user: user}.kill_switch_active and not Blacklist.suppresses(user, action.job):
+                action.updated(status: executed)
+                Outreach.deliver(action, action.channel)
+                TransitionJobStatus(action.job, user, applied)
+
+    @guidance
+        -- Semi-YOLO's one-click batch approval. The daily-limit + match-score
+        -- safeguards are autopilot-spam guards and do NOT bind a deliberate
+        -- user approval; the kill-switch + blacklist still do.
 }
 
 ------------------------------------------------------------
@@ -268,7 +308,16 @@ invariant DailyLimitCapsSends {
 
 invariant DryRunNeverSends {
     -- While AutopilotPolicy.dry_run, send-actions reach status = dry_run, never
-    -- executed — the autopilot does everything except actually submit.
+    -- executed — the autopilot does everything except actually submit. No
+    -- delivery, no Job status change, no CRM entry for a dry-run action.
+}
+
+invariant AutonomousSendAppliesAndCascadesCrm {
+    -- A successful (non-dry-run) autonomous send delivers via an OutreachChannel
+    -- (1.12) AND drives the Job to applied (crm-workflow.allium TransitionJobStatus).
+    -- That transition emits JobStatusChanged, which cascades to the CRM timeline
+    -- (crm.allium) + follow-up reminder (5.4). This spec does NOT re-own status
+    -- or CRM — it triggers the transition; the cascade is owned downstream.
 }
 
 invariant BlacklistedCompaniesNeverAutoSent {
@@ -279,6 +328,8 @@ invariant BlacklistedCompaniesNeverAutoSent {
 ------------------------------------------------------------
 -- Open Questions
 ------------------------------------------------------------
+
+open question "Reply-handling loop (ROADMAP 9.4 YOLO: 'on reply, the LLM analyses & suggests the next action'): when a sent application receives an inbound reply (Communication Connector inbox-sync 1.12 + CRM timeline), the autopilot should propose/take a next action. Is this modelled here (a post-send AutopilotAction kind) or owned by a communication/CRM spec with this spec only gating whether the suggestion auto-executes? Currently out of scope — captured as the next pipeline stage."
 
 open question "Daily limit scope: does daily_application_limit count only autonomous SENDS (current model — executed send-actions), or also Semi-YOLO drafts awaiting approval? Counting only sends means a user can have many drafts queued but ≤ N actually go out per day."
 
