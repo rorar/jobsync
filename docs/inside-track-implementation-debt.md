@@ -124,3 +124,24 @@ resume has one entry point. **SoT stays the Allium spec.**
 **When unblocked:** create a conductor track (e.g. `welle6-inside-track-outreach` / `-coverletter`),
 resolve the open question above first (allium:tend on inside-track + the blocker spec), then implement.
 
+## F. Deferred internal enhancement — referral CRM-timeline projection (NOT roadmap-gated)
+
+**Status:** deferred, no track. Discoverable now (no external blocker) — unlike §E. Surfaced
+during the Phase-3 honesty gate (verified vs code 2026-06-15).
+
+- **Gap:** Referral *lifecycle* changes (record, the working-state transitions open→engaged→
+  relayed→in_review, stale) do **not** appear on any CRM timeline. `crm-activity-logger.ts`
+  registers `registerProjection()` for JobStatusChanged / Contact* / Interview* / CrmTask* —
+  **none for Referral / PersonConnection**. Phase 3 emits no referral domain events.
+- **Not a defect:** the Allium spec defines no referral events, so nothing *expects* them
+  (no broken contract). Partial visibility already exists: `commitReferralToApply` emits
+  `JobStatusChanged`, so the **converted** referral's reified Job shows on the Job timeline —
+  only the referral's own pre-conversion lifecycle is invisible.
+- **To implement (when prioritized):** add Referral event types (e.g. `ReferralRecorded`,
+  `ReferralStatusChanged`) to `event-types.ts` + Zod in `event-schemas.ts` (the
+  `satisfies z.ZodType` link), emit from `referral.actions.ts` (create + `transitionReferral` +
+  commit), then add `registerProjection()` calls in `crm-activity-logger.ts` → `CrmActivityLog`
+  (new `activityType` value). Natural companion to a Phase-5 referral timeline panel, or a
+  follow-up. SoT stays `specs/inside-track.allium` (gain the event/projection rules via
+  allium:tend first).
+
