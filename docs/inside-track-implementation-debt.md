@@ -93,3 +93,34 @@ graph TD
 
 **Critical path:** IT-4 → (IT-3 ∥ IT-5 ∥ IT-6). IT-1/IT-2 fully parallel to everything.
 IT-7/IT-8 are blocked by external roadmap items (cv-document 4.2, 1.12) — defer until those land.
+
+## E. Phase 2 — Gated extensions: design context (deferred, NOT yet tracked)
+
+These are **out of welle5 scope** and have **no conductor track** (deliberate — creating
+one now is premature; register a track when the blocker is prioritized). Their design
+substance lives in `specs/inside-track.allium` `open question`s; consolidated here so a cold
+resume has one entry point. **SoT stays the Allium spec.**
+
+### IT-8 — Referral outreach tone-gate
+- **Blocker / trigger:** 1.12 Communication Connector implemented (spec `communication-connector.allium` exists; no code). Start when 1.12 lands.
+- **Open design question (verbatim from `specs/inside-track.allium`):** a referral-driven
+  outreach to a PRIVATE contact (friend/family/former_colleague) must not use a cold-recruiter
+  template. **Where is it enforced** — a guard in communication-connector keyed on
+  `ConnectionKind` / `processing_basis`, or an automation-modes register flag? Cold templates
+  only for arms-length tipsters?
+- **SoT anchors:** `inside-track.allium` scope note (outreach "register"), `ConnectionKind` enum, `PersonConnection`.
+
+### IT-7 — Cover-letter tipster reference
+- **Blocker / trigger:** cv-document 4.2 built (`cv-document.allium` is DRAFT; no CoverLetter/CvDocument code/model). Start when 4.2 lands.
+- **Open design question (G-E, verbatim):** the tipster name is intentionally rendered into a
+  generated cover letter ("über {tipster} …"), which conflicts with cv-document's
+  `CloudAiAlwaysRedacted` when generation/review runs on a cloud AI provider — that name is
+  third-party PII egress. **Design decision for the 4.2 integration:** redact-then-reinsert
+  locally, gate on `is_local`, or require explicit per-tipster consent for the named reference?
+- **SoT anchors:** `inside-track.allium` `external entity CoverLetterDraft` (FORWARD-LOOKING comment),
+  `value TipsterReference`, `invariant TipsterReferenceResolvesLive`, the draft-scrub arm of
+  `AnonymizeCascadesToInsideTrack`.
+
+**When unblocked:** create a conductor track (e.g. `welle6-inside-track-outreach` / `-coverletter`),
+resolve the open question above first (allium:tend on inside-track + the blocker spec), then implement.
+

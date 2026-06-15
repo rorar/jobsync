@@ -32,6 +32,11 @@ pick up when unblocked.
 | [ ] | [salary-calculator_20260601](./tracks/salary-calculator_20260601/index.md) | Salary Calculator — Gross↔Net Module (Discovery) | L | Welle 2 Phase 3 shipped + discovery spike picks per-country approach + Connector classification ADR |
 | [ ] | [company-perks_20260601](./tracks/company-perks_20260601/index.md) | Company Perks / Gimmicks (extensible multiselect) | M | Product scheduling (best after Phase 3; links to salary-calculator) |
 
+> **Gated, not-yet-tracked:** inside-track **Phase 2** — IT-7 cover-letter tipster reference
+> (← cv-document 4.2) and IT-8 outreach tone-gate (← 1.12 Communication). Design context +
+> open questions in `docs/inside-track-implementation-debt.md` §E. Register as conductor tracks
+> when their blocker is prioritized (SoT = `specs/inside-track.allium`).
+
 ## Suggested Execution Order
 
 The four Wellen are independent tracks but share a sensible order:
