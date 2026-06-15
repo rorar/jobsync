@@ -38,7 +38,9 @@ interface RecordNetworkTipInput {
 async function assertUsablePerson(
   personId: string,
   userId: string,
-): Promise<{ ok: true } | { ok: false; message: string }> {
+): Promise<
+  { ok: true } | { ok: false; message: "crm.errors.personNotFound" | "crm.errors.consentWithdrawn" }
+> {
   const person = await prisma.person.findFirst({
     where: { id: personId, userId },
     select: { processingBasis: true, consentWithdrawnAt: true },
@@ -243,6 +245,10 @@ export async function commitReferralToApply(
           jobTitleId: jobTitle.id,
           statusId,
           sourceReferralId: referral.id,
+          // Placeholder fields for a speculative application — user edits later.
+          description: "",
+          jobType: "",
+          createdAt: new Date(),
         },
         select: { id: true, Status: { select: { value: true } } },
       });
