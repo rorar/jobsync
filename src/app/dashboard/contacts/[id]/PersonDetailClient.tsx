@@ -13,6 +13,7 @@ import { getJobContactsForPerson, removeJobContact } from "@/actions/jobContact.
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { isValidJobContactRole } from "@/models/job.model";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -474,8 +475,14 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{jobTitle}</p>
                         <p className="text-sm text-muted-foreground truncate">{company}</p>
-                        {Boolean(jc.role) && (
-                          <p className="text-xs text-muted-foreground mt-1">{t("crm.contactRole")}: {String(jc.role)}</p>
+                        {isValidJobContactRole(jc.role) && (
+                          <Badge
+                            variant="secondary"
+                            className="mt-1 text-xs font-normal"
+                            aria-label={`${t("crm.contactRole")}: ${t(`crm.jobContactRole.${jc.role}`)}`}
+                          >
+                            {t(`crm.jobContactRole.${jc.role}`)}
+                          </Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-2 ml-3">
