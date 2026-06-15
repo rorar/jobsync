@@ -256,6 +256,27 @@ entity ApplicationFile {
         -- (same rule as the Gsync File model). Serve via an authenticated route.
 }
 
+entity OutreachMessage {
+    -- The channel-AGNOSTIC submission message (the cover note) the user sends
+    -- with the application. CONTENT lives here (bundle artifact, reviewed in
+    -- Semi-YOLO alongside the docs). The CHANNEL, recipient resolution and
+    -- actual delivery are the Communication Connector's concern (ROADMAP 1.12),
+    -- NOT here. The attachments ARE the bundle's GeneratedDocuments + Attachments
+    -- (not duplicated). One per bundle.
+    bundle: ApplicationBundle
+    body: String                   -- LLM-generated cover note; same content per channel
+    status: DocumentStatus         -- reuse draft/generated/edited/final (review lifecycle)
+    generated_by: AiProvider?
+    created_at: Timestamp
+    updated_at: Timestamp
+
+    @invariant OneOutreachMessagePerBundle
+        -- At most one OutreachMessage per bundle. It is reviewed and finalized
+        -- together with the generated documents (Semi-YOLO review covers docs +
+        -- CV + this message); body is immutable once final (mirrors
+        -- FinalContentImmutable for GeneratedDocument).
+}
+
 ------------------------------------------------------------
 -- Rules — bundle assembly
 ------------------------------------------------------------
@@ -318,6 +339,17 @@ rule PrepareDocumentsOnPromotion {
                 cover_letter,
                 JobLanguage.of(job_id),
                 ActiveAiProvider.of(User{id: user_id})
+            )
+            -- Also draft the channel-agnostic outreach message (cover note) for
+            -- review. Delivery channel/recipient are resolved later by the
+            -- Communication Connector (1.12), not here.
+            OutreachMessage.created(
+                bundle: bundle,
+                body: Llm.outreachMessage(bundle, JobLanguage.of(job_id)),
+                status: generated,
+                generated_by: ActiveAiProvider.of(User{id: user_id}),
+                created_at: now,
+                updated_at: now
             )
 
     @guidance
@@ -560,6 +592,8 @@ invariant DocumentFilenameFollowsConvention {
 ------------------------------------------------------------
 -- Open Questions (remaining)
 ------------------------------------------------------------
+
+open question "OutreachMessage vs cover_letter overlap: in some flows the submission message body IS the cover letter (Anschreiben inline), in others it is a short cover note with the Anschreiben as a separate attached document. Is OutreachMessage.body always distinct from the cover_letter GeneratedDocument, or may it be derived from / replaced by it per channel (e.g. email body = Anschreiben text; portal upload = Anschreiben PDF + short note)?"
 
 open question "Template management scope: is DocumentTemplate (create/edit/version/share via the 4.2 manifest pagebuilder) substantial enough to warrant its own spec, or does it stay here? It overlaps the CV template system (4.2.1 pdfme templates) — shared template aggregate?"
 

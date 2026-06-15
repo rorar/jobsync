@@ -17,7 +17,11 @@
 --   - Document generation (application-documents.allium — already gates on
 --     AutomationMode; this spec is the canonical owner of that enum + the
 --     effective-mode resolution it references)
---   - E-mail sending / Communication Connector (ROADMAP 1.12 / 4.9)
+--   - Outreach delivery — channel selection, recipient/address resolution, and
+--     the send itself = Communication Connector (ROADMAP 1.12 / 4.9, separate
+--     bounded context, not yet specced). This spec references OutreachChannel +
+--     the Outreach.deliver black box as EXTERNAL and only GATES the send; both
+--     conceptually belong to the 1.12 spec when it is written.
 --   - Scheduler runs (scheduler-coordination.allium); Automation entity
 --     (module-lifecycle.allium); company blacklist contents (2.15)
 --   - The match-score computation (AI Connector — ai-provider.allium)
@@ -46,10 +50,12 @@ external entity Job {
 }
 
 external entity OutreachChannel {
-    -- The delivery channel for an autonomous application (ROADMAP 1.12
-    -- Communication Connector). NOT email-only: email (SMTP/Graph/Gmail/Resend/
-    -- SES), portal message (1.9 Arbeitsagentur Vermittlungspostfach), webhook,
-    -- physical letter (1.17 Briefversand). The module behind it is pluggable.
+    -- The delivery channel for an autonomous application. OWNED by the future
+    -- 1.12 Communication Connector spec — channel selection (which channel for a
+    -- job), recipient/address resolution, and delivery live THERE, not here; this
+    -- spec only references the channel + gates the send. NOT email-only: email
+    -- (SMTP/Graph/Gmail/Resend/SES), portal message (1.9 Arbeitsagentur
+    -- Vermittlungspostfach), webhook, physical letter (1.17 Briefversand).
     user: User
 }
 
@@ -212,6 +218,7 @@ rule ExecuteAutopilotSend {
     requires: job.match_score != null
     requires: job.match_score >= AutopilotPolicy{user: user}.match_score_minimum
     requires: DailySendCount.of(user) < AutopilotPolicy{user: user}.daily_application_limit
+    requires: action.channel != null
 
     ensures:
         if AutopilotPolicy{user: user}.dry_run:
@@ -236,6 +243,29 @@ rule ExecuteAutopilotSend {
         -- Manual + Semi-YOLO modes never auto-send: Semi-YOLO produces a draft
         -- and waits for the user's one-click approval (application-documents
         -- OnlyYoloAutoFinalizesAndSends).
+}
+
+rule HoldForMissingRecipient {
+    when: AutopilotSendRequested(user, automation, job, action)
+
+    -- Would have auto-sent (yolo, match ok), but no deliverable channel/recipient
+    -- resolved. Channel + recipient resolution belong to the Communication
+    -- Connector (1.12); when it yields nothing (no email address, no portal, no
+    -- postal address), the autopilot HOLDS the application — never drops a viable
+    -- job, never sends blind.
+    requires: EffectiveAutomationMode.of(user, automation) = yolo
+    requires: job.match_score != null
+    requires: job.match_score >= AutopilotPolicy{user: user}.match_score_minimum
+    requires: action.channel = null
+
+    ensures:
+        action.updated(status: held)
+
+    @guidance
+        -- The no-recipient dead-end (deep-think branch). The held action sits in
+        -- the review queue for the user to add a recipient/channel. Distinct from
+        -- kill-switch `held` (which DeactivateKillSwitch re-pends in bulk) — this
+        -- one waits on recipient data, not on the switch.
 }
 
 rule SkipUnsafeSend {
@@ -310,6 +340,13 @@ invariant DryRunNeverSends {
     -- While AutopilotPolicy.dry_run, send-actions reach status = dry_run, never
     -- executed — the autopilot does everything except actually submit. No
     -- delivery, no Job status change, no CRM entry for a dry-run action.
+}
+
+invariant NeverSendWithoutResolvedChannel {
+    -- No send-action reaches status = executed without a resolved deliverable
+    -- channel (action.channel != null). A missing channel/recipient yields
+    -- held (HoldForMissingRecipient), never a silent drop or a blind send.
+    -- Channel + recipient resolution is owned by the Communication Connector (1.12).
 }
 
 invariant AutonomousSendAppliesAndCascadesCrm {
