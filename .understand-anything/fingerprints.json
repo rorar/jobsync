@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "gitCommitHash": "317a95d51f4e29feb5fff285e1b67ebbaf41feef",
-  "generatedAt": "2026-06-15T18:09:59.231Z",
+  "gitCommitHash": "2851eb45400ff3a8ad4e574e27f4077be42bf029",
+  "generatedAt": "2026-06-15T22:07:21.569Z",
   "files": {
     "__mocks__/next-auth-providers.ts": {
       "filePath": "__mocks__/next-auth-providers.ts",
@@ -11459,6 +11459,46 @@
       "totalLines": 154,
       "hasStructuralAnalysis": true
     },
+    "__tests__/warmPath.actions.spec.ts": {
+      "filePath": "__tests__/warmPath.actions.spec.ts",
+      "contentHash": "a20130c1131601d64131f04a25a883ecf81be23ab80c228a914ac9772b1c9d5c",
+      "functions": [
+        {
+          "name": "person",
+          "params": [
+            "id",
+            "companies",
+            "extra"
+          ],
+          "exported": false,
+          "lineCount": 10
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/actions/warmPath.actions",
+          "specifiers": [
+            "findWarmPaths"
+          ]
+        },
+        {
+          "source": "@/utils/user.utils",
+          "specifiers": [
+            "getCurrentUser"
+          ]
+        },
+        {
+          "source": "@prisma/client",
+          "specifiers": [
+            "PrismaClient"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 149,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/wcag-motion-reduce.spec.tsx": {
       "filePath": "__tests__/wcag-motion-reduce.spec.tsx",
       "contentHash": "6db0cf3f99950d1b0ad87ba7203bdcfd5f11cfd8e179c308f3597f0b33c80bad",
@@ -12464,7 +12504,7 @@
     },
     "conductor/tracks/welle5-inside-track_20260615/metadata.json": {
       "filePath": "conductor/tracks/welle5-inside-track_20260615/metadata.json",
-      "contentHash": "caf23835b734a8562abc49e62d410b7ab977ecf25491000d529788d608390e36",
+      "contentHash": "d29c665306fe10073ed459c58563e52b3f312d6a2667bc8ee35ccc9ae54fbf62",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -12474,7 +12514,7 @@
     },
     "conductor/tracks/welle5-inside-track_20260615/plan.md": {
       "filePath": "conductor/tracks/welle5-inside-track_20260615/plan.md",
-      "contentHash": "9e4284c52ce9aad2593e606bd4054aca98ceac693b873c81611525f330b7347e",
+      "contentHash": "d33cc4409640dce5fed122e15bf8086ed02ca219dfd72e390218e515ae027599",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -13404,12 +13444,12 @@
     },
     "docs/inside-track-implementation-debt.md": {
       "filePath": "docs/inside-track-implementation-debt.md",
-      "contentHash": "5c99999a1149d1247ea5fc153552ef558a281dc2295b2f9494d2e0faed21e0dc",
+      "contentHash": "f94a637cefa1664c2929d8409ceda0fd5e6aeb295d55602421ac5dae98e8d838",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 127,
+      "totalLines": 148,
       "hasStructuralAnalysis": true
     },
     "docs/interface-fragility-analysis.md": {
@@ -23326,6 +23366,79 @@
         "getNotificationPreferencesForUser"
       ],
       "totalLines": 280,
+      "hasStructuralAnalysis": true
+    },
+    "src/actions/warmPath.actions.ts": {
+      "filePath": "src/actions/warmPath.actions.ts",
+      "contentHash": "6167a6f190b703dd53f8f02db5ac6d0d9f981e97c4af9e8c11e5ad126975d586",
+      "functions": [
+        {
+          "name": "fullName",
+          "params": [
+            "p"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "findWarmPaths",
+          "params": [
+            "companyId"
+          ],
+          "returnType": "Promise<ActionResult<WarmPaths>>",
+          "exported": true,
+          "lineCount": 80
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "server-only",
+          "specifiers": []
+        },
+        {
+          "source": "@/lib/db",
+          "specifiers": [
+            "prisma"
+          ]
+        },
+        {
+          "source": "@/utils/user.utils",
+          "specifiers": [
+            "getCurrentUser"
+          ]
+        },
+        {
+          "source": "@/models/actionResult",
+          "specifiers": [
+            "ActionResult"
+          ]
+        },
+        {
+          "source": "@/lib/utils",
+          "specifiers": [
+            "handleError"
+          ]
+        },
+        {
+          "source": "@/models/person.model",
+          "specifiers": [
+            "parseCompanies",
+            "isConsentBlocked"
+          ]
+        },
+        {
+          "source": "@/models/insideTrack.model",
+          "specifiers": [
+            "ConnectionStrength"
+          ]
+        }
+      ],
+      "exports": [
+        "findWarmPaths"
+      ],
+      "totalLines": 137,
       "hasStructuralAnalysis": true
     },
     "src/actions/webhook.actions.ts": {
