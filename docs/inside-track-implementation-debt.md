@@ -1,8 +1,15 @@
 # Inside Track — Implementation Debt (ordered)
 
 Snapshot 2026-06-15. Spec layer DONE (`inside-track.allium` + `crm.allium` role changes +
-`crm-gdpr.allium` erasure fix, branch `inside-track-spec`, 0 allium errors). **No code written yet.**
+`crm-gdpr.allium` erasure fix, branch `inside-track-spec`, 0 allium errors).
 This file orders the implementation work + verifies it against `/tmp/jobsync-open-items.md`.
+
+> **STATUS 2026-06-20 — IMPLEMENTED (Welle 5, branch `welle-5-inside-track`).** IT-1..IT-6
+> shipped across Phases 1–7 (models + migration, referral lifecycle + actions, warm-path
+> discovery, UI at `/dashboard/referrals` + WarmPathFinder, GDPR anonymize cascade + DSAR
+> export). IT-7 (cover-letter tipster ref) and IT-8 (outreach tone-gate) remain **gated**
+> (§E — blocked on cv-document 4.2 / 1.12 Communication). **§F** (referral CRM-timeline
+> projection) is still deferred (no external blocker; pick up when prioritised).
 
 All facts below verified against current code this session (FEEDING-RULE: graph = hypothesis).
 
@@ -144,4 +151,24 @@ during the Phase-3 honesty gate (verified vs code 2026-06-15).
   (new `activityType` value). Natural companion to a Phase-5 referral timeline panel, or a
   follow-up. SoT stays `specs/inside-track.allium` (gain the event/projection rules via
   allium:tend first).
+
+## G. Deferred UI follow-ups (Welle 5 wrap, 2026-06-20)
+
+Not defects — deliberate deferrals decided at the Welle-5 wrap-up.
+
+- **Inline quick-create in entity pickers** (`crm/ContactPicker`, `crm/CompanyPicker`) —
+  today select-existing only. **Product-approved future UX:** create a contact/company in
+  place, without leaving the screen. Contact-create needs a *minimal-capture quick-form*
+  (name + email min, flag the rest) so it never spawns privacy-incomplete records;
+  company-create can mirror the AddJob create-on-type flow. **Complements ROADMAP 2.20
+  (Spotlight / Command-Palette Action-Registry) + 2.16 (Keyboard Shortcuts).**
+- **Combobox consolidation onto `ui/base-combobox.tsx`** (C4 ComboBox analysis,
+  Recommendation 2). The Inside Track pickers + the ~9 other specialised comboboxes still
+  hand-roll the Popover+Command shell. `BaseCombobox` currently lacks a trigger `aria-label`,
+  an `aria-live` announce, a loading slot, and overridable width/`capitalize` — so migrating
+  piecemeal would **regress a11y**. Do as ONE cross-cutting pass: enhance `BaseCombobox` with
+  those, then migrate all variants. (Why deferred from the Welle-5 wrap: scoped, not piecemeal.)
+- **Referral `via` capture** — handled server-side (`recordNetworkTip` auto-resolves the
+  tipster→insider `PersonConnection` when both are set; ≤1 edge per ordered pair per
+  `DistinctEndpointsPerUser`), so no manual `via` UI field is needed.
 

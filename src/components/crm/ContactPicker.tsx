@@ -114,8 +114,8 @@ interface ContactPickerProps {
  * Originally the Add-Job point-of-contact picker (Welle 3, F-AJ-07); promoted to
  * the shared CRM location in Welle 5 so the Inside Track tip-capture forms reuse
  * it (a Person/contact widget belongs to the CRM context, not the Job or
- * Inside-Track feature dir). Select-existing only — inline person creation is
- * out of scope (a Person needs more than a typed label; creation lives on
+ * Inside-Track feature dir). Select-existing for now — inline quick-create is a
+ * deferred future UX (needs a minimal-capture quick-form; full creation lives on
  * /contacts).
  *
  * Mirrors the CountrySelect pattern: props-based options, cmdk

@@ -56,8 +56,11 @@ Per-status workspace rendering:
 | declined | none (terminal) + "Declined" banner | declined indicator |
 | stale | Revive | stale badge, prior step greyed |
 
-Decline lives in the **header** (`variant="ghost" text-destructive`), present for non-terminal,
-non-stale statuses — keeps the forward-path action bar single-purpose.
+Decline lives in the **action bar** (`ReferralActionBar` — destructive ghost button + an
+AlertDialog confirm), present for every working state (open/engaged/relayed/in_review/stale).
+(The Allium SoT `DeclineReferral` permits decline from all of these, incl. `stale`. An earlier
+draft placed it in the header to keep the forward row single-purpose; the shipped design groups
+all actions and guards the destructive one with a confirm dialog instead.)
 
 ## D. Lifecycle rail (accessible, Shadcn-only)
 
