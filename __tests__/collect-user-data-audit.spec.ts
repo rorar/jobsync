@@ -145,3 +145,38 @@ describe("collectUserData → person.pii_read audit (S6b)", () => {
     expect(auditMock).not.toHaveBeenCalled();
   });
 });
+
+describe("collectUserData → Inside Track export (Art. 15/20)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (db as unknown as { person: { findMany: jest.Mock } }).person.findMany.mockResolvedValue([]);
+  });
+
+  it("includes referrals and personConnections in the export", async () => {
+    (db as unknown as { referral: { findMany: jest.Mock } }).referral.findMany.mockResolvedValue([
+      { id: "r1", kind: "insider_relay", status: "open" },
+    ]);
+    (
+      db as unknown as { personConnection: { findMany: jest.Mock } }
+    ).personConnection.findMany.mockResolvedValue([
+      { id: "pc1", fromPersonId: "a", toPersonId: "b", kind: "friend", strength: "close" },
+    ]);
+
+    const result = await collectUserData("user-id");
+
+    expect(result.referrals).toHaveLength(1);
+    expect(result.referrals[0].id).toBe("r1");
+    expect(result.personConnections).toHaveLength(1);
+    expect(result.personConnections[0].id).toBe("pc1");
+  });
+
+  it("scopes the referral + connection queries to the user (ADR-015)", async () => {
+    await collectUserData("user-xyz");
+    expect(
+      (db as unknown as { referral: { findMany: jest.Mock } }).referral.findMany,
+    ).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-xyz" } }));
+    expect(
+      (db as unknown as { personConnection: { findMany: jest.Mock } }).personConnection.findMany,
+    ).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-xyz" } }));
+  });
+});
