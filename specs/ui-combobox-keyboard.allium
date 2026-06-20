@@ -364,6 +364,15 @@ surface ComboboxKeyboardSurface {
         -- to communicate popover state to screen readers. The trigger
         -- button MUST also include type="button" to prevent accidental
         -- form submission when used inside a <form> element.
+
+    @guarantee TriggerHasAccessibleName
+        -- Every combobox trigger button MUST expose a stable accessible name
+        -- to assistive technology, independent of the currently-selected label.
+        -- When the visible content is a placeholder, an icon, or an ambiguous
+        -- truncated label, the trigger MUST carry an aria-label (or
+        -- aria-labelledby referencing a visible <label>) naming the field's
+        -- purpose (e.g. "Contact", "Company", "Location"). The accessible name
+        -- never collapses to empty when nothing is selected.
 }
 
 ------------------------------------------------------------

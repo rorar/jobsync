@@ -38,6 +38,7 @@ entity ComboboxState {
     highlighted_index: Integer?       -- cmdk-managed aria-selected item index
     selected_id: String?              -- the id of the currently selected option
     is_creating: Boolean              -- whether an async onCreateOption call is in flight
+    is_loading_options: Boolean       -- whether an async option fetch (remote search) is in flight; distinct from is_creating
     options: Set<Option>              -- available options in the dropdown
     field: FormField                  -- bound react-hook-form field
     creatable: Boolean                -- enables creation UI
@@ -232,6 +233,22 @@ rule CreateAsyncFailure {
         -- Error display is the caller's responsibility.
 }
 
+-- 4. Asynchronous Option Loading (remote search)
+
+rule AsyncOptionsLoading {
+    -- The caller toggles this slot around an in-flight remote-search fetch.
+    when: SetOptionsLoading(state, loading)
+    ensures: state.is_loading_options = loading
+
+    @guidance
+        -- The caller wires its own debounced fetch (onInputValueChange) and
+        -- toggles this slot around the await. While is_loading_options is true,
+        -- BaseCombobox shows a Loader in the list area and does NOT render
+        -- CommandEmpty (this prevents a "no results" flash during in-flight
+        -- remote search). The fetch itself is caller-owned per
+        -- CallerOwns: data fetching.
+}
+
 -- =============================================================================
 -- Invariants
 -- =============================================================================
@@ -341,6 +358,12 @@ rule CallerOwns {
 -- Open Questions
 -- =============================================================================
 
-open question "Should BaseCombobox accept an onSearch callback for debounced remote search, or should callers wire onInputValueChange to their own debounce logic?"
+-- RESOLVED: "Should BaseCombobox accept an onSearch callback for debounced remote search,
+-- or should callers wire onInputValueChange to their own debounce logic?"
+-- Decision: search stays caller-owned (CallerOwns: data fetching). BaseCombobox does NOT
+-- own the fetch or any debounce logic. It exposes only a loading slot (is_loading_options)
+-- plus its indicator: a Loader in the list area and suppression of CommandEmpty while true.
+-- Callers wire their own debounced fetch (onInputValueChange) and toggle the slot around
+-- the await. See rule AsyncOptionsLoading.
 open question "Should the options.unshift mutation in ComboBox.tsx be fixed as part of the BaseCombobox adoption, or tracked as a separate defect?"
 open question "Should BaseCombobox support a maxItems prop and disabled-trigger guard for multi-select variants, or is that purely a Layer 3 concern?"
