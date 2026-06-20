@@ -63,10 +63,10 @@ import { createJobTitle } from "@/actions/jobtitle.actions";
 import { addCompany } from "@/actions/company.actions";
 import { createLocation, createJobSource } from "@/actions/job.actions";
 import {
-  JobContactPicker,
+  ContactPicker,
   toPersonOption,
   type PersonOption,
-} from "./JobContactPicker";
+} from "@/components/crm/ContactPicker";
 import { addJobContact } from "@/actions/jobContact.actions";
 import { getPersons } from "@/actions/person.actions";
 import type { CompanyAssociation, TypedEmail } from "@/models/person.model";
@@ -855,7 +855,7 @@ export function AddJob({
                         <FormItem className="flex flex-col">
                           <FormLabel>{t("crm.pointOfContact")}</FormLabel>
                           <FormControl>
-                            <JobContactPicker
+                            <ContactPicker
                               value={field.value ?? ""}
                               onValueChange={(personId) => {
                                 field.onChange(personId);
