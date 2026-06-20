@@ -117,9 +117,15 @@ export async function recordNetworkTip(
     if (input.viaId) {
       const via = await prisma.personConnection.findFirst({
         where: { id: input.viaId, userId: user.id },
-        select: { id: true },
+        select: { fromPersonId: true, toPersonId: true },
       });
       if (!via) return { success: false, message: "crm.errors.connectionNotFound" };
+      // invariant NetworkPathViaConnectsTipsterToInsider (specs/inside-track.allium):
+      // the via edge must actually run tipster -> insider. Enforce at the boundary
+      // (ADR-019) so a callable server action cannot create an inconsistent path.
+      if (via.fromPersonId !== input.tipsterId || via.toPersonId !== input.insiderId) {
+        return { success: false, message: "crm.errors.invalidConnectionPath" };
+      }
     }
 
     const referral = await prisma.referral.create({

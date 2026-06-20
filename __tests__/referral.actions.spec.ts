@@ -94,6 +94,29 @@ describe("recordNetworkTip", () => {
       expect.objectContaining({ data: expect.objectContaining({ kind: "network_path", status: "open" }) }),
     );
   });
+
+  // invariant NetworkPathViaConnectsTipsterToInsider (specs/inside-track.allium):
+  // if `via` is set, the connection must run tipster -> insider.
+  it("rejects a via edge that does not run tipster -> insider", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.person.findFirst as jest.Mock).mockResolvedValue({ processingBasis: "legitimate_interest", consentWithdrawnAt: null });
+    (prisma.personConnection.findFirst as jest.Mock).mockResolvedValue({ fromPersonId: "someone-else", toPersonId: "p2" });
+
+    const res = await recordNetworkTip({ tipsterId: "p1", insiderId: "p2", viaId: "v1" });
+    expect(res.success).toBe(false);
+    expect(res.message).toBe("crm.errors.invalidConnectionPath");
+    expect(prisma.referral.create).not.toHaveBeenCalled();
+  });
+
+  it("accepts a via edge that runs tipster -> insider", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.person.findFirst as jest.Mock).mockResolvedValue({ processingBasis: "legitimate_interest", consentWithdrawnAt: null });
+    (prisma.personConnection.findFirst as jest.Mock).mockResolvedValue({ fromPersonId: "p1", toPersonId: "p2" });
+    (prisma.referral.create as jest.Mock).mockResolvedValue({ id: "r3" });
+
+    const res = await recordNetworkTip({ tipsterId: "p1", insiderId: "p2", viaId: "v1" });
+    expect(res.success).toBe(true);
+  });
 });
 
 describe("status transitions", () => {
