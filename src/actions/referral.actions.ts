@@ -7,6 +7,7 @@ import { ActionResult } from "@/models/actionResult";
 import { handleError } from "@/lib/utils";
 import { isConsentBlocked } from "@/models/person.model";
 import {
+  type ReferralKind,
   type ReferralStatus,
   isValidReferralTransition,
 } from "@/models/insideTrack.model";
@@ -325,8 +326,8 @@ export interface ReferralCompanyRef {
 /** Lightweight row for the Inside Track list / Job-detail back-reference. */
 export interface ReferralListEntry {
   id: string;
-  kind: string;
-  status: string;
+  kind: ReferralKind;
+  status: ReferralStatus;
   receivedAt: Date;
   lastActivityAt: Date;
   tipster: ReferralPersonRef | null;
@@ -378,8 +379,8 @@ export async function getReferral(referralId: string): Promise<ActionResult<Refe
       success: true,
       data: {
         id: r.id,
-        kind: r.kind,
-        status: r.status,
+        kind: r.kind as ReferralKind,
+        status: r.status as ReferralStatus,
         receivedAt: r.receivedAt,
         lastActivityAt: r.lastActivityAt,
         createdAt: r.createdAt,
@@ -431,8 +432,8 @@ export async function listReferrals(filter?: {
       success: true,
       data: rows.map((r) => ({
         id: r.id,
-        kind: r.kind,
-        status: r.status,
+        kind: r.kind as ReferralKind,
+        status: r.status as ReferralStatus,
         receivedAt: r.receivedAt,
         lastActivityAt: r.lastActivityAt,
         tipster: r.tipster,

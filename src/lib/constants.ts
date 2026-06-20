@@ -12,6 +12,7 @@ import {
   Users,
   Calendar,
   ListTodo,
+  Network,
 } from "lucide-react";
 import type { TranslationKey } from "@/i18n";
 
@@ -121,6 +122,12 @@ export const SIDEBAR_LINKS: {
     route: "/dashboard/crm-tasks",
     label: "CRM Tasks",
     labelKey: "nav.crmTasks",
+  },
+  {
+    icon: Network,
+    route: "/dashboard/referrals",
+    label: "Inside Track",
+    labelKey: "nav.insideTrack",
   },
   {
     icon: SquareCheckBig,
