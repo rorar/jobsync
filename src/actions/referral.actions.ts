@@ -114,6 +114,7 @@ export async function recordNetworkTip(
     if (input.targetCompanyId && !(await assertOwnedCompany(input.targetCompanyId, user.id))) {
       return { success: false, message: "crm.errors.companyNotFound" };
     }
+    let resolvedViaId: string | null = input.viaId ?? null;
     if (input.viaId) {
       const via = await prisma.personConnection.findFirst({
         where: { id: input.viaId, userId: user.id },
@@ -126,6 +127,16 @@ export async function recordNetworkTip(
       if (via.fromPersonId !== input.tipsterId || via.toPersonId !== input.insiderId) {
         return { success: false, message: "crm.errors.invalidConnectionPath" };
       }
+    } else if (input.insiderId) {
+      // Auto-link the warm path: if a tipster -> insider PersonConnection already
+      // exists, record it as `via` so the NetworkPath captures the full route. At
+      // most one edge per ordered pair (DistinctEndpointsPerUser), so this is
+      // unambiguous and needs no manual via picker in the UI.
+      const edge = await prisma.personConnection.findFirst({
+        where: { userId: user.id, fromPersonId: input.tipsterId, toPersonId: input.insiderId },
+        select: { id: true },
+      });
+      if (edge) resolvedViaId = edge.id;
     }
 
     const referral = await prisma.referral.create({
@@ -135,7 +146,7 @@ export async function recordNetworkTip(
         status: "open",
         tipsterId: input.tipsterId,
         insiderId: input.insiderId ?? null,
-        viaId: input.viaId ?? null,
+        viaId: resolvedViaId,
         targetCompanyId: input.targetCompanyId ?? null,
         updatedByType: "user",
         updatedById: user.id,
@@ -409,6 +420,10 @@ export async function listReferrals(filter?: {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "errors.notAuthenticated" };
 
+    // NOTE: intentionally un-paginated. Per-user referral counts are network-bounded
+    // (created one-by-one from real tips, not bulk-imported like Persons), so loading all
+    // + ordering by lastActivityAt is proportionate. Add cursor/skip pagination here
+    // (mirroring getPersons) if a user ever accumulates enough referrals to feel it.
     const where = filter?.jobId
       ? { userId: user.id, targetJob: { id: filter.jobId } }
       : { userId: user.id };

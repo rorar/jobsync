@@ -135,6 +135,40 @@ describe("recordNetworkTip", () => {
     expect(res.message).toBe("crm.errors.companyNotFound");
     expect(prisma.referral.create).not.toHaveBeenCalled();
   });
+
+  it("auto-links via when a tipster->insider connection exists (no explicit viaId)", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.person.findFirst as jest.Mock).mockResolvedValue({ processingBasis: "legitimate_interest", consentWithdrawnAt: null });
+    // No explicit viaId; the auto-resolve lookup finds the connecting edge.
+    (prisma.personConnection.findFirst as jest.Mock).mockResolvedValue({ id: "edge-1" });
+    (prisma.referral.create as jest.Mock).mockResolvedValue({ id: "r4" });
+
+    const res = await recordNetworkTip({ tipsterId: "p1", insiderId: "p2" });
+
+    expect(res.success).toBe(true);
+    expect(prisma.personConnection.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: "user-1", fromPersonId: "p1", toPersonId: "p2" },
+      }),
+    );
+    expect(prisma.referral.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ viaId: "edge-1" }) }),
+    );
+  });
+
+  it("leaves via null when no tipster->insider connection exists", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.person.findFirst as jest.Mock).mockResolvedValue({ processingBasis: "legitimate_interest", consentWithdrawnAt: null });
+    (prisma.personConnection.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.referral.create as jest.Mock).mockResolvedValue({ id: "r5" });
+
+    const res = await recordNetworkTip({ tipsterId: "p1", insiderId: "p2" });
+
+    expect(res.success).toBe(true);
+    expect(prisma.referral.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ viaId: null }) }),
+    );
+  });
 });
 
 describe("status transitions", () => {
