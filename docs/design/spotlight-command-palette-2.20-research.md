@@ -319,6 +319,41 @@ Two structural absences that validate the design:
 1. **No "Search" domain** → Spotlight Search is a **cross-domain read surface** (searchable entities live across Job/CRM/Discovery/Profile/Referral); the Action-Registry is a **cross-domain action surface**. Confirms "Spotlight = app-layer above the domains, not a domain entity."
 2. **No "File"/"Asset"/"Document" domain** → files exist today only as sub-mechanisms (logo assets under *Data Enrichment*; resumes under *Profile & Resume Management*). ROADMAP 2.8 File Explorer is **greenfield at the domain level** → best realized as a **new polymorphic-Attachment domain generalizing the existing asset+resume mechanisms** (Twenty's pattern), with no existing "Files" concept to collide with.
 
+### F.4 Voice — STT/TTS, offline vs API (`speech` Connector)
+
+Voice splits into **STT** (input — the 2.20 voice tier) and **TTS** (output — optional, agent narration / accessibility). Both have offline and API options:
+
+| | Offline / on-device | API (cloud) |
+|---|---|---|
+| **STT** (speech→text) | **whisper.cpp / whisper-wasm** = true zero-egress, local (tiny/base/small ~75–500MB). Browser **Web Speech API** = zero-setup but NOT truly offline (Chrome/Edge→Google, Safari→Apple). | OpenAI Whisper API, Deepgram, Azure/Google STT |
+| **TTS** (text→speech) | Browser **`speechSynthesis`** = OS voices, offline, zero-egress, zero-setup (good default). **Piper** / Coqui = local neural, offline. | OpenAI TTS, ElevenLabs, Google/Azure TTS |
+
+**Through the project rules:** a new `speech` ConnectorType with **local Modules as default** (whisper-wasm / Web Speech / `speechSynthesis` / Piper) + **cloud Modules opt-in** (Whisper API / OpenAI TTS) — mirrors the **Ollama-local-default / cloud-optional** AI-Provider pattern. GDPR: local-first; any cloud STT/TTS = third-party transfer → the same redaction + consent gate as the AI-bridge. **TTS is optional** (STT is the 2.20 tier; TTS is a nice-to-have). Run transcript cleanup on local Ollama before any cloud step.
+
+### F.5 Licensing & attribution (decisive — honour borrowed work)
+
+**JobSync is MIT.** Verified licenses of the reference repos:
+
+| Permissive — code-copy OK *with attribution* | Strong copyleft — **concepts only, NO code** |
+|---|---|
+| cmdk, kbar, kmenu, react-command-palette, cmd-dialog, astro-command-palette = **MIT** · reablocks, raycast-nuxt-ui-clone = **Apache-2.0** | **Twenty = GPL** · **dotdotduck = AGPL** |
+
+**The rule:**
+- **Concepts / patterns / ideas** (registry shape, composite ranking, the `agent_turn` envelope, hotkey scheme, search fan-out, polymorphic Attachment) are **not copyrightable** → reimplement freely, no obligation. This design already says "mirror natively / build natively" — the safe path. Courtesy: credit the source in code comments + this doc.
+- **Copied code** is bound by the source license:
+  - **MIT** sources → copying OK **iff** the copyright line + MIT notice is preserved. (cmdk is already a dependency; its MIT ships in `node_modules`.)
+  - **Apache-2.0** (reablocks, raycast) → preserve NOTICE + attribution + state changes.
+  - **GPL / AGPL** (Twenty, dotdotduck) → **DO NOT copy code into MIT JobSync.** Copyleft is viral — GPL/AGPL code would force JobSync itself to (A)GPL (AGPL is even *network*-viral). Take **ideas only**, never source.
+
+**Action items for implementation:**
+1. Twenty + dotdotduck = **patterns-only, no code** (protects the MIT license). All borrowings in this doc from them are conceptual.
+2. Any copied MIT/Apache snippet keeps its license header; add the source to a project `CREDITS`/`THIRD_PARTY_NOTICES` if non-trivial.
+3. Credit pattern sources in code comments (e.g. `// Action-Registry shape mirrors kbar (MIT); ranking pattern after kbar useMatches`).
+
+### F.6 References & provenance
+
+Citation convention in this doc: `path:line` where a precise anchor exists (richest in Appendices A–C, which carry the deep-review agents' file:line citations); `path` alone where the reference is a whole file/module. Pattern-source line anchors (cmdk/kbar/kmenu/Twenty) live in the appendices; JobSync-side anchors are inline in §0–§5 and F.3. The 3 deep-review subagent transcripts + the dual-graph (`/understand-chat` knowledge graph, `/understand-domain` domain graph) are the provenance for every claim; reference repos are cloned at `/home/pascal/projekte/`.
+
 ---
 
 ## Cross-references
