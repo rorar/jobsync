@@ -24,6 +24,7 @@ See `devenv.nix` for the full configuration. Requires a writable Nix store.
 ```bash
 ./scripts/dev.sh      # Start dev server (port 3737)
 ./scripts/build.sh    # Production build
+./scripts/build-safe.sh  # Production build in a systemd memory cgroup (low-RAM hosts; OOM-kills the build, not the host)
 ./scripts/test.sh     # Run Jest tests (uses system Node.js)
 ./scripts/stop.sh     # Stop dev server
 ./scripts/prisma-generate.sh  # Generate Prisma client
