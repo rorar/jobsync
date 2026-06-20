@@ -26,6 +26,8 @@ jest.mock("@/lib/db", () => ({
     crmActivityLog: { updateMany: jest.fn() },
     jobContact: { deleteMany: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
     crmBlocklist: { deleteMany: jest.fn() },
+    referral: { updateMany: jest.fn() },
+    personConnection: { deleteMany: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
@@ -58,6 +60,8 @@ const mockDb = db as unknown as {
   crmActivityLog: { updateMany: jest.Mock };
   jobContact: { deleteMany: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
   crmBlocklist: { deleteMany: jest.Mock };
+  referral: { updateMany: jest.Mock };
+  personConnection: { deleteMany: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -113,6 +117,8 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
     mockDb.jobContact.findMany.mockResolvedValue([]);
     mockDb.jobContact.updateMany.mockResolvedValue({ count: 0 });
     mockDb.crmBlocklist.deleteMany.mockResolvedValue({ count: 0 });
+    mockDb.referral.updateMany.mockResolvedValue({ count: 0 });
+    mockDb.personConnection.deleteMany.mockResolvedValue({ count: 0 });
     mockDb.person.update.mockResolvedValue({});
     mockDb.person.delete.mockResolvedValue({});
   });
@@ -189,6 +195,53 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
           userId: USER.id,
           handle: { in: ["alice@example.com"] },
         }),
+      });
+    });
+
+    // Inside Track (Welle 5) — AnonymizeCascadesToInsideTrack (specs/inside-track.allium)
+    it("hard-removes PersonConnection edges touching the person (userId-scoped)", async () => {
+      await anonymizePerson(PERSON_ID);
+      expect(mockDb.personConnection.deleteMany).toHaveBeenCalledWith({
+        where: {
+          userId: USER.id,
+          OR: [{ fromPersonId: PERSON_ID }, { toPersonId: PERSON_ID }],
+        },
+      });
+    });
+
+    it("severs forwarded_to and insider Person references on referrals", async () => {
+      await anonymizePerson(PERSON_ID);
+      expect(mockDb.referral.updateMany).toHaveBeenCalledWith({
+        where: { userId: USER.id, forwardedToId: PERSON_ID },
+        data: { forwardedToId: null },
+      });
+      expect(mockDb.referral.updateMany).toHaveBeenCalledWith({
+        where: { userId: USER.id, insiderId: PERSON_ID },
+        data: { insiderId: null },
+      });
+    });
+
+    it("de-identifies a still-working tipster referral AND declines it", async () => {
+      await anonymizePerson(PERSON_ID);
+      expect(mockDb.referral.updateMany).toHaveBeenCalledWith({
+        where: {
+          userId: USER.id,
+          tipsterId: PERSON_ID,
+          status: { notIn: ["converted", "declined"] },
+        },
+        data: { tipsterId: null, status: "declined" },
+      });
+    });
+
+    it("de-identifies a terminal tipster referral WITHOUT changing its status", async () => {
+      await anonymizePerson(PERSON_ID);
+      expect(mockDb.referral.updateMany).toHaveBeenCalledWith({
+        where: {
+          userId: USER.id,
+          tipsterId: PERSON_ID,
+          status: { in: ["converted", "declined"] },
+        },
+        data: { tipsterId: null },
       });
     });
   });
