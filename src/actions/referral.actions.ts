@@ -345,8 +345,6 @@ export interface ReferralListEntry {
 export interface ReferralDetail extends ReferralListEntry {
   createdAt: Date;
   updatedAt: Date;
-  updatedByType: string | null;
-  updatedById: string | null;
   forwardedTo: ReferralPersonRef | null;
   insider: ReferralPersonRef | null;
   via: { id: string; kind: string; strength: string } | null;
@@ -369,8 +367,6 @@ export async function getReferral(referralId: string): Promise<ActionResult<Refe
         lastActivityAt: true,
         createdAt: true,
         updatedAt: true,
-        updatedByType: true,
-        updatedById: true,
         tipster: { select: PERSON_REF_SELECT },
         targetCompany: { select: { id: true, label: true } },
         forwardedTo: { select: PERSON_REF_SELECT },
@@ -391,8 +387,6 @@ export async function getReferral(referralId: string): Promise<ActionResult<Refe
         lastActivityAt: r.lastActivityAt,
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
-        updatedByType: r.updatedByType,
-        updatedById: r.updatedById,
         tipster: r.tipster,
         forwardedTo: r.forwardedTo,
         insider: r.insider,

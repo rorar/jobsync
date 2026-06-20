@@ -135,7 +135,6 @@ export function TipCaptureSheet({
       if (!result.success) {
         toast({
           variant: "destructive",
-          title: t("insideTrack.toast.tipRecorded"),
           description: t(result.message ?? "errors.unknown"),
         });
         return;

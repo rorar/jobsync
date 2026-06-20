@@ -33,7 +33,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, interpolate } from "@/lib/utils";
 import type { ReferralStatus, ReferralKind } from "@/models/insideTrack.model";
 
 // ---------------------------------------------------------------------------
@@ -55,18 +55,6 @@ export interface ReferralActionBarProps {
   companyName?: string;
   onAction: (action: ReferralActionKey) => void | Promise<void>;
   busy?: boolean;
-}
-
-// ---------------------------------------------------------------------------
-// Helper — replace {placeholder} tokens in a translated template string.
-// Same idiom as WarmPathFinder.tsx `interpolate` helper.
-// ---------------------------------------------------------------------------
-
-function interpolate(template: string, vars: Record<string, string>): string {
-  return Object.entries(vars).reduce(
-    (acc, [key, val]) => acc.replace(`{${key}}`, val),
-    template,
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +132,8 @@ export function ReferralActionBar({
 
   // Stable id for aria-describedby on the blocked commit button
   const commitDescId = useId();
+  // Stable id for the action-group context description (review §E: aria-describedby)
+  const ctxDescId = useId();
 
   // ---------------------------------------------------------------------------
   // Derive the forward action button (if any)
@@ -271,9 +261,15 @@ export function ReferralActionBar({
     <div
       role="group"
       aria-label={t("insideTrack.workspace.availableActions")}
+      aria-describedby={ctxDescId}
       aria-busy={busy ? "true" : undefined}
       className="flex flex-wrap items-center gap-3"
     >
+      <span id={ctxDescId} className="sr-only">
+        {interpolate(t("insideTrack.workspace.actionsContextDescription"), {
+          status: t(`insideTrack.status.${status}`),
+        })}
+      </span>
       {forwardAction}
       {showDecline && <DeclineDialog t={t} onAction={onAction} />}
     </div>

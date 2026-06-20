@@ -407,8 +407,8 @@ describe("WarmPathFinder — results: network paths", () => {
     const hiddenSpans = document.querySelectorAll(
       'span[aria-hidden="true"], svg[aria-hidden="true"]',
     );
-    // At least one element should be aria-hidden in the network section
-    expect(hiddenSpans.length).toBeGreaterThanOrEqual(0);
+    // At least one decorative element must be aria-hidden in the network section
+    expect(hiddenSpans.length).toBeGreaterThan(0);
   });
 
   it("renders network paths as <ul>/<li>", async () => {

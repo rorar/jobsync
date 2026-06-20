@@ -117,6 +117,24 @@ describe("recordNetworkTip", () => {
     const res = await recordNetworkTip({ tipsterId: "p1", insiderId: "p2", viaId: "v1" });
     expect(res.success).toBe(true);
   });
+
+  it("rejects when the via connection is not found / not owned", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.person.findFirst as jest.Mock).mockResolvedValue({ processingBasis: "legitimate_interest", consentWithdrawnAt: null });
+    (prisma.personConnection.findFirst as jest.Mock).mockResolvedValue(null);
+    const res = await recordNetworkTip({ tipsterId: "p1", insiderId: "p2", viaId: "missing" });
+    expect(res.message).toBe("crm.errors.connectionNotFound");
+    expect(prisma.referral.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the target company is not owned", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.person.findFirst as jest.Mock).mockResolvedValue({ processingBasis: "legitimate_interest", consentWithdrawnAt: null });
+    (prisma.company.findFirst as jest.Mock).mockResolvedValue(null);
+    const res = await recordNetworkTip({ tipsterId: "p1", targetCompanyId: "c-not-mine" });
+    expect(res.message).toBe("crm.errors.companyNotFound");
+    expect(prisma.referral.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("status transitions", () => {

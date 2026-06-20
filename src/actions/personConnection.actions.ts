@@ -117,6 +117,15 @@ export async function listPersonConnections(
     const connections = await prisma.personConnection.findMany({
       where,
       orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        fromPersonId: true,
+        toPersonId: true,
+        kind: true,
+        strength: true,
+        notes: true,
+        createdAt: true,
+      },
     });
     return { success: true, data: connections };
   } catch (error) {

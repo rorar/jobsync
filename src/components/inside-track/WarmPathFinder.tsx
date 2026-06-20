@@ -18,7 +18,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "@/i18n";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { cn, interpolate } from "@/lib/utils";
 import { Network, AlertCircle, ArrowRight } from "lucide-react";
 import { findWarmPaths } from "@/actions/warmPath.actions";
 import type {
@@ -41,18 +41,6 @@ export interface WarmPathFinderProps {
 // ---------------------------------------------------------------------------
 
 type Status = "loading" | "error" | "empty" | "results";
-
-// ---------------------------------------------------------------------------
-// Helper — replace {placeholder} tokens in a translated template string.
-// The i18n system stores templates with {key} placeholders (see dictionary).
-// ---------------------------------------------------------------------------
-
-function interpolate(template: string, vars: Record<string, string>): string {
-  return Object.entries(vars).reduce(
-    (acc, [key, val]) => acc.replace(`{${key}}`, val),
-    template,
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Sub-components (kept inline per task guidance; can be extracted later)
@@ -223,7 +211,7 @@ function WarmPathFinderInner({
         // Announce: count of paths found
         const total = ins.length + net.length;
         setLiveText(
-          interpolate(t("insideTrack.warmPath.pathsListLabel"), {
+          interpolate(t("insideTrack.warmPath.resultsFound"), {
             count: String(total),
             company: companyName,
           }),
@@ -234,7 +222,7 @@ function WarmPathFinderInner({
     return () => {
       cancelled = true;
     };
-  }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [companyId, companyName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // -------------------------------------------------------------------------
   // Panel title (always visible when not loading)

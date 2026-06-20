@@ -27,14 +27,7 @@ import { tipsterDisplayName } from "@/components/inside-track/referralDisplay";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, AlertTriangle, ExternalLink } from "lucide-react";
-
-/** Replace {token} placeholders in a translated template. */
-function interpolate(template: string, vars: Record<string, string>): string {
-  return Object.entries(vars).reduce(
-    (acc, [k, v]) => acc.replace(`{${k}}`, v),
-    template,
-  );
-}
+import { interpolate } from "@/lib/utils";
 
 /** Maps a status-gated action to its server action (the Repository). */
 const ACTION_FNS: Record<
@@ -112,14 +105,19 @@ export default function ReferralWorkspaceClient({ referralId }: { referralId: st
               });
         setAnnouncement(msg);
         pendingFocus.current = true;
+        toast({
+          variant: "success",
+          description:
+            action === "commit"
+              ? t("insideTrack.toast.jobCreated")
+              : t("insideTrack.toast.statusUpdated"),
+        });
+      } else {
+        // The action succeeded server-side but the refresh failed — surface it
+        // rather than a stale "updated" success (review H-1).
+        setAnnouncement(t("insideTrack.workspace.statusLiveError"));
+        toast({ variant: "destructive", description: t("errors.unknown") });
       }
-      toast({
-        variant: "success",
-        description:
-          action === "commit"
-            ? t("insideTrack.toast.jobCreated")
-            : t("insideTrack.toast.statusUpdated"),
-      });
     } catch {
       toast({ variant: "destructive", description: t("errors.unknown") });
     } finally {
