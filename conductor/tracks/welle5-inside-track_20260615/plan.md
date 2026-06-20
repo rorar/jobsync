@@ -3,7 +3,7 @@
 **Track ID:** welle5-inside-track_20260615
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-06-15
-**Status:** [ ] Not Started
+**Status:** [x] Complete
 
 ## Overview
 
@@ -25,7 +25,7 @@ Controlled contact-role vocabulary + company-position rename. No inside-track de
 - [x] Task 1.6: Role badge on Person (ROADMAP 2244) derived from primary JobContact.role; component test.
 
 ### Verification
-- [ ] tsc 0, jest green; dictionary test 4 locales; `allium:weed` shows JobContactRole + position aligned (crm.allium 0 drift).
+- [x] tsc 0, jest green; dictionary test 4 locales; `allium:weed` shows JobContactRole + position aligned (crm.allium 0 drift).
 
 ## Phase 2: Persistence Foundation (IT-4 — blocks 3/4/6)
 
@@ -38,7 +38,7 @@ Prisma models for Referral + PersonConnection.
 - [x] Task 2.4: Lifecycle/transition validators (`isValidReferralTransition`) + ConnectionKind/Strength guards (ADR-019); unit tests first.
 
 ### Verification
-- [ ] Migration applies clean on a copy; tsc 0; validator unit tests green.
+- [x] Migration applies clean on a copy; tsc 0; validator unit tests green.
 
 ## Phase 3: Referral Lifecycle & Actions (IT-5a)
 
@@ -49,7 +49,7 @@ Prisma models for Referral + PersonConnection.
 - [x] Task 3.4: `ReferralGoesStale` in CRM cron (`crm-cron.ts`); idempotent; consent-block respected for any reminder; test with fake clock.
 
 ### Verification
-- [ ] All transitions match `specs/inside-track.allium` graph; jest green; `allium:weed` 0 drift on Referral rules.
+- [x] All transitions match `specs/inside-track.allium` graph; jest green; `allium:weed` 0 drift on Referral rules.
 
 ## Phase 4: Warm-Path Discovery (IT-5b)
 
@@ -58,7 +58,7 @@ Prisma models for Referral + PersonConnection.
 - [x] Task 4.2: Consent-block exclusion (`isConsentBlocked`) for every surfaced person — satisfies `@guarantee ExcludesConsentBlockedPersons`; regression test with a withdrawn-consent person.
 
 ### Verification
-- [ ] Finder excludes consent-blocked; depth capped at config.max_warm_path_depth; jest green.
+- [x] Finder excludes consent-blocked; depth capped at config.max_warm_path_depth; jest green.
 
 ## Phase 5: UI & i18n (IT-5c)
 
@@ -84,23 +84,23 @@ panel reused on `myjobs/[id]`; components in NEW `src/components/inside-track/`.
 - [x] Task 6.2: Add Referral + PersonConnection to `collect-user-data` + `gdpr-data-rights.allium UserDataExport` (Art. 15/20); export test.
 
 ### Verification
-- [ ] Anonymize leaves no inside-track PII; DSAR export includes new entities; `allium:weed` 0 drift on crm-gdpr + inside-track GDPR rules.
+- [x] Anonymize leaves no inside-track PII; DSAR export includes new entities; `allium:weed` 0 drift on crm-gdpr + inside-track GDPR rules.
 
 ## Phase 7: Drift-Gate & Wrap-up
 
 ### Tasks
-- [ ] Task 7.1: `allium:weed` full pass over the three specs ↔ code; resolve any residual drift.
-- [ ] Task 7.2: `/comprehensive-review:full-review` (architecture/security/perf/testing/best-practices); fix findings.
-- [ ] Task 7.3: blind-spot analysis; `/understand` graph refresh (Welle-end rule); docs (User Guide + ADR if architecture decision).
+- [x] Task 7.1: `allium:weed` full pass over the three specs ↔ code; resolve any residual drift.
+- [x] Task 7.2: `/comprehensive-review:full-review` (architecture/security/perf/testing/best-practices); fix findings.
+- [x] Task 7.3: blind-spot analysis; `/understand` graph refresh (Welle-end rule); docs (User Guide + ADR if architecture decision).
 
 ### Verification
-- [ ] Honesty-gate (2 questions) pre-push; full suite green; tsc 0; build clean; allium 0 drift.
+- [x] Honesty-gate (2 questions) pre-push; full suite green; tsc 0; build clean; allium 0 drift.
 
 ## Final Verification
-- [ ] All acceptance criteria (spec.md) met
-- [ ] Tests passing (unit + component + E2E + dictionary)
-- [ ] `allium:weed` 0 drift on inside-track / crm / crm-gdpr
-- [ ] Docs updated; ready for review
+- [x] All acceptance criteria (spec.md) met
+- [x] Tests passing (unit + component + E2E + dictionary)
+- [x] `allium:weed` 0 drift on inside-track / crm / crm-gdpr
+- [x] Docs updated; ready for review
 
 ---
 

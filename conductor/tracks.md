@@ -13,7 +13,7 @@ HEAD `663ff21`); all file:line facts re-verified against code at HEAD `b4b20e9`.
 | [x] | [welle3-crm-connection_20260601](./tracks/welle3-crm-connection_20260601/index.md) | Welle 3 — CRM-Verbindung (Kette C) | feature | 2026-06-01 | 2026-06-02 |
 | [x] | [welle4-custom-jobstatus_20260601](./tracks/welle4-custom-jobstatus_20260601/index.md) | Welle 4 — Custom JobStatus XL (Kette A) | feature | 2026-06-01 | 2026-06-14 |
 | [x] | [tech-debt-cleanup_20260601](./tracks/tech-debt-cleanup_20260601/index.md) | Tech-Debt Cleanup (Restposten + GDPR-LOW) | chore | 2026-06-01 | 2026-06-14 |
-| [~] | [welle5-inside-track_20260615](./tracks/welle5-inside-track_20260615/index.md) | Welle 5 — Inside Track (Tippgeber/Vitamin-B) | feature | 2026-06-15 | 2026-06-15 |
+| [x] | [welle5-inside-track_20260615](./tracks/welle5-inside-track_20260615/index.md) | Welle 5 — Inside Track (Tippgeber/Vitamin-B) | feature | 2026-06-15 | 2026-06-20 |
 
 ## Deferred / Entry-Criteria-gated ⛔
 
