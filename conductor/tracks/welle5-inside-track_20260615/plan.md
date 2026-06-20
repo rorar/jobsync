@@ -80,8 +80,8 @@ panel reused on `myjobs/[id]`; components in NEW `src/components/inside-track/`.
 ## Phase 6: GDPR Integration (IT-3, IT-6)
 
 ### Tasks
-- [ ] Task 6.1: Extend `anonymizePerson` cascade — sever tipster/forwarded_to/insider, null `via`, delete PersonConnection, decline/detach Referral (status≠converted→declined, converted→detach only), scrub draft refs (no-op until cv-document). Regression test asserting no re-identifying ref survives → satisfies `AnonymizeCascadesToInsideTrack`.
-- [ ] Task 6.2: Add Referral + PersonConnection to `collect-user-data` + `gdpr-data-rights.allium UserDataExport` (Art. 15/20); export test.
+- [x] Task 6.1: Extend `anonymizePerson` cascade — sever tipster/forwarded_to/insider, null `via`, delete PersonConnection, decline/detach Referral (status≠converted→declined, converted→detach only), scrub draft refs (no-op until cv-document). Regression test asserting no re-identifying ref survives → satisfies `AnonymizeCascadesToInsideTrack`.
+- [x] Task 6.2: Add Referral + PersonConnection to `collect-user-data` + `gdpr-data-rights.allium UserDataExport` (Art. 15/20); export test.
 
 ### Verification
 - [ ] Anonymize leaves no inside-track PII; DSAR export includes new entities; `allium:weed` 0 drift on crm-gdpr + inside-track GDPR rules.
