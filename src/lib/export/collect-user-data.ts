@@ -57,6 +57,8 @@ export async function collectUserData(userId: string) {
     vapidConfig,
     webPushSubscriptions,
     dedupHashes,
+    referrals,
+    personConnections,
   ] = await Promise.all([
     // --- Pattern A: Direct userId ---
     db.job.findMany({
@@ -496,6 +498,37 @@ export async function collectUserData(userId: string) {
 
     // DedupHash (count only — potentially large)
     db.dedupHash.count({ where: { userId } }),
+
+    // CRM Inside Track (Welle 5) — Art. 15/20. FK ids point to the subject's
+    // own persons/companies (same convention as jobContacts above).
+    db.referral.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        kind: true,
+        status: true,
+        tipsterId: true,
+        targetCompanyId: true,
+        forwardedToId: true,
+        insiderId: true,
+        viaId: true,
+        receivedAt: true,
+        lastActivityAt: true,
+        createdAt: true,
+      },
+    }),
+    db.personConnection.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        fromPersonId: true,
+        toPersonId: true,
+        kind: true,
+        strength: true,
+        notes: true,
+        createdAt: true,
+      },
+    }),
   ]);
 
   // S6b: a full data export reads every Person's PII — the highest-sensitivity
@@ -553,5 +586,7 @@ export async function collectUserData(userId: string) {
     vapidConfig,
     webPushSubscriptions,
     dedupHashCount: dedupHashes,
+    referrals,
+    personConnections,
   };
 }

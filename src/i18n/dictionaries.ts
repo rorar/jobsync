@@ -28,6 +28,7 @@ import { logoAsset } from "./dictionaries/logoAsset";
 import { crm } from "./dictionaries/crm";
 import { forms } from "./dictionaries/forms";
 import { jobStatus } from "./dictionaries/jobStatus";
+import { insideTrack } from "./dictionaries/insideTrack";
 
 const core = {
   en: {
@@ -45,6 +46,7 @@ const core = {
     "nav.contacts": "Contacts",
     "nav.interviews": "Interviews",
     "nav.crmTasks": "CRM Tasks",
+    "nav.insideTrack": "Inside Track",
     "nav.settings": "Settings",
     "nav.toggleMenu": "Toggle Menu",
     "nav.appTitle": "JobSync - Job Search Assistant",
@@ -237,6 +239,7 @@ const core = {
     "nav.contacts": "Kontakte",
     "nav.interviews": "Interviews",
     "nav.crmTasks": "CRM-Aufgaben",
+    "nav.insideTrack": "Inside Track",
     "nav.settings": "Einstellungen",
     "nav.toggleMenu": "Menü umschalten",
     "nav.appTitle": "JobSync - Jobsuche-Assistent",
@@ -425,6 +428,7 @@ const core = {
     "nav.contacts": "Contacts",
     "nav.interviews": "Entretiens",
     "nav.crmTasks": "Tâches CRM",
+    "nav.insideTrack": "Inside Track",
     "nav.settings": "Paramètres",
     "nav.toggleMenu": "Basculer le menu",
     "nav.appTitle": "JobSync - Assistant de recherche d'emploi",
@@ -613,6 +617,7 @@ const core = {
     "nav.contacts": "Contactos",
     "nav.interviews": "Entrevistas",
     "nav.crmTasks": "Tareas CRM",
+    "nav.insideTrack": "Inside Track",
     "nav.settings": "Configuración",
     "nav.toggleMenu": "Alternar menú",
     "nav.appTitle": "JobSync - Asistente de búsqueda de empleo",
@@ -802,7 +807,7 @@ function mergeDictionaries(...namespaces: Record<string, Record<string, string>>
   return merged;
 }
 
-const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, developer, staging, notifications, api, blacklist, deck, enrichment, webhook, email, smtp, push, logoAsset, crm, forms, jobStatus);
+const dictionaries = mergeDictionaries(core, dashboard, jobs, activities, tasks, automations, profile, questions, admin, settings, developer, staging, notifications, api, blacklist, deck, enrichment, webhook, email, smtp, push, logoAsset, crm, forms, jobStatus, insideTrack);
 
 /**
  * Loose key type used by the `t()` runtime accessor (`getDictionary`/`useTranslations`).
@@ -851,7 +856,8 @@ export type TranslationKeyStrict =
   | keyof (typeof logoAsset)["en"]
   | keyof (typeof crm)["en"]
   | keyof (typeof forms)["en"]
-  | keyof (typeof jobStatus)["en"];
+  | keyof (typeof jobStatus)["en"]
+  | keyof (typeof insideTrack)["en"];
 
 export type Dictionary = Record<string, string>;
 

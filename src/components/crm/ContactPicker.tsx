@@ -28,7 +28,7 @@ import type { CompanyAssociation, TypedEmail } from "@/models/person.model";
  *                  (role · company → company → primary email → ""). May be "".
  * - `searchText` — pre-lowercased haystack (name + emails + company labels +
  *                  roles) so the manual filter matches far more than the visible
- *                  label. Computed once in the AddJob mapping, not per keystroke.
+ *                  label. Computed once at the mapping site, not per keystroke.
  */
 export interface PersonOption {
   id: string;
@@ -70,14 +70,14 @@ export function toPersonOption(src: PersonOptionSource): PersonOption {
 
   const chosenCompany =
     companies.find((c) => c.isPrimary) ??
-    companies.find((c) => (c.role ?? "").trim()) ??
+    companies.find((c) => (c.position ?? "").trim()) ??
     companies[0];
 
   let secondary = "";
   if (chosenCompany) {
-    const role = (chosenCompany.role ?? "").trim();
-    secondary = role
-      ? `${role} · ${chosenCompany.companyLabel}`
+    const position = (chosenCompany.position ?? "").trim();
+    secondary = position
+      ? `${position} · ${chosenCompany.companyLabel}`
       : chosenCompany.companyLabel;
   } else if (primaryEmail) {
     secondary = primaryEmail;
@@ -87,14 +87,14 @@ export function toPersonOption(src: PersonOptionSource): PersonOption {
     name,
     ...emails.map((e) => e.email),
     ...companies.map((c) => c.companyLabel),
-    ...companies.map((c) => c.role ?? ""),
+    ...companies.map((c) => c.position ?? ""),
   ].filter(Boolean);
   const searchText = searchParts.join(" ").toLowerCase();
 
   return { id: src.id, name, secondary, searchText };
 }
 
-interface JobContactPickerProps {
+interface ContactPickerProps {
   value: string;
   onValueChange: (personId: string) => void;
   persons: PersonOption[];
@@ -102,29 +102,39 @@ interface JobContactPickerProps {
   className?: string;
   /** Shows a spinner instead of the empty state while options load */
   loading?: boolean;
+  /** Override the trigger/placeholder copy (defaults to crm.selectContact). */
+  placeholderKey?: string;
+  /** Accessible label for the trigger (defaults to crm.selectContact). */
+  ariaLabelKey?: string;
 }
 
 /**
- * Point-of-Contact person picker for the Add Job dialog (Welle 3, F-AJ-07).
+ * Reusable CRM contact picker (select-existing).
  *
- * Select-existing only — inline person creation is intentionally out of scope
- * for the create dialog (a Person needs more than a single typed label; full
- * person creation lives on /contacts). Mirrors the CountrySelect pattern:
- * props-based options, cmdk `shouldFilter={false}` + manual filter so the clear
- * item stays visible, controlled inputValue reset on close, aria-live announce.
+ * Originally the Add-Job point-of-contact picker (Welle 3, F-AJ-07); promoted to
+ * the shared CRM location in Welle 5 so the Inside Track tip-capture forms reuse
+ * it (a Person/contact widget belongs to the CRM context, not the Job or
+ * Inside-Track feature dir). Select-existing for now — inline quick-create is a
+ * deferred future UX (needs a minimal-capture quick-form; full creation lives on
+ * /contacts).
  *
- * Each item is two-tier: the person's name (primary, the accessible label) over
- * a muted secondary identifier. The manual filter matches `searchText`, not the
- * visible label, so typing a company or role finds the person too.
+ * Mirrors the CountrySelect pattern: props-based options, cmdk
+ * `shouldFilter={false}` + manual filter so the clear item stays visible,
+ * controlled inputValue reset on close, aria-live announce. Each item is
+ * two-tier: the person's name (primary, the accessible label) over a muted
+ * secondary identifier. The manual filter matches `searchText`, not the visible
+ * label, so typing a company or role finds the person too.
  */
-export function JobContactPicker({
+export function ContactPicker({
   value,
   onValueChange,
   persons,
   disabled,
   className,
   loading,
-}: JobContactPickerProps) {
+  placeholderKey = "crm.selectContact",
+  ariaLabelKey = "crm.selectContact",
+}: ContactPickerProps) {
   const { t } = useTranslations();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -155,14 +165,14 @@ export function JobContactPicker({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          aria-label={t("crm.selectContact")}
+          aria-label={t(ariaLabelKey)}
           disabled={disabled}
           className={cn("w-full justify-between font-normal", className)}
         >
           {selectedPerson ? (
             <span className="truncate">{selectedPerson.name}</span>
           ) : (
-            <span className="text-muted-foreground">{t("crm.selectContact")}</span>
+            <span className="text-muted-foreground">{t(placeholderKey)}</span>
           )}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -197,12 +207,12 @@ export function JobContactPicker({
                   value="__clear__"
                   onSelect={() => {
                     onValueChange("");
-                    setAnnouncement(t("crm.selectContact"));
+                    setAnnouncement(t(placeholderKey));
                     setOpen(false);
                   }}
                   className="text-muted-foreground"
                 >
-                  — {t("crm.selectContact")}
+                  — {t(placeholderKey)}
                 </CommandItem>
               )}
               {filtered.map((p) => (

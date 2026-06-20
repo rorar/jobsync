@@ -22,7 +22,11 @@ async function globalSetup(config: FullConfig) {
   await page.getByPlaceholder("id@example.com").fill("admin@example.com");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Login" }).click();
-  await page.waitForURL("**/dashboard", { timeout: 30000 });
+  // The first AUTHENTICATED /dashboard load triggers a Turbopack compile that
+  // can exceed 30 s on a slow VM (8 GB, no swap). scripts/test-e2e.sh raises
+  // this via E2E_LOGIN_TIMEOUT_MS; the 30 s default is unchanged for fast hosts.
+  const loginTimeout = Number(process.env.E2E_LOGIN_TIMEOUT_MS) || 30000;
+  await page.waitForURL("**/dashboard", { timeout: loginTimeout });
 
   await page.context().storageState({ path: "e2e/.auth/user.json" });
   await browser.close();

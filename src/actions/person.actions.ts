@@ -529,6 +529,42 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
             where: { userId: user.id, handle: { in: personEmails } },
           })]
         : []),
+      // Inside Track (Welle 5) GDPR cascade — AnonymizeCascadesToInsideTrack
+      // (specs/inside-track.allium). Network edges are hard-removed (they exist
+      // only to re-identify a path); Referral.viaId is onDelete:SetNull, so any
+      // NetworkPath.via pointing at a removed edge is nulled by the DB (G-B).
+      prisma.personConnection.deleteMany({
+        where: { userId: user.id, OR: [{ fromPersonId: personId }, { toPersonId: personId }] },
+      }),
+      // G-A: sever the variant-specific Person references (Person row is kept,
+      // so the FKs are NOT auto-nulled — do it explicitly).
+      prisma.referral.updateMany({
+        where: { userId: user.id, forwardedToId: personId },
+        data: { forwardedToId: null },
+      }),
+      prisma.referral.updateMany({
+        where: { userId: user.id, insiderId: personId },
+        data: { insiderId: null },
+      }),
+      // Tipster de-identified: a still-working tip is also declined (the
+      // door-opener is gone); a terminal tip (converted/declined) keeps its
+      // status and only loses the link (avoids an illegal declined->declined).
+      prisma.referral.updateMany({
+        where: {
+          userId: user.id,
+          tipsterId: personId,
+          status: { notIn: ["converted", "declined"] },
+        },
+        data: { tipsterId: null, status: "declined" },
+      }),
+      prisma.referral.updateMany({
+        where: {
+          userId: user.id,
+          tipsterId: personId,
+          status: { in: ["converted", "declined"] },
+        },
+        data: { tipsterId: null },
+      }),
       // Anonymize the person record
       prisma.person.update({
         where: { id: personId, userId: user.id },

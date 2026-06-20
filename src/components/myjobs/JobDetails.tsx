@@ -24,6 +24,7 @@ import { MatchDetails } from "../automations/MatchDetails";
 import { CompanyLogo } from "../ui/company-logo";
 import { EnrichmentStatusPanel } from "../enrichment/EnrichmentStatusPanel";
 import { StatusHistoryTimeline } from "../crm/StatusHistoryTimeline";
+import { WarmPathFinder } from "../inside-track/WarmPathFinder";
 import type { JobMatchResponse } from "@/models/ai.schemas";
 
 function JobDetails({ job }: { job: JobResponse }) {
@@ -159,6 +160,16 @@ function JobDetails({ job }: { job: JobResponse }) {
             )}
             <StatusHistoryTimeline jobId={job.id} />
           </div>
+
+          {/* Warm paths (Inside Track Welle 5): only when the job has a company. */}
+          {job.Company?.id && (
+            <div className="mx-4 mb-4">
+              <WarmPathFinder
+                companyId={job.Company.id}
+                companyName={job.Company.label ?? ""}
+              />
+            </div>
+          )}
 
           {/* CRM activity timeline (Welle 3 P3): unified person + company + job
               entries for this job, filtered by job and its hiring company. */}

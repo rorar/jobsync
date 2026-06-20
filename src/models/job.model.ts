@@ -32,6 +32,63 @@ export function isValidRelationshipType(value: unknown): value is RelationshipTy
   );
 }
 
+/**
+ * JobContactRole — controlled vocabulary for a Person's function in the hiring
+ * process for a specific Job (the JobContact link). SoT: specs/crm.allium
+ * `enum JobContactRole`. A closed, classifiable set — powers role badges
+ * (ROADMAP 2244) and warm-path / referral filtering (inside-track.allium).
+ * Distinct from CompanyAssociation.position (a free-text job title). A `null`
+ * JobContact.role means "unspecified"; there is deliberately NO `other` member
+ * (Allium: force ambiguity into the open — add a value rather than hide it).
+ */
+export const JOB_CONTACT_ROLES = [
+  "recruiter",
+  "hiring_manager",
+  "hr",
+  "referral",
+  "tipster",
+  "interviewer",
+  "decision_maker",
+] as const;
+export type JobContactRole = (typeof JOB_CONTACT_ROLES)[number];
+
+/** Runtime membership check for the erased JobContactRole union (ADR-019). */
+export function isValidJobContactRole(value: unknown): value is JobContactRole {
+  return (
+    typeof value === "string" &&
+    (JOB_CONTACT_ROLES as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Known synonyms for the one-off migration of legacy free-text JobContact.role
+ * values (Welle 5 Task 1.3). Keyed by the normalized form (lowercased, runs of
+ * whitespace/hyphens collapsed to a single underscore).
+ */
+const LEGACY_CONTACT_ROLE_SYNONYMS: Record<string, JobContactRole> = {
+  recruiting: "recruiter",
+  human_resources: "hr",
+  referrer: "referral",
+  tip: "tipster",
+  tippgeber: "tipster",
+};
+
+/**
+ * Maps a legacy free-text JobContact.role string to a canonical JobContactRole.
+ * Known strings (incl. case/separator variants and a small synonym table) map
+ * to the matching enum; everything unmappable (and empty/nullish) maps to null.
+ * Pure + dependency-free so the migration script and unit tests can both use it.
+ */
+export function mapLegacyContactRole(
+  raw: string | null | undefined,
+): JobContactRole | null {
+  if (raw == null) return null;
+  const normalized = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized.length === 0) return null;
+  if (isValidJobContactRole(normalized)) return normalized;
+  return LEGACY_CONTACT_ROLE_SYNONYMS[normalized] ?? null;
+}
+
 export interface JobForm {
   id?: string;
   userId?: string;

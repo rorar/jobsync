@@ -1712,6 +1712,7 @@ Universelle Such- und Aktionsleiste im macOS-Spotlight-Stil. Öffnet per `Cmd+K`
 - **Navigation:** "Go to Siemens" → Company-Detail. "Open EURES Automation" → Automation-Detail. "Settings" → Settings-Page. Alle Seiten und Entities erreichbar ohne Klicken durch Menüs.
 - **Search:** "Jobs in Berlin" → gefilterte Job-Liste. "Rejected last week" → Status-Query. Volltextsuche über Jobs, Companies, Contacts, Automations, Notizen, Dokumente.
 - **Actions:** "Run EURES" → startet Automation. "Create Job at BMW" → Pre-filled Modal. "Switch to Dark Mode" → Setting-Toggle. "Export CV as PDF" → Dokumenten-Generierung.
+- **Inline-Create in Entity-Pickers (Cross-Ref):** Pickers wie `ContactPicker` / `CompanyPicker` (Inside Track) sollen In-Place-Create über die Action-Registry bekommen — Kontakt/Firma anlegen ohne Screen-Wechsel (Kontakt via Minimal-Capture-Quick-Form). Welle 5 ließ sie select-existing; Detail in `docs/inside-track-implementation-debt.md` §G.
 
 **AI-Bridge (Zukunft):**
 - Natürliche Spracheingabe: "Schreib ein Anschreiben für den Siemens-Job" → LLM-Action

@@ -384,3 +384,24 @@ These are deliberate deferrals, not bugs:
     `e2e/cleanup-stale-data.ts` (label `startsWith "E2E "`, `isDefault:false`, `jobs:none`,
     `historyAsNew:none` — RESTRICT-safe, never the default) so globalSetup purges them each run, and
     cleared the 4 existing orphans from dev.db (verified 0 remaining).
+
+## Blind-Spot Sweep — Welle 5 wrap (2026-06-20)
+
+Project-wide pattern hunt (4 agents, graph-scoped + grep-verified) after the Inside Track feature.
+**Fixed inline:** `PushSettings.handleUnsubscribe` fired the success toast + flipped the UI regardless
+of the `unsubscribePush` result; settings health-check toasts dropped the misleading "Check Now" title
+(the description already carries the outcome). Two **systemic** items tracked for a dedicated pass —
+deliberately NOT fixed piecemeal at the feature tail (scope + consumer-coupling + false-positive risk):
+
+- **ADR-019 `select`-hygiene sweep** (~20 client-returned reads with no explicit `select`, leaking
+  `createdBy`/`userId`/internal FKs): `getPerson`/`getPersons`, `getAllTags`/`JobTitles`/`Companies`/
+  `Locations`/`ActivityTypes`, `getCompanyById`, task/activity/note lists, `getDiscoveredJobs`,
+  `getBlocklist`, `getAutomationRuns`, + the `countBy`-undefined branches of the paginated lookups.
+  **LOW severity** — all userId/createdBy-scoped (own-data, not cross-user IDOR; defense-in-depth).
+  Each fix must curate the `select` to what consumers actually read (e.g. PersonDetailClient renders
+  `processingBasis`/`consentWithdrawnAt`) → consumer-coupled; careful per-action pass, not bulk.
+- **i18n dead-key sweep (knip-guarded)** (~146 orphaned keys; **0 missing** — no runtime raw-key bugs):
+  largest clusters `smtp.*` (26, migrated to `settings.smtp*`), `enrichment.*` old naming (16) +
+  scattered; incl. ~10 this-session `insideTrack.*` keys for deferred UI (via field, lifecycle badges,
+  workspace labels). **Do NOT bulk-delete from the hunt list** — it false-positived ≥1 used key
+  (`commitToApplyConfirmDescription`); run `bun knip` + the dictionary-completeness test as guards.

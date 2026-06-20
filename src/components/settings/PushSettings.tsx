@@ -258,7 +258,13 @@ export default function PushSettings() {
         await registration?.pushManager.getSubscription();
       if (subscription) {
         await subscription.unsubscribe();
-        await unsubscribePush(subscription.endpoint);
+        const res = await unsubscribePush(subscription.endpoint);
+        if (!res.success) {
+          // Server-side delete failed — do NOT flip the UI to "disabled" or
+          // claim success; the subscription record still exists (blind-spot fix).
+          toast({ variant: "destructive", description: t(res.message ?? "errors.unknown") });
+          return;
+        }
       }
       setIsSubscribed(false);
       toast({ variant: "success", title: t("settings.pushDisabled") });

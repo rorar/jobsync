@@ -4,15 +4,17 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations, formatDateShort } from "@/i18n";
 import { useToast } from "@/components/ui/use-toast";
-import { getPerson, updatePerson, archivePerson, reactivatePerson, anonymizePerson, withdrawConsent, reinstateConsent } from "@/actions/person.actions";
+import { getPerson, getPersons, updatePerson, archivePerson, reactivatePerson, anonymizePerson, withdrawConsent, reinstateConsent } from "@/actions/person.actions";
 import { getPersonHolidayInfo, type PersonHolidayInfo } from "@/actions/reference-data.actions";
 import { getInterviews } from "@/actions/crmInterview.actions";
 import { getCrmTasks } from "@/actions/crmTask.actions";
 import { getCrmNotes } from "@/actions/crmNote.actions";
 import { getJobContactsForPerson, removeJobContact } from "@/actions/jobContact.actions";
+import { addPersonConnection } from "@/actions/personConnection.actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { isValidJobContactRole } from "@/models/job.model";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -27,10 +29,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ArrowLeft, Archive, RefreshCw, ShieldOff, Mail, Phone, MapPin, Briefcase, ExternalLink, Pencil, Trash2, Ban, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Archive, RefreshCw, ShieldOff, Mail, Phone, MapPin, Briefcase, ExternalLink, Pencil, Trash2, Ban, ShieldCheck, Network } from "lucide-react";
 import { ActivityTimeline } from "@/components/crm/ActivityTimeline";
 import { HolidayBadge } from "@/components/crm/HolidayBadge";
 import PersonForm from "@/components/crm/PersonForm";
+import { AddConnectionForm } from "@/components/inside-track/AddConnectionForm";
+import { toPersonOption, type PersonOption } from "@/components/crm/ContactPicker";
 import type { TypedEmail, TypedPhone, CompanyAssociation, SocialProfile } from "@/models/person.model";
 
 interface PersonDetailClientProps {
@@ -57,6 +61,8 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
   const [jobContacts, setJobContacts] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
+  const [addConnOpen, setAddConnOpen] = useState(false);
+  const [connPersons, setConnPersons] = useState<PersonOption[]>([]);
   const [holidayInfo, setHolidayInfo] = useState<PersonHolidayInfo | null>(null);
 
   const loadPerson = useCallback(async () => {
@@ -171,6 +177,48 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
     }
   };
 
+  // Inside Track (Welle 5): record a directed person-to-person connection from
+  // THIS contact. Powers 2-hop warm-path discovery (WarmPathFinder). The picker
+  // excludes the current contact (NoSelfConnection is also enforced server-side).
+  const openAddConnection = async () => {
+    setAddConnOpen(true);
+    const res = await getPersons({ pageSize: 200 });
+    if (res.success && res.data) {
+      setConnPersons(
+        res.data.persons
+          .filter((p) => (p.id as string) !== personId)
+          .map((p) =>
+            toPersonOption({
+              id: p.id as string,
+              firstName: p.firstName as string | null,
+              lastName: p.lastName as string | null,
+              emails: p.emails as TypedEmail[] | null,
+              companies: p.companies as CompanyAssociation[] | null,
+            }),
+          ),
+      );
+    }
+  };
+
+  const handleAddConnection = async (data: {
+    toPersonId: string;
+    kind: string;
+    strength: string;
+  }) => {
+    const res = await addPersonConnection({
+      fromPersonId: personId,
+      toPersonId: data.toPersonId,
+      kind: data.kind,
+      strength: data.strength,
+    });
+    if (res.success) {
+      toast({ title: t("insideTrack.toast.connectionAdded") });
+      setAddConnOpen(false);
+    } else {
+      toast({ title: t(res.message ?? "errors.unknown"), variant: "destructive" });
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4 p-4">
@@ -220,6 +268,12 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="mr-2 h-4 w-4" />
               {t("crm.editContact")}
+            </Button>
+          )}
+          {status === "active" && (
+            <Button variant="outline" size="sm" onClick={openAddConnection}>
+              <Network className="mr-2 h-4 w-4" aria-hidden="true" />
+              {t("insideTrack.addConnection.title")}
             </Button>
           )}
           {status === "active" && (
@@ -310,7 +364,7 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                   <div key={c.companyId ?? c.companyLabel} className="flex items-center gap-2 text-sm">
                     <Briefcase className="h-4 w-4 text-muted-foreground" />
                     <span>{c.companyLabel}</span>
-                    {c.role && <span className="text-muted-foreground">— {c.role}</span>}
+                    {c.position && <span className="text-muted-foreground">— {c.position}</span>}
                     {c.isPrimary && <Badge className="text-xs">{t("crm.primary")}</Badge>}
                   </div>
                 ))}
@@ -474,8 +528,14 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{jobTitle}</p>
                         <p className="text-sm text-muted-foreground truncate">{company}</p>
-                        {Boolean(jc.role) && (
-                          <p className="text-xs text-muted-foreground mt-1">{t("crm.contactRole")}: {String(jc.role)}</p>
+                        {isValidJobContactRole(jc.role) && (
+                          <Badge
+                            variant="secondary"
+                            className="mt-1 text-xs font-normal"
+                            aria-label={`${t("crm.contactRole")}: ${t(`crm.jobContactRole.${jc.role}`)}`}
+                          >
+                            {t(`crm.jobContactRole.${jc.role}`)}
+                          </Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-2 ml-3">
@@ -526,6 +586,23 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
               person={person}
               onSubmit={handleUpdate}
               onCancel={() => setEditOpen(false)}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Add Connection Sheet (Inside Track — 2-hop warm-path data entry) */}
+      <Sheet open={addConnOpen} onOpenChange={setAddConnOpen}>
+        <SheetContent className="sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>{t("insideTrack.addConnection.title")}</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6">
+            <AddConnectionForm
+              persons={connPersons}
+              fromPersonId={personId}
+              onSubmit={handleAddConnection}
+              onCancel={() => setAddConnOpen(false)}
             />
           </div>
         </SheetContent>

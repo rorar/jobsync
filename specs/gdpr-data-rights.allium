@@ -121,6 +121,8 @@ value UserDataExport {
     tags: List<String>
     company_blacklist: List<String>
     job_status_history_count: Integer
+    referrals: List<String>
+    person_connections: List<String>
 }
 
 value ExportMetadata {

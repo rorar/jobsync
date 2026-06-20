@@ -2,18 +2,18 @@
   "id": "welle5-inside-track_20260615",
   "title": "Welle 5 — Inside Track (Tippgeber/Vitamin-B)",
   "type": "feature",
-  "status": "pending",
+  "status": "in_progress",
   "created": "2026-06-15T00:00:00Z",
-  "updated": "2026-06-15T00:00:00Z",
-  "current_phase": 0,
-  "current_task": "not_started",
+  "updated": "2026-06-20T00:00:00Z",
+  "current_phase": 7,
+  "current_task": "7.1",
   "phases": {
     "total": 7,
-    "completed": 0
+    "completed": 6
   },
   "tasks": {
-    "total": 26,
-    "completed": 0
+    "total": 27,
+    "completed": 24
   },
   "source_of_truth": [
     "specs/inside-track.allium",

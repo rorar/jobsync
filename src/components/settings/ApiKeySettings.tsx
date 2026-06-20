@@ -316,7 +316,6 @@ function ApiKeySettings() {
         );
         toast({
           variant: result.data.success ? "success" : "destructive",
-          title: t("settings.healthCheckNow"),
           description: t("settings.healthCheckSuccess")
             .replace("{module}", getModuleName(module, locale))
             .replace("{status}", t(HEALTH_STATUS_KEYS[result.data.healthStatus] ?? "enrichment.health.unknown"))
@@ -325,7 +324,6 @@ function ApiKeySettings() {
       } else {
         toast({
           variant: "destructive",
-          title: t("settings.healthCheckNow"),
           description: t("settings.healthCheckFailed").replace("{module}", getModuleName(module, locale)),
         });
       }

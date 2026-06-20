@@ -333,13 +333,30 @@ describe("parseCompanies", () => {
       {
         companyId: "c1",
         companyLabel: "Acme Corp",
-        role: "Recruiter",
+        position: "VP Engineering",
         isPrimary: true,
         startDate: "2024-01-01",
         endDate: null,
       },
     ];
     expect(parseCompanies(JSON.stringify(input))).toEqual(input);
+  });
+
+  it("reads the legacy `role` key as `position` (backcompat, Task 1.4)", () => {
+    // Rows written before the rename stored the free-text title under `role`.
+    const legacy = JSON.stringify([
+      { companyId: "c1", companyLabel: "Acme Corp", role: "Lecturer", isPrimary: true },
+    ]);
+    const parsed = parseCompanies(legacy);
+    expect(parsed[0].position).toBe("Lecturer");
+    expect((parsed[0] as unknown as Record<string, unknown>).role).toBeUndefined();
+  });
+
+  it("prefers `position` when both keys are present", () => {
+    const both = JSON.stringify([
+      { companyId: "c1", companyLabel: "Acme", position: "CTO", role: "stale", isPrimary: false },
+    ]);
+    expect(parseCompanies(both)[0].position).toBe("CTO");
   });
 
   it("should return empty array for null", () => {

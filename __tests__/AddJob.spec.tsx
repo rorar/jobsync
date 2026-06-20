@@ -298,7 +298,7 @@ describe("AddJob Component", () => {
         logInterviewRound: false,
         // Welle 3 F-AJ-07: optional point-of-contact (untouched → empty defaults)
         contactPersonId: "",
-        contactRole: "",
+        contactRole: null,
         // Welle 3 F-AJ-08: recruiter triangle (untouched → empty/null defaults)
         recruitingCompany: "",
         relationshipType: null,
@@ -312,9 +312,10 @@ describe("AddJob Component", () => {
 
     // Block label present (create-only)
     expect(screen.getByText("Point of Contact")).toBeInTheDocument();
-    // Role field starts disabled (no person selected yet)
-    const roleInput = screen.getByPlaceholderText("Recruiter, Hiring Manager…");
-    expect(roleInput).toBeDisabled();
+    // Role is now a controlled Select (JobContactRole); starts disabled until a
+    // person is chosen. SelectFormCtrl trigger aria-label = "Select Role".
+    const roleSelect = screen.getByLabelText("Select Role");
+    expect(roleSelect).toBeDisabled();
   });
 
   it("maps loaded persons into two-tier picker items (name + secondary)", async () => {
@@ -335,7 +336,7 @@ describe("AddJob Component", () => {
               {
                 companyId: "c1",
                 companyLabel: "Acme Corp",
-                role: "Recruiter",
+                position: "Recruiter",
                 isPrimary: true,
               },
             ],
@@ -366,7 +367,53 @@ describe("AddJob Component", () => {
     // Open the contact picker and assert the two-tier item rendered.
     await user.click(screen.getByRole("combobox", { name: "Select contact..." }));
     expect(await screen.findByText("Jane Doe")).toBeInTheDocument();
-    // Secondary line: role · company (priority over the email).
+    // Secondary line: position · company (priority over the email).
     expect(screen.getByText("Recruiter · Acme Corp")).toBeInTheDocument();
+  });
+
+  it("enables the JobContactRole Select once a contact person is chosen (Task 1.5)", async () => {
+    cleanup();
+    (getPersons as jest.Mock).mockResolvedValueOnce({
+      success: true,
+      data: {
+        persons: [
+          {
+            id: "person-1",
+            firstName: "Jane",
+            lastName: "Doe",
+            emails: [{ email: "jane@acme.com", type: "work", isPrimary: true }],
+            companies: [],
+          },
+        ],
+        total: 1,
+      },
+    });
+
+    const mockCompanies = (await getMockList(1, 10, "companies")).data;
+    const mockJobTitles = (await getMockList(1, 10, "jobTitles")).data;
+    const mockLocations = (await getMockList(1, 10, "locations")).data;
+    render(
+      <AddJob
+        jobStatuses={mockJobStatuses}
+        companies={mockCompanies}
+        jobTitles={mockJobTitles}
+        locations={mockLocations}
+        jobSources={mockJobSources}
+        tags={[]}
+        editJob={null}
+        resetEditJob={mockResetEditJob}
+      />,
+    );
+    await user.click(screen.getByTestId("add-job-btn"));
+    await screen.findByTestId("add-job-dialog-title");
+
+    // Role Select starts disabled.
+    expect(screen.getByLabelText("Select Role")).toBeDisabled();
+
+    // Choose a contact person → the role Select becomes enabled.
+    await user.click(screen.getByRole("combobox", { name: "Select contact..." }));
+    await user.click(await screen.findByText("Jane Doe"));
+
+    expect(screen.getByLabelText("Select Role")).not.toBeDisabled();
   });
 });

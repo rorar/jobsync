@@ -158,3 +158,16 @@ export const getLast7Days = (dateType = "PP", baseDate?: Date, locale?: string) 
   }
   return dates;
 };
+
+/**
+ * Replace `{token}` placeholders in a template string. `t()` returns the raw
+ * i18n template (no built-in interpolation), so call-sites whose values carry
+ * `{company}` / `{status}` / `{count}` tokens use this. Shared util (was
+ * previously copy-pasted across the inside-track surfaces).
+ */
+export function interpolate(template: string, vars: Record<string, string>): string {
+  return Object.entries(vars).reduce(
+    (acc, [key, value]) => acc.replace(`{${key}}`, value),
+    template,
+  );
+}

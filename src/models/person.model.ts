@@ -29,7 +29,14 @@ export interface Address {
 export interface CompanyAssociation {
   companyId: string;
   companyLabel: string;
-  role?: string | null;
+  /**
+   * Free-text job title / position at the company (e.g. "VP Engineering").
+   * SoT: specs/crm.allium `CompanyAssociation.position`. DIFFERENT concept from
+   * JobContact.role (the controlled JobContactRole — a function in a hiring
+   * process). Renamed from the legacy `role` key (Welle 5 Task 1.4); parseCompanies
+   * reads the old key for backward compatibility.
+   */
+  position?: string | null;
   isPrimary: boolean;
   startDate?: string | null;
   endDate?: string | null;
@@ -217,7 +224,17 @@ export function parseCompanies(raw: string | null | undefined): CompanyAssociati
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    // Backcompat (Task 1.4): rows written before the rename stored the free-text
+    // title under `role`. Read it as `position` (position wins if both present)
+    // and drop the legacy key so consumers see only the new shape.
+    return parsed.map((c) => {
+      if (c && typeof c === "object" && "role" in c) {
+        const { role, ...rest } = c as Record<string, unknown>;
+        return { ...rest, position: rest.position ?? role ?? null } as CompanyAssociation;
+      }
+      return c as CompanyAssociation;
+    });
   } catch {
     return [];
   }

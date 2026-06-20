@@ -26,7 +26,7 @@ import {
   JobTitle,
   Tag,
 } from "@/models/job.model";
-import { SALARY_PERIODS, RELATIONSHIP_TYPES } from "@/models/job.model";
+import { SALARY_PERIODS, RELATIONSHIP_TYPES, JOB_CONTACT_ROLES } from "@/models/job.model";
 import { addDays } from "date-fns";
 import { z } from "zod";
 import { toast } from "../ui/use-toast";
@@ -63,10 +63,10 @@ import { createJobTitle } from "@/actions/jobtitle.actions";
 import { addCompany } from "@/actions/company.actions";
 import { createLocation, createJobSource } from "@/actions/job.actions";
 import {
-  JobContactPicker,
+  ContactPicker,
   toPersonOption,
   type PersonOption,
-} from "./JobContactPicker";
+} from "@/components/crm/ContactPicker";
 import { addJobContact } from "@/actions/jobContact.actions";
 import { getPersons } from "@/actions/person.actions";
 import type { CompanyAssociation, TypedEmail } from "@/models/person.model";
@@ -154,7 +154,7 @@ export function AddJob({
       sendToQueue: false,
       logInterviewRound: false,
       contactPersonId: "",
-      contactRole: "",
+      contactRole: null,
       recruitingCompany: "",
       relationshipType: null,
     },
@@ -855,12 +855,12 @@ export function AddJob({
                         <FormItem className="flex flex-col">
                           <FormLabel>{t("crm.pointOfContact")}</FormLabel>
                           <FormControl>
-                            <JobContactPicker
+                            <ContactPicker
                               value={field.value ?? ""}
                               onValueChange={(personId) => {
                                 field.onChange(personId);
                                 // Clearing the person clears any stale role.
-                                if (!personId) setValue("contactRole", "");
+                                if (!personId) setValue("contactRole", null);
                               }}
                               persons={persons}
                               loading={personsLoading}
@@ -874,16 +874,18 @@ export function AddJob({
                       control={form.control}
                       name="contactRole"
                       render={({ field }) => (
-                        <FormItem className="flex flex-col">
+                        <FormItem className="flex flex-col [&>button]:capitalize">
                           <FormLabel>{t("crm.contactRole")}</FormLabel>
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ""}
-                              placeholder={t("crm.contactRolePlaceholder")}
-                              disabled={!contactPersonIdValue}
-                            />
-                          </FormControl>
+                          <SelectFormCtrl
+                            label={t("crm.contactRole")}
+                            options={JOB_CONTACT_ROLES.map((r) => ({
+                              id: r,
+                              label: t(`crm.jobContactRole.${r}`),
+                              value: r,
+                            }))}
+                            field={field}
+                            disabled={!contactPersonIdValue}
+                          />
                           <FormMessage />
                         </FormItem>
                       )}

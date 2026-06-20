@@ -126,7 +126,6 @@ function ApiStatusOverview() {
       } else if (!silent) {
         toast({
           variant: "destructive",
-          title: t("settings.healthCheckNow"),
           description: result.message ?? t("settings.unexpectedError"),
         });
       }
@@ -136,7 +135,6 @@ function ApiStatusOverview() {
       if (!silent) {
         toast({
           variant: "destructive",
-          title: t("settings.healthCheckNow"),
           description: t("settings.unexpectedError"),
         });
       }

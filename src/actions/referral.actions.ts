@@ -1,0 +1,472 @@
+"use server";
+
+import "server-only";
+import prisma from "@/lib/db";
+import { getCurrentUser } from "@/utils/user.utils";
+import { ActionResult } from "@/models/actionResult";
+import { handleError } from "@/lib/utils";
+import { isConsentBlocked } from "@/models/person.model";
+import {
+  type ReferralKind,
+  type ReferralStatus,
+  isValidReferralTransition,
+} from "@/models/insideTrack.model";
+import { resolveAppliedStatusId } from "@/lib/crm/resolve-applied-status";
+import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
+
+// ---------------------------------------------------------------------------
+// referral.actions.ts — Referral aggregate Repository (Welle 5, Inside Track).
+// SoT: specs/inside-track.allium (RecordInsiderTip/RecordNetworkTip + the five
+// status-gated stimulus rules + TipReifiesToJob). ADR-015: every query is
+// userId-scoped; user_id comes from the session, never from client input.
+// ---------------------------------------------------------------------------
+
+interface RecordInsiderTipInput {
+  tipsterId: string;
+  targetCompanyId?: string | null;
+  forwardedToId?: string | null;
+}
+
+interface RecordNetworkTipInput {
+  tipsterId: string;
+  insiderId?: string | null;
+  viaId?: string | null;
+  targetCompanyId?: string | null;
+}
+
+/** Verify the given Person belongs to the user and is not consent-blocked. */
+async function assertUsablePerson(
+  personId: string,
+  userId: string,
+): Promise<
+  { ok: true } | { ok: false; message: "crm.errors.personNotFound" | "crm.errors.consentWithdrawn" }
+> {
+  const person = await prisma.person.findFirst({
+    where: { id: personId, userId },
+    select: { processingBasis: true, consentWithdrawnAt: true },
+  });
+  if (!person) return { ok: false, message: "crm.errors.personNotFound" };
+  // GDPR Art. 7(3): no new processing tied to a consent-blocked contact.
+  if (isConsentBlocked(person)) return { ok: false, message: "crm.errors.consentWithdrawn" };
+  return { ok: true };
+}
+
+async function assertOwnedCompany(companyId: string, userId: string): Promise<boolean> {
+  const company = await prisma.company.findFirst({
+    where: { id: companyId, createdBy: userId },
+    select: { id: true },
+  });
+  return Boolean(company);
+}
+
+export async function recordInsiderTip(
+  input: RecordInsiderTipInput,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
+
+    const tipsterCheck = await assertUsablePerson(input.tipsterId, user.id);
+    if (!tipsterCheck.ok) return { success: false, message: tipsterCheck.message };
+
+    if (input.forwardedToId) {
+      const fwd = await assertUsablePerson(input.forwardedToId, user.id);
+      if (!fwd.ok) return { success: false, message: fwd.message };
+    }
+    if (input.targetCompanyId && !(await assertOwnedCompany(input.targetCompanyId, user.id))) {
+      return { success: false, message: "crm.errors.companyNotFound" };
+    }
+
+    const referral = await prisma.referral.create({
+      data: {
+        userId: user.id,
+        kind: "insider_relay",
+        status: "open",
+        tipsterId: input.tipsterId,
+        forwardedToId: input.forwardedToId ?? null,
+        targetCompanyId: input.targetCompanyId ?? null,
+        updatedByType: "user",
+        updatedById: user.id,
+      },
+      select: { id: true },
+    });
+    return { success: true, data: { id: referral.id } };
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+export async function recordNetworkTip(
+  input: RecordNetworkTipInput,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
+
+    const tipsterCheck = await assertUsablePerson(input.tipsterId, user.id);
+    if (!tipsterCheck.ok) return { success: false, message: tipsterCheck.message };
+
+    if (input.insiderId) {
+      const ins = await assertUsablePerson(input.insiderId, user.id);
+      if (!ins.ok) return { success: false, message: ins.message };
+    }
+    if (input.targetCompanyId && !(await assertOwnedCompany(input.targetCompanyId, user.id))) {
+      return { success: false, message: "crm.errors.companyNotFound" };
+    }
+    let resolvedViaId: string | null = input.viaId ?? null;
+    if (input.viaId) {
+      const via = await prisma.personConnection.findFirst({
+        where: { id: input.viaId, userId: user.id },
+        select: { fromPersonId: true, toPersonId: true },
+      });
+      if (!via) return { success: false, message: "crm.errors.connectionNotFound" };
+      // invariant NetworkPathViaConnectsTipsterToInsider (specs/inside-track.allium):
+      // the via edge must actually run tipster -> insider. Enforce at the boundary
+      // (ADR-019) so a callable server action cannot create an inconsistent path.
+      if (via.fromPersonId !== input.tipsterId || via.toPersonId !== input.insiderId) {
+        return { success: false, message: "crm.errors.invalidConnectionPath" };
+      }
+    } else if (input.insiderId) {
+      // Auto-link the warm path: if a tipster -> insider PersonConnection already
+      // exists, record it as `via` so the NetworkPath captures the full route. At
+      // most one edge per ordered pair (DistinctEndpointsPerUser), so this is
+      // unambiguous and needs no manual via picker in the UI.
+      const edge = await prisma.personConnection.findFirst({
+        where: { userId: user.id, fromPersonId: input.tipsterId, toPersonId: input.insiderId },
+        select: { id: true },
+      });
+      if (edge) resolvedViaId = edge.id;
+    }
+
+    const referral = await prisma.referral.create({
+      data: {
+        userId: user.id,
+        kind: "network_path",
+        status: "open",
+        tipsterId: input.tipsterId,
+        insiderId: input.insiderId ?? null,
+        viaId: resolvedViaId,
+        targetCompanyId: input.targetCompanyId ?? null,
+        updatedByType: "user",
+        updatedById: user.id,
+      },
+      select: { id: true },
+    });
+    return { success: true, data: { id: referral.id } };
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+/**
+ * Shared status-gated transition: fetch (userId-scoped), validate against the
+ * inside-track lifecycle graph, then persist + refresh last_activity_at so
+ * ReferralGoesStale re-arms.
+ */
+async function transitionReferral(
+  referralId: string,
+  to: ReferralStatus,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
+
+    const referral = await prisma.referral.findFirst({
+      where: { id: referralId, userId: user.id },
+      select: { id: true, status: true },
+    });
+    if (!referral) return { success: false, message: "crm.errors.referralNotFound" };
+
+    if (!isValidReferralTransition(referral.status, to)) {
+      return { success: false, message: "crm.errors.invalidTransition" };
+    }
+
+    await prisma.referral.update({
+      where: { id: referralId },
+      data: {
+        status: to,
+        lastActivityAt: new Date(),
+        updatedByType: "user",
+        updatedById: user.id,
+      },
+    });
+    return { success: true, data: { id: referralId } };
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+/** ApplicantEngagesTip: open -> engaged. */
+export async function engageReferral(id: string) {
+  return transitionReferral(id, "engaged");
+}
+/** IntermediaryRelaysTip: engaged -> relayed. */
+export async function relayReferral(id: string) {
+  return transitionReferral(id, "relayed");
+}
+/** TargetReviewsApplication: relayed -> in_review. */
+export async function reviewReferral(id: string) {
+  return transitionReferral(id, "in_review");
+}
+/** DeclineReferral: {open,engaged,relayed,in_review,stale} -> declined. */
+export async function declineReferral(id: string) {
+  return transitionReferral(id, "declined");
+}
+/** ReviveReferral: stale -> open. */
+export async function reviveReferral(id: string) {
+  return transitionReferral(id, "open");
+}
+
+/**
+ * TipReifiesToJob: the boundary between "a tip" and "a Job". A Job is created
+ * only when the user commits to applying AND a target company is known; the
+ * referral then transitions in_review -> converted (1:1 source_referral link).
+ */
+export async function commitReferralToApply(
+  referralId: string,
+): Promise<ActionResult<{ id: string; jobId: string }>> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
+
+    const referral = await prisma.referral.findFirst({
+      where: { id: referralId, userId: user.id },
+      select: { id: true, status: true, targetCompanyId: true },
+    });
+    if (!referral) return { success: false, message: "crm.errors.referralNotFound" };
+
+    // requires: status = in_review (validated against the lifecycle graph)
+    if (!isValidReferralTransition(referral.status, "converted")) {
+      return { success: false, message: "crm.errors.invalidTransition" };
+    }
+    // requires: target_company != null
+    if (!referral.targetCompanyId) {
+      return { success: false, message: "crm.errors.referralRequiresTargetCompany" };
+    }
+
+    const company = await prisma.company.findFirst({
+      where: { id: referral.targetCompanyId, createdBy: user.id },
+      select: { id: true, label: true },
+    });
+    if (!company) return { success: false, message: "crm.errors.companyNotFound" };
+
+    // Placeholder title (no posting exists for a speculative application); the
+    // user renames it. Resolve the applied-kind status (never null).
+    const statusId = await resolveAppliedStatusId(user.id);
+    const jobTitle = await prisma.jobTitle.upsert({
+      where: { value_createdBy: { value: company.label.trim().toLowerCase(), createdBy: user.id } },
+      update: {},
+      create: { label: company.label.trim(), value: company.label.trim().toLowerCase(), createdBy: user.id },
+      select: { id: true },
+    });
+
+    // Atomic: create the Job (linked back via sourceReferralId) + its initial
+    // JobStatusHistory + convert the referral, so a converted referral always
+    // has its Job (ConvertedReferralHasJob) and the new Job is consistent with
+    // every other Job (addJob also seeds history + emits JobStatusChanged).
+    const result = await prisma.$transaction(async (tx) => {
+      const newJob = await tx.job.create({
+        data: {
+          userId: user.id,
+          companyId: company.id,
+          jobTitleId: jobTitle.id,
+          statusId,
+          sourceReferralId: referral.id,
+          // Placeholder fields for a speculative application — user edits later.
+          description: "",
+          jobType: "",
+          createdAt: new Date(),
+        },
+        select: { id: true, Status: { select: { value: true } } },
+      });
+      const history = await tx.jobStatusHistory.create({
+        data: {
+          jobId: newJob.id,
+          userId: user.id,
+          previousStatusId: null,
+          newStatusId: statusId,
+          note: null,
+          changedAt: new Date(),
+        },
+      });
+      await tx.referral.update({
+        where: { id: referralId },
+        data: {
+          status: "converted",
+          lastActivityAt: new Date(),
+          updatedByType: "user",
+          updatedById: user.id,
+        },
+      });
+      return { jobId: newJob.id, statusValue: newJob.Status.value, historyId: history.id };
+    });
+
+    // Post-commit side-effects (mirror addJob): timeline event + GDPR audit.
+    emitEvent(
+      createEvent(DomainEventTypes.JobStatusChanged, {
+        jobId: result.jobId,
+        userId: user.id,
+        previousStatusValue: null,
+        newStatusValue: result.statusValue,
+        note: undefined,
+        historyEntryId: result.historyId,
+      }),
+    );
+    writeDataAuditLog({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: "job.create",
+      targetType: "job",
+      targetId: result.jobId,
+    });
+
+    return { success: true, data: { id: referralId, jobId: result.jobId } };
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Read side (Task 5.0 — gates the Phase-5 UI). SoT: surface ReferralWorkspace
+// (exposes kind/tipster/target_company/target_job/status/received_at/
+// last_activity_at) + @guarantee TipsterShownLive. The tipster (and every other
+// Person ref) is resolved LIVE via a nested select on the Person — never a
+// snapshotted name — so an anonymized contact renders de-identified at the UI.
+// ADR-015: userId-scoped; explicit select so no internal columns leak.
+// ---------------------------------------------------------------------------
+
+/** Live Person reference shape — the UI de-identifies when `status` is anonymized. */
+const PERSON_REF_SELECT = { id: true, firstName: true, lastName: true, status: true } as const;
+
+export interface ReferralPersonRef {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  status: string;
+}
+export interface ReferralCompanyRef {
+  id: string;
+  label: string;
+}
+
+/** Lightweight row for the Inside Track list / Job-detail back-reference. */
+export interface ReferralListEntry {
+  id: string;
+  kind: ReferralKind;
+  status: ReferralStatus;
+  receivedAt: Date;
+  lastActivityAt: Date;
+  tipster: ReferralPersonRef | null;
+  targetCompany: ReferralCompanyRef | null;
+  targetJobId: string | null;
+}
+
+/** Full referral for the ReferralWorkspace. */
+export interface ReferralDetail extends ReferralListEntry {
+  createdAt: Date;
+  updatedAt: Date;
+  forwardedTo: ReferralPersonRef | null;
+  insider: ReferralPersonRef | null;
+  via: { id: string; kind: string; strength: string } | null;
+  targetJobTitle: string | null;
+}
+
+/** One referral by id (ReferralWorkspace context). */
+export async function getReferral(referralId: string): Promise<ActionResult<ReferralDetail>> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
+
+    const r = await prisma.referral.findFirst({
+      where: { id: referralId, userId: user.id },
+      select: {
+        id: true,
+        kind: true,
+        status: true,
+        receivedAt: true,
+        lastActivityAt: true,
+        createdAt: true,
+        updatedAt: true,
+        tipster: { select: PERSON_REF_SELECT },
+        targetCompany: { select: { id: true, label: true } },
+        forwardedTo: { select: PERSON_REF_SELECT },
+        insider: { select: PERSON_REF_SELECT },
+        via: { select: { id: true, kind: true, strength: true } },
+        targetJob: { select: { id: true, JobTitle: { select: { label: true } } } },
+      },
+    });
+    if (!r) return { success: false, message: "crm.errors.referralNotFound" };
+
+    return {
+      success: true,
+      data: {
+        id: r.id,
+        kind: r.kind as ReferralKind,
+        status: r.status as ReferralStatus,
+        receivedAt: r.receivedAt,
+        lastActivityAt: r.lastActivityAt,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        tipster: r.tipster,
+        forwardedTo: r.forwardedTo,
+        insider: r.insider,
+        via: r.via,
+        targetCompany: r.targetCompany,
+        targetJobId: r.targetJob?.id ?? null,
+        targetJobTitle: r.targetJob?.JobTitle?.label ?? null,
+      },
+    };
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+/** All of the user's referrals (Inside Track home), or the one(s) for a Job. */
+export async function listReferrals(filter?: {
+  jobId?: string;
+}): Promise<ActionResult<ReferralListEntry[]>> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "errors.notAuthenticated" };
+
+    // NOTE: intentionally un-paginated. Per-user referral counts are network-bounded
+    // (created one-by-one from real tips, not bulk-imported like Persons), so loading all
+    // + ordering by lastActivityAt is proportionate. Add cursor/skip pagination here
+    // (mirroring getPersons) if a user ever accumulates enough referrals to feel it.
+    const where = filter?.jobId
+      ? { userId: user.id, targetJob: { id: filter.jobId } }
+      : { userId: user.id };
+
+    const rows = await prisma.referral.findMany({
+      where,
+      orderBy: { lastActivityAt: "desc" },
+      select: {
+        id: true,
+        kind: true,
+        status: true,
+        receivedAt: true,
+        lastActivityAt: true,
+        tipster: { select: PERSON_REF_SELECT },
+        targetCompany: { select: { id: true, label: true } },
+        targetJob: { select: { id: true } },
+      },
+    });
+
+    return {
+      success: true,
+      data: rows.map((r) => ({
+        id: r.id,
+        kind: r.kind as ReferralKind,
+        status: r.status as ReferralStatus,
+        receivedAt: r.receivedAt,
+        lastActivityAt: r.lastActivityAt,
+        tipster: r.tipster,
+        targetCompany: r.targetCompany,
+        targetJobId: r.targetJob?.id ?? null,
+      })),
+    };
+  } catch (error) {
+    return handleError(error);
+  }
+}

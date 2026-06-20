@@ -23,9 +23,13 @@ See `devenv.nix` for the full configuration. Requires a writable Nix store.
 
 ```bash
 ./scripts/dev.sh      # Start dev server (port 3737)
+./scripts/restart.sh  # Stop, flush .next cache, then restart dev server
 ./scripts/build.sh    # Production build
+./scripts/build-safe.sh  # Production build in a systemd memory cgroup (low-RAM hosts; OOM-kills the build, not the host)
 ./scripts/test.sh     # Run Jest tests (uses system Node.js)
+./scripts/test-e2e.sh # Run Playwright E2E (env + warm server + single worker; low-RAM hosts)
 ./scripts/stop.sh     # Stop dev server
+./scripts/clean.sh    # Flush .next/ build cache (no restart; --all also clears node_modules/.cache)
 ./scripts/prisma-generate.sh  # Generate Prisma client
 ./scripts/prisma-migrate.sh   # Run migrations
 ```
@@ -846,13 +850,17 @@ Formal specifications in `specs/*.allium` capture domain behaviour:
 
 **Running E2E tests:**
 ```bash
-# Resource-tight (NixOS VM, CI) — single worker:
-nice -n 10 npx playwright test --project=chromium --workers=1
+# Resource-tight (8 GB NixOS VM) — one command: env + warm server + single worker:
+./scripts/test-e2e.sh                                    # full suite (smoke -> crud)
+./scripts/test-e2e.sh e2e/crud/inside-track-crud.spec.ts # one spec
+
+# Manual (dev server already started via scripts/dev-e2e.sh):
+nice -n 10 npx playwright test --workers=1               # projects are "smoke" + "crud" (there is NO "chromium" project)
 
 # Local development — parallel workers:
 npx playwright test --workers=4
 ```
-Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` on NixOS.
+Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` on NixOS (`scripts/test-e2e.sh` sets it for you).
 
 **Dev server:** Agents may start the dev server but must **NEVER stop it**. `reuseExistingServer: true` ensures Playwright reuses a running server.
 
