@@ -887,11 +887,10 @@ Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` on
 **When to run:** On user request — typically after refactorings, dependency changes, or feature deletions. Not automatically on every commit.
 
 **Commands:**
-- `bun knip --changed` — **primary**: scan only files changed since last commit
-- `bun knip --changed --base main` — scan all changes on current branch
-- `bun knip` — full scan (files, dependencies, exports)
+- `bun knip` — **primary**: full scan (files, dependencies, exports, types)
 - `bun knip --dependencies` — fastest check, unused packages only
 - `bun knip:prod` — production dependencies only
+- Scope to a branch/commit diff (this knip build has **no** `--changed`/`--base` — verified 2026-06-20): run full `bun knip` then filter to the diff, e.g. `grep -Ff <(git diff --name-only <base> HEAD) <knip-output-file>`.
 
 **Key config decisions** (in `knip.ts`):
 - Side-effect imports (module self-registration via `register-all.ts`, event consumers) are explicit entry points

@@ -405,3 +405,10 @@ deliberately NOT fixed piecemeal at the feature tail (scope + consumer-coupling 
   scattered; incl. ~10 this-session `insideTrack.*` keys for deferred UI (via field, lifecycle badges,
   workspace labels). **Do NOT bulk-delete from the hunt list** — it false-positived ≥1 used key
   (`commitToApplyConfirmDescription`); run `bun knip` + the dictionary-completeness test as guards.
+- **Project-wide TS knip debt (pre-existing, full `bun knip` 2026-06-20)** — 21 unused files, 3 deps,
+  3 devDeps, 84 unused exports, 33 unused exported types, 2 duplicate exports. **NOT introduced by
+  Welle 5** — the welle5-scoped scan was clean; each knip hit in a welle5-touched file (JOB_STATUSES,
+  stopCrmCron, Country, Address, FullName, ActorSource) was verified present at `be6b016` (pre-welle5).
+  Distinct from the i18n/select sweeps above (this is TS-level dead exports/types/files). Verify-before-
+  delete (knip false-positives on side-effect/dynamic use; `ignoreExportsUsedInFile` already on) —
+  dedicated sweep, not bulk. NB: installed knip has no `--changed`; scope via full run + `git diff` filter.
