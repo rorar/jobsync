@@ -37,7 +37,7 @@ All facts below verified against current code this session (FEEDING-RULE: graph 
 | H-P-09 Observability | — | independent (2-3wk) |
 | 1.12 Communication / Gmail-Sync | confirmed: spec only, no code | **blocks IT-8** (+ CRM 5.1) |
 | 1.7 Calendar | confirmed: no code | independent (blocks 5.2) |
-| 2.20 CompanyDetail page | — | unblocks company-timeline; mild synergy with WarmPathFinder |
+| 2.21 CompanyDetail page | — | unblocks company-timeline; mild synergy with WarmPathFinder |
 | Welle-1 follow-ups (handleError i18n swallow, person.pii_read audit, RoPA) | — | independent |
 | 3 cosmetic + KeyRotation (deferred) | — | independent |
 

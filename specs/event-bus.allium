@@ -290,7 +290,7 @@ value CrmTaskCreatedPayload {
     target_person_id: String?
     target_job_id: String?
     -- Set when the task targets a Company directly; carried to ActivityLog.target_company
-    -- for the CompanyTimeline surface (read surface gated on ROADMAP 2.20 CompanyDetail).
+    -- for the CompanyTimeline surface (read surface gated on ROADMAP 2.21 CompanyDetail).
     target_company_id: String?
     user_id: String
 }

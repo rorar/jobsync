@@ -246,7 +246,7 @@ export function registerCrmActivityLogConsumers(): void {
       targetJobId: p.targetJobId ?? null,
       // Prefer an explicit company target (CrmTask targeting a Company directly);
       // otherwise resolve the company from the linked job. Pre-staged for the
-      // ROADMAP 2.20 CompanyDetail timeline.
+      // ROADMAP 2.21 CompanyDetail timeline.
       targetCompanyId: p.targetCompanyId ?? (await resolveCompanyId(p.targetJobId, p.userId)),
       linkedRecordName: p.title,
     }),
@@ -264,7 +264,7 @@ export function registerCrmActivityLogConsumers(): void {
       targetJobId: p.targetJobId ?? null,
       // Prefer an explicit company target (CrmTask targeting a Company directly);
       // otherwise resolve the company from the linked job. Pre-staged for the
-      // ROADMAP 2.20 CompanyDetail timeline.
+      // ROADMAP 2.21 CompanyDetail timeline.
       targetCompanyId: p.targetCompanyId ?? (await resolveCompanyId(p.targetJobId, p.userId)),
       linkedRecordName: p.title,
     }),

@@ -272,7 +272,7 @@ export interface CrmTaskCreatedPayload {
   targetPersonId?: string;
   targetJobId?: string;
   // Set when the task targets a Company directly. Pre-staged for the company
-  // timeline read surface (ROADMAP 2.20 CompanyDetail); the projection threads
+  // timeline read surface (ROADMAP 2.21 CompanyDetail); the projection threads
   // it through but no consumer reads it yet. Additive + optional → safeParse-safe.
   targetCompanyId?: string;
 }
