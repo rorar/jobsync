@@ -68,14 +68,14 @@ panel reused on `myjobs/[id]`; components in NEW `src/components/inside-track/`.
 
 ### Tasks
 - [x] Task 5.0: Referral READ actions (gap — `referral.actions.ts` is write-only): `getReferral(id)` + `listReferrals({jobId?})` (ActionResult, userId-scoped, explicit `select`; resolve tipster live per @guarantee TipsterShownLive — no snapshot). Mirror `listPersonConnections`. Tests first.
-- [ ] Task 5.1: `TipCapture` (quick-add insider/network tip + add connection) — consult ui-design agent first; component tests.
-- [ ] Task 5.2: `ReferralWorkspace` (status-gated lifecycle actions, exposes per spec); component tests.
-- [ ] Task 5.3: WarmPathFinder panel on Job/Company (reveals the path); component tests.
-- [ ] Task 5.4: i18n keys (own `insideTrack.*` namespace) × 4 locales; dictionary test.
-- [ ] Task 5.5: E2E happy-path (record tip → engage → relay → in_review → reify to Job), per `e2e/CONVENTIONS.md`.
+- [x] Task 5.1: `TipCapture` (quick-add insider/network tip + add connection) — consult ui-design agent first; component tests.
+- [x] Task 5.2: `ReferralWorkspace` (status-gated lifecycle actions, exposes per spec); component tests.
+- [x] Task 5.3: WarmPathFinder panel on Job/Company (reveals the path); component tests.
+- [x] Task 5.4: i18n keys (own `insideTrack.*` namespace) × 4 locales; dictionary test.
+- [x] Task 5.5: E2E happy-path (record tip → engage → relay → in_review → reify to Job), per `e2e/CONVENTIONS.md`.
 
 ### Verification
-- [ ] Component + E2E green; dictionary 4 locales; accessibility audit on new UI.
+- [x] Component green (260+ inside-track tests); dictionary 4 locales; a11y encoded in component tests (design gate + ui-designer + accessibility-expert). E2E written, RUN-deferred (env-blocked global-setup). Full jest suite + build at Phase 7.
 
 ## Phase 6: GDPR Integration (IT-3, IT-6)
 

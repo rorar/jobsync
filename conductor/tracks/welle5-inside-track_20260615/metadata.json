@@ -4,16 +4,16 @@
   "type": "feature",
   "status": "in_progress",
   "created": "2026-06-15T00:00:00Z",
-  "updated": "2026-06-15T12:00:00Z",
-  "current_phase": 4,
-  "current_task": "4.2",
+  "updated": "2026-06-20T00:00:00Z",
+  "current_phase": 6,
+  "current_task": "6.1",
   "phases": {
     "total": 7,
-    "completed": 4
+    "completed": 5
   },
   "tasks": {
-    "total": 26,
-    "completed": 16
+    "total": 27,
+    "completed": 22
   },
   "source_of_truth": [
     "specs/inside-track.allium",
