@@ -173,7 +173,7 @@ describe("crmNote.actions", () => {
       expect(eventBus.publish).toHaveBeenCalled();
     });
 
-    // targetCompanyId pre-staging (ROADMAP 2.20 CompanyDetail) — additive + optional.
+    // targetCompanyId pre-staging (ROADMAP 2.21 CompanyDetail) — additive + optional.
     it("publishes CrmNoteCreated with targetCompanyId for a company-targeted note", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (validateExactlyOneTarget as jest.Mock).mockReturnValue(true);

@@ -307,7 +307,7 @@ describe("crm-activity-logger", () => {
     expect(mockFindUnique).not.toHaveBeenCalled();
   });
 
-  // ROADMAP 2.20 pre-staging: a task/note targeting a Company directly carries
+  // ROADMAP 2.21 pre-staging: a task/note targeting a Company directly carries
   // targetCompanyId in the payload, which the projection prefers over the
   // job→company resolution (so no job lookup happens).
   it("task_created prefers the explicit payload targetCompanyId without a job lookup", async () => {

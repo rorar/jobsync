@@ -464,7 +464,7 @@ describe("crmTask.actions", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // targetCompanyId pre-staging (ROADMAP 2.20 CompanyDetail) — the event
+  // targetCompanyId pre-staging (ROADMAP 2.21 CompanyDetail) — the event
   // payloads carry the company target so a company-targeted task can later land
   // on the (future) company timeline. Additive + optional.
   // ---------------------------------------------------------------------------
