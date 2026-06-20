@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "gitCommitHash": "2851eb45400ff3a8ad4e574e27f4077be42bf029",
-  "generatedAt": "2026-06-15T22:07:21.569Z",
+  "gitCommitHash": "fca5b10fbf17641886030732803843075590c5b7",
+  "generatedAt": "2026-06-20T09:45:31.310Z",
   "files": {
     "__mocks__/next-auth-providers.ts": {
       "filePath": "__mocks__/next-auth-providers.ts",
@@ -498,6 +498,69 @@
       ],
       "exports": [],
       "totalLines": 153,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/AddConnectionForm.spec.tsx": {
+      "filePath": "__tests__/AddConnectionForm.spec.tsx",
+      "contentHash": "ec3f34f7f2587e4f4d3431f84e1f5cb4259a2b393d5681a3847e8fedf086d055",
+      "functions": [
+        {
+          "name": "renderForm",
+          "params": [
+            "overrides"
+          ],
+          "exported": false,
+          "lineCount": 24
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen",
+            "waitFor"
+          ]
+        },
+        {
+          "source": "@testing-library/user-event",
+          "specifiers": [
+            "userEvent"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/AddConnectionForm",
+          "specifiers": [
+            "AddConnectionForm"
+          ]
+        },
+        {
+          "source": "@/components/crm/ContactPicker",
+          "specifiers": [
+            "PersonOption"
+          ]
+        },
+        {
+          "source": "@/models/insideTrack.model",
+          "specifiers": [
+            "CONNECTION_KINDS",
+            "CONNECTION_STRENGTHS"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 297,
       "hasStructuralAnalysis": true
     },
     "__tests__/AddEducation.spec.tsx": {
@@ -2103,7 +2166,7 @@
     },
     "__tests__/collect-user-data-audit.spec.ts": {
       "filePath": "__tests__/collect-user-data-audit.spec.ts",
-      "contentHash": "a74e1e3888ac7791b423891cd5ccd15c2f64ec8e77672c06017616680ceeea45",
+      "contentHash": "0886168feddff00ecbedba051f8f57c232c985ee61a71ca78300de2b5e0fa9ad",
       "functions": [],
       "classes": [],
       "imports": [
@@ -2127,7 +2190,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 148,
+      "totalLines": 183,
       "hasStructuralAnalysis": true
     },
     "__tests__/ComboBox.spec.tsx": {
@@ -2757,6 +2820,53 @@
       "imports": [],
       "exports": [],
       "totalLines": 57,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/ContactPicker.spec.tsx": {
+      "filePath": "__tests__/ContactPicker.spec.tsx",
+      "contentHash": "994dac8363e669dfba806bbd44eccaf55edf9b517d41e22256ee32ba199e7501",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen"
+          ]
+        },
+        {
+          "source": "@testing-library/user-event",
+          "specifiers": [
+            "userEvent"
+          ]
+        },
+        {
+          "source": "@/components/crm/ContactPicker",
+          "specifiers": [
+            "ContactPicker",
+            "toPersonOption"
+          ]
+        },
+        {
+          "source": "@/components/crm/ContactPicker",
+          "specifiers": [
+            "PersonOption"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 275,
       "hasStructuralAnalysis": true
     },
     "__tests__/CountrySelect.spec.tsx": {
@@ -5936,53 +6046,6 @@
       "totalLines": 302,
       "hasStructuralAnalysis": true
     },
-    "__tests__/JobContactPicker.spec.tsx": {
-      "filePath": "__tests__/JobContactPicker.spec.tsx",
-      "contentHash": "05c68950d7da739a3388646a18c59979bbad36cde5e21dfc9f24cd35bb4ef89a",
-      "functions": [],
-      "classes": [],
-      "imports": [
-        {
-          "source": "react",
-          "specifiers": [
-            "React"
-          ]
-        },
-        {
-          "source": "@testing-library/jest-dom",
-          "specifiers": []
-        },
-        {
-          "source": "@testing-library/react",
-          "specifiers": [
-            "render",
-            "screen"
-          ]
-        },
-        {
-          "source": "@testing-library/user-event",
-          "specifiers": [
-            "userEvent"
-          ]
-        },
-        {
-          "source": "@/components/myjobs/JobContactPicker",
-          "specifiers": [
-            "JobContactPicker",
-            "toPersonOption"
-          ]
-        },
-        {
-          "source": "@/components/myjobs/JobContactPicker",
-          "specifiers": [
-            "PersonOption"
-          ]
-        }
-      ],
-      "exports": [],
-      "totalLines": 275,
-      "hasStructuralAnalysis": true
-    },
     "__tests__/jobContactRole.spec.ts": {
       "filePath": "__tests__/jobContactRole.spec.ts",
       "contentHash": "d20fd2dde939af2efcaf477e590b8d06bf3016794c54fbceebf288859406d312",
@@ -7978,7 +8041,7 @@
     },
     "__tests__/person.actions.spec.ts": {
       "filePath": "__tests__/person.actions.spec.ts",
-      "contentHash": "029a11e49031bf34f1e10d38cacae9e646bfd13e0a734d9aac5ed92686ffab09",
+      "contentHash": "b5257cc2885187e80336aef8bc7a8beaa9561cd0b84d1f9c324501a3675496ac",
       "functions": [
         {
           "name": "basePerson",
@@ -8023,7 +8086,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 489,
+      "totalLines": 542,
       "hasStructuralAnalysis": true
     },
     "__tests__/person.model.spec.ts": {
@@ -8733,7 +8796,7 @@
     },
     "__tests__/referral.actions.spec.ts": {
       "filePath": "__tests__/referral.actions.spec.ts",
-      "contentHash": "4c36e23e4fcd6cafa6610aad6cdcf2cf0c17b4a88068a4342087752eb6889a8c",
+      "contentHash": "3df64ddeda543dead4a2fe4ee54fba7b46a63c099b23ba94ce436d2008b8d73e",
       "functions": [],
       "classes": [],
       "imports": [
@@ -8745,7 +8808,9 @@
             "engageReferral",
             "declineReferral",
             "reviveReferral",
-            "commitReferralToApply"
+            "commitReferralToApply",
+            "getReferral",
+            "listReferrals"
           ]
         },
         {
@@ -8768,7 +8833,246 @@
         }
       ],
       "exports": [],
-      "totalLines": 187,
+      "totalLines": 301,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/ReferralActionBar.spec.tsx": {
+      "filePath": "__tests__/ReferralActionBar.spec.tsx",
+      "contentHash": "cb6164dac99be0d58a70a762e38fbf1014cb5457a201728796553cfe084fd7db",
+      "functions": [
+        {
+          "name": "renderBar",
+          "params": [
+            "overrides"
+          ],
+          "exported": false,
+          "lineCount": 21
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen",
+            "fireEvent",
+            "waitFor"
+          ]
+        },
+        {
+          "source": "@testing-library/user-event",
+          "specifiers": [
+            "userEvent"
+          ]
+        },
+        {
+          "source": "@/models/insideTrack.model",
+          "specifiers": [
+            "ReferralStatus",
+            "ReferralKind"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/ReferralActionBar",
+          "specifiers": [
+            "ReferralActionBar",
+            "ReferralActionKey"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 428,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/ReferralBadges.spec.tsx": {
+      "filePath": "__tests__/ReferralBadges.spec.tsx",
+      "contentHash": "de8f0841a2321f567e2c2fc5f02d3bbcde353a5ffff30ff9a619d73993d6757f",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/ReferralStatusBadge",
+          "specifiers": [
+            "ReferralStatusBadge"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/ReferralKindBadge",
+          "specifiers": [
+            "ReferralKindBadge"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 65,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/ReferralLifecycleRail.spec.tsx": {
+      "filePath": "__tests__/ReferralLifecycleRail.spec.tsx",
+      "contentHash": "35be9c818dab89c23ecf2da33a30c182c0da7bff10390dddf5bc6f2bff35c766",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen",
+            "within"
+          ]
+        },
+        {
+          "source": "@/models/insideTrack.model",
+          "specifiers": [
+            "ReferralStatus"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/ReferralLifecycleRail",
+          "specifiers": [
+            "ReferralLifecycleRail"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 262,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/ReferralsPageClient.spec.tsx": {
+      "filePath": "__tests__/ReferralsPageClient.spec.tsx",
+      "contentHash": "0476343607542f00acc293ffe4ca81166b10a5644133691342b68722f0458597",
+      "functions": [
+        {
+          "name": "entry",
+          "params": [
+            "over"
+          ],
+          "exported": false,
+          "lineCount": 11
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen"
+          ]
+        },
+        {
+          "source": "@testing-library/user-event",
+          "specifiers": [
+            "userEvent"
+          ]
+        },
+        {
+          "source": "@/app/dashboard/referrals/ReferralsPageClient",
+          "specifiers": [
+            "ReferralsPageClient"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 117,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/ReferralWorkspaceClient.spec.tsx": {
+      "filePath": "__tests__/ReferralWorkspaceClient.spec.tsx",
+      "contentHash": "5e02caa2999ea49fc6221471154e9e46705eadf1b83c90f4544520ca7dc51c5d",
+      "functions": [
+        {
+          "name": "detail",
+          "params": [
+            "over"
+          ],
+          "exported": false,
+          "lineCount": 19
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen",
+            "waitFor"
+          ]
+        },
+        {
+          "source": "@testing-library/user-event",
+          "specifiers": [
+            "userEvent"
+          ]
+        },
+        {
+          "source": "@/app/dashboard/referrals/[id]/ReferralWorkspaceClient",
+          "specifiers": [
+            "ReferralWorkspaceClient"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 144,
       "hasStructuralAnalysis": true
     },
     "__tests__/relationshipType.spec.ts": {
@@ -10732,6 +11036,62 @@
       "totalLines": 325,
       "hasStructuralAnalysis": true
     },
+    "__tests__/TipCaptureForm.spec.tsx": {
+      "filePath": "__tests__/TipCaptureForm.spec.tsx",
+      "contentHash": "772b64f3f919193594259106000d2d62b58173ae7253c8fc9bc51fc1cd26fcd5",
+      "functions": [
+        {
+          "name": "renderForm",
+          "params": [
+            "overrides"
+          ],
+          "exported": false,
+          "lineCount": 24
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen",
+            "waitFor"
+          ]
+        },
+        {
+          "source": "@testing-library/user-event",
+          "specifiers": [
+            "userEvent"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/TipCaptureForm",
+          "specifiers": [
+            "TipCaptureForm"
+          ]
+        },
+        {
+          "source": "@/components/crm/ContactPicker",
+          "specifiers": [
+            "PersonOption"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 430,
+      "hasStructuralAnalysis": true
+    },
     "__tests__/toast-dismiss-i18n.spec.tsx": {
       "filePath": "__tests__/toast-dismiss-i18n.spec.tsx",
       "contentHash": "e0cab982ff6acc5f2fdd612ecdb72784b21654885d7456677635ccbc33a65bec",
@@ -11497,6 +11857,68 @@
       ],
       "exports": [],
       "totalLines": 149,
+      "hasStructuralAnalysis": true
+    },
+    "__tests__/WarmPathFinder.spec.tsx": {
+      "filePath": "__tests__/WarmPathFinder.spec.tsx",
+      "contentHash": "0dc0eb1c6bb2a7d73a6ac50969c624ebebf2ffee3ff473710a40270eab511045",
+      "functions": [
+        {
+          "name": "makeSuccess",
+          "params": [
+            "insiders",
+            "networkPaths"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "renderFinder",
+          "params": [
+            "companyId",
+            "companyName"
+          ],
+          "exported": false,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@testing-library/jest-dom",
+          "specifiers": []
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen",
+            "waitFor",
+            "act"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/WarmPathFinder",
+          "specifiers": [
+            "WarmPathFinder"
+          ]
+        },
+        {
+          "source": "@/actions/warmPath.actions",
+          "specifiers": [
+            "WarmPathInsider",
+            "WarmPathNetwork"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 515,
       "hasStructuralAnalysis": true
     },
     "__tests__/wcag-motion-reduce.spec.tsx": {
@@ -12504,7 +12926,7 @@
     },
     "conductor/tracks/welle5-inside-track_20260615/metadata.json": {
       "filePath": "conductor/tracks/welle5-inside-track_20260615/metadata.json",
-      "contentHash": "d29c665306fe10073ed459c58563e52b3f312d6a2667bc8ee35ccc9ae54fbf62",
+      "contentHash": "b65d58e7c3f4704dda07f9eed0120be97f0fe541ca7f5690b6061da82de58725",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -12514,12 +12936,12 @@
     },
     "conductor/tracks/welle5-inside-track_20260615/plan.md": {
       "filePath": "conductor/tracks/welle5-inside-track_20260615/plan.md",
-      "contentHash": "d33cc4409640dce5fed122e15bf8086ed02ca219dfd72e390218e515ae027599",
+      "contentHash": "a92a63754e611e228b51fe77a47a6b242b2a957e2e89acaa3b13116a0253079a",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 103,
+      "totalLines": 108,
       "hasStructuralAnalysis": true
     },
     "conductor/tracks/welle5-inside-track_20260615/spec.md": {
@@ -13352,6 +13774,16 @@
       "totalLines": 1049,
       "hasStructuralAnalysis": true
     },
+    "docs/design/inside-track-ui.md": {
+      "filePath": "docs/design/inside-track-ui.md",
+      "contentHash": "ae44348f066540e3dd0a5d9acbaa9f594862a8ceff439307a2a3722897b10dfe",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 134,
+      "hasStructuralAnalysis": true
+    },
     "docs/design/kanban-ui-design.md": {
       "filePath": "docs/design/kanban-ui-design.md",
       "contentHash": "607b3f638fb7da6bc5be1d6eb3a98c904f7a28dfcb644076b1d1903beb983bdd",
@@ -13444,12 +13876,12 @@
     },
     "docs/inside-track-implementation-debt.md": {
       "filePath": "docs/inside-track-implementation-debt.md",
-      "contentHash": "f94a637cefa1664c2929d8409ceda0fd5e6aeb295d55602421ac5dae98e8d838",
+      "contentHash": "82a9210de87e24c7a6b6c6602c9d5f2dd399a69237a0b4528c31fef71cdff701",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 148,
+      "totalLines": 155,
       "hasStructuralAnalysis": true
     },
     "docs/interface-fragility-analysis.md": {
@@ -14895,6 +15327,79 @@
       ],
       "exports": [],
       "totalLines": 349,
+      "hasStructuralAnalysis": true
+    },
+    "e2e/crud/inside-track-crud.spec.ts": {
+      "filePath": "e2e/crud/inside-track-crud.spec.ts",
+      "contentHash": "3ba9efdc8f62d8b72f0348db1b551f0310d719a20ae2deeada8785ea88c3edcf",
+      "functions": [
+        {
+          "name": "ensureEnglishLocale",
+          "params": [
+            "page"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "createTipster",
+          "params": [
+            "page",
+            "fullName"
+          ],
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "recordInsiderTip",
+          "params": [
+            "page",
+            "tipsterName"
+          ],
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "openWorkspace",
+          "params": [
+            "page",
+            "tipsterName"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "advance",
+          "params": [
+            "page",
+            "buttonName",
+            "expectedStatus"
+          ],
+          "exported": false,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@playwright/test",
+          "specifiers": [
+            "test",
+            "expect",
+            "Page"
+          ]
+        },
+        {
+          "source": "../helpers",
+          "specifiers": [
+            "uniqueId",
+            "expectToast",
+            "safeWait"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 105,
       "hasStructuralAnalysis": true
     },
     "e2e/crud/job-crud.spec.ts": {
@@ -17861,12 +18366,12 @@
     },
     "specs/gdpr-data-rights.allium": {
       "filePath": "specs/gdpr-data-rights.allium",
-      "contentHash": "acdaca341cae1debca17e3b7256332eff5ea515d22212d9bd23b62b018ab2cf4",
+      "contentHash": "9bfce12b35810d75502705ae216fb0a3c3984f3f4845136b768beae6e110a949",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 469,
+      "totalLines": 471,
       "hasStructuralAnalysis": false
     },
     "specs/geo-codes.allium": {
@@ -21234,7 +21739,7 @@
     },
     "src/actions/person.actions.ts": {
       "filePath": "src/actions/person.actions.ts",
-      "contentHash": "64b07d30872c99045da1fea18a73d642270e3d876c96a5c132a5e1a5ade00c31",
+      "contentHash": "e7640c9586cc691218914cdd3814ddcfcdf9724432d7190b441fe6cc58cb0398",
       "functions": [
         {
           "name": "createPerson",
@@ -21316,7 +21821,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 86
+          "lineCount": 122
         },
         {
           "name": "mergePersons",
@@ -21411,12 +21916,12 @@
         "anonymizePerson",
         "mergePersons"
       ],
-      "totalLines": 728,
+      "totalLines": 764,
       "hasStructuralAnalysis": true
     },
     "src/actions/personConnection.actions.ts": {
       "filePath": "src/actions/personConnection.actions.ts",
-      "contentHash": "58909a2ff3709419aaa0b776bf3a16d583bb9c8ba242839a88f30cedad45e50a",
+      "contentHash": "596d795ec954c5ddaac8c96c0c54e8e3efa521ea9e8a91055abf12c748ab9450",
       "functions": [
         {
           "name": "addPersonConnection",
@@ -21443,7 +21948,7 @@
           ],
           "returnType": "Promise<ActionResult<Record<string, unknown>[]>>",
           "exported": true,
-          "lineCount": 20
+          "lineCount": 29
         }
       ],
       "classes": [],
@@ -21490,7 +21995,7 @@
         "removePersonConnection",
         "listPersonConnections"
       ],
-      "totalLines": 126,
+      "totalLines": 135,
       "hasStructuralAnalysis": true
     },
     "src/actions/privacy.actions.ts": {
@@ -22320,7 +22825,7 @@
     },
     "src/actions/referral.actions.ts": {
       "filePath": "src/actions/referral.actions.ts",
-      "contentHash": "611b6c5a08520c48942d5d9cb816d71a568b67ce6b9d20db88773970fbf766c9",
+      "contentHash": "8fd6ae7fa99236e9d541c49e04d311fdac00b1cb4d0ae080c8f4cf828bc6ebf6",
       "functions": [
         {
           "name": "assertUsablePerson",
@@ -22358,7 +22863,7 @@
           ],
           "returnType": "Promise<ActionResult<{ id: string }>>",
           "exported": true,
-          "lineCount": 44
+          "lineCount": 50
         },
         {
           "name": "transitionReferral",
@@ -22418,6 +22923,24 @@
           "returnType": "Promise<ActionResult<{ id: string; jobId: string }>>",
           "exported": true,
           "lineCount": 103
+        },
+        {
+          "name": "getReferral",
+          "params": [
+            "referralId"
+          ],
+          "returnType": "Promise<ActionResult<ReferralDetail>>",
+          "exported": true,
+          "lineCount": 48
+        },
+        {
+          "name": "listReferrals",
+          "params": [
+            "filter"
+          ],
+          "returnType": "Promise<ActionResult<ReferralListEntry[]>>",
+          "exported": true,
+          "lineCount": 43
         }
       ],
       "classes": [],
@@ -22459,6 +22982,7 @@
         {
           "source": "@/models/insideTrack.model",
           "specifiers": [
+            "ReferralKind",
             "ReferralStatus",
             "isValidReferralTransition"
           ]
@@ -22492,9 +23016,11 @@
         "reviewReferral",
         "declineReferral",
         "reviveReferral",
-        "commitReferralToApply"
+        "commitReferralToApply",
+        "getReferral",
+        "listReferrals"
       ],
-      "totalLines": 301,
+      "totalLines": 448,
       "hasStructuralAnalysis": true
     },
     "src/actions/smtp.actions.ts": {
@@ -26679,6 +27205,312 @@
       ],
       "exports": [],
       "totalLines": 63,
+      "hasStructuralAnalysis": true
+    },
+    "src/app/dashboard/referrals/[id]/page.tsx": {
+      "filePath": "src/app/dashboard/referrals/[id]/page.tsx",
+      "contentHash": "569a0019668b2270b66c4e00b64feadcfe36b567f42a00a8d71064ef18e49b9d",
+      "functions": [
+        {
+          "name": "ReferralWorkspacePage",
+          "params": [
+            "{\n  params,\n}"
+          ],
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./ReferralWorkspaceClient",
+          "specifiers": [
+            "ReferralWorkspaceClient"
+          ]
+        }
+      ],
+      "exports": [
+        "ReferralWorkspacePage"
+      ],
+      "totalLines": 11,
+      "hasStructuralAnalysis": true
+    },
+    "src/app/dashboard/referrals/[id]/ReferralWorkspaceClient.tsx": {
+      "filePath": "src/app/dashboard/referrals/[id]/ReferralWorkspaceClient.tsx",
+      "contentHash": "0535af08d8e32119de9414a0892a6b1a0a4830eb48a98bef41ab3e5ec22ab57b",
+      "functions": [
+        {
+          "name": "ReferralWorkspaceClient",
+          "params": [
+            "{ referralId }"
+          ],
+          "exported": true,
+          "lineCount": 206
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useState",
+            "useEffect",
+            "useCallback",
+            "useRef"
+          ]
+        },
+        {
+          "source": "next/navigation",
+          "specifiers": [
+            "useRouter"
+          ]
+        },
+        {
+          "source": "next/link",
+          "specifiers": [
+            "Link"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations",
+            "formatDateShort"
+          ]
+        },
+        {
+          "source": "@/components/ui/use-toast",
+          "specifiers": [
+            "toast"
+          ]
+        },
+        {
+          "source": "@/actions/referral.actions",
+          "specifiers": [
+            "getReferral",
+            "engageReferral",
+            "relayReferral",
+            "reviewReferral",
+            "commitReferralToApply",
+            "reviveReferral",
+            "declineReferral",
+            "ReferralDetail"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/ReferralLifecycleRail",
+          "specifiers": [
+            "ReferralLifecycleRail"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/ReferralActionBar",
+          "specifiers": [
+            "ReferralActionBar",
+            "ReferralActionKey"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/WarmPathFinder",
+          "specifiers": [
+            "WarmPathFinder"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/ReferralStatusBadge",
+          "specifiers": [
+            "ReferralStatusBadge"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/ReferralKindBadge",
+          "specifiers": [
+            "ReferralKindBadge"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/referralDisplay",
+          "specifiers": [
+            "tipsterDisplayName"
+          ]
+        },
+        {
+          "source": "@/components/ui/button",
+          "specifiers": [
+            "Button"
+          ]
+        },
+        {
+          "source": "@/components/ui/skeleton",
+          "specifiers": [
+            "Skeleton"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "ArrowLeft",
+            "AlertTriangle",
+            "ExternalLink"
+          ]
+        },
+        {
+          "source": "@/lib/utils",
+          "specifiers": [
+            "interpolate"
+          ]
+        }
+      ],
+      "exports": [
+        "ReferralWorkspaceClient"
+      ],
+      "totalLines": 251,
+      "hasStructuralAnalysis": true
+    },
+    "src/app/dashboard/referrals/page.tsx": {
+      "filePath": "src/app/dashboard/referrals/page.tsx",
+      "contentHash": "04f9908dc9070ae044786f2770e60d9607578517d90e55974647b8cbb609f4a7",
+      "functions": [
+        {
+          "name": "ReferralsPage",
+          "params": [],
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./ReferralsPageClient",
+          "specifiers": [
+            "ReferralsPageClient"
+          ]
+        }
+      ],
+      "exports": [
+        "ReferralsPage"
+      ],
+      "totalLines": 6,
+      "hasStructuralAnalysis": true
+    },
+    "src/app/dashboard/referrals/ReferralsPageClient.tsx": {
+      "filePath": "src/app/dashboard/referrals/ReferralsPageClient.tsx",
+      "contentHash": "cf142e27cd44a268dc0c6616b16a8ac54c59f6ad5d195c94460f7f744de0a169",
+      "functions": [
+        {
+          "name": "ReferralsPageClient",
+          "params": [],
+          "exported": true,
+          "lineCount": 178
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useState",
+            "useEffect",
+            "useCallback"
+          ]
+        },
+        {
+          "source": "next/navigation",
+          "specifiers": [
+            "useRouter"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations",
+            "formatDateShort"
+          ]
+        },
+        {
+          "source": "@/actions/referral.actions",
+          "specifiers": [
+            "listReferrals",
+            "ReferralListEntry"
+          ]
+        },
+        {
+          "source": "@/components/ui/table",
+          "specifiers": [
+            "Table",
+            "TableBody",
+            "TableCell",
+            "TableHead",
+            "TableHeader",
+            "TableRow"
+          ]
+        },
+        {
+          "source": "@/components/ui/button",
+          "specifiers": [
+            "Button"
+          ]
+        },
+        {
+          "source": "@/components/ui/skeleton",
+          "specifiers": [
+            "Skeleton"
+          ]
+        },
+        {
+          "source": "@/components/ui/select",
+          "specifiers": [
+            "Select",
+            "SelectContent",
+            "SelectItem",
+            "SelectTrigger",
+            "SelectValue"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Network",
+            "Plus",
+            "AlertTriangle"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/ReferralStatusBadge",
+          "specifiers": [
+            "ReferralStatusBadge"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/ReferralKindBadge",
+          "specifiers": [
+            "ReferralKindBadge"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/TipCaptureSheet",
+          "specifiers": [
+            "TipCaptureSheet"
+          ]
+        },
+        {
+          "source": "@/components/inside-track/referralDisplay",
+          "specifiers": [
+            "tipsterDisplayName"
+          ]
+        },
+        {
+          "source": "@/models/insideTrack.model",
+          "specifiers": [
+            "REFERRAL_STATUSES",
+            "REFERRAL_KINDS"
+          ]
+        }
+      ],
+      "exports": [
+        "ReferralsPageClient"
+      ],
+      "totalLines": 209,
       "hasStructuralAnalysis": true
     },
     "src/app/dashboard/settings/page.tsx": {
@@ -31433,6 +32265,171 @@
       "totalLines": 155,
       "hasStructuralAnalysis": true
     },
+    "src/components/crm/CompanyPicker.tsx": {
+      "filePath": "src/components/crm/CompanyPicker.tsx",
+      "contentHash": "dc297d654b470d4605688c1c5f0f9911f005f8385caa1a62f54bbaaca699e9aa",
+      "functions": [
+        {
+          "name": "CompanyPicker",
+          "params": [
+            "{\n  value,\n  onValueChange,\n  companies,\n  disabled,\n  className,\n  loading,\n  placeholderKey = \"insideTrack.tipCapture.companyPlaceholder\",\n  ariaLabelKey = \"insideTrack.tipCapture.companyLabel\",\n  searchPlaceholderKey = \"insideTrack.tipCapture.companySearchPlaceholder\",\n  emptyKey = \"insideTrack.tipCapture.companyNoneFound\",\n}"
+          ],
+          "exported": true,
+          "lineCount": 116
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useMemo",
+            "useState"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "ChevronsUpDown",
+            "Check",
+            "Loader2"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/components/ui/button",
+          "specifiers": [
+            "Button"
+          ]
+        },
+        {
+          "source": "@/components/ui/popover",
+          "specifiers": [
+            "Popover",
+            "PopoverContent",
+            "PopoverTrigger"
+          ]
+        },
+        {
+          "source": "@/components/ui/command",
+          "specifiers": [
+            "Command",
+            "CommandEmpty",
+            "CommandGroup",
+            "CommandInput",
+            "CommandItem",
+            "CommandList"
+          ]
+        },
+        {
+          "source": "@/lib/utils",
+          "specifiers": [
+            "cn"
+          ]
+        }
+      ],
+      "exports": [
+        "CompanyPicker"
+      ],
+      "totalLines": 168,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/crm/ContactPicker.tsx": {
+      "filePath": "src/components/crm/ContactPicker.tsx",
+      "contentHash": "f22cd781256d6b21f0e09041b67d46c1e62ff9782a3e4fb7fd3bdd29286f5ee8",
+      "functions": [
+        {
+          "name": "toPersonOption",
+          "params": [
+            "src"
+          ],
+          "returnType": "PersonOption",
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "ContactPicker",
+          "params": [
+            "{\n  value,\n  onValueChange,\n  persons,\n  disabled,\n  className,\n  loading,\n  placeholderKey = \"crm.selectContact\",\n  ariaLabelKey = \"crm.selectContact\",\n}"
+          ],
+          "exported": true,
+          "lineCount": 126
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useMemo",
+            "useState"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "ChevronsUpDown",
+            "Check",
+            "Loader2"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/components/ui/button",
+          "specifiers": [
+            "Button"
+          ]
+        },
+        {
+          "source": "@/components/ui/popover",
+          "specifiers": [
+            "Popover",
+            "PopoverContent",
+            "PopoverTrigger"
+          ]
+        },
+        {
+          "source": "@/components/ui/command",
+          "specifiers": [
+            "Command",
+            "CommandEmpty",
+            "CommandGroup",
+            "CommandInput",
+            "CommandItem",
+            "CommandList"
+          ]
+        },
+        {
+          "source": "@/lib/utils",
+          "specifiers": [
+            "cn"
+          ]
+        },
+        {
+          "source": "@/models/person.model",
+          "specifiers": [
+            "CompanyAssociation",
+            "TypedEmail"
+          ]
+        }
+      ],
+      "exports": [
+        "toPersonOption",
+        "ContactPicker"
+      ],
+      "totalLines": 254,
+      "hasStructuralAnalysis": true
+    },
     "src/components/crm/CrmTaskForm.tsx": {
       "filePath": "src/components/crm/CrmTaskForm.tsx",
       "contentHash": "ac42153907a74a748e03d2b1d60198984e98c989fb7f2b89c07b6421e33c9a56",
@@ -33071,6 +34068,597 @@
       "totalLines": 95,
       "hasStructuralAnalysis": true
     },
+    "src/components/inside-track/AddConnectionForm.tsx": {
+      "filePath": "src/components/inside-track/AddConnectionForm.tsx",
+      "contentHash": "6fd4c0330de3dd53ccc2a0c2ec1a3b337d8553e1d7783221c6762cbbdfefb096",
+      "functions": [
+        {
+          "name": "AddConnectionForm",
+          "params": [
+            "{\n  persons,\n  fromPersonId: _fromPersonId, // available to parent for display; not used in this minimal form\n  onSubmit,\n  onCancel,\n}"
+          ],
+          "exported": true,
+          "lineCount": 134
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useState"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/components/ui/button",
+          "specifiers": [
+            "Button"
+          ]
+        },
+        {
+          "source": "@/components/ui/label",
+          "specifiers": [
+            "Label"
+          ]
+        },
+        {
+          "source": "@/components/ui/select",
+          "specifiers": [
+            "Select",
+            "SelectContent",
+            "SelectItem",
+            "SelectTrigger",
+            "SelectValue"
+          ]
+        },
+        {
+          "source": "@/components/crm/ContactPicker",
+          "specifiers": [
+            "ContactPicker",
+            "PersonOption"
+          ]
+        },
+        {
+          "source": "@/models/insideTrack.model",
+          "specifiers": [
+            "CONNECTION_KINDS",
+            "CONNECTION_STRENGTHS"
+          ]
+        }
+      ],
+      "exports": [
+        "AddConnectionForm"
+      ],
+      "totalLines": 183,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/inside-track/ReferralActionBar.tsx": {
+      "filePath": "src/components/inside-track/ReferralActionBar.tsx",
+      "contentHash": "bc541733e577ce499a96301f323914d2587baa1128ecf3bfd58b0dcab159ab17",
+      "functions": [
+        {
+          "name": "DeclineDialog",
+          "params": [
+            "{\n  t,\n  onAction,\n}"
+          ],
+          "exported": false,
+          "lineCount": 42
+        },
+        {
+          "name": "ReferralActionBar",
+          "params": [
+            "{\n  status,\n  kind,\n  hasTargetCompany,\n  companyName,\n  onAction,\n  busy = false,\n}"
+          ],
+          "exported": true,
+          "lineCount": 155
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useId"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/components/ui/button",
+          "specifiers": [
+            "Button"
+          ]
+        },
+        {
+          "source": "@/components/ui/alert-dialog",
+          "specifiers": [
+            "AlertDialog",
+            "AlertDialogAction",
+            "AlertDialogCancel",
+            "AlertDialogContent",
+            "AlertDialogDescription",
+            "AlertDialogFooter",
+            "AlertDialogHeader",
+            "AlertDialogTitle",
+            "AlertDialogTrigger"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Loader2"
+          ]
+        },
+        {
+          "source": "@/lib/utils",
+          "specifiers": [
+            "cn",
+            "interpolate"
+          ]
+        },
+        {
+          "source": "@/models/insideTrack.model",
+          "specifiers": [
+            "ReferralStatus",
+            "ReferralKind"
+          ]
+        }
+      ],
+      "exports": [
+        "ReferralActionBar"
+      ],
+      "totalLines": 278,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/inside-track/referralDisplay.ts": {
+      "filePath": "src/components/inside-track/referralDisplay.ts",
+      "contentHash": "b7c1a29189fada0e14922ac4896e5038c49719e78a5fad5b321618333a3d4fc5",
+      "functions": [
+        {
+          "name": "tipsterDisplayName",
+          "params": [
+            "tipster",
+            "t"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 9
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/actions/referral.actions",
+          "specifiers": [
+            "ReferralPersonRef"
+          ]
+        }
+      ],
+      "exports": [
+        "tipsterDisplayName"
+      ],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/inside-track/ReferralKindBadge.tsx": {
+      "filePath": "src/components/inside-track/ReferralKindBadge.tsx",
+      "contentHash": "9a0d3d1d0455a8a12817957724596d0c9b651fe18ee7efad4e1cc51a184bb31a",
+      "functions": [
+        {
+          "name": "ReferralKindBadge",
+          "params": [
+            "{\n  kind,\n  className,\n}"
+          ],
+          "exported": true,
+          "lineCount": 14
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/components/ui/badge",
+          "specifiers": [
+            "Badge"
+          ]
+        }
+      ],
+      "exports": [
+        "ReferralKindBadge"
+      ],
+      "totalLines": 25,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/inside-track/ReferralLifecycleRail.tsx": {
+      "filePath": "src/components/inside-track/ReferralLifecycleRail.tsx",
+      "contentHash": "0b0d6ee98eeefb96132687a3f3d265ea021c8951faa7493950e8bfd0f5bba934",
+      "functions": [
+        {
+          "name": "getPosition",
+          "params": [
+            "stateIndex",
+            "currentIndex",
+            "status",
+            "state"
+          ],
+          "returnType": "StatePosition",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "ReferralLifecycleRail",
+          "params": [
+            "{\n  status,\n  className,\n}"
+          ],
+          "exported": true,
+          "lineCount": 118
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/lib/utils",
+          "specifiers": [
+            "cn"
+          ]
+        },
+        {
+          "source": "@/models/insideTrack.model",
+          "specifiers": [
+            "ReferralStatus"
+          ]
+        }
+      ],
+      "exports": [
+        "ReferralLifecycleRail"
+      ],
+      "totalLines": 202,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/inside-track/ReferralStatusBadge.tsx": {
+      "filePath": "src/components/inside-track/ReferralStatusBadge.tsx",
+      "contentHash": "5cb74ac727ede1f5544ebb7851c0ffca536bc3c39b1cf640283a91cd2ee9d23d",
+      "functions": [
+        {
+          "name": "ReferralStatusBadge",
+          "params": [
+            "{\n  status,\n  className,\n}"
+          ],
+          "exported": true,
+          "lineCount": 18
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/components/ui/badge",
+          "specifiers": [
+            "Badge"
+          ]
+        },
+        {
+          "source": "@/lib/utils",
+          "specifiers": [
+            "cn"
+          ]
+        }
+      ],
+      "exports": [
+        "ReferralStatusBadge"
+      ],
+      "totalLines": 49,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/inside-track/TipCaptureForm.tsx": {
+      "filePath": "src/components/inside-track/TipCaptureForm.tsx",
+      "contentHash": "db674464cb204afcaf136b58cb8b507a77407d3ea88116061866295362989369",
+      "functions": [
+        {
+          "name": "TipCaptureForm",
+          "params": [
+            "{\n  persons,\n  loadingPersons,\n  companies = [],\n  loadingCompanies,\n  onSubmit,\n  onCancel,\n}"
+          ],
+          "exported": true,
+          "lineCount": 181
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useState"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/components/ui/button",
+          "specifiers": [
+            "Button"
+          ]
+        },
+        {
+          "source": "@/components/ui/radio-group",
+          "specifiers": [
+            "RadioGroup",
+            "RadioGroupItem"
+          ]
+        },
+        {
+          "source": "@/components/ui/label",
+          "specifiers": [
+            "Label"
+          ]
+        },
+        {
+          "source": "@/components/crm/ContactPicker",
+          "specifiers": [
+            "ContactPicker",
+            "PersonOption"
+          ]
+        },
+        {
+          "source": "@/components/crm/CompanyPicker",
+          "specifiers": [
+            "CompanyPicker",
+            "CompanyOption"
+          ]
+        },
+        {
+          "source": "@/models/insideTrack.model",
+          "specifiers": [
+            "ReferralKind"
+          ]
+        }
+      ],
+      "exports": [
+        "TipCaptureForm"
+      ],
+      "totalLines": 221,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/inside-track/TipCaptureSheet.tsx": {
+      "filePath": "src/components/inside-track/TipCaptureSheet.tsx",
+      "contentHash": "c652ee915d95f05882fdc6bc0be21aa97bb8299041b5876224db28022024e14b",
+      "functions": [
+        {
+          "name": "TipCaptureSheet",
+          "params": [
+            "{\n  open,\n  onOpenChange,\n  onRecorded,\n}"
+          ],
+          "exported": true,
+          "lineCount": 133
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useEffect",
+            "useState",
+            "useTransition"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/components/ui/sheet",
+          "specifiers": [
+            "Sheet",
+            "SheetContent",
+            "SheetDescription",
+            "SheetHeader",
+            "SheetTitle"
+          ]
+        },
+        {
+          "source": "@/components/ui/scroll-area",
+          "specifiers": [
+            "ScrollArea"
+          ]
+        },
+        {
+          "source": "@/components/ui/use-toast",
+          "specifiers": [
+            "toast"
+          ]
+        },
+        {
+          "source": "@/hooks/use-media-query",
+          "specifiers": [
+            "useMediaQuery"
+          ]
+        },
+        {
+          "source": "./TipCaptureForm",
+          "specifiers": [
+            "TipCaptureForm",
+            "TipCaptureFormData"
+          ]
+        },
+        {
+          "source": "@/components/crm/ContactPicker",
+          "specifiers": [
+            "toPersonOption",
+            "PersonOption"
+          ]
+        },
+        {
+          "source": "@/components/crm/CompanyPicker",
+          "specifiers": [
+            "CompanyOption"
+          ]
+        },
+        {
+          "source": "@/actions/person.actions",
+          "specifiers": [
+            "getPersons"
+          ]
+        },
+        {
+          "source": "@/actions/company.actions",
+          "specifiers": [
+            "getAllCompanies"
+          ]
+        },
+        {
+          "source": "@/actions/referral.actions",
+          "specifiers": [
+            "recordInsiderTip",
+            "recordNetworkTip"
+          ]
+        },
+        {
+          "source": "@/models/person.model",
+          "specifiers": [
+            "CompanyAssociation",
+            "TypedEmail"
+          ]
+        }
+      ],
+      "exports": [
+        "TipCaptureSheet"
+      ],
+      "totalLines": 189,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/inside-track/WarmPathFinder.tsx": {
+      "filePath": "src/components/inside-track/WarmPathFinder.tsx",
+      "contentHash": "8e48e87c2dde874f9138760c092f3b21d035407bbd58cb0fdbaedfdc98140eac",
+      "functions": [
+        {
+          "name": "WarmPathInsiderRow",
+          "params": [
+            "{\n  insider,\n  companyName,\n  formerLabel,\n  directPathTemplate,\n}"
+          ],
+          "exported": false,
+          "lineCount": 39
+        },
+        {
+          "name": "WarmPathNetworkRow",
+          "params": [
+            "{\n  path,\n  companyName,\n  kindLabel,\n  strengthLabel,\n  pathTemplate,\n}"
+          ],
+          "exported": false,
+          "lineCount": 46
+        },
+        {
+          "name": "WarmPathFinder",
+          "params": [
+            "{\n  companyId,\n  companyName,\n  className,\n}"
+          ],
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "WarmPathFinderInner",
+          "params": [
+            "{\n  companyId,\n  companyName,\n  className,\n  t,\n}"
+          ],
+          "exported": false,
+          "lineCount": 188
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "useState",
+            "useEffect",
+            "useRef"
+          ]
+        },
+        {
+          "source": "@/i18n",
+          "specifiers": [
+            "useTranslations"
+          ]
+        },
+        {
+          "source": "@/components/ui/badge",
+          "specifiers": [
+            "Badge"
+          ]
+        },
+        {
+          "source": "@/components/ui/skeleton",
+          "specifiers": [
+            "Skeleton"
+          ]
+        },
+        {
+          "source": "@/lib/utils",
+          "specifiers": [
+            "cn",
+            "interpolate"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Network",
+            "AlertCircle",
+            "ArrowRight"
+          ]
+        },
+        {
+          "source": "@/actions/warmPath.actions",
+          "specifiers": [
+            "findWarmPaths"
+          ]
+        },
+        {
+          "source": "@/actions/warmPath.actions",
+          "specifiers": [
+            "WarmPathInsider",
+            "WarmPathNetwork"
+          ]
+        }
+      ],
+      "exports": [
+        "WarmPathFinder"
+      ],
+      "totalLines": 359,
+      "hasStructuralAnalysis": true
+    },
     "src/components/kanban/index.ts": {
       "filePath": "src/components/kanban/index.ts",
       "contentHash": "e112b2604abaafbeb7393eb8e5900d64d509b72fcd64154b0e8efe41bf75657a",
@@ -33882,7 +35470,7 @@
     },
     "src/components/myjobs/AddJob.tsx": {
       "filePath": "src/components/myjobs/AddJob.tsx",
-      "contentHash": "66b7d80e24a1eacfc2b77a888b455e1ee08cd0a32529755b55fcafc03fd89b02",
+      "contentHash": "b76f467f7064560c55f28fcd398a848c2f366cd66002cfafc08ed8ea70181c54",
       "functions": [
         {
           "name": "mergeConnectorSources",
@@ -34167,9 +35755,9 @@
           ]
         },
         {
-          "source": "./JobContactPicker",
+          "source": "@/components/crm/ContactPicker",
           "specifiers": [
-            "JobContactPicker",
+            "ContactPicker",
             "toPersonOption",
             "PersonOption"
           ]
@@ -34200,100 +35788,9 @@
       "totalLines": 966,
       "hasStructuralAnalysis": true
     },
-    "src/components/myjobs/JobContactPicker.tsx": {
-      "filePath": "src/components/myjobs/JobContactPicker.tsx",
-      "contentHash": "c129d6d044050f66401601eff2510188e2ef4586dd1e1713ae42f3a077fa7fb0",
-      "functions": [
-        {
-          "name": "toPersonOption",
-          "params": [
-            "src"
-          ],
-          "returnType": "PersonOption",
-          "exported": true,
-          "lineCount": 33
-        },
-        {
-          "name": "JobContactPicker",
-          "params": [
-            "{\n  value,\n  onValueChange,\n  persons,\n  disabled,\n  className,\n  loading,\n}"
-          ],
-          "exported": true,
-          "lineCount": 124
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "react",
-          "specifiers": [
-            "useMemo",
-            "useState"
-          ]
-        },
-        {
-          "source": "lucide-react",
-          "specifiers": [
-            "ChevronsUpDown",
-            "Check",
-            "Loader2"
-          ]
-        },
-        {
-          "source": "@/i18n",
-          "specifiers": [
-            "useTranslations"
-          ]
-        },
-        {
-          "source": "@/components/ui/button",
-          "specifiers": [
-            "Button"
-          ]
-        },
-        {
-          "source": "@/components/ui/popover",
-          "specifiers": [
-            "Popover",
-            "PopoverContent",
-            "PopoverTrigger"
-          ]
-        },
-        {
-          "source": "@/components/ui/command",
-          "specifiers": [
-            "Command",
-            "CommandEmpty",
-            "CommandGroup",
-            "CommandInput",
-            "CommandItem",
-            "CommandList"
-          ]
-        },
-        {
-          "source": "@/lib/utils",
-          "specifiers": [
-            "cn"
-          ]
-        },
-        {
-          "source": "@/models/person.model",
-          "specifiers": [
-            "CompanyAssociation",
-            "TypedEmail"
-          ]
-        }
-      ],
-      "exports": [
-        "toPersonOption",
-        "JobContactPicker"
-      ],
-      "totalLines": 244,
-      "hasStructuralAnalysis": true
-    },
     "src/components/myjobs/JobDetails.tsx": {
       "filePath": "src/components/myjobs/JobDetails.tsx",
-      "contentHash": "7a1eb9b2782b608a3c896a7cc48f539022699a9df789448e1a444a4cc3bac3ad",
+      "contentHash": "d8cdb64637dde3dfee80e90684d16ad110870db803f736b6aef3ed0e057a9955",
       "functions": [
         {
           "name": "JobDetails",
@@ -34301,7 +35798,7 @@
             "{ job }"
           ],
           "exported": false,
-          "lineCount": 172
+          "lineCount": 182
         }
       ],
       "classes": [],
@@ -34431,6 +35928,12 @@
           ]
         },
         {
+          "source": "../inside-track/WarmPathFinder",
+          "specifiers": [
+            "WarmPathFinder"
+          ]
+        },
+        {
           "source": "@/models/ai.schemas",
           "specifiers": [
             "JobMatchResponse"
@@ -34438,7 +35941,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 203,
+      "totalLines": 214,
       "hasStructuralAnalysis": true
     },
     "src/components/myjobs/JobSalaryFields.tsx": {
@@ -45494,7 +46997,7 @@
     },
     "src/i18n/dictionaries.ts": {
       "filePath": "src/i18n/dictionaries.ts",
-      "contentHash": "70e7bfc673d2f8c279e521380c6271ebaf33663d20cfead65bcc94f89dffaf5e",
+      "contentHash": "ffe3c6bf5aa2985bcd4a57851248f50cb367967ba6b4e4f7d04cc065880ff74c",
       "functions": [
         {
           "name": "mergeDictionaries",
@@ -45669,13 +47172,19 @@
           "specifiers": [
             "jobStatus"
           ]
+        },
+        {
+          "source": "./dictionaries/insideTrack",
+          "specifiers": [
+            "insideTrack"
+          ]
         }
       ],
       "exports": [
         "getDictionary",
         "t"
       ],
-      "totalLines": 866,
+      "totalLines": 872,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/activities.ts": {
@@ -45740,14 +47249,14 @@
     },
     "src/i18n/dictionaries/crm.ts": {
       "filePath": "src/i18n/dictionaries/crm.ts",
-      "contentHash": "f30a28f9f9b526d091f1d5903814a6831725a5a2f895333b93821eff0e064bde",
+      "contentHash": "d276e4bdaa26ffed5e1595ea947c74f4d70492b41c798744e6e55c33a9194111",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [
         "crm"
       ],
-      "totalLines": 1067,
+      "totalLines": 1071,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/dashboard.ts": {
@@ -45820,6 +47329,18 @@
         "forms"
       ],
       "totalLines": 54,
+      "hasStructuralAnalysis": true
+    },
+    "src/i18n/dictionaries/insideTrack.ts": {
+      "filePath": "src/i18n/dictionaries/insideTrack.ts",
+      "contentHash": "cef547ae06f3d8b982485652f3bcda860fa5cdb33b5294773c2a593bfc34738c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "insideTrack"
+      ],
+      "totalLines": 493,
       "hasStructuralAnalysis": true
     },
     "src/i18n/dictionaries/jobs.ts": {
@@ -53528,7 +55049,7 @@
     },
     "src/lib/constants.ts": {
       "filePath": "src/lib/constants.ts",
-      "contentHash": "35b69198c7f9d4ad44948a68afc562e230f455275b58a547441be012f214059d",
+      "contentHash": "7582d4dee147734ffdf37d801ce8bb47975c8753def0276c9dd2be701f778e03",
       "functions": [
         {
           "name": "isMockDataEnabled",
@@ -53555,7 +55076,8 @@
             "Inbox",
             "Users",
             "Calendar",
-            "ListTodo"
+            "ListTodo",
+            "Network"
           ]
         },
         {
@@ -53573,7 +55095,7 @@
         "isMockDataEnabled",
         "SIDEBAR_LINKS"
       ],
-      "totalLines": 163,
+      "totalLines": 170,
       "hasStructuralAnalysis": true
     },
     "src/lib/crm/blocklist-match.ts": {
@@ -55238,7 +56760,7 @@
     },
     "src/lib/export/collect-user-data.ts": {
       "filePath": "src/lib/export/collect-user-data.ts",
-      "contentHash": "6632bd08b44ff28009b9326c127d1c1649b0ab6697e0923b456af4131351e32d",
+      "contentHash": "c3b62d5b651813f11eee10d4cefc40fbe4caf9d56e3acf470cc4b0b7b455f042",
       "functions": [
         {
           "name": "collectUserData",
@@ -55246,7 +56768,7 @@
             "userId"
           ],
           "exported": true,
-          "lineCount": 533
+          "lineCount": 568
         }
       ],
       "classes": [],
@@ -55280,7 +56802,7 @@
       "exports": [
         "collectUserData"
       ],
-      "totalLines": 558,
+      "totalLines": 593,
       "hasStructuralAnalysis": true
     },
     "src/lib/export/export-metadata.ts": {
@@ -58235,7 +59757,7 @@
     },
     "src/lib/utils.ts": {
       "filePath": "src/lib/utils.ts",
-      "contentHash": "c7fd3e1c9bb7abc9d1f895fd0794be5158bc54de117a1573b8ce32072bafd6f3",
+      "contentHash": "8717f5c50bc1d810ff52509892b715c3b17b2ba766038887cbafba5c3c9cf35c",
       "functions": [
         {
           "name": "cn",
@@ -58318,6 +59840,16 @@
           ],
           "exported": true,
           "lineCount": 10
+        },
+        {
+          "name": "interpolate",
+          "params": [
+            "template",
+            "vars"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 6
         }
       ],
       "classes": [],
@@ -58371,9 +59903,10 @@
         "combineDateAndTime",
         "formatElapsedTime",
         "calculatePercentageDifference",
-        "getLast7Days"
+        "getLast7Days",
+        "interpolate"
       ],
-      "totalLines": 161,
+      "totalLines": 174,
       "hasStructuralAnalysis": true
     },
     "src/lib/vacancy-pipeline/bulk-action.service.ts": {
