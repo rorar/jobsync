@@ -198,15 +198,25 @@ async function transitionReferral(
 }
 
 /** ApplicantEngagesTip: open -> engaged. */
-export const engageReferral = (id: string) => transitionReferral(id, "engaged");
+export async function engageReferral(id: string) {
+  return transitionReferral(id, "engaged");
+}
 /** IntermediaryRelaysTip: engaged -> relayed. */
-export const relayReferral = (id: string) => transitionReferral(id, "relayed");
+export async function relayReferral(id: string) {
+  return transitionReferral(id, "relayed");
+}
 /** TargetReviewsApplication: relayed -> in_review. */
-export const reviewReferral = (id: string) => transitionReferral(id, "in_review");
+export async function reviewReferral(id: string) {
+  return transitionReferral(id, "in_review");
+}
 /** DeclineReferral: {open,engaged,relayed,in_review,stale} -> declined. */
-export const declineReferral = (id: string) => transitionReferral(id, "declined");
+export async function declineReferral(id: string) {
+  return transitionReferral(id, "declined");
+}
 /** ReviveReferral: stale -> open. */
-export const reviveReferral = (id: string) => transitionReferral(id, "open");
+export async function reviveReferral(id: string) {
+  return transitionReferral(id, "open");
+}
 
 /**
  * TipReifiesToJob: the boundary between "a tip" and "a Job". A Job is created
