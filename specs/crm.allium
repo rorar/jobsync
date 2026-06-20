@@ -1412,3 +1412,24 @@ open question "Should the Activity Timeline show ALL events or only 'important' 
 open question "Should interview scheduling integrate with external calendar immediately (1.7) or start with manual-only?"
 
 open question "No surface provides AutoCreatePerson. This trigger depends on email/calendar sync (CommunicationConnector) which is deferred."
+
+open question "When a Person is created inline from an entity picker (ContactPicker, ROADMAP 2.20) via a minimal-capture form (name + one email only), should that origin be recorded as durable provenance distinct from a full manual CreatePerson?"
+-- (a) CreatePerson already permits a minimal contact (name + emails.count > 0, everything
+--     else optional), so a quick-create contact is valid TODAY with no new rule. The open
+--     decision is narrower: is "quick-capture origin" a behaviourally-meaningful fact worth
+--     persisting at all, or just a transient UI mode that leaves no trace on the record?
+-- (b) Candidate seam: a new DataSource literal (e.g. quick_capture) on the SAME axis as
+--     manual | auto_created | imported. This reuses the existing provenance machinery and the
+--     AutoCreatedHasRetention precedent (a data_source value that implies governance), rather
+--     than inventing a parallel governance state. "Completeness" for a UI nudge would be a
+--     DERIVED value (only name + one email present, nothing else), not a stored flag.
+-- (c) Deferred CONSEQUENCES — spec each at its consumer, NOT here, NOT now:
+--       - outreach-gate: do not auto-send outreach to a quick-capture / minimal contact
+--         (IT-8; communication-connector OutboundIsThirdPartyTransfer).
+--       - completion nudge: prompt the user to finish the record (ROADMAP 2.20).
+--       - retention: does quick_capture expire like auto_created? (crm-gdpr.allium decision).
+--       - import: bulk-imported contacts (5.7/5.8) are also minimal — reuse the SAME fact,
+--         do not mint a second "incomplete contact" concept.
+-- (d) Sequencing: lock this provenance decision BEFORE the 2.20 quick-create UI ships.
+--     Contacts created in the gap are born ambiguous — the origin cannot be reconstructed
+--     after the fact, so the seam must exist before the first quick-create write.
