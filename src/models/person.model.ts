@@ -277,6 +277,35 @@ export function validateAtMostOnePrimaryCompany(companies: CompanyAssociation[])
 }
 
 // ---------------------------------------------------------------------------
+// CompanyAssociation structural guard (specs/crm.allium:84 — `company: Company`
+// is a REQUIRED reference; "no company known" is the empty LIST, not an empty
+// association).
+// ---------------------------------------------------------------------------
+
+/**
+ * An association must carry something that identifies the employer: either a
+ * company reference, or — transitionally — the free-text label captured before
+ * the picker existed. An association with neither is meaningless and is the
+ * shape the CRM form used to produce.
+ *
+ * Enforced at the server-action boundary, not only in the form: PersonForm is
+ * the current writer, but "use server" actions are callable from the browser
+ * and future writers (API v1, bulk import, automations) will not go through it.
+ */
+export function validateCompanyAssociations(companies: CompanyAssociation[]): boolean {
+  return companies.every(
+    (c) => c.companyId.trim() !== "" || c.companyLabel.trim() !== "",
+  );
+}
+
+/** The distinct, non-empty company references in a list of associations. */
+export function companyIdsOf(companies: CompanyAssociation[]): string[] {
+  return Array.from(
+    new Set(companies.map((c) => c.companyId.trim()).filter((id) => id !== "")),
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Config constants (from crm.allium config)
 // ---------------------------------------------------------------------------
 

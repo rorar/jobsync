@@ -283,6 +283,7 @@ export const crm = {
     "crm.errors.subdivisionWithoutCountry": "Subdivision requires a country",
     "crm.errors.companyNotFound": "Company not found",
     "crm.errors.multiplePrimaryCompanies": "A contact can only have one primary company",
+    "crm.errors.invalidCompanyAssociation": "Each company entry needs a company",
 
     // Generic
     "crm.loadInterviewsError": "Failed to load interviews",
@@ -548,6 +549,7 @@ export const crm = {
     "crm.errors.subdivisionWithoutCountry": "Bundesland/Region erfordert ein Land",
     "crm.errors.companyNotFound": "Unternehmen nicht gefunden",
     "crm.errors.multiplePrimaryCompanies": "Ein Kontakt kann nur ein Hauptunternehmen haben",
+    "crm.errors.invalidCompanyAssociation": "Jeder Unternehmenseintrag braucht ein Unternehmen",
 
     // Generic
     "crm.loadInterviewsError": "Interviews konnten nicht geladen werden",
@@ -813,6 +815,7 @@ export const crm = {
     "crm.errors.subdivisionWithoutCountry": "La subdivision nécessite un pays",
     "crm.errors.companyNotFound": "Entreprise non trouvée",
     "crm.errors.multiplePrimaryCompanies": "Un contact ne peut avoir qu'une seule entreprise principale",
+    "crm.errors.invalidCompanyAssociation": "Chaque entrée d'entreprise doit désigner une entreprise",
 
     // Generic
     "crm.loadInterviewsError": "Impossible de charger les entretiens",
@@ -1078,6 +1081,7 @@ export const crm = {
     "crm.errors.subdivisionWithoutCountry": "La subdivisión requiere un país",
     "crm.errors.companyNotFound": "Empresa no encontrada",
     "crm.errors.multiplePrimaryCompanies": "Un contacto solo puede tener una empresa principal",
+    "crm.errors.invalidCompanyAssociation": "Cada entrada de empresa necesita una empresa",
 
     // Generic
     "crm.loadInterviewsError": "No se pudieron cargar las entrevistas",

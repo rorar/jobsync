@@ -19,6 +19,8 @@ import {
   isValidPersonTransition,
   isConsentBlocked,
   validateAtMostOnePrimaryCompany,
+  validateCompanyAssociations,
+  companyIdsOf,
   parseEmails,
   parsePhones,
   parseCompanies,
@@ -64,6 +66,34 @@ interface PersonUpdateInput {
   processingBasis?: ProcessingBasis;
 }
 
+/**
+ * ADR-015 at the trust boundary: every company referenced by an association
+ * must exist AND belong to the caller.
+ *
+ * PersonForm can only offer the user's own companies, but `"use server"`
+ * exports are callable from the browser and the client supplies this array
+ * wholesale — so the UI's guarantee is not a guarantee. Future writers (API v1,
+ * bulk import per ROADMAP 5.7/5.8, automations) will not go through the form
+ * at all.
+ *
+ * Legacy label-only associations carry no id and are skipped by `companyIdsOf`,
+ * so they pass — their shape is checked by `validateCompanyAssociations`.
+ *
+ * Not exported: it takes a raw userId, which must not become a browser-callable
+ * Server Action (ADR-019).
+ */
+async function areCompaniesOwned(
+  companies: CompanyAssociation[],
+  userId: string,
+): Promise<boolean> {
+  const ids = companyIdsOf(companies);
+  if (ids.length === 0) return true;
+  const owned = await prisma.company.count({
+    where: { id: { in: ids }, createdBy: userId },
+  });
+  return owned === ids.length;
+}
+
 // ---------------------------------------------------------------------------
 // CRUD
 // ---------------------------------------------------------------------------
@@ -86,6 +116,12 @@ export async function createPerson(input: PersonInput): Promise<ActionResult<{ i
     const companies = input.companies ?? [];
     if (!validateAtMostOnePrimaryCompany(companies)) {
       return { success: false, message: "crm.errors.multiplePrimaryCompanies" };
+    }
+    if (!validateCompanyAssociations(companies)) {
+      return { success: false, message: "crm.errors.invalidCompanyAssociation" };
+    }
+    if (!(await areCompaniesOwned(companies, user.id))) {
+      return { success: false, message: "crm.errors.companyNotFound" };
     }
 
     const ALLOWED_URL_SCHEMES = /^https?:\/\//i;
@@ -291,6 +327,12 @@ export async function updatePerson(
     if (input.companies !== undefined) {
       if (!validateAtMostOnePrimaryCompany(input.companies)) {
         return { success: false, message: "crm.errors.multiplePrimaryCompanies" };
+      }
+      if (!validateCompanyAssociations(input.companies)) {
+        return { success: false, message: "crm.errors.invalidCompanyAssociation" };
+      }
+      if (!(await areCompaniesOwned(input.companies, user.id))) {
+        return { success: false, message: "crm.errors.companyNotFound" };
       }
       data.companies = JSON.stringify(input.companies);
     }

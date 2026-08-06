@@ -9,6 +9,8 @@ import {
   isValidTaskTransition,
   validateExactlyOneTarget,
   validateAtMostOnePrimaryCompany,
+  validateCompanyAssociations,
+  companyIdsOf,
   parseEmails,
   parsePhones,
   parseCompanies,
@@ -265,6 +267,72 @@ describe("validateAtMostOnePrimaryCompany", () => {
       { companyId: "c3", companyLabel: "C", isPrimary: true },
     ];
     expect(validateAtMostOnePrimaryCompany(companies)).toBe(false);
+  });
+});
+
+/**
+ * Structural guard for `CompanyAssociation.company` being a REQUIRED reference
+ * (specs/crm.allium:84). The form now links every named company, but a server
+ * action is a trust boundary — API v1, imports (ROADMAP 5.7/5.8) and
+ * automations are future writers that will not go through PersonForm.
+ */
+describe("validateCompanyAssociations", () => {
+  it("should accept an empty list (no company known — the spec's empty-list case)", () => {
+    expect(validateCompanyAssociations([])).toBe(true);
+  });
+
+  it("should accept associations that carry a company reference", () => {
+    const companies: CompanyAssociation[] = [
+      { companyId: "c1", companyLabel: "Acme", isPrimary: true },
+    ];
+    expect(validateCompanyAssociations(companies)).toBe(true);
+  });
+
+  it("should accept a legacy row: no id but a stored free-text label", () => {
+    const companies: CompanyAssociation[] = [
+      { companyId: "", companyLabel: "Old Freetext Ltd", isPrimary: true },
+    ];
+    expect(validateCompanyAssociations(companies)).toBe(true);
+  });
+
+  it("should reject an association with neither an id nor a label", () => {
+    const companies: CompanyAssociation[] = [
+      { companyId: "", companyLabel: "", isPrimary: true },
+    ];
+    expect(validateCompanyAssociations(companies)).toBe(false);
+  });
+
+  it("should reject whitespace-only values", () => {
+    const companies: CompanyAssociation[] = [
+      { companyId: "   ", companyLabel: "  ", isPrimary: false },
+    ];
+    expect(validateCompanyAssociations(companies)).toBe(false);
+  });
+
+  it("should reject when any association in the list is empty", () => {
+    const companies: CompanyAssociation[] = [
+      { companyId: "c1", companyLabel: "Acme", isPrimary: true },
+      { companyId: "", companyLabel: "", isPrimary: false },
+    ];
+    expect(validateCompanyAssociations(companies)).toBe(false);
+  });
+});
+
+describe("companyIdsOf", () => {
+  it("should return only non-empty ids, trimmed and deduplicated", () => {
+    const companies: CompanyAssociation[] = [
+      { companyId: "c1", companyLabel: "Acme", isPrimary: true },
+      { companyId: " c1 ", companyLabel: "Acme again", isPrimary: false },
+      { companyId: "", companyLabel: "Legacy Ltd", isPrimary: false },
+      { companyId: "c2", companyLabel: "Beta", isPrimary: false },
+    ];
+    expect(companyIdsOf(companies).sort()).toEqual(["c1", "c2"]);
+  });
+
+  it("should return an empty array when nothing is linked", () => {
+    expect(
+      companyIdsOf([{ companyId: "", companyLabel: "Legacy", isPrimary: true }]),
+    ).toEqual([]);
   });
 });
 
