@@ -27,7 +27,25 @@ export interface Address {
 }
 
 export interface CompanyAssociation {
+  /**
+   * The domain reference. SoT: specs/crm.allium `CompanyAssociation.company`,
+   * which is a REQUIRED reference — an association always points at a real
+   * Company. Enforced at the form boundary (PersonForm links via CompanyPicker).
+   *
+   * Empty string is a TRANSITIONAL value only: rows captured before the picker
+   * existed carry a free-text `companyLabel` with no id. They are preserved on
+   * edit rather than dropped (dropping would destroy data during an unrelated
+   * save) and are surfaced with a "link it" nudge. Nothing creates this shape
+   * any more. NB: `findWarmPaths` matches on this id exactly, so an unlinked
+   * association is invisible to warm-path discovery.
+   */
   companyId: string;
+  /**
+   * Denormalised display cache — NOT part of the domain contract (the Allium
+   * value carries only the reference). Kept to render a person without a
+   * company lookup. Consequence: renaming a Company does not update labels
+   * already stored on Person records.
+   */
   companyLabel: string;
   /**
    * Free-text job title / position at the company (e.g. "VP Engineering").

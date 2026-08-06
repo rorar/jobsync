@@ -1,6 +1,7 @@
 import {
   addCompany,
   deleteCompanyById,
+  findOrCreateCompany,
   getAllCompanies,
   getCompanyById,
   getCompanyList,
@@ -637,6 +638,127 @@ describe("Company Actions", () => {
       const result = await deleteCompanyById("company-id");
 
       expect(result).toEqual({ success: false, message: "errors.deleteFailed" });
+    });
+  });
+
+  /**
+   * findOrCreateCompany — the picker-facing resolve-or-create path.
+   *
+   * Differs from addCompany deliberately: an existing company is RETURNED, not
+   * treated as an error. addCompany throws on a duplicate, which is a dead end
+   * for an inline-create flow where the user's intent ("link this contact to
+   * this company") is satisfiable by the existing row.
+   * See .full-stack-feature/03-architecture.md §1.1.
+   */
+  describe("findOrCreateCompany", () => {
+    const existingCompany = {
+      id: "existing-company-id",
+      label: "Acme",
+      value: "acme",
+      logoUrl: null,
+      createdBy: "user-id",
+    };
+
+    it("should return the existing company instead of erroring on a duplicate", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue(existingCompany);
+
+      const result = await findOrCreateCompany("Acme");
+
+      expect(result).toEqual({ success: true, data: existingCompany });
+      expect(prisma.company.create).not.toHaveBeenCalled();
+    });
+
+    it("should match case-insensitively and ignore surrounding whitespace", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue(existingCompany);
+
+      const result = await findOrCreateCompany("  ACME  ");
+
+      expect(result).toEqual({ success: true, data: existingCompany });
+      expect(prisma.company.findFirst).toHaveBeenCalledWith({
+        where: { value: "acme", createdBy: mockUser.id },
+      });
+    });
+
+    it("should create the company when none matches, preserving the typed casing as label", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue(null);
+      const created = {
+        id: "new-company-id",
+        label: "Beispiel GmbH",
+        value: "beispiel gmbh",
+        logoUrl: null,
+        createdBy: mockUser.id,
+      };
+      (prisma.company.create as jest.Mock).mockResolvedValue(created);
+
+      const result = await findOrCreateCompany("  Beispiel GmbH  ");
+
+      expect(result).toEqual({ success: true, data: created });
+      expect(prisma.company.create).toHaveBeenCalledWith({
+        data: {
+          createdBy: mockUser.id,
+          value: "beispiel gmbh",
+          label: "Beispiel GmbH",
+        },
+      });
+    });
+
+    it("should scope both the lookup and the create to the session user (ADR-015)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.company.create as jest.Mock).mockResolvedValue({
+        id: "new-company-id",
+        label: "Scoped",
+        value: "scoped",
+        createdBy: mockUser.id,
+      });
+
+      await findOrCreateCompany("Scoped");
+
+      expect(prisma.company.findFirst).toHaveBeenCalledWith({
+        where: { value: "scoped", createdBy: mockUser.id },
+      });
+      expect(prisma.company.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ createdBy: mockUser.id }),
+        }),
+      );
+    });
+
+    it("should reject an empty or whitespace-only name with a translated key", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+
+      const result = await findOrCreateCompany("   ");
+
+      expect(result).toEqual({
+        success: false,
+        message: "crm.errors.companyNameRequired",
+      });
+      expect(prisma.company.findFirst).not.toHaveBeenCalled();
+      expect(prisma.company.create).not.toHaveBeenCalled();
+    });
+
+    it("should return an error if the user is not authenticated", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(null);
+
+      const result = await findOrCreateCompany("Acme");
+
+      expect(result.success).toBe(false);
+      expect(prisma.company.create).not.toHaveBeenCalled();
+    });
+
+    it("should handle unexpected errors with the generic create key", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.company.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.company.create as jest.Mock).mockRejectedValue(
+        new Error("db down"),
+      );
+
+      const result = await findOrCreateCompany("Acme");
+
+      expect(result).toEqual({ success: false, message: "errors.createFailed" });
     });
   });
 });

@@ -135,7 +135,9 @@ export const addCompany = async (
     });
 
     if (companyExists) {
-      throw new Error("Company already exists!");
+      // Log-only: handleError below collapses this to `errors.createFailed`
+      // for the caller. Kept as an i18n key for log hygiene.
+      throw new Error("crm.errors.companyExists");
     }
 
     const res = await prisma.company.create({
@@ -158,6 +160,76 @@ export const addCompany = async (
 
     revalidatePath("/dashboard/myjobs", "page");
     return { success: true, data: res };
+  } catch (error) {
+    const msg = "errors.createFailed";
+    return handleError(error, msg);
+  }
+};
+
+/**
+ * Resolve a company by name, creating it if it does not exist yet.
+ *
+ * The picker-facing counterpart to {@link addCompany}: an already-existing
+ * company is RETURNED rather than treated as an error, because in an inline-
+ * create flow the user's intent ("link this contact to this company") is
+ * satisfied by the existing row. Name matching uses the same normalisation as
+ * `addCompany` (`trim().toLowerCase()`), so "  ACME " resolves onto "Acme".
+ *
+ * Distinct error cases are returned explicitly rather than thrown: `handleError`
+ * discards a thrown message and substitutes the caller's fallback key
+ * (`src/lib/utils.ts:87`), so throwing would collapse them into one message.
+ *
+ * IDOR (ADR-015): both the lookup and the create are scoped by `createdBy`.
+ * Creating emits `CompanyCreated`, which drives domain auto-fill and logo
+ * enrichment (`src/lib/events/consumers/enrichment-trigger.ts`).
+ *
+ * Spec: specs/crm.allium `CompanyAssociation.company` is a required reference.
+ */
+export const findOrCreateCompany = async (
+  name: string,
+): Promise<ActionResult<Company>> => {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      throw new Error("errors.notAuthenticated");
+    }
+
+    const label = name.trim();
+    if (!label) {
+      return { success: false, message: "crm.errors.companyNameRequired" };
+    }
+
+    const value = label.toLowerCase();
+
+    const existing = await prisma.company.findFirst({
+      where: {
+        value,
+        createdBy: user.id,
+      },
+    });
+
+    if (existing) {
+      return { success: true, data: existing as Company };
+    }
+
+    const created = await prisma.company.create({
+      data: {
+        createdBy: user.id,
+        value,
+        label,
+      },
+    });
+
+    emitEvent(
+      createEvent(DomainEventTypes.CompanyCreated, {
+        companyId: created.id,
+        companyName: label,
+        userId: user.id,
+      }),
+    );
+
+    return { success: true, data: created as Company };
   } catch (error) {
     const msg = "errors.createFailed";
     return handleError(error, msg);
