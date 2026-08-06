@@ -24,7 +24,35 @@ search.
    (the email is required).
 3. Optionally set a **country** — this powers the holiday/timezone hint on the
    contact's page (see below).
-4. Click **Add Contact** to save.
+4. Optionally add the **company** they work for — see the next section.
+5. Click **Add Contact** to save.
+
+### Where a contact works
+
+Use the **Company** picker to link a contact to a company. Start typing to
+search the companies you already have; if the one you need does not exist yet,
+the list offers **Create "…"** with whatever you typed. Pick it, and the company
+is created and linked in one step — no need to leave the contact form.
+
+You can add several companies per contact (someone can be a recruiter at an
+agency and a lecturer somewhere else) and mark one as **primary**. The
+**position** field below each company is their job title there, in free text.
+
+**If you do not know the company, leave it out.** A tip from an acquaintance
+who did not name the employer, or a recruiter who will not say who they are
+hiring for, is a normal situation — simply do not add a company row. An empty
+company is a perfectly valid contact.
+
+> **Why linking matters.** The company is a real link, not just a typed name.
+> That link is what lets JobSync answer "who do I know at this company?" — see
+> the warm paths in the [Inside Track guide](./inside-track.md). A contact whose
+> employer was only ever typed as text will not show up there.
+
+If you have contacts from before this feature existed, their company appears as
+plain text with a note that it is **not linked yet**. Pick or create the
+matching company to connect it. Nothing is lost in the meantime — the typed
+name stays until you link it — but those contacts stay invisible to warm-path
+search until you do.
 
 ### The contact page
 

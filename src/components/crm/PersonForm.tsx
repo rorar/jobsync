@@ -17,6 +17,9 @@ import { Plus, Trash2, Loader2 } from "lucide-react";
 import { CountrySelect, type CountryOption } from "@/components/ui/country-select";
 import { SubdivisionSelect, type SubdivisionOption } from "@/components/ui/subdivision-select";
 import { getCountryOptions, getSubdivisionOptions } from "@/actions/reference-data.actions";
+import { CompanyPicker, type CompanyOption } from "@/components/crm/CompanyPicker";
+import { findOrCreateCompany, getAllCompanies } from "@/actions/company.actions";
+import { useToast } from "@/components/ui/use-toast";
 import type {
   TypedEmail,
   TypedPhone,
@@ -47,6 +50,7 @@ const emptyPhone = (): TypedPhone => ({
 });
 
 export default function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
+  const { toast } = useToast();
   const { t, locale } = useTranslations();
   const isEdit = !!person;
 
@@ -77,6 +81,8 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
   const [addressSubdivisionCode, setAddressSubdivisionCode] = useState(
     (person?.addressSubdivisionCode as string) ?? "",
   );
+  const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(true);
   const [countries, setCountries] = useState<CountryOption[]>([]);
   const [subdivisions, setSubdivisions] = useState<SubdivisionOption[]>([]);
   const [countriesLoading, setCountriesLoading] = useState(true);
@@ -95,6 +101,23 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
   });
 
   const [submitting, setSubmitting] = useState(false);
+
+  // Load selectable companies on mount. Both call sites (ContactsPageClient,
+  // PersonDetailClient) pass only {person, onSubmit, onCancel}, so the form
+  // owns this fetch — same shape as the country options below.
+  useEffect(() => {
+    let cancelled = false;
+    setCompaniesLoading(true);
+    getAllCompanies()
+      .then((res) => {
+        if (cancelled || !res.success || !res.data) return;
+        setCompanyOptions(
+          res.data.map((c) => ({ id: c.id as string, label: c.label as string })),
+        );
+      })
+      .finally(() => { if (!cancelled) setCompaniesLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Load countries on mount
   useEffect(() => {
@@ -201,6 +224,69 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
       return next;
     });
 
+  /**
+   * Link a row to a real Company. Writes companyId AND the denormalised
+   * companyLabel together so the display stays correct without a lookup.
+   * Clearing the picker resets both — an association must point at a company
+   * (specs/crm.allium:84, `company: Company`), so a half-filled row is not a
+   * state we create.
+   */
+  const selectCompany = (idx: number, companyId: string) => {
+    const option = companyOptions.find((o) => o.id === companyId);
+    setCompanies((prev) =>
+      prev.map((c, i) => {
+        if (i !== idx) return c;
+        // Explicit clear: drop both fields.
+        if (!companyId) return { ...c, companyId: "", companyLabel: "" };
+        // A just-created company is not in `companyOptions` yet from this
+        // closure's perspective (the setState has not re-rendered us), so a
+        // miss must PRESERVE the label handleCreateCompany already wrote —
+        // never blank it.
+        return {
+          ...c,
+          companyId,
+          companyLabel: option?.label ?? c.companyLabel,
+        };
+      }),
+    );
+  };
+
+  /**
+   * Inline create from the picker. Registers the new option BEFORE resolving,
+   * which is the contract CompanyPicker relies on to render the new label
+   * immediately (see CompanyPicker `onCreate` docs).
+   */
+  const handleCreateCompany = async (
+    idx: number,
+    name: string,
+  ): Promise<CompanyOption | null> => {
+    const res = await findOrCreateCompany(name);
+    if (!res.success || !res.data) {
+      toast({
+        title: t(res.message ?? "crm.errors.companyCreateFailed"),
+        variant: "destructive",
+      });
+      return null;
+    }
+    const option: CompanyOption = {
+      id: res.data.id as string,
+      label: res.data.label as string,
+    };
+    setCompanyOptions((prev) =>
+      prev.some((o) => o.id === option.id) ? prev : [option, ...prev],
+    );
+    // Write the row here, where the resolved label is in hand. selectCompany
+    // then only confirms the id (its option lookup would miss — see there).
+    setCompanies((prev) =>
+      prev.map((c, i) =>
+        i === idx
+          ? { ...c, companyId: option.id, companyLabel: option.label }
+          : c,
+      ),
+    );
+    return option;
+  };
+
   const updateCompany = (idx: number, field: keyof CompanyAssociation, value: unknown) =>
     setCompanies((prev) =>
       prev.map((c, i) => {
@@ -219,7 +305,14 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
     // Filter out empty entries
     const validEmails = emails.filter((em) => em.email.trim() !== "");
     const validPhones = phones.filter((ph) => ph.number.trim() !== "");
-    const validCompanies = companies.filter((c) => c.companyLabel.trim() !== "");
+    // A named company must be a LINKED company — that is what makes the contact
+    // findable by findWarmPaths(), which matches on companyId exactly.
+    // One deliberate exception: legacy rows (no id, but a stored label captured
+    // before the picker existed) are KEPT. Dropping them would destroy data the
+    // user never agreed to lose during an unrelated edit.
+    const validCompanies = companies.filter(
+      (c) => c.companyId !== "" || c.companyLabel.trim() !== "",
+    );
 
     await onSubmit({
       firstName: firstName || null,
@@ -452,12 +545,29 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
         {companies.map((c, idx) => (
           <div key={c.companyId || c.companyLabel || `company-${idx}`} className="space-y-2 rounded-md border p-3">
             <div className="flex items-center gap-2">
-              <Input
-                placeholder={t("crm.company")}
-                value={c.companyLabel}
-                onChange={(e) => updateCompany(idx, "companyLabel", e.target.value)}
-                className="flex-1"
-              />
+              <div className="flex-1">
+                <CompanyPicker
+                  value={c.companyId}
+                  onValueChange={(companyId) => selectCompany(idx, companyId)}
+                  companies={companyOptions}
+                  loading={companiesLoading}
+                  onCreate={(name) => handleCreateCompany(idx, name)}
+                  // Only reference the hint when it is actually rendered —
+                  // a dangling aria-describedby is worse than none.
+                  describedById={
+                    !c.companyId && c.companyLabel.trim() !== ""
+                      ? `company-unlinked-hint-${idx}`
+                      : undefined
+                  }
+                  placeholderKey="crm.selectCompany"
+                  // Own accessible name: the "add company" button above is
+                  // also labelled crm.company — two controls with the same
+                  // name is an a11y smell and an ambiguous test selector.
+                  ariaLabelKey="crm.selectCompany"
+                  searchPlaceholderKey="crm.searchCompanies"
+                  emptyKey="crm.noCompaniesFound"
+                />
+              </div>
               <div className="flex items-center gap-1" title={t("crm.primary")}>
                 <Switch
                   checked={c.isPrimary}
@@ -474,6 +584,19 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
                 <Trash2 className="h-4 w-4 text-muted-foreground" />
               </Button>
             </div>
+            {/* Legacy row: a free-text company name captured before the picker
+                existed (companyId ""). Shown with its stored label plus a nudge
+                to link it — never silently dropped, see handleSubmit. */}
+            {!c.companyId && c.companyLabel.trim() !== "" && (
+              <p
+                id={`company-unlinked-hint-${idx}`}
+                className="text-xs text-muted-foreground"
+              >
+                <span className="font-medium">{c.companyLabel}</span>
+                {" — "}
+                {t("crm.unlinkedCompanyHint")}
+              </p>
+            )}
             <Input
               placeholder={t("crm.jobTitle")}
               value={c.position ?? ""}

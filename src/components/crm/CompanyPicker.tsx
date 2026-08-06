@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronsUpDown, Check, Loader2 } from "lucide-react";
+import { ChevronsUpDown, Check, Loader2, CirclePlus } from "lucide-react";
 import { useTranslations } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +38,19 @@ interface CompanyPickerProps {
   ariaLabelKey?: string;
   searchPlaceholderKey?: string;
   emptyKey?: string;
+  /**
+   * Opt-in inline creation. When provided, an unmatched search term offers a
+   * "create" item. The parent resolves it to a {@link CompanyOption} (and is
+   * responsible for adding that option to `companies` BEFORE resolving, so the
+   * trigger can render the new label immediately). Resolve `null` to signal
+   * failure — the popover stays open and nothing is selected; the parent owns
+   * the error toast.
+   */
+  onCreate?: (name: string) => Promise<CompanyOption | null>;
+  createLabelKey?: string;
+  creatingLabelKey?: string;
+  /** Id of an element describing this control (wired as aria-describedby). */
+  describedById?: string;
 }
 
 /**
@@ -45,9 +58,11 @@ interface CompanyPickerProps {
  *
  * Mirrors {@link ContactPicker}: props-based options, cmdk
  * `shouldFilter={false}` + manual filter so the clear item stays visible,
- * controlled inputValue reset on close, aria-live announce. Select-existing
- * only — inline company creation (the AddJob create-on-type flow) is a
- * deliberate follow-up; companies are created via the Job/CRM flows.
+ * controlled inputValue reset on close, aria-live announce.
+ *
+ * Select-existing by default. Passing `onCreate` additionally enables inline
+ * creation, mirroring the AddJob create-on-type flow (`src/components/ComboBox.tsx`).
+ * Consumers that omit `onCreate` (e.g. TipCaptureForm) are unaffected.
  */
 export function CompanyPicker({
   value,
@@ -60,11 +75,16 @@ export function CompanyPicker({
   ariaLabelKey = "insideTrack.tipCapture.companyLabel",
   searchPlaceholderKey = "insideTrack.tipCapture.companySearchPlaceholder",
   emptyKey = "insideTrack.tipCapture.companyNoneFound",
+  onCreate,
+  createLabelKey = "crm.createCompany",
+  creatingLabelKey = "crm.creatingCompany",
+  describedById,
 }: CompanyPickerProps) {
   const { t } = useTranslations();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [announcement, setAnnouncement] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const selected = useMemo(
     () => companies.find((c) => c.id === value),
@@ -76,6 +96,36 @@ export function CompanyPicker({
     if (!q) return companies;
     return companies.filter((c) => c.label.toLowerCase().includes(q));
   }, [companies, inputValue]);
+
+  const query = inputValue.trim();
+
+  /**
+   * Offer creation only for a non-empty term that does not already name an
+   * existing company (case-insensitive). Matching against the FULL list, not
+   * `filtered`, so a term that is a substring match but an exact-name miss
+   * still can't produce a duplicate.
+   */
+  const canCreate =
+    !!onCreate &&
+    query.length > 0 &&
+    !companies.some((c) => c.label.toLowerCase() === query.toLowerCase());
+
+  const handleCreate = async () => {
+    if (!onCreate || creating || !query) return;
+    setCreating(true);
+    setAnnouncement(t(creatingLabelKey));
+    try {
+      const created = await onCreate(query);
+      if (created) {
+        onValueChange(created.id);
+        setAnnouncement(created.label);
+        setOpen(false);
+        setInputValue("");
+      }
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <Popover
@@ -91,7 +141,15 @@ export function CompanyPicker({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          aria-label={t(ariaLabelKey)}
+          /*
+           * aria-label REPLACES the trigger's text content in the accessible
+           * name, so a bare label would hide the selected company from screen
+           * readers (WCAG 4.1.2). Compose label + value instead.
+           */
+          aria-label={
+            selected ? `${t(ariaLabelKey)}: ${selected.label}` : t(ariaLabelKey)
+          }
+          aria-describedby={describedById}
           disabled={disabled}
           className={cn("w-full justify-between font-normal", className)}
         >
@@ -139,6 +197,21 @@ export function CompanyPicker({
                   className="text-muted-foreground"
                 >
                   — {t(placeholderKey)}
+                </CommandItem>
+              )}
+              {canCreate && (
+                <CommandItem
+                  value="__create__"
+                  disabled={creating}
+                  onSelect={handleCreate}
+                  className="text-primary"
+                >
+                  <CirclePlus className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="truncate">
+                    {creating
+                      ? t(creatingLabelKey)
+                      : t(createLabelKey).replace("{label}", query)}
+                  </span>
                 </CommandItem>
               )}
               {filtered.map((c) => (

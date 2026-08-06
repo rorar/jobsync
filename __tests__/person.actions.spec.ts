@@ -25,6 +25,7 @@ jest.mock("@/lib/db", () => ({
     crmInterview: { updateMany: jest.fn() },
     crmActivityLog: { updateMany: jest.fn() },
     jobContact: { deleteMany: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
+    company: { count: jest.fn() },
     crmBlocklist: { deleteMany: jest.fn() },
     referral: { updateMany: jest.fn() },
     personConnection: { deleteMany: jest.fn() },
@@ -59,6 +60,7 @@ const mockDb = db as unknown as {
   crmInterview: { updateMany: jest.Mock };
   crmActivityLog: { updateMany: jest.Mock };
   jobContact: { deleteMany: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
+  company: { count: jest.Mock };
   crmBlocklist: { deleteMany: jest.Mock };
   referral: { updateMany: jest.Mock };
   personConnection: { deleteMany: jest.Mock };
@@ -439,6 +441,70 @@ describe("person.actions — GDPR-Consent (Art. 7(3))", () => {
 
       expect(result.success).toBe(true);
       expect(mockDb.person.update).toHaveBeenCalled();
+    });
+
+    /**
+     * The company array arrives from the client wholesale. PersonForm can only
+     * offer the user's own companies, but a "use server" export is callable
+     * from the browser — so the UI guarantee is not a guarantee (ADR-015).
+     */
+    describe("company association boundary", () => {
+      beforeEach(() => {
+        mockDb.person.findFirst.mockResolvedValue({
+          id: PERSON_ID,
+          status: "active",
+          processingBasis: "legitimate_interest",
+          consentWithdrawnAt: null,
+        });
+      });
+
+      it("rejects a company id the caller does not own", async () => {
+        mockDb.company.count.mockResolvedValue(0); // foreign id -> not owned
+
+        const result = await updatePerson(PERSON_ID, {
+          companies: [
+            { companyId: "someone-elses-company", companyLabel: "Acme", isPrimary: true },
+          ],
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("crm.errors.companyNotFound");
+        expect(mockDb.person.update).not.toHaveBeenCalled();
+        expect(mockDb.company.count).toHaveBeenCalledWith({
+          where: { id: { in: ["someone-elses-company"] }, createdBy: USER.id },
+        });
+      });
+
+      it("rejects an association with neither an id nor a label", async () => {
+        const result = await updatePerson(PERSON_ID, {
+          companies: [{ companyId: "", companyLabel: "", isPrimary: true }],
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("crm.errors.invalidCompanyAssociation");
+        expect(mockDb.person.update).not.toHaveBeenCalled();
+      });
+
+      it("accepts an owned company id", async () => {
+        mockDb.company.count.mockResolvedValue(1);
+
+        const result = await updatePerson(PERSON_ID, {
+          companies: [{ companyId: "own-company", companyLabel: "Acme", isPrimary: true }],
+        });
+
+        expect(result.success).toBe(true);
+        expect(mockDb.person.update).toHaveBeenCalled();
+      });
+
+      it("accepts a legacy label-only row without querying companies", async () => {
+        const result = await updatePerson(PERSON_ID, {
+          companies: [{ companyId: "", companyLabel: "Old Freetext Ltd", isPrimary: true }],
+        });
+
+        expect(result.success).toBe(true);
+        expect(mockDb.company.count).not.toHaveBeenCalled();
+        expect(mockDb.person.update).toHaveBeenCalled();
+      });
     });
   });
 

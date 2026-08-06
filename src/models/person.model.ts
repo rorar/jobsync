@@ -27,7 +27,25 @@ export interface Address {
 }
 
 export interface CompanyAssociation {
+  /**
+   * The domain reference. SoT: specs/crm.allium `CompanyAssociation.company`,
+   * which is a REQUIRED reference — an association always points at a real
+   * Company. Enforced at the form boundary (PersonForm links via CompanyPicker).
+   *
+   * Empty string is a TRANSITIONAL value only: rows captured before the picker
+   * existed carry a free-text `companyLabel` with no id. They are preserved on
+   * edit rather than dropped (dropping would destroy data during an unrelated
+   * save) and are surfaced with a "link it" nudge. Nothing creates this shape
+   * any more. NB: `findWarmPaths` matches on this id exactly, so an unlinked
+   * association is invisible to warm-path discovery.
+   */
   companyId: string;
+  /**
+   * Denormalised display cache — NOT part of the domain contract (the Allium
+   * value carries only the reference). Kept to render a person without a
+   * company lookup. Consequence: renaming a Company does not update labels
+   * already stored on Person records.
+   */
   companyLabel: string;
   /**
    * Free-text job title / position at the company (e.g. "VP Engineering").
@@ -256,6 +274,35 @@ export function parseSocialProfiles(raw: string | null | undefined): SocialProfi
 
 export function validateAtMostOnePrimaryCompany(companies: CompanyAssociation[]): boolean {
   return companies.filter((c) => c.isPrimary).length <= 1;
+}
+
+// ---------------------------------------------------------------------------
+// CompanyAssociation structural guard (specs/crm.allium:84 — `company: Company`
+// is a REQUIRED reference; "no company known" is the empty LIST, not an empty
+// association).
+// ---------------------------------------------------------------------------
+
+/**
+ * An association must carry something that identifies the employer: either a
+ * company reference, or — transitionally — the free-text label captured before
+ * the picker existed. An association with neither is meaningless and is the
+ * shape the CRM form used to produce.
+ *
+ * Enforced at the server-action boundary, not only in the form: PersonForm is
+ * the current writer, but "use server" actions are callable from the browser
+ * and future writers (API v1, bulk import, automations) will not go through it.
+ */
+export function validateCompanyAssociations(companies: CompanyAssociation[]): boolean {
+  return companies.every(
+    (c) => c.companyId.trim() !== "" || c.companyLabel.trim() !== "",
+  );
+}
+
+/** The distinct, non-empty company references in a list of associations. */
+export function companyIdsOf(companies: CompanyAssociation[]): string[] {
+  return Array.from(
+    new Set(companies.map((c) => c.companyId.trim()).filter((id) => id !== "")),
+  );
 }
 
 // ---------------------------------------------------------------------------
