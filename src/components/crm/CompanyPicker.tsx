@@ -49,6 +49,8 @@ interface CompanyPickerProps {
   onCreate?: (name: string) => Promise<CompanyOption | null>;
   createLabelKey?: string;
   creatingLabelKey?: string;
+  /** Id of an element describing this control (wired as aria-describedby). */
+  describedById?: string;
 }
 
 /**
@@ -76,6 +78,7 @@ export function CompanyPicker({
   onCreate,
   createLabelKey = "crm.createCompany",
   creatingLabelKey = "crm.creatingCompany",
+  describedById,
 }: CompanyPickerProps) {
   const { t } = useTranslations();
   const [open, setOpen] = useState(false);
@@ -138,7 +141,15 @@ export function CompanyPicker({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          aria-label={t(ariaLabelKey)}
+          /*
+           * aria-label REPLACES the trigger's text content in the accessible
+           * name, so a bare label would hide the selected company from screen
+           * readers (WCAG 4.1.2). Compose label + value instead.
+           */
+          aria-label={
+            selected ? `${t(ariaLabelKey)}: ${selected.label}` : t(ariaLabelKey)
+          }
+          aria-describedby={describedById}
           disabled={disabled}
           className={cn("w-full justify-between font-normal", className)}
         >

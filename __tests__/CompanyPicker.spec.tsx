@@ -68,6 +68,45 @@ describe("CompanyPicker — select existing (regression guard)", () => {
     expect(screen.getByRole("combobox")).toHaveTextContent("Select company...");
   });
 
+  /**
+   * a11y regression guard (audit 2026-08-06, serious #1): `aria-label` replaces
+   * the trigger's text content in the accessible name, so an unconditional
+   * label hid the selected value from screen readers — a regression against the
+   * plain <Input> this picker replaced in PersonForm. WCAG 4.1.2.
+   */
+  it("exposes the selected company in the accessible name, not just the label", () => {
+    render(
+      <CompanyPicker {...baseProps} value="c1" onValueChange={jest.fn()} />,
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: /Select company\.\.\.: Acme Corp/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("falls back to the bare label when nothing is selected", () => {
+    render(<CompanyPicker {...baseProps} onValueChange={jest.fn()} />);
+
+    expect(
+      screen.getByRole("combobox", { name: "Select company..." }),
+    ).toBeInTheDocument();
+  });
+
+  it("wires aria-describedby when a description id is supplied", () => {
+    render(
+      <CompanyPicker
+        {...baseProps}
+        onValueChange={jest.fn()}
+        describedById="hint-1"
+      />,
+    );
+
+    expect(screen.getByRole("combobox")).toHaveAttribute(
+      "aria-describedby",
+      "hint-1",
+    );
+  });
+
   it("selects an existing company by id", async () => {
     const onValueChange = jest.fn();
     render(<CompanyPicker {...baseProps} onValueChange={onValueChange} />);

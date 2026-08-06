@@ -230,6 +230,16 @@ describe("PersonForm — company field", () => {
     expect(screen.getByText("Old Freetext Ltd")).toBeInTheDocument();
     expect(screen.getByText(/Not linked yet/)).toBeInTheDocument();
 
+    // a11y (audit 2026-08-06, moderate #2): the hint must be programmatically
+    // associated, not merely adjacent — otherwise a screen reader user never
+    // learns why the row needs attention. WCAG 1.3.1.
+    const combobox = screen.getByRole("combobox", { name: /company/i });
+    const hintId = combobox.getAttribute("aria-describedby");
+    expect(hintId).toBeTruthy();
+    expect(document.getElementById(hintId as string)).toHaveTextContent(
+      /Not linked yet/,
+    );
+
     await submitForm();
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());

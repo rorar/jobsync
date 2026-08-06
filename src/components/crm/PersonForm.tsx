@@ -552,6 +552,13 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
                   companies={companyOptions}
                   loading={companiesLoading}
                   onCreate={(name) => handleCreateCompany(idx, name)}
+                  // Only reference the hint when it is actually rendered —
+                  // a dangling aria-describedby is worse than none.
+                  describedById={
+                    !c.companyId && c.companyLabel.trim() !== ""
+                      ? `company-unlinked-hint-${idx}`
+                      : undefined
+                  }
                   placeholderKey="crm.selectCompany"
                   // Own accessible name: the "add company" button above is
                   // also labelled crm.company — two controls with the same
@@ -581,7 +588,10 @@ export default function PersonForm({ person, onSubmit, onCancel }: PersonFormPro
                 existed (companyId ""). Shown with its stored label plus a nudge
                 to link it — never silently dropped, see handleSubmit. */}
             {!c.companyId && c.companyLabel.trim() !== "" && (
-              <p className="text-xs text-muted-foreground">
+              <p
+                id={`company-unlinked-hint-${idx}`}
+                className="text-xs text-muted-foreground"
+              >
                 <span className="font-medium">{c.companyLabel}</span>
                 {" — "}
                 {t("crm.unlinkedCompanyHint")}
