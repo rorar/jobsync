@@ -157,18 +157,31 @@ during the Phase-3 honesty gate (verified vs code 2026-06-15).
 Not defects — deliberate deferrals decided at the Welle-5 wrap-up.
 
 - **Inline quick-create in entity pickers** (`crm/ContactPicker`, `crm/CompanyPicker`) —
-  **HALF DONE (2026-08-06/07).** The **company** half shipped: `CompanyPicker` gained an
-  optional `onCreate`, `PersonForm` uses it, and `findOrCreateCompany` resolves-or-creates
-  (merged `9a74e4d8`). It mirrors the AddJob create-on-type flow as this entry predicted.
-  Motivation turned out to be stronger than UX convenience: the contact form previously stored
-  a free-text employer, so `CompanyAssociation.companyId` stayed `""` and those contacts were
-  invisible to `findWarmPaths` — Inside Track's own warm-path discovery.
-  **Still open — the contact half**, and deliberately so: contact-create needs the
-  *minimal-capture quick-form* (name + email min, flag the rest) so it never spawns
-  privacy-incomplete records, and that is gated on the quick-capture provenance open question
-  in `specs/crm.allium:1416-1433`, whose own sequencing note says to lock the decision BEFORE
-  the quick-create UI ships. **Complements ROADMAP 2.20 (Spotlight / Command-Palette
-  Action-Registry) + 2.16 (Keyboard Shortcuts).**
+  **still open for Inside Track.** **Product-approved future UX:** create a contact/company in
+  place, without leaving the screen. Contact-create needs a *minimal-capture quick-form*
+  (name + email min, flag the rest) so it never spawns privacy-incomplete records;
+  company-create can mirror the AddJob create-on-type flow. **Complements ROADMAP 2.20
+  (Spotlight / Command-Palette Action-Registry) + 2.16 (Keyboard Shortcuts).**
+
+  **Partial progress (2026-08-06/07, merged `9a74e4d8`) — capability built, Inside Track not yet
+  wired.** `CompanyPicker` gained an **optional** `onCreate` prop plus `findOrCreateCompany`
+  (resolve-or-create), mirroring the AddJob create-on-type flow as predicted above. It is passed
+  at exactly **one** call site — `PersonForm.tsx:549` (the CRM contact form). Verified state of
+  the other four:
+  - `TipCaptureForm.tsx:199` (company) — **no `onCreate`**, still select-existing
+  - `TipCaptureForm.tsx:149` + `:180`, `AddConnectionForm.tsx:94`, `AddJob.tsx:858` (contact) —
+    unchanged; `ContactPicker` has no `onCreate` at all
+
+  So for the Inside Track surfaces nothing has changed yet: recording a tip still cannot create
+  the target company in place. **Company side is now cheap** — pass `onCreate` in
+  `TipCaptureForm`, no new design or spec decision needed. **Contact side stays gated** on the
+  quick-capture provenance open question (`specs/crm.allium:1416-1433`), whose own sequencing
+  note says to lock that decision BEFORE the quick-create UI ships.
+
+  Why the CRM side went first: the contact form stored a free-text employer, so
+  `CompanyAssociation.companyId` stayed `""` and those contacts were invisible to
+  `findWarmPaths` — Inside Track's own warm-path discovery. The driver was that data bug, not
+  the UX convenience this entry describes.
 - **Combobox consolidation onto `ui/base-combobox.tsx`** (C4 ComboBox analysis,
   Recommendation 2). The Inside Track pickers + the ~9 other specialised comboboxes still
   hand-roll the Popover+Command shell. `BaseCombobox` currently lacks a trigger `aria-label`,
