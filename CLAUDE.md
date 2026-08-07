@@ -28,6 +28,7 @@ See `devenv.nix` for the full configuration. Requires a writable Nix store.
 ./scripts/build-safe.sh  # Production build in a systemd memory cgroup (low-RAM hosts; OOM-kills the build, not the host)
 ./scripts/test.sh     # Run Jest tests (uses system Node.js)
 ./scripts/test-e2e.sh # Run Playwright E2E (env + warm server + single worker; low-RAM hosts)
+./scripts/typecheck-safe.sh  # tsc --noEmit in a systemd memory cgroup (low-RAM hosts; NEVER run bare `npx tsc`)
 ./scripts/stop.sh     # Stop dev server
 ./scripts/clean.sh    # Flush .next/ build cache (no restart; --all also clears node_modules/.cache)
 ./scripts/prisma-generate.sh  # Generate Prisma client
@@ -35,6 +36,38 @@ See `devenv.nix` for the full configuration. Requires a writable Nix store.
 ```
 
 All scripts source `scripts/env.sh` which auto-downloads and patches Prisma engines for NixOS.
+
+### Using these scripts (resource discipline — 8 GB no-swap VM)
+
+**Never invoke the underlying tool directly when a wrapper exists.** The wrappers are not
+convenience aliases; each exists because the bare command has taken this host down.
+
+| Instead of | Run | Why |
+|---|---|---|
+| `npx tsc --noEmit` | `bash scripts/typecheck-safe.sh` | The bare command starves the host and has to be killed. Wrapper = systemd memory cgroup (4G) + `nice -n 19` + `ionice -c3` + 600 s timeout. **Empty output means clean** — it prints only its own banner on success. |
+| `npx jest` / `bun test` | `bash scripts/test.sh` | Defaults to `--maxWorkers=1`; `jest.config.ts` enforces it again for callers that bypass the script. Also translates the common `--workers=N` typo, which Jest silently ignores. Coverage is opt-in via `--coverage`. |
+| `npx playwright test` | `./scripts/test-e2e.sh` | Single worker + `nice`/`ionice`, and it starts a **correctly configured** dev server if none is running (`env.sh` + `E2E_AUTH_RATE_LIMIT_BYPASS`). |
+| `bun run build` | `bash scripts/build-safe.sh` | 7G cgroup — an over-large build is OOM-killed inside its own scope instead of swap-deathing the host. |
+
+**For the full Jest suite** (~6 min, 300+ suites) add outer limits, since `test.sh` itself sets
+neither priority nor a heap cap:
+
+```bash
+nice -n 19 ionice -c3 env NODE_OPTIONS=--max-old-space-size=3072 bash scripts/test.sh
+```
+
+**Long runs:** start them with `run_in_background` and wait on the output file. A foreground full
+suite or E2E run will hit the tool timeout and get orphaned.
+
+**Judging exit status:** `cmd | tail -N; echo $?` reports **`tail`'s** status, not the command's —
+it will happily print `0` above a list of errors. Use `${PIPESTATUS[0]}`, `set -o pipefail`, or
+judge by the output itself.
+
+**Dev server:** agents may **start** one, never **stop** one (see `e2e/CONVENTIONS.md`). Beware the
+reuse trap: `test-e2e.sh` reuses anything answering on :3737, including a server started by
+`dev.sh`, which lacks the E2E env — the failure then surfaces far from its cause as a hanging login.
+`scripts/dev-e2e.sh` runs in the FOREGROUND (`exec bun run dev`), so starting it from a shell that
+exits kills it; let `test-e2e.sh` start it instead.
 
 **bun** is the package manager (not npm/yarn). Use `bun add`, `bun run`, etc.
 
