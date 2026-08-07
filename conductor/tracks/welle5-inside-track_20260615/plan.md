@@ -75,7 +75,8 @@ panel reused on `myjobs/[id]`; components in NEW `src/components/inside-track/`.
 - [x] Task 5.5: E2E happy-path (record tip → engage → relay → in_review → reify to Job), per `e2e/CONVENTIONS.md`.
 
 ### Verification
-- [x] Component green (260+ inside-track tests); dictionary 4 locales; a11y encoded in component tests (design gate + ui-designer + accessibility-expert). E2E written, RUN-deferred (env-blocked global-setup). Full jest suite + build at Phase 7.
+- [x] Component green (260+ inside-track tests); dictionary 4 locales; a11y encoded in component tests (design gate + ui-designer + accessibility-expert). Full jest suite + build at Phase 7.
+- [x] E2E **no longer deferred** (corrected 2026-08-07): the run-block was a dev server started without the E2E env, which `scripts/test-e2e.sh` now provisions itself. `e2e/crud/inside-track-crud.spec.ts` passes — the full `open → engaged → relayed → in_review` lifecycle drives through in ~16-19 s.
 
 ## Phase 6: GDPR Integration (IT-3, IT-6)
 
