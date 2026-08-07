@@ -157,11 +157,18 @@ during the Phase-3 honesty gate (verified vs code 2026-06-15).
 Not defects — deliberate deferrals decided at the Welle-5 wrap-up.
 
 - **Inline quick-create in entity pickers** (`crm/ContactPicker`, `crm/CompanyPicker`) —
-  today select-existing only. **Product-approved future UX:** create a contact/company in
-  place, without leaving the screen. Contact-create needs a *minimal-capture quick-form*
-  (name + email min, flag the rest) so it never spawns privacy-incomplete records;
-  company-create can mirror the AddJob create-on-type flow. **Complements ROADMAP 2.20
-  (Spotlight / Command-Palette Action-Registry) + 2.16 (Keyboard Shortcuts).**
+  **HALF DONE (2026-08-06/07).** The **company** half shipped: `CompanyPicker` gained an
+  optional `onCreate`, `PersonForm` uses it, and `findOrCreateCompany` resolves-or-creates
+  (merged `9a74e4d8`). It mirrors the AddJob create-on-type flow as this entry predicted.
+  Motivation turned out to be stronger than UX convenience: the contact form previously stored
+  a free-text employer, so `CompanyAssociation.companyId` stayed `""` and those contacts were
+  invisible to `findWarmPaths` — Inside Track's own warm-path discovery.
+  **Still open — the contact half**, and deliberately so: contact-create needs the
+  *minimal-capture quick-form* (name + email min, flag the rest) so it never spawns
+  privacy-incomplete records, and that is gated on the quick-capture provenance open question
+  in `specs/crm.allium:1416-1433`, whose own sequencing note says to lock the decision BEFORE
+  the quick-create UI ships. **Complements ROADMAP 2.20 (Spotlight / Command-Palette
+  Action-Registry) + 2.16 (Keyboard Shortcuts).**
 - **Combobox consolidation onto `ui/base-combobox.tsx`** (C4 ComboBox analysis,
   Recommendation 2). The Inside Track pickers + the ~9 other specialised comboboxes still
   hand-roll the Popover+Command shell. `BaseCombobox` currently lacks a trigger `aria-label`,
