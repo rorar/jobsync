@@ -236,6 +236,7 @@ rule TipReifiesToJob {
     when: ApplicantCommitsToApply(referral)
     requires: referral.target_company != null
     requires: referral.status = in_review
+    let previous_status = referral.status
     ensures: Job.created(
         user_id: referral.user_id,
         company: referral.target_company,
@@ -244,6 +245,15 @@ rule TipReifiesToJob {
         source_referral: referral
     )
     ensures: referral.status = converted
+    ensures: ReferralStatusChanged(
+        referral_id: referral.id,
+        user_id: referral.user_id,
+        previous_status: previous_status,
+        new_status: referral.status,
+        system_initiated: false,
+        tipster_person_id: referral.tipster?.id,
+        target_company_id: referral.target_company?.id
+    )
     @guidance
         -- VERIFIED against code (2026-06-15): JobStatus is per-user and
         -- customizable (Welle 4) with a category `kind` ∈ lead|applied|
@@ -272,7 +282,30 @@ rule ReferralGoesStale {
     -- instead of lingering as a false "open" lead.
     when: referral: Referral.last_activity_at + config.stale_after <= now
     requires: referral.status in {open, engaged, relayed, in_review}
+    let previous_status = referral.status
     ensures: referral.status = stale
+    ensures: ReferralStatusChanged(
+        referral_id: referral.id,
+        user_id: referral.user_id,
+        previous_status: previous_status,
+        new_status: referral.status,
+        system_initiated: true,
+        tipster_person_id: referral.tipster?.id,
+        target_company_id: referral.target_company?.id
+    )
+
+    @guidance
+        -- The ONLY system_initiated transition: nobody acted, a deadline passed.
+        -- The CRM timeline projection reads that flag to record no actor.
+        -- This rule does NOT refresh last_activity_at — that is what stops it
+        -- re-firing once the status guard no longer holds.
+        -- Two obligations follow for the implementation, and neither is met by a
+        -- blind bulk update:
+        --   * the event carries previous_status and the tipster/company links, so
+        --     the referrals must be READ before they are flagged;
+        --   * a system transition must record itself as such in
+        --     updated_by_type (ActorType automation), not leave the last human
+        --     editor in place as though they had acted.
 }
 
 -- Phase 2 — stimulus rules driving the lifecycle (user / 9.5 self-service
@@ -289,30 +322,46 @@ rule RecordInsiderTip {
     -- A tip from a contact who works at the target company and will relay
     -- the user's documents onward (use case A).
     when: RecordInsiderTip(user, tipster, target_company)
-    ensures: InsiderRelay.created(
-        user_id: user.id,
-        tipster: tipster,
-        target_company: target_company,
-        status: open,
-        received_at: now,
-        last_activity_at: now
-    )
+    ensures:
+        let referral = InsiderRelay.created(
+            user_id: user.id,
+            tipster: tipster,
+            target_company: target_company,
+            status: open,
+            received_at: now,
+            last_activity_at: now
+        )
+        ReferralRecorded(
+            referral_id: referral.id,
+            user_id: user.id,
+            kind: referral.kind,
+            tipster_person_id: tipster.id,
+            target_company_id: target_company?.id
+        )
 }
 
 rule RecordNetworkTip {
     -- A tip from a contact who knows an insider at the target company
     -- (use case B). `insider` and `via` may be supplied if already known.
     when: RecordNetworkTip(user, tipster, insider, via, target_company)
-    ensures: NetworkPath.created(
-        user_id: user.id,
-        tipster: tipster,
-        insider: insider,
-        via: via,
-        target_company: target_company,
-        status: open,
-        received_at: now,
-        last_activity_at: now
-    )
+    ensures:
+        let referral = NetworkPath.created(
+            user_id: user.id,
+            tipster: tipster,
+            insider: insider,
+            via: via,
+            target_company: target_company,
+            status: open,
+            received_at: now,
+            last_activity_at: now
+        )
+        ReferralRecorded(
+            referral_id: referral.id,
+            user_id: user.id,
+            kind: referral.kind,
+            tipster_person_id: tipster.id,
+            target_company_id: target_company?.id
+        )
 }
 
 rule ApplicantEngagesTip {
@@ -320,39 +369,89 @@ rule ApplicantEngagesTip {
     -- relay; NetworkPath: asks the tipster for an introduction).
     when: ApplicantEngages(referral)
     requires: referral.status = open
+    let previous_status = referral.status
     ensures: referral.status = engaged
     ensures: referral.last_activity_at = now
+    ensures: ReferralStatusChanged(
+        referral_id: referral.id,
+        user_id: referral.user_id,
+        previous_status: previous_status,
+        new_status: referral.status,
+        system_initiated: false,
+        tipster_person_id: referral.tipster?.id,
+        target_company_id: referral.target_company?.id
+    )
 }
 
 rule IntermediaryRelaysTip {
     -- The intermediary acts (forwarded the documents / made the introduction).
     when: IntermediaryRelays(referral)
     requires: referral.status = engaged
+    let previous_status = referral.status
     ensures: referral.status = relayed
     ensures: referral.last_activity_at = now
+    ensures: ReferralStatusChanged(
+        referral_id: referral.id,
+        user_id: referral.user_id,
+        previous_status: previous_status,
+        new_status: referral.status,
+        system_initiated: false,
+        tipster_person_id: referral.tipster?.id,
+        target_company_id: referral.target_company?.id
+    )
 }
 
 rule TargetReviewsApplication {
     -- The target side engages — reviewing the (forwarded / introduced) candidate.
     when: TargetReviews(referral)
     requires: referral.status = relayed
+    let previous_status = referral.status
     ensures: referral.status = in_review
     ensures: referral.last_activity_at = now
+    ensures: ReferralStatusChanged(
+        referral_id: referral.id,
+        user_id: referral.user_id,
+        previous_status: previous_status,
+        new_status: referral.status,
+        system_initiated: false,
+        tipster_person_id: referral.tipster?.id,
+        target_company_id: referral.target_company?.id
+    )
 }
 
 rule DeclineReferral {
     -- The tip dies (intermediary can't help, target passes, applicant drops it).
     when: DeclineReferral(referral)
     requires: referral.status in {open, engaged, relayed, in_review, stale}
+    let previous_status = referral.status
     ensures: referral.status = declined
+    ensures: ReferralStatusChanged(
+        referral_id: referral.id,
+        user_id: referral.user_id,
+        previous_status: previous_status,
+        new_status: referral.status,
+        system_initiated: false,
+        tipster_person_id: referral.tipster?.id,
+        target_company_id: referral.target_company?.id
+    )
 }
 
 rule ReviveReferral {
     -- A stale tip is revived when the tipster re-engages.
     when: ReviveReferral(referral)
     requires: referral.status = stale
+    let previous_status = referral.status
     ensures: referral.status = open
     ensures: referral.last_activity_at = now
+    ensures: ReferralStatusChanged(
+        referral_id: referral.id,
+        user_id: referral.user_id,
+        previous_status: previous_status,
+        new_status: referral.status,
+        system_initiated: false,
+        tipster_person_id: referral.tipster?.id,
+        target_company_id: referral.target_company?.id
+    )
 }
 
 rule AddPersonConnection {
@@ -389,9 +488,11 @@ rule AnonymizeCascadesToInsideTrack {
     -- The established cascade pattern is: JobContact deleteMany (hard remove),
     -- Interview/CrmActivityLog updateMany personId=null + scrub (detach). The
     -- arms below match that pattern: PersonConnection hard-removed, Referral
-    -- detached (tipster=null). NOTE: crm-gdpr.allium's DeleteCrmContact rule
-    -- says `not exists person`, which DRIFTS from this implementation — flag
-    -- for `weed`; do NOT copy that assumption here.
+    -- detached (tipster=null).
+    -- (A note here once claimed crm-gdpr.allium's `DeleteCrmContact` rule drifts
+    -- by asserting `not exists person`. No such rule exists; the erasure rule is
+    -- FulfillErasureRequest, which retains the row as a de-identified tombstone
+    -- too. Checked 2026-08-17 — there is no drift. Do not re-raise.)
     when: person: crm/Person.status transitions_to anonymized
     -- Network edges are hard-removed (they only exist to re-identify a path).
     ensures:
@@ -428,6 +529,17 @@ rule AnonymizeCascadesToInsideTrack {
     ensures:
         for d in CoverLetterDraft where d.tipster_reference?.person = person and not d.finalized:
             d.tipster_reference = null
+
+    @guidance
+        -- DELIBERATELY emits NO ReferralStatusChanged, although it does move
+        -- working referrals to `declined`. Every other status transition in this
+        -- spec projects onto the CRM timeline; this one must not. The payload
+        -- carries tipster_person_id, so projecting here would write a FRESH
+        -- timeline entry naming the very person being erased — an Art. 17
+        -- self-defeat, and the crm cascade is concurrently detaching existing
+        -- ActivityLog rows from that person. The erasure trace is
+        -- ContactDeleted(reason: anonymized) -> RecordContactDeletion, which is
+        -- already de-identified (target_person: null) by design.
 }
 
 -- ---------------------------------------------------------------------------
