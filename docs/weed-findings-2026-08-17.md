@@ -1,9 +1,18 @@
 # `allium:weed` findings — 2026-08-17 (`crm.allium` + `inside-track.allium`)
 
-Spec↔code divergences from a systematic `allium:weed` pass. **32 findings, 2 fixed (W-C1, W-F1), 30 open.**
+Spec↔code divergences from a systematic `allium:weed` pass.
+**34 findings, 3 fixed (W-C1, W-F1, W-F3), 31 open.**
 
-The two fixed are the ones that sat inside files the 2026-08-17 session was already committing —
-shipping without them would have committed a spec making a false statement about a sibling spec.
+W-C1 and W-F1 sat inside files the 2026-08-17 session was already committing — shipping without them
+would have committed a spec making a false statement about a sibling spec. W-F3 and W-F4 were found
+*while fixing* W-F1, under `allium:tend`; W-F3 was fixed because resolving W-F1 made its expression
+the sole surviving statement of the property.
+
+> **`allium check` does not catch malformed expressions.** Both W-F3's invalid
+> `not exists X in Collection where …` and its valid replacement return **0 errors**. So did a
+> fabricated enum literal earlier the same session (`"InsiderRelay"` where the code uses
+> `insider_relay`). A green check means the file parses, not that it is correct — verify constructs
+> against the language reference and claims against the code.
 
 **Scope note:** the pass was run as the pre-commit gate for the referral-events / quick-capture
 session (`docs/session-2026-08-17-open-items.md`). **None of these findings was caused by that
@@ -27,12 +36,12 @@ Baselines at the time of the pass: `allium check specs/` → 0 errors in both fi
 |---|---|
 | **High** | W-A1, W-B1, W-D1 |
 | **Medium-High** | W-B2, W-C5, W-D2 |
-| **Medium** | W-A2, W-C1, W-C2, W-C3, W-E1, W-E2, W-E4, W-F1, W-G1, W-G3, W-G4, W-G7, W-G8, W-H1, W-H2 |
+| **Medium** | W-A2, W-C1, W-C2, W-C3, W-E1, W-E2, W-E4, W-F1, W-F3, W-F4, W-G1, W-G3, W-G4, W-G7, W-G8, W-H1, W-H2 |
 | **Low / Low-Medium** | W-B3, W-C4, W-E3, W-E5, W-E6, W-F2, W-G2, W-G5, W-G6, W-G9, W-H3 |
 
-3 High + 3 Medium-High + 15 Medium + 11 Low/Low-Medium = 32.
+3 High + 3 Medium-High + 17 Medium + 11 Low/Low-Medium = 34.
 
-Which side is wrong: **spec** 18 · **both** 7 · **code** 6 · **aspirational (not a bug)** 1.
+Which side is wrong: **spec** 20 · **both** 7 · **code** 6 · **aspirational (not a bug)** 1.
 The spec-heavy skew is expected — the code has shipped and been reviewed repeatedly, while several
 spec rules were written ahead of it and never reconciled afterwards.
 
@@ -176,6 +185,36 @@ understated — code matches parent domains (`domain.endsWith("."+handle)`,
 **retroactively** while the same-named invariant in `crm-gdpr.allium:623-635` is explicitly
 *"enforced at creation time, not as a retroactive check"*. **Two specs cannot own one invariant name
 with opposite enforcement models.**
+
+**Resolution (2026-08-17).** `pattern` + per-member semantics added to `crm.allium`'s enum.
+On (c), the duplicate was **removed rather than synchronised** — `crm-gdpr.allium` is now the sole
+owner. The specs' own scope headers decide it: `crm-gdpr.allium` declares it *includes* "contact
+auto-creation constraints" and "data minimization rules" and *excludes* the "CRM domain model", and
+only its version documents all four match modes. `crm.allium` keeps a comment in its Invariants
+section explaining the absence, and still **enforces** the property through
+`AutoCreatePersonFromEmail`'s `requires` guards — it simply no longer restates it. Two synchronised
+copies is the arrangement that produced this finding; one owner cannot drift from itself.
+
+**W-F3 — `not exists X in Collection where …` is not valid Allium. [Medium] [spec] — ✅ FIXED 2026-08-17**
+`crm-gdpr.allium`'s `BlocklistSuppressesAutoCreation` used
+`not exists b in Blocklists where b.type = email and …`. The language reference permits only
+`exists <let-binding>` and `exists Entity{field: value}` (invariant expression table: *"Existence —
+`exists entity`, `not exists entity`"*); there is no `… in Collection where …` form. The correct
+idiom is already used elsewhere in the same codebase (`crm.allium:540-543`
+`not exists Blocklist{user_id: …, handle: …, type: email}`).
+**Found by copying the shape into `crm.allium` while fixing W-F1** — the copy passed `allium check`
+with 0 errors, which is how the malformed original survived in the first place. Both were rewritten
+as nested `for` + `implies`, matching the reference's own `UniqueEmail` example.
+
+**W-F4 — the suppression rule implements 2 of the 4 declared match modes. [Medium] [spec]**
+After W-F1 added `pattern`, `BlocklistType` advertises four modes (`email`, `phone`, `domain`,
+`pattern`), but `AutoCreatePersonFromEmail`'s guards (`crm.allium:540-541`) test only exact `email`
+and exact `domain`. Nothing in the spec suppresses on `phone` or on a `pattern` glob, and the
+`domain` guard is exact-match where the code matches parent domains too
+(`blocklist-match.ts:70-95` handles all four, including `domain.endsWith("."+handle)`). Adding the
+enum member did not create this gap — it made an existing one visible. Note the invariant can only
+express the `email` arm as a pure predicate, so the other three modes are carried by the rule's
+guards; those guards are what need extending.
 
 **W-F2 — the whole suppression path has no producer. [Low] [aspirational, not a bug]**
 `isHandleBlocked` / `isBlockedByEntries` have no production consumer (tests only), and

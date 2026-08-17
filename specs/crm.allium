@@ -1226,33 +1226,16 @@ invariant ExactlyOneNoteTarget {
         or (nt.target_person = null and nt.target_company = null and nt.target_job != null)
 }
 
-invariant BlocklistSuppressesAutoCreation {
-    -- No Person is auto-created for a handle the blocklist suppresses.
-    --
-    -- CORRECTED (weed, 2026-08-17): this previously asserted a RETROACTIVE
-    -- property (a blocklisted auto-created Person `implies status = archived`),
-    -- which contradicted the same-named invariant in crm-gdpr.allium — two specs
-    -- cannot own one invariant name with opposite enforcement models. It also
-    -- described behaviour nothing implements: no rule archives an existing
-    -- Person when a handle is later blocklisted. Suppression is enforced at
-    -- CREATION, by AutoCreatePersonFromEmail's `requires` guards.
-    --
-    -- A Blocklist entry suppresses according to its `type` (Welle 3 Gap-6):
-    --   email | phone → exact handle match
-    --   domain        → the email's domain or any parent domain
-    --   pattern       → a `*`-glob over the handle (ReDoS-safe)
-    -- Only the exact (email) case is expressible as a pure set predicate here;
-    -- the domain-suffix and glob modes are defined by the blocklist matching
-    -- rules and enforced by the same suppression check. crm-gdpr.allium carries
-    -- the authoritative statement of this invariant; this one is its CRM-side
-    -- restatement and must not diverge from it again.
-    for person in Persons:
-        for bl in Blocklists:
-            person.user_id = bl.user_id
-                and person.is_auto_created
-                and bl.type = email
-                implies person.primary_email != bl.handle
-}
+-- BlocklistSuppressesAutoCreation is NOT declared here. It lives in
+-- crm-gdpr.allium, which owns auto-creation constraints and data-minimisation
+-- rules by declared scope, and which documents all four match modes
+-- (email | phone exact, domain incl. parents, pattern glob).
+-- This spec carried a duplicate under the same name until weed W-F1
+-- (2026-08-17) found the two had drifted into opposite enforcement models — a
+-- retroactive "blocklisted implies archived" here, creation-time there — with
+-- the retroactive reading describing behaviour no rule implements. One owner,
+-- not two synchronised copies. crm.allium still ENFORCES the property, in
+-- AutoCreatePersonFromEmail's `requires` guards; it just no longer restates it.
 
 invariant AtMostOnePrimaryCompany {
     -- A Person may have zero or one primary company association.

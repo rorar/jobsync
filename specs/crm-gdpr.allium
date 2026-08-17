@@ -630,10 +630,17 @@ invariant BlocklistSuppressesAutoCreation {
     -- Only the exact (email) case is expressible as a pure set predicate here;
     -- the domain-suffix and glob modes are defined by the blocklist matching
     -- rules and enforced by the same suppression check.
+    -- SOLE OWNER of this property (weed W-F1, 2026-08-17). crm.allium carried a
+    -- duplicate of this invariant under the same name; the two diverged into
+    -- opposite enforcement models (retroactive vs creation-time) before anyone
+    -- noticed. The duplicate has been removed: auto-creation constraints and
+    -- data-minimisation rules are this spec's declared scope, and only this
+    -- version documents all four match modes. crm.allium enforces the property
+    -- operationally, through AutoCreatePersonFromEmail's `requires` guards.
     for gdpr in PersonGdprExtensions:
-        if gdpr.data_source = auto_created:
-            not exists b in Blocklists
-            where b.type = email and gdpr.person.emails.any(e => e = b.handle)
+        for b in Blocklists:
+            gdpr.is_auto_created and b.type = email
+                implies not gdpr.person.emails.any(e => e = b.handle)
 }
 
 -- =============================================================================
