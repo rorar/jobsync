@@ -68,6 +68,9 @@ enum DomainEventType {
     | company_created
     | enrichment_completed
     | enrichment_failed
+    -- Inside Track referrals (spec: inside-track.allium)
+    | referral_recorded
+    | referral_status_changed
 }
 
 ------------------------------------------------------------
@@ -246,7 +249,7 @@ value EnrichmentFailedPayload {
 value ContactCreatedPayload {
     person_id: String
     user_id: String
-    source: String                       -- "manual" | "auto_created" | "imported"
+    source: String                       -- "manual" | "auto_created" | "imported" | "quick_capture"
 }
 
 value ContactUpdatedPayload {
@@ -310,6 +313,37 @@ value CrmNoteCreatedPayload {
     target_job_id: String?
     target_company_id: String?
     user_id: String
+}
+
+-- Inside Track referral payloads (spec: inside-track.allium)
+-- Both carry the tipster and target-company ids so the CRM timeline projection
+-- can place the entry without navigating back to the Referral: events are
+-- immutable snapshots, and by the time a consumer runs the tipster link may
+-- already have been severed by the GDPR cascade.
+
+value ReferralRecordedPayload {
+    referral_id: String
+    user_id: String
+    kind: String                         -- "insider_relay" | "network_path"
+                                         -- (the wire form of the Referral
+                                         -- variant discriminator; NOT the
+                                         -- PascalCase variant names)
+    tipster_person_id: String?           -- null once GDPR de-identification has run
+    target_company_id: String?           -- null for a pure market tip (no company yet)
+}
+
+value ReferralStatusChangedPayload {
+    referral_id: String
+    user_id: String
+    previous_status: String
+    new_status: String
+    -- True only for the temporal stale sweep (ReferralGoesStale); false for
+    -- every user-driven transition. Carried explicitly so the timeline
+    -- projection can decide whether to record an actor WITHOUT string-matching
+    -- new_status against a status literal it does not own.
+    system_initiated: Boolean
+    tipster_person_id: String?
+    target_company_id: String?
 }
 
 ------------------------------------------------------------
