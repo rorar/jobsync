@@ -28,7 +28,7 @@ jest.mock("@/lib/db", () => ({
     company: { count: jest.fn() },
     crmBlocklist: { deleteMany: jest.fn() },
     referral: { updateMany: jest.fn() },
-    personConnection: { deleteMany: jest.fn() },
+    personConnection: { deleteMany: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
@@ -63,7 +63,7 @@ const mockDb = db as unknown as {
   company: { count: jest.Mock };
   crmBlocklist: { deleteMany: jest.Mock };
   referral: { updateMany: jest.Mock };
-  personConnection: { deleteMany: jest.Mock };
+  personConnection: { deleteMany: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -121,6 +121,8 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
     mockDb.crmBlocklist.deleteMany.mockResolvedValue({ count: 0 });
     mockDb.referral.updateMany.mockResolvedValue({ count: 0 });
     mockDb.personConnection.deleteMany.mockResolvedValue({ count: 0 });
+    mockDb.personConnection.findMany.mockResolvedValue([]);
+    mockDb.personConnection.updateMany.mockResolvedValue({ count: 0 });
     mockDb.person.update.mockResolvedValue({});
     mockDb.person.delete.mockResolvedValue({});
   });
@@ -397,6 +399,116 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
       await mergePersons(WINNER_ID, LOSER_ID);
 
       expect(mockDb.crmTaskTarget.deleteMany).not.toHaveBeenCalled();
+    });
+
+    // -----------------------------------------------------------------------
+    // Inside Track cascade — regression for weed W-D1.
+    // Before the fix the merge transferred five CRM relations and then deleted
+    // the loser, leaving Referral/PersonConnection to raw referential actions:
+    // Referral person links are onDelete:SetNull (warm path LOST, not
+    // transferred) and PersonConnection endpoints are onDelete:Cascade (the
+    // loser's edges deleted outright). Spec: specs/inside-track.allium
+    // MergeCascadesToInsideTrack.
+    // -----------------------------------------------------------------------
+    describe("Inside Track cascade (W-D1)", () => {
+      it("transfers referral tipster/insider/forwardedTo to the winner", async () => {
+        await mergePersons(WINNER_ID, LOSER_ID);
+
+        expect(mockDb.referral.updateMany).toHaveBeenCalledWith({
+          where: { tipsterId: LOSER_ID, userId: USER.id },
+          data: { tipsterId: WINNER_ID },
+        });
+        expect(mockDb.referral.updateMany).toHaveBeenCalledWith({
+          where: { insiderId: LOSER_ID, userId: USER.id },
+          data: { insiderId: WINNER_ID },
+        });
+        expect(mockDb.referral.updateMany).toHaveBeenCalledWith({
+          where: { forwardedToId: LOSER_ID, userId: USER.id },
+          data: { forwardedToId: WINNER_ID },
+        });
+      });
+
+      it("transfers an ordinary network edge instead of losing it", async () => {
+        mockDb.personConnection.findMany
+          .mockResolvedValueOnce([
+            { id: "edge-1", fromPersonId: LOSER_ID, toPersonId: "other-person" },
+          ]) // loser's edges
+          .mockResolvedValueOnce([]); // winner holds none
+
+        await mergePersons(WINNER_ID, LOSER_ID);
+
+        expect(mockDb.personConnection.updateMany).toHaveBeenCalledWith({
+          where: { id: { in: ["edge-1"] }, fromPersonId: LOSER_ID, userId: USER.id },
+          data: { fromPersonId: WINNER_ID },
+        });
+        expect(mockDb.personConnection.deleteMany).not.toHaveBeenCalled();
+      });
+
+      it("drops an edge BETWEEN the two merged persons (would self-connect)", async () => {
+        mockDb.personConnection.findMany
+          .mockResolvedValueOnce([
+            { id: "edge-self", fromPersonId: LOSER_ID, toPersonId: WINNER_ID },
+          ])
+          .mockResolvedValueOnce([
+            { id: "edge-self", fromPersonId: LOSER_ID, toPersonId: WINNER_ID },
+          ]);
+
+        await mergePersons(WINNER_ID, LOSER_ID);
+
+        expect(mockDb.personConnection.deleteMany).toHaveBeenCalledWith({
+          where: { id: { in: ["edge-self"] }, userId: USER.id },
+        });
+        expect(mockDb.personConnection.updateMany).not.toHaveBeenCalled();
+      });
+
+      it("drops a duplicate edge and re-points `via` at the survivor BEFORE deleting it", async () => {
+        mockDb.personConnection.findMany
+          .mockResolvedValueOnce([
+            { id: "edge-loser", fromPersonId: LOSER_ID, toPersonId: "insider-1" },
+          ])
+          .mockResolvedValueOnce([
+            { id: "edge-winner", fromPersonId: WINNER_ID, toPersonId: "insider-1" },
+          ]);
+
+        await mergePersons(WINNER_ID, LOSER_ID);
+
+        // The duplicate is removed, not transferred (DistinctEndpointsPerUser).
+        expect(mockDb.personConnection.deleteMany).toHaveBeenCalledWith({
+          where: { id: { in: ["edge-loser"] }, userId: USER.id },
+        });
+        // ...and any NetworkPath routed along it now points at the survivor.
+        expect(mockDb.referral.updateMany).toHaveBeenCalledWith({
+          where: { viaId: "edge-loser", userId: USER.id },
+          data: { viaId: "edge-winner" },
+        });
+
+        // ORDER IS THE POINT: re-pointing must be queued before the delete, or
+        // onDelete:SetNull nulls viaId first and the warm path is lost anyway.
+        const repointOrder = mockDb.referral.updateMany.mock.calls.findIndex(
+          ([arg]) => arg?.where?.viaId === "edge-loser",
+        );
+        expect(repointOrder).toBeGreaterThanOrEqual(0);
+        const repointInvocation =
+          mockDb.referral.updateMany.mock.invocationCallOrder[repointOrder];
+        const deleteInvocation =
+          mockDb.personConnection.deleteMany.mock.invocationCallOrder[0];
+        expect(repointInvocation).toBeLessThan(deleteInvocation);
+      });
+
+      it("scopes both connection pre-reads by userId (ADR-015)", async () => {
+        await mergePersons(WINNER_ID, LOSER_ID);
+
+        const calls = mockDb.personConnection.findMany.mock.calls;
+        expect(calls.length).toBe(2);
+        expect(calls[0][0]).toEqual({
+          where: { userId: USER.id, OR: [{ fromPersonId: LOSER_ID }, { toPersonId: LOSER_ID }] },
+          select: { id: true, fromPersonId: true, toPersonId: true },
+        });
+        expect(calls[1][0]).toEqual({
+          where: { userId: USER.id, OR: [{ fromPersonId: WINNER_ID }, { toPersonId: WINNER_ID }] },
+          select: { id: true, fromPersonId: true, toPersonId: true },
+        });
+      });
     });
   });
 });
