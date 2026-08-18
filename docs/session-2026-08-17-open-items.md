@@ -48,6 +48,18 @@ Each was confirmed against code this session. Re-verifying is wasted budget.
 | `specs/inside-track.allium` | 0 errors / 0 warn / 11 info | unchanged |
 | `specs/event-bus.allium` | 0 errors / 30 warn / 0 info | 0 errors / **32** warn / 0 info |
 
+### Test baseline (2026-08-18, after the W-D1 fix)
+
+`bash scripts/test.sh` — **308 suites passed / 308, 5636 tests passed + 2 todo, 0 failures, 179s.**
+Verified from the run log (`EXIT:0` + the summary lines), not from the wrapper's exit status.
+
+This supersedes the verification caveat recorded in the W-D1 commit message (`3078bf24`), which was
+written when the suite could not be completed. The obstacle was host contention, not the change: a
+dev server left running 12 days held ~5GB, and the same suite that had been SIGTERM'd after 35
+suites — with `crmTask.actions.spec.ts` alone taking 457s — finished in 179s once it was stopped.
+`scripts/typecheck-safe.sh` still does not complete on this host (`EXIT:124` at both 600s and
+`TSC_TIMEOUT=1500`); targeted LSP/serena diagnostics remain the substitute for a changed file.
+
 The +2 crm infos are `allium.rule.unreachableTrigger` on the two new projections — the same accepted
 kind as the three existing cross-spec projections. The +2 event-bus warnings are `definition.unused`
 on the two new payload value types, matching the 28 already there (payload values in that file are
@@ -156,8 +168,10 @@ documentation-only). `allium analyse` returns **0 findings** on both edited spec
   repo, so there was no index to update.
 - **E-3 — No blind-spot pass, no formal honesty gate.** The gate is pre-push, so not overdue — but it
   has not happened, and the session accumulated enough change to warrant it.
-- **E-4 — No tests, and CI spec-validation was never checked.** Spec-only changes plausibly need none,
-  but "no tests needed" is an **assumption**: whether `allium check` runs in CI was not verified.
+- **E-4 — CI spec-validation still unchecked.** Partly closed: the W-D1 fix ships 5 regression tests
+  (verified to fail without it) and the full suite is green at 308/308. Still open: whether
+  `allium check` runs in CI at all was never verified, so "the specs are validated on every push"
+  remains an assumption, not a finding.
 - **E-5 — Any IT-B1 / IT-B2 fix is a UI change** → the ui-design agent must be consulted first per
   project rule. This constrains how those two get done.
 
