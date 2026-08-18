@@ -1,7 +1,7 @@
 # `allium:weed` findings — 2026-08-17 (`crm.allium` + `inside-track.allium`)
 
 Spec↔code divergences from a systematic `allium:weed` pass.
-**34 findings, 3 fixed (W-C1, W-F1, W-F3), 31 open.**
+**34 findings, 4 fixed (W-C1, W-F1, W-F3, W-D1), 30 open.**
 
 W-C1 and W-F1 sat inside files the 2026-08-17 session was already committing — shipping without them
 would have committed a spec making a false statement about a sibling spec. W-F3 and W-F4 were found
@@ -122,7 +122,7 @@ the blocked Person, which `findWarmPaths` then filters out again. Also a spec ga
 
 ## D. Person merge
 
-**W-D1 — `MergePersons` orphans Referrals and destroys PersonConnections. [High] [both] ✅ verified**
+**W-D1 — `MergePersons` orphans Referrals and destroys PersonConnections. [High] [both] ✅ verified — ✅ FIXED 2026-08-18**
 `person.actions.ts:731-785` transfers five CRM relations, then `person.delete(loser)`. **No Referral
 or PersonConnection arm**, in neither the code nor `inside-track.allium` (which has a cascade for
 anonymization only). FK behaviour then applies: `Referral.tipsterId/insiderId/forwardedToId` are

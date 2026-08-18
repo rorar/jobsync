@@ -128,8 +128,8 @@ documentation-only). `allium analyse` returns **0 findings** on both edited spec
   - **W-G1** — `TipReifiesToJob` seeds `JobStatusHistory` + emits `JobStatusChanged` in code, witnessed
     by no `ensures`. This session's `RecordReferralStatusChange` guidance reasons about that entry, so
     it leans on an unspecified effect.
-  - **W-D1** (High) — `MergePersons` orphans Referrals and hard-deletes PersonConnections: silent data
-    loss on a routine, non-GDPR operation. Highest-priority fix in the whole set.
+  - ~~**W-D1** (High) — `MergePersons` orphans Referrals and hard-deletes PersonConnections~~
+    **FIXED 2026-08-18** (spec + code + 5 regression tests verified to fail without the fix).
 - **D-3 — Unverified descriptive claims remain in the invented surface.** One fabricated literal was
   found and fixed (`kind` was written as `"InsiderRelay" | "NetworkPath"`; code uses
   `insider_relay` / `network_path`). But `PersonQuickCapture`'s `exposes` list (`name`,
