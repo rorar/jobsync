@@ -706,6 +706,12 @@ rule MergePersons {
         -- Every consumer of PersonsMerged must be applied ATOMICALLY with this
         -- rule. A partially-applied merge leaves other contexts referencing a
         -- Person that no longer exists.
+        -- CONSEQUENCE, so `weed` does not read this as drift: PersonsMerged is
+        -- an observable outcome, NOT necessarily an event-bus publication. The
+        -- implementation satisfies it INLINE, inside the merge transaction —
+        -- publishing it would hand the cascade to an async consumer running
+        -- after the loser row is gone, which is precisely the atomicity this
+        -- rule forbids. Expect no `PersonsMerged` in the event registry.
 }
 
 rule AddJobContact {
