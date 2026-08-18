@@ -542,6 +542,61 @@ rule AnonymizeCascadesToInsideTrack {
         -- already de-identified (target_person: null) by design.
 }
 
+rule MergeCascadesToInsideTrack {
+    -- The MIRROR IMAGE of AnonymizeCascadesToInsideTrack. Anonymization severs
+    -- references because the person is being erased; a merge asserts the two
+    -- records are the SAME person, so every inside-track reference to the loser
+    -- becomes a reference to the winner instead.
+    --
+    -- Without this rule the references are left to raw referential actions:
+    -- Referral's person links null out (the warm path is lost, not transferred)
+    -- and the loser's network edges are deleted outright — silent data loss on
+    -- a routine, non-GDPR housekeeping operation.
+    -- Consumed UNQUALIFIED, the same way crm.allium consumes JobStatusChanged /
+    -- VacancyPromoted from other specs: a foreign trigger needs no declared
+    -- extension point, and the qualified form is not an accepted trigger shape.
+    when: PersonsMerged(winner, loser)
+
+    ensures:
+        for r in Referral where tipster = loser:
+            r.tipster = winner
+    ensures:
+        for r in InsiderRelay where forwarded_to = loser:
+            r.forwarded_to = winner
+    ensures:
+        for r in NetworkPath where insider = loser:
+            r.insider = winner
+
+    -- Network edges transfer the same way, EXCEPT where the mapping would
+    -- produce an edge the model forbids (see @guidance).
+    ensures:
+        for c in PersonConnection where from_person = loser and to_person != winner:
+            c.from_person = winner
+    ensures:
+        for c in PersonConnection where to_person = loser and from_person != winner:
+            c.to_person = winner
+
+    -- An edge BETWEEN the two merged persons maps to from = to, which
+    -- NoSelfConnection forbids. It is removed rather than transferred: once the
+    -- two are one person, "knows themselves" carries no information.
+    ensures:
+        for c in PersonConnection where
+            (from_person = loser and to_person = winner)
+            or (from_person = winner and to_person = loser):
+            not exists c
+
+    @guidance
+        -- DistinctEndpointsPerUser: where the winner ALREADY holds an edge with
+        -- the same ordered endpoints, the loser's edge is a duplicate and is
+        -- removed instead of transferred (transferring it would violate the
+        -- constraint outright).
+        -- Any NetworkPath routed `via` a removed edge MUST be re-pointed at the
+        -- surviving equivalent edge BEFORE the removal. Removing it first nulls
+        -- the reference through the ordinary referential action and loses the
+        -- warm path — the exact failure this rule exists to prevent.
+        -- All of the above applies atomically with crm's MergePersons.
+}
+
 -- ---------------------------------------------------------------------------
 -- Warm-path discovery surface ("lege die Beziehungen offen")
 -- ---------------------------------------------------------------------------

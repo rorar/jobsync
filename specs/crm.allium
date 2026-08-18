@@ -690,12 +690,22 @@ rule MergePersons {
         for al in loser.timeline_activities:
             al.target_person = winner
 
+    -- Announced BEFORE the loser ceases to exist, so bounded contexts holding
+    -- their own references to a Person can transfer them (see
+    -- inside-track.allium MergeCascadesToInsideTrack). Without this, such
+    -- references are left to raw referential actions — which silently null or
+    -- cascade-delete them, losing data a merge is supposed to preserve.
+    ensures: PersonsMerged(winner: winner, loser: loser)
+
     ensures: not exists loser
 
     @guidance
         -- Winner's field values take precedence.
         -- Loser's emails/phones are appended with is_primary = false.
         -- Loser's company associations are appended with is_primary = false.
+        -- Every consumer of PersonsMerged must be applied ATOMICALLY with this
+        -- rule. A partially-applied merge leaves other contexts referencing a
+        -- Person that no longer exists.
 }
 
 rule AddJobContact {
