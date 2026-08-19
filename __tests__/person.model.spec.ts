@@ -7,6 +7,8 @@ import {
   isValidPersonTransition,
   isValidInterviewTransition,
   isValidTaskTransition,
+  isValidDataSource,
+  DATA_SOURCES,
   validateExactlyOneTarget,
   validateAtMostOnePrimaryCompany,
   validateCompanyAssociations,
@@ -29,6 +31,25 @@ import {
 // =============================================================================
 // State Machine: Person
 // =============================================================================
+
+describe("isValidDataSource", () => {
+  it("accepts every declared DataSource value including quick_capture", () => {
+    for (const source of DATA_SOURCES) {
+      expect(isValidDataSource(source)).toBe(true);
+    }
+    // quick_capture is the fourth provenance value (crm.allium DataSource enum)
+    expect(DATA_SOURCES).toContain("quick_capture");
+    expect(isValidDataSource("quick_capture")).toBe(true);
+  });
+
+  it("rejects unknown strings and non-strings", () => {
+    expect(isValidDataSource("scraped")).toBe(false);
+    expect(isValidDataSource("")).toBe(false);
+    expect(isValidDataSource(undefined)).toBe(false);
+    expect(isValidDataSource(null)).toBe(false);
+    expect(isValidDataSource(42)).toBe(false);
+  });
+});
 
 describe("isValidPersonTransition", () => {
   const validTransitions: [PersonStatus, PersonStatus][] = [

@@ -13,6 +13,7 @@
  */
 
 import { z } from "zod";
+import { DATA_SOURCES } from "@/models/person.model";
 import type {
   VacancyPromotedPayload,
   VacancyDismissedPayload,
@@ -227,7 +228,7 @@ export const EnrichmentFailedPayloadSchema = z.object({
 export const ContactCreatedPayloadSchema = z.object({
   personId: z.string(),
   userId: z.string(),
-  source: z.enum(["manual", "auto_created", "imported"]),
+  source: z.enum(DATA_SOURCES),
 }) satisfies z.ZodType<ContactCreatedPayload>;
 
 export const ContactUpdatedPayloadSchema = z.object({

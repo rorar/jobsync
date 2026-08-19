@@ -80,7 +80,21 @@ export type PersonStatus = "active" | "archived" | "anonymized";
 
 export type SocialPlatform = "linkedin" | "xing" | "github" | "twitter" | "other";
 
-export type DataSource = "manual" | "auto_created" | "imported";
+/**
+ * How a Person record entered the system — ONE provenance axis (crm.allium
+ * DataSource enum). `quick_capture` is a minimal inline create from an entity
+ * picker: behaviourally distinct from `manual` (knowingly incomplete at birth)
+ * and from `auto_created` (a user chose to create it). Consumers that must treat
+ * a knowingly-incomplete contact differently read THIS value — deriving origin
+ * from field emptiness is wrong, the first edit that fills a field erases it.
+ */
+export const DATA_SOURCES = ["manual", "auto_created", "imported", "quick_capture"] as const;
+export type DataSource = (typeof DATA_SOURCES)[number];
+
+/** Runtime membership check for the erased DataSource union (ADR-019). */
+export function isValidDataSource(value: unknown): value is DataSource {
+  return typeof value === "string" && (DATA_SOURCES as readonly string[]).includes(value);
+}
 
 export type ProcessingBasis = "legitimate_interest" | "consent" | "contract";
 

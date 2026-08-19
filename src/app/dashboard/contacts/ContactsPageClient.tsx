@@ -58,6 +58,8 @@ const dataSourceVariant = (source: string) => {
       return "secondary" as const;
     case "imported":
       return "outline" as const;
+    case "quick_capture":
+      return "secondary" as const;
     default:
       return "outline" as const;
   }
@@ -223,6 +225,7 @@ export default function ContactsPageClient() {
             <SelectItem value="manual">{t("crm.dataSource.manual")}</SelectItem>
             <SelectItem value="auto_created">{t("crm.dataSource.auto_created")}</SelectItem>
             <SelectItem value="imported">{t("crm.dataSource.imported")}</SelectItem>
+            <SelectItem value="quick_capture">{t("crm.dataSource.quick_capture")}</SelectItem>
           </SelectContent>
         </Select>
       </div>

@@ -91,6 +91,7 @@ export const crm = {
     "crm.dataSource.manual": "Manual",
     "crm.dataSource.auto_created": "Auto-created",
     "crm.dataSource.imported": "Imported",
+    "crm.dataSource.quick_capture": "Quick capture",
 
     // GDPR
     "crm.processingBasis": "Processing Basis",
@@ -385,6 +386,7 @@ export const crm = {
     "crm.dataSource.manual": "Manuell",
     "crm.dataSource.auto_created": "Automatisch erstellt",
     "crm.dataSource.imported": "Importiert",
+    "crm.dataSource.quick_capture": "Schnellerfassung",
     "crm.processingBasis": "Rechtsgrundlage",
     "crm.processingBasis.legitimate_interest": "Berechtigtes Interesse",
     "crm.processingBasis.consent": "Einwilligung",
@@ -651,6 +653,7 @@ export const crm = {
     "crm.dataSource.manual": "Manuel",
     "crm.dataSource.auto_created": "Création automatique",
     "crm.dataSource.imported": "Importé",
+    "crm.dataSource.quick_capture": "Saisie rapide",
     "crm.processingBasis": "Base juridique",
     "crm.processingBasis.legitimate_interest": "Intérêt légitime",
     "crm.processingBasis.consent": "Consentement",
@@ -917,6 +920,7 @@ export const crm = {
     "crm.dataSource.manual": "Manual",
     "crm.dataSource.auto_created": "Creación automática",
     "crm.dataSource.imported": "Importado",
+    "crm.dataSource.quick_capture": "Captura rápida",
     "crm.processingBasis": "Base legal",
     "crm.processingBasis.legitimate_interest": "Interés legítimo",
     "crm.processingBasis.consent": "Consentimiento",

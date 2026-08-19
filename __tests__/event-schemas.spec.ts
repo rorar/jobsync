@@ -655,7 +655,7 @@ describe("EnrichmentFailedPayloadSchema", () => {
 
 describe("ContactCreatedPayloadSchema", () => {
   it("accepts all valid source enum values", () => {
-    const sources = ["manual", "auto_created", "imported"] as const;
+    const sources = ["manual", "auto_created", "imported", "quick_capture"] as const;
     for (const source of sources) {
       const result = ContactCreatedPayloadSchema.safeParse({
         personId: "person-1",

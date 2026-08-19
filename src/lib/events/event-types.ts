@@ -8,6 +8,7 @@
  */
 
 import type { AutomationRunStatus } from "@/models/automation.model";
+import type { DataSource } from "@/models/person.model";
 
 /** Inline definition to avoid bidirectional dependency with scheduler/types */
 type RunSource = "scheduler" | "manual";
@@ -220,7 +221,7 @@ export interface EnrichmentFailedPayload {
 export interface ContactCreatedPayload {
   personId: string;
   userId: string;
-  source: "manual" | "auto_created" | "imported";
+  source: DataSource;
 }
 
 export interface ContactUpdatedPayload {
