@@ -19,7 +19,7 @@ import prisma from "@/lib/db";
 import { eventBus } from "@/lib/events";
 import { createEvent, DomainEventType } from "@/lib/events/event-types";
 import { CRM_CONFIG, isConsentBlocked } from "@/models/person.model";
-import { INSIDE_TRACK_CONFIG } from "@/models/insideTrack.model";
+import { INSIDE_TRACK_CONFIG, type ReferralStatus } from "@/models/insideTrack.model";
 import { debugLog, debugError } from "@/lib/debug";
 import { getPrivacySettingsForUser } from "@/lib/account/privacy-helpers";
 import { executeAccountDeletion } from "@/lib/account/execute-deletion";
@@ -112,14 +112,39 @@ async function flagStaleReferrals(): Promise<number> {
   const threshold = new Date(
     Date.now() - INSIDE_TRACK_CONFIG.staleAfterDays * 24 * 60 * 60 * 1000,
   );
-  const result = await prisma.referral.updateMany({
+  // Read-then-update, NOT a blind updateMany: ReferralGoesStale (inside-track.allium)
+  // emits ReferralStatusChanged per referral, and that event carries each row's
+  // previous_status + tipster/company links — data a bulk update cannot supply.
+  const staleReferrals = await prisma.referral.findMany({
     where: {
       status: { in: ["open", "engaged", "relayed", "in_review"] },
       lastActivityAt: { lte: threshold },
     },
-    data: { status: "stale" },
+    select: { id: true, status: true, userId: true, tipsterId: true, targetCompanyId: true },
   });
-  return result.count;
+
+  for (const referral of staleReferrals) {
+    // IT-B4: a system sweep records itself as `automation`, not the last human
+    // editor. updatedById is null — no user acted.
+    await prisma.referral.update({
+      where: { id: referral.id },
+      data: { status: "stale", updatedByType: "automation", updatedById: null },
+    });
+    // The ONLY system_initiated referral transition (systemInitiated: true) — the
+    // timeline projection reads that flag to record no actor.
+    eventBus.publish(
+      createEvent(DomainEventType.ReferralStatusChanged, {
+        referralId: referral.id,
+        userId: referral.userId,
+        previousStatus: referral.status as ReferralStatus,
+        newStatus: "stale",
+        systemInitiated: true,
+        tipsterPersonId: referral.tipsterId ?? undefined,
+        targetCompanyId: referral.targetCompanyId ?? undefined,
+      }),
+    );
+  }
+  return staleReferrals.length;
 }
 
 // ---------------------------------------------------------------------------

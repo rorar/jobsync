@@ -14,6 +14,7 @@
 
 import { z } from "zod";
 import { DATA_SOURCES } from "@/models/person.model";
+import { REFERRAL_KINDS, REFERRAL_STATUSES } from "@/models/insideTrack.model";
 import type {
   VacancyPromotedPayload,
   VacancyDismissedPayload,
@@ -43,6 +44,8 @@ import type {
   CrmTaskCreatedPayload,
   CrmTaskCompletedPayload,
   CrmNoteCreatedPayload,
+  ReferralRecordedPayload,
+  ReferralStatusChangedPayload,
 } from "./event-types";
 
 // ---------------------------------------------------------------------------
@@ -293,6 +296,27 @@ export const CrmNoteCreatedPayloadSchema = z.object({
   targetCompanyId: z.string().optional(),
 }) satisfies z.ZodType<CrmNoteCreatedPayload>;
 
+// Inside Track referrals (spec: inside-track.allium). kind/status use the shared
+// const-array enums so a new Referral kind or status can never drift from the
+// wire schema.
+export const ReferralRecordedPayloadSchema = z.object({
+  referralId: z.string(),
+  userId: z.string(),
+  kind: z.enum(REFERRAL_KINDS),
+  tipsterPersonId: z.string().optional(),
+  targetCompanyId: z.string().optional(),
+}) satisfies z.ZodType<ReferralRecordedPayload>;
+
+export const ReferralStatusChangedPayloadSchema = z.object({
+  referralId: z.string(),
+  userId: z.string(),
+  previousStatus: z.enum(REFERRAL_STATUSES),
+  newStatus: z.enum(REFERRAL_STATUSES),
+  systemInitiated: z.boolean(),
+  tipsterPersonId: z.string().optional(),
+  targetCompanyId: z.string().optional(),
+}) satisfies z.ZodType<ReferralStatusChangedPayload>;
+
 // ---------------------------------------------------------------------------
 // Schema Registry — maps DomainEventType to its Zod schema
 // ---------------------------------------------------------------------------
@@ -326,6 +350,8 @@ export const EventPayloadSchemas = {
   CrmTaskCreated: CrmTaskCreatedPayloadSchema,
   CrmTaskCompleted: CrmTaskCompletedPayloadSchema,
   CrmNoteCreated: CrmNoteCreatedPayloadSchema,
+  ReferralRecorded: ReferralRecordedPayloadSchema,
+  ReferralStatusChanged: ReferralStatusChangedPayloadSchema,
 } as const;
 
 // ---------------------------------------------------------------------------

@@ -58,7 +58,7 @@ describe("crm-activity-logger", () => {
     jest.clearAllMocks();
   });
 
-  it("subscribes to 11 event types", () => {
+  it("subscribes to 13 event types", () => {
     const expectedTypes = [
       DomainEventType.JobStatusChanged,
       DomainEventType.ContactCreated,
@@ -71,6 +71,8 @@ describe("crm-activity-logger", () => {
       DomainEventType.CrmNoteCreated,
       DomainEventType.VacancyPromoted,
       DomainEventType.AutomationDegraded,
+      DomainEventType.ReferralRecorded,
+      DomainEventType.ReferralStatusChanged,
     ];
 
     for (const type of expectedTypes) {
@@ -93,6 +95,94 @@ describe("crm-activity-logger", () => {
         userId: "user-1",
         actorId: "user-1",
         targetJobId: "job-1",
+      }),
+    });
+  });
+
+  // Inside Track referrals (spec: crm.allium RecordReferralRecorded /
+  // RecordReferralStatusChange). Both targets set when known so one entry surfaces
+  // on the tipster's PersonTimeline AND the target company's CompanyTimeline.
+  it("creates referral_recorded with both targets and a {referralId,kind} detail", async () => {
+    await emit(DomainEventType.ReferralRecorded, {
+      referralId: "ref-1",
+      userId: "user-1",
+      kind: "insider_relay",
+      tipsterPersonId: "person-1",
+      targetCompanyId: "company-1",
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "referral_recorded",
+        userId: "user-1",
+        actorId: "user-1",
+        targetPersonId: "person-1",
+        targetCompanyId: "company-1",
+        targetJobId: null,
+        details: JSON.stringify({ referralId: "ref-1", kind: "insider_relay" }),
+      }),
+    });
+  });
+
+  it("creates referral_recorded with null targets for a GDPR-severed market tip", async () => {
+    await emit(DomainEventType.ReferralRecorded, {
+      referralId: "ref-2",
+      userId: "user-1",
+      kind: "network_path",
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "referral_recorded",
+        targetPersonId: null,
+        targetCompanyId: null,
+      }),
+    });
+  });
+
+  it("creates referral_status_changed with actorId=userId for a user-driven change", async () => {
+    await emit(DomainEventType.ReferralStatusChanged, {
+      referralId: "ref-1",
+      userId: "user-1",
+      previousStatus: "open",
+      newStatus: "engaged",
+      systemInitiated: false,
+      tipsterPersonId: "person-1",
+      targetCompanyId: "company-1",
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "referral_status_changed",
+        userId: "user-1",
+        actorId: "user-1",
+        targetPersonId: "person-1",
+        targetCompanyId: "company-1",
+        targetJobId: null,
+        details: JSON.stringify({
+          referralId: "ref-1",
+          previousStatus: "open",
+          newStatus: "engaged",
+        }),
+      }),
+    });
+  });
+
+  it("creates referral_status_changed with actorId null for the system stale sweep", async () => {
+    await emit(DomainEventType.ReferralStatusChanged, {
+      referralId: "ref-1",
+      userId: "user-1",
+      previousStatus: "engaged",
+      newStatus: "stale",
+      systemInitiated: true,
+      tipsterPersonId: "person-1",
+      targetCompanyId: "company-1",
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "referral_status_changed",
+        actorId: null,
       }),
     });
   });

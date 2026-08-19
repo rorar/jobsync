@@ -16,14 +16,17 @@ jest.mock("@/lib/db", () => ({
     crmInterview: { findMany: jest.fn() },
     crmTask: { findMany: jest.fn() },
     crmActivityLog: { findFirst: jest.fn(), create: jest.fn() },
-    referral: { updateMany: jest.fn() },
+    referral: { findMany: jest.fn(), update: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
 jest.mock("@/lib/events", () => ({ eventBus: { publish: jest.fn() } }));
 jest.mock("@/lib/events/event-types", () => ({
   createEvent: jest.fn((type: string, payload: unknown) => ({ type, payload })),
-  DomainEventType: { ReminderTriggered: "ReminderTriggered" },
+  DomainEventType: {
+    ReminderTriggered: "ReminderTriggered",
+    ReferralStatusChanged: "ReferralStatusChanged",
+  },
 }));
 jest.mock("@/lib/account/privacy-helpers", () => ({ getPrivacySettingsForUser: jest.fn() }));
 jest.mock("@/lib/account/execute-deletion", () => ({ executeAccountDeletion: jest.fn() }));
@@ -44,7 +47,7 @@ const mockDb = db as unknown as {
   crmInterview: { findMany: jest.Mock };
   crmTask: { findMany: jest.Mock };
   crmActivityLog: { findFirst: jest.Mock; create: jest.Mock };
-  referral: { updateMany: jest.Mock };
+  referral: { findMany: jest.Mock; update: jest.Mock };
   $transaction: jest.Mock;
 };
 const mockPublish = (eventBus as unknown as { publish: jest.Mock }).publish;
@@ -166,23 +169,58 @@ describe("checkOverdueTasks", () => {
 describe("flagStaleReferrals (ReferralGoesStale)", () => {
   afterEach(() => jest.useRealTimers());
 
-  it("flags only working-status referrals quiet past config.stale_after (21d)", async () => {
+  it("reads working-status referrals quiet past config.stale_after (21d) then flags each", async () => {
     jest.useFakeTimers().setSystemTime(new Date("2026-06-15T12:00:00.000Z"));
-    mockDb.referral.updateMany.mockResolvedValue({ count: 3 });
+    mockDb.referral.findMany.mockResolvedValue([
+      { id: "r1", status: "open", userId: "u1", tipsterId: "p1", targetCompanyId: "c1" },
+      { id: "r2", status: "relayed", userId: "u2", tipsterId: null, targetCompanyId: null },
+    ]);
+    mockDb.referral.update.mockResolvedValue({});
 
     const count = await flagStaleReferrals();
 
-    expect(count).toBe(3);
-    const arg = mockDb.referral.updateMany.mock.calls[0][0];
-    expect(arg.data).toEqual({ status: "stale" });
-    expect(arg.where.status).toEqual({ in: ["open", "engaged", "relayed", "in_review"] });
-    // threshold = now - 21 days
-    const expected = new Date("2026-05-25T12:00:00.000Z");
-    expect((arg.where.lastActivityAt.lte as Date).toISOString()).toBe(expected.toISOString());
+    expect(count).toBe(2);
+    // Read filters the working set past the staleness threshold (now - 21d).
+    const where = mockDb.referral.findMany.mock.calls[0][0].where;
+    expect(where.status).toEqual({ in: ["open", "engaged", "relayed", "in_review"] });
+    expect((where.lastActivityAt.lte as Date).toISOString()).toBe(
+      new Date("2026-05-25T12:00:00.000Z").toISOString(),
+    );
+    // IT-B4: a system sweep attributes itself to `automation`, not the last human.
+    expect(mockDb.referral.update).toHaveBeenCalledTimes(2);
+    expect(mockDb.referral.update).toHaveBeenNthCalledWith(1, {
+      where: { id: "r1" },
+      data: { status: "stale", updatedByType: "automation", updatedById: null },
+    });
   });
 
-  it("returns 0 when nothing is stale (idempotent re-run)", async () => {
-    mockDb.referral.updateMany.mockResolvedValue({ count: 0 });
+  it("emits a system-initiated ReferralStatusChanged per flagged referral with its previous status", async () => {
+    mockDb.referral.findMany.mockResolvedValue([
+      { id: "r1", status: "engaged", userId: "u1", tipsterId: "p1", targetCompanyId: "c1" },
+    ]);
+    mockDb.referral.update.mockResolvedValue({});
+
+    await flagStaleReferrals();
+
+    expect(mockPublish).toHaveBeenCalledTimes(1);
+    expect(mockPublish.mock.calls[0][0]).toEqual({
+      type: "ReferralStatusChanged",
+      payload: {
+        referralId: "r1",
+        userId: "u1",
+        previousStatus: "engaged",
+        newStatus: "stale",
+        systemInitiated: true,
+        tipsterPersonId: "p1",
+        targetCompanyId: "c1",
+      },
+    });
+  });
+
+  it("returns 0 and emits nothing when the working set is empty (idempotent re-run)", async () => {
+    mockDb.referral.findMany.mockResolvedValue([]);
     expect(await flagStaleReferrals()).toBe(0);
+    expect(mockDb.referral.update).not.toHaveBeenCalled();
+    expect(mockPublish).not.toHaveBeenCalled();
   });
 });

@@ -33,6 +33,8 @@ import {
   CrmNoteCreatedPayloadSchema,
   VacancyPromotedPayloadSchema,
   AutomationDegradedPayloadSchema,
+  ReferralRecordedPayloadSchema,
+  ReferralStatusChangedPayloadSchema,
   safeParsePayload,
 } from "@/lib/events/event-schemas";
 
@@ -46,7 +48,9 @@ import {
  */
 interface ActivityData {
   userId: string;
-  actorId: string;
+  // Null for actor-less system events (e.g. the temporal referral stale sweep,
+  // crm.allium RecordReferralStatusChange). CrmActivityLog.actorId is nullable.
+  actorId: string | null;
   targetPersonId?: string | null;
   targetCompanyId?: string | null;
   targetJobId?: string | null;
@@ -150,6 +154,46 @@ export function registerCrmActivityLogConsumers(): void {
         linkedRecordName: [person?.firstName, person?.lastName].filter(Boolean).join(" ") || null,
       };
     },
+  );
+
+  // ReferralRecorded → referral_recorded (spec: crm.allium RecordReferralRecorded)
+  // Both targets set when known: the entry surfaces on the tipster's PersonTimeline
+  // AND the target company's CompanyTimeline. Either may be null (a pure market tip
+  // has no company; the GDPR cascade severs the tipster link).
+  registerProjection(
+    DomainEventType.ReferralRecorded,
+    ReferralRecordedPayloadSchema,
+    "referral_recorded",
+    (p) => ({
+      userId: p.userId,
+      actorId: p.userId,
+      targetPersonId: p.tipsterPersonId ?? null,
+      targetCompanyId: p.targetCompanyId ?? null,
+      targetJobId: null,
+      details: JSON.stringify({ referralId: p.referralId, kind: p.kind }),
+    }),
+  );
+
+  // ReferralStatusChanged → referral_status_changed (spec: crm.allium
+  // RecordReferralStatusChange). actorId is null for the temporal stale sweep
+  // (systemInitiated — nobody acted) and the owning user otherwise. targetJobId
+  // stays null even on conversion: the reified Job gets its own JobStatusChanged.
+  registerProjection(
+    DomainEventType.ReferralStatusChanged,
+    ReferralStatusChangedPayloadSchema,
+    "referral_status_changed",
+    (p) => ({
+      userId: p.userId,
+      actorId: p.systemInitiated ? null : p.userId,
+      targetPersonId: p.tipsterPersonId ?? null,
+      targetCompanyId: p.targetCompanyId ?? null,
+      targetJobId: null,
+      details: JSON.stringify({
+        referralId: p.referralId,
+        previousStatus: p.previousStatus,
+        newStatus: p.newStatus,
+      }),
+    }),
   );
 
   // ContactUpdated → contact_updated

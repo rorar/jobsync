@@ -44,6 +44,9 @@ import {
   CrmTaskCreatedPayloadSchema,
   CrmTaskCompletedPayloadSchema,
   CrmNoteCreatedPayloadSchema,
+  // Inside Track referrals
+  ReferralRecordedPayloadSchema,
+  ReferralStatusChangedPayloadSchema,
   // Helper
   safeParsePayload,
   // Registry
@@ -684,6 +687,88 @@ describe("ContactCreatedPayloadSchema", () => {
   });
 });
 
+describe("ReferralRecordedPayloadSchema", () => {
+  const base = {
+    referralId: "ref-1",
+    userId: "user-1",
+    kind: "insider_relay",
+  };
+
+  it("accepts a full payload with both optional person/company ids", () => {
+    const result = ReferralRecordedPayloadSchema.safeParse({
+      ...base,
+      tipsterPersonId: "person-1",
+      targetCompanyId: "company-1",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a payload omitting both optional ids (market tip, GDPR-severed)", () => {
+    const result = ReferralRecordedPayloadSchema.safeParse(base);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts network_path kind", () => {
+    expect(ReferralRecordedPayloadSchema.safeParse({ ...base, kind: "network_path" }).success).toBe(
+      true,
+    );
+  });
+
+  it("rejects an unknown kind (wire form, not PascalCase variant)", () => {
+    expect(ReferralRecordedPayloadSchema.safeParse({ ...base, kind: "InsiderRelay" }).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects a missing referralId", () => {
+    expect(ReferralRecordedPayloadSchema.safeParse({ userId: "u", kind: "insider_relay" }).success).toBe(
+      false,
+    );
+  });
+});
+
+describe("ReferralStatusChangedPayloadSchema", () => {
+  const base = {
+    referralId: "ref-1",
+    userId: "user-1",
+    previousStatus: "open",
+    newStatus: "engaged",
+    systemInitiated: false,
+  };
+
+  it("accepts a user-driven transition", () => {
+    expect(ReferralStatusChangedPayloadSchema.safeParse(base).success).toBe(true);
+  });
+
+  it("accepts the system-initiated stale sweep with optional links", () => {
+    const result = ReferralStatusChangedPayloadSchema.safeParse({
+      ...base,
+      newStatus: "stale",
+      systemInitiated: true,
+      tipsterPersonId: "person-1",
+      targetCompanyId: "company-1",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown status value", () => {
+    expect(
+      ReferralStatusChangedPayloadSchema.safeParse({ ...base, newStatus: "archived" }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a non-boolean systemInitiated", () => {
+    expect(
+      ReferralStatusChangedPayloadSchema.safeParse({ ...base, systemInitiated: "yes" }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a missing previousStatus", () => {
+    const { previousStatus: _omit, ...withoutPrev } = base;
+    expect(ReferralStatusChangedPayloadSchema.safeParse(withoutPrev).success).toBe(false);
+  });
+});
+
 describe("ContactUpdatedPayloadSchema", () => {
   it("accepts valid payload", () => {
     const result = ContactUpdatedPayloadSchema.safeParse({
@@ -1092,9 +1177,11 @@ describe("EventPayloadSchemas registry", () => {
       "CrmTaskCreated",
       "CrmTaskCompleted",
       "CrmNoteCreated",
+      "ReferralRecorded",
+      "ReferralStatusChanged",
     ];
 
-    expect(Object.keys(EventPayloadSchemas)).toHaveLength(28);
+    expect(Object.keys(EventPayloadSchemas)).toHaveLength(30);
 
     for (const key of expectedKeys) {
       expect(EventPayloadSchemas).toHaveProperty(key);

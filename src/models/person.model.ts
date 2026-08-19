@@ -130,7 +130,10 @@ export type ActivityType =
   | "follow_up_sent"
   | "application_submitted"
   | "contact_deleted"
-  | "automation_degraded";
+  | "automation_degraded"
+  // Inside Track referrals (spec: crm.allium, inside-track.allium)
+  | "referral_recorded"
+  | "referral_status_changed";
 
 // Welle 3 (Gap-6): "pattern" enables glob (`*`) handle matching alongside exact
 // (email/phone) and domain-suffix (domain) suppression.

@@ -9,6 +9,7 @@
 
 import type { AutomationRunStatus } from "@/models/automation.model";
 import type { DataSource } from "@/models/person.model";
+import type { ReferralKind, ReferralStatus } from "@/models/insideTrack.model";
 
 /** Inline definition to avoid bidirectional dependency with scheduler/types */
 type RunSource = "scheduler" | "manual";
@@ -52,6 +53,9 @@ export const DomainEventType = {
   CrmTaskCreated: "CrmTaskCreated",
   CrmTaskCompleted: "CrmTaskCompleted",
   CrmNoteCreated: "CrmNoteCreated",
+  // Inside Track referrals (spec: inside-track.allium)
+  ReferralRecorded: "ReferralRecorded",
+  ReferralStatusChanged: "ReferralStatusChanged",
 } as const;
 
 export type DomainEventType = (typeof DomainEventType)[keyof typeof DomainEventType];
@@ -295,6 +299,32 @@ export interface CrmNoteCreatedPayload {
   targetCompanyId?: string;
 }
 
+// Inside Track referral payloads (spec: inside-track.allium, event-bus.allium).
+// Immutable snapshots: the optional person/company ids may be null once the GDPR
+// de-identification cascade has severed the tipster link. `kind`/status carry the
+// wire form (insider_relay | network_path — NOT the PascalCase variant names).
+
+export interface ReferralRecordedPayload {
+  referralId: string;
+  userId: string;
+  kind: ReferralKind;
+  tipsterPersonId?: string;
+  targetCompanyId?: string;
+}
+
+export interface ReferralStatusChangedPayload {
+  referralId: string;
+  userId: string;
+  previousStatus: ReferralStatus;
+  newStatus: ReferralStatus;
+  // True ONLY for the temporal stale sweep (ReferralGoesStale); false for every
+  // user-driven transition. Carried explicitly so the timeline projection decides
+  // whether to record an actor without string-matching newStatus.
+  systemInitiated: boolean;
+  tipsterPersonId?: string;
+  targetCompanyId?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Payload Map (type → payload shape)
 // ---------------------------------------------------------------------------
@@ -328,6 +358,8 @@ export interface EventPayloadMap {
   CrmTaskCreated: CrmTaskCreatedPayload;
   CrmTaskCompleted: CrmTaskCompletedPayload;
   CrmNoteCreated: CrmNoteCreatedPayload;
+  ReferralRecorded: ReferralRecordedPayload;
+  ReferralStatusChanged: ReferralStatusChangedPayload;
 }
 
 // ---------------------------------------------------------------------------
