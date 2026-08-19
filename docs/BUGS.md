@@ -1,8 +1,19 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-06-14
+# Bug Tracker — Collected 2026-03-24, Updated 2026-08-17
 
-**Total: 595 bugs found, 594 fixed, 2 open (accepted risk), 0 new**
+**Total: 599 bugs found, 594 fixed, 6 open (2 accepted risk + 4 new), 4 new**
 
-### Status: ⚠️ 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability) — BS-01 ✅ fixed (Welle 0, 2026-05-31)
+### Status: ⚠️ 4 NEW open (IT-B1..IT-B4, found 2026-08-17 by a code audit of the referral/timeline tend pass — none fixed yet) + 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
+
+## Session 2026-08-17 — Audit of the referral-event / quick-capture `tend` pass (4 found, 0 fixed)
+
+Found while verifying spec claims against code before implementing `docs/inside-track-implementation-debt.md` §F/§G. **All four are pre-existing and independent of the spec change** — none was introduced by it; the spec work is what caused the surrounding code to be read closely. Every claim below was verified at the cited line.
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| IT-B1 | MEDIUM | **Anonymized Persons remain selectable in every contact picker.** `getPersons` only filters status when asked (`person.actions.ts:239` — `if (filters?.status)`), and `AddJob.tsx:272`, `InterviewForm.tsx:208`, `PersonDetailClient.tsx:185` all call `getPersons({ pageSize: 200 })` with no status. `anonymizePerson` nulls `firstName`/`lastName` and sets `emails: "[]"`, so an erased contact appears as a **blank but selectable row** — and selecting one re-links an erased record to a new Job / Interview / PersonConnection, re-establishing processing on data that was subject to Art. 17 erasure. Also affects `archived` Persons (clutter, not a rights issue). | Not yet fixed. Filter to `status: "active"` at the picker call sites (or default `getPersons` to active and make inclusion opt-in — preferred, since the current default is fail-open). Regression test: an anonymized Person must not appear in picker options. |
+| IT-B2 | LOW | **`CrmActivityLog.details` is rendered to users as a raw JSON blob.** All projections write `details: JSON.stringify({...})` (`crm-activity-logger.ts:128, 191, 332, 346`), and `ActivityTimeline.tsx:143` renders `{String(activity.details)}` with **no `JSON.parse` anywhere in the component tree**. Existing `status_changed`, `application_submitted` and `automation_degraded` entries therefore print e.g. `{"previousStatus":"lead","newStatus":"applied"}` verbatim in the timeline. | Not yet fixed. Parse `details` per `activityType` and render a localised sentence; keep the raw value out of the DOM. Blocks the referral projections (`specs/crm.allium` `RecordReferralStatusChange`), which need a readable step label. |
+| IT-B3 | LOW | **`ActivityType.vacancy_promoted` is dead, and the spec disagrees with the code.** `specs/crm.allium` `RecordVacancyPromotion` writes `activity_type: vacancy_promoted`, but the implementation maps `VacancyPromoted` → **`application_submitted`** (`crm-activity-logger.ts:317-334`). Nothing ever writes `vacancy_promoted`, and it has **no `crm.activity.*` i18n key** in any of the 4 locales — so if anything ever did write it, `t(\`crm.activity.${type}\`)` (`ActivityTimeline.tsx:137`) would render an untranslated key, because the label lookup has no fallback (the icon lookup does: `ACTIVITY_ICONS[type] ?? ActivityIcon`). | Not yet fixed. Decide which side is right, then align: either the projection emits `vacancy_promoted` (+ 4 i18n keys) or the spec drops the member. Independently, give the label lookup a fallback so a missing key degrades instead of leaking a key name. |
+| IT-B4 | LOW | **The stale-referral sweep attributes a system action to the last human editor.** `flagStaleReferrals` (`crm-cron.ts:115-121`) is a bulk `updateMany` writing only `status: "stale"`, leaving `updatedByType: "user"` / `updatedById: <user>` from whatever the person last did (`referral.actions.ts` sets them on all 4 write paths). So the audit trail claims a user moved the referral to `stale` when a cron did. `ActorType` already has an `automation` member for this (`specs/crm.allium`, ADR-035). | Not yet fixed. Set `updatedByType: "automation"` in the sweep. Note this pairs with the `findMany`-before-update rewrite that `specs/inside-track.allium` `ReferralGoesStale` now requires for per-referral event emission — do both in one change. |
 
 ## Session 2026-06-14 — Tech-Debt-Cleanup track (clusters 1-5) full-review
 

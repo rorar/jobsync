@@ -158,7 +158,18 @@ enum ContactChannelType {
 }
 
 enum DataSource {
-    manual | auto_created | imported
+    -- How the Person record entered the system. ONE provenance axis, not a set
+    -- of parallel governance flags — a new origin earns a value here.
+    --   manual        a full CRM create (PersonDirectory)
+    --   auto_created  email/calendar sync saw an unknown participant
+    --   imported      bulk import (5.7/5.8)
+    --   quick_capture a minimal inline create from an entity picker
+    -- quick_capture is behaviourally distinct from `manual` (the record is
+    -- knowingly incomplete at birth) and from `auto_created` (a user chose to
+    -- create it). Consumers that must treat a knowingly-incomplete contact
+    -- differently read THIS value; deriving origin from field emptiness is
+    -- wrong, because the first edit that fills a field erases the evidence.
+    manual | auto_created | imported | quick_capture
 }
 
 enum ProcessingBasis {
@@ -190,6 +201,11 @@ enum ActivityType {
     | document_attached | reminder_triggered
     | follow_up_sent | application_submitted
     | vacancy_promoted | automation_degraded
+    -- Inside Track referrals (spec: inside-track.allium). Deliberately NOT
+    -- folded into status_changed, which means "a Job's status changed": a
+    -- referral runs its own lifecycle, and merging them would make the two
+    -- indistinguishable on a timeline that shows both.
+    | referral_recorded | referral_status_changed
 }
 
 enum SocialPlatform {
@@ -197,7 +213,13 @@ enum SocialPlatform {
 }
 
 enum BlocklistType {
-    email | phone | domain
+    -- How a Blocklist entry's handle is matched against a person's handles
+    -- (Welle 3 Gap-6). Kept in step with crm-gdpr.allium's BlocklistType, which
+    -- carries the same four members and the same semantics.
+    email      -- exact email handle
+    phone      -- exact phone handle
+    domain     -- the email's domain or any parent domain (acme.com ⊇ eu.acme.com)
+    pattern    -- a `*`-glob over the handle (ReDoS-safe matching)
 }
 
 enum ConnectedAccountProvider {
@@ -467,6 +489,49 @@ rule CreatePerson {
     ensures: ContactCreated(person: person, source: manual)
 }
 
+rule QuickCapturePerson {
+    -- Inline minimal create from an entity picker embedded in another workflow
+    -- (recording a tip, adding a network connection, attaching a contact to a
+    -- Job) — the user never leaves the host screen.
+    --
+    -- Structurally this is CreatePerson with every optional field omitted, so
+    -- it adds no new capability. It is a SEPARATE rule because the origin is
+    -- the only thing that differs and provenance must be recorded at the write:
+    -- a Person born here cannot be told apart from a full manual create
+    -- afterwards (see DECIDED note in Open Questions).
+    when: QuickCapturePerson(user, name, email)
+
+    requires: Persons where user_id = user.id -> count < config.max_persons_per_user
+
+    ensures: Person.created(
+        user_id: user.id,
+        name: name,
+        emails: {TypedEmail(email: email, type: work, is_primary: true)},
+        phones: {},
+        companies: {},
+        social_profiles: {},
+        status: active,
+        data_source: quick_capture,
+        processing_basis: legitimate_interest,
+        created_by: ActorMetadata(source: manual, name: user.name),
+        updated_by: ActorMetadata(source: manual, name: user.name),
+        created_at: now,
+        updated_at: now
+    )
+
+    ensures: ContactCreated(person: person, source: quick_capture)
+
+    @guidance
+        -- created_by.source stays `manual` — ActorSource is the channel a human
+        -- or system acted through, DataSource is how the record originated. A
+        -- quick capture is a manual act with a distinct origin; keeping the two
+        -- axes separate is why quick_capture did not need a new ActorSource.
+        -- Deliberately NOT guarded by an existing-email check (unlike
+        -- AutoCreatePersonFromEmail): the picker has just shown the user the
+        -- matching contacts, so creating anyway is an informed choice.
+        -- MergePersons is the remedy if it turns out to be a duplicate.
+}
+
 rule AutoCreatePersonFromEmail {
     -- Email sync creates a Person for a previously unseen participant.
     -- Suppressed if the handle appears in the user's Blocklist.
@@ -625,12 +690,28 @@ rule MergePersons {
         for al in loser.timeline_activities:
             al.target_person = winner
 
+    -- Announced BEFORE the loser ceases to exist, so bounded contexts holding
+    -- their own references to a Person can transfer them (see
+    -- inside-track.allium MergeCascadesToInsideTrack). Without this, such
+    -- references are left to raw referential actions — which silently null or
+    -- cascade-delete them, losing data a merge is supposed to preserve.
+    ensures: PersonsMerged(winner: winner, loser: loser)
+
     ensures: not exists loser
 
     @guidance
         -- Winner's field values take precedence.
         -- Loser's emails/phones are appended with is_primary = false.
         -- Loser's company associations are appended with is_primary = false.
+        -- Every consumer of PersonsMerged must be applied ATOMICALLY with this
+        -- rule. A partially-applied merge leaves other contexts referencing a
+        -- Person that no longer exists.
+        -- CONSEQUENCE, so `weed` does not read this as drift: PersonsMerged is
+        -- an observable outcome, NOT necessarily an event-bus publication. The
+        -- implementation satisfies it INLINE, inside the merge transaction —
+        -- publishing it would hand the cascade to an async consumer running
+        -- after the loser row is gone, which is precisely the atomicity this
+        -- rule forbids. Expect no `PersonsMerged` in the event registry.
 }
 
 rule AddJobContact {
@@ -1036,6 +1117,82 @@ rule RecordAutomationDegradation {
         -- (circuit breaker trip, auth failure, consecutive run failures).
 }
 
+rule RecordReferralRecorded {
+    -- Project ReferralRecorded events (inside-track.allium) into the Activity
+    -- Timeline, so a referral's pre-conversion life is visible and not only the
+    -- Job it eventually reifies into.
+    --
+    -- Consumed UNQUALIFIED, like JobStatusChanged / VacancyPromoted /
+    -- AutomationDegraded: crm.allium subscribes to foreign events without
+    -- importing their emitter, which keeps the dependency pointing
+    -- inside-track -> crm and never back.
+    when: ReferralRecorded(referral_id, user_id, kind, tipster_person_id, target_company_id)
+
+    ensures: ActivityLog.created(
+        user_id: user_id,
+        activity_type: referral_recorded,
+        happened_at: now,
+        actor_id: user_id,
+        target_person: if tipster_person_id != null: Person{id: tipster_person_id} else: null,
+        target_company: if target_company_id != null: Company{id: target_company_id} else: null,
+        target_job: null,
+        details: referral_id,
+        linked_record_name: null
+    )
+
+    @guidance
+        -- BOTH targets are set when known, so one entry surfaces on the
+        -- tipster's PersonTimeline and on the target company's CompanyTimeline.
+        -- Those are the two questions a referral answers ("who opened this
+        -- door", "how do I get into this company"), and ActivityLog places no
+        -- exactly-one-target invariant on itself (unlike TaskTarget/NoteTarget).
+        -- Either may be null: a pure market tip has no company, and the GDPR
+        -- cascade severs the tipster link.
+        -- details carries the referral identity, and may fold in `kind`, as a
+        -- JSON object with camelCase keys — the shape RecordStatusChange and
+        -- RecordAutomationDegradation already use.
+        -- The timeline must render a LOCALISED label derived from those values.
+        -- Presenting details verbatim is a divergence: it puts a raw payload in
+        -- front of the user.
+}
+
+rule RecordReferralStatusChange {
+    -- Project ReferralStatusChanged events (inside-track.allium) into the
+    -- Activity Timeline: open -> engaged -> relayed -> in_review, plus decline,
+    -- revive and the temporal stale sweep.
+    when: ReferralStatusChanged(referral_id, user_id, previous_status, new_status,
+        system_initiated, tipster_person_id, target_company_id)
+
+    ensures: ActivityLog.created(
+        user_id: user_id,
+        activity_type: referral_status_changed,
+        happened_at: now,
+        actor_id: if system_initiated: null else: user_id,
+        target_person: if tipster_person_id != null: Person{id: tipster_person_id} else: null,
+        target_company: if target_company_id != null: Company{id: target_company_id} else: null,
+        target_job: null,
+        details: referral_id,
+        linked_record_name: null
+    )
+
+    @guidance
+        -- actor_id is null for the temporal stale sweep (nobody acted) and the
+        -- owning user otherwise. RecordStatusChange draws the same line for a
+        -- user-driven change; the system side of the split is asserted HERE
+        -- rather than inherited, because no existing projection models an
+        -- actor-less system event yet.
+        -- The owning user is the best actor this projection can carry: a
+        -- Referral records its editor in updated_by_type/updated_by_id, but
+        -- every write so far sets them to the owner, so they add nothing until
+        -- a non-owner can edit (the account-less tipster, ROADMAP 9.5).
+        -- details carries the referral identity plus previousStatus/newStatus as
+        -- a camelCase JSON object, matching RecordStatusChange. The timeline
+        -- must render a LOCALISED step label derived from those values — one
+        -- label per activity_type, or the entry shows an untranslated key.
+        -- target_job stays null even on conversion: the reified Job gets its own
+        -- JobStatusChanged entry via TipReifiesToJob.
+}
+
 -- ==========================================================
 -- Blocklist
 -- ==========================================================
@@ -1085,19 +1242,16 @@ invariant ExactlyOneNoteTarget {
         or (nt.target_person = null and nt.target_company = null and nt.target_job != null)
 }
 
-invariant BlocklistSuppressesAutoCreation {
-    -- No active auto-created Person should exist for a blocklisted handle.
-    -- Matches both exact email handles (type = email) and domain patterns
-    -- (type = domain, where the email's domain matches the blocklist handle).
-    for person in Persons:
-        for bl in Blocklists:
-            person.user_id = bl.user_id and person.is_auto_created
-                and (
-                    (bl.type = email and person.primary_email = bl.handle)
-                    or (bl.type = domain and extract_domain(person.primary_email) = bl.handle)
-                )
-                implies person.status = archived
-}
+-- BlocklistSuppressesAutoCreation is NOT declared here. It lives in
+-- crm-gdpr.allium, which owns auto-creation constraints and data-minimisation
+-- rules by declared scope, and which documents all four match modes
+-- (email | phone exact, domain incl. parents, pattern glob).
+-- This spec carried a duplicate under the same name until weed W-F1
+-- (2026-08-17) found the two had drifted into opposite enforcement models — a
+-- retroactive "blocklisted implies archived" here, creation-time there — with
+-- the retroactive reading describing behaviour no rule implements. One owner,
+-- not two synchronised copies. crm.allium still ENFORCES the property, in
+-- AutoCreatePersonFromEmail's `requires` guards; it just no longer restates it.
 
 invariant AtMostOnePrimaryCompany {
     -- A Person may have zero or one primary company association.
@@ -1153,6 +1307,42 @@ surface PersonDirectory {
     @guidance
         -- Full-text search across name, email, company.
         -- Filter by status, data_source, company.
+}
+
+surface PersonQuickCapture {
+    -- The contact entity-picker. Not a page of its own: a boundary embedded in
+    -- ANY host surface that needs to reference a Person (inside-track's
+    -- TipCapture, the Job contact panel). It returns a selection to its host
+    -- and, when nothing matches, lets the user mint a minimal contact in place
+    -- rather than abandoning the host workflow.
+    facing user: CrmUser
+
+    let candidates = Persons where user_id = user.id and status = active
+
+    exposes:
+        for candidate in candidates:
+            candidate.name
+            candidate.primary_email
+            candidate.primary_company
+
+    provides:
+        QuickCapturePerson(user, name, email)
+
+    @guarantee MinimalCaptureIsProvenanced
+        -- A contact minted at this boundary is recorded as
+        -- data_source = quick_capture, so its incomplete-at-birth origin stays
+        -- answerable for the life of the record. A host surface may not create a
+        -- Person here by any other route, because an origin cannot be
+        -- reconstructed after the fact.
+
+    @guidance
+        -- Search over name + email, as PersonDirectory does. Creation is offered
+        -- only once the query has matched nothing, so selecting an existing
+        -- contact stays the default path. The host surface decides what to do
+        -- with the returned Person; linking it is the host's concern, not this
+        -- boundary's. The company-side equivalent (create-on-type in the company
+        -- picker) needs no provenance seam: Company is a lookup value with no
+        -- data subject behind it.
 }
 
 surface PersonDetail {
@@ -1413,23 +1603,26 @@ open question "Should interview scheduling integrate with external calendar imme
 
 open question "No surface provides AutoCreatePerson. This trigger depends on email/calendar sync (CommunicationConnector) which is deferred."
 
-open question "When a Person is created inline from an entity picker (ContactPicker, ROADMAP 2.20) via a minimal-capture form (name + one email only), should that origin be recorded as durable provenance distinct from a full manual CreatePerson?"
--- (a) CreatePerson already permits a minimal contact (name + emails.count > 0, everything
---     else optional), so a quick-create contact is valid TODAY with no new rule. The open
---     decision is narrower: is "quick-capture origin" a behaviourally-meaningful fact worth
---     persisting at all, or just a transient UI mode that leaves no trace on the record?
--- (b) Candidate seam: a new DataSource literal (e.g. quick_capture) on the SAME axis as
---     manual | auto_created | imported. This reuses the existing provenance machinery and the
---     AutoCreatedHasRetention precedent (a data_source value that implies governance), rather
---     than inventing a parallel governance state. "Completeness" for a UI nudge would be a
---     DERIVED value (only name + one email present, nothing else), not a stored flag.
--- (c) Deferred CONSEQUENCES — spec each at its consumer, NOT here, NOT now:
---       - outreach-gate: do not auto-send outreach to a quick-capture / minimal contact
---         (IT-8; communication-connector OutboundIsThirdPartyTransfer).
---       - completion nudge: prompt the user to finish the record (ROADMAP 2.20).
---       - retention: does quick_capture expire like auto_created? (crm-gdpr.allium decision).
---       - import: bulk-imported contacts (5.7/5.8) are also minimal — reuse the SAME fact,
---         do not mint a second "incomplete contact" concept.
--- (d) Sequencing: lock this provenance decision BEFORE the 2.20 quick-create UI ships.
---     Contacts created in the gap are born ambiguous — the origin cannot be reconstructed
---     after the fact, so the seam must exist before the first quick-create write.
+-- DECIDED (tend, 2026-08-17) — quick-capture provenance. Resolves the former
+-- open question "should inline minimal creation be recorded as durable
+-- provenance?" with YES, via candidate (b) of that question's own analysis:
+--   * A new DataSource literal `quick_capture`, on the SAME axis as
+--     manual | auto_created | imported. This reuses the existing provenance
+--     machinery and the AutoCreatedHasRetention precedent (a data_source value
+--     that implies governance) instead of inventing a parallel governance state.
+--   * Witnessed by rule QuickCapturePerson and surface PersonQuickCapture.
+--   * The sequencing note in the old question is now satisfied: the seam exists
+--     BEFORE the first quick-create write, so no contact is born ambiguous.
+-- Deliberately NOT specified here:
+--   * "Completeness" stays a DERIVED notion (only name + one email present,
+--     nothing else) and never a stored flag. No consumer derives it yet; the
+--     first one that needs it adds the derived value.
+--   * The consequences belong at their consumers, not on this enum: the
+--     outreach gate (IT-8, communication-connector OutboundIsThirdPartyTransfer),
+--     the completion nudge (ROADMAP 2.20), and bulk-import reuse (5.7/5.8 —
+--     imported contacts are minimal too and must reuse THIS fact rather than
+--     minting a second "incomplete contact" concept).
+
+open question "Retention for quick_capture Persons. ExpireAutoCreatedPersons guards on is_auto_created, and AutoCreatedHasRetention constrains only auto_created — so a quick_capture Person today gets no retention_expires_at and never auto-archives, i.e. it is governed exactly like a full manual create. Is that the intent? A quick capture is a deliberate user act (unlike email-sync auto-creation), which argues for manual-like treatment; but it is also knowingly incomplete and may be a contact the user never returns to, which argues for a shorter leash. Decide in crm-gdpr.allium before quick-capture volume accumulates, since retro-fitting an expiry to existing records is a data-minimisation judgement made after the fact."
+
+open question "A referral timeline entry cannot deep-link to its Referral. ActivityLog has target_person / target_company / target_job only, and gaining a target_referral field would make crm.allium depend on inside-track.allium — the wrong direction (inside-track imports crm, not the reverse). RecordReferralRecorded / RecordReferralStatusChange therefore carry the referral identity in `details`, following RecordStatusChange's precedent, which means a timeline consumer must parse `details` to navigate. Acceptable, or is a polymorphic target seam on ActivityLog (mirroring TaskTarget/NoteTarget's nullable-FK pattern) worth introducing so any spec can project onto the timeline without crm knowing about it?"

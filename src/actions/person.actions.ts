@@ -727,6 +727,52 @@ export async function mergePersons(
     );
     const duplicateNoteIds = loserNoteIds.filter(id => winnerNoteIds.has(id));
 
+    // W-D1: Referral and PersonConnection are Inside Track's own references to a
+    // Person and were never transferred here. Raw referential actions applied
+    // instead: Referral.tipsterId/insiderId/forwardedToId are SetNull (the warm
+    // path was LOST rather than transferred) and PersonConnection endpoints are
+    // Cascade (the loser's network edges were deleted outright) — silent data
+    // loss on a routine, non-GDPR operation.
+    // Spec: specs/inside-track.allium MergeCascadesToInsideTrack.
+    //
+    // Two mappings cannot be transferred and must be dropped instead: an edge
+    // BETWEEN the two merged persons becomes from = to (NoSelfConnection), and an
+    // edge duplicating one the winner already holds would break the
+    // @@unique([userId, fromPersonId, toPersonId]) constraint (P2002).
+    const loserConnections = await prisma.personConnection.findMany({
+      where: { userId: user.id, OR: [{ fromPersonId: loserId }, { toPersonId: loserId }] },
+      select: { id: true, fromPersonId: true, toPersonId: true },
+    });
+    const winnerEdges = new Map(
+      (
+        await prisma.personConnection.findMany({
+          where: { userId: user.id, OR: [{ fromPersonId: winnerId }, { toPersonId: winnerId }] },
+          select: { id: true, fromPersonId: true, toPersonId: true },
+        })
+      ).map(c => [`${c.fromPersonId}>${c.toPersonId}`, c.id] as const),
+    );
+
+    const toWinner = (id: string) => (id === loserId ? winnerId : id);
+    const connectionsToDelete: string[] = [];
+    const viaRepoints: Array<{ removedConnectionId: string; survivingConnectionId: string }> = [];
+    for (const c of loserConnections) {
+      const from = toWinner(c.fromPersonId);
+      const to = toWinner(c.toPersonId);
+      if (from === to) {
+        connectionsToDelete.push(c.id); // would become a self-connection
+        continue;
+      }
+      const survivingConnectionId = winnerEdges.get(`${from}>${to}`);
+      if (survivingConnectionId) {
+        connectionsToDelete.push(c.id); // winner already holds this ordered pair
+        viaRepoints.push({ removedConnectionId: c.id, survivingConnectionId });
+      }
+    }
+    const deletedConnectionIds = new Set(connectionsToDelete);
+    const connectionsToTransfer = loserConnections
+      .filter(c => !deletedConnectionIds.has(c.id))
+      .map(c => c.id);
+
     // Finding 9 fix: dedup delete inside transaction to prevent race condition
     await prisma.$transaction([
       // Remove conflicting JobContacts BEFORE transfer (prevents P2002 on unique constraint, ADR-015: userId in where)
@@ -770,6 +816,54 @@ export async function mergePersons(
       prisma.crmActivityLog.updateMany({
         where: { targetPersonId: loserId, userId: user.id },
         data: { targetPersonId: winnerId },
+      }),
+      // W-D1 — Inside Track cascade. Order matters within this array.
+      // 1. Re-point NetworkPaths routed via a duplicate edge at the SURVIVING
+      //    edge before that edge is deleted. Deleting first would null viaId
+      //    through onDelete: SetNull and lose the warm path — the very failure
+      //    this cascade exists to prevent.
+      ...viaRepoints.map(({ removedConnectionId, survivingConnectionId }) =>
+        prisma.referral.updateMany({
+          where: { viaId: removedConnectionId, userId: user.id },
+          data: { viaId: survivingConnectionId },
+        }),
+      ),
+      // 2. Drop the untransferable edges (self-connections + duplicates).
+      ...(connectionsToDelete.length > 0
+        ? [
+            prisma.personConnection.deleteMany({
+              where: { id: { in: connectionsToDelete }, userId: user.id },
+            }),
+          ]
+        : []),
+      // 3. Transfer the rest to the winner. Two statements because an edge may
+      //    hold the loser at either endpoint.
+      ...(connectionsToTransfer.length > 0
+        ? [
+            prisma.personConnection.updateMany({
+              where: { id: { in: connectionsToTransfer }, fromPersonId: loserId, userId: user.id },
+              data: { fromPersonId: winnerId },
+            }),
+            prisma.personConnection.updateMany({
+              where: { id: { in: connectionsToTransfer }, toPersonId: loserId, userId: user.id },
+              data: { toPersonId: winnerId },
+            }),
+          ]
+        : []),
+      // 4. Referral person references transfer wholesale — no uniqueness to
+      //    violate, and a merge asserts the two records are the same person, so
+      //    a door the loser opened is the winner's door.
+      prisma.referral.updateMany({
+        where: { tipsterId: loserId, userId: user.id },
+        data: { tipsterId: winnerId },
+      }),
+      prisma.referral.updateMany({
+        where: { insiderId: loserId, userId: user.id },
+        data: { insiderId: winnerId },
+      }),
+      prisma.referral.updateMany({
+        where: { forwardedToId: loserId, userId: user.id },
+        data: { forwardedToId: winnerId },
       }),
       // Update winner with merged data (ADR-015: userId in where)
       prisma.person.update({
