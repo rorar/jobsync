@@ -182,7 +182,9 @@ export default function PersonDetailClient({ personId }: PersonDetailClientProps
   // excludes the current contact (NoSelfConnection is also enforced server-side).
   const openAddConnection = async () => {
     setAddConnOpen(true);
-    const res = await getPersons({ pageSize: 200 });
+    // IT-B1: pickers must never surface anonymized/archived persons — selecting
+    // an erased contact would re-link it into new processing (GDPR Art. 17).
+    const res = await getPersons({ status: "active", pageSize: 200 });
     if (res.success && res.data) {
       setConnPersons(
         res.data.persons

@@ -43,8 +43,8 @@ import type { CompanyAssociation, TypedEmail } from "@/models/person.model";
 //   2. `via` omitted: recordNetworkTip.viaId is NOT passed. Selecting the
 //      PersonConnection that must satisfy invariant NetworkPathViaConnectsTipsterToInsider
 //      is follow-up work (requires a connection picker that validates the
-//      tipster→insider edge). Documented in specs/inside-track.allium as an
-//      open question.
+//      tipster→insider edge). When viaId is absent the action auto-adopts an
+//      existing tipster→insider edge (RecordNetworkTip, specs/inside-track.allium).
 // ---------------------------------------------------------------------------
 
 interface TipCaptureSheetProps {
@@ -76,7 +76,8 @@ export function TipCaptureSheet({
     (async () => {
       setPersonsLoading(true);
       try {
-        const result = await getPersons({ pageSize: 200 });
+        // IT-B1: active-only — anonymized/archived persons must not be selectable.
+        const result = await getPersons({ status: "active", pageSize: 200 });
         if (!active || !result.success || !result.data) return;
         setPersons(
           result.data.persons.map((p) =>

@@ -11,6 +11,7 @@ import {
   type InterviewStatus,
   type InterviewOutcome,
   isValidInterviewTransition,
+  isValidInterviewOutcome,
   isConsentBlocked,
 } from "@/models/person.model";
 
@@ -119,6 +120,12 @@ export async function completeInterview(
       include: { job: { select: { id: true, JobTitle: { select: { label: true } } } } },
     });
     if (!interview) return { success: false, message: "crm.errors.interviewNotFound" };
+
+    // ADR-019: outcome is a TS-erased union arriving from a browser-callable
+    // "use server" export — validate membership before it reaches Prisma (W-B2).
+    if (!isValidInterviewOutcome(outcome)) {
+      return { success: false, message: "crm.errors.invalidInterviewOutcome" };
+    }
 
     if (!isValidInterviewTransition(interview.status as InterviewStatus, "completed")) {
       return { success: false, message: "crm.errors.invalidTransition" };

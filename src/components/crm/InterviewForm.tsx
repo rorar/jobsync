@@ -205,7 +205,8 @@ export default function InterviewForm({
     async function load() {
       setPersonsLoading(true);
       try {
-        const result = await getPersons({ pageSize: 200 });
+        // IT-B1: active-only — anonymized/archived persons must not be selectable.
+        const result = await getPersons({ status: "active", pageSize: 200 });
         if (!cancelled && result.success && result.data) {
           setPersons(
             result.data.persons.map((p) => {

@@ -78,7 +78,13 @@ export type ContactChannelType = "work" | "home" | "other";
 
 export type PersonStatus = "active" | "archived" | "anonymized";
 
-export type SocialPlatform = "linkedin" | "xing" | "github" | "twitter" | "other";
+export const SOCIAL_PLATFORMS = ["linkedin", "xing", "github", "twitter", "other"] as const;
+export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
+
+/** Runtime membership check for the erased SocialPlatform union (ADR-019, W-H3). */
+export function isValidSocialPlatform(value: unknown): value is SocialPlatform {
+  return typeof value === "string" && (SOCIAL_PLATFORMS as readonly string[]).includes(value);
+}
 
 /**
  * How a Person record entered the system — ONE provenance axis (crm.allium
@@ -109,7 +115,13 @@ export type ActorSource =
 
 export type InterviewStatus = "scheduled" | "completed" | "cancelled" | "rescheduled";
 
-export type InterviewOutcome = "pending" | "passed" | "rejected" | "waitlisted";
+export const INTERVIEW_OUTCOMES = ["pending", "passed", "rejected", "waitlisted"] as const;
+export type InterviewOutcome = (typeof INTERVIEW_OUTCOMES)[number];
+
+/** Runtime membership check for the erased InterviewOutcome union (ADR-019, W-B2). */
+export function isValidInterviewOutcome(value: unknown): value is InterviewOutcome {
+  return typeof value === "string" && (INTERVIEW_OUTCOMES as readonly string[]).includes(value);
+}
 
 export type CrmTaskStatus = "pending" | "in_progress" | "done" | "cancelled";
 

@@ -235,6 +235,26 @@ describe("completeInterview", () => {
     expect(prisma.crmInterview.update).not.toHaveBeenCalled();
   });
 
+  it("rejects an invalid outcome value before writing (W-B2, ADR-019)", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+    (prisma.crmInterview.findFirst as jest.Mock).mockResolvedValue({
+      id: "interview-1",
+      status: "scheduled",
+      jobId: "job-1",
+      personId: "person-1",
+      job: { id: "job-1", JobTitle: { label: "Engineer" } },
+    });
+
+    const result = await completeInterview(
+      "interview-1",
+      "hired" as unknown as Parameters<typeof completeInterview>[1],
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.message).toBe("crm.errors.invalidInterviewOutcome");
+    expect(prisma.crmInterview.update).not.toHaveBeenCalled();
+  });
+
   it("sets status to completed and stores outcome and outcomeNotes", async () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
     (prisma.crmInterview.findFirst as jest.Mock).mockResolvedValue({

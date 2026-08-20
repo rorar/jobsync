@@ -185,7 +185,7 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
       });
     });
 
-    it("includes userId in crmBlocklist.deleteMany WHERE clause when person has emails", async () => {
+    it("removes blocklist entries for the person's email AND its domain (W-C3)", async () => {
       mockDb.person.findFirst.mockResolvedValue(
         basePerson(PERSON_ID, {
           emails: JSON.stringify([{ email: "alice@example.com", isPrimary: true, label: "work" }]),
@@ -197,9 +197,39 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
       expect(mockDb.crmBlocklist.deleteMany).toHaveBeenCalledWith({
         where: expect.objectContaining({
           userId: USER.id,
-          handle: { in: ["alice@example.com"] },
+          handle: { in: expect.arrayContaining(["alice@example.com", "example.com"]) },
         }),
       });
+    });
+
+    it("removes blocklist entries for the person's phone handles too (W-C3)", async () => {
+      mockDb.person.findFirst.mockResolvedValue(
+        basePerson(PERSON_ID, {
+          emails: JSON.stringify([{ email: "bob@acme.io", isPrimary: true, label: "work" }]),
+          phones: JSON.stringify([{ number: "+49 170 1234567", type: "work", isPrimary: true }]),
+        }),
+      );
+
+      await anonymizePerson(PERSON_ID);
+
+      const call = mockDb.crmBlocklist.deleteMany.mock.calls[0][0];
+      const handles: string[] = call.where.handle.in;
+      expect(handles).toEqual(
+        expect.arrayContaining(["bob@acme.io", "acme.io", "+49 170 1234567"]),
+      );
+    });
+
+    it("marks the anonymized person's last actor as the system (W-C4)", async () => {
+      await anonymizePerson(PERSON_ID);
+
+      expect(mockDb.person.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: "anonymized",
+            updatedBySource: "system",
+          }),
+        }),
+      );
     });
 
     // Inside Track (Welle 5) — AnonymizeCascadesToInsideTrack (specs/inside-track.allium)
@@ -615,6 +645,63 @@ describe("person.actions — GDPR-Consent (Art. 7(3))", () => {
 
         expect(result.success).toBe(true);
         expect(mockDb.company.count).not.toHaveBeenCalled();
+        expect(mockDb.person.update).toHaveBeenCalled();
+      });
+    });
+
+    // W-H2: create rejects a subdivision without a country; update must be
+    // symmetric — over the effective (post-update) state, not just the input.
+    describe("subdivision requires country (W-H2)", () => {
+      it("rejects a subdivision when neither input nor existing supplies a country", async () => {
+        mockDb.person.findFirst.mockResolvedValue({
+          id: PERSON_ID,
+          status: "active",
+          processingBasis: "legitimate_interest",
+          consentWithdrawnAt: null,
+          addressCountryCode: null,
+          addressSubdivisionCode: null,
+        });
+
+        const result = await updatePerson(PERSON_ID, { addressSubdivisionCode: "BY" });
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("crm.errors.subdivisionWithoutCountry");
+        expect(mockDb.person.update).not.toHaveBeenCalled();
+      });
+
+      it("rejects nulling the country while a subdivision remains set", async () => {
+        mockDb.person.findFirst.mockResolvedValue({
+          id: PERSON_ID,
+          status: "active",
+          processingBasis: "legitimate_interest",
+          consentWithdrawnAt: null,
+          addressCountryCode: "DE",
+          addressSubdivisionCode: "BY",
+        });
+
+        const result = await updatePerson(PERSON_ID, { addressCountryCode: null });
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("crm.errors.subdivisionWithoutCountry");
+        expect(mockDb.person.update).not.toHaveBeenCalled();
+      });
+
+      it("accepts a subdivision paired with a country in the same update", async () => {
+        mockDb.person.findFirst.mockResolvedValue({
+          id: PERSON_ID,
+          status: "active",
+          processingBasis: "legitimate_interest",
+          consentWithdrawnAt: null,
+          addressCountryCode: null,
+          addressSubdivisionCode: null,
+        });
+
+        const result = await updatePerson(PERSON_ID, {
+          addressCountryCode: "DE",
+          addressSubdivisionCode: "BY",
+        });
+
+        expect(result.success).toBe(true);
         expect(mockDb.person.update).toHaveBeenCalled();
       });
     });

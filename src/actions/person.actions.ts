@@ -8,6 +8,7 @@ import { eventBus } from "@/lib/events";
 import { ActionResult } from "@/models/actionResult";
 import { handleError } from "@/lib/utils";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
+import { extractEmailDomain } from "@/lib/crm/blocklist-match";
 import {
   type TypedEmail,
   type TypedPhone,
@@ -17,6 +18,7 @@ import {
   type DataSource,
   type ProcessingBasis,
   isValidPersonTransition,
+  isValidSocialPlatform,
   isConsentBlocked,
   validateAtMostOnePrimaryCompany,
   validateCompanyAssociations,
@@ -129,8 +131,7 @@ export async function createPerson(input: PersonInput): Promise<ActionResult<{ i
       return { success: false, message: "crm.errors.invalidSocialProfileUrl" };
     }
 
-    const VALID_PLATFORMS = ["linkedin", "xing", "github", "twitter", "other"];
-    if (input.socialProfiles?.some(sp => !VALID_PLATFORMS.includes(sp.platform))) {
+    if (input.socialProfiles?.some(sp => !isValidSocialPlatform(sp.platform))) {
       return { success: false, message: "crm.errors.invalidPlatform" };
     }
 
@@ -343,8 +344,7 @@ export async function updatePerson(
         return { success: false, message: "crm.errors.invalidSocialProfileUrl" };
       }
 
-      const VALID_PLATFORMS = ["linkedin", "xing", "github", "twitter", "other"];
-      if (input.socialProfiles.some(sp => !VALID_PLATFORMS.includes(sp.platform))) {
+      if (input.socialProfiles.some(sp => !isValidSocialPlatform(sp.platform))) {
         return { success: false, message: "crm.errors.invalidPlatform" };
       }
 
@@ -366,6 +366,21 @@ export async function updatePerson(
     }
     if (input.addressSubdivisionCode !== undefined) {
       data.addressSubdivisionCode = input.addressSubdivisionCode;
+    }
+    // W-H2: enforce SubdivisionRequiresCountry over the EFFECTIVE post-update
+    // state — a partial update must not leave a subdivision without a country
+    // (e.g. nulling the country while a subdivision remains), the asymmetry the
+    // create-path check alone missed.
+    const effectiveCountryCode =
+      input.addressCountryCode !== undefined
+        ? input.addressCountryCode
+        : existing.addressCountryCode;
+    const effectiveSubdivisionCode =
+      input.addressSubdivisionCode !== undefined
+        ? input.addressSubdivisionCode
+        : existing.addressSubdivisionCode;
+    if (effectiveSubdivisionCode && !effectiveCountryCode) {
+      return { success: false, message: "crm.errors.subdivisionWithoutCountry" };
     }
     if (input.processingBasis !== undefined) data.processingBasis = input.processingBasis;
 
@@ -536,9 +551,17 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
       return { success: false, message: "crm.errors.alreadyAnonymized" };
     }
 
-    // Collect person emails for blocklist cleanup (before anonymization clears them)
-    const personEmails = parseEmails(person.emails)
-      .map((e) => e.email.trim().toLowerCase());
+    // Collect the person's blocklist handles before anonymization clears them.
+    // W-C3: the spec removes entries matching an email OR its domain, and the
+    // phone arm too — not exact emails only. Build the full handle set: exact
+    // emails, exact phones, and the domain of each email (which matches a
+    // `domain`-type blocklist entry stored as the bare domain handle).
+    const personEmails = parseEmails(person.emails).map((e) => e.email.trim().toLowerCase());
+    const personPhones = parsePhones(person.phones).map((p) => p.number.trim().toLowerCase());
+    const personEmailDomains = personEmails
+      .map((e) => extractEmailDomain(e))
+      .filter((d): d is string => d !== null);
+    const blockedHandles = [...new Set([...personEmails, ...personPhones, ...personEmailDomains])];
 
     // Transaction: anonymize person + cascade delete targets (GDPR Art. 17)
     await prisma.$transaction([
@@ -565,10 +588,11 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
         where: { targetPersonId: personId, userId: user.id },
         data: { targetPersonId: null, details: null, linkedRecordName: null },
       }),
-      // Remove blocklist entries for this person's emails/phones (S5 fix)
-      ...(personEmails.length > 0
+      // Remove blocklist entries for this person's emails, phones, and email
+      // domains (S5 fix + W-C3 domain/phone arms).
+      ...(blockedHandles.length > 0
         ? [prisma.crmBlocklist.deleteMany({
-            where: { userId: user.id, handle: { in: personEmails } },
+            where: { userId: user.id, handle: { in: blockedHandles } },
           })]
         : []),
       // Inside Track (Welle 5) GDPR cascade — AnonymizeCascadesToInsideTrack
@@ -628,6 +652,9 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
           addressSubdivisionCode: null,
           createdByName: null,
           updatedByName: null,
+          // W-C4: the erasure is a system action, not a human edit — record it
+          // so the tombstone does not claim a person last touched the record.
+          updatedBySource: "system",
         },
       }),
     ]);
