@@ -99,6 +99,9 @@ value CompanyAssociation {
 value SocialProfile {
     -- A link to a social/professional network profile.
     platform: SocialPlatform
+    -- W-H3: url must be a web link (http/https scheme only) — a domain-level
+    -- constraint validated at the create/update boundary. platform membership is
+    -- enforced by the SocialPlatform enum type.
     url: String
 }
 
@@ -200,7 +203,7 @@ enum ActivityType {
     | email_sent | email_received | call_logged
     | document_attached | reminder_triggered
     | follow_up_sent | application_submitted
-    | vacancy_promoted | automation_degraded
+    | automation_degraded
     -- Inside Track referrals (spec: inside-track.allium). Deliberately NOT
     -- folded into status_changed, which means "a Job's status changed": a
     -- referral runs its own lifecycle, and merging them would make the two
@@ -440,16 +443,22 @@ entity ConnectedAccount {
 config {
     -- GDPR retention
     auto_created_retention: Duration = 730.days
+    -- W-E6: the timeline-retention RULE lives in crm-gdpr.allium (which owns the
+    -- data-minimisation concern); this value is kept here for reference only and
+    -- is not consumed by a rule in this module.
     timeline_retention: Duration = 1095.days
 
     -- Reminders
     interview_reminder_before: Duration = 24.hours
+    -- W-E6: reserved for a future follow-up-scheduling rule; no rule consumes it yet.
     follow_up_default_delay: Duration = 7.days
 
     -- Limits
     max_persons_per_user: Integer = 10000
     max_tasks_per_user: Integer = 5000
     max_blocklist_entries: Integer = 1000
+    -- W-E6: the connected-accounts cap is enforced in inside-track.allium's own
+    -- config; this member is unused here.
     max_connected_accounts: Integer = 5
 }
 
@@ -540,6 +549,10 @@ rule AutoCreatePersonFromEmail {
     requires: not exists Blocklist{user_id: user.id, handle: email_handle, type: email}
     requires: not exists Blocklist{user_id: user.id, type: domain,
         handle: extract_domain(email_handle)}
+    -- W-F4: also suppress on a `pattern`-type glob entry that matches the handle.
+    -- Glob matching is algorithmic, so it is a black box here. The `phone` mode
+    -- does not apply to an email-triggered creation (no phone is present).
+    requires: not matches_blocked_pattern(user.id, email_handle)
     requires: not exists Person{user_id: user.id, primary_email: email_handle}
 
     let domain = extract_domain(email_handle)
@@ -576,7 +589,10 @@ rule UpdatePerson {
 
     ensures: person.updated_by = ActorMetadata(source: manual, name: user.name)
     ensures: person.updated_at = now
-    ensures: ContactUpdated(person: person)
+    -- W-E3: ContactUpdated has ONE shape everywhere — {person_id, user_id, job_id?}.
+    -- job_id is present only at the JobContact sites, where it routes the entry
+    -- onto the Job/Company timelines as well; a plain person edit omits it.
+    ensures: ContactUpdated(person_id: person.id, user_id: user.id)
 
     @guidance
         -- When the update originates from a sync connector (email/calendar),
@@ -697,6 +713,12 @@ rule MergePersons {
     -- cascade-delete them, losing data a merge is supposed to preserve.
     ensures: PersonsMerged(winner: winner, loser: loser)
 
+    -- W-E2: the loser Person ceases to exist here, which RecordContactDeletion
+    -- projects onto the timeline as a merge (reason: merged) — the same
+    -- ContactDeleted trigger AnonymizePerson emits. Announced before removal so
+    -- the projection can still resolve the loser.
+    ensures: ContactDeleted(person_id: loser.id, user_id: loser.user_id, reason: merged)
+
     ensures: not exists loser
 
     @guidance
@@ -729,7 +751,7 @@ rule AddJobContact {
         role: role,
         created_at: now
     )
-    ensures: ContactUpdated(person_id: person.id, user_id: user.id)
+    ensures: ContactUpdated(person_id: person.id, user_id: user.id, job_id: job.id)
 }
 
 rule RemoveJobContact {
@@ -739,7 +761,7 @@ rule RemoveJobContact {
     requires: job_contact.user_id = user.id
 
     ensures: not exists job_contact
-    ensures: ContactUpdated(person_id: job_contact.person.id, user_id: user.id)
+    ensures: ContactUpdated(person_id: job_contact.person.id, user_id: user.id, job_id: job_contact.job.id)
 }
 
 rule ExpireAutoCreatedPersons {
@@ -756,6 +778,11 @@ rule ExpireAutoCreatedPersons {
         reason: retention_expired,
         target_person: person
     )
+
+    @guidance
+        -- W-E4: the implementation also writes a timeline entry for this
+        -- archival, whose details it queries as an idempotency guard so the
+        -- expiry acts at most once per person.
 }
 
 -- ==========================================================
@@ -837,7 +864,11 @@ rule RescheduleInterview {
 
     ensures: interview.status = rescheduled
     ensures: interview.interview_date = new_date
-    ensures: interview.location = new_location
+    -- W-B3: an omitted new_location preserves the current one (matches UpdateNote),
+    -- rather than nulling it.
+    ensures:
+        if new_location != null:
+            interview.location = new_location
     ensures: interview.updated_at = now
 }
 
@@ -860,9 +891,16 @@ rule InterviewReminder {
         happened_at: now,
         target_job: interview.job,
         target_person: interview.person,
-        details: null,
+        details: interview.id,
         linked_record_name: interview.job.title
     )
+
+    @guidance
+        -- W-E4: details carries the interview id; the temporal sweep queries it
+        -- as an idempotency guard so a reminder fires at most once per 24h window.
+        -- W-E5: the implementation additionally skips consent-blocked interviewees
+        -- (crm-gdpr.allium ConsentBlockedRecordIsProcessingRestricted) — a person
+        -- whose consent is withdrawn is excluded from this active flow.
 }
 
 -- ==========================================================
@@ -973,9 +1011,15 @@ rule TaskOverdueReminder {
         user_id: task.user_id,
         activity_type: reminder_triggered,
         happened_at: now,
-        details: null,
+        details: task.id,
         linked_record_name: task.title
     )
+
+    @guidance
+        -- W-E4: details carries the task id; the temporal sweep queries it as an
+        -- idempotency guard so an overdue reminder fires at most once per 24h window.
+        -- W-E5: the implementation additionally skips consent-blocked task targets
+        -- (crm-gdpr.allium ConsentBlockedRecordIsProcessingRestricted).
 }
 
 -- ==========================================================
@@ -1060,6 +1104,42 @@ rule RecordStatusChange {
         -- previous_status and new_status for rendering.
 }
 
+rule RecordContactCreation {
+    -- W-E1: project ContactCreated events into the Activity Timeline. The linked
+    -- record name is the Person's own name, so it is erased together with the
+    -- Person by the anonymise cascade (crm-gdpr.allium timeline treatment) —
+    -- there is no separate retention obligation on this field.
+    when: ContactCreated(person, source)
+
+    ensures: ActivityLog.created(
+        user_id: person.user_id,
+        activity_type: contact_created,
+        happened_at: now,
+        actor_id: person.user_id,
+        target_person: person,
+        details: null,
+        linked_record_name: person.name.first_name
+    )
+}
+
+rule RecordContactUpdate {
+    -- W-E1: project ContactUpdated events into the Activity Timeline. A job↔person
+    -- link/unlink carries job_id, which also surfaces the entry on the Job and
+    -- Company timelines; a plain person edit omits it (target_job stays null).
+    when: ContactUpdated(person_id, user_id, job_id?)
+
+    ensures: ActivityLog.created(
+        user_id: user_id,
+        activity_type: contact_updated,
+        happened_at: now,
+        actor_id: user_id,
+        target_person: Person{id: person_id},
+        target_job: if job_id != null: Job{id: job_id} else: null,
+        details: null,
+        linked_record_name: null
+    )
+}
+
 rule RecordContactDeletion {
     -- Project ContactDeleted events into the Activity Timeline.
     -- Fired by AnonymizePerson (reason: anonymized) and
@@ -1084,12 +1164,16 @@ rule RecordContactDeletion {
 }
 
 rule RecordVacancyPromotion {
-    -- Project VacancyPromoted events into the Activity Timeline.
+    -- Project VacancyPromoted events into the Activity Timeline. Promoting a
+    -- discovered vacancy into a tracked Job IS the application-submitted moment,
+    -- so the timeline entry is application_submitted (there is no separate
+    -- vacancy_promoted activity type — that name belongs only to the
+    -- notification channel, a different concern).
     when: VacancyPromoted(staged_vacancy_id, job_id, user_id)
 
     ensures: ActivityLog.created(
         user_id: user_id,
-        activity_type: vacancy_promoted,
+        activity_type: application_submitted,
         happened_at: now,
         actor_id: user_id,
         target_job: Job{id: job_id},
@@ -1263,6 +1347,14 @@ invariant PersonOwnedByUser {
     -- ADR-015: all Person records must have an owner.
     for person in Persons:
         person.user_id != null
+}
+
+invariant SubdivisionRequiresCountry {
+    -- W-H2: an ISO 3166-2 subdivision code is namespaced by its country, so it
+    -- is meaningless without one. Enforced at create AND update (a partial update
+    -- must not null the country while leaving a subdivision set).
+    for person in Persons:
+        person.address?.subdivision_code != null implies person.address?.country_code != null
 }
 
 ------------------------------------------------------------
@@ -1466,6 +1558,8 @@ surface TaskBoard {
             when task.status in {pending, in_progress}
         CancelTask(user, task)
             when task.status in {pending, in_progress}
+        DeleteTask(user, task)
+            when task.status in {done, cancelled}
 
     timeout:
         TaskOverdueReminder
