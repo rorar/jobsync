@@ -1558,8 +1558,11 @@ surface TaskBoard {
             when task.status in {pending, in_progress}
         CancelTask(user, task)
             when task.status in {pending, in_progress}
-        DeleteTask(user, task)
-            when task.status in {done, cancelled}
+        -- W-A2: DeleteTask is intentionally NOT surfaced here. Cancel is the
+        -- terminal user action on the board; the DeleteTask rule remains a
+        -- callable repository capability (terminal-guarded) for future bulk /
+        -- API consumers, but no board button renders it today, so claiming it on
+        -- this surface would over-state the boundary.
 
     timeout:
         TaskOverdueReminder

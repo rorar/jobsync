@@ -84,7 +84,13 @@ cancelled first"). `crmTask.actions.ts:224-241` checks ownership only, then `pri
 test:** `__tests__/crmTask.actions.spec.ts:379-389` mocks `status: "pending"` and asserts success, so
 fixing the code requires changing the test. Browser-callable `"use server"` export; targets cascade.
 
-**W-A2 — `DeleteTask` has no surface, yet is publicly callable. [Medium] [spec + code]**
+**W-A2 — `DeleteTask` has no surface, yet is publicly callable. [Medium] [spec + code] — ✅ RESOLVED 2026-08-20**
+Resolved spec-side by keeping the divergence out of the surface: `TaskBoard` still provides only
+Create/Start/Complete/Cancel (matching the UI), and a comment records that `DeleteTask` is
+deliberately NOT surfaced — cancel is the terminal board action. The `DeleteTask` rule stays as a
+callable, terminal-guarded repository capability for a future bulk/API/UI consumer. Chose this over
+wiring a UI delete button (a new feature, ui-design-gated, out of scope for spec↔code
+reconciliation). Zero code; `deleteCrmTask` and its tests are unchanged. Original finding text follows.
 `TaskBoard` (`crm.allium:1442-1449`) provides Create/Start/Complete/Cancel only. `deleteCrmTask` has
 no UI consumer (only the spec file's test). Either add it to `TaskBoard provides` with a
 `when task.status in {done, cancelled}` guard, or drop the action. Compounds W-A1.
