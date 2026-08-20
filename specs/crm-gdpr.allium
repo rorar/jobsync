@@ -606,16 +606,21 @@ invariant ConsentBlockOnlyOnConsentBasis {
 invariant ConsentBlockedRecordIsProcessingRestricted {
     -- Art. 7(3): once consent is withdrawn, the Person record MUST NOT be
     -- processed further. Concretely: no field edits and no automated activity
-    -- (e.g. interview reminders) may act on a consent-blocked record. The only
-    -- operations that remain permitted are export (Art. 15 access / Art. 20
-    -- portability), erasure or anonymization (Art. 17), and consent
-    -- reinstatement (which lifts the restriction). Processing that occurred
-    -- before withdrawal stays lawful and is not undone.
+    -- (e.g. interview reminders) may act on a consent-blocked record, and no
+    -- NEW link that names the record may be created — this includes adding a
+    -- job contact (AddJobContact) and recording a network edge on either
+    -- endpoint (AddPersonConnection), alongside note/task/interview/referral
+    -- creation and the warm-path and cron flows. The only operations that
+    -- remain permitted are export (Art. 15 access / Art. 20 portability),
+    -- erasure or anonymization (Art. 17), and consent reinstatement (which
+    -- lifts the restriction). Processing that occurred before withdrawal stays
+    -- lawful and is not undone — hence this is a guard on the creating ACTION,
+    -- not a standing predicate over existing links.
     --
-    -- The "no edits / no reminders" half is a guard on processing rules rather
-    -- than a state predicate, so it is asserted in prose here; the structural
-    -- half (a block implies the consent basis) is checked by
-    -- ConsentBlockOnlyOnConsentBasis above.
+    -- The "no edits / no reminders / no new links" half is a guard on
+    -- processing rules rather than a state predicate, so it is asserted in
+    -- prose here; the structural half (a block implies the consent basis) is
+    -- checked by ConsentBlockOnlyOnConsentBasis above.
     for gdpr in PersonGdprExtensions:
         gdpr.is_consent_blocked implies gdpr.processing_basis = consent
 }

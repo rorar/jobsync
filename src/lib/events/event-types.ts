@@ -258,6 +258,7 @@ export interface InterviewCompletedPayload {
   interviewId: string;
   jobId: string;
   userId: string;
+  personId?: string;
   outcome: string;
 }
 

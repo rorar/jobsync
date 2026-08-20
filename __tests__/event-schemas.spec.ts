@@ -855,6 +855,17 @@ describe("InterviewCompletedPayloadSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts optional personId (W-B1)", () => {
+    const result = InterviewCompletedPayloadSchema.safeParse({
+      interviewId: "int-1",
+      jobId: "job-1",
+      userId: "user-1",
+      outcome: "passed",
+      personId: "person-1",
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects missing outcome", () => {
     const result = InterviewCompletedPayloadSchema.safeParse({
       interviewId: "int-1",

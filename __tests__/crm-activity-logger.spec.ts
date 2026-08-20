@@ -233,6 +233,29 @@ describe("crm-activity-logger", () => {
     });
   });
 
+  it("interview_completed projects targetPersonId so it reaches PersonTimeline (W-B1)", async () => {
+    mockFindUnique.mockResolvedValueOnce({
+      JobTitle: { label: "Staff Engineer" },
+      companyId: "company-7",
+    });
+    await emit(DomainEventType.InterviewCompleted, {
+      interviewId: "iv-1",
+      jobId: "job-1",
+      personId: "person-1",
+      userId: "user-1",
+      outcome: "passed",
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        activityType: "interview_completed",
+        targetPersonId: "person-1",
+        targetJobId: "job-1",
+        targetCompanyId: "company-7",
+        linkedRecordName: "Staff Engineer",
+      }),
+    });
+  });
+
   it("creates activity log for ContactCreated with DB lookup", async () => {
     mockFindUnique.mockResolvedValueOnce({
       firstName: "Jane",

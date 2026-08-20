@@ -231,6 +231,12 @@ export async function deleteCrmTask(taskId: string): Promise<ActionResult<{ id: 
     });
     if (!task) return { success: false, message: "crm.errors.taskNotFound" };
 
+    // DeleteTask spec (crm.allium): only terminal tasks may be hard-deleted;
+    // an active task must be cancelled first (W-A1).
+    if (task.status !== "done" && task.status !== "cancelled") {
+      return { success: false, message: "crm.errors.taskNotTerminal" };
+    }
+
     // Cascade delete targets via onDelete: Cascade
     await prisma.crmTask.delete({ where: { id: taskId } });
 

@@ -258,6 +258,7 @@ export const InterviewCompletedPayloadSchema = z.object({
   interviewId: z.string(),
   jobId: z.string(),
   userId: z.string(),
+  personId: z.string().optional(),
   outcome: z.string(),
 }) satisfies z.ZodType<InterviewCompletedPayload>;
 

@@ -10,6 +10,7 @@ import {
   isValidConnectionStrength,
   INSIDE_TRACK_CONFIG,
 } from "@/models/insideTrack.model";
+import { isConsentBlocked } from "@/models/person.model";
 
 // ---------------------------------------------------------------------------
 // personConnection.actions.ts — directed P2P network edges (Welle 5).
@@ -42,11 +43,19 @@ export async function addPersonConnection(
       return { success: false, message: "crm.errors.invalidConnectionAttributes" };
     }
 
-    // Both endpoints must belong to the user (IDOR).
-    const owned = await prisma.person.count({
+    // Both endpoints must belong to the user (IDOR). Fetch the consent fields
+    // too, so the GDPR gate below can run on the same query.
+    const endpoints = await prisma.person.findMany({
       where: { id: { in: [input.fromPersonId, input.toPersonId] }, userId: user.id },
+      select: { id: true, processingBasis: true, consentWithdrawnAt: true },
     });
-    if (owned < 2) return { success: false, message: "crm.errors.personNotFound" };
+    if (endpoints.length < 2) return { success: false, message: "crm.errors.personNotFound" };
+
+    // GDPR Art. 7(3): a connection edge names both Persons; recording one that
+    // references a consent-blocked endpoint is new processing (W-C5).
+    if (endpoints.some(isConsentBlocked)) {
+      return { success: false, message: "crm.errors.consentWithdrawn" };
+    }
 
     // DistinctEndpointsPerUser — at most one edge per (user, from, to).
     const existing = await prisma.personConnection.findFirst({

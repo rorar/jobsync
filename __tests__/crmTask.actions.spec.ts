@@ -376,9 +376,9 @@ describe("crmTask.actions", () => {
       expect(result.message).toBe("crm.errors.taskNotFound");
     });
 
-    it("deletes successfully (cascade deletes targets via Prisma)", async () => {
+    it("deletes successfully when the task is in a terminal state (cascade via Prisma)", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
-      (prisma.crmTask.findFirst as jest.Mock).mockResolvedValue({ id: "task-1", status: "pending", title: "T" });
+      (prisma.crmTask.findFirst as jest.Mock).mockResolvedValue({ id: "task-1", status: "done", title: "T" });
       (prisma.crmTask.delete as jest.Mock).mockResolvedValue({});
 
       const result = await deleteCrmTask("task-1");
@@ -386,6 +386,41 @@ describe("crmTask.actions", () => {
       expect(result.success).toBe(true);
       expect(result.data).toEqual({ id: "task-1" });
       expect(prisma.crmTask.delete).toHaveBeenCalledWith({ where: { id: "task-1" } });
+    });
+
+    it("also deletes a cancelled task", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.crmTask.findFirst as jest.Mock).mockResolvedValue({ id: "task-1", status: "cancelled", title: "T" });
+      (prisma.crmTask.delete as jest.Mock).mockResolvedValue({});
+
+      const result = await deleteCrmTask("task-1");
+
+      expect(result.success).toBe(true);
+      expect(prisma.crmTask.delete).toHaveBeenCalled();
+    });
+
+    it("rejects deleting an active task — must be cancelled first (W-A1; DeleteTask spec)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.crmTask.findFirst as jest.Mock).mockResolvedValue({ id: "task-1", status: "pending", title: "T" });
+      (prisma.crmTask.delete as jest.Mock).mockResolvedValue({});
+
+      const result = await deleteCrmTask("task-1");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("crm.errors.taskNotTerminal");
+      expect(prisma.crmTask.delete).not.toHaveBeenCalled();
+    });
+
+    it("rejects deleting an in_progress task", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.crmTask.findFirst as jest.Mock).mockResolvedValue({ id: "task-1", status: "in_progress", title: "T" });
+      (prisma.crmTask.delete as jest.Mock).mockResolvedValue({});
+
+      const result = await deleteCrmTask("task-1");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("crm.errors.taskNotTerminal");
+      expect(prisma.crmTask.delete).not.toHaveBeenCalled();
     });
   });
 

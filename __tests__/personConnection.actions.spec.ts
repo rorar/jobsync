@@ -15,7 +15,7 @@ import { PrismaClient } from "@prisma/client";
 
 jest.mock("@prisma/client", () => {
   const m = {
-    person: { count: jest.fn() },
+    person: { count: jest.fn(), findMany: jest.fn() },
     personConnection: {
       findFirst: jest.fn(),
       count: jest.fn(),
@@ -33,7 +33,10 @@ const user = { id: "user-1", name: "U", email: "u@x.io" };
 beforeEach(() => jest.clearAllMocks());
 
 function bothPersonsOwned() {
-  (prisma.person.count as jest.Mock).mockResolvedValue(2);
+  (prisma.person.findMany as jest.Mock).mockResolvedValue([
+    { id: "a", processingBasis: "legitimate_interest", consentWithdrawnAt: null },
+    { id: "b", processingBasis: "legitimate_interest", consentWithdrawnAt: null },
+  ]);
 }
 
 describe("addPersonConnection", () => {
@@ -58,9 +61,23 @@ describe("addPersonConnection", () => {
 
   it("rejects when a person is not owned (IDOR)", async () => {
     (getCurrentUser as jest.Mock).mockResolvedValue(user);
-    (prisma.person.count as jest.Mock).mockResolvedValue(1); // only one endpoint owned
+    (prisma.person.findMany as jest.Mock).mockResolvedValue([
+      { id: "a", processingBasis: "legitimate_interest", consentWithdrawnAt: null },
+    ]); // only one endpoint owned
     const res = await addPersonConnection({ fromPersonId: "a", toPersonId: "b", kind: "friend", strength: "close" });
     expect(res.message).toBe("crm.errors.personNotFound");
+  });
+
+  it("rejects when an endpoint is consent-blocked (GDPR Art. 7(3); W-C5)", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(user);
+    (prisma.person.findMany as jest.Mock).mockResolvedValue([
+      { id: "a", processingBasis: "legitimate_interest", consentWithdrawnAt: null },
+      { id: "b", processingBasis: "consent", consentWithdrawnAt: new Date() },
+    ]);
+    const res = await addPersonConnection({ fromPersonId: "a", toPersonId: "b", kind: "friend", strength: "close" });
+    expect(res.success).toBe(false);
+    expect(res.message).toBe("crm.errors.consentWithdrawn");
+    expect(prisma.personConnection.create).not.toHaveBeenCalled();
   });
 
   it("rejects a duplicate edge (DistinctEndpointsPerUser)", async () => {

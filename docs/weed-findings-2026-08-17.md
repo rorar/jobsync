@@ -1,7 +1,7 @@
 # `allium:weed` findings — 2026-08-17 (`crm.allium` + `inside-track.allium`)
 
 Spec↔code divergences from a systematic `allium:weed` pass.
-**34 findings, 4 fixed (W-C1, W-F1, W-F3, W-D1), 30 open.**
+**34 findings, 7 fixed (W-C1, W-F1, W-F3, W-D1, W-A1, W-B1, W-C5), 27 open.**
 
 W-C1 and W-F1 sat inside files the 2026-08-17 session was already committing — shipping without them
 would have committed a spec making a false statement about a sibling spec. W-F3 and W-F4 were found
@@ -49,7 +49,11 @@ spec rules were written ahead of it and never reconciled afterwards.
 
 ## A. Task lifecycle
 
-**W-A1 — `DeleteTask`'s terminal-state precondition is enforced nowhere. [High] [code] ✅ verified**
+**W-A1 — `DeleteTask`'s terminal-state precondition is enforced nowhere. [High] [code] ✅ verified — ✅ FIXED 2026-08-19**
+`deleteCrmTask` now rejects non-terminal tasks with `crm.errors.taskNotTerminal` (+4 locales); the
+pinned test `crmTask.actions.spec.ts:379` was flipped to a terminal-status success case plus two
+rejection cases.
+
 Spec `crm.allium:923-936` requires `task.status in {done, cancelled}` ("active tasks must be
 cancelled first"). `crmTask.actions.ts:224-241` checks ownership only, then `prisma.crmTask.delete`
 — no status check, unlike every sibling (`startCrmTask:145`, `completeCrmTask:171`,
@@ -64,7 +68,11 @@ no UI consumer (only the spec file's test). Either add it to `TaskBoard provides
 
 ## B. Interview lifecycle
 
-**W-B1 — `CompleteInterview`'s `target_person` can never be populated. [High] [code] ✅ verified**
+**W-B1 — `CompleteInterview`'s `target_person` can never be populated. [High] [code] ✅ verified — ✅ FIXED 2026-08-19**
+`InterviewCompletedPayload` now carries optional `personId` (schema + type); `completeInterview`
+emits `interview.personId`; the projection sets `targetPersonId`, so completion reaches
+`PersonTimeline`.
+
 Spec `crm.allium:788-797` sets `target_person: interview.person`. `InterviewCompletedPayload`
 (`event-types.ts:252-257`) carries `interviewId, jobId, userId, outcome` and **no `personId`**, so
 the projection (`crm-activity-logger.ts:218-235`) never sets it. `InterviewScheduledPayload`
@@ -110,7 +118,20 @@ Spec `crm.allium:617-618`. `person.actions.ts:629-630` nulls the names but leave
 `updatedBySource` untouched, so after erasure the record claims a human last touched it.
 `ActorSource` includes `system`; the column exists (`schema.prisma:1072`).
 
-**W-C5 — the consent gate is missing at 2 of 8 write sites. [Medium-High] [code + spec] ✅ verified**
+**W-C5 — the consent gate is missing at 2 of 8 write sites. [Medium-High] [code + spec] ✅ verified — ✅ FIXED 2026-08-19**
+`isConsentBlocked` now gates `addJobContact` and `addPersonConnection` (the latter switched from
+`person.count` to `findMany` to read the consent fields). **Spec side:** a first attempt added a
+per-rule `requires: not exists ext in gdpr/PersonGdprExtensions where … ext.is_consent_blocked` to
+`AddJobContact`/`AddPersonConnection`, but that was **reverted** — it (a) crosses external-entity
+identities (`crm/Person` vs `crm-gdpr`'s own `external entity Person`), (b) uses an
+alias-qualified entity as an iterable collection, for which there is no precedent and which
+`allium check` does **not** validate (a deliberately-bogus entity name still returns 0 errors — the
+checker is blind here), and (c) is the wrong *shape*: the restriction guards the creating **action**,
+whereas a standing `requires`/invariant over link state would be falsified by the lawful
+"link first, withdraw consent later" sequence. The spec's chosen encoding for this is the **prose**
+invariant `ConsentBlockedRecordIsProcessingRestricted` (crm-gdpr.allium), which was extended to name
+`AddJobContact` and `AddPersonConnection` explicitly. Code remains the authoritative enforcement.
+
 `crm-gdpr.allium:606-620` forbids automated CRM flows acting on a consent-blocked record.
 `isConsentBlocked` is enforced in `person`, `crmInterview`, `crmTask`, `crmNote`, `referral`,
 `warmPath` actions and `crm-cron` — but is **absent from `jobContact.actions.ts` and

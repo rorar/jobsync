@@ -8,6 +8,7 @@ import { handleError } from "@/lib/utils";
 import { createEvent, DomainEventType } from "@/lib/events/event-types";
 import { eventBus } from "@/lib/events";
 import { isValidJobContactRole } from "@/models/job.model";
+import { isConsentBlocked } from "@/models/person.model";
 
 export async function addJobContact(
   jobId: string,
@@ -31,6 +32,12 @@ export async function addJobContact(
     // Verify person ownership
     const person = await prisma.person.findFirst({ where: { id: personId, userId: user.id } });
     if (!person) return { success: false, message: "crm.errors.personNotFound" };
+
+    // GDPR Art. 7(3): linking a blocked Person to a Job is new processing (and
+    // emits ContactUpdated → a fresh timeline entry) — forbid it (W-C5).
+    if (isConsentBlocked(person)) {
+      return { success: false, message: "crm.errors.consentWithdrawn" };
+    }
 
     const contact = await prisma.jobContact.create({
       data: {

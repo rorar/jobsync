@@ -141,6 +141,9 @@ export async function completeInterview(
         interviewId,
         jobId: interview.jobId,
         userId: user.id,
+        // W-B1: carry the interviewee so completion reaches PersonTimeline,
+        // mirroring InterviewScheduled.
+        personId: interview.personId ?? undefined,
         outcome,
       }),
     );

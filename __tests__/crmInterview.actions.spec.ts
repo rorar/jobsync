@@ -287,7 +287,7 @@ describe("completeInterview", () => {
       id: "interview-1",
       status: "scheduled",
       jobId: "job-1",
-      personId: null,
+      personId: "person-1",
       job: { id: "job-1", JobTitle: { label: "Engineer" } },
     });
     (prisma.crmInterview.update as jest.Mock).mockResolvedValue({ id: "interview-1" });
@@ -302,9 +302,31 @@ describe("completeInterview", () => {
         jobId: "job-1",
         userId: mockUser.id,
         outcome: "rejected",
+        // W-B1: carry the interviewee so completion reaches PersonTimeline
+        personId: "person-1",
       }),
     );
     expect(eventBus.publish).toHaveBeenCalled();
+  });
+
+  it("carries no personId when the interview has none", async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+    (prisma.crmInterview.findFirst as jest.Mock).mockResolvedValue({
+      id: "interview-1",
+      status: "scheduled",
+      jobId: "job-1",
+      personId: null,
+      job: { id: "job-1", JobTitle: { label: "Engineer" } },
+    });
+    (prisma.crmInterview.update as jest.Mock).mockResolvedValue({ id: "interview-1" });
+    (prisma.crmActivityLog.create as jest.Mock).mockResolvedValue({});
+
+    await completeInterview("interview-1", "passed");
+
+    expect(createEvent).toHaveBeenCalledWith(
+      DomainEventType.InterviewCompleted,
+      expect.objectContaining({ personId: undefined }),
+    );
   });
 });
 

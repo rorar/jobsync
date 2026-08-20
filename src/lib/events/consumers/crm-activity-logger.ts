@@ -271,6 +271,9 @@ export function registerCrmActivityLogConsumers(): void {
       return {
         userId: p.userId,
         actorId: p.userId,
+        // W-B1: project the interviewee so completion surfaces on PersonTimeline,
+        // matching interview_scheduled.
+        targetPersonId: p.personId ?? null,
         targetJobId: p.jobId,
         targetCompanyId: job?.companyId ?? null,
         linkedRecordName: job?.JobTitle?.label ?? null,
