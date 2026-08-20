@@ -1,7 +1,7 @@
 # `allium:weed` findings — 2026-08-17 (`crm.allium` + `inside-track.allium`)
 
 Spec↔code divergences from a systematic `allium:weed` pass.
-**34 findings — 32 resolved, 1 open (W-D2, decision-gated), 1 aspirational (W-F2, not a bug).**
+**34 findings — 33 resolved, 1 aspirational (W-F2, not a bug).**
 
 > **Resolution pass 2026-08-20.** The remaining code + spec findings were closed in
 > two commits (`5c49bb43` code, `71da1c52` specs). Code side: W-B2 (isValidInterviewOutcome
@@ -12,8 +12,15 @@ Spec↔code divergences from a systematic `allium:weed` pass.
 > W-G7, W-G8, W-G9, W-H2, W-H3, and IT-B3 (RecordVacancyPromotion→application_submitted).
 > W-G3 (set forwarded_to after creation) and W-H1 (crm-gdpr consent surface) were recorded
 > as `open question`s — both need a decision/refactor a spec edit alone cannot supply.
-> **W-D2 remains open — a genuine product tradeoff (block Job delete vs converted→stale
-> recovery edge); see below. W-F2 stays aspirational (the suppression path has no producer).**
+> **W-D2 resolved (decision C, @rorar, 2026-08-20):** `ConvertedReferralHasJob` reshaped from a
+> standing "converted referral currently has a Job" predicate to a conversion-time obligation
+> (TipReifiesToJob creates the Job atomically at conversion; `target_job` may be null after a later,
+> independent Job deletion). Zero code — the invariant now conforms to `deleteJobById`'s existing
+> hard delete. Chosen over blocking the delete (A, UX friction) and a `converted→declined` recovery
+> edge (B): B would make Job-delete a two-entity operation, reintroducing the undoStore split-brain
+> hazard (M-A-09) and risking an illegal `declined→declined` on re-delete. See the W-D2 entry below
+> and ROADMAP "Undo-Erweiterung" (Job-undo + undo-point discovery backlog). **W-F2 stays aspirational
+> (the suppression path has no producer).**
 > Verified: full Jest suite 309 suites / 5685 passed + 2 todo / 0 fail; `allium check` 0 errors.
 
 **Original triage tally (superseded by the roll-up above):**
@@ -169,7 +176,15 @@ anonymization only). FK behaviour then applies: `Referral.tipsterId/insiderId/fo
 hard-deletes every network edge on the loser. **Silent data loss on a routine, non-GDPR
 housekeeping operation**, producing exactly the state W-C2's undeclared invariant would forbid.
 
-**W-D2 — `ConvertedReferralHasJob` is unenforceable against Job deletion. [Medium-High] [both]**
+**W-D2 — `ConvertedReferralHasJob` is unenforceable against Job deletion. [Medium-High] [both] — ✅ RESOLVED 2026-08-20 (decision C)**
+Reshaped to a conversion-time obligation instead of a standing predicate: `converted` is a
+historical outcome, and `target_job` (a relationship, `Job with source_referral = this`) may be null
+after a later independent Job deletion — the referral is not un-converted. Job delete stays a
+single-entity operation (no cascading referral status change), keeping its future undo compensation
+Job-only. Spec-only; no code change (current `deleteJobById` hard delete now conforms). Rejected A
+(block the delete — UX friction) and B (converted→declined recovery edge — two-entity delete,
+undoStore split-brain M-A-09, illegal declined→declined on re-delete). Original finding text
+follows.
 `inside-track.allium:635-638`; `converted` is terminal (`:190`). `deleteJobById`
 (`job.actions.ts:761-791`) hard-deletes the Job; `Job.sourceReferralId` is `onDelete: SetNull`,
 which protects the Job when the Referral goes, not the reverse. Deleting the Job strands the

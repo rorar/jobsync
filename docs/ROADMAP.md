@@ -245,6 +245,10 @@ Intake (Automation ODER Manual) → Staging Area → Processing → Inbox → Tr
 - Zeitfenster für Undo: konfigurierbar (Default: 10 Sekunden nach Aktion)
 - Gilt für: Staging (Dismiss/Restore), Inbox (Promote/Zurückstellen), Tracking (Archive/Trash/Delete)
 
+**Undo-Erweiterung — offene Punkte (Backlog, 2026-08-20):**
+- **Undo für Jobs (Job-Aggregat):** `deleteJobById` ist heute ein **Hard-Delete ohne Undo-Eintrag und ohne Snapshot** — der `undoStore` (Kompensations-Closures, 10s-TTL, `src/lib/undo`) deckt nur die Vacancy-Pipeline ab, nicht das reguläre Job-Löschen unter `/dashboard/myjobs`. Nachziehen: Job-Delete registriert einen Undo-Eintrag, dessen `compensate()` den Job (inkl. `sourceReferralId`) aus einem Snapshot wiederherstellt. **Designleitplanke (W-D2-Entscheidung, 2026-08-20):** Job-Delete bleibt eine **Single-Entity-Operation** — es mutiert KEINE Fremd-Aggregate (insb. keine Referral-Statusänderung). Genau deshalb wurde für `ConvertedReferralHasJob` Option C gewählt (Invariante als Konvertierungszeitpunkt-Pflicht, `target_job` darf nach Job-Delete null sein), damit die Kompensation Job-only bleibt und der `undoStore` sie sauber (ohne Cross-Entity-Split-Brain, vgl. M-A-09) zurückrollen kann. Redo existiert im aktuellen Modell nicht (Gmail-Undo-Pattern, kein Command-Stack).
+- **Discovery der Undo-fähigen Punkte:** Systematischer Sweep über ALLE destruktiven Mutationen (Server-Actions), um zu entscheiden, welche einen Undo-Eintrag registrieren sollen. Undo ist heute ad-hoc/pipeline-lokal; es gibt keine Inventarliste der undo-fähigen Punkte. Ergebnis: eine Matrix (Action → reversibel? → Kompensationsstrategie: Soft-Revert / Snapshot-Restore / gar nicht), plus Kennzeichnung der Aktionen, die aus Integritätsgründen NICHT einzeln undo-fähig sein dürfen (Cross-Entity-Kaskaden).
+
 **Dedup-Retention (DSGVO Privacy by Design):**
 - Nach Ablauf der Retention-Frist: StagedVacancy-Daten werden **gelöscht**, aber ein **Hash des Dedup-Keys** (`hash(sourceBoard + ":" + externalId)`) bleibt in einer `DedupHash`-Tabelle
 - Hash ist One-Way (nicht rekonstruierbar) → keine personenbezogenen Daten

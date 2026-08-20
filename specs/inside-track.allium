@@ -735,8 +735,29 @@ invariant TipsterReferenceResolvesLive {
 }
 
 invariant ConvertedReferralHasJob {
-    for r in Referral where r.status = converted:
-        r.target_job != null
+    -- W-D2 (decision C, 2026-08-20): the guarantee is discharged at the MOMENT
+    -- of conversion — TipReifiesToJob atomically creates a Job
+    -- (source_referral = this) on the in_review -> converted transition, so every
+    -- conversion DOES produce a Job. This is an obligation on the converting
+    -- ACTION, not a standing predicate over current state: the Job may later be
+    -- deleted independently (a lawful, undoable single-entity operation — see
+    -- ROADMAP "Undo-Erweiterung"), which nulls the target_job relationship
+    -- WITHOUT un-converting the referral. `converted` is a historical outcome
+    -- ("this warm path became an application"), true forever once reached; it
+    -- does not assert a live Job. Same shape as crm-gdpr.allium's
+    -- ConsentBlockedRecordIsProcessingRestricted — a guard on the action, not a
+    -- live state predicate.
+    --
+    -- Deliberately NOT enforced by cascading a referral status change on Job
+    -- deletion: that would make the delete a two-entity operation whose undo
+    -- compensation must revert both the Job AND the referral status, reintroducing
+    -- the undoStore split-brain hazard (M-A-09) and risking an illegal
+    -- declined->declined transition on re-delete. Job delete stays single-entity.
+    --
+    -- Structural residue that DOES hold at all times: any Job still linked to a
+    -- converted referral was created by that conversion.
+    for r in Referral where r.status = converted and r.target_job != null:
+        r.target_job.source_referral = r
 }
 
 invariant NetworkPathViaConnectsTipsterToInsider {
