@@ -1,7 +1,23 @@
 # `allium:weed` findings — 2026-08-17 (`crm.allium` + `inside-track.allium`)
 
 Spec↔code divergences from a systematic `allium:weed` pass.
-**34 findings, 7 fixed (W-C1, W-F1, W-F3, W-D1, W-A1, W-B1, W-C5), 27 open.**
+**34 findings — 32 resolved, 1 open (W-D2, decision-gated), 1 aspirational (W-F2, not a bug).**
+
+> **Resolution pass 2026-08-20.** The remaining code + spec findings were closed in
+> two commits (`5c49bb43` code, `71da1c52` specs). Code side: W-B2 (isValidInterviewOutcome
+> guard), W-C3 (anonymise blocklist domain+phone arms), W-C4 (updatedBySource=system),
+> W-H2 (updatePerson subdivision-requires-country), W-H3 (isValidSocialPlatform guard),
+> plus IT-B1 (active-only contact pickers) and W-G5 (comment). Spec side (via `allium:tend`):
+> W-A2, W-B3, W-C2, W-E1, W-E2, W-E3, W-E4, W-E5, W-E6, W-F4, W-G1, W-G2, W-G4, W-G6,
+> W-G7, W-G8, W-G9, W-H2, W-H3, and IT-B3 (RecordVacancyPromotion→application_submitted).
+> W-G3 (set forwarded_to after creation) and W-H1 (crm-gdpr consent surface) were recorded
+> as `open question`s — both need a decision/refactor a spec edit alone cannot supply.
+> **W-D2 remains open — a genuine product tradeoff (block Job delete vs converted→stale
+> recovery edge); see below. W-F2 stays aspirational (the suppression path has no producer).**
+> Verified: full Jest suite 309 suites / 5685 passed + 2 todo / 0 fail; `allium check` 0 errors.
+
+**Original triage tally (superseded by the roll-up above):**
+34 findings, 7 fixed (W-C1, W-F1, W-F3, W-D1, W-A1, W-B1, W-C5), 27 open.
 
 W-C1 and W-F1 sat inside files the 2026-08-17 session was already committing — shipping without them
 would have committed a spec making a false statement about a sibling spec. W-F3 and W-F4 were found
