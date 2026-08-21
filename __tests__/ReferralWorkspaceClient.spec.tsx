@@ -124,6 +124,21 @@ describe("ReferralWorkspaceClient", () => {
     expect(screen.queryByRole("group", { name: /availableActions/i })).not.toBeInTheDocument();
   });
 
+  it("explains the missing link when the converted referral's job was deleted (W-D2)", async () => {
+    getReferral.mockResolvedValue({
+      success: true,
+      data: detail({ status: "converted", targetJobId: null }),
+    });
+    render(<ReferralWorkspaceClient referralId="r1" />);
+
+    // Still converted — a historical outcome the Job deletion does not undo.
+    expect(await screen.findByText("insideTrack.workspace.convertedBanner")).toBeInTheDocument();
+    expect(
+      screen.getByText("insideTrack.workspace.convertedJobDeleted"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /viewJob/i })).not.toBeInTheDocument();
+  });
+
   it("shows the declined banner for a declined referral", async () => {
     getReferral.mockResolvedValue({ success: true, data: detail({ status: "declined" }) });
     render(<ReferralWorkspaceClient referralId="r1" />);

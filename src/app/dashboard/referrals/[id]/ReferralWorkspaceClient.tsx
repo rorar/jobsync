@@ -213,7 +213,7 @@ export default function ReferralWorkspaceClient({ referralId }: { referralId: st
           {referral.status === "converted" ? (
             <div className="rounded-md border border-green-300 bg-green-50 p-4 text-sm dark:border-green-900 dark:bg-green-950">
               <p className="font-medium">{t("insideTrack.workspace.convertedBanner")}</p>
-              {referral.targetJobId && (
+              {referral.targetJobId ? (
                 <Link
                   href={`/dashboard/myjobs/${referral.targetJobId}`}
                   className="mt-2 inline-flex items-center gap-1 text-primary underline"
@@ -221,6 +221,14 @@ export default function ReferralWorkspaceClient({ referralId }: { referralId: st
                   {t("insideTrack.workspace.viewJob")}
                   <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                 </Link>
+              ) : (
+                /* W-D2: `converted` is a historical outcome — the Job it created may
+                   have been deleted since, which leaves target_job null without
+                   un-converting the referral. Say so rather than showing a success
+                   banner with nothing behind it. */
+                <p className="mt-2 text-muted-foreground">
+                  {t("insideTrack.workspace.convertedJobDeleted")}
+                </p>
               )}
             </div>
           ) : referral.status === "declined" ? (
