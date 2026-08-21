@@ -1,7 +1,8 @@
 # `allium:weed` findings — 2026-08-17 (`crm.allium` + `inside-track.allium`)
 
 Spec↔code divergences from a systematic `allium:weed` pass.
-**34 findings — 33 resolved, 1 aspirational (W-F2, not a bug).**
+**35 findings — 34 resolved, 1 aspirational (W-F2, not a bug).**
+*(W-D3 was found on 2026-08-21 while reviewing the W-D2 decision — see below.)*
 
 > **Resolution pass 2026-08-20.** The remaining code + spec findings were closed in
 > two commits (`5c49bb43` code, `71da1c52` specs). Code side: W-B2 (isValidInterviewOutcome
@@ -22,6 +23,17 @@ Spec↔code divergences from a systematic `allium:weed` pass.
 > and ROADMAP "Undo-Erweiterung" (Job-undo + undo-point discovery backlog). **W-F2 stays aspirational
 > (the suppression path has no producer).**
 > Verified: full Jest suite 309 suites / 5685 passed + 2 todo / 0 fail; `allium check` 0 errors.
+>
+> **Follow-up pass 2026-08-21 (review of the W-D2 decision).** Decision C was upheld, but its
+> *implementation* and its *rationale* both had a defect:
+> 1. The "structural residue" expression left behind by C was a **tautology** — `target_job` is
+>    defined as `Job with source_referral = this` (`inside-track.allium:146`) and
+>    `Job.sourceReferralId` is `@unique`, so `r.target_job.source_referral = r` can never be false.
+>    A checker-blind construct is worse than none: it reads as a live guard. The invariant was
+>    removed and the guarantee moved onto `TipReifiesToJob` as prose, where the enforceable
+>    artefact already lives (`ensures: Job.created(... source_referral: referral)`). The language
+>    reference agrees: a property comparing two moments in time is not expressible.
+> 2. The rationale claimed Job-delete is a "single-entity operation". It is not — see **W-D3**.
 
 **Original triage tally (superseded by the roll-up above):**
 34 findings, 7 fixed (W-C1, W-F1, W-F3, W-D1, W-A1, W-B1, W-C5), 27 open.
@@ -182,6 +194,34 @@ anonymization only). FK behaviour then applies: `Referral.tipsterId/insiderId/fo
 hard-deletes every network edge on the loser. **Silent data loss on a routine, non-GDPR
 housekeeping operation**, producing exactly the state W-C2's undeclared invariant would forbid.
 
+**W-D3 — deleting a Person, Company or Job silently orphans CRM notes/tasks. [High] [code] — ✅ RESOLVED 2026-08-21**
+Found while checking the W-D2 claim that Job-delete is a "single-entity operation". It is not.
+`CrmNoteTarget.targetJob` / `targetPerson` / `targetCompany` and the `CrmTaskTarget` equivalents are
+all `onDelete: Cascade` (`prisma/schema.prisma:1186,1225` and the person/company arms). Deleting the
+target removes the join rows, so a note or task whose ONLY target was that entity survives with
+**zero targets** — unreachable on every timeline (all reads filter via `targets.some`), yet still
+holding its free-text body. No cleanup existed. `CreateNote`/`CreateTask` require `targets.count > 0`
+(`crm.allium:913,1032`) and creation is atomic (nested `targets: { create: [...] }`), so a
+zero-target record is not reachable by any legal action — it is pure residue.
+
+Three consequences, in ascending severity:
+- Silent data residue on a routine housekeeping operation (delete a job, lose its notes from view).
+- **GDPR Art. 17:** on `anonymizePerson` the orphan is free text *about the person being erased*,
+  retained indefinitely and invisible to the UI that would let the user delete it.
+- **Blocks the planned Job-undo** (ROADMAP "Undo-Erweiterung"): a Job-only snapshot cannot restore
+  the cascaded join rows, so notes/tasks would stay detached after an undo.
+
+Fix: `src/lib/crm/orphan-targets.ts` (`buildOrphanedCrmPruneOps` / `pruneOrphanedCrmRecords`) deletes
+the user's zero-target notes and tasks. Wired into all four delete paths, appended LAST inside the
+existing/new `$transaction` array so the ops run after the cascade has removed the join rows:
+`deleteJobById` (`job.actions.ts`), `DELETE /api/v1/jobs/:id`, `deleteCompanyById`
+(`company.actions.ts`), and `anonymizePerson` (`person.actions.ts`). `mergePersons` was checked and is
+NOT affected — it already dedupes and transfers targets to the winner (`person.actions.ts:726-833`).
+`CrmActivityLog.targetJobId` is `onDelete: SetNull`, so the timeline history of the conversion
+survives a Job deletion — which is what makes W-D2's "converted is a historical fact" defensible.
+Tests: `__tests__/crm-orphan-prune.spec.ts` plus per-call-site assertions (one transaction, prune
+scoped to `userId` + `targets: { none: {} }`, prune ordered after the delete).
+
 **W-D2 — `ConvertedReferralHasJob` is unenforceable against Job deletion. [Medium-High] [both] — ✅ RESOLVED 2026-08-20 (decision C)**
 Reshaped to a conversion-time obligation instead of a standing predicate: `converted` is a
 historical outcome, and `target_job` (a relationship, `Job with source_referral = this`) may be null
@@ -189,8 +229,12 @@ after a later independent Job deletion — the referral is not un-converted. Job
 single-entity operation (no cascading referral status change), keeping its future undo compensation
 Job-only. Spec-only; no code change (current `deleteJobById` hard delete now conforms). Rejected A
 (block the delete — UX friction) and B (converted→declined recovery edge — two-entity delete,
-undoStore split-brain M-A-09, illegal declined→declined on re-delete). Original finding text
-follows.
+undoStore split-brain M-A-09, illegal declined→declined on re-delete).
+**Amended 2026-08-21:** the residue expression C left in the invariant was tautological (see the
+follow-up note at the top), so the invariant is now gone entirely and the guarantee lives as prose
+on `TipReifiesToJob`. UI follow-through: the converted banner now says the job was deleted instead
+of rendering a success banner with no link (`insideTrack.workspace.convertedJobDeleted`).
+Original finding text follows.
 `inside-track.allium:635-638`; `converted` is terminal (`:190`). `deleteJobById`
 (`job.actions.ts:761-791`) hard-deletes the Job; `Job.sourceReferralId` is `onDelete: SetNull`,
 which protects the Job when the Referral goes, not the reverse. Deleting the Job strands the
