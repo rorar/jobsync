@@ -31,6 +31,13 @@ jest.mock("@prisma/client", () => {
     job: {
       count: jest.fn(),
     },
+    crmNote: {
+      deleteMany: jest.fn(),
+    },
+    crmTask: {
+      deleteMany: jest.fn(),
+    },
+    $transaction: jest.fn(),
     logoAsset: {
       findFirst: jest.fn(),
     },
@@ -574,6 +581,17 @@ describe("Company Actions", () => {
   });
 
   describe("deleteCompanyById", () => {
+    // W-D3: deleting the Company cascades away its CrmNoteTarget/CrmTaskTarget
+    // rows, so a note/task that ONLY targeted it is left with zero targets. The
+    // delete and the prune run as one transaction, prune ops last.
+    beforeEach(() => {
+      (prisma.crmNote.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.crmTask.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.$transaction as jest.Mock).mockImplementation(
+        async (ops: unknown) => Promise.all(ops as Promise<unknown>[]),
+      );
+    });
+
     it("should delete a company successfully", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (prisma.workExperience.count as jest.Mock).mockResolvedValue(0);
@@ -588,6 +606,28 @@ describe("Company Actions", () => {
       expect(prisma.company.delete).toHaveBeenCalledWith({
         where: { id: "company-id", createdBy: mockUser.id },
       });
+    });
+
+    it("prunes CRM notes/tasks orphaned by the cascade, in one transaction (W-D3)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.workExperience.count as jest.Mock).mockResolvedValue(0);
+      (prisma.job.count as jest.Mock).mockResolvedValue(0);
+      (prisma.logoAsset.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.company.delete as jest.Mock).mockResolvedValue({ id: "company-id" });
+
+      await deleteCompanyById("company-id");
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const ops = (prisma.$transaction as jest.Mock).mock.calls[0][0];
+      expect(Array.isArray(ops)).toBe(true);
+      expect(ops).toHaveLength(3);
+
+      const prune = { where: { userId: mockUser.id, targets: { none: {} } } };
+      expect(prisma.crmNote.deleteMany).toHaveBeenCalledWith(prune);
+      expect(prisma.crmTask.deleteMany).toHaveBeenCalledWith(prune);
+      expect((prisma.company.delete as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+        (prisma.crmNote.deleteMany as jest.Mock).mock.invocationCallOrder[0],
+      );
     });
 
     it("should return error for unauthenticated user", async () => {

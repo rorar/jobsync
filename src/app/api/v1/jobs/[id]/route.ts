@@ -4,6 +4,7 @@ import { actionToResponse, errorResponse, noContentResponse } from "@/lib/api/re
 import { UpdateJobSchema, isValidUUID } from "@/lib/api/schemas";
 import { findOrCreate, JOB_DETAIL_SELECT, JOB_API_SELECT } from "@/lib/api/helpers";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
+import { buildOrphanedCrmPruneOps } from "@/lib/crm/orphan-targets";
 import { buildJobSalaryData } from "@/lib/salary/build-job-salary";
 import { parseSalaryRange } from "@/lib/salary/parse-salary-range";
 import type { JobBonus } from "@/lib/salary/bonus";
@@ -118,8 +119,13 @@ export const DELETE = withApiAuth(async (_req, { userId, params }) => {
     return errorResponse("NOT_FOUND", "Job not found", 404);
   }
 
-  // Interview, CrmInterview, JobContact, etc. cascade-delete via onDelete rules in schema
-  await prisma.job.delete({ where: { id: jobId, userId } });
+  // Interview, CrmInterview, JobContact, etc. cascade-delete via onDelete rules in
+  // schema. W-D3: the cascade also drops CrmNoteTarget/CrmTaskTarget rows, so prune
+  // any note/task left with zero targets in the same transaction (prune ops last).
+  await prisma.$transaction([
+    prisma.job.delete({ where: { id: jobId, userId } }),
+    ...buildOrphanedCrmPruneOps(prisma, userId),
+  ]);
 
   // S6a: audit the Job deletion via the public API (actor = API-key user).
   writeDataAuditLog({

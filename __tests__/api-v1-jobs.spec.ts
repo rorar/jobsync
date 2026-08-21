@@ -96,6 +96,8 @@ jest.mock("@/lib/db", () => ({
     jobStatusHistory: { create: jest.fn() },
     resume: { findFirst: jest.fn() },
     tag: { count: jest.fn() },
+    crmNote: { deleteMany: jest.fn() },
+    crmTask: { deleteMany: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
@@ -153,6 +155,8 @@ const mockPrisma = db as unknown as {
   jobStatusHistory: { create: jest.Mock };
   resume: { findFirst: jest.Mock };
   tag: { count: jest.Mock };
+  crmNote: { deleteMany: jest.Mock };
+  crmTask: { deleteMany: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -234,8 +238,15 @@ beforeEach(() => {
   mockPrisma.jobStatus.findFirst.mockResolvedValue({ id: "st-draft", value: "draft" });
   mockPrisma.jobStatusHistory.create.mockResolvedValue({ id: "hist-1" });
   mockPrisma.company.findFirst.mockResolvedValue(null);
-  // $transaction passes the same mock client as tx so tx.job.create etc. work
-  mockPrisma.$transaction.mockImplementation(async (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma));
+  mockPrisma.crmNote.deleteMany.mockResolvedValue({ count: 0 });
+  mockPrisma.crmTask.deleteMany.mockResolvedValue({ count: 0 });
+  // Callback form passes the same mock client as tx so tx.job.create etc. work;
+  // array form (W-D3 delete + orphan prune) just settles the operations in order.
+  mockPrisma.$transaction.mockImplementation(async (arg: unknown) =>
+    Array.isArray(arg)
+      ? Promise.all(arg as Promise<unknown>[])
+      : (arg as (tx: typeof mockPrisma) => Promise<unknown>)(mockPrisma),
+  );
 });
 
 // =========================================================================
@@ -966,6 +977,30 @@ describe("DELETE /api/v1/jobs/:id", () => {
     expect(res.body).toBeNull();
     // No manual interview.deleteMany — cascade handles Interview, CrmInterview, JobContact, etc.
     expect(mockPrisma.interview.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("prunes CRM notes/tasks orphaned by the cascade, in one transaction (W-D3)", async () => {
+    mockPrisma.job.findFirst.mockResolvedValue({ id: VALID_UUID });
+    mockPrisma.job.delete.mockResolvedValue({});
+
+    const req = mockRequest(`http://localhost/api/v1/jobs/${VALID_UUID}`, {
+      method: "DELETE",
+    });
+    const res = asRes(await deleteJob(req, routeCtx(VALID_UUID)));
+
+    expect(res.status).toBe(204);
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+    const ops = mockPrisma.$transaction.mock.calls[0][0];
+    expect(Array.isArray(ops)).toBe(true);
+    expect(ops).toHaveLength(3);
+
+    const prune = { where: { userId: "test-user-id", targets: { none: {} } } };
+    expect(mockPrisma.crmNote.deleteMany).toHaveBeenCalledWith(prune);
+    expect(mockPrisma.crmTask.deleteMany).toHaveBeenCalledWith(prune);
+    // Prune must be built after the delete so the cascade has already run.
+    expect(mockPrisma.job.delete.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPrisma.crmNote.deleteMany.mock.invocationCallOrder[0],
+    );
   });
 
   it("writes a job.delete data-audit entry after a successful delete (S6a)", async () => {

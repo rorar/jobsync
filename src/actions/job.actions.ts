@@ -9,6 +9,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { isValidCategoryTransitionByKind, appliedSideEffectByKind } from "@/lib/crm/status-transition";
+import { buildOrphanedCrmPruneOps } from "@/lib/crm/orphan-targets";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import { buildJobSalaryData } from "@/lib/salary/build-job-salary";
@@ -768,13 +769,20 @@ export const deleteJobById = async (
       throw new Error("errors.notAuthenticated");
     }
 
-    // CrmInterview, JobContact, etc. cascade-delete via onDelete: Cascade in schema
-    await prisma.job.delete({
-      where: {
-        id: jobId,
-        userId: user.id,
-      },
-    });
+    // CrmInterview, JobContact, etc. cascade-delete via onDelete: Cascade in schema.
+    // W-D3: that cascade also drops CrmNoteTarget/CrmTaskTarget rows, leaving a note
+    // or task targeted ONLY at this Job with zero targets — invisible on every
+    // timeline but still holding its body. Prune it in the same transaction; the
+    // prune ops run last, once the cascade has removed the join rows.
+    await prisma.$transaction([
+      prisma.job.delete({
+        where: {
+          id: jobId,
+          userId: user.id,
+        },
+      }),
+      ...buildOrphanedCrmPruneOps(prisma, user.id),
+    ]);
 
     // GDPR audit trail (S6a): record Job deletion. No snapshot. Fire-and-forget.
     writeDataAuditLog({

@@ -9,6 +9,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
+import { buildOrphanedCrmPruneOps } from "@/lib/crm/orphan-targets";
 import { deleteFileAndPruneEmptyParents } from "@/lib/assets/file-cleanup";
 import { logoAssetService, LOGO_PRUNE_LEVELS } from "@/lib/assets/logo-asset-service";
 
@@ -378,12 +379,18 @@ export const deleteCompanyById = async (
       }
     }
 
-    const res = await prisma.company.delete({
-      where: {
-        id: companyId,
-        createdBy: user.id,
-      },
-    });
+    // W-D3: deleting the Company cascades away its CrmNoteTarget/CrmTaskTarget rows,
+    // leaving a note or task targeted ONLY at this company with zero targets. Prune
+    // in the same transaction; the prune ops run last, after the cascade.
+    const [res] = await prisma.$transaction([
+      prisma.company.delete({
+        where: {
+          id: companyId,
+          createdBy: user.id,
+        },
+      }),
+      ...buildOrphanedCrmPruneOps(prisma, user.id),
+    ]);
     return { data: res, success: true };
   } catch (error) {
     const msg = "errors.deleteFailed";

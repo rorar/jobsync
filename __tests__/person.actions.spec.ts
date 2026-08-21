@@ -29,6 +29,8 @@ jest.mock("@/lib/db", () => ({
     crmBlocklist: { deleteMany: jest.fn() },
     referral: { updateMany: jest.fn() },
     personConnection: { deleteMany: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
+    crmNote: { deleteMany: jest.fn() },
+    crmTask: { deleteMany: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
@@ -64,6 +66,8 @@ const mockDb = db as unknown as {
   crmBlocklist: { deleteMany: jest.Mock };
   referral: { updateMany: jest.Mock };
   personConnection: { deleteMany: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
+  crmNote: { deleteMany: jest.Mock };
+  crmTask: { deleteMany: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -113,6 +117,8 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
     mockDb.crmTaskTarget.deleteMany.mockResolvedValue({ count: 0 });
     mockDb.crmTaskTarget.findMany.mockResolvedValue([]);
     mockDb.crmTaskTarget.updateMany.mockResolvedValue({ count: 0 });
+    mockDb.crmNote.deleteMany.mockResolvedValue({ count: 0 });
+    mockDb.crmTask.deleteMany.mockResolvedValue({ count: 0 });
     mockDb.crmInterview.updateMany.mockResolvedValue({ count: 0 });
     mockDb.crmActivityLog.updateMany.mockResolvedValue({ count: 0 });
     mockDb.jobContact.deleteMany.mockResolvedValue({ count: 0 });
@@ -157,6 +163,26 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
           task: { userId: USER.id },
         }),
       });
+    });
+
+    it("prunes notes/tasks orphaned by the target removal, last in the tx (W-D3)", async () => {
+      await anonymizePerson(PERSON_ID);
+
+      // Removing the person's note/task targets can leave a record with zero
+      // targets — invisible on every timeline, yet still holding free-text about
+      // the erased person (GDPR Art. 17). It must be pruned in the same tx.
+      const prune = { where: { userId: USER.id, targets: { none: {} } } };
+      expect(mockDb.crmNote.deleteMany).toHaveBeenCalledWith(prune);
+      expect(mockDb.crmTask.deleteMany).toHaveBeenCalledWith(prune);
+
+      // The prune matches on `targets: { none: {} }`, so it only holds once the
+      // target rows are gone — it must be built after crmNoteTarget.deleteMany.
+      expect(mockDb.crmNoteTarget.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
+        mockDb.crmNote.deleteMany.mock.invocationCallOrder[0],
+      );
+      expect(mockDb.crmTaskTarget.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
+        mockDb.crmTask.deleteMany.mock.invocationCallOrder[0],
+      );
     });
 
     it("includes userId in jobContact.deleteMany WHERE clause", async () => {

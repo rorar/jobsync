@@ -9,6 +9,7 @@ import { ActionResult } from "@/models/actionResult";
 import { handleError } from "@/lib/utils";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import { extractEmailDomain } from "@/lib/crm/blocklist-match";
+import { buildOrphanedCrmPruneOps } from "@/lib/crm/orphan-targets";
 import {
   type TypedEmail,
   type TypedPhone,
@@ -657,6 +658,12 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
           updatedBySource: "system",
         },
       }),
+      // W-D3 (GDPR Art. 17): removing the note/task targets above can leave a
+      // note or task that ONLY targeted this person with zero targets — invisible
+      // on every timeline, yet still holding free-text about the erased person.
+      // Prune that residue in the same transaction. Must stay LAST: the ops match
+      // on `targets: { none: {} }`, which only holds once the target rows are gone.
+      ...buildOrphanedCrmPruneOps(prisma, user.id),
     ]);
 
     eventBus.publish(
