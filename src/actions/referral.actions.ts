@@ -303,9 +303,12 @@ export async function commitReferralToApply(
     });
 
     // Atomic: create the Job (linked back via sourceReferralId) + its initial
-    // JobStatusHistory + convert the referral, so a converted referral always
-    // has its Job (ConvertedReferralHasJob) and the new Job is consistent with
-    // every other Job (addJob also seeds history + emits JobStatusChanged).
+    // JobStatusHistory + convert the referral, so every conversion produces a
+    // Job, and the new Job is consistent with every other Job (addJob also seeds
+    // history + emits JobStatusChanged). This transaction IS the discharge of
+    // that guarantee — see the TipReifiesToJob guidance in
+    // specs/inside-track.allium for why it is prose there and not an invariant
+    // (the Job may later be deleted without un-converting the referral).
     const result = await prisma.$transaction(async (tx) => {
       const newJob = await tx.job.create({
         data: {
