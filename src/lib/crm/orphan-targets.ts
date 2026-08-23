@@ -1,57 +1,80 @@
 /**
- * Pruning of CRM notes/tasks orphaned by a target deletion (W-D3).
+ * Pruning of CRM notes orphaned by a target deletion (W-D3).
  *
- * `CrmNoteTarget` / `CrmTaskTarget` are polymorphic join rows that cascade-delete
- * with their target Person, Company or Job (`onDelete: Cascade`, schema.prisma).
- * A note or task whose ONLY target was that entity therefore survives with zero
- * targets: unreachable on every timeline (all reads filter via `targets.some`),
- * yet still holding its free-text body — which, on the GDPR erasure path, is
- * free-text about the very person being erased.
+ * `CrmNoteTarget` / `CrmTaskTarget` are polymorphic join rows (schema.prisma)
+ * that cascade-delete with their target Person, Company or Job
+ * (`onDelete: Cascade`).
  *
- * That state is not reachable by any legal action: CreateNote/CreateTask require
- * `targets.count > 0` (specs/crm.allium), and creation is atomic (nested
- * `targets: { create: [...] }`), so a zero-target record is always residue and
- * can be pruned unconditionally per user.
+ * A NOTE whose only target was that entity is then unreachable: every note read
+ * goes through a target filter (`getCrmNotes` is only ever called as
+ * `getCrmNotes({ targetPersonId })`), so the note disappears from the UI while
+ * still holding its free-text body — which, on the GDPR erasure path, is free
+ * text about the very person being erased. `CreateNote` requires
+ * `targets.count > 0` (specs/crm.allium) and creation is atomic (nested
+ * `targets: { create: [...] }`), so a zero-target note is always residue and can
+ * be pruned unconditionally per user.
  *
- * ORDERING: these ops must run AFTER the target rows are gone. Inside a Prisma
- * array transaction the statements execute in order, so append them LAST:
+ * A TASK is deliberately NOT pruned. It is not residue:
+ *   - the task board reads `getCrmTasks()` with no filter
+ *     (`CrmTasksPageClient`) and renders the zero-target case explicitly, so an
+ *     orphaned task stays visible and actionable;
+ *   - `checkOverdueTasks` (`src/lib/scheduler/crm-cron.ts`) selects on status +
+ *     dueDate alone, so reminders keep firing for it.
+ * Deleting one would also bypass `rule DeleteTask` (specs/crm.allium), which
+ * permits a hard delete only for a task in a terminal status — the guard
+ * `deleteCrmTask` enforces (W-A1). A task that loses its last target simply
+ * loses its link: `targets.count > 0` is an obligation on the creating action,
+ * not a standing predicate over current state (the same reasoning that moved
+ * the converted-referral guarantee onto `TipReifiesToJob`, W-D2).
  *
- *   await prisma.$transaction([
- *     prisma.job.delete({ where: { id, userId } }),
- *     ...buildOrphanedCrmPruneOps(prisma, userId),
- *   ]);
+ * ORDERING: the prune matches on `targets: { none: {} }`, which only holds once
+ * the cascade has removed the join rows, so it must run AFTER the delete. Prisma
+ * array transactions execute in order — `withOrphanedCrmPrune` owns that
+ * position so a caller cannot get it wrong:
  *
- * Spec: specs/crm.allium (ExactlyOneTaskTarget / ExactlyOneNoteTarget constrain a
- * single join row; the "a record always has at least one target" obligation lives
- * on CreateNote/CreateTask and is upheld here on the delete side).
+ *   await prisma.$transaction(
+ *     withOrphanedCrmPrune(prisma, userId, [
+ *       prisma.job.delete({ where: { id, userId } }),
+ *     ]),
+ *   );
  */
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 /** Accepts the full client or a transaction client. */
-type CrmPruneDb = Pick<PrismaClient, "crmNote" | "crmTask"> | Prisma.TransactionClient;
+type CrmPruneDb = Pick<PrismaClient, "crmNote"> | Prisma.TransactionClient;
 
-/**
- * Build the two deleteMany operations that remove the user's zero-target notes
- * and tasks. Returns unawaited Prisma promises for use in an array transaction —
- * append them last (see ORDERING above).
- */
-export function buildOrphanedCrmPruneOps(db: CrmPruneDb, userId: string) {
-  const where = { userId, targets: { none: {} } };
-  return [
-    db.crmNote.deleteMany({ where }),
-    db.crmTask.deleteMany({ where }),
-  ];
+type PruneOp = Prisma.PrismaPromise<Prisma.BatchPayload>;
+
+function orphanedNotePruneOp(db: CrmPruneDb, userId: string): PruneOp {
+  return db.crmNote.deleteMany({ where: { userId, targets: { none: {} } } });
 }
 
 /**
- * Await-and-count variant for interactive contexts (already inside a `$transaction`
- * callback, or where the caller wants the prune counts).
+ * Append the orphaned-note prune to a set of transaction operations. Pass the
+ * result straight to `prisma.$transaction` — the prune is always last, and the
+ * caller's own tuple types survive, so destructuring still works:
+ *
+ *   const [company] = await prisma.$transaction(
+ *     withOrphanedCrmPrune(prisma, userId, [prisma.company.delete({ ... })]),
+ *   );
  */
-export async function pruneOrphanedCrmRecords(
+export function withOrphanedCrmPrune<T extends readonly Prisma.PrismaPromise<unknown>[]>(
   db: CrmPruneDb,
   userId: string,
-): Promise<{ notes: number; tasks: number }> {
-  const [notes, tasks] = await Promise.all(buildOrphanedCrmPruneOps(db, userId));
-  return { notes: notes.count, tasks: tasks.count };
+  ops: readonly [...T],
+): [...T, PruneOp] {
+  return [...ops, orphanedNotePruneOp(db, userId)] as [...T, PruneOp];
+}
+
+/**
+ * Await-and-count variant, for callers that are not building a transaction
+ * array (or are already inside a `$transaction` callback).
+ */
+export async function pruneOrphanedCrmNotes(
+  db: CrmPruneDb,
+  userId: string,
+): Promise<number> {
+  const { count } = await orphanedNotePruneOp(db, userId);
+  return count;
 }

@@ -1,73 +1,82 @@
 /**
- * W-D3: pruning CRM notes/tasks orphaned by a target deletion.
+ * W-D3: pruning CRM notes orphaned by a target deletion.
  *
  * CrmNoteTarget/CrmTaskTarget cascade-delete with their target Person, Company
- * or Job. A note/task whose ONLY target was that entity survives with zero
- * targets — invisible on every timeline (reads filter via `targets.some`) yet
- * still holding its free-text body. These helpers remove that residue.
+ * or Job. A NOTE whose only target was that entity is then unreachable — every
+ * note read goes through a target filter — so it is residue and is pruned.
+ *
+ * A TASK is not: the board lists tasks unfiltered and renders the zero-target
+ * case, and the overdue cron selects on status+dueDate alone. Deleting one would
+ * also bypass `rule DeleteTask` (crm.allium), which permits a hard delete only
+ * for terminal tasks. Tasks must survive with no targets.
  */
 
 import {
-  buildOrphanedCrmPruneOps,
-  pruneOrphanedCrmRecords,
+  withOrphanedCrmPrune,
+  pruneOrphanedCrmNotes,
 } from "@/lib/crm/orphan-targets";
 
 const USER_ID = "user-1";
 
 function fakeDb() {
   return {
-    crmNote: { deleteMany: jest.fn().mockResolvedValue({ count: 2 }) },
-    crmTask: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    crmNote: { deleteMany: jest.fn().mockReturnValue({ __op: "notePrune" }) },
+    crmTask: { deleteMany: jest.fn() },
   };
 }
 
-describe("buildOrphanedCrmPruneOps", () => {
-  it("builds one note op and one task op, in that order", () => {
+describe("withOrphanedCrmPrune", () => {
+  it("appends the note prune after the caller's operations", () => {
     const db = fakeDb();
-    const ops = buildOrphanedCrmPruneOps(db as never, USER_ID);
+    const del = { __op: "delete" };
+
+    const ops = withOrphanedCrmPrune(db as never, USER_ID, [del as never]);
 
     expect(ops).toHaveLength(2);
-    expect(db.crmNote.deleteMany).toHaveBeenCalledTimes(1);
-    expect(db.crmTask.deleteMany).toHaveBeenCalledTimes(1);
+    expect(ops[0]).toBe(del);
+    expect(ops[1]).toEqual({ __op: "notePrune" });
   });
 
-  it("scopes both ops to the owning user and to zero-target records only", () => {
+  it("keeps the prune last no matter how many operations precede it", () => {
     const db = fakeDb();
-    buildOrphanedCrmPruneOps(db as never, USER_ID);
+    const before = [{ a: 1 }, { b: 2 }, { c: 3 }];
 
-    const expected = { where: { userId: USER_ID, targets: { none: {} } } };
-    expect(db.crmNote.deleteMany).toHaveBeenCalledWith(expected);
-    expect(db.crmTask.deleteMany).toHaveBeenCalledWith(expected);
+    const ops = withOrphanedCrmPrune(db as never, USER_ID, before as never);
+
+    // The wrapper owns the position, so a caller cannot append past the prune.
+    expect(ops).toHaveLength(4);
+    expect(ops.slice(0, 3)).toEqual(before);
+    expect(ops[3]).toEqual({ __op: "notePrune" });
   });
 
-  it("never deletes records that still have a target (no unscoped where)", () => {
+  it("scopes the prune to the owning user and to zero-target notes only", () => {
     const db = fakeDb();
-    buildOrphanedCrmPruneOps(db as never, USER_ID);
+    withOrphanedCrmPrune(db as never, USER_ID, []);
 
-    for (const mock of [db.crmNote.deleteMany, db.crmTask.deleteMany]) {
-      const arg = mock.mock.calls[0][0] as { where: Record<string, unknown> };
-      expect(arg.where.targets).toEqual({ none: {} });
-      expect(arg.where.userId).toBe(USER_ID);
-    }
+    expect(db.crmNote.deleteMany).toHaveBeenCalledWith({
+      where: { userId: USER_ID, targets: { none: {} } },
+    });
+  });
+
+  it("never deletes tasks — an orphaned task stays visible on the board", () => {
+    const db = fakeDb();
+    withOrphanedCrmPrune(db as never, USER_ID, []);
+
+    expect(db.crmTask.deleteMany).not.toHaveBeenCalled();
   });
 });
 
-describe("pruneOrphanedCrmRecords", () => {
-  it("returns the number of pruned notes and tasks", async () => {
-    const db = fakeDb();
+describe("pruneOrphanedCrmNotes", () => {
+  it("deletes the user's zero-target notes and returns the count", async () => {
+    const db = {
+      crmNote: { deleteMany: jest.fn().mockResolvedValue({ count: 3 }) },
+      crmTask: { deleteMany: jest.fn() },
+    };
 
-    await expect(pruneOrphanedCrmRecords(db as never, USER_ID)).resolves.toEqual({
-      notes: 2,
-      tasks: 1,
-    });
-  });
-
-  it("scopes the prune to the owning user", async () => {
-    const db = fakeDb();
-    await pruneOrphanedCrmRecords(db as never, "other-user");
-
+    await expect(pruneOrphanedCrmNotes(db as never, USER_ID)).resolves.toBe(3);
     expect(db.crmNote.deleteMany).toHaveBeenCalledWith({
-      where: { userId: "other-user", targets: { none: {} } },
+      where: { userId: USER_ID, targets: { none: {} } },
     });
+    expect(db.crmTask.deleteMany).not.toHaveBeenCalled();
   });
 });

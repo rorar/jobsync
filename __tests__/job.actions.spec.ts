@@ -1119,9 +1119,10 @@ describe("jobActions", () => {
         message: "errors.deleteJob",
       });
     });
-    // W-D3: the Job delete cascades away CrmNoteTarget/CrmTaskTarget rows, so a
-    // note or task that ONLY targeted this Job is left with zero targets. The
-    // delete and the prune must be one atomic transaction, prune ops last.
+    // W-D3: the Job delete cascades away CrmNoteTarget rows, so a note that ONLY
+    // targeted this Job is left unreachable. Delete + prune are one atomic
+    // transaction, prune last. Tasks are NOT pruned — they stay visible on the
+    // board, and deleting an active one would bypass rule DeleteTask (W-A1).
     const wireArrayTransaction = () =>
       (prisma.$transaction as jest.Mock).mockImplementation(
         async (ops: unknown) => Promise.all(ops as Promise<unknown>[]),
@@ -1132,7 +1133,7 @@ describe("jobActions", () => {
       (prisma.crmTask.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
     });
 
-    it("deletes the job and prunes CRM records orphaned by the cascade (W-D3)", async () => {
+    it("deletes the job and prunes notes orphaned by the cascade (W-D3)", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (prisma.job.delete as jest.Mock).mockResolvedValue(jobData);
       wireArrayTransaction();
@@ -1147,25 +1148,30 @@ describe("jobActions", () => {
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       const ops = (prisma.$transaction as jest.Mock).mock.calls[0][0];
       expect(Array.isArray(ops)).toBe(true);
-      expect(ops).toHaveLength(3);
+      expect(ops).toHaveLength(2);
 
-      const prune = { where: { userId: mockUser.id, targets: { none: {} } } };
-      expect(prisma.crmNote.deleteMany).toHaveBeenCalledWith(prune);
-      expect(prisma.crmTask.deleteMany).toHaveBeenCalledWith(prune);
+      expect(prisma.crmNote.deleteMany).toHaveBeenCalledWith({
+        where: { userId: mockUser.id, targets: { none: {} } },
+      });
+      // An orphaned TASK is not residue — the board lists tasks unfiltered and
+      // renders the zero-target case, and rule DeleteTask forbids hard-deleting
+      // a non-terminal task. It must survive the job deletion.
+      expect(prisma.crmTask.deleteMany).not.toHaveBeenCalled();
     });
 
-    it("orders the prune after the delete so the cascade has already run (W-D3)", async () => {
+    it("puts the prune LAST in the transaction array, after the delete (W-D3)", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (prisma.job.delete as jest.Mock).mockResolvedValue(jobData);
       wireArrayTransaction();
 
       await deleteJobById("job-id");
 
-      const deleteOrder = (prisma.job.delete as jest.Mock).mock.invocationCallOrder[0];
-      const noteOrder = (prisma.crmNote.deleteMany as jest.Mock).mock.invocationCallOrder[0];
-      const taskOrder = (prisma.crmTask.deleteMany as jest.Mock).mock.invocationCallOrder[0];
-      expect(deleteOrder).toBeLessThan(noteOrder);
-      expect(deleteOrder).toBeLessThan(taskOrder);
+      // Position in the array is what Prisma actually executes on — asserting
+      // build order alone would not catch an op appended after the prune.
+      const ops = (prisma.$transaction as jest.Mock).mock.calls[0][0];
+      const pruneOp = (prisma.crmNote.deleteMany as jest.Mock).mock.results[0].value;
+      expect(ops[ops.length - 1]).toBe(pruneOp);
+      expect(ops[0]).toBe((prisma.job.delete as jest.Mock).mock.results[0].value);
     });
 
     it("should handle unexpected errors from job.delete", async () => {

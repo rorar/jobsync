@@ -18,6 +18,7 @@ import {
   MOCK_VALUE_PREFIX,
 } from "@/lib/data/mockProfileData";
 import { subYears } from "date-fns";
+import { pruneOrphanedCrmNotes } from "@/lib/crm/orphan-targets";
 
 export const generateMockActivitiesAction = async (): Promise<ActionResult<Activity[]>> => {
   try {
@@ -519,6 +520,12 @@ export const clearMockProfileDataAction = async (): Promise<
           },
         }),
       ]);
+
+    // W-D3: deleting mock jobs/companies cascades away their CrmNoteTarget rows,
+    // so a real note attached only to a mock record would be left unreachable
+    // (every note read filters by target). Prune that residue. Tasks are left
+    // alone — they stay visible on the board; see the orphan-targets module docs.
+    await pruneOrphanedCrmNotes(prisma, user.id);
 
     const companiesCount =
       deletedCompanies.status === "fulfilled"

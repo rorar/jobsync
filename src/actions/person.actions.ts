@@ -9,7 +9,7 @@ import { ActionResult } from "@/models/actionResult";
 import { handleError } from "@/lib/utils";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import { extractEmailDomain } from "@/lib/crm/blocklist-match";
-import { buildOrphanedCrmPruneOps } from "@/lib/crm/orphan-targets";
+import { withOrphanedCrmPrune } from "@/lib/crm/orphan-targets";
 import {
   type TypedEmail,
   type TypedPhone,
@@ -565,106 +565,107 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
     const blockedHandles = [...new Set([...personEmails, ...personPhones, ...personEmailDomains])];
 
     // Transaction: anonymize person + cascade delete targets (GDPR Art. 17)
-    await prisma.$transaction([
-      // Remove note targets (ADR-015: scoped via note.userId — CrmNoteTarget has no userId column)
-      prisma.crmNoteTarget.deleteMany({ where: { targetPersonId: personId, note: { userId: user.id } } }),
-      // Remove task targets (ADR-015: scoped via task.userId — CrmTaskTarget has no userId column)
-      prisma.crmTaskTarget.deleteMany({ where: { targetPersonId: personId, task: { userId: user.id } } }),
-      // Remove job contacts (Kette C) (ADR-015: userId in where)
-      prisma.jobContact.deleteMany({ where: { personId, userId: user.id } }),
-      // Detach interviews + scrub free-text fields (G2 fix, ADR-015: userId in where)
-      prisma.crmInterview.updateMany({
-        where: { personId, userId: user.id },
-        data: {
-          personId: null,
-          notes: null,
-          outcomeNotes: null,
-          // Welle 3 (Gap-7): the erasing user is the actor of this cascade edit.
-          updatedByType: "user",
-          updatedById: user.id,
-        },
-      }),
-      // Anonymize activity log references + scrub PII text fields (S5 fix, ADR-015: userId in where)
-      prisma.crmActivityLog.updateMany({
-        where: { targetPersonId: personId, userId: user.id },
-        data: { targetPersonId: null, details: null, linkedRecordName: null },
-      }),
-      // Remove blocklist entries for this person's emails, phones, and email
-      // domains (S5 fix + W-C3 domain/phone arms).
-      ...(blockedHandles.length > 0
-        ? [prisma.crmBlocklist.deleteMany({
-            where: { userId: user.id, handle: { in: blockedHandles } },
-          })]
-        : []),
-      // Inside Track (Welle 5) GDPR cascade — AnonymizeCascadesToInsideTrack
-      // (specs/inside-track.allium). Network edges are hard-removed (they exist
-      // only to re-identify a path); Referral.viaId is onDelete:SetNull, so any
-      // NetworkPath.via pointing at a removed edge is nulled by the DB (G-B).
-      prisma.personConnection.deleteMany({
-        where: { userId: user.id, OR: [{ fromPersonId: personId }, { toPersonId: personId }] },
-      }),
-      // G-A: sever the variant-specific Person references (Person row is kept,
-      // so the FKs are NOT auto-nulled — do it explicitly).
-      prisma.referral.updateMany({
-        where: { userId: user.id, forwardedToId: personId },
-        data: { forwardedToId: null },
-      }),
-      prisma.referral.updateMany({
-        where: { userId: user.id, insiderId: personId },
-        data: { insiderId: null },
-      }),
-      // Tipster de-identified: a still-working tip is also declined (the
-      // door-opener is gone); a terminal tip (converted/declined) keeps its
-      // status and only loses the link (avoids an illegal declined->declined).
-      prisma.referral.updateMany({
-        where: {
-          userId: user.id,
-          tipsterId: personId,
-          status: { notIn: ["converted", "declined"] },
-        },
-        data: { tipsterId: null, status: "declined" },
-      }),
-      prisma.referral.updateMany({
-        where: {
-          userId: user.id,
-          tipsterId: personId,
-          status: { in: ["converted", "declined"] },
-        },
-        data: { tipsterId: null },
-      }),
-      // Anonymize the person record
-      prisma.person.update({
-        where: { id: personId, userId: user.id },
-        data: {
-          status: "anonymized",
-          firstName: null,
-          lastName: null,
-          emails: "[]",
-          phones: "[]",
-          companies: "[]",
-          headline: null,
-          socialProfiles: "[]",
-          avatarUrl: null,
-          addressStreet: null,
-          addressCity: null,
-          addressPostalCode: null,
-          addressCountry: null,
-          addressCountryCode: null,
-          addressSubdivisionCode: null,
-          createdByName: null,
-          updatedByName: null,
-          // W-C4: the erasure is a system action, not a human edit — record it
-          // so the tombstone does not claim a person last touched the record.
-          updatedBySource: "system",
-        },
-      }),
-      // W-D3 (GDPR Art. 17): removing the note/task targets above can leave a
-      // note or task that ONLY targeted this person with zero targets — invisible
-      // on every timeline, yet still holding free-text about the erased person.
-      // Prune that residue in the same transaction. Must stay LAST: the ops match
-      // on `targets: { none: {} }`, which only holds once the target rows are gone.
-      ...buildOrphanedCrmPruneOps(prisma, user.id),
-    ]);
+    await prisma.$transaction(
+      // W-D3 (GDPR Art. 17): removing the note targets above can leave a note
+      // that ONLY targeted this person with zero targets — unreachable in the UI,
+      // yet still holding free text about the erased person. withOrphanedCrmPrune
+      // appends that prune after every statement below. Tasks are left alone (they
+      // stay visible on the board) — see the orphan-targets module docs.
+      withOrphanedCrmPrune(prisma, user.id, [
+        // Remove note targets (ADR-015: scoped via note.userId — CrmNoteTarget has no userId column)
+        prisma.crmNoteTarget.deleteMany({ where: { targetPersonId: personId, note: { userId: user.id } } }),
+        // Remove task targets (ADR-015: scoped via task.userId — CrmTaskTarget has no userId column)
+        prisma.crmTaskTarget.deleteMany({ where: { targetPersonId: personId, task: { userId: user.id } } }),
+        // Remove job contacts (Kette C) (ADR-015: userId in where)
+        prisma.jobContact.deleteMany({ where: { personId, userId: user.id } }),
+        // Detach interviews + scrub free-text fields (G2 fix, ADR-015: userId in where)
+        prisma.crmInterview.updateMany({
+          where: { personId, userId: user.id },
+          data: {
+            personId: null,
+            notes: null,
+            outcomeNotes: null,
+            // Welle 3 (Gap-7): the erasing user is the actor of this cascade edit.
+            updatedByType: "user",
+            updatedById: user.id,
+          },
+        }),
+        // Anonymize activity log references + scrub PII text fields (S5 fix, ADR-015: userId in where)
+        prisma.crmActivityLog.updateMany({
+          where: { targetPersonId: personId, userId: user.id },
+          data: { targetPersonId: null, details: null, linkedRecordName: null },
+        }),
+        // Remove blocklist entries for this person's emails, phones, and email
+        // domains (S5 fix + W-C3 domain/phone arms).
+        ...(blockedHandles.length > 0
+          ? [prisma.crmBlocklist.deleteMany({
+              where: { userId: user.id, handle: { in: blockedHandles } },
+            })]
+          : []),
+        // Inside Track (Welle 5) GDPR cascade — AnonymizeCascadesToInsideTrack
+        // (specs/inside-track.allium). Network edges are hard-removed (they exist
+        // only to re-identify a path); Referral.viaId is onDelete:SetNull, so any
+        // NetworkPath.via pointing at a removed edge is nulled by the DB (G-B).
+        prisma.personConnection.deleteMany({
+          where: { userId: user.id, OR: [{ fromPersonId: personId }, { toPersonId: personId }] },
+        }),
+        // G-A: sever the variant-specific Person references (Person row is kept,
+        // so the FKs are NOT auto-nulled — do it explicitly).
+        prisma.referral.updateMany({
+          where: { userId: user.id, forwardedToId: personId },
+          data: { forwardedToId: null },
+        }),
+        prisma.referral.updateMany({
+          where: { userId: user.id, insiderId: personId },
+          data: { insiderId: null },
+        }),
+        // Tipster de-identified: a still-working tip is also declined (the
+        // door-opener is gone); a terminal tip (converted/declined) keeps its
+        // status and only loses the link (avoids an illegal declined->declined).
+        prisma.referral.updateMany({
+          where: {
+            userId: user.id,
+            tipsterId: personId,
+            status: { notIn: ["converted", "declined"] },
+          },
+          data: { tipsterId: null, status: "declined" },
+        }),
+        prisma.referral.updateMany({
+          where: {
+            userId: user.id,
+            tipsterId: personId,
+            status: { in: ["converted", "declined"] },
+          },
+          data: { tipsterId: null },
+        }),
+        // Anonymize the person record
+        prisma.person.update({
+          where: { id: personId, userId: user.id },
+          data: {
+            status: "anonymized",
+            firstName: null,
+            lastName: null,
+            emails: "[]",
+            phones: "[]",
+            companies: "[]",
+            headline: null,
+            socialProfiles: "[]",
+            avatarUrl: null,
+            addressStreet: null,
+            addressCity: null,
+            addressPostalCode: null,
+            addressCountry: null,
+            addressCountryCode: null,
+            addressSubdivisionCode: null,
+            createdByName: null,
+            updatedByName: null,
+            // W-C4: the erasure is a system action, not a human edit — record it
+            // so the tombstone does not claim a person last touched the record.
+            updatedBySource: "system",
+          },
+        }),
+      ]),
+    );
 
     eventBus.publish(
       createEvent(DomainEventType.ContactDeleted, {

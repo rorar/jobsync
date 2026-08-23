@@ -1,8 +1,8 @@
 # `allium:weed` findings — 2026-08-17 (`crm.allium` + `inside-track.allium`)
 
 Spec↔code divergences from a systematic `allium:weed` pass.
-**35 findings — 34 resolved, 1 aspirational (W-F2, not a bug).**
-*(W-D3 was found on 2026-08-21 while reviewing the W-D2 decision — see below.)*
+**36 findings — 34 resolved, 1 open (W-D4), 1 aspirational (W-F2, not a bug).**
+*(W-D3 found 2026-08-21 while reviewing the W-D2 decision; W-D4 split off from it 2026-08-23.)*
 
 > **Resolution pass 2026-08-20.** The remaining code + spec findings were closed in
 > two commits (`5c49bb43` code, `71da1c52` specs). Code side: W-B2 (isValidInterviewOutcome
@@ -194,33 +194,51 @@ anonymization only). FK behaviour then applies: `Referral.tipsterId/insiderId/fo
 hard-deletes every network edge on the loser. **Silent data loss on a routine, non-GDPR
 housekeeping operation**, producing exactly the state W-C2's undeclared invariant would forbid.
 
-**W-D3 — deleting a Person, Company or Job silently orphans CRM notes/tasks. [High] [code] — ✅ RESOLVED 2026-08-21**
+**W-D3 — deleting a Person, Company or Job silently orphans CRM notes. [High] [code] — ✅ RESOLVED 2026-08-21, CORRECTED 2026-08-23**
 Found while checking the W-D2 claim that Job-delete is a "single-entity operation". It is not.
 `CrmNoteTarget.targetJob` / `targetPerson` / `targetCompany` and the `CrmTaskTarget` equivalents are
 all `onDelete: Cascade` (`prisma/schema.prisma:1186,1225` and the person/company arms). Deleting the
-target removes the join rows, so a note or task whose ONLY target was that entity survives with
-**zero targets** — unreachable on every timeline (all reads filter via `targets.some`), yet still
-holding its free-text body. No cleanup existed. `CreateNote`/`CreateTask` require `targets.count > 0`
-(`crm.allium:913,1032`) and creation is atomic (nested `targets: { create: [...] }`), so a
-zero-target record is not reachable by any legal action — it is pure residue.
+target removes the join rows, so a record whose ONLY target was that entity survives with **zero
+targets**. `CreateNote`/`CreateTask` require `targets.count > 0` (`crm.allium:913,1032`) and creation
+is atomic, so that state is not reachable by any legal action.
 
-Three consequences, in ascending severity:
-- Silent data residue on a routine housekeeping operation (delete a job, lose its notes from view).
-- **GDPR Art. 17:** on `anonymizePerson` the orphan is free text *about the person being erased*,
-  retained indefinitely and invisible to the UI that would let the user delete it.
-- **Blocks the planned Job-undo** (ROADMAP "Undo-Erweiterung"): a Job-only snapshot cannot restore
-  the cascaded join rows, so notes/tasks would stay detached after an undo.
+**Notes are residue; tasks are not.** Every note read filters by target (`getCrmNotes` is only ever
+called as `getCrmNotes({ targetPersonId })`), so an orphaned note vanishes from the UI while keeping
+its free-text body — on `anonymizePerson` that is free text *about the person being erased*, retained
+indefinitely and invisible to the UI that would let the user delete it (GDPR Art. 17). Notes are
+therefore pruned.
 
-Fix: `src/lib/crm/orphan-targets.ts` (`buildOrphanedCrmPruneOps` / `pruneOrphanedCrmRecords`) deletes
-the user's zero-target notes and tasks. Wired into all four delete paths, appended LAST inside the
-existing/new `$transaction` array so the ops run after the cascade has removed the join rows:
-`deleteJobById` (`job.actions.ts`), `DELETE /api/v1/jobs/:id`, `deleteCompanyById`
-(`company.actions.ts`), and `anonymizePerson` (`person.actions.ts`). `mergePersons` was checked and is
-NOT affected — it already dedupes and transfers targets to the winner (`person.actions.ts:726-833`).
-`CrmActivityLog.targetJobId` is `onDelete: SetNull`, so the timeline history of the conversion
-survives a Job deletion — which is what makes W-D2's "converted is a historical fact" defensible.
-Tests: `__tests__/crm-orphan-prune.spec.ts` plus per-call-site assertions (one transaction, prune
-scoped to `userId` + `targets: { none: {} }`, prune ordered after the delete).
+Tasks are left alone. The first implementation pruned them too, on a false premise — corrected
+2026-08-23 after the Phase-1 quality review:
+- the board reads `getCrmTasks()` with **no filter** (`CrmTasksPageClient.tsx:101`) and renders the
+  zero-target case explicitly, so an orphaned task stays visible and actionable;
+- `checkOverdueTasks` (`src/lib/scheduler/crm-cron.ts:240`) selects on status + dueDate alone, so it
+  keeps firing reminders for it;
+- worst of all, a blanket prune hard-deleted `pending` tasks, bypassing `rule DeleteTask`
+  (`crm.allium:987`, terminal-only) — the exact guard **W-A1** had added to `deleteCrmTask`. The fix
+  re-opened a closed finding through a second path.
+A task that loses its last target simply loses its link: `targets.count > 0` is an obligation on the
+creating action, not a standing predicate (the same reasoning as `TipReifiesToJob`, W-D2).
+
+Fix: `src/lib/crm/orphan-targets.ts`. `withOrphanedCrmPrune(db, userId, ops)` returns the caller's
+transaction array with the note prune appended — the helper **owns** the last position, so a caller
+cannot append past it (the earlier `...buildOrphanedCrmPruneOps(...)` spread could be mispositioned,
+and a `PrismaPromise` is lazy, so a dropped op is a silent no-op rather than an error). Wired into
+five paths: `deleteJobById`, `DELETE /api/v1/jobs/:id`, `deleteCompanyById`, `anonymizePerson`, and
+`clearMockProfileDataAction` (via the awaited `pruneOrphanedCrmNotes`). `mergePersons` was checked and
+is NOT affected — it dedupes and transfers targets to the winner (`person.actions.ts:726-833`).
+`CrmActivityLog.targetJobId` is `onDelete: SetNull`, so the timeline history of a conversion survives
+a Job deletion — which is what makes W-D2's "converted is a historical fact" defensible.
+Tests assert array **position** (not build order), that tasks are never deleted, and the `userId` +
+`targets: { none: {} }` scoping.
+
+**W-D4 — open, deliberately not fixed here.** An orphaned *task* keeps its title/description, which on
+the `anonymizePerson` path may contain free text about the erased person. Deleting it is wrong (see
+above) and the established GDPR pattern in this codebase is to **scrub** free text rather than delete
+the row (`crmInterview.updateMany` sets `notes: null, outcomeNotes: null` in the same transaction).
+Deciding whether task free-text should be scrubbed on erasure is a product/DPO call, not a
+reconciliation.
+
 
 **W-D2 — `ConvertedReferralHasJob` is unenforceable against Job deletion. [Medium-High] [both] — ✅ RESOLVED 2026-08-20 (decision C)**
 Reshaped to a conversion-time obligation instead of a standing predicate: `converted` is a

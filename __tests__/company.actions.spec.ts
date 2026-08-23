@@ -581,9 +581,9 @@ describe("Company Actions", () => {
   });
 
   describe("deleteCompanyById", () => {
-    // W-D3: deleting the Company cascades away its CrmNoteTarget/CrmTaskTarget
-    // rows, so a note/task that ONLY targeted it is left with zero targets. The
-    // delete and the prune run as one transaction, prune ops last.
+    // W-D3: deleting the Company cascades away its CrmNoteTarget rows, so a note
+    // that ONLY targeted it is left unreachable. Delete + prune run as one
+    // transaction, prune last. Tasks are not pruned (still visible on the board).
     beforeEach(() => {
       (prisma.crmNote.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.crmTask.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
@@ -608,7 +608,7 @@ describe("Company Actions", () => {
       });
     });
 
-    it("prunes CRM notes/tasks orphaned by the cascade, in one transaction (W-D3)", async () => {
+    it("prunes notes orphaned by the cascade, in one transaction (W-D3)", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (prisma.workExperience.count as jest.Mock).mockResolvedValue(0);
       (prisma.job.count as jest.Mock).mockResolvedValue(0);
@@ -620,13 +620,15 @@ describe("Company Actions", () => {
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       const ops = (prisma.$transaction as jest.Mock).mock.calls[0][0];
       expect(Array.isArray(ops)).toBe(true);
-      expect(ops).toHaveLength(3);
+      expect(ops).toHaveLength(2);
 
-      const prune = { where: { userId: mockUser.id, targets: { none: {} } } };
-      expect(prisma.crmNote.deleteMany).toHaveBeenCalledWith(prune);
-      expect(prisma.crmTask.deleteMany).toHaveBeenCalledWith(prune);
-      expect((prisma.company.delete as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
-        (prisma.crmNote.deleteMany as jest.Mock).mock.invocationCallOrder[0],
+      expect(prisma.crmNote.deleteMany).toHaveBeenCalledWith({
+        where: { userId: mockUser.id, targets: { none: {} } },
+      });
+      expect(prisma.crmTask.deleteMany).not.toHaveBeenCalled();
+      // The prune must be the LAST op in the array.
+      expect(ops[ops.length - 1]).toBe(
+        (prisma.crmNote.deleteMany as jest.Mock).mock.results[0].value,
       );
     });
 

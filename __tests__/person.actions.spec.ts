@@ -165,24 +165,25 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
       });
     });
 
-    it("prunes notes/tasks orphaned by the target removal, last in the tx (W-D3)", async () => {
+    it("prunes notes orphaned by the target removal, last in the tx (W-D3)", async () => {
       await anonymizePerson(PERSON_ID);
 
-      // Removing the person's note/task targets can leave a record with zero
-      // targets — invisible on every timeline, yet still holding free-text about
-      // the erased person (GDPR Art. 17). It must be pruned in the same tx.
-      const prune = { where: { userId: USER.id, targets: { none: {} } } };
-      expect(mockDb.crmNote.deleteMany).toHaveBeenCalledWith(prune);
-      expect(mockDb.crmTask.deleteMany).toHaveBeenCalledWith(prune);
+      // Removing the person's note targets can leave a note with zero targets —
+      // unreachable in the UI, yet still holding free text about the erased
+      // person (GDPR Art. 17). It must be pruned in the same tx.
+      expect(mockDb.crmNote.deleteMany).toHaveBeenCalledWith({
+        where: { userId: USER.id, targets: { none: {} } },
+      });
+
+      // Tasks are NOT pruned: an orphaned task stays visible on the board and
+      // still fires overdue reminders, and rule DeleteTask forbids hard-deleting
+      // a non-terminal task.
+      expect(mockDb.crmTask.deleteMany).not.toHaveBeenCalled();
 
       // The prune matches on `targets: { none: {} }`, so it only holds once the
-      // target rows are gone — it must be built after crmNoteTarget.deleteMany.
-      expect(mockDb.crmNoteTarget.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
-        mockDb.crmNote.deleteMany.mock.invocationCallOrder[0],
-      );
-      expect(mockDb.crmTaskTarget.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
-        mockDb.crmTask.deleteMany.mock.invocationCallOrder[0],
-      );
+      // target rows are gone — it must be the LAST op in the transaction array.
+      const ops = mockDb.$transaction.mock.calls[0][0];
+      expect(ops[ops.length - 1]).toBe(mockDb.crmNote.deleteMany.mock.results[0].value);
     });
 
     it("includes userId in jobContact.deleteMany WHERE clause", async () => {

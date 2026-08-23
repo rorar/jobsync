@@ -979,7 +979,7 @@ describe("DELETE /api/v1/jobs/:id", () => {
     expect(mockPrisma.interview.deleteMany).not.toHaveBeenCalled();
   });
 
-  it("prunes CRM notes/tasks orphaned by the cascade, in one transaction (W-D3)", async () => {
+  it("prunes notes orphaned by the cascade, in one transaction (W-D3)", async () => {
     mockPrisma.job.findFirst.mockResolvedValue({ id: VALID_UUID });
     mockPrisma.job.delete.mockResolvedValue({});
 
@@ -992,15 +992,16 @@ describe("DELETE /api/v1/jobs/:id", () => {
     expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
     const ops = mockPrisma.$transaction.mock.calls[0][0];
     expect(Array.isArray(ops)).toBe(true);
-    expect(ops).toHaveLength(3);
+    expect(ops).toHaveLength(2);
 
-    const prune = { where: { userId: "test-user-id", targets: { none: {} } } };
-    expect(mockPrisma.crmNote.deleteMany).toHaveBeenCalledWith(prune);
-    expect(mockPrisma.crmTask.deleteMany).toHaveBeenCalledWith(prune);
-    // Prune must be built after the delete so the cascade has already run.
-    expect(mockPrisma.job.delete.mock.invocationCallOrder[0]).toBeLessThan(
-      mockPrisma.crmNote.deleteMany.mock.invocationCallOrder[0],
-    );
+    expect(mockPrisma.crmNote.deleteMany).toHaveBeenCalledWith({
+      where: { userId: "test-user-id", targets: { none: {} } },
+    });
+    // Tasks stay: an orphaned task is still listed on the board, and rule
+    // DeleteTask forbids hard-deleting a non-terminal one.
+    expect(mockPrisma.crmTask.deleteMany).not.toHaveBeenCalled();
+    // The prune must be the LAST op — that is what Prisma executes on.
+    expect(ops[ops.length - 1]).toBe(mockPrisma.crmNote.deleteMany.mock.results[0].value);
   });
 
   it("writes a job.delete data-audit entry after a successful delete (S6a)", async () => {
