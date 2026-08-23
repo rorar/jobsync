@@ -569,6 +569,26 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
       targetPersonId: personId,
     });
 
+    // GDPR Art. 17 (W-D4): a note or task that ALSO targets a Job or Company
+    // survives the target removal below — the prune only reaps records left with
+    // NO target — and keeps its free text about the erased person. That text is
+    // unreachable in the UI, but the Art. 15 export still emits it: it reads
+    // `crmNote.findMany({ where: { userId } })` with no target filter
+    // (src/lib/export/collect-user-data.ts). Retaining it would be ongoing
+    // disclosure of data that was supposed to be erased, so scrub the free text
+    // here, mirroring the crmInterview.notes/outcomeNotes treatment below.
+    //
+    // Tasks are scrubbed rather than deleted: rule DeleteTask (crm.allium)
+    // permits a hard delete only from a terminal status, and the board renders
+    // the targetless case, so the row must survive — but its title/description
+    // may name the erased person, and it keeps firing overdue reminders.
+    const piiTaskIds = (
+      await prisma.crmTaskTarget.findMany({
+        where: { targetPersonId: personId, task: { userId: user.id } },
+        select: { taskId: true },
+      })
+    ).map((t) => t.taskId);
+
     // Transaction: anonymize person + cascade delete targets (GDPR Art. 17)
     await prisma.$transaction(
       // W-D3 (GDPR Art. 17): removing the note targets above can leave a note
@@ -577,6 +597,28 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
       // appends that prune after every statement below. Tasks are left alone (they
       // stay visible on the board) — see the orphan-targets module docs.
       withOrphanedCrmPrune(prisma, user.id, orphanCandidates, [
+        // GDPR Art. 17: scrub the free text BEFORE the targets go, while the
+        // collected ids still describe records that named this person. `body` is
+        // non-nullable, so it is emptied rather than nulled. (ADR-015: userId in
+        // where — the id list is not trusted on its own.)
+        prisma.crmNote.updateMany({
+          where: { id: { in: orphanCandidates }, userId: user.id },
+          data: {
+            title: null,
+            body: "",
+            updatedByType: "system",
+            updatedById: user.id,
+          },
+        }),
+        prisma.crmTask.updateMany({
+          where: { id: { in: piiTaskIds }, userId: user.id },
+          data: {
+            title: "",
+            description: null,
+            updatedByType: "system",
+            updatedById: user.id,
+          },
+        }),
         // Remove note targets (ADR-015: scoped via note.userId — CrmNoteTarget has no userId column)
         prisma.crmNoteTarget.deleteMany({ where: { targetPersonId: personId, note: { userId: user.id } } }),
         // Remove task targets (ADR-015: scoped via task.userId — CrmTaskTarget has no userId column)
@@ -671,6 +713,21 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
         }),
       ]),
     );
+
+    // GDPR Art. 5(2) accountability: the erasure is the action a controller is
+    // most likely to have to demonstrate, and it was the only mutation here
+    // leaving no attributable trace — the contact_deleted timeline projection
+    // deliberately nulls the person reference, so it cannot serve as the record.
+    // The entry names the subject and the actor and nothing else: the sink drops
+    // any snapshot for a non-SNAPSHOT_ACTION, so an erasure can never preserve
+    // the PII it removed (spec: audit-trail.allium, rule AuditPersonAnonymise).
+    writeDataAuditLog({
+      actorId: user.id,
+      actorEmail: user.email,
+      action: "person.anonymize",
+      targetType: "person",
+      targetId: personId,
+    });
 
     eventBus.publish(
       createEvent(DomainEventType.ContactDeleted, {

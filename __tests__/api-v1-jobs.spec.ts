@@ -1006,7 +1006,15 @@ describe("DELETE /api/v1/jobs/:id", () => {
       where: {
         id: { in: ["note-1"] },
         userId: "test-user-id",
-        targets: { none: {} },
+        targets: {
+            none: {
+              OR: [
+                { targetPersonId: { not: null } },
+                { targetCompanyId: { not: null } },
+                { targetJobId: { not: null } },
+              ],
+            },
+          },
       },
     });
     // Tasks stay: an orphaned task is still listed on the board, and rule

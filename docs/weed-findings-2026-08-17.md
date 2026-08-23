@@ -1,7 +1,7 @@
 # `allium:weed` findings — 2026-08-17 (`crm.allium` + `inside-track.allium`)
 
 Spec↔code divergences from a systematic `allium:weed` pass.
-**38 findings — 35 resolved, 2 open (W-D4, W-D5), 1 aspirational (W-F2, not a bug).**
+**38 findings — 37 resolved, 0 open, 1 aspirational (W-F2, not a bug).**
 *(W-D3 found 2026-08-21 while reviewing the W-D2 decision; W-D4 split off from it 2026-08-23.)*
 
 > **Resolution pass 2026-08-20.** The remaining code + spec findings were closed in
@@ -232,14 +232,46 @@ a Job deletion — which is what makes W-D2's "converted is a historical fact" d
 Tests assert array **position** (not build order), that tasks are never deleted, and the `userId` +
 `targets: { none: {} }` scoping.
 
-**W-D4 — open, deliberately not fixed here.** An orphaned *task* keeps its title/description, which on
-the `anonymizePerson` path may contain free text about the erased person. Deleting it is wrong (see
-above) and the established GDPR pattern in this codebase is to **scrub** free text rather than delete
-the row (`crmInterview.updateMany` sets `notes: null, outcomeNotes: null` in the same transaction).
-Deciding whether task free-text should be scrubbed on erasure is a product/DPO call, not a
-reconciliation.
+**W-D4 — free text about an erased person survives on notes and tasks. [High] [code] — ✅ RESOLVED 2026-08-23 (Phase-2 security audit)**
+Recorded as an open product/DPO question on 2026-08-21; the Phase-2 audit supplied the fact that
+settled it. The prune's predicate is *no live target*, so a note or task that ALSO targets a Job or
+Company survives with its body intact — and while that note is unreachable in the UI
+(`getCrmNotes` is only ever called `{ targetPersonId }`), the **Art. 15 export still emits it**:
+`collect-user-data.ts:346` reads `crmNote.findMany({ where: { userId } })` with no target filter,
+selecting `title` and `body`. That is ongoing disclosure of data that was supposed to be erased, not
+merely retained residue — which makes it a compliance defect rather than a judgement call.
 
-**W-D5 — the note prune is not observable. [Medium] [code] — OPEN (2026-08-23, Phase-1 architecture review)**
+Fixed by **scrubbing, not deleting**, mirroring the treatment `anonymizePerson` already applies to
+`crmInterview.notes/outcomeNotes` and `crmActivityLog.details`: `crmNote.updateMany` nulls `title`
+and empties `body` (non-nullable), `crmTask.updateMany` empties `title` and nulls `description`, both
+scoped by `userId` and both ordered BEFORE the target deletes, while the collected ids still name the
+records. Tasks are scrubbed rather than deleted because `rule DeleteTask` permits a hard delete only
+from a terminal status and the board renders the targetless row (see W-D3).
+
+**L-1 (same audit) — ghost target rows.** The polymorphic FKs were `ON DELETE SET NULL` in migrations
+`20260510092100` and `20260512221118` before `20260512224224` switched them to `ON DELETE CASCADE`,
+so an older database can hold join rows whose three target columns are all null. A ghost row is not a
+target, but it made the original `targets: { none: {} }` predicate false and silently spared the
+note — on the erasure path in particular. The predicate is now `NO_LIVE_TARGET` ("no target row that
+points at anything"), and `invariant NoteHasAtLeastOneTarget` in `crm.allium` was narrowed to match.
+
+**W-D5 — the erasure path was not auditable. [High] [code+spec] — ✅ RESOLVED 2026-08-23**
+The Phase-2 audit found the gap is larger than the prune: **`anonymizePerson` writes no
+`writeDataAuditLog` row at all** (verified — the function spans `person.actions.ts:541-688` and
+contains none), and the `contact_deleted` timeline projection deliberately nulls `targetPersonId`
+and `linkedRecordName`. So a routine `job.delete` is fully audited with actor id and email, while
+the legally mandated Art. 17 erasure leaves nothing attributable: no record of which subject, by
+whom, or what was removed. That is an Art. 5(2) accountability gap, not engineering tidiness.
+
+Fixed on both sides. Spec (`audit-trail.allium`): `person.anonymize` added to `enum AuditAction`,
+`rule AuditPersonAnonymise` records the actor and the subject, and `invariant DataMinimisation` now
+covers it too — an erasure entry must carry no before/after, since a snapshot there would preserve
+exactly the PII the erasure removes. Code: `DataAuditAction` extended and `anonymizePerson` calls
+`writeDataAuditLog`. No sink change was needed — `writeDataAuditLog` already drops any snapshot for
+an action outside `SNAPSHOT_ACTIONS`, so the invariant holds structurally rather than by convention.
+
+The prune's own count is still not reported; that remains a genuine (Low) observability nit rather
+than a compliance gap, now that the erasure itself is attributable. Original framing follows.
 The prune hard-deletes user records and emits nothing: no audit row, no domain event, no timeline
 entry, no count in the action's result. On the `anonymizePerson` path that is an erasure side effect
 with no trace of what was erased. Deliberately NOT fixed here: `DataAuditAction`

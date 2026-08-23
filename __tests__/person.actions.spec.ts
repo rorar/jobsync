@@ -6,6 +6,7 @@
  */
 import { anonymizePerson, mergePersons, updatePerson, withdrawConsent, reinstateConsent } from "@/actions/person.actions";
 import { getCurrentUser } from "@/utils/user.utils";
+import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import db from "@/lib/db";
 
 // ---------------------------------------------------------------------------
@@ -29,14 +30,18 @@ jest.mock("@/lib/db", () => ({
     crmBlocklist: { deleteMany: jest.fn() },
     referral: { updateMany: jest.fn() },
     personConnection: { deleteMany: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
-    crmNote: { deleteMany: jest.fn() },
-    crmTask: { deleteMany: jest.fn() },
+    crmNote: { deleteMany: jest.fn(), updateMany: jest.fn() },
+    crmTask: { deleteMany: jest.fn(), updateMany: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
 
 jest.mock("@/utils/user.utils", () => ({
   getCurrentUser: jest.fn(),
+}));
+
+jest.mock("@/lib/audit/data-audit", () => ({
+  writeDataAuditLog: jest.fn(),
 }));
 
 jest.mock("next/cache", () => ({
@@ -66,8 +71,8 @@ const mockDb = db as unknown as {
   crmBlocklist: { deleteMany: jest.Mock };
   referral: { updateMany: jest.Mock };
   personConnection: { deleteMany: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
-  crmNote: { deleteMany: jest.Mock };
-  crmTask: { deleteMany: jest.Mock };
+  crmNote: { deleteMany: jest.Mock; updateMany: jest.Mock };
+  crmTask: { deleteMany: jest.Mock; updateMany: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -75,7 +80,7 @@ const mockDb = db as unknown as {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const USER = { id: "user-1" };
+const USER = { id: "user-1", email: "user-1@example.com" };
 const PERSON_ID = "person-1";
 const WINNER_ID = "winner-1";
 const LOSER_ID = "loser-1";
@@ -118,6 +123,8 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
     mockDb.crmTaskTarget.findMany.mockResolvedValue([]);
     mockDb.crmTaskTarget.updateMany.mockResolvedValue({ count: 0 });
     mockDb.crmNote.deleteMany.mockResolvedValue({ count: 0 });
+    mockDb.crmNote.updateMany.mockResolvedValue({ count: 0 });
+    mockDb.crmTask.updateMany.mockResolvedValue({ count: 0 });
     mockDb.crmTask.deleteMany.mockResolvedValue({ count: 0 });
     mockDb.crmInterview.updateMany.mockResolvedValue({ count: 0 });
     mockDb.crmActivityLog.updateMany.mockResolvedValue({ count: 0 });
@@ -165,6 +172,66 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
       });
     });
 
+    it("writes an attributable audit entry for the erasure, with no snapshot (Art. 5(2))", async () => {
+      await anonymizePerson(PERSON_ID);
+
+      expect(writeDataAuditLog).toHaveBeenCalledWith({
+        actorId: USER.id,
+        actorEmail: USER.email,
+        action: "person.anonymize",
+        targetType: "person",
+        targetId: PERSON_ID,
+      });
+      // No before/after: an erasure snapshot would preserve the very PII the
+      // erasure removes (audit-trail.allium DataMinimisation).
+      const call = (writeDataAuditLog as jest.Mock).mock.calls[0][0];
+      expect(call.beforeAfter).toBeUndefined();
+    });
+
+    it("scrubs free text on notes and tasks that named this person (GDPR Art. 17)", async () => {
+      mockDb.crmNoteTarget.findMany.mockResolvedValue([{ noteId: "note-1" }]);
+      mockDb.crmTaskTarget.findMany.mockResolvedValue([{ taskId: "task-1" }]);
+
+      await anonymizePerson(PERSON_ID);
+
+      // A record that ALSO targets a Job survives the target removal, so the
+      // prune (zero targets) never reaches it — but it still holds free text
+      // about the erased person, and the Art. 15 export reads notes by userId
+      // with no target filter. Scrub rather than retain.
+      expect(mockDb.crmNote.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ["note-1"] }, userId: USER.id },
+        data: {
+          title: null,
+          body: "",
+          updatedByType: "system",
+          updatedById: USER.id,
+        },
+      });
+      // Tasks are scrubbed, never deleted — rule DeleteTask permits a hard
+      // delete only from a terminal status, and the board renders the row.
+      expect(mockDb.crmTask.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ["task-1"] }, userId: USER.id },
+        data: {
+          title: "",
+          description: null,
+          updatedByType: "system",
+          updatedById: USER.id,
+        },
+      });
+      expect(mockDb.crmTask.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("scrubs before the targets are removed, so the ids still name the records", async () => {
+      mockDb.crmNoteTarget.findMany.mockResolvedValue([{ noteId: "note-1" }]);
+
+      await anonymizePerson(PERSON_ID);
+
+      const ops = mockDb.$transaction.mock.calls[0][0];
+      const scrub = mockDb.crmNote.updateMany.mock.results[0].value;
+      const targetDelete = mockDb.crmNoteTarget.deleteMany.mock.results[0].value;
+      expect(ops.indexOf(scrub)).toBeLessThan(ops.indexOf(targetDelete));
+    });
+
     it("prunes notes orphaned by the target removal, last in the tx (W-D3)", async () => {
       await anonymizePerson(PERSON_ID);
 
@@ -179,7 +246,15 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
         where: {
           id: { in: [] },
           userId: USER.id,
-          targets: { none: {} },
+          targets: {
+            none: {
+              OR: [
+                { targetPersonId: { not: null } },
+                { targetCompanyId: { not: null } },
+                { targetJobId: { not: null } },
+              ],
+            },
+          },
         },
       });
 
@@ -188,7 +263,7 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
       // a non-terminal task.
       expect(mockDb.crmTask.deleteMany).not.toHaveBeenCalled();
 
-      // The prune matches on `targets: { none: {} }`, so it only holds once the
+      // The prune's no-live-target predicate only holds once the
       // target rows are gone — it must be the LAST op in the transaction array.
       const ops = mockDb.$transaction.mock.calls[0][0];
       expect(ops[ops.length - 1]).toBe(mockDb.crmNote.deleteMany.mock.results[0].value);

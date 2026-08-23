@@ -38,7 +38,7 @@
  *      deletes a candidate only if it is left with NO targets at all, so a note
  *      that also targeted a person or company survives untouched.
  *
- * ORDERING: `targets: { none: {} }` only holds once the cascade has removed the
+ * ORDERING: the no-live-target predicate only holds once the cascade has removed the
  * join rows, so the prune must run after the delete. Prisma array transactions
  * execute in order and `withOrphanedCrmPrune` owns the last position, so a
  * caller cannot get it wrong:
@@ -59,6 +59,26 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 type CrmPruneDb = Pick<PrismaClient, "crmNote" | "crmNoteTarget"> | Prisma.TransactionClient;
 
 type PruneOp = Prisma.PrismaPromise<Prisma.BatchPayload>;
+
+/**
+ * "Has no target that actually points at anything."
+ *
+ * Not simply `{ none: {} }`: the polymorphic FKs were created `ON DELETE SET
+ * NULL` (migrations `20260510092100`, `20260512221118`) before
+ * `20260512224224` switched them to `ON DELETE CASCADE`, so a database seeded
+ * under the old schema can hold join rows whose three target columns are all
+ * null. Such a ghost row is not a target, but it would make `none: {}` false and
+ * silently spare the note — on the GDPR erasure path in particular.
+ */
+const NO_LIVE_TARGET = {
+  none: {
+    OR: [
+      { targetPersonId: { not: null } },
+      { targetCompanyId: { not: null } },
+      { targetJobId: { not: null } },
+    ],
+  },
+} satisfies Prisma.CrmNoteTargetListRelationFilter;
 
 /**
  * Notes that point at the entity about to be deleted — the only candidates the
@@ -105,7 +125,7 @@ export function withOrphanedCrmPrune<T extends readonly Prisma.PrismaPromise<unk
     where: {
       id: { in: [...candidateNoteIds] },
       userId,
-      targets: { none: {} },
+      targets: NO_LIVE_TARGET,
     },
   });
   return [...ops, prune] as [...T, PruneOp];
@@ -125,7 +145,7 @@ export async function pruneOrphanedCrmNotesByIds(
   if (candidateNoteIds.length === 0) return 0;
 
   const { count } = await db.crmNote.deleteMany({
-    where: { id: { in: [...candidateNoteIds] }, userId, targets: { none: {} } },
+    where: { id: { in: [...candidateNoteIds] }, userId, targets: NO_LIVE_TARGET },
   });
   return count;
 }

@@ -90,7 +90,15 @@ describe("withOrphanedCrmPrune", () => {
       where: {
         id: { in: ["n1", "n2"] },
         userId: USER_ID,
-        targets: { none: {} },
+        targets: {
+            none: {
+              OR: [
+                { targetPersonId: { not: null } },
+                { targetCompanyId: { not: null } },
+                { targetJobId: { not: null } },
+              ],
+            },
+          },
       },
     });
   });
@@ -113,7 +121,15 @@ describe("pruneOrphanedCrmNotesByIds", () => {
       pruneOrphanedCrmNotesByIds(db as never, USER_ID, ["n1", "n2"]),
     ).resolves.toBe(3);
     expect(db.crmNote.deleteMany).toHaveBeenCalledWith({
-      where: { id: { in: ["n1", "n2"] }, userId: USER_ID, targets: { none: {} } },
+      where: { id: { in: ["n1", "n2"] }, userId: USER_ID, targets: {
+            none: {
+              OR: [
+                { targetPersonId: { not: null } },
+                { targetCompanyId: { not: null } },
+                { targetJobId: { not: null } },
+              ],
+            },
+          } },
     });
     expect(db.crmTask.deleteMany).not.toHaveBeenCalled();
   });

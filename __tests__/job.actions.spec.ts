@@ -1166,7 +1166,15 @@ describe("jobActions", () => {
         where: {
           id: { in: ["note-1"] },
           userId: mockUser.id,
-          targets: { none: {} },
+          targets: {
+            none: {
+              OR: [
+                { targetPersonId: { not: null } },
+                { targetCompanyId: { not: null } },
+                { targetJobId: { not: null } },
+              ],
+            },
+          },
         },
       });
       // An orphaned TASK is not residue — the board lists tasks unfiltered and

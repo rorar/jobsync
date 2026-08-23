@@ -542,7 +542,15 @@ describe("mock.actions", () => {
         where: {
           id: { in: ["note-1"] },
           userId: mockUser.id,
-          targets: { none: {} },
+          targets: {
+            none: {
+              OR: [
+                { targetPersonId: { not: null } },
+                { targetCompanyId: { not: null } },
+                { targetJobId: { not: null } },
+              ],
+            },
+          },
         },
       });
       expect(result.data?.resumes).toBe(1);

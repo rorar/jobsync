@@ -637,7 +637,15 @@ describe("Company Actions", () => {
         where: {
           id: { in: ["note-1"] },
           userId: mockUser.id,
-          targets: { none: {} },
+          targets: {
+            none: {
+              OR: [
+                { targetPersonId: { not: null } },
+                { targetCompanyId: { not: null } },
+                { targetJobId: { not: null } },
+              ],
+            },
+          },
         },
       });
       expect(prisma.crmTask.deleteMany).not.toHaveBeenCalled();

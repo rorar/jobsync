@@ -1354,8 +1354,13 @@ invariant NoteHasAtLeastOneTarget {
     -- targetless case, the overdue reminder still fires for it, and DeleteTask
     -- permits a hard delete only from a terminal status. A task that loses its
     -- last target keeps existing as a commitment; it just loses its link.
+    -- A NoteTarget whose three polymorphic references are all null is a ghost,
+    -- not a target: databases seeded before migration 20260512224224 (when the
+    -- FKs were still ON DELETE SET NULL) can hold such rows. It must not count.
     for note in Notes:
-        note.targets -> count > 0
+        note.targets where (target_person != null
+            or target_company != null
+            or target_job != null) -> count > 0
 }
 
 invariant AtMostOnePrimaryCompany {
