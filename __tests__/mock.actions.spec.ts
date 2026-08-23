@@ -30,6 +30,7 @@ jest.mock("@prisma/client", () => {
     },
     job: {
       deleteMany: jest.fn(),
+      findMany: jest.fn(),
     },
     location: {
       upsert: jest.fn(),
@@ -159,6 +160,7 @@ describe("mock.actions", () => {
     (prisma.crmNoteTarget.findMany as jest.Mock).mockResolvedValue([
       { noteId: "note-1" },
     ]);
+    (prisma.job.findMany as jest.Mock).mockResolvedValue([{ id: "mock-job-1" }]);
   });
 
   afterEach(() => {

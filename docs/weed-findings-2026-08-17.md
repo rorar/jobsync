@@ -1,7 +1,7 @@
 # `allium:weed` findings — 2026-08-17 (`crm.allium` + `inside-track.allium`)
 
 Spec↔code divergences from a systematic `allium:weed` pass.
-**38 findings — 37 resolved, 0 open, 1 aspirational (W-F2, not a bug).**
+**39 findings — 38 resolved, 0 open, 1 aspirational (W-F2, not a bug).**
 *(W-D3 found 2026-08-21 while reviewing the W-D2 decision; W-D4 split off from it 2026-08-23.)*
 
 > **Resolution pass 2026-08-20.** The remaining code + spec findings were closed in
@@ -254,6 +254,32 @@ so an older database can hold join rows whose three target columns are all null.
 target, but it made the original `targets: { none: {} }` predicate false and silently spared the
 note — on the erasure path in particular. The predicate is now `NO_LIVE_TARGET` ("no target row that
 points at anything"), and `invariant NoteHasAtLeastOneTarget` in `crm.allium` was narrowed to match.
+
+**W-D7 — the ownership-scoped id lookup scans the user's whole table. [High] [code] — ✅ RESOLVED 2026-08-23 (Phase-2 performance audit)**
+The prune and the Art. 17 scrubs all filter `id IN (...) AND userId = ?`. Reproduced independently on
+a scratch database: with only `@@index([userId])`, SQLite uses the primary key for one or two
+candidates but from **three upward** switches to `CrmNote_userId_idx`, applying the id list only as a
+post-filter — so the correlated `NOT EXISTS` runs once per note the user owns. `userId` is the least
+selective column in the table (single-user-per-instance), and the cost is paid inside the write
+transaction, on the critical path of the GDPR erasure.
+
+Root cause is missing statistics: with no `sqlite_stat1`, SQLite assumes an equality on a non-unique
+index yields ~10 rows, so `userId = ?` looks cheaper than N primary-key seeks. Invisible to the test
+suite, which is fully mocked and never reaches a query planner.
+
+Fixed on both levels. Migration `20260823210341_add_crm_userid_id_indexes` adds `@@index([userId, id])`
+to `CrmNote` and `CrmTask`, which pins the plan deterministically — verified against `prisma/dev.db`:
+`SEARCH CrmNote USING COVERING INDEX CrmNote_userId_id_idx (userId=? AND id=?)`. And
+`refreshQueryPlannerStatistics` (`PRAGMA optimize`) joins the retention sweep, fixing the class of
+mis-costing rather than this one query. **This trap is not specific to the prune** — it fires on the
+canonical ADR-015 shape for any table with a `userId` index and no `(userId, id)` composite. Single-id
+`findFirst({ where: { id, userId } })`, the common case, is unaffected.
+
+Also from that audit: `clearMockProfileDataAction` collected through the `targetJob` relation, which
+no `CrmNoteTarget` index can serve; it now resolves the job ids first and uses two `in` lists.
+Accepted without change: the candidate list is over-collected by design (it holds every note attached
+to the entity, not only those that will be orphaned) and the collect read is index-driven but not
+covering — both are bounded by notes-per-entity, which is small.
 
 **W-D5 — the erasure path was not auditable. [High] [code+spec] — ✅ RESOLVED 2026-08-23**
 The Phase-2 audit found the gap is larger than the prune: **`anonymizePerson` writes no

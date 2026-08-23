@@ -228,6 +228,27 @@ async function cleanOrphanedLogoAssetFiles(): Promise<number> {
   return deletedCount;
 }
 
+/**
+ * Refresh SQLite's query-plan statistics (W-D3/F1).
+ *
+ * Not a retention rule — it runs alongside them because this is the only
+ * periodic maintenance sweep in the process. Without `sqlite_stat1`, SQLite
+ * assumes an equality on a non-unique index yields ~10 rows, so a
+ * `userId = ?` predicate looks cheap even though `userId` matches every row a
+ * user owns. That mis-costing is what made the orphan-note prune abandon the
+ * primary key from three candidates upward. The composite `(userId, id)`
+ * indexes pin the plan for that specific query; this fixes the class of
+ * problem for the rest.
+ *
+ * `PRAGMA optimize` is the maintenance call SQLite recommends for exactly this:
+ * incremental, cheap when there is nothing to do, and a no-op on tables whose
+ * statistics are still current.
+ */
+async function refreshQueryPlannerStatistics(): Promise<void> {
+  await prisma.$executeRawUnsafe("PRAGMA optimize");
+  logRule("refreshQueryPlannerStatistics", 0, null);
+}
+
 // ---------------------------------------------------------------------------
 // Main cron loop
 // ---------------------------------------------------------------------------
@@ -257,6 +278,7 @@ async function runRetentionRules(): Promise<void> {
       archiveAndPurgeOldAdminAuditLogs(),
       purgeOldCrmActivityLogs(),
       cleanOrphanedLogoAssetFiles(),
+      refreshQueryPlannerStatistics(),
     ]);
 
     // Log individual rule failures
@@ -268,6 +290,7 @@ async function runRetentionRules(): Promise<void> {
       "archiveAndPurgeOldAdminAuditLogs",
       "purgeOldCrmActivityLogs",
       "cleanOrphanedLogoAssetFiles",
+      "refreshQueryPlannerStatistics",
     ];
     for (const [i, label] of ruleLabels.entries()) {
       if (results[i].status === "rejected") {

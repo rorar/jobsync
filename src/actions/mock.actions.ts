@@ -497,9 +497,19 @@ export const clearMockProfileDataAction = async (): Promise<
       // rows that name these notes. A real note attached only to a mock job or
       // company would otherwise be left unreachable (every note read filters by
       // target). Tasks are left alone; see the orphan-targets module docs.
+      // F1/F5: resolve the job ids first rather than filtering through the
+      // `targetJob` relation. A nested relation filter cannot use any
+      // CrmNoteTarget target index, so it scans the user's whole target table;
+      // two `in` lists hit `targetJobId`/`targetCompanyId` directly.
+      const mockJobIds = (
+        await prisma.job.findMany({
+          where: { companyId: { in: companyIds }, userId: user.id },
+          select: { id: true },
+        })
+      ).map((j) => j.id);
       orphanCandidates = await collectOrphanCandidateNoteIds(prisma, user.id, {
         OR: [
-          { targetJob: { companyId: { in: companyIds } } },
+          { targetJobId: { in: mockJobIds } },
           { targetCompanyId: { in: companyIds } },
         ],
       });

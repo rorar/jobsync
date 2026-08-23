@@ -1169,6 +1169,9 @@ model CrmTask {
   @@index([userId])
   @@index([userId, status])
   @@index([userId, dueDate])
+  // W-D3/F1: same shape as CrmNote — the Art. 17 scrub filters
+  // `id IN (...) AND userId = ?`, which otherwise scans the user's tasks.
+  @@index([userId, id])
 }
 
 /// Polymorphic join: exactly one of targetPersonId/targetCompanyId/targetJobId
@@ -1208,6 +1211,12 @@ model CrmNote {
   targets CrmNoteTarget[]
 
   @@index([userId])
+  // W-D3/F1: the orphan prune and the Art. 17 scrub both filter
+  // `id IN (...) AND userId = ?`. With only the userId index, SQLite drives that
+  // off userId alone from three candidates upward — and userId matches every row
+  // a user owns — then applies the id list as a post-filter, so the correlated
+  // NOT EXISTS runs once per note owned. This composite makes it an index seek.
+  @@index([userId, id])
 }
 
 /// Polymorphic join: exactly one of targetPersonId/targetCompanyId/targetJobId
