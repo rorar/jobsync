@@ -1337,6 +1337,27 @@ invariant ExactlyOneNoteTarget {
 -- not two synchronised copies. crm.allium still ENFORCES the property, in
 -- AutoCreatePersonFromEmail's `requires` guards; it just no longer restates it.
 
+invariant NoteHasAtLeastOneTarget {
+    -- W-D3/W-D6: a Note is always ABOUT something — it has no standalone
+    -- identity, and every read of a note reaches it through one of its targets.
+    -- CreateNote establishes this (`requires: targets.count > 0`) and the delete
+    -- side upholds it: when a Person, Company or Job is deleted its NoteTargets
+    -- go with it, and a note left with no target at all is removed in the same
+    -- transaction rather than surviving as a body no surface can render.
+    --
+    -- Unlike the converted-referral guarantee (W-D2 on inside-track's
+    -- TipReifiesToJob), this IS a single-moment, falsifiable predicate over
+    -- current state, so it is expressed rather than left as prose.
+    --
+    -- There is deliberately NO Task counterpart. A Task may legitimately hold
+    -- zero targets: TaskBoard lists a user's tasks unfiltered and renders the
+    -- targetless case, the overdue reminder still fires for it, and DeleteTask
+    -- permits a hard delete only from a terminal status. A task that loses its
+    -- last target keeps existing as a commitment; it just loses its link.
+    for note in Notes:
+        note.targets -> count > 0
+}
+
 invariant AtMostOnePrimaryCompany {
     -- A Person may have zero or one primary company association.
     for person in Persons:

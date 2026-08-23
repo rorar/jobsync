@@ -1,7 +1,7 @@
 # `allium:weed` findings — 2026-08-17 (`crm.allium` + `inside-track.allium`)
 
 Spec↔code divergences from a systematic `allium:weed` pass.
-**38 findings — 34 resolved, 3 open (W-D4, W-D5, W-D6), 1 aspirational (W-F2, not a bug).**
+**38 findings — 35 resolved, 2 open (W-D4, W-D5), 1 aspirational (W-F2, not a bug).**
 *(W-D3 found 2026-08-21 while reviewing the W-D2 decision; W-D4 split off from it 2026-08-23.)*
 
 > **Resolution pass 2026-08-20.** The remaining code + spec findings were closed in
@@ -246,15 +246,28 @@ with no trace of what was erased. Deliberately NOT fixed here: `DataAuditAction`
 (`src/lib/audit/data-audit.ts:26`) mirrors the spec-governed `enum AuditAction`
 (`specs/audit-trail.allium:52`), so adding a prune action means a spec change — a new rule saying when
 the entry is emitted, plus the `SnapshotsAreFieldDiffsNotPii` obligation — not a code tweak.
-Do it via `allium:tend` first, then the code.
+Do it via `allium:tend` first, then the code. Nor is there a cheaper fallback: server actions have no
+logging convention to lean on — `logRule` (`src/lib/scheduler/retention-cron.ts:53`) is cron-local,
+so "just log the count" would introduce a new pattern rather than follow one.
 
-**W-D6 — the prune has no rule in `crm.allium`. [Medium] [spec] — OPEN (2026-08-23, Phase-1 architecture review)**
-This is a spec-driven project, and "deleting a Person/Company/Job reaps notes it orphaned" is
-behaviour a stakeholder cares about, yet no construct describes it. `allium weed` cannot flag drift
-on a behaviour the spec never mentions — which is exactly how the task-deletion bug (see W-D3) got
-past `allium check`. The obligation compares two moments in time (before/after the cascade), so per
-the `TipReifiesToJob` precedent it belongs in rule prose or as an `ensures` on a delete rule, not in
-an expression-bearing invariant.
+**W-D6 — the prune had no construct in `crm.allium`. [Medium] [spec] — ✅ RESOLVED 2026-08-23**
+This is a spec-driven project, and "a note always belongs to something" is behaviour a stakeholder
+cares about, yet no construct described it — which is exactly how the task-deletion bug (see W-D3)
+got past `allium check`.
+
+My first reading was that the `TipReifiesToJob` prose precedent (W-D2) transferred here. The
+architecture review pushed back and was right: that obligation was inexpressible because it compares
+two moments in time, and its residue was a tautology. This one is different — "every note has at
+least one target" is a single-moment, falsifiable predicate over current state, so it belongs in an
+expression-bearing invariant.
+
+Added `invariant NoteHasAtLeastOneTarget` next to the existing `ExactlyOneNoteTarget` /
+`ExactlyOneTaskTarget` shape constraints, as their cardinality companion. Had it existed, the
+original orphan bug would have been a straightforward invariant violation. Its comment also records
+why there is deliberately **no** Task counterpart: a task may legitimately hold zero targets, since
+`TaskBoard` lists tasks unfiltered, the overdue reminder still fires, and `DeleteTask` permits a hard
+delete only from a terminal status. That asymmetry being undocumented is what made the task bug
+possible. `allium check specs/`: 0 errors; `allium analyse`: unchanged from HEAD.
 
 
 
