@@ -74,15 +74,17 @@ export const deleteJobSourceById = async (
       throw new Error("errors.notAuthenticated");
     }
 
+    // ADR-015: scope the guard to this user's jobs.
     const jobs = await prisma.job.count({
       where: {
         jobSourceId,
+        userId: user.id,
       },
     });
 
     if (jobs > 0) {
       throw new Error(
-        `Job source cannot be deleted due to ${jobs} number of associated jobs! `
+        `Job source cannot be deleted while jobs still reference it! `
       );
     }
 

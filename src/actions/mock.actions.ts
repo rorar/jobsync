@@ -513,12 +513,14 @@ export const clearMockProfileDataAction = async (): Promise<
           { targetCompanyId: { in: companyIds } },
         ],
       });
-      // Delete notes first (FK cascade)
+      // Delete notes first (FK cascade). ADR-015: companyIds is already derived
+      // from this user's mock companies, but the filter is stated explicitly so
+      // the ownership bound does not depend on a caller two scopes up.
       await prisma.note.deleteMany({
-        where: { job: { companyId: { in: companyIds } } },
+        where: { userId: user.id, job: { companyId: { in: companyIds } } },
       });
       await prisma.job.deleteMany({
-        where: { companyId: { in: companyIds } },
+        where: { userId: user.id, companyId: { in: companyIds } },
       });
     }
 

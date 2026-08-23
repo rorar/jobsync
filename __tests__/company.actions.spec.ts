@@ -614,6 +614,40 @@ describe("Company Actions", () => {
       });
     });
 
+    it("scopes both delete guards to this user (ADR-015)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.workExperience.count as jest.Mock).mockResolvedValue(0);
+      (prisma.job.count as jest.Mock).mockResolvedValue(0);
+      (prisma.logoAsset.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.company.delete as jest.Mock).mockResolvedValue({ id: "company-id" });
+
+      await deleteCompanyById("company-id");
+
+      // Counting unscoped let another user's resume or job block this delete,
+      // and the error message leaked that count back to the caller.
+      expect(prisma.workExperience.count).toHaveBeenCalledWith({
+        where: {
+          companyId: "company-id",
+          ResumeSection: { Resume: { profile: { userId: mockUser.id } } },
+        },
+      });
+      expect(prisma.job.count).toHaveBeenCalledWith({
+        where: { companyId: "company-id", userId: mockUser.id },
+      });
+    });
+
+    it("does not leak the job count in the error message (ADR-015)", async () => {
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.workExperience.count as jest.Mock).mockResolvedValue(0);
+      (prisma.job.count as jest.Mock).mockResolvedValue(7);
+
+      const result = await deleteCompanyById("company-id");
+
+      expect(result.success).toBe(false);
+      expect(JSON.stringify(result)).not.toContain("7");
+      expect(prisma.company.delete).not.toHaveBeenCalled();
+    });
+
     it("prunes notes orphaned by the cascade, in one transaction (W-D3)", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
       (prisma.workExperience.count as jest.Mock).mockResolvedValue(0);

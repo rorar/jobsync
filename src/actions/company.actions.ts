@@ -344,9 +344,14 @@ export const deleteCompanyById = async (
       throw new Error("errors.notAuthenticated");
     }
 
+      // ADR-015: a WorkExperience is owned through its resume chain
+      // (ResumeSection -> Resume -> Profile -> userId). Counting unscoped made
+      // another user's resume block this delete, and leaked its existence.
+      // Rows with no section belong to no resume and cannot surface anywhere.
     const experiences = await prisma.workExperience.count({
       where: {
         companyId,
+        ResumeSection: { Resume: { profile: { userId: user.id } } },
       },
     });
     if (experiences > 0) {
@@ -354,15 +359,17 @@ export const deleteCompanyById = async (
         `Company cannot be deleted due to its use in experience section of one of the resume! `,
       );
     }
+    // ADR-015: scope the guard to this user's jobs.
     const jobs = await prisma.job.count({
       where: {
         companyId,
+        userId: user.id,
       },
     });
 
     if (jobs > 0) {
       throw new Error(
-        `Company cannot be deleted due to ${jobs} number of associated jobs! `,
+        `Company cannot be deleted while jobs still reference it! `,
       );
     }
 
