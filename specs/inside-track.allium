@@ -200,7 +200,16 @@ entity Referral {
 variant InsiderRelay : Referral {
     -- Use case A: the tipster works at the target company and relays the
     -- user's documents onward. The decision-maker is frequently UNKNOWN at
-    -- the start and filled in later when the tipster names them.
+    -- the start, so the field is optional.
+    --
+    -- W-G3 (2026-08-23): it is set at CREATION or not at all. RecordInsiderRelay
+    -- accepts it, and nothing else writes it — there is no rule, no action and no
+    -- UI field that fills it in afterwards, so a relay recorded before the tipster
+    -- names the decision-maker cannot be completed. The earlier wording here
+    -- ("filled in later when the tipster names them") described an intent the
+    -- system has never implemented; correcting the prose rather than leaving the
+    -- spec promising a capability that does not exist. Adding it is a feature —
+    -- an update action for the participant references — not a reconciliation.
     forwarded_to: crm/Person?
 }
 

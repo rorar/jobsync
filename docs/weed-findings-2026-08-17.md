@@ -451,7 +451,14 @@ about that entry. Make it an `ensures`.
 transitions; `DeclineReferral` and `TipReifiesToJob` don't specify it. Harmless (both targets
 terminal), but should be stated.
 
-**W-G3 — `forwarded_to` can be set at creation but never afterwards. [Medium] [both]**
+**W-G3 — `forwarded_to` can be set at creation but never afterwards. [Medium] [both] — ✅ SPEC RECONCILED 2026-08-23, feature still open**
+Chased 2026-08-23. Confirmed unchanged: `referral.actions.ts:87` writes `forwardedToId` at creation
+and nothing writes it afterwards — no rule, no action, no UI field. The variant's prose promised the
+decision-maker would be "filled in later when the tipster names them", i.e. the spec described a
+capability the system has never had. Corrected the prose so the spec is truthful about create-only;
+the feature question (an `UpdateReferralParticipants` action, and whether it is status-gated) was
+already recorded as an `open question` at `inside-track.allium:817` and stays there. Original text
+follows.
 `variant InsiderRelay` promises the decision-maker is "filled in later"; **no rule fills it in**, and
 `referral.actions.ts` exposes no update action for `forwardedTo`/`insider`/`via`/`targetCompany` —
 only the five transitions + commit + reads. Meanwhile the code *does* accept `forwardedToId` at
