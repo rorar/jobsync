@@ -9,7 +9,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { isValidCategoryTransitionByKind, appliedSideEffectByKind } from "@/lib/crm/status-transition";
-import { withOrphanedCrmPrune } from "@/lib/crm/orphan-targets";
+import { collectOrphanCandidateNoteIds, withOrphanedCrmPrune } from "@/lib/crm/orphan-targets";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import { buildJobSalaryData } from "@/lib/salary/build-job-salary";
@@ -774,8 +774,14 @@ export const deleteJobById = async (
     // ONLY at this Job unreachable (every note read filters by target) but still
     // holding its body. withOrphanedCrmPrune runs that prune last in the same
     // transaction, after the cascade. Tasks are left alone — see the module docs.
+    // Collect BEFORE the delete: afterwards the cascade has removed the join rows
+    // and nothing names the note any more.
+    const orphanCandidates = await collectOrphanCandidateNoteIds(prisma, user.id, {
+      targetJobId: jobId,
+    });
+
     await prisma.$transaction(
-      withOrphanedCrmPrune(prisma, user.id, [
+      withOrphanedCrmPrune(prisma, user.id, orphanCandidates, [
         prisma.job.delete({
           where: {
             id: jobId,

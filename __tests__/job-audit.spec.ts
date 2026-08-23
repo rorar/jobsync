@@ -64,6 +64,9 @@ jest.mock("@prisma/client", () => {
     crmNote: {
       deleteMany: jest.fn(),
     },
+    crmNoteTarget: {
+      findMany: jest.fn(),
+    },
     crmTask: {
       deleteMany: jest.fn(),
     },
@@ -244,6 +247,7 @@ describe("Job-CRUD audit trail (S6a)", () => {
     beforeEach(() => {
       (prisma.crmNote.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.crmTask.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.crmNoteTarget.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.$transaction as jest.Mock).mockImplementation(
         async (ops: unknown) => Promise.all(ops as Promise<unknown>[]),
       );

@@ -9,7 +9,7 @@ import { APP_CONSTANTS } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { emitEvent, createEvent, DomainEventTypes } from "@/lib/events";
-import { withOrphanedCrmPrune } from "@/lib/crm/orphan-targets";
+import { collectOrphanCandidateNoteIds, withOrphanedCrmPrune } from "@/lib/crm/orphan-targets";
 import { deleteFileAndPruneEmptyParents } from "@/lib/assets/file-cleanup";
 import { logoAssetService, LOGO_PRUNE_LEVELS } from "@/lib/assets/logo-asset-service";
 
@@ -382,8 +382,13 @@ export const deleteCompanyById = async (
     // W-D3: deleting the Company cascades away its CrmNoteTarget rows, leaving a
     // note targeted ONLY at this company unreachable. Prune it in the same
     // transaction; withOrphanedCrmPrune keeps the prune last, after the cascade.
+    // Collect BEFORE the delete — the cascade removes the join rows.
+    const orphanCandidates = await collectOrphanCandidateNoteIds(prisma, user.id, {
+      targetCompanyId: companyId,
+    });
+
     const [res] = await prisma.$transaction(
-      withOrphanedCrmPrune(prisma, user.id, [
+      withOrphanedCrmPrune(prisma, user.id, orphanCandidates, [
         prisma.company.delete({
           where: {
             id: companyId,

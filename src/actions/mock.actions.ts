@@ -18,7 +18,10 @@ import {
   MOCK_VALUE_PREFIX,
 } from "@/lib/data/mockProfileData";
 import { subYears } from "date-fns";
-import { pruneOrphanedCrmNotes } from "@/lib/crm/orphan-targets";
+import {
+  collectOrphanCandidateNoteIds,
+  pruneOrphanedCrmNotesByIds,
+} from "@/lib/crm/orphan-targets";
 
 export const generateMockActivitiesAction = async (): Promise<ActionResult<Activity[]>> => {
   try {
@@ -487,8 +490,19 @@ export const clearMockProfileDataAction = async (): Promise<
       where: { value: { startsWith: MOCK_VALUE_PREFIX }, createdBy: user.id },
       select: { id: true },
     });
+    let orphanCandidates: string[] = [];
     if (mockCompanyIds.length > 0) {
       const companyIds = mockCompanyIds.map((c) => c.id);
+      // W-D3: collect BEFORE the deletes below — the cascade removes the join
+      // rows that name these notes. A real note attached only to a mock job or
+      // company would otherwise be left unreachable (every note read filters by
+      // target). Tasks are left alone; see the orphan-targets module docs.
+      orphanCandidates = await collectOrphanCandidateNoteIds(prisma, user.id, {
+        OR: [
+          { targetJob: { companyId: { in: companyIds } } },
+          { targetCompanyId: { in: companyIds } },
+        ],
+      });
       // Delete notes first (FK cascade)
       await prisma.note.deleteMany({
         where: { job: { companyId: { in: companyIds } } },
@@ -521,11 +535,7 @@ export const clearMockProfileDataAction = async (): Promise<
         }),
       ]);
 
-    // W-D3: deleting mock jobs/companies cascades away their CrmNoteTarget rows,
-    // so a real note attached only to a mock record would be left unreachable
-    // (every note read filters by target). Prune that residue. Tasks are left
-    // alone — they stay visible on the board; see the orphan-targets module docs.
-    await pruneOrphanedCrmNotes(prisma, user.id);
+    await pruneOrphanedCrmNotesByIds(prisma, user.id, orphanCandidates);
 
     const companiesCount =
       deletedCompanies.status === "fulfilled"

@@ -97,6 +97,7 @@ jest.mock("@/lib/db", () => ({
     resume: { findFirst: jest.fn() },
     tag: { count: jest.fn() },
     crmNote: { deleteMany: jest.fn() },
+    crmNoteTarget: { findMany: jest.fn() },
     crmTask: { deleteMany: jest.fn() },
     $transaction: jest.fn(),
   },
@@ -156,6 +157,7 @@ const mockPrisma = db as unknown as {
   resume: { findFirst: jest.Mock };
   tag: { count: jest.Mock };
   crmNote: { deleteMany: jest.Mock };
+  crmNoteTarget: { findMany: jest.Mock };
   crmTask: { deleteMany: jest.Mock };
   $transaction: jest.Mock;
 };
@@ -240,6 +242,7 @@ beforeEach(() => {
   mockPrisma.company.findFirst.mockResolvedValue(null);
   mockPrisma.crmNote.deleteMany.mockResolvedValue({ count: 0 });
   mockPrisma.crmTask.deleteMany.mockResolvedValue({ count: 0 });
+  mockPrisma.crmNoteTarget.findMany.mockResolvedValue([{ noteId: "note-1" }]);
   // Callback form passes the same mock client as tx so tx.job.create etc. work;
   // array form (W-D3 delete + orphan prune) just settles the operations in order.
   mockPrisma.$transaction.mockImplementation(async (arg: unknown) =>
@@ -994,8 +997,17 @@ describe("DELETE /api/v1/jobs/:id", () => {
     expect(Array.isArray(ops)).toBe(true);
     expect(ops).toHaveLength(2);
 
+    // Scoped to the notes that actually pointed at THIS job.
+    expect(mockPrisma.crmNoteTarget.findMany).toHaveBeenCalledWith({
+      where: { targetJobId: VALID_UUID, note: { userId: "test-user-id" } },
+      select: { noteId: true },
+    });
     expect(mockPrisma.crmNote.deleteMany).toHaveBeenCalledWith({
-      where: { userId: "test-user-id", targets: { none: {} } },
+      where: {
+        id: { in: ["note-1"] },
+        userId: "test-user-id",
+        targets: { none: {} },
+      },
     });
     // Tasks stay: an orphaned task is still listed on the board, and rule
     // DeleteTask forbids hard-deleting a non-terminal one.

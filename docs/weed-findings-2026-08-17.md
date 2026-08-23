@@ -1,7 +1,7 @@
 # `allium:weed` findings — 2026-08-17 (`crm.allium` + `inside-track.allium`)
 
 Spec↔code divergences from a systematic `allium:weed` pass.
-**36 findings — 34 resolved, 1 open (W-D4), 1 aspirational (W-F2, not a bug).**
+**38 findings — 34 resolved, 3 open (W-D4, W-D5, W-D6), 1 aspirational (W-F2, not a bug).**
 *(W-D3 found 2026-08-21 while reviewing the W-D2 decision; W-D4 split off from it 2026-08-23.)*
 
 > **Resolution pass 2026-08-20.** The remaining code + spec findings were closed in
@@ -238,6 +238,24 @@ above) and the established GDPR pattern in this codebase is to **scrub** free te
 the row (`crmInterview.updateMany` sets `notes: null, outcomeNotes: null` in the same transaction).
 Deciding whether task free-text should be scrubbed on erasure is a product/DPO call, not a
 reconciliation.
+
+**W-D5 — the note prune is not observable. [Medium] [code] — OPEN (2026-08-23, Phase-1 architecture review)**
+The prune hard-deletes user records and emits nothing: no audit row, no domain event, no timeline
+entry, no count in the action's result. On the `anonymizePerson` path that is an erasure side effect
+with no trace of what was erased. Deliberately NOT fixed here: `DataAuditAction`
+(`src/lib/audit/data-audit.ts:26`) mirrors the spec-governed `enum AuditAction`
+(`specs/audit-trail.allium:52`), so adding a prune action means a spec change — a new rule saying when
+the entry is emitted, plus the `SnapshotsAreFieldDiffsNotPii` obligation — not a code tweak.
+Do it via `allium:tend` first, then the code.
+
+**W-D6 — the prune has no rule in `crm.allium`. [Medium] [spec] — OPEN (2026-08-23, Phase-1 architecture review)**
+This is a spec-driven project, and "deleting a Person/Company/Job reaps notes it orphaned" is
+behaviour a stakeholder cares about, yet no construct describes it. `allium weed` cannot flag drift
+on a behaviour the spec never mentions — which is exactly how the task-deletion bug (see W-D3) got
+past `allium check`. The obligation compares two moments in time (before/after the cascade), so per
+the `TipReifiesToJob` precedent it belongs in rule prose or as an `ensures` on a delete rule, not in
+an expression-bearing invariant.
+
 
 
 **W-D2 — `ConvertedReferralHasJob` is unenforceable against Job deletion. [Medium-High] [both] — ✅ RESOLVED 2026-08-20 (decision C)**

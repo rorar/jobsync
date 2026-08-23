@@ -44,6 +44,9 @@ jest.mock("@prisma/client", () => {
     crmNote: {
       deleteMany: jest.fn(),
     },
+    crmNoteTarget: {
+      findMany: jest.fn(),
+    },
     profile: {
       findFirst: jest.fn(),
       create: jest.fn(),
@@ -153,6 +156,9 @@ describe("mock.actions", () => {
     process.env.NEXT_PUBLIC_ENABLE_MOCK_DATA = "true";
     // W-D3: clearing mock data prunes notes orphaned by the cascade.
     (prisma.crmNote.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+    (prisma.crmNoteTarget.findMany as jest.Mock).mockResolvedValue([
+      { noteId: "note-1" },
+    ]);
   });
 
   afterEach(() => {
@@ -533,7 +539,11 @@ describe("mock.actions", () => {
       // W-D3: a real note attached only to a deleted mock job/company would be
       // left unreachable — prune it. Tasks stay (visible on the board).
       expect(prisma.crmNote.deleteMany).toHaveBeenCalledWith({
-        where: { userId: mockUser.id, targets: { none: {} } },
+        where: {
+          id: { in: ["note-1"] },
+          userId: mockUser.id,
+          targets: { none: {} },
+        },
       });
       expect(result.data?.resumes).toBe(1);
       expect(result.data?.companies).toBe(12);

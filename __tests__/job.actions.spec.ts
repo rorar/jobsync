@@ -61,6 +61,9 @@ jest.mock("@prisma/client", () => {
     crmNote: {
       deleteMany: jest.fn(),
     },
+    crmNoteTarget: {
+      findMany: jest.fn(),
+    },
     crmTask: {
       deleteMany: jest.fn(),
     },
@@ -1131,6 +1134,9 @@ describe("jobActions", () => {
     beforeEach(() => {
       (prisma.crmNote.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.crmTask.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.crmNoteTarget.findMany as jest.Mock).mockResolvedValue([
+        { noteId: "note-1" },
+      ]);
     });
 
     it("deletes the job and prunes notes orphaned by the cascade (W-D3)", async () => {
@@ -1150,8 +1156,18 @@ describe("jobActions", () => {
       expect(Array.isArray(ops)).toBe(true);
       expect(ops).toHaveLength(2);
 
+      // Scoped to the notes that actually pointed at THIS job — deleting a job
+      // must not reap residue left behind by an unrelated delete.
+      expect(prisma.crmNoteTarget.findMany).toHaveBeenCalledWith({
+        where: { targetJobId: "job-id", note: { userId: mockUser.id } },
+        select: { noteId: true },
+      });
       expect(prisma.crmNote.deleteMany).toHaveBeenCalledWith({
-        where: { userId: mockUser.id, targets: { none: {} } },
+        where: {
+          id: { in: ["note-1"] },
+          userId: mockUser.id,
+          targets: { none: {} },
+        },
       });
       // An orphaned TASK is not residue — the board lists tasks unfiltered and
       // renders the zero-target case, and rule DeleteTask forbids hard-deleting

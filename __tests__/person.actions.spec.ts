@@ -171,8 +171,16 @@ describe("person.actions — ADR-015 IDOR ownership enforcement", () => {
       // Removing the person's note targets can leave a note with zero targets —
       // unreachable in the UI, yet still holding free text about the erased
       // person (GDPR Art. 17). It must be pruned in the same tx.
+      expect(mockDb.crmNoteTarget.findMany).toHaveBeenCalledWith({
+        where: { targetPersonId: PERSON_ID, note: { userId: USER.id } },
+        select: { noteId: true },
+      });
       expect(mockDb.crmNote.deleteMany).toHaveBeenCalledWith({
-        where: { userId: USER.id, targets: { none: {} } },
+        where: {
+          id: { in: [] },
+          userId: USER.id,
+          targets: { none: {} },
+        },
       });
 
       // Tasks are NOT pruned: an orphaned task stays visible on the board and

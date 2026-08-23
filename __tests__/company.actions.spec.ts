@@ -34,6 +34,9 @@ jest.mock("@prisma/client", () => {
     crmNote: {
       deleteMany: jest.fn(),
     },
+    crmNoteTarget: {
+      findMany: jest.fn(),
+    },
     crmTask: {
       deleteMany: jest.fn(),
     },
@@ -587,6 +590,9 @@ describe("Company Actions", () => {
     beforeEach(() => {
       (prisma.crmNote.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.crmTask.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.crmNoteTarget.findMany as jest.Mock).mockResolvedValue([
+        { noteId: "note-1" },
+      ]);
       (prisma.$transaction as jest.Mock).mockImplementation(
         async (ops: unknown) => Promise.all(ops as Promise<unknown>[]),
       );
@@ -622,8 +628,17 @@ describe("Company Actions", () => {
       expect(Array.isArray(ops)).toBe(true);
       expect(ops).toHaveLength(2);
 
+      // Scoped to the notes that actually pointed at THIS company.
+      expect(prisma.crmNoteTarget.findMany).toHaveBeenCalledWith({
+        where: { targetCompanyId: "company-id", note: { userId: mockUser.id } },
+        select: { noteId: true },
+      });
       expect(prisma.crmNote.deleteMany).toHaveBeenCalledWith({
-        where: { userId: mockUser.id, targets: { none: {} } },
+        where: {
+          id: { in: ["note-1"] },
+          userId: mockUser.id,
+          targets: { none: {} },
+        },
       });
       expect(prisma.crmTask.deleteMany).not.toHaveBeenCalled();
       // The prune must be the LAST op in the array.

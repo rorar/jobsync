@@ -11,8 +11,7 @@
  * still holding its free-text body — which, on the GDPR erasure path, is free
  * text about the very person being erased. `CreateNote` requires
  * `targets.count > 0` (specs/crm.allium) and creation is atomic (nested
- * `targets: { create: [...] }`), so a zero-target note is always residue and can
- * be pruned unconditionally per user.
+ * `targets: { create: [...] }`), so a note left with no targets is residue.
  *
  * A TASK is deliberately NOT pruned. It is not residue:
  *   - the task board reads `getCrmTasks()` with no filter
@@ -27,14 +26,29 @@
  * not a standing predicate over current state (the same reasoning that moved
  * the converted-referral guarantee onto `TipReifiesToJob`, W-D2).
  *
- * ORDERING: the prune matches on `targets: { none: {} }`, which only holds once
- * the cascade has removed the join rows, so it must run AFTER the delete. Prisma
- * array transactions execute in order — `withOrphanedCrmPrune` owns that
- * position so a caller cannot get it wrong:
+ * SCOPE: the prune is deliberately NOT a per-user sweep of every zero-target
+ * note. It only reaps notes that actually pointed at the entity being deleted,
+ * so `deleteJobById` cannot reap a note orphaned weeks ago by something else,
+ * and residue left by some *other* defect survives as evidence of that defect
+ * instead of being silently swallowed. Two phases:
  *
+ *   1. `collectOrphanCandidateNoteIds` BEFORE the delete — the join rows still
+ *      exist and name their note.
+ *   2. `withOrphanedCrmPrune` appends the prune to the transaction array; it
+ *      deletes a candidate only if it is left with NO targets at all, so a note
+ *      that also targeted a person or company survives untouched.
+ *
+ * ORDERING: `targets: { none: {} }` only holds once the cascade has removed the
+ * join rows, so the prune must run after the delete. Prisma array transactions
+ * execute in order and `withOrphanedCrmPrune` owns the last position, so a
+ * caller cannot get it wrong:
+ *
+ *   const noteIds = await collectOrphanCandidateNoteIds(prisma, userId, {
+ *     targetJobId: jobId,
+ *   });
  *   await prisma.$transaction(
- *     withOrphanedCrmPrune(prisma, userId, [
- *       prisma.job.delete({ where: { id, userId } }),
+ *     withOrphanedCrmPrune(prisma, userId, noteIds, [
+ *       prisma.job.delete({ where: { id: jobId, userId } }),
  *     ]),
  *   );
  */
@@ -42,12 +56,30 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 /** Accepts the full client or a transaction client. */
-type CrmPruneDb = Pick<PrismaClient, "crmNote"> | Prisma.TransactionClient;
+type CrmPruneDb = Pick<PrismaClient, "crmNote" | "crmNoteTarget"> | Prisma.TransactionClient;
 
 type PruneOp = Prisma.PrismaPromise<Prisma.BatchPayload>;
 
-function orphanedNotePruneOp(db: CrmPruneDb, userId: string): PruneOp {
-  return db.crmNote.deleteMany({ where: { userId, targets: { none: {} } } });
+/**
+ * Notes that point at the entity about to be deleted — the only candidates the
+ * prune may touch. Call this BEFORE the delete: afterwards the join rows are
+ * gone and nothing names the note any more.
+ *
+ * `where` is the caller's target predicate on `CrmNoteTarget`
+ * (`{ targetJobId }`, `{ targetPersonId }`, a nested relation filter, …).
+ * Ownership scoping via `note.userId` is added here — `CrmNoteTarget` has no
+ * `userId` column of its own (ADR-015).
+ */
+export async function collectOrphanCandidateNoteIds(
+  db: CrmPruneDb,
+  userId: string,
+  where: Prisma.CrmNoteTargetWhereInput,
+): Promise<string[]> {
+  const rows = await db.crmNoteTarget.findMany({
+    where: { ...where, note: { userId } },
+    select: { noteId: true },
+  });
+  return [...new Set(rows.map((r) => r.noteId))];
 }
 
 /**
@@ -56,25 +88,44 @@ function orphanedNotePruneOp(db: CrmPruneDb, userId: string): PruneOp {
  * caller's own tuple types survive, so destructuring still works:
  *
  *   const [company] = await prisma.$transaction(
- *     withOrphanedCrmPrune(prisma, userId, [prisma.company.delete({ ... })]),
+ *     withOrphanedCrmPrune(prisma, userId, noteIds, [
+ *       prisma.company.delete({ ... }),
+ *     ]),
  *   );
+ *
+ * The returned array's LAST element resolves to the prune's `{ count }`.
  */
 export function withOrphanedCrmPrune<T extends readonly Prisma.PrismaPromise<unknown>[]>(
   db: CrmPruneDb,
   userId: string,
+  candidateNoteIds: readonly string[],
   ops: readonly [...T],
 ): [...T, PruneOp] {
-  return [...ops, orphanedNotePruneOp(db, userId)] as [...T, PruneOp];
+  const prune = db.crmNote.deleteMany({
+    where: {
+      id: { in: [...candidateNoteIds] },
+      userId,
+      targets: { none: {} },
+    },
+  });
+  return [...ops, prune] as [...T, PruneOp];
 }
 
 /**
- * Await-and-count variant, for callers that are not building a transaction
- * array (or are already inside a `$transaction` callback).
+ * Prune the collected candidates, for callers that are not building a
+ * transaction array. The candidates must have been collected BEFORE the delete
+ * (`collectOrphanCandidateNoteIds`) — afterwards the join rows are gone and
+ * nothing names the note any more. Returns how many notes were pruned.
  */
-export async function pruneOrphanedCrmNotes(
+export async function pruneOrphanedCrmNotesByIds(
   db: CrmPruneDb,
   userId: string,
+  candidateNoteIds: readonly string[],
 ): Promise<number> {
-  const { count } = await orphanedNotePruneOp(db, userId);
+  if (candidateNoteIds.length === 0) return 0;
+
+  const { count } = await db.crmNote.deleteMany({
+    where: { id: { in: [...candidateNoteIds] }, userId, targets: { none: {} } },
+  });
   return count;
 }

@@ -9,7 +9,7 @@ import { ActionResult } from "@/models/actionResult";
 import { handleError } from "@/lib/utils";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import { extractEmailDomain } from "@/lib/crm/blocklist-match";
-import { withOrphanedCrmPrune } from "@/lib/crm/orphan-targets";
+import { collectOrphanCandidateNoteIds, withOrphanedCrmPrune } from "@/lib/crm/orphan-targets";
 import {
   type TypedEmail,
   type TypedPhone,
@@ -564,6 +564,11 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
       .filter((d): d is string => d !== null);
     const blockedHandles = [...new Set([...personEmails, ...personPhones, ...personEmailDomains])];
 
+    // Collect BEFORE the transaction removes this person's note targets.
+    const orphanCandidates = await collectOrphanCandidateNoteIds(prisma, user.id, {
+      targetPersonId: personId,
+    });
+
     // Transaction: anonymize person + cascade delete targets (GDPR Art. 17)
     await prisma.$transaction(
       // W-D3 (GDPR Art. 17): removing the note targets above can leave a note
@@ -571,7 +576,7 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
       // yet still holding free text about the erased person. withOrphanedCrmPrune
       // appends that prune after every statement below. Tasks are left alone (they
       // stay visible on the board) — see the orphan-targets module docs.
-      withOrphanedCrmPrune(prisma, user.id, [
+      withOrphanedCrmPrune(prisma, user.id, orphanCandidates, [
         // Remove note targets (ADR-015: scoped via note.userId — CrmNoteTarget has no userId column)
         prisma.crmNoteTarget.deleteMany({ where: { targetPersonId: personId, note: { userId: user.id } } }),
         // Remove task targets (ADR-015: scoped via task.userId — CrmTaskTarget has no userId column)
