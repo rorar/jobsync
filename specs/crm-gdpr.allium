@@ -7,82 +7,85 @@
 --
 -- Scope: GDPR compliance layer for CRM contact management
 -- Includes: Data subject requests (access, erasure, rectification, portability),
---           retention policies, contact auto-creation constraints, participant
---           anonymization, data classification
+--           consent withdrawal (Art. 7(3)), participant anonymization,
+--           data classification
 -- Excludes:
---   - CRM domain model (see reference-twenty-crm.allium)
+--   - CRM domain model (see crm.allium — imported below, NOT re-declared)
+--   - Person lifecycle, anonymisation cascade and auto-created retention
+--     expiry (all owned by crm.allium; this module delegates to them)
 --   - Consent banner / cookie UI (not applicable — self-hosted, no tracking)
 --   - Breach notification procedures (operational, not domain logic)
 --   - Data Processing Agreements with vendors (legal, not code)
---   - User account deletion (see auth-session.allium rule DeleteAccount —
---     the User/operator is not a CRM data subject)
+--   - User account deletion and full-platform export (see auth-session.allium
+--     rule DeleteAccount and gdpr-data-rights.allium — the User/operator is not
+--     a CRM data subject)
 --
 -- Legal basis: Art. 6(1)(f) DSGVO — Berechtigtes Interesse (Legitimate Interest)
 -- JobSync is self-hosted, single-user/small-team. The CRM operator manages their
 -- own job search contacts. No SaaS data processing agreement needed.
 
--- Dependencies: CRM entities from future crm.allium (currently documented
--- in reference-twenty-crm.allium). Once crm.allium exists, replace external
--- entities with: use "./crm.allium" as crm
+-- Dependencies: CRM entities come from crm.allium via the import below.
+-- W-H1 (2026-08-25): this module used to hand-copy twelve CRM entities as
+-- `external entity` stubs, because crm.allium did not exist when it was written.
+-- It has existed since Welle 3, and the copies had drifted: they referenced
+-- fields that no longer exist (Person.job_title, Person.city), missed a live
+-- enum value (DataSource.quick_capture), and in one case prescribed the
+-- OPPOSITE outcome to crm.allium and to the code (retention expiry: erase vs
+-- archive). The instruction to migrate had been sitting in this header
+-- unexecuted since Welle 3; it is now executed. Nine stubs became qualified
+-- `crm/...` references; three honest externals remain (see below).
+-- Do NOT re-introduce a local copy of a crm.allium entity, enum or config —
+-- that is the exact mechanism this migration removed.
+
+use "./crm.allium" as crm
 
 -- =============================================================================
 -- External Entities
 -- =============================================================================
 
--- CRM entities defined in reference-twenty-crm.allium / future crm.allium.
--- This spec adds GDPR-specific behaviour on top of them.
+-- These three are NOT copies of anything JobSync models — they are genuine
+-- externals describing an integration that does not exist yet, which is what
+-- `external entity` is for. They are deliberately NOT linked to crm.allium.
 
-external entity Person {
-    name: String?
-    emails: List<String>
-    phones: List<String>
-    job_title: String?
-    city: String?
-    created_at: Timestamp
+external entity MessageParticipant {
+    -- Email-sync participant. Modelled only in reference-twenty-crm.allium
+    -- (:483) as prior art; there is no JobSync Prisma model and no code.
+    -- communication-connector.allium is the spec that will own inbound message
+    -- sync, and it is DEFERRED — it does not declare this entity today, so
+    -- there is nothing to import. Stays external until that connector lands.
+    handle: String?
+    person: crm/Person?
+    display_name: String?
 }
 
-external entity Note { title: String }
-external entity Task { title: String? }
-external entity NoteTarget { note: Note?, target_person: Person? }
-external entity TaskTarget { task: Task?, target_person: Person? }
-external entity JobContact { person: Person? }
-external entity Interview { person: Person?, notes: String?, outcome_notes: String? }
-external entity TimelineActivity { target_person: Person?, happens_at: Timestamp }
-external entity MessageParticipant { handle: String?, person: Person?, display_name: String? }
-external entity CalendarEventParticipant { handle: String?, person: Person?, display_name: String? }
-external entity Blocklist { handle: String, type: BlocklistType }
-external entity Attachment { target_person: Person? }
+external entity CalendarEventParticipant {
+    -- Calendar-sync participant. Same situation as MessageParticipant:
+    -- reference-twenty-crm.allium (:562) only, no Prisma model, no code, and
+    -- the owning connector spec is deferred. Stays external.
+    handle: String?
+    person: crm/Person?
+    display_name: String?
+}
+
+external entity Attachment {
+    -- A file attached to a CRM contact. NOTE — this is a NAME COLLISION, not a
+    -- missing import: application-documents.allium:229 also declares an
+    -- `Attachment`, but that one hangs off an ApplicationBundle and has no
+    -- `target_person` at all. Linking to it would be wrong. The CRM-contact
+    -- attachment is modelled only in reference-twenty-crm.allium (:586) and has
+    -- no Prisma model. Stays external.
+    target_person: crm/Person?
+}
 
 -- =============================================================================
 -- Enumerations
 -- =============================================================================
 
-enum DataSource {
-    -- How a Person record entered the system
-    manual
-    auto_created
-    imported
-}
-
-enum BlocklistType {
-    -- How a Blocklist entry's handle is matched against a person's handles
-    -- (Welle 3 Gap-6).
-    email      -- exact email handle
-    phone      -- exact phone handle
-    domain     -- the email's domain or any parent domain (acme.com ⊇ eu.acme.com)
-    pattern    -- a `*`-glob over the handle (ReDoS-safe matching)
-}
-
-enum ProcessingBasis {
-    -- DSGVO Art. 6(1) legal basis for processing this record
-    legitimate_interest    -- Art. 6(1)(f) — default for all CRM contacts
-    consent                -- Art. 6(1)(a) — if explicit consent obtained.
-                           -- Withdrawable at any time per Art. 7(3); see
-                           -- consent_withdrawn_at + rules WithdrawConsent /
-                           -- ReinstateConsent. Processing performed before
-                           -- withdrawal remains lawful.
-    contract               -- Art. 6(1)(b) — if contact is a contractual party
-}
+-- DataSource, ProcessingBasis and BlocklistType are NOT declared here — they
+-- are crm.allium's (crm/DataSource, crm/ProcessingBasis, crm/BlocklistType).
+-- Local copies of all three existed until W-H1 and crm/DataSource had already
+-- gained a fourth member (`quick_capture`) that the copy here never learned
+-- about, leaving every rule in this file blind to a live provenance value.
 
 enum DataSubjectRequestType {
     access         -- Art. 15: right to know what data we hold
@@ -99,8 +102,8 @@ enum DataSubjectRequestStatus {
 }
 
 -- DSGVO Art. 4(1) classification of CRM entities:
---   personal_data:           Person, MessageParticipant, CalendarEventParticipant
---   potential_personal_data: Note.body_v2, Task.body_v2, Attachment content
+--   personal_data:           crm/Person, MessageParticipant, CalendarEventParticipant
+--   potential_personal_data: crm/Note.body, crm/Task.description, Attachment content
 --   not_personal_data:       Company (juristische Person), Opportunity, View, Workflow
 
 -- =============================================================================
@@ -108,17 +111,30 @@ enum DataSubjectRequestStatus {
 -- =============================================================================
 
 value PersonDataExport {
-    -- Machine-readable export of all personal data held about a Person.
+    -- Machine-readable export of all personal data held about a crm/Person.
     -- Produced by Art. 15 access requests and Art. 20 portability requests.
-    person_name: String?
-    person_emails: List<String>
-    person_phones: List<String>
-    person_job_title: String?
-    person_city: String?
+    --
+    -- W-H1: this shape is now derived from what the implementation actually
+    -- reads, not from the old stub. The nearest real implementation is
+    -- src/lib/export/collect-user-data.ts (which serves gdpr-data-rights.allium
+    -- ExportUserData — the whole-account export — and projects each Person
+    -- through exactly the field set below). The previous version of this value
+    -- specified `person_job_title` and `person_city`; NEITHER field exists on
+    -- crm/Person any more (Welle 3 Kette B replaced job_title with `headline`
+    -- and city with a structured `address`), so the spec described an export
+    -- that could not be produced.
+    person_name: crm/FullName
+    person_emails: List<crm/TypedEmail>
+    person_phones: List<crm/TypedPhone>
+    person_headline: String?
+    person_companies: List<crm/CompanyAssociation>
+    person_social_profiles: List<crm/SocialProfile>
+    person_status: crm/PersonStatus
     person_created_at: Timestamp
-    data_source: DataSource
-    processing_basis: ProcessingBasis
+    data_source: crm/DataSource
+    processing_basis: crm/ProcessingBasis
     consent_withdrawn_at: Timestamp?
+    retention_expires_at: Timestamp?
     linked_notes: List<String>
     linked_tasks: List<String>
     linked_timeline_events: Integer
@@ -129,6 +145,9 @@ value PersonDataExport {
 
 value ErasureResult {
     -- Documents what was anonymized/removed during an Art. 17 erasure.
+    -- Spans BOTH halves of the erasure (see rule FulfillErasureRequest): the
+    -- person-and-CRM-links half performed by crm/AnonymizePerson, and the
+    -- external-participant half performed here.
     person_anonymized: Boolean
     job_contacts_removed: Integer
     interviews_detached: Integer
@@ -145,32 +164,50 @@ value ErasureResult {
 -- Entities
 -- =============================================================================
 
-entity PersonGdprExtension {
-    -- GDPR-relevant metadata attached to each Person record.
-    -- In implementation: these fields are added directly to the Person
-    -- Prisma model. Modeled as a separate entity here because Person
-    -- is an external entity from the CRM reference spec.
-    person: Person
-    data_source: DataSource
-    processing_basis: ProcessingBasis
-    retention_expires_at: Timestamp?
-    consent_withdrawn_at: Timestamp?
-    erasure_requested_at: Timestamp?
-    is_anonymized: Boolean
-
-    is_retention_expired: retention_expires_at != null and retention_expires_at <= now
-    is_auto_created: data_source = auto_created
-
-    -- Art. 7(3): a consent-based record whose consent has been withdrawn is
-    -- processing-restricted. Records on other legal bases are never blocked.
-    is_consent_blocked: processing_basis = consent and consent_withdrawn_at != null
-}
+-- NOTE — `entity PersonGdprExtension` was DELETED by W-H1 (2026-08-25).
+-- Its own comment recorded that it existed only as a workaround: "In
+-- implementation: these fields are added directly to the Person Prisma model.
+-- Modeled as a separate entity here because Person is an external entity from
+-- the CRM reference spec." Person is no longer external, so the workaround is
+-- gone and its fields live where the implementation always had them:
+--   data_source, processing_basis, retention_expires_at  -> crm/Person (already)
+--   is_retention_expired, is_auto_created                -> crm/Person (already)
+--   consent_withdrawn_at, is_consent_blocked             -> crm/Person (added by W-H1)
+--   is_anonymized                        -> crm/Person.status = anonymized
+--                                           (a modelled terminal state, so the
+--                                           boolean was a second source of truth)
+--   erasure_requested_at                 -> DELETED: declared, never referenced
+--                                           by any rule or invariant, no Prisma
+--                                           column, no code. It was dead.
+-- `invariant EveryPersonHasGdprExtension` went with it — it asserted a join
+-- that only existed because of the split.
 
 entity DataSubjectRequest {
     -- Tracks DSGVO data subject rights requests.
     -- Each request has a 30-day response deadline (Art. 12(3)).
+    --
+    -- ===== ASPIRATIONAL — NOT IMPLEMENTED =====
+    -- There is NO Prisma model and NO code for this entity or for the workflow
+    -- around it (`grep -rn "DataSubjectRequest" src/` returns nothing, verified
+    -- 2026-08-25). Seven of the rules in this module (SubmitDataSubjectRequest,
+    -- BeginProcessingRequest, FulfillAccessRequest, FulfillErasureRequest,
+    -- RejectErasureForLegalRetention, FulfillRectificationRequest,
+    -- FulfillPortabilityRequest) describe that unbuilt workflow. This is a
+    -- deliberate forward-looking specification, not drift — but do not go
+    -- looking for the table, and do not report its absence as a finding.
+    -- What IS implemented today, and where:
+    --   Art. 15/20 export  -> gdpr-data-rights.allium ExportUserData
+    --                         (src/lib/export/collect-user-data.ts) —
+    --                         whole-account, not per-data-subject
+    --   Art. 17 erasure    -> crm/AnonymizePerson
+    --                         (src/actions/person.actions.ts anonymizePerson)
+    --   Art. 7(3) consent  -> WithdrawConsent / ReinstateConsent below
+    --                         (src/actions/person.actions.ts) — see surface
+    --                         ConsentManagement
+    -- The gap this entity fills is the REQUEST WRAPPER: intake, the 30-day
+    -- Art. 12(3) clock, status tracking and a documented rejection path.
     type: DataSubjectRequestType
-    person: Person
+    person: crm/Person
     status: DataSubjectRequestStatus
     requested_at: Timestamp
     deadline: Timestamp
@@ -197,16 +234,24 @@ config {
     -- Art. 12(3): response deadline for data subject requests
     dsr_response_deadline: Duration = 30.days
 
-    -- Retention period for auto-created contacts (from email/calendar sync)
-    auto_created_contact_retention: Duration = 730.days
-
-    -- Retention period for timeline activities
+    -- Retention window for CRM timeline activities.
+    -- W-E6 named this module the owner of the timeline-retention RULE, and
+    -- crm.allium:449 now points here for the value. See the CONTRADICTION note
+    -- on rule ExpireOldTimelineActivities before relying on either.
     timeline_retention: Duration = 1095.days
 
-    -- Data minimization: max fields captured during auto-creation
-    -- Only name + primary email, no phone, no address, no enrichment
+    -- Data minimization: max fields captured during auto-creation.
+    -- Only name + primary email, no phone, no address, no enrichment.
+    -- The rule that ENFORCES this is crm/AutoCreatePersonFromEmail, which
+    -- populates exactly these two and nothing else; the value is kept here
+    -- because data minimisation is this module's declared scope.
     auto_creation_allowed_fields: Set<String> = {"name", "email"}
 }
+
+-- NOTE — `config auto_created_contact_retention = 730.days` was DELETED by
+-- W-H1. It duplicated crm/config.auto_created_retention (same 730.days), which
+-- is the value crm/AutoCreatePersonFromEmail and crm/ExpireAutoCreatedPersons
+-- actually consume. Reference crm/config.auto_created_retention instead.
 
 -- =============================================================================
 -- Rules
@@ -246,25 +291,27 @@ rule BeginProcessingRequest {
 
 rule FulfillAccessRequest {
     -- Export all personal data held about the data subject.
-    -- Collects data from Person + all linked entities.
+    -- Collects data from crm/Person + all linked entities.
     when: FulfillAccess(request)
 
     requires: request.status = processing
     requires: request.type = access
 
     let person = request.person
-    let gdpr = person_gdpr_extension(person)
 
     ensures: request.response_data = PersonDataExport(
         person_name: person.name,
         person_emails: person.emails,
         person_phones: person.phones,
-        person_job_title: person.job_title,
-        person_city: person.city,
+        person_headline: person.headline,
+        person_companies: person.companies,
+        person_social_profiles: person.social_profiles,
+        person_status: person.status,
         person_created_at: person.created_at,
-        data_source: gdpr.data_source,
-        processing_basis: gdpr.processing_basis,
-        consent_withdrawn_at: gdpr.consent_withdrawn_at,
+        data_source: person.data_source,
+        processing_basis: person.processing_basis,
+        consent_withdrawn_at: person.consent_withdrawn_at,
+        retention_expires_at: person.retention_expires_at,
         linked_notes: collect_linked_notes(person),
         linked_tasks: collect_linked_tasks(person),
         linked_timeline_events: count_timeline_activities(person),
@@ -274,6 +321,15 @@ rule FulfillAccessRequest {
     )
     ensures: request.status = completed
     ensures: request.completed_at = now
+
+    @guidance
+        -- The field list mirrors the Person projection in
+        -- src/lib/export/collect-user-data.ts. Two fields that crm/Person holds
+        -- are deliberately NOT listed, because that implementation does not
+        -- export them: `address` and `avatar_url`. See the open question on
+        -- whether that is an Art. 15 completeness gap — do not "fix" the payload
+        -- here without settling it, since spec and code would then disagree in
+        -- the other direction.
 }
 
 -- -----------------------------------------------------------------------------
@@ -281,38 +337,54 @@ rule FulfillAccessRequest {
 -- -----------------------------------------------------------------------------
 
 rule FulfillErasureRequest {
-    -- Anonymize the Person in place (status = anonymized, all direct
-    -- identifiers nulled); the row is RETAINED as a de-identified tombstone
-    -- (audit trail + prevents re-creation), it is NOT deleted. Linked data is
-    -- cascaded/anonymized. Art. 17 is satisfied by irreversible anonymization,
-    -- not row deletion (the user-account-deletion path in gdpr-data-rights is a
-    -- separate, true hard delete).
-    -- CRITICAL PATTERN: Anonymize participants, do NOT delete messages/events.
+    -- The DSR WRAPPER around erasure. This rule deliberately does NOT restate
+    -- how a Person is anonymised — crm/AnonymizePerson owns that, and owns it
+    -- more completely than the copy that used to live here did (it also scrubs
+    -- created_by/updated_by actor metadata, cleans up now-pointless Blocklist
+    -- entries, and emits ContactDeleted).
+    --
+    -- The split, stated explicitly so the two halves stay fitted together:
+    --   crm/AnonymizePerson  owns  the Person row itself and every CRM link
+    --                              crm.allium models: interviews, note_targets,
+    --                              task_targets, job_contacts, timeline
+    --                              activities, blocklist cleanup.
+    --   THIS rule             owns  (a) the DSR wrapper — request.status,
+    --                              request.completed_at, the ErasureResult
+    --                              audit record; and (b) the three
+    --                              external-entity cascades crm.allium
+    --                              genuinely cannot model, because it does not
+    --                              declare those entities.
+    -- crm.allium:675 already carries an @guidance pointing this way for exactly
+    -- those three ("Implementation should also anonymize MessageParticipant and
+    -- CalendarEventParticipant per crm-gdpr.allium"); this is the other end of
+    -- that handshake.
+    --
+    -- Art. 17 is satisfied by irreversible anonymization, not row deletion: the
+    -- Person row is RETAINED as a de-identified tombstone (audit trail, and it
+    -- prevents silent re-creation). The user-account-deletion path in
+    -- gdpr-data-rights.allium is a separate, true hard delete.
+    -- CRITICAL PATTERN: anonymize participants, do NOT delete messages/events.
     -- Other participants in the same message/event still have rights to it.
     when: FulfillErasure(request)
 
     requires: request.status = processing
     requires: request.type = erasure
+    requires: request.person.status != anonymized
 
     let person = request.person
 
-    -- Delete direct associations
-    ensures:
-        for nt in NoteTargets:
-            if nt.target_person = person:
-                not exists nt
+    -- (1) Delegate the whole person-and-CRM-links half.
+    ensures: crm/AnonymizePerson(request.processed_by_user, person)
 
-    ensures:
-        for tt in TaskTargets:
-            if tt.target_person = person:
-                not exists tt
+    -- (2) Cascades crm.allium cannot express — the three external entities.
 
+    -- Attachments on the contact are hard-deleted (they exist only for them)
     ensures:
         for a in Attachments:
             if a.target_person = person:
                 not exists a
 
-    -- Anonymize message participants (preserve message, remove PII link)
+    -- Anonymize message participants (preserve the message, remove the PII link)
     ensures:
         for mp in MessageParticipants:
             if mp.person = person:
@@ -320,7 +392,7 @@ rule FulfillErasureRequest {
                 mp.display_name = null
                 mp.person = null
 
-    -- Anonymize calendar participants (same pattern)
+    -- Anonymize calendar participants (same pattern, same reason)
     ensures:
         for cp in CalendarEventParticipants:
             if cp.person = person:
@@ -328,45 +400,14 @@ rule FulfillErasureRequest {
                 cp.display_name = null
                 cp.person = null
 
-    -- Remove the job-contact links (hard delete — they only join this person)
-    ensures:
-        for jc in JobContacts:
-            if jc.person = person:
-                not exists jc
-
-    -- Detach interviews + scrub their free-text PII (preserve the interview row)
-    ensures:
-        for iv in Interviews:
-            if iv.person = person:
-                iv.person = null
-                iv.notes = null
-                iv.outcome_notes = null
-
-    -- Anonymize timeline references
-    ensures:
-        for ta in TimelineActivities:
-            if ta.target_person = person:
-                ta.target_person = null
-
-    -- Anonymize the Person record in place (retain row as de-identified tombstone)
-    ensures: person.status = anonymized
-    ensures: person.name = FullName(first_name: null, last_name: null)
-    ensures: person.emails = {}
-    ensures: person.phones = {}
-    ensures: person.headline = null
-    ensures: person.social_profiles = {}
-    ensures: person.avatar_url = null
-    ensures: person.address = null
-    ensures: person.companies = {}
-
-    -- Record what was done for audit trail
+    -- (3) Record what was done, across both halves, for the audit trail.
     ensures: request.response_data = ErasureResult(
         person_anonymized: true,
-        job_contacts_removed: count(JobContacts, jc => jc.person = person),
-        interviews_detached: count(Interviews, iv => iv.person = person),
-        note_targets_removed: count(NoteTargets, nt => nt.target_person = person),
-        task_targets_removed: count(TaskTargets, tt => tt.target_person = person),
-        timeline_activities_anonymized: count(TimelineActivities, ta => ta.target_person = person),
+        job_contacts_removed: person.job_contacts -> count,
+        interviews_detached: person.interviews -> count,
+        note_targets_removed: person.note_targets -> count,
+        task_targets_removed: person.task_targets -> count,
+        timeline_activities_anonymized: person.timeline_activities -> count,
         message_participants_anonymized: count(MessageParticipants, mp => mp.person = person),
         calendar_participants_anonymized: count(CalendarEventParticipants, cp => cp.person = person),
         attachments_removed: count(Attachments, a => a.target_person = person),
@@ -374,6 +415,10 @@ rule FulfillErasureRequest {
     )
     ensures: request.status = completed
     ensures: request.completed_at = now
+
+    @guidance
+        -- The counts must be evaluated BEFORE the cascades run, since the
+        -- cascades are what make them zero.
 }
 
 rule RejectErasureForLegalRetention {
@@ -395,7 +440,7 @@ rule RejectErasureForLegalRetention {
 -- -----------------------------------------------------------------------------
 
 rule FulfillRectificationRequest {
-    -- Update Person fields with corrected data.
+    -- Update crm/Person fields with corrected data.
     -- After rectification, re-run participant matching to update
     -- any MessageParticipant/CalendarEventParticipant links.
     when: FulfillRectification(request, corrected_fields)
@@ -415,25 +460,27 @@ rule FulfillRectificationRequest {
 
 rule FulfillPortabilityRequest {
     -- Export personal data in a structured, machine-readable format (JSON).
-    -- Same data collection as access request, but formatted for transfer.
+    -- Same data collection as the access request, but formatted for transfer.
     when: FulfillPortability(request)
 
     requires: request.status = processing
     requires: request.type = portability
 
     let person = request.person
-    let gdpr = person_gdpr_extension(person)
 
     ensures: request.response_data = PersonDataExport(
         person_name: person.name,
         person_emails: person.emails,
         person_phones: person.phones,
-        person_job_title: person.job_title,
-        person_city: person.city,
+        person_headline: person.headline,
+        person_companies: person.companies,
+        person_social_profiles: person.social_profiles,
+        person_status: person.status,
         person_created_at: person.created_at,
-        data_source: gdpr.data_source,
-        processing_basis: gdpr.processing_basis,
-        consent_withdrawn_at: gdpr.consent_withdrawn_at,
+        data_source: person.data_source,
+        processing_basis: person.processing_basis,
+        consent_withdrawn_at: person.consent_withdrawn_at,
+        retention_expires_at: person.retention_expires_at,
         linked_notes: collect_linked_notes(person),
         linked_tasks: collect_linked_tasks(person),
         linked_timeline_events: count_timeline_activities(person),
@@ -449,33 +496,52 @@ rule FulfillPortabilityRequest {
 -- Retention Enforcement
 -- -----------------------------------------------------------------------------
 
-rule ExpireAutoCreatedContacts {
-    -- Periodic cleanup: auto-created contacts whose retention has expired
-    -- are automatically erased. Uses the same anonymization cascade as
-    -- manual erasure requests.
-    when: RunRetentionCleanup()
-
-    ensures:
-        for gdpr in PersonGdprExtensions:
-            if gdpr.is_auto_created and gdpr.is_retention_expired and not gdpr.is_anonymized:
-                DataSubjectRequest.created(
-                    type: erasure,
-                    person: gdpr.person,
-                    status: pending,
-                    requested_at: now,
-                    deadline: now + config.dsr_response_deadline
-                )
-}
+-- NOTE — `rule ExpireAutoCreatedContacts` was DELETED by W-H1 (2026-08-25).
+-- crm.allium rule ExpireAutoCreatedPersons (crm.allium:767) is the SOLE OWNER
+-- of auto-created retention expiry. The rule deleted from here CONTRADICTED it
+-- outright: on the same trigger and the same subject, this module said expiry
+-- raises an erasure DataSubjectRequest and ends in `anonymized` (terminal,
+-- irreversible), while crm.allium says `archived` (reversible) plus a
+-- ReminderTriggered.
+-- The code archives: src/lib/scheduler/crm-cron.ts selects
+-- `{status: "active", dataSource: "auto_created", retentionExpiresAt: {lte: now}}`
+-- and writes `{status: "archived"}` plus a `retention_expired` timeline entry
+-- and a ReminderTriggered event. That matches crm.allium exactly.
+-- This mattered in practice: a reader consulting the GDPR spec — the natural
+-- place to look for a retention answer — was told that expiry irreversibly
+-- erases contacts. It does not. `allium check` could not see the conflict,
+-- because one spec talked about Person and the other about PersonGdprExtension.
 
 rule ExpireOldTimelineActivities {
-    -- Periodic cleanup: timeline activities older than retention window
-    -- are anonymized (target references removed, properties cleared).
+    -- Periodic cleanup: timeline activities older than the retention window
+    -- have their person reference removed (the row survives, de-identified).
+    --
+    -- ===== CONTRADICTION — UNRESOLVED, DO NOT TRUST THIS RULE ALONE =====
+    -- W-H1 (2026-08-25) found that this rule disagrees with both the code and
+    -- another spec, in the same way ExpireAutoCreatedContacts did:
+    --   THIS rule                              anonymise in place
+    --                                          (`ta.target_person = null`)
+    --   gdpr-data-rights.allium:404            hard DELETE the row
+    --   PurgeOldCrmActivityLogs                (`not exists cal`)
+    --   src/lib/scheduler/retention-cron.ts    hard DELETE the row
+    --   :203 purgeOldCrmActivityLogs           (`prisma.crmActivityLog
+    --                                            .deleteMany`)
+    -- Same subject (CRM timeline entries), same window (1095 days), different
+    -- outcome. The code and gdpr-data-rights.allium agree with each other; this
+    -- rule is the outlier, so on current evidence it is the one that is wrong.
+    -- It was NOT deleted here only because fixing it properly means choosing a
+    -- single owner across a spec this work stream is not scoped to edit
+    -- (gdpr-data-rights.allium). See the open question at the end of this file.
     when: RunRetentionCleanup()
 
     ensures:
-        for ta in TimelineActivities:
-            if ta.happens_at + config.timeline_retention < now:
+        for ta in crm/ActivityLogs:
+            if ta.happened_at + config.timeline_retention < now:
                 ta.target_person = null
+
+    @guidance
+        -- W-H1 also corrected the field name: the old local stub called this
+        -- `happens_at`, but crm/ActivityLog (and Prisma) call it `happened_at`.
 }
 
 -- -----------------------------------------------------------------------------
@@ -489,83 +555,98 @@ rule WithdrawConsent {
     -- processing (see invariant ConsentBlockedRecordIsProcessingRestricted);
     -- processing performed before this point stays lawful. Reversible via
     -- ReinstateConsent.
-    when: WithdrawConsent(gdpr)
+    when: WithdrawConsent(user, person)
 
-    requires: gdpr.processing_basis = consent
-    requires: gdpr.consent_withdrawn_at = null
+    requires: person.user_id = user.id
+    requires: person.processing_basis = consent
+    requires: person.consent_withdrawn_at = null
 
-    ensures: gdpr.consent_withdrawn_at = now
+    ensures: person.consent_withdrawn_at = now
+    ensures: person.updated_by = crm/ActorMetadata(source: manual, name: user.name)
+    ensures: crm/ContactUpdated(person_id: person.id, user_id: user.id)
+
+    @guidance
+        -- Implemented by withdrawConsent(personId) in src/actions/person.actions.ts:
+        -- ownership-scoped findFirst (ADR-015), rejects a non-consent basis with
+        -- crm.errors.consentNotApplicable and an already-withdrawn record with
+        -- crm.errors.consentAlreadyWithdrawn, then writes consentWithdrawnAt +
+        -- updatedBySource/updatedByName and publishes ContactUpdated.
 }
 
 rule ReinstateConsent {
     -- Inverse of WithdrawConsent: the data subject re-grants consent, clearing
     -- the withdrawal marker and lifting the processing restriction. Only valid
     -- for a consent-based record that is currently withdrawn.
-    when: ReinstateConsent(gdpr)
+    when: ReinstateConsent(user, person)
 
-    requires: gdpr.processing_basis = consent
-    requires: gdpr.consent_withdrawn_at != null
+    requires: person.user_id = user.id
+    requires: person.processing_basis = consent
+    requires: person.consent_withdrawn_at != null
 
-    ensures: gdpr.consent_withdrawn_at = null
+    ensures: person.consent_withdrawn_at = null
+    ensures: person.updated_by = crm/ActorMetadata(source: manual, name: user.name)
+    ensures: crm/ContactUpdated(person_id: person.id, user_id: user.id)
+
+    @guidance
+        -- Implemented by reinstateConsent(personId) in person.actions.ts; the
+        -- mirror of the above, rejecting a not-withdrawn record with
+        -- crm.errors.consentNotWithdrawn.
 }
 
 -- -----------------------------------------------------------------------------
--- Data Minimization at Auto-Creation
+-- Data Minimization at Contact Creation
 -- -----------------------------------------------------------------------------
 
-rule AutoCreatedContactMinimization {
-    -- When a Person is auto-created from an email/calendar participant,
-    -- only the minimum required fields are populated: name + primary email.
-    -- No phone, no city, no job_title, no enrichment.
-    when: AutoCreatePerson(participant)
-
-    ensures: PersonGdprExtension.created(
-        person: participant.created_person,
-        data_source: auto_created,
-        processing_basis: legitimate_interest,
-        retention_expires_at: now + config.auto_created_contact_retention,
-        is_anonymized: false
-    )
-}
-
-rule ManuallyCreatedContactMetadata {
-    -- When a Person is created manually by the CRM user.
-    -- No retention limit — user manages lifecycle.
-    when: ManuallyCreatePerson(person)
-
-    ensures: PersonGdprExtension.created(
-        person: person,
-        data_source: manual,
-        processing_basis: legitimate_interest,
-        retention_expires_at: null,
-        is_anonymized: false
-    )
-}
+-- NOTE — `rule AutoCreatedContactMinimization` and
+-- `rule ManuallyCreatedContactMetadata` were DELETED by W-H1 (2026-08-25).
+-- Both existed only to stamp data_source / processing_basis /
+-- retention_expires_at onto the old PersonGdprExtension. crm.allium already
+-- sets exactly those fields, on the Person itself, at the creating rule:
+--   auto-created  -> crm/AutoCreatePersonFromEmail (data_source: auto_created,
+--                    processing_basis: legitimate_interest,
+--                    retention_expires_at: now + config.auto_created_retention)
+--   manual        -> crm/CreatePerson (data_source: manual,
+--                    processing_basis: legitimate_interest, no retention limit)
+--   quick capture -> crm/QuickCapturePerson (data_source: quick_capture,
+--                    processing_basis: legitimate_interest, NO retention limit
+--                    — see the open question below; this module was asked to
+--                    decide and has not been able to)
+-- Keeping second copies here is what let the retention contradiction survive
+-- unnoticed for two Wellen.
 
 rule ImportedContactMetadata {
-    -- When a Person is imported (CSV, API, etc.).
-    -- Same retention as auto-created by default.
-    when: ImportPerson(person)
+    -- ===== ASPIRATIONAL — NO IMPLEMENTATION =====
+    -- When a Person is imported (CSV, API, etc.), it is governed like an
+    -- auto-created contact: same 2-year retention leash, legitimate interest.
+    -- Unlike the two rules deleted above, this one has NO counterpart in
+    -- crm.allium — there is no import rule there — so deleting it would lose
+    -- the only statement of how imported contacts are governed.
+    -- `imported` IS a live crm/DataSource value and the UI can already display
+    -- it (src/models/person.model.ts, ContactsPageClient.tsx), but nothing in
+    -- the codebase creates a Person with it. This rule specifies a path that
+    -- has not been built. When bulk import (ROADMAP 5.7/5.8) lands, this rule
+    -- should move to crm.allium next to CreatePerson, and this module should
+    -- keep only the retention judgement.
+    when: ImportPerson(user, person)
 
-    ensures: PersonGdprExtension.created(
-        person: person,
-        data_source: imported,
-        processing_basis: legitimate_interest,
-        retention_expires_at: now + config.auto_created_contact_retention,
-        is_anonymized: false
-    )
+    ensures: person.data_source = imported
+    ensures: person.processing_basis = legitimate_interest
+    ensures: person.retention_expires_at = now + crm/config.auto_created_retention
 }
 
 -- =============================================================================
 -- Invariants
 -- =============================================================================
 
-invariant EveryPersonHasGdprExtension {
-    -- Every Person in the CRM must have GDPR metadata tracking
-    -- data source, processing basis, and retention.
-    for p in Persons:
-        exists gdpr in PersonGdprExtensions where gdpr.person = p
-}
+-- NOTE — `invariant EveryPersonHasGdprExtension` was DELETED by W-H1: it
+-- asserted the Person <-> PersonGdprExtension join, which only existed because
+-- Person was an external stub. With the fields on crm/Person and non-null by
+-- declaration, the property is structural and needs no invariant.
+--
+-- NOTE — `invariant AutoCreatedContactHasRetention` was DELETED by W-H1: it is
+-- exactly crm/Person's own `invariant AutoCreatedHasRetention`
+-- (`data_source = auto_created implies retention_expires_at != null`), which
+-- lives on the entity where it belongs.
 
 invariant DataSubjectRequestHasDeadline {
     for r in DataSubjectRequests:
@@ -580,27 +661,20 @@ invariant DataSubjectRequestDeadlineWithin30Days {
 
 invariant ErasedPersonIsFullyAnonymized {
     -- After erasure, no MessageParticipant or CalendarEventParticipant
-    -- should still reference the deleted Person.
+    -- should still reference the erased Person.
     for mp in MessageParticipants:
-        mp.person != null implies exists p in Persons where p = mp.person
+        mp.person != null implies exists p in crm/Persons where p = mp.person
 
     for cp in CalendarEventParticipants:
-        cp.person != null implies exists p in Persons where p = cp.person
-}
-
-invariant AutoCreatedContactHasRetention {
-    -- Auto-created contacts MUST have a retention expiry date.
-    for gdpr in PersonGdprExtensions:
-        if gdpr.data_source = auto_created:
-            gdpr.retention_expires_at != null
+        cp.person != null implies exists p in crm/Persons where p = cp.person
 }
 
 invariant ConsentBlockOnlyOnConsentBasis {
     -- Art. 7(3): consent withdrawal only restricts records processed on the
     -- consent basis. A withdrawal marker on a legitimate_interest or contract
     -- record would be meaningless — those bases are unaffected by withdrawal.
-    for gdpr in PersonGdprExtensions:
-        gdpr.consent_withdrawn_at != null implies gdpr.processing_basis = consent
+    for p in crm/Persons:
+        p.consent_withdrawn_at != null implies p.processing_basis = consent
 }
 
 invariant ConsentBlockedRecordIsProcessingRestricted {
@@ -621,14 +695,14 @@ invariant ConsentBlockedRecordIsProcessingRestricted {
     -- processing rules rather than a state predicate, so it is asserted in
     -- prose here; the structural half (a block implies the consent basis) is
     -- checked by ConsentBlockOnlyOnConsentBasis above.
-    for gdpr in PersonGdprExtensions:
-        gdpr.is_consent_blocked implies gdpr.processing_basis = consent
+    for p in crm/Persons:
+        p.is_consent_blocked implies p.processing_basis = consent
 }
 
 invariant BlocklistSuppressesAutoCreation {
     -- No Person should be auto-created for a handle suppressed by the blocklist.
-    -- Enforced at creation time, not as a retroactive check. A Blocklist entry
-    -- suppresses according to its `type` (Welle 3 Gap-6):
+    -- Enforced at creation time, not as a retroactive check. A crm/Blocklist
+    -- entry suppresses according to its `type` (Welle 3 Gap-6):
     --   email | phone → exact handle match
     --   domain        → the email's domain or any parent domain
     --   pattern       → a `*`-glob over the handle (ReDoS-safe)
@@ -642,20 +716,101 @@ invariant BlocklistSuppressesAutoCreation {
     -- data-minimisation rules are this spec's declared scope, and only this
     -- version documents all four match modes. crm.allium enforces the property
     -- operationally, through AutoCreatePersonFromEmail's `requires` guards.
-    for gdpr in PersonGdprExtensions:
-        for b in Blocklists:
-            gdpr.is_auto_created and b.type = email
-                implies not gdpr.person.emails.any(e => e = b.handle)
+    --
+    -- W-H1 — the quick_capture case, stated rather than left silent: this
+    -- invariant guards `is_auto_created` only, i.e. data_source = auto_created.
+    -- A crm/QuickCapturePerson (data_source = quick_capture) is therefore NOT
+    -- suppressed by the blocklist, and crm/QuickCapturePerson declares no
+    -- blocklist `requires` either — so a user CAN quick-capture a blocklisted
+    -- handle. Assessed as CORRECT and left as-is: the blocklist suppresses
+    -- AUTO-creation (an unattended sync deciding to store a person), and a quick
+    -- capture is a deliberate, attended user act against a handle the user has
+    -- typed. Widening this to all data sources would let a stale blocklist entry
+    -- silently block a contact the user is explicitly trying to create. The
+    -- retention half of the quick_capture question is a different matter and is
+    -- genuinely undecided — see the open question at the end of this file.
+    for p in crm/Persons:
+        for b in crm/Blocklists:
+            p.is_auto_created and b.type = email
+                implies not p.emails.any(e => e.email = b.handle)
+}
+
+-- =============================================================================
+-- Actors
+-- =============================================================================
+
+-- This module declares NO actor of its own. It reuses crm.allium's CrmUser
+-- (crm.allium `actor CrmUser { identified_by: User }`) by qualified reference,
+-- because the data subject's record IS a crm/Person and the person acting on it
+-- IS the CRM user who owns it (crm/Person.user_id, ADR-015).
+-- Declaring a local `actor CrmUser` here would re-create, at the actor level,
+-- exactly the copy-paste drift that W-H1 removed at the entity level.
+
+-- =============================================================================
+-- Surfaces
+-- =============================================================================
+
+surface ConsentManagement {
+    -- W-H1 (2026-08-25) — THE FIX. Until now this module declared zero actors
+    -- and zero surfaces, so WithdrawConsent and ReinstateConsent — two Art. 7(3)
+    -- actions that are genuinely user-facing, invoked from
+    -- src/app/dashboard/contacts/[id]/PersonDetailClient.tsx:140,150 — existed
+    -- at no declared boundary in ANY spec. That was not an oversight: the
+    -- mechanism was the stub. The old `external entity Person` had no `user_id`,
+    -- so there was no ownership predicate, so no actor could be tied to it, so
+    -- no surface could be declared. Importing crm.allium supplies both
+    -- crm/Person.user_id and crm/CrmUser, and the boundary becomes declarable.
+    facing user: crm/CrmUser
+    context person: crm/Person where user_id = user.id
+
+    exposes:
+        person.processing_basis
+        person.consent_withdrawn_at
+        person.is_consent_blocked
+
+    provides:
+        WithdrawConsent(user, person)
+            when person.processing_basis = consent
+                and person.consent_withdrawn_at = null
+        ReinstateConsent(user, person)
+            when person.processing_basis = consent
+                and person.consent_withdrawn_at != null
+
+    related:
+        crm/PersonDetail(person)
+
+    @guidance
+        -- Not a standalone screen: rendered inside crm.allium's PersonDetail
+        -- surface, in the GDPR/governance area alongside the data_source /
+        -- processing_basis / retention_expires_at fields PersonDetail already
+        -- exposes. Both actions are confirm-dialog-gated in the implementation.
+        -- Both are ownership-scoped (ADR-015) and both are no-ops on a
+        -- non-consent basis, which is why the `when` guards mirror the rules'
+        -- `requires` exactly rather than merely hiding the buttons.
 }
 
 -- =============================================================================
 -- Open Questions
 -- =============================================================================
 
+-- RESOLVED — W-H1 (2026-08-25). This slot used to hold an open question asking
+-- where WithdrawConsent / ReinstateConsent belong, given that this module
+-- declared no actor and no surface while its Person was an external stub. It is
+-- answered, not abandoned: the stub is gone, this module imports crm.allium,
+-- and the two Art. 7(3) actions are now declared on `surface ConsentManagement`
+-- above, facing crm/CrmUser and contexted on crm/Person where user_id = user.id.
+-- The question's own predicted remedy ("once the documented use \"./crm.allium\"
+-- as crm migration lands it can borrow crm's CrmUser actor and expose a
+-- ConsentManagement surface") is exactly what was done. Do not re-raise it.
+
 open question "Should auto-created contacts receive a notification that their data is being processed? Art. 14 requires informing data subjects when data is obtained indirectly — but self-hosted single-user CRM may qualify for the household exemption (Art. 2(2)(c))."
 
-open question "Should the retention period for imported contacts differ from auto-created? Imports are deliberate user actions, auto-creation is automatic. Consider: imported = no auto-expiry (like manual), or same 2-year TTL?"
+open question "Should the retention period for imported contacts differ from auto-created? Imports are deliberate user actions, auto-creation is automatic. Consider: imported = no auto-expiry (like manual), or same 2-year TTL? Note rule ImportedContactMetadata currently assumes the same 2-year TTL, and is aspirational — no import path exists yet, so this is still cheap to change."
 
-open question "Should Note/Task body_v2 free-text fields be included in erasure cascades? They MAY contain personal data about the erased person but also contain the CRM user's own notes. Consider: flag-and-review vs automatic inclusion in export, exclude from deletion."
+open question "Should crm/Note.body and crm/Task.description free-text fields be included in erasure cascades? They MAY contain personal data about the erased person but also contain the CRM user's own notes. Consider: flag-and-review vs automatic inclusion in export, exclude from deletion."
 
-open question "W-H1: WithdrawConsent and ReinstateConsent are user-facing actions (invoked from PersonDetailClient), yet this module declares no surface — so two Art. 7(3) actions exist at no declared boundary in any spec. This module is deliberately surface-less while it depends on external Person/GDPR entities; once the documented `use \"./crm.allium\" as crm` migration lands it can borrow crm's CrmUser actor and expose a ConsentManagement surface (withdraw_consent / reinstate_consent, alongside export / anonymize). Until then the boundary is only implicit in crm.allium's PersonDetail surface."
+open question "Art. 15 completeness: PersonDataExport omits crm/Person.address and crm/Person.avatar_url. This is not an oversight in the spec — it mirrors the implementation exactly (src/lib/export/collect-user-data.ts:295-310 selects firstName, lastName, headline, emails, phones, companies, socialProfiles, status, dataSource, processingBasis, consentWithdrawnAt, retentionExpiresAt, createdAt, and nothing else; all six address* columns and avatarUrl are absent). W-H1 aligned the spec to the code rather than silently widening the payload, because the two directions have different consequences: widening the SPEC alone would re-create drift, and widening the CODE is a behaviour change to a live GDPR export. Art. 15(1) entitles the data subject to all personal data undergoing processing, and a postal address plainly qualifies, so the likely answer is that the CODE should grow, not that the spec should stay narrow. avatar_url is the weaker case (a URL, possibly to an image of the data subject, possibly to a third-party-hosted asset). Settle both together and change spec and code in the same commit."
+
+open question "W-H1 FOLLOW-UP — retention governance for quick_capture Persons is STILL UNDECIDED, and this module is where crm.allium (open question at crm.allium:1749) deferred the decision. Now that crm/DataSource is imported rather than hand-copied, the value is at least VISIBLE here — the old local copy of the enum had only three members and could not express it. State of play: crm/QuickCapturePerson sets no retention_expires_at, crm/Person.AutoCreatedHasRetention constrains only data_source = auto_created, and crm/ExpireAutoCreatedPersons guards on is_auto_created — so a quick_capture Person is today governed exactly like a full manual create (no expiry, ever). Is that intended? Quick capture is a deliberate user act (unlike email-sync auto-creation), which argues for manual-like treatment; but the record is knowingly incomplete at birth and may be a contact the user never returns to, which argues for a shorter leash. This needs a product/legal judgement, not a spec edit, so W-H1 deliberately did NOT settle it. Whoever settles it must also decide whether ImportedContactMetadata's sibling question (above) gets the same answer. Decide before quick-capture volume accumulates: retro-fitting an expiry onto existing records is a data-minimisation judgement made after the fact."
+
+open question "W-H1 FOUND A SECOND CONTRADICTION, out of scope to fix here — timeline-activity retention has two specs and they disagree. This module's rule ExpireOldTimelineActivities anonymises in place (target_person = null, row survives); gdpr-data-rights.allium:404 PurgeOldCrmActivityLogs hard-deletes the row; and the implementation (src/lib/scheduler/retention-cron.ts:203 purgeOldCrmActivityLogs, prisma.crmActivityLog.deleteMany) hard-deletes. Both specs use the same 1095-day window, from two separately-declared config values (this module's timeline_retention and gdpr-data-rights' crm_activity_log_retention). Code and gdpr-data-rights.allium agree, so on current evidence THIS module's rule is the wrong one. Resolving it properly means naming a single owner and deleting the loser, which requires editing gdpr-data-rights.allium — outside the W-H1 mandate (crm.allium + crm-gdpr.allium only). Note the two rules are not merely redundant: a hard delete also destroys the non-personal audit value of the timeline entry, so 'which is correct' is a real GDPR judgement (Art. 5(1)(e) storage limitation vs Art. 5(1)(f)/accountability), not just bookkeeping. NOTE for whoever picks this up: W-E6's earlier resolution — 'the timeline-retention RULE lives in crm-gdpr.allium' — was reached by comparing this module against crm.allium ONLY, and did not consider gdpr-data-rights.allium at all. Re-open that decision rather than inheriting it."

@@ -15,10 +15,16 @@
 -- Dependencies:
 --   - Job, Company from shared-entities.allium
 --   - JobStatusChanged from event-bus.allium
---   - DataSubjectRequest from crm-gdpr.allium
+-- W-H1 (2026-08-25): this module NO LONGER depends on crm-gdpr.allium — the
+-- dependency direction was flipped. crm-gdpr.allium now does `use "./crm.allium"
+-- as crm` and references crm/Person et al. directly instead of keeping its own
+-- `external entity` hand-copies of them. The old `use "./crm-gdpr.allium" as
+-- gdpr` line here had ZERO qualified references (every cross-spec link in this
+-- file is a prose comment), so removing it costs nothing and clears what would
+-- otherwise have been a real import cycle. Do NOT re-add it: crm.allium is the
+-- lower layer and must not import its own GDPR consumer.
 
 use "./crm-workflow.allium" as workflow
-use "./crm-gdpr.allium" as gdpr
 use "./event-bus.allium" as events
 use "./shared-entities.allium" as shared
 use "./notification-dispatch.allium" as notifications
@@ -253,6 +259,17 @@ entity Person {
     data_source: DataSource
     processing_basis: ProcessingBasis
     retention_expires_at: Timestamp?
+    -- Art. 7(3): the moment consent was withdrawn, or null if it never was.
+    -- Only meaningful together with processing_basis = consent; a withdrawal
+    -- marker on a legitimate_interest or contract record would be meaningless,
+    -- since those bases are unaffected by withdrawal (crm-gdpr.allium
+    -- ConsentBlockOnlyOnConsentBasis). Processing performed BEFORE withdrawal
+    -- stays lawful and is not undone. Reversible — see crm-gdpr.allium rules
+    -- WithdrawConsent / ReinstateConsent. Prisma: Person.consentWithdrawnAt.
+    -- W-H1: lived on crm-gdpr's PersonGdprExtension until 2026-08-25; it was
+    -- the one governance field that existed in Prisma and in code but had no
+    -- home on this entity.
+    consent_withdrawn_at: Timestamp?
 
     created_by: ActorMetadata
     updated_by: ActorMetadata
@@ -271,6 +288,11 @@ entity Person {
     primary_company: companies where is_primary = true -> company
     is_auto_created: data_source = auto_created
     is_retention_expired: retention_expires_at != null and retention_expires_at <= now
+    -- Art. 7(3): a consent-based record whose consent has been withdrawn is
+    -- processing-restricted. Records on other legal bases are never blocked.
+    -- The restriction itself (what may and may not act on such a record) is
+    -- specified in crm-gdpr.allium ConsentBlockedRecordIsProcessingRestricted.
+    is_consent_blocked: processing_basis = consent and consent_withdrawn_at != null
 
     transitions status {
         active -> archived
@@ -443,10 +465,16 @@ entity ConnectedAccount {
 config {
     -- GDPR retention
     auto_created_retention: Duration = 730.days
-    -- W-E6: the timeline-retention RULE lives in crm-gdpr.allium (which owns the
-    -- data-minimisation concern); this value is kept here for reference only and
-    -- is not consumed by a rule in this module.
-    timeline_retention: Duration = 1095.days
+    -- W-H1 (2026-08-25): `timeline_retention: Duration = 1095.days` was DELETED
+    -- here. No rule in this module consumed it — W-E6 had already found the
+    -- duplication and settled for a "kept for reference only" comment, which is
+    -- the same symptom-patching W-H1 exists to undo: a value two files must
+    -- manually keep in step is a drift mechanism, not documentation. Timeline
+    -- retention is specified where its rule lives. Note the owner is currently
+    -- CONTESTED between crm-gdpr.allium (ExpireOldTimelineActivities) and
+    -- gdpr-data-rights.allium (PurgeOldCrmActivityLogs), which disagree on
+    -- anonymise-vs-hard-delete — see the open question at the end of
+    -- crm-gdpr.allium. Do not re-add a third copy here to resolve that.
 
     -- Reminders
     interview_reminder_before: Duration = 24.hours
