@@ -1,10 +1,10 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-08-25
 
-**Total: 609 bugs found, 607 fixed, 3 open (2 accepted risk, 1 flake)**
+**Total: 610 bugs found, 607 fixed, 4 open (2 accepted risk, 1 flake, 1 GDPR design decision)**
 
 ### Status: ✅ WH-B1 fixed, WH-B2 open (test flake, not a product defect) — see Session 2026-08-25 · OP-B1..OP-B8 all fixed (CRM orphan-note prune + full-review, 2026-08-21/23) + IT-B1..IT-B4 all fixed (IT-B2/IT-B4 on 2026-08-19 §F; IT-B1/IT-B3 on 2026-08-20 weed-resolution pass) + 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
 
-## Session 2026-08-25 — W-H1 spec dependency flip + orphan-prune leftovers (2 found, 1 fixed)
+## Session 2026-08-25 — W-H1 spec dependency flip + orphan-prune leftovers (4 found, 2 fixed)
 
 Both were found incidentally while verifying the session's own work, not by looking for them.
 Neither was caused by this session's changes; both pre-date it.
@@ -28,6 +28,58 @@ warnings-only check was run, not `bun run lint`. Corrected here rather than quie
 block now carries a comment stating why it is empty. **Zero behaviour change** — the alternative
 (actually handling the errors) would change how the browser-automation scripts behave, which is not
 a lint fix.
+
+### WH-B4 — API doc claimed tags cascade on job delete — FIXED
+
+**Severity:** Low (documentation; would mislead an API consumer)
+**File:** `docs/architecture/public-api-v1.md` § `DELETE /api/v1/jobs/:id`
+
+Introduced by commit `010c9008` **in this same session**, while fixing a different error in the
+same paragraph (the doc claimed `200` + body where the route returns `204`). The replacement text
+said the delete cascades to "its `Note`s, tags and status history". `Note` and `JobStatusHistory`
+do cascade; **tags do not** — `Tag` is a many-to-many with `Job` (`jobs Job[]` / `tags Tag[]`,
+implicit join table), so the delete drops the association and the `Tag` survives as a user-level
+lookup shared across jobs. A consumer would expect their tag vocabulary to shrink when they delete
+a job.
+
+Fixed in `8dd32004` by listing the rows that actually carry `onDelete: Cascade` on `jobId`, each
+verified against `prisma/schema.prisma`, and calling out the tag exception explicitly.
+
+Worth noting for its own sake: this is a doc error introduced *while correcting a doc error*, and
+it was caught only because the review re-verified the replacement text against the schema instead
+of trusting it. Correcting a claim is not the same as verifying the correction.
+
+### WH-B3 — retention expiry archives but never erases; archived PII is kept forever — OPEN
+
+**Severity:** Medium (GDPR Art. 5(1)(e) storage limitation; low real-world exposure — see below)
+**Files:** `specs/crm.allium` `rule ExpireAutoCreatedPersons` (`requires: person.status = active`),
+`src/lib/scheduler/crm-cron.ts:71` (`data: { status: "archived" }`)
+
+`ExpireAutoCreatedPersons` moves an auto-created Person `active -> archived` when
+`retentionExpiresAt` passes. **Nothing runs after that.** `crm-cron.ts` only performs that one
+transition and `retention-cron.ts` never touches `Person`, so an archived, retention-expired
+contact keeps `firstName`, `lastName`, `emails` and `phones` indefinitely. `archived` is a status
+flag, not de-identification — the row remains "kept in a form which permits identification"
+(Art. 5(1)(e)).
+
+Worse, the gap widens: a Person archived MANUALLY before its retention date can never be expired
+at all, because the expiry rule requires `status = active` and archiving is the only thing that
+rule does.
+
+**Not caused by W-H1.** `crm.allium` has always had that guard and the code always matched. What
+W-H1 changed is that `crm-gdpr.allium`'s `ExpireAutoCreatedContacts` — which claimed expiry raises
+an *erasure* request — was deleted as contradictory. That rule was never implemented, so no
+behaviour changed; the spec merely stopped overstating the guarantee, which made this visible.
+
+**Why exposure is low, not zero:** JobSync is self-hosted and single-user on a legitimate-interest
+basis, and `crm-gdpr.allium` already carries an open question about whether the household exemption
+(Art. 2(2)(c)) applies at all. So this is a design decision to make deliberately, not an incident.
+
+**Deliberately NOT fixed here.** The options differ in kind — anonymise on expiry (mirrors
+`crm/AnonymizePerson`, terminal and irreversible), a second longer-dated sweep archived -> anonymized,
+or an explicit documented decision that archived retention is indefinite by design. Picking one is a
+product/legal judgement, and this session's whole thesis is that such judgements belong to @rorar
+rather than to a silent commit.
 
 ### WH-B2 — `TasksPageClient.spec.tsx` flakes under full-suite load — OPEN
 
