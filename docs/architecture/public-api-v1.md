@@ -499,10 +499,18 @@ const UpdateJobApiSchema = z.object({
 
 ### `DELETE /api/v1/jobs/:id`
 
-Delete a job and everything the Job aggregate owns: its `Note`s, tags and status history
-cascade with it. A `CrmNote` that pointed only at this job is also pruned, since it would
-otherwise be unreachable — see `src/lib/crm/orphan-targets.ts`. `CrmTask`s are deliberately
-**not** pruned; an orphaned task stays visible on the task board.
+Delete a job and everything the Job aggregate owns. Rows with `onDelete: Cascade` on their
+`jobId` go with it — `Note`, `JobStatusHistory`, `CrmInterview`, `JobContact`, and the
+`CrmNoteTarget` / `CrmTaskTarget` join rows.
+
+**Tags are not deleted.** `Tag` is a many-to-many with `Job` (`prisma/schema.prisma` `model Tag`,
+`jobs Job[]`), so the delete drops the *association* and the `Tag` itself survives — it is a
+user-level lookup shared across jobs.
+
+A `CrmNote` left with no targets at all is additionally pruned in the same transaction, since
+nothing could ever read it again — see `src/lib/crm/orphan-targets.ts`. A `CrmTask` in the same
+position is deliberately **not** pruned: the task board lists tasks unfiltered, so an orphaned
+task stays visible and actionable.
 
 **Response: 204 No Content** — no response body.
 
