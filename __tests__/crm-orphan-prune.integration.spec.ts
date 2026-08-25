@@ -16,10 +16,17 @@
  *   - ghost join rows (all three FK columns null) not counting as targets;
  *   - the erasure scrub reaching a note that keeps a second target.
  *
+ * It also covers one claim that is not about the prune at all but is about the
+ * same operation: deleting a Job leaves a converted Referral converted, with its
+ * job link gone (W-D2 Decision C). See the last test for why it lives here.
+ *
  * The schema is built by replaying the committed migrations in order (~0.7 s),
  * so this needs no Prisma CLI, no new dependency and no fixture database — it
  * cannot drift from `prisma/migrations`.
  */
+
+// orphan-targets.ts is server-only; jest resolves the real package, which throws.
+jest.mock("server-only", () => ({}));
 
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
@@ -305,5 +312,48 @@ describeOrSkip("orphan-note prune (real SQLite)", () => {
 
     expect(await prisma.crmNote.findUnique({ where: { id: note.id } })).not.toBeNull();
     expect(await prisma.job.findUnique({ where: { id: job.id } })).not.toBeNull();
+  });
+
+  // W-D2 Decision C: "converted with no target job" is a LEGAL, reachable state.
+  // The UI renders a fallback for it (ReferralWorkspaceClient, pinned by
+  // __tests__/ReferralWorkspaceClient.spec.tsx). What no test covered was the
+  // other half of that claim — that the state is actually reachable — and it is
+  // reachable only through database behaviour: the link lives on Job
+  // (`Job.sourceReferralId`), NOT on Referral, so `referral.targetJob` resolves
+  // to null the moment the Job row disappears. No cascade, no SetNull on the
+  // referral side, nothing to un-convert it.
+  //
+  // Deliberately tested here rather than end-to-end: driving it through the UI
+  // needs the commit->reify-Job step that e2e/crud/inside-track-crud.spec.ts
+  // documents as excluded (company seed + AlertDialog, flaky on the 8 GB VM),
+  // plus a Job deletion on top. The claim is a database claim, so it belongs in
+  // this tier (ADR-040).
+  it("leaves a converted referral converted, with its job link simply gone, when the job is deleted", async () => {
+    const { job } = await makeJob();
+    const referral = await prisma.referral.create({
+      data: { userId: USER_ID, kind: "insider_relay", status: "converted" },
+    });
+    await prisma.job.update({
+      where: { id: job.id },
+      data: { sourceReferralId: referral.id },
+    });
+
+    // Sanity: the link resolves before the delete, so a null afterwards means
+    // the delete did it — not that the fixture never wired it up.
+    const before = await prisma.referral.findUnique({
+      where: { id: referral.id },
+      include: { targetJob: true },
+    });
+    expect(before?.targetJob?.id).toBe(job.id);
+
+    await deleteJobWithPrune(job.id);
+
+    const after = await prisma.referral.findUnique({
+      where: { id: referral.id },
+      include: { targetJob: true },
+    });
+    expect(after).not.toBeNull();
+    expect(after?.status).toBe("converted");
+    expect(after?.targetJob).toBeNull();
   });
 });

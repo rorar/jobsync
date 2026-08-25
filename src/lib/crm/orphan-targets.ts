@@ -64,6 +64,8 @@
  *   );
  */
 
+import "server-only";
+
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 /** Accepts the full client or a transaction client. */
