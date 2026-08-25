@@ -1,8 +1,48 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-08-23
+# Bug Tracker — Collected 2026-03-24, Updated 2026-08-25
 
-**Total: 607 bugs found, 606 fixed, 2 open (2 accepted risk)**
+**Total: 609 bugs found, 607 fixed, 3 open (2 accepted risk, 1 flake)**
 
-### Status: ✅ OP-B1..OP-B8 all fixed (CRM orphan-note prune + full-review, 2026-08-21/23) + IT-B1..IT-B4 all fixed (IT-B2/IT-B4 on 2026-08-19 §F; IT-B1/IT-B3 on 2026-08-20 weed-resolution pass) + 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
+### Status: ✅ WH-B1 fixed, WH-B2 open (test flake, not a product defect) — see Session 2026-08-25 · OP-B1..OP-B8 all fixed (CRM orphan-note prune + full-review, 2026-08-21/23) + IT-B1..IT-B4 all fixed (IT-B2/IT-B4 on 2026-08-19 §F; IT-B1/IT-B3 on 2026-08-20 weed-resolution pass) + 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
+
+## Session 2026-08-25 — W-H1 spec dependency flip + orphan-prune leftovers (2 found, 1 fixed)
+
+Both were found incidentally while verifying the session's own work, not by looking for them.
+Neither was caused by this session's changes; both pre-date it.
+
+### WH-B1 — `bun run lint` fails repo-wide, and CI runs it — FIXED
+
+**Severity:** Medium (blocks CI on merge to `main`/`dev`; harmless on feature branches)
+**Files:** `src/lib/connector/arbeitsagentur-account/cdp-scripts/cdp-auto-complete.mjs:51`,
+`cdp-keep-alive.mjs:457`, `cdp-login-bundid.mjs:61,117,128`
+
+Five `no-empty` ESLint **errors** (not warnings), introduced by `d7bf3af1` on **2026-05-17** and
+unnoticed since. `.github/workflows/ci.yml` runs `bun run lint` on push to `main`/`dev` and on PRs
+to them, so this is red the moment any branch carrying it merges. It went unnoticed because feature
+branches do not trigger that workflow.
+
+Note this **contradicts the "eslint clean" line** in `docs/handoff-2026-08-24-orphan-prune.md` and in
+`.full-review/05-final-report-wd3-orphan-prune.md`. Those claims were wrong — evidently a scoped or
+warnings-only check was run, not `bun run lint`. Corrected here rather than quietly.
+
+**Fix:** all five are deliberate best-effort swallows in CDP teardown and polling loops. Each empty
+block now carries a comment stating why it is empty. **Zero behaviour change** — the alternative
+(actually handling the errors) would change how the browser-automation scripts behave, which is not
+a lint fix.
+
+### WH-B2 — `TasksPageClient.spec.tsx` flakes under full-suite load — OPEN
+
+**Severity:** Low (test-only; no product defect)
+**File:** `__tests__/TasksPageClient.spec.tsx:524` — *"should handle switching between multiple
+filters"*
+
+Fails with `Exceeded timeout of 5000 ms for a test` in a full 311-suite run (216 s, single worker,
+8 GB VM), and **passes 16/16 in isolation**. Unrelated to anything this session touched.
+
+Deliberately NOT fixed by raising the timeout: that would mask whichever of the two causes is real —
+genuine slowness in `TasksContainer` (the suite also emits many `not wrapped in act(...)` warnings
+from its `useEffect` fetch chain, which is a real smell) versus pure resource starvation on this VM.
+Raising a timeout to make a symptom disappear is the same move as W-E6's "kept for reference only"
+comment, and this session spent its afternoon undoing one of those. Diagnose before suppressing.
 
 ## Session 2026-08-21/23 — CRM orphan-note prune + its full-review (8 found, 8 fixed)
 

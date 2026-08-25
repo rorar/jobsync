@@ -454,6 +454,7 @@ const LOGOUT_EVENTS = [
   log(`Keep-Alive v5 beendet nach ${totalMin} Min.`);
   log(`Stats: ${keypressCount} keypresses, ${refreshCount} refreshes, ${eventBlockCount} events blocked, ${logoutRequestBlocked} fetches blocked.`);
 
-  try { await send('Fetch.disable'); } catch (_) {}
+  // Best-effort teardown: the target may already be gone, and we close ws next.
+  try { await send('Fetch.disable'); } catch (_) { /* ignored */ }
   ws.close();
 })();
