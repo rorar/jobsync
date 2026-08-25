@@ -261,6 +261,31 @@ from this work). Check `bash scripts/understand-staleness-check.sh` first.
 - ADR-040 records an open end: the database-backed tier is **not wired into a documented CI step**, so
   a runner without `sqlite3` would skip it — the `process.env.CI` throw only fires if `CI` is set.
 - No E2E test for the converted-banner fallback (`d7126096`).
+- **`docs/architecture/public-api-v1.md:500-510` documents the wrong DELETE contract** (pre-existing,
+  not from this work): it shows `200` with a JSON body `{ success: true, data: { deleted: true } }`.
+  The route returns `noContentResponse()` — `204`, no body — and the tests pin that
+  (`api-v1-jobs.spec.ts:979,994`). Anyone implementing against the doc waits for a body that never
+  arrives. The same section says "delete a job and all its associated notes (cascading)", which refers
+  to `Note` (job notes); the CrmNote prune is not mentioned. One-line fix plus a sentence.
+
+### 8.4 API-level note for later — the guard has a door the type system does not watch
+
+`getCrmNotes` requires a target by type **and** by a runtime guard, which is what keeps the prune safe
+(see §5). That protects **server actions only**.
+
+API v1 routes deliberately bypass server actions and query Prisma directly — CLAUDE.md: *"Phase 1 uses
+direct Prisma queries (not server actions) because `getCurrentUser()` depends on NextAuth session."*
+So a future CrmNote endpoint could read notes with no target filter, and nothing would stop it: not the
+type, not a test, not `allium check`. Same class as blind-spot §1.1, through a different door.
+
+**Current state is clean** — verified: only four v1 routes exist, all jobs-scoped, and none touches
+`CrmNote` / `CrmTask` / `Person`. `/api/v1/jobs/[id]/notes` uses `prisma.note` (job notes), a different
+model. `DELETE /api/v1/jobs/:id` is the only deleting route and the prune is wired into it
+(`route.ts:126,131`), with the 204 response shape unchanged.
+
+The risk resolves itself once the `AsyncLocalStorage` bridge announced in CLAUDE.md (API Phase 2) routes
+API handlers through the server actions. **Until then: any new API route that reads `CrmNote` must
+apply a target filter explicitly.**
 - `.full-review/` is **gitignored** — `01a-quality.md`, `01b-architecture.md`, `02a-security.md`,
   `02b-performance.md`, `05-final-report-wd3-orphan-prune.md`, `06-blindspot.md` are **local only**
   and will not survive a fresh clone. Their substance is in this handout, BUGS.md and the weed board.
