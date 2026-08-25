@@ -62,9 +62,15 @@ contact keeps `firstName`, `lastName`, `emails` and `phones` indefinitely. `arch
 flag, not de-identification — the row remains "kept in a form which permits identification"
 (Art. 5(1)(e)).
 
-Worse, the gap widens: a Person archived MANUALLY before its retention date can never be expired
-at all, because the expiry rule requires `status = active` and archiving is the only thing that
-rule does.
+**Corrected 2026-08-25 (security review).** An earlier draft of this entry claimed as a second,
+independent defect that "a Person archived MANUALLY before its retention date can never be expired
+at all, because the expiry rule requires `status = active`". That is literally true but **inert
+today**: the rule's only effect on the Person is `ensures: person.status = archived`
+(`crm.allium`), so a record already archived has already reached the post-state and skipping it
+changes nothing observable. It becomes a real gap **only if** this bug is fixed by making expiry do
+something stronger than archiving — at which point the `status = active` guard would let
+manually-archived records escape the stronger treatment. Whoever fixes the main issue must widen
+that guard in the same change; it is not a separate defect to track.
 
 **Not caused by W-H1.** `crm.allium` has always had that guard and the code always matched. What
 W-H1 changed is that `crm-gdpr.allium`'s `ExpireAutoCreatedContacts` — which claimed expiry raises

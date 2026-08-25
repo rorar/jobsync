@@ -14,6 +14,7 @@
     "i18n:extract": "lingui extract --clean",
     "i18n:compile": "lingui compile --typescript",
     "check:notification-writers": "bash scripts/check-notification-writers.sh",
+    "check:spec-refs": "node scripts/check-spec-refs.mjs",
     "knip": "knip",
     "knip:prod": "knip --production"
   },
