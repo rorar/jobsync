@@ -3,7 +3,7 @@
 **Date:** 2026-08-21 → 2026-08-24
 **Branch:** `feat/quick-capture-and-referral-events` — **everything is pushed** (`origin` = fork
 `rorar/jobsync`; upstream untouched).
-**HEAD at handoff:** `ce63e947`
+**Last code commit:** `ce63e947` (later commits on this branch are documentation only)
 **Working tree:** clean except pre-existing, unrelated files (see §9).
 
 Written so this can be picked up cold. Every claim below was verified at the cited line during the
