@@ -6,8 +6,10 @@
  * (`onDelete: Cascade`).
  *
  * A NOTE whose only target was that entity is then unreachable: every note read
- * goes through a target filter (`getCrmNotes` is only ever called as
- * `getCrmNotes({ targetPersonId })`), so the note disappears from the UI while
+ * goes through a target filter — `getCrmNotes` REQUIRES one, by type and by a
+ * runtime guard, precisely so this stays true (see its docstring: an unfiltered
+ * list view would turn this prune from "reaps residue" into "deletes visible
+ * data", and nothing would fail) — so the note disappears from the UI while
  * still holding its free-text body — which, on the GDPR erasure path, is free
  * text about the very person being erased. `CreateNote` requires
  * `targets.count > 0` (specs/crm.allium) and creation is atomic (nested
@@ -37,6 +39,15 @@
  *   2. `withOrphanedCrmPrune` appends the prune to the transaction array; it
  *      deletes a candidate only if it is left with NO targets at all, so a note
  *      that also targeted a person or company survives untouched.
+ *
+ * ACCEPTED TRADE-OFF: this module lets the Job, Company and Person repositories
+ * write to a CRM aggregate, which crosses an aggregate boundary the project
+ * otherwise keeps. The architecture review raised it and it was accepted rather
+ * than resolved: the alternatives — emitting a `JobDeleted` event and pruning in
+ * a consumer, or calling into the CRM action files — both give up the property
+ * the fix depends on, that the delete and the prune commit or roll back
+ * together. The cost is contained by keeping the cross-aggregate write in this
+ * one module instead of spreading it across five call sites.
  *
  * ORDERING: the no-live-target predicate only holds once the cascade has removed the
  * join rows, so the prune must run after the delete. Prisma array transactions

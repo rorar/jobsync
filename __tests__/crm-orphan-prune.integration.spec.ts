@@ -57,7 +57,20 @@ const OTHER_USER_ID = "user-int-2";
 let dir: string;
 let prisma: PrismaClient;
 
-const describeOrSkip = haveSqlite3() ? describe : describe.skip;
+const sqlite3Available = haveSqlite3();
+
+// A silent skip is the real hazard here: a CI runner without sqlite3 would go
+// green while this whole tier never ran. Locally, skipping is the right call —
+// the developer sees it reported and nothing else breaks. (ADR-040.)
+if (!sqlite3Available && process.env.CI) {
+  throw new Error(
+    "sqlite3 CLI not found. It is required for the database-backed test tier " +
+      "(see docs/adr/040-database-backed-integration-tests.md). Refusing to " +
+      "skip silently in CI.",
+  );
+}
+
+const describeOrSkip = sqlite3Available ? describe : describe.skip;
 
 describeOrSkip("orphan-note prune (real SQLite)", () => {
   beforeAll(async () => {

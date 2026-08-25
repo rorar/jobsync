@@ -290,7 +290,7 @@ describe("crmNote.actions", () => {
     it("rejects unauthenticated user", async () => {
       (getCurrentUser as jest.Mock).mockResolvedValue(null);
 
-      const result = await getCrmNotes();
+      const result = await getCrmNotes({ targetPersonId: "person-1" });
 
       expect(result.success).toBe(false);
       expect(result.message).toBe("errors.notAuthenticated");
@@ -304,7 +304,7 @@ describe("crmNote.actions", () => {
       ];
       (prisma.crmNote.findMany as jest.Mock).mockResolvedValue(notes);
 
-      const result = await getCrmNotes();
+      const result = await getCrmNotes({ targetPersonId: "person-1" });
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(notes);
@@ -313,6 +313,21 @@ describe("crmNote.actions", () => {
           where: expect.objectContaining({ userId: mockUser.id }),
         }),
       );
+    });
+
+    it("never queries without a target predicate, even if called with none", async () => {
+      // The orphan prune deletes a note left with no live target, which is only
+      // safe while every read goes through a target. An unfiltered list would
+      // make the prune delete visible data. The union type is erased at runtime
+      // (ADR-019), so the guard is re-asserted in the action.
+      (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+
+      const result = await getCrmNotes(
+        {} as unknown as Parameters<typeof getCrmNotes>[0],
+      );
+
+      expect(result.success).toBe(false);
+      expect(prisma.crmNote.findMany).not.toHaveBeenCalled();
     });
 
     it("filters by targetPersonId", async () => {

@@ -1,10 +1,10 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-08-23
 
-**Total: 606 bugs found, 605 fixed, 2 open (2 accepted risk)**
+**Total: 607 bugs found, 606 fixed, 2 open (2 accepted risk)**
 
-### Status: ✅ OP-B1..OP-B7 all fixed (CRM orphan-note prune + full-review, 2026-08-21/23) + IT-B1..IT-B4 all fixed (IT-B2/IT-B4 on 2026-08-19 §F; IT-B1/IT-B3 on 2026-08-20 weed-resolution pass) + 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
+### Status: ✅ OP-B1..OP-B8 all fixed (CRM orphan-note prune + full-review, 2026-08-21/23) + IT-B1..IT-B4 all fixed (IT-B2/IT-B4 on 2026-08-19 §F; IT-B1/IT-B3 on 2026-08-20 weed-resolution pass) + 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
 
-## Session 2026-08-21/23 — CRM orphan-note prune + its full-review (7 found, 7 fixed)
+## Session 2026-08-21/23 — CRM orphan-note prune + its full-review (8 found, 8 fixed)
 
 Started as a spec/code reconciliation (weed W-D2/W-D3) and turned into a bug hunt. **Three of these
 were shipped to the fork branch on 2026-08-21 and fixed on 2026-08-23** — OP-B1, OP-B5 and OP-B6 were
@@ -12,6 +12,16 @@ introduced by the OP-B2 fix itself and found by the phase-1/2 review agents. Eve
 verified at the cited line, and the query-plan claims were reproduced on a real SQLite database.
 Full disposition: `.full-review/05-final-report-wd3-orphan-prune.md`; weed detail:
 `docs/weed-findings-2026-08-17.md` (W-D3..W-D7).
+
+**Live-exposure qualifier (blind-spot pass, 2026-08-24) — read before citing these.** `CrmNote` has
+**no creation surface and never has had one**: `createCrmNote` (`crmNote.actions.ts`) is the model's
+only writer and has **zero callers** in `src/`, and `prisma/dev.db` holds `CrmNote = 0`,
+`CrmNoteTarget = 0`. So every note-side defect below (OP-B2, OP-B3, OP-B5, OP-B7, and the CrmNote half
+of OP-B6) describes behaviour over rows that cannot currently exist — the fixes are a go-forward
+guarantee, not a remediation of live data loss or live disclosure. **OP-B1 and OP-B4 were genuinely
+live:** tasks *are* creatable and visible (task board + TaskForm), and `anonymizePerson` wrote no
+audit entry regardless of whether any note existed. The original present-tense framing of OP-B3 in
+particular overstated the exposure; the finding and the fix stand, the urgency does not.
 
 | ID | Severity | Summary | Fix |
 |----|----------|---------|-----|
@@ -22,6 +32,9 @@ Full disposition: `.full-review/05-final-report-wd3-orphan-prune.md`; weed detai
 | OP-B5 | MEDIUM ✅ FIXED 2026-08-23 | **Legacy ghost join rows defeated the prune.** The polymorphic FKs were `ON DELETE SET NULL` in migrations `20260510092100`/`20260512221118` before `20260512224224` made them `CASCADE`, so a database seeded under the old schema can hold `CrmNoteTarget` rows whose three target columns are all null. Such a row is not a target, but it made `targets: { none: {} }` false and silently spared the note — on the erasure path in particular. | Predicate narrowed to `NO_LIVE_TARGET` ("no target row that points at anything"); `invariant NoteHasAtLeastOneTarget` in `crm.allium` narrowed to match. Regression test creates a ghost row explicitly. Commit `b08e5645`. |
 | OP-B6 | MEDIUM ✅ FIXED 2026-08-23 | **`id IN (...) AND userId = ?` abandoned the primary key and scanned the user's whole table.** With no `sqlite_stat1`, SQLite estimates an equality on a non-unique index at ~10 rows, so `userId = ?` looks cheaper than N primary-key seeks. Reproduced exactly: 1-2 candidates use the PK, **3+ switch to `CrmNote_userId_idx`** and apply the id list only as a post-filter, running the correlated `NOT EXISTS` once per note the user owns — inside the write transaction, on the GDPR erasure path. `userId` is the least selective column (single user per instance). **Not specific to the prune:** the trap fires on the canonical ADR-015 shape for any table with a `userId` index and no `(userId, id)` composite; single-id `findFirst({ where: { id, userId } })` is unaffected. | Migration `20260823210341` adds `@@index([userId, id])` to `CrmNote` **and** `CrmTask` (the Art. 17 scrubs have the same shape), verified against `prisma/dev.db`: `SEARCH ... USING COVERING INDEX CrmNote_userId_id_idx (userId=? AND id=?)`. Plus `refreshQueryPlannerStatistics` (`PRAGMA optimize`) in the retention sweep for the root cause. Commit `f51bbf29`. |
 | OP-B7 | HIGH ✅ FIXED 2026-08-21 | **The prune was a per-user sweep, not a cascade.** `81ad0940` deleted *every* zero-target note the user owned, with no reference to the entity being deleted — so deleting job A reaped a note orphaned weeks earlier by job B, and residue left by any other defect was silently swallowed by the next unrelated delete instead of surviving as evidence of it. | Two-phase: collect the candidate ids before the delete, then reap only those left with no live target. Commit `741c904e`. |
+
+| OP-B8 | MEDIUM ✅ FIXED 2026-08-23 | **Lookup delete guards counted across all users.** `deleteCompanyById`, `deleteJobTitleById`, `deleteJobLocationById` and `deleteJobSourceById` guarded on `workExperience.count` / `job.count` with **no ownership filter** (7 call sites), so another user's resume or job could block a delete. `Company`/`JobTitle`/`Location` rows are per-user (`createdBy`), so the cross-tenant match is a false block rather than a real FK guard. | `job.count` carries `userId`; `workExperience.count` filters through the ownership chain `ResumeSection -> Resume -> Profile -> userId`. `mock.actions.ts`'s note/job deletes state `userId` explicitly (they were already safe transitively). Two regression tests — the existing ones mocked the counts and never asserted a where clause, so they would have passed before the fix. Commit `485c307e`. |
+| — | — | **Correction to OP-B8's original framing (blind-spot pass, 2026-08-24).** The commit message and the review both said the guards "leaked the cross-tenant count back to the caller" via `` `...due to ${jobs} number of associated jobs!` ``. **That is false.** `handleError` (`src/lib/utils.ts:60-90`) returns `{ success: false, message: <the translation key the caller passed> }` and never returns `error.message` — the interpolated count reached `console.error` on the server only. Removing it from the messages was still right (server-log hygiene, and the strings were raw English rather than i18n keys), but it was never a client-visible disclosure. I repeated the audit's claim without checking the error path. | — |
 
 **Test-infrastructure gap closed alongside.** All three reviewers independently ranked "nothing exercises the real database" as the largest residual risk, and it was accurate: OP-B5, OP-B6 and the array-transaction ordering the design rests on are all invisible to a mocked Prisma. `__tests__/crm-orphan-prune.integration.spec.ts` is the repo's **first** test against a real database — schema built by replaying the committed migrations into a temp SQLite file (~0.75 s), no new dependency, no Prisma CLI at test time. Commit `fffbab60`.
 
