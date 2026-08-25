@@ -499,9 +499,13 @@ const UpdateJobApiSchema = z.object({
 
 ### `DELETE /api/v1/jobs/:id`
 
-Delete a job and everything the Job aggregate owns. Rows with `onDelete: Cascade` on their
-`jobId` go with it — `Note`, `JobStatusHistory`, `CrmInterview`, `JobContact`, and the
-`CrmNoteTarget` / `CrmTaskTarget` join rows.
+Delete a job and everything the Job aggregate owns. Rows whose Job foreign key carries
+`onDelete: Cascade` go with it — `Note`, `Interview`, `JobStatusHistory`, `CrmInterview`,
+`JobContact`, and the `CrmNoteTarget` / `CrmTaskTarget` join rows (the last two key on
+`targetJobId`, not `jobId`).
+
+`CrmActivityLog` is the exception: its `targetJobId` is `onDelete: SetNull`, so timeline entries
+**survive** the delete and lose only their job link.
 
 **Tags are not deleted.** `Tag` is a many-to-many with `Job` (`prisma/schema.prisma` `model Tag`,
 `jobs Job[]`), so the delete drops the *association* and the `Tag` itself survives — it is a

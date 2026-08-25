@@ -15,8 +15,10 @@ Neither was caused by this session's changes; both pre-date it.
 **Files:** `src/lib/connector/arbeitsagentur-account/cdp-scripts/cdp-auto-complete.mjs:51`,
 `cdp-keep-alive.mjs:457`, `cdp-login-bundid.mjs:61,117,128`
 
-Five `no-empty` ESLint **errors** (not warnings), introduced by `d7bf3af1` on **2026-05-17** and
-unnoticed since. `.github/workflows/ci.yml` runs `bun run lint` on push to `main`/`dev` and on PRs
+Five `no-empty` ESLint **errors** (not warnings), all landing **2026-05-17** across three commits —
+`e2f740fd` (`cdp-auto-complete.mjs`), `a06cf528` (`cdp-login-bundid.mjs`, 3 of the 5) and
+`d7bf3af1` (`cdp-keep-alive.mjs`) — and unnoticed since. An earlier revision of this entry
+attributed all five to `d7bf3af1`, which only accounts for one. `.github/workflows/ci.yml` runs `bun run lint` on push to `main`/`dev` and on PRs
 to them, so this is red the moment any branch carrying it merges. It went unnoticed because feature
 branches do not trigger that workflow.
 
