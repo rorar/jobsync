@@ -316,3 +316,82 @@ apply a target filter explicitly.**
   returns the message (§6).
 - **Resource discipline (CLAUDE.md):** always the `scripts/*` wrappers. A bare `npx tsc` in this
   session had to be killed.
+
+---
+
+## 11. Status update — 2026-08-25 session
+
+Everything §8 listed as open is now either done or deliberately parked with a named reason. This
+section is appended rather than edited in, so §8 still reads as it did when it was written.
+
+### §8.1 W-H1 — DONE, on its own branch `spec/w-h1-crm-gdpr-dependency-flip`
+
+Three commits: the drift inventory (`09327527`), the migration (`8a5ab578`), an ADR-037 correction
+(`e952a488`). Full detail in **`docs/w-h1-crm-gdpr-drift-inventory.md`** — read that, not this
+paragraph, before touching either spec.
+
+The recommendation in §8.1 held up, with two corrections:
+
+- **"Delete the 12 stubs" was wrong — three had to stay.** `MessageParticipant` and
+  `CalendarEventParticipant` belong to a deferred connector spec, and `Attachment` is a **name
+  collision**: `application-documents.allium:229`'s `Attachment` hangs off an `ApplicationBundle`
+  and has no `target_person`. Linking them would have been a silent modelling error.
+- **The drift included an outright contradiction**, not just staleness.
+  `ExpireAutoCreatedContacts` raised an *erasure* request on retention expiry (→ `anonymized`,
+  terminal) while `crm.allium`'s `ExpireAutoCreatedPersons` *archives* (reversible). The code
+  archives (`crm-cron.ts:57,71`). Deleted; `crm.allium` is sole owner.
+
+Result: `allium check specs/` 0 errors, warnings **303 → 285**. `allium analyse` drops 18 findings
+including the W-H1 diagnostic itself (*"Rule 'WithdrawConsent' listens for trigger 'WithdrawConsent'
+but no local surface provides or emits it"*), and adds only 2 `info` — the analyser does not resolve
+cross-spec field reads, so the two new `crm/Person` fields read as unreferenced.
+
+**Two things this deliberately did NOT settle — both need @rorar:**
+
+1. **A second contradiction, in timeline-activity retention.** `crm-gdpr`'s
+   `ExpireOldTimelineActivities` anonymises in place; `gdpr-data-rights.allium:404`
+   `PurgeOldCrmActivityLogs` hard-deletes; `retention-cron.ts:203` hard-deletes. Two against one,
+   so mechanically the `crm-gdpr` rule is the loser — **but deleting it *is* choosing hard-delete**,
+   which destroys the non-personal audit value of the entry. Art. 5(1)(e) storage limitation against
+   accountability: a real GDPR judgement, not bookkeeping. Recorded as an `open question`.
+   Note W-E6's earlier ownership call compared `crm-gdpr` against `crm.allium` **only** and never
+   considered `gdpr-data-rights.allium`. Re-open it rather than inheriting it.
+2. **`PersonDataExport` omits `address` and `avatar_url`.** The spec was aligned *to the code*
+   (`collect-user-data.ts:295-310` genuinely selects neither). But Art. 15(1) entitles the data
+   subject to all personal data processed, and a postal address plainly qualifies — so the likely
+   answer is that the **code** should grow. Spec and code must change in the same commit; neither
+   moved. Recorded as an `open question`.
+
+### §8.3 smaller items — all four done, one by substitution
+
+On `feat/quick-capture-and-referral-events`: `4086ec09`, `010c9008`, `036e6b91`.
+
+- `import "server-only"` added; both test files mock it.
+- CI now verifies `sqlite3` up front. **ADR-040's stated risk was wrong** — the suite already throws
+  rather than skipping when `CI` is set, and Actions always sets it, so silent-green was never
+  reachable. The ADR is corrected, not just ticked off.
+- `public-api-v1.md` DELETE contract fixed to 204.
+- **The converted-banner E2E was deliberately replaced by a database-tier test.** Writing the E2E
+  needs the commit→reify-Job step that `e2e/crud/inside-track-crud.spec.ts` documents as excluded
+  for VM-flake reasons, plus a Job deletion on top. What it would have added over the existing
+  component test is proof the state is *reachable* — and that is a database claim: the link lives on
+  `Job.sourceReferralId`, `referral.targetJobId` is derived, so it resolves to null when the Job row
+  goes. Now pinned in `crm-orphan-prune.integration.spec.ts` (ADR-040 tier), deterministic, 32 ms.
+
+### Found while verifying, not from this work — see BUGS.md § Session 2026-08-25
+
+- **WH-B1 (fixed):** `bun run lint` had been failing repo-wide since 2026-05-17 with five `no-empty`
+  **errors**, and `ci.yml` runs it on push to `main`/`dev`. Red on merge. Survived three months
+  because feature branches do not trigger that workflow. **This contradicts the "eslint clean" line
+  in §7 of this handoff and in the W-D3 final report — those claims were wrong.**
+- **WH-B2 (open):** `TasksPageClient.spec.tsx:524` times out at 5000 ms in a full 311-suite run and
+  passes 16/16 in isolation. Left open on purpose: raising the timeout would mask which cause is
+  real (genuine `TasksContainer` slowness — the suite emits many `not wrapped in act(...)` warnings
+  — versus VM starvation). Diagnose before suppressing.
+
+### Not done
+
+- `/understand` graph refresh — **excluded by @rorar for this session.** Still overdue (§8.2).
+- No `/comprehensive-review:full-review` run for this work. An informal blind-spot pass was done
+  (import graph, doc blast radius, dangling cross-references — which is how the missing `open
+  question` at `crm-gdpr.allium:329` was caught), but that is not the same thing.
