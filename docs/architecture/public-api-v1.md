@@ -499,15 +499,15 @@ const UpdateJobApiSchema = z.object({
 
 ### `DELETE /api/v1/jobs/:id`
 
-Delete a job and all its associated notes (cascading).
+Delete a job and everything the Job aggregate owns: its `Note`s, tags and status history
+cascade with it. A `CrmNote` that pointed only at this job is also pruned, since it would
+otherwise be unreachable — see `src/lib/crm/orphan-targets.ts`. `CrmTask`s are deliberately
+**not** pruned; an orphaned task stays visible on the task board.
 
-**Response: 200**
-```json
-{
-  "success": true,
-  "data": { "deleted": true }
-}
-```
+**Response: 204 No Content** — no response body.
+
+Note this differs from every other endpoint in this API, which return the
+`{ success, data }` envelope. Clients must not wait for a body here.
 
 **Error: 404** — Job not found or belongs to another user.
 

@@ -48,6 +48,18 @@ jobs:
       - name: Type check
         run: bunx tsc --noEmit
 
+      # The database-backed test tier (ADR-040) builds a SQLite schema by
+      # replaying prisma/migrations through the sqlite3 CLI. Checked here so a
+      # missing binary fails in one obvious line instead of inside a 300-suite
+      # run. The suite itself also refuses to skip when CI is set, so this is a
+      # second line of defence, not the only one.
+      - name: Verify sqlite3 (database-backed test tier)
+        run: |
+          sqlite3 -version || {
+            echo "::error::sqlite3 CLI missing. Required by the database-backed test tier (docs/adr/040-database-backed-integration-tests.md)."
+            exit 1
+          }
+
       - name: Unit tests
         run: bun run test
 
