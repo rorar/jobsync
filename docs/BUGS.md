@@ -64,8 +64,23 @@ contact keeps `firstName`, `lastName`, `emails` and `phones` indefinitely. `arch
 flag, not de-identification — the row remains "kept in a form which permits identification"
 (Art. 5(1)(e)).
 
-**ESCALATED 2026-08-26 — retention expiry EXTENDS the name's lifetime.** The rest of this
-entry describes archived rows *passively* keeping PII. Verified worse, and active: in the
+**LATENCY QUALIFIER — read before citing this as live (added 2026-08-26).** The defect below
+is real in the code as written, but it **cannot currently fire**. No production code writes
+`Person.retentionExpiresAt` (the only occurrences are a read filter at
+`src/lib/scheduler/crm-cron.ts:57` and a select at `src/lib/export/collect-user-data.ts:308`),
+and none writes `dataSource: "auto_created"` (`src/actions/person.actions.ts:168` hardcodes
+`"manual"`). The expiry cron filters on **both**, so it matches nothing until auto-creation
+ships — which depends on the deferred email-sync connector.
+
+Severity is largely retained rather than reduced: this is the last moment the fix is free, and
+the design defect is in the spec regardless. But the escalation immediately below was written
+in the present tense and overstates live exposure. That is the same live-exposure check the
+orphan-prune work applied to `CrmNote` (see the qualifier on the 2026-08-21/23 section) and it
+was not repeated here.
+
+**ESCALATED 2026-08-26 — retention expiry would EXTEND the name's lifetime.** The rest of this
+entry describes archived rows *passively* keeping PII. It is worse, and active, once the path
+is reachable: in the
 **same transaction** that archives the Person for retention expiry,
 `src/lib/scheduler/crm-cron.ts:73-81` creates a `CrmActivityLog` row carrying
 `targetPersonId: person.id` **and**
@@ -77,8 +92,8 @@ entry describes archived rows *passively* keeping PII. Verified worse, and activ
 is **copied into an immutable timeline row with a fresh three-year clock**, started by the very
 event meant to end retention.
 
-Retention expiry therefore *lengthens* the identifier's practical lifetime rather than ending
-it — a far more concrete Art. 5(1)(e) failure than a status flag that fails to de-identify, and
+Retention expiry would therefore *lengthen* the identifier's practical lifetime rather than
+ending it — a far more concrete Art. 5(1)(e) failure than a status flag that fails to de-identify, and
 it means **any fix that does not also address the log copy is incomplete**. Note
 `crm/AnonymizePerson` already scrubs `linked_record_name` on the erasure path: the capability
 exists, the retention path simply does not use it.
