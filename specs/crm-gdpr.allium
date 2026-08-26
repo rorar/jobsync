@@ -386,12 +386,30 @@ rule FulfillAccessRequest {
 
     @guidance
         -- The field list mirrors the Person projection in
-        -- src/lib/export/collect-user-data.ts. Two fields that crm/Person holds
-        -- are deliberately NOT listed, because that implementation does not
-        -- export them: `address` and `avatar_url`. See the open question on
-        -- whether that is an Art. 15 completeness gap — do not "fix" the payload
-        -- here without settling it, since spec and code would then disagree in
-        -- the other direction.
+        -- src/lib/export/collect-user-data.ts:293-311. Fields that crm/Person
+        -- holds and this payload deliberately does NOT list, because that
+        -- implementation does not export them:
+        --   address       -- clear Art. 15(1) gap (six Prisma columns)
+        --   avatar_url    -- weaker case; a URL, possibly third-party-hosted
+        --   created_by    -- ActorMetadata; Art. 15(1)(g) "information as to
+        --                    their source" for a contact not collected from the
+        --                    data subject. Partly covered by the exported
+        --                    data_source.
+        --   updated_by    -- same class, weaker
+        --   updated_at    -- processing metadata; weakest case
+        --
+        -- W-H1 REVIEW (2026-08-26) corrected this comment: it previously said
+        -- "Two fields", naming only address and avatar_url. That was wrong, and
+        -- the size of the error is the point. At Prisma granularity the same
+        -- gap is THIRTEEN of `model Person`'s twenty-seven scalar columns
+        -- (avatarUrl, six address* columns, createdBySource, createdByName,
+        -- updatedBySource, updatedByName, updatedAt, userId). Two successive
+        -- careful human reviews of this hand-maintained allow-list named two of
+        -- them. That is why the fix cannot be "audit the list again" — see the
+        -- open question below.
+        --
+        -- Do not "fix" the payload here without settling that question, since
+        -- spec and code would then disagree in the other direction.
 }
 
 -- -----------------------------------------------------------------------------
@@ -798,12 +816,52 @@ invariant ConsentBlockedRecordIsProcessingRestricted {
     -- lawful and is not undone — hence this is a guard on the creating ACTION,
     -- not a standing predicate over existing links.
     --
-    -- The "no edits / no reminders / no new links" half is a guard on
-    -- processing rules rather than a state predicate, so it is asserted in
-    -- prose here; the structural half (a block implies the consent basis) is
-    -- checked by ConsentBlockOnlyOnConsentBasis above.
-    for p in crm/Persons:
-        p.is_consent_blocked implies p.processing_basis = consent
+    -- THIS INVARIANT HAS NO PREDICATE, DELIBERATELY. Read the next paragraph
+    -- before adding one back.
+    --
+    -- W-H1 REVIEW (2026-08-26) — it used to carry
+    --     for p in crm/Persons:
+    --         p.is_consent_blocked implies p.processing_basis = consent
+    -- which asserts NOTHING. crm/Person.is_consent_blocked is DEFINED as
+    -- `processing_basis = consent and consent_withdrawn_at != null`
+    -- (crm.allium:295), so the expression unfolds to
+    -- `(A and B) implies A` = true, for every Person, always. It was a
+    -- degenerate restatement of the sibling invariant
+    -- ConsentBlockOnlyOnConsentBasis above, which says the same thing in its
+    -- non-vacuous form (`consent_withdrawn_at != null implies
+    -- processing_basis = consent`) and is genuinely upheld — crm/UpdatePerson
+    -- requires `not person.is_consent_blocked`, so once withdrawn the basis
+    -- cannot be edited away. Two invariants, one invariant's worth of content,
+    -- and the weaker one produced a FALSE GREEN: `allium check` reported no
+    -- error and a reader concluded the Art. 7(3) restriction was machine-
+    -- checked. It never was. That is the same defect class W-H1 exists to
+    -- remove, one level up: a construct that LOOKS verified and is not.
+    --
+    -- The property above is not expressible as an invariant, and the language
+    -- reference says so directly. `invariant Name { expr }` asserts "properties
+    -- over entity state at a single point in time"; TEMPORAL ORDERING and
+    -- guards on actions are listed under "Not expressible — use prose comments
+    -- or @invariant in contracts", with the closing rule "If it requires
+    -- comparing two moments in time [...] it belongs in prose."
+    -- "Processing performed before withdrawal stays lawful and is not undone"
+    -- is exactly a two-moment comparison. So prose is not a concession here; it
+    -- is the prescribed form.
+    --
+    -- The construct and its NAME are kept rather than deleted because the name
+    -- is load-bearing: crm.allium cites it six times (:294, :623, :960, :1094,
+    -- :1605, :1862) and it is the only written statement anywhere of WHAT the
+    -- restriction forbids. The enforcement now genuinely exists, as `requires`
+    -- guards on the rules themselves (crm.allium:627, :791, :847, :937, :982,
+    -- :1074, :1115) — which is why the filler predicate is no longer even
+    -- serving as a placeholder for absent enforcement.
+    --
+    -- The structural half is checked, non-vacuously, by
+    -- ConsentBlockOnlyOnConsentBasis above. Do not duplicate it here.
+    --
+    -- If a future allium release requires a non-empty invariant body, this
+    -- becomes a parse error — i.e. it fails LOUDLY, which is the intended
+    -- trade. Do not silence it by reinstating a tautology; convert it to an
+    -- @invariant annotation on surface ConsentManagement instead.
 }
 
 invariant BlocklistSuppressesAutoCreation {
@@ -920,8 +978,10 @@ open question "Should the retention period for imported contacts differ from aut
 
 open question "Should crm/Note.body and crm/Task.description free-text fields be included in erasure cascades? They MAY contain personal data about the erased person but also contain the CRM user's own notes. Consider: flag-and-review vs automatic inclusion in export, exclude from deletion."
 
-open question "Art. 15 completeness: PersonDataExport omits crm/Person.address and crm/Person.avatar_url. This is not an oversight in the spec — it mirrors the implementation exactly (src/lib/export/collect-user-data.ts:295-310 selects firstName, lastName, headline, emails, phones, companies, socialProfiles, status, dataSource, processingBasis, consentWithdrawnAt, retentionExpiresAt, createdAt, and nothing else; all six address* columns and avatarUrl are absent). W-H1 aligned the spec to the code rather than silently widening the payload, because the two directions have different consequences: widening the SPEC alone would re-create drift, and widening the CODE is a behaviour change to a live GDPR export. Art. 15(1) entitles the data subject to all personal data undergoing processing, and a postal address plainly qualifies, so the likely answer is that the CODE should grow, not that the spec should stay narrow. avatar_url is the weaker case (a URL, possibly to an image of the data subject, possibly to a third-party-hosted asset). Settle both together and change spec and code in the same commit."
+open question "Art. 15 completeness: PersonDataExport omits FIVE crm/Person fields — address, avatar_url, created_by, updated_by and updated_at (W-H1 REVIEW 2026-08-26 corrected an earlier version of this question, which named only the first two). This is not an oversight in the spec — it mirrors the implementation exactly (src/lib/export/collect-user-data.ts:295-310 selects firstName, lastName, headline, emails, phones, companies, socialProfiles, status, dataSource, processingBasis, consentWithdrawnAt, retentionExpiresAt, createdAt, and nothing else; all six address* columns, avatarUrl, createdBySource, createdByName, updatedBySource, updatedByName and updatedAt are absent — THIRTEEN of the model\'s twenty-seven scalar columns are unexported, not two). W-H1 aligned the spec to the code rather than silently widening the payload, because the two directions have different consequences: widening the SPEC alone would re-create drift, and widening the CODE is a behaviour change to a live GDPR export. Art. 15(1) entitles the data subject to all personal data undergoing processing, and a postal address plainly qualifies, so the likely answer is that the CODE should grow, not that the spec should stay narrow. avatar_url is the weaker case (a URL, possibly to an image of the data subject, possibly to a third-party-hosted asset). created_by/updated_by are a third case nobody has raised: Art. 15(1)(g) entitles a data subject whose data was not collected from them to any available information as to its source, and for an auto-created contact created_by IS that information (partly, but only partly, covered by the exported data_source). Settle them together and change spec and code in the same commit. AND -- the more important half -- do not settle this by auditing the list, because auditing the list is what has already failed twice: the payload is a hand-maintained allow-list, and two successive careful reviews named two of the thirteen unexported columns. The durable fix is a test asserting that every scalar column on Prisma model Person is either exported or named in a documented exclusion set, so that adding a column forces a decision. Scope that test at FIELD level over the models ALREADY in collect-user-data.ts, not at model level: the model list has in fact been maintained (Welle 5 added Referral and PersonConnection when those models landed), whereas columns added to a model already in the list -- ROADMAP 1.21 put addressCountryCode and addressSubdivisionCode on Person long after the export existed -- are invisible to whoever edits the export. Adding a model prompts the question; adding a column does not."
 
 open question "W-H1 FOLLOW-UP — retention governance for quick_capture Persons is STILL UNDECIDED, and this module is where crm.allium (open question at crm.allium:1749) deferred the decision. Now that crm/DataSource is imported rather than hand-copied, the value is at least VISIBLE here — the old local copy of the enum had only three members and could not express it. State of play: crm/QuickCapturePerson sets no retention_expires_at, crm/Person.AutoCreatedHasRetention constrains only data_source = auto_created, and crm/ExpireAutoCreatedPersons guards on is_auto_created — so a quick_capture Person is today governed exactly like a full manual create (no expiry, ever). Is that intended? Quick capture is a deliberate user act (unlike email-sync auto-creation), which argues for manual-like treatment; but the record is knowingly incomplete at birth and may be a contact the user never returns to, which argues for a shorter leash. This needs a product/legal judgement, not a spec edit, so W-H1 deliberately did NOT settle it. Whoever settles it must also decide whether ImportedContactMetadata's sibling question (above) gets the same answer. Decide before quick-capture volume accumulates: retro-fitting an expiry onto existing records is a data-minimisation judgement made after the fact."
+
+open question "W-H1 REVIEW (2026-08-26) -- the stub mechanism this module just removed is STILL LIVE in three other specs, and one of them is the file two of the questions above hand work to. Grepping specs/ for external-entity Person declarations returns four files; the three besides this one declare no use line at all. (1) gdpr-data-rights.allium declares external entity Person { user: User, name: String?, emails: List<String> } -- ALL THREE fields diverge from crm/Person (user_id: String, name: FullName, emails: List<TypedEmail>), with no comment explaining the divergence. Same stale-shape class as the stub deleted from here, in the module that owns CrmActivityLog retention (its own Scope line S4) and the Art. 15 export -- i.e. the file in which both the timeline-ownership question and the Art. 15 question will be resolved. Fix that stub BEFORE either, or the resolution gets written against a shape that is already wrong. (2) audit-trail.allium declares external entity Person { user: User } and documents WHY it mirrors no PII (the audit trail records ACCESS to them, never copies their content) -- that is a good stub; it needs only a user vs user_id alignment. (3) application-documents.allium declares external entity Person { gender: String?, full_name: FullName? }, and gender exists NOWHERE -- not in crm.allium, not in prisma/schema.prisma, not in src/models/person.model.ts -- yet that spec builds a salutation feature on it (Salutation.resolve considering Person.gender at :403, enum member formal_named at :115, an invariant at :541). Different class: not stale drift but a REQUIREMENT smuggled into a stub, benign today only because that whole spec is aspirational (Owner: ... to build). It will surface as \"Person has no gender\" the day ROADMAP 4.2 starts. Whoever schedules the next W-item should take gdpr-data-rights.allium first, on exactly the argument that justified flipping this module: the defect is the mechanism, not the instance."
 
 open question "W-H1 FOUND A SECOND CONTRADICTION, out of scope to fix here — timeline-activity retention has two specs and they disagree. This module's rule ExpireOldTimelineActivities anonymises in place (target_person = null, row survives); gdpr-data-rights.allium:404 PurgeOldCrmActivityLogs hard-deletes the row; and the implementation (src/lib/scheduler/retention-cron.ts:203 purgeOldCrmActivityLogs, prisma.crmActivityLog.deleteMany) hard-deletes. Both specs use the same 1095-day window, from two separately-declared config values (this module's timeline_retention and gdpr-data-rights' crm_activity_log_retention). Code and gdpr-data-rights.allium agree, so on current evidence THIS module's rule is the wrong one. Resolving it properly means naming a single owner and deleting the loser, which requires editing gdpr-data-rights.allium — outside the W-H1 mandate (crm.allium + crm-gdpr.allium only). Note the two rules are not merely redundant: a hard delete also destroys the non-personal audit value of the timeline entry, so 'which is correct' is a real GDPR judgement (Art. 5(1)(e) storage limitation vs Art. 5(1)(f)/accountability), not just bookkeeping. NOTE for whoever picks this up: W-E6's earlier resolution — 'the timeline-retention RULE lives in crm-gdpr.allium' — was reached by comparing this module against crm.allium ONLY, and did not consider gdpr-data-rights.allium at all. Re-open that decision rather than inheriting it."

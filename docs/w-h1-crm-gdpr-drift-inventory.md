@@ -1,3 +1,19 @@
+> **STATUS — SUPERSEDED SNAPSHOT. Do not read as a current description of the specs.**
+>
+> This is a **dated evidence record**, frozen at **2026-08-25**, written *before*
+> W-H1 changed anything. Every `file:line` citation below addresses the **pre-flip**
+> files and is now wrong. The stubs, duplicated enums, duplicated config and
+> `PersonGdprExtension` described here **no longer exist**.
+>
+> - For the decision, its alternatives and its consequences → **`docs/adr/041-crm-gdpr-spec-dependency-direction.md`**
+> - For what the specs say **now** → `specs/crm-gdpr.allium` and `specs/crm.allium`
+> - For the independent review of the change → `docs/wh1-independent-assessment.md`
+>
+> It is kept rather than folded into the ADR and deleted because a log is not a
+> second copy of state: it is the evidence that a GDPR-module decision was
+> reasoned rather than asserted, and it cannot be reconstructed later. See
+> ADR-041 §7.
+
 # W-H1 — drift inventory: `crm-gdpr.allium` against `crm.allium` and the code
 
 **Date:** 2026-08-25 · **Branch:** `spec/w-h1-crm-gdpr-dependency-flip`
