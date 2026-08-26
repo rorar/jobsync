@@ -1,4 +1,11 @@
-export type DebugCategory = "scheduler" | "runner" | "automationLogger" | "crm-cron";
+export type DebugCategory =
+  | "scheduler"
+  | "runner"
+  | "automationLogger"
+  | "crm-cron"
+  // Retention-policy writes fire from server actions (updatePerson,
+  // updatePrivacySettings) as well as the cron, so they are NOT "crm-cron".
+  | "crm-retention";
 
 /**
  * Gated debug logging. Checks DEBUG_LOGGING env variable.

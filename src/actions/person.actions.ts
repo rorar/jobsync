@@ -10,6 +10,8 @@ import { handleError } from "@/lib/utils";
 import { writeDataAuditLog } from "@/lib/audit/data-audit";
 import { extractEmailDomain } from "@/lib/crm/blocklist-match";
 import { collectOrphanCandidateNoteIds, withOrphanedCrmPrune } from "@/lib/crm/orphan-targets";
+import { anonymizePersonCascade } from "@/lib/crm/anonymize-person";
+import { touchPersonRetention } from "@/lib/crm/retention-policy";
 import {
   type TypedEmail,
   type TypedPhone,
@@ -390,6 +392,14 @@ export async function updatePerson(
       data,
     });
 
+    // Last-activity retention clock (specs/crm.allium ExpireAutoCreatedPersons):
+    // a substantive edit is the unambiguous "this contact is still needed"
+    // signal, so it re-bases the retention deadline. No-op for manual /
+    // quick_capture Persons — they carry no retention leash. Best-effort by
+    // design: the helper swallows its own errors so a clock failure can never
+    // fail the user's edit.
+    await touchPersonRetention(user.id, personId);
+
     eventBus.publish(
       createEvent(DomainEventType.ContactUpdated, {
         personId,
@@ -539,6 +549,14 @@ export async function reinstateConsent(
   }
 }
 
+/**
+ * GDPR Art. 17 erasure of a Person (server action).
+ *
+ * Thin auth wrapper: session, ownership (ADR-015) and the terminal-status guard
+ * live here; the cascade itself lives in the session-free server-only helper
+ * `@/lib/crm/anonymize-person`, so the retention cron can invoke the SAME
+ * erasure without a session. Precedent: `@/lib/account/execute-deletion`.
+ */
 export async function anonymizePerson(personId: string): Promise<ActionResult<{ id: string }>> {
   try {
     const user = await getCurrentUser();
@@ -552,190 +570,10 @@ export async function anonymizePerson(personId: string): Promise<ActionResult<{ 
       return { success: false, message: "crm.errors.alreadyAnonymized" };
     }
 
-    // Collect the person's blocklist handles before anonymization clears them.
-    // W-C3: the spec removes entries matching an email OR its domain, and the
-    // phone arm too — not exact emails only. Build the full handle set: exact
-    // emails, exact phones, and the domain of each email (which matches a
-    // `domain`-type blocklist entry stored as the bare domain handle).
-    const personEmails = parseEmails(person.emails).map((e) => e.email.trim().toLowerCase());
-    const personPhones = parsePhones(person.phones).map((p) => p.number.trim().toLowerCase());
-    const personEmailDomains = personEmails
-      .map((e) => extractEmailDomain(e))
-      .filter((d): d is string => d !== null);
-    const blockedHandles = [...new Set([...personEmails, ...personPhones, ...personEmailDomains])];
-
-    // Collect BEFORE the transaction removes this person's note targets.
-    const orphanCandidates = await collectOrphanCandidateNoteIds(prisma, user.id, {
-      targetPersonId: personId,
-    });
-
-    // GDPR Art. 17 (W-D4): a note or task that ALSO targets a Job or Company
-    // survives the target removal below — the prune only reaps records left with
-    // NO target — and keeps its free text about the erased person. That text is
-    // unreachable in the UI, but the Art. 15 export still emits it: it reads
-    // `crmNote.findMany({ where: { userId } })` with no target filter
-    // (src/lib/export/collect-user-data.ts). Retaining it would be ongoing
-    // disclosure of data that was supposed to be erased, so scrub the free text
-    // here, mirroring the crmInterview.notes/outcomeNotes treatment below.
-    //
-    // Tasks are scrubbed rather than deleted: rule DeleteTask (crm.allium)
-    // permits a hard delete only from a terminal status, and the board renders
-    // the targetless case, so the row must survive — but its title/description
-    // may name the erased person, and it keeps firing overdue reminders.
-    const piiTaskIds = (
-      await prisma.crmTaskTarget.findMany({
-        where: { targetPersonId: personId, task: { userId: user.id } },
-        select: { taskId: true },
-      })
-    ).map((t) => t.taskId);
-
-    // Transaction: anonymize person + cascade delete targets (GDPR Art. 17)
-    await prisma.$transaction(
-      // W-D3 (GDPR Art. 17): removing the note targets above can leave a note
-      // that ONLY targeted this person with zero targets — unreachable in the UI,
-      // yet still holding free text about the erased person. withOrphanedCrmPrune
-      // appends that prune after every statement below. Tasks are left alone (they
-      // stay visible on the board) — see the orphan-targets module docs.
-      withOrphanedCrmPrune(prisma, user.id, orphanCandidates, [
-        // GDPR Art. 17: scrub the free text BEFORE the targets go, while the
-        // collected ids still describe records that named this person. `body` is
-        // non-nullable, so it is emptied rather than nulled. (ADR-015: userId in
-        // where — the id list is not trusted on its own.)
-        prisma.crmNote.updateMany({
-          where: { id: { in: orphanCandidates }, userId: user.id },
-          data: {
-            title: null,
-            body: "",
-            updatedByType: "system",
-            updatedById: user.id,
-          },
-        }),
-        prisma.crmTask.updateMany({
-          where: { id: { in: piiTaskIds }, userId: user.id },
-          data: {
-            title: "",
-            description: null,
-            updatedByType: "system",
-            updatedById: user.id,
-          },
-        }),
-        // Remove note targets (ADR-015: scoped via note.userId — CrmNoteTarget has no userId column)
-        prisma.crmNoteTarget.deleteMany({ where: { targetPersonId: personId, note: { userId: user.id } } }),
-        // Remove task targets (ADR-015: scoped via task.userId — CrmTaskTarget has no userId column)
-        prisma.crmTaskTarget.deleteMany({ where: { targetPersonId: personId, task: { userId: user.id } } }),
-        // Remove job contacts (Kette C) (ADR-015: userId in where)
-        prisma.jobContact.deleteMany({ where: { personId, userId: user.id } }),
-        // Detach interviews + scrub free-text fields (G2 fix, ADR-015: userId in where)
-        prisma.crmInterview.updateMany({
-          where: { personId, userId: user.id },
-          data: {
-            personId: null,
-            notes: null,
-            outcomeNotes: null,
-            // Welle 3 (Gap-7): the erasing user is the actor of this cascade edit.
-            updatedByType: "user",
-            updatedById: user.id,
-          },
-        }),
-        // Anonymize activity log references + scrub PII text fields (S5 fix, ADR-015: userId in where)
-        prisma.crmActivityLog.updateMany({
-          where: { targetPersonId: personId, userId: user.id },
-          data: { targetPersonId: null, details: null, linkedRecordName: null },
-        }),
-        // Remove blocklist entries for this person's emails, phones, and email
-        // domains (S5 fix + W-C3 domain/phone arms).
-        ...(blockedHandles.length > 0
-          ? [prisma.crmBlocklist.deleteMany({
-              where: { userId: user.id, handle: { in: blockedHandles } },
-            })]
-          : []),
-        // Inside Track (Welle 5) GDPR cascade — AnonymizeCascadesToInsideTrack
-        // (specs/inside-track.allium). Network edges are hard-removed (they exist
-        // only to re-identify a path); Referral.viaId is onDelete:SetNull, so any
-        // NetworkPath.via pointing at a removed edge is nulled by the DB (G-B).
-        prisma.personConnection.deleteMany({
-          where: { userId: user.id, OR: [{ fromPersonId: personId }, { toPersonId: personId }] },
-        }),
-        // G-A: sever the variant-specific Person references (Person row is kept,
-        // so the FKs are NOT auto-nulled — do it explicitly).
-        prisma.referral.updateMany({
-          where: { userId: user.id, forwardedToId: personId },
-          data: { forwardedToId: null },
-        }),
-        prisma.referral.updateMany({
-          where: { userId: user.id, insiderId: personId },
-          data: { insiderId: null },
-        }),
-        // Tipster de-identified: a still-working tip is also declined (the
-        // door-opener is gone); a terminal tip (converted/declined) keeps its
-        // status and only loses the link (avoids an illegal declined->declined).
-        prisma.referral.updateMany({
-          where: {
-            userId: user.id,
-            tipsterId: personId,
-            status: { notIn: ["converted", "declined"] },
-          },
-          data: { tipsterId: null, status: "declined" },
-        }),
-        prisma.referral.updateMany({
-          where: {
-            userId: user.id,
-            tipsterId: personId,
-            status: { in: ["converted", "declined"] },
-          },
-          data: { tipsterId: null },
-        }),
-        // Anonymize the person record
-        prisma.person.update({
-          where: { id: personId, userId: user.id },
-          data: {
-            status: "anonymized",
-            firstName: null,
-            lastName: null,
-            emails: "[]",
-            phones: "[]",
-            companies: "[]",
-            headline: null,
-            socialProfiles: "[]",
-            avatarUrl: null,
-            addressStreet: null,
-            addressCity: null,
-            addressPostalCode: null,
-            addressCountry: null,
-            addressCountryCode: null,
-            addressSubdivisionCode: null,
-            createdByName: null,
-            updatedByName: null,
-            // W-C4: the erasure is a system action, not a human edit — record it
-            // so the tombstone does not claim a person last touched the record.
-            updatedBySource: "system",
-          },
-        }),
-      ]),
-    );
-
-    // GDPR Art. 5(2) accountability: the erasure is the action a controller is
-    // most likely to have to demonstrate, and it was the only mutation here
-    // leaving no attributable trace — the contact_deleted timeline projection
-    // deliberately nulls the person reference, so it cannot serve as the record.
-    // The entry names the subject and the actor and nothing else: the sink drops
-    // any snapshot for a non-SNAPSHOT_ACTION, so an erasure can never preserve
-    // the PII it removed (spec: audit-trail.allium, rule AuditPersonAnonymise).
-    writeDataAuditLog({
-      actorId: user.id,
+    await anonymizePersonCascade(user.id, personId, person, {
+      reason: "anonymized",
       actorEmail: user.email,
-      action: "person.anonymize",
-      targetType: "person",
-      targetId: personId,
     });
-
-    eventBus.publish(
-      createEvent(DomainEventType.ContactDeleted, {
-        personId,
-        userId: user.id,
-        reason: "anonymized",
-      }),
-    );
 
     return { success: true, data: { id: personId } };
   } catch (error) {

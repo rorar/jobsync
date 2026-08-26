@@ -590,20 +590,34 @@ rule FulfillPortabilityRequest {
 -- -----------------------------------------------------------------------------
 
 -- NOTE — `rule ExpireAutoCreatedContacts` was DELETED by W-H1 (2026-08-25).
--- crm.allium rule ExpireAutoCreatedPersons (crm.allium:767) is the SOLE OWNER
--- of auto-created retention expiry. The rule deleted from here CONTRADICTED it
--- outright: on the same trigger and the same subject, this module said expiry
--- raises an erasure DataSubjectRequest and ends in `anonymized` (terminal,
--- irreversible), while crm.allium says `archived` (reversible) plus a
--- ReminderTriggered.
--- The code archives: src/lib/scheduler/crm-cron.ts selects
--- `{status: "active", dataSource: "auto_created", retentionExpiresAt: {lte: now}}`
--- and writes `{status: "archived"}` plus a `retention_expired` timeline entry
--- and a ReminderTriggered event. That matches crm.allium exactly.
--- This mattered in practice: a reader consulting the GDPR spec — the natural
--- place to look for a retention answer — was told that expiry irreversibly
--- erases contacts. It does not. `allium check` could not see the conflict,
--- because one spec talked about Person and the other about PersonGdprExtension.
+-- crm.allium rule ExpireAutoCreatedPersons is the SOLE OWNER of auto-created
+-- retention expiry. Do NOT re-add a copy here.
+--
+-- W-H1 deleted it because the two modules CONTRADICTED each other on the same
+-- trigger and the same subject: this module said expiry ends in `anonymized`
+-- (terminal, irreversible), crm.allium said `archived` (reversible) plus a
+-- ReminderTriggered, and the code archived. `allium check` could not see the
+-- conflict, because one spec talked about Person and the other about
+-- PersonGdprExtension. A reader consulting the GDPR spec — the natural place to
+-- look for a retention answer — was told erasure happened when it did not.
+--
+-- W-B3 UPDATE (2026-08-26) — READ THIS BEFORE CONCLUDING THE DELETION WAS WRONG.
+-- The two outcomes have since CONVERGED on `anonymized`: crm.allium
+-- ExpireAutoCreatedPersons now delegates to AnonymizePerson, and the code erases
+-- (src/lib/scheduler/crm-cron.ts calls anonymizePersonCascade with
+-- reason: retention_expired). It no longer archives, no longer writes a
+-- retention_expired timeline entry, and no longer emits ReminderTriggered; the
+-- selector is now `{status: {not: "anonymized"}, dataSource: "auto_created",
+-- retentionExpiresAt: {lte: now}}`, so manually-archived records no longer
+-- escape. The description two paragraphs above of what the code does is
+-- therefore HISTORICAL — it described the pre-W-B3 implementation.
+--
+-- So the outcome this module originally prescribed turned out to be the right
+-- one. That does NOT make the deletion wrong, and is exactly the reasoning trap
+-- this note exists to stop: W-H1 removed a SECOND OWNER, not a wrong answer. Two
+-- modules independently specifying one rule is a drift mechanism whichever of
+-- them happens to be correct at any moment — it is what allowed the divergence
+-- to persist unseen in the first place. Ownership stays with crm.allium.
 
 rule ExpireOldTimelineActivities {
     -- Periodic cleanup: timeline activities older than the retention window

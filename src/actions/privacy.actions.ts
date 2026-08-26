@@ -13,11 +13,14 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { handleError } from "@/lib/utils";
 import type { ActionResult } from "@/models/actionResult";
 import {
+  ALLOWED_CRM_RETENTION_DAYS,
   defaultPrivacySettings,
   defaultUserSettings,
   type PrivacySettings,
   type UserSettingsData,
 } from "@/models/userSettings.model";
+// ADR-019: server-only leaf, NOT re-exported from this "use server" file.
+import { rebaseCrmRetention } from "@/lib/crm/retention-policy";
 
 // ---------------------------------------------------------------------------
 // Allowed cooling-off day values (ADR-019 runtime validation)
@@ -64,7 +67,10 @@ export async function getPrivacySettings(): Promise<
  * Update the current user's privacy settings.
  * Runtime validates all fields per ADR-019:
  * - booleans checked with typeof
- * - coolingOffDays checked against allowed union values
+ * - coolingOffDays / crmRetentionDays checked against allowed union values
+ *
+ * Side effect: changing the CRM retention period re-bases existing auto-created
+ * contacts' deadlines so the new period takes effect immediately.
  */
 export async function updatePrivacySettings(
   settings: PrivacySettings,
@@ -101,6 +107,29 @@ export async function updatePrivacySettings(
         errorCode: "VALIDATION_ERROR",
       };
     }
+    if (typeof settings.crmRetentionEnabled !== "boolean") {
+      return {
+        success: false,
+        message: "errors.invalidInput",
+        errorCode: "VALIDATION_ERROR",
+      };
+    }
+    // ADR-019: the `180 | 365 | 730 | 1095` union is erased at runtime, so the
+    // boundary check is the only thing standing between a crafted payload and a
+    // retention period of, say, 3_650_000 days — i.e. option (d) "retain
+    // forever" smuggled in as a configuration, which Art. 5(1)(e) does not
+    // permit. Membership check, not a range check.
+    if (
+      !(ALLOWED_CRM_RETENTION_DAYS as readonly number[]).includes(
+        settings.crmRetentionDays,
+      )
+    ) {
+      return {
+        success: false,
+        message: "errors.invalidInput",
+        errorCode: "VALIDATION_ERROR",
+      };
+    }
 
     // Read existing settings and merge privacy
     const existingRow = await prisma.userSettings.findUnique({
@@ -108,9 +137,13 @@ export async function updatePrivacySettings(
     });
 
     let mergedSettings: UserSettingsData;
+    // Retention period BEFORE this save — needed to re-base existing deadlines.
+    let previousRetentionDays = defaultPrivacySettings.crmRetentionDays;
 
     if (existingRow) {
       const current: UserSettingsData = JSON.parse(existingRow.settings);
+      previousRetentionDays =
+        current.privacy?.crmRetentionDays ?? defaultPrivacySettings.crmRetentionDays;
       mergedSettings = {
         ...current,
         privacy: settings,
@@ -131,6 +164,21 @@ export async function updatePrivacySettings(
         settings: JSON.stringify(mergedSettings),
       },
     });
+
+    // Shortening the period must take effect NOW, not at each contact's next
+    // edit. Without this the setting would be a lie — an operator tightening
+    // 730 -> 180 to be more protective would see nothing happen for years,
+    // which is the "system does not enforce its own declared retention policy"
+    // defect (Art. 5(2)) this feature exists to fix, re-created as a config.
+    // Exact + idempotent: the helper shifts stored deadlines by the delta.
+    // Best-effort — the settings save itself has already succeeded.
+    if (previousRetentionDays !== settings.crmRetentionDays) {
+      await rebaseCrmRetention(
+        user.id,
+        previousRetentionDays,
+        settings.crmRetentionDays,
+      );
+    }
 
     return { success: true, data: settings };
   } catch (error) {

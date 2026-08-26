@@ -243,7 +243,8 @@ export interface ContactUpdatedPayload {
 export interface ContactDeletedPayload {
   personId: string;
   userId: string;
-  reason: "anonymized" | "merged" | "deleted";
+  /** `retention_expired` = automatic expiry by the CRM retention cron (no human actor). */
+  reason: "anonymized" | "merged" | "deleted" | "retention_expired";
 }
 
 export interface InterviewScheduledPayload {

@@ -23,6 +23,8 @@ import { INSIDE_TRACK_CONFIG, type ReferralStatus } from "@/models/insideTrack.m
 import { debugLog, debugError } from "@/lib/debug";
 import { getPrivacySettingsForUser } from "@/lib/account/privacy-helpers";
 import { executeAccountDeletion } from "@/lib/account/execute-deletion";
+import { anonymizePersonCascade } from "@/lib/crm/anonymize-person";
+import { getCrmRetentionPolicy } from "@/lib/crm/retention-policy";
 import { writeAdminAuditLog } from "@/lib/auth/admin";
 
 // globalThis guard: survives Next.js HMR module reloads (same pattern as RunCoordinator)
@@ -46,58 +48,95 @@ const CRM_CRON_EXPRESSION = "*/15 * * * *"; // Every 15 minutes
 
 // ---------------------------------------------------------------------------
 // Rule: ExpireAutoCreatedPersons
+//
+// Auto-created Persons whose retention has elapsed are ERASED (the
+// AnonymizePerson cascade), not archived. Gated per user by
+// PrivacySettings.crmRetentionEnabled. Idempotency is structural: `anonymized`
+// is terminal and the query excludes it, so the rule cannot fire twice on one
+// Person — no activity-log guard row is needed (and none is written).
+//
+// Spec: specs/crm.allium rule ExpireAutoCreatedPersons.
 // ---------------------------------------------------------------------------
 
 async function expireAutoCreatedPersons(): Promise<number> {
   const now = new Date();
   const expired = await prisma.person.findMany({
     where: {
-      status: "active",
+      // W-B3: NOT `status: "active"`. A manually-archived Person is still held,
+      // still exported (Art. 15) and still un-archivable in one click, so an
+      // `active`-only guard let exactly the records a user had already set aside
+      // escape retention entirely. This is deliberately the SAME predicate as
+      // the AnonymizePerson trigger (crm.allium), not a third one.
+      status: { not: "anonymized" },
       dataSource: "auto_created",
       retentionExpiresAt: { lte: now },
     },
-    select: { id: true, userId: true, firstName: true, lastName: true },
+    // W-B3: firstName/lastName are NOT selected. They were read only to build a
+    // `linkedRecordName` timeline row that started a fresh 1095-day clock on the
+    // very name the expiry was supposed to retire. That row is gone; the names
+    // must not be read.
+    select: { id: true, userId: true },
   });
 
   if (expired.length === 0) return 0;
 
-  let archived = 0;
+  // The retention policy is per-user (PrivacySettings.crmRetentionEnabled).
+  // Cache per sweep so a multi-user install does one settings read per user,
+  // not one per Person.
+  const policyCache = new Map<string, boolean>();
+  async function isEnabledFor(userId: string): Promise<boolean> {
+    const cached = policyCache.get(userId);
+    if (cached !== undefined) return cached;
+    const { enabled } = await getCrmRetentionPolicy(userId);
+    policyCache.set(userId, enabled);
+    return enabled;
+  }
+
+  let erased = 0;
   for (const person of expired) {
     try {
-      // Transaction: archive + audit log atomically (Finding 2 fix)
-      await prisma.$transaction([
-        prisma.person.update({
-          where: { id: person.id },
-          data: { status: "archived" },
-        }),
-        prisma.crmActivityLog.create({
-          data: {
-            userId: person.userId,
-            activityType: "reminder_triggered",
-            actorId: null,
-            targetPersonId: person.id,
-            details: JSON.stringify({ reason: "retention_expired" }),
-            linkedRecordName: [person.firstName, person.lastName].filter(Boolean).join(" ") || null,
-          },
-        }),
-      ]);
+      // Disabled does NOT mean "retain forever": the period stays declared and
+      // `retentionExpiresAt` still shows on the contact. Only the unattended
+      // erasure is suspended — the operator carries out the Art. 5(1)(e) review
+      // by hand. See docs/retention-settings-plan.md D2.
+      if (!(await isEnabledFor(person.userId))) continue;
 
-      // Event publish outside transaction — best-effort
-      eventBus.publish(
-        createEvent(DomainEventType.ReminderTriggered, {
-          userId: person.userId,
-          reason: "retention_expired",
-          targetPersonId: person.id,
-        }),
-      );
+      // W-B3: erase, do not archive. `archived` is a UI filter facet, not a
+      // retention outcome — an archived Person is still listed, searched,
+      // exported and one click from being restored, so archiving on expiry
+      // never actually ended the processing (Art. 5(1)(e) / 5(2)).
+      //
+      // The audit row is produced automatically and PII-free by the
+      // ContactDeleted -> contact_deleted projection
+      // (src/lib/events/consumers/crm-activity-logger.ts), which nulls both
+      // targetPersonId and linkedRecordName. Nothing is written here.
+      // Deliberately a SECOND query rather than selecting emails/phones in the
+      // findMany above, and deliberately not an N+1 to apologise for: these are
+      // the PII fields the cascade needs to build the blocklist handle set, and
+      // reading them up front would pull them into memory for every candidate
+      // — including the ones a disabled policy is about to skip. Fetch the
+      // minimum, for the records actually being erased, as late as possible.
+      const record = await prisma.person.findFirst({
+        where: { id: person.id, userId: person.userId },
+        select: { emails: true, phones: true },
+      });
+      if (!record) continue;
 
-      archived++;
+      await anonymizePersonCascade(person.userId, person.id, record, {
+        reason: "retention_expired",
+        // No session: the cron has no acting human. The audit row records the
+        // account owner as actor with no email rather than inventing one.
+        actorEmail: null,
+      });
+
+      erased++;
     } catch (error) {
+      // Per-person catch: one failure must not abort the sweep.
       debugError("crm-cron", `Failed to expire person ${person.id}:`, error);
     }
   }
 
-  return archived;
+  return erased;
 }
 
 // ---------------------------------------------------------------------------

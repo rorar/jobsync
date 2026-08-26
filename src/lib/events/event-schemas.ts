@@ -243,7 +243,7 @@ export const ContactUpdatedPayloadSchema = z.object({
 export const ContactDeletedPayloadSchema = z.object({
   personId: z.string(),
   userId: z.string(),
-  reason: z.enum(["anonymized", "merged", "deleted"]),
+  reason: z.enum(["anonymized", "merged", "deleted", "retention_expired"]),
 }) satisfies z.ZodType<ContactDeletedPayload>;
 
 export const InterviewScheduledPayloadSchema = z.object({
