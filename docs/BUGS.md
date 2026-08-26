@@ -64,6 +64,27 @@ contact keeps `firstName`, `lastName`, `emails` and `phones` indefinitely. `arch
 flag, not de-identification — the row remains "kept in a form which permits identification"
 (Art. 5(1)(e)).
 
+**ESCALATED 2026-08-26 — retention expiry EXTENDS the name's lifetime.** The rest of this
+entry describes archived rows *passively* keeping PII. Verified worse, and active: in the
+**same transaction** that archives the Person for retention expiry,
+`src/lib/scheduler/crm-cron.ts:73-81` creates a `CrmActivityLog` row carrying
+`targetPersonId: person.id` **and**
+`linkedRecordName: [person.firstName, person.lastName].filter(Boolean).join(" ")`.
+
+`CrmActivityLog.happenedAt` defaults to `now`, and that table runs on a *different* clock —
+`crm_activity_log_retention` (1095 days, `gdpr-data-rights.allium:209`), swept by
+`retention-cron.ts:201`. So at the moment the Person's retention period ends, their full name
+is **copied into an immutable timeline row with a fresh three-year clock**, started by the very
+event meant to end retention.
+
+Retention expiry therefore *lengthens* the identifier's practical lifetime rather than ending
+it — a far more concrete Art. 5(1)(e) failure than a status flag that fails to de-identify, and
+it means **any fix that does not also address the log copy is incomplete**. Note
+`crm/AnonymizePerson` already scrubs `linked_record_name` on the erasure path: the capability
+exists, the retention path simply does not use it.
+
+Full verification log: `docs/wh-b3-retention-analysis.md`.
+
 **Corrected 2026-08-25 (security review).** An earlier draft of this entry claimed as a second,
 independent defect that "a Person archived MANUALLY before its retention date can never be expired
 at all, because the expiry rule requires `status = active`". That is literally true but **inert
