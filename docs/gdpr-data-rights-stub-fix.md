@@ -2,7 +2,7 @@
 
 **Branch:** `spec/gdpr-data-rights-person-stub`
 **Date:** 2026-08-26
-**Status:** IN PROGRESS — appended continuously. If this file ends mid-section, the run was cut short.
+**Status:** COMPLETE. Final gates in §11: 0 dangling, 0 errors, 269 warnings. Nothing committed.
 **Baseline at start:** `allium check specs/` = 0 errors / 285 warnings / 945 infos.
 `check-spec-refs.mjs specs` = 37 resolved / 0 dangling. Nothing committed.
 
@@ -296,3 +296,181 @@ brief invites clarification. It is **not** a resolution: both rules survive unch
 neither retention period moves, no owner is named, and anonymise-vs-hard-delete is
 untouched. I have not edited `crm-gdpr.allium` at all.
 
+---
+
+## 5. What I changed
+
+Only `specs/gdpr-data-rights.allium` (81 insertions, 20 deletions). No other spec, no code.
+
+1. **Added one import** — `use "./crm.allium" as crm` (:19). The only one. Cycle-checked in §4.
+2. **Deleted `external entity Person`** — dead (§3.3), all three fields wrong (§2). Replaced
+   by a three-line tombstone in the section header naming `crm.allium:242` and
+   `crm-gdpr.allium`, so a grep for "Person" in this file still lands somewhere useful.
+3. **Deleted `external entity Job`** — dead, two of three fields wrong. One-line tombstone
+   naming `job-aggregate.allium:57`.
+4. **Deleted `external entity CrmActivityLog`; `PurgeOldCrmActivityLogs` now iterates
+   `crm/ActivityLogs`.** This is the one import that earns its keep: the field *is*
+   dereferenced (`cal.happened_at`), the owner *is* `crm.allium:419`, and the pattern is
+   already precedented at `crm-gdpr.allium:631`. The rule carries a comment stating
+   plainly that this makes the retention contradiction **visible, not resolved**, and
+   telling the next reader not to settle it by deleting either rule.
+5. **Corrected `LogoAsset.company_id: String?` → `String`** — the one outright false field
+   declaration, contradicted by both `logo-asset-cache.allium:73` and
+   `prisma/schema.prisma:937`. The stub comment records what it was and why.
+6. **Every remaining stub now names its owner** (`-- OWNER: <file>:<line>`), plus a note
+   where the projection differs and why that difference is or is not acceptable. This is
+   the actual mechanism fix — see §6 for why it now matters more than I expected.
+7. **Four `open question` declarations added** — the LogoAsset orphan rule iterating the
+   wrong collection; the two enum-weakened stubs; `AiManifest` having no owning spec; the
+   `AdminAuditLog`/`AuditLogEntry` double-naming.
+8. **Scope header** (:10) now reads `crm/ActivityLog` instead of `CrmActivityLog`, so the
+   header greps to the same name as the rule.
+
+I did **not** strip the decorative `user: User` fields, though six of them are
+`allium.field.unused` and every one differs from its owner's `user_id: String`. §2
+classified that as an encoding difference rather than drift, and removing them would have
+contradicted my own analysis while forcing a corpus-wide convention nobody asked for. They
+stay, with the owner's spelling recorded in the comment.
+
+---
+
+## 6. The warning count improved by more than the file did — read it carefully
+
+This file went from **29 warnings to 13**, and the whole corpus from **285 to 269**. I
+attributed the delta per-file before writing it down: all 16 came from here, nothing moved
+elsewhere. But the number flatters the change, and the reason is a finding in its own right.
+
+The 29 broke down as 13 `externalEntity.missingSourceHint` + 11 `entity.unused` +
+5 `definition.unused`. The 13 are now **0**. Only three of those thirteen stubs were
+deleted. The other ten are still there, still importing nothing —
+`allium.externalEntity.missingSourceHint` is evaluated **per module, not per entity**, so
+a single `use` line anywhere in the file satisfies it for every stub in it.
+
+So of the 16 warnings that disappeared, **6 are real** (three dead entities, each costing
+one `entity.unused` and one `missingSourceHint`) and **10 are the diagnostic disarming
+itself**. Ten stubs are exactly as unlinked as they were this morning.
+
+Two consequences, and they point in opposite directions:
+
+- **Do not use this file's warning count as evidence the stubs are healthy.** It is now a
+  worse signal than before, because it reads clean. If the team wants a real guard, it has
+  to be `check-spec-refs.mjs`-shaped — per-entity, and looking for the owner.
+- **The `-- OWNER:` comments in §5.6 are now the only machine-findable link** for those ten.
+  I added them as documentation; they turn out to be the load-bearing part. A five-line
+  script can assert that every `external entity` in `specs/` is followed by an `OWNER:`
+  line whose cited file and entity exist. That would catch what `missingSourceHint` was
+  supposed to catch, per entity, and would have caught the `Person` stub on the day it was
+  written. I have not written it — that is code, and I was scoped to specs.
+
+This is the third instance in two tasks of the same shape: a diagnostic that looks like a
+guard, is not one, and whose green state is read as safety. The other two are in
+`docs/wh1-independent-assessment.md` §2 (qualified references unchecked in expression
+position) and §3.4/§3.5 above (`entity.unused` false-positives on plural collections;
+nullability unchecked in comparisons).
+
+---
+
+## 7. Every external entity, classified
+
+The brief offered three classes. The audit needed a fourth — **dead declaration** — which
+is what the nominal target turned out to be, and which is why §4 diverged. A dead stub
+looks identical to a stale one until you grep for references.
+
+| Entity | Class | Disposition |
+|---|---|---|
+| `User` | genuinely external, faithful | **kept** + `OWNER: auth-session.allium:84`. `id` is not declared by the owner but is real in Prisma; not a divergence worth acting on. |
+| `Job` | **dead declaration** (also stale: 2 of 3 fields wrong) | **deleted** + tombstone |
+| `Person` | **dead declaration** (also stale: 3 of 3 fields wrong) | **deleted** + tombstone |
+| `Resume` | genuinely external, faithful | **kept** + owner. My initial "nullability drift" call was wrong — see §2 correction. |
+| `ContactInfo` | genuinely external, **exactly** faithful | **kept** + owner. Wide on purpose: these six fields are the PII set S3 strips. |
+| `AiManifest` | genuinely external, **no owner exists** | **kept** + owner-absence documented + open question. Mirrors code (`manifest.ts:196`), not a spec. Same field is hand-declared in three specs. |
+| `Notification` | genuinely external; encoding differs (`user` vs `user_id`) | **kept** + owner |
+| `EnrichmentResult` | genuinely external; naming convention differs (snake vs camel) | **kept** + owner |
+| `EnrichmentLog` | genuinely external; same | **kept** + owner |
+| `StagedVacancy` | **requirement smuggled** — enum weakened to `String` so a rule could compare a string literal | **kept**, weakening documented, open question. Fixing needs a second import. |
+| `AdminAuditLog` | **duplicate name** for `audit-trail.allium:78` `AuditLogEntry` + enum weakened | **kept**, both documented, open question. Renaming spans two specs and is a ubiquitous-language call. |
+| `CrmActivityLog` | **duplicate name** for `crm.allium:419` `ActivityLog` | **deleted**, replaced by the import |
+| `LogoAsset` | **requirement smuggled** — `company_id` made nullable so a rule could test it | **fixed** to non-null; the now-dead guard raised as an open question |
+
+---
+
+## 8. Qualified references added — for verification
+
+Exactly one new qualified reference, and one new import:
+
+| Added | Location | Resolves to |
+|---|---|---|
+| `use "./crm.allium" as crm` | `specs/gdpr-data-rights.allium:19` | `specs/crm.allium` (exists) |
+| `crm/ActivityLogs` | in `rule PurgeOldCrmActivityLogs`, the `for cal in ...` clause | `entity ActivityLog`, `specs/crm.allium:419` |
+
+`check-spec-refs.mjs specs` went **37 → 38 resolved, 0 dangling**, which is the +1 above.
+No other qualified reference in the corpus was touched. Every other mention of `crm.allium`
+or `ActivityLog` I added is inside a `--` comment, and the resolver skips comment lines
+(`check-spec-refs.mjs:161`).
+
+---
+
+## 9. Things in the brief that were wrong or incomplete
+
+1. **The framing of the fix** — already conceded by the team lead before I implemented, and
+   recorded here for the trail: the Person stub needed deleting, not importing. Nothing in
+   the file reads it.
+2. **The three-way classification is missing a class.** "Genuinely external / stale copy /
+   requirement smuggled" has no slot for *dead declaration*, which is what two of the
+   thirteen were, and which needs a different remedy from all three. A stale stub gets
+   repaired or imported; a dead one gets deleted. They are indistinguishable by inspection
+   — only a reference grep separates them — so the classification has to include it or the
+   auditor will import things nothing uses.
+3. **"warnings ≤ 285" is not a meaningful gate for this change.** It held (269), but §6
+   shows ten of the sixteen disappeared because one `use` line disarmed a per-module
+   diagnostic. A stub-hygiene task can improve that number by *adding* an unnecessary
+   import. Worth changing the gate before the next stub task uses it.
+4. Everything else checked out. The cycle claim was correct (verified in §4), the resolver
+   invocation and its 37/0 baseline were correct, and my Bash is indeed unrestricted.
+
+---
+
+## 10. What I deliberately left alone
+
+- **Timeline-retention ownership.** Both rules survive. No retention period moved, no owner
+  was named, `crm-gdpr.allium` was not opened. The only change is that both rules now name
+  the same collection, which was the point.
+- **The Art. 15 export.** `UserDataExport` and `ExportMetadata` are untouched. §7's
+  disposition for `Person` does not narrow the export — `UserDataExport.persons` is a
+  `List<String>` and never referenced the entity.
+- **`crm-cron.ts:73-81` / WH-B3.** Flagged to me as context, explicitly not mine. Not
+  chased, not cited as support for anything above.
+- **The six decorative `user: User` fields** — reasoning in §5.
+- **The `AdminAuditLog` → `AuditLogEntry` rename** — spans two specs plus a config key, an
+  enum member and a rule name. Raised, not done.
+- **Strengthening `StagedVacancy.status` / `AdminAuditLog.action`** — needs two more
+  imports; §4's "one `use` line, not eight" applies. Raised, not done.
+- **Rewriting `CleanOrphanedLogoAssetFiles`** — the code is clear about what it does, but
+  restating the rule needs an entity for an on-disk file that this module does not have,
+  and inventing one is inventing coverage. Raised, not done.
+- **The `-- OWNER:` lint script** (§6) — that is code.
+
+---
+
+## 11. Verification
+
+Run at the end, on the final state of the tree:
+
+```
+$ node .../check-spec-refs.mjs specs
+check-spec-refs: 38 qualified reference(s) resolved, 0 dangling.
+
+$ allium check specs/
+38 files — 0 errors, 269 warnings, 939 infos
+```
+
+Gates: **0 dangling** ✓ · **0 errors** ✓ · **269 ≤ 285 warnings** ✓ (caveat in §6).
+
+Baseline was 37/0 and 0 errors / 285 warnings / 939 infos. Per-file attribution confirms
+the entire warning delta comes from `gdpr-data-rights.allium` (29 → 13); no other file's
+diagnostics moved.
+
+Branch `spec/gdpr-data-rights-person-stub`. **Nothing committed.** `git status` shows one
+spec modified: `specs/gdpr-data-rights.allium`.
+
+**Status: COMPLETE.**

@@ -7,7 +7,7 @@
 --   S2 — User data export / portability (full platform data, not just CRM Person)
 --   S3 — AI prompt PII minimization (strip contact PII before sending to cloud providers)
 --   S4 — System-wide retention policies (Notifications, EnrichmentResult/Log, StagedVacancy,
---         AdminAuditLog, CrmActivityLog, orphaned LogoAsset files)
+--         AdminAuditLog, crm/ActivityLog, orphaned LogoAsset files)
 --
 -- Excludes:
 --   - CRM Person-level GDPR (see crm-gdpr.allium — Person as data subject)
@@ -16,33 +16,48 @@
 --   - Breach notification (operational, not domain logic)
 --   - Data Processing Agreements with AI vendors (legal, not code)
 
+use "./crm.allium" as crm
+
 ------------------------------------------------------------
 -- External Entities
 ------------------------------------------------------------
+--
+-- EVERY stub below names the specification that OWNS the entity. A stub that
+-- names no owner is how a hand-maintained copy drifts unnoticed: nothing links
+-- it back to the thing it claims to project, so no reader and no script can
+-- check it. Pattern taken from crm.allium:36 and audit-trail.allium:41, which
+-- already did this. Audit + evidence: docs/gdpr-data-rights-stub-fix.md; the
+-- general argument for why copies are the defect:
+-- docs/adr/041-crm-gdpr-spec-dependency-direction.md.
+--
+-- DELETED 2026-08-26 -- dead declarations, referenced by nothing in this module
+-- (only by prose comments), and diverging from their owners in every field:
+--   Person  -- owned by crm.allium:242. Person-as-data-subject GDPR lives in
+--             crm-gdpr.allium; this module's scope line already says so (:13).
+--   Job     -- owned by job-aggregate.allium:57.
+--   CrmActivityLog -- was a SECOND NAME for crm.allium:419 `ActivityLog`, over
+--             the same Prisma table. Now imported instead: see `crm/ActivityLogs`
+--             in PurgeOldCrmActivityLogs.
 
 external entity User {
+    -- OWNER: auth-session.allium:84 (a real `entity User`).
+    -- The data subject of this module: every rule here is scoped to one User.
     id: String
     email: String
 }
 
-external entity Job {
-    user: User
-    title: String?
-    created_at: Timestamp
-}
-
-external entity Person {
-    user: User
-    name: String?
-    emails: List<String>
-}
-
 external entity Resume {
+    -- OWNER: profile-resume.allium:68.
+    -- `contact_info` is optional here and there: profile-resume's
+    -- @invariant OneContactInfoPerResume says "at most one".
     title: String
     contact_info: ContactInfo?
 }
 
 external entity ContactInfo {
+    -- OWNER: profile-resume.allium:100. Field-for-field faithful.
+    -- These six ARE the PII set that S3 replaces with placeholders, which is
+    -- why this projection is wide where the others are narrow.
     first_name: String
     last_name: String
     email: String
@@ -52,26 +67,42 @@ external entity ContactInfo {
 }
 
 external entity AiManifest {
+    -- OWNER: none in specs/. Nearest is ai-provider.allium, which models the
+    -- three providers as OllamaModule/OpenAIModule/DeepSeekModule (:192/:210/:226)
+    -- with `module_id: AiModuleId`, and expresses locality by ENUMERATING ids
+    -- (`module.module_id = ollama` :281, `in {openai, deepseek}` :295) rather
+    -- than by a field. `is_local` here mirrors the CODE, not a spec:
+    -- src/lib/connector/manifest.ts:196 `isLocal?: boolean`. See open question.
     module_id: String
     is_local: Boolean
 }
 
 external entity Notification {
+    -- OWNER: notification-dispatch.allium:181 (declares `user_id: String`).
     user: User
     created_at: Timestamp
 }
 
 external entity EnrichmentResult {
+    -- OWNER: data-enrichment.allium:188. That module names its fields in
+    -- camelCase (`userId`, `expiresAt`); this one uses the corpus-standard
+    -- snake_case. Same fields, different naming convention -- not drift.
     user: User
     expires_at: Timestamp
 }
 
 external entity EnrichmentLog {
+    -- OWNER: data-enrichment.allium:222 (`userId`, `createdAt` -- see above).
     user: User
     created_at: Timestamp
 }
 
 external entity StagedVacancy {
+    -- OWNER: vacancy-pipeline.allium:200.
+    -- WEAKENED: `status` is `enum StagedVacancyStatus` there
+    -- (staged|processing|ready|promoted|dismissed, vacancy-pipeline.allium:167).
+    -- Typed String here so PurgeOldStagedVacancies can compare it to the string
+    -- literal "dismissed". See open question -- do not silently keep widening.
     user: User
     status: String
     trashed_at: Timestamp?
@@ -79,18 +110,26 @@ external entity StagedVacancy {
 }
 
 external entity AdminAuditLog {
+    -- OWNER: audit-trail.allium:78 -- where it is named `AuditLogEntry`, over
+    -- the SAME Prisma table (that file's header, :74, says so explicitly).
+    -- Two spec names for one table: a reader grepping either name misses the
+    -- other. See open question.
+    -- WEAKENED: `action` is `enum AuditAction` there.
     timestamp: Timestamp
     action: String
 }
 
-external entity CrmActivityLog {
-    user: User
-    happened_at: Timestamp
-}
-
 external entity LogoAsset {
+    -- OWNER: logo-asset-cache.allium:65.
+    -- `company_id` was declared `String?` here until 2026-08-26. It is NOT
+    -- nullable: logo-asset-cache.allium:73 declares `company_id: String` and
+    -- prisma/schema.prisma:937 declares `companyId String` under
+    -- @@unique([userId, companyId]). The nullability was invented so that
+    -- CleanOrphanedLogoAssetFiles could say `company_id = null`; corrected here,
+    -- which leaves that rule's guard unsatisfiable. See open question -- the rule
+    -- iterates the wrong collection, and the fix is not mine to pick.
     user: User
-    company_id: String?
+    company_id: String
     file_path: String
     created_at: Timestamp
 }
@@ -404,10 +443,24 @@ rule ArchiveAndPurgeOldAdminAuditLogs {
 rule PurgeOldCrmActivityLogs {
     -- Delete CRM timeline entries older than retention window.
     -- Config value from CRM_CONFIG.timelineRetentionDays = 1095.
+    --
+    -- 2026-08-26: iterates crm/ActivityLogs directly. This module used to declare
+    -- its own `external entity CrmActivityLog` -- a second spec name for the same
+    -- Prisma table crm.allium:419 already owns as `ActivityLog`. Two names for one
+    -- table is how the retention contradiction below stayed invisible: a reader
+    -- grepping either name did not find the other rule.
+    --
+    -- THE CONTRADICTION IS NOW VISIBLE, NOT RESOLVED. crm-gdpr.allium's
+    -- ExpireOldTimelineActivities anonymises the same rows in place over the same
+    -- 1095-day window while this rule hard-deletes them; the implementation
+    -- (src/lib/scheduler/retention-cron.ts purgeOldCrmActivityLogs) hard-deletes.
+    -- Naming an owner is a live GDPR decision (Art. 5(1)(e) storage limitation vs
+    -- Art. 5(1)(f) accountability) parked for @rorar -- see the open question at
+    -- the end of crm-gdpr.allium. Do NOT resolve it by deleting either rule.
     when: RunRetentionSweep()
 
     ensures:
-        for cal in CrmActivityLogs:
+        for cal in crm/ActivityLogs:
             if cal.happened_at + config.crm_activity_log_retention < now:
                 not exists cal
 }
@@ -462,6 +515,14 @@ invariant RetentionPeriodsMatchConfig {
 ------------------------------------------------------------
 -- Open Questions
 ------------------------------------------------------------
+
+open question "CleanOrphanedLogoAssetFiles iterates the wrong collection. Its guard is `la.company_id = null`, but a LogoAsset row with a null company_id cannot exist: logo-asset-cache.allium:73 declares `company_id: String` and prisma/schema.prisma:937 declares `companyId String` under @@unique([userId, companyId]). The nullable `company_id: String?` on this module's stub was invented so the guard could be written; the stub is corrected as of 2026-08-26, which leaves the guard dead. The rule's own @guidance already describes the real behaviour -- scan the logo directory for files with no matching DB record -- and src/lib/scheduler/retention-cron.ts implements exactly that: it selects every LogoAsset.filePath into a Set and calls purgeOrphanedFiles(getLogosDir(), p => knownPaths.has(p), grace, LOGO_PRUNE_LEVELS). An orphan is a FILE with no row, not a row with no company. So the rule should iterate stored logo files, not LogoAssets -- but this module declares no entity for a file on disk, and inventing one would be inventing coverage. Decide: (a) declare the on-disk artefact as an external entity owned by logo-asset-cache.allium and restate the rule over it, or (b) move the rule into logo-asset-cache.allium, which already owns the storage-path model. Note the checker will not catch this either way: comparing a non-nullable field to null produces no diagnostic (verified in isolation, 2026-08-26)."
+
+open question "Two of this module's stubs weaken an owner's enum to String, and both weakenings are load-bearing for a rule. StagedVacancy.status is `enum StagedVacancyStatus` at vacancy-pipeline.allium:167 but String here, so PurgeOldStagedVacancies can compare it to the string literal \"dismissed\" (:375 in the pre-2026-08-26 numbering). AdminAuditLog.action is `enum AuditAction` at audit-trail.allium but String here. Strengthening either means importing the owning spec -- `use \"./vacancy-pipeline.allium\"` and/or `use \"./audit-trail.allium\"` -- which is a real coupling decision for a module that deliberately spans eight bounded contexts. Worth it for the one field that a rule actually compares (status); probably not worth it for `action`, which no rule reads. Decide per-field, not per-file."
+
+open question "AiManifest has no owning specification. ai-provider.allium models the three providers as OllamaModule / OpenAIModule / DeepSeekModule (:192/:210/:226) with `module_id: AiModuleId`, and expresses locality by enumerating ids (`module.module_id = ollama`, `module.module_id in {openai, deepseek}`) rather than by a field -- so `is_local`, which THIS module's StripContactPiiForCloudProviders and CloudProvidersNeverReceiveContactPii both depend on, exists in the code (src/lib/connector/manifest.ts:196 `isLocal?: boolean`, set per module manifest) and in three separate stubs (here, cv-document.allium:97, application-documents.allium:62) but in no spec that owns it. Three files each hand-declare the same field over the same code property: the same copy-duplication class W-H1 removed, spread across modules instead of within one. Should ai-provider.allium declare is_local on its module entities so the three consumers can import it? Note the code's field is OPTIONAL and every call site defaults it fail-safe (`?? false`, i.e. strip when locality is unknown); a spec-level `is_local: Boolean` does not capture that, and the fail-safe is the security-relevant half."
+
+open question "AdminAuditLog here and AuditLogEntry at audit-trail.allium:78 are two spec names for one Prisma table -- that file's header (:74) says so outright. Same shape for what was CrmActivityLog here and ActivityLog at crm.allium:419, resolved on 2026-08-26 by importing crm.allium. CLAUDE.md maintains a Ubiquitous Language table precisely to prevent this, and the cost is not cosmetic: the timeline-retention contradiction between this module and crm-gdpr.allium survived multiple review passes partly because a reader grepping one name never saw the other rule. Pick the winning name for the audit table and retire the other. Not done here because the losing name appears in this module's config (admin_audit_log_retention), its RetentionRuleId enum (admin_audit_log_archive) and its rule name (ArchiveAndPurgeOldAdminAuditLogs), so the rename is a coordinated edit across two specs -- and choosing which name wins is a ubiquitous-language decision for the team."
 
 open question "Should the user data export include StagedVacancy records? They are transient pipeline data, not user-created content. Including them adds completeness but also bulk."
 
