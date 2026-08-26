@@ -50,18 +50,42 @@ use "./crm.allium" as crm
 external entity MessageParticipant {
     -- Email-sync participant. Modelled only in reference-twenty-crm.allium
     -- (:483) as prior art; there is no JobSync Prisma model and no code.
-    -- communication-connector.allium is the spec that will own inbound message
-    -- sync, and it is DEFERRED — it does not declare this entity today, so
-    -- there is nothing to import. Stays external until that connector lands.
+    --
+    -- W-H1 FOLLOW-UP (2026-08-25) — the previous version of this comment said
+    -- communication-connector.allium "is DEFERRED — it does not declare this
+    -- entity today, so there is nothing to import". Literally true, and
+    -- misleading: that spec is not a placeholder. It is a full spec with an owner
+    -- line (communication-connector.allium:33), and it already models the same
+    -- concept under different names — `entity MessageThread` (:123) and
+    -- `entity CommunicationMessage` (:143). It is the IMPLEMENTATION that is
+    -- deferred, not the specification.
+    -- So: this stays external because nothing is built, NOT because the successor
+    -- is unwritten. The successor to reconcile against is named above. Note the
+    -- shapes do not correspond one-to-one — communication-connector reaches the
+    -- contact through crm.allium's JobContact join (:50-51) and declares no
+    -- per-message participant->Person link at all, so reconciling means deciding
+    -- whether that link is needed, not merely renaming this entity.
+    -- The consequence for erasure is recorded as an open question at the end of
+    -- this file, and it is the substantive one: FulfillErasureRequest cascades
+    -- over THIS entity, which nothing builds, while
+    -- communication-connector.allium CommunicationMessage.body — free text about
+    -- the erased person, which something eventually will build — has no erasure
+    -- cascade in any spec.
     handle: String?
     person: crm/Person?
     display_name: String?
 }
 
 external entity CalendarEventParticipant {
-    -- Calendar-sync participant. Same situation as MessageParticipant:
-    -- reference-twenty-crm.allium (:562) only, no Prisma model, no code, and
-    -- the owning connector spec is deferred. Stays external.
+    -- Calendar-sync participant. reference-twenty-crm.allium (:562) only, no
+    -- Prisma model, no code. Stays external.
+    --
+    -- W-H1 FOLLOW-UP — NOT quite the same situation as MessageParticipant, and
+    -- the previous comment's "same situation" elided the difference. Calendar
+    -- sync has no successor spec at all: communication-connector.allium
+    -- explicitly EXCLUDES it ("Calendar sync (ROADMAP 1.7, separate connector) —
+    -- sync here is comms-only", :27). So this one genuinely has nothing to
+    -- reconcile against yet, whereas MessageParticipant does.
     handle: String?
     person: crm/Person?
     display_name: String?
@@ -214,7 +238,19 @@ entity DataSubjectRequest {
     completed_at: Timestamp?
     response_data: String?
     rejection_reason: String?
-    processed_by_user: String?
+    -- The CRM user who took the request into processing. Null while pending;
+    -- stamped by BeginProcessingRequest, which is the only way into `processing`.
+    --
+    -- W-H1 FOLLOW-UP (2026-08-25) — this was `String?` and that made the erasure
+    -- delegation unsound on entry. FulfillErasureRequest passes this field as the
+    -- ACTOR argument of crm/AnonymizePerson, and that rule dereferences it
+    -- (`requires: person.user_id = user.id`, crm.allium:654) — a bare String has
+    -- no `.id`. It is typed as the User ENTITY, not as `crm/CrmUser`: an actor is
+    -- a boundary role bound in a `facing` clause (the binding then carries the
+    -- actor's `identified_by` entity type), not a field type. crm/CrmUser is
+    -- `identified_by: User`, so crm/User is exactly what the surface binding — and
+    -- therefore crm/AnonymizePerson's `user` parameter — actually is.
+    processed_by_user: crm/User?
 
     is_overdue: status != completed and status != rejected and deadline < now
 
@@ -240,11 +276,24 @@ config {
     -- on rule ExpireOldTimelineActivities before relying on either.
     timeline_retention: Duration = 1095.days
 
-    -- Data minimization: max fields captured during auto-creation.
-    -- Only name + primary email, no phone, no address, no enrichment.
-    -- The rule that ENFORCES this is crm/AutoCreatePersonFromEmail, which
-    -- populates exactly these two and nothing else; the value is kept here
-    -- because data minimisation is this module's declared scope.
+    -- Data minimization: max DATA-SUBJECT fields captured during auto-creation.
+    -- Only name + primary email; no phone, no address, no headline.
+    -- The rule that enforces this is crm/AutoCreatePersonFromEmail.
+    -- The value is kept here because data minimisation is this module's scope.
+    --
+    -- W-H1 FOLLOW-UP — this comment used to read "populates exactly these two
+    -- and nothing else". That was not true, in two different ways, and only one
+    -- of them is benign:
+    --   benign  — the rule also stamps governance/audit fields (data_source,
+    --             processing_basis, retention_expires_at, created_by, updated_by,
+    --             created_at, updated_at). Those are metadata ABOUT the
+    --             processing, not attributes OF the data subject, so they are
+    --             outside what an allowed-fields list is for.
+    --   not     — the rule ALSO seeds `companies` from the email domain, via
+    --             find_company_by_domain. That is an attribute of the data
+    --             subject, it is inferred rather than supplied, and it is not in
+    --             this set. See the tombstone on AutoCreatedContactMinimization
+    --             below and the open question at the end of this file.
     auto_creation_allowed_fields: Set<String> = {"name", "email"}
 }
 
@@ -278,11 +327,24 @@ rule SubmitDataSubjectRequest {
 }
 
 rule BeginProcessingRequest {
-    when: BeginProcessing(request)
+    -- Takes a pending request into processing and records WHO is processing it.
+    --
+    -- W-H1 FOLLOW-UP: this rule gained an actor parameter and the
+    -- processed_by_user stamp. Before, NOTHING in this module ever populated
+    -- processed_by_user, yet FulfillErasureRequest passed it to
+    -- crm/AnonymizePerson as the acting user — so the erasure path was dead on
+    -- entry. This is the rule that conceptually has the actor in hand (a human
+    -- decides to start work on a request), so this is where the stamp belongs.
+    -- The ownership guard is ADR-015's, restated at this boundary: only the CRM
+    -- user who owns the data subject's record may process a request about it,
+    -- which is also the precondition crm/AnonymizePerson will later check.
+    when: BeginProcessing(user, request)
 
     requires: request.status = pending
+    requires: request.person.user_id = user.id
 
     ensures: request.status = processing
+    ensures: request.processed_by_user = user
 }
 
 -- -----------------------------------------------------------------------------
@@ -370,10 +432,23 @@ rule FulfillErasureRequest {
     requires: request.status = processing
     requires: request.type = erasure
     requires: request.person.status != anonymized
+    -- The delegation below hands processed_by_user to crm/AnonymizePerson as its
+    -- ACTING USER, so it must actually be one. W-H1 FOLLOW-UP added this guard
+    -- together with the retyping of the field and the stamp in
+    -- BeginProcessingRequest; on their own the first two would leave a rule that
+    -- can still be entered with a null actor.
+    requires: request.processed_by_user != null
 
     let person = request.person
 
     -- (1) Delegate the whole person-and-CRM-links half.
+    -- crm/AnonymizePerson's own precondition is `person.user_id = user.id`. It is
+    -- discharged, not ignored: `processing` is reachable ONLY via
+    -- BeginProcessingRequest (see the transition graph — pending -> processing is
+    -- the sole inbound edge), and that rule requires exactly this equality before
+    -- stamping the same user here. It is therefore not restated as a `requires`
+    -- on this rule; if a second path into `processing` is ever added, it must
+    -- carry the same guard or this reasoning breaks.
     ensures: crm/AnonymizePerson(request.processed_by_user, person)
 
     -- (2) Cascades crm.allium cannot express — the three external entities.
@@ -563,7 +638,18 @@ rule WithdrawConsent {
 
     ensures: person.consent_withdrawn_at = now
     ensures: person.updated_by = crm/ActorMetadata(source: manual, name: user.name)
-    ensures: crm/ContactUpdated(person_id: person.id, user_id: user.id)
+    -- Emitted BARE, not as `crm/ContactUpdated`. W-H1 first wrote the qualified
+    -- form by analogy with crm/ActorMetadata above, but the two are not alike:
+    -- ActorMetadata is a `value` DECLARED in crm.allium, whereas ContactUpdated
+    -- is a trigger no spec declares — crm.allium emits it bare (UpdatePerson,
+    -- AddJobContact, RemoveJobContact) and consumes it bare (RecordContactUpdate),
+    -- and its payload shape is event-bus.allium `value ContactUpdatedPayload`
+    -- {person_id, user_id}. A qualified name with nothing to resolve to is a
+    -- dangling reference; `allium check` cannot see it, scripts/check-spec-refs.mjs
+    -- can. Bare emission also keeps this rule chaining into crm.allium's timeline
+    -- projection, which is the behaviour the code has (person.actions.ts
+    -- withdrawConsent publishes contact_updated).
+    ensures: ContactUpdated(person_id: person.id, user_id: user.id)
 
     @guidance
         -- Implemented by withdrawConsent(personId) in src/actions/person.actions.ts:
@@ -585,7 +671,8 @@ rule ReinstateConsent {
 
     ensures: person.consent_withdrawn_at = null
     ensures: person.updated_by = crm/ActorMetadata(source: manual, name: user.name)
-    ensures: crm/ContactUpdated(person_id: person.id, user_id: user.id)
+    -- Bare, for the reason given on WithdrawConsent above.
+    ensures: ContactUpdated(person_id: person.id, user_id: user.id)
 
     @guidance
         -- Implemented by reinstateConsent(personId) in person.actions.ts; the
@@ -613,6 +700,26 @@ rule ReinstateConsent {
 --                    decide and has not been able to)
 -- Keeping second copies here is what let the retention contradiction survive
 -- unnoticed for two Wellen.
+--
+-- W-H1 FOLLOW-UP (2026-08-25) — WHAT THE DELETION ALSO TOOK, recorded so the
+-- change set's thesis ("lose no constraint") stays honest. The justification
+-- above accounts only for the three fields AutoCreatedContactMinimization
+-- STAMPED. That rule also carried a PROHIBITION, in prose: "No phone, no city,
+-- no job_title, no enrichment." crm/AutoCreatePersonFromEmail discharges most of
+-- it structurally — it creates `phones: {}` and sets no address and no headline,
+-- which is stronger than prose — but NOT the last clause: it derives
+-- `let matching_company = find_company_by_domain(user.id, domain)` and, on a
+-- hit, seeds `companies` with a CompanyAssociation (crm.allium:586-590). That is
+-- an inferred attribute about the data subject, i.e. exactly the enrichment the
+-- deleted prose forbade.
+-- Assessed as PRE-EXISTING crm.allium behaviour, LOW severity, and deliberately
+-- NOT changed here: the inference is domain-derived rather than looked up from a
+-- third party, and it is what makes an auto-created contact useful at all. But
+-- it is now WRITTEN DOWN rather than silently dropped, and the config comment on
+-- auto_creation_allowed_fields (which used to claim the rule "populates exactly
+-- these two and nothing else") has been corrected to match. See the open
+-- question at the end of this file: someone has to decide whether the
+-- prohibition or the behaviour is the thing that should change.
 
 rule ImportedContactMetadata {
     -- ===== ASPIRATIONAL — NO IMPLEMENTATION =====
@@ -802,6 +909,10 @@ surface ConsentManagement {
 -- The question's own predicted remedy ("once the documented use \"./crm.allium\"
 -- as crm migration lands it can borrow crm's CrmUser actor and expose a
 -- ConsentManagement surface") is exactly what was done. Do not re-raise it.
+
+open question "W-H1 FOLLOW-UP — auto-creation enrichment: the deleted rule AutoCreatedContactMinimization forbade enrichment in prose (\"No phone, no city, no job_title, no enrichment\"), and config.auto_creation_allowed_fields still says {name, email}. But crm/AutoCreatePersonFromEmail seeds a CompanyAssociation inferred from the email domain (find_company_by_domain, crm.allium:586-590), which is an inferred attribute of the data subject and is not in that set. Only one of the two can stand. Either (a) the inference is acceptable data minimisation under Art. 5(1)(c) — it is derived from the handle the data subject themselves used, not looked up from a third party — in which case widen auto_creation_allowed_fields to {name, email, company} and retire the prohibition explicitly rather than by deletion; or (b) it is not, in which case crm/AutoCreatePersonFromEmail must stop seeding companies. W-H1 FOLLOW-UP deliberately did not choose: this is pre-existing shipped behaviour in another module\'s rule, and the change set that surfaced it was scoped to comments and references. Whoever chooses should note that (b) is a behaviour change to auto-creation, and that the same question does not arise for crm/QuickCapturePerson or crm/CreatePerson, where the user supplies the company."
+
+open question "W-H1 FOLLOW-UP — the erasure cascade covers entities nobody builds and misses the one that will hold the text. FulfillErasureRequest anonymises MessageParticipant and CalendarEventParticipant, neither of which has a Prisma model, code, or a successor declaration. Meanwhile communication-connector.allium — a written spec, owner line at :33, implementation deferred — declares entity MessageThread (:123) and entity CommunicationMessage (:143), and CommunicationMessage carries `body: String`: free text exchanged with, and about, the person being erased. NO spec declares an erasure cascade over it. That is a real Art. 17 gap the moment the Communication Connector ships, and it is a design decision, not an oversight to patch here, because a message body is jointly the erased person\'s data AND the CRM user\'s own correspondence — the same tension already parked in the crm/Note.body / crm/Task.description question above, and it should probably be settled with that one. Two sub-decisions: (1) does the cascade anonymise in place (consistent with the CRITICAL PATTERN this module already states — other participants retain rights to the same message) or redact the body; and (2) which spec owns it — communication-connector.allium, which declares the entity, or this module, which owns erasure. Note also that communication-connector reaches the contact via crm.allium\'s JobContact join (:50-51) and declares NO per-message participant->Person link, so there is currently no traversal from an erased Person to their messages at all; a cascade needs that link to exist first. Deciding this also determines whether MessageParticipant survives as an entity or is superseded."
 
 open question "Should auto-created contacts receive a notification that their data is being processed? Art. 14 requires informing data subjects when data is obtained indirectly — but self-hosted single-user CRM may qualify for the household exemption (Art. 2(2)(c))."
 

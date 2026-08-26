@@ -614,6 +614,17 @@ rule UpdatePerson {
 
     requires: person.user_id = user.id
     requires: person.status = active
+    -- W-H1 FOLLOW-UP (2026-08-25) — Art. 7(3) processing restriction, now
+    -- EXPRESSIBLE. This guard could not be written before the crm-gdpr.allium
+    -- dependency flip: the predicate lived on that module's PersonGdprExtension
+    -- stub, and importing crm-gdpr from here would have closed a cycle. With
+    -- consent_withdrawn_at and the derived is_consent_blocked on Person itself,
+    -- the constraint states locally. The property it enforces is specified by
+    -- crm-gdpr.allium ConsentBlockedRecordIsProcessingRestricted, which asserted
+    -- it in prose because it had no way to reach these rules.
+    -- Enforced at src/actions/person.actions.ts:320 (updatePerson) — rejects
+    -- with crm.errors.consentWithdrawn.
+    requires: not person.is_consent_blocked
 
     ensures: person.updated_by = ActorMetadata(source: manual, name: user.name)
     ensures: person.updated_at = now
@@ -771,6 +782,13 @@ rule AddJobContact {
     requires: job.user_id = user.id
     requires: person.user_id = user.id
     requires: not exists JobContact{job, person}
+    -- W-H1 FOLLOW-UP — Art. 7(3): a new link that NAMES a consent-blocked record
+    -- is new processing. Enforced at src/actions/jobContact.actions.ts:38
+    -- (addJobContact). The inverse RemoveJobContact deliberately carries NO such
+    -- guard, in the spec and in the code: unlinking reduces processing, and
+    -- blocking it would strand existing links on a record the user is trying to
+    -- disentangle. See UpdatePerson for why this became expressible.
+    requires: not person.is_consent_blocked
 
     ensures: JobContact.created(
         user_id: user.id,
@@ -821,6 +839,12 @@ rule ScheduleInterview {
     when: ScheduleInterview(user, job, interview_date, person?, location?, notes?)
 
     requires: job.user_id = user.id
+    -- W-H1 FOLLOW-UP — Art. 7(3). The interviewee is optional, so the guard is
+    -- conditional: an interview with no Person attached is unaffected. Enforced
+    -- at src/actions/crmInterview.actions.ts:75 (scheduleInterview), inside the
+    -- `if (input.personId)` branch — the same shape. See UpdatePerson for why
+    -- this became expressible.
+    requires: person != null implies not person?.is_consent_blocked
 
     ensures:
         let interview = Interview.created(
@@ -905,6 +929,12 @@ rule InterviewReminder {
     when: interview: Interview.interview_date - config.interview_reminder_before <= now
 
     requires: interview.status in {scheduled, rescheduled}
+    -- W-H1 FOLLOW-UP — Art. 7(3): an automated reminder is active processing, so
+    -- a consent-blocked interviewee is excluded. Enforced at
+    -- src/lib/scheduler/crm-cron.ts:184. This was previously stated only in the
+    -- W-E5 @guidance below, because the predicate was unreachable from this
+    -- module; it is now a real guard and the guidance records that.
+    requires: interview.person != null implies not interview.person?.is_consent_blocked
 
     ensures: ReminderTriggered(
         user_id: interview.user_id,
@@ -929,6 +959,9 @@ rule InterviewReminder {
         -- W-E5: the implementation additionally skips consent-blocked interviewees
         -- (crm-gdpr.allium ConsentBlockedRecordIsProcessingRestricted) — a person
         -- whose consent is withdrawn is excluded from this active flow.
+        -- W-H1 FOLLOW-UP: that skip is no longer only prose — it is the
+        -- `interview.person != null implies not ...is_consent_blocked` guard
+        -- above. Kept here for the pointer to the owning invariant.
 }
 
 -- ==========================================================
@@ -940,6 +973,13 @@ rule CreateTask {
 
     requires: targets.count > 0
     requires: Tasks where user_id = user.id -> count < config.max_tasks_per_user
+    -- W-H1 FOLLOW-UP — Art. 7(3). Targets are polymorphic; only the person-typed
+    -- ones can be consent-blocked, and ANY blocked target rejects the whole
+    -- creation rather than being silently dropped. Enforced at
+    -- src/actions/crmTask.actions.ts:81, in the per-target ownership loop, which
+    -- returns crm.errors.consentWithdrawn for the first blocked target. See
+    -- UpdatePerson for why this became expressible.
+    requires: targets.all(t => t.person != null implies not t.person?.is_consent_blocked)
 
     ensures:
         let task = Task.created(
@@ -1028,6 +1068,10 @@ rule TaskOverdueReminder {
     when: task: Task.due_date <= now
 
     requires: task.status = pending or task.status = in_progress
+    -- W-H1 FOLLOW-UP — Art. 7(3), the TaskOverdueReminder half of the same rule
+    -- as InterviewReminder above. Enforced at src/lib/scheduler/crm-cron.ts:261,
+    -- which skips the task if ANY of its targets is a consent-blocked person.
+    requires: task.targets.all(tt => tt.target_person != null implies not tt.target_person?.is_consent_blocked)
 
     ensures: ReminderTriggered(
         user_id: task.user_id,
@@ -1048,6 +1092,8 @@ rule TaskOverdueReminder {
         -- idempotency guard so an overdue reminder fires at most once per 24h window.
         -- W-E5: the implementation additionally skips consent-blocked task targets
         -- (crm-gdpr.allium ConsentBlockedRecordIsProcessingRestricted).
+        -- W-H1 FOLLOW-UP: now expressed as the `task.targets.all(...)` guard
+        -- above rather than only in prose.
 }
 
 -- ==========================================================
@@ -1058,6 +1104,15 @@ rule CreateNote {
     when: CreateNote(user, title?, body, targets)
 
     requires: targets.count > 0
+    -- W-H1 FOLLOW-UP — Art. 7(3), same shape as CreateTask. Enforced at
+    -- src/actions/crmNote.actions.ts:69. NOTE the asymmetry with UpdateNote and
+    -- DeleteNote, which are NOT guarded here because the code does not guard
+    -- them either (crmNote.actions.ts checks consent only in createNote). That
+    -- may be a real gap — editing a note that names a consent-blocked person is
+    -- arguably further processing — but it is a CODE gap, and inventing spec
+    -- coverage for it would re-create exactly the spec-ahead-of-code drift W-H1
+    -- was cleaning up. Raised as an open question below instead.
+    requires: targets.all(t => t.person != null implies not t.person?.is_consent_blocked)
 
     ensures:
         let note = Note.created(
@@ -1508,6 +1563,12 @@ surface PersonDetail {
         person.data_source
         person.processing_basis
         person.retention_expires_at
+        -- W-H1 FOLLOW-UP: a surface whose `provides` guards read
+        -- is_consent_blocked must also expose it, or the boundary hides WHY
+        -- three controls are unavailable. crm-gdpr.allium surface
+        -- ConsentManagement — rendered inside this one — exposes the same
+        -- predicate alongside the withdraw/reinstate actions.
+        person.is_consent_blocked
         person.created_at
         person.updated_at
 
@@ -1530,8 +1591,26 @@ surface PersonDetail {
             jc.role
 
     provides:
+        -- W-H1 FOLLOW-UP (2026-08-25) — the `not person.is_consent_blocked`
+        -- halves below mirror the rules' new Art. 7(3) guards, so the boundary
+        -- states the same condition the rule enforces rather than only hiding a
+        -- control. Which operations carry it is NOT uniform, and the asymmetry
+        -- is deliberate — it tracks what the code actually enforces:
+        --   guarded   UpdatePerson, AddJobContact, CreateNote  (edits and new
+        --             links = further processing)
+        --   unguarded ArchivePerson, ReactivatePerson, AnonymizePerson,
+        --             RemoveJobContact, UpdateNote, DeleteNote
+        -- Anonymize and Archive must stay reachable on a blocked record — they
+        -- are how a withdrawal is honoured, and crm-gdpr.allium
+        -- ConsentBlockedRecordIsProcessingRestricted names erasure, export and
+        -- reinstatement as the permitted operations. RemoveJobContact reduces
+        -- processing. UpdateNote / DeleteNote are unguarded only because the
+        -- code does not guard them — see the open question at the end of this
+        -- file; do not "fix" that here without fixing the code in the same
+        -- change.
         UpdatePerson(user, person, changes)
             when person.status = active
+                and not person.is_consent_blocked
         ArchivePerson(user, person)
             when person.status = active
         ReactivatePerson(user, person)
@@ -1540,10 +1619,12 @@ surface PersonDetail {
             when person.status != anonymized
         AddJobContact(user, job, person, role?)
             when person.status = active
+                and not person.is_consent_blocked
         RemoveJobContact(user, job_contact)
             when person.status = active
         CreateNote(user, title?, body, targets)
             when person.status = active
+                and not person.is_consent_blocked
         UpdateNote(user, note, title?, body?)
             when person.status = active
         DeleteNote(user, note)
@@ -1777,3 +1858,7 @@ open question "No surface provides AutoCreatePerson. This trigger depends on ema
 open question "Retention for quick_capture Persons. ExpireAutoCreatedPersons guards on is_auto_created, and AutoCreatedHasRetention constrains only auto_created — so a quick_capture Person today gets no retention_expires_at and never auto-archives, i.e. it is governed exactly like a full manual create. Is that the intent? A quick capture is a deliberate user act (unlike email-sync auto-creation), which argues for manual-like treatment; but it is also knowingly incomplete and may be a contact the user never returns to, which argues for a shorter leash. Decide in crm-gdpr.allium before quick-capture volume accumulates, since retro-fitting an expiry to existing records is a data-minimisation judgement made after the fact."
 
 open question "A referral timeline entry cannot deep-link to its Referral. ActivityLog has target_person / target_company / target_job only, and gaining a target_referral field would make crm.allium depend on inside-track.allium — the wrong direction (inside-track imports crm, not the reverse). RecordReferralRecorded / RecordReferralStatusChange therefore carry the referral identity in `details`, following RecordStatusChange's precedent, which means a timeline consumer must parse `details` to navigate. Acceptable, or is a polymorphic target seam on ActivityLog (mirroring TaskTarget/NoteTarget's nullable-FK pattern) worth introducing so any spec can project onto the timeline without crm knowing about it?"
+
+open question "W-H1 FOLLOW-UP — Art. 7(3) coverage is UNEVEN across note lifecycle, and the spec now says so rather than papering over it. CreateNote rejects a consent-blocked target (src/actions/crmNote.actions.ts:69) but UpdateNote and DeleteNote do not check at all, so a note that names a consent-blocked person can still be edited after withdrawal. crm-gdpr.allium ConsentBlockedRecordIsProcessingRestricted says 'no field edits and no automated activity may act on a consent-blocked record', which reads as covering an edit to a note ABOUT that person; but it also says the restriction is 'a guard on the creating ACTION, not a standing predicate over existing links', which reads as excluding it. Both readings are available, which is the actual problem. Decide which, then make code and spec agree in ONE change: either add the guard to updateNote/deleteNote and to the rules here, or state explicitly in the invariant that edits to pre-existing notes stay permitted because the processing was already lawful when it began. Note DeleteNote is the awkward case for the strict reading — refusing to delete a note about a person who withdrew consent is the opposite of what Art. 7(3) wants."
+
+open question "W-H1 FOLLOW-UP — three further consent-block enforcement sites are NOT reflected in any spec, and they are not this module's to add: src/actions/referral.actions.ts:51, src/actions/personConnection.actions.ts:56 and src/actions/warmPath.actions.ts:82,113,114 all call isConsentBlocked, and all three belong to inside-track.allium (Referral, PersonConnection, warm-path traversal), which imports crm.allium rather than the reverse. The warm-path ones are the interesting case: they `continue` past a blocked person rather than rejecting, i.e. a consent-blocked contact silently vanishes from warm-path results instead of producing an error — a different enforcement SHAPE from every other site, and one whose absence from the spec means nobody has judged whether silent omission is the right behaviour. Whoever next tends inside-track.allium should add the guards there; the predicate is crm/Person.is_consent_blocked and it is importable today."
