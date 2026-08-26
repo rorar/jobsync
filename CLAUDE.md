@@ -37,7 +37,18 @@ See `devenv.nix` for the full configuration. Requires a writable Nix store.
 
 All scripts source `scripts/env.sh` which auto-downloads and patches Prisma engines for NixOS.
 
-### Using these scripts (resource discipline — 8 GB no-swap VM)
+### Using these scripts (resource discipline — 16 GB / 4-core VM, 4 GB swap)
+
+> **Corrected 2026-08-26.** This section previously said "8 GB no-swap VM". The host is
+> **16 GB RAM, 4 cores, with 4 GB of swap**. The correction matters operationally: on
+> 2026-08-25 the box hung while five agent processes plus tooling were live, and with
+> swap present that is **swap thrash**, not RAM exhaustion — the machine goes
+> unresponsive instead of OOM-killing something. The wrappers below still earn their
+> place, but note their caps (`typecheck-safe` 4 G, `build-safe` 7 G) were sized to
+> protect an 8 GB *no-swap* box by OOM-killing inside the scope; with swap available a
+> process can thrash **before** reaching its cap, so "kill the build, not the host" is a
+> weaker guarantee than it reads. Concurrency is now the thing to watch, not just
+> per-process size.
 
 **Never invoke the underlying tool directly when a wrapper exists.** The wrappers are not
 convenience aliases; each exists because the bare command has taken this host down.
@@ -883,7 +894,7 @@ Formal specifications in `specs/*.allium` capture domain behaviour:
 
 **Running E2E tests:**
 ```bash
-# Resource-tight (8 GB NixOS VM) — one command: env + warm server + single worker:
+# Resource-tight (16 GB / 4-core NixOS VM) — one command: env + warm server + single worker:
 ./scripts/test-e2e.sh                                    # full suite (smoke -> crud)
 ./scripts/test-e2e.sh e2e/crud/inside-track-crud.spec.ts # one spec
 

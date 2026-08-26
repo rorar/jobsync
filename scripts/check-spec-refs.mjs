@@ -18,9 +18,28 @@
  * exists. That exact failure — `person.job_title` / `person.city` outliving the
  * fields — is what W-H1 was cleaning up.
  *
- * So the flip traded a loud failure mode for a silent one, and this script is
- * the trade's other half. Without it the safety property is supplied by
- * reviewer diligence rather than by CI.
+ * A NOTE ON FRAMING, corrected 2026-08-26. An earlier version of this comment
+ * said the flip "traded a loud failure mode for a silent one". That is
+ * backwards, and the wording invited the conclusion that the flip was a
+ * regression needing compensation. It was not:
+ *
+ *   - The stub regime was never loud to a TOOL either. `external entity Person
+ *     { job_title: String }` plus `person.job_title` in a rule is internally
+ *     coherent; there was never anything for a checker to flag.
+ *   - "A human notices" did not happen. The retention CONTRADICTION (the GDPR
+ *     spec said auto-created contacts are irreversibly erased on expiry; the
+ *     code and crm.allium archive them, reversibly) survived from Welle 3 to
+ *     W-H1 — roughly 2.5 months, through at least two weed passes that touched
+ *     the file.
+ *   - Stubs were UNCHECKABLE, not merely unchecked: no resolvable link existed
+ *     between `external entity Person` here and `entity Person` there, and a
+ *     name-matching heuristic would be unsound — `external entity Attachment`
+ *     in crm-gdpr.allium deliberately does NOT correspond to
+ *     application-documents.allium's `Attachment`. Same name, different concept.
+ *
+ * Qualified references are the opposite: an explicit, machine-resolvable edge.
+ * So the flip traded UNCHECKABLE for CHECKABLE-BUT-NOT-YET-CHECKED, and this
+ * script closes the remaining gap. That is a strict improvement.
  *
  * WHAT IT CHECKS
  *   1. every `alias/Symbol` resolves to a declaration in the aliased spec;

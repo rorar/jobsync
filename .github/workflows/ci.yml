@@ -62,9 +62,11 @@ jobs:
 
       # `allium check` does NOT resolve qualified cross-spec references — verified
       # empirically against allium 3.2.3, a bogus `crm/Nope.field` yields 0 errors.
-      # W-H1 replaced hand-copied entity stubs with `crm/...` references, trading a
-      # loud failure mode (two copies visibly disagree) for a silent one. This step
-      # is the other half of that trade.
+      # W-H1 replaced hand-copied entity stubs with `crm/...` references. Stubs were
+      # UNCHECKABLE (no resolvable link existed, and name-matching would be unsound);
+      # qualified references are checkable, and this step is what checks them.
+      # See the header of scripts/check-spec-refs.mjs for why the earlier
+      # "traded loud for silent" framing was wrong.
       - name: Check cross-spec references
         run: bun run check:spec-refs
 
