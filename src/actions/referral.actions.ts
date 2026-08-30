@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/utils/user.utils";
 import { ActionResult } from "@/models/actionResult";
 import { handleError } from "@/lib/utils";
 import { isConsentBlocked } from "@/models/person.model";
+import { touchPersonsRetention } from "@/lib/crm/retention-policy";
 import {
   type ReferralKind,
   type ReferralStatus,
@@ -91,6 +92,13 @@ export async function recordInsiderTip(
       },
       select: { id: true },
     });
+
+    // Last-activity retention clock (specs/crm.allium AutoCreatedHasRetention):
+    // a referral names its participants as live actors in an ongoing search, so
+    // every Person it names re-bases. Ownership + consent were proven above by
+    // assertUsablePerson; nullish ids are dropped by the helper.
+    await touchPersonsRetention(user.id, [input.tipsterId, input.forwardedToId]);
+
     // RecordInsiderTip ensures ReferralRecorded (inside-track.allium). Snapshot
     // the tipster + company links so the CRM timeline can place the entry.
     emitEvent(
@@ -164,6 +172,12 @@ export async function recordNetworkTip(
       },
       select: { id: true },
     });
+
+    // Last-activity retention clock — see recordInsiderTip. `viaId` is a
+    // PersonConnection, not a Person, and its endpoints are the same
+    // tipster/insider pair already touched here.
+    await touchPersonsRetention(user.id, [input.tipsterId, input.insiderId]);
+
     // RecordNetworkTip ensures ReferralRecorded (inside-track.allium).
     emitEvent(
       createEvent(DomainEventTypes.ReferralRecorded, {

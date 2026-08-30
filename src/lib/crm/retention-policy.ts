@@ -70,6 +70,28 @@ export async function computeRetentionExpiry(
 }
 
 /**
+ * Shared body of the last-activity clock. `idFilter` is either a single id or a
+ * Prisma `{ in: [...] }` filter, so one and many Persons take the same path.
+ */
+async function applyRetentionTouch(
+  userId: string,
+  idFilter: string | { in: string[] },
+  now: Date,
+): Promise<void> {
+  try {
+    const { days } = await getCrmRetentionPolicy(userId);
+    // ADR-015: userId in the where. `updateMany` (not `update`) so a Person that
+    // is manual/quick_capture simply matches nothing instead of throwing.
+    await prisma.person.updateMany({
+      where: { id: idFilter, userId, dataSource: "auto_created" },
+      data: { retentionExpiresAt: retentionDeadline(now, days) },
+    });
+  } catch (error) {
+    debugError("crm-retention", "retention touch failed:", error);
+  }
+}
+
+/**
  * Last-activity clock (analysis option (e)): a substantive interaction with an
  * auto-created Person re-bases its deadline, so the period tracks necessity
  * instead of approximating it from the creation date.
@@ -77,23 +99,65 @@ export async function computeRetentionExpiry(
  * Scoped to `dataSource: "auto_created"` — manual and quick_capture Persons have
  * no retention leash today (`quick_capture` is an open question in crm.allium).
  * Best-effort: a failure here must never fail the caller's edit.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT COUNTS AS ACTIVITY (the W-B3 follow-up decision, 2026-08-30)
+ * ---------------------------------------------------------------------------
+ * The clock advances when a deliberate act by the AUTHENTICATED USER creates a
+ * NEW DURABLE ASSOCIATION with that specific Person — or refreshes the Person
+ * record itself. System-driven writes never count; acts that END or wind down
+ * the association never count.
+ *
+ * Both limbs matter under Art. 5(1)(e). An interaction is admissible evidence
+ * that the controller still NEEDS the data only if it is intentional (otherwise
+ * it measures system churn, not necessity) and constitutive (it advances the
+ * purpose rather than merely observing the record).
+ *
+ * Wired at, and only at:
+ *   updatePerson, reactivatePerson      (src/actions/person.actions.ts)
+ *   addJobContact                       (src/actions/jobContact.actions.ts)
+ *   createCrmNote  — person targets     (src/actions/crmNote.actions.ts)
+ *   createCrmTask  — person targets     (src/actions/crmTask.actions.ts)
+ *   scheduleInterview — when personId   (src/actions/crmInterview.actions.ts)
+ *   addPersonConnection — both ends     (src/actions/personConnection.actions.ts)
+ *   recordInsiderTip / recordNetworkTip (src/actions/referral.actions.ts)
+ *
+ * Deliberately NOT wired: archivePerson (archiving is the opposite of "still
+ * needed"), consent withdraw/reinstate (lawfulness, not necessity), lifecycle
+ * transitions and removals (ambiguous or negative evidence), and read-only
+ * views (a view is evidence of curiosity, not necessity — and Next.js prefetch
+ * would advance the clock with no user intent at all). mergePersons is an open
+ * question in specs/crm.allium: the winner should arguably inherit
+ * max(winner, loser) deadline, which is NOT this operation.
+ * Full reasoning: docs/fix-1-clock-notes.md.
  */
 export async function touchPersonRetention(
   userId: string,
   personId: string,
   now: Date = new Date(),
 ): Promise<void> {
-  try {
-    const { days } = await getCrmRetentionPolicy(userId);
-    // ADR-015: userId in the where. `updateMany` (not `update`) so a Person that
-    // is manual/quick_capture simply matches nothing instead of throwing.
-    await prisma.person.updateMany({
-      where: { id: personId, userId, dataSource: "auto_created" },
-      data: { retentionExpiresAt: retentionDeadline(now, days) },
-    });
-  } catch (error) {
-    debugError("crm-retention", `touchPersonRetention failed for ${personId}:`, error);
-  }
+  await applyRetentionTouch(userId, personId, now);
+}
+
+/**
+ * Plural form of {@link touchPersonRetention} for sites that name more than one
+ * Person in a single act — a note/task with several person targets, a
+ * PersonConnection (two endpoints), a Referral (tipster + insider/forwarded-to).
+ *
+ * Nullish and duplicate ids are dropped, then all remaining ids are re-based in
+ * ONE `updateMany` rather than N round-trips. Same ADR-015 scoping, same
+ * `auto_created` filter, same never-throws contract.
+ */
+export async function touchPersonsRetention(
+  userId: string,
+  personIds: ReadonlyArray<string | null | undefined>,
+  now: Date = new Date(),
+): Promise<void> {
+  const unique = Array.from(
+    new Set(personIds.filter((id): id is string => typeof id === "string" && id.length > 0)),
+  );
+  if (unique.length === 0) return;
+  await applyRetentionTouch(userId, { in: unique }, now);
 }
 
 /**

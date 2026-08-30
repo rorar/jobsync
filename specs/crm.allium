@@ -304,14 +304,51 @@ entity Person {
 
     -- W-B3: the retention clock this invariant guarantees exists is a
     -- LAST-ACTIVITY clock, not a creation clock — the period tracks necessity
-    -- instead of approximating it. UpdatePerson re-bases retention_expires_at to
-    -- now + the operator's configured period (src/lib/crm/retention-policy.ts
-    -- touchPersonRetention), and changing the configured period re-bases every
+    -- instead of approximating it. A qualifying interaction re-bases
+    -- retention_expires_at to now + the operator's configured period
+    -- (src/lib/crm/retention-policy.ts touchPersonRetention /
+    -- touchPersonsRetention), and changing the configured period re-bases every
     -- existing deadline by the delta, so shortening the period takes effect
     -- immediately rather than at each contact's next edit.
     --
-    -- Coverage is PARTIAL: UpdatePerson is the only wired site. See the open
-    -- question at the end of this module.
+    -- WHAT COUNTS AS ACTIVITY (decided 2026-08-30; the W-B3 follow-up open
+    -- question this replaces asked for exactly this decision):
+    --
+    --   The clock advances when a deliberate act by the AUTHENTICATED USER
+    --   creates a NEW DURABLE ASSOCIATION with that specific Person — or
+    --   refreshes the Person record itself. System-driven writes never count.
+    --   Acts that END or wind down the association never count.
+    --
+    -- Both limbs are load-bearing under Art. 5(1)(e). An interaction is
+    -- admissible evidence that the controller still NEEDS the data only if it
+    -- is intentional (otherwise it measures system churn, not necessity) and
+    -- constitutive (it advances the purpose rather than merely observing the
+    -- record). Stated as a PRINCIPLE rather than a list because an enumeration
+    -- drifts the moment a new action lands and gives no way to classify it.
+    --
+    -- Qualifying rules: UpdatePerson, ReactivatePerson, AddJobContact,
+    -- CreateNote and CreateTask (for each person target), ScheduleInterview
+    -- (when a person is attached), AddPersonConnection (both endpoints), and
+    -- inside-track RecordInsiderTip / RecordNetworkTip (every Person named).
+    --
+    -- NOT qualifying, deliberately: ArchivePerson (archiving asserts the
+    -- OPPOSITE of still-needed, so advancing the clock there would let filing a
+    -- contact away extend its retention); WithdrawConsent / ReinstateConsent
+    -- (consent is the LAWFULNESS limb, Art. 6/7 — orthogonal to necessity, and
+    -- overloading Art. 7(3) machinery with a retention effect would couple two
+    -- independent tests); lifecycle transitions and removals (completing or
+    -- cancelling a task or interview is as consistent with "we are done here"
+    -- as with "still working" — AMBIGUOUS evidence, and the recorded tie-break
+    -- for ambiguity is to err toward erasure, see the last_activity_at note
+    -- below); and read-only views, which leave no write at all and are evidence
+    -- of curiosity rather than necessity (counting them would additionally mean
+    -- a framework link-prefetch could advance the clock with no user intent).
+    --
+    -- ReactivatePerson is included even though it is not an association-creating
+    -- act, for the symmetric reason ArchivePerson is excluded, and because
+    -- ExpireAutoCreatedPersons erases ARCHIVED Persons too — without the touch,
+    -- restoring a Person the day before their deadline would erase them the day
+    -- after, contradicting the intent just expressed.
     invariant AutoCreatedHasRetention {
         data_source = auto_created implies retention_expires_at != null
     }
@@ -1921,8 +1958,8 @@ open question "W-H1 FOLLOW-UP — Art. 7(3) coverage is UNEVEN across note lifec
 
 open question "W-H1 FOLLOW-UP — three further consent-block enforcement sites are NOT reflected in any spec, and they are not this module's to add: src/actions/referral.actions.ts:51, src/actions/personConnection.actions.ts:56 and src/actions/warmPath.actions.ts:82,113,114 all call isConsentBlocked, and all three belong to inside-track.allium (Referral, PersonConnection, warm-path traversal), which imports crm.allium rather than the reverse. The warm-path ones are the interesting case: they `continue` past a blocked person rather than rejecting, i.e. a consent-blocked contact silently vanishes from warm-path results instead of producing an error — a different enforcement SHAPE from every other site, and one whose absence from the spec means nobody has judged whether silent omission is the right behaviour. Whoever next tends inside-track.allium should add the guards there; the predicate is crm/Person.is_consent_blocked and it is importable today."
 
-open question "W-B3 FOLLOW-UP — the last-activity retention clock is wired at ONE site, so a Person can be actively worked with and still expire. UpdatePerson calls touchPersonRetention (src/lib/crm/retention-policy.ts); nothing else does. Adding a CrmNote or CrmTask that targets the Person, scheduling or completing a CrmInterview with them, linking them to a Job via JobContact, recording a PersonConnection, and every Referral touch (tipster/insider/forwarded_to) all leave the deadline untouched. So an auto-created recruiter you exchange notes and interviews with for two years is erased on the anniversary of the last time you edited their NAME — which is precisely the necessity test the clock was introduced to make real, failing in the case it most needs to hold. Analysis docs/wh-b3-retention-analysis.md section 4.7 lists these sites and says explicitly that WHICH of them count is a design decision, not a mechanical one, so it was deliberately not guessed. Decide the set, then wire it and state it on invariant AutoCreatedHasRetention. Note archivePerson is explicitly NOT a candidate: archiving is the opposite of \"still needed\"."
+open question "W-B3 FOLLOW-UP, RESOLVED 2026-08-30 — kept as a record of the decision and its rejected alternatives, because the reasoning is the part a future reader will need. The clock was wired at ONE site (UpdatePerson), so an auto-created contact worked with through notes, tasks and interviews for two years was still erased on the anniversary of the last NAME edit. The set is now decided and stated on invariant AutoCreatedHasRetention above: a deliberate act by the authenticated user that creates a new durable association with the Person, or refreshes the Person record. Wired at UpdatePerson, ReactivatePerson, AddJobContact, CreateNote, CreateTask, ScheduleInterview, AddPersonConnection, RecordInsiderTip and RecordNetworkTip. Deliberately NOT wired at ArchivePerson (regression-tested), consent withdraw/reinstate, lifecycle transitions, removals, or read-only views. ONE candidate was rejected as a touch site and needs its own decision: MergePersons. The winner absorbs the loser's interviews, notes, tasks and job contacts, so it arguably ought to inherit their recency too — but the correct operation is max(winner.retention_expires_at, loser.retention_expires_at), NOT now + period. Touching would set the winner a deadline LATER than either input, i.e. de-duplication would extend retention, the same class of defect as walking the clock forward from the settings page. That is a different mechanism from the last-activity touch and was not guessed. Decide whether MergePersons should carry the later of the two deadlines, and if so state it as an ensures on the rule."
 
-open question "W-B3 FOLLOW-UP — Person has no last-activity column, so the retention clock has no durable basis to recompute from. retention_expires_at is the only materialised deadline; when it is absent, rebaseCrmRetention falls back to Person.updated_at as a last-activity proxy. updated_at also bumps on system-driven cascade writes (anonymisation cascades, status sweeps, consent changes), so the proxy errs toward retaining LONGER than a true interaction clock would — the wrong direction for Art. 5(1)(e). The re-base on the primary path avoids the issue by shifting stored deadlines by the period delta rather than recomputing (which also keeps it idempotent: recomputing from updated_at would let repeated visits to the settings page walk the clock forward, since the re-base write itself bumps updated_at). A dedicated Person.last_activity_at column would remove the proxy entirely and make the clock auditable, which Art. 5(2) accountability would prefer; it needs a migration slot. Worth doing before an auto-creation writer lands and real deadlines start accumulating."
+open question "W-B3 FOLLOW-UP, RESOLVED 2026-08-30 — DECIDED AGAINST a dedicated Person.last_activity_at column; kept as the record of why, since 'add a column' is the obvious suggestion and will be re-proposed otherwise. retention_expires_at is already a LOSSLESS encoding of last activity given the period: last_activity = retention_expires_at - period. rebaseCrmRetention relies on exactly that identity (it shifts stored deadlines by the period DELTA rather than recomputing, which is also what keeps it idempotent — recomputing from updated_at would let repeated visits to the settings page walk the clock forward, since the re-base write itself bumps updated_at). Every write path preserves the identity: initial computeRetentionExpiry, each touch, and the delta re-base; toggling crm_retention_enabled shifts nothing. A column would therefore be REDUNDANT DERIVED STATE — a second source of truth for a fact the first already carries exactly — requiring a double write at every touch site. This module already rejects a second owner in those words for the anonymise cascade (see ExpireAutoCreatedPersons: copying it in 'would be a second owner and therefore a drift mechanism'). The only thing a column would fix is rebaseCrmRetention's null-deadline fallback, which uses Person.updated_at as a proxy and so errs toward retaining LONGER — but that branch is reachable only for a row that already VIOLATES this module's AutoCreatedHasRetention invariant, so it is defence in depth for a forbidden state, not a live path. Trade-off accepted and stated: without a column no surface can render 'last interaction: <date>' directly; it must be derived, and no UI asks for it today. RE-OPEN IF: a UI needs the raw instant, or a second retention clock with a different period appears, at which point the single materialised deadline stops being sufficient."
 
 open question "W-B3 FOLLOW-UP — user-configurable settings have NO representation in any Allium module, so two live behavioural gates are invisible to allium check. ExpireAutoCreatedPersons is skipped entirely for a user whose PrivacySettings.crm_retention_enabled is false, and the retention period itself is a per-user choice of 180/365/730/1095 days rather than config.auto_created_retention; both are stated only in that rule's @guidance. The account-deletion cooling-off period (PrivacySettings.cooling_off_days, specs/gdpr-data-rights.allium) is equally unspec\u0027d, so this is a pattern, not a one-off. Minting a bespoke predicate form for a single rule was rejected as spec machinery with no precedent to keep it honest. The real question is whether Allium should model UserSettings as an entity that rules may read — which would make every settings-gated behaviour checkable — or whether user configuration is deliberately out of scope for these specs, in which case say so once, centrally, instead of leaving each gate to prose."

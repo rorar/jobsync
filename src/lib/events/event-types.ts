@@ -265,6 +265,30 @@ export interface InterviewCompletedPayload {
 
 export interface ReminderTriggeredPayload {
   userId: string;
+  /**
+   * Only `interview_upcoming` and `task_overdue` are emitted today
+   * (`src/lib/scheduler/crm-cron.ts`).
+   *
+   * `retention_expired` is RESERVED for the pre-expiry notice described in
+   * `docs/wh-b3-retention-analysis.md` §4.6 — a warning fired some days BEFORE
+   * `ExpireAutoCreatedPersons` erases an auto-created contact, so the operator
+   * can intervene. It had an emit site until W-B3 (2026-08-26) replaced
+   * archive-on-expiry with erasure; the notice itself was deliberately not
+   * built, because a `Notification` row lives 30 days and one fired 14 days
+   * before erasure would leave a NAMED residue ~16 days AFTER the erasure that
+   * existed to retire the name — unless it uses the late-binding pattern with
+   * `personId` in `titleParams`. The consumer half already assumes exactly that
+   * shape: `buildNotificationActions("retention_expired", { personId })` in
+   * `src/lib/notifications/deep-links.ts` is implemented and tested.
+   *
+   * NAMING CAVEAT for whoever builds §4.6: a PRE-expiry notice fires before
+   * expiry, so the honest member is `retention_expiring`. Rename or add rather
+   * than inheriting the mismatch.
+   *
+   * `follow_up_due` is likewise unemitted and reserved — see `crm.allium`
+   * `config.follow_up_default_delay` ("W-E6: reserved for a future
+   * follow-up-scheduling rule; no rule consumes it yet").
+   */
   reason: "interview_upcoming" | "task_overdue" | "retention_expired" | "follow_up_due";
   targetJobId?: string;
   targetPersonId?: string;

@@ -426,6 +426,12 @@ export async function archivePerson(personId: string): Promise<ActionResult<{ id
       return { success: false, message: "crm.errors.invalidTransition" };
     }
 
+    // NO retention touch here, deliberately: archiving means "I no longer need
+    // this contact", the exact opposite of the necessity signal the
+    // last-activity clock measures. Advancing the deadline on archive would let
+    // filing a contact away extend how long it is kept (Art. 5(1)(e)).
+    // Regression-guarded by __tests__/crm-retention-touch-sites.spec.ts.
+    // Its mirror, reactivatePerson, DOES touch.
     await prisma.person.update({
       where: { id: personId, userId: user.id },
       data: { status: "archived" },
@@ -454,6 +460,16 @@ export async function reactivatePerson(personId: string): Promise<ActionResult<{
       where: { id: personId, userId: user.id },
       data: { status: "active" },
     });
+
+    // Last-activity retention clock. Un-archiving is the most explicit
+    // "still needed" signal in the aggregate — the exact mirror of
+    // archivePerson, which is deliberately NOT a touch site because archiving
+    // means the opposite. It also closes a real defect: the expiry sweep guards
+    // only on `status != "anonymized"`, so the clock keeps running while a
+    // Person is archived and an archived-and-expired Person IS erased. Without
+    // this line, restoring a Person one day before their deadline would erase
+    // them the next, contradicting the intent the user just expressed.
+    await touchPersonRetention(user.id, personId);
 
     return { success: true, data: { id: personId } };
   } catch (error) {

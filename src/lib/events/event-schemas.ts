@@ -264,6 +264,9 @@ export const InterviewCompletedPayloadSchema = z.object({
 
 export const ReminderTriggeredPayloadSchema = z.object({
   userId: z.string(),
+  // `retention_expired` and `follow_up_due` are RESERVED, not dead — see the
+  // doc comment on ReminderTriggeredPayload in event-types.ts for what each is
+  // held for and why neither was retired. Kept in sync by `satisfies` below.
   reason: z.enum(["interview_upcoming", "task_overdue", "retention_expired", "follow_up_due"]),
   targetJobId: z.string().optional(),
   targetPersonId: z.string().optional(),

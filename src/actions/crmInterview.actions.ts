@@ -14,6 +14,7 @@ import {
   isValidInterviewOutcome,
   isConsentBlocked,
 } from "@/models/person.model";
+import { touchPersonRetention } from "@/lib/crm/retention-policy";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,6 +89,14 @@ export async function scheduleInterview(
         status: "scheduled",
       },
     });
+
+    // Last-activity retention clock (specs/crm.allium AutoCreatedHasRetention):
+    // arranging a meeting with the contact is unambiguous evidence they are
+    // still needed. Conditional, mirroring the ownership + consent guards
+    // above — an interview with no Person attached touches nothing.
+    if (input.personId) {
+      await touchPersonRetention(user.id, input.personId);
+    }
 
     // Activity log projected via crm-activity-logger consumer (TimelineProjection contract)
     eventBus.publish(

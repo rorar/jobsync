@@ -11,6 +11,7 @@ import {
   INSIDE_TRACK_CONFIG,
 } from "@/models/insideTrack.model";
 import { isConsentBlocked } from "@/models/person.model";
+import { touchPersonsRetention } from "@/lib/crm/retention-policy";
 
 // ---------------------------------------------------------------------------
 // personConnection.actions.ts — directed P2P network edges (Welle 5).
@@ -81,6 +82,12 @@ export async function addPersonConnection(
       },
       select: { id: true },
     });
+
+    // Last-activity retention clock (specs/crm.allium AutoCreatedHasRetention):
+    // a network edge is a durable association naming BOTH endpoints, so both
+    // deadlines re-base. Ownership of both was already proven above.
+    await touchPersonsRetention(user.id, [input.fromPersonId, input.toPersonId]);
+
     return { success: true, data: { id: conn.id } };
   } catch (error) {
     // @@unique backstop for a race past the pre-check.
