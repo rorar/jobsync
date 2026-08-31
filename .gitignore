@@ -80,3 +80,12 @@ AGENTS.md
 devenv.lock
 logs/sessions/
 .domain-experts/
+
+# Agent/MCP tool state — local caches and per-machine config, never shared
+.headroom/
+.serena/
+
+# Stray nohup logs. `scripts/restart.sh` run under nohup without a redirect drops
+# one next to the script; test-e2e.sh redirects to /tmp deliberately, so any
+# nohup.out in the tree is an accident.
+nohup.out
