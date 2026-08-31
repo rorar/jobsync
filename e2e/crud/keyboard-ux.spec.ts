@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { uniqueId, safeWait } from "../helpers";
+import { uniqueId } from "../helpers";
 
 /** Set NEXT_LOCALE=en cookie so the app renders in English. */
 async function ensureEnglishLocale(page: Page) {
@@ -214,8 +214,6 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     // M-T-04 follow-up: replaced waitForTimeout(600) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
     await companyInput.press("Enter");
-    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     await expect(getCompanyCombobox(page)).toContainText(company);
   });
@@ -237,8 +235,6 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     // M-T-04 follow-up: replaced waitForTimeout(600) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
     await locationInput.press("Enter");
-    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     await expect(getLocationCombobox(page)).toContainText(location);
   });
@@ -302,8 +298,6 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
 
     await titleInput.type(title, { delay: 20 });
     await titleInput.press("Enter");
-    // M-T-04 follow-up: replaced waitForTimeout(1500) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     await expect(getTitleCombobox(page)).toContainText(title, { timeout: 15000 });
     expect(filterCriticalErrors(errors)).toEqual([]);
@@ -397,8 +391,11 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
       // M-T-04 follow-up: replaced waitForTimeout(200) — wait for UI to settle.
       await page.waitForLoadState("domcontentloaded");
       await skillInput.press("Enter");
-      // M-T-04 follow-up: replaced waitForTimeout(800) — wait for server round-trip.
-      await safeWait(page, { loadState: "networkidle" });
+      // The next iteration types over the field, so this skill's chip has to
+      // be committed before we continue.
+      await expect(page.getByText(skill).first()).toBeVisible({
+        timeout: 10000,
+      });
     }
 
     for (let i = 1; i <= 3; i++) {
@@ -448,9 +445,6 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
 
     // Wait for async createTag to complete and chip to render
     await expect(page.getByText(skill).first()).toBeVisible({ timeout: 10000 });
-    // Wait for React startTransition to commit localTags state update
-    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     // Try adding the same skill again
     await skillInput.fill(skill);
@@ -508,9 +502,14 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     const keyword = `KBKeyword ${uid}`;
     await searchInput.fill(keyword);
-    // Wait for debounce + ESCO API fetch to complete or timeout
-    // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
+    // The occupation list is fetched from the ESCO proxy behind a debounce.
+    // Wait for the list to react to the typed text — same pattern as
+    // selectOrCreateComboboxOption. An empty list is a legitimate outcome.
+    await page
+      .getByRole("option")
+      .first()
+      .waitFor({ state: "visible", timeout: 5000 })
+      .catch(() => null);
     await searchInput.press("Enter");
 
     // Wait for async keyword addition to complete
@@ -552,9 +551,14 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     for (let i = 1; i <= 3; i++) {
       await searchInput.fill(`KW${i} ${uid}`);
-      // Wait for debounce + ESCO API fetch to complete or timeout
-      // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for server round-trip.
-      await safeWait(page, { loadState: "networkidle" });
+      // The occupation list is fetched from the ESCO proxy behind a debounce.
+      // Wait for the list to react to the typed text — same pattern as
+      // selectOrCreateComboboxOption. An empty list is a legitimate outcome.
+      await page
+        .getByRole("option")
+        .first()
+        .waitFor({ state: "visible", timeout: 5000 })
+        .catch(() => null);
       await searchInput.press("Enter");
       // Wait for chip to appear before adding next keyword
       await expect(page.getByText(`KW${i} ${uid}`).first()).toBeVisible({ timeout: 10000 });
@@ -625,8 +629,6 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     await searchInput.type(`QuickKW ${uid}`, { delay: 10 });
     await searchInput.press("Enter");
-    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     await expect(page.getByText(`QuickKW ${uid}`).first()).toBeVisible();
     expect(filterCriticalErrors(errors)).toEqual([]);
@@ -661,8 +663,6 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       .filter({ hasText: /Select countries|location/i });
     await expect(locationCombobox).toBeVisible({ timeout: 5000 });
     await locationCombobox.click();
-    // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     const locationInput = page.getByPlaceholder(/Search countries/i);
     await expect(locationInput).toBeVisible();
@@ -701,15 +701,11 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       .filter({ hasText: /Select countries|location/i });
     await expect(locationCombobox).toBeVisible({ timeout: 10000 });
     await locationCombobox.click();
-    // M-T-04 follow-up: replaced waitForTimeout(2000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     const locationInput = page.getByPlaceholder(/Search countries/i);
     await expect(locationInput).toBeVisible({ timeout: 5000 });
 
     await locationInput.fill("Germany");
-    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     const germanyOption = page
       .getByRole("option")
@@ -754,8 +750,6 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       .filter({ hasText: /Select countries|location/i });
     await expect(locationCombobox).toBeVisible({ timeout: 5000 });
     await locationCombobox.click();
-    // M-T-04 follow-up: replaced waitForTimeout(3000) — wait for server round-trip.
-    await safeWait(page, { loadState: "networkidle" });
 
     const countryWithRegions = page
       .getByRole("option")

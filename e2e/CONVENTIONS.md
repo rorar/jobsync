@@ -150,7 +150,10 @@ await safeWait(page, { selector: '[data-testid="staging-list-item"]' });
 await safeWait(page, { responseUrl: /\/api\/staging/ });
 
 // GOOD — wait for full page load:
-await safeWait(page, { loadState: "networkidle" });
+await safeWait(page, { loadState: "domcontentloaded" });
+
+// NEVER on a /dashboard/* page — see "networkidle is unreachable" below:
+// await safeWait(page, { loadState: "networkidle" });
 
 // GOOD — arbitrary Playwright assertion:
 await safeWait(page, {
@@ -159,6 +162,29 @@ await safeWait(page, {
   },
 });
 ```
+
+### `networkidle` is unreachable on every `/dashboard/*` page
+
+Do not wait for `loadState: "networkidle"` anywhere behind the dashboard shell.
+`src/components/Header.tsx` mounts `<SchedulerStatusBar/>`, whose
+`useSchedulerStatus()` hook opens an `EventSource("/api/scheduler/status")`. The
+route holds that stream open for ten minutes and the client reconnects
+immediately when it closes, so there is always a pending request and Playwright's
+"no network connections for 500 ms" condition never becomes true. The wait does
+not merely run slowly — it can only ever time out.
+
+`e2e/crud/job-crud.spec.ts` has carried this note since before the M-T-04 sweep;
+the sweep nevertheless introduced 13 `networkidle` waits, which is where 9 of the
+38 failures in the 2026-08-31 baseline came from.
+
+Wait for the thing you actually mean instead:
+
+| You meant | Wait for |
+|---|---|
+| "the page shell is interactive" | the landmark control, e.g. `getByTestId("add-job-btn")` |
+| "the server action finished" | its success toast (`expectToast`) |
+| "the list reloaded" | the row you expect, or a change in `getByRole("row").count()` |
+| "the async options arrived" | `getByRole("option").first().waitFor(...).catch(() => null)` |
 
 ### Acceptable exceptions
 

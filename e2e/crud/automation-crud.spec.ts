@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { safeWait } from "../helpers";
+import { expectToast } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -350,9 +350,9 @@ test.describe("Automation CRUD", () => {
       .filter({ has: page.locator(".lucide-pause") })
       .click();
 
-    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for networkidle
-    // so the server action has completed before we navigate away.
-    await safeWait(page, { loadState: "networkidle" });
+    // handlePause toasts automations.automationPaused only after the server
+    // action has resolved — wait for that before navigating away.
+    await expectToast(page, /Automation paused/);
     // Reload the list to confirm the status persisted
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
@@ -369,9 +369,9 @@ test.describe("Automation CRUD", () => {
       .filter({ has: page.locator(".lucide-play") })
       .click();
 
-    // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for networkidle
-    // so the server action has completed before we navigate away.
-    await safeWait(page, { loadState: "networkidle" });
+    // handleResume toasts automations.automationResumed only after the server
+    // action has resolved — wait for that before navigating away.
+    await expectToast(page, /Automation resumed/);
     // Reload the list to confirm the status persisted
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
