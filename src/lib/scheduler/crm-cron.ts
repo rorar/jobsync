@@ -2,9 +2,11 @@
  * CRM Temporal Rules — Cron job for time-based CRM rules.
  * Spec: specs/crm.allium rules ExpireAutoCreatedPersons, InterviewReminder, TaskOverdueReminder
  *
- * Also handles GDPR account deletion rules:
+ * Also handles rules from two other bounded contexts, which is why the
+ * `Promise.allSettled` array below runs six entries and not three:
  * - purgeExpiredDeletions: execute deletions past cooling-off period (F-4)
  * - sweepExpiredDeletionTokens: clean up expired confirmation tokens (F-2)
+ * - flagStaleReferrals: inside-track referral ageing
  *
  * Architecture:
  * - Separate cron from the automation scheduler (bounded context separation)

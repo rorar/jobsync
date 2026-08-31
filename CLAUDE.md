@@ -735,7 +735,7 @@ Any new notification-creating code path MUST populate the structured fields.
 
 **Person Fields (Kette B):** `headline` (free-form professional identity, replaces old `jobTitle`), `socialProfiles` (List of `{platform, url}`, replaces old `linkedinUrl`). Platforms: linkedin, xing, github, twitter, other. URLs validated server-side (https/http only, ADR-019 runtime membership check on platform enum).
 
-**CRM Temporal Rules (CRM Cron):** `src/lib/scheduler/crm-cron.ts` — separate cron job (every 15 min) for time-based CRM rules, independent from the automation scheduler (bounded context separation). Three rules:
+**CRM Temporal Rules (CRM Cron):** `src/lib/scheduler/crm-cron.ts` — separate cron job (every 15 min) for time-based CRM rules, independent from the automation scheduler (bounded context separation). Three CRM rules; the job's `Promise.allSettled` runs **six**, the other three belonging to GDPR account deletion and inside-track:
 - `ExpireAutoCreatedPersons` — **ERASES** auto-created persons past `retentionExpiresAt` via the AnonymizePerson cascade (NOT "archives" — that was the pre-`72f4138f` behaviour and it restricted nothing). Guards on `status: { not: "anonymized" }`, so manually-archived records cannot escape. Gated per user by `PrivacySettings.crmRetentionEnabled`; when off, the deadline is still written, advanced and displayed — only the unattended erasure stops. Period is a bounded `180|365|730|1095`, default 730. See ADR-042.
 - `InterviewReminder` — fires `ReminderTriggered` event for interviews within 24h
 - `TaskOverdueReminder` — fires `ReminderTriggered` event for overdue tasks
