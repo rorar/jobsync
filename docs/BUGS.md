@@ -1,8 +1,35 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-08-23
+# Bug Tracker — Collected 2026-03-24, Updated 2026-08-31
 
-**Total: 607 bugs found, 606 fixed, 2 open (2 accepted risk)**
+**Total: 608 bugs found, 607 fixed, 2 open (2 accepted risk)**
+
+> The three figures above do not reconcile (607 + 2 = 609, not 608) and did not before
+> this edit either (606 + 2 = 608, not 607). The off-by-one is inherited, not introduced
+> here; incrementing found and fixed preserves it rather than papering over it. Whoever
+> next audits this file should recount from the sections rather than trust this line.
 
 ### Status: ✅ OP-B1..OP-B8 all fixed (CRM orphan-note prune + full-review, 2026-08-21/23) + IT-B1..IT-B4 all fixed (IT-B2/IT-B4 on 2026-08-19 §F; IT-B1/IT-B3 on 2026-08-20 weed-resolution pass) + 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
+
+## Session 2026-08-31 — host move NixOS → Ubuntu 26 (1 found, 1 fixed)
+
+| ID | Severity | Summary | Fix |
+|----|----------|---------|-----|
+| HM-B1 | LOW ✅ FIXED 2026-08-31 | **Weekend detection silently stopped using the runtime's locale data.** `getWeekendDays` (`weekend.ts`) feature-detected only `Intl.Locale.prototype.getWeekInfo()`. TC39 moved the Intl Locale Info proposal from getters (`locale.weekInfo`) to methods, and **both shapes ship**: Node 22.23 / V8 12.4 / ICU 78.2 has only the getter. So on this host the documented primary path was **unreachable** and every lookup fell through to the bundled cldr-core table, while the file kept promising "auto-updates with CLDR". No wrong answer was ever returned — the two sources agree — so nothing failed loudly; the defect is that a self-updating source had silently become a frozen one. Surfaced only because `__tests__/weekend-service.spec.ts` W-1.1 died on `Property 'getWeekInfo' does not exist`, i.e. for the wrong reason: the spy target was absent, not "production took the fallback". | Probe both shapes, typed via a local `WeekInfo` (TypeScript's lib files declare neither). Verified ICU 78.2 and cldr-core 48.2.0 agree on DE/FI/IR/SA/AF/IN/US/IL/BD/NP **before** switching the path on, so no assertion changed value. W-1.1 now spies on whichever shape the runtime provides; W-1.3 had neutralised only the method and would no longer have reached the fallback at all, so it now deletes both properties and restores their descriptors (`weekInfo` is an accessor and cannot be hidden by assignment), asserting both are gone first. Commit `310d6f67`. |
+
+**Class note.** This is not a portability bug that the move created; it is a **latent
+feature-detection bug the move exposed**. A `typeof x === "function"` probe against one of two
+live spellings of the same API degrades silently by design — the fallback is correct, so the only
+symptom is a capability quietly lost.
+
+Grepped project-wide rather than assumed (`feedback_flashlight_effect`). Three other
+`typeof x === "function"` guards exist and **none is a second instance**:
+`use-media-query.ts:35` is the same dual-spelling situation (`addEventListener` vs Safari-13
+`addListener`) and handles it correctly, which is the pattern `weekend.ts` should have followed;
+`SuperLikeCelebration.tsx:190` guards `window.matchMedia`, which has no second spelling.
+One adjacent observation, not filed as a bug: `currency-data.ts:28` guards
+`Intl.supportedValuesOf` with a fallback of `[]`, and `normalizeCode` rejects everything absent
+from that set — so the fallback does not degrade, it disables currency support outright. It is
+dead code on any supported runtime (the API is ES2022 and CI pins Node 20; this host reports 162
+currencies), but it is a fail-closed path that has never been exercised.
 
 ## Session 2026-08-21/23 — CRM orphan-note prune + its full-review (8 found, 8 fixed)
 
