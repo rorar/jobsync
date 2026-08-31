@@ -1,0 +1,13 @@
+# Ersetzt devenv.nix (nur jobsync nutzt Nix). Angelegt von 02-...-fixup.
+# devenv.nix/devenv.yaml bleiben liegen - fuer alle, die noch auf Nix sind.
+[tools]
+bun = "latest"
+node = "22"       # Jest braucht Node 22 (bun-Jest-Inkompatibilitaet, stack-utils)
+python = "3.13"
+
+[env]
+_.file = ".env"
+# Prisma-Engines / Playwright-Browser NICHT auf /nix/store pinnen -> die Tools
+# holen sich passende Binaries selbst (prisma: debian-openssl-3.0.x).
+# DATABASE_URL=file:./prisma/dev.db und AUTH_TRUST_HOST=true gehoeren in
+# jobsync/.env (aus devenv.nix uebernehmen, falls dort noch nicht drin).
