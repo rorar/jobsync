@@ -281,12 +281,13 @@ test.describe("Job Detail Panels", () => {
       hasText: /Logo|Deep Link/i,
     });
 
-    const hasEmptyState = await emptyState.isVisible().catch(() => false);
-    const hasTriggerBtn = await triggerButton.first().isVisible().catch(() => false);
-    const hasResults = (await resultsList.count()) > 0;
-
-    // At least one of these should be visible — proving the panel loaded
-    expect(hasEmptyState || hasTriggerBtn || hasResults).toBe(true);
+    // Assert with `or()` rather than three `isVisible()` probes. The panel
+    // renders <EnrichmentStatusSkeleton> while `loading` is true, so a probe
+    // taken the instant the card title appears reads all three as false and
+    // fails a panel that was merely still fetching. `or()` retries.
+    await expect(
+      emptyState.or(triggerButton.first()).or(resultsList.first()),
+    ).toBeVisible({ timeout: 15000 });
 
     // Cleanup
     await deleteJob(page, jobTitle);
@@ -324,14 +325,11 @@ test.describe("Job Detail Panels", () => {
     const timeline = page.getByRole("list", { name: /Status History/i });
     const emptyState = page.getByText(/No status changes/i);
 
-    const hasTimeline = await timeline.isVisible().catch(() => false);
-    const hasEmptyState = await emptyState.isVisible().catch(() => false);
-
-    // At least one should be visible
-    expect(hasTimeline || hasEmptyState).toBe(true);
+    // Same reason as the enrichment panel above: retry instead of probing once.
+    await expect(timeline.or(emptyState)).toBeVisible({ timeout: 15000 });
 
     // If the timeline has entries, verify structure
-    if (hasTimeline) {
+    if (await timeline.isVisible()) {
       const items = timeline.getByRole("listitem");
       const itemCount = await items.count();
       expect(itemCount).toBeGreaterThanOrEqual(1);

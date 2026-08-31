@@ -129,11 +129,13 @@ async function createAutomation(
  * parent <Link> navigation.
  */
 async function openAutomationDropdown(page: Page, name: string) {
-  const card = page.locator("a", { hasText: name }).first();
+  const card = page.getByRole("article", { name }).first();
   await expect(card).toBeVisible({ timeout: 10000 });
 
-  // The "more" button is the last button inside the card (DropdownMenuTrigger)
-  const moreButton = card.getByRole("button").first();
+  // The DropdownMenuTrigger carries aria-label={t("automations.actions")}.
+  // Do NOT index into the card's buttons: a paused automation renders a
+  // pause-reason Info button ahead of it, so `.first()` picks the wrong one.
+  const moreButton = card.getByRole("button", { name: "Actions" });
 
   // Use dispatchEvent to click without triggering link navigation
   // The component uses onClick={(e) => e.preventDefault()} but we need
@@ -234,7 +236,7 @@ test.describe("Automation CRUD", () => {
     await page.waitForLoadState("domcontentloaded");
 
     // Scope assertions to the specific card to avoid matching stale data
-    const card = page.locator("a", { hasText: automationName }).first();
+    const card = page.getByRole("article", { name: automationName }).first();
     await expect(card).toBeVisible({ timeout: 10000 });
     await expect(card.getByText("arbeitsagentur").first()).toBeVisible();
     await expect(card.getByText("active").first()).toBeVisible();
@@ -337,7 +339,7 @@ test.describe("Automation CRUD", () => {
     // Navigate to list and verify the automation is active
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
-    const card = page.locator("a", { hasText: automationName }).first();
+    const card = page.getByRole("article", { name: automationName }).first();
     await expect(card).toBeVisible({ timeout: 10000 });
     await expect(card.getByText("active").first()).toBeVisible({ timeout: 5000 });
 
@@ -356,7 +358,7 @@ test.describe("Automation CRUD", () => {
     // Reload the list to confirm the status persisted
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
-    const cardAfterPause = page.locator("a", { hasText: automationName }).first();
+    const cardAfterPause = page.getByRole("article", { name: automationName }).first();
     await expect(cardAfterPause).toBeVisible({ timeout: 10000 });
     await expect(cardAfterPause.getByText("paused").first()).toBeVisible({ timeout: 5000 });
 
@@ -375,7 +377,7 @@ test.describe("Automation CRUD", () => {
     // Reload the list to confirm the status persisted
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
-    const cardAfterResume = page.locator("a", { hasText: automationName }).first();
+    const cardAfterResume = page.getByRole("article", { name: automationName }).first();
     await expect(cardAfterResume).toBeVisible({ timeout: 10000 });
     await expect(cardAfterResume.getByText("active").first()).toBeVisible({ timeout: 5000 });
 

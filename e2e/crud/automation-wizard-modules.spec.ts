@@ -173,20 +173,27 @@ test.describe("Automation Wizard — Dynamic Module Selector", () => {
       await page.keyboard.press("Escape");
       await page.keyboard.press("Escape");
 
-      // Restore: re-activate JSearch
-      await page.goto("/dashboard/settings");
-      await page.waitForLoadState("domcontentloaded");
-      await page.getByRole("button", { name: "API Keys", exact: true }).click();
+      // Restore the ORIGINAL state — only re-activate what we deactivated.
+      // JSearch declares credential.type "api_key", and activateModule refuses
+      // with settings.moduleActivationRequiresCredential when no key is stored.
+      // Re-activating unconditionally therefore fails on any run that found
+      // JSearch already inactive, AND leaves it inactive for every later run —
+      // which is how this spec poisoned its own fixture between runs.
+      if (wasActive) {
+        await page.goto("/dashboard/settings");
+        await page.waitForLoadState("domcontentloaded");
+        await page.getByRole("button", { name: "API Keys", exact: true }).click();
 
-      // Wait for module switches to render again
-      await page.getByRole("switch").first().waitFor({ state: "visible", timeout: 15000 });
+        // Wait for module switches to render again
+        await page.getByRole("switch").first().waitFor({ state: "visible", timeout: 15000 });
 
-      const jsearchSwitchAfter = page.getByRole("switch", {
-        name: /Toggle JSearch module/i,
-      });
-      await jsearchSwitchAfter.waitFor({ state: "visible", timeout: 15000 });
-      await jsearchSwitchAfter.click();
-      await expect(jsearchSwitchAfter).toBeChecked({ timeout: 5000 });
+        const jsearchSwitchAfter = page.getByRole("switch", {
+          name: /Toggle JSearch module/i,
+        });
+        await jsearchSwitchAfter.waitFor({ state: "visible", timeout: 15000 });
+        await jsearchSwitchAfter.click();
+        await expect(jsearchSwitchAfter).toBeChecked({ timeout: 5000 });
+      }
     }
 
     // Cleanup
