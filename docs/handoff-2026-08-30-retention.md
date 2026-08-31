@@ -275,10 +275,20 @@ this section is the session narrative, not the record.
 first time the retention work's two new `server-only` modules (`src/lib/crm/anonymize-person.ts`,
 `src/lib/crm/retention-policy.ts`) have been verified as correctly placed.
 
-**Two gaps this gate did not close.** No blind-spot analysis was run over this session's work
-(`feedback_blindspot_after_tasks`), and **no E2E pass has been run on the new host at all** —
-Playwright's browsers are present (`~/.cache/ms-playwright/chromium-1234`), so it is runnable, it
-simply has not been. Both are cheap and unblocked; neither is a known failure.
+**Both gaps this gate named are now closed, and both found something.**
+
+*Blind-spot pass* → `e02390ad`. Country codes were validated for shape and not membership at
+three write sites, so withdrawn codes (NT, YD) produced a plausible business calendar instead of
+an error. The validator already existed and the precedent was two lines away.
+
+*E2E* → `ec52926f` for the runner, and a **baseline** in `docs/BUGS.md` § "first E2E baseline in
+months": **112 tests, 74 passed, 38 failed, 19.4 min.** The suite needed two runner fixes before
+it could run at all (a hardcoded NixOS chromium path; `NEXTAUTH_URL` pointing at the previous
+host's Tailscale address, which no longer resolves). 33 of the 38 failures land in the specs a
+previous session rewrote and explicitly flagged as at risk — `docs/BUGS.md` "E2E waitForTimeout
+sweep". Not attributable to this session's code: `contact-crud.spec.ts` is the only spec
+exercising both changed paths and it passed. **Nothing was fixed; the 38 are recorded, not
+resolved.**
 
 ---
 

@@ -9,6 +9,54 @@
 
 ### Status: ✅ OP-B1..OP-B8 all fixed (CRM orphan-note prune + full-review, 2026-08-21/23) + IT-B1..IT-B4 all fixed (IT-B2/IT-B4 on 2026-08-19 §F; IT-B1/IT-B3 on 2026-08-20 weed-resolution pass) + 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
 
+## Session 2026-08-31 — first E2E baseline in months (38 failing, cause attributed, none fixed)
+
+**Read this before running E2E and concluding something is newly broken.** The suite had not
+been run for a long time — `docs/handoff-2026-08-30-retention.md` §5 TODO-9 records that the old
+VM could not take a Playwright pass — so there was no baseline to compare against. This is it:
+
+    112 tests · 74 passed · 38 failed · 19.4 min · single worker
+    (runner fixes required to get this far: commit ec52926f)
+
+Distribution, by spec:
+
+| Spec | Failures |
+|---|---|
+| `keyboard-ux.spec.ts` | 15 |
+| `profile-crud.spec.ts` | 8 |
+| `automation-crud.spec.ts` | 5 |
+| `job-detail-panels.spec.ts` | 3 |
+| `automation-wizard-modules.spec.ts` | 2 |
+| `staging-layout-toggle.spec.ts` | 2 |
+| `staging-details-sheet.spec.ts`, `kanban.spec.ts`, `job-crud.spec.ts`, `enrichment.spec.ts` | 1 each |
+
+**33 of the 38 land in specs a previous session rewrote and explicitly flagged.** See the
+"E2E waitForTimeout sweep" row in the Sprint 3 follow-up table below: 65+ `waitForTimeout` calls
+were replaced with condition-based waits across exactly `profile-crud, keyboard-ux, enrichment,
+job-crud, automation-crud, job-detail-panels`, with the self-flagged risk *"some replacements may
+expose CI races — follow-up if keyboard-ux tests go flaky post-merge."* `keyboard-ux` is the
+largest cluster here. That prediction appears to have come true and gone unobserved because
+nobody could run the suite.
+
+**Not attributable to the 2026-08-31 code changes.** The country-code membership gate
+(`e02390ad`) and the Intl week-info probe (`310d6f67`) are both exercised by
+`e2e/crud/contact-crud.spec.ts`, which drives the CountrySelect combobox and then asserts the
+holiday/weekend badge path (`getPersonHolidayInfo`) on the detail page. That spec **passed**. No
+failing spec touches either code path.
+
+**Reproducible, not merely load-induced — at least in part.** `kanban.spec.ts:161` ("should
+persist view mode preference") fails identically when run alone: `switchToTableView(page)` then
+`locator("table")` never becomes visible within 5 s (12 passed / 1 failed in isolation). So the
+cluster is not purely a full-run resource artefact, and raising timeouts is not the fix.
+
+**Evidence note:** the 38 `error-context.md` snapshots from the full run were destroyed by a
+subsequent single-spec run — Playwright clears `test-results/` on start. Re-run the full suite
+before investigating, and copy the directory aside first.
+
+Nothing here is fixed. Filed as a baseline so the next run has something to compare against.
+
+---
+
 ## Session 2026-08-31 — host move NixOS → Ubuntu 26 (1 found, 1 fixed)
 
 | ID | Severity | Summary | Fix |
