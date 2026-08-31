@@ -10,18 +10,30 @@ async function navigateToMyJobs(page: Page) {
   await page.waitForLoadState("domcontentloaded");
 }
 
+/**
+ * Switch the Jobs view.
+ *
+ * `isVisible()` does not wait, so the previous `if (await radio.isVisible())`
+ * silently did nothing whenever the toolbar had not rendered yet — leaving the
+ * page in the other view and failing a later `locator("table")` wait with an
+ * error that pointed nowhere near the cause. Per e2e/CONVENTIONS.md we wait and
+ * throw rather than skip, and we confirm the toggle actually flipped.
+ */
+async function switchViewMode(page: Page, mode: "table" | "kanban") {
+  const radio = page.getByRole("radio", {
+    name: mode === "table" ? /table/i : /kanban/i,
+  });
+  await radio.waitFor({ state: "visible", timeout: 10000 });
+  await radio.click();
+  await expect(radio).toHaveAttribute("aria-checked", "true");
+}
+
 async function switchToKanbanView(page: Page) {
-  const kanbanRadio = page.getByRole("radio", { name: /kanban/i });
-  if (await kanbanRadio.isVisible()) {
-    await kanbanRadio.click();
-  }
+  await switchViewMode(page, "kanban");
 }
 
 async function switchToTableView(page: Page) {
-  const tableRadio = page.getByRole("radio", { name: /table/i });
-  if (await tableRadio.isVisible()) {
-    await tableRadio.click();
-  }
+  await switchViewMode(page, "table");
 }
 
 /**

@@ -2,9 +2,14 @@
  * Staging layout toggle — happy path E2E (Stream G / honesty gate)
  *
  * Verifies the StagingLayoutToggle (task 5 of the UX sprint) switches the
- * layout size and persists the choice in localStorage across reload. The
- * toggle uses role="radiogroup" with three role="radio" buttons (Compact /
- * Default / Comfortable). Storage key: jobsync-staging-layout-size.
+ * layout size and persists the choice in localStorage across reload.
+ *
+ * The control is a SINGLE icon Button (data-testid="staging-layout-toggle"),
+ * not the original three-radio group — StagingLayoutToggle.tsx dropped the
+ * radiogroup because users expected one enlarge/minimise affordance. Its
+ * aria-label names the state the NEXT click produces, so it reads
+ * "Comfortable" while the layout is compact/default and "Compact" once
+ * enlarged. Storage key: jobsync-staging-layout-size.
  */
 import { test, expect, type Page } from "@playwright/test";
 
@@ -44,15 +49,19 @@ test.describe("Staging layout toggle", () => {
     // Capture original state so we can restore it at the end
     const original = await readStoredSize(page);
 
-    // The toggle is a radiogroup with three radios
-    const compactRadio = page.getByRole("radio", { name: /Compact/i });
-    const comfortableRadio = page.getByRole("radio", { name: /Comfortable/i });
+    const toggle = page.getByTestId("staging-layout-toggle");
+    await expect(toggle).toBeVisible({ timeout: 5000 });
 
-    await expect(comfortableRadio).toBeVisible({ timeout: 5000 });
+    // A previous session may have left the layout comfortable. Cycle back so
+    // the enlarge step below is actually exercised rather than reversed.
+    if ((await toggle.getAttribute("aria-label")) === "Compact") {
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-label", "Comfortable");
+    }
 
-    // Click Comfortable
-    await comfortableRadio.click();
-    await expect(comfortableRadio).toHaveAttribute("aria-checked", "true");
+    // Enlarge
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-label", "Compact");
 
     // Verify localStorage was updated
     const afterClick = await readStoredSize(page);
@@ -69,28 +78,19 @@ test.describe("Staging layout toggle", () => {
     const afterReload = await readStoredSize(page);
     expect(afterReload).toBe("comfortable");
 
-    // The radio reflects the persisted choice
-    const comfortableAfterReload = page.getByRole("radio", {
-      name: /Comfortable/i,
-    });
-    await expect(comfortableAfterReload).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
+    // The button reflects the persisted choice: it now offers "Compact"
+    await expect(
+      page.getByTestId("staging-layout-toggle"),
+    ).toHaveAttribute("aria-label", "Compact");
 
-    // Cleanup: restore original state
-    if (original && original !== "comfortable") {
-      const restoreRadio = page.getByRole("radio", {
-        name: new RegExp(original, "i"),
-      });
-      if (await restoreRadio.isVisible().catch(() => false)) {
-        await restoreRadio.click();
-      }
-    } else if (original === null) {
-      // Original was unset — switch back to Compact (a non-default value)
-      // then clear via evaluate so the next test session starts unbiased.
-      await compactRadio.click();
-      await page.evaluate((key) => window.localStorage.removeItem(key), STORAGE_KEY);
-    }
+    // Cleanup: restore whatever this session started with. The button can only
+    // reach compact/comfortable, so a persisted "default" is restored directly.
+    await page.evaluate(
+      ([key, value]) => {
+        if (value === null) window.localStorage.removeItem(key);
+        else window.localStorage.setItem(key, value);
+      },
+      [STORAGE_KEY, original] as const,
+    );
   });
 });
