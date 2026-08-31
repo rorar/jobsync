@@ -81,6 +81,18 @@ guard **widens** from `status: "active"` to `status: { not: "anonymized" }`
 escape retention entirely; it is now deliberately the same predicate as the
 `AnonymizePerson` trigger rather than a third one.
 
+Two smaller defects went with the name-write, and both were misattribution
+rather than leakage. The deleted row carried `activityType: "reminder_triggered"`,
+so an archival event had been **masquerading as a reminder** in the user's
+timeline; deleting the row removes the mislabelling along with the name. And the
+interview scrub inside the cascade wrote `updatedByType: "user"` on every path,
+which on the cron path is a **false human attribution** — a record asserting that
+a person did something no person did. It is now
+`reason === "retention_expired" ? "system" : "user"`
+(`src/lib/crm/anonymize-person.ts:144`), matching the `"system"` the surrounding
+scrubs already used (`:114`, `:123`). Both are the same class of defect as the
+name-copy: the expiry path telling the record something untrue about itself.
+
 Anonymise-with-full-scrub is simultaneously the most compliant and the most
 flexible option, which is unusual and is why it won. Recital 26 places
 genuinely anonymised data outside the Regulation entirely, so the erased
@@ -195,7 +207,7 @@ a future reader will otherwise re-litigate.
 | `archivePerson` | Archiving is the opposite of "still needed". Regression-tested. |
 | Consent withdraw / reinstate | Lawfulness, not necessity — a different Article. |
 | Removals (unlink, delete target) | Negative evidence by construction. |
-| Read-only views | A view is evidence of curiosity, not necessity — and Next.js prefetch would advance the clock with no user intent at all. |
+| Read-only views | Rejected on the merits first: **a view is evidence of curiosity, not necessity.** Art. 5(1)(e) asks whether the data is still needed *for the purpose*, and opening a record to look at it advances no purpose. Both ways of counting one are also independently bad. Writing on the read path turns a GET into a mutation and makes it non-idempotent, and — decisively — **Next.js prefetches on link hover**, so a hovered list row, a back-navigation or a crawler would silently extend retention with zero user intent; that is the "system churn masquerading as necessity" failure `specs/crm.allium:1926` already condemns for `updatedAt`. A `PersonAccessLog` table plus a sweeper is correct in principle but **an access log of who viewed which data subject is itself personal data with its own storage limit** — it would create a fresh GDPR obligation in order to discharge an existing one, and still costs a write on every read. |
 
 `reactivatePerson` runs the other way: it was **not** on the analysis's candidate
 list and was included deliberately. The analysis excludes `archivePerson`
@@ -294,6 +306,28 @@ The verified state at `669104a0` is 314 suites / 5767 tests passed / 0 failed,
 caveat: `scripts/check-spec-refs.mjs` does **not** exist on this branch — it
 lives on `feat/quick-capture-and-referral-events` at `cb614f9c` — so the check
 cannot currently be re-run from this lineage.
+
+### What this costs, and should be weighed
+
+**A reversible outcome became an irreversible one, and it now happens
+unattended.** `anonymized` is terminal, so an erasure that should not have
+happened cannot be undone from inside the product. The gate is deliberately
+narrow — auto-created provenance, past deadline, policy enabled, and the default
+period unchanged at 730 days — and this is precisely the point of the change
+rather than a side effect of it. It is nonetheless the one property a reviewer
+should satisfy themselves about, because everything else here is recoverable and
+this is not. The clock work in `669104a0` is what makes it defensible: on the
+one-site version, an unattended irreversible erasure could fire on the
+anniversary of the last *name edit*.
+
+**`rebaseCrmRetention` is a read-then-write loop that runs inside a settings
+save.** It is bounded by `CRM_CONFIG.maxPersonsPerUser` (10 000) and today by the
+fact that nothing creates auto-created Persons at all
+(`src/lib/crm/retention-policy.ts:202-205`), so it is cheap now. If an
+auto-creation writer ever lands and produces thousands of rows per user, changing
+the retention period becomes a slow synchronous action and the rebase wants to
+become a background job. Recorded here rather than pre-solved, since the
+triggering condition does not exist yet.
 
 ### What was deliberately left undone
 
