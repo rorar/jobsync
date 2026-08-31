@@ -12,6 +12,7 @@ import { extractEmailDomain } from "@/lib/crm/blocklist-match";
 import { collectOrphanCandidateNoteIds, withOrphanedCrmPrune } from "@/lib/crm/orphan-targets";
 import { anonymizePersonCascade } from "@/lib/crm/anonymize-person";
 import { touchPersonRetention } from "@/lib/crm/retention-policy";
+import { isValidCountryCode } from "@/lib/connector/reference-data/modules/geo-codes/countries";
 import {
   type TypedEmail,
   type TypedPhone,
@@ -138,9 +139,19 @@ export async function createPerson(input: PersonInput): Promise<ActionResult<{ i
       return { success: false, message: "crm.errors.invalidPlatform" };
     }
 
-    // Validate ISO 3166 codes at boundary (only if provided, null is valid)
+    // Validate ISO 3166 codes at boundary (only if provided, null is valid).
+    // Shape THEN membership: the regex alone accepts NT, YD, XX -- withdrawn or
+    // never-assigned codes that flow on into weekend, holiday and business-day
+    // computation, which answer plausibly for them rather than failing. Mirrors
+    // the currency check in `updateProfilePreferences`, which has always had the
+    // membership half. Subdivision membership is deliberately NOT added here:
+    // `isValidSubdivisionCode` depends on per-country data whose completeness
+    // varies, so a false negative would reject legitimate input.
     if (input.addressCountryCode) {
-      if (!/^[A-Z]{2}$/i.test(input.addressCountryCode)) {
+      if (
+        !/^[A-Z]{2}$/i.test(input.addressCountryCode) ||
+        !isValidCountryCode(input.addressCountryCode)
+      ) {
         return { success: false, message: "crm.errors.invalidCountryCode" };
       }
     }
@@ -362,7 +373,14 @@ export async function updatePerson(
     if (input.addressPostalCode !== undefined) data.addressPostalCode = input.addressPostalCode;
     if (input.addressCountry !== undefined) data.addressCountry = input.addressCountry;
     if (input.addressCountryCode !== undefined) {
-      if (input.addressCountryCode && !/^[A-Z]{2}$/i.test(input.addressCountryCode)) {
+      // Same shape-then-membership gate as createPerson above. Kept in both
+      // places rather than shared: the two paths differ in null handling
+      // (create treats absent as null, update distinguishes absent from null).
+      if (
+        input.addressCountryCode &&
+        (!/^[A-Z]{2}$/i.test(input.addressCountryCode) ||
+          !isValidCountryCode(input.addressCountryCode))
+      ) {
         return { success: false, message: "crm.errors.invalidCountryCode" };
       }
       data.addressCountryCode = input.addressCountryCode;

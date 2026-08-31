@@ -164,6 +164,36 @@ describe("updateProfilePreferences", () => {
     expect(prisma.profile.upsert).not.toHaveBeenCalled();
   });
 
+  // The regex accepts any two letters, so "well-formed" and "real" are different
+  // questions. NT (Neutral Zone, withdrawn 1993) and YD (South Yemen, withdrawn
+  // 1990) pass the shape check and are exactly the codes that reach ICU with an
+  // answer -- weekend [5,6] rather than the [6,7] the bundled CLDR table gives --
+  // so an unreal country produced a plausible business calendar instead of an
+  // error. `preferredCurrency` below has always had the membership half.
+  it.each(["NT", "YD", "XX", "ZZ"])(
+    "rejects the well-formed but non-existent country code %s without writing",
+    async (code) => {
+      const res = await updateProfilePreferences({
+        addressCountryCode: code,
+        addressSubdivisionCode: null,
+        preferredCurrency: null,
+      });
+      expect(res.success).toBe(false);
+      expect(res.errorCode).toBe("VALIDATION_ERROR");
+      expect(prisma.profile.upsert).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still accepts a real country code in lower case", async () => {
+    const res = await updateProfilePreferences({
+      addressCountryCode: "de",
+      addressSubdivisionCode: null,
+      preferredCurrency: null,
+    });
+    expect(res.success).toBe(true);
+    expect(prisma.profile.upsert).toHaveBeenCalled();
+  });
+
   it("rejects an unknown currency code without writing", async () => {
     const res = await updateProfilePreferences({
       addressCountryCode: "DE",

@@ -15,6 +15,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { deleteFile } from "@/lib/profile/delete-file";
 import { isValidCurrencyCode } from "@/lib/connector/reference-data/modules/currency/currency-data";
+import { isValidCountryCode } from "@/lib/connector/reference-data/modules/geo-codes/countries";
 
 // Narrow Prisma string to domain enum
 function toResumeSection<T extends { sectionType: string }>(
@@ -899,8 +900,11 @@ export const getProfilePreferences = async (): Promise<ProfilePreferences | null
  * createResumeProfile). All three fields are optional/clearable.
  *
  * Boundary validation (ADR-019 — the format/union is erased at runtime):
- *   - country: /^[A-Z]{2}$/ or null
- *   - subdivision: /^[A-Z0-9]{1,3}$/ or null; forced null when no country
+ *   - country: /^[A-Z]{2}$/ AND a live ISO 3166-1 alpha-2 (GEO module) or null
+ *   - subdivision: /^[A-Z0-9]{1,3}$/ or null; forced null when no country.
+ *     Shape only, deliberately: `isValidSubdivisionCode` depends on per-country
+ *     data of uneven completeness, so a membership check would reject
+ *     legitimate input for the countries it covers least well.
  *   - currency: active ISO-4217 (CUR module) or null
  */
 export const updateProfilePreferences = async (
@@ -917,7 +921,14 @@ export const updateProfilePreferences = async (
     const subdivision = country ? normalizeOptionalCode(input.addressSubdivisionCode) : null;
     const currency = normalizeOptionalCode(input.preferredCurrency);
 
-    if (country !== null && !PROFILE_COUNTRY_RE.test(country)) {
+    // Shape THEN membership. The regex alone accepts NT, YD, XX -- withdrawn or
+    // never-assigned codes that flow on into weekend, holiday and business-day
+    // computation, which answer plausibly for them rather than failing. It is
+    // also the same echo-back hazard `currency-data.ts` documents defending
+    // against: `Intl.DisplayNames(type: "region").of("NT")` returns "NT", so an
+    // unknown code renders as a country named after itself. `preferredCurrency`
+    // two checks below has always had the membership half; the country did not.
+    if (country !== null && (!PROFILE_COUNTRY_RE.test(country) || !isValidCountryCode(country))) {
       return { success: false, message: "errors.invalidInput", errorCode: "VALIDATION_ERROR" };
     }
     if (subdivision !== null && !PROFILE_SUBDIVISION_RE.test(subdivision)) {

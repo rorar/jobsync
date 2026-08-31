@@ -761,6 +761,43 @@ describe("person.actions — GDPR-Consent (Art. 7(3))", () => {
 
     // W-H2: create rejects a subdivision without a country; update must be
     // symmetric — over the effective (post-update) state, not just the input.
+    // The boundary regex answers "well-formed?", not "real?". NT (Neutral Zone,
+    // withdrawn 1993) and YD (South Yemen, withdrawn 1990) pass it, and ICU still
+    // holds week data for them -- so an unreal country yielded a plausible
+    // business calendar rather than an error. Membership now gates both write
+    // paths; this block covers update, and createPerson carries the same gate.
+    describe("country code must be a live ISO 3166-1 alpha-2", () => {
+      const stubExisting = {
+        id: PERSON_ID,
+        status: "active",
+        processingBasis: "legitimate_interest",
+        consentWithdrawnAt: null,
+        addressCountryCode: null,
+        addressSubdivisionCode: null,
+      };
+
+      it.each(["NT", "YD", "XX", "ZZ"])(
+        "rejects the well-formed but non-existent code %s without writing",
+        async (code) => {
+          mockDb.person.findFirst.mockResolvedValue(stubExisting);
+
+          const result = await updatePerson(PERSON_ID, { addressCountryCode: code });
+
+          expect(result.success).toBe(false);
+          expect(result.message).toBe("crm.errors.invalidCountryCode");
+          expect(mockDb.person.update).not.toHaveBeenCalled();
+        },
+      );
+
+      it("still accepts a real country code in lower case", async () => {
+        mockDb.person.findFirst.mockResolvedValue(stubExisting);
+
+        const result = await updatePerson(PERSON_ID, { addressCountryCode: "de" });
+
+        expect(result.success).toBe(true);
+      });
+    });
+
     describe("subdivision requires country (W-H2)", () => {
       it("rejects a subdivision when neither input nor existing supplies a country", async () => {
         mockDb.person.findFirst.mockResolvedValue({
