@@ -15,8 +15,20 @@ async function navigateToJobs(page: Page) {
 }
 
 async function openAddJobDialog(page: Page) {
-  await page.getByTestId("add-job-btn").click();
-  await expect(page.getByTestId("add-job-dialog-title")).toBeVisible();
+  const title = page.getByTestId("add-job-dialog-title");
+
+  // `add-job-btn` is server-rendered, so waiting for it to be VISIBLE does not
+  // prove React has hydrated and attached its onClick. At the 375x667 viewport
+  // the Kanban board mounts late enough that the first click is dropped
+  // outright — reproduced standalone: identical script, dialog opens when a
+  // couple of evaluate() round-trips precede the click and does not when they
+  // do not. Retry the click until the dialog actually opens, and assert the
+  // outcome rather than the input.
+  await expect(async () => {
+    if (await title.isVisible()) return;
+    await page.getByTestId("add-job-btn").click();
+    await expect(title).toBeVisible({ timeout: 3000 });
+  }).toPass({ timeout: 20000 });
 }
 
 async function deleteJob(page: Page, jobTitle: string) {
@@ -190,9 +202,14 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     // Verify the created option shows in the trigger button
     await expect(getTitleCombobox(page)).toContainText(title, { timeout: 15000 });
 
-    // Verify sr-only announcement
-    const announcements = await getAllAnnouncements(page);
-    expect(hasAnnouncement(announcements, "Created")).toBe(true);
+    // Verify sr-only announcement. ComboBox announces
+    // t("forms.optionCreated") = "{label} created" — label first, lowercase
+    // verb — so the old substring "Created" never matched. Assert the exact
+    // announcement instead, and retry: setAnnouncement lands a render later.
+    await expect(async () => {
+      const announcements = await getAllAnnouncements(page);
+      expect(hasAnnouncement(announcements, `${title} created`)).toBe(true);
+    }).toPass({ timeout: 5000 });
 
     expect(filterCriticalErrors(errors)).toEqual([]);
   });
@@ -437,19 +454,26 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
     const skillInput = page.getByPlaceholder(/Type a skill/i);
     await expect(skillInput).toBeVisible();
 
-    // Create a skill first
+    // Create a skill first. TagInput's Enter handler bails on an empty
+    // inputValue, and createTag's transition clears the field when it resolves
+    // — so assert the controlled value has actually landed before each Enter
+    // rather than relying on a waitForLoadState that resolves instantly on an
+    // already-loaded page.
     await skillInput.fill(skill);
-    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
-    await page.waitForLoadState("domcontentloaded");
+    await expect(skillInput).toHaveValue(skill);
     await skillInput.press("Enter");
 
-    // Wait for async createTag to complete and chip to render
-    await expect(page.getByText(skill).first()).toBeVisible({ timeout: 10000 });
+    // Wait for async createTag to complete: the chip renders AND the field is
+    // cleared by the same transition. Waiting for the clear is what makes the
+    // re-fill below deterministic.
+    await expect(
+      page.getByRole("button", { name: `Remove ${skill}` }),
+    ).toBeVisible({ timeout: 10000 });
+    await expect(skillInput).toHaveValue("");
 
     // Try adding the same skill again
     await skillInput.fill(skill);
-    // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
-    await page.waitForLoadState("domcontentloaded");
+    await expect(skillInput).toHaveValue(skill);
     await skillInput.press("Enter");
 
     // Verify sr-only announcement says "already selected" (async state update)
@@ -493,7 +517,11 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     // Wait for Step 1 to render with the occupation combobox
     const keywordsCombobox = page
       .getByRole("combobox")
-      .filter({ hasText: /Search occupations|keyword/i });
+      // Match the trigger's own placeholder text ("Search ESCO occupations or
+      // type keywords..."). The looser /keyword/i alternative also matched the
+      // "Keyword search scope" select that the module manifest renders
+      // alongside it — a strict-mode violation, not a missing element.
+      .filter({ hasText: /Search ESCO occupations/i });
     await expect(keywordsCombobox).toBeVisible({ timeout: 10000 });
     await keywordsCombobox.click();
 
@@ -542,7 +570,11 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     const keywordsCombobox = page
       .getByRole("combobox")
-      .filter({ hasText: /Search occupations|keyword/i });
+      // Match the trigger's own placeholder text ("Search ESCO occupations or
+      // type keywords..."). The looser /keyword/i alternative also matched the
+      // "Keyword search scope" select that the module manifest renders
+      // alongside it — a strict-mode violation, not a missing element.
+      .filter({ hasText: /Search ESCO occupations/i });
     await expect(keywordsCombobox).toBeVisible({ timeout: 10000 });
     await keywordsCombobox.click();
 
@@ -583,7 +615,11 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     const keywordsCombobox = page
       .getByRole("combobox")
-      .filter({ hasText: /Search occupations|keyword/i });
+      // Match the trigger's own placeholder text ("Search ESCO occupations or
+      // type keywords..."). The looser /keyword/i alternative also matched the
+      // "Keyword search scope" select that the module manifest renders
+      // alongside it — a strict-mode violation, not a missing element.
+      .filter({ hasText: /Search ESCO occupations/i });
     await expect(keywordsCombobox).toBeVisible({ timeout: 5000 });
     await keywordsCombobox.click();
 
@@ -621,7 +657,11 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     const keywordsCombobox = page
       .getByRole("combobox")
-      .filter({ hasText: /Search occupations|keyword/i });
+      // Match the trigger's own placeholder text ("Search ESCO occupations or
+      // type keywords..."). The looser /keyword/i alternative also matched the
+      // "Keyword search scope" select that the module manifest renders
+      // alongside it — a strict-mode violation, not a missing element.
+      .filter({ hasText: /Search ESCO occupations/i });
     await expect(keywordsCombobox).toBeVisible({ timeout: 5000 });
     await keywordsCombobox.click();
 
