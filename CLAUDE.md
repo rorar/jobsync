@@ -721,7 +721,7 @@ Any new notification-creating code path MUST populate the structured fields.
 **Polymorphic Targeting (Twenty CRM Pattern):** `CrmTaskTarget` and `CrmNoteTarget` use nullable FK columns: exactly one of `targetPersonId`/`targetCompanyId`/`targetJobId` must be set. Enforced at app level by `validateExactlyOneTarget()`.
 
 **State Machines:**
-- Person: active → archived ↔ active, active → anonymized (terminal)
+- Person: active → archived ↔ active, active|archived → anonymized (terminal). Retention expiry takes the `archived → anonymized` edge (ADR-042).
 - Interview: scheduled → completed|cancelled|rescheduled, rescheduled → completed|cancelled
 - Task: pending → in_progress|done|cancelled, in_progress → done|cancelled
 
@@ -729,16 +729,18 @@ Any new notification-creating code path MUST populate the structured fields.
 
 **CRM Activity Logger:** `src/lib/events/consumers/crm-activity-logger.ts` — declarative event projections via `registerProjection<T>()`. 13 domain events projected into CrmActivityLog (immutable, append-only read model per TimelineProjection contract). **For new CRM timeline entries:** Add a `registerProjection()` call (5-8 lines) — no boilerplate. See `docs/event-consumer-analysis.md` for the full consumer inventory and 10 unconsumed event types awaiting future projections.
 
-**GDPR on Person:** `dataSource` (manual|auto_created|imported), `processingBasis` (legitimate_interest|consent|contract), `retentionExpiresAt`. AnonymizePerson cascades to NoteTargets, TaskTargets, JobContacts, ActivityLog references, and clears `createdByName`/`updatedByName` (actor PII).
+**GDPR on Person:** `dataSource` (manual|auto_created|imported|quick_capture), `processingBasis` (legitimate_interest|consent|contract), `retentionExpiresAt`. The AnonymizePerson cascade lives in `src/lib/crm/anonymize-person.ts` (one `$transaction`, `server-only`, takes `userId` explicitly) — **read that file, do not trust a list here.** It reaches ~10 model groups, not the four this line used to name: CrmNote/CrmTask free-text scrub, NoteTargets, TaskTargets, JobContacts, CrmInterview (detach + scrub), ActivityLog references, CrmBlocklist handles, PersonConnection edges, Referral links, and the Person row itself (14 PII fields, incl. `createdByName`/`updatedByName`, plus `updatedBySource: "system"`). Adding a model that references Person means adding an arm here — nothing catches the omission.
+
+**Retention last-activity clock:** **Any new server action that creates a durable association with a Person (link, note, task, interview, connection, referral role) or refreshes the Person record MUST call `touchPersonRetention`/`touchPersonsRetention` from `@/lib/crm/retention-policy` after its write.** Nothing catches the omission — no lint, no test. Lifecycle transitions, removals, archiving and read-only views deliberately do NOT touch. Principle and the rejected sites: ADR-042 §3.
 
 **Person Fields (Kette B):** `headline` (free-form professional identity, replaces old `jobTitle`), `socialProfiles` (List of `{platform, url}`, replaces old `linkedinUrl`). Platforms: linkedin, xing, github, twitter, other. URLs validated server-side (https/http only, ADR-019 runtime membership check on platform enum).
 
 **CRM Temporal Rules (CRM Cron):** `src/lib/scheduler/crm-cron.ts` — separate cron job (every 15 min) for time-based CRM rules, independent from the automation scheduler (bounded context separation). Three rules:
-- `ExpireAutoCreatedPersons` — archives auto-created persons past `retentionExpiresAt`
+- `ExpireAutoCreatedPersons` — **ERASES** auto-created persons past `retentionExpiresAt` via the AnonymizePerson cascade (NOT "archives" — that was the pre-`72f4138f` behaviour and it restricted nothing). Guards on `status: { not: "anonymized" }`, so manually-archived records cannot escape. Gated per user by `PrivacySettings.crmRetentionEnabled`; when off, the deadline is still written, advanced and displayed — only the unattended erasure stops. Period is a bounded `180|365|730|1095`, default 730. See ADR-042.
 - `InterviewReminder` — fires `ReminderTriggered` event for interviews within 24h
 - `TaskOverdueReminder` — fires `ReminderTriggered` event for overdue tasks
 
-Idempotency via activity log check (no duplicate reminders within 24h window). Started in `src/instrumentation.ts` alongside the automation scheduler.
+Reminder idempotency via activity log check (no duplicate reminders within 24h window); `ExpireAutoCreatedPersons` needs no guard row — `anonymized` is terminal and the query excludes it, so idempotency is structural. Started in `src/instrumentation.ts` alongside the automation scheduler.
 
 **CrmActivityLog Relations:** `targetCompanyId` and `targetJobId` have proper Prisma `@relation` FKs to Company and Job (migration `20260510193831`). Timeline queries include `targetCompany` and `targetJob` for rich display.
 
