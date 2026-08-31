@@ -263,7 +263,22 @@ getter. `getWeekendDays` probed only the method, so the primary path was **silen
 and every lookup fell through to the bundled CLDR table while the file went on promising
 "auto-updates with CLDR". The test noticed for the wrong reason (its spy target was absent, not
 "production took the fallback"). Both shapes are now probed; ICU 78.2 and cldr-core 48.2.0 were
-checked to agree on DE/FI/IR/SA/AF/IN/US/IL/BD/NP first, so no assertion changed value.
+checked to agree on DE/FI/IR/SA/AF/IN/US/IL/BD/NP first, so no assertion changed value. Filed as
+**HM-B1** in `docs/BUGS.md` — that file is the durable home per `CLAUDE.md`'s post-work checklist;
+this section is the session narrative, not the record.
+
+**Verified on elysium at `39fc5c56`:** 314 suites / 5767 passed / 0 fail (107 s) ·
+`typecheck-safe` exit 0 (28 s) · `build-safe` succeeds (1 m 48 s) · `allium check` 0 errors,
+269 warnings, 938 info · `check-spec-refs` 38 resolved / 0 dangling · lint unchanged.
+**The build is new information:** the green state recorded in §1 never included one, and
+`build-safe.sh` is the only gate that checks `import "server-only"` placement — so this is the
+first time the retention work's two new `server-only` modules (`src/lib/crm/anonymize-person.ts`,
+`src/lib/crm/retention-policy.ts`) have been verified as correctly placed.
+
+**Two gaps this gate did not close.** No blind-spot analysis was run over this session's work
+(`feedback_blindspot_after_tasks`), and **no E2E pass has been run on the new host at all** —
+Playwright's browsers are present (`~/.cache/ms-playwright/chromium-1234`), so it is runnable, it
+simply has not been. Both are cheap and unblocked; neither is a known failure.
 
 ---
 
