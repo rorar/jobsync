@@ -23,7 +23,7 @@ async function navigateToProfile(page: Page) {
 async function createResume(page: Page, title: string) {
   await page.getByRole("button", { name: "New Resume" }).click();
   await page.getByPlaceholder("Ex: Full Stack Developer").fill(title);
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
 }
 
 async function openResumeEditor(page: Page, resumeTitle: string) {
@@ -79,7 +79,7 @@ test("create resume and delete", async ({ page }) => {
 
   await navigateToProfile(page);
   await createResume(page, resumeTitle);
-  await expectToast(page, /Resume title has been created/);
+  await expectToast(page, /Resume created successfully/);
   await expect(page.locator("tbody")).toContainText(resumeTitle, {
     timeout: 10000,
   });

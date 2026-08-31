@@ -35,8 +35,8 @@ async function ensureResumeExists(
 
   await page.getByRole("button", { name: "New Resume" }).click();
   await page.getByPlaceholder("Ex: Full Stack Developer").fill(resumeTitle);
-  await page.getByRole("button", { name: "Save" }).click();
-  await expectToast(page, /Resume title has been/);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expectToast(page, /Resume created successfully/);
   return resumeTitle;
 }
 
