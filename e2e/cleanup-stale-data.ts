@@ -121,12 +121,23 @@ export async function cleanupStaleE2EData(): Promise<void> {
   // the CRM target relations (Cascade/SetNull) do not block. We still guard on
   // both job relations being empty so a company referenced by a non-E2E job
   // (shared label) is never removed.
+  //
+  // WorkExperience.companyId is the third Restrict edge into Company, and it is
+  // NOT covered by step 7: that step only removes resumes whose title starts
+  // with "E2E ", while profile-crud names its resumes "Resume Full <uid>". A
+  // work experience left behind by a profile-crud test that failed before its
+  // inline cleanup therefore pins its company forever — and an unguarded
+  // deleteMany then throws a foreign-key error out of globalSetup, which fails
+  // every single test in the run rather than the one that leaked. Guarding is
+  // the conservative half of the fix: the company survives instead of the suite
+  // dying. (Observed 2026-09-01: "E2E Corp" pinned by a WorkExperience row.)
   total += (await prisma.company.deleteMany({
     where: {
       createdBy: userId,
       label: { startsWith: "E2E " },
       jobsApplied: { none: {} },
       recruitingJobs: { none: {} },
+      workExperiences: { none: {} },
     },
   })).count;
 
