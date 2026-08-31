@@ -258,7 +258,12 @@ function ApiKeySettings() {
           toast({
             variant: "destructive",
             title: t("settings.error"),
-            description: result.message || t("settings.unexpectedError"),
+            // `message` is an i18n KEY (see module.actions.ts), not display
+            // text — without t() the user sees e.g.
+            // "settings.moduleActivationRequiresCredential" verbatim.
+            description: result.message
+              ? t(result.message)
+              : t("settings.unexpectedError"),
           });
         }
       } else {
@@ -278,7 +283,12 @@ function ApiKeySettings() {
           toast({
             variant: "destructive",
             title: t("settings.error"),
-            description: result.message || t("settings.unexpectedError"),
+            // `message` is an i18n KEY (see module.actions.ts), not display
+            // text — without t() the user sees e.g.
+            // "settings.moduleActivationRequiresCredential" verbatim.
+            description: result.message
+              ? t(result.message)
+              : t("settings.unexpectedError"),
           });
         }
       }
