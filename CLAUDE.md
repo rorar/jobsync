@@ -35,9 +35,19 @@ See `devenv.nix` for the full configuration. Requires a writable Nix store.
 ./scripts/prisma-migrate.sh   # Run migrations
 ```
 
-All scripts source `scripts/env.sh` which auto-downloads and patches Prisma engines for NixOS.
+All scripts source `scripts/env.sh`, which auto-downloads and patches Prisma engines **for
+NixOS hosts**. On a glibc host (Ubuntu et al.) `bunx prisma generate` works unpatched and the
+override is unnecessary; the script is a no-op cost, not a requirement.
 
-### Using these scripts (resource discipline — 8 GB no-swap VM)
+### Using these scripts (resource discipline)
+
+**The host is not fixed.** This project has run on an 8 GB no-swap NixOS VM, a 16 GB / 4 GB-swap
+one, and a 31 GB no-swap Ubuntu container — the numbers written into this file were wrong after
+two of those three moves. So no host figures are stated here. Read them when you need them:
+
+    nproc && free -h && df -h / /tmp && swapon --show
+
+What does **not** change with the host, and is the actual rule:
 
 **Never invoke the underlying tool directly when a wrapper exists.** The wrappers are not
 convenience aliases; each exists because the bare command has taken this host down.
@@ -883,7 +893,7 @@ Formal specifications in `specs/*.allium` capture domain behaviour:
 
 **Running E2E tests:**
 ```bash
-# Resource-tight (8 GB NixOS VM) — one command: env + warm server + single worker:
+# Resource-tight — one command: env + warm server + single worker:
 ./scripts/test-e2e.sh                                    # full suite (smoke -> crud)
 ./scripts/test-e2e.sh e2e/crud/inside-track-crud.spec.ts # one spec
 
@@ -893,7 +903,7 @@ nice -n 10 npx playwright test --workers=1               # projects are "smoke" 
 # Local development — parallel workers:
 npx playwright test --workers=4
 ```
-Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` on NixOS (`scripts/test-e2e.sh` sets it for you).
+On NixOS set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` (`scripts/test-e2e.sh` sets it for you); elsewhere leave it unset and Playwright uses its own download.
 
 **Dev server:** Agents may start the dev server but must **NEVER stop it**. `reuseExistingServer: true` ensures Playwright reuses a running server.
 

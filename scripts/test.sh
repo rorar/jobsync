@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Run Jest tests using system Node.js (not bun — avoids readonly property bug).
 #
-# VM resource guard: jobsync runs on an 8GB NixOS VM and has been trashed in
-# the past when Jest used its default worker count (num_cpus - 1). This
-# wrapper defends the VM in two ways:
+# Resource guard: jobsync has been run on hosts from 8 GB upwards and has been
+# trashed on more than one of them when Jest used its default worker count
+# (num_cpus - 1). The guard is not sized to a particular host. This wrapper
+# defends it in two ways:
 #
 #   1. Translates the common typo `--workers=N` to `--maxWorkers=N`. Jest's
 #      actual flag is `--maxWorkers`; `--workers` is silently ignored, which

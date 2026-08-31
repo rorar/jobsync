@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Resource-confined `tsc --noEmit` for low-RAM hosts (e.g. an 8 GB no-swap VM).
+# Resource-confined `tsc --noEmit`. The cap protects the host regardless of its size;
+# do not raise it to "fit" a bigger box -- see CLAUDE.md "resource discipline".
 #
 # A bare `npx tsc --noEmit` on this codebase can pin the host long enough that
 # the session has to kill it. This wraps it the same way scripts/build-safe.sh

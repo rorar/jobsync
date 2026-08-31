@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Resource-aware E2E runner for low-RAM hosts (8 GB no-swap VM).
+# Resource-aware E2E runner. Single worker by default whatever the host reports.
 #
 # Unlike the production build (which OOM-hangs the host -> see build-safe.sh),
 # the E2E suite is not memory-bound; it was blocked by two VM-specific issues,
@@ -57,5 +57,5 @@ else
 fi
 echo "[test-e2e] dev server ready :${PORT} | workers=${WORKERS} loginTimeout=${E2E_LOGIN_TIMEOUT_MS}ms chromium=${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH}"
 
-# 2. Run Playwright gently (single worker + low CPU/IO priority on the 8 GB VM).
+# 2. Run Playwright gently (single worker + low CPU/IO priority).
 exec nice -n 10 ionice -c3 npx playwright test --workers="$WORKERS" "$@"

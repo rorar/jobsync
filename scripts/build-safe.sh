@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Resource-confined production build for low-RAM hosts (e.g. an 8 GB no-swap VM).
+# Resource-confined production build. The cap protects the host regardless of its size;
+# do not raise it to "fit" a bigger box -- see CLAUDE.md "resource discipline".
 #
 # Wraps scripts/build.sh in a systemd memory cgroup so an over-large build is
 # OOM-killed INSIDE its own scope instead of swap-deathing the host. On hosts
