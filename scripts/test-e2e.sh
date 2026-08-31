@@ -26,17 +26,38 @@
 #   E2E_WORKERS            playwright workers              (default 1)
 #   E2E_LOGIN_TIMEOUT_MS   global-setup login wait, ms     (default 90000)
 #   E2E_SERVER_WAIT        seconds to await cold server    (default 150)
-#   PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH  chromium binary   (default NixOS path)
+#   PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH  chromium binary   (auto: NixOS path if
+#                                        present, else Playwright's own download)
 set -uo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR/.."
 
 source "$DIR/env.sh"
-export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-/run/current-system/sw/bin/chromium}"
+# Chromium: prefer an explicit override, then the NixOS system binary, else leave
+# UNSET so Playwright falls back to its own downloaded browser. Hardcoding the
+# NixOS store path as the default made every launch fail with "executable doesn't
+# exist" on a non-NixOS host, even though a usable browser was installed.
+NIXOS_CHROMIUM=/run/current-system/sw/bin/chromium
+if [ -n "${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-}" ]; then
+  export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+elif [ -x "$NIXOS_CHROMIUM" ]; then
+  export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$NIXOS_CHROMIUM"
+else
+  unset PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+fi
 export E2E_LOGIN_TIMEOUT_MS="${E2E_LOGIN_TIMEOUT_MS:-90000}"
 WORKERS="${E2E_WORKERS:-1}"
 SERVER_WAIT="${E2E_SERVER_WAIT:-150}"
 PORT=3737
+
+# NextAuth must agree with Playwright's baseURL ("http://localhost:3737"). A
+# developer .env legitimately points NEXTAUTH_URL at a LAN or Tailscale address so
+# the app is reachable from other machines; NextAuth then redirects sign-out and
+# callbacks to that origin, and the smoke test's post-logout assertion waits on a
+# navigation to a host Playwright is not on -- or, after a machine move, one that
+# no longer resolves at all. E2E must not depend on the operator's remote-access
+# choice, so pin it. This is the value CI already uses (ci.yml).
+export NEXTAUTH_URL="http://localhost:${PORT}"
 
 # 1. Ensure an env-correct, warm dev server (start if down; never stop it).
 if curl -fsS -o /dev/null "http://localhost:${PORT}/signin" 2>/dev/null; then
@@ -55,7 +76,7 @@ else
     exit 1
   fi
 fi
-echo "[test-e2e] dev server ready :${PORT} | workers=${WORKERS} loginTimeout=${E2E_LOGIN_TIMEOUT_MS}ms chromium=${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH}"
+echo "[test-e2e] dev server ready :${PORT} | workers=${WORKERS} loginTimeout=${E2E_LOGIN_TIMEOUT_MS}ms chromium=${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-playwright-bundled}"
 
 # 2. Run Playwright gently (single worker + low CPU/IO priority).
 exec nice -n 10 ionice -c3 npx playwright test --workers="$WORKERS" "$@"
