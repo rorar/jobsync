@@ -181,25 +181,36 @@ function JobsContainer({
   const loadJobs = useCallback(
     async (page: number, filter?: string, search?: string) => {
       setLoading(true);
-      const { success, data, total, message } = await getJobsList(
-        page,
-        jobsPerPage,
-        filter,
-        search,
-      );
-      if (success && data) {
-        setJobs((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
-        setTotalJobs(total ?? 0);
-        setPage(page);
-        setLoading(false);
-      } else {
+      try {
+        const { success, data, total, message } = await getJobsList(
+          page,
+          jobsPerPage,
+          filter,
+          search,
+        );
+        if (success && data) {
+          setJobs((prev) => (page === 1 ? data : [...prev, ...(data as any[])]) as any);
+          setTotalJobs(total ?? 0);
+          setPage(page);
+        } else {
+          toast({
+            variant: "destructive",
+            title: t("jobs.error"),
+            description: message ? t(message) : undefined,
+          });
+        }
+      } catch (error) {
+        // A rejected server action (aborted request, transport error) used to
+        // skip both setLoading(false) calls, leaving the list stuck on its
+        // spinner for the rest of the page's life — no table, no empty state,
+        // no error. Recover to a rendered state instead.
+        console.error("Error loading jobs:", error);
         toast({
           variant: "destructive",
           title: t("jobs.error"),
-          description: message ? t(message) : undefined,
         });
+      } finally {
         setLoading(false);
-        return;
       }
     },
     [jobsPerPage],
