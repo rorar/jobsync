@@ -123,32 +123,46 @@ describe("isWeekend", () => {
 describe("W-1: Intl.Locale.getWeekInfo() as primary source", () => {
   // -----------------------------------------------------------------------
   // W-1.1: Intl primary verification
-  // On Node.js 22+, getWeekendDays should use Intl.Locale.getWeekInfo()
-  // as the primary source. We verify by spying on the Intl.Locale prototype.
+  // getWeekendDays should consult the runtime's own locale data rather than
+  // going straight to the bundled CLDR table. TC39 moved this proposal from a
+  // `weekInfo` getter to a `getWeekInfo()` method and both shapes ship in the
+  // wild — V8 12.4 (Node 22.23) has the getter, newer V8 has the method — so
+  // spy on whichever this runtime provides. Pinning the test to one shape made
+  // it fail on a runtime the implementation handles correctly, which is exactly
+  // what the NixOS → Ubuntu 26 host move produced.
   // -----------------------------------------------------------------------
-  it("W-1.1: uses Intl.Locale.getWeekInfo() as primary source on Node 22+", () => {
-    // getWeekInfo exists on Node.js 21+. If it's available,
-    // the implementation should call it rather than falling back to CLDR.
-    const getWeekInfoSpy = jest.spyOn(
-      Intl.Locale.prototype,
-      "getWeekInfo" as keyof Intl.Locale,
-    );
+  it("W-1.1: uses the runtime's Intl.Locale week info as the primary source", () => {
+    const proto = Intl.Locale.prototype as any;
+    const hasMethod = typeof proto.getWeekInfo === "function";
+    const hasGetter =
+      !hasMethod &&
+      typeof Object.getOwnPropertyDescriptor(proto, "weekInfo")?.get === "function";
 
-    // Clear module-level caches to force a fresh lookup
-    // (This will fail if clearWeekendCaches is not exported — TDD RED)
     const weekendModule = require("@/lib/connector/reference-data/modules/public-holidays/weekend");
-    if (typeof weekendModule.clearWeekendCaches === "function") {
+
+    // No runtime week info at all: the implementation is required to fall back,
+    // and W-1.3 is the test that covers that path.
+    if (!hasMethod && !hasGetter) {
       weekendModule.clearWeekendCaches();
+      expect(getWeekendDays("FI")).toEqual([6, 7]);
+      return;
     }
 
-    // Call with a fresh country code not previously cached
-    getWeekendDays("FI");
+    const spy = hasMethod
+      ? jest.spyOn(proto, "getWeekInfo")
+      : jest.spyOn(proto, "weekInfo", "get");
 
-    // The implementation should have used Intl.Locale.getWeekInfo()
-    // This will FAIL because the current code only uses CLDR, never Intl
-    expect(getWeekInfoSpy).toHaveBeenCalled();
+    try {
+      // Clear module-level caches to force a fresh lookup
+      weekendModule.clearWeekendCaches();
 
-    getWeekInfoSpy.mockRestore();
+      // Call with a fresh country code not previously cached
+      getWeekendDays("FI");
+
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   // -----------------------------------------------------------------------
@@ -171,32 +185,40 @@ describe("W-1: Intl.Locale.getWeekInfo() as primary source", () => {
   });
 
   // -----------------------------------------------------------------------
-  // W-1.3: CLDR fallback when getWeekInfo is unavailable
-  // When Intl.Locale.prototype.getWeekInfo is absent, getWeekendDays
-  // should still work via the CLDR fallback path.
-  // This test will PASS because the current code ONLY uses CLDR.
-  // Included for completeness to ensure fallback survives refactoring.
+  // W-1.3: CLDR fallback when the runtime exposes no week info at all.
+  // Both shapes have to go, or this stops testing the fallback the moment the
+  // implementation learns to read the other one. `weekInfo` is an accessor, so
+  // assigning `undefined` to it does not hide it — deleting the property and
+  // restoring its descriptor is the only correct way in and back out.
   // -----------------------------------------------------------------------
-  it("W-1.3: falls back to CLDR when getWeekInfo is unavailable", () => {
-    // Save and remove getWeekInfo
-    const original = Intl.Locale.prototype.getWeekInfo;
-    (Intl.Locale.prototype as any).getWeekInfo = undefined;
+  it("W-1.3: falls back to CLDR when the runtime exposes no week info", () => {
+    const proto = Intl.Locale.prototype as any;
+    const methodDesc = Object.getOwnPropertyDescriptor(proto, "getWeekInfo");
+    const getterDesc = Object.getOwnPropertyDescriptor(proto, "weekInfo");
+    if (methodDesc) delete proto.getWeekInfo;
+    if (getterDesc) delete proto.weekInfo;
+
+    const weekendModule = require("@/lib/connector/reference-data/modules/public-holidays/weekend");
 
     try {
-      // Need fresh lookup — clear caches if possible
-      const weekendModule = require("@/lib/connector/reference-data/modules/public-holidays/weekend");
-      if (typeof weekendModule.clearWeekendCaches === "function") {
-        weekendModule.clearWeekendCaches();
-      }
+      // Guard the guard: if either shape survived the delete, this test would
+      // pass through the primary path and prove nothing.
+      expect(typeof proto.getWeekInfo).not.toBe("function");
+      expect(Object.getOwnPropertyDescriptor(proto, "weekInfo")).toBeUndefined();
 
-      // Should still return correct result via CLDR
+      // Need fresh lookup — the cache would otherwise answer from the primary path
+      weekendModule.clearWeekendCaches();
+
+      // Should still return the correct result via CLDR
       const days = getWeekendDays("DE");
       expect(days).toContain(6);
       expect(days).toContain(7);
       expect(days).toHaveLength(2);
     } finally {
-      // Restore
-      Intl.Locale.prototype.getWeekInfo = original;
+      if (methodDesc) Object.defineProperty(proto, "getWeekInfo", methodDesc);
+      if (getterDesc) Object.defineProperty(proto, "weekInfo", getterDesc);
+      // Leave no CLDR-sourced entries behind for the tests that follow
+      weekendModule.clearWeekendCaches();
     }
   });
 

@@ -1,9 +1,9 @@
 /**
  * Holiday Module — Weekend Detection
  *
- * Determines weekend days per country using Intl.Locale.getWeekInfo()
- * as the primary source (Node.js 21+, auto-updates with CLDR).
- * Falls back to cldr-core weekData.json when Intl API is unavailable.
+ * Determines weekend days per country from the runtime's own locale data
+ * (`Intl.Locale`, Node.js 21+, auto-updates with CLDR) as the primary source.
+ * Falls back to cldr-core weekData.json when that API is unavailable.
  *
  * External API uses ISO 8601 day numbers: 1=Mon, 2=Tue, ..., 7=Sun
  * Internal CLDR fallback uses JS Date.getDay() convention: 0=Sun, 6=Sat
@@ -16,6 +16,13 @@ import "server-only";
 import weekDataJson from "cldr-core/supplemental/weekData.json";
 
 const weekData = weekDataJson.supplemental.weekData;
+
+/**
+ * The slice of TC39's Intl Locale Info result this module reads.
+ * Neither shape that carries it is declared in TypeScript's lib files, so the
+ * access is typed here rather than cast away at the call site.
+ */
+type WeekInfo = { weekend?: number[] };
 
 /**
  * CLDR day name → JavaScript day number mapping (internal).
@@ -94,7 +101,9 @@ function resolveJsWeekend(countryCode: string): Set<number> {
 /**
  * Get weekend day numbers for a country in ISO 8601 format.
  *
- * Primary: Intl.Locale.getWeekInfo() (Node.js 21+, auto-updates with CLDR)
+ * Primary: Intl.Locale week info -- `getWeekInfo()` or the older `weekInfo`
+ *          getter, whichever the runtime provides (Node.js 21+, auto-updates
+ *          with CLDR)
  * Fallback: cldr-core weekData.json
  *
  * @param countryCode ISO 3166-1 alpha-2 country code
@@ -106,17 +115,27 @@ export function getWeekendDays(countryCode: string): number[] {
   let cached = isoWeekendCache.get(cc);
   if (cached) return cached;
 
-  // Primary: Intl.Locale.getWeekInfo() (Node 21+, auto-updates with CLDR)
+  // Primary: the runtime's own locale data (Node 21+, auto-updates with CLDR).
+  //
+  // TC39 moved the Intl Locale Info proposal from getters (`locale.weekInfo`)
+  // to methods (`locale.getWeekInfo()`). Both shapes are live: V8 12.4
+  // (Node 22.23) ships the getter, newer V8 ships the method. Probing only the
+  // method form makes the primary path silently unreachable on a getter-only
+  // runtime -- the CLDR fallback still answers correctly, so nothing breaks
+  // loudly, but the "auto-updates with CLDR" promise above quietly stops being
+  // true. Accept either shape.
   try {
-    const locale = new Intl.Locale("und", { region: cc });
-    if (typeof (locale as any).getWeekInfo === "function") {
-      const info = (locale as any).getWeekInfo();
-      if (info?.weekend && Array.isArray(info.weekend) && info.weekend.length > 0) {
-        // getWeekInfo().weekend is already ISO 8601 (1=Mon..7=Sun)
-        cached = [...info.weekend].sort((a: number, b: number) => a - b);
-        isoWeekendCache.set(cc, cached);
-        return cached;
-      }
+    const locale = new Intl.Locale("und", { region: cc }) as Intl.Locale & {
+      getWeekInfo?: () => WeekInfo | undefined;
+      weekInfo?: WeekInfo;
+    };
+    const info =
+      typeof locale.getWeekInfo === "function" ? locale.getWeekInfo() : locale.weekInfo;
+    if (info?.weekend && Array.isArray(info.weekend) && info.weekend.length > 0) {
+      // `weekend` is already ISO 8601 (1=Mon..7=Sun) in both shapes
+      cached = [...info.weekend].sort((a: number, b: number) => a - b);
+      isoWeekendCache.set(cc, cached);
+      return cached;
     }
   } catch {
     // Fall through to CLDR fallback
