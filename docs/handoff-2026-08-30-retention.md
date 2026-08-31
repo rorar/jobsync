@@ -240,7 +240,19 @@ What this does to §3:
 - **§3.1 (`/tmp/node-compile-cache` on a tmpfs `/`) is half obsolete.** `/` is no longer tmpfs, so
   the rootfs-pressure half is gone. `/tmp` still is, so **TODO-10 stands** — a compile cache there
   is still RAM.
-- **§3.2 (`jobsync-dashboard.service`) is moot** on this host; it was a zeldris unit.
+- **§3.2 (`jobsync-dashboard.service`) is NOT moot — I wrote that it was and I was wrong.** The
+  unit is `linked` and **`enabled` on elysium**, currently inactive with 0 restarts. It came
+  across because it is a symlink in `~/.config/systemd/user/` and the home directory moved with
+  the machine: `~/.config/systemd/user/jobsync-dashboard.service` →
+  `/home/pascal/projekte/helpers/systemd/user/jobsync-dashboard.service`, with
+  `ExecStart=/bin/bash /home/pascal/helpers/jobsync-dashboard.sh foreground`,
+  `Restart=on-failure`, `RestartSec=3`. The script runs `npx vite` and prepends the NixOS path
+  `/run/current-system/sw/bin` to `PATH`. `Linger=yes` on this user, so **enabled means it starts
+  at the next login or boot** — and on zeldris this unit crash-looped on
+  `ERR_MODULE_NOT_FOUND: Cannot find package 'vite'` at 95 % of a core continuously. **TODO-11
+  stands.** The error was inferring a *state* from an *observation*: "it misbehaved on the old
+  host" is not "it belonged to the old host". `systemctl --user is-enabled` answers it in one
+  command; see `feedback_verify_index_against_code`.
 - **§3.3 is now wrong in a third way, and has been retired rather than corrected.** Three hosts,
   three different figures, and the doc was wrong after two of the three moves — on two branches
   simultaneously at one point. `19cc6fe3` removes the numbers from `CLAUDE.md` and five script
@@ -250,6 +262,11 @@ What this does to §3:
   `user ≈ 0` meant swap thrash. With no swap there is no such path: over-cap now means a clean
   OOM-kill inside the scope. The wrappers' documented promise holds literally for the first time —
   not because anyone fixed them, but because the host underneath changed.
+
+A host-level handoff for whoever rebuilds elysium's configuration lives **outside this repo** at
+`~/elysium-jobsync-migration.md` — verified host facts, what was changed off-git (`.env`,
+dependency install, Playwright browsers), six open config items, and a section listing the things
+that look like problems and are not.
 
 `node_modules` did not survive the move. `bun install --frozen-lockfile` then
 `bunx prisma generate`; the latter works **natively** here, no `scripts/env.sh` override needed —
@@ -367,7 +384,7 @@ Ordered by value. Sequencing constraint noted where it exists.
 | **8** | Drift inventory: keep or fold | `docs/w-h1-crm-gdpr-drift-inventory.md` | Two defensible views. `rev-arch`: fold §1/§1b/§5/§7 into ADR-041 and delete the rest, since §2/§3/§4 are restated inline in the specs' tombstones — two copies of a finding is the failure mode W-H1 exists to end. `wh1-final`: keep as a dated snapshot, marked superseded (what it did). ADR-041 already cites it, so the duplication is live. |
 | **9** | E2E for retention settings | `e2e/` | CLAUDE.md wants ≥1 per feature. Not run — the VM could not take a Playwright pass concurrently. Low risk (a shadcn Switch+Select in an existing section) but the gap is real. |
 | **10** | `NODE_COMPILE_CACHE` off tmpfs | env / devenv | §3.1. Regrows into RAM otherwise. **Still open on elysium** — `/` is no longer tmpfs but `/tmp` is (16 G), so the cache is still RAM. See §3a. |
-| **11** | ~~`jobsync-dashboard.service`~~ | — | **Moot.** It was a zeldris unit; the host is gone. See §3a. |
+| **11** | `jobsync-dashboard.service` — **still open, my "moot" was wrong** | `~/.config/systemd/user/` | The unit followed the move (symlink in the home directory) and is `enabled` on elysium with `Linger=yes`, so it starts at the next boot. Inactive right now only because nothing has started it this session. `disable` it, or make `vite` resolvable for `/home/pascal/projekte/helpers/bin/jobsync-dashboard.sh`. Full detail in §3a and in `~/elysium-jobsync-migration.md` §5. |
 | **14** | No ADR index anywhere | `docs/adr/`, `CLAUDE.md:542` | Found while writing ADR-042. `CLAUDE.md` lists only the five security ADRs 015–019; 033, 037, 040, 041 and 042 appear in no index at all, so an ADR is discoverable only by knowing it exists. Deliberately not created — an index is a new hand-maintained copy of a directory listing, which is the failure mode §7 names. Decide: generate it from the directory, or drop the idea and rely on `ls docs/adr/`. |
 | **12** | WH-B2 flake | `__tests__/TasksPageClient.spec.tsx:524` | Exceeds 5000 ms under full-suite load, passes 16/16 in isolation. **Do not fix by raising the timeout** — that masks which cause is real (genuine `TasksContainer` slowness, evidenced by many `not wrapped in act(...)` warnings from its `useEffect` fetch chain, vs. resource starvation). Note TODO-10 changes what "starvation" means. Passed on the last two full runs. |
 | **13** | `session/s5a-resume-verification` | that branch | One unpushed commit from 2026-04-05 adding a resource guard to `scripts/sessions/run-session.sh`. **That script is referenced by nothing** — the whole directory is April-era and unreferenced. `bun knip` would flag it. Decide whether `scripts/sessions/` should exist at all. |
