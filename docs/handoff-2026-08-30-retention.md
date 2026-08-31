@@ -21,13 +21,22 @@
 |---|---|---|---|
 | `feat/quick-capture-and-referral-events` | `d6f41879` | yes | orphan-prune leftovers, §8.3 items, the CI reference resolver, three doc corrections, WH-B1/B3/B4 |
 | `spec/w-h1-crm-gdpr-dependency-flip` | `d2cd1ae8` | yes | the W-H1 dependency flip, ADR-041, the independent assessment, the tasklist |
-| `spec/gdpr-data-rights-person-stub` | `669104a0` | yes | the stub audit, WH-B3 analysis, user-configurable retention, the last-activity clock |
+| `spec/gdpr-data-rights-person-stub` | tip | yes | the stub audit, WH-B3 analysis, user-configurable retention, the last-activity clock, ADR-042 |
+
+The third row said `669104a0` and was stale by the time this file was committed — the commit
+that added it moved the branch. `6a30e6e4` records the identical failure on the previous
+handoff. A HEAD SHA in prose is a hand-maintained copy of `git rev-parse`; run that instead.
+Pinned measurements below keep their SHAs, because a figure attached to a SHA never rots.
 
 Branch three descends from branch two. Branch one is independent. **Nothing is merged to `main`.**
 Per `feedback_no_upstream_prs`: merge into the fork's `main` only, never a PR against `Gsync/jobsync`.
 
 Green state at `669104a0`: **314 suites / 5767 passed / 0 fail** · `typecheck-safe` exit 0 (28 s)
 · `allium check` 0 errors, 269 warnings · `check-spec-refs` 38 resolved / 0 dangling.
+
+Re-verified at `310d6f67` on the new host (§3a): **314 suites / 5767 passed / 0 fail** in 107 s
+· `typecheck-safe` exit 0 (28 s) · lint unchanged. One failure appeared on the move and was
+fixed there, not worked around — see §3a.
 
 **Lint is red on branches two and three** — 5 pre-existing `no-empty` errors in
 `src/lib/connector/arbeitsagentur-account/cdp-scripts/`. Fixed on branch one (`036e6b91`), which
@@ -217,6 +226,47 @@ it once (see §7).
 
 ---
 
+---
+
+## 3a. The host changed — what in §3 still applies
+
+On 2026-08-31 the project moved from **zeldris (NixOS)** to **elysium (Ubuntu 26.04.1 LTS)**, an
+LXC container on an Unraid kernel. Verified, not assumed: 6 cores, 31 GB RAM, **no swap**, `/` on
+ZFS at 4 % used, `/tmp` still tmpfs (16 G). `systemd-run --user --scope` works, so the cgroup
+wrappers are intact. Toolchain complete (bun 1.4.0, node 22.23.2, allium 3.2.3).
+
+What this does to §3:
+
+- **§3.1 (`/tmp/node-compile-cache` on a tmpfs `/`) is half obsolete.** `/` is no longer tmpfs, so
+  the rootfs-pressure half is gone. `/tmp` still is, so **TODO-10 stands** — a compile cache there
+  is still RAM.
+- **§3.2 (`jobsync-dashboard.service`) is moot** on this host; it was a zeldris unit.
+- **§3.3 is now wrong in a third way, and has been retired rather than corrected.** Three hosts,
+  three different figures, and the doc was wrong after two of the three moves — on two branches
+  simultaneously at one point. `19cc6fe3` removes the numbers from `CLAUDE.md` and five script
+  headers and names the command that answers the question instead. Same reasoning as §7's closing
+  paragraph: do not correct a hand-maintained copy, remove it.
+- **The §3 diagnostic pattern is retired with the swap.** `SIGTERM (143)` with `sys ≈ real` and
+  `user ≈ 0` meant swap thrash. With no swap there is no such path: over-cap now means a clean
+  OOM-kill inside the scope. The wrappers' documented promise holds literally for the first time —
+  not because anyone fixed them, but because the host underneath changed.
+
+`node_modules` did not survive the move. `bun install --frozen-lockfile` then
+`bunx prisma generate`; the latter works **natively** here, no `scripts/env.sh` override needed —
+the `/tmp/prisma-engines/` patchelf path is a NixOS workaround (`19cc6fe3` marks it conditional).
+
+**One real failure surfaced on the move and was fixed at the source** (`310d6f67`):
+`__tests__/weekend-service.spec.ts` W-1.1 died on `Property 'getWeekInfo' does not exist`. Not a
+flake and not the environment misbehaving — TC39 moved the Intl Locale Info proposal from getters
+(`locale.weekInfo`) to methods (`locale.getWeekInfo()`), both shapes ship, and this Node/V8 has the
+getter. `getWeekendDays` probed only the method, so the primary path was **silently unreachable**
+and every lookup fell through to the bundled CLDR table while the file went on promising
+"auto-updates with CLDR". The test noticed for the wrong reason (its spy target was absent, not
+"production took the fallback"). Both shapes are now probed; ICU 78.2 and cldr-core 48.2.0 were
+checked to agree on DE/FI/IR/SA/AF/IN/US/IL/BD/NP first, so no assertion changed value.
+
+---
+
 ## 4. Decisions still open — @rorar only
 
 Criterion @rorar set for all of these: *"most flexible and long-lasting BUT completely GDPR
@@ -291,8 +341,9 @@ Ordered by value. Sequencing constraint noted where it exists.
 | **7** | Pre-expiry notice | not started | Deliberately deferred. **Carries a trap:** a `Notification` row persists 30 days, so a notice fired 14 days before expiry leaves a **named residue ~16 days after erasure** unless it uses the late-binding pattern with `personId` in `titleParams`. `ReminderTriggered(reason: "retention_expired")` is kept and documented at `src/lib/events/event-types.ts:272` as reserved for exactly this. Shipping it half-right is worse than not shipping it. |
 | **8** | Drift inventory: keep or fold | `docs/w-h1-crm-gdpr-drift-inventory.md` | Two defensible views. `rev-arch`: fold §1/§1b/§5/§7 into ADR-041 and delete the rest, since §2/§3/§4 are restated inline in the specs' tombstones — two copies of a finding is the failure mode W-H1 exists to end. `wh1-final`: keep as a dated snapshot, marked superseded (what it did). ADR-041 already cites it, so the duplication is live. |
 | **9** | E2E for retention settings | `e2e/` | CLAUDE.md wants ≥1 per feature. Not run — the VM could not take a Playwright pass concurrently. Low risk (a shadcn Switch+Select in an existing section) but the gap is real. |
-| **10** | `NODE_COMPILE_CACHE` off tmpfs | env / devenv | §3.1. Regrows into RAM otherwise. |
-| **11** | `jobsync-dashboard.service` | systemd --user | §3.2. `disable` it or fix the missing `vite` package. |
+| **10** | `NODE_COMPILE_CACHE` off tmpfs | env / devenv | §3.1. Regrows into RAM otherwise. **Still open on elysium** — `/` is no longer tmpfs but `/tmp` is (16 G), so the cache is still RAM. See §3a. |
+| **11** | ~~`jobsync-dashboard.service`~~ | — | **Moot.** It was a zeldris unit; the host is gone. See §3a. |
+| **14** | No ADR index anywhere | `docs/adr/`, `CLAUDE.md:542` | Found while writing ADR-042. `CLAUDE.md` lists only the five security ADRs 015–019; 033, 037, 040, 041 and 042 appear in no index at all, so an ADR is discoverable only by knowing it exists. Deliberately not created — an index is a new hand-maintained copy of a directory listing, which is the failure mode §7 names. Decide: generate it from the directory, or drop the idea and rely on `ls docs/adr/`. |
 | **12** | WH-B2 flake | `__tests__/TasksPageClient.spec.tsx:524` | Exceeds 5000 ms under full-suite load, passes 16/16 in isolation. **Do not fix by raising the timeout** — that masks which cause is real (genuine `TasksContainer` slowness, evidenced by many `not wrapped in act(...)` warnings from its `useEffect` fetch chain, vs. resource starvation). Note TODO-10 changes what "starvation" means. Passed on the last two full runs. |
 | **13** | `session/s5a-resume-verification` | that branch | One unpushed commit from 2026-04-05 adding a resource guard to `scripts/sessions/run-session.sh`. **That script is referenced by nothing** — the whole directory is April-era and unreferenced. `bun knip` would flag it. Decide whether `scripts/sessions/` should exist at all. |
 

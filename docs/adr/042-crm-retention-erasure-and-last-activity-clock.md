@@ -71,7 +71,13 @@ outright rather than scrubbed**: the accountability row is now produced by the
 `ContactDeleted → contact_deleted` projection, which is PII-free by
 construction, so the expiry path writes no timeline row of its own and the
 `select` no longer reads `firstName`/`lastName` at all
-(`src/lib/scheduler/crm-cron.ts:74-78`). Idempotency became **structural**
+(`src/lib/scheduler/crm-cron.ts:74-78`). "PII-free by construction" is meant
+literally and is checked at the projection rather than asserted at the call site:
+`targetPersonId` and `linkedRecordName` are written as `null`, `details` carries
+only `JSON.stringify({ reason })`, and `reason` is a closed four-member Zod enum
+validated at the boundary (`src/lib/events/consumers/crm-activity-logger.ts:231-237`,
+`src/lib/events/event-schemas.ts:243-247`). The payload does carry `personId`;
+the projection deliberately drops it. Idempotency became **structural**
 rather than guarded — `anonymized` is terminal and the query excludes it, so the
 rule cannot fire twice on one Person and needs no activity-log guard row
 (`src/lib/scheduler/crm-cron.ts:52-56`, `specs/crm.allium:895-897`). And the
