@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { uniqueId } from "../helpers";
+import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
 
 /** Set NEXT_LOCALE=en cookie so the app renders in English. */
 async function ensureEnglishLocale(page: Page) {
@@ -42,49 +43,6 @@ async function deleteJob(page: Page, jobTitle: string) {
     await page.getByRole("button", { name: "Delete" }).click();
   } catch {
     // Job may not exist — skip cleanup
-  }
-}
-
-async function ensureResumeExists(page: Page, resumeTitle: string) {
-  await page.goto("/dashboard/profile");
-  await page.waitForLoadState("domcontentloaded");
-  const existingRow = page.getByRole("row", {
-    name: new RegExp(resumeTitle, "i"),
-  });
-  try {
-    await existingRow.first().waitFor({ state: "visible", timeout: 3000 });
-    return resumeTitle;
-  } catch {
-    // Resume does not exist — create
-  }
-  await page.getByRole("button", { name: "New Resume" }).click();
-  await page.getByPlaceholder("Ex: Full Stack Developer").fill(resumeTitle);
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(
-    page.getByRole("row", { name: new RegExp(resumeTitle, "i") }).first(),
-  ).toBeVisible({ timeout: 10000 });
-  return resumeTitle;
-}
-
-async function deleteResume(page: Page, title: string) {
-  await page.goto("/dashboard/profile");
-  await page.waitForLoadState("domcontentloaded");
-  try {
-    const row = page
-      .getByRole("row", { name: new RegExp(title, "i") })
-      .first();
-    await row.waitFor({ state: "visible", timeout: 5000 });
-    await row.getByTestId("resume-actions-menu-btn").click({ force: true });
-    await page
-      .getByRole("menuitem", { name: "Delete" })
-      .click({ force: true });
-    await expect(page.getByRole("alertdialog")).toBeVisible();
-    await page
-      .getByRole("alertdialog")
-      .getByRole("button", { name: "Delete" })
-      .click({ force: true });
-  } catch {
-    // skip cleanup
   }
 }
 
@@ -500,7 +458,7 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     const errors = collectConsoleErrors(page);
     const resumeTitle = `E2E Resume KBOcc1 ${uid}`;
 
-    await ensureResumeExists(page, resumeTitle);
+    await ensureResumeExists(page, resumeTitle, { confirmWith: "row" });
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
 
@@ -558,7 +516,7 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     const uid = uniqueId();
     const resumeTitle = `E2E Resume KBOcc2 ${uid}`;
 
-    await ensureResumeExists(page, resumeTitle);
+    await ensureResumeExists(page, resumeTitle, { confirmWith: "row" });
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
 
@@ -603,7 +561,7 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     const uid = uniqueId();
     const resumeTitle = `E2E Resume KBOcc3 ${uid}`;
 
-    await ensureResumeExists(page, resumeTitle);
+    await ensureResumeExists(page, resumeTitle, { confirmWith: "row" });
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
 
@@ -645,7 +603,7 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     const errors = collectConsoleErrors(page);
     const resumeTitle = `E2E Resume KBOcc4 ${uid}`;
 
-    await ensureResumeExists(page, resumeTitle);
+    await ensureResumeExists(page, resumeTitle, { confirmWith: "row" });
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
 

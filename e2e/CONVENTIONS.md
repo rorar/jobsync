@@ -124,6 +124,26 @@ Available imports:
 
 **Adding a new shared helper**: Only add helpers used by 3+ spec files. If it's aggregate-specific, keep it local.
 
+## Shared Fixtures (`e2e/helpers/*.ts`)
+
+`helpers/index.ts` holds *generic* primitives. A **fixture** — a page flow one aggregate owns but
+several others need as a precondition — gets its own file next to it and is imported directly.
+
+| Fixture | Import from | Used by |
+|---|---|---|
+| `ensureResumeExists(page, title, { confirmWith? })` / `deleteResume(page, title)` | `../helpers/resume-fixture` | `job-crud`, `job-detail-panels`, `enrichment`, `automation-crud`, `automation-wizard-modules`, `keyboard-ux` |
+
+**Never copy a fixture into a spec.** Six private copies of the resume fixture is how `898a5119`
+— one commit that added a second submit button to the Create Resume dialog and renamed the
+success toast — stayed half-repaired for five months: the fix had to be found six times and was
+found twice.
+
+If your spec needs a different post-state, add a **named option** to the shared fixture rather
+than a copy (`confirmWith: "toast" | "row"` exists for exactly that reason). If the difference is
+not a post-state but a different *contract* — e.g. `profile-crud` asserts that deletion succeeded
+instead of tolerating a missing row — keep a local function and give it a name that says so
+(`deleteResumeAndVerifyGone`), so nobody later unifies the two by name.
+
 ## No `waitForTimeout` Policy (M-T-04)
 
 `page.waitForTimeout()` is an **anti-pattern** documented by Playwright itself.

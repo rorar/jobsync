@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { expectToast } from "../helpers";
+import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -10,58 +11,6 @@ async function ensureEnglishLocale(page: Page) {
   await page.context().addCookies([
     { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
   ]);
-}
-
-/**
- * Ensure at least one resume exists (required for automation creation).
- * Creates a uniquely named resume if none with the given title exists.
- */
-async function ensureResumeExists(
-  page: Page,
-  resumeTitle: string,
-): Promise<string> {
-  await page.goto("/dashboard/profile");
-  await page.waitForLoadState("domcontentloaded");
-
-  const existingRow = page.getByRole("row", {
-    name: new RegExp(resumeTitle, "i"),
-  });
-  try {
-    await existingRow.first().waitFor({ state: "visible", timeout: 3000 });
-    return resumeTitle;
-  } catch {
-    // Resume does not exist yet — create one
-  }
-
-  await page.getByRole("button", { name: "New Resume" }).click();
-  await page.getByPlaceholder("Ex: Full Stack Developer").fill(resumeTitle);
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText(/Resume created successfully/i).first()).toBeVisible({
-    timeout: 10000,
-  });
-  return resumeTitle;
-}
-
-async function deleteResume(page: Page, title: string) {
-  await page.goto("/dashboard/profile");
-  await page.waitForLoadState("domcontentloaded");
-  const row = page
-    .getByRole("row", { name: new RegExp(title, "i") })
-    .first();
-  try {
-    await row.waitFor({ state: "visible", timeout: 5000 });
-    await row.getByTestId("resume-actions-menu-btn").click({ force: true });
-    await page
-      .getByRole("menuitem", { name: "Delete" })
-      .click({ force: true });
-    await expect(page.getByRole("alertdialog")).toBeVisible();
-    await page
-      .getByRole("alertdialog")
-      .getByRole("button", { name: "Delete" })
-      .click({ force: true });
-  } catch {
-    // Resume may not exist — skip cleanup
-  }
 }
 
 async function navigateToAutomations(page: Page) {

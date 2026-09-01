@@ -49,7 +49,17 @@ async function openResumeEditor(page: Page, resumeTitle: string) {
   ).toBeVisible({ timeout: 10000 });
 }
 
-async function deleteResume(page: Page, title: string) {
+/**
+ * Delete a resume and assert it is gone.
+ *
+ * Deliberately NOT the shared `deleteResume` from `../helpers/resume-fixture`.
+ * There, deletion is teardown and a missing row is tolerated; here it is the
+ * Profile aggregate's own delete flow, so a missing row must fail and the row
+ * must be gone afterwards. The name says which of the two this is — two
+ * functions called `deleteResume` with opposite failure semantics is how a
+ * fix gets applied to the wrong one.
+ */
+async function deleteResumeAndVerifyGone(page: Page, title: string) {
   await page.goto("/dashboard/profile");
   await page.waitForLoadState("domcontentloaded");
   const row = page
@@ -84,7 +94,7 @@ test("create resume and delete", async ({ page }) => {
     timeout: 10000,
   });
 
-  await deleteResume(page, resumeTitle);
+  await deleteResumeAndVerifyGone(page, resumeTitle);
 });
 
 test("edit resume title", async ({ page }) => {
@@ -115,7 +125,7 @@ test("edit resume title", async ({ page }) => {
     timeout: 10000,
   });
 
-  await deleteResume(page, editedTitle);
+  await deleteResumeAndVerifyGone(page, editedTitle);
 });
 
 test("add contact info", async ({ page }) => {
@@ -143,7 +153,7 @@ test("add contact info", async ({ page }) => {
     page.getByRole("heading", { name: "John Doe" }),
   ).toBeVisible({ timeout: 15000 });
 
-  await deleteResume(page, resumeTitle);
+  await deleteResumeAndVerifyGone(page, resumeTitle);
 });
 
 test("add summary section", async ({ page }) => {
@@ -169,7 +179,7 @@ test("add summary section", async ({ page }) => {
   await expect(page.getByText("this is test summary")).toBeVisible();
   await expectToast(page, /Summary has been created/);
 
-  await deleteResume(page, resumeTitle);
+  await deleteResumeAndVerifyGone(page, resumeTitle);
 });
 
 test("add work experience", async ({ page }) => {
@@ -234,7 +244,7 @@ test("add work experience", async ({ page }) => {
     page.getByRole("heading", { name: jobText }).first(),
   ).toBeVisible();
 
-  await deleteResume(page, resumeTitle);
+  await deleteResumeAndVerifyGone(page, resumeTitle);
 });
 
 test("edit experience dialog opens and cancels", async ({ page }) => {
@@ -317,7 +327,7 @@ test("edit experience dialog opens and cancels", async ({ page }) => {
   ).toBeVisible();
   await page.getByText("Cancel").click();
 
-  await deleteResume(page, resumeTitle);
+  await deleteResumeAndVerifyGone(page, resumeTitle);
 });
 
 test("multi-section integration: summary + experience + education", async ({
@@ -483,7 +493,7 @@ test("multi-section integration: summary + experience + education", async ({
   ).toBeVisible();
 
   // Step 7: Clean up
-  await deleteResume(page, resumeTitle);
+  await deleteResumeAndVerifyGone(page, resumeTitle);
 });
 
 test("add education and edit school name", async ({ page }) => {
@@ -569,5 +579,5 @@ test("add education and edit school name", async ({ page }) => {
   ).toBeVisible({ timeout: 15000 });
 
   // Clean up
-  await deleteResume(page, resumeTitle);
+  await deleteResumeAndVerifyGone(page, resumeTitle);
 });

@@ -4,6 +4,7 @@ import {
   selectOrCreateComboboxOption,
   expectToast,
 } from "../helpers";
+import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
 
 // ---------------------------------------------------------------------------
 // Helpers (aggregate-specific, NOT shared)
@@ -29,54 +30,6 @@ async function navigateToJobsTable(page: Page) {
 
   // Wait for the table element to appear
   await page.locator("table").first().waitFor({ state: "visible", timeout: 10000 });
-}
-
-/**
- * Ensure at least one resume exists to avoid P2003 FK violation
- * when the AddJob form submits with resume="".
- */
-async function ensureResumeExists(page: Page, resumeTitle: string) {
-  await page.goto("/dashboard/profile");
-  await page.waitForLoadState("domcontentloaded");
-
-  const existingRow = page.getByRole("row", {
-    name: new RegExp(resumeTitle, "i"),
-  });
-  try {
-    await existingRow.first().waitFor({ state: "visible", timeout: 3000 });
-    return;
-  } catch {
-    // Resume does not exist yet — create one
-  }
-
-  await page.getByRole("button", { name: "New Resume" }).click();
-  await page.getByPlaceholder("Ex: Full Stack Developer").fill(resumeTitle);
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(
-    page.getByText(/Resume created successfully/i).first(),
-  ).toBeVisible({ timeout: 10000 });
-}
-
-async function deleteResume(page: Page, title: string) {
-  await page.goto("/dashboard/profile");
-  await page.waitForLoadState("domcontentloaded");
-  const row = page
-    .getByRole("row", { name: new RegExp(title, "i") })
-    .first();
-  try {
-    await row.waitFor({ state: "visible", timeout: 5000 });
-    await row.getByTestId("resume-actions-menu-btn").click({ force: true });
-    await page
-      .getByRole("menuitem", { name: "Delete" })
-      .click({ force: true });
-    await expect(page.getByRole("alertdialog")).toBeVisible();
-    await page
-      .getByRole("alertdialog")
-      .getByRole("button", { name: "Delete" })
-      .click({ force: true });
-  } catch {
-    // Resume may not exist — skip cleanup
-  }
 }
 
 async function createJob(
