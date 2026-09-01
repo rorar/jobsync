@@ -262,10 +262,12 @@ test.describe("Enrichment", () => {
         .getByRole("button", { name: /deactivate|confirm/i })
         .click();
 
-      // Wait for toast confirming deactivation
-      await expect(
-        page.getByText(/inactive/i).first(),
-      ).toBeVisible({ timeout: 10000 });
+      // Assert the toggle itself flipped OFF. The Switch is fully controlled
+      // (EnrichmentModuleSettings.tsx:295 `checked={module.status === "active"}`)
+      // and that state is only set AFTER deactivateModule() resolves, so this is
+      // a genuine post-condition. A page-wide /inactive/i match would also hit
+      // the other modules' status badges (:290-292) and pick an arbitrary one.
+      await expect(faviconToggle).not.toBeChecked({ timeout: 10000 });
 
       // Reload and verify toggle is OFF
       await navigateToEnrichmentSettings(page);
@@ -275,19 +277,20 @@ test.describe("Enrichment", () => {
       await expect(toggleAfterReload).toBeVisible({ timeout: 10000 });
       await expect(toggleAfterReload).not.toBeChecked();
 
-      // Re-activate to restore original state
+      // Re-activate to restore original state, and assert the toggle flipped
+      // back ON before the test ends (page-wide /active/i matched every
+      // module's "Active" badge and could therefore never fail).
       await toggleAfterReload.click();
-      await expect(
-        page.getByText(/active/i).first(),
-      ).toBeVisible({ timeout: 10000 });
+      await expect(toggleAfterReload).toBeChecked({ timeout: 10000 });
     } else {
       // Activate: click toggle (no confirmation needed)
       await faviconToggle.click();
 
-      // Wait for toast confirming activation
-      await expect(
-        page.getByText(/active/i).first(),
-      ).toBeVisible({ timeout: 10000 });
+      // Assert the toggle itself flipped ON — controlled by post-response
+      // state, so this waits for activateModule() to actually succeed. A
+      // page-wide /active/i match hits every module's "Active" badge and
+      // is satisfied even if this module never activated.
+      await expect(faviconToggle).toBeChecked({ timeout: 10000 });
 
       // Reload and verify toggle is ON
       await navigateToEnrichmentSettings(page);

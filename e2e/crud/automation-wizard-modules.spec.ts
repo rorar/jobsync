@@ -104,21 +104,23 @@ test.describe("Automation Wizard — Dynamic Module Selector", () => {
     // The subject of this test is that DEACTIVATING JSearch removes it from
     // the wizard. Starting from an already-inactive module would assert that
     // an absent option is absent — passing while proving nothing — so the
-    // precondition is loud rather than skipped. Usual cause: an earlier run
-    // died between the deactivation and the restore below. e2e/
-    // cleanup-stale-data.ts step 0b clears ModuleRegistration so the
-    // manifest default (active) is restored — from the next dev-server start,
-    // since the registry syncs from the DB only once per process.
+    // precondition is loud rather than skipped. Usual cause: a previous run
+    // deactivated JSearch and left it that way (this test deliberately does
+    // not restore it — see the note at the end of the test). The state is
+    // reset centrally by e2e/cleanup-stale-data.ts step 0b, which deletes
+    // every ModuleRegistration row so the manifest default (active) reapplies
+    // — but only from the NEXT dev-server start, since syncRegistryFromDb
+    // latches on `dbSynced` and reads the table once per process
+    // (src/actions/module.actions.ts:430).
     expect(
       wasActive,
       "JSearch must start ACTIVE or this test proves nothing; a previous run likely left it inactive (cleanup-stale-data.ts step 0b resets ModuleRegistration, effective after the dev server restarts)",
     ).toBe(true);
 
-    if (wasActive) {
-      // Deactivate JSearch
-      await jsearchSwitch.click();
-      await expect(jsearchSwitch).not.toBeChecked({ timeout: 5000 });
-    }
+    // Deactivate JSearch. Unconditional: the assertion above admits no other
+    // value for wasActive.
+    await jsearchSwitch.click();
+    await expect(jsearchSwitch).not.toBeChecked({ timeout: 5000 });
 
     // Now open the automation wizard — JSearch should NOT appear
     await navigateToAutomations(page);
