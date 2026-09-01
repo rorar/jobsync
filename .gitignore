@@ -69,6 +69,8 @@ data/logos
 .github/*
 !.github/workflows
 .claude/settings.local.json
+# headroom wrap writes per-run markers next to the settings it borrows
+.claude/.headroom_wrap_*
 .specify
 # /specs — Allium specs are now tracked in git (19 specs, 8000+ lines)
 .vscode
