@@ -92,12 +92,49 @@ PORT=3737
 # choice, so pin it. This is the value CI already uses (ci.yml).
 export NEXTAUTH_URL="http://localhost:${PORT}"
 
-# 1. Ensure an env-correct, warm dev server (start if down; never stop it).
-if curl -fsS -o /dev/null "http://localhost:${PORT}/signin" 2>/dev/null; then
-  echo "[test-e2e] reusing dev server already on :${PORT}"
+# 1. Start a FRESH env-correct dev server for every run.
+#
+# This used to reuse whatever answered on :3737, and that reuse was silently
+# unsound. Two run-scoped fixtures live in the server PROCESS, not in the
+# database, so reuse carries state across runs that the cleanup cannot reach:
+#
+#   - Module activation. `syncRegistryFromDb` (src/actions/module.actions.ts:437)
+#     latches on `dbSynced` and reads ModuleRegistration ONCE per process, so
+#     cleanup-stale-data.ts step 0b — which deletes every row so the manifest
+#     default reapplies — has no effect on a server that already synced.
+#     automation-wizard-modules.spec.ts deactivates JSearch and cannot restore it
+#     (credential-gated), so on a reused server its own precondition fails on the
+#     SECOND run. Measured 2026-09-01: same process, DB already reset, test red at
+#     :118 with `Expected: true / Received: false`.
+#   - Memory. `next dev` under E2E traffic reached 7.3 GB RSS in 28 minutes and
+#     preceded a runner hang; the operator had to kill it twice in one day.
+#
+# The cost is one cold Turbopack compile per run (~30 s, bounded by
+# SERVER_WAIT). That buys a deterministic fixture state, which is worth more than
+# the 30 s — a suite whose result depends on how many times it ran before is not
+# measuring the tree.
+#
+# E2E_REUSE_SERVER=1 restores the old behaviour for a quick single-spec loop
+# where you know the process state is clean. Do not use it for a full run.
+if [ "${E2E_REUSE_SERVER:-0}" = "1" ] &&
+   curl -fsS -o /dev/null "http://localhost:${PORT}/signin" 2>/dev/null; then
+  echo "[test-e2e] reusing dev server already on :${PORT} (E2E_REUSE_SERVER=1)"
+  echo "[test-e2e] WARNING: module-state fixtures are per-process; a reused server"
+  echo "                   can fail automation-wizard-modules on its precondition."
 else
-  echo "[test-e2e] starting E2E dev server (env.sh + E2E_AUTH_RATE_LIMIT_BYPASS) ..."
+  echo "[test-e2e] starting a fresh E2E dev server (env.sh + E2E_AUTH_RATE_LIMIT_BYPASS) ..."
   nohup bash "$DIR/dev-e2e.sh" >/tmp/jobsync-e2e-dev.log 2>&1 &
+
+  # Wait for the OLD server to go down before waiting for the new one to come
+  # up. dev-e2e.sh pkills and sleeps 1s before exec'ing, so polling for "ready"
+  # immediately can observe the dying process and declare success against the
+  # very server we are replacing — which would reinstate the stale-process
+  # problem this restart exists to remove, invisibly.
+  for _ in $(seq 1 20); do
+    curl -fsS -o /dev/null "http://localhost:${PORT}/signin" 2>/dev/null || break
+    sleep 1
+  done
+
   echo "[test-e2e] waiting up to ${SERVER_WAIT}s for cold compile (log: /tmp/jobsync-e2e-dev.log) ..."
   ready=0
   for _ in $(seq 1 "$SERVER_WAIT"); do
