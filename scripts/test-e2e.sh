@@ -58,9 +58,24 @@ fi
 # that knows nothing about it, but it does, silently, and the resulting error names
 # a path rather than a cause.
 #
-# We deliberately do NOT substitute whatever build happens to be in the cache.
-# Playwright pins browser builds per version; running an unpinned one works until it
-# does not, and a silent skew is worse than a loud stop. Fail with the fix instead.
+# We used to fail hard here rather than substitute whatever build sits in the cache,
+# on the grounds that an unpinned browser works until it does not and a silent skew is
+# worse than a loud stop. That reasoning assumed the stop was ACTIONABLE — that the
+# advice it printed, `npx playwright install chromium`, could fetch the pinned build.
+# On this host it cannot, and the advice was simply wrong:
+#
+#     Error: ERROR: Playwright does not support chromium on ubuntu26.04-x64
+#
+# playwright-core 1.57.0 has no ubuntu26.04-x64 mapping for chromium 1200 at all
+# (`npx playwright install --dry-run chromium` prints an install location but no
+# download URL), so the pinned build is unobtainable until @playwright/test is
+# upgraded. The real choice on this machine is therefore between a WARNED
+# substitution and a suite that cannot run at all.
+#
+# So: substitute, but never silently. Every run prints which build it used and which
+# one the package pins, so a failure that turns out to be browser skew is one line away
+# from being recognised as such. A hard stop remains for the case the fallback cannot
+# cover — no chromium in the cache at all.
 if [ -z "${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-}" ]; then
   # Read the file by path, NOT via require("playwright-core/browsers.json"):
   # the package's "exports" map does not expose it, so require throws
@@ -69,12 +84,27 @@ if [ -z "${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-}" ]; then
   WANT_REV="$(node -e 'const f="node_modules/playwright-core/browsers.json";const fs=require("fs");if(!fs.existsSync(f))process.exit(0);const b=JSON.parse(fs.readFileSync(f,"utf8")).browsers.find(x=>x.name==="chromium");process.stdout.write(b?String(b.revision):"")' 2>/dev/null || true)"
   CACHE_ROOT="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
   if [ -n "$WANT_REV" ] && [ ! -d "$CACHE_ROOT/chromium-$WANT_REV" ]; then
-    echo "[test-e2e] ERROR: chromium build $WANT_REV is not installed."
-    echo "                 playwright-core $(node -p 'require("playwright-core/package.json").version' 2>/dev/null) pins it; $CACHE_ROOT holds:"
-    ls -1 "$CACHE_ROOT" 2>/dev/null | sed 's/^/                   /' || echo "                   (cache directory missing)"
-    echo "                 Fix:  npx playwright install chromium"
-    echo "                 Or point PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH at a browser you trust."
-    exit 1
+    PW_VER="$(node -p 'require("playwright-core/package.json").version' 2>/dev/null)"
+    HOST_OS="$( . /etc/os-release 2>/dev/null && echo "${ID:-unknown}${VERSION_ID:-}" )"
+    # Newest cached build wins. sort -V, not sort: plain sort puts 999 above 1234.
+    FALLBACK_CHROMIUM="$(ls -d "$CACHE_ROOT"/chromium-*/chrome-linux64/chrome 2>/dev/null | sort -V | tail -1)"
+    if [ -n "$FALLBACK_CHROMIUM" ] && [ -x "$FALLBACK_CHROMIUM" ]; then
+      export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$FALLBACK_CHROMIUM"
+      echo "[test-e2e] WARNING: chromium $WANT_REV, pinned by playwright-core $PW_VER, is NOT installed"
+      echo "                    and cannot be installed on $HOST_OS with this playwright version."
+      echo "                    Falling back to: $FALLBACK_CHROMIUM"
+      echo "                    If a failure smells like browser behaviour, this skew is the first suspect."
+      echo "                    Removing the skew means upgrading @playwright/test, not re-running install."
+    else
+      echo "[test-e2e] ERROR: chromium build $WANT_REV is not installed and no cached chromium"
+      echo "                 was found to fall back to. playwright-core $PW_VER pins it;"
+      echo "                 $CACHE_ROOT holds:"
+      ls -1 "$CACHE_ROOT" 2>/dev/null | sed 's/^/                   /' || echo "                   (cache directory missing)"
+      echo "                 On a supported OS:  npx playwright install chromium"
+      echo "                 On $HOST_OS that install is refused — point"
+      echo "                 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH at a browser you trust instead."
+      exit 1
+    fi
   fi
 fi
 
