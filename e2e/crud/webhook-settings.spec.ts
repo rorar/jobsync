@@ -185,6 +185,17 @@ test.describe("Webhook Settings", () => {
       await navigateToWebhooks(page);
       for (const url of leaked) {
         await deleteWebhookEndpoint(page, url);
+        // deleteWebhookEndpoint swallows every error, so calling it proves
+        // nothing — look again. Without this the hook's catch below only fires
+        // when navigateToWebhooks throws, and a row the net FAILED to delete
+        // would pass in silence, which is the opposite of what this net is for.
+        if ((await getEndpointCard(page, url).count()) > 0) {
+          console.warn(
+            `[webhook-settings] leaked endpoint survived cleanup: ${url} ` +
+              `— it counts against MAX_ENDPOINTS_PER_USER until the next run's ` +
+              `cleanup-stale-data.ts step 0a removes it.`,
+          );
+        }
       }
     } catch (error) {
       console.warn(

@@ -23,6 +23,18 @@ async function navigateToAutomations(page: Page) {
 
 // storageState handles authentication — no per-test login needed
 
+// Retries are pointless here and would be actively misleading. The second test
+// below deactivates JSearch and cannot restore it (the module is credential-
+// gated, so activateModule refuses), and `syncRegistryFromDb` reads
+// ModuleRegistration once per process (src/actions/module.actions.ts:437). A
+// retry therefore runs against a process the first attempt already mutated and
+// fails on its own `wasActive` precondition — every time, by construction.
+// `retries` is 0 locally but 2 under CI (playwright.config.ts:14), which would
+// turn one honest failure into three and hide which attempt was real.
+// scripts/test-e2e.sh starts a fresh server per RUN, which fixes the run-level
+// case; it cannot fix the attempt-level one.
+test.describe.configure({ retries: 0 });
+
 test.describe("Automation Wizard — Dynamic Module Selector", () => {
   test.beforeEach(async ({ page }) => {
     await ensureEnglishLocale(page);

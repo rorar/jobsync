@@ -208,6 +208,18 @@ test.describe("Public API Key Management", () => {
       await navigateToPublicApiKeys(page);
       for (const keyName of leaked) {
         await purgeApiKey(page, keyName);
+        // purgeApiKey swallows every error by design, so calling it proves
+        // nothing — look again. Without this the hook's catch below only fires
+        // when navigateToPublicApiKeys throws, and a key the net FAILED to
+        // remove would pass in silence while still counting against the cap.
+        if ((await getKeyRow(page, keyName).count()) > 0) {
+          console.warn(
+            `[settings-api-keys] leaked key survived cleanup: ${keyName} ` +
+              `— an ACTIVE key counts against the limit of 10 ` +
+              `(publicApiKey.actions.ts:38) until the next run's ` +
+              `cleanup-stale-data.ts step 13 removes it.`,
+          );
+        }
       }
     } catch (error) {
       console.warn(
