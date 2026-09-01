@@ -45,6 +45,39 @@ elif [ -x "$NIXOS_CHROMIUM" ]; then
 else
   unset PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
 fi
+
+# Preflight: when we are relying on Playwright's own download, check the build it
+# actually wants is present, and say so BEFORE the run instead of dying inside
+# global-setup.ts with "Executable doesn't exist at …chromium_headless_shell-NNNN".
+#
+# The shared cache ~/.cache/ms-playwright is not ours alone. A newer playwright-core
+# living elsewhere on the machine populates it with ITS pinned build: on this host
+# `@playwright/mcp@latest` pulls playwright-core 1.63.0-alpha, which downloads
+# chromium 1234, while this project's 1.57.0 wants 1200 — so the cache looks full
+# and the launch still fails. Installing an MCP server should not break a test suite
+# that knows nothing about it, but it does, silently, and the resulting error names
+# a path rather than a cause.
+#
+# We deliberately do NOT substitute whatever build happens to be in the cache.
+# Playwright pins browser builds per version; running an unpinned one works until it
+# does not, and a silent skew is worse than a loud stop. Fail with the fix instead.
+if [ -z "${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-}" ]; then
+  # Read the file by path, NOT via require("playwright-core/browsers.json"):
+  # the package's "exports" map does not expose it, so require throws
+  # ERR_PACKAGE_PATH_NOT_EXPORTED, the revision comes back empty, and the check
+  # below silently passes — a preflight that looks like it checks and does not.
+  WANT_REV="$(node -e 'const f="node_modules/playwright-core/browsers.json";const fs=require("fs");if(!fs.existsSync(f))process.exit(0);const b=JSON.parse(fs.readFileSync(f,"utf8")).browsers.find(x=>x.name==="chromium");process.stdout.write(b?String(b.revision):"")' 2>/dev/null || true)"
+  CACHE_ROOT="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
+  if [ -n "$WANT_REV" ] && [ ! -d "$CACHE_ROOT/chromium-$WANT_REV" ]; then
+    echo "[test-e2e] ERROR: chromium build $WANT_REV is not installed."
+    echo "                 playwright-core $(node -p 'require("playwright-core/package.json").version' 2>/dev/null) pins it; $CACHE_ROOT holds:"
+    ls -1 "$CACHE_ROOT" 2>/dev/null | sed 's/^/                   /' || echo "                   (cache directory missing)"
+    echo "                 Fix:  npx playwright install chromium"
+    echo "                 Or point PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH at a browser you trust."
+    exit 1
+  fi
+fi
+
 export E2E_LOGIN_TIMEOUT_MS="${E2E_LOGIN_TIMEOUT_MS:-90000}"
 WORKERS="${E2E_WORKERS:-1}"
 SERVER_WAIT="${E2E_SERVER_WAIT:-150}"
