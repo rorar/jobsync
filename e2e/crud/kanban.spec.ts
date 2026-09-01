@@ -1,5 +1,4 @@
 import { test, expect, type Page } from "@playwright/test";
-import { expectToast } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers (kanban-specific)
@@ -36,63 +35,21 @@ async function switchToTableView(page: Page) {
   await switchViewMode(page, "table");
 }
 
-/**
- * Create a job via the Add Job form. Returns the title for cleanup.
- */
-async function createTestJob(page: Page, uid: string): Promise<string> {
-  const title = `E2E Kanban ${uid}`;
-
-  // Switch to table view to use the existing Add Job flow
-  await switchToTableView(page);
-
-  // Click Add Job button
-  await page.getByRole("button", { name: /add job/i }).click();
-
-  // Wait for dialog
-  await page.waitForSelector('[role="dialog"]', { state: "visible" });
-
-  // Fill in job title
-  const titleInput = page.locator('input[name="title"]').first();
-  if (await titleInput.isVisible()) {
-    await titleInput.fill(title);
-  }
-
-  // Fill in company
-  const companyInput = page.locator('input[name="company"]').first();
-  if (await companyInput.isVisible()) {
-    await companyInput.fill(`Company ${uid}`);
-  }
-
-  // Submit
-  const submitBtn = page.getByRole("button", { name: /save|create|add/i }).last();
-  await submitBtn.click();
-
-  // Wait for dialog to close (indicates successful creation)
-  await page.waitForSelector('[role="dialog"]', { state: "hidden", timeout: 5000 });
-
-  return title;
-}
-
-/**
- * Delete a job by title from the table view
- */
-async function deleteTestJob(page: Page, title: string) {
-  await switchToTableView(page);
-  await page.locator("table").first().waitFor({ state: "visible", timeout: 5000 });
-
-  const row = page.getByRole("row", { name: new RegExp(title, "i") }).first();
-  if (await row.isVisible({ timeout: 3000 }).catch(() => false)) {
-    const menuBtn = row.getByTestId("job-actions-menu-btn");
-    await menuBtn.click();
-    const deleteItem = page.getByRole("menuitem", { name: /delete/i });
-    await deleteItem.click();
-    // Confirm deletion dialog
-    const confirmBtn = page.getByRole("button", { name: /delete/i }).last();
-    if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await confirmBtn.click();
-    }
-  }
-}
+// NOTE: `createTestJob` / `deleteTestJob` used to live here and were deleted
+// (E2E-B19 close-out). They had no call sites — no test in this file creates a
+// job — and they could not have worked if wired up: the trigger they clicked,
+// `getByRole("button", { name: /add job/i })`, matches nothing, because the
+// button's accessible name is `jobs.newJob` = "New Job" (AddJob.tsx:397,
+// jobs.ts:20) while "Add Job" is only the DialogTitle; and the fields they
+// filled, `input[name="title"]` / `input[name="company"]`, do not exist —
+// both are <Combobox> (AddJob.tsx:445,472) and those `name` values are
+// react-hook-form FormField props, erased before the DOM.
+//
+// Deleted rather than repaired: nothing here needs job creation, so a repaired
+// helper would be speculative. A future kanban test that does need one should
+// use the flow every other spec already uses — getByTestId("add-job-btn"),
+// selectOrCreateComboboxOption(page, "Title"|"Company", ...), then
+// getByTestId("save-job-btn") — see job-crud.spec.ts:73-93.
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -181,11 +138,15 @@ test.describe("Kanban Board", () => {
     await page.reload();
     await page.waitForLoadState("domcontentloaded");
 
-    // Check that table radio is selected
+    // Assert, don't probe. This assertion IS the test: persistence is only
+    // proven by the reloaded toggle coming back checked. `isVisible()` does not
+    // wait, so the `.catch(() => false)` guard this replaces turned a slow
+    // post-reload render into a silent skip — green while verifying nothing.
+    // switchToTableView above already resolved this exact radio, so its absence
+    // after a reload is a real failure and worth seeing.
     const tableRadio = page.getByRole("radio", { name: /table/i });
-    if (await tableRadio.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await expect(tableRadio).toHaveAttribute("aria-checked", "true");
-    }
+    await expect(tableRadio).toBeVisible({ timeout: 10000 });
+    await expect(tableRadio).toHaveAttribute("aria-checked", "true");
 
     // Switch back to kanban for future tests
     await switchToKanbanView(page);
