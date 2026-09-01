@@ -1103,3 +1103,53 @@ and an explicit list of what NOT to redo.
 
 The authoritative findings list is `docs/BUGS.md` § Session 2026-09-01 — 21 findings, 13 fixed,
 8 open, each with file:line. This file holds the reasoning; that one holds the inventory.
+
+---
+
+# Close-out pass — the four findings that were recorded and left
+
+The extraction brief's rule was "if a genuine bug is found, record it and leave it". That rule was
+lifted by the operator on 2026-09-01 19:45, so B19, B20, B21 and B11 are now in scope, along with
+the two decisions that were waiting on them (chromium, push).
+
+Approach: six agents in parallel with disjoint file ownership — `kanban.spec.ts`,
+`profile-crud.spec.ts`, `job-status-crud.spec.ts`, `helpers/index.ts`, `webhook-settings.spec.ts`,
+and a read-only probe over `src/` for the hydration mismatch. None of them may run a typechecker,
+a test runner, a build, or a dev server; the host has five cores and no swap and was taken down
+twice earlier today. Every gate runs serially afterwards, on this side.
+
+## Chromium 1200 is not installable on this host (E2E-B10, closed differently than planned)
+
+The plan was to run `npx playwright install chromium` so the pinned build would be present and the
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` export would stop being necessary. It fails:
+
+    Error: ERROR: Playwright does not support chromium on ubuntu26.04-x64
+    EXIT=1
+
+`npx playwright install --dry-run chromium` prints an install location for `chromium-1200` but no
+download URL, and the host is `ubuntu 26.04` while `playwright-core` is 1.57.0. So the pinned build
+has no binary for this OS in that version's matrix — this is not a transient failure and re-running
+it will not help. The 1234 build in the cache exists only because `@playwright/mcp@latest` pulls a
+NEWER playwright-core, whose matrix does cover 26.04.
+
+**The install itself reported success.** The background task notification said "exit code 0" because
+the command ended in `tail`. The `EXIT=` line inside the log said 1. Third time today that this
+specific trap fired; the handoff warns about it and it still caught me.
+
+Consequence for `scripts/test-e2e.sh`: its preflight was telling the operator to run a command that
+cannot work here. The check was right about the problem and wrong about the remedy, which is the
+worse half to get wrong — it is the same defect class as everything else in this session, an
+instrument that looks like it knows and does not.
+
+Fixed in `41b87e09`. The old policy — never substitute a cached build, because a silent skew is
+worse than a loud stop — assumed the stop was actionable. Where the pinned build is unobtainable,
+the real choice is between a *warned* substitution and a suite that cannot run at all. So the
+preflight now falls back to the newest cached chromium and prints, on every run, which build it
+used, which one the package pins, and that the skew is removed by upgrading `@playwright/test`
+rather than by re-running install. The hard stop survives for the one case the fallback cannot
+cover: no chromium in the cache at all.
+
+Both branches were exercised standalone before the commit — fallback selects `chromium-1234` with
+the warning, an empty cache exits 1 with the accurate text. The earlier version of this same
+preflight shipped as a no-op because nobody armed it and watched it fail, so that step is not
+optional any more.
