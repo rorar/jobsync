@@ -1153,3 +1153,74 @@ Both branches were exercised standalone before the commit — fallback selects `
 the warning, an empty cache exits 1 with the accurate text. The earlier version of this same
 preflight shipped as a no-op because nobody armed it and watched it fail, so that step is not
 optional any more.
+
+## Result of the close-out pass
+
+```
+E2E  --project=crud   112 passed / 0 failed   23.7 min   EXIT=0
+cleanup warnings      0
+typecheck             exit 0, banner only (tsconfig includes **/*.ts, so e2e/ is covered)
+```
+
+Same numbers as the baseline, with five behavioural corrections in the suite. Nothing was
+weakened to get there: assertions in `profile-crud` went 38 -> 43, `kanban` gained a real one where
+the only assertion in the test used to sit inside a swallowed guard, and `job-status-crud` traded a
+page-wide text match for a Kanban-only locator.
+
+### What the agents got right that I had wrong
+
+Three of the six agents refused their brief and were correct to.
+
+1. **`kanban.spec.ts` — the assigned site was dead code.** `createTestJob` has no call sites and
+   could not work if wired up: its trigger `getByRole("button", {name: /add job/i})` matches
+   nothing (the button is `jobs.newJob` = "New Job"), and `input[name="title"]` /
+   `input[name="company"]` do not exist because both fields are `<Combobox>` and those `name`
+   values are react-hook-form props erased before the DOM. Those two lines were the ONLY
+   `input[name=` selectors in the whole e2e tree — a selector nobody else uses is a strong signal
+   it never worked. The finding's headline ("submits an EMPTY form") was therefore false, and
+   `docs/BUGS.md` said so because I wrote it that way. The real live site was
+   `kanban.spec.ts:184`, which the original audit missed, and there the swallowed assertion IS the
+   entire test.
+
+2. **`expectToast` — my proposed anchor was ambiguous.** I specified
+   `getByRole("region", { name: /^Notifications/ })`. `NotificationDropdown.tsx:352` renders a
+   SECOND `role="region"` named exactly "Notifications", so that pattern would have matched the
+   dropdown as well — silently, because the chained `.getByText().first()` suppresses the
+   strict-mode error that would otherwise have exposed it. The agent added the trailing `" ("`,
+   which Radix's own label ("Notifications (F8)") supplies and the dropdown's does not.
+
+3. **`profile-crud` — seven sites that look identical were correctly left alone.** The
+   `getByRole("gridcell")` waits use the same `.catch(() => null)`, but each is followed by an
+   unguarded `waitFor` on the specific date cell before the click, so the swallowed wait is a
+   redundant pre-wait rather than a silent skip. Verified at `:231-234` before accepting.
+
+### What I got wrong, and what it cost
+
+**I broke my own resource rule.** The rule was passed to all six agents as a prohibition, and then
+I started a Playwright run while all six were still resident. Load average reached **69.81** on
+five cores. The resulting run produced 11 failures with durations like 14.9 minutes for a single
+test — not a test result, a measurement of contention. It was killed rather than interpreted. The
+rule is per-MACHINE, not per-agent; the handoff already said so.
+
+**I nearly recorded a fabricated cause.** For the first two failures I had a tidy explanation —
+`job-status-crud` needs a resume and never creates one, and no resume-creating spec ran before it
+in my four-file subset. It is wrong: the database holds 63 resumes including an unprefixed
+"Test Resume". Measuring it took one `sqlite3` query. Had I not run it, an invented root cause
+would now be sitting in `docs/BUGS.md` looking exactly as authoritative as the real ones.
+
+**The killed run was not worthless.** Its failure artefact contained
+`region "Notifications (F8)"`, which confirmed at runtime the one assumption the `expectToast`
+fix rested on and which the agent had flagged as statically-derived-only.
+
+### E2E-B11 is root-caused (dev-only), not fixed
+
+Decoded from the two failure logs rather than inferred: `server_upper = client_upper * 4 + 2` for
+all three diverging ids — one extra 2-or-3-child array fork on the server at index 1, sitting
+immediately above `src/app/dashboard/layout.tsx`, where the only app-owned nodes are two
+single-child providers. Re-derived independently before accepting (the longest common suffix is 27
+bits, not the 25 originally stated; same conclusion). next-themes, the most plausible suspect, is
+exonerated by the same decode. Full detail in `docs/BUGS.md` E2E-B11.
+
+No code change: H1 is unconfirmed, and the residual question is a decision about the oracle rather
+than a defect. `filterCriticalErrors` cannot distinguish this framework artefact from a future
+app-caused hydration mismatch, so suppressing it would trade explained noise for blindness.
