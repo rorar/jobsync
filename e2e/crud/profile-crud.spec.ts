@@ -194,14 +194,11 @@ test("add work experience", async ({ page }) => {
   // Add Experience section
   await page.getByRole("button", { name: "Add Section" }).click();
   await page.getByRole("menuitem", { name: "Add Experience" }).click();
-  // M-T-04 follow-up: replaced waitForTimeout(500) — wait for the section form.
-  await page.getByPlaceholder("Ex: Experience").waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
-
+  // Field is created by the Add Experience click above; its absence is a real failure.
   const sectionTitleField = page.getByPlaceholder("Ex: Experience");
-  if (await sectionTitleField.isVisible()) {
-    await sectionTitleField.fill("Experience");
-    await sectionTitleField.press("Tab");
-  }
+  await expect(sectionTitleField).toBeVisible({ timeout: 5000 });
+  await sectionTitleField.fill("Experience");
+  await sectionTitleField.press("Tab");
 
   await selectOrCreateComboboxOption(
     page,
@@ -259,14 +256,11 @@ test("edit experience dialog opens and cancels", async ({ page }) => {
   // Add Experience section first
   await page.getByRole("button", { name: "Add Section" }).click();
   await page.getByRole("menuitem", { name: "Add Experience" }).click();
-  // M-T-04 follow-up: replaced waitForTimeout(500) — wait for the section form.
-  await page.getByPlaceholder("Ex: Experience").waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
-
+  // Field is created by the Add Experience click above; its absence is a real failure.
   const sectionTitleField = page.getByPlaceholder("Ex: Experience");
-  if (await sectionTitleField.isVisible()) {
-    await sectionTitleField.fill("Experience");
-    await sectionTitleField.press("Tab");
-  }
+  await expect(sectionTitleField).toBeVisible({ timeout: 5000 });
+  await sectionTitleField.fill("Experience");
+  await sectionTitleField.press("Tab");
 
   await selectOrCreateComboboxOption(
     page,
@@ -371,14 +365,11 @@ test("multi-section integration: summary + experience + education", async ({
   // Step 4: Add Experience section
   await page.getByRole("button", { name: "Add Section" }).click();
   await page.getByRole("menuitem", { name: "Add Experience" }).click();
-  // M-T-04 follow-up: replaced waitForTimeout(500) — wait for the section form.
-  await page.getByPlaceholder("Ex: Experience").waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
-
+  // Field is created by the Add Experience click above; its absence is a real failure.
   const experienceSectionTitle = page.getByPlaceholder("Ex: Experience");
-  if (await experienceSectionTitle.isVisible()) {
-    await experienceSectionTitle.fill("Work Experience");
-    await experienceSectionTitle.press("Tab");
-  }
+  await expect(experienceSectionTitle).toBeVisible({ timeout: 5000 });
+  await experienceSectionTitle.fill("Work Experience");
+  await experienceSectionTitle.press("Tab");
 
   await selectOrCreateComboboxOption(
     page,
@@ -428,13 +419,10 @@ test("multi-section integration: summary + experience + education", async ({
   // Step 5: Add Education section
   await page.getByRole("button", { name: "Add Section" }).click();
   await page.getByRole("menuitem", { name: "Add Education" }).click();
-  // M-T-04 follow-up: replaced waitForTimeout(500) — wait for the section form.
-  await page.getByPlaceholder("Ex: Education").waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
-
+  // Field is created by the Add Education click above; its absence is a real failure.
   const educationSectionTitle = page.getByPlaceholder("Ex: Education");
-  if (await educationSectionTitle.isVisible()) {
-    await educationSectionTitle.fill("Education");
-  }
+  await expect(educationSectionTitle).toBeVisible({ timeout: 5000 });
+  await educationSectionTitle.fill("Education");
 
   await page.getByPlaceholder("Ex: Stanford").click();
   await page.getByPlaceholder("Ex: Stanford").fill(schoolName);
@@ -512,13 +500,10 @@ test("add education and edit school name", async ({ page }) => {
   // Add Education section
   await page.getByRole("button", { name: "Add Section" }).click();
   await page.getByRole("menuitem", { name: "Add Education" }).click();
-  // M-T-04 follow-up: replaced waitForTimeout(500) — wait for the section form.
-  await page.getByPlaceholder("Ex: Education").waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
-
+  // Field is created by the Add Education click above; its absence is a real failure.
   const sectionTitleField = page.getByPlaceholder("Ex: Education");
-  if (await sectionTitleField.isVisible()) {
-    await sectionTitleField.fill("Education");
-  }
+  await expect(sectionTitleField).toBeVisible({ timeout: 5000 });
+  await sectionTitleField.fill("Education");
 
   await page.getByPlaceholder("Ex: Stanford").fill(originalSchool);
 
