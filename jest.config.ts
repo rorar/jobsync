@@ -206,7 +206,16 @@ const config: Config = {
   ],
 
   // An array of regexp pattern strings that are matched against all test paths, matched tests are skipped
-  testPathIgnorePatterns: ["e2e", "\\.tracks/", "__tests__/helpers"],
+  // Anchored to the project's own e2e/ directory. These patterns are regexes
+  // matched against ABSOLUTE paths, so a bare "e2e" also matches every path in
+  // a checkout that merely has "e2e" in its name — e.g. the git worktree
+  // /home/pascal/projekte/jobsync-e2e, where it silently ignored all 342 test
+  // files and Jest reported "No tests found" instead of running the suite.
+  testPathIgnorePatterns: [
+    "<rootDir>/e2e/",
+    "\\.tracks/",
+    "__tests__/helpers",
+  ],
 
   // The regexp pattern or array of patterns that Jest uses to detect test files
   // testRegex: [],
