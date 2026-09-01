@@ -109,17 +109,55 @@ async function createWebhookEndpoint(
 }
 
 /**
+ * The length above which WebhookSettings.tsx:520-523 shortens the displayed
+ * URL. That truncation is done in JAVASCRIPT (`endpoint.url.slice(0, 47) +
+ * "..."`), not by CSS, so past this point the tail genuinely is NOT in the DOM
+ * and no text matcher can see it. (The `truncate` class on the same element,
+ * WebhookSettings.tsx:533, is cosmetic on top of that JS cut — CSS never
+ * removes text from the DOM, so it alone would not have hidden anything from
+ * Playwright.)
+ */
+const URL_JS_TRUNCATION_LIMIT = 50;
+
+/**
  * Find the endpoint card containing the given URL.
- * The URL may be truncated in the display, so match on the first 40 chars.
+ *
+ * Matches the FULL URL. The URLs built by the tests below are 41 characters
+ * (`https://example.com/webhooks/e2e-` = 33 + an 8-char `uniqueId()`), i.e.
+ * under URL_JS_TRUNCATION_LIMIT, so they are rendered whole and `hasText` sees
+ * all of them. Matching a PREFIX — what this helper used to do, first 40 chars
+ * — dropped exactly the last character of the uid, which is the only thing
+ * distinguishing one test's endpoint from another's: two endpoints created
+ * within the same 36 ms `Date.now().toString(36)` tick would have been
+ * indistinguishable, and the `.first()` in `deleteWebhookEndpoint` / the
+ * afterEach net could then have deleted the OTHER test's card while
+ * de-registering its own URL. Inert under `scripts/test-e2e.sh` (--workers=1),
+ * live for a bare `npx playwright test`.
+ *
+ * The guard is not paranoia: without it a longer URL would match nothing and
+ * surface as an unexplained 5 s timeout inside a `catch` that swallows it.
+ *
+ * Container: one EndpointRow's <Card>. `div.rounded-lg.border` is the Card base
+ * class from src/components/ui/card.tsx:12 (nothing here renders `rounded-xl`,
+ * and Badge/Button/Switch use `rounded-md`/`rounded-full`), scoped to the
+ * endpoint list — the aria-live region at WebhookSettings.tsx:411 — which
+ * excludes the create-form Card structurally instead of relying on the text
+ * filter to do it.
  */
 function getEndpointCard(page: Page, webhookUrl: string) {
-  // Match on the domain part of the URL since long URLs are truncated
-  const urlPrefix = webhookUrl.length > 40
-    ? webhookUrl.slice(0, 40)
-    : webhookUrl;
+  if (webhookUrl.length > URL_JS_TRUNCATION_LIMIT) {
+    throw new Error(
+      `[webhook-settings] URL is ${webhookUrl.length} chars, over the ` +
+        `${URL_JS_TRUNCATION_LIMIT}-char limit at WebhookSettings.tsx:520 — the ` +
+        `component renders it truncated, so the full string is not in the DOM ` +
+        `and this locator cannot match it. Shorten the test URL.`,
+    );
+  }
   return page
-    .locator(".rounded-lg, .rounded-xl")
-    .filter({ hasText: urlPrefix });
+    .getByRole("main")
+    .locator('[aria-live="polite"]')
+    .locator("div.rounded-lg.border")
+    .filter({ hasText: webhookUrl });
 }
 
 /** Delete a webhook endpoint by its URL. */
@@ -242,8 +280,9 @@ test.describe("Webhook Settings", () => {
     await navigateToWebhooks(page);
     await createWebhookEndpoint(page, webhookUrl, "Module Deactivated");
 
-    // Verify the endpoint appears in the list
-    // The URL should be visible (possibly truncated)
+    // Verify the endpoint appears in the list. The full URL is in the DOM:
+    // WebhookSettings.tsx:520 only shortens URLs over 50 chars and this one is
+    // 41 — see URL_JS_TRUNCATION_LIMIT above.
     await expect(
       page.getByText(new RegExp(`example\\.com/webhooks/e2e-${uid}`)).first(),
     ).toBeVisible({ timeout: 10000 });
