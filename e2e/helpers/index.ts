@@ -47,13 +47,20 @@ export async function login(page: Page) {
  * additionally portals a VisuallyHidden role="status" announce copy of each
  * toast to document.body, outside the viewport (index.mjs:365-372).
  *
- * Known limitation, deliberately out of scope: this narrows WHERE we look, not
- * WHAT we match. Toasts live for 5 s (toaster.tsx:19), so a test that fires two
- * actions in quick succession can still be satisfied by the previous toast that
- * is still on screen — `module-settings.spec.ts` is the live example, since
- * /Active/i is a substring of "Inactive". Telling two simultaneous toasts apart
- * is inherent to text matching; a call site that needs it should assert on
- * something unique to its own message.
+ * Known limitation this helper cannot fix: it narrows WHERE we look, not WHAT
+ * we match. Toasts live for 5 s (toaster.tsx:19), so a test that fires two
+ * actions in quick succession can still be satisfied by the PREVIOUS toast,
+ * which is still on screen. Telling two simultaneous toasts apart is inherent
+ * to text matching, so the obligation sits with the caller: pass a pattern that
+ * cannot match the neighbouring action's message.
+ *
+ * `module-settings.spec.ts` was the live example — /Active/i matches
+ * "Inactive" and /activated/i matches "deactivated" — and was fixed by moving
+ * to /Module activated\./i and /Module deactivated\./i, which are mutually
+ * exclusive because the discriminating "de" sits between "Module " and
+ * "activated". Use that as the pattern for any toggle-shaped assertion. Short
+ * generic patterns are the ones to look at: /deleted/i, /updated/i, /revoked/i
+ * are each used at several call sites.
  */
 export async function expectToast(
   page: Page,
