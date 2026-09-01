@@ -199,7 +199,15 @@ async function createJob(
       .first()
       .click();
     if (opts.contactRole) {
-      await page.getByLabel("Role").fill(opts.contactRole);
+      // Role is a Select (SelectFormCtrl → Radix), not a text field: its
+      // trigger is a role="combobox" button carrying
+      // aria-label={t("forms.selectPlaceholder")} = "Select Role", which is why
+      // a substring getByLabel("Role") resolved to it and fill() then rejected
+      // it as "not an <input>". Pick the option instead.
+      await page.getByRole("combobox", { name: "Select Role" }).click();
+      await page
+        .getByRole("option", { name: opts.contactRole, exact: true })
+        .click();
     }
   }
 
