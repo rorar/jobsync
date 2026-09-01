@@ -37,16 +37,28 @@ export NEXTAUTH_URL="${E2E_BASE_URL:-http://localhost:3737}"
 # memory buys nothing. The cgroup is only a backstop for Turbopack's native
 # (non-V8) allocations.
 #
-# CPU is deliberately NOT capped by default: this is the application under
-# test, and throttling it distorts the very timings the suite measures. Set
-# E2E_DEV_CPU_QUOTA (e.g. "300%") if the host needs it.
+# CPU IS capped, as of 2026-09-01, and that is a deliberate trade against
+# measurement fidelity. This process is the application under test, so
+# throttling it does distort the timings the suite measures — the earlier
+# version of this comment said that was reason enough to leave it uncapped.
+# Practice disagreed: on 2026-09-01 the operator had to kill this server twice
+# because the host became unusable, and a cold Turbopack compile at 174 % CPU
+# was the largest single contributor to load averages above 40. A suite that
+# cannot finish measures nothing at all, so stability wins.
+#
+# 300 % of 5 cores leaves two for the Playwright worker and the system. The
+# observed cold-compile peak was 174 %, so the cap does not bind in normal
+# operation — it only stops a runaway. Raise it if cold compiles start hitting
+# the 150 s readiness wait in test-e2e.sh; set it to "" to restore the old
+# uncapped behaviour when you specifically need undistorted timings.
 #
 # Tunables (env vars):
 #   E2E_DEV_NODE_HEAP   node --max-old-space-size, MB  (default 3072)
 #   E2E_DEV_MEM_MAX     cgroup memory backstop         (default 8G)
-#   E2E_DEV_CPU_QUOTA   cgroup CPUQuota                (default unset = none)
+#   E2E_DEV_CPU_QUOTA   cgroup CPUQuota                (default 300%, "" = none)
 DEV_NODE_HEAP="${E2E_DEV_NODE_HEAP:-3072}"
 DEV_MEM_MAX="${E2E_DEV_MEM_MAX:-8G}"
+E2E_DEV_CPU_QUOTA="${E2E_DEV_CPU_QUOTA-300%}"
 export NODE_OPTIONS="--max-old-space-size=${DEV_NODE_HEAP} ${NODE_OPTIONS:-}"
 
 SCOPE_ARGS=(-p Description=jobsync-dev-e2e -p MemoryMax="$DEV_MEM_MAX" -p MemorySwapMax=0)
