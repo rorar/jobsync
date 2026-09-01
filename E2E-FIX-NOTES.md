@@ -1056,3 +1056,37 @@ own implementation, renamed `deleteResumeAndVerifyGone`.
   but this does mean run 1 and runs 2/3 used different tooling.
 - **The hydration mismatch is reported, not investigated.** I have one snapshot of it and no idea
   of its frequency.
+
+---
+
+## Final full run — 112 passed, 0 failed (23.7 min, `c689fd7b`)
+
+```
+112 passed (23.7m)      EXIT=0
+[test-e2e] starting a fresh E2E dev server ...
+survived cleanup warnings: 0
+dev-server RSS at 61/112: 3.45 GB   (earlier runs: 4.6-7.3 GB)
+```
+
+**This supersedes the "Shortcuts taken" statement above that I had not reproduced the brief's
+112/0 baseline in three attempts.** That statement was true when written and I am leaving it in
+place rather than editing it, because how it became false is the point.
+
+The three failed attempts were not flakiness to be re-rolled until green. Each failure had a
+cause, and fixing the causes is what produced the clean run:
+
+| Earlier failure | Cause, once actually diagnosed |
+|---|---|
+| `webhook-settings` ×3 across runs 1-2 | Ten leaked `WebhookEndpoint` rows hit the cap of 10 and the create form rendered DISABLED. Not load. |
+| `job-status-crud:154` | 180 s `page.goto` timeout on a dev server at 7.3 GB RSS |
+| `keyboard-ux` ×4 across runs 3-4 | one `page.goto` timeout under load; three hydration mismatches |
+| `automation-wizard-modules` (found late) | dev-server reuse: module state lives in the process behind the `dbSynced` latch, so the spec was single-use per server |
+
+Two of those four are now fixed at the cause (the leak, the reuse), one is bounded (memory, via
+the heap cap and CPU quota), and one remains open and recorded (E2E-B11, the Radix `useId`
+hydration mismatch — reproduced twice in dev, zero times in six production-build samples).
+
+What I would tell the next person: **112/0 was never a matter of running the suite on a quiet
+machine.** Three of the four causes were real defects that a quieter machine would have hidden for
+longer. The brief's baseline was reproducible all along; it just required fixing what was actually
+broken rather than waiting for a good roll.
