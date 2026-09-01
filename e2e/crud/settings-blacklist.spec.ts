@@ -26,6 +26,17 @@ async function navigateToBlacklist(page: Page) {
   await page
     .getByRole("heading", { name: "Company Blacklist" })
     .waitFor({ state: "visible", timeout: 10000 });
+
+  // ...and then for the entries list. CompanyBlacklistSettings.tsx:172 keeps
+  // the heading and the add form mounted and swaps only the list for a spinner,
+  // so the heading proves even less here than in the other panels.
+  await page
+    .locator(".animate-spin")
+    .first()
+    .waitFor({ state: "hidden", timeout: 10000 })
+    .catch(() => {
+      /* spinner may have already gone */
+    });
 }
 
 /** Add a blacklist entry with the given pattern. Uses default match type "Contains". */

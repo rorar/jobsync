@@ -218,6 +218,23 @@ export async function cleanupStaleE2EData(): Promise<void> {
     where: { userId, handle: { startsWith: "E2E " } },
   })).count;
 
+  // 16. Webhook endpoints (E2E test endpoints)
+  //
+  // This one is load-bearing, not tidiness. A user may hold at most 10
+  // endpoints (MAX_ENDPOINTS_PER_USER in webhook.actions.ts, MAX_ENDPOINTS in
+  // WebhookSettings.tsx), and at the cap the component renders the create form
+  // DISABLED. webhook-settings.spec.ts deletes its endpoint inline at the end
+  // of each test, so every test that fails before that line leaks one. After
+  // ten such leaks the form can never be filled again and EVERY webhook test
+  // fails in EVERY later run, permanently, until someone deletes rows by hand.
+  // That is exactly what happened on 2026-09-01: one load-induced failure
+  // leaked the tenth row and the next run lost two webhook tests to a disabled
+  // input. Same shape as the WorkExperience/Company foreign-key landmine in
+  // step 6a — a cleanup gap that turns one flake into a permanent outage.
+  total += (await prisma.webhookEndpoint.deleteMany({
+    where: { userId, url: { startsWith: "https://example.com/webhooks/e2e-" } },
+  })).count;
+
   if (total > 0) {
     console.log(`[E2E Cleanup] Removed ${total} stale E2E records`);
   }

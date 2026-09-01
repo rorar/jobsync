@@ -122,6 +122,17 @@ async function navigateToEnrichmentSettings(page: Page) {
   await page
     .getByText("Data Enrichment Modules")
     .waitFor({ state: "visible", timeout: 15000 });
+
+  // ...and then for the module list. EnrichmentModuleSettings.tsx:207
+  // early-returns a loading block containing that same heading, so the wait
+  // above passes while the module cards are still unmounted.
+  await page
+    .locator(".animate-spin")
+    .first()
+    .waitFor({ state: "hidden", timeout: 15000 })
+    .catch(() => {
+      /* spinner may have already gone */
+    });
 }
 
 // ---------------------------------------------------------------------------

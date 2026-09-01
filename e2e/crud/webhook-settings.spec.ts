@@ -27,6 +27,18 @@ async function navigateToWebhooks(page: Page) {
     .getByText("Webhooks", { exact: true })
     .first()
     .waitFor({ state: "visible", timeout: 15000 });
+
+  // ...and then for the panel's own data, which the heading does NOT prove.
+  // WebhookSettings.tsx:281 early-returns a loading block that renders the very
+  // same heading, so the wait above is satisfied while the form is still
+  // unmounted. Wait for the spinner to go, as navigateToSmtp already does.
+  await page
+    .locator(".animate-spin")
+    .first()
+    .waitFor({ state: "hidden", timeout: 15000 })
+    .catch(() => {
+      /* spinner may have already gone */
+    });
 }
 
 /**

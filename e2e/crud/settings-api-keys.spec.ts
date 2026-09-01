@@ -26,6 +26,17 @@ async function navigateToPublicApiKeys(page: Page) {
   await page
     .getByRole("heading", { name: /Public API Keys/i })
     .waitFor({ state: "visible", timeout: 15000 });
+
+  // ...and then for the panel's own data. PublicApiKeySettings.tsx:166
+  // early-returns a loading block containing that same heading, so the wait
+  // above passes while the controls are still unmounted.
+  await page
+    .locator(".animate-spin")
+    .first()
+    .waitFor({ state: "hidden", timeout: 15000 })
+    .catch(() => {
+      /* spinner may have already gone */
+    });
 }
 
 /** Create an API key with the given name. Closes the "key created" dialog. */
