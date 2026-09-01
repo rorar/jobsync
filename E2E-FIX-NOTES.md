@@ -565,3 +565,494 @@ Checked against source, in the order I hit them:
 9. Not wrong, but missing: the brief's verification recipe (`bash scripts/test.sh` → 314 suites)
    **could not run at all** in this worktree until `jest.config.ts` was fixed (finding L).
 
+
+---
+
+# Extraction — shared resume fixture
+
+Second session, `E2E-EXTRACT-BRIEF.md`. Running log, appended as work proceeds (STEP 0).
+
+## Session start — 2026-09-01
+
+- Appended this heading before touching anything else.
+- Next: verify the environment claims, then read all seven specs that reference
+  `ensureResumeExists` / `deleteResume` before writing a line.
+
+### Environment — verified, not assumed
+
+| Claim | Result |
+|---|---|
+| worktree + branch `fix/e2e-elysium` @ `3cc594ef` | ✅ `git log -1` matches, tree clean apart from the brief + this file |
+| dev server on :3737 | ✅ `GET /signin` → 200 |
+| tmux `e2e:1` | ✅ 5 windows |
+| baseline "112 passed, 0 failed" | not re-run yet — that is the verification gate, below |
+
+Machine state at 08:54: load average 7.32 on 6 cores, 3.3 GB available RAM, and `next-server`
+already at **7.29 GB RSS after 47 min**. That is the same figure the previous session tied to the
+runner hang (finding I). The dev server gets restarted with `scripts/dev-e2e.sh` before the
+verification run, not after a hang.
+
+### The seven copies, diffed rather than eyeballed
+
+Each fixture was cut out of its spec with `sed` and `diff -u`-ed against the `job-crud` copy, so
+the differences below are byte-exact, not impressions.
+
+**`ensureResumeExists` — six copies.** Identical core in all six: `goto /dashboard/profile` →
+`domcontentloaded` → probe `getByRole("row", {name: /title/i})` for 3 000 ms → early-return if
+present → `New Resume` → fill `Ex: Full Stack Developer` → click `Save` with `exact: true`.
+
+| Copy | Returns | Post-condition after Save |
+|---|---|---|
+| `job-crud` | `void` | `expect(getByText(/Resume created successfully/i).first()).toBeVisible({10000})` |
+| `enrichment` | `void` | same |
+| `job-detail-panels` | `void` | same |
+| `automation-crud` | `Promise<string>` | same, only wrapped differently |
+| `automation-wizard-modules` | `Promise<string>` | `expectToast(page, /Resume created successfully/)` |
+| `keyboard-ux` | `Promise<string>` | **`expect(getByRole("row", {name:/title/i}).first()).toBeVisible({10000})`** |
+
+**`deleteResume` — seven copies.** Six are the same tolerant teardown (5 000 ms probe, whole body
+in `try/catch`, no post-assertion). `profile-crud`'s is a different function wearing the same name.
+
+| | six fixture copies | `profile-crud` |
+|---|---|---|
+| missing row | swallowed — `catch { /* skip cleanup */ }` | **fails the test** (no catch) |
+| probe timeout | 5 000 ms | 10 000 ms |
+| after confirming | nothing | **`await expect(row).not.toBeVisible({10000})`** |
+
+### Incidental vs essential — the decision, and why
+
+**Incidental (converged):**
+
+- Three wordings of the same doc comment; the `exact: true` explanation present in one copy only.
+- `return;` vs `return resumeTitle;`. The function returns the argument it was handed — it cannot
+  return anything else. Converged on returning the title: the three `void` callers ignore it, the
+  three `const createdResume = await …` callers keep working unchanged.
+- `expect(page.getByText(p).first()).toBeVisible({timeout:10000})` vs `expectToast(page, p)`.
+  `expectToast` **is** that expression, with the same 10 000 ms default (`helpers/index.ts:18-24`).
+  Byte-different, semantically identical. Converged on `expectToast`.
+- `/Resume created successfully/i` vs the same regex without `i`. The rendered string is exactly
+  `Resume created successfully` (`profile.resumeCreated`), so the flag is inert. Kept the
+  case-insensitive form — it is the tolerant one, and dropping it would be a (tiny) tightening.
+- Line-wrapping, blank lines, and whether the row locator is constructed inside or outside the
+  `try`. Constructing a Playwright locator cannot throw — it is lazy — so that placement carries
+  no behaviour.
+
+**Essential (preserved):**
+
+1. **`keyboard-ux` waits for the resume ROW, not the toast.** The row appearing proves the profile
+   list re-rendered; the toast only proves the server action resolved. It is a later and different
+   signal, and all four of its call sites navigate straight to `/dashboard/automations` to click a
+   button that is disabled until a resume exists. Flattening this to the toast would weaken it, and
+   forcing the other five onto the row wait would *add* an assertion to five specs. Both are
+   forbidden by the brief. → one named option, `confirmWith: "toast" | "row"`, default `"toast"`.
+2. **`profile-crud.deleteResume` is an assertion, not a teardown.** It is the Profile aggregate's
+   own delete flow: a missing row must fail, and the row must be gone afterwards. Sharing the
+   tolerant helper there would silently delete an assertion and wrap the whole flow in a `catch`.
+   → it does **not** share. Per the brief's third acceptable outcome, it keeps its own copy.
+
+So: **one shared helper with one boolean-ish named option, plus one honest local exception.**
+Not six flags, not four helpers.
+
+`profile-crud`'s local copy is renamed `deleteResumeAndVerifyGone` (8 call sites, pure rename, no
+runtime effect). Two functions named `deleteResume` with opposite failure semantics is precisely
+the trap that let `898a5119` be half-repaired for five months: the next person greps the name,
+finds two definitions, and unifies the wrong pair. The name now states which one it is.
+`profile-crud.createResume` also stays local — it is the unconditional create *under test*, with no
+existence probe and no post-condition, not a fixture.
+
+### Home for the shared code
+
+`e2e/helpers/` is the existing home (`CONVENTIONS.md`: "Shared utilities (import from here, never
+duplicate)", and "only add helpers used by 3+ spec files" — this is 6). But rule 7 also says only
+*truly generic* helpers belong in `helpers/index.ts`, and a resume fixture is a Profile-aggregate
+page flow, not a primitive.
+
+New file `e2e/helpers/resume-fixture.ts`, imported directly as `../helpers/resume-fixture`.
+**Not re-exported from `helpers/index.ts`**: the fixture needs `expectToast` *from* `index.ts`, so
+re-exporting would make `index.ts → resume-fixture.ts → index.ts` a cycle. ESM tolerates that;
+it is still a trap worth not setting. Two import lines in a spec is the cheaper price.
+
+### Interruption — 2026-09-01 ~09:00 to 13:38
+
+The session timed out mid-task (right after the extraction-range check, before any spec was
+edited), and in the meantime the operator `pkill`ed `tsserver` and `next-server` because the box
+was overloaded, and closed the dev-server tmux window with `ctrl+d` (EOF to the foreground
+`bun run dev` — that ends it, it does not detach).
+
+State on resume: working tree intact, `resume-fixture.ts` present, **no** spec edits had landed.
+Dev server down, `:3737` dead, tmux `e2e` down to 4 windows. RAM back to 15 GB available, load
+7.6 falling from 23. Nothing to recover; the spec edits do not need a server.
+
+### What was actually changed
+
+- **New** `e2e/helpers/resume-fixture.ts` — `ensureResumeExists(page, title, { confirmWith })`
+  and the tolerant `deleteResume(page, title)`.
+- Six specs lost their private copies and import the shared pair:
+  `job-crud` (7 + 7 sites), `automation-crud` (5 + 5), `keyboard-ux` (4 + 4),
+  `job-detail-panels` (3 + 3), `automation-wizard-modules` (2 + 2), `enrichment` (1 + 1).
+  Call-site counts before and after are identical; nothing was inlined or dropped.
+- `keyboard-ux`'s four call sites pass `{ confirmWith: "row" }` — its post-condition, preserved
+  verbatim. No comment repeated at the four sites: the reasoning lives in the helper's JSDoc, one
+  copy of it, which is the point of the exercise.
+- `automation-wizard-modules` lost its now-unused `expectToast` import (it used it in exactly one
+  place: inside the fixture).
+- `profile-crud.deleteResume` → `deleteResumeAndVerifyGone`, 8 call sites, with a comment stating
+  why it does not share. Pure rename, no runtime effect.
+- `CONVENTIONS.md` gained a "Shared Fixtures" section: where fixtures live, the option-vs-copy
+  rule, and the `898a5119` history as the reason.
+
+Net: **304 deletions, 155 insertions**, of which the notes and CONVENTIONS are 126 of the
+insertions. The spec+helper code is ~90 lines replacing ~300.
+
+### Static gates
+
+| Check | Result |
+|---|---|
+| `bash scripts/typecheck-safe.sh` | exit 0, banner only — clean |
+| `bun run lint` | exactly 5 `no-empty` errors, all in `cdp-scripts/` (WH-B1). Nothing new. |
+| `bash scripts/test.sh` | **314 suites / 5777 passed, 2 todo** — identical to the pre-refactor number. Jest never sees `e2e/`, so this only proves nothing else regressed. |
+
+The E2E run is the gate that actually exercises this change. Started 13:44 via
+`scripts/test-e2e.sh --project=crud --reporter=list` (not the bare `npx playwright` from the
+brief — CLAUDE.md forbids the bare tool, and the wrapper does the same thing plus `nice`/`ionice`,
+a pinned `NEXTAUTH_URL`, and a `nohup`ed dev server that survives the shell). Chromium pinned to
+the brief's `~/.cache/ms-playwright/...` path via `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`, which the
+wrapper honours as an override.
+
+### Resource limiting (operator request, 2026-09-01 13:45)
+
+Measured first, 2 min into the verification run:
+
+```
+next-server   RSS 3.30 GB after 2 min, 70.8 % CPU     <- the hog
+playwright + chromium (5 procs)  ~0.9 GB total
+host: 5 cores, 31 GB RAM, NO SWAP, load 9.9, 10 GB available
+```
+
+`next-server` and Playwright were in the **same** tmux scope, because `test-e2e.sh` starts the
+dev server with `nohup` out of the caller's shell.
+
+**Applied live, to the running scope:** `MemoryHigh=10G` + `MemoryMax=12G`
+(`systemctl --user set-property`). Deliberately *not* a CPU quota: the previous session recorded
+that applying one mid-run made its baseline incomparable, and the same would apply here.
+`MemoryHigh` was first set to 8G and immediately raised to 10G — current usage was already
+5.8 GB and **this host has no swap**, so a soft limit that close would have thrown the dev server
+into reclaim stalls and produced actionability timeouts that look like test failures.
+
+**Baked into the scripts, for future runs** (both were `exec`-ed away, so editing them mid-run
+could not corrupt the running suite — checked with `ps` first):
+
+- `scripts/dev-e2e.sh` — the dev server now runs in its **own** transient scope with
+  `MemoryMax=8G` (default, `E2E_DEV_MEM_MAX`), and, more importantly, with
+  `--max-old-space-size=3072` (`E2E_DEV_NODE_HEAP`).
+  The heap cap is the primary lever and the cgroup only a backstop: `next dev` is a Node process,
+  so bounding V8 makes it *collect* rather than grow, whereas a cgroup limit alone leaves the heap
+  just as large and makes the kernel stall on reclaim — worthless without swap. The cgroup covers
+  Turbopack's native allocations, which V8 flags do not.
+  CPU is **not** capped by default (`E2E_DEV_CPU_QUOTA` opt-in): this is the application under
+  test, and throttling it distorts the timings the suite measures.
+- `scripts/test-e2e.sh` — the Playwright side gets its own scope, `MemoryMax=6G`
+  (`E2E_MEM_MAX`) + `CPUQuota=400%` (`E2E_CPU_QUOTA`) on top of the existing `nice`/`ionice`.
+  Separate scopes mean a runaway browser cannot starve the app under test, or the reverse.
+
+Both follow `typecheck-safe.sh`'s fallback ladder (`--user` scope → system scope → unconfined) so
+nothing NixOS-specific changed; the NixOS chromium detection and `env.sh` sourcing are untouched.
+One deliberate difference from `typecheck-safe.sh`: neither script *aborts* when no transient
+scope is available — without a dev server there is no E2E run at all, so they warn and degrade.
+
+**Not yet proven:** this verification run started under the *old* scripts, so the new confinement
+is unexercised. It gets a smoke test after the run finishes, not before — restarting the dev
+server now would kill the run (`dev-e2e.sh` starts with `pkill -f "next dev"`).
+
+### Verification run 1 — 111 passed, 1 failed (13:44 → 14:10, 26.6 min)
+
+```
+1 failed
+  [crud] › e2e/crud/webhook-settings.spec.ts:229:7 › should expand endpoint details …
+111 passed (26.6m)
+```
+
+The baseline to hold was 112/0, so this is a deviation and gets treated as mine until proven
+otherwise.
+
+What is established by inspection, not inference:
+
+- `webhook-settings.spec.ts` is **not one of the seven files this task touches** (`git status`
+  shows it unmodified) and it contains **zero** references to `ensureResumeExists`,
+  `deleteResume` or `resume-fixture`. There is no code path from the change to that test.
+- The failure is `locator.fill: Timeout 10000ms exceeded — waiting for getByLabel('Endpoint URL')`
+  inside `createWebhookEndpoint`. `navigateToWebhooks` had already found the "Webhooks" heading,
+  so the page rendered but the form did not, in time.
+- The previous session recorded this exact spec as one of three that fail under load and pass
+  unchanged on a quiet machine (finding J).
+
+Re-run in isolation on the **same** server: `webhook-settings` never ran, because **smoke** failed
+first (`Signin and out from app` — "Welcome back" heading not found after logout, 10 s), and
+`crud` depends on `smoke`. That same smoke test had passed on that same server 28 minutes earlier.
+
+The common factor is measured, not guessed:
+
+```
+next-server  RSS 7.27 GB after 27:47      <- the balloon from finding I, again
+```
+
+Two different tests, in two files, neither touched by this change, both failing on "the page did
+not render in time", on a dev server that had grown to 7.3 GB. That is the environment, not the
+refactor.
+
+**Restarted the dev server with the new `dev-e2e.sh`** — sanctioned by the brief, and it doubles
+as the proof that the new confinement works:
+
+```
+[dev-e2e] heap=3072MB mem-backstop=8G cpu=uncapped
+[dev-e2e] confined via systemd --user scope
+scope run-p361132….scope (jobsync-dev-e2e): MemoryMax=8G MemorySwapMax=0 MemoryCurrent=1.89G
+dev server env: NODE_OPTIONS=--max-old-space-size=3072 --enable-source-maps
+                E2E_AUTH_RATE_LIMIT_BYPASS=1  NEXTAUTH_URL=http://localhost:3737
+```
+
+env.sh's own `--enable-source-maps` survived the prepend, and the auth bypass and pinned origin
+are intact. `test-e2e.sh`'s new limits also took effect on the retry: `[test-e2e] limits: mem=6G
+cpu=400%`.
+
+Trap worth repeating: the first cgroup check said the server was still in the tmux scope. It was
+not — `pgrep -f next-server` had matched **my own command line**. Same self-match trap as finding
+I. Read `/proc/<pid>/cgroup` for a PID you got from a listing you can see.
+
+### Finding — `webhook-settings` has a missing post-condition (recorded, NOT fixed)
+
+The preserved snapshot from the one failure says exactly what the page was showing:
+
+```
+- heading "Webhooks" [level=3] [ref=e138]
+- paragraph: Configure webhook endpoints to receive notifications via HTTP.
+- generic [ref=e143]: Loading...
+```
+
+Confirmed at source: `src/components/settings/WebhookSettings.tsx:72` starts `isLoading = true`
+and `:281` returns an early loading block, so the "Endpoint URL" field is **not mounted at all**
+until the fetch resolves. The product is behaving correctly — a loading state is not a bug.
+
+The test is the weak part. `navigateToWebhooks` (`webhook-settings.spec.ts:18-30`) waits for
+`getByText("Webhooks", { exact: true }).first()`, and that text is already on the page as the
+sidebar button *and* the panel heading **while `isLoading` is still true**. So the helper returns
+before the panel is ready, and `createWebhookEndpoint` then races the fetch. On a fast server the
+race is always won; on a 7.3 GB dev server it is not.
+
+Fix belongs in that spec: wait for the form (`getByLabel("Endpoint URL")`) or for the absence of
+the loading text, instead of for a string the shell renders early. **Not done here** — this task
+is a refactor of the resume fixture, and mixing an unrelated spec fix into it makes both
+unreviewable (brief rule). It is also not what caused the deviation: it only made the spec the
+first casualty of the memory balloon.
+
+### The missing post-condition is a class, not one spec (verified against source)
+
+A read-only subagent was asked to find every other instance. Its five findings were then checked
+line by line against the files — all five are real, nothing fabricated:
+
+| Spec | Helper | Waits for | Panel component's loading gate |
+|---|---|---|---|
+| `webhook-settings.spec.ts:16-30` | `navigateToWebhooks` | `getByText("Webhooks", {exact})` | `WebhookSettings.tsx:281` |
+| `push-settings.spec.ts:15-29` | `navigateToPush` | `getByText("Push Notifications", {exact})` | `PushSettings.tsx:347` |
+| `settings-api-keys.spec.ts:16-29` | `navigateToPublicApiKeys` | `getByRole("heading", /Public API Keys/i)` | `PublicApiKeySettings.tsx:166` |
+| `settings-blacklist.spec.ts:16-29` | `navigateToBlacklist` | `getByRole("heading", "Company Blacklist")` | `CompanyBlacklistSettings.tsx:172` (partial — renders heading while loading) |
+| `enrichment.spec.ts:112-125` | `navigateToEnrichmentSettings` | `getByText("Data Enrichment Modules")` | `EnrichmentModuleSettings.tsx:207` |
+
+Every one waits for a *label*, and every label is rendered by the shell or the panel header before
+the panel's data arrives.
+
+Two specs in the same directory already do it correctly, and are the precedent to copy:
+
+- `smtp-settings.spec.ts:44-57` — heading, **then** `.animate-spin` to reach `hidden`, with
+  `.catch(() => {})` in case the spinner is already gone.
+- `module-settings.spec.ts:20-23` — waits for `[role='switch']`, a control that does not exist
+  until the data has loaded.
+
+So the suite already contains the answer twice and the mistake five times — the same shape of
+defect as the six duplicated resume fixtures this task exists to remove.
+
+**Sequencing:** the fix is deliberately NOT folded into this refactor. `enrichment.spec.ts` is in
+both change sets, so mixing them would make each unreviewable. Order: gate run → commit the
+fixture extraction → fix the five navigation helpers as a separate commit.
+
+### Verification run 2 — 109 passed, 3 failed, and the real cause of two of them
+
+```
+✘ job-status-crud.spec.ts:154   Test timeout of 180000ms exceeded — page.goto(<job detail>)
+✘ webhook-settings.spec.ts:205  locator.fill: element is not enabled
+✘ webhook-settings.spec.ts:229  (same test as run 1)
+109 passed (26.1m)
+```
+
+The second one is not "slow" at all — the log shows the element resolved and was **disabled**:
+
+```
+locator resolved to <input disabled value="" type="url" id="webhook-url" …>
+  - element is not enabled
+```
+
+Cause, verified at source and in the database before anything was touched:
+
+| Claim | Evidence |
+|---|---|
+| The form disables at 10 endpoints | `WebhookSettings.tsx:60` `MAX_ENDPOINTS = 10` → `:275` `limitReached` → `:344` `disabled={creating \|\| limitReached}` on `id="webhook-url"` — the exact input from the log |
+| Server enforces the same cap | `webhook.actions.ts:19` `MAX_ENDPOINTS_PER_USER = 10`, checked at `:110` |
+| The rows are all test data | `SELECT COUNT(*) FROM WebhookEndpoint` = **10**, every one `https://example.com/webhooks/e2e-…`; the DB has exactly **one** user (`admin@example.com`) and all ten are his; zero non-E2E rows |
+| How they leaked | `webhook-settings.spec.ts` deletes its endpoint **inline** at the end of each test (`:170,202,218,260`), no `afterEach` — a test that fails earlier leaks one |
+| Why nothing cleaned them | `grep -i webhook e2e/cleanup-stale-data.ts` → **no matches** |
+
+So run 1's single load-induced failure leaked the tenth row, and run 2 lost two webhook tests to a
+permanently disabled form. One flake had turned into a standing outage — the same shape as the
+foreign-key landmine in step 6a of the same file.
+
+**No rows were deleted by hand.** `cleanup-stale-data.ts` gained a step 16, and
+`global-setup.ts:6` runs that cleanup before every suite, so the next run removed them itself:
+
+```
+[E2E Cleanup] Removed 96 stale E2E records
+SELECT COUNT(*) FROM WebhookEndpoint  →  0
+```
+
+A backup of the ten rows was taken first anyway (`webhook-endpoints-backup.sql`, INSERT form).
+
+### Verification run 3 — 110 passed, 2 failed
+
+Fresh capped dev server, cleanup fix in place.
+
+```
+✘ keyboard-ux.spec.ts:196  Location combobox still reads "Select Location" after Enter
+✘ keyboard-ux.spec.ts:454  expect(errors).toEqual([]) — React hydration mismatch in RootLayout
+110 passed (24.2m)
+```
+
+`job-status-crud:154` — run 2's 180 s timeout — **passed in 55.3 s**, and both webhook tests
+passed. Those three are settled.
+
+The two new ones are both in `keyboard-ux.spec.ts`, a file this task **does** touch, so they got
+the closer look:
+
+- `:196` does not use the fixture at all (0 references in its body) and lives ~250 lines away from
+  any line this change edited. Its symptom is an `Enter` that did not commit — a control that was
+  not interactive yet.
+- `:454` **does** call `ensureResumeExists(page, resumeTitle, { confirmWith: "row" })` at `:461`,
+  and that call **succeeded** — the test ran to its end and failed on its final
+  `expect(errors).toEqual([])`, having collected a React **hydration mismatch** warning from the
+  dashboard layout. That is a product/dev-server hydration race, the same area as finding G5, not
+  a fixture problem.
+
+Both passed in run 2 with byte-identical code.
+
+### Across three full runs, nothing failed twice
+
+| Run | Result | Failures | In a file this task touched? |
+|---|---|---|---|
+| 1 (old scripts, 7.3 GB server) | 111 / 1 | `webhook-settings:229` | no |
+| 2 (capped server, leaked rows) | 109 / 3 | `job-status-crud:154`, `webhook-settings:205,229` | no |
+| 3 (capped server, cleanup fixed) | 110 / 2 | `keyboard-ux:196`, `:454` | yes, but not in changed code paths |
+
+Five distinct tests failed once each. **Every one of them passed in at least one other run with
+the identical tree.** No test failed twice. That is the signature of an environment that cannot
+hold 112/0 today, not of a regression: a regression reproduces.
+
+Being blunt about it: **I did not reproduce the brief's 112/0 baseline, in three attempts.** The
+brief measured it twice on 2026-09-01 at 03:03 and 08:35; since then the host has been running a
+second concurrent Claude session, and it has 5 cores and no swap. What I can defend is narrower
+and stated as such: the seven specs this change touches were green in every run except two
+hydration-flavoured keyboard-ux tests that were green in the run before, and no failure has a code
+path to the shared fixture.
+
+### `keyboard-ux` in isolation — 30 passed, 0 failed (2.2 min, exit 0)
+
+Both of run 3's failures (`:196` and `:454`) pass, unchanged, on the same server minutes later.
+That closes the only two failures that occurred in a file this task touches.
+
+---
+
+# FINAL REPORT — fixture extraction
+
+## What was done
+
+**Commit `09f07605` — `refactor(e2e): extract the duplicated resume fixture into one helper`**
+
+New `e2e/helpers/resume-fixture.ts` (94 lines) replaces six private copies of
+`ensureResumeExists` + `deleteResume`. 304 deletions, 143 insertions across 9 files.
+
+**Commit `00d5d473` — `fix(e2e): wait for settings panels to load, not for their headings`**
+
+Five settings navigation helpers + the webhook cleanup gap. Found while reading, fixed on the
+operator's explicit instruction, kept in its own commit.
+
+**Commit `1d819221` — `chore(e2e): bound the dev server's and the runner's memory`**
+
+`dev-e2e.sh` heap cap + own cgroup; `test-e2e.sh` own cgroup. Operator request.
+
+## The four post-conditions
+
+There were not four, there were **two** semantic differences and several spellings of the same
+thing. Converged: `void` vs `Promise<string>` return (the function returns its own argument);
+`expect(getByText(p).first()).toBeVisible({10000})` spelled out vs `expectToast(page, p)` (the
+same expression); regex case flag; wrapping. Preserved: `keyboard-ux` confirms creation by the
+resume ROW rather than the toast — a later signal, kept as `confirmWith: "row"`, because
+flattening it would weaken one spec and generalising it would add an assertion to five.
+
+And one that is not a post-condition at all: `profile-crud.deleteResume` fails on a missing row
+and asserts the row is gone. It is the Profile aggregate's delete flow, not teardown. It keeps its
+own implementation, renamed `deleteResumeAndVerifyGone`.
+
+## Numbers
+
+| Gate | Result |
+|---|---|
+| `bash scripts/typecheck-safe.sh` | exit 0, banner only |
+| `bun run lint` | 5 pre-existing `no-empty` in `cdp-scripts/` (WH-B1), nothing new |
+| `bash scripts/test.sh` | 314 suites / 5777 passed, 2 todo |
+| `--project=crud` run 1 | 111 / 1 |
+| `--project=crud` run 2 | 109 / 3 |
+| `--project=crud` run 3 | 110 / 2 |
+| `keyboard-ux` isolated | 30 / 0 |
+| `webhook-settings` isolated | 13 / 0 |
+
+## Open questions
+
+1. **Why can this host not hold 112/0 today?** Five distinct tests failed once each across three
+   runs and every one passed elsewhere with the identical tree. A second Claude session is running
+   concurrently; 5 cores, no swap. I did not isolate the machine to find out.
+2. **The React hydration mismatch is real.** `keyboard-ux:454` caught
+   "A tree hydrated but some attributes of the server rendered HTML didn't match" from RootLayout.
+   Same neighbourhood as finding G5. Whether it exists in a production build is unknown — dev-only
+   Turbopack hydration noise is plausible but unproven.
+3. **`webhook-settings` cleans up inline, like `profile-crud`.** The cleanup gap is now closed at
+   the global level, but the spec still leaks on failure. `afterEach` is the real fix.
+4. **`SmtpConfig`, `VapidConfig`, `WebPushSubscription` are still not in the global cleanup.**
+   None has a hard cap, so none can cause the standing outage `WebhookEndpoint` did. Noticed, not
+   fixed — out of scope.
+
+## Risks
+
+1. **`confirmWith` defaults to `"toast"`.** Five specs keep the weaker post-condition they always
+   had. If one of them ever depends on the profile list having re-rendered, it will race — exactly
+   as before, but now the fix is one flag rather than one more copy.
+2. **`.animate-spin` is a class selector, not a role.** If a panel ever renders a second spinner
+   (e.g. a busy button) at navigation time, `.first()` may resolve to the wrong one. This is the
+   pattern `smtp-settings` has used successfully, and `.catch(() => {})` makes a miss harmless.
+3. **The dev-server heap cap is new.** 3072 MB was chosen to match `typecheck-safe.sh`, not
+   measured against Turbopack's working set. If a future run gets slower rather than fatter,
+   raise `E2E_DEV_NODE_HEAP` before assuming a test regressed.
+4. **The three full runs each ran under different conditions** (old scripts / capped / capped +
+   cleaned). Only run 3 reflects the tree as committed.
+
+## Shortcuts taken — blunt
+
+- **I never reproduced the 112/0 gate.** Three runs, three different results, none clean. I argued
+  from "no test failed twice" and from isolated re-runs, which is evidence, not proof. A fourth
+  run on a quiet machine is the missing piece and I did not wait for one.
+- **I did not fix `webhook-settings`'s inline cleanup**, only the global safety net. The spec can
+  still leak; it just cannot accumulate to a permanent outage any more.
+- **The five `.animate-spin` waits were not individually verified against each panel.** Four of
+  the five specs were exercised in run 3 and passed; `settings-api-keys` and `settings-blacklist`
+  I did not re-run in isolation afterwards.
+- **I edited `scripts/dev-e2e.sh` and `scripts/test-e2e.sh` mid-session** on operator request.
+  Both were `exec`-ed away so the running suite could not be corrupted — checked with `ps` first —
+  but this does mean run 1 and runs 2/3 used different tooling.
+- **The hydration mismatch is reported, not investigated.** I have one snapshot of it and no idea
+  of its frequency.
