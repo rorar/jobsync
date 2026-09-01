@@ -1,16 +1,16 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-09-01
 
-**Total: 620 bugs found, 614 fixed, 7 open (2 accepted risk + 5 from 2026-09-01)**
+**Total: 621 bugs found, 616 fixed, 6 open (2 accepted risk + 4 from 2026-09-01)**
 
-> The three figures above do not reconcile (614 + 7 = 621, not 620) and have not reconciled
+> The three figures above do not reconcile (616 + 6 = 622, not 621) and have not reconciled
 > for several sessions. The off-by-one is inherited, not introduced here; the 2026-09-01 edit
-> added 12 (7 fixed, 5 open) to each figure, which preserves the discrepancy rather than
+> added 13 (9 fixed, 4 open) to each figure, which preserves the discrepancy rather than
 > papering over it. Whoever next audits this file should recount from the sections rather
 > than trust this line.
 
 ### Status: ✅ OP-B1..OP-B8 all fixed (CRM orphan-note prune + full-review, 2026-08-21/23) + IT-B1..IT-B4 all fixed (IT-B2/IT-B4 on 2026-08-19 §F; IT-B1/IT-B3 on 2026-08-20 weed-resolution pass) + 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
 
-## Session 2026-09-01 — E2E fixture extraction + the data leak behind it (12 found, 7 fixed, 5 open)
+## Session 2026-09-01 — E2E fixture extraction + the data leak behind it (13 found, 9 fixed, 4 open)
 
 Context: the resume-fixture extraction (`09f07605`) needed three full `--project=crud` runs to
 verify. None was clean, and chasing *why* turned up a leak that had already been silently breaking
@@ -27,11 +27,12 @@ code path to it.
 | E2E-B6 | MEDIUM | Five settings navigation helpers waited for a heading or label that the panel's own **loading state** renders (`WebhookSettings.tsx:281`, `PushSettings.tsx:347`, `PublicApiKeySettings.tsx:166`, `EnrichmentModuleSettings.tsx:207`, `CompanyBlacklistSettings.tsx:172`), then interacted with controls that were not mounted. Fast server hides it; loaded server does not. | Each now also waits for the spinner to clear, copying `smtp-settings.spec.ts:50-57` and `module-settings.spec.ts:23`, which already did it correctly. Commit `00d5d473`. |
 | E2E-B7 | LOW | `package.json` shipped `"test:e2e": "npx playwright test"` — the bare invocation CLAUDE.md forbids, bypassing the resource wrapper. | Routed through `./scripts/test-e2e.sh`. Siblings that still bypass their wrappers (`build`, `test`, `test:watch`, `dev`) reported, not changed — `dev` has blast radius because Playwright's `webServer.command` is literally `bun run dev`. |
 
+| E2E-B8 | MEDIUM | `enrichment.spec.ts` asserted three times on page-wide `getByText(/…active/i).first()`, with comments claiming they awaited the activation/deactivation toast. They did not. `EnrichmentModuleSettings.tsx:290-292` renders an `Active`/`Inactive` badge for EVERY module, and `.first()` resolves in DOM order, so the module cards win over the toast viewport and an arbitrary module's badge satisfied the assertion. With three modules on the page `/active/i` could therefore **never fail**. (The toast title `"<module> — Active"` at `:145` *is* matchable — the earlier claim that the regex could not match a toast at all was wrong, and only the description `"Module activated."` is unmatchable.) | Fixed after the full-suite run: all three replaced with `toBeChecked()` / `not.toBeChecked()` on the switch the test already located. |
+| E2E-B13 | LOW | Introduced by change 8 in the same session. `automation-wizard-modules.spec.ts:117` still guards the deactivation with `if (wasActive)`, but `:112-115` asserts `wasActive === true` and aborts otherwise — so the conditional is provably always taken. A reader infers the state can vary when it cannot. The comment at `:108` also still says "died between the deactivation and the restore below", and that restore was deleted by the same change. | Fixed: the conditional was removed and its body hoisted, and the stale comment now describes the central step-0b reset and the `dbSynced` latch instead of a deleted restore. |
 ### Open
 
 | ID | Severity | Bug | Why not fixed |
 |---|---|---|---|
-| E2E-B8 | MEDIUM | `enrichment.spec.ts:281,289` assert `getByText(/active/i)`, and that regex also matches "**In**active" — the test can finish before the transition lands. This is why `google_favicon` kept ending up inactive despite "passing". | Separate defect; mixing it into the leak fix would make both unreviewable. |
 | E2E-B9 | MEDIUM | JSearch cannot be re-activated through the UI on this host: `credential.type: API_KEY, required: true`, and `activateModule` refuses without a default, `RAPIDAPI_KEY`, or a stored `ApiKey` row. The per-test restore that used to hide this was removed, so the module stays inactive for the rest of the dev-server process (`dbSynced` syncs once). | Needs a decision: seed a credential fixture, set the env var for the E2E server, or accept step 0b as the reset. Step 0b already makes it self-healing across runs. |
 | E2E-B10 | MEDIUM | Playwright 1.57.0 expects chromium build **1200** (`playwright-core/browsers.json`); the cache holds only **1234**. Without `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` every run dies at `global-setup.ts:15` before a single test — a launch failure, not a test failure. | Infra: either `npx playwright install` or a fallback in `scripts/env.sh`. Also means every E2E number recorded today was measured against a build this Playwright does not nominally support. |
 | E2E-B11 | LOW | React hydration mismatch in the dashboard chrome: three Radix `useId` values diverge between server and client (Sheet trigger, NotificationBell, ProfileDropdown `aria-controls`/`id`). Caught once by `keyboard-ux.spec.ts:454`'s `expect(errors).toEqual([])`. All classic triggers (`Date.now`, `Math.random`, locale formatting, `localStorage` in first render, `typeof window` branches, invalid nesting) were ruled out with file:line. | Whether it reaches a production build is undetermined — not established without one, and a build was out of scope on this host. Frequency unknown: one occurrence, one clean 7-sample re-run. |
