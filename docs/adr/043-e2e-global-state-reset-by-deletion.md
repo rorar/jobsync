@@ -126,6 +126,28 @@ test in the run).
   (`module.actions.ts:430`), so a dev server that already synced will not re-read the table. The
   cleanup runs in `globalSetup`, a separate process, so its effect appears at the next server
   start. This is documented in the cleanup comment and in the spec that depends on it.
+- **A live server process can resurrect the row the reset just deleted.** Deleting the override
+  removes it from the table, not from the memory of a process that already read it.
+  `getModuleManifests` fires a background `checkModuleHealth` for every module whose in-memory
+  health is `UNKNOWN` — with **no filter on status** (`module.actions.ts:79-86`) — and that
+  function's upsert writes `status: registered.status` on its **create** branch
+  (`health-monitor.ts:215-227`). A process still holding a stale `inactive` therefore re-persists
+  that `inactive` into the table `globalSetup` had just emptied, and the next process syncs the
+  resurrected value. The window opens on the first settings-page load after the reset.
+
+  Starting a fresh dev server per run (`scripts/test-e2e.sh`, `47369e15`) largely defuses this: a
+  new process syncs from an empty table, holds the manifest defaults, and so any row it re-creates
+  carries `active`. It does not eliminate it — any other process sharing the database (a
+  `scripts/dev.sh` server left running, a second run overlapping the first) can still write back
+  what it remembers.
+
+  This race is **orthogonal to the delete-versus-write choice**: Option 1 would be undone by the
+  same upsert carrying the same stale value, so it is not a cost of this decision. What it does is
+  bound the decision's guarantee — **the reset is durable only against processes that start after
+  it**, which is the same one-process-late boundary as the bullet above, seen from the other side.
+  A reset that must outlive a running process would need the registry to re-read on write, or the
+  health path to stop persisting `status` at all; neither is in scope here.
+
 - **The step is global while every other step is `userId`-scoped**, because the model has no user
   column. On a shared database it would reset another user's deliberate deactivations. Acceptable
   for a test database; it would not be for anything else.
@@ -162,4 +184,6 @@ initially changed to match the JSearch spec and reverted when that was recognise
 - `src/actions/module.actions.ts:430,439-450,452` — the sync latch and the rows-that-exist loop
 - `src/lib/connector/registry.ts:67` — the manifest default
 - `e2e/cleanup-stale-data.ts` steps 0a/0b — the implementation and its comment
-- `docs/BUGS.md` § Session 2026-09-01 — E2E-B4, and E2E-B9 for the credential-gated restore
+- `src/actions/module.actions.ts:79-86` — the unfiltered background health check that opens the resurrection window
+- `src/lib/connector/health-monitor.ts:215-227` — the upsert `create` branch that writes `status`
+- `docs/BUGS.md` § Session 2026-09-01 — E2E-B4, E2E-B9 (credential-gated restore), E2E-B18 (resurrection race)
