@@ -48,7 +48,12 @@ async function navigateToSmtp(page: Page) {
     .waitFor({ state: "visible", timeout: 15000 });
 
   // Wait for loading spinner to disappear
+  // Scoped to <main>: SchedulerStatusBar (Header.tsx:76, above <main> in
+  // DOM order) renders its own .animate-spin whenever a scheduler run is
+  // active, so an unscoped .first() would wait on the wrong element,
+  // time out, and be swallowed by the .catch below.
   await page
+    .getByRole("main")
     .locator(".animate-spin")
     .first()
     .waitFor({ state: "hidden", timeout: 15000 })

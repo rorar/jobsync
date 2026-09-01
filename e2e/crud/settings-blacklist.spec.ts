@@ -30,7 +30,12 @@ async function navigateToBlacklist(page: Page) {
   // ...and then for the entries list. CompanyBlacklistSettings.tsx:172 keeps
   // the heading and the add form mounted and swaps only the list for a spinner,
   // so the heading proves even less here than in the other panels.
+  // Scoped to <main>: SchedulerStatusBar (Header.tsx:76, above <main> in
+  // DOM order) renders its own .animate-spin whenever a scheduler run is
+  // active, so an unscoped .first() would wait on the wrong element,
+  // time out, and be swallowed by the .catch below.
   await page
+    .getByRole("main")
     .locator(".animate-spin")
     .first()
     .waitFor({ state: "hidden", timeout: 10000 })

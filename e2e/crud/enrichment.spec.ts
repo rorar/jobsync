@@ -126,7 +126,12 @@ async function navigateToEnrichmentSettings(page: Page) {
   // ...and then for the module list. EnrichmentModuleSettings.tsx:207
   // early-returns a loading block containing that same heading, so the wait
   // above passes while the module cards are still unmounted.
+  // Scoped to <main>: SchedulerStatusBar (Header.tsx:76, above <main> in
+  // DOM order) renders its own .animate-spin whenever a scheduler run is
+  // active, so an unscoped .first() would wait on the wrong element,
+  // time out, and be swallowed by the .catch below.
   await page
+    .getByRole("main")
     .locator(".animate-spin")
     .first()
     .waitFor({ state: "hidden", timeout: 15000 })

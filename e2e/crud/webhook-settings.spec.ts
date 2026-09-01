@@ -32,7 +32,12 @@ async function navigateToWebhooks(page: Page) {
   // WebhookSettings.tsx:281 early-returns a loading block that renders the very
   // same heading, so the wait above is satisfied while the form is still
   // unmounted. Wait for the spinner to go, as navigateToSmtp already does.
+  // Scoped to <main>: SchedulerStatusBar (Header.tsx:76, above <main> in
+  // DOM order) renders its own .animate-spin whenever a scheduler run is
+  // active, so an unscoped .first() would wait on the wrong element,
+  // time out, and be swallowed by the .catch below.
   await page
+    .getByRole("main")
     .locator(".animate-spin")
     .first()
     .waitFor({ state: "hidden", timeout: 15000 })
