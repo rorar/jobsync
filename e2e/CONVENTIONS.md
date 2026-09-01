@@ -238,6 +238,12 @@ comment with the reason.
 - **NixOS**: Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium`
 - **Dev server**: Agents may start it (`bun run dev`) but must **never stop it**. For E2E runs prefer `scripts/dev-e2e.sh` — it starts the dev server with `E2E_AUTH_RATE_LIMIT_BYPASS=1` so repeated logins (global-setup + the signin smoke test) don't trip the signin rate limiter (5/15min per IP). The bypass is prod-inert (gated on `NODE_ENV !== "production"`); never set it in production. See CLAUDE.md § Shared Rate-Limit Factory.
 - **SQLite**: Shared `dev.db` with no per-test isolation. Unique test data names are your only protection against collision.
+- **Cleanup runs in `globalSetup` only.** Playwright's UI mode (`--ui`), watch mode and the
+  test-runner MCP can execute tests without it, so the stale-data purge in
+  `e2e/cleanup-stale-data.ts` never runs in those modes. None of them is reachable on this host
+  today (no Playwright VS Code extension, `DISPLAY`/`WAYLAND_DISPLAY` unset, no `--ui`/`--watch`
+  in the repo), so this is a note to keep in mind — not something to build machinery against.
+  Use `./scripts/test-e2e.sh`, which always goes through `globalSetup`.
 
 ## One Spec Per Aggregate
 

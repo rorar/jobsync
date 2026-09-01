@@ -42,6 +42,27 @@ async function navigateToWebhooks(page: Page) {
 }
 
 /**
+ * URLs of the endpoints created by the test currently running.
+ *
+ * Load-bearing, not tidiness. A user may hold at most 10 endpoints
+ * (MAX_ENDPOINTS_PER_USER in webhook.actions.ts, MAX_ENDPOINTS in
+ * WebhookSettings.tsx), and at the cap the create form renders DISABLED. Each
+ * test below deletes its endpoint inline as its last statement, so a test that
+ * throws before that line leaks a row — and after ten leaks EVERY webhook test
+ * fails in EVERY later run until someone deletes rows by hand. That happened
+ * on 2026-09-01.
+ *
+ * `createWebhookEndpoint` registers here itself so no caller can forget, and
+ * `deleteWebhookEndpoint` de-registers on success, so the afterEach below only
+ * ever deletes what genuinely leaked. An ARRAY, not a scalar: a test that
+ * creates two endpoints (the obvious missing one — "form disables at the cap" —
+ * would create ten) must not leak all but the last. Module scope is per-worker
+ * (workers are separate processes running their tests serially) and the hook
+ * swaps the reference out, so nothing bleeds into the next test.
+ */
+let createdEndpointUrls: string[] = [];
+
+/**
  * Create a webhook endpoint with the given URL and at least one event selected.
  * Closes the secret dialog after creation.
  */
@@ -50,6 +71,10 @@ async function createWebhookEndpoint(
   webhookUrl: string,
   eventLabel: string,
 ) {
+  // Register BEFORE creating: a create that fails after the row was written
+  // has still leaked one.
+  createdEndpointUrls.push(webhookUrl);
+
   // Fill the URL input
   await page.getByLabel("Endpoint URL").fill(webhookUrl);
 
@@ -113,6 +138,12 @@ async function deleteWebhookEndpoint(page: Page, webhookUrl: string) {
 
     // Wait for the AlertDialog to close
     await alertDialog.waitFor({ state: "hidden", timeout: 5000 });
+
+    // Deleted for real (toast seen, dialog closed) — drop it from the tracking
+    // so the afterEach does not re-delete a row that is already gone. Anything
+    // that threw above skips this line and stays tracked, which is exactly the
+    // case the net exists for.
+    createdEndpointUrls = createdEndpointUrls.filter((u) => u !== webhookUrl);
   } catch {
     // Endpoint may not exist — skip cleanup
   }
@@ -127,6 +158,34 @@ async function deleteWebhookEndpoint(page: Page, webhookUrl: string) {
 test.describe("Webhook Settings", () => {
   test.beforeEach(async ({ page }) => {
     await ensureEnglishLocale(page);
+  });
+
+  // Safety net for the inline deletes at the end of each test — see
+  // `createdEndpointUrls` above. On a green test this list is already empty
+  // (deleteWebhookEndpoint de-registers), so the hook costs nothing and stays
+  // silent; a warning here therefore means a REAL leak, not routine noise.
+  test.afterEach(async ({ page }) => {
+    // Swap the reference out BEFORE the first await: clearing afterwards would
+    // keep entries alive into the next test if a delete throws, and clearing in
+    // a beforeEach would not run at all under test.skip.
+    const leaked = createdEndpointUrls;
+    createdEndpointUrls = [];
+    if (leaked.length === 0) return;
+
+    try {
+      // deleteWebhookEndpoint assumes the Webhooks panel is open. A test that
+      // failed inside createWebhookEndpoint leaves the browser on the secret
+      // dialog, so navigate first — and keep it inside the try, because a hook
+      // that throws replaces the real test failure in the report.
+      await navigateToWebhooks(page);
+      for (const url of leaked) {
+        await deleteWebhookEndpoint(page, url);
+      }
+    } catch (error) {
+      console.warn(
+        `[webhook-settings] afterEach cleanup failed: ${String(error)}`,
+      );
+    }
   });
 
   test("should display webhook settings section with create form", async ({

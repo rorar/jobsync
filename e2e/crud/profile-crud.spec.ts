@@ -85,7 +85,7 @@ async function deleteResumeAndVerifyGone(page: Page, title: string) {
 
 test("create resume and delete", async ({ page }) => {
   const uid = Date.now().toString(36);
-  const resumeTitle = `Resume Create ${uid}`;
+  const resumeTitle = `E2E Resume Create ${uid}`;
 
   await navigateToProfile(page);
   await createResume(page, resumeTitle);
@@ -99,8 +99,8 @@ test("create resume and delete", async ({ page }) => {
 
 test("edit resume title", async ({ page }) => {
   const uid = Date.now().toString(36);
-  const resumeTitle = `Resume Title ${uid}`;
-  const editedTitle = `Resume Title ${uid} Edited`;
+  const resumeTitle = `E2E Resume Title ${uid}`;
+  const editedTitle = `E2E Resume Title ${uid} Edited`;
 
   await navigateToProfile(page);
   await createResume(page, resumeTitle);
@@ -130,7 +130,7 @@ test("edit resume title", async ({ page }) => {
 
 test("add contact info", async ({ page }) => {
   const uid = Date.now().toString(36);
-  const resumeTitle = `Resume Contact ${uid}`;
+  const resumeTitle = `E2E Resume Contact ${uid}`;
 
   await navigateToProfile(page);
   await createResume(page, resumeTitle);
@@ -158,7 +158,7 @@ test("add contact info", async ({ page }) => {
 
 test("add summary section", async ({ page }) => {
   const uid = Date.now().toString(36);
-  const resumeTitle = `Resume Summary ${uid}`;
+  const resumeTitle = `E2E Resume Summary ${uid}`;
 
   await navigateToProfile(page);
   await createResume(page, resumeTitle);
@@ -184,7 +184,7 @@ test("add summary section", async ({ page }) => {
 
 test("add work experience", async ({ page }) => {
   const uid = Date.now().toString(36);
-  const resumeTitle = `Resume Experience ${uid}`;
+  const resumeTitle = `E2E Resume Experience ${uid}`;
   const jobText = "Software Developer";
 
   await navigateToProfile(page);
@@ -249,7 +249,7 @@ test("add work experience", async ({ page }) => {
 
 test("edit experience dialog opens and cancels", async ({ page }) => {
   const uid = Date.now().toString(36);
-  const resumeTitle = `Resume EditExp ${uid}`;
+  const resumeTitle = `E2E Resume EditExp ${uid}`;
   const jobText = "Software Developer";
 
   await navigateToProfile(page);
@@ -334,7 +334,7 @@ test("multi-section integration: summary + experience + education", async ({
   page,
 }) => {
   const uid = Date.now().toString(36);
-  const resumeTitle = `Resume Full ${uid}`;
+  const resumeTitle = `E2E Resume Full ${uid}`;
   const schoolName = "MIT";
   const degreeName = "Master of Science";
   const fieldOfStudy = "Computer Science";
@@ -498,7 +498,7 @@ test("multi-section integration: summary + experience + education", async ({
 
 test("add education and edit school name", async ({ page }) => {
   const uid = Date.now().toString(36);
-  const resumeTitle = `Resume EditEdu ${uid}`;
+  const resumeTitle = `E2E Resume EditEdu ${uid}`;
   const originalSchool = "Harvard University";
   const updatedSchool = "Stanford University";
 

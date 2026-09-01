@@ -15,6 +15,19 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 export async function cleanupStaleE2EData(): Promise<void> {
+  // The disconnect MUST survive every exit path: the "no test user" early
+  // return below, and any deleteMany that throws (a foreign-key error is the
+  // realistic one — see step 6a). A PrismaClient left connected keeps the
+  // SQLite handle open after globalSetup returns. The work is a separate
+  // function purely so wrapping it does not re-indent 200 lines of deletions.
+  try {
+    await deleteStaleRecords();
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+async function deleteStaleRecords(): Promise<void> {
   const userId = await getTestUserId();
   if (!userId) {
     console.log("[E2E Cleanup] Test user not found, skipping cleanup");
@@ -22,6 +35,62 @@ export async function cleanupStaleE2EData(): Promise<void> {
   }
 
   let total = 0;
+
+  // Steps 0a/0b run FIRST, ahead of the FK-ordered deletions below, because
+  // they are the two steps whose omission causes a PERMANENT outage rather
+  // than clutter. Any later step that throws aborts this function (step 6a's
+  // comment records a foreign-key error escaping globalSetup and failing an
+  // entire run), and a purge that only runs if everything before it succeeded
+  // is the first casualty. Neither step has an FK reason to sit anywhere:
+  // WebhookEndpoint's only edge is user (Cascade) and ModuleRegistration has
+  // no relations at all.
+
+  // 0a. Webhook endpoints (E2E test endpoints)
+  //
+  // Load-bearing, not tidiness. A user may hold at most 10 endpoints
+  // (MAX_ENDPOINTS_PER_USER in webhook.actions.ts, MAX_ENDPOINTS in
+  // WebhookSettings.tsx), and at the cap the component renders the create form
+  // DISABLED. webhook-settings.spec.ts deletes its endpoint inline at the end
+  // of each test, so every test that fails before that line leaks one. After
+  // ten such leaks the form can never be filled again and EVERY webhook test
+  // fails in EVERY later run, permanently, until someone deletes rows by hand.
+  // That is exactly what happened on 2026-09-01: one load-induced failure
+  // leaked the tenth row and the next run lost two webhook tests to a disabled
+  // input. Same shape as the WorkExperience/Company foreign-key landmine in
+  // step 6a — a cleanup gap that turns one flake into a permanent outage.
+  total += (await prisma.webhookEndpoint.deleteMany({
+    where: { userId, url: { startsWith: "https://example.com/webhooks/e2e-" } },
+  })).count;
+
+  // 0b. Module registrations — delete ALL rows, unfiltered.
+  //
+  // This RESTORES the manifest-declared default instead of imposing a status:
+  // ModuleRegistration is an OVERRIDE layer (see module.actions.ts
+  // syncRegistryFromDb), so with no row a module keeps the in-memory default
+  // from registry.ts (ModuleStatus.ACTIVE), and every writer is an upsert, so
+  // rows come back on demand. Writing "active" here instead would hardcode a
+  // status policy and a module list, which is precisely what the
+  // manifest-driven architecture forbids; deleting keeps the manifest the
+  // single source of truth and covers new modules automatically.
+  //
+  // Deliberately GLOBAL while every other step is userId-scoped: the model has
+  // no user column (schema.prisma), module state is instance-wide.
+  //
+  // Why this matters: automation-wizard-modules.spec.ts and enrichment.spec.ts
+  // toggle a module and restore it only on the success path, so a run that
+  // dies in between leaves it inactive for good. The next run then reads
+  // "already inactive" — and in automation-wizard-modules that means skipping
+  // the very deactivation the test exists to prove, asserting instead that an
+  // absent option is absent. (enrichment.spec.ts mirrors its flow for the
+  // inactive case, so it still asserts something real; it is the drifted
+  // starting state, not a vacuous test.)
+  //
+  // LIMITATION, honestly stated: syncRegistryFromDb latches on a `dbSynced`
+  // flag per process, so a dev server that already synced will NOT re-read the
+  // table. The reset therefore takes effect from the next server start, not
+  // immediately. The health/monitoring columns on these rows are re-populated
+  // by the health monitor.
+  total += (await prisma.moduleRegistration.deleteMany({})).count;
 
   // Delete in strict FK dependency order (deepest children first)
 
@@ -122,15 +191,16 @@ export async function cleanupStaleE2EData(): Promise<void> {
   // both job relations being empty so a company referenced by a non-E2E job
   // (shared label) is never removed.
   //
-  // WorkExperience.companyId is the third Restrict edge into Company, and it is
-  // NOT covered by step 7: that step only removes resumes whose title starts
-  // with "E2E ", while profile-crud names its resumes "Resume Full <uid>". A
-  // work experience left behind by a profile-crud test that failed before its
-  // inline cleanup therefore pins its company forever — and an unguarded
-  // deleteMany then throws a foreign-key error out of globalSetup, which fails
-  // every single test in the run rather than the one that leaked. Guarding is
-  // the conservative half of the fix: the company survives instead of the suite
-  // dying. (Observed 2026-09-01: "E2E Corp" pinned by a WorkExperience row.)
+  // WorkExperience.companyId is the third Restrict edge into Company, and step
+  // 7 does not clear it: WorkExperience.resumeSectionId is OPTIONAL, so
+  // deleting a ResumeSection only NULLs that link (ON DELETE SET NULL) and
+  // leaves the work-experience row behind. A work experience left behind by a
+  // profile-crud test that failed before its inline cleanup therefore pins its
+  // company forever — and an unguarded deleteMany then throws a foreign-key
+  // error out of globalSetup, which fails every single test in the run rather
+  // than the one that leaked. Guarding is the conservative half of the fix: the
+  // company survives instead of the suite dying. (Observed 2026-09-01: "E2E
+  // Corp" pinned by a WorkExperience row.)
   total += (await prisma.company.deleteMany({
     where: {
       createdBy: userId,
@@ -218,28 +288,9 @@ export async function cleanupStaleE2EData(): Promise<void> {
     where: { userId, handle: { startsWith: "E2E " } },
   })).count;
 
-  // 16. Webhook endpoints (E2E test endpoints)
-  //
-  // This one is load-bearing, not tidiness. A user may hold at most 10
-  // endpoints (MAX_ENDPOINTS_PER_USER in webhook.actions.ts, MAX_ENDPOINTS in
-  // WebhookSettings.tsx), and at the cap the component renders the create form
-  // DISABLED. webhook-settings.spec.ts deletes its endpoint inline at the end
-  // of each test, so every test that fails before that line leaks one. After
-  // ten such leaks the form can never be filled again and EVERY webhook test
-  // fails in EVERY later run, permanently, until someone deletes rows by hand.
-  // That is exactly what happened on 2026-09-01: one load-induced failure
-  // leaked the tenth row and the next run lost two webhook tests to a disabled
-  // input. Same shape as the WorkExperience/Company foreign-key landmine in
-  // step 6a — a cleanup gap that turns one flake into a permanent outage.
-  total += (await prisma.webhookEndpoint.deleteMany({
-    where: { userId, url: { startsWith: "https://example.com/webhooks/e2e-" } },
-  })).count;
-
   if (total > 0) {
     console.log(`[E2E Cleanup] Removed ${total} stale E2E records`);
   }
-
-  await prisma.$disconnect();
 }
 
 async function getTestUserId(): Promise<string | null> {
