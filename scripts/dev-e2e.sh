@@ -23,6 +23,49 @@ export E2E_AUTH_RATE_LIMIT_BYPASS=1
 # NOT — the redirect is computed on the SERVER.
 export NEXTAUTH_URL="${E2E_BASE_URL:-http://localhost:3737}"
 
+# Bound the dev server's memory.
+#
+# An unconfined `next dev` under E2E traffic reaches ~7.7 GB RSS in about an
+# hour on this host, and that is what preceded the runner hang recorded in
+# E2E-FIX-NOTES.md (finding I): both node processes at 0 % CPU, no timeout
+# firing, killed by hand.
+#
+# The heap cap is the primary lever, not the cgroup. `next dev` is a Node
+# process, so --max-old-space-size makes V8 collect harder instead of growing;
+# a cgroup limit alone would leave the heap just as large and make the kernel
+# stall on reclaim instead — this host has no swap, so throttling anonymous
+# memory buys nothing. The cgroup is only a backstop for Turbopack's native
+# (non-V8) allocations.
+#
+# CPU is deliberately NOT capped by default: this is the application under
+# test, and throttling it distorts the very timings the suite measures. Set
+# E2E_DEV_CPU_QUOTA (e.g. "300%") if the host needs it.
+#
+# Tunables (env vars):
+#   E2E_DEV_NODE_HEAP   node --max-old-space-size, MB  (default 3072)
+#   E2E_DEV_MEM_MAX     cgroup memory backstop         (default 8G)
+#   E2E_DEV_CPU_QUOTA   cgroup CPUQuota                (default unset = none)
+DEV_NODE_HEAP="${E2E_DEV_NODE_HEAP:-3072}"
+DEV_MEM_MAX="${E2E_DEV_MEM_MAX:-8G}"
+export NODE_OPTIONS="--max-old-space-size=${DEV_NODE_HEAP} ${NODE_OPTIONS:-}"
+
+SCOPE_ARGS=(-p Description=jobsync-dev-e2e -p MemoryMax="$DEV_MEM_MAX" -p MemorySwapMax=0)
+[ -n "${E2E_DEV_CPU_QUOTA:-}" ] && SCOPE_ARGS+=(-p CPUQuota="$E2E_DEV_CPU_QUOTA")
+
 pkill -f "next dev" 2>/dev/null
 sleep 1
-exec bun run dev
+
+echo "[dev-e2e] heap=${DEV_NODE_HEAP}MB mem-backstop=${DEV_MEM_MAX} cpu=${E2E_DEV_CPU_QUOTA:-uncapped}"
+
+# Unlike typecheck-safe.sh, a missing systemd scope must NOT abort: without a
+# dev server there is no E2E run at all. Fall back to the heap cap alone.
+if systemd-run --user --scope -p MemoryMax="$DEV_MEM_MAX" true 2>/dev/null; then
+  echo "[dev-e2e] confined via systemd --user scope"
+  exec systemd-run --user --scope "${SCOPE_ARGS[@]}" bun run dev
+elif systemd-run --scope -p MemoryMax="$DEV_MEM_MAX" true 2>/dev/null; then
+  echo "[dev-e2e] confined via systemd system scope"
+  exec systemd-run --scope "${SCOPE_ARGS[@]}" bun run dev
+else
+  echo "[dev-e2e] WARNING: no systemd transient scope — heap-capped but UNCONFINED."
+  exec bun run dev
+fi

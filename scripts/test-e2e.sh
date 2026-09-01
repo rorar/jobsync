@@ -78,5 +78,26 @@ else
 fi
 echo "[test-e2e] dev server ready :${PORT} | workers=${WORKERS} loginTimeout=${E2E_LOGIN_TIMEOUT_MS}ms chromium=${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-playwright-bundled}"
 
-# 2. Run Playwright gently (single worker + low CPU/IO priority).
-exec nice -n 10 ionice -c3 npx playwright test --workers="$WORKERS" "$@"
+# 2. Run Playwright gently (single worker + low CPU/IO priority), inside a
+#    transient cgroup so the runner and its Chromium children cannot take the
+#    host with them. The DEV SERVER is not in this scope — dev-e2e.sh opens its
+#    own — so a runaway browser cannot starve the app under test, and vice
+#    versa. Same fallback ladder as typecheck-safe.sh; unlike that script this
+#    one degrades to plain nice/ionice rather than aborting, because a host
+#    without transient scopes can still run the suite.
+#
+#   E2E_MEM_MAX     cgroup memory cap for runner + browsers  (default 6G)
+#   E2E_CPU_QUOTA   cgroup CPUQuota                          (default 400%)
+MEM_MAX="${E2E_MEM_MAX:-6G}"
+CPU_QUOTA="${E2E_CPU_QUOTA:-400%}"
+RUN=(nice -n 10 ionice -c3 npx playwright test --workers="$WORKERS" "$@")
+
+echo "[test-e2e] limits: mem=${MEM_MAX} cpu=${CPU_QUOTA}"
+if systemd-run --user --scope -p MemoryMax="$MEM_MAX" true 2>/dev/null; then
+  exec systemd-run --user --scope -p Description=jobsync-e2e-run \
+    -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 -p CPUQuota="$CPU_QUOTA" \
+    "${RUN[@]}"
+else
+  echo "[test-e2e] WARNING: no systemd transient scope — nice/ionice only."
+  exec "${RUN[@]}"
+fi
