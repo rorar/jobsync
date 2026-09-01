@@ -14,13 +14,58 @@ export async function login(page: Page) {
   await page.getByRole("button", { name: "Login" }).click();
 }
 
-/** Wait for a toast notification matching the given pattern. */
+/**
+ * Wait for a toast notification matching the given pattern.
+ *
+ * E2E-B20: the match is scoped to the Radix toast viewport, not to the page.
+ * `page.getByText()` matches anywhere in the document, so this helper was
+ * routinely satisfied by the row the test had just created, by a heading, or by
+ * a status badge — the assertion went green without a toast ever appearing. Two
+ * call sites were provably in that state: `module-settings.spec.ts` asserts
+ * /Active|activated/i on a page that renders an "Active"/"Inactive" badge for
+ * every module row (ApiKeySettings.tsx:416), and `settings-api-keys.spec.ts`
+ * asserts /revoked/i on a page that renders a "Revoked" badge
+ * (PublicApiKeySettings.tsx:274).
+ *
+ * The anchor is the viewport's landmark role. `<ToastViewport />` in
+ * src/components/ui/toaster.tsx:34 passes no `label`, so Radix applies its own
+ * default `"Notifications ({hotkey})"` with `hotkey = ["F8"]`
+ * (@radix-ui/react-toast/dist/index.mjs:69-70, :176-177). That literal never
+ * passes through our i18n, so the anchor is stable in all four locales. Toasts
+ * portal into the `<ol>` nested inside that region (index.mjs:79, :193), so
+ * every visible toast is a descendant of it.
+ *
+ * The trailing " (" is load-bearing: NotificationDropdown.tsx:352 renders a
+ * SECOND `role="region"` whose accessible name is exactly "Notifications"
+ * (notifications.title, en). Anchoring on /^Notifications/ alone would also
+ * select the notification dropdown whenever a test leaves it open.
+ *
+ * A page-wide `getByRole("status")` is the obvious alternative and is wrong: a
+ * dozen sr-only live regions in src/ carry that role and announce the very text
+ * these tests match on (ComboBox.tsx:195, StatusStageCombobox.tsx:179,
+ * ContactPicker.tsx:248, CompanyPicker.tsx:235, skeleton.tsx:75, ...), and Radix
+ * additionally portals a VisuallyHidden role="status" announce copy of each
+ * toast to document.body, outside the viewport (index.mjs:365-372).
+ *
+ * Known limitation, deliberately out of scope: this narrows WHERE we look, not
+ * WHAT we match. Toasts live for 5 s (toaster.tsx:19), so a test that fires two
+ * actions in quick succession can still be satisfied by the previous toast that
+ * is still on screen — `module-settings.spec.ts` is the live example, since
+ * /Active/i is a substring of "Inactive". Telling two simultaneous toasts apart
+ * is inherent to text matching; a call site that needs it should assert on
+ * something unique to its own message.
+ */
 export async function expectToast(
   page: Page,
   pattern: RegExp,
   timeout = 10000,
 ) {
-  await expect(page.getByText(pattern).first()).toBeVisible({ timeout });
+  await expect(
+    page
+      .getByRole("region", { name: /^Notifications \(/ })
+      .getByText(pattern)
+      .first(),
+  ).toBeVisible({ timeout });
 }
 
 /**
