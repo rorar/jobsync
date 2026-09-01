@@ -104,13 +104,19 @@ test.describe("Custom JobStatus → dynamic Kanban", () => {
     // 3. In the Kanban view, the custom status has its own column.
     await gotoMyJobs(page);
     // The view toggle is a role="radio" segmented control; ensure Kanban is active.
-    const kanbanToggle = page.getByRole("radio", { name: "Kanban" });
-    if (await kanbanToggle.count()) {
-      await kanbanToggle.first().click().catch(() => {});
-    }
-    await expect(page.getByText(statusLabel, { exact: true }).first()).toBeVisible({
-      timeout: 15000,
-    });
+    // Asserted, not probed: a swallowed click would leave the table view up and
+    // everything below would then be measured against the wrong view.
+    const kanbanToggle = page.getByRole("radio", { name: "Kanban" }).first();
+    await expect(kanbanToggle).toBeVisible();
+    await kanbanToggle.click();
+    // Anchor on the column itself, not on page-wide text: the table view renders
+    // the same status label in its status cell, so a bare text match also passed
+    // when the switch to Kanban never happened. `kanban-column-*` is emitted only
+    // by KanbanColumn, and the heading filter ties the column to THIS status.
+    const statusColumn = page
+      .locator("[data-testid^='kanban-column-']")
+      .filter({ has: page.getByRole("heading", { name: statusLabel, exact: true }) });
+    await expect(statusColumn).toBeVisible({ timeout: 15000 });
 
     // 4. Cleanup — delete the job, then the (now history-only) status via the
     //    move-and-delete reassign dialog. Best-effort so a cleanup hiccup does
