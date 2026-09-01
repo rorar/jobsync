@@ -1090,3 +1090,16 @@ What I would tell the next person: **112/0 was never a matter of running the sui
 machine.** Three of the four causes were real defects that a quieter machine would have hidden for
 longer. The brief's baseline was reproducible all along; it just required fixing what was actually
 broken rather than waiting for a good roll.
+
+---
+
+## Handoff pointer
+
+A session handoff for the post-compaction continuation is at
+`/home/pascal/projekte/jobsync/.remember/remember.md` (the path the SessionStart hook designates).
+It covers: current state and gate numbers, the open items ranked, the environment traps that cost
+the most time today, what changed in the runner scripts and why it must not be "simplified" away,
+and an explicit list of what NOT to redo.
+
+The authoritative findings list is `docs/BUGS.md` § Session 2026-09-01 — 21 findings, 13 fixed,
+8 open, each with file:line. This file holds the reasoning; that one holds the inventory.
