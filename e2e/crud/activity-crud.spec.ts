@@ -18,7 +18,8 @@ async function stopRunningActivity(page: Page) {
     await page.reload();
     await page.waitForLoadState("domcontentloaded");
   } catch {
-    // No running activity, continue
+    // swallow-ok: idempotent precondition — there may be no running activity
+    // to stop, and that absence is the state this helper wants.
   }
 }
 

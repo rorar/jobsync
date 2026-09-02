@@ -89,6 +89,8 @@ export async function deleteResume(page: Page, title: string) {
       .getByRole("button", { name: "Delete" })
       .click({ force: true });
   } catch {
-    // Resume may not exist — skip cleanup
+    // swallow-ok: this helper's contract is to TOLERATE absence (see the
+    // header); profile-crud keeps its own deleteResumeAndVerifyGone for the
+    // case where the deletion is the subject under test.
   }
 }

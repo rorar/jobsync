@@ -721,9 +721,13 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       const hasContent = announcements.some((a) => a.length > 0);
       expect(hasContent).toBe(true);
     } catch {
-      console.log(
-        "Note: Location options not available; skipping selection assertion",
-      );
+      // The EuresLocationCombobox fetches /api/eures/locations, a proxy to an
+      // EU service this suite does not control. Skipping is honest — the run
+      // reports the test as NOT RUN. The console.log this replaces reported it
+      // as PASSED, which left the console-error oracle below as the only
+      // surviving assertion: green, measuring a page nobody interacted with
+      // (E2E-B27).
+      test.skip(true, "EURES location options unavailable — external service");
     }
 
     expect(filterCriticalErrors(errors)).toEqual([]);
@@ -763,7 +767,8 @@ test.describe("Keyboard UX: EuresLocationCombobox", () => {
       const expanded = page.getByText(/All of|▾/).first();
       await expect(expanded).toBeVisible({ timeout: 3000 });
     } catch {
-      console.log("Note: No country with regions found in test data");
+      // Same external dependency as above; same reasoning.
+      test.skip(true, "EURES country-with-regions unavailable — external service");
     }
   });
 });
@@ -854,19 +859,19 @@ test.describe("Keyboard UX: ARIA Announcements", () => {
     // M-T-04 follow-up: replaced waitForTimeout(600) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
     const firstOption = page.getByRole("option").first();
-    try {
-      await firstOption.waitFor({ state: "visible", timeout: 3000 });
-      await firstOption.click();
-      // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
-      await page.waitForLoadState("domcontentloaded");
+    // No try/catch here, deliberately. Job sources are seeded (prisma/seed.ts
+    // creates nine), so an option list that does not appear is a defect, not
+    // an unavailable external service — the two EURES sites above are the
+    // ones with a dependency this suite does not control. Swallowing here
+    // left the sr-only assertion unreachable while the test reported PASSED
+    // (E2E-B27).
+    await firstOption.waitFor({ state: "visible", timeout: 3000 });
+    await firstOption.click();
+    // M-T-04 follow-up: replaced waitForTimeout(500) — wait for UI to settle.
+    await page.waitForLoadState("domcontentloaded");
 
-      const announcements = await getAllAnnouncements(page);
-      expect(hasAnnouncement(announcements, "selected")).toBe(true);
-    } catch {
-      console.log(
-        "Note: Job source options not found — skipping assertion",
-      );
-    }
+    const announcements = await getAllAnnouncements(page);
+    expect(hasAnnouncement(announcements, "selected")).toBe(true);
   });
 
   test("TagInput sr-only reports tag count after creation", async ({

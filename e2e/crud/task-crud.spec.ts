@@ -59,7 +59,7 @@ async function stopRunningActivity(page: Page) {
     await stopButton.click({ force: true });
     await expect(stopButton).not.toBeVisible({ timeout: 10000 });
   } catch {
-    // No running activity
+    // swallow-ok: idempotent precondition — there may be no running activity.
   }
 }
 

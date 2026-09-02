@@ -120,7 +120,8 @@ async function deleteAutomation(page: Page, name: string) {
     // Wait for the automation to disappear from the list (onRefresh reloads it).
     await expect(page.getByText(name)).not.toBeVisible({ timeout: 15000 });
   } catch {
-    // Automation may not exist — skip cleanup
+    // swallow-ok: cleanup net — the automation may already be gone, and a
+    // throwing teardown would replace the real test failure with its own.
   }
 }
 

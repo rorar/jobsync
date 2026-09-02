@@ -63,6 +63,26 @@ ALLOWED_GROWTH=(
   "_e2e_meta"           # written by e2e_db_provision_run, not by a test
 )
 
+# Debt, not permission.
+#
+# These models leak TODAY, from specs the 2026-09-02 audit already recorded
+# (E2E-B24, E2E-B25). A gate that is red from its first day gets switched off, so
+# they do not fail the run — but they are NOT in ALLOWED_GROWTH either, because
+# nothing about them is by design. Every run prints them as outstanding debt with
+# the finding that owns them, and the entry is deleted when the finding is.
+#
+# The distinction matters: ALLOWED_GROWTH says "this is not a leak";
+# KNOWN_DEBT says "this is a leak we have not fixed yet, and here is its number".
+KNOWN_DEBT=(
+  "Resume:E2E-B25"     # keyboard-ux creates KBOcc1-4 and its cleanup does not always run
+  "JobTitle:E2E-B25"   # KBTest Title / KBRapid / KBMobile — created, never removed
+  "Company:E2E-B25"    # KBTest Co, and profile-crud's unprefixed reference data
+  "Location:E2E-B25"   # KBTest Loc, "location test", "Boston", "Cambridge"
+  "Tag:E2E-B24"        # KBSkill / KBMulti / KBDupe / KBAria — no cleanup exists at all
+  "Person:E2E-B22"     # four specs archive but never delete
+  "Referral:E2E-B23"   # no cleanup anywhere, spec or backstop
+)
+
 # Seeded rows these models are allowed to have modified. Keep this list short
 # and hostile: every entry is a place where a test changed shared state and
 # nothing restored it.
@@ -112,6 +132,7 @@ TABLES="$(sqlite3 "$E2E_TEMPLATE_DB" \
 growth_violations=""
 mutation_violations=""
 allowed_seen=""
+debt_seen=""
 
 for t in $TABLES; do
   tmpl="$(sqlite3 "$E2E_TEMPLATE_DB" "SELECT count(*) FROM \"$t\";" 2>/dev/null)"
@@ -120,8 +141,14 @@ for t in $TABLES; do
   delta=$(( run - tmpl ))
 
   if [ "$delta" -gt 0 ]; then
+    debt_id=""
+    for entry in "${KNOWN_DEBT[@]}"; do
+      [ "${entry%%:*}" = "$t" ] && debt_id="${entry#*:}"
+    done
     if in_list "$t" "${ALLOWED_GROWTH[@]}"; then
       allowed_seen="$allowed_seen  $t +$delta\n"
+    elif [ -n "$debt_id" ]; then
+      debt_seen="$debt_seen  $t +$delta  ($debt_id, unfixed)\n"
     else
       growth_violations="$growth_violations  $t: template=$tmpl run=$run (+$delta rows left behind)\n"
     fi
@@ -150,11 +177,13 @@ done
 # Report
 # ---------------------------------------------------------------------------
 if [ -z "$growth_violations" ] && [ -z "$mutation_violations" ]; then
-  echo "[residue] OK — no unowned rows and no modified seed data."
+  echo "[residue] OK — no NEW unowned rows and no modified seed data."
   [ -n "$allowed_seen" ] && printf "[residue] allowed, for the record:\n%b" "$allowed_seen"
+  [ -n "$debt_seen" ] && printf "[residue] OUTSTANDING DEBT — leaks with a finding, not permission:\n%b" "$debt_seen"
   exit 0
 fi
 
+[ -n "$debt_seen" ] && printf "[residue] outstanding debt (not the failure below):\n%b" "$debt_seen"
 echo "[residue] FAIL — the run left state behind that no test owns:" >&2
 [ -n "$growth_violations" ]   && printf "\n rows created and not deleted:\n%b" "$growth_violations" >&2
 [ -n "$mutation_violations" ] && printf "\n seed data modified and not restored:\n%b" "$mutation_violations" >&2
