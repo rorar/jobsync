@@ -22,7 +22,7 @@ See `devenv.nix` for the full configuration. Requires a writable Nix store.
 ### Option B: Helper scripts (for read-only Nix store / VMs)
 
 ```bash
-./scripts/dev.sh      # Start dev server (port 3737)
+./scripts/dev.sh      # Start dev server (port 3737 in the main checkout; derived per worktree)
 ./scripts/restart.sh  # Stop, flush .next cache, then restart dev server
 ./scripts/build.sh    # Production build
 ./scripts/build-safe.sh  # Production build in a systemd memory cgroup (low-RAM hosts; OOM-kills the build, not the host)
@@ -107,19 +107,33 @@ suite or E2E run will hit the tool timeout and get orphaned.
 it will happily print `0` above a list of errors. Use `${PIPESTATUS[0]}`, `set -o pipefail`, or
 judge by the output itself.
 
-**Dev server — the rule is about CONCURRENT workers, not about anyone touching the server.**
+**Dev server — one port per worktree, a lock per port, and a kill that checks whose.**
+`scripts/lib-devserver.sh` (sourced by `dev.sh`, `dev-e2e.sh`, `test-e2e.sh`, `stop.sh`,
+`build-safe.sh`, `clean.sh`, `dev-and-check.sh`) resolves all three:
+
+| | |
+|---|---|
+| `devserver_port` | Main checkout keeps **3737**; a linked worktree gets `3737 + 1 + (cksum(root) % 49)`. A pure function of the path — a counter or a random port would leave two tools in the same worktree looking in different places. `JOBSYNC_PORT` overrides. `package.json`'s `dev` script honours `PORT`; `playwright.config.ts` reads `E2E_BASE_URL`. |
+| `devserver_lock_acquire` | `flock -n` on fd 9 over `/tmp/jobsync-dev-<port>.lock`, taken BEFORE the server starts. The descriptor survives `exec`, so the lock belongs to the **server process** and frees when it dies — killed or not, with no cleanup path to forget. A second `dev-e2e.sh` exits **75** naming the holder's pid, cwd and start time. |
+| `devserver_stop` | Refuses unless `/proc/<pid>/cwd` matches this worktree, then walks **up to the supervisor**: `next dev` respawns `next-server` within seconds, so killing the listener alone looks like it worked and is not. `stop.sh` is scoped the same way; `STOP_ALL_WORKTREES=1` restores the machine-wide sweep. |
+
+**Do not replace the lock with a message handshake between agents.** "May I kill this?" answered
+over a channel is not atomic: between the answer and the kill, the answer can stop being true.
+Exclusive access to a resource is a lock problem.
+
+**The rule this replaces was about CONCURRENT workers, not about anyone touching the server.**
 **SUBAGENTS** may start one and must not stop one: the rule exists because parallel subagents
-killed each other's server mid-run, and a worker cannot know whether the process on :3737 belongs
-to a sibling that is three minutes into a suite. The **orchestrator** (main thread) and the
-wrappers may stop it deliberately — `dev-e2e.sh` pkills `next dev`, `build-safe.sh` frees :3737 —
-because they are the only parties that know nothing else is running.
+killed each other's server mid-run, and a worker cannot know whether the process on the port
+belongs to a sibling that is three minutes into a suite. The **orchestrator** (main thread) and the
+wrappers may stop it deliberately, through `devserver_stop`, because they are the only parties that
+know nothing else is running.
 
 Read as a blanket prohibition it produces the opposite of its purpose: on 2026-09-02 it argued
 against killing an **orphaned** `bun run dev` tree (PPID 1, its systemd scope already dead) holding
 4.3 GB and port 3737, which no run owned and which nothing would have reclaimed.
 
-`pkill -f "next dev"` in the wrappers is path- and port-blind and WILL kill a sibling worktree's
-server. That is a real cost of the wrapper approach, not a reason to kill by hand instead.
+The wrappers used to run `pkill -f "next dev"`, which is path- and port-blind and took a sibling
+worktree's server with it. That is what `devserver_stop` replaced.
 
 Since `47369e15` `test-e2e.sh` **always starts a fresh server**, because module activation lives in
 the process behind a `dbSynced` latch and reuse silently carried state across runs. The old warning
@@ -963,6 +977,28 @@ investigation, not on the tool.
 
 **Pipeline:** `globalSetup` → smoke project → crud project. Smoke tests verify auth works; CRUD tests skip login via storageState.
 
+**Every run gets its own database.** `scripts/e2e-db.sh` builds a template from migrations +
+`prisma/seed.ts` + `prisma/seed-e2e.ts`, keyed by their combined hash, and copies it to
+`prisma/.e2e-run.db` for each run; `DATABASE_URL` points there for both the dev server and the
+Playwright process. **`prisma/dev.db` is never opened by the suite** — verified across three full
+runs by comparing its sha256 before and after (it changed on every run before this landed).
+
+Consequences worth knowing before you debug something:
+
+- **A spec that needs a row must declare it in `prisma/seed-e2e.ts`.** Three tests already depended
+  on data nobody seeded and passed only because the developer's database happened to hold it
+  (E2E-B30 staging, E2E-B31 jobs). On a fresh database they fail immediately, which is the correct
+  behaviour of an incorrect setup.
+- **Creating is now the common path.** `selectOrCreateComboboxOption` used to find most values
+  already present; it now creates them. That cost ~11 s per value until `2d58d135` short-circuited
+  the dead waits — if a helper looks slow on an empty database, measure before assuming flake.
+- **The run database is kept after the run**, discarded at the next provision. A red run stays
+  inspectable, and no live server is left holding an unlinked inode. `E2E_KEEP_RUN_DB=0` deletes at
+  exit.
+- **`E2E_REUSE_SERVER=1` keeps using `prisma/dev.db`** and says so: a reused server holds the
+  `DATABASE_URL` it started with, so provisioning under it would put app and runner on different
+  databases — a failure that names neither.
+
 **Running E2E tests:**
 ```bash
 # Resource-tight — one command: env + warm server + single worker:
@@ -977,7 +1013,7 @@ E2E_WORKERS=4 ./scripts/test-e2e.sh
 ```
 On NixOS set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` (`scripts/test-e2e.sh` sets it for you); elsewhere leave it unset and Playwright uses its own download.
 
-**Dev server:** Agents must not stop the dev server by hand; `test-e2e.sh` restarts it itself on every run. `reuseExistingServer: true` ensures Playwright reuses a running server.
+**Dev server:** Subagents must not stop it; the orchestrator and the wrappers may (see § Dev server). `test-e2e.sh` restarts it itself on every run, on this worktree's own port. `reuseExistingServer: true` ensures Playwright reuses a running server.
 
 **E2E conventions:**
 - CRUD tests must be **self-contained** (create → assert → cleanup in one test body)

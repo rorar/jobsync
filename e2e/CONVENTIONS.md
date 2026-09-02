@@ -236,6 +236,7 @@ comment with the reason.
 
 - **8 GB RAM, no swap** (until infra-issue #11 is resolved): Long serial runs (>10 min) can crash the dev server. Run tests in batches if needed.
 - **NixOS**: Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium`
+- **Port**: one per worktree. The main checkout keeps 3737; a linked worktree derives its own (`scripts/lib-devserver.sh`), so two checkouts can run suites at the same time. Never hardcode 3737 in a spec or a helper — read `baseURL` from the Playwright config, which follows `E2E_BASE_URL`.
 - **Dev server**: **Subagents** may start it (`bun run dev`) and must **never stop it** — parallel subagents once killed each other's server mid-run, and a worker cannot tell whether the process on :3737 belongs to a sibling three minutes into a suite. The orchestrator and the wrappers may stop it deliberately; they are the only parties that know nothing else is running. Read as a blanket ban the rule protects orphaned processes nobody owns. For E2E runs prefer `scripts/dev-e2e.sh` — it starts the dev server with `E2E_AUTH_RATE_LIMIT_BYPASS=1` so repeated logins (global-setup + the signin smoke test) don't trip the signin rate limiter (5/15min per IP). The bypass is prod-inert (gated on `NODE_ENV !== "production"`); never set it in production. See CLAUDE.md § Shared Rate-Limit Factory.
 - **SQLite**: Shared `dev.db` with no per-test isolation. Unique test data names are your only protection against collision.
 - **Cleanup runs in `globalSetup` only.** Playwright's UI mode (`--ui`), watch mode and the
