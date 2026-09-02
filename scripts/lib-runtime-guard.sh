@@ -34,9 +34,18 @@
 # OTHER containers on the same host. If a run is inexplicably slow while this
 # guard is quiet, look outside the container.
 #
+# The thresholds are fractions of the allowance, and they are deliberately WELL
+# BELOW 1.0. The sample is taken BEFORE the heavy work starts, so it measures
+# what is ALREADY running — resident subagents, a forgotten dev server, another
+# suite. Usage cannot exceed the allowance (that is what an allowance is), so a
+# threshold at or above 1.0 can never fire: the first version aborted at 1.20
+# and was therefore unreachable, a guard that looked like it protected and could
+# not. 0.60 means "more than half this container is spoken for before I begin",
+# which is the situation that produced 14-minute unit tests.
+#
 # Usage: guard_host_load "<label>"  -> non-zero means the caller should stop.
-# Tunables: GUARD_CPU_WARN (default 0.60 = 60% of allowance), GUARD_CPU_ABORT
-#           (1.20), GUARD_SAMPLE_SECS (1), ALLOW_BUSY_HOST=1 to proceed anyway.
+# Tunables: GUARD_CPU_WARN (0.35), GUARD_CPU_ABORT (0.60), GUARD_SAMPLE_SECS (1),
+#           ALLOW_BUSY_HOST=1 to proceed anyway.
 guard_host_load() {
   local label="${1:-run}" allowance busy ratio warn abort a b secs quota period
 
@@ -61,8 +70,8 @@ guard_host_load() {
   fi
 
   ratio="$(awk -v b="$busy" -v c="$allowance" 'BEGIN{printf "%.2f", (c>0 ? b/c : b)}')"
-  warn="${GUARD_CPU_WARN:-0.60}"
-  abort="${GUARD_CPU_ABORT:-1.20}"
+  warn="${GUARD_CPU_WARN:-0.35}"
+  abort="${GUARD_CPU_ABORT:-0.60}"
 
   if awk -v r="$ratio" -v a="$abort" 'BEGIN{exit !(r+0 >= a+0)}'; then
     echo "[$label] this container is using ${busy} of ${allowance} allowed cores (${ratio}x)."

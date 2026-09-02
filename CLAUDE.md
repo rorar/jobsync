@@ -70,7 +70,10 @@ Tunables if you need them: `JEST_MEM_MAX` (4G), `JEST_NODE_HEAP` (3072), `JEST_T
 
 **All four heavy wrappers refuse to start when this container is already busy.**
 `scripts/lib-runtime-guard.sh` samples **cgroup v2 `cpu.stat`** for one second and aborts with exit
-**75** when we are using more than 1.2× our CPU allowance. It exists because a Playwright run was
+**75** when more than **60%** of our CPU allowance is already in use. The sample is taken BEFORE
+the heavy work starts, so it measures what is already running — resident subagents, a forgotten
+dev server. Thresholds must stay well under 1.0: usage cannot exceed the allowance, so the first
+version's 1.2× abort could never fire. It exists because a Playwright run was
 once started while six subagents were still resident: the suite returned 11 failures with durations
 like 14.9 minutes for a single test — numbers that measured contention, not the tree.
 
@@ -82,7 +85,7 @@ host was at ~20%.
 
 Known limitation, worth remembering: this cannot see contention from OTHER containers on the same
 host. If a run is inexplicably slow while the guard stays quiet, look outside the container.
-Override with `ALLOW_BUSY_HOST=1`; `GUARD_CPU_WARN` (0.60) / `GUARD_CPU_ABORT` (1.20) /
+Override with `ALLOW_BUSY_HOST=1`; `GUARD_CPU_WARN` (0.35) / `GUARD_CPU_ABORT` (0.60) /
 `GUARD_SAMPLE_SECS` (1) tune it.
 
 **Every wrapper prints `[<name>] EXIT=<rc>` as its last line**, and explains exit **124** as a
