@@ -887,6 +887,26 @@ Formal specifications in `specs/*.allium` capture domain behaviour:
 - Use `allium:elicit` to build specs through conversation
 - Use `allium:distill` to extract specs from existing code
 
+**`allium check` proves syntax, NOT reference integrity — do not quote "0 errors" as evidence that
+an invariant holds.** Verified twice independently against `allium 3.2.3` on 2026-09-02: appending
+an invariant that reads a field which does not exist on a real entity, and one that iterates an
+entity type that was never declared, leaves `check` at **0 errors** with the warning and info
+counters completely unmoved, and `analyse` reports nothing naming either. The probes are recorded
+in `specs/e2e-test-infrastructure.allium` (Invariants section header) so nobody has to re-derive
+them. Two consequences:
+
+1. A green `allium check` in a handoff or commit message means the file parses. It does not mean
+   the file refers to anything that exists. Say which you mean.
+2. ADR-044's lesson needs qualifying. That five-month drift happened to a **prose** invariant, and
+   the obvious remedy is "write it formally" — but formal clauses here are unresolved too. Moving
+   a claim into braces narrows the gap and does not close it. What the formal form buys is a
+   named, greppable, precisely shaped claim a **human reviewer** can check.
+
+Repeating the experiment has its own trap: a probe written with invalid syntax (e.g. `all t in
+TestCases:` instead of `for t in TestCases:`) produces parse errors pointing *at the bogus field's
+line*, which reads like the resolver caught it. It did not — that is a false negative on the
+investigation, not on the tool.
+
 ## Testing Requirements
 
 **CRITICAL: Every feature, bugfix, and refactoring MUST include tests.** No code ships without test coverage.
