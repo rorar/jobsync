@@ -16,6 +16,20 @@
 # confirming nothing matches any more. Exits non-zero if it cannot stop them,
 # so callers (and CI) can tell a real stop from a wishful one.
 set -uo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-devserver.sh"
+
+# Scope: THIS worktree only.
+#
+# The matching below was correct about which processes are dev servers and
+# wrong about whose they are. `next dev` and `next-server` produce the same
+# command line in every checkout, so a stop here reached into a sibling
+# worktree and killed a server three minutes into someone else's suite -- the
+# incident that produced the "agents must never stop the dev server" rule.
+# Ownership is the working directory, which /proc knows and a command line
+# cannot express. STOP_ALL_WORKTREES=1 restores the old machine-wide sweep for
+# the case where you really are cleaning up after everything.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+SCOPE_ALL="${STOP_ALL_WORKTREES:-0}"
 
 # ERE, as pgrep -f expects. Covers the `next dev` wrapper and the `next-server`
 # worker, including Turbopack orphans.
@@ -35,8 +49,13 @@ alive() {
     [[ "$pid" == "$$" || "$pid" == "$PPID" ]] && continue
     comm="$(ps -p "$pid" -o comm= 2>/dev/null)" || continue
     case "$comm" in
-      node|node.js|next-server*) echo "$pid" ;;
+      node|node.js|next-server*) ;;
+      *) continue ;;
     esac
+    if [[ "$SCOPE_ALL" != "1" && "$(readlink "/proc/$pid/cwd" 2>/dev/null)" != "$REPO_ROOT" ]]; then
+      continue
+    fi
+    echo "$pid"
   done
 }
 

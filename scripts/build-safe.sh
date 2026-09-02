@@ -24,9 +24,11 @@ NODE_HEAP="${BUILD_NODE_HEAP:-6144}"
 TIMEOUT="${BUILD_TIMEOUT:-900}"
 
 # Free RAM so the confined build runs alone.
-lsof -ti:3737 2>/dev/null | xargs -r kill 2>/dev/null
-pkill -f "next dev" 2>/dev/null
-pkill -f "next-server" 2>/dev/null
+# Scoped to this worktree. The three commands this replaces were port-blind and
+# path-blind: they freed :3737 whoever owned it, and killed `next dev` /
+# `next-server` in every checkout on the machine.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-devserver.sh"
+devserver_stop "$(devserver_port)"
 
 # build.sh sources env.sh (Prisma engines) + execs `bun run build`; NODE_OPTIONS
 # is inherited through env, the wall-clock/priority wrappers apply to that process.

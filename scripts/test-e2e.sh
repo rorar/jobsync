@@ -39,6 +39,7 @@ cd "$DIR/.."
 source "$DIR/env.sh"
 source "$DIR/lib-runtime-guard.sh"
 source "$DIR/e2e-db.sh"
+source "$DIR/lib-devserver.sh"
 # Chromium: prefer an explicit override, then the NixOS system binary, else leave
 # UNSET so Playwright falls back to its own downloaded browser. Hardcoding the
 # NixOS store path as the default made every launch fail with "executable doesn't
@@ -130,7 +131,12 @@ export E2E_ALLOW_DESTRUCTIVE=1
 export E2E_LOGIN_TIMEOUT_MS="${E2E_LOGIN_TIMEOUT_MS:-90000}"
 WORKERS="${E2E_WORKERS:-1}"
 SERVER_WAIT="${E2E_SERVER_WAIT:-150}"
-PORT=3737
+# One port per worktree (scripts/lib-devserver.sh). The main checkout keeps
+# 3737; a linked worktree derives its own, so a suite here cannot take down a
+# server there. Playwright reads E2E_BASE_URL, NextAuth reads NEXTAUTH_URL, and
+# both must agree with the port the server actually binds.
+PORT="$(devserver_port)"
+export E2E_BASE_URL="http://localhost:${PORT}"
 
 # NextAuth must agree with Playwright's baseURL ("http://localhost:3737"). A
 # developer .env legitimately points NEXTAUTH_URL at a LAN or Tailscale address so
@@ -139,7 +145,7 @@ PORT=3737
 # navigation to a host Playwright is not on -- or, after a machine move, one that
 # no longer resolves at all. E2E must not depend on the operator's remote-access
 # choice, so pin it. This is the value CI already uses (ci.yml).
-export NEXTAUTH_URL="http://localhost:${PORT}"
+export NEXTAUTH_URL="$E2E_BASE_URL"
 
 # 1. Start a FRESH env-correct dev server for every run.
 #

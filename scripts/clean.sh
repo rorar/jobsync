@@ -14,8 +14,10 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 # Warn if a dev server is live — deleting .next out from under it causes errors
 # until the next request recompiles. (restart.sh stops the server first, so this
 # never fires there.)
-if curl -fsS -o /dev/null http://localhost:3737/ 2>/dev/null; then
-  echo "[clean] WARNING: dev server is up on :3737 — flushing .next under a live"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-devserver.sh"
+CLEAN_PORT="$(devserver_port)"
+if curl -fsS -o /dev/null "http://localhost:${CLEAN_PORT}/" 2>/dev/null; then
+  echo "[clean] WARNING: dev server is up on :${CLEAN_PORT} — flushing .next under a live"
   echo "        server can cause errors. Restart it after, or use scripts/restart.sh."
 fi
 

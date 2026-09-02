@@ -6,7 +6,31 @@
 # limit. The bypass is double-gated and prod-inert — see
 # src/lib/auth/auth-rate-limit.ts. NEVER use this script for a production server.
 source "$(dirname "$0")/env.sh"
+source "$(dirname "$0")/lib-devserver.sh"
 export E2E_AUTH_RATE_LIMIT_BYPASS=1
+
+# One port per worktree. The main checkout keeps 3737; a linked worktree gets a
+# port derived from its path, so two checkouts can run suites simultaneously
+# instead of taking turns killing each other's server.
+PORT="$(devserver_port)"
+export PORT                       # package.json's dev script reads it
+export E2E_BASE_URL="http://localhost:${PORT}"
+
+# Advisory lock, held for the SERVER's lifetime rather than this script's.
+# The descriptor survives the exec below, so the lock is released exactly when
+# the server dies -- including when it is killed -- with no cleanup path anyone
+# can forget. A message-passing handshake cannot give this: between "may I?"
+# and the kill, the answer can stop being true.
+#
+# Degradation is deliberate: if the descriptor does not survive (a systemd
+# version that closes it, say), the lock frees early and mechanism 2 is lost,
+# while the per-worktree port and the cwd-scoped kill still hold. That is a
+# weaker guarantee, not a broken one.
+if ! devserver_lock_acquire "$PORT"; then
+  echo "[dev-e2e] port ${PORT} is already claimed by: $(devserver_lock_describe "$PORT")" >&2
+  echo "[dev-e2e] refusing to start a second server for the same worktree." >&2
+  exit 75
+fi
 
 # Pin the auth origin to the one Playwright drives.
 #
@@ -21,7 +45,7 @@ export E2E_AUTH_RATE_LIMIT_BYPASS=1
 # A real process env var wins over a .env entry in Next.js, so exporting here
 # is enough. Setting it in the Playwright process (as the run command does) is
 # NOT — the redirect is computed on the SERVER.
-export NEXTAUTH_URL="${E2E_BASE_URL:-http://localhost:3737}"
+export NEXTAUTH_URL="$E2E_BASE_URL"
 
 # Bound the dev server's memory.
 #
@@ -64,10 +88,11 @@ export NODE_OPTIONS="--max-old-space-size=${DEV_NODE_HEAP} ${NODE_OPTIONS:-}"
 SCOPE_ARGS=(-p Description=jobsync-dev-e2e -p MemoryMax="$DEV_MEM_MAX" -p MemorySwapMax=0)
 [ -n "${E2E_DEV_CPU_QUOTA:-}" ] && SCOPE_ARGS+=(-p CPUQuota="$E2E_DEV_CPU_QUOTA")
 
-pkill -f "next dev" 2>/dev/null
-sleep 1
+# Scoped to this worktree's port and working directory. `pkill -f "next dev"`
+# matched a command line every checkout produces, so it reached into siblings.
+devserver_stop "$PORT"
 
-echo "[dev-e2e] heap=${DEV_NODE_HEAP}MB mem-backstop=${DEV_MEM_MAX} cpu=${E2E_DEV_CPU_QUOTA:-uncapped}"
+echo "[dev-e2e] port=${PORT} heap=${DEV_NODE_HEAP}MB mem-backstop=${DEV_MEM_MAX} cpu=${E2E_DEV_CPU_QUOTA:-uncapped}"
 
 # Unlike typecheck-safe.sh, a missing systemd scope must NOT abort: without a
 # dev server there is no E2E run at all. Fall back to the heap cap alone.

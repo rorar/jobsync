@@ -1,5 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// The port is per worktree (scripts/lib-devserver.sh): the main checkout keeps
+// 3737, linked worktrees get a port derived from their path, so two checkouts
+// can run suites at the same time without one killing the other's server.
+// scripts/test-e2e.sh exports this; the fallback keeps a bare `playwright test`
+// working against a hand-started server on the default port.
+const E2E_BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3737";
+
 const chromiumOptions = {
   ...devices["Desktop Chrome"],
   launchOptions: {
@@ -19,7 +26,7 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup.ts",
 
   use: {
-    baseURL: "http://localhost:3737",
+    baseURL: E2E_BASE_URL,
     actionTimeout: 10_000,
     trace: "on-first-retry",
   },
@@ -50,7 +57,7 @@ export default defineConfig({
 
   webServer: {
     command: "bun run dev",
-    url: "http://localhost:3737",
+    url: E2E_BASE_URL,
     reuseExistingServer: true,
     timeout: 120_000,
   },

@@ -12,11 +12,17 @@
 # processes are actually gone instead of trusting pkill's exit status.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/env.sh"
+source "$SCRIPT_DIR/lib-devserver.sh"
+
+# One port per worktree, so a second checkout does not fight this one for 3737.
+PORT="$(devserver_port)"
+export PORT
 
 if ! bash "$SCRIPT_DIR/stop.sh"; then
   echo "[dev] refusing to start: could not stop the running dev server" >&2
-  echo "[dev] check for a stuck process on port 3737 before retrying" >&2
+  echo "[dev] check for a stuck process on port ${PORT} before retrying" >&2
   exit 1
 fi
 
+echo "[dev] starting on port ${PORT}"
 exec bun run dev
