@@ -575,6 +575,9 @@ describe("Health Monitor", () => {
       expect(upsert).toHaveBeenCalledTimes(1);
       const payload = upsert.mock.calls[0][0];
 
+      // Both assertions are load-bearing, do not "simplify" to one: toEqual
+      // treats { status: undefined } as equal to an absent key, so it alone
+      // would pass a reintroduced `status: expr ?? undefined`.
       expect(payload.create).not.toHaveProperty("status");
       expect(payload.create).toEqual({
         moduleId: "persist-mod",
@@ -622,7 +625,10 @@ describe("Health Monitor", () => {
       const schema = readFileSync(join(process.cwd(), "prisma/schema.prisma"), "utf8");
       const model = schema.slice(schema.indexOf("model ModuleRegistration"));
       const body = model.slice(0, model.indexOf("\n}"));
-      const declared = body.match(/status\s+String\s+@default\("([^"]+)"\)/)?.[1];
+      // Anchored with ^…/m on purpose: `status` is a substring of
+      // `healthStatus`, so an unanchored match would silently read the wrong
+      // field the day someone adds a `*status` column above this one.
+      const declared = body.match(/^\s*status\s+String\s+@default\("([^"]+)"\)/m)?.[1];
       expect(declared).toBe(ModuleStatus.ACTIVE);
 
       const migration = readFileSync(
