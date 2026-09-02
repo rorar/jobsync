@@ -66,6 +66,8 @@ jest.mock("@/lib/connector/registry", () => {
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { checkModuleHealth } from "@/lib/connector/health-monitor";
 import { moduleRegistry } from "@/lib/connector/registry";
 import { emitEvent, createEvent } from "@/lib/events";
@@ -606,6 +608,33 @@ describe("Health Monitor", () => {
       expect(result.error).toContain("not active");
       expect(mockFetch).not.toHaveBeenCalled();
       expect(mockPrisma.moduleRegistration.upsert).not.toHaveBeenCalled();
+    });
+
+    it("keeps the DB column default equal to the manifest default", () => {
+      // ADR-043 rests on an equivalence: the column default this code now
+      // delegates to must be the same value the registry gives a freshly
+      // registered module. Half of that was already pinned — registry.ts's
+      // ModuleStatus.ACTIVE by module-registry.spec.ts — and half by nothing.
+      // Change the schema default to "inactive" and every unit test stays
+      // green while the E2E module reset (which deletes rows so the default
+      // reapplies) silently inverts. Both sources are checked, because schema
+      // and migration drifting apart is its own failure mode.
+      const schema = readFileSync(join(process.cwd(), "prisma/schema.prisma"), "utf8");
+      const model = schema.slice(schema.indexOf("model ModuleRegistration"));
+      const body = model.slice(0, model.indexOf("\n}"));
+      const declared = body.match(/status\s+String\s+@default\("([^"]+)"\)/)?.[1];
+      expect(declared).toBe(ModuleStatus.ACTIVE);
+
+      const migration = readFileSync(
+        join(
+          process.cwd(),
+          "prisma/migrations/20260329013355_add_module_lifecycle/migration.sql",
+        ),
+        "utf8",
+      );
+      expect(migration).toContain(
+        `"status" TEXT NOT NULL DEFAULT '${ModuleStatus.ACTIVE}'`,
+      );
     });
   });
 });

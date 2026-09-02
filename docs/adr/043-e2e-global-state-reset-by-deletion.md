@@ -189,6 +189,11 @@ initially changed to match the JSearch spec and reverted when that was recognise
 - `src/actions/module.actions.ts:430,439-450,452` — the sync latch and the rows-that-exist loop
 - `src/lib/connector/registry.ts:67` — the manifest default
 - `e2e/cleanup-stale-data.ts` steps 0a/0b — the implementation and its comment
-- `src/actions/module.actions.ts:79-86` — the unfiltered background health check that opens the resurrection window
-- `src/lib/connector/health-monitor.ts:215-227` — the upsert `create` branch that writes `status`
-- `docs/BUGS.md` § Session 2026-09-01 — E2E-B4, E2E-B9 (credential-gated restore), E2E-B18 (resurrection race)
+- `src/lib/connector/health-monitor.ts:110-118` — the not-active guard, which is what actually
+  prevents a stale `inactive` from ever reaching the persist (present since `32426cca`)
+- `src/actions/module.actions.ts:79-86` — the background health check, fired without a status
+  filter; harmless because of that guard
+- `src/lib/connector/health-monitor.ts:227-239` — the upsert whose `create` branch no longer
+  writes `status` at all (`f56da9ff`)
+- `docs/BUGS.md` § Session 2026-09-01 — E2E-B4, E2E-B9 (credential-gated restore), E2E-B18
+  (lifecycle write from the health path)

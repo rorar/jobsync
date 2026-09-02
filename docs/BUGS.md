@@ -1,10 +1,10 @@
 # Bug Tracker — Collected 2026-03-24, Updated 2026-09-01
 
-**Total: 629 bugs found, 624 fixed, 6 open (2 accepted risk + 4 from 2026-09-01)**
+**Total: 629 bugs found, 625 fixed, 5 open (2 accepted risk + 3 from 2026-09-01)**
 
-> The three figures above do not reconcile (624 + 6 = 630, not 629) and have not reconciled
+> The three figures above do not reconcile (625 + 5 = 630, not 629) and have not reconciled
 > for several sessions. The off-by-one is inherited, not introduced here; the 2026-09-01 edits
-> added 21 findings and now close 17 of them (4 still open: E2E-B9, B11, B12, B18), which
+> added 21 findings and now close 18 of them (3 still open: E2E-B9, B11, B12), which
 > preserves the discrepancy rather than papering over it. Whoever next audits this file should recount from the sections rather
 > than trust this line.
 
