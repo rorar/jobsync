@@ -28,6 +28,12 @@ export async function cleanupStaleE2EData(): Promise<void> {
 }
 
 async function deleteStaleRecords(): Promise<void> {
+  // This early return is load-bearing beyond its appearance: every delete below,
+  // INCLUDING the unfiltered global one in step 0b, is unreachable without the
+  // hardcoded test user. It is the strongest safety property this file has and
+  // it was undocumented. It is also weak on its own — prisma/seed.ts and .env
+  // both hardcode the same address, so a self-hoster who followed the README HAS
+  // that user — which is why step 0b is gated as well.
   const userId = await getTestUserId();
   if (!userId) {
     console.log("[E2E Cleanup] Test user not found, skipping cleanup");
@@ -90,7 +96,32 @@ async function deleteStaleRecords(): Promise<void> {
   // table. The reset therefore takes effect from the next server start, not
   // immediately. The health/monitoring columns on these rows are re-populated
   // by the health monitor.
-  total += (await prisma.moduleRegistration.deleteMany({})).count;
+  // GATED, because this is the one delete in this file with no userId filter
+  // and no name prefix — it removes every row, including module deactivations
+  // an admin made deliberately through an admin-gated, audit-logged action.
+  //
+  // The loss is silent and asymmetric: the module reverts to ACTIVE on the next
+  // server start while the automations that deactivation paused stay paused
+  // with pauseReason "module_deactivated" — a state no code path produces. And
+  // deactivating a cloud AI module is a plausible GDPR act under CLAUDE.md's
+  // PII-egress rules, so re-activating it silently is worse than losing a row.
+  //
+  // ADR-043 called this "acceptable for a test database". Nothing distinguished
+  // a test database from a developer's: DATABASE_URL is file:./dev.db, the same
+  // file the dev server uses. The precondition was stated and not implemented.
+  // It is implemented now — the runner opts in explicitly, so running Playwright
+  // by hand against your own dev.db cannot wipe module configuration.
+  if (process.env.E2E_ALLOW_DESTRUCTIVE === "1") {
+    total += (await prisma.moduleRegistration.deleteMany({})).count;
+  } else {
+    console.log(
+      "[E2E Cleanup] SKIPPING the global ModuleRegistration reset: " +
+        "E2E_ALLOW_DESTRUCTIVE is not set (scripts/test-e2e.sh sets it). " +
+        "Without it, a module left inactive by an earlier run stays inactive " +
+        "and automation-wizard-modules.spec.ts fails its precondition loudly " +
+        "rather than passing vacuously.",
+    );
+  }
 
   // Delete in strict FK dependency order (deepest children first)
 

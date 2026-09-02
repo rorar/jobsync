@@ -140,8 +140,26 @@ test in the run).
   `specs/module-lifecycle.allium`. That is recorded in **ADR-044**, which also carries the one
   narrow case where the fix loses information. Neither disturbs the decision in this record.
 
-- **The step is global while every other step is `userId`-scoped**, because the model has no user
-  column. On a shared database it would reset another user's deliberate deactivations. Acceptable
+- **The step is global while every other step is `userId`-scoped**, and this is the precondition
+  on the whole decision rather than one cost among several. It erases module deactivations an
+  admin made through an admin-gated, rate-limited, audit-logged action, and the resulting state is
+  one no code path produces: the module reverts to `ACTIVE` on the next server start while the
+  automations that deactivation paused stay paused with `pauseReason: "module_deactivated"`, with
+  no notification. Deactivating a cloud AI module is also a plausible GDPR act under `CLAUDE.md`
+  § PII Egress, so re-activating it silently is worse than losing a row.
+
+  **This record originally called that "acceptable for a test database". That was a precondition
+  stated and not implemented** — `DATABASE_URL` is `file:./dev.db`, the same file the dev server
+  uses, and nothing distinguished the two. It is implemented as of 2026-09-02: step 0b is gated on
+  `E2E_ALLOW_DESTRUCTIVE=1`, which only `scripts/test-e2e.sh` sets. Running Playwright by hand
+  against your own database now skips the reset and says so. There is a second, weaker gate that
+  was always there and undocumented: the whole function early-returns when the hardcoded
+  `admin@example.com` user is absent, so every delete here is unreachable without it.
+
+  The Scope section below says this decision "does not license deleting product data that a user
+  might own". Module activation state IS such data, and the reasoning that a leaked `inactive` row
+  is "a test artifact, not a user's choice" holds only on a database used exclusively by the
+  suite — which is exactly what the gate now enforces rather than assumes. Acceptable
   for a test database; it would not be for anything else.
 - **Health and monitoring columns on those rows are discarded** and re-populated by the health
   monitor. Observed and harmless, but it means the table is not a durable record across runs.

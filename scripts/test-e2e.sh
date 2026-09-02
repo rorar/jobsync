@@ -115,6 +115,13 @@ fi
 # then refuses to start.
 guard_host_load "test-e2e" || exit 75
 
+# Opt in to the ONE destructive step in e2e/cleanup-stale-data.ts: the global,
+# unfiltered ModuleRegistration reset (ADR-043). Everything else in that file is
+# userId-scoped and "E2E "-prefixed and needs no permission. Running Playwright
+# by hand without this wrapper therefore cannot wipe a developer's module
+# configuration; it skips the reset and says so.
+export E2E_ALLOW_DESTRUCTIVE=1
+
 export E2E_LOGIN_TIMEOUT_MS="${E2E_LOGIN_TIMEOUT_MS:-90000}"
 WORKERS="${E2E_WORKERS:-1}"
 SERVER_WAIT="${E2E_SERVER_WAIT:-150}"
