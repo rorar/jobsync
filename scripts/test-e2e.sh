@@ -189,9 +189,10 @@ echo "[test-e2e] dev server ready :${PORT} | workers=${WORKERS} loginTimeout=${E
 #    transient cgroup so the runner and its Chromium children cannot take the
 #    host with them. The DEV SERVER is not in this scope — dev-e2e.sh opens its
 #    own — so a runaway browser cannot starve the app under test, and vice
-#    versa. Same fallback ladder as typecheck-safe.sh; unlike that script this
-#    one degrades to plain nice/ionice rather than aborting, because a host
-#    without transient scopes can still run the suite.
+#    versa. NOT the same ladder as typecheck-safe.sh: there is no system-scope
+#    branch here, so on a host without a user session this degrades straight to
+#    plain nice/ionice. That is deliberate — a host without transient scopes can
+#    still run the suite — but it is two branches, not three.
 #
 #   E2E_MEM_MAX     cgroup memory cap for runner + browsers  (default 6G)
 #   E2E_CPU_QUOTA   cgroup CPUQuota                          (default 400%)
