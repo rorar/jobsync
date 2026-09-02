@@ -40,6 +40,24 @@ export async function login(page: Page) {
  * (notifications.title, en). Anchoring on /^Notifications/ alone would also
  * select the notification dropdown whenever a test leaves it open.
  *
+ * It is an ATTRIBUTE selector rather than getByRole, and that is deliberate.
+ * getByRole consults the accessibility tree. Radix's modal Dialog calls
+ * hideOthers() (@radix-ui/react-dialog/dist/index.mjs:137), whose aria-hidden
+ * helper walks document.body's children and sets aria-hidden="true" on every
+ * one that is not an ancestor of the portal — with no exemption for live
+ * regions. Our <ToastViewport/> is rendered IN PLACE inside the app root
+ * (toaster.tsx:34, dashboard/layout.tsx:47) and is never portalled: react-toast
+ * uses Portal only for the sr-only announce clone (index.mjs:480), while the
+ * viewport itself is a plain DismissableLayer.Branch (:171-180). So it is
+ * exactly such a sibling, and under getByRole it would be invisible to
+ * Playwright for as long as any modal is open — a timeout for every toast
+ * asserted before its dialog has closed, while the toast sits there on screen.
+ * CSS attribute matching never consults that tree.
+ *
+ * The trade-off is real rather than free: this also gives up the role engine's
+ * implicit "is in the accessibility tree" filter. Here that is exactly what we
+ * want, but it is a semantic change, not a pure refactor.
+ *
  * A page-wide `getByRole("status")` is the obvious alternative and is wrong: a
  * dozen sr-only live regions in src/ carry that role and announce the very text
  * these tests match on (ComboBox.tsx:195, StatusStageCombobox.tsx:179,
@@ -48,7 +66,24 @@ export async function login(page: Page) {
  * toast to document.body, outside the viewport (index.mjs:365-372).
  *
  * Known limitation this helper cannot fix: it narrows WHERE we look, not WHAT
- * we match. Toasts live for 5 s (toaster.tsx:19), so a test that fires two
+ * we match. A pattern is safe only if it can match NEITHER of two things:
+ *
+ *   (a) the NEIGHBOURING action's success message — toasts live 5 s
+ *       (toaster.tsx), so a test that acts twice in quick succession can be
+ *       satisfied by the first toast. This is the visible hazard; it costs you
+ *       a missed assertion.
+ *
+ *   (b) any FAILURE message the SAME action can produce. This one is worse: it
+ *       turns a broken flow green rather than merely skipping a check. Today
+ *       every call site is clear of it, but by luck rather than design —
+ *       `handleError` (src/lib/utils.ts:60-90) discards the thrown
+ *       `error.message` and returns the caller's generic key, so a rejection
+ *       surfaces as e.g. "Failed to delete API key" (no "deleted"). The moment
+ *       anyone surfaces the real message, `/deleted/i` at
+ *       settings-api-keys.spec.ts:136 becomes a false positive the same day,
+ *       because `api.keyMustBeRevoked` already reads "API key must be revoked
+ *       before it can be deleted".
+ * Toasts live for 5 s (toaster.tsx:19), so a test that fires two
  * actions in quick succession can still be satisfied by the PREVIOUS toast,
  * which is still on screen. Telling two simultaneous toasts apart is inherent
  * to text matching, so the obligation sits with the caller: pass a pattern that
@@ -69,7 +104,7 @@ export async function expectToast(
 ) {
   await expect(
     page
-      .getByRole("region", { name: /^Notifications \(/ })
+      .locator('[role="region"][aria-label^="Notifications ("]')
       .getByText(pattern)
       .first(),
   ).toBeVisible({ timeout });

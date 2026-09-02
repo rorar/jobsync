@@ -522,13 +522,17 @@ test("add education and edit school name", async ({ page }) => {
   await page.getByLabel("Start Date").click();
   // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for date picker calendar.
   await page.getByRole("gridcell").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
-  await page.getByRole("gridcell", { name: "15" }).first().click();
+  const eduStartCell = page.getByRole("gridcell", { name: "15" }).first();
+  await eduStartCell.waitFor({ state: "visible", timeout: 5000 });
+  await eduStartCell.click();
 
   // Set End Date
   await page.getByLabel("End Date").click();
   // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for date picker calendar.
   await page.getByRole("gridcell").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
-  await page.getByRole("gridcell", { name: "20" }).first().click();
+  const eduEndCell = page.getByRole("gridcell", { name: "20" }).first();
+  await eduEndCell.waitFor({ state: "visible", timeout: 5000 });
+  await eduEndCell.click();
 
   // Fill description
   await page.locator(".tiptap").last().click();

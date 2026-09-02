@@ -37,10 +37,14 @@ async function switchToTableView(page: Page) {
 
 // NOTE: `createTestJob` / `deleteTestJob` used to live here and were deleted
 // (E2E-B19 close-out). They had no call sites — no test in this file creates a
-// job — and they could not have worked if wired up: the trigger they clicked,
-// `getByRole("button", { name: /add job/i })`, matches nothing, because the
-// button's accessible name is `jobs.newJob` = "New Job" (AddJob.tsx:397,
-// jobs.ts:20) while "Add Job" is only the DialogTitle; and the fields they
+// job — and they could not have worked if wired up. `createTestJob` switched to
+// the TABLE view first, and there its trigger `getByRole("button", { name:
+// /add job/i })` matches nothing: the table toolbar's button is `jobs.newJob` =
+// "New Job" (AddJob.tsx:397, jobs.ts:20). An "Add Job" button DOES exist in the
+// app — KanbanEmptyState.tsx:18-23 renders `jobs.kanbanEmptyBoardAction` =
+// "Add Job" — but only in the kanban branch (JobsContainer.tsx:437,449), which
+// this helper had just navigated away from. The decisive half of the argument
+// needs none of that: the fields they
 // filled, `input[name="title"]` / `input[name="company"]`, do not exist —
 // both are <Combobox> (AddJob.tsx:445,472) and those `name` values are
 // react-hook-form FormField props, erased before the DOM.

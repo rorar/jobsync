@@ -111,8 +111,10 @@ async function createWebhookEndpoint(
 /**
  * The length above which WebhookSettings.tsx:520-523 shortens the displayed
  * URL. That truncation is done in JAVASCRIPT (`endpoint.url.slice(0, 47) +
- * "..."`), not by CSS, so past this point the tail genuinely is NOT in the DOM
- * and no text matcher can see it. (The `truncate` class on the same element,
+ * "..."`), not by CSS, so past this point the tail is not in the DOM AS TEXT and
+ * no text matcher can see it. (The full URL does remain in the DOM as the
+ * `title` attribute at WebhookSettings.tsx:533 — invisible to `hasText`, which
+ * reads text content, but present, so do not read this as "the string is gone".) (The `truncate` class on the same element,
  * WebhookSettings.tsx:533, is cosmetic on top of that JS cut — CSS never
  * removes text from the DOM, so it alone would not have hidden anything from
  * Playwright.)
@@ -320,9 +322,14 @@ test.describe("Webhook Settings", () => {
     // The card gets opacity-60 class when inactive
     await expect(card.first()).toHaveClass(/opacity-60/, { timeout: 5000 });
 
-    // Toggle it back on
+    // Toggle it back on. The toast CANNOT discriminate here: webhook.updated is
+    // one string for both directions ("Webhook endpoint updated", webhook.ts:6),
+    // and the first toast is still on screen inside its 5 s life. Assert the
+    // state instead — without this the second click could miss entirely and the
+    // test would still pass on the first action's toast.
     await toggle.click();
     await expectToast(page, /updated/i);
+    await expect(card.first()).not.toHaveClass(/opacity-60/, { timeout: 5000 });
 
     // Cleanup
     await deleteWebhookEndpoint(page, webhookUrl);

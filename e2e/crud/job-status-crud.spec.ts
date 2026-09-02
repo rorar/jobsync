@@ -112,7 +112,8 @@ test.describe("Custom JobStatus → dynamic Kanban", () => {
     // Anchor on the column itself, not on page-wide text: the table view renders
     // the same status label in its status cell, so a bare text match also passed
     // when the switch to Kanban never happened. `kanban-column-*` is emitted only
-    // by KanbanColumn, and the heading filter ties the column to THIS status.
+    // by KanbanColumn, and the heading filter ties the column to THIS status
+    // rather than to whichever column happens to be first.
     const statusColumn = page
       .locator("[data-testid^='kanban-column-']")
       .filter({ has: page.getByRole("heading", { name: statusLabel, exact: true }) });
