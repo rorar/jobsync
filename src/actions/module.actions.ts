@@ -476,6 +476,15 @@ async function syncRegistryFromDb(): Promise<void> {
  *    — writes ONLY `healthStatus` and `updatedAt`. The `status` column
  *    (active/inactive) is never touched by the health-monitor path.
  *
+ *    CORRECTION (2026-09-02, ADR-044): point 2 was ASPIRATIONAL until
+ *    `f56da9ff`. It quotes the `update` branch correctly and then generalises
+ *    to "the health-monitor path", but the upsert has two branches, and its
+ *    `create` branch wrote `status: registered.status` from `32426cca` until
+ *    `f56da9ff` — five months. It is true as written now. The Sprint 3
+ *    CONCLUSION was unaffected: the create branch fires only when no row
+ *    exists, so there was never a recorded lifecycle value for a non-admin
+ *    caller to overwrite.
+ *
  * 3. Neither write cascades into pausing any user's automations.
  *    The automation-pause cascade is exclusively triggered by
  *    `handleAuthFailure`, `handleCircuitBreakerTrip`, and `deactivateModule`

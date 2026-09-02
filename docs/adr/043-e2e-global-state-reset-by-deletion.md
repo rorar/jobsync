@@ -126,32 +126,19 @@ test in the run).
   (`module.actions.ts:430`), so a dev server that already synced will not re-read the table. The
   cleanup runs in `globalSetup`, a separate process, so its effect appears at the next server
   start. This is documented in the cleanup comment and in the spec that depends on it.
-- **A live process could re-persist lifecycle state through the health path — narrower than
-  first recorded, and now closed.** This bullet originally claimed that a process holding a stale
-  `inactive` would re-create the deleted row carrying that value, via the background
-  `checkModuleHealth` that `getModuleManifests` fires for every module whose in-memory health is
-  `UNKNOWN` (`module.actions.ts:79-86`, no status filter). **That claim was wrong**, and it was
-  wrong when this ADR was written. `checkModuleHealth` early-returns for any module that is not
-  `ModuleStatus.ACTIVE` (`health-monitor.ts:110-118`, present since `32426cca`, 2026-03-29), so a
-  process holding a stale `inactive` never reaches the upsert and cannot write that value back.
+- **RETRACTED — this record twice claimed a resurrection path that does not exist.** Version one
+  said a process holding a stale `inactive` would re-create the deleted row carrying that value,
+  via the unfiltered background `checkModuleHealth`. Version two narrowed it to a concurrent
+  `deactivateModule` landing inside the probe's await window. **Both were wrong, in the same
+  shape:** each traced the call path far enough to look plausible and stopped before the thing
+  that closes it — first the `ModuleStatus.ACTIVE` guard at `health-monitor.ts:110-118` (present
+  since `32426cca`, 2026-03-29), then the lifecycle writer's own upsert, which asserts its status
+  in **both** branches and therefore overwrites anything the probe's create branch wrote.
 
-  What was real is a much narrower race. `registered` is a live registry object and the probe
-  awaits a network round trip between the guard and the persist, so a concurrent
-  `deactivateModule` landing inside that window would flip `registered.status` and the **create**
-  branch would then persist `inactive` — a value the health path has no business asserting at all.
-
-  Closed by removing `status` from that create payload: the schema default
-  (`status String @default("active")`, `prisma/schema.prisma:606`) supplies it, and that default
-  coincides with the manifest default (`registry.ts:67`) — which is precisely the property this
-  ADR rests on. Health is an observation; lifecycle is an intention, asserted only by the
-  admin-gated `activateModule` / `deactivateModule`. A row materialised by a probe must carry no
-  opinion about activation. Pinned by two tests in `__tests__/health-monitor.spec.ts`, one
-  asserting the create payload has no `status`, one pinning the guard itself so a future
-  relaxation cannot silently re-open the path.
-
-  The correction does not disturb the decision. It removes a cost this record wrongly attributed
-  to it: the reset was never undoable by a stale-`inactive` process, and is now not undoable by a
-  concurrently-deactivated one either.
+  The health path did nevertheless write lifecycle state on its create branch, which is a real and
+  separate problem with a real justification — a five-month divergence from
+  `specs/module-lifecycle.allium`. That is recorded in **ADR-044**, which also carries the one
+  narrow case where the fix loses information. Neither disturbs the decision in this record.
 
 - **The step is global while every other step is `userId`-scoped**, because the model has no user
   column. On a shared database it would reset another user's deliberate deactivations. Acceptable
