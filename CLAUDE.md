@@ -253,7 +253,7 @@ That's it — no hardcoded arrays, no ENV_VAR_MAP entries, no duplicate resilien
 
 **Current structure:** `src/lib/connector/data-enrichment/`:
 - **types.ts** — DataEnrichmentConnector, EnrichmentDimension, LogoData, DeepLinkData, FallbackChainConfig, ENRICHMENT_CONFIG
-- **registry.ts** — Facade: `getActiveEnrichmentModules()`, `getEnrichmentModuleByDimension()`
+- **registry.ts** — Facade: `getActiveEnrichmentModules()`, `getEnrichmentModuleByDimension()`. **Currently UNUSED (verified 2026-09-02): zero importers, and `orchestrator.ts:12` bypasses it for `moduleRegistry` directly.** Aspirational rather than live; `reference-data/registry.ts` is unused the same way, while the `job-discovery/` and `ai-provider/` facades ARE consumed. Decide before adding a module: route new code through these, or delete both files together with this paragraph — deleting the files alone leaves this text promising a seam that no longer exists.
 - **orchestrator.ts** — `EnrichmentOrchestrator.execute()`: cache check → chain execution → persist result → publish events. `globalThis` singleton. Resolves credentials via PUSH pattern for key-based modules.
   - Cache keys include `userId` to prevent cross-user data leakage (ADR-029).
   - Per-module timeout uses `Promise.race` (not AbortSignal propagation). Chain-level timeout at `CHAIN_TIMEOUT_MS`.
@@ -970,6 +970,27 @@ On NixOS set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chr
 **Knip** (`bun knip`) detects unused files, dependencies, exports, and types. Config: `knip.ts`. Use the `/knip` skill for guidance.
 
 **When to run:** On user request — typically after refactorings, dependency changes, or feature deletions. Not automatically on every commit.
+
+**Three shapes make knip wrong in THIS repo. Never delete a candidate matching one on importer
+count alone — check it against tsc or a run first:**
+
+1. **Ambient `.d.ts` declarations** — `src/types/iso3166-2-db.d.ts` has no importer by path; it is
+   picked up through `tsconfig.include` and consumed by `geo-codes/subdivisions.ts:17`. Deleting it
+   fails the typecheck.
+2. **Dynamic template imports** — `src/i18n/lingui.ts:8` resolves `./messages/${locale}.ts` at
+   runtime, which no static analyser follows, so all four catalogs look orphaned.
+3. **Framework-convention entries** — `src/instrumentation.ts` starts the scheduler, the CRM cron,
+   the event consumers and the FATAL env validation. Deleting it breaks nothing at build time and
+   silently disables all of it at runtime.
+
+**Trust diagnostic:** knip's Next plugin lists `instrumentation.ts` as an entry point. If it ever
+appears in an "Unused files" report, the plugin did not activate and the whole list is
+untrustworthy. Verified absent on 2026-09-02, so that run's list was credible.
+
+Also load-bearing despite zero importers: `src/models/actionResult.type-test.ts`, a build-enforced
+type regression guard (its own header explains why it is deliberately unimported), and the
+`ts-node` devDependency, without which `jest-config` cannot load `jest.config.ts` and jest does not
+start at all.
 
 **Commands:**
 - `bun knip` — **primary**: full scan (files, dependencies, exports, types)
