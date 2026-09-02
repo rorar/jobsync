@@ -16,28 +16,64 @@
 #   prints its own status as the final line of its own output, where no
 #   pipeline can rewrite it.
 
-# Refuse (or warn about) starting heavy work on an already-busy host.
-# Usage: guard_host_load "<label>"   -> returns non-zero if the caller should stop.
-# Tunables: GUARD_LOAD_WARN (default 2.0 per core), GUARD_LOAD_ABORT (4.0),
-#           ALLOW_BUSY_HOST=1 to proceed anyway.
+# Refuse (or warn about) starting heavy work when THIS container is already busy.
+#
+# It deliberately does NOT use /proc/loadavg. This project runs in an LXC
+# container, and loadavg is not namespaced: it reports the whole HOST's load,
+# while nproc reports our CPU affinity. Dividing one by the other compares
+# unrelated numbers. The first version of this guard did exactly that and
+# blocked a legitimate run at "5.37 over 3 cores" while this cgroup was using
+# 0.04 cores and the host was at ~20% — the same defect class it was written to
+# catch, pointing the other way.
+#
+# cgroup v2 cpu.stat gives the honest signal: how much CPU WE are actually
+# using. That is also the right scope, because what flattened this host was our
+# own six subagents plus a Playwright run, all inside this cgroup.
+#
+# Known limitation, stated rather than hidden: this cannot see contention from
+# OTHER containers on the same host. If a run is inexplicably slow while this
+# guard is quiet, look outside the container.
+#
+# Usage: guard_host_load "<label>"  -> non-zero means the caller should stop.
+# Tunables: GUARD_CPU_WARN (default 0.60 = 60% of allowance), GUARD_CPU_ABORT
+#           (1.20), GUARD_SAMPLE_SECS (1), ALLOW_BUSY_HOST=1 to proceed anyway.
 guard_host_load() {
-  local label="${1:-run}" cores load ratio warn abort
-  cores="$(nproc 2>/dev/null || echo 1)"
-  load="$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0)"
-  ratio="$(awk -v l="$load" -v c="$cores" 'BEGIN{printf "%.2f", (c>0 ? l/c : l)}')"
-  warn="${GUARD_LOAD_WARN:-2.0}"
-  abort="${GUARD_LOAD_ABORT:-4.0}"
+  local label="${1:-run}" allowance busy ratio warn abort a b secs quota period
+
+  # effective CPU allowance: cgroup quota if one is set, else our affinity
+  allowance="$(nproc 2>/dev/null || echo 1)"
+  if [ -r /sys/fs/cgroup/cpu.max ]; then
+    read -r quota period < /sys/fs/cgroup/cpu.max
+    if [ "$quota" != "max" ] && [ -n "$period" ] && [ "$period" -gt 0 ] 2>/dev/null; then
+      allowance="$(awk -v q="$quota" -v p="$period" 'BEGIN{printf "%.2f", q/p}')"
+    fi
+  fi
+
+  secs="${GUARD_SAMPLE_SECS:-1}"
+  if [ -r /sys/fs/cgroup/cpu.stat ]; then
+    a="$(awk '/^usage_usec/{print $2}' /sys/fs/cgroup/cpu.stat)"
+    sleep "$secs"
+    b="$(awk '/^usage_usec/{print $2}' /sys/fs/cgroup/cpu.stat)"
+    busy="$(awk -v a="$a" -v b="$b" -v s="$secs" 'BEGIN{printf "%.2f", (b-a)/(s*1000000)}')"
+  else
+    # bare metal without cgroup v2: loadavg IS ours, so it is usable here
+    busy="$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0)"
+  fi
+
+  ratio="$(awk -v b="$busy" -v c="$allowance" 'BEGIN{printf "%.2f", (c>0 ? b/c : b)}')"
+  warn="${GUARD_CPU_WARN:-0.60}"
+  abort="${GUARD_CPU_ABORT:-1.20}"
 
   if awk -v r="$ratio" -v a="$abort" 'BEGIN{exit !(r+0 >= a+0)}'; then
-    echo "[$label] host load ${load} over ${cores} cores = ${ratio}x per core."
+    echo "[$label] this container is using ${busy} of ${allowance} allowed cores (${ratio}x)."
     echo "[$label] Top consumers right now:"
     ps -eo pcpu,rss,cmd --sort=-pcpu --no-headers 2>/dev/null | head -5 |
       sed 's/^/           /' | cut -c1-110
     if [ "${ALLOW_BUSY_HOST:-}" = "1" ]; then
-      echo "[$label] ALLOW_BUSY_HOST=1 — proceeding anyway. Treat the results as suspect."
+      echo "[$label] ALLOW_BUSY_HOST=1 - proceeding. Treat the results as suspect."
       return 0
     fi
-    echo "[$label] ABORT: this host is too busy for a meaningful run."
+    echo "[$label] ABORT: too busy for a meaningful run."
     echo "           Numbers produced now would measure contention, not the code."
     echo "           Stop what is competing (subagents count!), then re-run."
     echo "           Override with ALLOW_BUSY_HOST=1 if you know what you are doing."
@@ -45,7 +81,7 @@ guard_host_load() {
   fi
 
   if awk -v r="$ratio" -v w="$warn" 'BEGIN{exit !(r+0 >= w+0)}'; then
-    echo "[$label] WARNING: load ${load} over ${cores} cores = ${ratio}x per core."
+    echo "[$label] WARNING: container using ${busy} of ${allowance} cores (${ratio}x)."
     echo "           Timings will be inflated; a failure here may be contention."
   fi
   return 0

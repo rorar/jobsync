@@ -68,13 +68,22 @@ bash scripts/test.sh
 
 Tunables if you need them: `JEST_MEM_MAX` (4G), `JEST_NODE_HEAP` (3072), `JEST_TIMEOUT` (1800).
 
-**All four heavy wrappers refuse to start on an overloaded host.** `scripts/lib-runtime-guard.sh`
-aborts with exit **75** when the 1-minute load exceeds 4× the core count, and prints the top
-consumers. This exists because a Playwright run was once started while six subagents were still
-resident: load hit 69.81 and the suite returned 11 failures with durations like 14.9 minutes for a
-single test — numbers that measured contention, not the tree. Override with `ALLOW_BUSY_HOST=1`
-only if you accept that the results are suspect. `GUARD_LOAD_WARN` / `GUARD_LOAD_ABORT` tune the
-thresholds (per core).
+**All four heavy wrappers refuse to start when this container is already busy.**
+`scripts/lib-runtime-guard.sh` samples **cgroup v2 `cpu.stat`** for one second and aborts with exit
+**75** when we are using more than 1.2× our CPU allowance. It exists because a Playwright run was
+once started while six subagents were still resident: the suite returned 11 failures with durations
+like 14.9 minutes for a single test — numbers that measured contention, not the tree.
+
+**It deliberately does not use `/proc/loadavg`.** This project runs in an **LXC container**, where
+loadavg is not namespaced: it reports the whole HOST's load while `nproc` reports our affinity, so
+dividing one by the other compares unrelated numbers. The first version did exactly that and
+blocked a legitimate run at "5.37 over 3 cores" while this cgroup was using **0.04** cores and the
+host was at ~20%.
+
+Known limitation, worth remembering: this cannot see contention from OTHER containers on the same
+host. If a run is inexplicably slow while the guard stays quiet, look outside the container.
+Override with `ALLOW_BUSY_HOST=1`; `GUARD_CPU_WARN` (0.60) / `GUARD_CPU_ABORT` (1.20) /
+`GUARD_SAMPLE_SECS` (1) tune it.
 
 **Every wrapper prints `[<name>] EXIT=<rc>` as its last line**, and explains exit **124** as a
 timeout rather than a failure of the thing under test. Read that line, not the shell's — `cmd; echo
