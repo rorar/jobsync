@@ -19,7 +19,9 @@
 `checkModuleHealth` persisted its result with an upsert whose `update` branch touched only
 `healthStatus`, but whose `create` branch also wrote `status: registered.status`.
 
-That is not a cosmetic overlap. `specs/module-lifecycle.allium:765-768` cites the separation as
+That is not a cosmetic overlap. `specs/module-lifecycle.allium:765-768` — a **prose** invariant,
+i.e. a comment that `allium check` cannot enforce, which is precisely why it could drift from the
+code for five months with no tool objecting — cites the separation as
 the **stated reason `runHealthCheck` is excluded from the admin gate**:
 
 > `runHealthCheck` is intentionally EXCLUDED from this gate — confirmed-safe by Sprint 3 Stream C
@@ -114,6 +116,16 @@ converge on the intended value. The justification is the spec divergence, not a 
   this properly and is a larger change than this one should carry.
 
 - The schema/registry equivalence is now load-bearing. Mitigated, not eliminated (below).
+
+- **ADR-043 widens the window this record accepts, and neither document noticed.** The negative
+  above needs "no row exists", which is rare in production and *routinely manufactured* by
+  ADR-043's step 0b, which deletes every row before every E2E run. Severity stays low — on a
+  freshly reset database the lost intention is a test artefact, not a user's — but the two
+  decisions interact on exactly the machine where the reset runs.
+
+- The upstream defect this exposes is tracked as **MOD-B1** in `docs/BUGS.md`, not only here. An
+  ADR records a decision; it is not a bug tracker, and a finding filed only in a Consequences
+  section has been forgotten on purpose.
 
 ### Neutral
 
