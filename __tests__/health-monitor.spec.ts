@@ -547,4 +547,65 @@ describe("Health Monitor", () => {
       );
     });
   });
+
+  // Regression guard for E2E-B18. Health is an observation; lifecycle
+  // (active/inactive) is an intention asserted only by the admin-gated
+  // activate/deactivateModule. A row materialised by a health probe must
+  // therefore carry no `status`, so the schema default supplies it and a
+  // deleted row still resolves to the manifest default (ADR-043).
+  describe("DB persistence writes health only, never lifecycle", () => {
+    it("omits status from the upsert create payload", async () => {
+      registerActiveModule("persist-mod", {
+        endpoint: "https://api.example.com/health",
+        timeoutMs: 5000,
+        intervalMs: 300000,
+      });
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+      });
+
+      await checkModuleHealth("persist-mod");
+
+      const upsert = mockPrisma.moduleRegistration.upsert as jest.Mock;
+      expect(upsert).toHaveBeenCalledTimes(1);
+      const payload = upsert.mock.calls[0][0];
+
+      expect(payload.create).not.toHaveProperty("status");
+      expect(payload.create).toEqual({
+        moduleId: "persist-mod",
+        connectorType: ConnectorType.JOB_DISCOVERY,
+        healthStatus: HealthStatus.HEALTHY,
+      });
+
+      expect(payload.update).not.toHaveProperty("status");
+      expect(payload.update).toEqual(
+        expect.objectContaining({ healthStatus: HealthStatus.HEALTHY }),
+      );
+    });
+
+    it("does not persist at all for a non-active module", async () => {
+      // The status guard is what actually blocks the E2E-B18 resurrection
+      // narrative: a process holding a stale INACTIVE never reaches the
+      // upsert, so it cannot write that stale value back. Pinned here so a
+      // future relaxation of the guard cannot silently re-open the path.
+      registerActiveModule(
+        "stale-inactive-mod",
+        {
+          endpoint: "https://api.example.com/health",
+          timeoutMs: 5000,
+          intervalMs: 300000,
+        },
+        { status: ModuleStatus.INACTIVE },
+      );
+
+      const result = await checkModuleHealth("stale-inactive-mod");
+
+      expect(result.error).toContain("not active");
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockPrisma.moduleRegistration.upsert).not.toHaveBeenCalled();
+    });
+  });
 });
