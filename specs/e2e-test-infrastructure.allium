@@ -2,7 +2,8 @@
 -- e2e-test-infrastructure.allium
 
 -- Scope: E2E test execution infrastructure for JobSync
--- Includes: Test categorization, auth state management, execution pipeline, data isolation
+-- Includes: Test categorization, auth state management, execution pipeline, data isolation,
+--           disposable per-run database, fixture-owned entity lifecycle, console oracle scope
 -- Excludes:
 --   - Individual test assertions (domain-level, not infrastructure)
 --   - Unit/component test infrastructure (Jest, separate concern)
@@ -28,7 +29,11 @@ external entity NextAuthSession {
 
 external entity SQLiteDatabase {
     path: String                   -- "prisma/dev.db"
-    -- Shared across all tests and dev server; no per-test isolation
+    -- The DEVELOPER'S working database, owned by the dev server and the seed
+    -- script. Since DisposableRunDatabase the suite never opens this file: it
+    -- runs against a per-run copy of a seeded template instead.
+    -- It is modelled here solely so the suite can assert it stays untouched
+    -- (invariant RunDatabaseIsNeverTheWorkingDatabase).
 }
 
 external entity WebServerConfig {
@@ -51,6 +56,11 @@ value TestDataIdentifier {
     uid: String                    -- Date.now().toString(36), e.g. "m1abc2d"
     -- Note: prefix is not used in practice. Tests use "{Label} {uid}" format
     -- (e.g., "Co m1abc2d", "Tag m1abc2d") which is sufficiently unique.
+    -- Since DisposableRunDatabase the uid is an INTRA-run device only: it keeps
+    -- concurrent workers inside one run from colliding. Cross-run hygiene is
+    -- the disposable database's job. The "E2E " name prefix likewise survives
+    -- only as a reading aid and as the filter the legacy cleanup script uses;
+    -- it is no longer the mechanism that keeps runs from contaminating runs.
 }
 
 ------------------------------------------------------------
@@ -77,21 +87,43 @@ contract TestConventions {
         -- The .auth/ directory containing session cookies is never committed.
 
     @invariant SingleSourceHelpers
-        -- ALL reusable E2E utilities live in e2e/helpers/index.ts.
-        -- No test file duplicates login(), selectOrCreateComboboxOption(),
-        -- expectToast(), or uniqueId().
+        -- ALL reusable E2E utilities live under e2e/helpers/, and
+        -- e2e/helpers/index.ts is the import surface: a spec file imports
+        -- "../helpers" unless the utility it needs is a module index.ts does
+        -- not re-export.
+        -- Splitting helpers into internal modules under e2e/helpers/ is NOT a
+        -- violation — fixtures.ts, console-oracle.ts and resume-fixture.ts are
+        -- expected shapes. What stays forbidden is a SPEC FILE carrying its own
+        -- copy of a shared helper: that is what let one renamed toast leave six
+        -- private copies of the same resume fixture half-repaired for five
+        -- months.
+        -- No test file defines its own login(), selectOrCreateComboboxOption(),
+        -- expectToast(), uniqueId(), tracked-entity factory or console oracle.
         -- Exception: signin.spec.ts may define inline login (tests the auth flow itself).
         -- Exception: locale-switching.spec.ts may define locale-aware login variant.
+        -- (Was: "ALL reusable E2E utilities live in e2e/helpers/index.ts",
+        -- which forbade the very extraction the suite needed.)
 
-    @invariant SharedDatabaseIsolation
-        -- All E2E tests share a single SQLite database (prisma/dev.db).
-        -- No test modifies seed data (admin user, job sources, job statuses).
-        -- No test reads data created by another test.
-        -- All test-created data uses uniqueId() for identification.
+    @invariant PerRunDatabaseIsolation
+        -- Renamed from SharedDatabaseIsolation, which described a single
+        -- long-lived prisma/dev.db shared by every run.
+        -- Each RUN owns its database: a copy of the seeded template, discarded
+        -- when the run ends. Runs cannot observe each other's rows and no run
+        -- can leave residue for the next, by construction rather than by
+        -- cleanup.
+        -- WITHIN a run the tests still share one database, so the intra-run
+        -- half of the old rule stands unchanged: no test reads data created by
+        -- another test, and all test-created data carries uniqueId() so
+        -- concurrent workers cannot collide.
 
     @invariant SeedDataReadOnly
-        -- Seed data (admin user, job sources, job statuses, default profile)
-        -- is shared infrastructure. Tests may READ seed data but never MODIFY it.
+        -- Seed data (admin user, job sources, job statuses, default profile,
+        -- and at least one staged vacancy) is a DETERMINISTIC TEMPLATE, not
+        -- whatever the developer's database happens to contain. Two runs of the
+        -- same commit start from byte-identical state.
+        -- Tests may READ seed data but never MODIFY it. Under a per-run
+        -- database a modification corrupts only that run's copy — but it still
+        -- breaks every later test in that run, so the prohibition stands.
 
     @invariant OneSpecPerAggregate
         -- Each domain aggregate generally has one E2E spec file.
@@ -134,6 +166,40 @@ enum ProjectStatus {
     skipped
 }
 
+enum TestOutcome {
+    running
+    passed
+    failed
+}
+
+enum TestPhase {
+    arrange                        -- navigation and fixture preparation
+    act                            -- the interaction under test
+    teardown                       -- fixture-owned cleanup
+}
+-- Note: the literal is "arrange", not "setup", because `setup` is already the
+-- conventional binding name for the GlobalSetup instance in this file's rules
+-- and a bound name shadows an enum literal.
+
+enum FixtureKind {
+    admin_user
+    job_source
+    job_status
+    default_profile
+    staged_vacancy                 -- required by e2e/crud/staging-details-sheet.spec.ts
+}
+
+enum RunDatabaseStatus {
+    provisioned
+    discarded
+}
+
+enum OwnedRowStatus {
+    registered                     -- the fixture knows about the row
+    written                        -- the row exists in the run database
+    released                       -- the row is provably gone
+}
+
 ------------------------------------------------------------
 -- Entities
 ------------------------------------------------------------
@@ -154,12 +220,111 @@ entity TestFile {
     category: TestCategory
     test_count: Integer
     uses_storage_state: Boolean
+    required_fixtures: Set<FixtureKind>
+    -- What the file needs the template to already contain. Declaring it is the
+    -- point: staging-details-sheet.spec.ts needs a StagedVacancy and no test
+    -- creates one, so its precondition was invisible until it hard-failed.
 }
 
 entity GlobalSetup {
-    -- Runs once before any project. Performs UI login and persists auth state.
+    -- Runs once before any project. Provisions the run database, starts the
+    -- dev server, then performs UI login and persists auth state.
     auth_state: AuthState
     executable_path: String?       -- PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH for NixOS
+    template: SeedTemplate
+    database: RunDatabase?         -- absent until ProvisionRunDatabase has run
+    reuse_server: Boolean          -- E2E_REUSE_SERVER=1; false by default
+    dev_server_started_by_runner: Boolean
+}
+
+entity SeedTemplate {
+    -- The deterministically seeded database every run is copied from.
+    -- Read-only: no run opens it for writing.
+    path: String
+    seeded_fixtures: Set<FixtureKind>
+}
+
+entity RunDatabase {
+    -- One per run: a copy of the template, discarded when the run ends.
+    path: String
+    template: SeedTemplate
+    status: RunDatabaseStatus
+    file_present: Boolean
+
+    transitions status {
+        provisioned -> discarded
+        terminal: discarded
+    }
+
+    invariant NeverTheTemplateItself {
+        path != template.path
+    }
+
+    invariant DiscardedMeansFileRemoved {
+        status = discarded implies not file_present
+    }
+}
+
+entity TestCase {
+    -- One test(...) body. TestFile is the file; TestCase is a single case in it.
+    file: TestFile
+    outcome: TestOutcome
+    behavioural_assertions: Integer
+    -- Assertions other than the console oracle that no catch can swallow.
+    -- A source-level count: the checker cannot compute it, but the property it
+    -- guards (ConsoleOracleIsNeverTheOnlyAssertion) is worth naming.
+
+    owned_rows: OwnedRow with owner = this
+    console_oracle: ConsoleOracle with test_case = this
+
+    leaked_rows: owned_rows where status = written
+    has_settled: outcome in {passed, failed}
+}
+
+entity OwnedRow {
+    -- A row a test created through a tracked factory fixture. The fixture, not
+    -- the test body, owns its lifecycle.
+    owner: TestCase
+    label: String                  -- "{Label} {uid}", e.g. "E2E Job m1abc2d"
+    carries_uid: Boolean
+    status: OwnedRowStatus
+    deletion_confirmed: Boolean
+
+    transitions status {
+        registered -> written
+        written -> released
+        terminal: released
+    }
+
+    invariant ReleaseRequiresConfirmedDeletion {
+        status = released implies deletion_confirmed
+    }
+}
+
+entity ConsoleOracle {
+    -- An assertion over browser console output for one test case.
+    test_case: TestCase
+    armed_in: TestPhase            -- phase in which collection starts
+    asserted_in: TestPhase         -- phase in which the assertion runs
+    tolerations: ConsoleToleration with oracle = this
+
+    invariant ScopedToActPhase {
+        armed_in = act and asserted_in = act
+    }
+}
+
+entity ConsoleToleration {
+    -- A console artefact the oracle ignores, together with the condition that
+    -- makes ignoring it legitimate.
+    oracle: ConsoleOracle
+    pattern: String                -- e.g. "favicon", "404"
+    condition: String              -- the environment fact being relied on
+    condition_holds: Boolean       -- re-evaluated every run
+
+    suppresses: condition_holds
+    -- Derived, deliberately: the tolerance IS its condition. There is no way to
+    -- express "ignore this always" — when the condition lapses, suppression
+    -- lapses with it and the oracle fails closed.
 }
 
 ------------------------------------------------------------
@@ -177,6 +342,8 @@ config {
     base_url: String = "http://localhost:3737"
     chromium_executable: String = "/run/current-system/sw/bin/chromium"
     stability_runs: Integer = 5   -- number of repeated runs for anti-flaky verification
+    min_behavioural_assertions: Integer = 1
+    -- A console oracle is never a test's only surviving assertion.
 }
 
 ------------------------------------------------------------
@@ -233,84 +400,386 @@ rule CrudProjectConfig {
 }
 
 ------------------------------------------------------------
+-- Rules: Disposable Run Database
+------------------------------------------------------------
+
+rule ProvisionRunDatabase {
+    -- WHEN a run starts, the suite copies the deterministically seeded template
+    -- to a fresh file and runs against the COPY.
+    -- This is what makes cross-run residue impossible rather than merely
+    -- cleaned-up. It also removes the suite's only claim on the developer's
+    -- working database, which until now rested on an env-var gate
+    -- (E2E_ALLOW_DESTRUCTIVE) that covered ONE unfiltered delete while every
+    -- other write went to prisma/dev.db by design.
+    when: TestRunStarted(setup)
+    requires: not exists setup.database
+    ensures:
+        let db = RunDatabase.created(
+            path: fresh_run_path(setup),
+            template: setup.template,
+            status: provisioned,
+            file_present: true
+        )
+        setup.database = db
+
+    @guidance
+        -- Copy the template file; do not migrate-and-seed per run. A copy is
+        -- deterministic and O(file size); a re-seed is neither, and a template
+        -- that is rebuilt rather than copied cannot be byte-compared.
+}
+
+rule DiscardRunDatabase {
+    -- WHEN the run ends, the run database file is removed. Nothing the suite
+    -- wrote outlives the run.
+    when: TestRunFinished(setup)
+    requires: exists setup.database
+    requires: setup.database.status = provisioned
+    ensures:
+        setup.database.status = discarded
+        setup.database.file_present = false
+
+    @guidance
+        -- Fires on every terminal outcome, including a failed or interrupted
+        -- run: a suite that leaves its database behind on failure has
+        -- reintroduced exactly the residue this design removes.
+        -- Artefact capture (traces, the HTML report) must therefore copy
+        -- anything it needs OUT of the database before this runs.
+}
+
+------------------------------------------------------------
 -- Rules: Self-Contained Tests (Anti-Flaky)
 ------------------------------------------------------------
 
 rule SelfContainedCrudTest {
-    -- EVERY CRUD test must be independently runnable.
-    -- Each test creates its own data, asserts, and cleans up.
-    -- No test depends on state from a previous test.
-    when: CrudTestExecutes(test)
-    requires: test.category = crud
-    ensures: test.uses_storage_state = true
+    -- EVERY CRUD test must be independently runnable: it begins owning nothing.
+    -- No row it will touch was inherited from an earlier test, in this run or
+    -- any other.
+    when: CrudTestExecutes(test_case)
+    requires: test_case.file.category = crud
+    ensures: test_case.owned_rows.count = 0
 
     @guidance
-        -- Each test creates own test data with unique TestDataIdentifier.
-        -- Each test cleans up own data (via afterEach or inline cleanup).
-        -- No test reads data created by another test.
+        -- This is the START-state half of the guarantee; the END-state half is
+        -- the invariant SettledTestCaseOwnsNoLeakedRow. Together they bracket
+        -- the test: owns nothing before, owns nothing after.
+        -- The rule used to end `ensures: test.uses_storage_state = true`, which
+        -- asserted an auth property that has nothing to do with independence.
+        -- That claim now lives in the invariant StorageStateFollowsCategory,
+        -- which is about test FILES, where it belongs.
 }
 
 rule UniqueTestData {
-    -- WHEN a CRUD test creates data, it uses a unique identifier
-    -- derived from Date.now().toString(36) to prevent collision
-    -- when tests run in parallel across workers.
-    when: CrudTestCreatesData(test, entity_name)
-    let uid = TestDataIdentifier{uid: timestamp_base36()}
-    ensures: test.uses_storage_state = true
+    -- WHEN a CRUD test creates data, the row's label carries a unique
+    -- identifier derived from Date.now().toString(36), so concurrent workers
+    -- inside the same run cannot collide.
+    when: CrudTestCreatesData(test_case, row)
+    let identifier = TestDataIdentifier{uid: timestamp_base36()}
+    requires: row.owner = test_case
+    ensures:
+        row.label = labelled_with(identifier.uid)
+        row.carries_uid = true
 
     @guidance
-        -- The entity_name must contain the uid to ensure uniqueness
-        -- across parallel workers.
+        -- TrackedFactoryRegistersBeforeWrite takes the label as a parameter;
+        -- this rule constrains what that parameter may be. They are not two
+        -- writers of the same field.
+        -- Cross-RUN uniqueness is no longer this rule's job. The run database
+        -- is discarded, so there are no earlier runs' rows to collide with —
+        -- the uid is an intra-run device only.
+        -- The rule used to end `ensures: test.uses_storage_state = true`,
+        -- an auth property unrelated to uniqueness; see
+        -- StorageStateFollowsCategory.
 }
 
-rule CleanupOnFailure {
-    -- WHEN a test fails during assertion, cleanup must still execute.
-    -- Use test.afterEach hooks, not inline cleanup after assertions.
-    when: CrudTestFails(test)
-    ensures: test.uses_storage_state = true
+rule FixtureOwnedTeardown {
+    -- Supersedes CleanupOnFailure. The GUARANTEE is unchanged: cleanup executes
+    -- even when an assertion throws. Only the mechanism changed.
+    -- WHEN a test case settles — passed OR failed — the fixture that owns its
+    -- rows tears them down. Ownership belongs to a Playwright fixture whose
+    -- teardown the runner invokes itself, not to a hand-written test.afterEach.
+    when: TestCaseSettled(test_case)
+    requires: test_case.has_settled
+    ensures:
+        for row in test_case.leaked_rows:
+            TrackedDeleteConfirmed(row: row)
 
     @guidance
-        -- test.afterEach must execute cleanup regardless of assertion outcome.
-        -- All test data created by this test must be removed.
+        -- Why the mechanism had to change: a fixture cannot be forgotten the
+        -- way an afterEach can. The test signature requests the fixture, so any
+        -- test that uses the factory necessarily gets the teardown; an
+        -- afterEach has to be remembered per file. Measured 2026-09-02: of the
+        -- 27 spec files, 25 have no afterEach at all. The old rule was not
+        -- aspirational, it was false.
+        -- Intra-run teardown still matters under a disposable database: several
+        -- per-user caps (10 webhook endpoints, 10 active API keys) are reached
+        -- WITHIN one run, and a leak there disables the create form for every
+        -- later test in the same run.
+        -- The rule used to end `ensures: test.uses_storage_state = true`; see
+        -- StorageStateFollowsCategory.
+}
+
+------------------------------------------------------------
+-- Rules: Entity Ownership
+------------------------------------------------------------
+
+rule TrackedFactoryRegistersBeforeWrite {
+    -- The factory registers the row BEFORE it attempts the write.
+    -- Registering afterwards loses exactly the rows that matter: a create that
+    -- fails AFTER the row was written has still leaked one, and that is the
+    -- failure mode teardown exists for.
+    when: TrackedFactoryInvoked(test_case, label)
+    ensures: OwnedRow.created(
+        owner: test_case,
+        label: label,
+        carries_uid: true,
+        status: registered,
+        deletion_confirmed: false
+    )
+
+    @guidance
+        -- Registration is the factory's own first statement, so no caller can
+        -- forget it. A row registered whose write never landed is harmless:
+        -- it stays `registered`, is not a leak, and teardown skips it.
+}
+
+rule TrackedRowWritten {
+    -- The write is observed to have landed. `written` is reachable only from
+    -- `registered` (see the transition graph on OwnedRow), which is how
+    -- "registration happens before the write" is enforced rather than asked for.
+    when: TrackedWriteObserved(row)
+    requires: row.status = registered
+    ensures: row.status = written
+}
+
+rule TrackedRowReleasedOnConfirmedDelete {
+    -- De-registration happens ONLY on a proven-successful delete.
+    -- An optimistic release leaves the fixture believing a row is gone while it
+    -- still occupies a per-user cap — the leak becomes invisible instead of
+    -- being reclaimed at teardown.
+    when: TrackedDeleteConfirmed(row)
+    requires: row.status = written
+    ensures:
+        row.deletion_confirmed = true
+        row.status = released
+
+    @guidance
+        -- "Proven" means an observed success signal — the delete confirmation
+        -- toast, or a re-query showing the row absent — not merely that the
+        -- delete call returned.
+}
+
+------------------------------------------------------------
+-- Rules: Console Oracle
+------------------------------------------------------------
+
+rule ConsoleOracleCoversActPhaseOnly {
+    -- An assertion over browser console output covers the ACT phase only.
+    -- Arming it before the arrange-phase navigations folds every setup request
+    -- into the assertion, which is the reason unrelated environment noise had
+    -- to be filtered out at all: the filter was compensating for a window that
+    -- was too wide.
+    when: ConsoleOracleArmed(test_case)
+    requires: test_case.outcome = running
+    ensures: ConsoleOracle.created(
+        test_case: test_case,
+        armed_in: act,
+        asserted_in: act
+    )
+
+    @guidance
+        -- Narrowing the window is what makes the oracle worth having: inside
+        -- the act phase an unexpected console error IS the finding, so it need
+        -- not be excused.
+}
+
+rule ToleranceFailsClosed {
+    -- A tolerated artefact is tolerated only while its stated condition holds.
+    -- WHEN the condition lapses, suppression lapses with it and the oracle
+    -- fails again, so a tolerance cannot outlive the reason it was granted.
+    when: toleration: ConsoleToleration.condition_holds transitions_to false
+    ensures: toleration.oracle.test_case.outcome = failed
+
+    @guidance
+        -- Every toleration must name its condition, e.g. "favicon 404s occur
+        -- because the dev server serves no favicon". When the app starts
+        -- serving one, that condition is false and the pattern stops being
+        -- excused — rather than silently masking a real favicon error forever.
+        -- An unconditional deny-list cannot expire and is therefore forbidden.
 }
 
 ------------------------------------------------------------
 -- Rules: Shared Helpers
 ------------------------------------------------------------
 
--- SingleSourceHelpers and HelperExceptions describe code structure conventions
--- that cannot be expressed as entity state transitions. They are captured
--- as prose invariants below in the Invariants section.
+-- SingleSourceHelpers describes where source files live and what they may
+-- import. That is a property of the repository tree, not of any entity's state
+-- at a point in time, so it has no expression-bearing form: there is nothing to
+-- navigate to and nothing to compare. It stays a prose @invariant in the
+-- TestConventions contract above (NOT in the Invariants section below, which
+-- holds only expression-bearing invariants).
 
 ------------------------------------------------------------
 -- Rules: Data Isolation
 ------------------------------------------------------------
 
--- SharedDatabaseConstraint and SeedDataIsReadOnly describe test isolation
--- conventions. They are captured as prose invariants below.
+-- PerRunDatabaseIsolation and SeedDataReadOnly describe test isolation
+-- conventions that hold over source structure rather than entity state.
+-- They are captured as prose invariants in the TestConventions contract.
+-- The parts that ARE entity state — provisioning and discarding the run
+-- database — are the rules above, not prose.
 
 ------------------------------------------------------------
 -- Rules: One Spec Per Aggregate
 ------------------------------------------------------------
 
--- OneSpecPerAggregate describes a file-organisation convention.
--- Captured as a prose invariant below.
+-- OneSpecPerAggregate describes a file-organisation convention. Same shape as
+-- SingleSourceHelpers: a property of the tree, not of entity state.
+-- Prose @invariant in the TestConventions contract above.
 
 ------------------------------------------------------------
 -- Rules: Dev Server
 ------------------------------------------------------------
 
-rule ExternalDevServer {
-    -- The dev server MUST be started externally before running E2E tests.
-    -- Playwright config uses reuseExistingServer: true.
-    -- Agents must never start/stop the dev server themselves.
+rule FreshDevServerPerRun {
+    -- Supersedes ExternalDevServer, which claimed the dev server MUST be
+    -- started externally and that the runner never starts or stops one.
+    -- That has been false since 47369e15: the runner REPLACES whatever answers
+    -- on the E2E port with a fresh, correctly configured server on every run.
+    -- Reuse is unsound because two run-scoped fixtures live in the server
+    -- PROCESS rather than in the database — module activation latches on a
+    -- dbSynced flag and is read once per process, and `next dev` memory grows
+    -- across a suite — so a reused server carries state no database reset can
+    -- reach.
     when: TestRunStarted(setup)
-    requires: setup.auth_state != null
-    ensures: setup.auth_state.created_at = now
+    requires: not setup.reuse_server
+    ensures: setup.dev_server_started_by_runner = true
 
     @guidance
-        -- PlaywrightRunner.web_server.reuse_existing_server must be true.
-        -- The dev server is started externally; agents must never start or stop it.
+        -- The surviving true part of the old rule: agents must not kill a dev
+        -- server AD HOC. The wrapper kills and restarts one deliberately, as a
+        -- documented step of the run. "Never stop the server" was a rule about
+        -- unplanned interference, not about the runner.
+        -- PlaywrightRunner.web_server.reuse_existing_server stays true: the
+        -- wrapper has already started the server by the time Playwright looks,
+        -- so Playwright reuses THAT one rather than starting a third.
+        -- The cost is one cold compile per run, bought deliberately: a suite
+        -- whose result depends on how many times it ran before is not measuring
+        -- the tree.
+}
+
+rule ReusedDevServerIsOptIn {
+    -- The opt-out exists for a single-spec loop where the process state is
+    -- known clean. It must be requested explicitly and is never the default.
+    when: TestRunStarted(setup)
+    requires: setup.reuse_server
+    ensures: setup.dev_server_started_by_runner = false
+
+    @guidance
+        -- E2E_REUSE_SERVER=1. Not for a full run: the module-state fixture is
+        -- per-process, so a reused server can fail
+        -- automation-wizard-modules.spec.ts on its own precondition — and fail
+        -- it in a way that looks like a product bug.
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+-- Expression-bearing invariants: properties of entity state at a point in time.
+-- Conventions about the source tree stay prose @invariants in the
+-- TestConventions contract; they have no expression form.
+--
+-- HONEST LIMITATION, verified against allium 3.2.3 on 2026-09-02 (`allium
+-- --version`; note that the plugin cache directory is numbered 3.12.0 and is
+-- NOT the tool version — reading the path instead of asking the binary is an
+-- easy way to record the wrong number here):
+-- `allium check` and `allium analyse` parse these bodies but do not RESOLVE
+-- them. An invariant referring to a field that does not exist, an invariant
+-- quantifying over an entity type that was never declared, and a transition
+-- edge naming a state that does not exist all report zero errors.
+--
+-- Reproduction — append to a scratch COPY of this file:
+--
+--     invariant BogusFieldProbe {
+--         for test_case in TestCases:
+--             test_case.this_field_does_not_exist = 42
+--     }
+--
+--     invariant BogusEntityProbe {
+--         for x in ThingsThatWereNeverDeclared:
+--             x.whatever
+--     }
+--
+-- `allium check` then reports 0 errors and its diagnostic counts do not move at
+-- all; `allium analyse` reports 0 findings naming either probe. Reproduced
+-- twice independently, 2026-09-02.
+--
+-- Do NOT write the quantifier as `all t in TestCases:`. That is not the syntax,
+-- and it yields parse errors that look like the checker catching the bogus
+-- field when it is only catching the malformed `all`. A probe that exercises
+-- the parser instead of the resolver supports the opposite conclusion, so
+-- anyone repeating this experiment can talk themselves out of the finding.
+--
+-- So the value of writing these formally is a named, precisely shaped,
+-- greppable claim a reviewer can check — NOT tool-enforced freedom from drift.
+-- Read that together with ADR-044: the five-month drift there happened to a
+-- prose invariant, and moving a claim into braces narrows the gap without
+-- closing it. Do not treat a green `allium check` as evidence any of these hold.
+
+invariant StorageStateFollowsCategory {
+    -- Hoisted here from SelfContainedCrudTest, UniqueTestData and
+    -- CleanupOnFailure, which each carried it verbatim as
+    -- `ensures: test.uses_storage_state = true` — a formal clause asserting
+    -- something none of the three rules was about. It is a property of test
+    -- FILES, not an outcome of executing, creating data or failing.
+    for file in TestFiles:
+        (file.category = crud implies file.uses_storage_state)
+        and (file.category = smoke implies not file.uses_storage_state)
+}
+
+invariant RunDatabaseIsNeverTheWorkingDatabase {
+    -- The suite never opens the developer's prisma/dev.db, and never opens the
+    -- template for writing either. Before DisposableRunDatabase the first half
+    -- was not true: DATABASE_URL pointed at the same file the dev server used,
+    -- and E2E_ALLOW_DESTRUCTIVE gated only the single unfiltered delete.
+    for db in RunDatabases:
+        for working in SQLiteDatabases:
+            db.path != working.path
+}
+
+invariant TemplateSatisfiesDeclaredFixtures {
+    -- Every fixture a spec file depends on is present in the template.
+    -- A spec that needs a row nothing creates does not have a flaky test, it
+    -- has an unstated precondition: e2e/crud/staging-details-sheet.spec.ts
+    -- requires a pre-existing StagedVacancy and hard-fails when the database
+    -- has none, because the alternative — skipping silently — turns a gap in
+    -- coverage into a green badge.
+    for template in SeedTemplates:
+        for file in TestFiles:
+            file.required_fixtures.all(f => f in template.seeded_fixtures)
+}
+
+invariant SettledTestCaseOwnsNoLeakedRow {
+    -- The END-state half of SelfContainedCrudTest, and the surviving guarantee
+    -- of the retired CleanupOnFailure: once a test has settled, PASSED OR
+    -- FAILED, none of the rows it wrote are still standing.
+    -- Quantifying over both outcomes is the whole point — an invariant that
+    -- held only for passing tests would permit exactly the leak that made one
+    -- load-induced failure disable every later webhook test.
+    for test_case in TestCases:
+        test_case.has_settled implies test_case.leaked_rows.count = 0
+}
+
+invariant ConsoleOracleIsNeverTheOnlyAssertion {
+    -- A catch that swallows the behavioural assertions leaves a test whose only
+    -- surviving claim is "the console stayed quiet" — which passes against a
+    -- page that never rendered at all.
+    -- behavioural_assertions is a source-level count the checker cannot
+    -- compute; the invariant is stated formally anyway so the property has a
+    -- name to cite in review, rather than living only in a comment.
+    for test_case in TestCases:
+        exists test_case.console_oracle
+            implies test_case.behavioural_assertions >= config.min_behavioural_assertions
 }
 
 ------------------------------------------------------------
@@ -338,13 +807,18 @@ surface LocalExecution {
 
     provides:
         RunAll(runner, suite)
-            -- npx playwright test --workers=4
+            -- ./scripts/test-e2e.sh
         RunSmoke(runner, suite)
-            -- npx playwright test --project=smoke
+            -- ./scripts/test-e2e.sh --project=smoke
         RunCrud(runner, suite)
-            -- npx playwright test --project=crud
+            -- ./scripts/test-e2e.sh --project=crud
         RunSingleFile(runner, suite, path: String)
-            -- npx playwright test <path>
+            -- ./scripts/test-e2e.sh <path>
+
+    -- The wrapper, not bare `npx playwright test`, is the entry point: it is
+    -- what provisions the run database and replaces the dev server (see
+    -- ProvisionRunDatabase and FreshDevServerPerRun). Invoking Playwright
+    -- directly skips both and silently runs against whatever is already there.
 
     exposes:
         suite.projects
@@ -365,7 +839,9 @@ surface CIExecution {
 
     provides:
         RunAll(runner, suite)
-            -- nice -n 10 npx playwright test --project=chromium --workers=1
+            -- ./scripts/test-e2e.sh   (single worker, nice/ionice, memory cgroup)
+            -- Was documented as `--project=chromium`, which never existed:
+            -- the projects are "smoke" and "crud".
 
     exposes:
         suite.projects
@@ -399,3 +875,10 @@ surface PlaywrightConfig {
 open question "Should storageState be refreshed mid-run if NextAuth session expires during long test suites?"
 open question "Should a future Phase introduce per-test database transactions for stronger isolation (e.g., SQLite savepoints)?"
 open question "Should waitForTimeout calls be systematically replaced with event-based waits, or is the debounce pattern acceptable?"
+
+-- Raised while reconciling this spec with the disposable-database decision.
+
+open question "Should e2e/helpers/index.ts become a STRICT barrel? Today it does not re-export resume-fixture.ts and six spec files import e2e/helpers/resume-fixture directly, so SingleSourceHelpers is written to permit direct submodule imports. Making it strict is a one-line re-export plus six import rewrites, but it is a code change nobody has approved."
+open question "Who rebuilds the seed template when a Prisma migration lands, and how does a run detect that its template predates the schema? A stale template fails every spec at once, which is loud, but the failure names the test rather than the template."
+open question "Once DisposableRunDatabase lands, is e2e/cleanup-stale-data.ts retired outright, or kept for the E2E_REUSE_SERVER path? Its global unfiltered ModuleRegistration reset only ever needed E2E_ALLOW_DESTRUCTIVE because it ran against the developer's own database."
+open question "TestCase.behavioural_assertions cannot be counted by any tool the project runs today, so ConsoleOracleIsNeverTheOnlyAssertion is review-enforced only. Is a lint rule worth building, or is the named invariant enough?"
