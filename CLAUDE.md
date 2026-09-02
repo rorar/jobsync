@@ -107,9 +107,19 @@ suite or E2E run will hit the tool timeout and get orphaned.
 it will happily print `0` above a list of errors. Use `${PIPESTATUS[0]}`, `set -o pipefail`, or
 judge by the output itself.
 
-**Dev server:** agents may **start** one and must not stop one by hand — but note the wrappers
-themselves do (`dev-e2e.sh` pkills `next dev`, `build-safe.sh` frees :3737). The rule is about
-ad-hoc kills, not about the scripts, which restart it deliberately.
+**Dev server — the rule is about CONCURRENT workers, not about anyone touching the server.**
+**SUBAGENTS** may start one and must not stop one: the rule exists because parallel subagents
+killed each other's server mid-run, and a worker cannot know whether the process on :3737 belongs
+to a sibling that is three minutes into a suite. The **orchestrator** (main thread) and the
+wrappers may stop it deliberately — `dev-e2e.sh` pkills `next dev`, `build-safe.sh` frees :3737 —
+because they are the only parties that know nothing else is running.
+
+Read as a blanket prohibition it produces the opposite of its purpose: on 2026-09-02 it argued
+against killing an **orphaned** `bun run dev` tree (PPID 1, its systemd scope already dead) holding
+4.3 GB and port 3737, which no run owned and which nothing would have reclaimed.
+
+`pkill -f "next dev"` in the wrappers is path- and port-blind and WILL kill a sibling worktree's
+server. That is a real cost of the wrapper approach, not a reason to kill by hand instead.
 
 Since `47369e15` `test-e2e.sh` **always starts a fresh server**, because module activation lives in
 the process behind a `dbSynced` latch and reuse silently carried state across runs. The old warning
