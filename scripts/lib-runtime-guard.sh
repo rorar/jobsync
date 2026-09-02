@@ -50,10 +50,12 @@ guard_host_load() {
   local label="${1:-run}" allowance busy ratio warn abort a b secs quota period
 
   # effective CPU allowance: cgroup quota if one is set, else our affinity
-  # NOT nproc: measured on this host it returns 3 while Cpus_allowed_list is
-  # 1-5, with no OMP_* variable to explain it — a 40% under-report that would
-  # make the guard abort early. The affinity mask answers the actual question,
-  # "how many CPUs may this process use".
+  # NOT nproc: it is CONTEXT-DEPENDENT on this host. One shell reports 3 while
+  # Cpus_allowed_list is 1-5; another process on the same host, same affinity,
+  # reports 5. No OMP_* variable explains it and we did not chase it — the point
+  # is that a number which disagrees with itself between processes cannot be the
+  # denominator of a threshold. The affinity mask answers the question directly:
+  # how many CPUs may THIS process use.
   allowance="$(awk '/Cpus_allowed_list/{n=0;split($2,r,",");for(i in r){split(r[i],b,"-");n+=(b[2]?b[2]-b[1]+1:1)};print n}' /proc/self/status 2>/dev/null)"
   [ -n "$allowance" ] && [ "$allowance" -gt 0 ] 2>/dev/null || allowance="$(nproc 2>/dev/null || echo 1)"
   if [ -r /sys/fs/cgroup/cpu.max ]; then

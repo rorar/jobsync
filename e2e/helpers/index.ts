@@ -89,13 +89,12 @@ export async function login(page: Page) {
  * to text matching, so the obligation sits with the caller: pass a pattern that
  * cannot match the neighbouring action's message.
  *
- * `module-settings.spec.ts` was the live example — /Active/i matches
- * "Inactive" and /activated/i matches "deactivated" — and was fixed by moving
- * to /Module activated\./i and /Module deactivated\./i, which are mutually
- * exclusive because the discriminating "de" sits between "Module " and
- * "activated". Use that as the pattern for any toggle-shaped assertion. Short
- * generic patterns are the ones to look at: /deleted/i, /updated/i, /revoked/i
- * are each used at several call sites.
+ * Worked example for (a): `module-settings.spec.ts` matched /Active/i against
+ * "Inactive" and /activated/i against "deactivated". Fixed by moving to
+ * /Module activated\./i and /Module deactivated\./i, mutually exclusive because
+ * the discriminating "de" sits between "Module " and "activated". Use that shape
+ * for any toggle-style assertion; the short generic patterns — /deleted/i,
+ * /updated/i, /revoked/i — are the ones to check first.
  */
 export async function expectToast(
   page: Page,

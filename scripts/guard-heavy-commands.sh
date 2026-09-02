@@ -59,6 +59,11 @@ def verdict(argv):
     if base == "exec":
         return verdict(rest) if rest else None
 
+    # `bun x` and `npm exec` / `npm x` are the documented aliases of bunx/npx.
+    # Normalise them here so the runner branch below sees a plain tool name.
+    if base in {"bun", "npm"} and rest[:1] in (["x"], ["exec"]):
+        return verdict(["npx", *rest[1:]])
+
     if base in {"npx", "bunx", "pnpx"}:
         # skip npx's own flags (--yes, -y, --package=x ...)
         tool = next((a for a in rest if not a.startswith("-")), None)
@@ -103,8 +108,6 @@ def verdict(argv):
             return "bash scripts/build-safe.sh"
         if first == "dev":
             return "./scripts/dev.sh   (for E2E, let ./scripts/test-e2e.sh start it)"
-        if base == "bun" and rest[:1] == ["x"]:
-            return None  # handled by the npx branch shape below if reached
 
     if base == "bun":
         if rest[:1] == ["test"]:

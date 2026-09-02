@@ -6,16 +6,20 @@
 # both fixed here:
 #   1. Prisma NixOS engine + auth bypass: Playwright's webServer ("bun run dev")
 #      sources NEITHER env.sh NOR E2E_AUTH_RATE_LIMIT_BYPASS. So we pre-start a
-#      correct dev server (scripts/dev-e2e.sh) and let Playwright reuse it
-#      (reuseExistingServer:true). The server is NEVER stopped (e2e/CONVENTIONS.md).
+#      correct dev server (scripts/dev-e2e.sh). Since 47369e15 this script
+#      REPLACES any server already on the port — see the block below for why.
+#      (e2e/CONVENTIONS.md's "never stop the dev server" is a rule for ad-hoc
+#      kills by hand; the wrappers restart it deliberately.)
 #   2. Cold-compile signin flake: the first AUTHENTICATED /dashboard load (in
 #      global-setup) triggers a Turbopack compile that can exceed the default
 #      30 s login timeout on a slow VM. We raise it via E2E_LOGIN_TIMEOUT_MS,
 #      which e2e/global-setup.ts now honours.
 #
-# No memory cgroup here: the DEV server (incremental Turbopack) is far lighter
-# than a production build and runs safely on this VM daily; single-worker +
-# nice is enough. Add a cgroup only if a future run proves it necessary.
+# The DEV server is confined by dev-e2e.sh's own scope, not by this one. The
+# RUNNER and its browsers do get a cgroup here (E2E_MEM_MAX / E2E_CPU_QUOTA,
+# applied at the bottom of this file) so a runaway Chromium cannot take the host
+# with it — an earlier version of this comment said there was no cgroup at all,
+# which stopped being true when that scope was added.
 #
 # Extra args pass straight through to `playwright test`, e.g.:
 #   ./scripts/test-e2e.sh                                  # full suite (smoke -> crud)

@@ -56,7 +56,7 @@ convenience aliases; each exists because the bare command has taken this host do
 |---|---|---|
 | `npx tsc --noEmit` | `bash scripts/typecheck-safe.sh` | The bare command starves the host and has to be killed. Wrapper = systemd memory cgroup (4G) + `nice -n 19` + `ionice -c3` + 600 s timeout. It prints its banner, the scope line and a final `EXIT=0`; anything else is a real error. |
 | `npx jest` / `bun test` | `bash scripts/test.sh` | Defaults to `--maxWorkers=1`; `jest.config.ts` enforces it again for callers that bypass the script. Also translates the common `--workers=N` typo, which Jest silently ignores. Coverage is opt-in via `--coverage`. |
-| `npx playwright test` | `./scripts/test-e2e.sh` | Single worker + `nice`/`ionice`, and it starts a **fresh, correctly configured** dev server if none is running (`env.sh` + `E2E_AUTH_RATE_LIMIT_BYPASS`). |
+| `npx playwright test` | `./scripts/test-e2e.sh` | Single worker + `nice`/`ionice`, and it **replaces** any server on :3737 with a fresh, correctly configured one (`env.sh` + `E2E_AUTH_RATE_LIMIT_BYPASS`). |
 | `bun run build` | `bash scripts/build-safe.sh` | 7G cgroup — an over-large build is OOM-killed inside its own scope instead of swap-deathing the host. |
 
 **For the full Jest suite** (~6 min, 300+ suites) just run the wrapper — it now applies its own
@@ -69,7 +69,7 @@ bash scripts/test.sh
 Tunables if you need them: `JEST_MEM_MAX` (4G), `JEST_NODE_HEAP` (3072), `JEST_TIMEOUT` (1800).
 
 **All four heavy wrappers refuse to start when this container is already busy.**
-`scripts/lib-runtime-guard.sh` samples **cgroup v2 `cpu.stat`** for one second and aborts with exit
+`scripts/lib-runtime-guard.sh` samples **cgroup v2 `cpu.stat`** three times for a second each and takes the MAX (three seconds of wall clock before every wrapper; the max biases toward aborting, deliberately, because resident agents are bursty). It aborts with exit
 **75** when more than **60%** of our CPU allowance is already in use. The sample is taken BEFORE
 the heavy work starts, so it measures what is already running — resident subagents, a forgotten
 dev server. Thresholds must stay well under 1.0: usage cannot exceed the allowance, so the first

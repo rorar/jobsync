@@ -71,10 +71,15 @@ echo "[dev-e2e] heap=${DEV_NODE_HEAP}MB mem-backstop=${DEV_MEM_MAX} cpu=${E2E_DE
 
 # Unlike typecheck-safe.sh, a missing systemd scope must NOT abort: without a
 # dev server there is no E2E run at all. Fall back to the heap cap alone.
-if systemd-run --user --scope -p MemoryMax="$DEV_MEM_MAX" true 2>/dev/null; then
+# Probe with the SAME properties the real call uses ("${SCOPE_ARGS[@]}"). A
+# subset lets the probe pass where the real invocation fails instantly, and here
+# that surfaces as a useless "dev server not ready in 150s" AFTER the operator's
+# server has already been killed. 0844cb37 fixed this in test.sh and
+# test-e2e.sh and missed this file.
+if systemd-run --user --scope "${SCOPE_ARGS[@]}" true 2>/dev/null; then
   echo "[dev-e2e] confined via systemd --user scope"
   exec systemd-run --user --scope "${SCOPE_ARGS[@]}" bun run dev
-elif systemd-run --scope -p MemoryMax="$DEV_MEM_MAX" true 2>/dev/null; then
+elif systemd-run --scope "${SCOPE_ARGS[@]}" true 2>/dev/null; then
   echo "[dev-e2e] confined via systemd system scope"
   exec systemd-run --scope "${SCOPE_ARGS[@]}" bun run dev
 else
