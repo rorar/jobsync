@@ -1,8 +1,25 @@
 import { expect, type Page } from "@playwright/test";
 
-/** Generate a unique identifier for test data (e.g. "m1abc2d"). */
+/**
+ * Generate a unique identifier for test data (e.g. "m1abc2dw0").
+ *
+ * Millisecond timestamp plus the WORKER that produced it. The timestamp alone
+ * was the whole identifier until 2026-09-02 (E2E-B29), which is safe only while
+ * one worker runs: `playwright.config.ts` sets `fullyParallel: true` with
+ * `workers: 3` locally and CLAUDE.md documents `E2E_WORKERS=4`, so three
+ * workers entering this function in the same millisecond produced the same
+ * name — and the suite's protection against collision IS the name
+ * (e2e/CONVENTIONS.md, and `UniqueTestData` in the spec).
+ *
+ * `process.env.TEST_PARALLEL_INDEX` rather than `test.info().parallelIndex`:
+ * the env var is set by the worker process (playwright/lib/worker/workerMain.js)
+ * and is therefore readable from module scope, where `test.info()` throws.
+ * Outside a Playwright worker it is absent, and "0" is then correct — there is
+ * no second worker to collide with.
+ */
 export function uniqueId(): string {
-  return Date.now().toString(36);
+  const worker = process.env.TEST_PARALLEL_INDEX ?? "0";
+  return `${Date.now().toString(36)}w${worker}`;
 }
 
 /** Perform UI login. Only needed in tests that don't use storageState. */
