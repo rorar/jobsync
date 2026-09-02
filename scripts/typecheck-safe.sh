@@ -34,19 +34,37 @@ echo "[typecheck-safe] mem=${MEM_MAX} swap=0 heap=${NODE_HEAP}MB timeout=${TIMEO
 
 if systemd-run --user --scope -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 -p CPUWeight=50 true 2>/dev/null; then
   echo "[typecheck-safe] confined via systemd --user scope"
-  exec systemd-run --user --scope -p Description=jobsync-typecheck \
+  systemd-run --user --scope -p Description=jobsync-typecheck \
     -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 -p CPUWeight=50 \
     "${WRAP[@]}"
 elif systemd-run --scope -p MemoryMax="$MEM_MAX" true 2>/dev/null; then
   echo "[typecheck-safe] confined via systemd system scope"
-  exec systemd-run --scope -p Description=jobsync-typecheck \
+  systemd-run --scope -p Description=jobsync-typecheck \
     -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 -p CPUWeight=50 \
     "${WRAP[@]}"
 elif [ "${ALLOW_UNCONFINED:-}" = "1" ]; then
   echo "[typecheck-safe] WARNING: no systemd scope; heap-capped + niced but UNCONFINED."
-  exec "${WRAP[@]}"
+  "${WRAP[@]}"
 else
   echo "[typecheck-safe] ABORT: no systemd transient scope available."
   echo "                 Set ALLOW_UNCONFINED=1 to override, or run on a roomy host."
   exit 86
 fi
+RC=$?
+
+# `timeout` reports 124, and a bare 124 next to a silent log looks exactly like a
+# failed type check — it is not one. On 2026-09-02 this exact status was read as
+# "typecheck failed" while the tree was clean; the run had simply been starved by
+# six concurrent agents, and the same tree checked in 9 seconds once the host was
+# idle. Say so, so nobody hunts a type error that does not exist.
+if [ "$RC" -eq 124 ]; then
+  echo
+  echo "[typecheck-safe] TIMED OUT after ${TIMEOUT}s — this is NOT a type error."
+  echo "                 tsc was killed before it could finish, so the tree is"
+  echo "                 neither proven clean nor proven broken."
+  echo "                 Check the machine first:  uptime && nproc"
+  echo "                 A loaded host is the usual cause; re-run it alone before"
+  echo "                 believing anything about the types. Raise the budget with"
+  echo "                 TSC_TIMEOUT=<seconds> only once you know why it is slow."
+fi
+exit "$RC"
