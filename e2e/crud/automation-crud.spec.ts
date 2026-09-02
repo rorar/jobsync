@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { expectToast } from "../helpers";
+import { expectToast, uniqueId } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
 
 // ---------------------------------------------------------------------------
@@ -139,7 +139,7 @@ test.describe("Automation CRUD", () => {
   test("should create an automation through the 6-step wizard", async ({
     page,
   }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const automationName = `E2E Automation ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
 
@@ -167,7 +167,7 @@ test.describe("Automation CRUD", () => {
   test("should display the automation with correct details", async ({
     page,
   }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const automationName = `E2E Automation ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
 
@@ -197,7 +197,7 @@ test.describe("Automation CRUD", () => {
   });
 
   test("should edit an automation name", async ({ page }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const automationName = `E2E Automation ${uid}`;
     const updatedName = `E2E Edited ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
@@ -272,7 +272,7 @@ test.describe("Automation CRUD", () => {
   });
 
   test("should pause and resume an automation", async ({ page }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const automationName = `E2E Automation ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
 
@@ -339,7 +339,7 @@ test.describe("Automation CRUD", () => {
   test("should delete the automation and verify removal", async ({
     page,
   }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const automationName = `E2E Automation ${uid}`;
     const resumeTitle = `E2E Resume ${uid}`;
 

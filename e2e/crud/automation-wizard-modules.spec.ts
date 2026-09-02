@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
+import { uniqueId } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -43,7 +44,7 @@ test.describe("Automation Wizard — Dynamic Module Selector", () => {
   test("should show available modules in the job board selector", async ({
     page,
   }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const resumeTitle = `E2E Resume ${uid}`;
 
     // Ensure a resume exists so the "Create Automation" button is enabled
@@ -82,7 +83,7 @@ test.describe("Automation Wizard — Dynamic Module Selector", () => {
   test("should only show active modules in the selector", async ({
     page,
   }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const resumeTitle = `E2E Resume ${uid}`;
 
     // Ensure a resume exists

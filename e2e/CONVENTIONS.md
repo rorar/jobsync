@@ -49,7 +49,7 @@ async function deleteItem(page: Page, title: string) {
 
 test.describe("MyAggregate CRUD", () => {
   test("should create and verify an item", async ({ page }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();  // NOT Date.now() inline: uniqueId adds the worker index
     const title = `E2E Item ${uid}`;
 
     await navigateToMyPage(page);
@@ -67,7 +67,7 @@ test.describe("MyAggregate CRUD", () => {
 
 ### Key Rules
 
-1. **Unique data per test**: Always use `Date.now().toString(36)` for unique names. Never hardcode test data names like "Test Job 1".
+1. **Unique data per test**: Always use `uniqueId()` from `e2e/helpers/` (timestamp base-36 plus the worker index — the timestamp alone collided across parallel workers, E2E-B29) for unique names. Never hardcode test data names like "Test Job 1".
 
 2. **Cleanup in every test**: Every test that creates data must delete it. If the test can fail before cleanup, use the pattern:
    ```typescript
@@ -116,7 +116,7 @@ Available imports:
 
 | Helper | Purpose |
 |---|---|
-| `uniqueId()` | `Date.now().toString(36)` — unique test data suffix |
+| `uniqueId()` | timestamp base-36 + worker index (E2E-B29: the timestamp alone collided across parallel workers) — unique test data suffix |
 | `login(page)` | UI login — only for smoke tests |
 | `expectToast(page, pattern, timeout?)` | Assert toast notification visible |
 | `selectOrCreateComboboxOption(page, label, placeholder, text, timeout?)` | 3-step combobox: exact → partial → create |

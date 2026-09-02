@@ -27,10 +27,21 @@
 # ---------------------------------------------
 #   INSERT residue — a row created and not deleted. A count delta finds it.
 #   UPDATE residue — an existing row mutated and not restored. The count is
-#     UNCHANGED. `deactivateModule` upserts onto a row the health monitor has
-#     already created (src/actions/module.actions.ts:346-352), so a deactivated
-#     module is invisible to counting; automation-wizard-modules.spec.ts:27-28
-#     documents that later tests see the result.
+#     UNCHANGED, so counting alone cannot see it. Found here by ATTACHing the
+#     template and asking which rows that came FROM it were written after this
+#     run was provisioned. Verified against a seeded StagedVacancy.
+#
+# AND THE EXAMPLE THAT MOTIVATED THE UPDATE HALF IS NOT COVERED BY IT.
+# `deactivateModule` upserts onto a ModuleRegistration row the health monitor
+# created (src/actions/module.actions.ts:348), and that is exactly the shape a
+# count misses — but neither prisma/seed.ts nor seed-e2e.ts creates a
+# ModuleRegistration row, so the template holds NONE, and the `EXISTS (… FROM
+# tmpl …)` filter below excludes every one of them. The model is in
+# ALLOWED_MUTATION as well, but removing it would change nothing: the query
+# cannot reach those rows either way. Stated here rather than left for someone
+# to discover, because the header of a check claiming coverage it does not have
+# is worse than no header. Closing it means seeding module state into the
+# template so the rows exist to be compared.
 # So this checks both: counts for the first, `updatedAt` against the run's own
 # provisioning timestamp for the second.
 #
@@ -81,7 +92,16 @@ KNOWN_DEBT=(
   "Tag:E2E-B24"        # KBSkill / KBMulti / KBDupe / KBAria — no cleanup exists at all
   "Person:E2E-B22"     # four specs archive but never delete
   "Referral:E2E-B23"   # no cleanup anywhere, spec or backstop
+  "Task:E2E-B24"       # task-crud deletes inline, so a failing assertion skips it
+  "Activity:E2E-B24"   # same, and activity-crud deletes the Activity but not its type
+  "ActivityType:E2E-B24"  # never deleted inline at all; the purge used to catch it
 )
+
+# Those last three were found by this gate, not by the audit that wrote the
+# others: they leaked before too, and e2e/cleanup-stale-data.ts steps 2, 3 and 12
+# removed them BETWEEN runs, so nothing ever surfaced them. Deleting the purge
+# did not create the leak; it stopped hiding it. That is the gate earning its
+# place on its first day of real use.
 
 # Seeded rows these models are allowed to have modified. Keep this list short
 # and hostile: every entry is a place where a test changed shared state and

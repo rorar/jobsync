@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { expectToast, safeWait, selectOrCreateComboboxOption } from "../helpers";
+import { expectToast, safeWait, selectOrCreateComboboxOption, uniqueId } from "../helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -94,7 +94,7 @@ test.describe("Task CRUD", () => {
   test("should create a new task and verify it appears in the list", async ({
     page,
   }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Task ${uid}`;
 
     await navigateToTasks(page);
@@ -111,7 +111,7 @@ test.describe("Task CRUD", () => {
   test("should edit the task title and verify updated values", async ({
     page,
   }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Task ${uid}`;
     const updatedTitle = `E2E Task Updated ${uid}`;
 
@@ -154,7 +154,7 @@ test.describe("Task CRUD", () => {
   });
 
   test("should change task status via the actions menu", async ({ page }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Task ${uid}`;
 
     // Create
@@ -184,7 +184,7 @@ test.describe("Task CRUD", () => {
   });
 
   test("should delete the task and verify removal", async ({ page }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Task ${uid}`;
 
     // Create
@@ -236,7 +236,7 @@ test.describe("Task CRUD", () => {
   });
 
   test("should toggle task completion via checkbox", async ({ page }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Toggle ${uid}`;
 
     await navigateToTasks(page);
@@ -276,7 +276,7 @@ test.describe("Task CRUD", () => {
   test("should start activity from task and redirect to activities", async ({
     page,
   }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Activity Task ${uid}`;
 
     await stopRunningActivity(page);
@@ -328,7 +328,7 @@ test.describe("Task CRUD", () => {
   test("should not allow starting activity on completed task", async ({
     page,
   }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const taskTitle = `E2E Completed ${uid}`;
 
     await stopRunningActivity(page);

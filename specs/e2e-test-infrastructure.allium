@@ -4,10 +4,16 @@
 -- Scope: E2E test execution infrastructure for JobSync
 -- Includes: Test categorization, auth state management, execution pipeline, data isolation,
 --           disposable per-run database, fixture-owned entity lifecycle, console oracle scope,
---           per-worktree dev server ownership (port, lock, ownership-checked stop)
+--           per-worktree dev server ownership (port, lock, ownership-checked stop),
+--           post-run residue classification (growth, seed mutation, debt vs permission)
 -- Excludes:
 --   - Individual test assertions (domain-level, not infrastructure)
 --   - Unit/component test infrastructure (Jest, separate concern)
+--     EXCEPT the two Jest/shell checks that ENFORCE invariants declared here:
+--     __tests__/e2e-no-swallowed-assertions.spec.ts and
+--     scripts/check-e2e-residue.sh. They live in the other pyramid layer for
+--     deployment reasons (Jest runs in CI, Playwright does not); what they
+--     enforce is in scope, and is named at the invariants they enforce.
 --   - CI/CD pipeline definition (GitHub Actions, separate concern)
 -- Dependencies: User entity defined in jobsync.allium
 
@@ -61,9 +67,13 @@ value AuthState {
 }
 
 value TestDataIdentifier {
-    uid: String                    -- Date.now().toString(36), e.g. "m1abc2d"
+    uid: String                    -- millisecond stamp + worker, e.g. "m1abc2dw0"
+    -- Was: "Date.now().toString(36), e.g. m1abc2d" — the timestamp alone, which
+    -- is unique only while ONE worker runs. Since 4447b9fe (E2E-B29) the uid is
+    -- that stamp plus `w` plus the worker index, because the identifier has to
+    -- discriminate on both axes it can collide on: WHEN and WHO.
     -- Note: prefix is not used in practice. Tests use "{Label} {uid}" format
-    -- (e.g., "Co m1abc2d", "Tag m1abc2d") which is sufficiently unique.
+    -- (e.g., "Co m1abc2dw0", "Tag m1abc2dw0") which is sufficiently unique.
     -- Since DisposableRunDatabase the uid is an INTRA-run device only: it keeps
     -- concurrent workers inside one run from colliding. Cross-run hygiene is
     -- the disposable database's job. The "E2E " name prefix likewise survives
@@ -116,9 +126,13 @@ contract TestConventions {
         -- Renamed from SharedDatabaseIsolation, which described a single
         -- long-lived prisma/dev.db shared by every run.
         -- Each RUN owns its database: a copy of the seeded template, discarded
-        -- when the run ends. Runs cannot observe each other's rows and no run
-        -- can leave residue for the next, by construction rather than by
+        -- at the NEXT provisioning. Runs cannot observe each other's rows and no
+        -- run can leave residue for the next, by construction rather than by
         -- cleanup.
+        -- "At the next provisioning" rather than "when the run ends" is what
+        -- makes the isolation and the post-mortem compatible: the file outlives
+        -- the run that wrote it, and is gone before any run that could read it.
+        -- See DiscardRunDatabase, which said the opposite for six hours.
         -- WITHIN a run the tests still share one database, so the intra-run
         -- half of the old rule stands unchanged: no test reads data created by
         -- another test, and all test-created data carries uniqueId() so
@@ -197,7 +211,16 @@ enum TestOutcome {
     running
     passed
     failed
+    skipped                        -- test.skip() was called, at any point
 }
+-- `skipped` was added when test.skip() became a sanctioned way for a test body
+-- to give up (see ConsoleOracleIsNeverTheOnlyAssertion). It is a TERMINAL
+-- outcome and it counts as settled: a test that skips mid-body may already have
+-- written rows, and the runner still invokes fixture teardown for it, so the
+-- rows must still go. Modelling a skip as "not settled" would have exempted
+-- exactly the tests most likely to have given up halfway through a create.
+-- Distinct from ProjectStatus.skipped, which is a whole project skipped because
+-- a dependency failed.
 
 enum TestPhase {
     arrange                        -- navigation and fixture preparation
@@ -226,6 +249,39 @@ enum OwnedRowStatus {
     written                        -- the row exists in the run database
     released                       -- the row is provably gone
 }
+
+enum ResidueVerdict {
+    -- Who is answerable for the rows a model gains during a run. The three
+    -- values are NOT degrees of the same thing; they are different claims, and
+    -- collapsing any two of them is what an allowlist decays into.
+    owned                          -- a test created it and must remove it
+    allowed_growth                 -- growth is by design; this is not a leak
+    known_debt                     -- this IS a leak, it has a finding, it is unfixed
+}
+-- The distinction between the last two is the load-bearing one.
+-- allowed_growth says "this is not a leak": append-only audit and log tables,
+-- rows the health monitor writes for every module, the enrichment cache. No
+-- test owns them and no number of them means anything.
+-- known_debt says "this is a leak we have not fixed, and here is its number".
+-- It does not fail the run, because a gate that is red from its first day gets
+-- switched off; it PRINTS on every run instead, and its entry is deleted when
+-- the finding is. Filing these under allowed_growth would have bought a green
+-- gate by redefining four open findings as design.
+
+enum IntraRunVisibility {
+    -- Whether a row left behind can be OBSERVED by a later test in the same run.
+    -- This, not the model's convenience, is what decides whether teardown has to
+    -- survive a thrown assertion (see FixtureOwnedTeardown).
+    capacity_bound                 -- a per-user cap: 10 webhook endpoints, 10 active API keys
+    per_user_singleton             -- one row per user: SmtpConfig, VapidConfig
+    unique_keyed                   -- a unique constraint a re-create collides with
+    invisible                      -- a later test in this run cannot tell it is there
+}
+-- unique_keyed is the class that is easiest to miss, because nothing about it
+-- looks like a limit: JobStatus is unique on (userId, value), CompanyBlacklist
+-- on (userId, pattern, matchType), EnrichmentResult on
+-- (userId, dimension, domainKey). A leftover row does not fill a quota — it
+-- makes the SAME create fail for a later test, which reads as a product bug.
 
 enum DevServerStatus {
     starting                       -- lock taken, not yet answering on the port
@@ -271,6 +327,10 @@ entity GlobalSetup {
     template: SeedTemplate
     database: RunDatabase?         -- absent until ProvisionRunDatabase has run
     reuse_server: Boolean          -- E2E_REUSE_SERVER=1; false by default
+    keep_run_database: Boolean     -- E2E_KEEP_RUN_DB; TRUE by default
+    -- Default true, which is the unusual direction for a cleanup flag and is
+    -- deliberate: see DiscardRunDatabase. Setting it false restores the
+    -- discard-at-exit behaviour this spec required until SPEC-B2 was resolved.
     dev_server_started_by_runner: Boolean
     worktree: Worktree             -- the checkout this run belongs to
     dev_server: DevServer?         -- absent until the server is up
@@ -284,14 +344,35 @@ entity SeedTemplate {
     -- Read-only: no run opens it for writing.
     path: String
     seeded_fixtures: Set<FixtureKind>
+    stamp: String
+    -- A digest of everything whose change invalidates the template: the schema,
+    -- the migrations, and the two seed scripts. It is how a run decides whether
+    -- to rebuild, and — carried into the copy — how a POST-run check decides
+    -- whether it is allowed to draw a conclusion at all.
 }
 
 entity RunDatabase {
-    -- One per run: a copy of the template, discarded when the run ends.
+    -- One per run: a copy of the template, discarded at the NEXT provisioning.
     path: String
     template: SeedTemplate
     status: RunDatabaseStatus
     file_present: Boolean
+
+    provisioned_at: Timestamp
+    template_stamp: String
+    -- Provenance, recorded INSIDE the copy rather than beside it. Both fields
+    -- exist for the residue gate, and both close a way it could report on
+    -- something it did not measure:
+    --   provisioned_at is the baseline for "was this seeded row written DURING
+    --     the run?". Read from the copy, it is the run's OWN clock; taken from
+    --     the file's mtime or from wall time at check time, it drifts.
+    --   template_stamp says which template this copy came from. A check that
+    --     read the template's CURRENT stamp instead would compare against
+    --     whatever the template is now — a rebuild between the run and the
+    --     check, or a check invoked hours later, both produce a plausible and
+    --     wrong answer. With the baseline in the copy, a mismatch is
+    --     DETECTABLE, so the gate skips loudly instead of guessing (see
+    --     SettledTestCaseOwnsNoLeakedRow).
 
     transitions status {
         provisioned -> discarded
@@ -320,14 +401,56 @@ entity TestCase {
     console_oracle: ConsoleOracle with test_case = this
 
     leaked_rows: owned_rows where status = written
-    has_settled: outcome in {passed, failed}
+    has_settled: outcome in {passed, failed, skipped}
+}
+
+entity PersistedModel {
+    -- A model in the run database, classified by who is answerable for what
+    -- happens to its rows during a run. Instances are the SCHEMA's models —
+    -- Person, Tag, Resume, ModuleRegistration — not individual rows.
+    -- It exists because the residue gate works at this granularity: it can see
+    -- that a model gained rows, and it cannot see which test created them. That
+    -- is the honest description of the enforcement, and pretending otherwise
+    -- would make the invariants below unfalsifiable.
+    name: String
+    growth: ResidueVerdict
+    finding_id: String?            -- the finding that owns the debt, when growth = known_debt
+    mutation_allowed: Boolean      -- seeded rows of this model may be left modified
+    visibility: IntraRunVisibility
+    has_update_clock: Boolean       -- the model carries an updatedAt column
+    -- Deliberately referenced by NO invariant, and that silence is the point.
+    -- When it is false, seed_rows_mutated is necessarily 0 — not because nothing
+    -- was mutated, but because nothing can be seen. Writing that as a formal
+    -- clause would make SettledRunRestoresMutatedSeedData hold VACUOUSLY for
+    -- exactly the models it cannot check (Profile, Job, Company, JobTitle,
+    -- Location), which is worse than leaving the gap named in prose: a reader
+    -- would take the green result as coverage. The field exists so the blind
+    -- spot has somewhere to live and a name to cite.
+
+    rows_gained: Integer            -- run count minus template count
+    seed_rows_mutated: Integer      -- rows from the template written after provisioning
+    -- Both are what the GATE measured, not ground truth. rows_gained counts
+    -- against the template, so it cannot attribute a row to a test; and it is a
+    -- membership question, never a budget — AdminAuditLog is written on every
+    -- job mutation and every PII read, the CRM cron writes every 15 minutes, and
+    -- the dev server keeps running after the suite exits, so any threshold here
+    -- would measure wall clock rather than ownership.
+
+    invariant KnownDebtNamesItsFinding {
+        -- Both directions, deliberately. A debt entry without a finding is an
+        -- allowlist with the reason filed off; a finding attached to anything
+        -- other than debt is a claim that a design decision is a bug.
+        (growth = known_debt implies exists finding_id)
+        and (exists finding_id implies growth = known_debt)
+    }
 }
 
 entity OwnedRow {
     -- A row a test created through a tracked factory fixture. The fixture, not
     -- the test body, owns its lifecycle.
     owner: TestCase
-    label: String                  -- "{Label} {uid}", e.g. "E2E Job m1abc2d"
+    model: PersistedModel
+    label: String                  -- "{Label} {uid}", e.g. "E2E Job m1abc2dw0"
     carries_uid: Boolean
     status: OwnedRowStatus
     deletion_confirmed: Boolean
@@ -451,7 +574,7 @@ config {
     retries_ci: Integer = 2
     retries_local: Integer = 0
     dev_server_base_port: Integer = 3737
-    worktree_port_span: Integer = 49
+    worktree_port_span: Integer = 200
     -- Replaces `base_url: String = "http://localhost:3737"`, which was true of
     -- every run until 0e1b5fca and is now true only of the MAIN checkout. There
     -- is no single base URL to name: it is derived per worktree, which is why
@@ -459,8 +582,14 @@ config {
     -- constant. The main checkout keeps the base port deliberately — it is in
     -- .env, in bookmarks and in muscle memory, and moving it would tax the
     -- common case to serve the rare one.
-    -- The span is small (49 slots), so two LINKED worktrees can be assigned the
-    -- same port; see the open question at the foot of this file.
+    -- Was 49. Widened to 200 in f98bb779, and the widening is the lesser half
+    -- of that fix: a hash over ANY finite span collides, so the span only makes
+    -- a collision rarer, never impossible. What removes it is resolving
+    -- collisions deterministically — walk the worktrees in path order and let
+    -- the earlier one keep the contested slot. The cost, stated because it is
+    -- surprising: ADDING a worktree can move a later one's port. That is visible
+    -- (the wrapper prints the port it bound) and beats two checkouts silently
+    -- fighting over one.
     chromium_executable: String = "/run/current-system/sw/bin/chromium"
     stability_runs: Integer = 5   -- number of repeated runs for anti-flaky verification
     min_behavioural_assertions: Integer = 1
@@ -539,7 +668,9 @@ rule ProvisionRunDatabase {
             path: fresh_run_path(setup),
             template: setup.template,
             status: provisioned,
-            file_present: true
+            file_present: true,
+            provisioned_at: now,
+            template_stamp: setup.template.stamp
         )
         setup.database = db
 
@@ -547,24 +678,89 @@ rule ProvisionRunDatabase {
         -- Copy the template file; do not migrate-and-seed per run. A copy is
         -- deterministic and O(file size); a re-seed is neither, and a template
         -- that is rebuilt rather than copied cannot be byte-compared.
+        -- The two provenance fields are written into the COPY, in the same step
+        -- that makes it. Recording them anywhere else — beside the file, or
+        -- re-derived at check time — reintroduces the ambiguity they exist to
+        -- remove; see the comment on RunDatabase.
 }
 
 rule DiscardRunDatabase {
-    -- WHEN the run ends, the run database file is removed. Nothing the suite
-    -- wrote outlives the run.
+    -- WHEN a run starts, the database left standing by the PREVIOUS run is
+    -- discarded, BEFORE this run's copy is made. Nothing the suite wrote
+    -- survives into a run that could observe it.
+    when: TestRunStarted(setup)
+    requires: not setup.reuse_server
+    for db in RunDatabases where status = provisioned:
+        ensures:
+            db.status = discarded
+            db.file_present = false
+
+    @guidance
+        -- Was: `when: TestRunFinished(setup)`, requiring the file gone when the
+        -- run ended, "on every terminal outcome, including a failed or
+        -- interrupted run", because "a suite that leaves its database behind on
+        -- failure has reintroduced exactly the residue this design removes".
+        -- That was written the same afternoon as the code that does the
+        -- opposite (E2E_KEEP_RUN_DB defaults to 1), by the same author, and was
+        -- found by a third reader comparing the two (SPEC-B2). Resolved here in
+        -- favour of the CODE, which ADR-045 §3 already states as a decision.
+        --
+        -- The retired claim's worry is still met, and that is why resolving it
+        -- this way costs nothing: residue cannot survive into a run that could
+        -- observe it, because provisioning ALWAYS replaces the file before
+        -- anything runs. What changes is only how long a dead run's data stays
+        -- readable — and three things want it readable:
+        --   1. The residue gate (scripts/check-e2e-residue.sh) runs AFTER the
+        --      Playwright process exits and READS this database. It is the
+        --      enforcement of SettledTestCaseOwnsNoLeakedRow, so a lifetime that
+        --      ends before it does would forbid the mechanism that makes another
+        --      invariant in this file real.
+        --   2. A red run stays inspectable instead of vanishing with the
+        --      failure — the run whose data you most want is the one that
+        --      failed.
+        --   3. Unlinking the file under a still-running dev server leaves a
+        --      server bound to an unlinked inode, writing to storage nothing can
+        --      open. The run wrapper does not stop the server it started.
+        --
+        -- Reason 1 is worth stating precisely, because the obvious form of it is
+        -- too strong: the in-wrapper gate is ORDERED before the opt-in discard,
+        -- so a run-end discard would not by itself have broken it. What a
+        -- run-end discard genuinely forbids is the STANDALONE post-run
+        -- invocation (`bun run check:e2e-residue`), which 52bb5db7 kept
+        -- deliberately, and it makes the retired guidance's own instruction —
+        -- "copy anything you need OUT before this runs" — unworkable for a check
+        -- whose input is the whole database.
+        --
+        -- ORDERING, which this language cannot express: the discard happens
+        -- before the copy, in one provisioning step. Two rules fire on
+        -- TestRunStarted and nothing here sequences them; the guarantee lives in
+        -- e2e_db_provision_run, which removes and then copies.
+        -- The -wal and -shm sidecars travel with the file. Copying a database
+        -- while a -wal exists yields a torn snapshot that opens cleanly and is
+        -- missing the most recent writes; removing the database and leaving a
+        -- -wal is the same bug with the halves swapped.
+        -- E2E_REUSE_SERVER declines provisioning altogether — a reused server
+        -- holds the DATABASE_URL it started with — so it also declines this
+        -- discard, and the previous run's database is what the run then uses.
+}
+
+rule DiscardRunDatabaseAtExitIsOptIn {
+    -- The retired behaviour survives as an OPT-IN: E2E_KEEP_RUN_DB=0 discards at
+    -- exit for a caller who wants nothing left on disk.
     when: TestRunFinished(setup)
     requires: exists setup.database
-    requires: setup.database.status = provisioned
+    requires: not setup.keep_run_database
     ensures:
         setup.database.status = discarded
         setup.database.file_present = false
 
     @guidance
-        -- Fires on every terminal outcome, including a failed or interrupted
-        -- run: a suite that leaves its database behind on failure has
-        -- reintroduced exactly the residue this design removes.
-        -- Artefact capture (traces, the HTML report) must therefore copy
-        -- anything it needs OUT of the database before this runs.
+        -- Ordered AFTER the residue gate, deliberately: the gate is the last
+        -- reader of the database, so discarding first would silently turn the
+        -- gate into a permanent skip ("no run database") rather than a failure.
+        -- A check that cannot run must say so; one that cannot run BY
+        -- CONSTRUCTION is a check that has been switched off without anyone
+        -- deciding to.
 }
 
 ------------------------------------------------------------
@@ -590,17 +786,35 @@ rule SelfContainedCrudTest {
 }
 
 rule UniqueTestData {
-    -- WHEN a CRUD test creates data, the row's label carries a unique
-    -- identifier derived from Date.now().toString(36), so concurrent workers
-    -- inside the same run cannot collide.
+    -- WHEN a CRUD test creates data, the row's label carries an identifier that
+    -- discriminates on BOTH axes a name can collide on: the millisecond it was
+    -- generated in, and the worker that generated it. Concurrent workers inside
+    -- the same run therefore cannot collide.
     when: CrudTestCreatesData(test_case, row)
-    let identifier = TestDataIdentifier{uid: timestamp_base36()}
+    let identifier = TestDataIdentifier{uid: timestamp_base36_and_worker()}
     requires: row.owner = test_case
     ensures:
         row.label = labelled_with(identifier.uid)
         row.carries_uid = true
 
     @guidance
+        -- Was: `TestDataIdentifier{uid: timestamp_base36()}` — the millisecond
+        -- stamp alone. That is sufficient only at one worker, and the suite does
+        -- not run at one worker by configuration: playwright.config.ts sets
+        -- `fullyParallel: true` with `workers: 3` locally, and CLAUDE.md
+        -- documents E2E_WORKERS=4. Three workers entering the helper in the same
+        -- millisecond produced the SAME name — and the name IS this suite's
+        -- protection against collision, so the protection was absent exactly
+        -- when it was needed. Closed by 4447b9fe (E2E-B29).
+        -- Never observed in the wild, because the wrapper forces --workers=1.
+        -- That makes it a structural hole rather than a reproduced failure, and
+        -- structural is the worse kind: the configuration that opens it is the
+        -- one a developer reaches for when the suite feels slow.
+        -- The worker index is read from the ENVIRONMENT (TEST_PARALLEL_INDEX,
+        -- set by the worker process) and not from test.info().parallelIndex,
+        -- which throws when called from module scope where the helper lives.
+        -- Absent outside a worker, where "0" is correct — there is no second
+        -- worker to collide with. Do not "simplify" this to test.info().
         -- TrackedFactoryRegistersBeforeWrite takes the label as a parameter;
         -- this rule constrains what that parameter may be. They are not two
         -- writers of the same field.
@@ -615,26 +829,61 @@ rule UniqueTestData {
 rule FixtureOwnedTeardown {
     -- Supersedes CleanupOnFailure. The GUARANTEE is unchanged: cleanup executes
     -- even when an assertion throws. Only the mechanism changed.
-    -- WHEN a test case settles — passed OR failed — the fixture that owns its
-    -- rows tears them down. Ownership belongs to a Playwright fixture whose
-    -- teardown the runner invokes itself, not to a hand-written test.afterEach.
+    -- WHEN a test case settles — passed, failed OR skipped — the fixture that
+    -- owns its rows tears down the ones a LATER TEST IN THIS RUN could observe.
+    -- Ownership belongs to a Playwright fixture whose teardown the runner
+    -- invokes itself, not to a hand-written test.afterEach and not to a
+    -- statement at the end of the test body.
     when: TestCaseSettled(test_case)
     requires: test_case.has_settled
     ensures:
-        for row in test_case.leaked_rows:
+        for row in test_case.leaked_rows where model.visibility != invisible:
             TrackedDeleteConfirmed(row: row)
 
     @guidance
-        -- Why the mechanism had to change: a fixture cannot be forgotten the
-        -- way an afterEach can. The test signature requests the fixture, so any
-        -- test that uses the factory necessarily gets the teardown; an
-        -- afterEach has to be remembered per file. Measured 2026-09-02: of the
-        -- 27 spec files, 25 have no afterEach at all. The old rule was not
-        -- aspirational, it was false.
+        -- SCOPE, narrowed 2026-09-02, and narrowed on the second attempt.
+        -- Unnarrowed the rule demanded fixture-owned teardown from every spec
+        -- and got it from 2 of 27 — a rule that is 93% violated does not
+        -- constrain anything, it just makes the file wrong.
+        --
+        -- The FIRST narrowing was withdrawn before it was written, and the
+        -- reason is the useful part. A measurement showed SmtpConfig,
+        -- CompanyBlacklist and Question ending a run at zero residue, which was
+        -- read as "these specs already own their rows, so only capacity-bound
+        -- and singleton models need the rule". A falsification test destroyed
+        -- that inference (E2E-B37): all three clean up INLINE at the end of the
+        -- test body — the path a thrown assertion skips — so they measured zero
+        -- because the run was GREEN, not because they own anything. One injected
+        -- failing assertion before the inline delete leaves SmtpConfig at 1, an
+        -- active per-user singleton. A measurement taken only on the passing
+        -- path cannot answer a question about the failing path.
+        --
+        -- So the scope is NOT a list of convenient models. It is the property:
+        -- a row whose survival a LATER TEST IN THE SAME RUN can observe must be
+        -- removed on a path that a thrown assertion cannot skip. Three ways a
+        -- row is observable, and unique_keyed is the one that gets forgotten
+        -- because it looks like nothing (see enum IntraRunVisibility).
+        -- Everything else is covered by the disposable run database — and only
+        -- ACROSS runs. Within a run, nothing collects an invisible row; that is
+        -- what makes it invisible, not a promise that it is harmless.
+        --
+        -- MECHANISM, which the scope does not weaken: a fixture cannot be
+        -- forgotten the way an afterEach can. The test signature requests the
+        -- fixture, so any test that uses the factory necessarily gets the
+        -- teardown; an afterEach has to be remembered per file. Measured
+        -- 2026-09-02: of the 27 spec files, 25 have no afterEach at all, and the
+        -- two that do (settings-api-keys, webhook-settings) only console.warn.
+        -- An inline delete at the end of a test body is NOT this mechanism, and
+        -- it is the shape E2E-B37 is about.
         -- Intra-run teardown still matters under a disposable database: several
         -- per-user caps (10 webhook endpoints, 10 active API keys) are reached
         -- WITHIN one run, and a leak there disables the create form for every
         -- later test in the same run.
+        -- The residue gate is deliberately STRICTER than this rule: it fails on
+        -- any unclassified growth, visible or not. That is not a contradiction —
+        -- this rule says what must be torn down for the suite to be CORRECT, and
+        -- the gate additionally catches the next spec that starts leaking, while
+        -- the visibility is still nobody's problem.
         -- The rule used to end `ensures: test.uses_storage_state = true`; see
         -- StorageStateFollowsCategory.
 }
@@ -648,9 +897,10 @@ rule TrackedFactoryRegistersBeforeWrite {
     -- Registering afterwards loses exactly the rows that matter: a create that
     -- fails AFTER the row was written has still leaked one, and that is the
     -- failure mode teardown exists for.
-    when: TrackedFactoryInvoked(test_case, label)
+    when: TrackedFactoryInvoked(test_case, label, model)
     ensures: OwnedRow.created(
         owner: test_case,
+        model: model,
         label: label,
         carries_uid: true,
         status: registered,
@@ -661,6 +911,10 @@ rule TrackedFactoryRegistersBeforeWrite {
         -- Registration is the factory's own first statement, so no caller can
         -- forget it. A row registered whose write never landed is harmless:
         -- it stays `registered`, is not a leak, and teardown skips it.
+        -- The MODEL is registered alongside the label because teardown scope
+        -- depends on it (FixtureOwnedTeardown): a fixture that knows only the
+        -- label cannot tell a row a later test will collide with from one
+        -- nothing will ever look at.
 }
 
 rule TrackedRowWritten {
@@ -865,8 +1119,24 @@ rule AcquirePortLockBeforeStart {
         -- sibling three minutes into a suite — only the working directory can,
         -- which is what OwnershipCheckedStop reads. Acquire-then-stop therefore
         -- refuses the one eviction that is always legitimate: reclaiming one's
-        -- own. See the open question on scripts/dev-e2e.sh at the foot of this
-        -- file.
+        -- own.
+        -- RESOLVED in f98bb779 (E2E-B33), and resolved by SPLITTING the two
+        -- entry points rather than by reordering one of them — which is why this
+        -- rule still says acquire-first and is still right. A DIRECT start
+        -- (scripts/dev-e2e.sh) keeps lock-then-stop, because its correct answer
+        -- to an occupied port is to REFUSE: it cannot know whose server that is.
+        -- The RUN WRAPPER's contract is the opposite — it always replaces — so
+        -- the stop moved into the wrapper, where it is scoped to this worktree,
+        -- followed by a check that the lock actually came free rather than an
+        -- assumption that the stop implied it.
+        -- The symptom this closed is worth keeping, because nothing in it named
+        -- the cause: the second consecutive run in one worktree met its own
+        -- previous server, the starter exited 75 into a backgrounded nohup whose
+        -- status nobody read, and the readiness poll then answered YES against
+        -- the OLD server — while the run database had already been provisioned
+        -- fresh. Two databases in one run, a green start, and no message.
+        -- Hence also: a start's exit status must be READ. A refusal a caller
+        -- discards is not a refusal (see ContendedStartIsRefused).
 }
 
 rule ContendedStartIsRefused {
@@ -986,7 +1256,16 @@ rule UnownedStopIsRefused {
 --
 -- `allium check` then reports 0 errors and its diagnostic counts do not move at
 -- all; `allium analyse` reports 0 findings naming either probe. Reproduced
--- three times independently, 2026-09-02, across allium 3.2.3 and 3.6.1.
+-- FOUR times independently, 2026-09-02, across allium 3.2.3 and 3.6.1 — the
+-- fourth during this tend pass, against 3.6.1, on the post-edit file: both
+-- probes appended, counts stayed at 5 warnings / 33 infos, and `analyse`
+-- returned 0 findings. The transition half was probed separately in the same
+-- pass by adding the edge `discarded -> state_that_does_not_exist` to
+-- RunDatabase; the counts did not move for that either.
+-- Re-verifying was worth the two minutes: 3.6.1 DID add enforcement that 3.2.3
+-- lacked (rule.invalidTrigger, which is what SPEC-B1 is about), so "the tool
+-- got stricter somewhere" is not a safe assumption in either direction. It got
+-- stricter about triggers and remains silent about references.
 --
 -- Corroborated from the opposite direction by a diagnostic the checker DOES
 -- emit: `allium.entity.unused` fires for SQLiteDatabase, which is referenced by
@@ -1046,13 +1325,87 @@ invariant TemplateSatisfiesDeclaredFixtures {
 
 invariant SettledTestCaseOwnsNoLeakedRow {
     -- The END-state half of SelfContainedCrudTest, and the surviving guarantee
-    -- of the retired CleanupOnFailure: once a test has settled, PASSED OR
-    -- FAILED, none of the rows it wrote are still standing.
-    -- Quantifying over both outcomes is the whole point — an invariant that
-    -- held only for passing tests would permit exactly the leak that made one
-    -- load-induced failure disable every later webhook test.
+    -- of the retired CleanupOnFailure: once a test has settled — PASSED, FAILED
+    -- or SKIPPED — none of the rows it wrote are still standing.
+    -- Quantifying over every terminal outcome is the whole point. An invariant
+    -- that held only for passing tests would permit exactly the leak that made
+    -- one load-induced failure disable every later webhook test, and it is the
+    -- shape E2E-B37 found in three specs that clean up inline.
     for test_case in TestCases:
         test_case.has_settled implies test_case.leaked_rows.count = 0
+
+    -- ENFORCEMENT. This invariant was prose with no mechanism until 52bb5db7;
+    -- its only implementations were two per-file afterEach detectors that
+    -- console.warn and never fail. What makes it real now is
+    -- `scripts/check-e2e-residue.sh`, run by scripts/test-e2e.sh AFTER the
+    -- Playwright process exits — NOT `allium check`, which does not resolve this
+    -- expression at all (see the HONEST LIMITATION note above).
+    --
+    -- The gate works on models, not on test cases, so it enforces the two
+    -- invariants below rather than this one directly. Read together they are the
+    -- same property from two ends: this one says what a test owes, and those say
+    -- what the database is allowed to look like when every test has paid.
+    --
+    -- WHAT IT SEES, and the distinction is load-bearing:
+    --   INSERT residue — a row created and not deleted. A count delta finds it.
+    --   UPDATE residue — a SEEDED row mutated and not restored. The count is
+    --     UNCHANGED, so no count can find it. The gate ATTACHes the template and
+    --     asks which rows that came FROM it carry an updatedAt later than this
+    --     run's own provisioning timestamp. The ids decide which rows are the
+    --     template's; a count cannot.
+    --
+    -- WHAT IT CANNOT SEE, stated here rather than discovered later:
+    --   Profile, Job, Company, JobTitle and Location have no updatedAt column,
+    --   so a mutation of a seeded row in ANY of them is invisible to both
+    --   halves. It is not that the gate tolerates these — it cannot form an
+    --   opinion. A test that edits the seeded default profile passes a green
+    --   gate, and nothing here will ever say so.
+    --
+    -- PROVENANCE is what keeps a skip from becoming a plausible wrong answer:
+    -- the provisioning timestamp and the template stamp live INSIDE the run
+    -- database (see RunDatabase). A gate run against a database from a different
+    -- template — the template was rebuilt, or the check was invoked hours later
+    -- — detects the mismatch and SKIPS LOUDLY. It also skips when Playwright
+    -- did not report at all, because a run killed by the cgroup or the timeout
+    -- leaves a partial database nobody should judge.
+}
+
+invariant UnownedGrowthIsALeak {
+    -- The INSERT half, at the granularity the gate can actually measure: a model
+    -- that gained rows during the run must be one whose growth somebody has
+    -- accounted for. `owned` means a test created them and owed their removal,
+    -- so growth in an `owned` model is by definition a row nobody took back.
+    for model in PersistedModels:
+        model.rows_gained > 0 implies model.growth != owned
+
+    -- known_debt satisfies this clause today and is NOT a hole in it: the four
+    -- findings (E2E-B22 Person, E2E-B23 Referral, E2E-B24 Tag, E2E-B25 Resume /
+    -- JobTitle / Company / Location) are recorded, printed on every run, and
+    -- expected to be reclassified to `owned` as each is fixed. The verdict is
+    -- the unit of progress — an entry moves, it is not merely deleted.
+}
+
+invariant SettledRunRestoresMutatedSeedData {
+    -- The UPDATE half, which the leaked-row invariant above cannot express at
+    -- all: a mutated SEED row is not an OwnedRow, because no test created it.
+    -- Reading a seeded row is free; changing one and leaving it changed is not,
+    -- and it is the harder leak to find precisely because nothing about the
+    -- database's size changes.
+    for model in PersistedModels:
+        model.seed_rows_mutated > 0 implies model.mutation_allowed
+
+    -- Only two models are allowed: ModuleRegistration, because the health
+    -- monitor writes healthStatus on every probe and the noise cannot be told
+    -- from a test's mutation, and UserSettings, the seeded singleton the
+    -- settings specs legitimately drive.
+    -- The first of those deserves a warning, because it is also the example the
+    -- mechanism was BUILT for: deactivateModule upserts onto a ModuleRegistration
+    -- row (src/actions/module.actions.ts:348) and a deactivated module is
+    -- visible to later tests. Allowing mutation there means the motivating case
+    -- is not the case this catches — see the open question at the foot of this
+    -- file. What the mechanism does catch was verified against a seeded
+    -- StagedVacancy, which is genuinely in the template and genuinely has an
+    -- updatedAt.
 }
 
 invariant WorktreeScopedPort {
@@ -1073,10 +1426,17 @@ invariant WorktreeScopedPort {
                 and worktree.port <= config.dev_server_base_port + config.worktree_port_span)
 
     -- NOT EXPRESSIBLE, and the more important half: the port is a pure FUNCTION
-    -- of the worktree root — same path, same port, on every invocation, in every
-    -- tool, after any restart. That is cross-instance agreement about the output
-    -- of a computation, not a property of stored state, so this language cannot
-    -- assert it (see the language reference on what invariants can express).
+    -- of the worktree root AND the current set of worktrees — same inputs, same
+    -- port, on every invocation, in every tool, after any restart. That is
+    -- cross-instance agreement about the output of a computation, not a property
+    -- of stored state, so this language cannot assert it (see the language
+    -- reference on what invariants can express).
+    -- Was stated as "a pure function of the worktree root" alone. That stopped
+    -- being true when collision resolution started walking `git worktree list`
+    -- in path order (f98bb779): the SET is a second input, and adding a worktree
+    -- can therefore move a later one's port. Determinism at any one moment is
+    -- what the mechanism needs and what it still has; stability across time is
+    -- what it gave up, deliberately, to stop two checkouts sharing a slot.
     -- It is why the port is derived by hashing the path rather than handed out
     -- by a counter or picked at random: a counter would give two tools in the
     -- SAME worktree different answers, and then the runner, the server and the
@@ -1129,6 +1489,49 @@ invariant ConsoleOracleIsNeverTheOnlyAssertion {
     for test_case in TestCases:
         exists test_case.console_oracle
             implies test_case.behavioural_assertions >= config.min_behavioural_assertions
+
+    -- ENFORCEMENT, since 4d558142:
+    -- `__tests__/e2e-no-swallowed-assertions.spec.ts` walks e2e/ and flags a
+    -- `try` whose body contains `expect(` and whose `catch` neither rethrows,
+    -- asserts, calls test.skip(), nor carries a `// swallow-ok: <reason>`
+    -- marker. It is a lexical heuristic, not a TypeScript parse, because the
+    -- shape it looks for is lexical. It lives in Jest because Jest runs in CI
+    -- and Playwright does not — a check that can run automatically should.
+    --
+    -- A SKIP IS AN HONEST OUTCOME AND A LOG IS NOT. This is the whole reason
+    -- test.skip() is accepted and console.log is not, and it is a claim about
+    -- REPORTING, not about coverage: a skipped test is reported as NOT RUN,
+    -- while the console.log it replaces reported PASSED. Both leave the same
+    -- gap in what was verified; only one of them tells you the gap is there.
+    -- A green badge covering an unexercised page is the failure mode this
+    -- invariant exists for, and logging is how it was reached (E2E-B27).
+    --
+    -- The three fixed sites did not have one answer, which is the point:
+    --   Two now skip, because they drive a combobox backed by
+    --     /api/eures/locations — a proxy to an EU service this suite does not
+    --     control. Unavailability there is not a defect in this tree.
+    --   One had its try/catch REMOVED. It waited on Job Source options, which
+    --     prisma/seed.ts creates nine of; that is local, seeded, deterministic
+    --     data, so an absent option list is a defect and must fail. Skipping
+    --     would have been the same lie in a more honest tone.
+    -- The four remaining sites are cleanup and idempotent-precondition helpers
+    -- that SHOULD swallow — a throwing teardown replaces the real failure with
+    -- its own — and each carries its marker and its reason.
+    --
+    -- WHY THE OPT-OUT IS A MARKER AT THE SITE, not a path+line allowlist in the
+    -- checking test: a list drifts the first time anyone edits those specs, and
+    -- its reasons live a directory away from the code they excuse. The marker
+    -- is read by whoever next looks at the catch, which is the only reader who
+    -- can tell whether the reason still holds. Same argument as
+    -- ConsoleToleration.suppresses, one level up: an excuse that cannot be
+    -- re-evaluated where it applies stops being an excuse and becomes a habit.
+    --
+    -- WHAT THIS DOES NOT CLOSE: the detector finds assertions swallowed by a
+    -- CATCH, which is how the count reached zero in every case observed. It
+    -- cannot count behavioural_assertions, so a test that has a console oracle
+    -- and simply never asserted anything else still satisfies the checker and
+    -- violates this invariant. That residue is review-enforced — see the open
+    -- question at the foot of this file.
 }
 
 ------------------------------------------------------------
@@ -1263,16 +1666,68 @@ open question "Should waitForTimeout calls be systematically replaced with event
 -- Raised while reconciling this spec with the disposable-database decision.
 
 open question "Should e2e/helpers/index.ts become a STRICT barrel? Today it does not re-export resume-fixture.ts and six spec files import e2e/helpers/resume-fixture directly, so SingleSourceHelpers is written to permit direct submodule imports. Making it strict is a one-line re-export plus six import rewrites, but it is a code change nobody has approved."
-open question "Who rebuilds the seed template when a Prisma migration lands, and how does a run detect that its template predates the schema? A stale template fails every spec at once, which is loud, but the failure names the test rather than the template."
-open question "Once DisposableRunDatabase lands, is e2e/cleanup-stale-data.ts retired outright, or kept for the E2E_REUSE_SERVER path? Its global unfiltered ModuleRegistration reset only ever needed E2E_ALLOW_DESTRUCTIVE because it ran against the developer's own database."
-open question "TestCase.behavioural_assertions cannot be counted by any tool the project runs today, so ConsoleOracleIsNeverTheOnlyAssertion is review-enforced only. Is a lint rule worth building, or is the named invariant enough?"
+
+-- ANSWERED 2026-09-02, kept as a record of what closed them.
+--
+-- "Who rebuilds the seed template when a Prisma migration lands, and how does a
+--  run detect that its template predates the schema?" — the run does, itself and
+--  every time: SeedTemplate.stamp digests the schema, the migrations and both
+--  seed scripts, and a mismatch rebuilds before provisioning. Nobody rebuilds it
+--  by hand and no run can use a template that predates its own inputs. The
+--  residual risk moved rather than vanished — see the open question on the stamp
+--  input list below.
+--
+-- "Is e2e/cleanup-stale-data.ts retired outright, or kept for the
+--  E2E_REUSE_SERVER path?" — retired outright in a0f9a320. All 330 lines, the
+--  E2E_ALLOW_DESTRUCTIVE gate, and the cross-run purpose of the "E2E " name
+--  prefix went with it. The reuse path did not keep it: a reused server holds an
+--  unprovisioned database, which is a reason to warn, not a reason to keep a
+--  purge whose filter had already drifted twice (E2E-B3, E2E-B22).
+--
+-- Raised while giving SettledTestCaseOwnsNoLeakedRow and
+-- ConsoleOracleIsNeverTheOnlyAssertion their enforcement mechanisms (52bb5db7,
+-- 4d558142). All four were found by reading the gate against the schema, not by
+-- a failing run.
+
+open question "TestCase.behavioural_assertions still cannot be counted by any tool the project runs. __tests__/e2e-no-swallowed-assertions.spec.ts closes the path by which the count reached zero in every observed case — a catch that discards a failing expect() — but a test that has a console oracle and simply never asserted anything else passes it. Is counting worth building, or is closing the observed path plus a named invariant enough?"
+
+open question "ModuleRegistration is in the residue gate's ALLOWED_MUTATION list, and it is also the example the UPDATE check was BUILT for: deactivateModule upserts onto it (module.actions.ts:348) and automation-wizard-modules.spec.ts documents that later tests see the result. Worse, the seeds create no ModuleRegistration rows at all, so those rows are not in the template and the UPDATE check — which matches on ids present in the template — could not see them even unlisted. The mechanism is real and was verified against a seeded StagedVacancy; the motivating case is not the case it catches. Should module activation state be seeded into the template so it becomes checkable, or should the spec stop citing it as the motivating example?"
+
+open question "EnrichmentResult is classified allowed_growth ('enrichment cache, keyed and TTL'd, not owned by a test') and is simultaneously unique_keyed on (userId, dimension, domainKey), which by IntraRunVisibility makes a leftover row observable by a later test in the same run — as a cache HIT rather than a constraint violation, so it changes behaviour silently rather than loudly. Is a cache genuinely exempt, or is this the first case where the growth verdict and the visibility class disagree and one of them is wrong?"
+
+open question "The residue gate enumerates tables from the TEMPLATE, so a table that exists only in the run database is never examined. _e2e_meta is the only one today and its ALLOWED_GROWTH entry is therefore inert — harmless, but it reads as an active exemption. More usefully, it means the gate cannot see a table a MIGRATION added if that migration also rebuilt the template, which is the case where a new model's residue is least likely to be anticipated."
+
+open question "SeedTemplate.stamp digests the schema, the migrations and the two seed scripts. Nothing else — so a change to a factory, a fixture helper or an env default that alters seeded CONTENT does not invalidate the template, and the next run silently uses one built from different behaviour. The stamp's input list is a claim about what determines the template's contents, and it is maintained by hand. What re-checks it?"
 
 -- Raised while reconciling this spec with the per-worktree dev server decision
--- (0e1b5fca). All three were found by reading the scripts, not by a failing run.
-
-open question "AcquirePortLockBeforeStart says stop-then-lock; scripts/dev-e2e.sh does lock-then-stop (acquire at :29, devserver_stop at :93). test-e2e.sh does not stop the incumbent either, and leaves its server running when the run ends, so the NEXT run in the same worktree meets a live lock holder: dev-e2e.sh exits 75, test-e2e.sh backgrounds it with nohup and never sees that status, its readiness poll finds the OLD server answering, and the run proceeds against it — with a freshly provisioned run database the old server has never heard of. That is FreshDevServerPerRun and RunDrivesItsOwnWorktreesServer both silently false on the second consecutive run. Is the fix to stop before locking, to let a start reclaim a lock held from its own worktree root, or to have test-e2e.sh check the starter's exit status?"
-
-open question "Only scripts/dev-e2e.sh acquires the port lock. scripts/dev.sh computes the same port and starts a server without claiming it, so an ordinary development server is invisible to mechanism 2: a concurrent E2E start sees a free lock, takes it, and only then discovers the port is occupied. Should dev.sh acquire too, or is the ownership-checked stop considered sufficient cover for that case?"
-
-open question "config.worktree_port_span is 49, so two LINKED worktrees whose roots hash to the same slot are assigned the same port. Mechanism 2 then refuses the second one with a message that says the port is claimed by 'the same worktree' when it is not, and OwnershipCheckedStop refuses to clear it because the holder genuinely is not ours — so the second worktree can never run a suite, and nothing in the diagnostic points at the collision. Widen the span, or detect the collision and say so?"
+-- (0e1b5fca). All three were found by reading the scripts, not by a failing run,
+-- and ALL THREE WERE ANSWERED by f98bb779 the same day. They are recorded here
+-- rather than deleted, because each was answered in a way the question did not
+-- offer, and the shape of that is the part worth keeping.
+--
+-- "Is the fix to stop before locking, to let a start reclaim a lock held from
+--  its own worktree root, or to have test-e2e.sh check the starter's exit
+--  status?" — the first and the third, and neither by changing dev-e2e.sh
+--  (E2E-B33). The two entry points were given OPPOSITE contracts instead of one
+--  shared ordering: a direct start still refuses an occupied port, while the run
+--  wrapper stops its own incumbent first, confirms the lock came free, and reads
+--  the starter's exit status. The middle option — letting a start reclaim by
+--  worktree root — was not taken: it would have put the ownership decision back
+--  inside the lock, where the working directory is not visible.
+--  A second defect surfaced only once the first was fixed (E2E-B34):
+--  devserver_stop waited for the PORT to free, but the port frees when the
+--  listener dies while the lock is held by the tree root, which outlives it by a
+--  beat. The stop returned with the lock still held. It now waits on the
+--  processes. Worth remembering as a pattern: waiting on a PROXY for the thing
+--  you care about is a race with a long fuse.
+--
+-- "Should dev.sh acquire too?" — yes, it does now. An ordinary development
+--  server is visible to mechanism 2 instead of being discovered after the lock
+--  was taken and the port found occupied.
+--
+-- "Widen the span, or detect the collision and say so?" — both, and neither was
+--  sufficient alone. The span went 49 -> 200, which only makes collisions rarer;
+--  what removes them is walking `git worktree list` in path order so the earlier
+--  worktree keeps the contested slot. See config.worktree_port_span and the NOT
+--  EXPRESSIBLE note on WorktreeScopedPort, which that change also weakened.
 

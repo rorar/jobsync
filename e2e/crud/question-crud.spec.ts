@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { safeWait } from "../helpers";
+import { safeWait, uniqueId } from "../helpers";
 
 // storageState handles authentication — no per-test login needed
 
@@ -106,7 +106,7 @@ async function deleteQuestion(page: Page, questionText: string) {
 
 test.describe("Question CRUD", () => {
   test("should create a new question", async ({ page }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const questionText = `E2E TypeScript experience ${uid}?`;
     const answerText = `E2E I have 5 years of TypeScript experience ${uid}.`;
     const tagLabel = "TypeScript";
@@ -138,7 +138,7 @@ test.describe("Question CRUD", () => {
   });
 
   test("should edit an existing question", async ({ page }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const questionText = `E2E TypeScript experience ${uid}?`;
     const answerText = `E2E I have 5 years of TypeScript experience ${uid}.`;
     const updatedQuestionText = `E2E Advanced TypeScript experience ${uid}?`;
@@ -199,7 +199,7 @@ test.describe("Question CRUD", () => {
   });
 
   test("should delete a question", async ({ page }) => {
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const deleteQuestionText = `E2E Dependency injection ${uid}?`;
     const deleteAnswerText = `E2E A design pattern for managing dependencies ${uid}.`;
 

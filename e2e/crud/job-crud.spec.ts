@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { selectOrCreateComboboxOption } from "../helpers";
+import { selectOrCreateComboboxOption, uniqueId } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
 
 // ---------------------------------------------------------------------------
@@ -244,7 +244,7 @@ test.describe("Job CRUD", () => {
 
   test("should create a new job with all fields", async ({ page }) => {
     test.setTimeout(120_000); // first crud job compiles the Add Job route on the dev server → >60s
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
@@ -271,7 +271,7 @@ test.describe("Job CRUD", () => {
     page,
   }) => {
     test.setTimeout(120_000); // Resume + full job + salary fields requires >60s on slow dev server
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const jobTitle = `E2E Salary Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
@@ -301,7 +301,7 @@ test.describe("Job CRUD", () => {
     page,
   }) => {
     test.setTimeout(120_000); // Create + Edit requires >60s on slow dev server
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
@@ -369,7 +369,7 @@ test.describe("Job CRUD", () => {
 
   test("should delete the job and verify removal", async ({ page }) => {
     test.setTimeout(120_000); // Create + Delete requires >60s on slow dev server
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const jobTitle = `E2E Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
@@ -406,7 +406,7 @@ test.describe("Job CRUD", () => {
     page,
   }) => {
     test.setTimeout(120_000);
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const jobTitle = `E2E NoDue ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
@@ -441,7 +441,7 @@ test.describe("Job CRUD", () => {
     page,
   }) => {
     test.setTimeout(120_000);
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const jobTitle = `E2E Contact Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
@@ -509,7 +509,7 @@ test.describe("Job CRUD", () => {
     page,
   }) => {
     test.setTimeout(120_000);
-    const uid = Date.now().toString(36);
+    const uid = uniqueId();
     const jobTitle = `E2E Recruiter Job ${uid}`;
     const company = `E2E Company ${uid}`;
     const location = `E2E Location ${uid}`;
