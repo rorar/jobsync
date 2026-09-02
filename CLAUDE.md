@@ -27,7 +27,7 @@ See `devenv.nix` for the full configuration. Requires a writable Nix store.
 ./scripts/build.sh    # Production build
 ./scripts/build-safe.sh  # Production build in a systemd memory cgroup (low-RAM hosts; OOM-kills the build, not the host)
 ./scripts/test.sh     # Run Jest tests (uses system Node.js)
-./scripts/test-e2e.sh # Run Playwright E2E (env + warm server + single worker; low-RAM hosts)
+./scripts/test-e2e.sh # Run Playwright E2E (env + FRESH server per run + single worker)
 ./scripts/typecheck-safe.sh  # tsc --noEmit in a systemd memory cgroup (low-RAM hosts; NEVER run bare `npx tsc`)
 ./scripts/stop.sh     # Stop dev server
 ./scripts/clean.sh    # Flush .next/ build cache (no restart; --all also clears node_modules/.cache)
@@ -54,9 +54,9 @@ convenience aliases; each exists because the bare command has taken this host do
 
 | Instead of | Run | Why |
 |---|---|---|
-| `npx tsc --noEmit` | `bash scripts/typecheck-safe.sh` | The bare command starves the host and has to be killed. Wrapper = systemd memory cgroup (4G) + `nice -n 19` + `ionice -c3` + 600 s timeout. **Empty output means clean** — it prints only its own banner on success. |
+| `npx tsc --noEmit` | `bash scripts/typecheck-safe.sh` | The bare command starves the host and has to be killed. Wrapper = systemd memory cgroup (4G) + `nice -n 19` + `ionice -c3` + 600 s timeout. It prints its banner, the scope line and a final `EXIT=0`; anything else is a real error. |
 | `npx jest` / `bun test` | `bash scripts/test.sh` | Defaults to `--maxWorkers=1`; `jest.config.ts` enforces it again for callers that bypass the script. Also translates the common `--workers=N` typo, which Jest silently ignores. Coverage is opt-in via `--coverage`. |
-| `npx playwright test` | `./scripts/test-e2e.sh` | Single worker + `nice`/`ionice`, and it starts a **correctly configured** dev server if none is running (`env.sh` + `E2E_AUTH_RATE_LIMIT_BYPASS`). |
+| `npx playwright test` | `./scripts/test-e2e.sh` | Single worker + `nice`/`ionice`, and it starts a **fresh, correctly configured** dev server if none is running (`env.sh` + `E2E_AUTH_RATE_LIMIT_BYPASS`). |
 | `bun run build` | `bash scripts/build-safe.sh` | 7G cgroup — an over-large build is OOM-killed inside its own scope instead of swap-deathing the host. |
 
 **For the full Jest suite** (~6 min, 300+ suites) just run the wrapper — it now applies its own
@@ -88,8 +88,11 @@ host. If a run is inexplicably slow while the guard stays quiet, look outside th
 Override with `ALLOW_BUSY_HOST=1`; `GUARD_CPU_WARN` (0.35) / `GUARD_CPU_ABORT` (0.60) /
 `GUARD_SAMPLE_SECS` (1) tune it.
 
-**Every wrapper prints `[<name>] EXIT=<rc>` as its last line**, and explains exit **124** as a
-timeout rather than a failure of the thing under test. Read that line, not the shell's — `cmd; echo
+**Every wrapper prints `[<name>] EXIT=<rc>` as its last line** once it reaches the tool, and
+explains exit **124** as a timeout rather than a failure of the thing under test. The early exits
+do NOT print it — guard abort (**75**), no systemd scope (**86**), bad arguments (**2**), dev
+server not ready (**1**) — so a run that ends without an `EXIT=` line failed before it started,
+and the reason is the last thing printed. Read that line, not the shell's — `cmd; echo
 $?` and a trailing `| tail` both report the WRONG command's status.
 
 **A `PreToolUse` hook enforces the table above** (`scripts/guard-heavy-commands.sh`, wired in
@@ -104,9 +107,15 @@ suite or E2E run will hit the tool timeout and get orphaned.
 it will happily print `0` above a list of errors. Use `${PIPESTATUS[0]}`, `set -o pipefail`, or
 judge by the output itself.
 
-**Dev server:** agents may **start** one, never **stop** one (see `e2e/CONVENTIONS.md`). Beware the
-reuse trap: `test-e2e.sh` reuses anything answering on :3737, including a server started by
-`dev.sh`, which lacks the E2E env — the failure then surfaces far from its cause as a hanging login.
+**Dev server:** agents may **start** one and must not stop one by hand — but note the wrappers
+themselves do (`dev-e2e.sh` pkills `next dev`, `build-safe.sh` frees :3737). The rule is about
+ad-hoc kills, not about the scripts, which restart it deliberately.
+
+Since `47369e15` `test-e2e.sh` **always starts a fresh server**, because module activation lives in
+the process behind a `dbSynced` latch and reuse silently carried state across runs. The old warning
+about a "reuse trap" is inverted: today's surprise is that YOUR dev server gets replaced.
+`E2E_REUSE_SERVER=1` opts out, and then the original trap returns — a server from `dev.sh` lacks
+the E2E env and the failure surfaces far from its cause as a hanging login.
 `scripts/dev-e2e.sh` runs in the FOREGROUND (`exec bun run dev`), so starting it from a shell that
 exits kills it; let `test-e2e.sh` start it instead.
 
@@ -900,7 +909,7 @@ Formal specifications in `specs/*.allium` capture domain behaviour:
 - **New Connector Module** → unit tests for translator, integration test for search/getDetails
 - **i18n changes** → dictionary consistency validation
 - Run `bash scripts/test.sh` before every commit — all tests must pass (coverage collection is OFF by default for speed; pass `--coverage` to opt in)
-- Run `source scripts/env.sh && bun run build` — zero type errors
+- Run `bash scripts/build-safe.sh` — zero type errors
 
 ### Test Infrastructure
 
@@ -931,14 +940,14 @@ Formal specifications in `specs/*.allium` capture domain behaviour:
 ./scripts/test-e2e.sh e2e/crud/inside-track-crud.spec.ts # one spec
 
 # Manual (dev server already started via scripts/dev-e2e.sh):
-nice -n 10 npx playwright test --workers=1               # projects are "smoke" + "crud" (there is NO "chromium" project)
+./scripts/test-e2e.sh --workers=1                        # projects are "smoke" + "crud" (there is NO "chromium" project)
 
 # Local development — parallel workers:
-npx playwright test --workers=4
+E2E_WORKERS=4 ./scripts/test-e2e.sh
 ```
 On NixOS set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium` (`scripts/test-e2e.sh` sets it for you); elsewhere leave it unset and Playwright uses its own download.
 
-**Dev server:** Agents may start the dev server but must **NEVER stop it**. `reuseExistingServer: true` ensures Playwright reuses a running server.
+**Dev server:** Agents must not stop the dev server by hand; `test-e2e.sh` restarts it itself on every run. `reuseExistingServer: true` ensures Playwright reuses a running server.
 
 **E2E conventions:**
 - CRUD tests must be **self-contained** (create → assert → cleanup in one test body)
