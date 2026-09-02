@@ -17,7 +17,19 @@ async function ensureEnglishLocale(page: Page) {
   ]);
 }
 
-/** Navigate to My Jobs page and ensure Table view is active. */
+/**
+ * Navigate to My Jobs and switch to Table view. Does NOT wait for a table.
+ *
+ * There is no table when the user has no jobs: JobsContainer.tsx:447-449 renders
+ * KanbanEmptyState instead. Waiting for `table` here was an unstated dependency
+ * on jobs left behind by earlier runs — invisible while the suite shared the
+ * developer's database (which held four), and a hard failure of all three tests
+ * in this file the first time it ran against a fresh one.
+ *
+ * Callers that need a row wait for that row, which is the assertion they
+ * actually care about; callers that are about to CREATE the first job must not
+ * wait for a table that cannot exist yet.
+ */
 async function navigateToJobsTable(page: Page) {
   await page.goto("/dashboard/myjobs");
   await page.waitForLoadState("domcontentloaded");
@@ -27,8 +39,14 @@ async function navigateToJobsTable(page: Page) {
   const tableRadio = page.getByRole("radio", { name: /table/i });
   await tableRadio.waitFor({ state: "visible", timeout: 5000 });
   await tableRadio.click();
+}
 
-  // Wait for the table element to appear
+/**
+ * Same, plus the table itself — for callers that expect at least one job and
+ * would otherwise race the render.
+ */
+async function navigateToPopulatedJobsTable(page: Page) {
+  await navigateToJobsTable(page);
   await page.locator("table").first().waitFor({ state: "visible", timeout: 10000 });
 }
 
@@ -111,7 +129,7 @@ async function createJob(
 
 /** Delete a job from the table view. */
 async function deleteJob(page: Page, jobTitle: string) {
-  await navigateToJobsTable(page);
+  await navigateToPopulatedJobsTable(page);
   const cells = page.getByText(new RegExp(jobTitle, "i"));
   await expect(cells.first()).toBeVisible({ timeout: 15000 });
   await page
@@ -131,7 +149,7 @@ async function deleteJob(page: Page, jobTitle: string) {
 
 /** Navigate to job detail by clicking the job title link in the table. */
 async function navigateToJobDetail(page: Page, jobTitle: string) {
-  await navigateToJobsTable(page);
+  await navigateToPopulatedJobsTable(page);
 
   // Wait for the job to appear in the table
   const jobLink = page
@@ -156,7 +174,7 @@ async function changeJobStatus(
   jobTitle: string,
   newStatus: string,
 ) {
-  await navigateToJobsTable(page);
+  await navigateToPopulatedJobsTable(page);
   await expect(
     page.getByText(new RegExp(jobTitle, "i")).first(),
   ).toBeVisible({ timeout: 15000 });
