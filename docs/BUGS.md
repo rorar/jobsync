@@ -1,12 +1,13 @@
-# Bug Tracker — Collected 2026-03-24, Updated 2026-09-01
+# Bug Tracker — Collected 2026-03-24, Updated 2026-09-02
 
-**Total: 629 bugs found, 625 fixed, 5 open (2 accepted risk + 3 from 2026-09-01)**
+**Total: 637 bugs found, 625 fixed, 13 open (2 accepted risk + 3 from 2026-09-01 + 8 from 2026-09-02)**
 
-> The three figures above do not reconcile (625 + 5 = 630, not 629) and have not reconciled
+> The three figures above do not reconcile (625 + 13 = 638, not 637) and have not reconciled
 > for several sessions. The off-by-one is inherited, not introduced here; the 2026-09-01 edits
-> added 21 findings and now close 18 of them (3 still open: E2E-B9, B11, B12), which
-> preserves the discrepancy rather than papering over it. Whoever next audits this file should recount from the sections rather
-> than trust this line.
+> added 21 findings and closed 18 of them (3 still open: E2E-B9, B11, B12), and the 2026-09-02
+> ownership audit added 8 more (E2E-B22..B29, none fixed yet) — both preserve the discrepancy
+> rather than papering over it. Whoever next audits this file should recount from the sections
+> rather than trust this line.
 
 ### Status: ✅ OP-B1..OP-B8 all fixed (CRM orphan-note prune + full-review, 2026-08-21/23) + IT-B1..IT-B4 all fixed (IT-B2/IT-B4 on 2026-08-19 §F; IT-B1/IT-B3 on 2026-08-20 weed-resolution pass) + 2 known issues (accepted risk, pre-existing) + 1 deferred cross-cutting (H-P-09 observability)
 
@@ -52,6 +53,30 @@ the row count.
 | E2E-B19 | MEDIUM | Pre-existing silent-skip family, none introduced here, ranked by an audit: `kanban.spec.ts:56,62` gates a `fill` on non-waiting `isVisible()` so a slow render submits an EMPTY form; `profile-crud.spec.ts:201,266,378,435,519` same probe with the preceding timeout swallowed; `job-status-crud.spec.ts:107-111` optional Kanban switch whose failure is swallowed and whose follow-up assertion the table view already satisfies. | **FIXED (`12200fb7`, `389ca225`, `a8891ed4`), and the finding itself was WRONG about its own worst case.** `createTestJob` cannot submit an empty form: it has NO call sites, and it could not work if wired up — its trigger `getByRole("button", {name: /add job/i})` matches nothing (the button is `jobs.newJob` = "New Job", AddJob.tsx:397; "Add Job" is only the DialogTitle), and `input[name="title"]`/`input[name="company"]` do not exist (both are `<Combobox>`, AddJob.tsx:445,472; those `name` values are react-hook-form FormField props erased before the DOM). Those two lines were the only `input[name=` selectors in the entire e2e tree. Both dead helpers deleted rather than repaired. The REAL live site in that file was `kanban.spec.ts:184`, missed by the original audit, where the swallowed assertion IS the whole test — "view mode persists" passed while verifying nothing. profile-crud: all five sites asserted, assertions 38 -> 43. job-status-crud: toggle asserted and the follow-up re-anchored on `[data-testid^='kanban-column-']`, since the page-wide text match was also satisfied by the table view. |
 | E2E-B20 | LOW | `expectToast` (`e2e/helpers/index.ts`, now ~:100 after the JSDoc grew) is a page-wide text match, structurally the same defect as E2E-B8. It cannot tell which resume a toast refers to. Unchanged in behaviour by this branch, but the fixture extraction promoted it into the blessed shared helper that future callers will reach for by default. | **FIXED (`0b1e4941`).** Scoped to the Radix toast viewport's landmark role, whose label `"Notifications (F8)"` comes from Radix and never passes through our i18n. The trailing `" ("` in the pattern is load-bearing and was NOT in the original plan: `NotificationDropdown.tsx:352` renders a second `role="region"` named exactly `"Notifications"`, so a bare `/^Notifications/` would have silently matched the dropdown — no strict-mode error, because of the chained `.getByText().first()`. A page-wide `getByRole("status")` was rejected: a dozen sr-only live regions in `src/` carry that role and announce the very record names these specs match on. Verified before commit that no existing call site relied on the old page-wide reach. Limitation kept and documented in the JSDoc: this narrows WHERE we look, not WHAT we match, so a lingering 5 s toast can still satisfy the next assertion (`/Active/i` is a substring of `"Inactive"`). |
 | E2E-B21 | LOW | `getEndpointCard` truncates the URL to 40 chars while it is 41, so matching ignores the final uid character. Under `fullyParallel: true, workers: 3` two endpoints created within ~36 ms would let `.first()` delete the other test's card while de-registering its own URL. Inert under `scripts/test-e2e.sh`, which pins `--workers=1`. | **FIXED (`db6ed4d7`).** Matches the full URL now. The comment justifying the prefix was also wrong about the mechanism: `WebhookSettings.tsx:520` truncates in JavaScript but only above 50 chars, and the `truncate` class beside it is cosmetic — CSS never removes text from the DOM. At 41 chars the whole URL is rendered. A guard throws with the reason if a future URL crosses 50, which would otherwise surface as an unexplained 5 s timeout inside a swallowing catch. Container narrowed to the Card base class inside the endpoint list's `aria-live` region; nothing in this section renders `rounded-xl`, so that arm of the old selector was dead. |
+
+## Session 2026-09-02 — E2E ownership audit (8 found, 0 fixed)
+
+Found by three read-only exploration agents while deciding E2E-B9/B11/B12, then verified by hand
+against the current tree. None was introduced by this session. They are grouped here because they
+share one cause: **the suite has no ownership model.** Cleanup is the last statement of a test body,
+and the backstop behind it is a name-string convention (`startsWith: "E2E "`) enforced by nothing.
+The plan that addresses them is `docs/handoff-2026-09-02-e2e-closeout.md` § follow-up and the
+Phase 0-4 sequence recorded with ADR-045.
+
+| ID | Severity | Bug | Status |
+|---|---|---|---|
+| E2E-B22 | HIGH | **Person rows leak permanently and nothing has ever cleaned them.** Four specs name their person `` `E2E${uid}` `` with **no trailing space** — `contact-crud.spec.ts:60`, `contact-company-link.spec.ts:37`, `inside-track-crud.spec.ts:84`, `job-crud.spec.ts:449` — while the backstop filters `firstName: { startsWith: "E2E " }` (`cleanup-stale-data.ts:190`). All four only *archive* the person inline; none deletes. So every run adds rows that neither the spec nor the purge can remove. Same mechanism as E2E-B1, which stayed invisible for months and then surfaced as an apparent application bug. | Open |
+| E2E-B23 | MEDIUM | `Referral` has no cleanup at all — not inline, not in the backstop. `inside-track-crud.spec.ts` terminalises the referral by declining it (`:97-102`) and leaves both the `Referral` and its `Person` behind. `cleanup-stale-data.ts` has no step for the model. | Open |
+| E2E-B24 | MEDIUM | Models written by specs with **no backstop step whatsoever**: `Tag` (`keyboard-ux.spec.ts:320,364,406,876`, `question-crud.spec.ts:112`), and the resume children `Summary`, `WorkExperience`, `Education`, `LicenseOrCertification`, `OtherSection`. Step 7 deletes `ResumeSection` but those children hang off optional FKs (`schema.prisma:165-265`), so deleting the section orphans rather than removes them. | Open |
+| E2E-B25 | MEDIUM | `keyboard-ux.spec.ts` creates reference data with names that carry **no `E2E ` prefix and no cleanup**: `KBTest Title/Co/Loc` (`:143,179,200`), `KBRapid` (`:264`), `KBMobile` (`:786`), plus tags. Only its four resumes are cleaned (`:512,557,596,634`). `profile-crud.spec.ts` does the same with `"Software Developer"`, `"company test"`, `"location test"`, `"Boston"`, `"Cambridge"` (`:203-224,265-289,374-390,511`). | Open |
+| E2E-B26 | LOW | `"E2E Corp"` (`profile-crud.spec.ts:336`) is **permanently undeletable**. Step 6a requires `workExperiences: { none: {} }` (`cleanup-stale-data.ts:235-243`), but `WorkExperience.resumeSectionId` is optional (`schema.prisma:213`), so deleting the resume only NULLs the link and leaves the work experience pointing at the company. The row is visible to the filter and permanently guarded out by it. | Open |
+| E2E-B27 | MEDIUM | **A test that can pass while asserting nothing.** `keyboard-ux.spec.ts:714-727` wraps the entire selection block in `try { … } catch { console.log("Note: …") }`. If the option never appears, every functional assertion is skipped and the console-error oracle at `:729` is the only surviving assertion. Two sibling `console.log("Note: …")` catches at `:766` and `:866`. | Open |
+| E2E-B28 | MEDIUM | **The console oracle's window is wider than the behaviour it judges.** The collector is installed at the top of the test body (`:142,265,319,458,603,681,787`) and asserted at the end (`:172,278,350,510,632,729,817`), so it captures every console error from the 2-3 full page loads that sites 4-6 perform as *setup* (`ensureResumeExists` → `/dashboard/automations` → wizard). That is why a dev-server hydration warning lands on it (E2E-B11). Separately, its three filter entries — `favicon`, `404`, `Failed to fetch` (`:90-97`) — have **no recorded rationale anywhere**; `git blame` attributes all of them to `9a891c32e` (2026-03-26) with no edit since. `404` as a bare substring would suppress genuine app failures whose message embeds the status (`api/logos/[id]/route.ts:67,96,102`, `api/profile/resume/route.ts:112`, and others). | Open |
+| E2E-B29 | LOW | `uniqueId()` is `Date.now().toString(36)` (`e2e/helpers/index.ts:5`) — millisecond resolution with **no worker discriminator**, while `playwright.config.ts` runs `fullyParallel: true, workers: 3` locally. Three workers entering the same helper in the same millisecond produce identical names. Not yet observed; structurally possible. | Open |
+
+Also noted, not bugs: `login()` in `e2e/helpers/index.ts:9-15` is a dead export (no spec imports it;
+the two smoke specs and `global-setup.ts` each inline their own), and `ensureEnglishLocale` is
+duplicated in 16 spec files.
 
 ## Session 2026-08-31 — first E2E baseline in months (38 failing, cause attributed, none fixed)
 
