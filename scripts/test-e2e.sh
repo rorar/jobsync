@@ -191,8 +191,32 @@ else
   e2e_db_provision_run || exit 1
   E2E_DB_PROVISIONED=1
 
+  # Stop the incumbent HERE, not inside the starter.
+  #
+  # dev-e2e.sh acquires the port lock BEFORE it stops anything, which is right
+  # for a direct invocation -- it refuses rather than killing a server someone
+  # else is using. But this wrapper's contract is the opposite: it always
+  # replaces. Left to the starter, the second consecutive run in one worktree
+  # met its own previous server still holding the lock, exited 75 into a
+  # backgrounded nohup nobody reads, and the readiness poll below then answered
+  # YES against that OLD server -- while e2e_db_provision_run had already
+  # pointed the Playwright process at a new database the old server has never
+  # opened. Two databases in one run, and nothing says so.
+  #
+  # devserver_stop only touches servers whose /proc/<pid>/cwd is this worktree,
+  # so "always replaces" still means "replaces MINE".
+  devserver_stop "$PORT"
+
+  # And confirm the precondition rather than assuming the stop implied it.
+  if ! devserver_wait_lock_free "$PORT" 10; then
+    echo "[test-e2e] ERROR: port ${PORT} is still locked after stopping our server:" >&2
+    echo "[test-e2e]        $(devserver_lock_describe "$PORT")" >&2
+    exit 1
+  fi
+
   echo "[test-e2e] starting a fresh E2E dev server (env.sh + E2E_AUTH_RATE_LIMIT_BYPASS) ..."
   nohup bash "$DIR/dev-e2e.sh" >/tmp/jobsync-e2e-dev.log 2>&1 &
+  STARTER_PID=$!
 
   # Wait for the OLD server to go down before waiting for the new one to come
   # up. dev-e2e.sh pkills and sleeps 1s before exec'ing, so polling for "ready"
@@ -203,6 +227,17 @@ else
     curl -fsS -o /dev/null "http://localhost:${PORT}/signin" 2>/dev/null || break
     sleep 1
   done
+
+  # A starter that died is not a slow starter. Without this the only symptom is
+  # a 150 s wait ending in "dev server not ready", which names the timeout and
+  # not the reason -- and if anything else is listening, no symptom at all.
+  if ! kill -0 "$STARTER_PID" 2>/dev/null; then
+    wait "$STARTER_PID"; STARTER_RC=$?
+    echo "[test-e2e] ERROR: the dev server starter exited immediately (rc=$STARTER_RC)." >&2
+    [ "$STARTER_RC" = "75" ] && echo "[test-e2e]        rc 75 means the port lock is held: $(devserver_lock_describe "$PORT")" >&2
+    tail -20 /tmp/jobsync-e2e-dev.log >&2
+    exit 1
+  fi
 
   echo "[test-e2e] waiting up to ${SERVER_WAIT}s for cold compile (log: /tmp/jobsync-e2e-dev.log) ..."
   ready=0

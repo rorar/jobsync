@@ -3,7 +3,8 @@
 
 -- Scope: E2E test execution infrastructure for JobSync
 -- Includes: Test categorization, auth state management, execution pipeline, data isolation,
---           disposable per-run database, fixture-owned entity lifecycle, console oracle scope
+--           disposable per-run database, fixture-owned entity lifecycle, console oracle scope,
+--           per-worktree dev server ownership (port, lock, ownership-checked stop)
 -- Excludes:
 --   - Individual test assertions (domain-level, not infrastructure)
 --   - Unit/component test infrastructure (Jest, separate concern)
@@ -39,6 +40,13 @@ external entity SQLiteDatabase {
 external entity WebServerConfig {
     command: String
     reuse_existing_server: Boolean
+    base_url: String
+    -- Was a constant "http://localhost:3737" in playwright.config.ts. It is now
+    -- read from the environment (E2E_BASE_URL) because the port is a property of
+    -- the WORKTREE, not of the project — see invariant WorktreeScopedPort.
+    -- Playwright's baseURL, its webServer.url and the server's own NEXTAUTH_URL
+    -- must all carry the same value: a disagreement surfaces as a hanging login
+    -- or a post-logout wait on a host the browser is not on, far from its cause.
 }
 
 ------------------------------------------------------------
@@ -125,6 +133,25 @@ contract TestConventions {
         -- database a modification corrupts only that run's copy — but it still
         -- breaks every later test in that run, so the prohibition stands.
 
+    @invariant StopScopedByConcurrencyNotIdentity
+        -- Who may stop a dev server is a question about CONCURRENCY, not about
+        -- who they are.
+        -- A SUBAGENT must not stop one: it cannot know whether the process on
+        -- the port belongs to a sibling three minutes into a suite. The
+        -- ORCHESTRATOR and the wrappers may, because they are the only parties
+        -- in a position to know that nothing else is running.
+        -- Recorded as "nobody may ever stop the dev server" the rule inverts its
+        -- own purpose: on 2026-09-02 it argued for leaving an ORPHANED
+        -- `bun run dev` tree (PPID 1, its systemd scope already dead) holding
+        -- 4.3 GB and the base port — owned by no run, and reclaimed by nothing.
+        -- Since rule OwnershipCheckedStop the worktree half is enforced
+        -- mechanically, so this prohibition is no longer the only thing standing
+        -- between a worker and a sibling's server. It stands anyway because a
+        -- bare `kill` does not go through the check: the guarantee lives in the
+        -- wrapper, so stopping outside the wrapper forfeits it.
+        -- This is prose, not an expression: "the actor could not have known"
+        -- is a property of who was running, not of any entity's state.
+
     @invariant OneSpecPerAggregate
         -- Each domain aggregate generally has one E2E spec file.
         -- Exception: automation has two files (automation-crud + automation-wizard-modules)
@@ -200,6 +227,16 @@ enum OwnedRowStatus {
     released                       -- the row is provably gone
 }
 
+enum DevServerStatus {
+    starting                       -- lock taken, not yet answering on the port
+    serving
+    stopped
+}
+-- `starting` is a distinct state and not a modelling nicety: the lock is taken
+-- BEFORE the process exists, so there is a window in which a port is claimed and
+-- nothing answers on it. A caller that polls for "ready" without knowing that
+-- window exists reads the claim as an absence and starts a second server.
+
 ------------------------------------------------------------
 -- Entities
 ------------------------------------------------------------
@@ -235,6 +272,11 @@ entity GlobalSetup {
     database: RunDatabase?         -- absent until ProvisionRunDatabase has run
     reuse_server: Boolean          -- E2E_REUSE_SERVER=1; false by default
     dev_server_started_by_runner: Boolean
+    worktree: Worktree             -- the checkout this run belongs to
+    dev_server: DevServer?         -- absent until the server is up
+    -- worktree is what makes the run's port, its base URL and its stop scope one
+    -- decision rather than three: everything the run addresses is derived from
+    -- it (invariants WorktreeScopedPort and RunDrivesItsOwnWorktreesServer).
 }
 
 entity SeedTemplate {
@@ -327,6 +369,75 @@ entity ConsoleToleration {
     -- lapses with it and the oracle fails closed.
 }
 
+entity Worktree {
+    -- A checkout of the repository. The MAIN checkout and every linked worktree
+    -- are separate instances, and the thing that distinguishes them is the root
+    -- PATH — which is also what the port is derived from, so that two tools
+    -- asking "which port is ours?" in the same directory cannot disagree.
+    root: String                   -- absolute path of the checkout
+    is_main_checkout: Boolean      -- git-dir equals git-common-dir
+    port: Integer
+}
+
+entity DevServer {
+    -- The `next dev` process tree serving the app for one worktree.
+    -- A tree, not a process: the pid LISTENING on the port is a child, and the
+    -- supervisor above it respawns that child within seconds. This is why an
+    -- earlier teardown appeared to leave a "new" server behind — it was the
+    -- same supervisor, one child later — and why a stop must walk UP before it
+    -- signals (see OwnershipCheckedStop).
+    worktree: Worktree
+    port: Integer
+    status: DevServerStatus
+
+    stop_attempts: DevServerStop with target = this
+    -- A server accumulates attempts, not one attempt: a refused stop is a
+    -- normal event that leaves the server standing, so the refused and the
+    -- eventual permitted attempt both name the same target.
+
+    transitions status {
+        starting -> serving
+        starting -> stopped
+        serving -> stopped
+        terminal: stopped
+    }
+
+    invariant ServesItsOwnWorktreesPort {
+        port = worktree.port
+    }
+}
+
+entity PortLock {
+    -- The advisory lock that turns "is anything already claiming this port?"
+    -- into a question with an ATOMIC answer. One instance per port, and it is
+    -- present for every port: a lock nobody has ever taken and a lock that has
+    -- been released are the same state, which is what lets a start ask about
+    -- any port without first checking whether the question has been asked.
+    -- Why not ask over a message channel: "may I kill this?" answered by a
+    -- message is not atomic, because between the answer and the kill the answer
+    -- can stop being true. Exclusive access to a resource is a lock problem, not
+    -- a conversation problem.
+    port: Integer
+    holder: DevServer?             -- absent = free
+    -- The holder is the SERVER, not the script that acquired the lock. The
+    -- descriptor the lock lives on is inherited across exec, so it is released
+    -- exactly when the server process dies — including when it is killed — and
+    -- there is no cleanup path for anyone to forget.
+}
+
+entity DevServerStop {
+    -- One attempt to stop a dev server, together with the scope it was made in.
+    -- Modelled as an entity because a stop has to carry BOTH coordinates: which
+    -- port, and out of which directory. A command line carries neither — every
+    -- checkout produces the same argv, which is what made `pkill -f "next dev"`
+    -- reach into siblings.
+    target: DevServer
+    scope_root: String             -- root of the worktree requesting the stop
+    machine_wide: Boolean          -- STOP_ALL_WORKTREES=1, the deliberate sweep
+
+    permitted: machine_wide or target.worktree.root = scope_root
+}
+
 ------------------------------------------------------------
 -- Config
 ------------------------------------------------------------
@@ -339,7 +450,17 @@ config {
     timeout_action: Duration = 10.seconds
     retries_ci: Integer = 2
     retries_local: Integer = 0
-    base_url: String = "http://localhost:3737"
+    dev_server_base_port: Integer = 3737
+    worktree_port_span: Integer = 49
+    -- Replaces `base_url: String = "http://localhost:3737"`, which was true of
+    -- every run until 0e1b5fca and is now true only of the MAIN checkout. There
+    -- is no single base URL to name: it is derived per worktree, which is why
+    -- the constant became a base port plus a span rather than a different
+    -- constant. The main checkout keeps the base port deliberately — it is in
+    -- .env, in bookmarks and in muscle memory, and moving it would tax the
+    -- common case to serve the rare one.
+    -- The span is small (49 slots), so two LINKED worktrees can be assigned the
+    -- same port; see the open question at the foot of this file.
     chromium_executable: String = "/run/current-system/sw/bin/chromium"
     stability_runs: Integer = 5   -- number of repeated runs for anti-flaky verification
     min_behavioural_assertions: Integer = 1
@@ -643,25 +764,35 @@ rule ToleranceFailsClosed {
 rule FreshDevServerPerRun {
     -- Supersedes ExternalDevServer, which claimed the dev server MUST be
     -- started externally and that the runner never starts or stops one.
-    -- That has been false since 47369e15: the runner REPLACES whatever answers
-    -- on the E2E port with a fresh, correctly configured server on every run.
+    -- That has been false since 47369e15: the runner replaces the server on the
+    -- port THIS WORKTREE owns with a fresh, correctly configured one on every
+    -- run.
     -- Reuse is unsound because two run-scoped fixtures live in the server
     -- PROCESS rather than in the database — module activation latches on a
     -- dbSynced flag and is read once per process, and `next dev` memory grows
     -- across a suite — so a reused server carries state no database reset can
     -- reach.
+    -- Was: "REPLACES whatever answers on the E2E port". Since 0e1b5fca there is
+    -- no such thing as THE E2E port, and "whatever answers" is exactly the
+    -- overreach that let one run take down a sibling's server: what the runner
+    -- replaces is the server on its own worktree's port, and only when that
+    -- server is running out of this worktree (rule OwnershipCheckedStop).
     when: TestRunStarted(setup)
     requires: not setup.reuse_server
     ensures: setup.dev_server_started_by_runner = true
 
     @guidance
-        -- The surviving true part of the old rule: agents must not kill a dev
-        -- server AD HOC. The wrapper kills and restarts one deliberately, as a
-        -- documented step of the run. "Never stop the server" was a rule about
-        -- unplanned interference, not about the runner.
+        -- The surviving true part of the old rule is scoped by CONCURRENCY, not
+        -- by identity: see @invariant StopScopedByConcurrencyNotIdentity. The
+        -- wrapper kills and restarts one deliberately, as a documented step of
+        -- the run, because it is in a position to know that nothing else is
+        -- running; a subagent is not.
         -- PlaywrightRunner.web_server.reuse_existing_server stays true: the
         -- wrapper has already started the server by the time Playwright looks,
-        -- so Playwright reuses THAT one rather than starting a third.
+        -- so Playwright reuses THAT one rather than starting a third. That now
+        -- also requires web_server.base_url to name the same port the wrapper
+        -- bound — a Playwright still pointed at the base port would "reuse" a
+        -- DIFFERENT worktree's server and report nothing unusual.
         -- The cost is one cold compile per run, bought deliberately: a suite
         -- whose result depends on how many times it ran before is not measuring
         -- the tree.
@@ -679,6 +810,146 @@ rule ReusedDevServerIsOptIn {
         -- per-process, so a reused server can fail
         -- automation-wizard-modules.spec.ts on its own precondition — and fail
         -- it in a way that looks like a product bug.
+        -- What is reused is the server on THIS worktree's port. The opt-in never
+        -- reaches across worktrees, so it cannot silently borrow a sibling's
+        -- server; it can only decline to replace its own.
+        -- It also declines ProvisionRunDatabase: a reused server holds the
+        -- DATABASE_URL it was started with, so provisioning a copy here would
+        -- put the app and the runner on different databases — a failure that
+        -- names neither.
+}
+
+------------------------------------------------------------
+-- Rules: Dev Server Ownership
+------------------------------------------------------------
+
+-- Three mechanisms, composed, for one problem: parallel workers stopping each
+-- other's dev server. Each covers what the one below it cannot.
+--
+--   1. A port per worktree (invariant WorktreeScopedPort). Two worktrees no
+--      longer contend at all, so the common case needs no coordination.
+--   2. A lock per port (invariant DevServerExclusiveLock). Two starts in the
+--      SAME worktree — two terminals, an orchestrator and its subagent — see
+--      each other before one replaces the other's server.
+--   3. A stop scoped to port AND directory (rule OwnershipCheckedStop). The
+--      backstop for anything that bypasses 1 and 2.
+--
+-- Degradation is deliberate and ordered: if mechanism 2 is lost — a runtime
+-- that closes the inherited descriptor would free the lock early — 1 and 3 still
+-- hold. That is a weaker guarantee, not a broken one.
+
+rule AcquirePortLockBeforeStart {
+    -- The lock is taken BEFORE the server process exists, which is what makes
+    -- the claim atomic: there is no window in which two starters have both
+    -- looked and neither has claimed.
+    when: DevServerStartRequested(_, worktree)
+    let lock = PortLock{port: worktree.port}
+    requires: not exists lock.holder
+    ensures:
+        let server = DevServer.created(
+            worktree: worktree,
+            port: worktree.port,
+            status: starting
+        )
+        lock.holder = server
+
+    @guidance
+        -- The holder recorded here is the SERVER, not the starting script.
+        -- Implemented by acquiring on a file descriptor that survives exec and
+        -- then exec'ing the server onto it, so the lock is released exactly when
+        -- the server dies — killed or not — with no cleanup path to forget.
+        -- ORDERING, and it is the load-bearing part: a run that wants a fresh
+        -- server must STOP the incumbent BEFORE it takes the lock. The incumbent
+        -- left behind by the previous run in this same worktree is a live
+        -- process holding the lock, and the lock cannot tell it apart from a
+        -- sibling three minutes into a suite — only the working directory can,
+        -- which is what OwnershipCheckedStop reads. Acquire-then-stop therefore
+        -- refuses the one eviction that is always legitimate: reclaiming one's
+        -- own. See the open question on scripts/dev-e2e.sh at the foot of this
+        -- file.
+}
+
+rule ContendedStartIsRefused {
+    -- WHEN the port is already claimed, the start REFUSES. It does not wait and
+    -- it does not take over: the holder may be three minutes into a suite, and
+    -- the starter has no way to find out.
+    when: DevServerStartRequested(_, worktree)
+    let lock = PortLock{port: worktree.port}
+    requires: exists lock.holder
+    ensures: DevServerStartRefused(port: worktree.port, holder: lock.holder)
+
+    @guidance
+        -- The refusal is LOUD and names the holder — its pid, its working
+        -- directory and when it started — because "port busy" alone sends the
+        -- reader looking for a leaked process when the answer is usually a
+        -- second window in the same checkout.
+        -- A refusal that a caller cannot see is not a refusal: a starter
+        -- launched into the background has its exit status discarded, and then
+        -- the run continues against the incumbent as if the start had succeeded.
+}
+
+rule PortLockReleasedWhenServerExits {
+    -- The claim outlives the starting script and dies with the SERVER.
+    when: server: DevServer.status transitions_to stopped
+    for lock in PortLocks where holder = server:
+        ensures: lock.holder = null
+
+    @guidance
+        -- Not a teardown step anybody runs — that is the point. A release that
+        -- has to be executed is a release that a SIGKILL, a crash or an early
+        -- `exit` can skip, and the resulting stale claim is indistinguishable
+        -- from a live one.
+}
+
+rule OwnershipCheckedStop {
+    -- A stop names TWO coordinates: the port, and the directory the process
+    -- must be running out of. It proceeds only when the process on that port
+    -- belongs to the worktree asking.
+    when: DevServerStopRequested(_, stop)
+    requires: stop.permitted
+    ensures: stop.target.status = stopped
+
+    @guidance
+        -- The requester is DISCARDED (`_`) on purpose. Ownership is a property
+        -- of the process being stopped, not of who is asking, so the rule has
+        -- nothing to branch on. Who may ask at all is a separate question, and
+        -- one this model cannot answer formally — see
+        -- @invariant StopScopedByConcurrencyNotIdentity.
+        -- Ownership is the working directory, which /proc knows and a command
+        -- line cannot express: `next dev` and `next-server` produce the same
+        -- argv in every checkout, so `pkill -f "next dev"` matched every
+        -- worktree on the machine and the operator could not tell from the
+        -- output that it had.
+        -- Signal the SUPERVISOR, not the listener. `next dev` respawns
+        -- `next-server` within seconds, so a stop aimed at the listening pid
+        -- alone appears to succeed and leaves the same supervisor serving one
+        -- child later — which is what an earlier teardown was misread as
+        -- "a new server appeared".
+        -- The two coordinates do different jobs: the port narrows WHICH server,
+        -- the directory decides WHETHER. A stop that names only the directory is
+        -- therefore still sound — it stops every dev server this worktree owns
+        -- rather than one of them — which is what a general-purpose stop wants.
+        -- Dropping the DIRECTORY is the unsound direction, and is what the old
+        -- port-only and argv-only stops did.
+        -- machine_wide (STOP_ALL_WORKTREES=1) is the deliberate sweep and the
+        -- only way past this guard. It is for cleaning up after everything, not
+        -- for getting an inconvenient refusal out of the way.
+}
+
+rule UnownedStopIsRefused {
+    -- A stop against a process this worktree does not own leaves it running.
+    when: DevServerStopRequested(_, stop)
+    requires: not stop.permitted
+    ensures: DevServerStopRefused(target: stop.target, scope_root: stop.scope_root)
+
+    @guidance
+        -- The refusal must be visible and must name the directory the process
+        -- IS running out of. A silent no-op reads as "nothing was there", and
+        -- the caller then proceeds as though the port were free — which is the
+        -- same end state as the bug this replaces, reached more quietly.
+        -- "It leaves the target running" is not stated as an invariant: that
+        -- compares two moments in time (the target may be stopped later, and
+        -- legitimately), and invariants here hold at a single point in time.
 }
 
 ------------------------------------------------------------
@@ -689,10 +960,13 @@ rule ReusedDevServerIsOptIn {
 -- Conventions about the source tree stay prose @invariants in the
 -- TestConventions contract; they have no expression form.
 --
--- HONEST LIMITATION, verified against allium 3.2.3 on 2026-09-02 (`allium
--- --version`; note that the plugin cache directory is numbered 3.12.0 and is
--- NOT the tool version — reading the path instead of asking the binary is an
--- easy way to record the wrong number here):
+-- HONEST LIMITATION, verified against allium 3.2.3 AND re-verified against
+-- allium 3.6.1, both on 2026-09-02 (`allium --version`; the plugin cache
+-- directory is numbered separately — 3.12.0 earlier today, 3.15.0 now — and is
+-- NOT the tool version, so reading the path instead of asking the binary is an
+-- easy way to record the wrong number here. The binary itself moved between the
+-- two runs, which is why this note names two versions rather than correcting
+-- one; the finding survived the upgrade unchanged):
 -- `allium check` and `allium analyse` parse these bodies but do not RESOLVE
 -- them. An invariant referring to a field that does not exist, an invariant
 -- quantifying over an entity type that was never declared, and a transition
@@ -712,7 +986,18 @@ rule ReusedDevServerIsOptIn {
 --
 -- `allium check` then reports 0 errors and its diagnostic counts do not move at
 -- all; `allium analyse` reports 0 findings naming either probe. Reproduced
--- twice independently, 2026-09-02.
+-- three times independently, 2026-09-02, across allium 3.2.3 and 3.6.1.
+--
+-- Corroborated from the opposite direction by a diagnostic the checker DOES
+-- emit: `allium.entity.unused` fires for SQLiteDatabase, which is referenced by
+-- name in RunDatabaseIsNeverTheWorkingDatabase below. It also fired for
+-- DevServerStop while that entity appeared only in rule trigger parameters, and
+-- stopped when a field-typed relationship (DevServer.stop_attempts) was added.
+-- So "used" means referenced as a FIELD TYPE; references inside invariant
+-- bodies and trigger parameter lists are not read at all. That is the same
+-- non-resolution seen from the other side, and it means the unused-entity
+-- warning is unreliable in both directions: it can accuse a referenced entity,
+-- and it cannot vouch for an unreferenced one.
 --
 -- Do NOT write the quantifier as `all t in TestCases:`. That is not the syntax,
 -- and it yields parse errors that look like the checker catching the bogus
@@ -768,6 +1053,70 @@ invariant SettledTestCaseOwnsNoLeakedRow {
     -- load-induced failure disable every later webhook test.
     for test_case in TestCases:
         test_case.has_settled implies test_case.leaked_rows.count = 0
+}
+
+invariant WorktreeScopedPort {
+    -- Mechanism 1. The MAIN checkout keeps the base port; every LINKED worktree
+    -- gets a different one, inside a bounded span above it. That the main
+    -- checkout is the one that keeps 3737 is not arbitrary: the base port is in
+    -- .env, in bookmarks and in muscle memory, so the rare case pays the move.
+    -- A linked worktree therefore can never collide with the main checkout,
+    -- which is the collision that used to happen every time.
+    -- An explicit per-invocation override (JOBSYNC_PORT) sits OUTSIDE this
+    -- invariant by design: it is how you deliberately point two checkouts at
+    -- one port, and stating it as an exception here would turn the escape hatch
+    -- into part of the rule.
+    for worktree in Worktrees:
+        (worktree.is_main_checkout implies worktree.port = config.dev_server_base_port)
+        and (not worktree.is_main_checkout implies
+                worktree.port > config.dev_server_base_port
+                and worktree.port <= config.dev_server_base_port + config.worktree_port_span)
+
+    -- NOT EXPRESSIBLE, and the more important half: the port is a pure FUNCTION
+    -- of the worktree root — same path, same port, on every invocation, in every
+    -- tool, after any restart. That is cross-instance agreement about the output
+    -- of a computation, not a property of stored state, so this language cannot
+    -- assert it (see the language reference on what invariants can express).
+    -- It is why the port is derived by hashing the path rather than handed out
+    -- by a counter or picked at random: a counter would give two tools in the
+    -- SAME worktree different answers, and then the runner, the server and the
+    -- browser would each be looking somewhere else. That failure reads as "the
+    -- login hangs", which names none of the three.
+}
+
+invariant DevServerExclusiveLock {
+    -- Mechanism 2. At most one dev server per port.
+    -- The language has no cardinality operator, so "at most one" is encoded
+    -- through the lock's SINGLE-VALUED holder: every live server on a port must
+    -- BE that one value, and two distinct live servers on one port cannot both
+    -- satisfy that. Read it as the uniqueness constraint it is.
+    for lock in PortLocks:
+        for server in DevServers:
+            (server.port = lock.port and server.status in {starting, serving})
+                implies lock.holder = server
+}
+
+invariant LockHolderIsNeverAStoppedServer {
+    -- The other half of mechanism 2, and the reason it needs no cleanup step:
+    -- the claim is released exactly when the server dies, so a lock held by a
+    -- process that is gone is a state this spec does not admit.
+    -- What is NOT expressible here is the mechanism that buys it — that the
+    -- claim lives on a descriptor the server inherits rather than in a teardown
+    -- anybody has to run. That is a statement about how the release happens,
+    -- not about any state; it stays prose on the PortLock entity.
+    for lock in PortLocks:
+        for server in DevServers:
+            lock.holder = server implies server.status != stopped
+}
+
+invariant RunDrivesItsOwnWorktreesServer {
+    -- The three mechanisms are only worth having if the run actually addresses
+    -- the server they protect. A run whose base URL named a sibling's port would
+    -- pass every ownership check and still be measuring the wrong tree — and it
+    -- would look like a normal green run.
+    for setup in GlobalSetups:
+        for server in DevServers:
+            setup.dev_server = server implies server.worktree = setup.worktree
 }
 
 invariant ConsoleOracleIsNeverTheOnlyAssertion {
@@ -868,6 +1217,41 @@ surface PlaywrightConfig {
         -- Smoke failure prevents crud execution.
 }
 
+surface DevServerControl {
+    facing operator: Developer
+    context worktree: Worktree
+
+    provides:
+        DevServerStartRequested(operator, worktree)
+            -- ./scripts/dev.sh  |  ./scripts/dev-e2e.sh
+        DevServerStopRequested(operator, stop: DevServerStop)
+            -- ./scripts/stop.sh, and the stop the run wrappers take before
+            -- starting their own server
+
+    exposes:
+        worktree.root
+        worktree.port
+
+    -- The wrappers are the surface. A bare `kill` reaches the same processes
+    -- and skips the ownership check entirely, which is why the prohibition in
+    -- @invariant StopScopedByConcurrencyNotIdentity is about the ENTRY POINT
+    -- and not about the outcome.
+
+    @guarantee StopsOnlyWhatThisWorktreeOwns
+        -- A stop through this surface never signals a process running out of a
+        -- different worktree, whatever the port and whatever the command line.
+        -- STOP_ALL_WORKTREES=1 is the one documented way past it.
+
+    @guidance
+        -- The actor here is the human operator or the orchestrating agent.
+        -- The distinction that actually governs stopping — orchestrator versus
+        -- SUBAGENT — is NOT expressible as an actor in this model: both drive
+        -- the same scripts from the same checkout, and nothing in the entity
+        -- model distinguishes them. It stays prose in
+        -- @invariant StopScopedByConcurrencyNotIdentity. Naming a `Subagent`
+        -- actor here would be a formal clause with nothing behind it.
+}
+
 ------------------------------------------------------------
 -- Open Questions
 ------------------------------------------------------------
@@ -882,3 +1266,13 @@ open question "Should e2e/helpers/index.ts become a STRICT barrel? Today it does
 open question "Who rebuilds the seed template when a Prisma migration lands, and how does a run detect that its template predates the schema? A stale template fails every spec at once, which is loud, but the failure names the test rather than the template."
 open question "Once DisposableRunDatabase lands, is e2e/cleanup-stale-data.ts retired outright, or kept for the E2E_REUSE_SERVER path? Its global unfiltered ModuleRegistration reset only ever needed E2E_ALLOW_DESTRUCTIVE because it ran against the developer's own database."
 open question "TestCase.behavioural_assertions cannot be counted by any tool the project runs today, so ConsoleOracleIsNeverTheOnlyAssertion is review-enforced only. Is a lint rule worth building, or is the named invariant enough?"
+
+-- Raised while reconciling this spec with the per-worktree dev server decision
+-- (0e1b5fca). All three were found by reading the scripts, not by a failing run.
+
+open question "AcquirePortLockBeforeStart says stop-then-lock; scripts/dev-e2e.sh does lock-then-stop (acquire at :29, devserver_stop at :93). test-e2e.sh does not stop the incumbent either, and leaves its server running when the run ends, so the NEXT run in the same worktree meets a live lock holder: dev-e2e.sh exits 75, test-e2e.sh backgrounds it with nohup and never sees that status, its readiness poll finds the OLD server answering, and the run proceeds against it — with a freshly provisioned run database the old server has never heard of. That is FreshDevServerPerRun and RunDrivesItsOwnWorktreesServer both silently false on the second consecutive run. Is the fix to stop before locking, to let a start reclaim a lock held from its own worktree root, or to have test-e2e.sh check the starter's exit status?"
+
+open question "Only scripts/dev-e2e.sh acquires the port lock. scripts/dev.sh computes the same port and starts a server without claiming it, so an ordinary development server is invisible to mechanism 2: a concurrent E2E start sees a free lock, takes it, and only then discovers the port is occupied. Should dev.sh acquire too, or is the ownership-checked stop considered sufficient cover for that case?"
+
+open question "config.worktree_port_span is 49, so two LINKED worktrees whose roots hash to the same slot are assigned the same port. Mechanism 2 then refuses the second one with a message that says the port is claimed by 'the same worktree' when it is not, and OwnershipCheckedStop refuses to clear it because the holder genuinely is not ours — so the second worktree can never run a suite, and nothing in the diagnostic points at the collision. Widen the span, or detect the collision and say so?"
+

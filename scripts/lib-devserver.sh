@@ -21,6 +21,7 @@
 # scope already dead, held 4.3 GB and port 3737 with no run owning it.
 
 DEVSERVER_BASE_PORT="${DEVSERVER_BASE_PORT:-3737}"
+DEVSERVER_PORT_SPAN="${DEVSERVER_PORT_SPAN:-200}"
 
 # The port this worktree uses.
 #
@@ -41,11 +42,51 @@ devserver_port() {
     return
   fi
   root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
   # cksum, not $RANDOM and not a counter: the port must be a pure function of
   # the path, or two tools in the same worktree disagree about where to look.
-  local h
-  h=$(printf '%s' "$root" | cksum | cut -d' ' -f1)
-  echo $(( DEVSERVER_BASE_PORT + 1 + (h % 49) ))
+  #
+  # A hash over a finite span collides, and a collision here is worse than a
+  # random port would be: two worktrees claim one port, the second one's lock
+  # acquisition fails, and the message says the port is held by "this worktree"
+  # when it is held by a different one. Nothing in that diagnostic points at the
+  # collision. So resolve it deterministically instead: walk the worktrees in
+  # path order and let the earlier one keep the contested slot.
+  #
+  # The cost is that ADDING a worktree can move a later one's port. That is
+  # visible (the wrapper prints the port it bound) and beats two checkouts
+  # silently fighting over one.
+  local -a linked=()
+  local line r first=1
+  while read -r line; do
+    case "$line" in
+      "worktree "*)
+        r="${line#worktree }"
+        if [ "$first" = 1 ]; then first=0; else linked+=("$r"); fi
+        ;;
+    esac
+  done < <(git worktree list --porcelain 2>/dev/null)
+
+  if [ ${#linked[@]} -eq 0 ]; then
+    echo $(( DEVSERVER_BASE_PORT + 1 + ($(printf '%s' "$root" | cksum | cut -d' ' -f1) % DEVSERVER_PORT_SPAN) ))
+    return
+  fi
+
+  local -A taken=()
+  local candidate slot chosen=""
+  while IFS= read -r candidate; do
+    slot=$(( $(printf '%s' "$candidate" | cksum | cut -d' ' -f1) % DEVSERVER_PORT_SPAN ))
+    while [ -n "${taken[$slot]:-}" ]; do
+      slot=$(( (slot + 1) % DEVSERVER_PORT_SPAN ))
+    done
+    taken[$slot]="$candidate"
+    [ "$candidate" = "$root" ] && chosen="$slot"
+  done < <(printf '%s\n' "${linked[@]}" | sort)
+
+  # Not in the list (a detached checkout, or git unavailable): fall back to the
+  # bare hash rather than guessing.
+  [ -z "$chosen" ] && chosen=$(( $(printf '%s' "$root" | cksum | cut -d' ' -f1) % DEVSERVER_PORT_SPAN ))
+  echo $(( DEVSERVER_BASE_PORT + 1 + chosen ))
 }
 
 devserver_pid_on_port() {
@@ -112,15 +153,45 @@ devserver_stop() {
 
   # shellcheck disable=SC2086
   kill -TERM $tree $children 2>/dev/null
-  local waited=0
-  while [ "$waited" -lt 8 ]; do
-    [ -z "$(devserver_pid_on_port "$port")" ] && break
+
+  # Wait for the PROCESSES to be gone, not for the port to be free.
+  #
+  # Those are different moments, and the difference is a real failure: the port
+  # frees when the LISTENER dies, while the port lock is held by the tree ROOT,
+  # which outlives it by a beat. Waiting on the port returned while the root was
+  # still alive holding the lock, so the very next `dev-e2e.sh` was refused --
+  # and the wrapper then waited 150 s for a server that was never going to start.
+  local waited=0 remaining
+  while [ "$waited" -lt 10 ]; do
+    remaining=""
+    for p in $tree $children; do
+      kill -0 "$p" 2>/dev/null && remaining="$remaining $p"
+    done
+    [ -z "$remaining" ] && break
     sleep 1
     waited=$((waited + 1))
   done
   # shellcheck disable=SC2086
   kill -KILL $tree $children 2>/dev/null
+  sleep 1
   return 0
+}
+
+# Wait until the port lock can actually be taken.
+#
+# The direct check of the precondition a start depends on, rather than a proxy
+# for it. Returns non-zero on timeout so the caller can say WHY it gave up.
+devserver_wait_lock_free() {
+  local port="${1:-$(devserver_port)}" secs="${2:-10}" waited=0
+  local lock; lock="$(devserver_lock_file "$port")"
+  while [ "$waited" -lt "$secs" ]; do
+    if ( exec 8>"$lock"; flock -n 8 ) 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  return 1
 }
 
 # --- Advisory lock -----------------------------------------------------------

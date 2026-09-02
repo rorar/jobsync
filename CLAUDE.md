@@ -113,7 +113,7 @@ judge by the output itself.
 
 | | |
 |---|---|
-| `devserver_port` | Main checkout keeps **3737**; a linked worktree gets `3737 + 1 + (cksum(root) % 49)`. A pure function of the path — a counter or a random port would leave two tools in the same worktree looking in different places. `JOBSYNC_PORT` overrides. `package.json`'s `dev` script honours `PORT`; `playwright.config.ts` reads `E2E_BASE_URL`. |
+| `devserver_port` | Main checkout keeps **3737**; a linked worktree gets a slot from `cksum(root) % 200`, with collisions resolved by walking `git worktree list` in path order so the earlier worktree keeps the contested slot. A pure function of the path AND the worktree set — a counter or a random port would leave two tools in the same worktree looking in different places. Adding a worktree can move a later one's port; the wrapper prints the port it bound. `JOBSYNC_PORT` overrides. `package.json`'s `dev` script honours `PORT`; `playwright.config.ts` reads `E2E_BASE_URL`. |
 | `devserver_lock_acquire` | `flock -n` on fd 9 over `/tmp/jobsync-dev-<port>.lock`, taken BEFORE the server starts. The descriptor survives `exec`, so the lock belongs to the **server process** and frees when it dies — killed or not, with no cleanup path to forget. A second `dev-e2e.sh` exits **75** naming the holder's pid, cwd and start time. |
 | `devserver_stop` | Refuses unless `/proc/<pid>/cwd` matches this worktree, then walks **up to the supervisor**: `next dev` respawns `next-server` within seconds, so killing the listener alone looks like it worked and is not. `stop.sh` is scoped the same way; `STOP_ALL_WORKTREES=1` restores the machine-wide sweep. |
 
