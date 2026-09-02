@@ -312,8 +312,9 @@ every point was verified against the tree before being accepted:**
    `automation-wizard-modules.spec.ts:27-28` documents that later tests see it.
 2. **"Ends at zero" means the run was green.** `SmtpConfig`, `CompanyBlacklist` and `Question` clean
    up *inline at the end of the test body* — the path a failed assertion skips. Only webhook and
-   API-key specs have failure-path nets. **The falsification test is cheap and has not been run:**
-   make one assertion fail before the inline delete in `smtp-settings`, run, diff.
+   API-key specs have failure-path nets. **The falsification test was run at 21:40 and confirmed it:**
+   one injected failing assertion before the inline delete leaves `SmtpConfig` at 1 — an active
+   per-user singleton in the run database (E2E-B37). The zeros measured a green run.
 3. **The capacity list was wrong in both directions.** `MAX_SUBSCRIPTIONS_PER_USER = 10`
    (`push.actions.ts:41`) and the `VapidConfig` singleton are absent from the table;
    `company-crud.spec.ts:37` *does* read by count (`10 × 25 = 250`).

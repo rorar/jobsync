@@ -151,7 +151,9 @@ Every load-bearing claim below was re-verified by me against the tree before acc
    API-key specs have failure-path nets; `SmtpConfig`, `CompanyBlacklist` and `Question` clean
    inline at the end of the test body — the path a failed assertion skips. The invariant the gate
    claims to implement quantifies over passed OR failed.
-   → **Re-measure on a deliberately red run** before this argument is repeated anywhere.
+   → **Done, 21:40: the argument does not survive.** One injected failing assertion before the
+   inline delete leaves `SmtpConfig` at 1 (E2E-B37). The zeros measured a green run, so the
+   'already own their rows' premise is withdrawn for 3 of the 5 models.
 3. **The capacity list was incomplete in both directions.** `MAX_SUBSCRIPTIONS_PER_USER = 10`
    (`push.actions.ts:41`) and the `VapidConfig` singleton (`schema.prisma:888-890`) are capped
    models absent from the table; `company-crud.spec.ts:37` *does* read by count (`10 × 25 = 250`).
