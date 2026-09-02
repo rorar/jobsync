@@ -272,6 +272,30 @@ else
 fi
 RC=$?
 
+# Residue gate: did the run leave state behind that no test owns?
+#
+# Conditions, each closing a way this could report on something it did not
+# measure:
+#   - only when WE provisioned the database (E2E_REUSE_SERVER skips provisioning,
+#     and the run database is then the PREVIOUS run's file);
+#   - only for exit codes 0 and 1, i.e. Playwright ran and reported. This script
+#     is `set -uo pipefail` without -e, so a runner killed by the cgroup or the
+#     timeout leaves a partial database that would be judged as if it were a
+#     finished run.
+#
+# Exit semantics, stated because two failures can meet here: Playwright's status
+# wins when it is non-zero -- it is the more informative failure and the residue
+# is likely a consequence of it. A clean run with dirty residue exits 1.
+if [ "${E2E_DB_PROVISIONED:-0}" = "1" ] && { [ "$RC" = "0" ] || [ "$RC" = "1" ]; }; then
+  if ! bash "$DIR/check-e2e-residue.sh"; then
+    [ "$RC" = "0" ] && RC=1
+  fi
+elif [ "${E2E_DB_PROVISIONED:-0}" != "1" ]; then
+  echo "[residue] SKIPPED — this run did not provision a database (E2E_REUSE_SERVER)."
+else
+  echo "[residue] SKIPPED — playwright exited $RC; a run that did not finish leaves a database nobody should judge."
+fi
+
 # The run database is kept by default: a red run leaves its data inspectable,
 # and unlinking the file under a still-running dev server would leave the
 # operator with a server bound to a deleted inode. The next run replaces it.

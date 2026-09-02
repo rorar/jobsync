@@ -111,6 +111,20 @@ e2e_db_provision_run() {
   _e2e_db_rm "$E2E_RUN_DB"
   cp "$E2E_TEMPLATE_DB" "$E2E_RUN_DB" || return 1
 
+  # Provenance, written INTO the copy rather than left beside it.
+  #
+  # A post-run check that reads the template's stamp file is comparing against
+  # whatever the template is NOW, not against what this run started from: a
+  # rebuild between the run and the check, or a check invoked hours later, both
+  # produce a plausible and wrong answer. The run database carries its own
+  # baseline, so a mismatch is detectable instead of invisible.
+  if command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 "$E2E_RUN_DB" \
+      "CREATE TABLE IF NOT EXISTS _e2e_meta (key TEXT PRIMARY KEY, value TEXT);
+       INSERT OR REPLACE INTO _e2e_meta VALUES ('provisioned_at_ms', CAST(strftime('%s','now') AS INTEGER) * 1000);
+       INSERT OR REPLACE INTO _e2e_meta VALUES ('template_stamp', '$(_e2e_db_stamp)');" >/dev/null
+  fi
+
   export DATABASE_URL="file:$E2E_RUN_DB"
   echo "[e2e-db] run database: $E2E_RUN_DB (dev.db is not opened by this run)"
 }
