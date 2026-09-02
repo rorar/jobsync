@@ -109,6 +109,12 @@ if [ -z "${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-}" ]; then
   fi
 fi
 
+# Guarded HERE, not next to the runner invocation: everything below this line
+# has side effects the operator pays for — it kills their dev server and eats a
+# ~30s cold compile. Aborting after that costs them the server on a run that
+# then refuses to start.
+guard_host_load "test-e2e" || exit 75
+
 export E2E_LOGIN_TIMEOUT_MS="${E2E_LOGIN_TIMEOUT_MS:-90000}"
 WORKERS="${E2E_WORKERS:-1}"
 SERVER_WAIT="${E2E_SERVER_WAIT:-150}"
@@ -193,10 +199,9 @@ MEM_MAX="${E2E_MEM_MAX:-6G}"
 CPU_QUOTA="${E2E_CPU_QUOTA:-400%}"
 RUN=(nice -n 10 ionice -c3 npx playwright test --workers="$WORKERS" "$@")
 
-guard_host_load "test-e2e" || exit 75
-
 echo "[test-e2e] limits: mem=${MEM_MAX} cpu=${CPU_QUOTA}"
-if systemd-run --user --scope -p MemoryMax="$MEM_MAX" true 2>/dev/null; then
+if systemd-run --user --scope -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 \
+     -p CPUQuota="$CPU_QUOTA" true 2>/dev/null; then
   systemd-run --user --scope -p Description=jobsync-e2e-run \
     -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 -p CPUQuota="$CPU_QUOTA" \
     "${RUN[@]}"

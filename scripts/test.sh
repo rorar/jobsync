@@ -75,12 +75,18 @@ guard_host_load "test.sh" || exit 75
 MEM_MAX="${JEST_MEM_MAX:-4G}"
 NODE_HEAP="${JEST_NODE_HEAP:-3072}"
 TIMEOUT="${JEST_TIMEOUT:-1800}"
-WRAP=(timeout "$TIMEOUT" nice -n 19 ionice -c3
+# --foreground: without it timeout puts jest in its own process group and Ctrl-C
+# no longer reaches it, which also breaks `--watch`.
+WRAP=(timeout --foreground "$TIMEOUT" nice -n 19 ionice -c3
       env "NODE_OPTIONS=--max-old-space-size=${NODE_HEAP}"
       npx jest "${ARGS[@]}")
 
 echo "[test.sh] mem=${MEM_MAX} heap=${NODE_HEAP}MB timeout=${TIMEOUT}s"
-if systemd-run --user --scope -p MemoryMax="$MEM_MAX" true 2>/dev/null; then
+# Probe with the SAME properties the real call uses. Probing a subset lets the
+# probe pass where the real invocation fails instantly, and that failure would
+# then be reported as a jest failure.
+if systemd-run --user --scope -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 \
+   -p CPUWeight=50 true 2>/dev/null; then
   systemd-run --user --scope -p Description=jobsync-jest \
     -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 -p CPUWeight=50 "${WRAP[@]}"
 else

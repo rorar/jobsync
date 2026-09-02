@@ -50,7 +50,12 @@ guard_host_load() {
   local label="${1:-run}" allowance busy ratio warn abort a b secs quota period
 
   # effective CPU allowance: cgroup quota if one is set, else our affinity
-  allowance="$(nproc 2>/dev/null || echo 1)"
+  # NOT nproc: measured on this host it returns 3 while Cpus_allowed_list is
+  # 1-5, with no OMP_* variable to explain it — a 40% under-report that would
+  # make the guard abort early. The affinity mask answers the actual question,
+  # "how many CPUs may this process use".
+  allowance="$(awk '/Cpus_allowed_list/{n=0;split($2,r,",");for(i in r){split(r[i],b,"-");n+=(b[2]?b[2]-b[1]+1:1)};print n}' /proc/self/status 2>/dev/null)"
+  [ -n "$allowance" ] && [ "$allowance" -gt 0 ] 2>/dev/null || allowance="$(nproc 2>/dev/null || echo 1)"
   if [ -r /sys/fs/cgroup/cpu.max ]; then
     read -r quota period < /sys/fs/cgroup/cpu.max
     if [ "$quota" != "max" ] && [ -n "$period" ] && [ "$period" -gt 0 ] 2>/dev/null; then
@@ -60,13 +65,26 @@ guard_host_load() {
 
   secs="${GUARD_SAMPLE_SECS:-1}"
   if [ -r /sys/fs/cgroup/cpu.stat ]; then
-    a="$(awk '/^usage_usec/{print $2}' /sys/fs/cgroup/cpu.stat)"
-    sleep "$secs"
-    b="$(awk '/^usage_usec/{print $2}' /sys/fs/cgroup/cpu.stat)"
-    busy="$(awk -v a="$a" -v b="$b" -v s="$secs" 'BEGIN{printf "%.2f", (b-a)/(s*1000000)}')"
+    # MAX of three samples, not one average: resident agents are bursty and a
+    # single second lands in a gap often enough to matter. Costs 2s extra on a
+    # run measured in minutes.
+    busy=0
+    for _ in 1 2 3; do
+      a="$(awk '/^usage_usec/{print $2}' /sys/fs/cgroup/cpu.stat)"
+      sleep "$secs"
+      b="$(awk '/^usage_usec/{print $2}' /sys/fs/cgroup/cpu.stat)"
+      busy="$(awk -v a="$a" -v b="$b" -v s="$secs" -v m="$busy" \
+        'BEGIN{v=(b-a)/(s*1000000); printf "%.2f", (v>m?v:m)}')"
+    done
   else
-    # bare metal without cgroup v2: loadavg IS ours, so it is usable here
-    busy="$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0)"
+    # NO cgroup v2. Do NOT fall back to /proc/loadavg: in a cgroup v1 LXC
+    # container — this project's own deployment class — loadavg is still the
+    # HOST's, and judging on it is the exact bug 4bf222e3 removed (measured
+    # here: cgroup 0.05 cores vs a loadavg-derived 2.02). Say so and proceed;
+    # a guard that cannot measure must not pretend to.
+    echo "[$label] NOTE: no cgroup v2 cpu.stat — cannot measure container CPU use."
+    echo "           Proceeding unguarded. If this run is slow, check the host yourself."
+    return 0
   fi
 
   ratio="$(awk -v b="$busy" -v c="$allowance" 'BEGIN{printf "%.2f", (c>0 ? b/c : b)}')"
