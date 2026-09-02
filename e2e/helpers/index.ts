@@ -201,30 +201,49 @@ export async function selectOrCreateComboboxOption(
   await searchInput.click();
   await searchInput.fill(text);
 
-  // M-T-04: replaced waitForTimeout(600) — wait for the options list to
-  // react to the typed text instead of a fixed 600 ms pause.
-  await page
-    .getByRole("option")
-    .first()
-    .waitFor({ state: "visible", timeout: 5000 })
-    .catch(() => null); // list may stay empty if "Create:" is the only entry
-
   const exactOption = page.getByRole("option", { name: text, exact: true });
   const partialOption = page
     .getByRole("option", { name: new RegExp(text, "i") })
     .first();
   const createOption = page.getByText(`Create: ${text}`);
 
-  try {
-    await exactOption.waitFor({ state: "visible", timeout });
-    await exactOption.click();
-  } catch {
+  // M-T-04: replaced waitForTimeout(600) — wait for the options list to react
+  // to the typed text instead of a fixed 600 ms pause.
+  //
+  // Race the "Create:" entry against the option list. Waiting only for an
+  // option burns the FULL 5 s whenever creation is the only possible outcome,
+  // because the create entry is not an option (see the popover-close comment
+  // below). That was free while the suite ran against a database full of
+  // leftovers, where almost every value already existed. Since every run now
+  // starts from a seeded template, creating is the common case, not the rare
+  // one: profile-crud's multi-section test creates four values and went from
+  // 14.2 s to a 60 s timeout on the first run against a fresh database.
+  await Promise.race([
+    page.getByRole("option").first().waitFor({ state: "visible", timeout: 5000 }),
+    createOption.waitFor({ state: "visible", timeout: 5000 }),
+  ]).catch(() => null);
+
+  // Fast path for the create case. The race above already proves the list has
+  // settled, so a snapshot is safe here — and it skips two 3 s waits that can
+  // only ever expire. Falls through to the original chain when anything is
+  // ambiguous, so the slow path still governs every case it used to.
+  if (
+    (await createOption.isVisible().catch(() => false)) &&
+    (await page.getByRole("option").count()) === 0
+  ) {
+    await createOption.click();
+  } else {
     try {
-      await partialOption.waitFor({ state: "visible", timeout });
-      await partialOption.click();
+      await exactOption.waitFor({ state: "visible", timeout });
+      await exactOption.click();
     } catch {
-      await createOption.waitFor({ state: "visible", timeout });
-      await createOption.click();
+      try {
+        await partialOption.waitFor({ state: "visible", timeout });
+        await partialOption.click();
+      } catch {
+        await createOption.waitFor({ state: "visible", timeout });
+        await createOption.click();
+      }
     }
   }
 
