@@ -9,6 +9,13 @@ itself invalidated (`6a30e6e4`, and §1 of `handoff-2026-08-30-retention.md`).
 Do not `cd` into `/home/pascal/projekte/jobsync`; this is a worktree of the same repository and
 the stash stack is shared.
 
+> ## ⚠ Superseded in part, same day — read §9 first
+>
+> This document was written at ~16:50 and describes the state before the Phase 1 rework. Three of
+> its claims are now false: `E2E_ALLOW_DESTRUCTIVE` no longer exists, `e2e/cleanup-stale-data.ts`
+> is deleted, and E2E-B9 and E2E-B12 are closed. **§9, appended at 21:30, carries the current
+> state.** Everything before §9 is kept as the record of that afternoon, not as instructions.
+
 > **Read this first if you are resuming.** One rule dominates everything below, and it is the
 > only conclusion of this session I would defend without qualification:
 >
@@ -242,3 +249,92 @@ failing spec alone and record the duration before reaching for an explanation.
 - `e2e/CONVENTIONS.md` — templates and anti-patterns; read before writing any E2E test
 - `https://github.com/rorar/jobsync/issues/1` — the LinguiJS/knip work, deliberately not repeated
   here
+
+
+---
+
+## 9. Same day, 17:00-21:30 — the Phase 1 rework and what it changed
+
+Appended after the fact. Where this section and §1-8 disagree, this one is current.
+
+### What replaced what
+
+Every E2E run now executes against a **disposable database** copied from a seeded template
+(`scripts/e2e-db.sh`, `prisma/seed-e2e.ts`), and `prisma/dev.db` is never opened by the suite —
+verified by comparing its sha256 across four full runs, unchanged, with row counts unchanged.
+Before this, its hash moved on every run. **ADR-045** records the decision and supersedes ADR-043.
+
+Deleted with it: `e2e/cleanup-stale-data.ts` (330 lines), `E2E_ALLOW_DESTRUCTIVE`, and the
+cross-run purpose of the `"E2E "` name prefix. §4 of this document describes that gate as a live
+safeguard; it is gone.
+
+**E2E-B9 and E2E-B12 are closed** — not fixed, dissolved. A fresh database has no
+`ModuleRegistration` row, so a credential-gated module resolves to its manifest default; and a mode
+that bypasses `globalSetup` cannot inherit residue because there is none.
+
+### The dev server is no longer a shared resource
+
+`scripts/lib-devserver.sh`: a port per worktree (main checkout keeps 3737, a linked worktree derives
+one — this one is 3931), an advisory `flock` per port held by the **server process** (the descriptor
+survives `exec`, so it frees when the server dies), and a stop that refuses unless
+`/proc/<pid>/cwd` matches this worktree and then walks up to the supervisor. `pkill -f "next dev"`
+is gone from every wrapper.
+
+### What today's runs actually showed
+
+| Run | Result | Note |
+|---|---|---|
+| Baseline (shared dev.db) | 109/3, 26.7 min | all 3 failures passed in isolation |
+| First disposable-DB full run | 106/6, 23.7 min | 3 were a real defect the fresh DB exposed (E2E-B31) |
+| After the two fixes, quiet machine | **111/1, 15.1 min** | the 1 passed in isolation |
+| After the dev-server rework | 109/3, 19.2 min | all 3 passed in isolation |
+
+`keyboard-ux.spec.ts` is a **timing-sensitive cluster** (E2E-B35), not a set of independent flakes:
+across four runs its members failed in varying combinations and every one passed in isolation, often
+five times faster. The lever is the dev server reaching 4-5 GB RSS during a run, not the timeouts.
+
+### Phase 2 was redesigned, then reviewed and corrected
+
+The measurement that decided it — template subtracted from the run database, one full run:
+
+    Resume +29  JobTitle +15  Company +15  Location +14  Tag +7  Person +4  Referral +1
+    WebhookEndpoint 0  PublicApiKey 0  SmtpConfig 0  CompanyBlacklist 0  Question 0
+
+A suite-wide fixture rewrite (77 tests) was **not** adopted: the models that can break a later test
+in the same run already end at zero. Phase 2 became "enforce the property, not the pattern" — a
+residue gate plus a Jest check for swallowed assertions.
+
+**An independent reviewer (Fable 5.1, high effort) then found the evidence weaker than stated, and
+every point was verified against the tree before being accepted:**
+
+1. **Counts cannot see UPDATE residue.** `deactivateModule` upserts on a row the health monitor has
+   already created (`module.actions.ts:346-352`): state changes, count does not.
+   `automation-wizard-modules.spec.ts:27-28` documents that later tests see it.
+2. **"Ends at zero" means the run was green.** `SmtpConfig`, `CompanyBlacklist` and `Question` clean
+   up *inline at the end of the test body* — the path a failed assertion skips. Only webhook and
+   API-key specs have failure-path nets. **The falsification test is cheap and has not been run:**
+   make one assertion fail before the inline delete in `smtp-settings`, run, diff.
+3. **The capacity list was wrong in both directions.** `MAX_SUBSCRIPTIONS_PER_USER = 10`
+   (`push.actions.ts:41`) and the `VapidConfig` singleton are absent from the table;
+   `company-crud.spec.ts:37` *does* read by count (`10 × 25 = 250`).
+4. **The expensive thing in six months, absent from the plan:** Playwright never runs unattended.
+   `ci.yml` has no Playwright job and triggers only on `main`/`dev`. Every detector in the plan has
+   one consumer — a person who remembers to run the wrapper. That is exactly the mechanism that kept
+   E2E-B22, B30 and B31 invisible for months. The disposable database removed the last obstacle to a
+   nightly job.
+
+The full revised plan, including the gate's four false-pass paths, is in
+`/home/pascal/.claude/plans/validated-leaping-hennessy.md` — **session-local, and the next `/plan`
+overwrites it.** Copy it before relying on it.
+
+### Open, in order
+
+1. **SPEC-B2** — `DiscardRunDatabase` says remove the run database at run end; the code keeps it.
+   Both written today, by the same author, in the same session that fixed this defect twice.
+2. Phase 2 implementation as revised (residue gate, Jest swallowed-assertion check, `uniqueId`
+   worker discriminator, and the spec tend that must accompany it).
+3. **E2E-B36** — eight comments still justify test behaviour by citing the deleted cleanup file.
+4. Phase 3 (console oracle scoped to the act phase) and Phase 4 (MOD-B1).
+5. **SPEC-B1** — `allium check specs/` reports 3 errors in `cv-document.allium` caused by the
+   toolchain upgrade 3.2.3 → 3.6.1, not by a commit.
+6. 35 commits unpushed since `5e5d4ae8`.
