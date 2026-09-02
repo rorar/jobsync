@@ -38,6 +38,7 @@ cd "$DIR/.."
 
 source "$DIR/env.sh"
 source "$DIR/lib-runtime-guard.sh"
+source "$DIR/e2e-db.sh"
 # Chromium: prefer an explicit override, then the NixOS system binary, else leave
 # UNSET so Playwright falls back to its own downloaded browser. Hardcoding the
 # NixOS store path as the default made every launch fail with "executable doesn't
@@ -169,7 +170,21 @@ if [ "${E2E_REUSE_SERVER:-0}" = "1" ] &&
   echo "[test-e2e] reusing dev server already on :${PORT} (E2E_REUSE_SERVER=1)"
   echo "[test-e2e] WARNING: module-state fixtures are per-process; a reused server"
   echo "                   can fail automation-wizard-modules on its precondition."
+  echo "[test-e2e] WARNING: this run uses prisma/dev.db, NOT a disposable copy."
+  echo "                   A reused server holds the DATABASE_URL it was started"
+  echo "                   with, so provisioning one here would put the app and"
+  echo "                   the test runner on DIFFERENT databases — a failure that"
+  echo "                   names neither. Your working data WILL be written to."
 else
+  # Give this run its own database. Everything the suite writes lands in a copy
+  # of a seeded template that dies with the next run, so prisma/dev.db is never
+  # opened: see scripts/e2e-db.sh for why that replaces cleanup-stale-data.ts
+  # rather than improving it. Must happen BEFORE the server starts — the export
+  # reaches the app only through dev-e2e.sh's environment, and the Playwright
+  # process needs it too (e2e/cleanup-stale-data.ts opens its own PrismaClient).
+  e2e_db_provision_run || exit 1
+  E2E_DB_PROVISIONED=1
+
   echo "[test-e2e] starting a fresh E2E dev server (env.sh + E2E_AUTH_RATE_LIMIT_BYPASS) ..."
   nohup bash "$DIR/dev-e2e.sh" >/tmp/jobsync-e2e-dev.log 2>&1 &
 
@@ -222,5 +237,13 @@ else
   "${RUN[@]}"
 fi
 RC=$?
+
+# The run database is kept by default: a red run leaves its data inspectable,
+# and unlinking the file under a still-running dev server would leave the
+# operator with a server bound to a deleted inode. The next run replaces it.
+if [ "${E2E_KEEP_RUN_DB:-1}" = "0" ] && [ "${E2E_DB_PROVISIONED:-0}" = "1" ]; then
+  e2e_db_discard_run
+fi
+
 report_exit "test-e2e" "$RC"
 exit "$RC"

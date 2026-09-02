@@ -60,6 +60,13 @@ next-env.d.ts
 dev.db
 dev.db-journal
 dev.db.backup-*
+
+# E2E disposable run database (scripts/e2e-db.sh). The template is a build
+# artefact rebuilt from schema + migrations + seeds; the run copy dies with the
+# next run. Neither belongs in git, and neither is the developer's dev.db.
+prisma/.e2e-template.db*
+prisma/.e2e-template.stamp
+prisma/.e2e-run.db*
 /test-results/
 /playwright-report/
 /blob-report/
