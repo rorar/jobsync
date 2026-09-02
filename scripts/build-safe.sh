@@ -16,6 +16,9 @@
 set -uo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+source "$DIR/lib-runtime-guard.sh"
+guard_host_load "build-safe" || exit 75
+
 MEM_MAX="${BUILD_MEM_MAX:-7G}"
 NODE_HEAP="${BUILD_NODE_HEAP:-6144}"
 TIMEOUT="${BUILD_TIMEOUT:-900}"
@@ -35,20 +38,23 @@ echo "[build-safe] mem=${MEM_MAX} swap=0 heap=${NODE_HEAP}MB timeout=${TIMEOUT}s
 
 if systemd-run --user --scope -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 -p CPUWeight=50 true 2>/dev/null; then
   echo "[build-safe] confined via systemd --user scope"
-  exec systemd-run --user --scope -p Description=jobsync-build \
+  systemd-run --user --scope -p Description=jobsync-build \
     -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 -p CPUWeight=50 \
     "${WRAP[@]}"
 elif systemd-run --scope -p MemoryMax="$MEM_MAX" true 2>/dev/null; then
   echo "[build-safe] confined via systemd system scope"
-  exec systemd-run --scope -p Description=jobsync-build \
+  systemd-run --scope -p Description=jobsync-build \
     -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 -p CPUWeight=50 \
     "${WRAP[@]}"
 elif [ "${ALLOW_UNCONFINED:-}" = "1" ]; then
   echo "[build-safe] WARNING: no systemd scope; running heap-capped + niced but UNCONFINED (host hang possible)."
-  exec "${WRAP[@]}"
+  "${WRAP[@]}"
 else
   echo "[build-safe] ABORT: no systemd transient scope available."
   echo "             An unconfined build can swap-death a low-RAM host."
   echo "             Use scripts/build.sh on a roomy host/CI, or set ALLOW_UNCONFINED=1 to override."
   exit 86
 fi
+RC=$?
+report_exit "build-safe" "$RC" "$TIMEOUT"
+exit "$RC"

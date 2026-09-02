@@ -20,6 +20,7 @@
 # the `JEST_MAX_WORKERS` env var at the config level or by passing an
 # explicit `--maxWorkers=N` / `-w N` flag through this wrapper.
 source "$(dirname "$0")/env.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib-runtime-guard.sh"
 export PATH="/run/current-system/sw/bin:$PATH"
 
 echo "[test.sh] Using Node.js $(node --version)"
@@ -66,4 +67,26 @@ if [[ "$HAS_COVERAGE_FLAG" == "false" ]]; then
   echo "[test.sh] No --coverage flag supplied; running without coverage (fast default, see H-P-03)"
 fi
 
-exec npx jest "${ARGS[@]}"
+guard_host_load "test.sh" || exit 75
+
+# The limits CLAUDE.md used to ask every caller to prepend by hand. A wrapper
+# whose protection depends on being invoked correctly is not a wrapper: the full
+# suite is ~6 min over 300+ suites, and an unguarded run has starved this host.
+MEM_MAX="${JEST_MEM_MAX:-4G}"
+NODE_HEAP="${JEST_NODE_HEAP:-3072}"
+TIMEOUT="${JEST_TIMEOUT:-1800}"
+WRAP=(timeout "$TIMEOUT" nice -n 19 ionice -c3
+      env "NODE_OPTIONS=--max-old-space-size=${NODE_HEAP}"
+      npx jest "${ARGS[@]}")
+
+echo "[test.sh] mem=${MEM_MAX} heap=${NODE_HEAP}MB timeout=${TIMEOUT}s"
+if systemd-run --user --scope -p MemoryMax="$MEM_MAX" true 2>/dev/null; then
+  systemd-run --user --scope -p Description=jobsync-jest \
+    -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 -p CPUWeight=50 "${WRAP[@]}"
+else
+  echo "[test.sh] WARNING: no systemd transient scope - nice/ionice + heap cap only."
+  "${WRAP[@]}"
+fi
+RC=$?
+report_exit "test.sh" "$RC" "$TIMEOUT"
+exit "$RC"

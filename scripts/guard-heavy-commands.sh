@@ -72,6 +72,30 @@ if payload.get("tool_name") != "Bash":
     sys.exit(0)
 command = (payload.get("tool_input") or {}).get("command") or ""
 
+def strip_heredoc_bodies(cmd):
+    """Remove heredoc CONTENT before analysis.
+
+    A heredoc body is data, not commands: `python3 -c "$(cat <<'PY' ... PY)"`
+    that writes a script mentioning `npx jest` must not be blocked. This guard
+    blocked exactly that on its first day of life, which is the failure mode the
+    header warns about — a guard with false positives gets disabled, and then
+    you have neither the rule nor the protection.
+    """
+    lines, out, i = cmd.split("\n"), [], 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(line)
+        for m in re.finditer(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1", line):
+            term = m.group(2)
+            j = i + 1
+            while j < len(lines) and lines[j].strip() != term:
+                j += 1
+            i = j
+        i += 1
+    return "\n".join(out)
+
+command = strip_heredoc_bodies(command)
+
 for segment in re.split(r"(?:&&|\|\||[;|\n])", command):
     segment = segment.strip()
     if not segment:

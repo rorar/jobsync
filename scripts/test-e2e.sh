@@ -33,6 +33,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR/.."
 
 source "$DIR/env.sh"
+source "$DIR/lib-runtime-guard.sh"
 # Chromium: prefer an explicit override, then the NixOS system binary, else leave
 # UNSET so Playwright falls back to its own downloaded browser. Hardcoding the
 # NixOS store path as the default made every launch fail with "executable doesn't
@@ -192,12 +193,17 @@ MEM_MAX="${E2E_MEM_MAX:-6G}"
 CPU_QUOTA="${E2E_CPU_QUOTA:-400%}"
 RUN=(nice -n 10 ionice -c3 npx playwright test --workers="$WORKERS" "$@")
 
+guard_host_load "test-e2e" || exit 75
+
 echo "[test-e2e] limits: mem=${MEM_MAX} cpu=${CPU_QUOTA}"
 if systemd-run --user --scope -p MemoryMax="$MEM_MAX" true 2>/dev/null; then
-  exec systemd-run --user --scope -p Description=jobsync-e2e-run \
+  systemd-run --user --scope -p Description=jobsync-e2e-run \
     -p MemoryMax="$MEM_MAX" -p MemorySwapMax=0 -p CPUQuota="$CPU_QUOTA" \
     "${RUN[@]}"
 else
   echo "[test-e2e] WARNING: no systemd transient scope — nice/ionice only."
-  exec "${RUN[@]}"
+  "${RUN[@]}"
 fi
+RC=$?
+report_exit "test-e2e" "$RC"
+exit "$RC"

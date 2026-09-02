@@ -59,12 +59,31 @@ convenience aliases; each exists because the bare command has taken this host do
 | `npx playwright test` | `./scripts/test-e2e.sh` | Single worker + `nice`/`ionice`, and it starts a **correctly configured** dev server if none is running (`env.sh` + `E2E_AUTH_RATE_LIMIT_BYPASS`). |
 | `bun run build` | `bash scripts/build-safe.sh` | 7G cgroup — an over-large build is OOM-killed inside its own scope instead of swap-deathing the host. |
 
-**For the full Jest suite** (~6 min, 300+ suites) add outer limits, since `test.sh` itself sets
-neither priority nor a heap cap:
+**For the full Jest suite** (~6 min, 300+ suites) just run the wrapper — it now applies its own
+`nice`/`ionice`, heap cap, memory cgroup and timeout, so nothing needs prepending:
 
 ```bash
-nice -n 19 ionice -c3 env NODE_OPTIONS=--max-old-space-size=3072 bash scripts/test.sh
+bash scripts/test.sh
 ```
+
+Tunables if you need them: `JEST_MEM_MAX` (4G), `JEST_NODE_HEAP` (3072), `JEST_TIMEOUT` (1800).
+
+**All four heavy wrappers refuse to start on an overloaded host.** `scripts/lib-runtime-guard.sh`
+aborts with exit **75** when the 1-minute load exceeds 4× the core count, and prints the top
+consumers. This exists because a Playwright run was once started while six subagents were still
+resident: load hit 69.81 and the suite returned 11 failures with durations like 14.9 minutes for a
+single test — numbers that measured contention, not the tree. Override with `ALLOW_BUSY_HOST=1`
+only if you accept that the results are suspect. `GUARD_LOAD_WARN` / `GUARD_LOAD_ABORT` tune the
+thresholds (per core).
+
+**Every wrapper prints `[<name>] EXIT=<rc>` as its last line**, and explains exit **124** as a
+timeout rather than a failure of the thing under test. Read that line, not the shell's — `cmd; echo
+$?` and a trailing `| tail` both report the WRONG command's status.
+
+**A `PreToolUse` hook enforces the table above** (`scripts/guard-heavy-commands.sh`, wired in
+`.claude/settings.json`). Bare `npx tsc|jest|playwright`, `bun test`, `bun run build|dev` and
+`next build|dev` are refused with the wrapper named. It judges the command position only, so
+`grep -n "npx tsc" …` and heredoc bodies that merely mention a tool keep working.
 
 **Long runs:** start them with `run_in_background` and wait on the output file. A foreground full
 suite or E2E run will hit the tool timeout and get orphaned.
