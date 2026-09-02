@@ -1,9 +1,10 @@
 import { chromium, type FullConfig } from "@playwright/test";
-import { cleanupStaleE2EData } from "./cleanup-stale-data";
 
 async function globalSetup(config: FullConfig) {
-  // Clean up stale E2E test data from previous runs
-  await cleanupStaleE2EData();
+  // No stale-data purge here any more. Every run gets its own database
+  // (scripts/e2e-db.sh), so there is no residue from a previous run to remove:
+  // the file this used to clean is discarded and re-copied from a seeded
+  // template before the server starts.
 
   const baseURL =
     config.projects[0]?.use?.baseURL ?? "http://localhost:3737";

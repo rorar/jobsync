@@ -238,13 +238,12 @@ comment with the reason.
 - **NixOS**: Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/run/current-system/sw/bin/chromium`
 - **Port**: one per worktree. The main checkout keeps 3737; a linked worktree derives its own (`scripts/lib-devserver.sh`), so two checkouts can run suites at the same time. Never hardcode 3737 in a spec or a helper — read `baseURL` from the Playwright config, which follows `E2E_BASE_URL`.
 - **Dev server**: **Subagents** may start it (`bun run dev`) and must **never stop it** — parallel subagents once killed each other's server mid-run, and a worker cannot tell whether the process on :3737 belongs to a sibling three minutes into a suite. The orchestrator and the wrappers may stop it deliberately; they are the only parties that know nothing else is running. Read as a blanket ban the rule protects orphaned processes nobody owns. For E2E runs prefer `scripts/dev-e2e.sh` — it starts the dev server with `E2E_AUTH_RATE_LIMIT_BYPASS=1` so repeated logins (global-setup + the signin smoke test) don't trip the signin rate limiter (5/15min per IP). The bypass is prod-inert (gated on `NODE_ENV !== "production"`); never set it in production. See CLAUDE.md § Shared Rate-Limit Factory.
-- **SQLite**: Shared `dev.db` with no per-test isolation. Unique test data names are your only protection against collision.
-- **Cleanup runs in `globalSetup` only.** Playwright's UI mode (`--ui`), watch mode and the
-  test-runner MCP can execute tests without it, so the stale-data purge in
-  `e2e/cleanup-stale-data.ts` never runs in those modes. None of them is reachable on this host
-  today (no Playwright VS Code extension, `DISPLAY`/`WAYLAND_DISPLAY` unset, no `--ui`/`--watch`
-  in the repo), so this is a note to keep in mind — not something to build machinery against.
-  Use `./scripts/test-e2e.sh`, which always goes through `globalSetup`.
+- **SQLite**: every run gets its **own** database, copied from a seeded template (`scripts/e2e-db.sh`); `prisma/dev.db` is never opened by the suite. Within a run the workers still share that copy, so unique test-data names remain your protection against collision — but nothing survives into the next run.
+- **There is no stale-data purge any more, and none is needed.** It used to run in `globalSetup`
+  only, which meant UI mode, watch mode and the test-runner MCP silently skipped it. The database
+  is now provisioned per run by `./scripts/test-e2e.sh`, so a mode that bypasses `globalSetup`
+  cannot inherit residue — but a mode that bypasses the WRAPPER runs against whatever
+  `DATABASE_URL` your shell has, which is `prisma/dev.db`. Use the wrapper.
 
 ## One Spec Per Aggregate
 

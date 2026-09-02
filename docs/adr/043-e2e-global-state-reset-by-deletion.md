@@ -1,6 +1,12 @@
 # ADR-043: E2E fixtures reset global state by deletion, never by writing a status
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-045](045-e2e-owns-nothing-that-outlives-the-run.md) (2026-09-02)
+
+> The reasoning below is not wrong and is worth reading: absence expresses a default better than
+> any copy of it. What is superseded is its SCOPE. This record resets one table inside a database
+> shared with the developer's own work; ADR-045 gives every run its own database, so the mechanism
+> chosen here no longer has a caller. `e2e/cleanup-stale-data.ts` and `E2E_ALLOW_DESTRUCTIVE`,
+> which this record introduced, are deleted.
 **Date:** 2026-09-01
 **Context:** E2E data-leak fix, commit `b85c45df`; findings E2E-B1..E2E-B12 in `docs/BUGS.md`
 **Supporting records:** `E2E-FIX-NOTES.md` § Extraction, `e2e/CONVENTIONS.md` § Shared Fixtures

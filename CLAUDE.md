@@ -999,6 +999,11 @@ Consequences worth knowing before you debug something:
   `DATABASE_URL` it started with, so provisioning under it would put app and runner on different
   databases — a failure that names neither.
 
+`e2e/cleanup-stale-data.ts` is **gone** (330 lines of foreign-key-ordered deletes, plus the
+`E2E_ALLOW_DESTRUCTIVE` gate and the `"E2E "` name-prefix convention it matched on). It existed to
+remove the previous run's residue from a database that should never have held it. ADR-043 records
+the decision it implemented; that decision is superseded, not wrong.
+
 **Running E2E tests:**
 ```bash
 # Resource-tight — one command: env + warm server + single worker:
