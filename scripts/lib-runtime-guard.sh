@@ -105,6 +105,9 @@ guard_host_load() {
     echo "[$label] ABORT: too busy for a meaningful run."
     echo "           Numbers produced now would measure contention, not the code."
     echo "           Stop what is competing (subagents count!), then re-run."
+    echo "           If the top consumer above is YOUR OWN stale next-server, that is"
+    echo "           the trap: test-e2e.sh would replace it, but this guard runs first"
+    echo "           and never lets it get there. Clear it with scripts/stop.sh."
     echo "           Override with ALLOW_BUSY_HOST=1 if you know what you are doing."
     return 1
   fi
