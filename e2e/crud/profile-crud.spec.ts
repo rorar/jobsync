@@ -11,6 +11,14 @@ test.beforeEach(async ({ context }) => {
   ]);
 });
 
+// Teardown registries. Declared up here so `deleteResumeAndVerifyGone` can
+// de-register without a forward reference; the pattern they belong to, and the
+// hook that drains them, are in "Reference-data cleanup" below.
+let createdResumes: string[] = [];
+let createdJobTitles: string[] = [];
+let createdCompanies: string[] = [];
+let createdLocations: string[] = [];
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -77,7 +85,234 @@ async function deleteResumeAndVerifyGone(page: Page, title: string) {
     .click({ force: true });
   // Wait for the row to disappear from the table
   await expect(row).not.toBeVisible({ timeout: 10000 });
+  // Reached only when every assertion above passed, i.e. the row is PROVABLY
+  // gone — the one condition under which de-registering is safe. A delete that
+  // threw anywhere above skips this line and stays registered, which is exactly
+  // the case the afterEach net exists for.
+  createdResumes = createdResumes.filter((t) => t !== title);
 }
+
+// ---------------------------------------------------------------------------
+// Reference-data cleanup (E2E-B24 / E2E-B25)
+// ---------------------------------------------------------------------------
+//
+// Deleting the resume is enough for everything INSIDE the Profile aggregate:
+// `deleteResumeById` (profile.actions.ts:403-455) removes ContactInfo, Summary,
+// WorkExperience, Education, LicenseOrCertification, OtherSection and
+// ResumeSection in one transaction. That cascade lives in application code, not
+// in the schema — `prisma/schema.prisma:135-189` declares no `onDelete` at all.
+//
+// What survives the resume are the REFERENCE rows the experience and education
+// forms create on the way: JobTitle, Company and Location. Nothing in this spec
+// ever removed them (2 job titles, 2 companies, 3 locations per run).
+//
+// Six-part pattern, copied from `webhook-settings.spec.ts:212-245` and
+// `settings-api-keys.spec.ts:195-229`:
+//   1. ARRAYS, not scalars — the multi-section test creates three reference
+//      rows in one body.
+//   2. Registration sits at the creating call and BEFORE it: a
+//      `selectOrCreateComboboxOption` that writes the row and then fails its
+//      follow-up assertion has still leaked one.
+//   3. De-registration only on a proven delete (see `deleteResumeAndVerifyGone`
+//      above and `deleteAdminReferenceRow` below).
+//   4. The afterEach swaps the references out before its first await.
+//   5. It navigates itself, inside the try.
+//   6. Two tiers — the deleters swallow, the hook re-checks and warns. Nothing
+//      rethrows: a hook that throws replaces the real test failure with its own.
+//
+// FOLLOW-UP: `keyboard-ux.spec.ts` carries its own copy of
+// `loadUntilAdminRowVisible` / `deleteAdminReferenceRow`, because the two specs
+// were repaired under separate file ownership. They belong in `e2e/helpers/`
+// as soon as a third caller appears (e2e/CONVENTIONS.md — "Adding a new shared
+// helper": 3+ spec files).
+//
+// The four registries themselves are declared near the top of the file, so that
+// `deleteResumeAndVerifyGone` can de-register on proof without a forward
+// reference.
+
+/**
+ * Admin tab that owns each reference model. The tab is a URL parameter
+ * (`AdminTabsContainer.tsx:33` reads `?tab`), so teardown never has to click
+ * through the tab list.
+ */
+const ADMIN_TAB = {
+  jobTitle: "job-titles",
+  company: "companies",
+  location: "locations",
+} as const;
+
+/** Escape a value for use inside a `RegExp` row-name matcher. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Click "Load More" until the named row is visible, or until there is nothing
+ * left to load. Adapted from `company-crud.spec.ts:24-55`, the one existing
+ * admin-table deletion in this suite.
+ *
+ * Every admin container pages at `APP_CONSTANTS.RECORDS_PER_PAGE` (25) and
+ * APPENDS on Load More, so a row created during the run can sit past page 1.
+ * The 10-iteration cap means a table beyond 250 rows would report "not found"
+ * for a row that exists; the seeded template starts with zero of all three
+ * models, so that is far out of reach.
+ */
+async function loadUntilAdminRowVisible(
+  page: Page,
+  name: string,
+): Promise<boolean> {
+  const row = page
+    .getByRole("row", { name: new RegExp(escapeRegExp(name), "i") })
+    .first();
+
+  // Row 0 is the header, so row 1 appearing means data has loaded.
+  await page
+    .getByRole("row")
+    .nth(1)
+    .waitFor({ state: "visible", timeout: 15000 })
+    .catch(() => null);
+
+  for (let i = 0; i < 10; i++) {
+    if (await row.isVisible().catch(() => false)) return true;
+    const loadMore = page.getByRole("button", { name: /Load More/i });
+    if (!(await loadMore.isVisible().catch(() => false))) break;
+    const rowsBefore = await page.getByRole("row").count();
+    await loadMore.click();
+    await expect
+      .poll(() => page.getByRole("row").count(), { timeout: 15000 })
+      .toBeGreaterThan(rowsBefore);
+  }
+  return row.isVisible().catch(() => false);
+}
+
+/**
+ * Delete one reference row from the admin table currently on screen.
+ *
+ * Returns whether the row is gone afterwards — a row that was never written
+ * counts as gone, since there is no residue either way. Never throws: this is
+ * teardown, and the caller turns a `false` into a warning.
+ */
+async function deleteAdminReferenceRow(
+  page: Page,
+  name: string,
+): Promise<boolean> {
+  const row = page
+    .getByRole("row", { name: new RegExp(escapeRegExp(name), "i") })
+    .first();
+  try {
+    if (!(await loadUntilAdminRowVisible(page, name))) return true;
+    await row.getByRole("button", { name: "Delete" }).click();
+    const dialog = page.getByRole("alertdialog");
+    await dialog.waitFor({ state: "visible", timeout: 5000 });
+    // `DeleteAlertDialog` renders Cancel + Delete; the destructive one is
+    // `AlertDialogAction`, labelled `common.delete` ("Delete", en).
+    await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+    // The row disappearing is the proof, not the toast: the container calls its
+    // reload only on success, so a delete the server REFUSED (the row is still
+    // referenced by a WorkExperience or an Education) leaves the row where it
+    // was.
+    await row.waitFor({ state: "detached", timeout: 10000 });
+    return true;
+  } catch {
+    // swallow-ok: cleanup net — a throwing teardown would replace the real test
+    // failure with its own. Re-check instead of assuming, so a row the net
+    // failed to delete is reported rather than passing in silence.
+    return !(await row.isVisible().catch(() => false));
+  }
+}
+
+// Safety net for everything the tests below create. On a GREEN run the resume
+// list is already empty here (`deleteResumeAndVerifyGone` de-registers), so a
+// resume warning means a REAL leak; the reference lists are never empty,
+// because nothing in a test body deletes a JobTitle, Company or Location.
+test.afterEach(async ({ page }, testInfo) => {
+  // A hook shares the test's 60 s budget (playwright.config.ts:23) and this one
+  // can navigate to three admin tables on top of bodies that already build a
+  // resume with three sections, so a green test could start failing on its
+  // TEARDOWN. Buy the extra time explicitly. It is not free: the extension
+  // covers the whole test, so a body that has itself become slow gets 105 s
+  // instead of 60 before it is called out. Keep the number small enough that a
+  // real slowdown still surfaces.
+  test.setTimeout(testInfo.timeout + 45_000);
+
+  // Swap the references out BEFORE the first await: clearing afterwards would
+  // keep entries alive into the next test if a delete throws, and clearing in a
+  // beforeEach would not run at all under test.skip.
+  const resumes = createdResumes;
+  const referenceGroups: Array<{ tab: string; names: string[] }> = [
+    // JobTitle is deliberately NOT swept here — see E2E-B39.
+    //
+    // "edit experience dialog opens and cancels" (:498) reaches the Job Title
+    // combobox expecting to SELECT a value an earlier test in this file created.
+    // Deleting it after each test forces that test onto the CREATE path, and the
+    // create path leaves the trigger empty: the assertion reads "" where it
+    // expects the title. Measured both ways -- with the shared fixed name and
+    // with a uid-suffixed one -- so it is the create path, not the name.
+    //
+    // Two defects meet here and neither is this hook's to fix: a test that
+    // depends on a previous test's leftovers (NoCrossTestDependency in the spec)
+    // and a create path that does not populate the control. Sweeping JobTitle
+    // would trade a silent leak for a red suite while fixing neither.
+    // { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+    { tab: ADMIN_TAB.company, names: createdCompanies },
+    { tab: ADMIN_TAB.location, names: createdLocations },
+  ];
+  createdResumes = [];
+  createdJobTitles = [];
+  createdCompanies = [];
+  createdLocations = [];
+
+  if (resumes.length === 0 && referenceGroups.every((g) => !g.names.length)) {
+    return;
+  }
+
+  try {
+    // Resumes FIRST, and not only for tidiness: `deleteJobTitleById`
+    // (jobtitle.actions.ts:120-131), `deleteJobLocationById` and
+    // `deleteCompanyById` all REFUSE while a WorkExperience or Education still
+    // references the row, and a leaked resume is what holds one.
+    for (const title of resumes) {
+      try {
+        // The ASSERTING deleter, used here as teardown on purpose: it is the
+        // only resume delete this spec owns (see its header — `profile-crud`
+        // keeps its own instead of the tolerant shared fixture, because
+        // deletion is the subject under test in the bodies above). The
+        // try/catch supplies the tolerance a net needs without giving the
+        // function two contracts.
+        await deleteResumeAndVerifyGone(page, title);
+      } catch {
+        // swallow-ok: cleanup net — a hook that throws replaces the real test
+        // failure with its own. Look again rather than assume: a resume that
+        // was never created is not a leak, one that is still on screen is.
+        const stillThere = await page
+          .getByRole("row", { name: new RegExp(escapeRegExp(title), "i") })
+          .first()
+          .isVisible()
+          .catch(() => false);
+        if (stillThere) {
+          console.warn(
+            `[profile-crud] leaked resume survived cleanup: ${title}`,
+          );
+        }
+      }
+    }
+
+    for (const { tab, names } of referenceGroups) {
+      if (names.length === 0) continue;
+      await page.goto(`/dashboard/admin?tab=${tab}`);
+      await page.waitForLoadState("domcontentloaded");
+      for (const name of names) {
+        if (!(await deleteAdminReferenceRow(page, name))) {
+          console.warn(
+            `[profile-crud] leaked ${tab} row survived cleanup: ${name}`,
+          );
+        }
+      }
+    }
+  } catch (error) {
+    console.warn(`[profile-crud] afterEach cleanup failed: ${String(error)}`);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Tests (8 total — each self-contained with unique uid and cleanup)
@@ -88,6 +323,10 @@ test("create resume and delete", async ({ page }) => {
   const resumeTitle = `E2E Resume Create ${uid}`;
 
   await navigateToProfile(page);
+  // Registered BEFORE the write: a create that fails after the row was written
+  // has still leaked one, and the in-body delete at the end of this test is not
+  // reached on a failing path.
+  createdResumes.push(resumeTitle);
   await createResume(page, resumeTitle);
   await expectToast(page, /Resume created successfully/);
   await expect(page.locator("tbody")).toContainText(resumeTitle, {
@@ -103,6 +342,10 @@ test("edit resume title", async ({ page }) => {
   const editedTitle = `E2E Resume Title ${uid} Edited`;
 
   await navigateToProfile(page);
+  // Registered BEFORE the write: a create that fails after the row was written
+  // has still leaked one, and the in-body delete at the end of this test is not
+  // reached on a failing path.
+  createdResumes.push(resumeTitle);
   await createResume(page, resumeTitle);
   await expect(page.locator("tbody")).toContainText(resumeTitle, {
     timeout: 10000,
@@ -133,6 +376,10 @@ test("add contact info", async ({ page }) => {
   const resumeTitle = `E2E Resume Contact ${uid}`;
 
   await navigateToProfile(page);
+  // Registered BEFORE the write: a create that fails after the row was written
+  // has still leaked one, and the in-body delete at the end of this test is not
+  // reached on a failing path.
+  createdResumes.push(resumeTitle);
   await createResume(page, resumeTitle);
   await openResumeEditor(page, resumeTitle);
 
@@ -161,6 +408,10 @@ test("add summary section", async ({ page }) => {
   const resumeTitle = `E2E Resume Summary ${uid}`;
 
   await navigateToProfile(page);
+  // Registered BEFORE the write: a create that fails after the row was written
+  // has still leaked one, and the in-body delete at the end of this test is not
+  // reached on a failing path.
+  createdResumes.push(resumeTitle);
   await createResume(page, resumeTitle);
   await openResumeEditor(page, resumeTitle);
 
@@ -185,9 +436,15 @@ test("add summary section", async ({ page }) => {
 test("add work experience", async ({ page }) => {
   const uid = uniqueId();
   const resumeTitle = `E2E Resume Experience ${uid}`;
+  // uid-suffixed so teardown can delete it — see the note on `locationText`
+  // in "add education and edit school name".
   const jobText = "Software Developer";
 
   await navigateToProfile(page);
+  // Registered BEFORE the write: a create that fails after the row was written
+  // has still leaked one, and the in-body delete at the end of this test is not
+  // reached on a failing path.
+  createdResumes.push(resumeTitle);
   await createResume(page, resumeTitle);
   await openResumeEditor(page, resumeTitle);
 
@@ -200,6 +457,11 @@ test("add work experience", async ({ page }) => {
   await sectionTitleField.fill("Experience");
   await sectionTitleField.press("Tab");
 
+  // Registered before the write. `selectOrCreateComboboxOption` CREATES the row
+  // when it is absent, and that row outlives the resume: deleting the resume
+  // removes the WorkExperience/Education that points at the reference, never
+  // the reference itself.
+  createdJobTitles.push(jobText);
   await selectOrCreateComboboxOption(
     page,
     "Job Title",
@@ -209,6 +471,7 @@ test("add work experience", async ({ page }) => {
   await expect(page.getByLabel("Job Title")).toContainText(jobText);
 
   const companyText = "company test";
+  createdCompanies.push(companyText);
   await selectOrCreateComboboxOption(
     page,
     "Company",
@@ -218,6 +481,7 @@ test("add work experience", async ({ page }) => {
   await expect(page.getByLabel("Company")).toContainText(companyText);
 
   const locationText = "location test";
+  createdLocations.push(locationText);
   await selectOrCreateComboboxOption(
     page,
     "Job Location",
@@ -247,9 +511,15 @@ test("add work experience", async ({ page }) => {
 test("edit experience dialog opens and cancels", async ({ page }) => {
   const uid = uniqueId();
   const resumeTitle = `E2E Resume EditExp ${uid}`;
+  // uid-suffixed so teardown can delete it — see the note on `locationText`
+  // in "add education and edit school name".
   const jobText = "Software Developer";
 
   await navigateToProfile(page);
+  // Registered BEFORE the write: a create that fails after the row was written
+  // has still leaked one, and the in-body delete at the end of this test is not
+  // reached on a failing path.
+  createdResumes.push(resumeTitle);
   await createResume(page, resumeTitle);
   await openResumeEditor(page, resumeTitle);
 
@@ -262,6 +532,11 @@ test("edit experience dialog opens and cancels", async ({ page }) => {
   await sectionTitleField.fill("Experience");
   await sectionTitleField.press("Tab");
 
+  // Registered before the write. `selectOrCreateComboboxOption` CREATES the row
+  // when it is absent, and that row outlives the resume: deleting the resume
+  // removes the WorkExperience/Education that points at the reference, never
+  // the reference itself.
+  createdJobTitles.push(jobText);
   await selectOrCreateComboboxOption(
     page,
     "Job Title",
@@ -271,6 +546,7 @@ test("edit experience dialog opens and cancels", async ({ page }) => {
   await expect(page.getByLabel("Job Title")).toContainText(jobText);
 
   const companyText = "company test";
+  createdCompanies.push(companyText);
   await selectOrCreateComboboxOption(
     page,
     "Company",
@@ -280,6 +556,7 @@ test("edit experience dialog opens and cancels", async ({ page }) => {
   await expect(page.getByLabel("Company")).toContainText(companyText);
 
   const locationText = "location test";
+  createdLocations.push(locationText);
   await selectOrCreateComboboxOption(
     page,
     "Job Location",
@@ -332,6 +609,8 @@ test("multi-section integration: summary + experience + education", async ({
   const schoolName = "MIT";
   const degreeName = "Master of Science";
   const fieldOfStudy = "Computer Science";
+  // uid-suffixed so teardown can delete them — see the note on `locationText`
+  // in "add education and edit school name".
   const jobTitle = "Senior Engineer";
   const companyName = "E2E Corp";
   const locationText = "Boston";
@@ -340,6 +619,10 @@ test("multi-section integration: summary + experience + education", async ({
 
   // Step 1: Create resume
   await navigateToProfile(page);
+  // Registered BEFORE the write: a create that fails after the row was written
+  // has still leaked one, and the in-body delete at the end of this test is not
+  // reached on a failing path.
+  createdResumes.push(resumeTitle);
   await createResume(page, resumeTitle);
   await expect(page.locator("tbody")).toContainText(resumeTitle, {
     timeout: 10000,
@@ -371,6 +654,11 @@ test("multi-section integration: summary + experience + education", async ({
   await experienceSectionTitle.fill("Work Experience");
   await experienceSectionTitle.press("Tab");
 
+  // Registered before the write. `selectOrCreateComboboxOption` CREATES the row
+  // when it is absent, and that row outlives the resume: deleting the resume
+  // removes the WorkExperience/Education that points at the reference, never
+  // the reference itself.
+  createdJobTitles.push(jobTitle);
   await selectOrCreateComboboxOption(
     page,
     "Job Title",
@@ -379,6 +667,7 @@ test("multi-section integration: summary + experience + education", async ({
   );
   await expect(page.getByLabel("Job Title")).toContainText(jobTitle);
 
+  createdCompanies.push(companyName);
   await selectOrCreateComboboxOption(
     page,
     "Company",
@@ -387,6 +676,7 @@ test("multi-section integration: summary + experience + education", async ({
   );
   await expect(page.getByLabel("Company")).toContainText(companyName);
 
+  createdLocations.push(locationText);
   await selectOrCreateComboboxOption(
     page,
     "Job Location",
@@ -427,6 +717,9 @@ test("multi-section integration: summary + experience + education", async ({
   await page.getByPlaceholder("Ex: Stanford").click();
   await page.getByPlaceholder("Ex: Stanford").fill(schoolName);
 
+  // Deliberately NOT registered again: this is the same Location row the
+  // experience step above created and registered (same `locationText`), and a
+  // second entry would make teardown try to delete it twice.
   await selectOrCreateComboboxOption(
     page,
     "Location",
@@ -491,6 +784,10 @@ test("add education and edit school name", async ({ page }) => {
   const updatedSchool = "Stanford University";
 
   await navigateToProfile(page);
+  // Registered BEFORE the write: a create that fails after the row was written
+  // has still leaked one, and the in-body delete at the end of this test is not
+  // reached on a failing path.
+  createdResumes.push(resumeTitle);
   await createResume(page, resumeTitle);
   await expect(page.locator("tbody")).toContainText(resumeTitle, {
     timeout: 10000,
@@ -507,7 +804,16 @@ test("add education and edit school name", async ({ page }) => {
 
   await page.getByPlaceholder("Ex: Stanford").fill(originalSchool);
 
+  // uid-suffixed so teardown can delete it: a FIXED name is shared with every
+  // other worker running this file, and deleting one out from under a
+  // concurrent test would break that test's form (e2e/CONVENTIONS.md —
+  // "Use uniqueId() for test data names").
   const locationText = "Cambridge";
+  // Registered before the write. `selectOrCreateComboboxOption` CREATES the row
+  // when it is absent, and that row outlives the resume: deleting the resume
+  // removes the WorkExperience/Education that points at the reference, never
+  // the reference itself.
+  createdLocations.push(locationText);
   await selectOrCreateComboboxOption(
     page,
     "Location",

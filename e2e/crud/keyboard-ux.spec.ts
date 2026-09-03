@@ -2,6 +2,225 @@ import { test, expect, type Page } from "@playwright/test";
 import { uniqueId } from "../helpers";
 import { ensureResumeExists, deleteResume } from "../helpers/resume-fixture";
 
+// ---------------------------------------------------------------------------
+// Reference-data cleanup (E2E-B24 / E2E-B25)
+// ---------------------------------------------------------------------------
+//
+// Every Enter this spec presses in a combobox or the skills input writes a
+// REFERENCE row that outlives the dialog it was typed into — JobTitle, Company,
+// Location, Tag. No test here ever submits the AddJob form, so nothing points
+// at those rows afterwards and every one of them is pure residue: 3 job titles,
+// 1 company, 1 location and 6 tags per run.
+//
+// Six-part pattern, copied from `webhook-settings.spec.ts:212-245` and
+// `settings-api-keys.spec.ts:195-229`:
+//   1. ARRAYS, not scalars — one tag test creates three rows in one body.
+//   2. Registration sits where the row is WRITTEN and BEFORE the keystroke that
+//      writes it: an Enter that creates the row and then fails the assertion
+//      after it has still leaked one.
+//   3. De-registration only on a PROVEN delete (see `deleteResumeTracked`).
+//   4. The afterEach swaps the references out before its first await.
+//   5. It navigates itself, inside the try.
+//   6. Two tiers — the deleters swallow, the hook re-checks and warns. Nothing
+//      rethrows: a hook that throws replaces the real test failure with its own.
+//
+// FOLLOW-UP: `profile-crud.spec.ts` carries its own copy of
+// `loadUntilAdminRowVisible` / `deleteAdminReferenceRow`, because the two specs
+// were repaired under separate file ownership. They belong in `e2e/helpers/`
+// as soon as a third caller appears (e2e/CONVENTIONS.md — "Adding a new shared
+// helper": 3+ spec files).
+let createdJobTitles: string[] = [];
+let createdCompanies: string[] = [];
+let createdLocations: string[] = [];
+let createdTags: string[] = [];
+let createdResumes: string[] = [];
+
+/**
+ * Admin tab that owns each reference model. The tab is a URL parameter
+ * (`AdminTabsContainer.tsx:33` reads `?tab`), so teardown never has to click
+ * through the tab list.
+ */
+const ADMIN_TAB = {
+  jobTitle: "job-titles",
+  company: "companies",
+  location: "locations",
+  tag: "skills",
+} as const;
+
+/** Escape a value for use inside a `RegExp` row-name matcher. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Click "Load More" until the named row is visible, or until there is nothing
+ * left to load. Adapted from `company-crud.spec.ts:24-55`, the one existing
+ * admin-table deletion in this suite.
+ *
+ * Every admin container pages at `APP_CONSTANTS.RECORDS_PER_PAGE` (25) and
+ * APPENDS on Load More, so a row created during the run can sit past page 1.
+ * The 10-iteration cap means a table beyond 250 rows would report "not found"
+ * for a row that exists; the seeded template starts with zero of all four
+ * models, so that is far out of reach.
+ */
+async function loadUntilAdminRowVisible(
+  page: Page,
+  name: string,
+): Promise<boolean> {
+  const row = page
+    .getByRole("row", { name: new RegExp(escapeRegExp(name), "i") })
+    .first();
+
+  // Row 0 is the header, so row 1 appearing means data has loaded.
+  await page
+    .getByRole("row")
+    .nth(1)
+    .waitFor({ state: "visible", timeout: 15000 })
+    .catch(() => null);
+
+  for (let i = 0; i < 10; i++) {
+    if (await row.isVisible().catch(() => false)) return true;
+    const loadMore = page.getByRole("button", { name: /Load More/i });
+    if (!(await loadMore.isVisible().catch(() => false))) break;
+    const rowsBefore = await page.getByRole("row").count();
+    await loadMore.click();
+    await expect
+      .poll(() => page.getByRole("row").count(), { timeout: 15000 })
+      .toBeGreaterThan(rowsBefore);
+  }
+  return row.isVisible().catch(() => false);
+}
+
+/**
+ * Delete one reference row from the admin table currently on screen.
+ *
+ * Returns whether the row is gone afterwards — a row that was never written
+ * counts as gone, since there is no residue either way. Never throws: this is
+ * teardown, and the caller turns a `false` into a warning.
+ */
+async function deleteAdminReferenceRow(
+  page: Page,
+  name: string,
+): Promise<boolean> {
+  const row = page
+    .getByRole("row", { name: new RegExp(escapeRegExp(name), "i") })
+    .first();
+  try {
+    if (!(await loadUntilAdminRowVisible(page, name))) return true;
+    await row.getByRole("button", { name: "Delete" }).click();
+    const dialog = page.getByRole("alertdialog");
+    await dialog.waitFor({ state: "visible", timeout: 5000 });
+    // `DeleteAlertDialog` renders Cancel + Delete; the destructive one is
+    // `AlertDialogAction`, labelled `common.delete` ("Delete", en).
+    await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+    // The row disappearing is the proof, not the toast: the container calls its
+    // reload only on success, so a delete the server REFUSED (the row is still
+    // referenced) leaves the row exactly where it was.
+    await row.waitFor({ state: "detached", timeout: 10000 });
+    return true;
+  } catch {
+    // swallow-ok: cleanup net — a throwing teardown would replace the real test
+    // failure with its own. Re-check instead of assuming, so a row the net
+    // failed to delete is reported rather than passing in silence.
+    return !(await row.isVisible().catch(() => false));
+  }
+}
+
+/**
+ * Delete a resume created by this spec and prove it is gone.
+ *
+ * The shared `deleteResume` fixture swallows every error by contract, so
+ * calling it proves nothing — look again, and de-register ONLY on proof.
+ * Anything that fails stays registered, which is exactly the case the afterEach
+ * net exists for.
+ */
+async function deleteResumeTracked(page: Page, title: string): Promise<boolean> {
+  await deleteResume(page, title);
+  const gone = await page
+    .getByRole("row", { name: new RegExp(escapeRegExp(title), "i") })
+    .first()
+    .waitFor({ state: "detached", timeout: 10000 })
+    .then(() => true)
+    .catch(() => false);
+  if (gone) createdResumes = createdResumes.filter((t) => t !== title);
+  return gone;
+}
+
+// Safety net for every row this spec writes. Unlike `webhook-settings` there is
+// no inline delete to pair it with for the reference models — nothing in this
+// file removes a JobTitle/Company/Location/Tag — so on a GREEN run this hook
+// does the whole job and is expected to be busy. Resumes are the exception: the
+// four EURES tests delete their own and de-register on proof, so a WARNING
+// about a resume means a real leak.
+test.afterEach(async ({ page }, testInfo) => {
+  // A hook shares the test's 60 s budget (playwright.config.ts:23) and this one
+  // can navigate to four admin tables, so a green test could start failing on
+  // its TEARDOWN. Buy the extra time explicitly. It is not free: the extension
+  // covers the whole test, so a body that has itself become slow gets 105 s
+  // instead of 60 before it is called out. Keep the number small enough that a
+  // real slowdown still surfaces.
+  test.setTimeout(testInfo.timeout + 45_000);
+
+  // Swap the references out BEFORE the first await: clearing afterwards would
+  // keep entries alive into the next test if a delete throws, and clearing in a
+  // beforeEach would not run at all under test.skip.
+  const resumes = createdResumes;
+  const referenceGroups: Array<{ tab: string; names: string[] }> = [
+    { tab: ADMIN_TAB.jobTitle, names: createdJobTitles },
+    { tab: ADMIN_TAB.company, names: createdCompanies },
+    { tab: ADMIN_TAB.location, names: createdLocations },
+    { tab: ADMIN_TAB.tag, names: createdTags },
+  ];
+  createdResumes = [];
+  createdJobTitles = [];
+  createdCompanies = [];
+  createdLocations = [];
+  createdTags = [];
+
+  if (resumes.length === 0 && referenceGroups.every((g) => !g.names.length)) {
+    return;
+  }
+
+  try {
+    // The "Mobile Viewport" describe pins 375x667 for its whole test, teardown
+    // included, and the admin tables hide columns and scroll horizontally at
+    // that width. The test is over by now, so widening cannot affect anything
+    // it asserted — it only stops teardown from inheriting a layout it was
+    // never written for.
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    // Resumes FIRST. `deleteJobTitleById` (jobtitle.actions.ts:120-131),
+    // `deleteJobLocationById` and `deleteCompanyById` all refuse while a
+    // WorkExperience or Education still references the row, and a leaked resume
+    // is what holds one. Deleting the resume also removes its ContactInfo,
+    // Summary, WorkExperience, Education and ResumeSection rows — that cascade
+    // lives in `deleteResumeById`'s transaction (profile.actions.ts:403-455),
+    // not in the Prisma schema.
+    for (const title of resumes) {
+      if (!(await deleteResumeTracked(page, title))) {
+        console.warn(
+          `[keyboard-ux] leaked resume survived cleanup: ${title}`,
+        );
+      }
+    }
+
+    for (const { tab, names } of referenceGroups) {
+      if (names.length === 0) continue;
+      await page.goto(`/dashboard/admin?tab=${tab}`);
+      await page.waitForLoadState("domcontentloaded");
+      for (const name of names) {
+        if (!(await deleteAdminReferenceRow(page, name))) {
+          console.warn(
+            `[keyboard-ux] leaked ${tab} row survived cleanup: ${name}`,
+          );
+        }
+      }
+    }
+  } catch (error) {
+    console.warn(`[keyboard-ux] afterEach cleanup failed: ${String(error)}`);
+  }
+});
+
 /** Set NEXT_LOCALE=en cookie so the app renders in English. */
 async function ensureEnglishLocale(page: Page) {
   await page.context().addCookies([
@@ -153,6 +372,10 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await titleInput.fill(title);
     // M-T-04 follow-up: replaced waitForTimeout(600) — wait for options list.
     await page.getByRole("option").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
+    // Registered BEFORE the keystroke that writes the row: an Enter that
+    // creates the JobTitle and then fails an assertion below has still leaked
+    // one, and only a registered name gets cleaned up.
+    createdJobTitles.push(title);
     await titleInput.press("Enter");
     // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for combobox to close.
     await page.getByRole("option").first().waitFor({ state: "hidden", timeout: 5000 }).catch(() => null);
@@ -188,6 +411,8 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await companyInput.fill(company);
     // M-T-04 follow-up: replaced waitForTimeout(600) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
+    // Registered before the write — see the Title test above.
+    createdCompanies.push(company);
     await companyInput.press("Enter");
 
     await expect(getCompanyCombobox(page)).toContainText(company);
@@ -209,6 +434,8 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await locationInput.fill(location);
     // M-T-04 follow-up: replaced waitForTimeout(600) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
+    // Registered before the write — see the Title test above.
+    createdLocations.push(location);
     await locationInput.press("Enter");
 
     await expect(getLocationCombobox(page)).toContainText(location);
@@ -272,6 +499,8 @@ test.describe("Keyboard UX: BaseCombobox (AddJob modal)", () => {
     await expect(titleInput).toBeVisible();
 
     await titleInput.type(title, { delay: 20 });
+    // Registered before the write — see the Title test above.
+    createdJobTitles.push(title);
     await titleInput.press("Enter");
 
     await expect(getTitleCombobox(page)).toContainText(title, { timeout: 15000 });
@@ -329,6 +558,10 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
     await skillInput.fill(skill);
     // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
+    // Registered before the write: this Enter creates a Tag row that outlives
+    // the dialog (TagInput.tsx:137-170 — only Enter creates; Tab and Escape do
+    // not), and the AddJob form is never submitted, so nothing else removes it.
+    createdTags.push(skill);
     await skillInput.press("Enter");
 
     // Wait for async createTag to complete and chip to render
@@ -365,6 +598,10 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
       await skillInput.fill(skill);
       // M-T-04 follow-up: replaced waitForTimeout(200) — wait for UI to settle.
       await page.waitForLoadState("domcontentloaded");
+      // Registered inside the loop, before each write: a failure on iteration 2
+      // must still clean up the row iteration 1 created. This is why the
+      // tracking is an array and not a scalar.
+      createdTags.push(skill);
       await skillInput.press("Enter");
       // The next iteration types over the field, so this skill's chip has to
       // be committed before we continue.
@@ -419,6 +656,10 @@ test.describe("Keyboard UX: TagInput (Skills)", () => {
     // already-loaded page.
     await skillInput.fill(skill);
     await expect(skillInput).toHaveValue(skill);
+    // Registered once, before the FIRST write. The second Enter below is the
+    // subject under test precisely because it creates nothing — it announces
+    // "already selected" (TagInput.tsx:160-165).
+    createdTags.push(skill);
     await skillInput.press("Enter");
 
     // Wait for async createTag to complete: the chip renders AND the field is
@@ -458,6 +699,10 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     const errors = collectConsoleErrors(page);
     const resumeTitle = `E2E Resume KBOcc1 ${uid}`;
 
+    // Registered BEFORE the write. `ensureResumeExists` creates the row on its
+    // first call, and a failure anywhere below leaves it behind — including the
+    // failure paths that never reach the delete at the end of this test.
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle, { confirmWith: "row" });
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
@@ -509,13 +754,17 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     expect(filterCriticalErrors(errors)).toEqual([]);
 
-    await deleteResume(page, resumeTitle);
+    await deleteResumeTracked(page, resumeTitle);
   });
 
   test("Multiple keywords via Enter", async ({ page }) => {
     const uid = uniqueId();
     const resumeTitle = `E2E Resume KBOcc2 ${uid}`;
 
+    // Registered BEFORE the write. `ensureResumeExists` creates the row on its
+    // first call, and a failure anywhere below leaves it behind — including the
+    // failure paths that never reach the delete at the end of this test.
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle, { confirmWith: "row" });
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
@@ -554,13 +803,17 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
       await expect(page.getByText(`KW${i} ${uid}`).first()).toBeVisible({ timeout: 10000 });
     }
 
-    await deleteResume(page, resumeTitle);
+    await deleteResumeTracked(page, resumeTitle);
   });
 
   test("Tab closes keywords popover", async ({ page }) => {
     const uid = uniqueId();
     const resumeTitle = `E2E Resume KBOcc3 ${uid}`;
 
+    // Registered BEFORE the write. `ensureResumeExists` creates the row on its
+    // first call, and a failure anywhere below leaves it behind — including the
+    // failure paths that never reach the delete at the end of this test.
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle, { confirmWith: "row" });
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
@@ -593,7 +846,7 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
 
     await expect(searchInput).not.toBeVisible();
 
-    await deleteResume(page, resumeTitle);
+    await deleteResumeTracked(page, resumeTitle);
   });
 
   test("Rapid type + Enter before ESCO results load does not crash", async ({
@@ -603,6 +856,10 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     const errors = collectConsoleErrors(page);
     const resumeTitle = `E2E Resume KBOcc4 ${uid}`;
 
+    // Registered BEFORE the write. `ensureResumeExists` creates the row on its
+    // first call, and a failure anywhere below leaves it behind — including the
+    // failure paths that never reach the delete at the end of this test.
+    createdResumes.push(resumeTitle);
     await ensureResumeExists(page, resumeTitle, { confirmWith: "row" });
     await page.goto("/dashboard/automations");
     await page.waitForLoadState("domcontentloaded");
@@ -631,7 +888,7 @@ test.describe("Keyboard UX: EuresOccupationCombobox", () => {
     await expect(page.getByText(`QuickKW ${uid}`).first()).toBeVisible();
     expect(filterCriticalErrors(errors)).toEqual([]);
 
-    await deleteResume(page, resumeTitle);
+    await deleteResumeTracked(page, resumeTitle);
   });
 });
 
@@ -801,6 +1058,8 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
     await titleInput.fill(title);
     // M-T-04 follow-up: replaced waitForTimeout(600) — wait for options list.
     await page.getByRole("option").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
+    // Registered before the write — see the Title test above.
+    createdJobTitles.push(title);
     await titleInput.press("Enter");
     // M-T-04 follow-up: replaced waitForTimeout(1000) — wait for combobox to close.
     await page.getByRole("option").first().waitFor({ state: "hidden", timeout: 5000 }).catch(() => null);
@@ -810,6 +1069,9 @@ test.describe("Keyboard UX: Mobile Viewport (375x667)", () => {
     await getCompanyCombobox(page).click();
     const companyInput = page.getByPlaceholder("Create or search Company");
     await expect(companyInput).toBeVisible();
+    // NOT registered, and deliberately so: this value leaves via Tab, and
+    // `ComboBox.handleInputKeyDown` (ComboBox.tsx:84-88) only creates on Enter —
+    // Tab just closes the popover and clears the field. No row is written.
     await companyInput.fill("test mobile");
     // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
@@ -890,6 +1152,8 @@ test.describe("Keyboard UX: ARIA Announcements", () => {
     await skillInput.fill(skill);
     // M-T-04 follow-up: replaced waitForTimeout(300) — wait for UI to settle.
     await page.waitForLoadState("domcontentloaded");
+    // Registered before the write — see the first TagInput test above.
+    createdTags.push(skill);
     await skillInput.press("Enter");
 
     // Wait for chip to appear (confirms the async creation completed)

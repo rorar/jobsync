@@ -18,6 +18,33 @@ async function navigateToAutomations(page: Page) {
   await page.waitForLoadState("domcontentloaded");
 }
 
+/**
+ * Names of the automations created by the test currently running.
+ *
+ * Every test below deletes its automation inline as its second-to-last
+ * statement — the path a thrown assertion skips. The helper itself is sound:
+ * `deleteAutomation` waits for the card to leave the list, and the full run of
+ * 2026-09-03 (5/5 green) left ZERO `Automation` rows behind. The `+5` recorded
+ * against E2E-B38 is the failing-run shape — the 2026-08-31 baseline had
+ * exactly five automation-crud failures — so what was missing was not a repair
+ * but this net (E2E-B37: "ends at zero" was a property of the run being green,
+ * not of the spec owning its rows).
+ *
+ * `createAutomation` registers here itself so no caller can forget, and
+ * `deleteAutomation` de-registers only on a proven-successful delete, so the
+ * afterEach below only ever deletes what genuinely leaked. An ARRAY, not a
+ * scalar: a test that creates two automations must not leak all but the last.
+ * Module scope is per-worker (workers are separate processes running their
+ * tests serially) and the hook swaps the reference out, so nothing bleeds into
+ * the next test.
+ */
+let createdAutomationNames: string[] = [];
+
+/** The list card for one automation — `AutomationList.tsx:169,178`. */
+function automationCard(page: Page, name: string) {
+  return page.getByRole("article", { name });
+}
+
 async function createAutomation(
   page: Page,
   opts: {
@@ -27,6 +54,10 @@ async function createAutomation(
     resumeTitle: string;
   },
 ) {
+  // Register BEFORE creating: a wizard that fails after the row was written
+  // has still leaked one.
+  createdAutomationNames.push(opts.name);
+
   await page.getByRole("button", { name: /Create Automation/i }).click();
   await expect(
     page.getByRole("heading", { name: /Create Automation/i }),
@@ -119,6 +150,12 @@ async function deleteAutomation(page: Page, name: string) {
     // The server action runs async after Radix closes the dialog.
     // Wait for the automation to disappear from the list (onRefresh reloads it).
     await expect(page.getByText(name)).not.toBeVisible({ timeout: 15000 });
+
+    // Gone for real (card no longer in the list) — drop it from the tracking so
+    // the afterEach does not re-delete a row that is already gone. Anything
+    // that threw above skips this line and stays tracked, which is exactly the
+    // case the net exists for.
+    createdAutomationNames = createdAutomationNames.filter((n) => n !== name);
   } catch {
     // swallow-ok: cleanup net — the automation may already be gone, and a
     // throwing teardown would replace the real test failure with its own.
@@ -134,6 +171,58 @@ async function deleteAutomation(page: Page, name: string) {
 test.describe("Automation CRUD", () => {
   test.beforeEach(async ({ page }) => {
     await ensureEnglishLocale(page);
+  });
+
+  // Safety net for the inline deletes at the end of each test — see
+  // `createdAutomationNames` above. On a green test this list is already empty
+  // (deleteAutomation de-registers), so the hook costs nothing and stays
+  // silent; a warning here therefore means a REAL leak, not routine noise.
+  test.afterEach(async ({ page }) => {
+    // Swap the reference out BEFORE the first await: clearing afterwards would
+    // keep entries alive into the next test if a delete throws, and clearing in
+    // a beforeEach would not run at all under test.skip.
+    const leaked = createdAutomationNames;
+    createdAutomationNames = [];
+    if (leaked.length === 0) return;
+
+    try {
+      // deleteAutomation navigates to the list itself, so a test that failed
+      // mid-wizard (browser parked on the dialog) is handled — but the probe
+      // below needs the list on screen first. Keep everything inside the try,
+      // because a hook that throws replaces the real test failure in the
+      // report.
+      await navigateToAutomations(page);
+      for (const name of leaked) {
+        // Cheap presence probe before the expensive helper. Between the fill
+        // and the confirmation assertion the edit test tracks BOTH the original
+        // and the updated name, only one of which can exist; without this,
+        // openAutomationDropdown would spend its full 10 s timeout on the one
+        // that does not.
+        const present = await automationCard(page, name)
+          .first()
+          .waitFor({ state: "visible", timeout: 5000 })
+          .then(() => true)
+          .catch(() => false);
+        if (!present) continue;
+
+        await deleteAutomation(page, name);
+        // deleteAutomation swallows every error by design, so calling it proves
+        // nothing — look again. Without this the hook's catch below could only
+        // fire on a navigation error, and a row the net FAILED to delete would
+        // pass in silence.
+        if ((await automationCard(page, name).count()) > 0) {
+          console.warn(
+            `[automation-crud] leaked automation survived cleanup: ${name} ` +
+              `— it stays in the run database and keeps its resume undeletable ` +
+              `(E2E-B38).`,
+          );
+        }
+      }
+    } catch (error) {
+      console.warn(
+        `[automation-crud] afterEach cleanup failed: ${String(error)}`,
+      );
+    }
   });
 
   test("should create an automation through the 6-step wizard", async ({
@@ -237,6 +326,16 @@ test.describe("Automation CRUD", () => {
     const nameInput = page.getByPlaceholder(/Frontend Jobs Berlin/i);
     await nameInput.clear();
     await nameInput.fill(updatedName);
+
+    // Track the name the row is ABOUT to carry, WITHOUT dropping the one it
+    // still carries. Only one of the two can exist at any moment, but which one
+    // depends on whether the five Next clicks and the submit below all succeed
+    // — and a rename that never lands is precisely the failure this net is for.
+    // Re-keying instead of adding would hand that case to nobody. The afterEach
+    // probes each name for 3 s before doing anything expensive, so the one that
+    // does not exist costs seconds, not a timeout.
+    createdAutomationNames.push(updatedName);
+
     await page.getByRole("button", { name: /Next/i }).click();
 
     // Step 2: Search (keep defaults)
@@ -265,6 +364,15 @@ test.describe("Automation CRUD", () => {
     await expect(page.getByText(updatedName).first()).toBeVisible({
       timeout: 10000,
     });
+
+    // The rename is now PROVEN, so the old name can no longer name a row —
+    // drop it. Doing this here rather than at the fill above is what lets the
+    // afterEach return before its first await on a green run: it keeps the
+    // both-names coverage for every path that can still throw, and costs
+    // nothing on the path that cannot.
+    createdAutomationNames = createdAutomationNames.filter(
+      (n) => n !== automationName,
+    );
 
     // Cleanup
     await deleteAutomation(page, updatedName);

@@ -88,6 +88,18 @@ export async function deleteResume(page: Page, title: string) {
       .getByRole("alertdialog")
       .getByRole("button", { name: "Delete" })
       .click({ force: true });
+
+    // Wait for the deletion to LAND, not merely to be requested.
+    //
+    // This helper used to end on the click above and return. A click is not an
+    // outcome: the server action runs after Radix closes the dialog, so the
+    // function reported success while the row was still there — and it is the
+    // last statement of most tests that use it, so nothing downstream noticed.
+    // That is the shape behind Resume +29 per run, and the same shape that
+    // produced Task +6 in task-crud.spec.ts (7 tests create, 1 asserts the
+    // outcome, 6 leak). Proving the row is gone costs one wait and converts a
+    // hopeful cleanup into a real one.
+    await expect(row).not.toBeVisible({ timeout: 10000 });
   } catch {
     // swallow-ok: this helper's contract is to TOLERATE absence (see the
     // header); profile-crud keeps its own deleteResumeAndVerifyGone for the
