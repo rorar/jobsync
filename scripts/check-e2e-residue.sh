@@ -95,7 +95,23 @@ KNOWN_DEBT=(
   "Task:E2E-B24"       # task-crud deletes inline, so a failing assertion skips it
   "Activity:E2E-B24"   # same, and activity-crud deletes the Activity but not its type
   "ActivityType:E2E-B24"  # never deleted inline at all; the purge used to catch it
+  "ResumeSection:E2E-B24" # resume children hang off optional FKs; deleting the
+  "ContactInfo:E2E-B24"   #   section orphans them rather than removing them, and
+  "Summary:E2E-B24"       #   the purge had no step for any of them
+  "WorkExperience:E2E-B24"
+  "Education:E2E-B24"
+  "Automation:E2E-B38"    # automation-crud deletes inline, skipped on a throw
+  "JobSource:E2E-B38"     # createJob's fallback creates "Indeed" and nothing removes it
+  "JobStatus:E2E-B38"     # job-status-crud's cleanup is a best-effort try/catch
+  "Job:E2E-B38"           # inline delete, so a failing assertion leaves the row
 )
+
+# The nine entries above ResumeSection came from the audit; the ten below it came
+# from the GATE, on its first full run. That asymmetry is the finding recorded as
+# E2E-B38: this list was seeded from a document when a measurement of the same
+# thing already existed, and the document was less complete than the data. The
+# gate now reports the whole set, and the numbers match the full-run measurement
+# of 2026-09-02 exactly.
 
 # Those last three were found by this gate, not by the audit that wrote the
 # others: they leaked before too, and e2e/cleanup-stale-data.ts steps 2, 3 and 12
